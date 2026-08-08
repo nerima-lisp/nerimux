@@ -159,7 +159,7 @@
   ;; characters E-n-t-e-r — NOT translated to a CR.  This is the byte payload
   ;; send-keys-to-pane writes when :literal is true.
   (it "send-keys-literal-enter-stays-five-bytes"
-    (let ((literal-bytes (babel:string-to-octets "Enter")))
+    (let ((literal-bytes (cl-codec-kit:string-to-octets "Enter")))
       (expect (= 5 (length literal-bytes)))
       (expect (equalp #(69 110 116 101 114) literal-bytes))
       ;; The literal payload must differ from the translated (single-CR) payload.
@@ -170,7 +170,7 @@
   ;; "café" is 4 characters but encodes to 5 bytes (é = 2 bytes), so literal
   ;; mode preserves the multi-byte encoding rather than counting characters.
   (it "send-keys-literal-multibyte-utf8-preserves-bytes"
-    (let ((literal-bytes (babel:string-to-octets "café" :encoding :utf-8)))
+    (let ((literal-bytes (cl-codec-kit:string-to-octets "café" :encoding :utf-8)))
       (expect (= 5 (length literal-bytes)))
       (expect (> (length literal-bytes) (length "café")))
       ;; The é (U+00E9) encodes to the two-byte sequence C3 A9; assert the tail.

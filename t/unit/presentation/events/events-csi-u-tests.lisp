@@ -123,13 +123,10 @@
           (let ((ready (cl-tmux/pty:select-fds (list rfd) 200000)))
             (expect ready :to-be-truthy)
             (when ready
-              (cffi:with-foreign-object (buf :uint8 16)
-                (let ((n (cffi:foreign-funcall "read"
-                                               :int rfd :pointer buf :unsigned-long 16
-                                               :long)))
-                  (expect (= 5 n))
-                  (expect (= 27  (cffi:mem-aref buf :uint8 0)))
-                  (expect (= 126 (cffi:mem-aref buf :uint8 4)))))))))))
+              (let ((bytes (read-octets-from-fd rfd 16)))
+                (expect (= 5 (length bytes)))
+                (expect (= 27  (aref bytes 0)))
+                (expect (= 126 (aref bytes 4))))))))))
 
   ;; Digit-leading CSI input must stay buffered until a CSI final byte arrives.
   ;; This prevents ESC [ 1 5 from being forwarded before the terminating '~'.
@@ -145,10 +142,7 @@
           (let ((ready (cl-tmux/pty:select-fds (list rfd) 200000)))
             (expect ready :to-be-truthy)
             (when ready
-              (cffi:with-foreign-object (buf :uint8 16)
-                (let ((n (cffi:foreign-funcall "read"
-                                               :int rfd :pointer buf :unsigned-long 16
-                                               :long)))
-                  (expect (= 5 n))
-                  (expect (= 27  (cffi:mem-aref buf :uint8 0)))
-                  (expect (= 126 (cffi:mem-aref buf :uint8 4))))))))))))
+              (let ((bytes (read-octets-from-fd rfd 16)))
+                (expect (= 5 (length bytes)))
+                (expect (= 27  (aref bytes 0)))
+                (expect (= 126 (aref bytes 4)))))))))))

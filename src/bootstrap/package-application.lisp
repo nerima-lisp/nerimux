@@ -7,10 +7,13 @@
         #:cl-tmux/terminal
         #:cl-tmux/model
         #:cl-tmux/hooks)
-  ;; bt:with-timeout / bt:timeout in commands-shell.lisp and commands-pipe-pane.lisp
-  ;; stay qualified: TIMEOUT is also an ordinary parameter name in both files, and
-  ;; importing the condition type would make the two impossible to tell apart.
-  (:import-from #:bordeaux-threads #:with-lock-held)
+  ;; cl-concurrent-kit's WITH-TIMEOUT / OPERATION-TIMED-OUT in commands-shell.lisp
+  ;; and commands-pipe-pane.lisp stay qualified, next to the TIMEOUT-SECONDS
+  ;; parameter they bound.  Under bordeaux-threads they HAD to: the condition was
+  ;; named TIMEOUT, which collided with the ordinary parameter name in both files.
+  ;; OPERATION-TIMED-OUT no longer collides, so this is now a readability choice
+  ;; rather than a forced one.
+  (:import-from #:cl-concurrent-kit #:with-lock-held)
   (:documentation
    "APPLICATION layer: the tmux commands themselves, as operations on the domain
     model.  Pane and window lifecycle (kill, resize, swap, break, join, respawn), the
@@ -134,9 +137,9 @@
         #:cl-tmux/transport
         #:cl-tmux/net)
   ;; The reader/timer thread machinery in runtime*.lisp and the control-mode output
-  ;; lock. bordeaux-threads:join-thread and thread-alive-p stay qualified in
-  ;; runtime.lisp, next to the THREAD parameter they are called on.
-  (:import-from #:bordeaux-threads
+  ;; lock.  runtime.lisp calls sb-thread:join-thread directly for its :TIMEOUT
+  ;; argument, so no join/alive-p name is imported here.
+  (:import-from #:cl-concurrent-kit
                 #:make-thread
                 #:make-lock
                 #:with-lock-held

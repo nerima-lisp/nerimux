@@ -51,15 +51,9 @@
           (let ((ready (cl-tmux/pty:select-fds (list rfd) 200000)))  ; 200 ms
             (expect ready :to-be-truthy)
             (when ready
-              (cffi:with-foreign-object (buf :uint8 32)
-                (let ((n (cffi:foreign-funcall "read"
-                                               :int rfd :pointer buf :unsigned-long 8
-                                               :long)))
-                  (expect (= 8 n))
-                  (let ((str (make-string (max 0 n))))
-                    (dotimes (i (max 0 n))
-                      (setf (char str i) (code-char (cffi:mem-aref buf :uint8 i))))
-                    (expect (string= "PASTE-ME" str)))))))))))
+              (let ((bytes (read-octets-from-fd rfd 8)))
+                (expect (= 8 (length bytes)))
+                (expect (string= "PASTE-ME" (map 'string #'code-char bytes))))))))))
 
   ;; Middle-click with no paste-buffer is a safe no-op: the pane is focused but no
   ;; bytes are written to its PTY.

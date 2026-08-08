@@ -143,7 +143,7 @@
   ;; run-shell -c runs the shell command from the requested start-directory.
   (it "run-shell-c-start-directory-controls-shell-cwd"
     (let* ((tmp-dir (merge-pathnames "cl-tmux-run-shell-c/"
-                                     (uiop:temporary-directory)))
+                                     (host-kit:temporary-directory)))
            (out-file (merge-pathnames "pwd.txt" tmp-dir)))
       (ensure-directories-exist tmp-dir)
       (unwind-protect
@@ -158,10 +158,10 @@
                                   (namestring (truename tmp-dir))))
                    (actual-dir (string-right-trim
                                 '(#\Newline #\Return)
-                                (uiop:read-file-string out-file))))
+                                (host-kit:read-file-string out-file))))
                (expect (string= actual-dir expected-dir))))
         (ignore-errors
-          (uiop:delete-directory-tree tmp-dir :validate t :if-does-not-exist :ignore)))))
+          (host-kit:delete-directory-tree tmp-dir :validate t :if-does-not-exist :ignore)))))
 
   ;; run-shell -C executes the tmux command and reports handled.
   (it "run-shell-C-table"

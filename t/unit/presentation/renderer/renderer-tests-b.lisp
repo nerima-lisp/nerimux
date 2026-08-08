@@ -157,8 +157,10 @@
       (let* ((sess (make-renderer-test-session 30 10 :content ""))
              (out  (with-output-to-string (s)
                      (cl-tmux/renderer::render-extra-status-line s sess 30 8 1)))
-             (vis  (cl-ppcre:regex-replace-all
-                    (format nil "~C\\[[0-9;?]*[A-Za-z]" #\Escape) out ""))
+             (vis  (cl-regex-kit:replace-all
+                    (cl-regex-kit:compile-regex
+                     (format nil "~C\\[[0-9;?]*[A-Za-z]" #\Escape))
+                    out ""))
              (rpos (search "R1" vis)))
         (expect (eql 0 (search "L1" vis)))
         (expect (and rpos (= (+ rpos 2) 30))))))

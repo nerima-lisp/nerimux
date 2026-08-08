@@ -84,7 +84,7 @@
              (screen (cl-tmux/model:pane-screen pane)))
         ;; Two prompts: one at row 0, output, one at row 2.
         (cl-tmux/terminal/emulator:screen-process-bytes
-         screen (babel:string-to-octets
+         screen (cl-codec-kit:string-to-octets
                  (format nil "~C]133;A~Cprompt-1~%output~%~C]133;A~Cprompt-2"
                          #\Escape (code-char 7) #\Escape (code-char 7))
                  :encoding :utf-8))

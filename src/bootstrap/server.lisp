@@ -200,7 +200,7 @@
    (socket-path NAME).  The session persists across detaches until its last
    window is killed."
   (require :sb-posix)
-  (install-pty-port)              ; wire the CFFI PTY adapter into the domain port
+  (install-pty-port)              ; wire the PTY adapter into the domain port
   (ignore-errors (load-config-file))
   (setf *running*          t
         *dirty*            t

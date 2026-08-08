@@ -34,12 +34,25 @@
    Updates the geometry slots, then resizes the underlying PTY and virtual screen.
    When pane-border-status is on, one row of the allocation is reserved for the
    title line, so the pane's CONTENT geometry (and the app's PTY/screen) is one
-   row shorter — the title no longer overwrites pane content."
+   row shorter — the title no longer overwrites pane content.
+
+   THE PTY RESIZE IS GUARDED ON THE DIMENSIONS, not just on the fd.  set-pty-size
+   now reaches cl-tty-kit:set-terminal-size, whose %assert-terminal-dimension
+   demands POSITIVE integers and signals before the ioctl is attempted; the cffi
+   path it replaced passed a 0x0 winsize straight through and dropped the -1
+   return on the floor.  This is the one caller that COMPUTES the dimensions it
+   passes instead of receiving them — %pane-border-status-reservation yields a
+   CONTENT-HEIGHT of 0 for an allocated HEIGHT of 0 — so a degenerate layout (a
+   window relayout to zero rows, a split leaving a pane no room) would signal out
+   of what is otherwise a pure geometry update.  Skipping the resize keeps the
+   pre-migration behaviour: the kernel is simply not told about a window that has
+   no area to report.  The slot update and the screen-resize below still happen,
+   so the pane's own geometry stays consistent with the layout that asked for it."
   (let ((status (cl-tmux/options:get-option "pane-border-status" "off")))
     (multiple-value-bind (content-y-offset content-height)
         (%pane-border-status-reservation status height)
       (%update-pane-geometry pane x (+ y content-y-offset) width content-height)
-      (when (> (pane-fd pane) 0)
+      (when (and (> (pane-fd pane) 0) (plusp width) (plusp content-height))
         (resize-pty (pane-fd pane) content-height width))
       (let ((screen (pane-screen pane)))
         (with-lock-held ((screen-lock screen))

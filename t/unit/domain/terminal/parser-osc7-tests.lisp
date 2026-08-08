@@ -21,7 +21,7 @@
   (it "osc7-sets-screen-cwd-end-to-end"
     (with-screen (s 20 5)
       (screen-process-bytes s
-        (babel:string-to-octets
+        (cl-codec-kit:string-to-octets
           (format nil "~C]7;file://myhost/home/user/project~C" #\Escape (code-char 7))
           :encoding :utf-8))
       (expect (string= "/home/user/project" (cl-tmux/terminal/types:screen-cwd s)))))

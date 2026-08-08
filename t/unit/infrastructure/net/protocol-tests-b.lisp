@@ -23,15 +23,15 @@
 
   ;; split-on-nul-bytes with one NUL-terminated field returns a one-element list.
   (it "split-on-nul-bytes-single-field"
-    (let* ((bytes (babel:string-to-octets "hello" :encoding :utf-8))
+    (let* ((bytes (cl-codec-kit:string-to-octets "hello" :encoding :utf-8))
            (buf   (concatenate '(simple-array (unsigned-byte 8) (*)) bytes #(0))))
       (expect (equal '("hello") (cl-tmux/protocol:split-on-nul-bytes buf)))))
 
   ;; split-on-nul-bytes with multiple NUL-separated fields returns them all.
   (it "split-on-nul-bytes-multiple-fields"
-    (let* ((a (babel:string-to-octets "alpha" :encoding :utf-8))
-           (b (babel:string-to-octets "beta"  :encoding :utf-8))
-           (c (babel:string-to-octets "gamma" :encoding :utf-8))
+    (let* ((a (cl-codec-kit:string-to-octets "alpha" :encoding :utf-8))
+           (b (cl-codec-kit:string-to-octets "beta"  :encoding :utf-8))
+           (c (cl-codec-kit:string-to-octets "gamma" :encoding :utf-8))
            (buf (concatenate '(simple-array (unsigned-byte 8) (*))
                              a #(0) b #(0) c #(0))))
       (expect (equal '("alpha" "beta" "gamma")
@@ -39,7 +39,7 @@
 
   ;; split-on-nul-bytes with no NUL byte returns an empty list (no complete field).
   (it "split-on-nul-bytes-no-nul-returns-empty-list"
-    (let ((buf (babel:string-to-octets "no-nul" :encoding :utf-8)))
+    (let ((buf (cl-codec-kit:string-to-octets "no-nul" :encoding :utf-8)))
       (expect (null (cl-tmux/protocol:split-on-nul-bytes buf)))))
 
   ;; ── command-name-to-string ──────────────────────────────────────────────────
@@ -75,15 +75,15 @@
 
   ;; encode-fields-to-buffer packs one field followed by a NUL byte.
   (it "encode-fields-to-buffer-single-field-has-trailing-nul"
-    (let* ((field-bytes (babel:string-to-octets "hello" :encoding :utf-8))
+    (let* ((field-bytes (cl-codec-kit:string-to-octets "hello" :encoding :utf-8))
            (buf (cl-tmux/protocol:encode-fields-to-buffer (list field-bytes))))
       (expect (= 6 (length buf)))
       (expect (= 0 (aref buf 5)))))
 
   ;; encode-fields-to-buffer places a NUL after each field.
   (it "encode-fields-to-buffer-multiple-fields-split-by-nuls"
-    (let* ((f1  (babel:string-to-octets "ab" :encoding :utf-8))
-           (f2  (babel:string-to-octets "cd" :encoding :utf-8))
+    (let* ((f1  (cl-codec-kit:string-to-octets "ab" :encoding :utf-8))
+           (f2  (cl-codec-kit:string-to-octets "cd" :encoding :utf-8))
            (buf (cl-tmux/protocol:encode-fields-to-buffer (list f1 f2))))
       ;; Layout: a b NUL c d NUL → 6 bytes
       (expect (= 6 (length buf)))
@@ -124,7 +124,7 @@
 
   ;; decode-text decodes a plain ASCII payload to a string.
   (it "decode-text-ascii"
-    (let ((bytes (babel:string-to-octets "hello" :encoding :utf-8)))
+    (let ((bytes (cl-codec-kit:string-to-octets "hello" :encoding :utf-8)))
       (expect (string= "hello" (decode-text bytes)))))
 
   ;; ── decode-command-payload empty / degenerate input ─────────────────────────
@@ -141,7 +141,7 @@
   ;; decode-command-payload on a payload with no NUL terminator returns
   ;; (values NIL NIL NIL) — no NUL means no complete field was transmitted.
   (it "decode-command-payload-no-nul-byte-returns-nil-values"
-    (let ((payload (babel:string-to-octets "no-nul-here" :encoding :utf-8)))
+    (let ((payload (cl-codec-kit:string-to-octets "no-nul-here" :encoding :utf-8)))
       (multiple-value-bind (command target args)
           (decode-command-payload payload)
         (expect (null command))
@@ -179,9 +179,9 @@
 
   ;; split-on-nul-bytes ignores bytes that follow the final NUL (incomplete field).
   (it "split-on-nul-bytes-trailing-bytes-after-last-nul-are-ignored"
-    (let* ((a     (babel:string-to-octets "alpha" :encoding :utf-8))
+    (let* ((a     (cl-codec-kit:string-to-octets "alpha" :encoding :utf-8))
            ;; 'beta' bytes appended WITHOUT a terminating NUL.
-           (b     (babel:string-to-octets "beta"  :encoding :utf-8))
+           (b     (cl-codec-kit:string-to-octets "beta"  :encoding :utf-8))
            (buf   (concatenate '(simple-array (unsigned-byte 8) (*))
                                a #(0) b)))
       (expect (equal '("alpha")
@@ -201,7 +201,7 @@
   (it "encode-fields-to-buffer-and-split-on-nul-bytes-are-symmetric"
     (let* ((strings  '("alpha" "beta" "gamma" "delta"))
            (octets   (mapcar (lambda (s)
-                               (babel:string-to-octets s :encoding :utf-8))
+                               (cl-codec-kit:string-to-octets s :encoding :utf-8))
                              strings))
            (buf      (cl-tmux/protocol:encode-fields-to-buffer octets))
            (decoded  (cl-tmux/protocol:split-on-nul-bytes buf)))

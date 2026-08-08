@@ -17,7 +17,7 @@
   (pipe-fd  nil)                      ; NIL or stream for pipe-pane output tee
   (pipe-output-stream nil)            ; NIL or stream for command stdout -> pane
   (pipe-output-thread nil)            ; NIL or copier thread for command stdout
-  (pipe-process nil)                  ; NIL or uiop process-info for pipe-pane command
+  (pipe-process nil)                  ; NIL or process-kit:process-handle for pipe-pane
   ;; ── Terminal emulator ─────────────────────────────────────────────────────
   (screen   nil)
   ;; ── Window back-pointer and state ─────────────────────────────────────────

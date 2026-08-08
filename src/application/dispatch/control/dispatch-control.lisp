@@ -21,7 +21,7 @@
     (cl-tmux/control:control-format-reply
      number (or cl-tmux/prompt:*overlay* "") :success success)))
 
-(defvar *control-output-lock* (make-lock "control-output")
+(defvar *control-output-lock* (make-lock :name "control-output")
   "Mutex serializing every write to a control-mode (-C) client's output stream.
    Reader threads emit %output / %window-* notifications through %control-emit on
    their own threads, while the REPL writes command replies and %exit from the
@@ -137,7 +137,7 @@
    change (installed/removed around the loop).  Streams are parameters so the loop
    is testable without a real tty."
   (let ((handlers (%install-control-notifications output))
-        (*control-output-lock* (make-lock "control-output")))
+        (*control-output-lock* (make-lock :name "control-output")))
     (unwind-protect
          (loop with number = 0
                for line = (read-line input nil nil)

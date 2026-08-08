@@ -162,6 +162,43 @@
     (expect (>= cl-tmux/pty::+max-sane-rows+ 24))
     (expect (>= cl-tmux/pty::+max-sane-cols+ 80)))
 
+  ;;; ── set-pty-size argument order ──────────────────────────────────────────────
+  ;;;
+  ;;; cl-tmux's set-pty-size is (MASTER-FD ROWS COLS); cl-tty-kit's
+  ;;; set-terminal-size is (COLUMNS ROWS &optional FD). The adapter must both
+  ;;; transpose rows/cols AND move the fd. A round-trip on a DELIBERATELY
+  ;;; NON-SQUARE size is the only thing that catches an inversion — 24x24 would
+  ;;; pass either way. Both dimensions are asserted, so a swap fails loudly.
+  ;;;
+  ;;; This also covers the arm64 bug this migration fixed: the previous cffi
+  ;;; ioctl call used a fixed prototype for a variadic syscall, so on Apple
+  ;;; Silicon it returned -1 and the pty kept its old size. Under that code this
+  ;;; test reads back the spawn size (8x20), not 40x123, and fails.
+
+  ;; set-pty-size applies rows and columns to the correct fields, not transposed.
+  (it "set-pty-size-applies-non-square-size-without-transposition"
+    (with-pty-available
+      (multiple-value-bind (master pid) (forkpty-with-shell 8 20)
+        (unwind-protect
+             (progn
+               ;; rows=40, cols=123 — distinct, and neither matches the spawn size.
+               (cl-tmux/pty:set-pty-size master 40 123)
+               ;; cl-tty-kit:terminal-size returns (values COLUMNS ROWS).
+               (multiple-value-bind (cols rows) (cl-tty-kit:terminal-size master)
+                 (expect (eql 123 cols))
+                 (expect (eql 40 rows))))
+          (cl-tmux/pty:pty-close master pid)))))
+
+  ;; cl-tmux/pty:terminal-size transposes cl-tty-kit's (COLUMNS ROWS) back into
+  ;; cl-tmux's (ROWS COLS) contract. Guarded by the sanity bounds, so an
+  ;; unavailable size falls back to 24x80 rather than reporting a transposed one.
+  (it "terminal-size-returns-rows-first"
+    (multiple-value-bind (rows cols) (cl-tmux/pty:terminal-size)
+      (expect (integerp rows))
+      (expect (integerp cols))
+      (expect (<= 1 rows cl-tmux/pty::+max-sane-rows+))
+      (expect (<= 1 cols cl-tmux/pty::+max-sane-cols+))))
+
   ;; select-fds short-circuits on an empty fd list regardless of timeout,
   ;; returning nil without ever calling select(2).
   (it "select-fds-empty-list-returns-nil"
@@ -239,11 +276,7 @@
   ;; pty-read-blocking returns an (unsigned-byte 8) vector containing the written bytes.
   (it "pty-read-blocking-returns-octet-vector-when-data-available"
     (with-pipe-fds (rfd wfd)
-      (cffi:with-foreign-object (buf :uint8 3)
-        (setf (cffi:mem-aref buf :uint8 0) 1
-              (cffi:mem-aref buf :uint8 1) 2
-              (cffi:mem-aref buf :uint8 2) 3)
-        (cffi:foreign-funcall "write" :int wfd :pointer buf :unsigned-long 3 :long))
+      (write-octets-to-fd wfd #(1 2 3))
       (let ((result (cl-tmux/pty:pty-read-blocking rfd 4096)))
         (expect result :to-be-truthy)
         (expect (= 3 (length result)))
@@ -294,24 +327,32 @@
   (it "microseconds-per-second-is-one-million"
     (expect (= 1000000 cl-tmux/pty::+microseconds-per-second+)))
 
-  ;; %setup-timeval decomposes microseconds into (seconds, remainder) correctly.
-  ;; 1500000 us = 1 second + 500000 us.
-  (it "setup-timeval-decomposes-correctly"
-    (cffi:with-foreign-object (tv :long 2)
-      (cl-tmux/pty::%setup-timeval tv 1500000)
-      (expect (= 1 (cffi:mem-aref tv :long 0)))
-      (expect (= 500000 (cffi:mem-aref tv :long 1)))))
+  ;;; ── %timeout-us-to-seconds ───────────────────────────────────────────────────
+  ;;;
+  ;;; Replaces the old %setup-timeval tests. cl-tmux no longer decomposes a
+  ;;; struct timeval by hand — process-kit does that — so what is worth pinning
+  ;;; here is only the unit conversion at the boundary, and in particular that
+  ;;; it stays EXACT. A float would drift the deadline process-kit subtracts
+  ;;; from across EINTR retries.
 
-  ;; %setup-timeval with 0 produces (0, 0) — purely non-blocking.
-  (it "setup-timeval-zero-timeout"
-    (cffi:with-foreign-object (tv :long 2)
-      (cl-tmux/pty::%setup-timeval tv 0)
-      (expect (= 0 (cffi:mem-aref tv :long 0)))
-      (expect (= 0 (cffi:mem-aref tv :long 1)))))
+  ;; 1500000 us is 3/2 second exactly, not 1.5f0.
+  (it "timeout-us-to-seconds-converts-exactly"
+    (let ((seconds (cl-tmux/pty::%timeout-us-to-seconds 1500000)))
+      (expect (= 3/2 seconds))
+      (expect (rationalp seconds))
+      (expect (not (floatp seconds)))))
 
-  ;; %setup-timeval with 50000 us (50 ms) produces (0, 50000).
-  (it "setup-timeval-sub-second-timeout"
-    (cffi:with-foreign-object (tv :long 2)
-      (cl-tmux/pty::%setup-timeval tv 50000)
-      (expect (= 0 (cffi:mem-aref tv :long 0)))
-      (expect (= 50000 (cffi:mem-aref tv :long 1))))))
+  ;; 0 us stays 0 — process-kit spells a non-blocking poll that way too.
+  (it "timeout-us-to-seconds-zero-is-a-poll"
+    (expect (eql 0 (cl-tmux/pty::%timeout-us-to-seconds 0))))
+
+  ;; 50000 us (50 ms, the +poll-timeout-us+ value) is 1/20 second.
+  (it "timeout-us-to-seconds-sub-second-timeout"
+    (expect (= 1/20 (cl-tmux/pty::%timeout-us-to-seconds 50000))))
+
+  ;; A negative timeout is cl-tmux's "block indefinitely"; process-kit spells
+  ;; that NIL, so the conversion must produce NIL and not a negative number
+  ;; (which process-kit's FD-WAIT-TIMEOUT type would reject outright).
+  (it "timeout-us-to-seconds-negative-means-block-forever"
+    (expect (null (cl-tmux/pty::%timeout-us-to-seconds -1)))
+    (expect (null (cl-tmux/pty::%timeout-us-to-seconds -100)))))

@@ -241,7 +241,7 @@
       (let ((s (make-screen 10 5)))
         ;; OSC 52: ESC ] 52 ; c ; SGVsbG8= ST
         ;; ST = ESC backslash (0x1b 0x5c)
-        (let ((seq (babel:string-to-octets
+        (let ((seq (cl-codec-kit:string-to-octets
                     (format nil "~C]52;c;SGVsbG8=~C\\" #\Escape #\Escape)
                     :encoding :latin-1)))
           (cl-tmux/terminal/emulator:screen-process-bytes s seq))

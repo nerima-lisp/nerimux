@@ -32,20 +32,27 @@
 
 (defun %copy-mode-make-matcher (term)
   "Return a matcher closure (row-string start) → match-start-column (or NIL).
-   TERM is compiled as a cl-ppcre regex; on compile failure falls back to
-   literal substring search so terms with unbalanced metacharacters still work."
-  (let ((scanner (ignore-errors (cl-ppcre:create-scanner term))))
-    (if scanner
-        (lambda (str start) (cl-ppcre:scan scanner str :start start))
-        (lambda (str start) (search term str :start2 start)))))
+   TERM is compiled as a cl-regex-kit regex; on compile failure falls back to
+   literal substring search so terms with unbalanced metacharacters still work.
 
-(defun %copy-mode-regex-escape (text)
-  "Return TEXT with regex metacharacters escaped for literal search."
-  (with-output-to-string (out)
-    (loop for ch across text do
-      (when (find ch "\\^$.|?*+()[]{}" :test #'char=)
-        (write-char #\\ out))
-      (write-char ch out))))
+   :OCTAL NIL because TERM is whatever the user typed at the copy-mode / prompt.
+   Under cl-regex-kit's :OCTAL T default a typed `\\1` compiles to U+0001 and
+   silently matches nothing; refused, it takes the literal-substring branch
+   below, which is the useful answer for someone searching for the text `\\1`.
+
+   RENDERER-PANE-SEARCH.LISP's %ALL-MATCH-RANGES MUST KEEP THE SAME OPTIONS.
+   That function decides independently whether the same TERM is a valid regex,
+   and it is what paints the highlight.  If the two disagree, n/N jumps to
+   matches that are not highlighted, or highlights spans the cursor never visits.
+
+   SCAN returns a MATCH-RESULT struct, not cl-ppcre's four values, so the start
+   column is read back with MATCH-START rather than taken as the first value."
+  (let ((scanner (ignore-errors (cl-regex-kit:compile-regex term :octal nil))))
+    (if scanner
+        (lambda (str start)
+          (let ((match (cl-regex-kit:scan scanner str :start start)))
+            (and match (cl-regex-kit:match-start match))))
+        (lambda (str start) (search term str :start2 start)))))
 
 ;;; ── Full-buffer directional search ──────────────────────────────────────────
 
@@ -173,9 +180,9 @@
     (when term
       (ecase direction
         (:forward
-         (copy-mode-search-forward screen (%copy-mode-regex-escape term)))
+         (copy-mode-search-forward screen (cl-regex-kit:escape term)))
         (:backward
-         (copy-mode-search-backward screen (%copy-mode-regex-escape term)))))))
+         (copy-mode-search-backward screen (cl-regex-kit:escape term)))))))
 
 (defun copy-mode-search-forward-word (screen)
   "Search forward for the word under the copy-mode cursor, treating it literally."

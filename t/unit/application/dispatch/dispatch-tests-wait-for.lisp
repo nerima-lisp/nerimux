@@ -9,7 +9,7 @@
     (with-fake-session (s)
       (let ((received nil))
         ;; Start a thread waiting on the channel.
-        (bt:make-thread
+        (cl-concurrent-kit:make-thread
          (lambda () (setf received (cl-tmux::wait-for-channel "test-ch-signal")))
          :name "waiter")
         ;; Brief yield so the waiter thread reaches condition-wait before signal.
@@ -22,7 +22,7 @@
   (it "cmd-wait-for-arg-option-terminator-after-flags"
     (with-fake-session (s)
       (let ((received nil))
-        (bt:make-thread
+        (cl-concurrent-kit:make-thread
          (lambda () (setf received (cl-tmux::wait-for-channel "test-ch-dd-signal")))
          :name "waiter-with-double-dash")
         (sleep 0.05)
@@ -53,7 +53,7 @@
     (with-fake-session (s)
       (let ((result :pending))
         ;; Run wait-for in a background thread so it blocks without stalling tests.
-        (bt:make-thread
+        (cl-concurrent-kit:make-thread
          (lambda ()
            (setf result (cl-tmux::%cmd-wait-for-arg s '("test-ch-bare"))))
          :name "bare-waiter")

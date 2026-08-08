@@ -40,12 +40,15 @@
   (let ((targets
           (remove-if-not
            (lambda (th)
-             (let ((name (bordeaux-threads:thread-name th)))
+             (let ((name (cl-concurrent-kit:thread-name th)))
                (and (stringp name)
                     (or (search "pty-reader" name)
                         (search "cl-tmux-status-timer" name)
                         (search "shell-bg" name)))))
-           (bordeaux-threads:all-threads))))
+           ;; cl-concurrent-kit deliberately wraps no thread-enumeration call --
+           ;; it is a debugging facility, not a concurrency primitive -- so this
+           ;; reaches for SB-THREAD directly, as runtime.lisp already does.
+           (sb-thread:list-all-threads))))
     (when targets
       (setf cl-tmux::*running* nil)
       (sleep 0.15)

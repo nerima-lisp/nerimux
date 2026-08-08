@@ -74,14 +74,22 @@
     (expect (cl-tmux/terminal/actions:combining-char-p #\Space) :to-be-falsy)
     (expect (cl-tmux/terminal/actions:combining-char-p #\Null) :to-be-falsy))
 
-  ;; Table-driven test across all five combining ranges.
+  ;; Table-driven test across the combining blocks.
+  ;;
+  ;; U+1AFF and U+20FF used to be listed here as combining, because
+  ;; combining-char-p was a hand-written range list that ran to the end of each
+  ;; block.  Both are UNASSIGNED (general category Cn), and CHAR-WIDTH counts an
+  ;; unassigned code point as one column, so the old list contradicted it.  The
+  ;; predicate is now defined as CHAR-WIDTH, so the last ASSIGNED mark of each
+  ;; block is the boundary that matters; the unassigned tail is pinned falsy.
   (it-each ((#x0300 t   "combining grave accent - Diacritical Marks start")
             (#x036F t   "combining latin small letter x - Diacritical Marks end")
             (#x0370 nil "greek capital letter Heta - just after Diacritical Marks")
             (#x1AB0 t   "combining doubled circumflex accent - Extended start")
-            (#x1AFF t   "last code in Extended block")
+            (#x1AFF nil "unassigned tail of the Extended block - one column")
             (#x20D0 t   "combining left harpoon above - Marks for Symbols start")
-            (#x20FF t   "last code in Marks for Symbols block")
+            (#x20F0 t   "combining asterisk above - last assigned Marks for Symbols")
+            (#x20FF nil "unassigned tail of the Marks for Symbols block - one column")
             (#x0041 nil "ASCII A - not a combining character"))
       "combining-char-p: ~*~*~A"
       (cp expected description)

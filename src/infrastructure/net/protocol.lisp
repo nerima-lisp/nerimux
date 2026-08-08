@@ -150,11 +150,11 @@
    "client→server frame announcing a new terminal size.")
   (msg-detach  +msg-detach+  ()           #()
    "client→server detach frame.")
-  (msg-frame   +msg-frame+   (string)     (babel:string-to-octets string :encoding :utf-8)
+  (msg-frame   +msg-frame+   (string)     (cl-codec-kit:string-to-octets string :encoding :utf-8)
    "server→client frame carrying a rendered screen STRING (UTF-8 encoded).")
   (msg-bye     +msg-bye+     ()           #()
    "server→client frame announcing the server is closing.")
-  (msg-reply   +msg-reply+   (string)     (babel:string-to-octets string :encoding :utf-8)
+  (msg-reply   +msg-reply+   (string)     (cl-codec-kit:string-to-octets string :encoding :utf-8)
    "server→client frame carrying a forwarded command's text output (UTF-8)."))
 
 ;;; ── Typed command message constructor ────────────────────────────────────────
@@ -195,5 +195,34 @@
   (values (read-u16 payload 0) (read-u16 payload +cols-offset-in-size-payload+)))
 
 (defun decode-text (payload)
-  "Decode a UTF-8 frame PAYLOAD into a string."
-  (babel:octets-to-string (to-octets payload) :encoding :utf-8))
+  "Decode a UTF-8 frame PAYLOAD into a string, LENIENTLY: malformed sequences
+   become U+FFFD instead of signalling.
+
+   This is deliberately the opposite policy from SPLIT-ON-NUL-BYTES in
+   protocol-command.lisp, which decodes strictly.  The two differ because the
+   payloads differ in kind.  DECODE-TEXT is only ever applied to *display* text
+   — +msg-frame+ rendered screen content (client.lisp) and +msg-reply+ command
+   output (client-command.lisp) — which is written to stdout and never re-parsed,
+   interned, or dispatched on.  A command payload, by contrast, is interned and
+   executed, so there a repaired string would be a guess with consequences.
+
+   One caller does inspect the result, and stating the exception precisely is
+   what keeps this rationale honest.  %READ-COMMAND-REPLY (client-command.lisp)
+   branches on (PLUSP (LENGTH TEXT)) and on whether the last character is a
+   newline, to decide whether to print at all and whether to add a trailing one.
+   A fully malformed +msg-reply+ payload therefore decodes to a NON-EMPTY run of
+   U+FFFD, prints as that run, and ends in U+FFFD rather than a newline, so one
+   extra TERPRI is synthesised.  That is a cosmetic difference in already-garbled
+   output, not a changed decision, so the policy stands.  CLIENT.LISP has no such
+   test: %DECODE-SERVER-FRAME classifies on the frame TYPE alone and
+   %RECEIVE-SERVER-FRAME only WRITE-STRINGs the text it returns.
+
+   Leniency also matters because neither caller establishes a handler: signalling
+   here would unwind the client's event loop and kill the user's attached
+   terminal mid-render over a single bad byte.  The replacement character is
+   passed explicitly rather than relying on the encoding's own default, matching
+   PARSER-OSC-DISPATCH.LISP and SAFE-CODE-CHAR."
+  (cl-codec-kit:octets-to-string (to-octets payload)
+                                 :encoding :utf-8
+                                 :errorp nil
+                                 :replacement #\REPLACEMENT_CHARACTER))

@@ -145,7 +145,7 @@
   (it "run-shell-start-directory-controls-working-directory"
     (let ((dir (merge-pathnames
                 (format nil "cl-tmux-run-shell-cwd-~D/" (random 1000000))
-                (uiop:temporary-directory))))
+                (host-kit:temporary-directory))))
       (unwind-protect
            (let* ((created (ensure-directories-exist dir))
                   (expected (string-right-trim '(#\/)
@@ -157,7 +157,7 @@
                                              out)))
              (expect (stringp out))
              (expect (string= expected actual)))
-        (ignore-errors (uiop:delete-directory-tree dir :validate t)))))
+        (ignore-errors (host-kit:delete-directory-tree dir :validate t)))))
 
   ;; run-shell :delay waits before launching the shell subprocess.
   (it "run-shell-delay-waits-before-running-command"
@@ -181,7 +181,7 @@
   (it "run-command-line-run-shell-c-controls-working-directory"
     (let ((dir (merge-pathnames
                 (format nil "cl-tmux-run-shell-dispatch-cwd-~D/" (random 1000000))
-                (uiop:temporary-directory))))
+                (host-kit:temporary-directory))))
       (unwind-protect
            (let* ((created (ensure-directories-exist dir))
                   (expected (string-right-trim '(#\/)
@@ -191,7 +191,7 @@
                  (with-run-command-line-overlay (s command :context command)
                    (assert-overlay-not-contains "unsupported argument" *overlay* command)
                    (assert-overlay-contains expected *overlay* command)))))
-        (ignore-errors (uiop:delete-directory-tree dir :validate t)))))
+        (ignore-errors (host-kit:delete-directory-tree dir :validate t)))))
 
   ;; %run-command-line run-shell renders output-producing flag behavior through the overlay.
   (it "run-command-line-run-shell-overlay-output-table"

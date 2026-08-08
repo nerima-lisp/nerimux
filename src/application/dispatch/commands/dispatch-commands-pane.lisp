@@ -199,7 +199,7 @@
 
 (defun %read-standard-input-octets ()
   "Read command stdin as UTF-8 bytes for split-window -I."
-  (babel:string-to-octets
+  (cl-codec-kit:string-to-octets
    (with-output-to-string (out)
      (loop for ch = (read-char *standard-input* nil nil)
            while ch

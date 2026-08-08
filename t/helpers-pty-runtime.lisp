@@ -16,9 +16,14 @@
     (error () nil)))
 
 (defmacro with-pty-available (&body body)
-  "Run BODY only when PTY-backed shells are available."
-  `(when (pty-available-p)
-     ,@body))
+  "Run BODY when PTY-backed shells are available; otherwise SKIP the enclosing test.
+   A bare (WHEN (PTY-AVAILABLE-P) ...) would leave the test reporting a PASS on a
+   machine without /dev/ptmx, having asserted nothing — worse than a skip, because
+   CI then looks clean.  cl-weave's SKIP invokes the SKIP-TEST restart, so the test
+   is reported as skipped and the reason is printed."
+  `(if (pty-available-p)
+       (progn ,@body)
+       (skip "PTY-backed shells are unavailable on this system (no /dev/ptmx?)")))
 
 (defmacro with-pty-session (session-spec &body body)
   "Run BODY in a fake session only when PTY-backed shells are available."
@@ -91,7 +96,7 @@
 ;;; ── PTY port initialization ─────────────────────────────────────────────────
 ;;;
 ;;; Any test that creates a real pane (create-initial-session, session-new-window,
-;;; respawn-pane) goes through cl-tmux/ports:spawn-pty.  Install the CFFI adapter
+;;; respawn-pane) goes through cl-tmux/ports:spawn-pty.  Install the PTY adapter
 ;;; now so the port vars are non-NIL for the duration of the test run.
 ;;; Tests that need a mock port can rebind *spawn-pty* / *write-pty* / etc.
 ;;; around individual test bodies.

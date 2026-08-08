@@ -42,6 +42,55 @@
       (spec key val expected)
     (expect (string= expected (fmt spec key val))))
 
+  ;; ── replacement-template dialect ────────────────────────────────────────────
+  ;;
+  ;; These pin :TEMPLATE-SYNTAX :BACKSLASH in %regex-replace-all.  cl-regex-kit
+  ;; defaults to Rust-style `$1`; under that default these do not signal, they
+  ;; emit the replacement template LITERALLY (`\1x` instead of `bx`), which would
+  ;; silently break every #{s///} in every user's .tmux.conf.
+  ;;
+  ;; The first row is the exact example tmux(1) documents for the s modifier:
+  ;; "s/a(.)/\1x/i: would change abABab into bxBxbx".  Upstream expands that \N
+  ;; in its own regsub_expand() (regsub.c), not in the regex engine.
+  (it-each (("#{s/a(.)/\\1x/i:p}"      :p "abABab"    "bxBxbx")
+            ("#{s/b+/[\\&]/:p}"        :p "abbbc"     "a[bbb]c")
+            ("#{s/(a)(b)/\\0!/:p}"     :p "ab"        "ab!"))
+      "substitute-backslash-template ~A"
+      (spec key val expected)
+    (expect (string= expected (fmt spec key val))))
+
+  ;; ── user patterns are compiled with :OCTAL NIL ──────────────────────────────
+  ;;
+  ;; cl-regex-kit's compile-regex defaults to :OCTAL T, under which \1-\7 are
+  ;; OCTAL CHARACTER ESCAPES.  A user reaching for an ERE backreference would
+  ;; then get a pattern that silently matches U+0001 instead of one that is
+  ;; refused.  Both call sites pass :OCTAL NIL, so the pattern is rejected and
+  ;; each degrades the documented way (no match / string unchanged).
+  (it "format-regex-user-pattern-octal-escape-is-refused"
+    ;; Positive control first, so a blanket "never matches" bug cannot pass this.
+    (expect (cl-tmux/format::%regex-match-p "a.c" "abc"))
+    ;; \1 must NOT be read as the octal escape for U+0001.
+    (expect (null (cl-tmux/format::%regex-match-p
+                   "a\\1" (format nil "a~C" (code-char 1)))))
+    ;; A genuine backreference is refused rather than mis-compiled.  cl-regex-kit
+    ;; is RE2/Rust-style and has no backreferences -- neither does POSIX ERE,
+    ;; which is what upstream tmux compiles these with (regcomp + REG_EXTENDED).
+    (expect (null (cl-tmux/format::%regex-match-p "([a-z]+)_\\1" "ab_ab")))
+    ;; The substitute path degrades to "unchanged" on the same pattern.
+    (expect (string= "ab_ab" (cl-tmux/format::%regex-replace-all
+                              "ab_ab" "([a-z]+)_\\1" "X" nil))))
+
+  ;; Case-insensitivity survives the migration.  Callers pass (FIND #\i FLAGS),
+  ;; a CHARACTER, but cl-regex-kit's compile-regex does (CHECK-TYPE
+  ;; CASE-INSENSITIVE BOOLEAN).  Without the coercion in %regex-match-p /
+  ;; %regex-replace-all that TYPE-ERROR is swallowed by their own degrade-to-NIL
+  ;; handlers, so every /i pattern would quietly stop working.
+  (it "format-regex-case-insensitive-flag-is-coerced-to-boolean"
+    (expect (cl-tmux/format::%regex-match-p "ABC" "xabcx" #\i))
+    (expect (null (cl-tmux/format::%regex-match-p "ABC" "xabcx" nil)))
+    (expect (string= "xQx" (cl-tmux/format::%regex-replace-all
+                            "xabcx" "ABC" "Q" #\i))))
+
   ;; %regex-replace-all returns the input unchanged on a malformed regex and on an
   ;; empty pattern (never signals, never inserts per-position).
   (it "format-regex-replace-all-malformed-unit"

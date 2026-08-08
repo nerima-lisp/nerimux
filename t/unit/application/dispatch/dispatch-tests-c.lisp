@@ -23,13 +23,10 @@
           (let ((ready (cl-tmux/pty:select-fds (list rfd) 200000)))  ; 200 ms
             (expect ready :to-be-truthy)
             (when ready
-              (cffi:with-foreign-object (buf :uint8 8)
-                (let ((n (cffi:foreign-funcall "read"
-                                               :int rfd :pointer buf :unsigned-long 3
-                                               :long)))
-                  (expect (= 3 n))
-                  (expect (= 27 (cffi:mem-aref buf :uint8 0)))
-                  (expect (= 73 (cffi:mem-aref buf :uint8 2)))))))))))
+              (let ((bytes (read-octets-from-fd rfd 3)))
+                (expect (= 3 (length bytes)))
+                (expect (= 27 (aref bytes 0)))
+                (expect (= 73 (aref bytes 2))))))))))
 
   ;; Switching away from a window sends ESC[O (focus lost) to the window being left.
   (it "cycle-window-delivers-focus-out-to-old-window-pane"
@@ -44,13 +41,10 @@
           (let ((ready (cl-tmux/pty:select-fds (list rfd) 200000)))
             (expect ready :to-be-truthy)
             (when ready
-              (cffi:with-foreign-object (buf :uint8 8)
-                (let ((n (cffi:foreign-funcall "read"
-                                               :int rfd :pointer buf :unsigned-long 3
-                                               :long)))
-                  (expect (= 3 n))
-                  (expect (= 27 (cffi:mem-aref buf :uint8 0)))
-                  (expect (= 79 (cffi:mem-aref buf :uint8 2)))))))))))
+              (let ((bytes (read-octets-from-fd rfd 3)))
+                (expect (= 3 (length bytes)))
+                (expect (= 27 (aref bytes 0)))
+                (expect (= 79 (aref bytes 2))))))))))
 
   ;; Cycling windows runs the focus-transition path without error when panes have no
   ;; PTY, and still changes the active window.

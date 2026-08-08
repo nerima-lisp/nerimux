@@ -15,7 +15,7 @@
     `(let* ((,label (format nil "cl-tmux-wire-test-~D-~D.bin"
                             (get-universal-time) (random 1000000)))
             (,path-var (namestring
-                        (merge-pathnames ,label (uiop:temporary-directory)))))
+                        (merge-pathnames ,label (host-kit:temporary-directory)))))
        (unwind-protect (progn ,@body)
          (ignore-errors (delete-file ,path-var))))))
 
@@ -91,7 +91,7 @@
     `(let* ((,label (format nil "cl-tmux-test-~D-~D.sock"
                             (get-universal-time) (random 1000000)))
             (,path-var (namestring
-                        (merge-pathnames ,label (uiop:temporary-directory)))))
+                        (merge-pathnames ,label (host-kit:temporary-directory)))))
        (unwind-protect (progn ,@body)
          (ignore-errors (delete-file ,path-var))))))
 

@@ -44,7 +44,7 @@
             (expect (= -1 (pane-fd target)))
             (cl-tmux::%handle-multi-client-message
              cl-tmux::+msg-key+
-             (babel:string-to-octets "forwarded stdin" :encoding :utf-8)
+             (cl-codec-kit:string-to-octets "forwarded stdin" :encoding :utf-8)
              s conn)
             (expect (search "forwarded stdin" (row-string (pane-screen target) 0))))))))
 

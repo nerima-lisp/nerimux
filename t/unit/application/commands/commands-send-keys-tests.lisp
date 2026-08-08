@@ -122,9 +122,6 @@
         (let ((ready (cl-tmux/pty:select-fds (list rfd) 200000)))
           (expect ready :to-be-truthy)
           (when ready
-            (cffi:with-foreign-object (buf :uint8 8)
-              (let ((n (cffi:foreign-funcall "read"
-                                             :int rfd :pointer buf :unsigned-long 4
-                                             :long)))
-                (expect (= 1 n))
-                (expect (= 13 (cffi:mem-aref buf :uint8 0)))))))))))
+            (let ((bytes (read-octets-from-fd rfd 4)))
+              (expect (= 1 (length bytes)))
+              (expect (= 13 (aref bytes 0))))))))))

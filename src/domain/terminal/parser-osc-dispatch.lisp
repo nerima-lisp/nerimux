@@ -16,7 +16,7 @@
       (let* ((decoded-bytes (and payload-data (%base64-decode payload-data)))
              (decoded-text  (and decoded-bytes
                                  (handler-case
-                                     (babel:octets-to-string decoded-bytes :encoding :utf-8)
+                                     (cl-codec-kit:octets-to-string decoded-bytes :encoding :utf-8)
                                    (error () nil)))))
         (when (and decoded-text *osc52-handler*)
           (funcall *osc52-handler* decoded-text))))))
@@ -74,8 +74,30 @@
    (%handle-osc-133 screen body)))
 
 (defun %dispatch-osc (screen payload-buffer)
-  "Parse accumulated OSC payload PAYLOAD-BUFFER and apply side effects to SCREEN."
-  (let* ((payload  (babel:octets-to-string payload-buffer :encoding :utf-8 :errorp nil))
+  "Parse accumulated OSC payload PAYLOAD-BUFFER and apply side effects to SCREEN.
+
+   OSC payloads arrive from the child process and are untrusted, so a malformed
+   UTF-8 sequence must not signal out of the parser: :ERRORP NIL substitutes
+   :REPLACEMENT for each one instead.
+
+   :REPLACEMENT is passed explicitly rather than defaulted.  CL-CODEC-KIT's own
+   default is #\\SUB (U+001A), which is a C0 control character — wrong for a
+   terminal emulator, where this string is scanned for #\\; and then handed to
+   title/clipboard/cwd handlers as display text.  U+FFFD is both what babel did
+   here originally (its UTF-8 decoder hardcodes +REPL+ = #xFFFD for every
+   decoding error, regardless of the encoding's own :DEFAULT-REPLACEMENT slot)
+   and what cl-tmux substitutes everywhere else it cannot represent a code
+   point — see SAFE-CODE-CHAR and +UNICODE-REPLACEMENT-CHAR+ in cell.lisp.
+
+   How MANY U+FFFD one bad sequence yields is not guaranteed: CL-CODEC-KIT
+   emits one per decode error and resyncs one octet at a time, so ED A0 80
+   yields three.  Nothing here is length-sensitive: PAYLOAD is only scanned for
+   the first #\\; and split there, and BODY reaches title/colour/clipboard/cwd
+   handlers that treat it as opaque text."
+  (let* ((payload  (cl-codec-kit:octets-to-string payload-buffer
+                                                  :encoding :utf-8
+                                                  :errorp nil
+                                                  :replacement #\REPLACEMENT_CHARACTER))
          (semi-pos (position #\; payload))
          (command  (%parse-osc-command payload (or semi-pos (length payload))))
          (body     (if semi-pos (subseq payload (1+ semi-pos)) "")))

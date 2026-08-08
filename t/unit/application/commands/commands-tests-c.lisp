@@ -99,7 +99,7 @@
   ;; pipe-pane-open runs the command via `sh -c`, so a bogus *command* still
   ;; launches successfully (sh exists, then fails internally — matching tmux).
   ;; To exercise the launch-failure → NIL path, point *default-shell* at a
-  ;; non-existent binary so uiop:launch-program itself fails.
+  ;; non-existent binary so process-kit:spawn itself fails.
   (it "pipe-pane-open-invalid-command-returns-nil"
     (let* ((pane   (%make-test-pane))
            (cl-tmux/config:*default-shell* "/no/such/shell-5f3a9b2e")
@@ -107,18 +107,32 @@
       (expect (null result))))
 
   ;; pipe-pane-open returns NIL and leaves the pane clean when launch times out.
+  ;;
+  ;; THE STUB MUST BE INSTALLED ON PROCESS-KIT:SPAWN, not on uiop:launch-program.
+  ;; pipe-pane-open stopped calling uiop:launch-program in the dependency
+  ;; migration (commands-pipe-pane.lisp now calls process-kit:spawn), and a stub
+  ;; on the old name intercepts nothing: the launch returns promptly, the 1-second
+  ;; +pipe-pane-open-timeout+ never fires, pipe-pane-open returns a live handle,
+  ;; and this test fails while claiming to cover the timeout path.
+  ;;
+  ;; The stub keeps SPAWN's real lambda list — (COMMAND ARGUMENTS &KEY ...) — and
+  ;; delegates to the original rather than fabricating a return value, so if the
+  ;; deadline ever stopped firing this would still produce a genuine
+  ;; PROCESS-KIT:PROCESS-HANDLE that pipe-pane-open can read process-stdin off.
+  ;; A shape mismatch would otherwise be swallowed by %with-timeout-cleanup's
+  ;; (or operation-timed-out error) clause and look exactly like a timeout.
   (it "pipe-pane-open-times-out-and-cleans-up"
     (let* ((pane (%make-test-pane))
-           (original-launch (fdefinition 'uiop:launch-program)))
+           (original-spawn (fdefinition 'process-kit:spawn)))
       (unwind-protect
           (progn
-            (setf (fdefinition 'uiop:launch-program)
-                  (lambda (&rest args)
-                    (sleep 2)
-                    (apply original-launch args)))
+            (setf (fdefinition 'process-kit:spawn)
+                  (lambda (command arguments &rest keys)
+                    (sleep 2)                 ; > +pipe-pane-open-timeout+ (1s)
+                    (apply original-spawn command arguments keys)))
             (expect (null (cl-tmux/commands:pipe-pane-open pane "cat")))
             (assert-pipe-pane-closed-state pane))
-        (setf (fdefinition 'uiop:launch-program) original-launch)
+        (setf (fdefinition 'process-kit:spawn) original-spawn)
         (ignore-errors (cl-tmux/commands:pipe-pane-close pane)))))
 
   ;; pipe-pane-write with an open pipe sends bytes to the subprocess stdin.
@@ -130,11 +144,26 @@
   ;; still verifies the real behaviour (bytes DO traverse the pipe to the child)
   ;; while tolerating a one-off environmental hiccup.  3 deterministic failures in a
   ;; row would still fail (a genuine break is not masked).
+  ;;
+  ;; THREE uiop CALLS DELIBERATELY REMAIN, and they are the only ones left under
+  ;; t/.  cl-host-kit has no equivalent for any of them, so replacing them would
+  ;; mean rewriting the fixture rather than re-pointing a call:
+  ;;   * uiop:tmpize-pathname   — cl-host-kit's temporary-file API is CPS
+  ;;     (call-with-temporary-file / with-temporary-file) and CREATES and OPENS the
+  ;;     file.  This test needs a unique pathname that does NOT exist yet, because
+  ;;     `cat > FILE` is what has to create it; handing the shell an already-open
+  ;;     mkstemp fd would stop testing the pipe and start testing redirection.
+  ;;   * uiop:merge-pathnames*  — no cl-host-kit export.
+  ;;   * uiop:native-namestring — no cl-host-kit export.  The result is
+  ;;     interpolated into a /bin/sh command line, so the native (not Lisp)
+  ;;     spelling of the path is load-bearing.
+  ;; host-kit:temporary-directory, read-file-string and delete-file-if-exists in
+  ;; the same form DO have exact equivalents and were migrated.
   (it "pipe-pane-write-bytes-reach-subprocess"
     (flet ((attempt ()
              (let ((tmpfile (uiop:tmpize-pathname
                              (uiop:merge-pathnames* "pipe-pane-write-test"
-                                                    (uiop:temporary-directory))))
+                                                    (host-kit:temporary-directory))))
                    (pane    (%make-test-pane)))
                (unwind-protect
                     (progn
@@ -149,11 +178,11 @@
                                            (search "ABC"
                                                    (setf contents
                                                          (or (ignore-errors
-                                                               (uiop:read-file-string tmpfile))
+                                                               (host-kit:read-file-string tmpfile))
                                                              ""))))
                                 do (sleep 0.005))
                           (and (search "ABC" contents) t))))
-                 (ignore-errors (uiop:delete-file-if-exists tmpfile))))))
+                 (ignore-errors (host-kit:delete-file-if-exists tmpfile))))))
       (let ((ok nil))
         (dotimes (i 8) (unless ok (setf ok (attempt))))
         (expect ok :to-be-truthy))))
@@ -207,6 +236,28 @@
     (let ((result (cl-tmux/commands::%run-with-timeout
                    (lambda () (sleep 60)) 1/1000)))
       (expect (null result))))
+
+  ;; The deadline may be an arbitrary FORM, not just a literal.  This pins the
+  ;; bordeaux-threads -> cl-concurrent-kit syntax change: bt:with-timeout took
+  ;; its deadline wrapped in a list, (bt:with-timeout (SECS) ...), while
+  ;; cl-concurrent-kit's is a bare form like SB-EXT:WITH-TIMEOUT's,
+  ;; (with-timeout SECS ...).  Carrying the old parens over would expand to
+  ;; (SECS) -- calling the timeout value as a function.
+  (it "run-with-timeout-accepts-a-computed-deadline"
+    (let ((seconds (+ 5 5)))
+      (expect (= 42 (cl-tmux/commands::%run-with-timeout (lambda () 42) seconds)))))
+
+  ;; The timeout the handler clause catches is CL-CONCURRENT-KIT:OPERATION-TIMED-OUT,
+  ;; not SB-EXT:TIMEOUT.  This matters because SB-EXT:TIMEOUT is a
+  ;; SERIOUS-CONDITION that is deliberately NOT an ERROR, so a handler written
+  ;; for ERROR would not catch it and the timeout would escape %run-with-timeout
+  ;; instead of returning NIL.  Asserted on the primitive so a future refactor of
+  ;; %run-with-timeout's own handler cannot mask it.
+  (it "with-timeout-signals-operation-timed-out-not-sb-ext-timeout"
+    (expect (typep (handler-case
+                       (cl-concurrent-kit:with-timeout 1/1000 (sleep 60))
+                     (cl-concurrent-kit:operation-timed-out (c) c))
+                   'error)))
 
   ;; ── run-shell timeout ────────────────────────────────────────────────────────
 

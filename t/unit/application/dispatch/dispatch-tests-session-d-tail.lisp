@@ -32,7 +32,7 @@
                          ,prefix
                          (get-universal-time)
                          (random 1000000)))
-          (,path (namestring (merge-pathnames label (uiop:temporary-directory)))))
+          (,path (namestring (merge-pathnames label (host-kit:temporary-directory)))))
      (unwind-protect
           (progn
             (with-open-file (out ,path
@@ -157,7 +157,7 @@
         (with-temporary-text-file (path "cl-tmux-save-buffer" "")
           (cl-tmux/buffer:set-named-buffer "saved" "named text")
           (cl-tmux::%run-command-tokens s (list "save-buffer" "-b" "saved" path))
-          (expect (string= "named text" (uiop:read-file-string path)))))))
+          (expect (string= "named text" (host-kit:read-file-string path)))))))
 
   ;; save-buffer -a appends the selected buffer to an existing file.
   (it "cmd-save-buffer-a-appends"
@@ -166,7 +166,7 @@
         (with-temporary-text-file (path "cl-tmux-save-buffer-append" "pre:")
           (cl-tmux/buffer:add-paste-buffer "post")
           (cl-tmux::%run-command-tokens s (list "save-buffer" "-a" path))
-          (expect (string= "pre:post" (uiop:read-file-string path)))))))
+          (expect (string= "pre:post" (host-kit:read-file-string path)))))))
 
   ;; save-buffer rejects unknown flags and stray positionals before writing.
   (it "cmd-save-buffer-rejects-unsupported-arguments"
@@ -183,7 +183,7 @@
                    (cl-tmux::%run-command-tokens s (cons "save-buffer" args))
                    "save-buffer: unsupported argument"
                    (format nil "save-buffer rejects ~S" args))
-                (expect (string= "pre:" (uiop:read-file-string path))))))))))
+                (expect (string= "pre:" (host-kit:read-file-string path))))))))))
 
   ;; load-buffer -b name path loads file contents.
   (it "cmd-load-buffer-b-loads-named-buffer"

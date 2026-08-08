@@ -63,7 +63,7 @@
    Stops at EOF or when +stdin-read-max-octets+ have been accumulated, whichever
    comes first -- prevents an indefinite hang when stdin is a long-running pipe
    that never closes (e.g. `some-process | cl-tmux split-window -I`)."
-  (babel:string-to-octets
+  (cl-codec-kit:string-to-octets
     (with-output-to-string (output-accumulator)
       (let ((byte-count 0))
         (loop for character = (read-char *standard-input* nil nil)

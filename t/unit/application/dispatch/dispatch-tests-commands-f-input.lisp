@@ -153,7 +153,7 @@
                  (setf (fdefinition 'cl-tmux/pty:pty-write)
                        (lambda (fd octets)
                          (declare (ignore fd))
-                         (push (babel:octets-to-string octets :encoding :utf-8)
+                         (push (cl-codec-kit:octets-to-string octets :encoding :utf-8)
                                written)))
                  (cl-tmux::%paste-to-pane pane "hi" bracket-p))
             (setf (fdefinition 'cl-tmux/pty:pty-write) real-pty-write))

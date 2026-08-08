@@ -31,8 +31,17 @@
                               input (sort (copy-list matches) #'string<))))))))))
 
 (defun %lc-subst-all (string pat replacement)
-  "Replace all non-overlapping occurrences of PAT in STRING with REPLACEMENT."
-  (cl-ppcre:regex-replace-all (cl-ppcre:quote-meta-chars pat) string replacement))
+  "Replace all non-overlapping occurrences of PAT in STRING with REPLACEMENT.
+
+   PAT is a fixed placeholder (\"#{command_list_name}\"), escaped so its #, { and }
+   are literal.  REPLACEMENT is still expanded as a template, exactly as
+   cl-ppcre:regex-replace-all did — hence :TEMPLATE-SYNTAX :BACKSLASH, which
+   selects the `\\1` dialect cl-ppcre used.  Leaving it at cl-regex-kit's `$1`
+   default would change what a user's list-commands -F string means."
+  (cl-regex-kit:replace-all
+   (cl-regex-kit:compile-regex (cl-regex-kit:escape pat))
+   string replacement
+   :template-syntax :backslash))
 
 (defun %lc-render-command (canonical-name format-string)
   "Render one canonical command entry using FORMAT-STRING or default usage output."

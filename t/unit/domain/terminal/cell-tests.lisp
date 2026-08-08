@@ -189,7 +189,51 @@
                        (list (cl-tmux/terminal/types:safe-code-char 97) #\a    "U+0061 = LATIN SMALL LETTER A")
                        (list (cl-tmux/terminal/types:safe-code-char 32) #\Space "U+0020 = SPACE")
                        (list (cl-tmux/terminal/types:safe-code-char 10) #\Newline "U+000A = LINE FEED"))
-                 :test #'equal)))
+                 :test #'equal))
+
+  ;;; ── Lone surrogates ────────────────────────────────────────────────────────
+  ;;;
+  ;;; D800-DFFF are reserved for UTF-16 pairing and are not Unicode scalar
+  ;;; values, so no well-formed UTF-8 encodes one. SBCL nonetheless lets
+  ;;; (CODE-CHAR #xD800) build a character, and CHAR-CODE-LIMIT does not exclude
+  ;;; the block — so the old (< cp char-code-limit) guard admitted a lone
+  ;;; surrogate into a screen cell.
+  ;;;
+  ;;; That matters because cl-tmux's own UTF-8 continuation decoder
+  ;;; (parser-utf8.lisp) will happily reassemble the three bytes ED A0 80 into
+  ;;; code point #xD800 — i.e. ANY child process can produce one on demand — and
+  ;;; the cell then reaches CL-CODEC-KIT:STRING-TO-OCTETS on the render/broadcast
+  ;;; path (protocol.lisp MSG-FRAME). babel used to encode it as CESU-8 and say
+  ;;; nothing; SBCL's encoder signals, which would take down the frame
+  ;;; broadcast for every attached client.
+
+  ;; surrogate-code-point-p covers exactly D800-DFFF and nothing on either side.
+  (it "surrogate-code-point-p-covers-exactly-the-surrogate-block"
+    (expect (cl-tmux/terminal/types:surrogate-code-point-p #xD800) :to-be-truthy)
+    (expect (cl-tmux/terminal/types:surrogate-code-point-p #xDBFF) :to-be-truthy)
+    (expect (cl-tmux/terminal/types:surrogate-code-point-p #xDC00) :to-be-truthy)
+    (expect (cl-tmux/terminal/types:surrogate-code-point-p #xDFFF) :to-be-truthy)
+    ;; Boundaries: one below and one above the block are ordinary characters.
+    (expect (cl-tmux/terminal/types:surrogate-code-point-p #xD7FF) :to-be-falsy)
+    (expect (cl-tmux/terminal/types:surrogate-code-point-p #xE000) :to-be-falsy))
+
+  ;; safe-code-char substitutes U+FFFD for a lone surrogate rather than
+  ;; returning an unencodable character.
+  (it "safe-code-char-lone-surrogate-returns-replacement"
+    (dolist (cp '(#xD800 #xDBFF #xDC00 #xDFFF))
+      (expect (= #xFFFD (char-code (cl-tmux/terminal/types:safe-code-char cp)))))
+    ;; The characters immediately outside the block are returned unchanged.
+    (expect (= #xD7FF (char-code (cl-tmux/terminal/types:safe-code-char #xD7FF))))
+    (expect (= #xE000 (char-code (cl-tmux/terminal/types:safe-code-char #xE000)))))
+
+  ;; The point of the guard: whatever safe-code-char returns must be UTF-8
+  ;; encodable, because it lands in a screen cell that is later encoded for the
+  ;; wire. This is the assertion that would have caught the regression.
+  (it "safe-code-char-result-is-always-utf8-encodable"
+    (dolist (cp '(#xD800 #xDBFF #xDFFF #x41 #xD7FF #xE000 #x1F600))
+      (let ((string (string (cl-tmux/terminal/types:safe-code-char cp))))
+        (expect (cl-codec-kit:string-to-octets string :encoding :utf-8)
+                :to-be-truthy)))))
 
 ;;; ── SUITE: char-width / double-width ─────────────────────────────────────────
 
@@ -209,9 +253,35 @@
     (loop for cp from 32 to 126
           do (expect (= 1 (char-width (code-char cp))))))
 
-  ;; define-wide-char-ranges is a defined macro accessible via single-colon export.
-  (it "define-wide-char-ranges-macro-is-defined"
-    (expect (macro-function 'cl-tmux/terminal/types:define-wide-char-ranges)))
+  ;; ── zero-width characters ────────────────────────────────────────────────
+  ;;
+  ;; THE REGRESSION THIS SUITE EXISTS TO PIN.  char-width used to be a
+  ;; hand-rolled table of 13 coarse ranges with a `1' fallback, so every
+  ;; combining mark counted as one column that the outer terminal never drew,
+  ;; and each one desynchronised the rest of the line by a cell.
+  (it "char-width-combining-marks-are-zero-columns"
+    (dolist (cp '(#x0300      ; COMBINING GRAVE ACCENT (Mn)
+                  #x0301      ; COMBINING ACUTE ACCENT (Mn)
+                  #x036F      ; COMBINING LATIN SMALL LETTER X (Mn), block end
+                  #x1AB0      ; COMBINING DOUBLED CIRCUMFLEX ACCENT (Mn)
+                  #x1DC0      ; COMBINING DOTTED GRAVE ACCENT (Mn)
+                  #x20D0      ; COMBINING LEFT HARPOON ABOVE (Mn)
+                  #x20DD      ; COMBINING ENCLOSING CIRCLE (Me)
+                  #xFE20))    ; COMBINING LIGATURE LEFT HALF (Mn)
+      (expect (= 0 (char-width (code-char cp))))))
+
+  ;; U+3099/U+309A are the case the OLD table got wrong in the other direction:
+  ;; they are combining marks, but they sit inside the table's blanket
+  ;; #x3041-#x33FF "Hiragana, Katakana" range, so each one was counted as TWO
+  ;; columns instead of zero — a three-cell error per mark.
+  (it "char-width-kana-combining-marks-are-zero-not-two"
+    (expect (= 0 (char-width (code-char #x3099))))
+    (expect (= 0 (char-width (code-char #x309A)))))
+
+  ;; U+231A WATCH is East Asian Wide but falls outside the old table's
+  ;; #x1F300-#x1FAFF emoji range, so it was counted 1 and drawn 2.
+  (it "char-width-wide-symbol-outside-old-emoji-range"
+    (expect (= 2 (char-width (code-char #x231A)))))
 
   ;; Table-driven char-width boundary tests: (cp expected-width description)
   ;;
@@ -229,14 +299,21 @@
                     (#x9FFF 2 "U+9FFF CJK Unified end")
                     (#xAC00 2 "U+AC00 Hangul syllables start")
                     (#xD7A3 2 "U+D7A3 Hangul syllables end")
-                    (#xFF00 2 "U+FF00 Fullwidth ASCII start")
+                    ;; U+FF00 is UNASSIGNED — the Fullwidth Forms block starts at
+                    ;; U+FF01.  The old hand-rolled table blanket-widened
+                    ;; #xFF00-#xFF60 and so claimed 2; the real East_Asian_Width
+                    ;; of an unassigned code point here is Neutral, i.e. 1.
+                    (#xFF00 1 "U+FF00 unassigned, below Fullwidth block — width 1")
+                    (#xFF01 2 "U+FF01 Fullwidth exclamation, real block start")
                     (#xFF21 2 "U+FF21 Fullwidth Latin Capital A (mid-range)")
                     (#xFF60 2 "U+FF60 Fullwidth ASCII end")
                     (#xFFE0 2 "U+FFE0 Fullwidth signs start")
                     (#xFFE6 2 "U+FFE6 Fullwidth signs end")
                     (#x1F2FF 1 "U+1F2FF below Emoji block — must be width 1")
                     (#x1F300 2 "U+1F300 Emoji/pictograph block start")
-                    (#x1FAFF 2 "U+1FAFF Emoji/pictograph block end")
+                    ;; Also unassigned, and also widened by the old blanket range.
+                    (#x1FAFF 1 "U+1FAFF unassigned — width 1, not 2")
+                    (#x1F600 2 "U+1F600 GRINNING FACE, a real wide emoji")
                     (#x20000 2 "U+20000 CJK Extension B start")))
       (destructuring-bind (cp expected-width desc) case
         (declare (ignore desc))

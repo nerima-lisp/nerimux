@@ -71,7 +71,7 @@
     (let ((cl-tmux::*wait-channels* (make-hash-table :test #'equal))
           (channel-name "wfc-test"))
       (cl-tmux::%ensure-channel channel-name)
-      (bordeaux-threads:make-thread
+      (cl-concurrent-kit:make-thread
        (lambda ()
          (sleep 0.05)
          (cl-tmux::signal-channel channel-name))

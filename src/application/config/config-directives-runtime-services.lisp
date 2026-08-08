@@ -38,7 +38,7 @@
 
 (defun %run-config-shell-command-background (command &key combine-stderr directory)
   "Run config COMMAND asynchronously and report the directive as handled."
-  (bt:make-thread
+  (cl-concurrent-kit:make-thread
    (lambda ()
      (%run-config-shell-command-safe command
                                      :combine-stderr combine-stderr

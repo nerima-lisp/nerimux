@@ -47,6 +47,7 @@
           (:file "cursor-tests-c") ; cursor-ri, cursor-nel, write-char-at-cursor wide, %advance-cursor no-wrap, movement behavioral - part III
           (:file "cursor-tests-d") ; cursor-lf direct, cursor-nl newline-mode, %materialize-tab-stops, BCE background, boundary table - part IV
           (:file "cursor-tests-e") ; custom multi-stop %next-tab-stop/%prev-tab-stop via HTS/TBC, table-driven regression - part V
+          (:file "char-write-tests") ; combining-char-p = char-width; kana marks, ZWJ, controls
           (:file "scroll-tests") ; scroll-ops - part I
           (:file "scroll-erase-tests") ; ED/EL parser-path and direct erase coverage
           (:file "scroll-region-tests") ; DECSTBM, RI, IL/DL parser-path scroll-region coverage
@@ -316,6 +317,7 @@
           (:file "protocol-tests-b") ; field/text codecs and basic command payload round-trips - part II
           (:file "protocol-binary-layout-tests") ; integer encoders, frame layout, attach payload boundaries
           (:file "protocol-command-payload-tests") ; target detection and encode-command-payload ordering
+          (:file "protocol-command-malformed-utf8-tests") ; strict command decode + drop guard
           (:file "transport-tests") ; round-trips, with-incoming-frame, %read-exact - part I
           (:file "transport-tests-b"))) ; validation, security boundaries, CPS-phase direct coverage - part II
         (:module "bootstrap"

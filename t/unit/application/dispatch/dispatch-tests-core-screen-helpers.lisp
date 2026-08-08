@@ -63,14 +63,11 @@
         (let ((ready (cl-tmux/pty:select-fds (list rfd) 200000)))  ; 200 ms
           (expect ready :to-be-truthy)
           (when ready
-            (cffi:with-foreign-object (buf :uint8 8)
-              (let ((n (cffi:foreign-funcall "read"
-                                             :int rfd :pointer buf :unsigned-long 3
-                                             :long)))
-                (expect (= 3 n))
-                (expect (= 27 (cffi:mem-aref buf :uint8 0)))
-                (expect (= 91 (cffi:mem-aref buf :uint8 1)))
-                (expect (= 73 (cffi:mem-aref buf :uint8 2))))))))))
+            (let ((bytes (read-octets-from-fd rfd 3)))
+              (expect (= 3 (length bytes)))
+              (expect (= 27 (aref bytes 0)))
+              (expect (= 91 (aref bytes 1)))
+              (expect (= 73 (aref bytes 2)))))))))
 
   ;; A pane whose app did NOT enable focus events receives no report even with a
   ;; live fd, and select-fds reports the pipe idle.

@@ -11,16 +11,22 @@
     (let* ((screen (make-screen 10 5))
            (pane   (make-pane :id 1 :x 0 :y 0 :width 10 :height 5
                               :fd -1 :pid -1 :screen screen)))
-      (pane-feed pane (babel:string-to-octets "hi" :encoding :utf-8))
+      (pane-feed pane (cl-codec-kit:string-to-octets "hi" :encoding :utf-8))
       (expect (char= #\h (cell-char (screen-cell screen 0 0))))
       (expect (char= #\i (cell-char (screen-cell screen 1 0))))
       (expect (= 2 (screen-cursor-x screen)))))
 
   ;; ── pane-reposition direct unit test (no PTY) ───────────────────────────────
   ;;
-  ;; NOTE: pane-reposition calls set-pty-size on fd -1, which is a tolerated
-  ;; EBADF no-op (ioctl returns -1 without signalling a Lisp condition), and
-  ;; calls screen-resize under the screen lock.  The observable effects are the
+  ;; NOTE: make-no-pty-pane builds panes with fd -1, and pane-reposition's own
+  ;; (> (pane-fd pane) 0) guard means set-pty-size is NEVER CALLED for them.  That
+  ;; guard is what makes these tests PTY-free — it is not, and never was, an EBADF
+  ;; that the syscall tolerates.  Any tolerance there might once have been is
+  ;; gone: set-pty-size now reaches cl-tty-kit:set-terminal-size, which rejects a
+  ;; negative fd and a non-positive dimension outright and signals rather than
+  ;; returning -1 (see pane-reposition-degenerate-dimensions-skip-the-pty-resize
+  ;; below, and the fd/dimension guards it pins).  pane-reposition also calls
+  ;; screen-resize under the screen lock.  The observable effects here are the
   ;; x/y/width/height slot updates and the matching screen dimension update.
 
   ;; pane-reposition sets x/y/width/height and resizes the underlying screen.
@@ -64,6 +70,45 @@
             (expect (= expected-y (pane-y pane)))
             (expect (= expected-h (pane-height pane)))
             (expect (= expected-h (screen-height (pane-screen pane)))))))))
+
+  ;; ── pane-reposition degenerate-layout guard ─────────────────────────────────
+  ;;
+  ;; A zero dimension must not reach the PTY resize.  set-pty-size now delegates
+  ;; to cl-tty-kit:set-terminal-size, whose %assert-terminal-dimension demands
+  ;; POSITIVE integers and signals ("Terminal columns must be a positive integer,
+  ;; got 0.") BEFORE attempting the ioctl — where the cffi path it replaced sent a
+  ;; 0x0 winsize to the kernel and dropped the -1 return.  pane-reposition is the
+  ;; one caller that COMPUTES its dimensions rather than receiving them:
+  ;; %pane-border-status-reservation returns a CONTENT-HEIGHT of 0 for an
+  ;; allocated HEIGHT of 0, so a degenerate layout would signal out of what is
+  ;; otherwise a pure geometry update.
+  ;;
+  ;; The fd guard alone is NOT enough and this test would pass vacuously on a
+  ;; make-no-pty-pane, whose fd is -1 — so the pane is given a positive fd and
+  ;; *resize-pty* is swapped for a recorder.  No real fd is ever touched.
+
+  ;; pane-reposition skips the PTY resize when a computed dimension is zero, and
+  ;; still performs it for a sane geometry.
+  (it "pane-reposition-degenerate-dimensions-skip-the-pty-resize"
+    (with-fresh-options
+      (cl-tmux/options:set-option "pane-border-status" "off")
+      (let* ((calls nil)
+             (cl-tmux/ports:*resize-pty*
+               (lambda (fd rows cols) (push (list fd rows cols) calls)))
+             (pane (make-no-pty-pane 1 0 0 20 5)))
+        (setf (pane-fd pane) 3)              ; positive: the fd guard passes
+        ;; height 0 → content-height 0
+        (finishes (pane-reposition pane 0 0 40 0)
+                  "a zero content height must not reach set-pty-size")
+        (expect (null calls))
+        ;; width 0
+        (finishes (pane-reposition pane 0 0 0 10)
+                  "a zero width must not reach set-pty-size")
+        (expect (null calls))
+        ;; Positive control: a sane geometry still resizes, and still transposes
+        ;; into set-pty-size's (FD ROWS COLS) order.
+        (pane-reposition pane 0 0 40 10)
+        (expect (equal (list (list 3 10 40)) calls)))))
 
   ;; ── next-pane-id direct tests (pure, no PTY) ─────────────────────────────
 

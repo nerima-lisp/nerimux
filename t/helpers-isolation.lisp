@@ -44,7 +44,7 @@
   (let ((path-sym (gensym "PATH")))
     `(let ((,path-sym (merge-pathnames
                        (format nil "cl-tmux-test-~D.conf" (random 1000000))
-                       (uiop:temporary-directory))))
+                       (host-kit:temporary-directory))))
        (unwind-protect
             (progn
               (with-open-file (out ,path-sym :direction :output

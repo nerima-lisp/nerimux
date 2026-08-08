@@ -24,9 +24,13 @@
   "Run THUNK in a fresh thread; join it up to TIMEOUT-SECONDS.
    Returns (funcall thunk) result or NIL if the timeout expires."
   (handler-case
-      (bt:with-timeout (timeout-seconds)
+      ;; NOT (with-timeout (timeout-seconds) ...): cl-concurrent-kit's macro takes
+      ;; the deadline as a bare form, like SB-EXT:WITH-TIMEOUT, where bordeaux-
+      ;; threads wrapped it in a list.  Keeping the parens would call
+      ;; TIMEOUT-SECONDS as a function.
+      (cl-concurrent-kit:with-timeout timeout-seconds
         (funcall thunk))
-    (bt:timeout () nil)))
+    (cl-concurrent-kit:operation-timed-out () nil)))
 
 (defmacro with-shell-timeout ((shell-var timeout) &body body)
   "Bind SHELL-VAR to the active shell binary and run BODY with a TIMEOUT (seconds).
@@ -70,7 +74,7 @@
    subprocess may run; when the synchronous limit is exceeded NIL is returned."
   (if background
       (progn
-        (bt:make-thread
+        (cl-concurrent-kit:make-thread
           (lambda ()
             (let ((shell (or *default-shell* "/bin/sh")))
               (ignore-errors

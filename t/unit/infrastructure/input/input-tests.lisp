@@ -76,13 +76,11 @@
       (let ((ready (cl-tmux/pty:select-fds (list rfd) 200000)))  ; 200 ms timeout
         (expect ready :to-be-truthy)
         (when ready
-          ;; Read exactly one byte via CFFI (same mechanics as read-byte-nonblock).
-          (cffi:with-foreign-object (rbuf :uint8)
-            (let ((n (cffi:foreign-funcall "read"
-                                           :int rfd :pointer rbuf :unsigned-long 1
-                                           :long)))
-              (expect (= 1 n))
-              (expect (= 42 (cffi:mem-ref rbuf :uint8)))))))))
+          ;; Read exactly one byte (same mechanics as read-byte-nonblock, which
+          ;; now goes through cl-tty-kit:fd-read-octets rather than cffi).
+          (let ((bytes (read-octets-from-fd rfd 1)))
+            (expect (= 1 (length bytes)))
+            (expect (= 42 (aref bytes 0))))))))
 
   ;; select-fds returns NIL when no data is available within the timeout.
   ;; Verified on a fresh idle pipe.

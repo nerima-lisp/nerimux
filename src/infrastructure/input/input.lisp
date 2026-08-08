@@ -2,8 +2,11 @@
 
 ;;;; Keyboard input: raw-mode wrapper and non-blocking stdin reads.
 ;;;;
-;;;; We read from fd 0 (stdin) via select+CFFI rather than through a Lisp
-;;;; stream because Lisp streams may buffer; we need single bytes.
+;;;; We read from fd 0 (stdin) at the descriptor level rather than through a
+;;;; Lisp stream because Lisp streams may buffer; we need single bytes. The
+;;;; readiness poll goes through cl-tmux/pty:select-fds (cl-process-kit) and the
+;;;; read itself through cl-tty-kit:fd-read-octets, the same function
+;;;; pty-read-blocking-into already uses for the PTY master side.
 
 ;;; ── Raw-mode convenience macro ─────────────────────────────────────────────
 
@@ -34,14 +37,26 @@
   "Return a byte (0–255) from stdin within TIMEOUT-US microseconds, or NIL.
    NIL means the timeout elapsed with no data — it does NOT mean EOF.
    EOF on stdin is indistinguishable from a zero-byte read at this layer;
-   both return NIL.  TIMEOUT-US = 0 is a purely non-blocking poll."
+   both return NIL.  TIMEOUT-US = 0 is a purely non-blocking poll.
+
+   cl-tty-kit:fd-read-octets already collapses the cases the raw read(2) call
+   this replaces had to distinguish by hand: it returns a positive count for
+   data, 0 at EOF, and NIL when the read would have blocked (EAGAIN/EWOULDBLOCK)
+   or a signal interrupted it (EINTR).  Only a count of exactly 1 yields a byte,
+   so EOF and would-block both fall through to NIL — the documented contract
+   above, unchanged.
+
+   A hard OS error is the one case whose handling had to change rather than be
+   copied: the old code ignored read(2)'s -1 return and produced NIL, whereas
+   fd-read-octets signals PTY-OPERATION-FAILED.  It is mapped back to NIL here
+   so an unreadable stdin cannot take down the interactive key loop, matching
+   both the previous behavior and this function's stated \"or NIL\" contract."
   (declare (type fixnum timeout-us))
   (let ((ready (cl-tmux/pty:select-fds (list 0) timeout-us)))
     (when ready
       ;; Read exactly one byte from fd 0 directly (bypasses Lisp buffering).
-      (cffi:with-foreign-object (buf :uint8)
-        (let ((n (cffi:foreign-funcall "read"
-                                       :int 0 :pointer buf :unsigned-long 1
-                                       :long)))
-          (when (= n 1)
-            (cffi:mem-ref buf :uint8)))))))
+      (let ((buffer (make-array 1 :element-type '(unsigned-byte 8))))
+        (let ((count (handler-case (cl-tty-kit:fd-read-octets 0 buffer 1)
+                       (cl-tty-kit:pty-operation-failed () nil))))
+          (when (eql count 1)
+            (aref buffer 0)))))))

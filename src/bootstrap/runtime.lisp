@@ -41,24 +41,22 @@
 
 (defconstant +reader-thread-join-timeout+ 10
   "Seconds (real number) to wait for a PTY reader thread to terminate before
-   giving up when the Lisp implementation supports bounded thread joins.")
+   giving up.")
 
 (defun %join-thread-with-timeout (thread &optional (timeout +reader-thread-join-timeout+))
-  "Join THREAD with a bounded wait when available.
+  "Join THREAD, waiting at most TIMEOUT seconds.
 
-   Bordeaux Threads does not standardize a timeout argument to JOIN-THREAD; SBCL
-   provides one on SB-THREAD:JOIN-THREAD.  On other implementations, poll for the
-   thread to exit and only call the portable join once it is already dead."
-  #+sbcl
-  (sb-thread:join-thread thread :timeout timeout)
-  #-sbcl
-  (let ((deadline (+ (get-internal-real-time)
-                     (round (* timeout internal-time-units-per-second)))))
-    (loop while (and (bordeaux-threads:thread-alive-p thread)
-                     (< (get-internal-real-time) deadline))
-          do (sleep 0.01))
-    (unless (bordeaux-threads:thread-alive-p thread)
-      (bordeaux-threads:join-thread thread))))
+   SB-THREAD:JOIN-THREAD is called directly rather than through
+   CL-CONCURRENT-KIT:JOIN-THREAD only because there is nothing to gain from the
+   wrapper here: it forwards :TIMEOUT to this same call.  Signals
+   SB-THREAD:JOIN-THREAD-ERROR when the deadline passes or THREAD aborted;
+   callers that treat a stuck reader as survivable wrap this in IGNORE-ERRORS.
+
+   This used to carry a #-SBCL polling fallback for implementations whose
+   JOIN-THREAD takes no timeout.  It was already incoherent — the #+SBCL branch
+   above it made the function SBCL-only in practice — and ADR-0048 makes the
+   whole org SBCL-only, so the dead branch is gone rather than conditionalized."
+  (sb-thread:join-thread thread :timeout timeout))
 
 (defconstant +wait-for-channel-timeout+ 30
   "Seconds before wait-for-channel gives up waiting for a signal.
@@ -89,7 +87,7 @@
 (defun %ensure-channel (name)
   "Return the plist for channel NAME, creating it if absent."
   (or (gethash name *wait-channels*)
-      (let* ((lk (make-lock (format nil "wf-~A" name)))
+      (let* ((lk (make-lock :name (format nil "wf-~A" name)))
              (cv (make-condition-variable :name (format nil "wf-cv-~A" name)))
              (ch (list :lock lk :cv cv :locked nil)))
         (setf (gethash name *wait-channels*) ch)

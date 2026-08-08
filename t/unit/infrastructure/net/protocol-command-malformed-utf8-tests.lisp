@@ -128,23 +128,30 @@
                         (bystander-sock (cl-tmux/net:accept-connection listener))
                         (cl-tmux::*clients* nil))
                    (declare (ignore ignored))
-                   (when (and attacker-sock bystander-sock)
-                     (let ((bad-conn  (cl-tmux::%add-client attacker-sock))
-                           (good-conn (cl-tmux::%add-client bystander-sock))
-                           (payload   (make-array 2 :element-type '(unsigned-byte 8)
-                                                    :initial-contents '(#xFF #x00)))
-                           (result    :never-ran))
-                       (send-frame (cl-tmux/net:socket-stream attacker)
-                                   (encode-frame +msg-command+ payload))
-                       ;; The decode error must not escape the event loop.
-                       (finishes
-                         (setf result
-                               (cl-tmux::%dispatch-ready-clients
-                                s (list (cl-tmux::client-conn-fd bad-conn)))))
-                       ;; It must not end the session either.
-                       (expect (not (eq :quit result)))
-                       ;; And it must cost exactly one client: the sender.
-                       (expect (equal (list good-conn) cl-tmux::*clients*)))))
+                   ;; The fixture is ASSERTED, never branched on.  ACCEPT-CONNECTION
+                   ;; returns NIL on timeout by design (net.lisp), so a (WHEN (AND
+                   ;; attacker-sock bystander-sock) ...) here would skip every
+                   ;; assertion below on a loaded machine and still report PASS —
+                   ;; silently retiring the only test that pins strictness and the
+                   ;; WITH-LOOP-SAFE-ERROR guard as a matched pair.
+                   (expect attacker-sock :to-be-truthy)
+                   (expect bystander-sock :to-be-truthy)
+                   (let ((bad-conn  (cl-tmux::%add-client attacker-sock))
+                         (good-conn (cl-tmux::%add-client bystander-sock))
+                         (payload   (make-array 2 :element-type '(unsigned-byte 8)
+                                                  :initial-contents '(#xFF #x00)))
+                         (result    :never-ran))
+                     (send-frame (cl-tmux/net:socket-stream attacker)
+                                 (encode-frame +msg-command+ payload))
+                     ;; The decode error must not escape the event loop.
+                     (finishes
+                       (setf result
+                             (cl-tmux::%dispatch-ready-clients
+                              s (list (cl-tmux::client-conn-fd bad-conn)))))
+                     ;; It must not end the session either.
+                     (expect (not (eq :quit result)))
+                     ;; And it must cost exactly one client: the sender.
+                     (expect (equal (list good-conn) cl-tmux::*clients*))))
               (ignore-errors (cl-tmux/net:close-socket attacker))
               (when bystander
                 (ignore-errors (cl-tmux/net:close-socket bystander))))))))))

@@ -76,7 +76,7 @@
               (lambda (cond-str) (cl-tmux/format:expand-format cond-str nil)))
             (path (merge-pathnames
                    (format nil "cl-tmux-realworld-~D.conf" (random 1000000))
-                   (uiop:temporary-directory))))
+                   (host-kit:temporary-directory))))
         (unwind-protect
              (progn
                (with-open-file (s path :direction :output :if-exists :supersede)

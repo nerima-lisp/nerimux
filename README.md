@@ -76,18 +76,20 @@ Tests live in `t/` and run under
 set `CL_TMUX_TEST_SYSTEM` to pick one of `cl-tmux/test` (default),
 `cl-tmux/weave` or `cl-tmux/dataflow`.
 
-cl-tmux is the org's L4 application package and its testbed: it runs on eight
+cl-tmux is the org's L4 application package and its testbed: it runs on ten
 sibling libraries — [cl-cli](https://github.com/nerima-lisp/cl-cli),
 [cl-boundary-kit](https://github.com/nerima-lisp/cl-boundary-kit),
 [cl-dataflow](https://github.com/nerima-lisp/cl-dataflow),
 [cl-parser-kit](https://github.com/nerima-lisp/cl-parser-kit),
 [cl-tty-kit](https://github.com/nerima-lisp/cl-tty-kit),
 [cl-process-kit](https://github.com/nerima-lisp/cl-process-kit),
-[cl-history-kit](https://github.com/nerima-lisp/cl-history-kit) — plus
+[cl-history-kit](https://github.com/nerima-lisp/cl-history-kit),
+[cl-concurrent-kit](https://github.com/nerima-lisp/cl-concurrent-kit),
+[cl-regex-kit](https://github.com/nerima-lisp/cl-regex-kit) — plus
 [cl-prolog](https://github.com/nerima-lisp/cl-prolog) for cold-path reasoning
-read-models. It is also the only repository in the org with external
-dependencies (`cffi`, `bordeaux-threads`, `babel`, `cl-ppcre`); the reason for
-each is recorded in `cl-tmux.asd`. See
+read-models. It has **no external dependencies**: it was the last repository in
+the org with any, and the final two (`bordeaux-threads`, `cl-ppcre`) were
+replaced by siblings on 2026-08-02. See
 [Dogfooded sibling libraries](https://nerima-lisp.github.io/cl-tmux/guide/sibling-libraries/).
 
 ## Contributing

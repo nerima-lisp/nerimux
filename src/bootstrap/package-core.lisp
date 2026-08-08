@@ -67,8 +67,10 @@
    ;; environment helpers, which used to carry their own identical copy)
    #:find-posix-function))
 
-;; No :import-from for #:cffi: every foreign operator in src/infrastructure/pty/
-;; is already written cffi:-qualified, which is what makes the C surface legible.
+;; No :import-from for the sibling kits: every descriptor-level operator in
+;; src/infrastructure/pty/ is written qualified (cl-tty-kit:, process-kit:,
+;; sb-posix:), which is what makes the system-call surface legible. This used to
+;; say the same about cffi:, which cl-tmux no longer depends on.
 (defpackage #:cl-tmux/pty
   (:use #:cl)
   (:documentation

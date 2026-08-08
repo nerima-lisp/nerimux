@@ -37,7 +37,7 @@
   ;; #{window_silence_flag}: set T when monitor-silence threshold is exceeded.
   ;; Cleared when the window is selected or receives new output.
   (silence-flag nil :type boolean)
-  (lock (make-lock "window") :read-only t))
+  (lock (make-lock :name "window") :read-only t))
 
 (defun window-refresh-panes (window)
   "Recompute WINDOW's derived PANES list from its TREE (when present)."

@@ -3,11 +3,19 @@
 ;;;; Window-level tests: relayout and window size reconciliation.
 ;;;;
 ;;;; NOTE: NO-PTY relayout tests build panes by hand with :fd -1 :pid -1 (no
-;;;; real PTY) and a directly constructed virtual screen.  pane-reposition /
-;;;; window-relayout call set-pty-size on fd -1, which is a tolerated EBADF
-;;;; no-op (ioctl returns -1 without signalling a Lisp condition), so the only
-;;;; observable effect is the pane geometry update and the screen-resize.  They
-;;;; therefore run real assertions in the sandbox without gating on pty-available-p.
+;;;; real PTY) and a directly constructed virtual screen.  pane-reposition's
+;;;; (> (pane-fd pane) 0) guard means set-pty-size is NEVER CALLED for such a
+;;;; pane, so the only observable effect is the pane geometry update and the
+;;;; screen-resize.  They therefore run real assertions in the sandbox without
+;;;; gating on pty-available-p.
+;;;;
+;;;; That guard — NOT a tolerated EBADF — is what makes this work.  set-pty-size
+;;;; now delegates to cl-tty-kit:set-terminal-size, which rejects a negative fd
+;;;; ("Terminal FD must be a non-negative integer, got -1.") and a non-positive
+;;;; dimension outright, signalling instead of returning the -1 the old cffi
+;;;; ioctl did.  pane-reposition guards (plusp width) and (plusp content-height)
+;;;; for the same reason; see pane-tests-geometry.lisp's
+;;;; pane-reposition-degenerate-dimensions-skip-the-pty-resize.
 
 (describe "model-suite"
 

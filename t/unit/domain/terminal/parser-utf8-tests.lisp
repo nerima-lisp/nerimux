@@ -59,4 +59,37 @@
     (with-screen (s 10 2)
       (screen-process-bytes s (make-array 1 :element-type '(unsigned-byte 8)
                                             :initial-contents '(#xFF)))
+      (expect (char= (code-char #xFFFD) (char-at s 0 0)))))
+
+  ;;; ── CESU-8 lone surrogate ──────────────────────────────────────────────────
+  ;;;
+  ;;; ED A0 80 is the CESU-8 encoding of U+D800, a lone high surrogate. It is
+  ;;; NOT well-formed UTF-8, but this parser's structure accepts it: utf8-lead-p
+  ;;; admits #xED, utf8-lead-decode asks for two continuation bytes, and both
+  ;;; A0 and 80 are valid continuation bytes, so the accumulator reaches #xD800
+  ;;; and is handed to write-codepoint. Any child process can emit these three
+  ;;; bytes, so this is reachable from untrusted input.
+  ;;;
+  ;;; The cell must hold U+FFFD, not #\UD800. A surrogate stored here would be
+  ;;; UTF-8 encoded later on the frame-broadcast path, where SBCL's encoder
+  ;;; signals (babel silently emitted CESU-8 instead, which is why this only
+  ;;; became load-bearing when the codec moved to cl-host-kit).
+
+  ;; A CESU-8 lone surrogate decodes to U+FFFD, not to an unencodable character.
+  (it "utf8-cesu8-lone-surrogate-becomes-replacement"
+    (with-screen (s 10 2)
+      (screen-process-bytes s (make-array 3 :element-type '(unsigned-byte 8)
+                                            :initial-contents '(#xED #xA0 #x80)))
+      (let ((written (char-at s 0 0)))
+        (expect (char= (code-char #xFFFD) written))
+        ;; The real invariant: whatever landed in the cell survives encoding.
+        (expect (cl-codec-kit:string-to-octets (string written) :encoding :utf-8)
+                :to-be-truthy))))
+
+  ;; The low end of the surrogate block (U+DFFF, bytes ED BF BF) is handled the
+  ;; same way -- the guard is a range, not a single value.
+  (it "utf8-cesu8-low-surrogate-becomes-replacement"
+    (with-screen (s 10 2)
+      (screen-process-bytes s (make-array 3 :element-type '(unsigned-byte 8)
+                                            :initial-contents '(#xED #xBF #xBF)))
       (expect (char= (code-char #xFFFD) (char-at s 0 0))))))

@@ -55,19 +55,32 @@
                 (subseq mod (1+ p2)))))))   ; flags after the final delimiter
 
 (defun %regex-replace-all (string pat replacement &optional ignore-case)
-  "Replace every regex match of PAT in STRING with REPLACEMENT (via cl-ppcre),
-   mirroring tmux's #{s/PAT/REP/[i]:var} (regsub with REG_EXTENDED).  PAT is an
-   extended regular expression; REPLACEMENT supports \\N backreferences.
-   IGNORE-CASE T compiles PAT case-insensitively.  An empty PAT returns STRING
-   unchanged (matches the literal-era behaviour and avoids per-position inserts).
+  "Replace every regex match of PAT in STRING with REPLACEMENT, mirroring tmux's
+   #{s/PAT/REP/[i]:var} (regsub with REG_EXTENDED).  PAT is an extended regular
+   expression; REPLACEMENT supports \\N backreferences.  IGNORE-CASE non-NIL
+   compiles PAT case-insensitively.  An empty PAT returns STRING unchanged
+   (matches the literal-era behaviour and avoids per-position inserts).
    A malformed PAT degrades gracefully by returning STRING unchanged — invalid
-   regexes never break format expansion (mirrors %regex-match-p)."
+   regexes never break format expansion (mirrors %regex-match-p).
+
+   :TEMPLATE-SYNTAX :BACKSLASH is load-bearing, not decoration.  cl-regex-kit
+   defaults to Rust-style `$1`; tmux's replacement dialect is `\\1`, expanded by
+   its own regsub_expand() (regsub.c) rather than by the regex engine, and
+   tmux(1) documents `s/a(.)/\\1x/i` turning `abABab` into `bxBxbx`.  Omitting the
+   option does not error — it emits the two characters `\\1` LITERALLY, silently
+   breaking every substitution in every user's .tmux.conf.
+
+   :OCTAL NIL for the same reason as %REGEX-MATCH-P: PAT is user input, and the
+   default :OCTAL T would read a pattern-side `\\1` as U+0001 instead of refusing
+   it.  IGNORE-CASE is coerced to a boolean because callers pass (FIND #\\i FLAGS),
+   a CHARACTER, and COMPILE-REGEX check-types that argument."
   (if (zerop (length pat))
       string
       (handler-case
-          (let ((scanner (cl-ppcre:create-scanner
-                          pat :case-insensitive-mode ignore-case)))
-            (cl-ppcre:regex-replace-all scanner string replacement))
+          (let ((scanner (cl-regex-kit:compile-regex
+                          pat :case-insensitive (and ignore-case t) :octal nil)))
+            (cl-regex-kit:replace-all scanner string replacement
+                                      :template-syntax :backslash))
         (error () string))))
 
 (defun %apply-pad-modifier (mod value)

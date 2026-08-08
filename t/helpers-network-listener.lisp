@@ -12,7 +12,7 @@
      "/"
      (if (and tmpdir
               (plusp (length tmpdir))
-              (uiop:directory-exists-p tmpdir))
+              (host-kit:directory-exists-p tmpdir))
          tmpdir
          "/tmp"))))
 

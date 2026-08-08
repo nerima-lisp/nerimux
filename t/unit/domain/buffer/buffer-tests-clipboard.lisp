@@ -8,14 +8,14 @@
   (it "base64-encode-known-value"
     (expect (string= "aGVsbG8="
                  (cl-tmux/terminal/parser::%base64-encode
-                  (babel:string-to-octets "hello" :encoding :utf-8))))
+                  (cl-codec-kit:string-to-octets "hello" :encoding :utf-8))))
     (expect (string= "aGk="
                  (cl-tmux/terminal/parser::%base64-encode
-                  (babel:string-to-octets "hi" :encoding :utf-8)))))
+                  (cl-codec-kit:string-to-octets "hi" :encoding :utf-8)))))
 
   ;; %base64-encode then %base64-decode recovers the original bytes.
   (it "base64-encode-decode-round-trip"
-    (let* ((bytes (babel:string-to-octets "Round-trip 123! αβγ" :encoding :utf-8))
+    (let* ((bytes (cl-codec-kit:string-to-octets "Round-trip 123! αβγ" :encoding :utf-8))
            (round (cl-tmux/terminal/parser::%base64-decode
                    (cl-tmux/terminal/parser::%base64-encode bytes))))
       (expect (equalp bytes (coerce round '(vector (unsigned-byte 8)))))))
