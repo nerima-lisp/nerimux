@@ -46,12 +46,13 @@
 
 (progn (asdf:compile-system "cl-tmux" :force t) (dolist (system '("cl-tmux/test" "cl-tmux/weave" "cl-tmux/dataflow")) (asdf:load-system system :force t)))
 
-(let* ((report-dir (or (second sb-ext:*posix-argv*) "coverage-report/"))
+(let* ((report-dir
+         (host-kit:ensure-directory-pathname
+          (or (second sb-ext:*posix-argv*) "coverage-report/")))
        (source-root (truename (merge-pathnames #P"../src/"
                                                 (host-kit:pathname-directory-pathname
                                                  *load-truename*))))
-       (report-path (merge-pathnames #P"cover-index.html"
-                                     (host-kit:ensure-directory-pathname report-dir))))
+       (report-path (merge-pathnames #P"cover-index.html" report-dir)))
   (labels ((coverage-minimum (environment-name default)
              (let ((value (host-kit:getenv environment-name)))
                (if (and value (plusp (length value)))
