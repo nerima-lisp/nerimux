@@ -105,24 +105,90 @@
   (#\h #\␤ "newline (NL)")
   (#\i #\␋ "vertical tab (VT)"))
 
-;;; Unicode combining character ranges (Category M*: combining marks).
-;;; These code points have zero display width and should be appended to the
-;;; previous cell rather than placed in a new cell.
+;;; ── Combining characters ───────────────────────────────────────────────────
+;;;
+;;; A combining character occupies no terminal column and belongs to the
+;;; grapheme cluster of the character before it, so it is appended to the
+;;; previous cell instead of being placed in a new one.
+;;;
+;;; The DEFINITION is CHAR-WIDTH: a character combines exactly when it is
+;;; zero-width, minus the control-code carve-out below.  This is also tmux's own
+;;; rule — screen_write_cell() routes any cell of width 0 to
+;;; screen_write_combine().
+;;;
+;;; It replaces a hand-written list of five ranges, which was a second answer to
+;;; a question CHAR-WIDTH already answers, and disagreed with it in both
+;;; directions:
+;;;
+;;;   * It missed U+3099 / U+309A (COMBINING KATAKANA-HIRAGANA VOICED /
+;;;     SEMI-VOICED SOUND MARK), every Arabic, Hebrew, Devanagari and Thai mark,
+;;;     and every variation selector.  Each took a column here while CHAR-WIDTH
+;;;     said it took none, so the IRM insert gap (%APPLY-INSERT-MODE-GAP, which
+;;;     asks CHAR-WIDTH) and the cursor advance (%WRITE-NORMAL-CELL, which did
+;;;     not) disagreed by one cell per mark.
+;;;   * It over-claimed on the unassigned tails of its own ranges: U+1ACF-1AFF
+;;;     and U+20F1-20FF are Cn, which CHAR-WIDTH counts as one column.
+;;;
+;;; Deliberately IN scope, and pinned by tests in char-write-tests.lisp:
+;;;
+;;;   * Cf format controls combine: U+200D ZWJ, U+200B ZWSP, U+200C ZWNJ,
+;;;     U+FEFF, the bidi marks.  An emoji ZWJ sequence is then the width of its
+;;;     glyphs with no stray column between them.  U+00AD SOFT HYPHEN is the one
+;;;     Cf that CHAR-WIDTH exempts (a terminal draws it when it breaks a line),
+;;;     so it keeps its column here too, for free.
+;;;   * Me enclosing marks combine (U+20DD COMBINING ENCLOSING CIRCLE).
+;;;   * Hangul Jamo medial vowels and final consonants U+1160-U+11FF combine;
+;;;     they compose onto the leading jamo, which is why CHAR-WIDTH carries an
+;;;     explicit zero-width range for them despite their Lo category.
+;;;
+;;; Deliberately OUT of scope: control codes.  CHAR-WIDTH reports 0 for every C0
+;;; and C1 code point (NUL, TAB, ESC, U+0080-U+009F) because they are not
+;;; printed — not because they attach to the character before them.  GROUND-STATE
+;;; in parser.lisp dispatches C0 bytes to CURSOR-HT / CURSOR-NL / ... and never
+;;; hands one to WRITE-CHAR-AT-CURSOR, but a C1 control still arrives through
+;;; WRITE-CODEPOINT: the UTF-8 decoder assembles the two bytes C2 80 into
+;;; U+0080.  The carve-out is therefore a guard, not a comment — without it that
+;;; byte pair would silently glue itself onto the previous cell.
+
+(defun %control-char-p (ch)
+  "Return T when CH is a C0 or C1 control code point.
+   Mirrors the control test inside CL-TTY-KIT:CHAR-WIDTH, which is the reason it
+   answers 0 for these; see the commentary above for why that 0 does not mean
+   \"combining\"."
+  (let ((cp (char-code ch)))
+    (or (< cp #x20)
+        (<= #x7F cp #x9F))))
 
 (defun combining-char-p (ch)
-  "Return T if CH is a Unicode combining character (zero-width mark)."
-  (let ((cp (char-code ch)))
-    (or (<= #x0300 cp #x036F)   ; Combining Diacritical Marks
-        (<= #x1AB0 cp #x1AFF)   ; Combining Diacritical Marks Extended
-        (<= #x1DC0 cp #x1DFF)   ; Combining Diacritical Marks Supplement
-        (<= #x20D0 cp #x20FF)   ; Combining Diacritical Marks for Symbols
-        (<= #xFE20 cp #xFE2F)))) ; Combining Half Marks
+  "Return T if CH is a zero-width combining character: one that occupies no
+   terminal column and belongs to the preceding character's grapheme cluster.
+   Agrees with CHAR-WIDTH on every non-control code point by construction;
+   control codes are excluded deliberately (see above)."
+  (and (not (%control-char-p ch))
+       (zerop (char-width ch))))
+
+(defun %combining-target-x (screen)
+  "Column of the cell a combining mark written at the cursor belongs to.
+   Normally the column left of the cursor.  At column 0 there is no such cell,
+   so column 0 itself is used — the only cell available on that row.
+
+   When the cell to the left is a double-width character's continuation
+   placeholder (width 0), the mark belongs to that character's LEAD cell, one
+   column further left: か followed by U+3099 must read as が.  Attaching it to
+   the placeholder would drop it outright, because %RENDER-CELL-ROW emits
+   nothing for a width-0 cell — the outer terminal already drew both columns of
+   the glyph to its left."
+  (let ((x (screen-cursor-x screen)))
+    (cond ((zerop x) 0)
+          ((and (> x 1)
+                (zerop (cell-width (screen-cell screen (1- x) (screen-cursor-y screen)))))
+           (- x 2))
+          (t (1- x)))))
 
 (defun %append-combining-char (screen ch)
-  "Append combining character CH to the cell immediately left of the cursor.
-   The cursor is NOT advanced.  If the cursor is at column 0, the combining
-   char is appended to column 0 (the only cell available on that row)."
-  (let* ((prev-x    (if (> (screen-cursor-x screen) 0) (1- (screen-cursor-x screen)) 0))
+  "Append combining character CH to the cell the cursor's write position belongs
+   to (see %COMBINING-TARGET-X).  The cursor is NOT advanced."
+  (let* ((prev-x    (%combining-target-x screen))
          (prev-y    (screen-cursor-y screen))
          (prev-cell (screen-cell screen prev-x prev-y)))
     (setf (screen-cell screen prev-x prev-y)

@@ -201,7 +201,7 @@
 
 ;;; ── SUITE: screen-lock slot ──────────────────────────────────────────────────
 ;;;
-;;; screen-lock is a bordeaux-threads lock created at construction time.
+;;; screen-lock is a cl-concurrent-kit lock created at construction time.
 ;;; Unit tests verify the slot is populated and has the expected type.
 
 (describe "terminal-suite/screen-lock-suite"
@@ -212,12 +212,24 @@
       (expect (cl-tmux/terminal/types:screen-lock s) :to-be-truthy)))
 
   ;; The screen lock can be acquired and released without error.
+  ;; WITH-LOCK-HELD rather than a bare acquire/release pair: cl-concurrent-kit
+  ;; exports no separate ACQUIRE-LOCK/RELEASE-LOCK, and this is the only shape
+  ;; cl-tmux ever uses on this slot anyway.
   (it "screen-lock-can-be-acquired-and-released"
     (with-screen (s 10 5)
       (let ((lock (cl-tmux/terminal/types:screen-lock s)))
         (finishes
-          (bordeaux-threads:acquire-lock lock)
-          (bordeaux-threads:release-lock lock))))))
+          (cl-concurrent-kit:with-lock-held (lock) t)))))
+
+  ;; The slot's declared type is cl-concurrent-kit:lock, so a real lock object
+  ;; must satisfy it -- this pins the (or null cl-concurrent-kit:lock) slot
+  ;; declaration in screen.lisp, which was bordeaux-threads:lock before the
+  ;; migration and would otherwise only be checked when SBCL feels like it.
+  (it "screen-lock-satisfies-the-declared-lock-type"
+    (with-screen (s 10 5)
+      (expect (typep (cl-tmux/terminal/types:screen-lock s)
+                     'cl-concurrent-kit:lock)
+              :to-be-truthy))))
 
 ;;; ── SUITE: screen-cells and screen-parser accessors ─────────────────────────
 ;;;

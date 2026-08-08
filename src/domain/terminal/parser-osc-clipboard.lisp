@@ -85,5 +85,5 @@
   "Build the OSC 52 set-clipboard escape sequence."
   (format nil "~C]52;c;~A~C\\"
           #\Escape
-          (%base64-encode (babel:string-to-octets text :encoding :utf-8))
+          (%base64-encode (cl-codec-kit:string-to-octets text :encoding :utf-8))
           #\Escape))

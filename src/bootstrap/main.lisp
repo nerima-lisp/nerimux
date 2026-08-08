@@ -93,7 +93,7 @@
 
 (defun %initialize-session-environment ()
   "Set up the shared session environment before spawning any panes.
-   Installs the CFFI PTY adapter into the cl-tmux/ports domain abstraction
+   Installs the PTY adapter into the cl-tmux/ports domain abstraction
    (run-server was the only caller of install-pty-port; run-standalone and
    run-control-mode create panes too, so they need it here), loads the
    default shell, wires the %if condition evaluator, installs the

@@ -45,7 +45,7 @@
 (defpackage #:cl-tmux/renderer
   (:use #:cl
         #:cl-tmux/model #:cl-tmux/terminal #:cl-tmux/prompt)
-  (:import-from #:bordeaux-threads #:with-lock-held)
+  (:import-from #:cl-concurrent-kit #:with-lock-held)
   (:documentation
    "PRESENTATION layer: the only package that writes to the real terminal.  Composites
     every pane's emulator screen, the borders between them, the status bar, and any
@@ -72,8 +72,10 @@
    #:*color-downsample-fn*
    #:%rgb-int-to-256))
 
-;; As in cl-tmux/pty, #:cffi needs no :import-from — input.lisp already writes
-;; cffi:with-foreign-object / cffi:foreign-funcall / cffi:mem-ref in full.
+;; No :import-from for the sibling kits — input.lisp writes
+;; cl-tty-kit:fd-read-octets qualified in full, which is what keeps the
+;; descriptor-level surface legible. (It formerly wrote cffi: forms here; cffi
+;; is no longer a dependency.)
 (defpackage #:cl-tmux/input
   (:use #:cl
         #:cl-tmux/config #:cl-tmux/pty)

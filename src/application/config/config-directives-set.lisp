@@ -37,10 +37,15 @@
      ("set-shell" 1 (path)
        (setf *default-shell* path)
        t)
+     ;; Clamped to +MAX-STATUS-LINES+ for parity with the `status` option
+     ;; (config-option-side-effects.lisp:98).  Without the cap, `set-status-height
+     ;; 50` on a 24-row terminal makes (- *term-rows* *status-height*) negative,
+     ;; and the four call sites that compute a pane height that way have no floor
+     ;; of their own.
      ("set-status-height" 1 (n)
        (let ((height (cl-tmux::%parse-integer-or-nil n :junk-allowed t)))
          (when (and height (plusp height))
-           (setf *status-height* height)
+           (setf *status-height* (min height +max-status-lines+))
            t)))
      ,@(mapcar #'%set-directive-config-rule +set-directive-commands+)
      ;; NOTE: set-hook is handled entirely by %apply-set-hook-directive (stores raw

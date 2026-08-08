@@ -27,7 +27,7 @@
     ;; dead by the time stop-reader-threads joins it.  A LET binding would be
     ;; invisible to the child thread, leaving it looping forever.
     (with-global-running nil
-      (let ((thread (bordeaux-threads:make-thread
+      (let ((thread (cl-concurrent-kit:make-thread
                      (lambda ()
                        (loop while cl-tmux::*running* do (sleep 0.001)))
                      :name "test-dead-thread")))

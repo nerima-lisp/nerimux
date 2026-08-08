@@ -40,12 +40,15 @@
   (let ((targets
           (remove-if-not
            (lambda (th)
-             (let ((name (bordeaux-threads:thread-name th)))
+             (let ((name (cl-concurrent-kit:thread-name th)))
                (and (stringp name)
                     (or (search "pty-reader" name)
                         (search "cl-tmux-status-timer" name)
                         (search "shell-bg" name)))))
-           (bordeaux-threads:all-threads))))
+           ;; cl-concurrent-kit deliberately wraps no thread-enumeration call --
+           ;; it is a debugging facility, not a concurrency primitive -- so this
+           ;; reaches for SB-THREAD directly, as runtime.lisp already does.
+           (sb-thread:list-all-threads))))
     (when targets
       (setf cl-tmux::*running* nil)
       (sleep 0.15)
@@ -63,23 +66,36 @@
    STOP-CL-TMUX-THREADS joins them before returning.
 
    Also isolates prompt/overlay/menu/popup state so that UI state created by
-   one test does not leak into subsequent event-loop tests."
-  `(let ((cl-tmux::*dirty* nil)
-         (cl-tmux::*last-mouse-click* nil)
-         (cl-tmux::*key-table* nil)
-         ;; Tests feed key bytes microseconds apart, a rate no real terminal
-         ;; produces for typed keys.  Reset key history to avoid triggering the
-         ;; assume-paste-time heuristic on every second key.
-         (cl-tmux::*last-ground-key-time* nil)
-         (cl-tmux::*server-marked-pane* nil)
-         (cl-tmux::*client-read-only* nil)
-         (cl-tmux/prompt:*prompt* nil)
-         (cl-tmux/prompt:*overlay* nil)
-         (cl-tmux/prompt:*overlay-scroll-offset* 0)
-         (cl-tmux/prompt:*overlay-shown-at* 0)
-         (cl-tmux/prompt:*display-panes-active* nil)
-         (cl-tmux/prompt:*active-menu* nil)
-         (cl-tmux/prompt:*active-popup* nil))
-     (with-global-running t
-       (unwind-protect (progn ,@body)
-         (stop-cl-tmux-threads)))))
+   one test does not leak into subsequent event-loop tests.  PTY processes
+   created inside BODY are closed after the reader threads stop, even when a
+   dispatch creates a session not reachable from the original fixture session."
+  `(let ((initial-pty-fds
+            (loop for fd being the hash-keys of cl-tmux/pty::*pty-processes*
+                  collect fd)))
+     (let ((cl-tmux::*dirty* nil)
+            (cl-tmux::*last-mouse-click* nil)
+            (cl-tmux::*key-table* nil)
+            ;; Tests feed key bytes microseconds apart, a rate no real terminal
+            ;; produces for typed keys.  Reset key history to avoid triggering the
+            ;; assume-paste-time heuristic on every second key.
+            (cl-tmux::*last-ground-key-time* nil)
+            (cl-tmux::*server-marked-pane* nil)
+            (cl-tmux::*client-read-only* nil)
+            (cl-tmux/prompt:*prompt* nil)
+            (cl-tmux/prompt:*overlay* nil)
+            (cl-tmux/prompt:*overlay-scroll-offset* 0)
+            (cl-tmux/prompt:*overlay-shown-at* 0)
+            (cl-tmux/prompt:*display-panes-active* nil)
+            (cl-tmux/prompt:*active-menu* nil)
+            (cl-tmux/prompt:*active-popup* nil))
+       (with-global-running t
+         (unwind-protect (progn ,@body)
+           (stop-cl-tmux-threads)
+           (dolist (fd
+                     (loop for fd being the hash-keys of cl-tmux/pty::*pty-processes*
+                           collect fd))
+             (unless (member fd initial-pty-fds)
+               (let ((pty (cl-tmux/pty::%take-pty-process fd)))
+                 (when pty
+                   (ignore-errors
+                     (cl-tty-kit:close-pty pty)))))))))))

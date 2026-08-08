@@ -47,7 +47,7 @@
   ;; Lock for thread safety (renderer <-> PTY-reader threads).
   ;; Allocated by make-screen (CONSTRUCT layer), not here, so this DATA-layer
   ;; defstruct remains free of side-effecting allocations at load time.
-  (lock nil :type (or null bordeaux-threads:lock))
+  (lock nil :type (or null cl-concurrent-kit:lock))
   ;; Alt-screen support (?1049h / ?1049l)
   (alt-cells nil)                           ; saved normal-screen cell grid, or nil
   (alt-cursor-x 0 :type fixnum)            ; cursor column saved on alt-screen entry
@@ -227,7 +227,7 @@
 
 (defun make-screen (width height)
   "Create a blank WIDTH x HEIGHT screen with cursor at origin.
-   Allocates the bordeaux-threads mutex here (CONSTRUCT layer) so that the
+   Allocates the mutex here (CONSTRUCT layer) so that the
    defstruct default for the lock slot can be NIL, keeping the DATA layer free
    of side-effecting allocations at load time.
    The CPS parser is wired to CL-TMUX/TERMINAL/PARSER:GROUND-STATE after
@@ -237,7 +237,7 @@
                                :height        height
                                :cells         (%make-blank-cells (* width height))
                                :scroll-bottom (1- height)
-                               :lock          (make-lock "screen"))))
+                               :lock          (make-lock :name "screen"))))
     ;; Wire the real ground-state now that all packages are loaded.
     (setf (screen-parser screen)
           (lambda (s byte) (cl-tmux/terminal/parser:ground-state s byte)))

@@ -112,35 +112,60 @@
   "Clamp integer V to the closed interval [LO, HI]."
   (max lo (min hi v)))
 
+(defconstant +surrogate-first+ #xD800
+  "First UTF-16 surrogate code point.  D800-DFFF are reserved for UTF-16 pairing
+   and are NOT Unicode scalar values, so no well-formed UTF-8 encodes one.")
+(defconstant +surrogate-last+ #xDFFF
+  "Last UTF-16 surrogate code point.  See +SURROGATE-FIRST+.")
+
+(defun surrogate-code-point-p (cp)
+  "Return T when CP lies in the UTF-16 surrogate block D800-DFFF.
+
+   SBCL's CHAR-CODE-LIMIT does not exclude this block: (CODE-CHAR #xD800) yields
+   a real character object, so a bare (< cp CHAR-CODE-LIMIT) guard admits a lone
+   surrogate into a string.  Such a string cannot be UTF-8 encoded — SBCL's
+   encoder signals on it — so it must be rejected where it enters, not where it
+   is written out."
+  (<= +surrogate-first+ cp +surrogate-last+))
+
 (defun safe-code-char (cp)
-  "CODE-CHAR guarded against invalid code points; falls back to U+FFFD."
-  (or (and (< cp char-code-limit) (code-char cp))
+  "CODE-CHAR guarded against invalid code points; falls back to U+FFFD.
+
+   A lone surrogate counts as invalid.  A child process can emit the three bytes
+   ED A0 80, which cl-tmux's own UTF-8 continuation decoder (parser-utf8.lisp)
+   reassembles into code point #xD800; without this guard that lone surrogate
+   would be stored in a screen cell and then reach
+   CL-CODEC-KIT:STRING-TO-OCTETS on the render/broadcast path (protocol.lisp
+   MSG-FRAME), which signals rather than encoding it.  Substituting U+FFFD here
+   is what a terminal should display for an unpaired surrogate anyway, and it
+   keeps every octet-encoding call site on the strict :ERRORP T default, so a
+   genuine defect still surfaces."
+  (or (and (< cp char-code-limit)
+           (not (surrogate-code-point-p cp))
+           (code-char cp))
       (code-char +unicode-replacement-char+)))
 
-(defmacro define-wide-char-ranges (&rest ranges)
-  "Generate CHAR-WIDTH from a declarative Unicode wide-char range table.
-   Each RANGE is (lo hi description) where lo and hi are code-point integers
-   and description is a string annotation (compile-time only)."
-  `(defun char-width (ch)
-     "Display column width of CH: 2 for East-Asian Wide / Fullwidth characters
-      (CJK, kana, hangul, fullwidth forms, most emoji), 1 otherwise.
-      Ambiguous-width ranges (box drawing) are treated as 1."
-     (let ((cp (char-code ch)))
-       (if (or ,@(mapcar (lambda (range) `(<= ,(first range) cp ,(second range)))
-                         ranges))
-           2 1))))
+(declaim (inline char-width))
+(defun char-width (ch)
+  "Display column width of CH: 0 for zero-width characters (combining marks,
+   enclosing marks, format controls), 2 for East-Asian Wide / Fullwidth
+   characters (CJK, kana, hangul, fullwidth forms, most emoji), 1 otherwise.
+   Ambiguous-width ranges (box drawing) are treated as 1.
 
-(define-wide-char-ranges
-  (#x1100  #x115F  "Hangul Jamo")
-  (#x2E80  #x303E  "CJK radicals, Kangxi, CJK symbols")
-  (#x3041  #x33FF  "Hiragana, Katakana, CJK compat")
-  (#x3400  #x4DBF  "CJK Extension A")
-  (#x4E00  #x9FFF  "CJK Unified Ideographs")
-  (#xA000  #xA4CF  "Yi syllables")
-  (#xAC00  #xD7A3  "Hangul syllables")
-  (#xF900  #xFAFF  "CJK Compatibility Ideographs")
-  (#xFE30  #xFE4F  "CJK Compatibility Forms")
-  (#xFF00  #xFF60  "Fullwidth ASCII forms")
-  (#xFFE0  #xFFE6  "Fullwidth signs")
-  (#x1F300 #x1FAFF "Emoji and pictographs")
-  (#x20000 #x3FFFD "CJK Extension B and beyond"))
+   Delegates to CL-TTY-KIT:CHAR-WIDTH.  This used to be a hand-rolled
+   DEFINE-WIDE-CHAR-RANGES table of 13 coarse ranges that returned 1 for every
+   character it did not recognise, including zero-width ones, so column counts
+   drifted from what the outer terminal actually drew.  Three concrete cases the
+   table got wrong, each confirmed against cl-tty-kit's 121 ranges plus its
+   SB-UNICODE general-category handling:
+
+     * U+0301 COMBINING ACUTE ACCENT (Mn) — table said 1, true width is 0.
+     * U+309A COMBINING KATAKANA-HIRAGANA SEMI-VOICED SOUND MARK — the table's
+       blanket #x3041-#x33FF \"Hiragana, Katakana\" range said 2 for a mark that
+       occupies no columns at all, so one mark desynchronised a line by two.
+     * U+231A WATCH — East Asian Wide, but outside the table's emoji range
+       (#x1F300-#x1FAFF), so it was counted 1 and drawn 2.
+
+   nshell already delegates the same way; keeping a second table here meant two
+   answers to one Unicode question."
+  (cl-tty-kit:char-width ch))

@@ -35,7 +35,15 @@
   "#{a:N} — character whose code is N (bare literal or nested #{...} operand)."
   (let* ((n-str (if (search "#{" rest) (expand-format rest context) rest))
          (code  (cl-tmux::%parse-integer-or-nil n-str :junk-allowed t))
+         ;; The surrogate block is excluded for the same reason SAFE-CODE-CHAR
+         ;; excludes it: CHAR-CODE-LIMIT admits D800-DFFF, but a lone surrogate
+         ;; cannot be UTF-8 encoded, and an expanded format string reaches
+         ;; CL-CODEC-KIT:STRING-TO-OCTETS on the frame-broadcast path.  So a
+         ;; status-format containing #{a:55296} would take the server down
+         ;; rather than render one bad glyph.  Emitting nothing matches the
+         ;; existing out-of-range behavior of this modifier.
          (ch    (and code (<= 0 code (1- char-code-limit))
+                     (not (cl-tmux/terminal/types:surrogate-code-point-p code))
                      (ignore-errors (code-char code)))))
     (when ch (write-string (string ch) out))))
 

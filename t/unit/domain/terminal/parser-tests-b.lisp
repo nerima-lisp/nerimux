@@ -140,7 +140,7 @@
 (defun %feed-dcs (s payload)
   "Feed a DCS sequence (ESC P PAYLOAD ST) to screen S via screen-process-bytes."
   (screen-process-bytes s
-    (babel:string-to-octets (format nil "~CP~A~C\\" #\Escape payload #\Escape)
+    (cl-codec-kit:string-to-octets (format nil "~CP~A~C\\" #\Escape payload #\Escape)
                             :encoding :utf-8)))
 
 (describe "terminal-suite/dcs-parsing"

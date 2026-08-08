@@ -131,49 +131,41 @@
 
   ;; new-window -a inserts after the current window's id.
   (it "run-command-line-new-window-after-current"
-    (with-fake-session (s :nwindows 2)
-      (when (pty-available-p)
-        (let* ((active-id (cl-tmux/model:window-id
-                           (cl-tmux/model:session-active-window s)))
-               (before-count (length (cl-tmux/model:session-windows s))))
-          (cl-tmux::%run-command-line s "new-window -a")
-          (stop-cl-tmux-threads)
-          (expect (> (length (cl-tmux/model:session-windows s)) before-count))
-          ;; The new window should have a higher id than active-id.
-          (let ((new-win (cl-tmux/model:session-active-window s)))
-            (expect (> (cl-tmux/model:window-id new-win) active-id)))))))
+    (with-pty-session (s :nwindows 2)
+      (let* ((active-id (cl-tmux/model:window-id
+                          (cl-tmux/model:session-active-window s)))
+             (before-count (length (cl-tmux/model:session-windows s))))
+        (cl-tmux::%run-command-line s "new-window -a")
+        (expect (> (length (cl-tmux/model:session-windows s)) before-count))
+        ;; The new window should have a higher id than active-id.
+        (let ((new-win (cl-tmux/model:session-active-window s)))
+          (expect (> (cl-tmux/model:window-id new-win) active-id))))))
 
   ;; new-window -t N inserts at specific index N.
   (it "run-command-line-new-window-at-index"
-    (with-fake-session (s :nwindows 1)
-      (when (pty-available-p)
-        (cl-tmux::%run-command-line s "new-window -t 5")
-        (stop-cl-tmux-threads)
-        ;; The new window should have id >= 5.
-        (let ((new-win (cl-tmux/model:session-active-window s)))
-          (expect (>= (cl-tmux/model:window-id new-win) 5))))))
+    (with-pty-session (s :nwindows 1)
+      (cl-tmux::%run-command-line s "new-window -t 5")
+      ;; The new window should have id >= 5.
+      (let ((new-win (cl-tmux/model:session-active-window s)))
+        (expect (>= (cl-tmux/model:window-id new-win) 5)))))
 
   ;; new-window -d does not switch focus to the new window.
   (it "run-command-line-new-window-detach"
-    (with-fake-session (s :nwindows 1)
-      (when (pty-available-p)
-        (let ((prev-win (cl-tmux/model:session-active-window s)))
-          (cl-tmux::%run-command-line s "new-window -d")
-          (stop-cl-tmux-threads)
-          (expect (eq prev-win (cl-tmux/model:session-active-window s)))))))
+    (with-pty-session (s :nwindows 1)
+      (let ((prev-win (cl-tmux/model:session-active-window s)))
+        (cl-tmux::%run-command-line s "new-window -d")
+        (expect (eq prev-win (cl-tmux/model:session-active-window s))))))
 
   ;;; ── split-window -c start-dir ────────────────────────────────────────────────
 
   ;; split-window -c /tmp parses the -c flag without error.
   (it "run-command-line-split-window-c-accepts-dir"
-    (with-fake-session (s :nwindows 1 :npanes 1)
-      (when (pty-available-p)
-        (let* ((win    (cl-tmux/model:session-active-window s))
-               (before (length (cl-tmux/model:window-panes win))))
-          ;; /tmp is always present; the new shell should chdir there.
-          (cl-tmux::%run-command-line s "split-window -c /tmp")
-          (stop-cl-tmux-threads)
-          (expect (> (length (cl-tmux/model:window-panes win)) before))))))
+    (with-pty-session (s :nwindows 1 :npanes 1)
+      (let* ((win    (cl-tmux/model:session-active-window s))
+             (before (length (cl-tmux/model:window-panes win))))
+        ;; /tmp is always present; the new shell should chdir there.
+        (cl-tmux::%run-command-line s "split-window -c /tmp")
+        (expect (> (length (cl-tmux/model:window-panes win)) before)))))
 
   ;;; ── copy-mode -e ─────────────────────────────────────────────────────────────
   ;;;

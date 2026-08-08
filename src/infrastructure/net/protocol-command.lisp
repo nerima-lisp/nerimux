@@ -80,18 +80,50 @@
   (let* ((name-str      (command-name-to-string command-name))
          (field-strings (assemble-command-fields name-str target args))
          (field-octets  (mapcar (lambda (s)
-                                  (babel:string-to-octets s :encoding :utf-8))
+                                  (cl-codec-kit:string-to-octets s :encoding :utf-8))
                                 field-strings)))
     (encode-fields-to-buffer field-octets)))
+
+;;; ── Why this decode is deliberately STRICT ──────────────────────────────────
+;;;
+;;; PARSER-OSC-DISPATCH.LISP decodes with :ERRORP NIL and U+FFFD, and that is
+;;; correct THERE: an OSC payload is terminal *output* handed to the title /
+;;; colour / clipboard handlers as opaque text, so one unrepresentable byte
+;;; costs one mangled glyph and can change no decision.
+;;;
+;;; A +msg-command+ payload is the opposite — a *control* channel.  Field 0
+;;; reaches TARGET-FIELD-P and then INTERN in DECODE-COMMAND-PAYLOAD below: it
+;;; names a command the server will execute.  Substituting U+FFFD would guess at
+;;; a byte the sender never wrote, turning a malformed command into a different
+;;; well-formed one, and would widen the set of byte strings that reach INTERN
+;;; from "valid UTF-8" to "anything at all".  Input on a command channel must
+;;; fail closed rather than be repaired.
+;;;
+;;; Failing closed is safe here precisely because the error has a bounded
+;;; per-client destination.  CL-CODEC-KIT:DECODE-ERROR propagates out through
+;;; %HANDLE-MULTI-COMMAND-MESSAGE into the WITH-LOOP-SAFE-ERROR guard in
+;;; %READ-AND-DISPATCH-CLIENT-MESSAGE (server-multi-loop.lisp), which turns it
+;;; into the :DROP disposition: the sender is disconnected, while the server,
+;;; the session, and every other attached client keep running.  That guard is
+;;; load-bearing — it is the only thing standing between a strict decode here
+;;; and a server-wide crash, and it has been accidentally disabled once before
+;;; (see the macro-ordering note at the top of server-multi-dispatch.lisp).
+;;; Both halves are pinned together in
+;;; t/unit/infrastructure/net/protocol-command-malformed-utf8-tests.lisp so
+;;; neither the strictness nor the guard can be removed on its own.
 
 (defun split-on-nul-bytes (octets)
   "Split OCTETS on NUL bytes and return a list of decoded UTF-8 strings.
    Each NUL-terminated region becomes one string; bytes after the final NUL
-   (if any) are ignored.  Returns NIL for an empty or NUL-free input."
+   (if any) are ignored.  Returns NIL for an empty or NUL-free input.
+   Decodes STRICTLY (:ERRORP T, the default): malformed UTF-8 in a command
+   payload signals CL-CODEC-KIT:DECODE-ERROR rather than yielding a repaired
+   string.  See the commentary above for why this channel must not be lenient
+   and where the resulting condition is caught."
   (loop with start = 0
         for i from 0 below (length octets)
         when (zerop (aref octets i))
-          collect (babel:octets-to-string octets :start start :end i :encoding :utf-8)
+          collect (cl-codec-kit:octets-to-string octets :start start :end i :encoding :utf-8)
           and do (setf start (1+ i))))
 
 (defun decode-command-payload (payload)

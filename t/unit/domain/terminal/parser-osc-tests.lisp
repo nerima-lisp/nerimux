@@ -46,7 +46,7 @@
   (defun %feed-osc (s payload)
     "Feed an OSC sequence (ESC ] PAYLOAD ST) to screen S via screen-process-bytes."
     (screen-process-bytes s
-      (babel:string-to-octets (format nil "~C]~A~C\\" #\Escape payload #\Escape)
+      (cl-codec-kit:string-to-octets (format nil "~C]~A~C\\" #\Escape payload #\Escape)
                               :encoding :utf-8)))
 
   ;; OSC 0, 1, and 2 all set screen-title (cl-tmux keeps a single title slot).
@@ -73,6 +73,24 @@
         (expect (= expected (cl-tmux/terminal/parser::%parse-osc-color input)))))
     (dolist (input '("tomato" "rgb:zz/00/00"))
       (expect (null (cl-tmux/terminal/parser::%parse-osc-color input)))))
+
+  ;; ── rgb: field splitting keeps empty fields ─────────────────────────────────
+  ;;
+  ;; %parse-rgb-color used cl-ppcre:split, which DROPS trailing empty fields, so
+  ;; the malformed "rgb:1/2/3/" split into exactly three parts and was accepted
+  ;; as a colour.  It now uses host-kit:split-string (a plain character split --
+  ;; the delimiter is one fixed character, so no regex is warranted), which keeps
+  ;; them, as cl-regex-kit:split also would.  xterm's rgb: syntax is exactly
+  ;; three channels, so rejecting these is the correct reading.
+  (it "parse-osc-color-rgb-rejects-empty-and-extra-fields"
+    (dolist (input '("rgb:ff/00/00/"    ; trailing delimiter -> 4 fields
+                     "rgb:/ff/00/00"    ; leading delimiter  -> 4 fields
+                     "rgb:ff//00"       ; empty middle channel
+                     "rgb:ff/00"        ; too few
+                     "rgb:ff/00/00/00")) ; too many
+      (expect (null (cl-tmux/terminal/parser::%parse-osc-color input))))
+    ;; Control: the well-formed three-field form still parses.
+    (expect (= #xFF0000 (cl-tmux/terminal/parser::%parse-osc-color "rgb:ff/00/00"))))
 
   ;; %osc-color-reply and %osc4-reply build xterm-style ESC ] ... rgb:RRRR/GGGG/BBBB replies.
   (it "osc-color-helper-replies-format-correctly"
@@ -244,7 +262,7 @@
       (feed s "a")
       ;; OSC 0 ; title BEL -- common in xterm
       (screen-process-bytes s
-        (babel:string-to-octets
+        (cl-codec-kit:string-to-octets
           (format nil "~C]0;window title~C" #\Escape (code-char 7))
           :encoding :utf-8))
       (feed s "b")
@@ -257,7 +275,7 @@
       (feed s "a")
       ;; OSC terminated by ST = ESC \
       (screen-process-bytes s
-        (babel:string-to-octets
+        (cl-codec-kit:string-to-octets
           (format nil "~C]0;title~C\\" #\Escape #\Escape)
           :encoding :utf-8))
       (feed s "b")

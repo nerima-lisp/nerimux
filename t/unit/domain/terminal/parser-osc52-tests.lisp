@@ -15,7 +15,7 @@
         ;; Base64 of "hello" is aGVsbG8=  (SGVsbG8= would decode to "Hello").
         ;; Feed OSC 52 ; c ; aGVsbG8= BEL  (c = clipboard target, ignored)
         (screen-process-bytes s
-          (babel:string-to-octets
+          (cl-codec-kit:string-to-octets
             (format nil "~C]52;c;aGVsbG8=~C" #\Escape (code-char 7))
             :encoding :utf-8))
         (expect (string= "hello" received)))))
@@ -26,7 +26,7 @@
       (let ((cl-tmux/terminal/parser:*osc52-handler* nil))
         (finishes
           (screen-process-bytes s
-            (babel:string-to-octets
+            (cl-codec-kit:string-to-octets
               (format nil "~C]52;c;SGVsbG8=~C" #\Escape (code-char 7))
               :encoding :utf-8))))))
 
@@ -37,7 +37,7 @@
              (cl-tmux/terminal/parser:*osc52-handler*
                (lambda (text) (setf received text))))
         (screen-process-bytes s
-          (babel:string-to-octets
+          (cl-codec-kit:string-to-octets
             (format nil "~C]52;c;?~C" #\Escape (code-char 7))
             :encoding :utf-8))
         (expect (eq :not-called received)))))
@@ -59,7 +59,7 @@
       (expect (string= prefix (subseq seq 0 (length prefix))))
       (expect (string= (format nil "~C\\" #\Escape) (subseq seq (- (length seq) 2))))
       (let* ((payload (subseq seq (length prefix) (- (length seq) 2)))
-             (decoded (babel:octets-to-string
+             (decoded (cl-codec-kit:octets-to-string
                        (cl-tmux/terminal/parser::%base64-decode payload)
                        :encoding :utf-8)))
         (expect (string= text decoded))))))

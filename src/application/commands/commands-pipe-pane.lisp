@@ -13,16 +13,21 @@
   "Seconds to wait for launching the pipe-pane subprocess.")
 
 (defmacro %with-timeout-cleanup ((timeout-seconds cleanup-thunk) &body body)
-  "Run BODY under a TIMEOUT-SECONDS bt:with-timeout.  On success, return BODY's
-   value.  On a bt:timeout or any other error, funcall CLEANUP-THUNK (a
-   zero-argument function) and return NIL.  Consolidates the 'run with a
-   deadline, clean up identically on either failure kind, else fall through to
-   NIL' shape shared by the pipe-pane launch/wait sites."
+  "Run BODY under a TIMEOUT-SECONDS deadline.
+   Clean up and return NIL on an operational failure; propagate type errors."
   `(handler-case
-       (bt:with-timeout (,timeout-seconds) ,@body)
-     ((or bt:timeout error) ()
+       (cl-concurrent-kit:with-timeout
+           (cl-date-kit:duration-of-nanos
+            (round (* ,timeout-seconds 1000000000)))
+         ,@body)
+     (cl-concurrent-kit:operation-timed-out ()
        (funcall ,cleanup-thunk)
-       nil)))
+       nil)
+     (error (condition)
+       (funcall ,cleanup-thunk)
+       (if (typep condition (quote type-error))
+           (error condition)
+           nil))))
 
 (defun %pipe-pane-copy-output (pane output-stream)
   "Copy OUTPUT-STREAM from the command back into PANE's PTY."
@@ -39,8 +44,9 @@
 
 (defun %pipe-pane-start-output-thread (pane output-stream)
   "Start the background copier for command stdout into PANE."
-  (bt:make-thread (lambda () (%pipe-pane-copy-output pane output-stream))
-                  :name (format nil "pipe-pane-output-~D" (pane-id pane))))
+  (cl-concurrent-kit:make-thread
+   (lambda () (%pipe-pane-copy-output pane output-stream))
+   :name (format nil "pipe-pane-output-~D" (pane-id pane))))
 
 (defun %pipe-pane-reset (pane)
   "Clear all pipe-pane state slots on PANE."
@@ -73,7 +79,15 @@
                                :process proc)))
       (let* ((shell (or cl-tmux/config:*default-shell* "/bin/sh"))
              (new-proc
+               ;; :search t is required, not optional.  process-kit:spawn defaults
+               ;; :search to NIL and passes that straight to run-program, so a
+               ;; bare shell name never resolves on PATH.  Unlike the two
+               ;; /bin/sh literals elsewhere in this repo, SHELL here comes from
+               ;; *default-shell*, which init-default-shell fills from $SHELL and
+               ;; the `set-shell` directive accepts unvalidated.  Same reasoning
+               ;; as format-context-os-probe.lisp:38-40.
                (process-kit:spawn shell (list "-c" command)
+                                  :search t
                                   :input (if pane-output-to-command-p :stream nil)
                                   :output (if command-output-to-pane-p :stream nil)
                                   :error nil))

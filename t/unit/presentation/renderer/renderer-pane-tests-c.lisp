@@ -117,9 +117,10 @@
 
   (defun %strip-csi-sequences (out)
     "Remove CSI escape sequences from OUT so the visible pane text can be compared."
-    (cl-ppcre:regex-replace-all (format nil "~C\\[[0-9;?]*[A-Za-z]" #\Escape)
-                                out
-                                ""))
+    (cl-regex-kit:replace-all (cl-regex-kit:compile-regex
+                               (format nil "~C\\[[0-9;?]*[A-Za-z]" #\Escape))
+                              out
+                              ""))
 
   ;; copy-mode-line-numbers off leaves the pane content unchanged.
   (it "copy-mode-line-numbers-off-suppresses-gutter"

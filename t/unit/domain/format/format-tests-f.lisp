@@ -161,7 +161,7 @@
   (it "format-glob-match-in-conditional"
     (expect (string= "yes" (fmt "#{?#{m:*bash,bash},yes,no}"))))
 
-  ;;; ── Regex match #{m/r:pattern,string} (cl-ppcre) ─────────────────────────────
+  ;;; ── Regex match #{m/r:pattern,string} (cl-regex-kit) ────────────────────────
 
   ;; #{m/r:pattern,string} returns '1' for matches and '0' for misses.
   (it "format-regex-match-table"

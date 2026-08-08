@@ -58,8 +58,8 @@
            (ignore-errors (apply-config-directive (%config-tokens command)))))
     (if background
         (progn
-          (bt:make-thread #'apply-command
-                          :name "cl-tmux config run-shell -C")
+          (cl-concurrent-kit:make-thread #'apply-command
+                                         :name "cl-tmux config run-shell -C")
           t)
         (progn
           (apply-command)

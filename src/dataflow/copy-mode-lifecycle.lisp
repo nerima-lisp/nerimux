@@ -18,17 +18,15 @@
 
 (defun copy-mode-lifecycle-machine ()
   "Return a fresh cl-dataflow state machine for the copy-mode lifecycle,
-   starting in the \"normal\" (not-in-copy-mode) state."
-  (cl-dataflow:make-state-machine
-   :state "normal"
-   :transitions
-   (list
-    (cl-dataflow:make-transition "normal"    "enter"            "copy-mode")
-    (cl-dataflow:make-transition "copy-mode" "exit"              "normal")
-    (cl-dataflow:make-transition "copy-mode" "begin-selection"   "selecting")
-    (cl-dataflow:make-transition "selecting" "cancel-selection"  "copy-mode")
-    (cl-dataflow:make-transition "selecting" "exit"              "normal")
-    (cl-dataflow:make-transition "selecting" "yank"              "normal"))))
+   starting in the normal (not-in-copy-mode) state."
+  (cl-dataflow:define-state-machine
+    (:state "normal")
+    ("normal" "enter" "copy-mode")
+    ("copy-mode" "exit" "normal")
+    ("copy-mode" "begin-selection" "selecting")
+    ("selecting" "cancel-selection" "copy-mode")
+    ("selecting" "exit" "normal")
+    ("selecting" "yank" "normal")))
 
 (defun screen-copy-mode-lifecycle-state (screen)
   "Return SCREEN's current copy-mode lifecycle state as one of the

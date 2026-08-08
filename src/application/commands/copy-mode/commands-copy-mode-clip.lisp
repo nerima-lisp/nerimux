@@ -52,7 +52,7 @@
 (defun %run-shell-cmd-with-input (command text)
   "Pipe TEXT as stdin to COMMAND (a shell string), bounded by +copy-command-timeout+.
    process-kit:run owns the deadline: on overrun it escalates SIGTERM->SIGKILL
-   over the child's process group, so no belt-and-suspenders bt:with-timeout is
+   over the child's process group, so no belt-and-suspenders WITH-TIMEOUT is
    needed and no orphaned shell survives the deadline.  Errors are silently
    swallowed so a misconfigured command does not crash the session."
   (ignore-errors

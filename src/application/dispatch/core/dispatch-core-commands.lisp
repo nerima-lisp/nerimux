@@ -196,11 +196,11 @@
            (bracketed (and bracket-p (screen-bracketed-paste screen))))
       (when bracketed
         (pty-write (pane-fd pane)
-                   (babel:string-to-octets +bracketed-paste-begin+ :encoding :utf-8)))
-      (pty-write (pane-fd pane) (babel:string-to-octets text :encoding :utf-8))
+                   (cl-codec-kit:string-to-octets +bracketed-paste-begin+ :encoding :utf-8)))
+      (pty-write (pane-fd pane) (cl-codec-kit:string-to-octets text :encoding :utf-8))
       (when bracketed
         (pty-write (pane-fd pane)
-                   (babel:string-to-octets +bracketed-paste-end+ :encoding :utf-8))))))
+                   (cl-codec-kit:string-to-octets +bracketed-paste-end+ :encoding :utf-8))))))
 
 ;;; -- Shared command dispatch registry ----------------------------------------
 ;;;

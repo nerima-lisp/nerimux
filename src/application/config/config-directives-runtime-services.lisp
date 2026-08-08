@@ -12,18 +12,7 @@
 (defconstant +config-shell-command-timeout+ 30
   "Seconds to allow config-time shell directives to run.")
 
-(defun %run-config-shell-command (command &key combine-stderr directory)
-  "Run COMMAND through /bin/sh while loading config, with a bounded lifetime.
-   Returns (values stdout-string stderr-string exit-code), matching
-   uiop:run-program's prior :output :string calling convention."
-  (let ((result (cl-boundary-kit:process-boundary-run
-                 *process-boundary* "/bin/sh"
-                 :arguments (list "-c" command)
-                 :output :string
-                 :error-output (when combine-stderr :output)
-                 :timeout +config-shell-command-timeout+
-                 :directory directory)))
-    (values (getf result :stdout) (getf result :stderr) (getf result :exit-code))))
+(defun %run-config-shell-command (command &key combine-stderr directory) "Run COMMAND through /bin/sh while loading config, with a bounded lifetime. Returns (values stdout-string stderr-string exit-code), matching the process-boundary result convention." (let ((result (cl-boundary-kit:process-boundary-run *process-boundary* "/bin/sh" :arguments (list "-c" command) :output :string :error-output (when combine-stderr :output) :timeout +config-shell-command-timeout+ :directory directory))) (values (getf result :stdout) (getf result :stderr) (getf result :exit-code))))
 
 (defun %run-config-shell-command-safe (command &key combine-stderr directory delay)
   "Run COMMAND and return NIL if the shell process signals a serious condition."
@@ -38,7 +27,7 @@
 
 (defun %run-config-shell-command-background (command &key combine-stderr directory)
   "Run config COMMAND asynchronously and report the directive as handled."
-  (bt:make-thread
+  (cl-concurrent-kit:make-thread
    (lambda ()
      (%run-config-shell-command-safe command
                                      :combine-stderr combine-stderr

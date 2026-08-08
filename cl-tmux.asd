@@ -21,26 +21,49 @@
   :homepage "https://github.com/nerima-lisp/cl-tmux"
   :bug-tracker "https://github.com/nerima-lisp/cl-tmux/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-tmux.git")
-  ;; The four names below are the org's ONLY sanctioned external (non-org)
-  ;; dependencies, recorded here as DEPENDENCY_POLICY.md requires. They pre-date
-  ;; the policy and are grandfathered in on the strength of cl-tmux being the
-  ;; sole L4 application package (nothing in the org depends on it, so an
-  ;; upstream break cannot propagate). Each line states what it is needed for;
-  ;; do not add a fifth without the four-condition review, and do not drop one
-  ;; of these to "reduce dependencies" — each covers a gap SBCL does not.
-  :depends-on (:cffi             ; select(2)/ioctl(2): the libc calls sb-posix does not expose
-               :bordeaux-threads ; portable threads + locks for the per-pane PTY reader threads
-               :babel            ; string<->octet encoding for UTF-8 PTY and socket traffic
-               :cl-ppcre         ; regex engine behind the format #{m/r:...} and #{s///:} modifiers
+  ;; NO EXTERNAL (non-org) DEPENDENCIES. Every name below is a nerima-lisp
+  ;; sibling, so this system now satisfies DEPENDENCY_POLICY.md's default rule
+  ;; outright rather than through the grandfather clause it used to rely on, and
+  ;; CODING_STANDARD.md's "外部依存を持つのは cl-tmux の1リポジトリだけです" no
+  ;; longer describes any repository in the org.
+  ;;
+  ;; Four external dependencies were removed across the 2026-08-01/02 sweep, each
+  ;; replaced by an org sibling rather than by hand-written code:
+  ;;   * cffi              -> cl-process-kit (select(2)), cl-tty-kit (ioctl
+  ;;                          TIOCSWINSZ, read(2)) and sb-posix (kill(2)). This
+  ;;                          also FIXED a live bug: the old ioctl went through a
+  ;;                          fixed cffi prototype, which misfires on the arm64
+  ;;                          variadic ABI, so pane resize was a silent no-op on
+  ;;                          Apple Silicon.
+  ;;   * babel             -> cl-codec-kit, a from-scratch, babel-API-compatible
+  ;;                          codec with no dependencies of its own, which
+  ;;                          cl-tty-kit and cl-process-kit already use. Call
+  ;;                          sites went through cl-host-kit for one day before
+  ;;                          being re-pointed here; cl-host-kit remains a
+  ;;                          dependency, but for pathname/string ops only.
+  ;;   * bordeaux-threads  -> cl-concurrent-kit. Portability was the whole point
+  ;;                          of bordeaux-threads and ADR-0048 makes the org
+  ;;                          SBCL-only, so it was buying nothing. Note
+  ;;                          WITH-TIMEOUT's shape differs (see below).
+  ;;   * cl-ppcre          -> cl-regex-kit. This one is NOT behaviour-preserving:
+  ;;                          cl-regex-kit is RE2/Rust-style with no
+  ;;                          backreferences and no lookaround. That is a
+  ;;                          deliberate trade, and it moves cl-tmux CLOSER to
+  ;;                          upstream tmux, which compiles #{m/r:} and #{s///}
+  ;;                          patterns with regcomp()+REG_EXTENDED — POSIX ERE,
+  ;;                          which has neither construct either.
+  :depends-on (:cl-date-kit :cl-concurrent-kit ; threads, locks, condvars and preemptive deadlines
+               :cl-regex-kit     ; regex engine behind the format #{m/r:...} and #{s///:} modifiers
                :cl-prolog        ; dependency-free Prolog engine (cold-path reasoning)
                :cl-cli           ; startup argv/flag parsing (main-startup-flags)
                :cl-boundary-kit  ; process boundary for run-shell/if-shell
                :cl-dataflow      ; copy-mode lifecycle state machine (src/dataflow)
                :cl-parser-kit    ; commands-tokenizer combinator rewrite
-               :cl-tty-kit       ; true-color -> 256/16 downsampling (renderer-format)
-               :cl-process-kit   ; timeout-guarded subprocess run (SIGTERM->SIGKILL, pgid-isolated)
+               :cl-tty-kit       ; PTY spawn/raw-mode/fd-io, ioctl window size, colour downsampling
+               :cl-process-kit   ; timeout-guarded subprocess run, and select(2) over raw fds
                :cl-history-kit   ; command-prompt history store + recall navigation (runtime-history)
-               :cl-host-kit)     ; env/pathname/string host operations (2026-08-01 uiop migration)
+               :cl-codec-kit     ; string<->octet UTF-8 codec (protocol, PTY, OSC payloads)
+               :cl-host-kit)     ; pathname/string host ops (split-string, directory helpers)
   :components
   ((:module "src"
     :serial t
@@ -76,9 +99,10 @@
      (:module "infrastructure/pty"
       :serial t
       :components
-      ((:file "pty-ffi")       ; FFI declarations and platform constants
-       (:file "pty-rawmode")   ; terminal raw mode management
-       (:file "pty")))         ; PTY lifecycle + install-pty-port adapter (references cl-tmux/ports vars)
+       ((:file "pty-ffi")       ; FFI declarations and platform constants
+        (:file "pty-rawmode")   ; terminal raw mode management
+        (:file "pty")            ; PTY lifecycle and terminal geometry
+        (:file "pty-io")))       ; fd I/O, select boundary, and port registration
      (:module "infrastructure/net"
       :serial t
       :components

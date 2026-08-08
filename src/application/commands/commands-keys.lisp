@@ -44,10 +44,10 @@
         (modified (%modified-special-key-string name)))
     (cond
       (entry
-       (babel:string-to-octets (cdr entry) :encoding :utf-8))
+       (cl-codec-kit:string-to-octets (cdr entry) :encoding :utf-8))
       ;; Modified special key (C-Up, S-F5, C-M-Left) before the C-/M-<char> paths.
       (modified
-       (babel:string-to-octets modified :encoding :utf-8))
+       (cl-codec-kit:string-to-octets modified :encoding :utf-8))
       ;; C-<char>: control byte.  C-a..C-z → 1..26, C-@ → 0, C-[ → 27, ...
       ;; +ctrl-mask+ = #x1f (exported from cl-tmux/config).
       ((and (= (length name) 3) (string= (subseq name 0 2) "C-"))
@@ -56,7 +56,7 @@
                                               +ctrl-mask+)))
       ;; M-<char>: ESC followed by the character (Alt/Meta).
       ((and (= (length name) 3) (string= (subseq name 0 2) "M-"))
-       (babel:string-to-octets
+       (cl-codec-kit:string-to-octets
         (concatenate 'string (string (code-char 27)) (subseq name 2))
         :encoding :utf-8))
       (t nil))))
@@ -70,11 +70,11 @@
    `send-keys \"echo hi\" Enter` sends \"echo hi\" then CR."
   (let ((args (tokenize-command-string string)))
     (if (null args)
-        (babel:string-to-octets string :encoding :utf-8)
+        (cl-codec-kit:string-to-octets string :encoding :utf-8)
         (apply #'concatenate '(vector (unsigned-byte 8))
                (mapcar (lambda (arg)
                          (or (%key-name-to-bytes arg)
-                             (babel:string-to-octets arg :encoding :utf-8)))
+                             (cl-codec-kit:string-to-octets arg :encoding :utf-8)))
                        args)))))
 
 (defun send-keys-to-pane (pane string &key literal)
@@ -87,5 +87,5 @@
   (when (and pane (> (pane-fd pane) -1))
     (pty-write (pane-fd pane)
                (if literal
-                   (babel:string-to-octets string :encoding :utf-8)
+                   (cl-codec-kit:string-to-octets string :encoding :utf-8)
                    (%translate-send-keys string)))))

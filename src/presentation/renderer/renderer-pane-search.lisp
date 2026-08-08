@@ -9,17 +9,32 @@
       (write-char (cell-char (screen-display-cell screen col row)) s))))
 
 (defun %all-match-ranges (term row-str)
-  "All (START . END) column ranges in ROW-STR matching TERM: regex via cl-ppcre,
-   literal-substring fallback when TERM is not a valid regex.  Zero-width matches
-   are skipped."
-  (if (ignore-errors (cl-ppcre:create-scanner term))
-      (loop for (s e) on (cl-ppcre:all-matches term row-str) by #'cddr
-            when (and e (> e s)) collect (cons s e))
-      (loop with tlen = (length term) and start = 0
-            for pos = (search term row-str :start2 start)
-            while pos
-            collect (cons pos (+ pos tlen))
-            do (setf start (+ pos (max 1 tlen))))))
+  "All (START . END) column ranges in ROW-STR matching TERM: regex via
+   cl-regex-kit, literal-substring fallback when TERM is not a valid regex.
+   Zero-width matches are skipped.
+
+   :OCTAL NIL MUST MATCH %COPY-MODE-MAKE-MATCHER (commands-copy-mode-search.lisp).
+   These are two independent decisions about whether the same user TERM is a
+   valid regex — one drives cursor motion for n/N, this one paints the highlight.
+   Any difference in compile options desynchronises them.
+
+   ALL-MATCHES returns a list of MATCH-RESULT structs, not cl-ppcre's flat list
+   of alternating integers, so the ranges are read off with MATCH-START/MATCH-END
+   instead of walking the list two at a time.  The compiled regex is now also
+   reused for the scan rather than recompiled from the string, which the cl-ppcre
+   version did (it compiled TERM once just to test validity, then handed the raw
+   string to ALL-MATCHES)."
+  (let ((scanner (ignore-errors (cl-regex-kit:compile-regex term :octal nil))))
+    (if scanner
+        (loop for match in (cl-regex-kit:all-matches scanner row-str)
+              for s = (cl-regex-kit:match-start match)
+              for e = (cl-regex-kit:match-end match)
+              when (> e s) collect (cons s e))
+        (loop with tlen = (length term) and start = 0
+              for pos = (search term row-str :start2 start)
+              while pos
+              collect (cons pos (+ pos tlen))
+              do (setf start (+ pos (max 1 tlen)))))))
 
 (defun %option-style-sgr (option-name default)
   "SGR attribute string for the tmux style option OPTION-NAME (falling back to

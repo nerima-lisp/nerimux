@@ -8,7 +8,8 @@
 ;;;   (make-array N :element-type '(unsigned-byte 8) :initial-contents '(...))
 ;;; is repeated 7+ times in parser-tests.lisp.  Centralise it as make-bytes.
 ;;; The pattern
-;;;   (screen-process-bytes s (babel:string-to-octets (format nil "~C]N;...~C" ...) :encoding :utf-8))
+;;;   (screen-process-bytes s (cl-codec-kit:string-to-octets (format nil "~C]N;...~C" ...)
+;;;                                                          :encoding :utf-8))
 ;;; is repeated 10+ times.  Centralise it as feed-osc.
 
 (defun make-bytes (&rest byte-values)
@@ -21,7 +22,7 @@
   "Feed an OSC sequence with integer COMMAND-NUMBER and BODY-STRING to SCREEN,
    terminated by BEL (ASCII 7).  Uses UTF-8 encoding to match real terminal behaviour."
   (screen-process-bytes screen
-    (babel:string-to-octets
+    (cl-codec-kit:string-to-octets
       (format nil "~C]~D;~A~C" #\Escape command-number body-string (code-char 7))
       :encoding :utf-8)))
 
@@ -94,7 +95,7 @@
     (let ((result (cl-tmux/terminal/parser::%base64-decode "aGVsbG8=")))
       (expect (not (null result)))
       (expect (string= "hello"
-                       (babel:octets-to-string result :encoding :utf-8)))))
+                       (cl-codec-kit:octets-to-string result :encoding :utf-8)))))
 
   ;; %base64-decode on an empty string returns an empty byte vector.
   (it "base64-decode-empty-string"

@@ -335,7 +335,7 @@
   (it "decode-command-payload-command-name-with-colon-is-not-misidentified"
     ;; Encode manually: a single NUL-terminated field with ':' in the name.
     ;; With only 1 field decode-command-payload cannot treat it as a target.
-    (let* ((name-bytes (babel:string-to-octets "weird:name" :encoding :utf-8))
+    (let* ((name-bytes (cl-codec-kit:string-to-octets "weird:name" :encoding :utf-8))
            (payload    (concatenate '(simple-array (unsigned-byte 8) (*))
                                     name-bytes #(0))))
       (multiple-value-bind (command target args) (decode-command-payload payload)

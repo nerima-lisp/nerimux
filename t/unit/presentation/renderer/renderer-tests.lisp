@@ -49,14 +49,16 @@
   ;; %compose-aligned-line places #[align=right] content flush-right and
   ;; #[align=centre] content centred, filling to the requested width.
   (it "compose-aligned-line-positions-regions"
-    (flet ((vis (s) (cl-ppcre:regex-replace-all
-                     (format nil "~C\\[[0-9;]*m" #\Escape) s "")))
-      (expect (string= "AB      CD"
-                       (vis (cl-tmux/renderer::%compose-aligned-line "AB#[align=right]CD" "" 10))))
-      (expect (string= "    XX    "
-                       (vis (cl-tmux/renderer::%compose-aligned-line "#[align=centre]XX" "" 10))))
-      (expect (= 10 (cl-tmux/renderer::%visible-length
-                     (cl-tmux/renderer::%compose-aligned-line "L#[align=centre]C#[align=right]R" "" 10))))))
+    ;; cl-regex-kit:replace-all takes a COMPILED regex (there is no string
+    ;; overload), so the pattern is compiled once outside the flet rather than
+    ;; per call as cl-ppcre's string-accepting regex-replace-all allowed.
+    (let ((sgr (cl-regex-kit:compile-regex (format nil "~C\\[[0-9;]*m" #\Escape))))
+      (flet ((vis (s) (cl-regex-kit:replace-all sgr s ""))
+             (compose (spec) (cl-tmux/renderer::%compose-aligned-line spec "" 10)))
+        (expect (string= "AB      CD" (vis (compose "AB#[align=right]CD"))))
+        (expect (string= "    XX    " (vis (compose "#[align=centre]XX"))))
+        (expect (= 10 (cl-tmux/renderer::%visible-length
+                       (compose "L#[align=centre]C#[align=right]R")))))))
 
   ;; When status-format[0] is set, the bar renders from that template with
   ;; #[align=right] honoured, instead of the procedural left/window-list/right path.
@@ -65,8 +67,10 @@
       (let* ((sess (make-renderer-test-session 40 10 :content ""))
              (out  (render-status-bar-output sess 10 40))
              ;; Strip ALL CSI sequences (the leading cursor-move ESC[10;1H and any SGR).
-             (vis  (cl-ppcre:regex-replace-all
-                    (format nil "~C\\[[0-9;?]*[A-Za-z]" #\Escape) out ""))
+             (vis  (cl-regex-kit:replace-all
+                    (cl-regex-kit:compile-regex
+                     (format nil "~C\\[[0-9;?]*[A-Za-z]" #\Escape))
+                    out ""))
              (rpos (search "RIGHThere" vis)))
         (expect (eql 0 (search "LEFThere" vis)))
         (expect (and rpos (= (+ rpos (length "RIGHThere")) 40))))))
@@ -76,8 +80,10 @@
     (with-isolated-options ("status-format[0]" "#{W:[#{window_index}]}")
       (let* ((sess (make-renderer-test-session 40 10 :content ""))
              (out  (render-status-bar-output sess 10 40))
-             (vis  (cl-ppcre:regex-replace-all
-                    (format nil "~C\\[[0-9;?]*[A-Za-z]" #\Escape) out "")))
+             (vis  (cl-regex-kit:replace-all
+                    (cl-regex-kit:compile-regex
+                     (format nil "~C\\[[0-9;?]*[A-Za-z]" #\Escape))
+                    out "")))
         (expect (search "[" vis)))))
 
   ;; With *prompt* explicitly inactive, the status bar shows the normal status

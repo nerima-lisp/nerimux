@@ -1,28 +1,57 @@
 (in-package #:cl-tmux/pty)
 
-;;;; PTY management, terminal raw mode, and multiplexed I/O.
+;;;; PTY lifecycle and terminal geometry.
 ;;;;
 ;;;; Implemented in pure Common Lisp using:
-;;;;   • SB-EXT    — process spawning with a PTY stream
-;;;;   • CFFI      — ioctl, select, read/write (all from libc; no custom C)
-;;;;   • sb-posix  — terminal raw mode and fallback fd close
+;;;;   • cl-tty-kit         — PTY creation, process ownership, raw mode, window size
+;;;;   • cl-concurrent-kit  — bounded child wait
+;;;;   • sb-posix           — signal delivery and fallback fd close
 ;;;;
-;;;; FFI declarations and platform constants live in pty-ffi.lisp.
+;;;; Platform constants live in pty-ffi.lisp.
 
 ;;; ── Public: PTY creation ───────────────────────────────────────────────────
 
 (defun set-pty-size (master-fd rows cols)
-  "Notify the kernel PTY driver of a new ROWS×COLS window size."
-  (cffi:with-foreign-object (ws '(:struct winsize))
-    (setf (cffi:foreign-slot-value ws '(:struct winsize) 'ws-row)    rows
-          (cffi:foreign-slot-value ws '(:struct winsize) 'ws-col)    cols
-          (cffi:foreign-slot-value ws '(:struct winsize) 'ws-xpixel) 0
-          (cffi:foreign-slot-value ws '(:struct winsize) 'ws-ypixel) 0)
-    (cffi:foreign-funcall "ioctl"
-                          :int master-fd
-                          :unsigned-long +tiocswinsz+
-                          :pointer ws
-                          :int)))
+  "Notify the kernel PTY driver of a new ROWS×COLS window size.
+
+   ARGUMENT ORDER: this function keeps cl-tmux's (MASTER-FD ROWS COLS) contract —
+   it is installed as cl-tmux/ports:*resize-pty* and called from the domain — but
+   cl-tty-kit:set-terminal-size takes (COLUMNS ROWS &optional FD). The call below
+   therefore both TRANSPOSES rows/cols and moves the fd to the end. Getting this
+   wrong silently swaps every pane's width and height, so it is covered by two
+   round-trip tests on a non-square size, both of which set the size and read it
+   back with cl-tty-kit:terminal-size:
+     * SET-PTY-SIZE-ROUND-TRIPS-NON-SQUARE-SIZE-ON-REAL-PTY
+       (t/unit/infrastructure/pty/pty-tests.lisp), and
+     * SET-PTY-SIZE-APPLIES-NON-SQUARE-SIZE-WITHOUT-TRANSPOSITION
+       (t/integration/pty-tests.lisp).
+   Both need a real PTY and skip without one, so neither is a CI guard on a host
+   with no /dev/ptmx; that is why the duplication is deliberate rather than
+   redundant — the unit suite is the one that runs in `nix develop`.
+   The same transposition, in the read direction, is done by TERMINAL-SIZE below.
+
+   This is also a BUG FIX. The previous implementation called variadic ioctl(2)
+   through a FIXED cffi prototype. On the arm64 ABI a variadic argument is passed
+   on the stack while a fixed prototype passes it in a register, so the kernel
+   read a garbage pointer and the call failed with EFAULT: verified on this
+   machine, where the fixed-prototype TIOCSWINSZ returned -1 and left the pty at
+   0x0, while SBCL's own sb-unix:unix-ioctl (what cl-tty-kit uses) set 40x123
+   correctly on the same fd. set-pty-size was therefore a silent no-op on Apple
+   Silicon — every child process saw a stale or zero window size and SIGWINCH was
+   never delivered.
+
+   cl-tty-kit signals TERMINAL-SIZE-SET-FAILED on failure, whereas the old ioctl
+   returned -1 that no caller inspected. FORKPTY-WITH-SHELL calls this inside an
+   unwind-protect that tears the pty down, and the resize command path wraps it,
+   so a genuine failure now surfaces instead of leaving a wrongly-sized pane.
+
+   ROWS and COLS must both be POSITIVE. cl-tty-kit's %ASSERT-TERMINAL-DIMENSION
+   rejects 0 (and anything negative) before attempting the ioctl, where the old
+   cffi path passed a 0x0 winsize through and ignored the -1 return. A degenerate
+   layout can produce a zero content height, so CL-TMUX/MODEL:PANE-REPOSITION —
+   the only caller that computes its dimensions rather than receiving them —
+   guards (PLUSP WIDTH) and (PLUSP CONTENT-HEIGHT) alongside its fd guard."
+  (cl-tty-kit:set-terminal-size cols rows master-fd))
 
 ;;; ── Private: spawned PTY helpers ───────────────────────────────────────────
 
@@ -76,28 +105,33 @@
    daemonizing grandchild still holding the PTY open) so the reader thread
    that calls this at EOF cannot block forever.")
 
-(defun pty-child-exit-status (master-fd &optional (timeout +pty-child-wait-timeout+))
-  "Exit information for MASTER-FD's child process, called at PTY EOF (the child
-   has closed the slave, so the wait does not normally block for a live shell;
-   bounded by TIMEOUT seconds regardless, default +PTY-CHILD-WAIT-TIMEOUT+ —
-   override only for tests that need a live child to time out quickly).
-   Returns (values CODE KIND) where KIND is :exited (CODE = exit code) or
-   :signaled (CODE = signal number), or NIL when the child is unknown (foreign
-   fd, synthetic test pane), the wait times out, or the wait fails."
+(defun pty-child-exit-status
+    (master-fd &optional (timeout +pty-child-wait-timeout+))
+  "Exit information for MASTER-FD child process, called at PTY EOF (the child
+has closed the slave, so the wait does not normally block for a live shell;
+bounded by TIMEOUT seconds regardless, default +PTY-CHILD-WAIT-TIMEOUT+.
+Returns (values CODE KIND) where KIND is :exited (CODE = exit code) or
+:signaled (CODE = signal number), or NIL when the child is unknown (foreign
+fd, synthetic test pane), the wait times out, or the wait fails."
   (let* ((pty (gethash master-fd *pty-processes*))
          (process (and pty (cl-tty-kit:pty-process pty))))
     (when process
       (handler-case
           (progn
-            (bt:with-timeout (timeout)
+            (cl-concurrent-kit:with-timeout
+                (cl-date-kit:duration-of-nanos
+                 (round (* timeout 1000000000)))
               (sb-ext:process-wait process))
             (let ((code (sb-ext:process-exit-code process)))
               (when code
                 (if (eq (sb-ext:process-status process) :signaled)
                     (values code :signaled)
                     (values code :exited)))))
-        (bt:timeout () nil)
-        (error () nil)))))
+        (cl-concurrent-kit:operation-timed-out () nil)
+        (error (condition)
+          (if (typep condition (quote type-error))
+              (error condition)
+              nil))))))
 
 (defun forkpty-with-shell (rows cols &key start-dir default-command environment)
   "Spawn a child shell process on a fresh PTY of size ROWS×COLS.
@@ -142,117 +176,24 @@
         (unless success
           (ignore-errors (cl-tty-kit:close-pty pty)))))))
 
-;;; ── Public: PTY I/O ────────────────────────────────────────────────────────
-;;;
-;;; Byte-transparent master-fd read/write is delegated to cl-tty-kit's
-;;; fd-centric layer (fd-read-octets / fd-write-octets), which wraps the same
-;;; unix-read/unix-write calls cl-tmux formerly issued via CFFI.  cl-tmux keeps
-;;; its own type-guarding and empty-noop conventions here so callers and tests
-;;; observe unchanged behavior.
-
-(defun pty-write (fd data)
-  "Write DATA (octet vector or UTF-8 string) to the PTY master fd."
-  (etypecase data
-    (string
-     (pty-write fd (babel:string-to-octets data :encoding :utf-8)))
-    ((simple-array (unsigned-byte 8) (*))
-     ;; Two noop guards preserving the prior raw-write(2) behavior:
-     ;;   * empty vector — no write is issued (tests assert this).
-     ;;   * negative fd — the "no PTY / dead pane" sentinel (pane-fd -1).  The
-     ;;     former CFFI write(2) ignored its return value, so a write to fd -1
-     ;;     silently failed; cl-tty-kit's fd-write-octets instead asserts a
-     ;;     non-negative fd and signals, so we skip it here.  Real PTY master fds
-     ;;     are always positive, and the domain already gates real writes on
-     ;;     (> (pane-fd pane) 0).
-     (when (and (>= fd 0) (plusp (length data)))
-       (cl-tty-kit:fd-write-octets fd data)))))
-
-(defun pty-read-blocking-into (fd buffer)
-  "Block until data arrives on FD, read into the caller-supplied octet BUFFER, and
-   return a fresh exact-size octet vector holding just the bytes read — or NIL on
-   EOF/would-block.  Same return contract as pty-read-blocking (fresh exact-size
-   vector, or NIL), but BUFFER is reused across calls to eliminate the per-read
-   4 KB allocation on the hot read path: only the (subseq buffer 0 count) result
-   (count bytes) is freshly allocated.  Because that result is a copy, BUFFER may
-   be safely overwritten by the next read even if the caller retains the result.
-
-   Callers gate this with select-fds, so FD is ready when we read: cl-tty-kit's
-   fd-read-octets then returns the available bytes (positive count) without
-   waiting to fill BUFFER.  A 0 (EOF) or NIL (would-block) result maps to NIL —
-   the 'no data / child gone' signal the reader treats as EOF, matching the
-   previous %read-based convention."
-  (let ((count (cl-tty-kit:fd-read-octets fd buffer)))
-    (when (and count (plusp count))
-      (subseq buffer 0 count))))
-
-(defun pty-read-blocking (fd buffer-size)
-  "Block until data arrives on FD, then return an octet vector of up to BUFFER-SIZE bytes.
-   Returns NIL on EOF or error.
-
-   Thin allocating wrapper over pty-read-blocking-into: allocates a fresh
-   BUFFER-SIZE scratch buffer per call and reads into it, preserving the historic
-   (fd size) signature for callers/tests that do not manage their own buffer."
-  (pty-read-blocking-into
-   fd (make-array buffer-size :element-type '(unsigned-byte 8))))
-
 (defun pty-close (master-fd child-pid)
   "Send SIGHUP to the child process and close the PTY master.
 
    A non-positive CHILD-PID is ignored: kill(-1)/kill(0) broadcast the signal to
    the whole process group (including this process), which must never happen.
    Likewise a negative MASTER-FD is not closed."
-  (ignore-errors
-    ;; cl-tmux-specific teardown: SIGHUP (NOT cl-tty-kit's SIGTERM->SIGKILL
-    ;; escalation) then close the master.  Drop the retained cl-tty-kit PTY
-    ;; struct from *pty-processes* so it is no longer reachable; closing its
-    ;; SBCL process object closes the master stream (and fd), as before.
-    (when (> child-pid 0)
-      (cffi:foreign-funcall "kill" :int child-pid :int +sighup+ :int))
-    (when (>= master-fd 0)
-      (let ((pty (%take-pty-process master-fd)))
-        (if pty
-            (sb-ext:process-close (cl-tty-kit:pty-process pty))
+  ;; A child can exit between the fork and this cleanup.  Keep its failed
+  ;; SIGHUP from preventing close-pty from releasing the retained stream.
+  (when (> child-pid 0)
+    (ignore-errors
+      (sb-posix:kill child-pid sb-posix:sighup)))
+  (when (>= master-fd 0)
+    (let ((pty (%take-pty-process master-fd)))
+      (if pty
+          (ignore-errors
+            (cl-tty-kit:close-pty pty))
+          (ignore-errors
             (sb-posix:close master-fd))))))
-
-;;; ── Public: select-based I/O multiplexing ─────────────────────────────────
-
-(defconstant +microseconds-per-second+ 1000000
-  "Number of microseconds in one second; used in struct timeval decomposition.")
-
-(defun %setup-timeval (tv timeout-us)
-  "Write TIMEOUT-US microseconds into the struct timeval at foreign pointer TV.
-   Decomposes timeout into (seconds, remainder-microseconds) using
-   +microseconds-per-second+."
-  (setf (cffi:mem-aref tv :long 0) (floor timeout-us +microseconds-per-second+)
-        (cffi:mem-aref tv :long 1) (mod   timeout-us +microseconds-per-second+)))
-
-(defun %collect-ready-fds (fds rset)
-  "Return the sub-list of FDS whose bits are set in read-set RSET."
-  (loop for fd in fds when (fd-isset-p fd rset) collect fd))
-
-(defun select-fds (fds timeout-us)
-  "Poll FDS for readability with a TIMEOUT-US microsecond timeout.
-   timeout-us = 0 → non-blocking; -1 → block indefinitely.
-   Returns the sub-list of fds that are ready to read, or NIL.
-   The read-set is meaningful only when select(2) returns a positive count."
-  (when fds
-    (let ((maxfd (reduce #'max fds)))
-      (cffi:with-foreign-objects ((rset :uint32 +fd-set-words+)
-                                  (tv   :long   2))
-        (fd-zero! rset)
-        (dolist (fd fds) (fd-set! fd rset))
-        (let ((nready (if (>= timeout-us 0)
-                          (progn
-                            (%setup-timeval tv timeout-us)
-                            (%select (1+ maxfd) rset
-                                     (cffi:null-pointer) (cffi:null-pointer)
-                                     tv))
-                          (%select (1+ maxfd) rset
-                                   (cffi:null-pointer) (cffi:null-pointer)
-                                   (cffi:null-pointer)))))
-          ;; Only a positive count leaves a valid read-set to inspect.
-          (when (> nready 0)
-            (%collect-ready-fds fds rset)))))))
 
 ;;; ── Public: terminal geometry ──────────────────────────────────────────────
 
@@ -287,17 +228,3 @@
              (<= 1 cols +max-sane-cols+))
         (values rows cols)
         (values +default-term-rows+ +default-term-cols+))))
-
-;;; ── Port adapter ─────────────────────────────────────────────────────────────
-;;;
-;;; install-pty-port wires this module's CFFI-backed functions into the
-;;; cl-tmux/ports abstraction layer so that domain code (cl-tmux/model) calls
-;;; through the port rather than referencing cl-tmux/pty symbols directly.
-;;; Must be called before any pane is created (server startup or test setup).
-
-(defun install-pty-port ()
-  "Register the CFFI PTY implementation as the active cl-tmux/ports adapter."
-  (setf cl-tmux/ports:*spawn-pty* #'forkpty-with-shell
-        cl-tmux/ports:*write-pty* #'pty-write
-        cl-tmux/ports:*resize-pty* #'set-pty-size
-        cl-tmux/ports:*close-pty* #'pty-close))

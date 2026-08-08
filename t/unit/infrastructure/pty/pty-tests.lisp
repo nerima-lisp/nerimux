@@ -77,12 +77,63 @@
            (expect (string= "" slave-path))
         (pty-close fd pid))))
 
-  ;; set-pty-size succeeds (no error) when called on a real spawned PTY master fd.
-  (it "set-pty-size-does-not-error-on-real-pty"
+  ;; set-pty-size applies ROWS and COLS to the right winsize fields on a real
+  ;; spawned PTY master fd.
+  ;;
+  ;; READ-BACK IS THE POINT.  The previous version of this test only asserted
+  ;; that the call did not signal, which cannot catch a rows/cols transposition:
+  ;; set-terminal-size accepts 100x30 exactly as happily as 30x100, so an
+  ;; inverted adapter passed silently.  The only other round-trip guard lives in
+  ;; t/integration/pty-tests.lisp, and the whole integration suite is skipped
+  ;; when no /dev/ptmx is available — i.e. on CI — so this was the transposition
+  ;; regression's only chance of being caught in `nix develop` and it did not
+  ;; take it.  30x100 is deliberately NON-SQUARE (and neither dimension matches
+  ;; with-pty-shell's 24x80 spawn size), so a swap fails both assertions.
+  ;; cl-tty-kit:terminal-size returns (values COLUMNS ROWS) — columns first.
+  (it "set-pty-size-round-trips-non-square-size-on-real-pty"
     (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
     (with-pty-shell (fd pid)
       (finishes (cl-tmux/pty:set-pty-size fd 30 100)
-                "set-pty-size must not signal on a live PTY master fd")))
+                "set-pty-size must not signal on a live PTY master fd")
+      (multiple-value-bind (cols rows) (cl-tty-kit:terminal-size fd)
+        (expect (eql 100 cols))
+        (expect (eql 30 rows)))))
+
+  ;;; ── set-pty-size rejects degenerate dimensions ───────────────────────────────
+
+  ;; cl-tty-kit:set-terminal-size demands POSITIVE dimensions and signals before
+  ;; the ioctl; the cffi path it replaced passed a 0x0 winsize through and ignored
+  ;; the -1 return.  Pinned here because CL-TMUX/MODEL:PANE-REPOSITION's
+  ;; (plusp width) / (plusp content-height) guard exists solely to keep a
+  ;; degenerate layout away from this behaviour — if the kit ever went back to
+  ;; tolerating 0, that guard would become dead code rather than stay load-bearing.
+  (it "set-pty-size-signals-on-a-zero-dimension"
+    (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
+    (with-pty-shell (fd pid)
+      (signals error (cl-tmux/pty:set-pty-size fd 0 80))
+      (signals error (cl-tmux/pty:set-pty-size fd 24 0))))
+
+  ;;; ── select-fds: the dead-pane fd sentinel ───────────────────────────────────
+
+  ;; pane-fd -1 is cl-tmux's documented "no PTY / dead pane" sentinel, and the
+  ;; event loop can still hold one in its poll set for the iteration in which a
+  ;; pane is torn down.  process-kit's %validate-fds requires (INTEGER 0) and
+  ;; raises a BARE TYPE-ERROR, which is NOT process-kit:fd-wait-failed and so is
+  ;; NOT caught by select-fds' handler-case: without %selectable-fds the sentinel
+  ;; is an unhandled error out of the event loop, where the hand-rolled %select
+  ;; this replaced made it a silent no-op.
+  (it "select-fds-drops-the-negative-fd-sentinel"
+    (finishes (cl-tmux/pty:select-fds (list -1) 0)
+              "select-fds must not signal on the pane-fd -1 sentinel")
+    (expect (null (cl-tmux/pty:select-fds (list -1) 0))))
+
+  ;; ...and dropping it must not collapse the whole poll: live fds in the same
+  ;; call are still reported.  This is what filtering buys over widening the
+  ;; handler-case to TYPE-ERROR, which would have returned NIL for the whole set.
+  (it "select-fds-with-sentinel-still-reports-a-live-ready-fd"
+    (with-pipe-fds (rfd wfd)
+      (write-byte-to-fd wfd 99)
+      (expect (equal (list rfd) (cl-tmux/pty:select-fds (list -1 rfd) 200000)))))
 
   ;;; ── pty-child-exit-status ────────────────────────────────────────────────────
 
@@ -98,6 +149,42 @@
     (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
     (with-pty-shell (fd pid)
       (expect (null (cl-tmux/pty:pty-child-exit-status fd 0.05)))))
+
+  ;; The two properties pty-child-exit-status's bounded wait rests on, pinned
+  ;; WITHOUT a PTY so they still hold on CI, where the live-child test above and
+  ;; every other real-PTY test in this file skip.  A hung child there means the
+  ;; reader thread never returns from EOF handling, so the deadline is the only
+  ;; thing keeping the server alive.
+  ;;
+  ;;  1. THE DEADLINE IS A BARE FORM.  cl-concurrent-kit's WITH-TIMEOUT is shaped
+  ;;     like SB-EXT:WITH-TIMEOUT — (with-timeout SECS ...) — not like
+  ;;     bordeaux-threads' (bt:with-timeout (SECS) ...).  Carrying the old parens
+  ;;     over expands to (SECS), calling the timeout VALUE as a function; passing
+  ;;     a computed rather than literal deadline is what distinguishes the two.
+  ;;
+  ;;  2. THE CONDITION IS AN ERROR.  SB-EXT:TIMEOUT is a SERIOUS-CONDITION that is
+  ;;     deliberately NOT an ERROR, so pty.lisp's (error () nil) clause — the one
+  ;;     sitting right beside (cl-concurrent-kit:operation-timed-out () nil) —
+  ;;     would NOT have caught a raw sb-ext:timeout.  Only cl-concurrent-kit's
+  ;;     translation makes either clause reachable; without it the timeout escapes
+  ;;     pty-child-exit-status entirely instead of becoming its documented NIL.
+  ;;
+  ;; Asserted with a raw HANDLER-CASE rather than cl-weave's :to-throw for exactly
+  ;; reason 2 — the same precedent as commands-tests-c.lisp's
+  ;; with-timeout-signals-operation-timed-out-not-sb-ext-timeout.
+  (it "cl-concurrent-kit-timeout-uses-duration"
+    (let* ((seconds (/ 1 1000))
+           (duration (cl-date-kit:duration-of-nanos (round (* seconds 1000000000))))
+           (condition (handler-case
+                          (cl-concurrent-kit:with-timeout duration (sleep 60))
+                        (cl-concurrent-kit:operation-timed-out (c) c))))
+      (expect (typep condition (quote cl-concurrent-kit:operation-timed-out)))
+      (expect (typep condition (quote error)))
+      (expect (not (typep condition (quote sb-ext:timeout))))
+      (expect (null (handler-case
+                        (cl-concurrent-kit:with-timeout duration (sleep 60))
+                      (cl-concurrent-kit:operation-timed-out () nil)
+                      (error () :wrong-clause))))))
 
   ;; pty-child-exit-status reports :exited with the real exit code once the
   ;; child has actually terminated.

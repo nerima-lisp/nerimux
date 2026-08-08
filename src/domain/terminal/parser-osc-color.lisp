@@ -30,8 +30,17 @@
     (4 (ldb (byte 8 8) value))))
 
 (defun %parse-rgb-color (spec)
-  "Parse rgb:R/G/B where each channel is 1-4 hex digits."
-  (let* ((parts (cl-ppcre:split "/" spec))
+  "Parse rgb:R/G/B where each channel is 1-4 hex digits.
+
+   HOST-KIT:SPLIT-STRING, not a regex: the delimiter is the single fixed
+   character #\\/, so compiling a pattern to find it buys nothing.
+
+   This also TIGHTENS one case.  cl-ppcre:split drops trailing empty fields, so
+   the malformed `rgb:1/2/3/` split into exactly three parts and was accepted as
+   a colour.  SPLIT-STRING keeps them (as cl-regex-kit:split would), giving four
+   parts and a rejection — which is what xterm's rgb: syntax, exactly three
+   channels, actually calls for."
+  (let* ((parts (host-kit:split-string spec :separator #\/))
          (valid (= (length parts) 3)))
     (when valid
       (let ((channels

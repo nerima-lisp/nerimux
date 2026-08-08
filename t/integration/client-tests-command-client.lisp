@@ -36,7 +36,7 @@
     (let ((*standard-input* (make-string-input-stream "hello")))
       (let ((octets (cl-tmux::%read-command-client-stdin-octets)))
         (expect (typep octets '(vector (unsigned-byte 8))))
-        (expect (string= "hello" (babel:octets-to-string octets :encoding :utf-8))))))
+        (expect (string= "hello" (cl-codec-kit:octets-to-string octets :encoding :utf-8))))))
 
   ;; %read-command-client-stdin-octets returns an empty octet vector when
   ;; stdin is immediately at EOF.
@@ -49,7 +49,7 @@
   (it "read-command-client-stdin-octets-unicode"
     (let ((*standard-input* (make-string-input-stream "日本語")))
       (let ((octets (cl-tmux::%read-command-client-stdin-octets)))
-        (expect (string= "日本語" (babel:octets-to-string octets :encoding :utf-8))))))
+        (expect (string= "日本語" (cl-codec-kit:octets-to-string octets :encoding :utf-8))))))
 
   ;;; ── %read-command-reply socket-roundtrip tests ───────────────────────────────
   ;;;

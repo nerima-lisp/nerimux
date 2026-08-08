@@ -49,7 +49,7 @@
           ;; line rather than being adjacent characters.
           (flet ((line-with-ab (text)
                    (find-if (lambda (l) (search "AB" l))
-                            (uiop:split-string text :separator '(#\Newline)))))
+                            (host-kit:split-string text :separator '(#\Newline)))))
             (expect (search "CD" (or (line-with-ab joined) "")))
             (expect (null (search "CD" (or (line-with-ab plain) "")))))))))
 
@@ -61,18 +61,18 @@
       (let* ((pane   (cl-tmux/model:session-active-pane s))
              (screen (cl-tmux/model:pane-screen pane)))
         (cl-tmux/terminal/emulator:screen-process-bytes
-         screen (babel:string-to-octets (format nil "~C#6WIDE" #\Escape)
+         screen (cl-codec-kit:string-to-octets (format nil "~C#6WIDE" #\Escape)
                                         :encoding :utf-8))
         (expect (eql #\6 (gethash 0 (cl-tmux/terminal/types:screen-line-sizes screen))))
         (let ((out (cl-tmux/renderer::render-session-to-string s 5 20)))
           (expect (search (format nil "~C#6" #\Escape) out))
           (expect (search (format nil "~C#5" #\Escape) out)))
         (cl-tmux/terminal/emulator:screen-process-bytes
-         screen (babel:string-to-octets (format nil "~C#5" #\Escape)
+         screen (cl-codec-kit:string-to-octets (format nil "~C#5" #\Escape)
                                         :encoding :utf-8))
         (expect (null (gethash 0 (cl-tmux/terminal/types:screen-line-sizes screen))))
         (cl-tmux/terminal/emulator:screen-process-bytes
-         screen (babel:string-to-octets (format nil "~C#6~Cc" #\Escape #\Escape)
+         screen (cl-codec-kit:string-to-octets (format nil "~C#6~Cc" #\Escape #\Escape)
                                         :encoding :utf-8))
         (expect (zerop (hash-table-count
                         (cl-tmux/terminal/types:screen-line-sizes screen)))))))

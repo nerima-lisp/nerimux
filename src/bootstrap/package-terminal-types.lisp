@@ -7,7 +7,7 @@
 
 (defpackage #:cl-tmux/terminal/types
   (:use #:cl)
-  (:import-from #:bordeaux-threads #:make-lock)
+  (:import-from #:cl-concurrent-kit #:make-lock)
   (:documentation
    "DOMAIN layer, the DATA half of the terminal emulator.  Defines the two structs
     the whole emulator is written against — CELL (character, colours, attribute
@@ -57,8 +57,15 @@
    #:blank-cell
    #:clamp
    #:safe-code-char
+   ;; UTF-16 surrogate block (D800-DFFF): not Unicode scalar values, so no
+   ;; well-formed UTF-8 encodes one and SBCL's encoder signals on one.
+   #:+surrogate-first+
+   #:+surrogate-last+
+   #:surrogate-code-point-p
+   ;; CHAR-WIDTH now delegates to CL-TTY-KIT:CHAR-WIDTH; the
+   ;; DEFINE-WIDE-CHAR-RANGES macro that used to generate it, and its export, are
+   ;; gone with the hand-rolled table.
    #:char-width
-   #:define-wide-char-ranges
    ;; Screen struct + constructors
    #:screen
    #:%make-screen

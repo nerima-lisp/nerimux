@@ -37,14 +37,27 @@
         (t (return nil))))))
 
 (defun %regex-match-p (pattern string &optional ignore-case)
-  "Return T when STRING matches the regular expression PATTERN (via cl-ppcre).
-   IGNORE-CASE T compiles the pattern case-insensitively.  This backs the tmux
-   #{m/r:pattern,string} match modifier.  A malformed PATTERN yields NIL (no
-   match) rather than signaling — invalid regexes never break format expansion."
+  "Return T when STRING matches the regular expression PATTERN.
+   IGNORE-CASE non-NIL compiles the pattern case-insensitively.  This backs the
+   tmux #{m/r:pattern,string} match modifier.  A malformed PATTERN yields NIL (no
+   match) rather than signaling — invalid regexes never break format expansion.
+   That is exactly upstream tmux's own behaviour: format_match() in format.c does
+   `if (regcomp(&r, pattern, flags) != 0) return (xstrdup(\"0\"))`.
+
+   :OCTAL NIL because PATTERN comes from a user's .tmux.conf.  cl-regex-kit
+   defaults to :OCTAL T, under which `\\1`-`\\7` are OCTAL CHARACTER ESCAPES, so a
+   user who writes a backreference out of ERE habit would get a silent match
+   against U+0001 instead of a rejected pattern.  With :OCTAL NIL it is refused
+   like `\\8`/`\\9` already are, and this handler turns that into \"no match\".
+
+   IGNORE-CASE is forced to a real boolean: callers pass (FIND #\\i MOD), which is
+   a CHARACTER, and COMPILE-REGEX does (CHECK-TYPE CASE-INSENSITIVE BOOLEAN).
+   Without the coercion that TYPE-ERROR would be swallowed by the handler below
+   and every #{m/r/i:} would silently stop matching."
   (handler-case
-      (let ((scanner (cl-ppcre:create-scanner pattern
-                                              :case-insensitive-mode ignore-case)))
-        (and (cl-ppcre:scan scanner string) t))
+      (let ((scanner (cl-regex-kit:compile-regex
+                      pattern :case-insensitive (and ignore-case t) :octal nil)))
+        (and (cl-regex-kit:scan scanner string) t))
     (error () nil)))
 
 (defun %pane-visible-lines (pane)

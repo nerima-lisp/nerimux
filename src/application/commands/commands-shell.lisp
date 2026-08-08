@@ -24,9 +24,11 @@
   "Run THUNK in a fresh thread; join it up to TIMEOUT-SECONDS.
    Returns (funcall thunk) result or NIL if the timeout expires."
   (handler-case
-      (bt:with-timeout (timeout-seconds)
+      (cl-concurrent-kit:with-timeout
+          (cl-date-kit:duration-of-nanos
+           (round (* timeout-seconds 1000000000)))
         (funcall thunk))
-    (bt:timeout () nil)))
+    (cl-concurrent-kit:operation-timed-out () nil)))
 
 (defmacro with-shell-timeout ((shell-var timeout) &body body)
   "Bind SHELL-VAR to the active shell binary and run BODY with a TIMEOUT (seconds).
@@ -41,8 +43,8 @@
 (defun %run-shell-program (shell command &key output error-output timeout directory)
   "Run COMMAND through SHELL via cl-tmux/config:*process-boundary*, with an
    explicit subprocess TIMEOUT and DIRECTORY.  Returns (values stdout-string
-   stderr-string exit-code), matching uiop:run-program's prior calling
-   convention so run-shell / if-shell need no further changes."
+   stderr-string exit-code), matching the process-boundary result convention
+   so run-shell / if-shell need no further changes."
   (let ((result (cl-boundary-kit:process-boundary-run
                  cl-tmux/config:*process-boundary* shell
                  :arguments (list "-c" command)
@@ -56,7 +58,18 @@
   "Wait DELAY seconds before launching a run-shell subprocess."
   (when (and delay (plusp delay))
     (sleep delay)))
-
+(defun if-shell (command then-fn &key else-fn (timeout +shell-command-timeout+))
+  (let ((exit-code
+          (with-shell-timeout (shell timeout)
+            (multiple-value-bind (output error-output code)
+                (%run-shell-program shell command
+                                    :output nil
+                                    :timeout timeout)
+              (declare (ignore output error-output))
+              code))))
+    (if (and exit-code (zerop exit-code))
+        (when then-fn (funcall then-fn))
+        (when else-fn (funcall else-fn)))))
 (defun run-shell (command &key background combine-stderr
                             start-directory delay
                             (timeout +shell-command-timeout+))
@@ -70,7 +83,7 @@
    subprocess may run; when the synchronous limit is exceeded NIL is returned."
   (if background
       (progn
-        (bt:make-thread
+        (cl-concurrent-kit:make-thread
           (lambda ()
             (let ((shell (or *default-shell* "/bin/sh")))
               (ignore-errors
@@ -89,20 +102,3 @@
                             :error-output (when combine-stderr :output)
                             :timeout timeout
                             :directory start-directory))))
-
-(defun if-shell (command then-fn &key else-fn (timeout +shell-command-timeout+))
-  "Run COMMAND; call THEN-FN if exit code is 0, ELSE-FN otherwise.
-   THEN-FN and ELSE-FN are zero-argument functions (keyword arguments).
-   TIMEOUT (seconds, default +shell-command-timeout+) limits how long the
-   command may run; when the limit is exceeded ELSE-FN is called."
-  (let ((exit-code
-          (with-shell-timeout (shell timeout)
-            (multiple-value-bind (output error-output code)
-                (%run-shell-program shell command
-                                    :output nil
-                                    :timeout timeout)
-              (declare (ignore output error-output))
-              code))))
-    (if (and exit-code (zerop exit-code))
-        (when then-fn (funcall then-fn))
-        (when else-fn (funcall else-fn)))))

@@ -76,6 +76,45 @@
            (ctx (list :%c-search-pane p :target "beta")))
       (expect (string= "2" (cl-tmux/format:expand-format "#{C:#{target}}" ctx)))))
 
+  ;;; ── #{C/r:} user patterns are compiled with :OCTAL NIL ──────────────────────
+  ;;;
+  ;;; The copy-mode / content-search regex path reaches cl-regex-kit through
+  ;;; %regex-match-p (format-search.lisp), which passes :OCTAL NIL.  Under
+  ;;; cl-regex-kit's DEFAULT of :OCTAL T, \1-\7 are OCTAL CHARACTER ESCAPES, so a
+  ;;; user reaching for an ERE backreference out of habit gets a pattern that
+  ;;; silently matches U+0001 instead of one that is refused — and #{C/r:} then
+  ;;; reports a line number for a line the user never asked about.  This mirrors
+  ;;; the coverage format-tests-b.lisp already carries for the #{m/r:} and
+  ;;; #{s///} sites; the search path had none of its own.
+  ;;;
+  ;;; Asserted on %content-search-match-p rather than end to end through
+  ;;; expand-format because the ONLY discriminating input is a line CONTAINING
+  ;;; U+0001, and U+0001 cannot be put on a pane's visible screen: it is a C0
+  ;;; control, so the terminal emulator consumes it instead of storing a cell.
+  ;;; An end-to-end #{C/r:\1} case would pass under EITHER :OCTAL setting — i.e.
+  ;;; vacuously, which is the failure mode this whole review was about.  REGEX-P
+  ;;; is passed as T, which is exactly what %format-content-search computes from
+  ;;; the /r modifier token.
+
+  ;; A pattern-side \1 is refused, not read as the octal escape for U+0001.
+  (it "format-content-search-user-pattern-octal-escape-is-refused"
+    ;; Positive control first, so a blanket "never matches" bug cannot pass this.
+    (expect (cl-tmux/format::%content-search-match-p "b.r" "foo bar" t nil))
+    ;; \1 must NOT be read as the octal escape for U+0001.
+    (expect (null (cl-tmux/format::%content-search-match-p
+                   "a\\1" (format nil "a~C" (code-char 1)) t nil)))
+    ;; A genuine backreference is refused rather than mis-compiled, so the line a
+    ;; backreference WOULD have matched does not match.  cl-regex-kit is
+    ;; RE2/Rust-style and has no backreferences — neither does POSIX ERE, which is
+    ;; what upstream tmux compiles these with (regcomp + REG_EXTENDED).
+    (expect (null (cl-tmux/format::%content-search-match-p
+                   "([a-z]+)_\\1" "ab_ab" t nil)))
+    ;; ...and the /r modifier really is wired to that function: the same line
+    ;; matches a plain regex through the public #{C/r:} entry point.
+    (let* ((p   (%content-search-pane "ab_ab"))
+           (ctx (cl-tmux/format:format-context-from-session nil nil p)))
+      (expect (string= "1" (cl-tmux/format:expand-format "#{C/r:ab_.b}" ctx)))))
+
   ;;; ── %glob-match-p direct unit tests ─────────────────────────────────────────
   ;;;
   ;;; These exercise %glob-match-p in isolation, covering:

@@ -40,15 +40,41 @@ of what is implemented and what is deliberately different.
 ## What it is built on
 
 - **SBCL** — the Lisp implementation (PTYs via `sb-ext:run-program`, POSIX via
-  `sb-posix`).
-- **CFFI** — the handful of libc calls `sb-posix` does not cover (`select`,
-  `ioctl`).
-- **bordeaux-threads** — one reader thread per PTY pane.
-- **babel** / **cl-ppcre** — UTF-8 codecs and regexes (format `s///` and `m/r:`
-  matching).
+  `sb-posix`, signals via `sb-posix:kill`).
+- **cl-concurrent-kit** — one reader thread per PTY pane, plus the locks and
+  the preemptive `with-timeout` that bound `run-shell` and `pipe-pane`.
+- **cl-regex-kit** — regexes (format `s///` and `m/r:` matching).
+- **cl-codec-kit** — UTF-8 string↔octet conversion for protocol frames, PTY
+  output and OSC payloads.
+- **cl-tty-kit** — PTY spawn/raw-mode/fd-io, `ioctl` window size, colour
+  downsampling, and character display widths.
+- **cl-host-kit** — pathname, string, environment, and bootstrap operations;
+  its CPS temporary-file helpers are used directly by integration tests.
+- **cl-date-kit** — typed duration values at timeout boundaries.
+- **cl-prolog** — cold-path relational read models for key bindings and
+  command metadata.
+- **cl-dataflow** — the inspectable copy-mode lifecycle state machine.
+- **cl-weave** — the native test runner and matcher framework for the test
+  suites.
 
-Beyond those four, cl-tmux runs on eight sibling `nerima-lisp` libraries; see
-[Dogfooded sibling libraries](guide/sibling-libraries.md).
+**cl-tmux has no external dependencies.** Every name above except SBCL is a
+`nerima-lisp` sibling. Four external libraries were retired to get here:
+**CFFI** and **babel** on 2026-08-01, then **bordeaux-threads** and
+**cl-ppcre** on 2026-08-02. Each was replaced by a sibling rather than by
+hand-written code.
+
+Two of those removals fixed or changed real behaviour rather than merely moving
+it. Dropping the hand-written `ioctl` fixed a bug: it used a fixed prototype for
+a variadic syscall, which misfires on the arm64 ABI, so pane resize was a silent
+no-op on Apple Silicon. And cl-regex-kit is not a drop-in for cl-ppcre — it is
+RE2/Rust-style, with **no backreferences and no lookaround** in patterns. That
+is a deliberate trade, and it moves cl-tmux *closer* to real tmux, which
+compiles these same patterns with `regcomp()` + `REG_EXTENDED`, i.e. POSIX ERE,
+which has neither construct either. `\1` in a `#{s/…/…/}` **replacement** is
+unaffected: that is expanded by the substitution layer, not the engine, in
+cl-tmux exactly as in tmux's own `regsub.c`.
+
+See [Dogfooded sibling libraries](guide/sibling-libraries.md).
 
 ## Project
 

@@ -20,6 +20,8 @@
                  (cl-tmux/pty:select-fds (list listener-fd) 1000000)
                  (cl-tmux::%accept-pending-connection listener listener-fd (list listener-fd))
                  (expect (= 1 (length cl-tmux::*clients*))))
+            (dolist (conn cl-tmux::*clients*)
+              (cl-tmux::%drop-client conn))
             (ignore-errors (cl-tmux/net:close-socket peer)))))))
 
   ;; %accept-pending-connection does nothing when the listener fd is absent from

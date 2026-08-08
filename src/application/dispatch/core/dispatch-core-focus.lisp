@@ -45,7 +45,7 @@
     (let ((seq (cl-tmux/terminal/actions:focus-event-report
                 (pane-screen pane) focused-p)))
       (when seq
-        (pty-write (pane-fd pane) (babel:string-to-octets seq :encoding :utf-8))))))
+        (pty-write (pane-fd pane) (cl-codec-kit:string-to-octets seq :encoding :utf-8))))))
 
 (defun %select-pane-with-focus (win new-pane)
   "Make NEW-PANE the active pane of WIN, delivering focus-out to the previously

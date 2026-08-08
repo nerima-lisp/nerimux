@@ -11,7 +11,7 @@
   (when (> (length octets) 0)
     (write-string
      (or (handler-case
-             (babel:octets-to-string octets :encoding :utf-8)
+             (cl-codec-kit:octets-to-string octets :encoding :utf-8)
            (error () nil))
          (coerce (loop for i below (length octets)
                        collect (code-char (aref octets i)))

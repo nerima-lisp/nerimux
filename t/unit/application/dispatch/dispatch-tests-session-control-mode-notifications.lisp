@@ -172,15 +172,15 @@
   (it "control-emit-serializes-concurrent-writers"
     (with-isolated-hooks
       (let* ((out      (make-string-output-stream))
-             (cl-tmux::*control-output-lock* (bt:make-lock "test-control"))
+             (cl-tmux::*control-output-lock* (cl-concurrent-kit:make-lock :name "test-control"))
              (n        200)
              (line     "%output %1 hello")
              (threads  (loop repeat 4
-                             collect (bt:make-thread
+                             collect (cl-concurrent-kit:make-thread
                                       (lambda ()
                                         (dotimes (i n)
                                           (cl-tmux::%control-emit out line)))))))
-        (mapc #'bt:join-thread threads)
+        (mapc #'cl-concurrent-kit:join-thread threads)
         (let* ((s     (get-output-stream-string out))
                (lines (with-input-from-string (in s)
                         (loop for l = (read-line in nil nil)
@@ -194,7 +194,7 @@
   (it "control-emit-respects-bound-lock"
     (with-isolated-hooks
       (let* ((out  (make-string-output-stream))
-             (lock (bt:make-lock "bound-control"))
+             (lock (cl-concurrent-kit:make-lock :name "bound-control"))
              (cl-tmux::*control-output-lock* lock))
         (cl-tmux::%control-emit out "%window-add @9")
         (expect (search "%window-add @9" (get-output-stream-string out))))))

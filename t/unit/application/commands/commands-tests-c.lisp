@@ -99,7 +99,7 @@
   ;; pipe-pane-open runs the command via `sh -c`, so a bogus *command* still
   ;; launches successfully (sh exists, then fails internally — matching tmux).
   ;; To exercise the launch-failure → NIL path, point *default-shell* at a
-  ;; non-existent binary so uiop:launch-program itself fails.
+  ;; non-existent binary so process-kit:spawn itself fails.
   (it "pipe-pane-open-invalid-command-returns-nil"
     (let* ((pane   (%make-test-pane))
            (cl-tmux/config:*default-shell* "/no/such/shell-5f3a9b2e")
@@ -107,18 +107,31 @@
       (expect (null result))))
 
   ;; pipe-pane-open returns NIL and leaves the pane clean when launch times out.
+  ;;
+  ;; THE STUB MUST BE INSTALLED ON PROCESS-KIT:SPAWN, not on a removed process
+  ;; launcher. pipe-pane-open calls process-kit:spawn directly, and a stub on an
+  ;; old name would intercept nothing: the launch returns promptly, the 1-second
+  ;; +pipe-pane-open-timeout+ never fires, pipe-pane-open returns a live handle,
+  ;; and this test fails while claiming to cover the timeout path.
+  ;;
+  ;; The stub keeps SPAWN's real lambda list — (COMMAND ARGUMENTS &KEY ...) — and
+  ;; delegates to the original rather than fabricating a return value, so if the
+  ;; deadline ever stopped firing this would still produce a genuine
+  ;; PROCESS-KIT:PROCESS-HANDLE that pipe-pane-open can read process-stdin off.
+  ;; A shape mismatch would otherwise be swallowed by %with-timeout-cleanup's
+  ;; (or operation-timed-out error) clause and look exactly like a timeout.
   (it "pipe-pane-open-times-out-and-cleans-up"
     (let* ((pane (%make-test-pane))
-           (original-launch (fdefinition 'uiop:launch-program)))
+           (original-spawn (fdefinition 'process-kit:spawn)))
       (unwind-protect
           (progn
-            (setf (fdefinition 'uiop:launch-program)
-                  (lambda (&rest args)
-                    (sleep 2)
-                    (apply original-launch args)))
+            (setf (fdefinition 'process-kit:spawn)
+                  (lambda (command arguments &rest keys)
+                    (sleep 2)                 ; > +pipe-pane-open-timeout+ (1s)
+                    (apply original-spawn command arguments keys)))
             (expect (null (cl-tmux/commands:pipe-pane-open pane "cat")))
             (assert-pipe-pane-closed-state pane))
-        (setf (fdefinition 'uiop:launch-program) original-launch)
+        (setf (fdefinition 'process-kit:spawn) original-spawn)
         (ignore-errors (cl-tmux/commands:pipe-pane-close pane)))))
 
   ;; pipe-pane-write with an open pipe sends bytes to the subprocess stdin.
@@ -130,32 +143,42 @@
   ;; still verifies the real behaviour (bytes DO traverse the pipe to the child)
   ;; while tolerating a one-off environmental hiccup.  3 deterministic failures in a
   ;; row would still fail (a genuine break is not masked).
+  ;;
+  ;; The fixture uses host-kit's CPS temporary-file API, which owns creation,
+  ;; closing, and deletion while the subprocess writes to the pathname. The
+  ;; retry loop preserves coverage for the real shell subprocess and filesystem
+  ;; boundary without relying on a process-launcher stub.
   (it "pipe-pane-write-bytes-reach-subprocess"
     (flet ((attempt ()
-             (let ((tmpfile (uiop:tmpize-pathname
-                             (uiop:merge-pathnames* "pipe-pane-write-test"
-                                                    (uiop:temporary-directory))))
-                   (pane    (%make-test-pane)))
-               (unwind-protect
-                    (progn
-                      (cl-tmux/commands:pipe-pane-open
-                       pane (format nil "cat > ~A" (uiop:native-namestring tmpfile)))
-                      (when (pane-pipe-fd pane)            ; launch succeeded
-                        (cl-tmux/commands:pipe-pane-write pane #(65 66 67)) ; "ABC"
-                        (cl-tmux/commands:pipe-pane-close pane)
-                        (let ((contents ""))
-                          (loop repeat 250                  ; ~1.25s per attempt
-                                until (and (probe-file tmpfile)
-                                           (search "ABC"
-                                                   (setf contents
-                                                         (or (ignore-errors
-                                                               (uiop:read-file-string tmpfile))
-                                                             ""))))
-                                do (sleep 0.005))
-                          (and (search "ABC" contents) t))))
-                 (ignore-errors (uiop:delete-file-if-exists tmpfile))))))
-      (let ((ok nil))
-        (dotimes (i 8) (unless ok (setf ok (attempt))))
+             (host-kit:call-with-temporary-file
+              (lambda (stream tmpfile)
+                (declare (ignore stream))
+                (let ((pane (%make-test-pane)))
+                  (unwind-protect
+                       (progn
+                         (cl-tmux/commands:pipe-pane-open
+                          pane (format nil "cat > ~A" (namestring tmpfile)))
+                         (when (pane-pipe-fd pane)
+                           (cl-tmux/commands:pipe-pane-write pane #(65 66 67))
+                           (cl-tmux/commands:pipe-pane-close pane)
+                           (let ((contents ""))
+                             (loop repeat 250
+                                   until (and (probe-file tmpfile)
+                                              (search "ABC"
+                                                      (setf contents
+                                                            (or (ignore-errors
+                                                                  (host-kit:read-file-string
+                                                                   tmpfile))
+                                                                ""))))
+                                   do (sleep 0.005))
+                             (and (search "ABC" contents) t))))
+                    (when (pane-pipe-fd pane)
+                      (ignore-errors
+                        (cl-tmux/commands:pipe-pane-close pane))))))))) (let ((ok nil))
+        (dotimes (i 8)
+          (declare (ignore i))
+          (unless ok
+            (setf ok (attempt))))
         (expect ok :to-be-truthy))))
 
   ;; ── %copy-mode-virtual-row-string (direct unit tests) ───────────────────────
@@ -207,6 +230,32 @@
     (let ((result (cl-tmux/commands::%run-with-timeout
                    (lambda () (sleep 60)) 1/1000)))
       (expect (null result))))
+
+  ;; The deadline may be an arbitrary FORM, not just a literal.  This pins the
+  ;; bordeaux-threads -> cl-concurrent-kit syntax change: bt:with-timeout took
+  ;; its deadline wrapped in a list, (bt:with-timeout (SECS) ...), while
+  ;; cl-concurrent-kit's is a bare form like SB-EXT:WITH-TIMEOUT's,
+  ;; (with-timeout SECS ...).  Carrying the old parens over would expand to
+  ;; (SECS) -- calling the timeout value as a function.
+  (it "run-with-timeout-accepts-a-computed-deadline"
+    (let ((seconds (+ 5 5)))
+      (expect (= 42 (cl-tmux/commands::%run-with-timeout (lambda () 42) seconds)))))
+
+  ;; The timeout the handler clause catches is CL-CONCURRENT-KIT:OPERATION-TIMED-OUT,
+  ;; not SB-EXT:TIMEOUT.  This matters because SB-EXT:TIMEOUT is a
+  ;; SERIOUS-CONDITION that is deliberately NOT an ERROR, so a handler written
+  ;; for ERROR would not catch it and the timeout would escape %run-with-timeout
+  ;; instead of returning NIL.  Asserted on the primitive so a future refactor of
+  ;; %run-with-timeout's own handler cannot mask it.
+  (it "with-timeout-signals-operation-timed-out-not-sb-ext-timeout"
+    (expect
+      (typep
+       (handler-case
+           (cl-concurrent-kit:with-timeout
+               (cl-date-kit:duration-of-nanos 1000000)
+             (sleep 60))
+         (cl-concurrent-kit:operation-timed-out (condition) condition))
+       'cl-concurrent-kit:operation-timed-out)))
 
   ;; ── run-shell timeout ────────────────────────────────────────────────────────
 

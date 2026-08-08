@@ -77,7 +77,7 @@
 (defun utf8-feed (screen lisp-string)
   "Encode LISP-STRING as UTF-8 and feed the bytes to SCREEN."
   (screen-process-bytes screen
-                        (babel:string-to-octets lisp-string :encoding :utf-8))
+                        (cl-codec-kit:string-to-octets lisp-string :encoding :utf-8))
   screen)
 
 (defun feed-lines (screen &rest lines)

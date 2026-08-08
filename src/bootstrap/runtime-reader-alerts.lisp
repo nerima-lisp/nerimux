@@ -59,7 +59,7 @@
    state function itself remains pure (only returns the next state)."
   (let ((screen (pane-screen pane)))
     (when screen
-      (let ((banner-bytes (babel:string-to-octets (%remain-on-exit-banner pane)
+      (let ((banner-bytes (cl-codec-kit:string-to-octets (%remain-on-exit-banner pane)
                                                   :encoding :utf-8)))
         (cl-tmux/terminal/emulator:screen-process-bytes screen banner-bytes)))))
 

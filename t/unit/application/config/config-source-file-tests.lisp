@@ -20,8 +20,8 @@
 
   ;; source-file with a glob loads every matching file; %glob-expand finds them.
   (it "source-files-glob-expands-and-loads-matching-files"
-    (let ((dir (uiop:ensure-directory-pathname
-                (merge-pathnames "cl-tmux-glob-tests/" (uiop:temporary-directory)))))
+    (let ((dir (host-kit:ensure-directory-pathname
+                (merge-pathnames "cl-tmux-glob-tests/" (host-kit:temporary-directory)))))
       (ensure-directories-exist dir)
       (unwind-protect
            (progn
@@ -36,7 +36,7 @@
                (expect (= 2 (length matches)))
                (expect (eq t (cl-tmux/config:source-files
                           (list (namestring (merge-pathnames "*.conf" dir))))))))
-        (ignore-errors (uiop:delete-directory-tree dir :validate t)))))
+        (ignore-errors (host-kit:delete-directory-tree dir :validate t)))))
 
   ;; source-file on a missing path or unmatched glob (no -q) logs
   ;; 'No such file or directory: PATH' and returns NIL.
