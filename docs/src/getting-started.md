@@ -70,6 +70,10 @@ cl-tmux-sbcl --eval '(asdf:load-system "cl-tmux")' --eval '(cl-tmux:main)'
 cl-tmux-coverage ./coverage-report    # sb-cover report and coverage gate
 ```
 
+To build the same coverage report as a hermetic Nix artifact, run
+`nix build .#coverage-report`. The resulting directory contains
+`cover-index.html` and the per-source HTML reports.
+
 Coverage is instrumented through `cl-weave` and fails if the report is empty or
 below the default floor of 87% expressions and 83% branches. To enforce the
 100% target while closing the remaining uncovered paths, set
