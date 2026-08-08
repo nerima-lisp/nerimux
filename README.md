@@ -74,21 +74,31 @@ Tests live in `t/` and run under
 [cl-weave](https://github.com/nerima-lisp/cl-weave), the org's test framework.
 `sbcl --script run-tests.lisp` is the entry point CI and the flake both use;
 set `CL_TMUX_TEST_SYSTEM` to pick one of `cl-tmux/test` (default),
-`cl-tmux/weave` or `cl-tmux/dataflow`.
+`cl-tmux/weave` or `cl-tmux/dataflow`. For example,
+`CL_TMUX_TEST_SYSTEM=cl-tmux/weave nix run .#test` runs the reasoning suite.
+`nix build .#coverage-report` builds the hermetic sb-cover report.
+The default coverage gate is 87% for expressions and 83% for branches, based
+on the current clean baseline. Set
+`CL_TMUX_COVERAGE_MINIMUM_EXPRESSION=100` and
+`CL_TMUX_COVERAGE_MINIMUM_BRANCH=100` to enforce the 100% target explicitly.
 
-cl-tmux is the org's L4 application package and its testbed: it runs on ten
-sibling libraries — [cl-cli](https://github.com/nerima-lisp/cl-cli),
+cl-tmux is the org's L4 application package and its testbed: it directly uses
+nerima-lisp siblings including [cl-cli](https://github.com/nerima-lisp/cl-cli),
 [cl-boundary-kit](https://github.com/nerima-lisp/cl-boundary-kit),
 [cl-dataflow](https://github.com/nerima-lisp/cl-dataflow),
+[cl-date-kit](https://github.com/nerima-lisp/cl-date-kit),
+[cl-host-kit](https://github.com/nerima-lisp/cl-host-kit),
 [cl-parser-kit](https://github.com/nerima-lisp/cl-parser-kit),
 [cl-tty-kit](https://github.com/nerima-lisp/cl-tty-kit),
 [cl-process-kit](https://github.com/nerima-lisp/cl-process-kit),
 [cl-history-kit](https://github.com/nerima-lisp/cl-history-kit),
 [cl-concurrent-kit](https://github.com/nerima-lisp/cl-concurrent-kit),
-[cl-regex-kit](https://github.com/nerima-lisp/cl-regex-kit) — plus
-[cl-prolog](https://github.com/nerima-lisp/cl-prolog) for cold-path reasoning
-read-models. It has **no external dependencies**: it was the last repository in
-the org with any, and the final two (`bordeaux-threads`, `cl-ppcre`) were
+[cl-regex-kit](https://github.com/nerima-lisp/cl-regex-kit),
+[cl-prolog](https://github.com/nerima-lisp/cl-prolog), and
+[cl-weave](https://github.com/nerima-lisp/cl-weave). `cl-prolog` and
+`cl-dataflow` provide cold-path read models, while `cl-host-kit` owns host
+operations and `cl-date-kit` supplies typed timeout values. It has **no
+external dependencies**: the final two (`bordeaux-threads`, `cl-ppcre`) were
 replaced by siblings on 2026-08-02. See
 [Dogfooded sibling libraries](https://nerima-lisp.github.io/cl-tmux/guide/sibling-libraries/).
 

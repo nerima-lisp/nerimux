@@ -111,7 +111,7 @@
 
   ;; window-split :full refuses root splits that cannot leave both panes at min size.
   (it "window-split-full-obeys-axis-minimums"
-    (with-session (session 24 80)
+    (with-pty-available (with-session (session 24 80)
       (dolist (row '((:h 4 24 "full h-split needs at least 5 columns")
                      (:v 80 2 "full v-split needs at least 3 rows")))
         (destructuring-bind (direction width height desc) row
@@ -125,4 +125,4 @@
             (expect (null (window-split session win direction :full t)))
             (expect (eq leaf (window-tree win)))
             (expect (equal (list p0) (window-panes win)))
-            (expect (eq p0 (window-active-pane win)))))))))
+            (expect (eq p0 (window-active-pane win))))))))))

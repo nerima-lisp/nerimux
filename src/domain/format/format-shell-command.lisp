@@ -8,9 +8,7 @@
 (defconstant +format-shell-command-output-limit+ 4096
   "Maximum bytes captured from #(shell-command) expansion stdout.")
 
-(defun %format-shell-capture-command (command)
-  "Wrap COMMAND so stdout is bounded before UIOP accumulates it."
-  (format nil "( ~A ) | head -c ~D" command +format-shell-command-output-limit+))
+(defun %format-shell-capture-command (command) "Wrap COMMAND so stdout is bounded before process-kit:run captures it." (format nil "( ~A ) | head -c ~D" command +format-shell-command-output-limit+))
 
 (defun %trim-one-trailing-newline (text)
   "Return TEXT without exactly one trailing newline."

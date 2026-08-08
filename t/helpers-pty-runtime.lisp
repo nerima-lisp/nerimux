@@ -30,8 +30,14 @@
   (let ((session-var (if (consp session-spec) (first session-spec) session-spec))
         (session-args (if (consp session-spec) (rest session-spec) nil)))
     `(with-pty-available
-       (with-fake-session (,session-var ,@session-args)
-         ,@body))))
+       (let ((,session-var (make-fake-session ,@session-args)))
+         (unwind-protect
+              (with-loop-state
+                ,@body)
+           (dolist (p (all-panes ,session-var))
+             (when (gethash (pane-fd p) cl-tmux/pty::*pty-processes*)
+               (ignore-errors
+                 (pty-close (pane-fd p) (pane-pid p))))))))))
 
 (defmacro with-pty-run-command-line-overlay ((session-spec command &key context)
                                              &body body)

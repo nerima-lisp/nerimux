@@ -52,7 +52,7 @@
   ;;                          upstream tmux, which compiles #{m/r:} and #{s///}
   ;;                          patterns with regcomp()+REG_EXTENDED — POSIX ERE,
   ;;                          which has neither construct either.
-  :depends-on (:cl-concurrent-kit ; threads, locks, condvars and preemptive deadlines
+  :depends-on (:cl-date-kit :cl-concurrent-kit ; threads, locks, condvars and preemptive deadlines
                :cl-regex-kit     ; regex engine behind the format #{m/r:...} and #{s///:} modifiers
                :cl-prolog        ; dependency-free Prolog engine (cold-path reasoning)
                :cl-cli           ; startup argv/flag parsing (main-startup-flags)
@@ -99,9 +99,10 @@
      (:module "infrastructure/pty"
       :serial t
       :components
-      ((:file "pty-ffi")       ; FFI declarations and platform constants
-       (:file "pty-rawmode")   ; terminal raw mode management
-       (:file "pty")))         ; PTY lifecycle + install-pty-port adapter (references cl-tmux/ports vars)
+       ((:file "pty-ffi")       ; FFI declarations and platform constants
+        (:file "pty-rawmode")   ; terminal raw mode management
+        (:file "pty")            ; PTY lifecycle and terminal geometry
+        (:file "pty-io")))       ; fd I/O, select boundary, and port registration
      (:module "infrastructure/net"
       :serial t
       :components

@@ -14,7 +14,7 @@
     # `inputs.nixpkgs.follows`: without it each drags in its own nixpkgs,
     # inflating flake.lock and rebuilding the same derivations twice.
     cl-weave = {
-      url = "github:nerima-lisp/cl-weave/v1.1.4";
+      url = "github:nerima-lisp/cl-weave/v1.3.0";
       inputs.nixpkgs.follows = "nixpkgs";
       # cl-weave's own flake still declares its paredit-cli dev input under the
       # pre-migration owner; pin it to the org (and to a tag) so no takeokunn/*
@@ -24,7 +24,7 @@
     };
 
     cl-prolog = {
-      url = "github:nerima-lisp/cl-prolog/v1.3.0";
+      url = "github:nerima-lisp/cl-prolog/v1.4.3";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -59,6 +59,10 @@
       url = "github:nerima-lisp/cl-dataflow/v1.1.1";
       flake = false;
     };
+    cl-date-kit = {
+      url = "github:nerima-lisp/cl-date-kit/v1.0.0";
+      flake = false;
+    };
     cl-parser-kit = {
       url = "github:nerima-lisp/cl-parser-kit/v1.0.3";
       flake = false;
@@ -77,21 +81,8 @@
       flake = false;
     };
     cl-process-kit = {
-      # !!! PIN IS STALE — THIS FLAKE CANNOT BUILD UNTIL IT IS ADVANCED !!!
-      #
-      # src/infrastructure/pty/pty.lisp now calls process-kit:wait-for-input,
-      # added by src/fd-readiness.lisp. That file is UNCOMMITTED in
-      # cl-process-kit's working tree as of 2026-08-01: the newest tag is
-      # v2.0.0 and neither it nor v1.0.1 exports select-fds/wait-for-input
-      # (verified with `git show <tag>:src/package.lisp`).
-      #
-      # Advance this to the first tag that ships fd-readiness.lisp — and note
-      # that means crossing the v2.0.0 MAJOR boundary, so upstream's breaking
-      # changes must be reviewed against cl-tmux's existing process-kit:run /
-      # spawn / process-* call sites at the same time, not just this one.
-      #
-      # v1.0.1 was a packaging-only fix (a stale cl-log-kit tag reference in
-      # upstream's own flake.nix); no source change, API identical to v1.0.0.
+      # v3.1.0 provides the process lifecycle and fd-readiness APIs used by
+      # cl-tmux's shell and pipe-pane commands without a local adapter.
       url = "github:nerima-lisp/cl-process-kit/v3.1.0";
       flake = false;
     };
@@ -105,15 +96,7 @@
     cl-concurrent-kit = {
       # Replaces bordeaux-threads: threads, locks, condition variables and a
       # preemptive WITH-TIMEOUT, each a thin wrapper over SB-THREAD/SB-EXT.
-      #
-      # !!! PIN IS PROVISIONAL — VERIFY BEFORE RELYING ON CI !!!
-      #
-      # cl-tmux needs WITH-TIMEOUT (src/timeout.lisp) and the LOCK deftype, both
-      # of which were added on 2026-08-01 and are UNCOMMITTED in
-      # cl-concurrent-kit's working tree. No tag ships them yet. Advance this to
-      # the first tag that does; until then this flake cannot build, for the same
-      # reason the cl-process-kit and cl-host-kit pins above cannot.
-      url = "github:nerima-lisp/cl-concurrent-kit/v0.3.0";
+      url = "github:nerima-lisp/cl-concurrent-kit/v0.6.1";
       flake = false;
     };
     cl-regex-kit = {
@@ -148,10 +131,9 @@
       flake = false;
     };
     cl-host-kit = {
-      # Pathname/string host operations, replacing direct uiop: calls
-      # (2026-08-01 org-wide uiop->cl-host-kit migration). Still used for
-      # split-string and the pathname-directory-pathname/directory-pathname-p
-      # helpers.
+      # Pathname/string host operations used directly by the bootstrap and
+      # runtime. Still used for split-string and the
+      # pathname-directory-pathname/directory-pathname-p helpers.
       #
       # This pin was marked STALE while cl-tmux's octet conversion went through
       # this package's own string/octet wrappers, which exist only in the
@@ -179,6 +161,7 @@
       cl-boundary-kit,
       cl-log-kit,
       cl-dataflow,
+      cl-date-kit,
       cl-parser-kit,
       cl-tty-kit,
       cl-process-kit,
@@ -230,10 +213,9 @@
         in
         builtins.head (builtins.match "[[:space:]]*:version \"([^\"]*)\"" versionLine);
 
-      # Every dogfooded sibling library is dependency-free (or depends only on
-      # other siblings here), so each is consumed purely as source: its checkout
-      # goes on ASDF's central registry rather than through nixpkgs Lisp
-      # packaging. This one list drives every sbcl invocation below.
+      # Every dogfooded sibling library is consumed purely as source: its
+      # checkout goes on ASDF's central registry rather than through nixpkgs
+      # Lisp packaging. This one list drives every SBCL invocation below.
       siblingRepos = [
         cl-prolog
         cl-weave
@@ -241,6 +223,7 @@
         cl-boundary-kit
         cl-log-kit
         cl-dataflow
+        cl-date-kit
         cl-parser-kit
         cl-tty-kit
         cl-process-kit
@@ -315,7 +298,7 @@
             cp -r ${self} ./src-tree
             chmod -R u+w ./src-tree
             cd ./src-tree
-            sbcl --script run-tests.lisp
+            timeout --foreground --kill-after=30s 2700 sbcl --script run-tests.lisp
             touch "$out"
           '';
     in
@@ -417,17 +400,18 @@
           # to upload as an artifact without a local SBCL checkout. Mirrors
           # cl-tty-kit's package of the same name (scripts/coverage.lisp is
           # this project's counterpart to its scripts/coverage.lisp). Runs in
-          # the same writable-copy-of-$self shape as mkTestCheck below, which
-          # is proven to run the full suite cleanly inside the Nix sandbox —
-          # unlike an interactive `nix develop` shell, where this exact suite
-          # is known to hang (a real PTY/tty artifact of that environment, not
-          # a suite bug; see the devShell cl-tmux-coverage helper below, which
-          # calls this same script for local use once that hang is a non-issue
-          # for the caller).
+          # the same writable-copy-of-$self shape as mkTestCheck below. The
+          # devShell cl-tmux-coverage helper invokes this same script for
+          # local runs. On Darwin hosts whose Nix builder cannot open a PTY,
+          # use that helper instead of the derivation; the failure occurs
+          # before the test process starts and is not a suite result.
           coverage-report =
             pkgs.runCommand "cl-tmux-coverage-report"
               {
-                nativeBuildInputs = [ sbcl ];
+                nativeBuildInputs = [
+                  sbcl
+                  pkgs.coreutils
+                ];
                 CL_TMUX_SIBLING_REGISTRY = siblingRegistry;
               }
               ''
@@ -436,7 +420,7 @@
                 cp -r ${self} ./src-tree
                 chmod -R u+w ./src-tree
                 cd ./src-tree
-                timeout 2700 sbcl --script scripts/coverage.lisp ./coverage-report
+                timeout --foreground --kill-after=30s 2700 sbcl --script scripts/coverage.lisp ./coverage-report
                 mkdir -p "$out"
                 cp -R ./coverage-report/. "$out/"
               '';
@@ -470,6 +454,10 @@
         # merge to main — so a break would surface as a failed deploy rather
         # than as a failed pull request.
         docs = self.packages.${system}.docs;
+
+        # The instrumented suite enforces the expression/branch regression
+        # floors in scripts/coverage.lisp and rejects empty reports.
+        coverage = self.packages.${system}.coverage-report;
       });
 
       apps = forAllSystems (
@@ -553,8 +541,12 @@
               # inside the Nix sandbox rather than this interactive shell).
               cl-tmux-coverage() {
                 local report_dir="''${1:-./coverage-report}/"
-                sbcl --script scripts/coverage.lisp "$report_dir"
-                echo "Coverage report: $report_dir" "cover-index.html"
+                if sbcl --script scripts/coverage.lisp "$report_dir"; then
+                  echo "Coverage report: $report_dir" "cover-index.html"
+                else
+                  local status=$?
+                  return "$status"
+                fi
               }
               export -f cl-tmux-coverage
 
