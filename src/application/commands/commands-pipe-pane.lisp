@@ -13,21 +13,19 @@
   "Seconds to wait for launching the pipe-pane subprocess.")
 
 (defmacro %with-timeout-cleanup ((timeout-seconds cleanup-thunk) &body body)
-  "Run BODY under a TIMEOUT-SECONDS deadline.
-   Clean up and return NIL on an operational failure; propagate type errors."
+  "Run BODY under a TIMEOUT-SECONDS CL-CONCURRENT-KIT:WITH-TIMEOUT.  On success,
+   return BODY's value.  On an OPERATION-TIMED-OUT or any other error, funcall
+   CLEANUP-THUNK (a zero-argument function) and return NIL.  Consolidates the
+   'run with a deadline, clean up identically on either failure kind, else fall
+   through to NIL' shape shared by the pipe-pane launch/wait sites.
+
+   The deadline is a bare form, not (,TIMEOUT-SECONDS): cl-concurrent-kit's
+   WITH-TIMEOUT follows SB-EXT:WITH-TIMEOUT's shape rather than bordeaux-threads'."
   `(handler-case
-       (cl-concurrent-kit:with-timeout
-           (cl-date-kit:duration-of-nanos
-            (round (* ,timeout-seconds 1000000000)))
-         ,@body)
-     (cl-concurrent-kit:operation-timed-out ()
+       (cl-concurrent-kit:with-timeout ,timeout-seconds ,@body)
+     ((or cl-concurrent-kit:operation-timed-out error) ()
        (funcall ,cleanup-thunk)
-       nil)
-     (error (condition)
-       (funcall ,cleanup-thunk)
-       (if (typep condition (quote type-error))
-           (error condition)
-           nil))))
+       nil)))
 
 (defun %pipe-pane-copy-output (pane output-stream)
   "Copy OUTPUT-STREAM from the command back into PANE's PTY."

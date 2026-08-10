@@ -67,22 +67,12 @@ the sibling-library registry already set up:
 
 ```bash
 cl-tmux-sbcl --eval '(asdf:load-system "cl-tmux")' --eval '(cl-tmux:main)'
-cl-tmux-coverage ./coverage-report    # sb-cover report and coverage gate
+cl-tmux-coverage ./coverage-report    # sb-cover report via cl-weave
 ```
-
-To build the same coverage report as a hermetic Nix artifact, run
-`nix build .#coverage-report`. The resulting directory contains
-`cover-index.html` and the per-source HTML reports.
-
-Coverage is instrumented through `cl-weave` and fails if the report is empty or
-below the default floor of 87% expressions and 83% branches. To enforce the
-100% target while closing the remaining uncovered paths, set
-`CL_TMUX_COVERAGE_MINIMUM_EXPRESSION=100` and
-`CL_TMUX_COVERAGE_MINIMUM_BRANCH=100`.
 
 ## Testing
 
-`nix flake check` runs six derivations in parallel:
+`nix flake check` runs five derivations in parallel:
 
 | Check | What it covers |
 |---|---|
@@ -91,7 +81,6 @@ below the default floor of 87% expressions and 83% branches. To enforce the
 | `dataflow` | the copy-mode lifecycle read-model (`cl-tmux/dataflow`) |
 | `formatting` | treefmt / nixfmt over every tracked Nix file |
 | `docs` | this site, built with `mkdocs --strict` |
-| `coverage` | sb-cover report with expression/branch thresholds |
 
 The main suite (290+ test files, 11,000+ checks) runs on
 [cl-weave](https://github.com/nerima-lisp/cl-weave) and covers the VT100

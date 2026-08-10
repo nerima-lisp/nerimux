@@ -48,14 +48,6 @@ of what is implemented and what is deliberately different.
   output and OSC payloads.
 - **cl-tty-kit** — PTY spawn/raw-mode/fd-io, `ioctl` window size, colour
   downsampling, and character display widths.
-- **cl-host-kit** — pathname, string, environment, and bootstrap operations;
-  its CPS temporary-file helpers are used directly by integration tests.
-- **cl-date-kit** — typed duration values at timeout boundaries.
-- **cl-prolog** — cold-path relational read models for key bindings and
-  command metadata.
-- **cl-dataflow** — the inspectable copy-mode lifecycle state machine.
-- **cl-weave** — the native test runner and matcher framework for the test
-  suites.
 
 **cl-tmux has no external dependencies.** Every name above except SBCL is a
 `nerima-lisp` sibling. Four external libraries were retired to get here:

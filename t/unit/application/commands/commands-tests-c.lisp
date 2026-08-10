@@ -108,9 +108,10 @@
 
   ;; pipe-pane-open returns NIL and leaves the pane clean when launch times out.
   ;;
-  ;; THE STUB MUST BE INSTALLED ON PROCESS-KIT:SPAWN, not on a removed process
-  ;; launcher. pipe-pane-open calls process-kit:spawn directly, and a stub on an
-  ;; old name would intercept nothing: the launch returns promptly, the 1-second
+  ;; THE STUB MUST BE INSTALLED ON PROCESS-KIT:SPAWN, not on uiop:launch-program.
+  ;; pipe-pane-open stopped calling uiop:launch-program in the dependency
+  ;; migration (commands-pipe-pane.lisp now calls process-kit:spawn), and a stub
+  ;; on the old name intercepts nothing: the launch returns promptly, the 1-second
   ;; +pipe-pane-open-timeout+ never fires, pipe-pane-open returns a live handle,
   ;; and this test fails while claiming to cover the timeout path.
   ;;
@@ -144,41 +145,46 @@
   ;; while tolerating a one-off environmental hiccup.  3 deterministic failures in a
   ;; row would still fail (a genuine break is not masked).
   ;;
-  ;; The fixture uses host-kit's CPS temporary-file API, which owns creation,
-  ;; closing, and deletion while the subprocess writes to the pathname. The
-  ;; retry loop preserves coverage for the real shell subprocess and filesystem
-  ;; boundary without relying on a process-launcher stub.
+  ;; THREE uiop CALLS DELIBERATELY REMAIN, and they are the only ones left under
+  ;; t/.  cl-host-kit has no equivalent for any of them, so replacing them would
+  ;; mean rewriting the fixture rather than re-pointing a call:
+  ;;   * uiop:tmpize-pathname   — cl-host-kit's temporary-file API is CPS
+  ;;     (call-with-temporary-file / with-temporary-file) and CREATES and OPENS the
+  ;;     file.  This test needs a unique pathname that does NOT exist yet, because
+  ;;     `cat > FILE` is what has to create it; handing the shell an already-open
+  ;;     mkstemp fd would stop testing the pipe and start testing redirection.
+  ;;   * uiop:merge-pathnames*  — no cl-host-kit export.
+  ;;   * uiop:native-namestring — no cl-host-kit export.  The result is
+  ;;     interpolated into a /bin/sh command line, so the native (not Lisp)
+  ;;     spelling of the path is load-bearing.
+  ;; host-kit:temporary-directory, read-file-string and delete-file-if-exists in
+  ;; the same form DO have exact equivalents and were migrated.
   (it "pipe-pane-write-bytes-reach-subprocess"
     (flet ((attempt ()
-             (host-kit:call-with-temporary-file
-              (lambda (stream tmpfile)
-                (declare (ignore stream))
-                (let ((pane (%make-test-pane)))
-                  (unwind-protect
-                       (progn
-                         (cl-tmux/commands:pipe-pane-open
-                          pane (format nil "cat > ~A" (namestring tmpfile)))
-                         (when (pane-pipe-fd pane)
-                           (cl-tmux/commands:pipe-pane-write pane #(65 66 67))
-                           (cl-tmux/commands:pipe-pane-close pane)
-                           (let ((contents ""))
-                             (loop repeat 250
-                                   until (and (probe-file tmpfile)
-                                              (search "ABC"
-                                                      (setf contents
-                                                            (or (ignore-errors
-                                                                  (host-kit:read-file-string
-                                                                   tmpfile))
-                                                                ""))))
-                                   do (sleep 0.005))
-                             (and (search "ABC" contents) t))))
-                    (when (pane-pipe-fd pane)
-                      (ignore-errors
-                        (cl-tmux/commands:pipe-pane-close pane))))))))) (let ((ok nil))
-        (dotimes (i 8)
-          (declare (ignore i))
-          (unless ok
-            (setf ok (attempt))))
+             (let ((tmpfile (uiop:tmpize-pathname
+                             (uiop:merge-pathnames* "pipe-pane-write-test"
+                                                    (host-kit:temporary-directory))))
+                   (pane    (%make-test-pane)))
+               (unwind-protect
+                    (progn
+                      (cl-tmux/commands:pipe-pane-open
+                       pane (format nil "cat > ~A" (uiop:native-namestring tmpfile)))
+                      (when (pane-pipe-fd pane)            ; launch succeeded
+                        (cl-tmux/commands:pipe-pane-write pane #(65 66 67)) ; "ABC"
+                        (cl-tmux/commands:pipe-pane-close pane)
+                        (let ((contents ""))
+                          (loop repeat 250                  ; ~1.25s per attempt
+                                until (and (probe-file tmpfile)
+                                           (search "ABC"
+                                                   (setf contents
+                                                         (or (ignore-errors
+                                                               (host-kit:read-file-string tmpfile))
+                                                             ""))))
+                                do (sleep 0.005))
+                          (and (search "ABC" contents) t))))
+                 (ignore-errors (host-kit:delete-file-if-exists tmpfile))))))
+      (let ((ok nil))
+        (dotimes (i 8) (unless ok (setf ok (attempt))))
         (expect ok :to-be-truthy))))
 
   ;; ── %copy-mode-virtual-row-string (direct unit tests) ───────────────────────
@@ -248,14 +254,10 @@
   ;; instead of returning NIL.  Asserted on the primitive so a future refactor of
   ;; %run-with-timeout's own handler cannot mask it.
   (it "with-timeout-signals-operation-timed-out-not-sb-ext-timeout"
-    (expect
-      (typep
-       (handler-case
-           (cl-concurrent-kit:with-timeout
-               (cl-date-kit:duration-of-nanos 1000000)
-             (sleep 60))
-         (cl-concurrent-kit:operation-timed-out (condition) condition))
-       'cl-concurrent-kit:operation-timed-out)))
+    (expect (typep (handler-case
+                       (cl-concurrent-kit:with-timeout 1/1000 (sleep 60))
+                     (cl-concurrent-kit:operation-timed-out (c) c))
+                   'error)))
 
   ;; ── run-shell timeout ────────────────────────────────────────────────────────
 

@@ -20,24 +20,6 @@
 
 (require :asdf)
 
-(progn
-  (defun %register-directory (directory)
-    (pushnew (truename directory)
-             asdf:*central-registry*
-             :test (function equal)))
-  (defun %bootstrap-sibling-directories ()
-    (let ((registry (sb-ext:posix-getenv "CL_TMUX_SIBLING_REGISTRY")))
-      (when (and registry (plusp (length registry)))
-        (loop with start = 0
-              for separator = (position #\: registry :start start)
-              for directory = (subseq registry start separator)
-              do (unless (string= directory "")
-                   (%register-directory directory))
-              if separator
-                do (setf start (1+ separator))
-              else
-                do (return))))))
-
 ;;; ASDF has to be told where this checkout and its sibling libraries are.
 ;;; Sibling packages are consumed purely as source (see flake.nix), so they go
 ;;; on the central registry rather than through nixpkgs Lisp packaging.
@@ -47,27 +29,25 @@
 ;;; alone, which is what a developer wants when the siblings are already on
 ;;; CL_SOURCE_REGISTRY (the nixpkgs sbcl wrapper only ever *prefixes* that
 ;;; variable, so an outer value survives).
-(progn
-  (%register-directory
-   (make-pathname :name nil :type nil :defaults *load-truename*))
-  (%bootstrap-sibling-directories)
-  (asdf:load-system "cl-host-kit"))
+(push (uiop:pathname-directory-pathname *load-truename*)
+      asdf:*central-registry*)
 
-(progn
-  (%register-directory (host-kit:pathname-directory-pathname *load-truename*))
-  (dolist (dir (host-kit:split-string
-                (or (host-kit:getenv "CL_TMUX_SIBLING_REGISTRY") "")
-                :separator #\:))
-    (unless (string= dir "")
-      (%register-directory (host-kit:ensure-directory-pathname dir)))))
+(dolist (dir (uiop:split-string (or (uiop:getenv "CL_TMUX_SIBLING_REGISTRY") "")
+                                :separator ":"))
+  (unless (string= dir "")
+    (push (truename (uiop:ensure-directory-pathname dir))
+          asdf:*central-registry*)))
 
-(let ((system (or (host-kit:getenv "CL_TMUX_TEST_SYSTEM") "cl-tmux/test")))
+(let ((system (or (uiop:getenv "CL_TMUX_TEST_SYSTEM") "cl-tmux/test")))
   (format t "~&Running test system ~A~%" system)
   (finish-output)
   (handler-case (asdf:test-system system)
-    (error (condition)
-      (format *error-output* "~&TESTS FAILED (~A): ~A~%" system condition)
+    ;; --script already exits non-zero on an unhandled error, but it prints a
+    ;; raw backtrace. Catching it keeps the failure line first in the CI log,
+    ;; which is the part `nix flake check --print-build-logs` shows on failure.
+    (error (e)
+      (format *error-output* "~&TESTS FAILED (~A): ~A~%" system e)
       (finish-output *error-output*)
-      (host-kit:quit 1))))
+      (uiop:quit 1))))
 
-(host-kit:quit 0)
+(uiop:quit 0)

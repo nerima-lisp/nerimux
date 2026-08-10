@@ -31,19 +31,11 @@
                condition-classes)))
 
 (defun make-listener (path &key (backlog 1))
-  "Bind a Unix-domain stream socket at PATH and start listening (BACKLOG deep).
-   A socket whose bind or listen setup fails is closed before the error escapes."
-  (let ((socket (make-instance (quote sb-bsd-sockets:local-socket) :type :stream))
-        (succeeded-p nil))
-    (unwind-protect
-         (progn
-           (sb-bsd-sockets:socket-bind socket path)
-           (sb-bsd-sockets:socket-listen socket backlog)
-           (setf succeeded-p t)
-           socket)
-      (unless succeeded-p
-        (ignore-errors
-          (sb-bsd-sockets:socket-close socket))))))
+  "Bind a Unix-domain stream socket at PATH and start listening (BACKLOG deep)."
+  (let ((socket (make-instance 'sb-bsd-sockets:local-socket :type :stream)))
+    (sb-bsd-sockets:socket-bind socket path)
+    (sb-bsd-sockets:socket-listen socket backlog)
+    socket))
 
 (defun accept-connection (listener)
   "Accept one connection from LISTENER within +accept-timeout-seconds+.
@@ -62,19 +54,11 @@
 (defun connect-to (path)
   "Connect a fresh Unix-domain stream socket to the listener at PATH.
    The connect attempt is bounded by +connect-timeout-seconds+; signals
-   SB-EXT:TIMEOUT when the server does not accept within that window.
-   A failed attempt closes its newly allocated socket before signalling."
-  (let ((socket (make-instance (quote sb-bsd-sockets:local-socket) :type :stream))
-        (succeeded-p nil))
-    (unwind-protect
-         (progn
-           (sb-ext:with-timeout +connect-timeout-seconds+
-             (sb-bsd-sockets:socket-connect socket path))
-           (setf succeeded-p t)
-           socket)
-      (unless succeeded-p
-        (ignore-errors
-          (sb-bsd-sockets:socket-close socket))))))
+   SB-EXT:TIMEOUT when the server does not accept within that window."
+  (let ((socket (make-instance 'sb-bsd-sockets:local-socket :type :stream)))
+    (sb-ext:with-timeout +connect-timeout-seconds+
+      (sb-bsd-sockets:socket-connect socket path))
+    socket))
 
 (defun socket-stream (socket)
   "A bidirectional binary stream over SOCKET (element-type (unsigned-byte 8)).

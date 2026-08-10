@@ -172,17 +172,17 @@
   ;; Asserted with a raw HANDLER-CASE rather than cl-weave's :to-throw for exactly
   ;; reason 2 — the same precedent as commands-tests-c.lisp's
   ;; with-timeout-signals-operation-timed-out-not-sb-ext-timeout.
-  (it "cl-concurrent-kit-timeout-uses-duration"
-    (let* ((seconds (/ 1 1000))
-           (duration (cl-date-kit:duration-of-nanos (round (* seconds 1000000000))))
+  (it "pty-child-exit-status-deadline-is-a-bare-form-signalling-an-error"
+    (let* ((seconds (/ 1 1000))              ; computed, not a literal
            (condition (handler-case
-                          (cl-concurrent-kit:with-timeout duration (sleep 60))
+                          (cl-concurrent-kit:with-timeout seconds (sleep 60))
                         (cl-concurrent-kit:operation-timed-out (c) c))))
-      (expect (typep condition (quote cl-concurrent-kit:operation-timed-out)))
-      (expect (typep condition (quote error)))
-      (expect (not (typep condition (quote sb-ext:timeout))))
+      (expect (typep condition 'cl-concurrent-kit:operation-timed-out))
+      (expect (typep condition 'error))
+      (expect (not (typep condition 'sb-ext:timeout)))
+      ;; The clause pty.lisp actually writes, exercised as written.
       (expect (null (handler-case
-                        (cl-concurrent-kit:with-timeout duration (sleep 60))
+                        (cl-concurrent-kit:with-timeout seconds (sleep 60))
                       (cl-concurrent-kit:operation-timed-out () nil)
                       (error () :wrong-clause))))))
 

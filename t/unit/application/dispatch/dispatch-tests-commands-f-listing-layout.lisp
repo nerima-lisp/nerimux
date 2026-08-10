@@ -67,8 +67,8 @@
   ;; dispatch without error.  Each command gets a fresh session so that the
   ;; reader thread started by a split does not block the next fork.
   (it "dispatch-rotate-and-split-no-focus-do-not-error"
-    (with-pty-available (dolist (cmd '(:rotate-window :rotate-window-reverse
+    (dolist (cmd '(:rotate-window :rotate-window-reverse
                    :split-horizontal-no-focus :split-vertical-no-focus))
       (with-fake-session (s :nwindows 1 :npanes 1)
         (finishes (cl-tmux::dispatch-command s cmd nil)
-                  "~A must not signal an error" cmd))))))
+                  "~A must not signal an error" cmd)))))

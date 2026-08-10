@@ -15,28 +15,23 @@
           (let* ((client      (cl-tmux/net:connect-to path))
                  (server-sock (cl-tmux/net:accept-connection listener))
                  (cl-tmux::*clients* nil))
-            (unwind-protect
-                 (when server-sock
-                   (let ((conn    (cl-tmux::%add-client server-sock))
-                         (payload (cl-tmux/protocol::encode-command-payload
-                                   :display-message :args '("hello"))))
-                     (unwind-protect
-                          (progn
-                            ;; Run the forwarded command; the server replies with its output.
-                            (cl-tmux::%handle-multi-client-message
-                             cl-tmux::+msg-command+ payload s conn)
-                            (expect (string= "hello"
-                                              (cdr (first (cl-tmux::client-conn-message-log conn)))))
-                            (let ((ready (cl-tmux/pty:select-fds
-                                          (list (cl-tmux/net:socket-fd client)) 1000000)))
-                              (expect ready :to-be-truthy)
-                              (when ready
-                                (multiple-value-bind (type payload)
-                                    (cl-tmux::read-frame (cl-tmux/net:socket-stream client))
-                                  (expect (eql cl-tmux::+msg-reply+ type))
-                                  (expect (search "hello" (cl-tmux::decode-text payload)))))))
-                       (cl-tmux::%drop-client conn))))
-              (cl-tmux/net:close-socket client)))))))
+            (when server-sock
+              (let ((conn    (cl-tmux::%add-client server-sock))
+                    (payload (cl-tmux/protocol::encode-command-payload
+                              :display-message :args '("hello"))))
+                ;; Run the forwarded command; the server replies with its output.
+                (cl-tmux::%handle-multi-client-message
+                 cl-tmux::+msg-command+ payload s conn)
+                (expect (string= "hello"
+                                  (cdr (first (cl-tmux::client-conn-message-log conn)))))
+                (let ((ready (cl-tmux/pty:select-fds
+                              (list (cl-tmux/net:socket-fd client)) 1000000)))
+                  (expect ready :to-be-truthy)
+                  (when ready
+                    (multiple-value-bind (type payload)
+                        (cl-tmux::read-frame (cl-tmux/net:socket-stream client))
+                      (expect (eql cl-tmux::+msg-reply+ type))
+                      (expect (search "hello" (cl-tmux::decode-text payload)))))))))))))
 
   ;; run-command-client forwards a command to the server as a decodable
   ;; +msg-command+ frame (the `cl-tmux <command>` CLI path).  A -t target rides
@@ -47,24 +42,20 @@
       (with-test-listener (listener path (cl-tmux::socket-path name) :backlog 4)
         (cl-tmux::run-command-client name '("next-window" "-t" "2"))
         (let ((server-sock (cl-tmux/net:accept-connection listener)))
-          (unwind-protect
-               (progn
-                 (expect server-sock :to-be-truthy)
-                 (when server-sock
-                   (let ((ready (cl-tmux/pty:select-fds
-                                 (list (cl-tmux/net:socket-fd server-sock)) 1000000)))
-                     (expect ready :to-be-truthy)
-                     (when ready
-                       (multiple-value-bind (type payload)
-                           (cl-tmux::read-frame (cl-tmux/net:socket-stream server-sock))
-                         (expect (eql cl-tmux::+msg-command+ type))
-                         (multiple-value-bind (cmd target args)
-                             (cl-tmux::decode-command-payload payload)
-                           (declare (ignore target))
-                           (expect (eq :next-window cmd))
-                           (expect (equal '("-t" "2") args))))))))
-            (when server-sock
-              (cl-tmux/net:close-socket server-sock)))))))
+          (expect server-sock :to-be-truthy)
+          (when server-sock
+            (let ((ready (cl-tmux/pty:select-fds
+                          (list (cl-tmux/net:socket-fd server-sock)) 1000000)))
+              (expect ready :to-be-truthy)
+              (when ready
+                (multiple-value-bind (type payload)
+                    (cl-tmux::read-frame (cl-tmux/net:socket-stream server-sock))
+                  (expect (eql cl-tmux::+msg-command+ type))
+                  (multiple-value-bind (cmd target args)
+                      (cl-tmux::decode-command-payload payload)
+                    (declare (ignore target))
+                    (expect (eq :next-window cmd))
+                    (expect (equal '("-t" "2") args)))))))))))
 
   ;; run-command-client sends stdin after the split-window -I command frame.
   (it "command-client-split-window-I-forwards-stdin-frame"
@@ -74,32 +65,28 @@
         (with-input-from-string (*standard-input* "client stdin")
           (cl-tmux::run-command-client name '("split-window" "-I")))
         (let ((server-sock (cl-tmux/net:accept-connection listener)))
-          (unwind-protect
-               (progn
-                 (expect server-sock :to-be-truthy)
-                 (when server-sock
-                   (let ((ready (cl-tmux/pty:select-fds
-                                 (list (cl-tmux/net:socket-fd server-sock)) 1000000)))
-                     (expect ready :to-be-truthy)
-                     (when ready
-                       (multiple-value-bind (type payload)
-                           (cl-tmux::read-frame (cl-tmux/net:socket-stream server-sock))
-                         (expect (eql cl-tmux::+msg-command+ type))
-                         (multiple-value-bind (cmd target args)
-                             (cl-tmux::decode-command-payload payload)
-                           (declare (ignore target))
-                           (expect (eq :split-window cmd))
-                           (expect (equal '("-I") args))))))
-                   (let ((ready (cl-tmux/pty:select-fds
-                                 (list (cl-tmux/net:socket-fd server-sock)) 1000000)))
-                     (expect ready :to-be-truthy)
-                     (when ready
-                       (multiple-value-bind (type payload)
-                           (cl-tmux::read-frame (cl-tmux/net:socket-stream server-sock))
-                         (expect (eql cl-tmux::+msg-key+ type))
-                         (expect (string= "client stdin" (cl-tmux::decode-text payload))))))))
-            (when server-sock
-              (cl-tmux/net:close-socket server-sock)))))))
+          (expect server-sock :to-be-truthy)
+          (when server-sock
+            (let ((ready (cl-tmux/pty:select-fds
+                          (list (cl-tmux/net:socket-fd server-sock)) 1000000)))
+              (expect ready :to-be-truthy)
+              (when ready
+                (multiple-value-bind (type payload)
+                    (cl-tmux::read-frame (cl-tmux/net:socket-stream server-sock))
+                  (expect (eql cl-tmux::+msg-command+ type))
+                  (multiple-value-bind (cmd target args)
+                      (cl-tmux::decode-command-payload payload)
+                    (declare (ignore target))
+                    (expect (eq :split-window cmd))
+                    (expect (equal '("-I") args))))))
+            (let ((ready (cl-tmux/pty:select-fds
+                          (list (cl-tmux/net:socket-fd server-sock)) 1000000)))
+              (expect ready :to-be-truthy)
+              (when ready
+                (multiple-value-bind (type payload)
+                    (cl-tmux::read-frame (cl-tmux/net:socket-stream server-sock))
+                  (expect (eql cl-tmux::+msg-key+ type))
+                  (expect (string= "client stdin" (cl-tmux::decode-text payload)))))))))))
 
   ;;; -- exit-unattached: terminate when the last client detaches ----------------
 
@@ -144,24 +131,19 @@
                  (client2 (cl-tmux/net:connect-to path))
                  (server2 (cl-tmux/net:accept-connection listener))
                  (cl-tmux::*clients* nil))
-            (unwind-protect
-                 (when (and server1 server2)
-                   (cl-tmux::%add-client server1)
-                   (cl-tmux::%add-client server2)
-                   (setf cl-tmux::*dirty* t)
-                   (cl-tmux::%broadcast-frame s)
-                   ;; Both client sockets must now have a frame to read.  Gate the
-                   ;; reads on select so a missing frame fails fast (not hangs).
-                   (dolist (client (list client1 client2))
-                     (let ((ready (cl-tmux/pty:select-fds
-                                   (list (cl-tmux/net:socket-fd client)) 1000000)))
-                       (expect ready :to-be-truthy)
-                       (when ready
-                         (multiple-value-bind (type payload)
-                             (cl-tmux::read-frame (cl-tmux/net:socket-stream client))
-                           (declare (ignore payload))
-                           (expect (eql cl-tmux::+msg-frame+ type))))))))
-              (dolist (conn cl-tmux::*clients*)
-                (cl-tmux::%drop-client conn))
-              (cl-tmux/net:close-socket client1)
-              (cl-tmux/net:close-socket client2)))))))
+            (when (and server1 server2)
+              (cl-tmux::%add-client server1)
+              (cl-tmux::%add-client server2)
+              (setf cl-tmux::*dirty* t)
+              (cl-tmux::%broadcast-frame s)
+              ;; Both client sockets must now have a frame to read.  Gate the
+              ;; reads on select so a missing frame fails fast (not hangs).
+              (dolist (client (list client1 client2))
+                (let ((ready (cl-tmux/pty:select-fds
+                              (list (cl-tmux/net:socket-fd client)) 1000000)))
+                  (expect ready :to-be-truthy)
+                  (when ready
+                    (multiple-value-bind (type payload)
+                        (cl-tmux::read-frame (cl-tmux/net:socket-stream client))
+                      (declare (ignore payload))
+                      (expect (eql cl-tmux::+msg-frame+ type)))))))))))))

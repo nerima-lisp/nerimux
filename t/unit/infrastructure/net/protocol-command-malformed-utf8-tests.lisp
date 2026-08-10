@@ -152,6 +152,6 @@
                      (expect (not (eq :quit result)))
                      ;; And it must cost exactly one client: the sender.
                      (expect (equal (list good-conn) cl-tmux::*clients*))))
-              (progn (dolist (conn cl-tmux::*clients*) (cl-tmux::%drop-client conn)) (ignore-errors (cl-tmux/net:close-socket attacker)))
+              (ignore-errors (cl-tmux/net:close-socket attacker))
               (when bystander
                 (ignore-errors (cl-tmux/net:close-socket bystander))))))))))

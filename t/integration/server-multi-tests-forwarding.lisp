@@ -51,7 +51,7 @@
   ;; A forwarded `new-session -d` command must run in the server process and add
   ;; the new detached session to *server-sessions*.
   (it "multi-handle-forwarded-new-session-creates-session"
-    (with-pty-available (with-isolated-hooks
+    (with-isolated-hooks
       (with-fake-session (s)
         (let ((cl-tmux::*server-sessions* (list (cons "0" s)))
               (created nil))
@@ -69,7 +69,7 @@
             (dolist (pane (and created (cl-tmux::all-panes created)))
               (ignore-errors (cl-tmux/pty:pty-close
                               (cl-tmux::pane-fd pane)
-                              (cl-tmux::pane-pid pane))))))))))
+                              (cl-tmux::pane-pid pane)))))))))
 
   ;; A forwarded kill-server command must propagate :quit to the multi-client loop.
   (it "multi-handle-forwarded-kill-server-quits-loop"
@@ -117,24 +117,20 @@
     (with-test-listener (listener path (%test-socket-path "reply-helper") :backlog 4)
       (let* ((client      (cl-tmux/net:connect-to path))
              (server-sock (cl-tmux/net:accept-connection listener)))
-        (unwind-protect
-             (when server-sock
-               (let ((conn (cl-tmux::%make-client-conn :socket server-sock
-                                                        :stream (cl-tmux/net:socket-stream server-sock)
-                                                        :fd     (cl-tmux/net:socket-fd server-sock))))
-                 (let ((cl-tmux/prompt:*overlay* "reply-text"))
-                   (cl-tmux::%reply-with-command-output conn))
-                 (let ((ready (cl-tmux/pty:select-fds
-                               (list (cl-tmux/net:socket-fd client)) 1000000)))
-                   (expect (not (null ready)))
-                   (when ready
-                     (multiple-value-bind (type payload)
-                         (cl-tmux::read-frame (cl-tmux/net:socket-stream client))
-                       (expect (eql cl-tmux::+msg-reply+ type))
-                       (expect (string= "reply-text" (cl-tmux::decode-text payload))))))))
-          (cl-tmux/net:close-socket client)
-          (when server-sock
-            (cl-tmux/net:close-socket server-sock))))))
+        (when server-sock
+          (let ((conn (cl-tmux::%make-client-conn :socket server-sock
+                                                   :stream (cl-tmux/net:socket-stream server-sock)
+                                                   :fd     (cl-tmux/net:socket-fd server-sock))))
+            (let ((cl-tmux/prompt:*overlay* "reply-text"))
+              (cl-tmux::%reply-with-command-output conn))
+            (let ((ready (cl-tmux/pty:select-fds
+                          (list (cl-tmux/net:socket-fd client)) 1000000)))
+              (expect (not (null ready)))
+              (when ready
+                (multiple-value-bind (type payload)
+                    (cl-tmux::read-frame (cl-tmux/net:socket-stream client))
+                  (expect (eql cl-tmux::+msg-reply+ type))
+                  (expect (string= "reply-text" (cl-tmux::decode-text payload)))))))))))
 
   ;; %drop-client (no bye, no socket) removes the conn from *clients*.
   (it "multi-drop-client-removes-from-registry"

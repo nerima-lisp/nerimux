@@ -248,10 +248,10 @@
 
   ;; :split-horizontal and :split-vertical both dispatch without error on a fake session.
   (it "dispatch-split-horizontal-vertical-do-not-error"
-    (with-pty-available (dolist (cmd '(:split-horizontal :split-vertical))
+    (dolist (cmd '(:split-horizontal :split-vertical))
       (with-fake-session (s :nwindows 1 :npanes 1)
         (finishes (cl-tmux::dispatch-command s cmd nil)
-                  "~A must not signal an error" cmd)))))
+                  "~A must not signal an error" cmd))))
 
   ;;; ── :new-window dispatch ─────────────────────────────────────────────────────
 

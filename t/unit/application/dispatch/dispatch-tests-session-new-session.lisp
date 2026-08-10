@@ -30,19 +30,19 @@
   ;; An auto-generated session name that would collide bumps to the next free
   ;; number instead of orphaning the existing session.
   (it "new-session-auto-name-avoids-collision"
-    (with-pty-available (with-fake-session (s2)
+    (with-fake-session (s2)
       (setf (cl-tmux::session-name s2) "2")
       (with-registered-sessions (("2" s2))
         (let ((*overlay* nil))
           (let ((new (cl-tmux::%cmd-new-session-arg s2 '("-d"))))
             (expect (not (null new)))
             (expect (not (string= "2" (cl-tmux::session-name new))))
-            (expect (eq s2 (cl-tmux::server-find-session "2")))))))))
+            (expect (eq s2 (cl-tmux::server-find-session "2"))))))))
 
   ;; new-session -e VAR=val stores VAR in the new session's environment overlay
   ;; (inherited by windows created later in the session).
   (it "new-session-e-sets-session-environment"
-    (with-pty-available (with-fake-session (s2)
+    (with-fake-session (s2)
       (setf (cl-tmux::session-name s2) "7")
       (with-registered-sessions (("7" s2))
         (let ((*overlay* nil))
@@ -52,12 +52,12 @@
             (multiple-value-bind (value source)
                 (cl-tmux/model:session-environment-value new "CLTMUX_NS_E")
               (declare (ignore source))
-              (expect (string= "bar" value)))))))))
+              (expect (string= "bar" value))))))))
 
   ;; new-session -dP prints the new session info (default #{session_name}:) to an
   ;; overlay, and -F overrides the format.
   (it "new-session-P-prints-session-info"
-    (with-pty-available (with-fake-session (s2)
+    (with-fake-session (s2)
       (setf (cl-tmux::session-name s2) "6")
       (with-registered-sessions (("6" s2))
         (let ((*overlay* nil))
@@ -66,7 +66,7 @@
         (let ((*overlay* nil))
           (cl-tmux::%cmd-new-session-arg
            s2 '("-d" "-P" "-F" "ID=#{session_name}" "-s" "fmty"))
-          (expect (and *overlay* (search "ID=fmty" *overlay*))))))))
+          (expect (and *overlay* (search "ID=fmty" *overlay*)))))))
 
   ;; new-window -S -n NAME selects an existing window with that name instead of
   ;; creating a new one (tmux new-window -S).

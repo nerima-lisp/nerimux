@@ -129,11 +129,11 @@
 
   ;; %cmd-split with :no-focus T does not signal an error in either orientation.
   (it "cmd-split-no-focus-table"
-    (with-pty-available (dolist (c '((:h "horizontal :no-focus must not error even when pane is too small")
+    (dolist (c '((:h "horizontal :no-focus must not error even when pane is too small")
                  (:v "vertical :no-focus must not error even when pane is too small")))
       (destructuring-bind (orient desc) c
         (with-fake-session (s :nwindows 1 :npanes 1)
-          (finishes (cl-tmux::%cmd-split s orient :no-focus t) "~A" desc))))))
+          (finishes (cl-tmux::%cmd-split s orient :no-focus t) "~A" desc)))))
 
   ;;; ── %make-dispatch-named-table helper ────────────────────────────────────────
 

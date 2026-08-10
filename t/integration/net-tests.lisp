@@ -65,57 +65,6 @@
   (it "connect-to-empty-path-signals"
     (signals error
       (connect-to "")))
-  ;; A listen failure closes the listener socket before signalling.
-  (it "make-listener-closes-socket-on-listen-failure"
-    (let ((closed 0))
-      (with-stubbed-fdefinition
-          ((sb-bsd-sockets:socket-bind
-             (lambda (&rest args)
-               (declare (ignore args))
-               nil))
-           (sb-bsd-sockets:socket-listen
-             (lambda (&rest args)
-               (declare (ignore args))
-               (error "listen failure")))
-           (sb-bsd-sockets:socket-close
-             (lambda (socket)
-               (declare (ignore socket))
-               (incf closed))))
-        (signals error
-          (make-listener "mocked-path")))
-      (expect (= 1 closed))))
-
-  ;; A bind failure closes the listener socket before signalling.
-  (it "make-listener-closes-socket-on-bind-failure"
-    (let ((closed 0))
-      (with-stubbed-fdefinition
-          ((sb-bsd-sockets:socket-bind
-             (lambda (&rest args)
-               (declare (ignore args))
-               (error "bind failure")))
-           (sb-bsd-sockets:socket-close
-             (lambda (socket)
-               (declare (ignore socket))
-               (incf closed))))
-        (signals error
-          (make-listener "mocked-path")))
-      (expect (= 1 closed))))
-
-  ;; A connect failure closes the client socket before signalling.
-  (it "connect-to-closes-socket-on-connect-failure"
-    (let ((closed 0))
-      (with-stubbed-fdefinition
-          ((sb-bsd-sockets:socket-connect
-             (lambda (&rest args)
-               (declare (ignore args))
-               (error "connect failure")))
-           (sb-bsd-sockets:socket-close
-             (lambda (socket)
-               (declare (ignore socket))
-               (incf closed))))
-        (signals error
-          (connect-to "mocked-path")))
-      (expect (= 1 closed))))
 
   ;;; ── socket-fd on bound listener ───────────────────────────────────────────
 

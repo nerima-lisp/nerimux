@@ -66,14 +66,14 @@
   ;; split-window -f -v adds a pane spanning the FULL window width (a full-window
   ;; split at the layout root), not just the active pane's width.
   (it "split-window-f-full-spans-window-width"
-    (with-pty-available (let* ((win (%vsplit-window 20))   ; p0|p1 side by side; window width 41
+    (let* ((win (%vsplit-window 20))   ; p0|p1 side by side; window width 41
            (s   (make-session :id 1 :name "0" :windows (list win))))
       (session-select-window s win)
       (with-loop-state
         (cl-tmux::%run-command-line s "split-window -f -v")
         (expect (= 3 (length (window-panes win))))
         (let ((newest (car (last (window-panes win)))))
-          (expect (= (window-width win) (pane-width newest))))))))
+          (expect (= (window-width win) (pane-width newest)))))))
 
   ;; split-window -t :NAME splits the named window instead of the active one.
   (it "run-command-line-split-window-targets-named-window"

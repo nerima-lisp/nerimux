@@ -50,7 +50,7 @@
   ;; new-session -d with no -x/-y sizes the detached session from the default-size
   ;; option (it has no client to size it), not the current terminal.
   (it "cmd-new-session-detached-uses-default-size"
-    (with-pty-available (with-isolated-config
+    (with-isolated-config
       (with-isolated-options ("default-size" "100x40")
         (with-fake-session (s)
           (let* ((cl-tmux::*server-sessions* nil)
@@ -58,7 +58,7 @@
                  (win (session-active-window new))
                  (expected-height (- 40 cl-tmux/config:*status-height*)))
             (expect (= 100 (window-width win)))
-            (expect (= expected-height (window-height win)))))))))
+            (expect (= expected-height (window-height win))))))))
 
   ;;; ── popup-border-lines: popup box-drawing character set ──────────────────────
 

@@ -35,7 +35,7 @@ Its regression suite (`cl-tmux/weave`) uses
 `around-each` fixtures, a property test, and cl-prolog's own `deftest-queries`
 bridge — and runs as the `weave` flake check.
 
-## Additional direct integrations
+## The other nine
 
 - [cl-cli](https://github.com/nerima-lisp/cl-cli) parses the top-level
   `cl-tmux [flags] [command [flags]]` global flags
@@ -50,14 +50,6 @@ bridge — and runs as the `weave` flake check.
   copy-mode lifecycle as an inspectable state machine (`src/dataflow/`), the
   cl-dataflow counterpart to `src/reasoning/` above — same cold-path-only rule,
   same dedicated flake check (`dataflow`).
-- [cl-host-kit](https://github.com/nerima-lisp/cl-host-kit) owns host-facing
-  pathname, string, environment, and bootstrap operations. Test and coverage
-  entrypoints register the project and sibling roots before loading it, then
-  use its CPS helpers directly instead of a local compatibility layer.
-- [cl-date-kit](https://github.com/nerima-lisp/cl-date-kit) supplies the typed
-  `duration` values accepted by cl-concurrent-kit's timeout macro. Timeout
-  seconds are converted at the boundary, so callers do not pass untyped
-  numbers into the concurrency API.
 - [cl-tty-kit](https://github.com/nerima-lisp/cl-tty-kit) backs the PTY layer:
   pane spawn, byte-transparent master-fd read/write, raw mode, and
   terminal-size queries all delegate to it (`src/infrastructure/pty/`). It also
@@ -119,14 +111,13 @@ the outcome the dependency policy is aiming for.
 
 `bordeaux-threads` became **cl-concurrent-kit**. Portability was the entire
 point of bordeaux-threads, and ADR-0048 makes the org SBCL-only, so it was
-buying nothing that `sb-thread` did not already provide. One contract
+buying nothing that `sb-thread` did not already provide. One syntactic
 difference is worth knowing if you are reading old code: cl-concurrent-kit's
-`with-timeout` takes a `cl-date-kit:DURATION` form, for example
-`(with-timeout (duration-of-seconds 5) …)`, not a numeric seconds value or
-bordeaux-threads' `(with-timeout (5) …)`. The condition it signals is
-`operation-timed-out`, not `timeout`. The rename is an improvement:
-`sb-ext:timeout` is a `serious-condition` that is deliberately *not* an
-`error`, so a handler written for `error` silently misses it, whereas
+`with-timeout` takes its deadline as a **bare form**, like `sb-ext:with-timeout`
+— `(with-timeout 5 …)`, not bordeaux-threads' `(with-timeout (5) …)` — and the
+condition it signals is `operation-timed-out`, not `timeout`. The rename is an
+improvement: `sb-ext:timeout` is a `serious-condition` that is deliberately
+*not* an `error`, so a handler written for `error` silently misses it, whereas
 `operation-timed-out` inherits from `cl-concurrent-kit-error`.
 
 Removing it also let a dead `#-sbcl` polling branch go from

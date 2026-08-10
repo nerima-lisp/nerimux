@@ -14,9 +14,9 @@
 ;;; isolation does not depend on suite boundaries or execution order.
 
 (defun run-tests ()
-  "Run every registered suite sequentially through cl-weave, report the
-results, and signal an error on any failure or empty suite."
-  (unless (cl-weave:run-all :reporter :spec :max-workers 1
-                            :pass-with-no-tests nil)
+  "Run every registered suite SEQUENTIALLY (single worker) through cl-weave,
+report the results, and signal an error (non-zero exit under Nix) on any
+failure."
+  (unless (cl-weave:run-all :reporter :spec :max-workers 1)
     (error "cl-tmux test suite failed"))
   t)

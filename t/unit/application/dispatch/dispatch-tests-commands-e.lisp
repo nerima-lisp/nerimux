@@ -39,10 +39,10 @@
 
   ;; :new-session dispatches without error.
   (it "dispatch-new-session-does-not-error"
-    (with-pty-available (with-fake-session (s)
+    (with-fake-session (s)
       (let ((cl-tmux::*server-sessions* nil))
         (finishes (cl-tmux::dispatch-command s :new-session nil)
-                  ":new-session must not signal an error")))))
+                  ":new-session must not signal an error"))))
 
   ;;; ── :kill-session dispatch ────────────────────────────────────────────────────
 

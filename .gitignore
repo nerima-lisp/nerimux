@@ -63,3 +63,5 @@ coverage.dat
 # Agent/editor harness state kept in-tree by local tooling only.
 /.claude/
 /.serena/
+
+.worktrees/
