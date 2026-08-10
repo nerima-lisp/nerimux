@@ -59,6 +59,13 @@
       url = "github:nerima-lisp/cl-dataflow/v1.1.1";
       flake = false;
     };
+    # Transitive only: cl-log-kit depends on cl-date-kit >= 0.2.0, and
+    # siblings are consumed as source, so the source has to be on the
+    # registry even though nothing in cl-tmux.asd names it directly.
+    cl-date-kit = {
+      url = "github:nerima-lisp/cl-date-kit/v1.0.0";
+      flake = false;
+    };
     cl-parser-kit = {
       url = "github:nerima-lisp/cl-parser-kit/v1.0.3";
       flake = false;
@@ -77,21 +84,10 @@
       flake = false;
     };
     cl-process-kit = {
-      # !!! PIN IS STALE — THIS FLAKE CANNOT BUILD UNTIL IT IS ADVANCED !!!
-      #
-      # src/infrastructure/pty/pty.lisp now calls process-kit:wait-for-input,
-      # added by src/fd-readiness.lisp. That file is UNCOMMITTED in
-      # cl-process-kit's working tree as of 2026-08-01: the newest tag is
-      # v2.0.0 and neither it nor v1.0.1 exports select-fds/wait-for-input
-      # (verified with `git show <tag>:src/package.lisp`).
-      #
-      # Advance this to the first tag that ships fd-readiness.lisp — and note
-      # that means crossing the v2.0.0 MAJOR boundary, so upstream's breaking
-      # changes must be reviewed against cl-tmux's existing process-kit:run /
-      # spawn / process-* call sites at the same time, not just this one.
-      #
-      # v1.0.1 was a packaging-only fix (a stale cl-log-kit tag reference in
-      # upstream's own flake.nix); no source change, API identical to v1.0.0.
+      # v3.1.0 exports wait-for-input/select-fds (verified with
+      # `git show v3.1.0:src/package.lisp`), which
+      # src/infrastructure/pty/pty.lisp's process-kit:wait-for-input call
+      # needs.
       url = "github:nerima-lisp/cl-process-kit/v3.1.0";
       flake = false;
     };
@@ -106,28 +102,18 @@
       # Replaces bordeaux-threads: threads, locks, condition variables and a
       # preemptive WITH-TIMEOUT, each a thin wrapper over SB-THREAD/SB-EXT.
       #
-      # !!! PIN IS PROVISIONAL — VERIFY BEFORE RELYING ON CI !!!
-      #
-      # cl-tmux needs WITH-TIMEOUT (src/timeout.lisp) and the LOCK deftype, both
-      # of which were added on 2026-08-01 and are UNCOMMITTED in
-      # cl-concurrent-kit's working tree. No tag ships them yet. Advance this to
-      # the first tag that does; until then this flake cannot build, for the same
-      # reason the cl-process-kit and cl-host-kit pins above cannot.
-      url = "github:nerima-lisp/cl-concurrent-kit/v0.3.0";
+      # v0.3.0 (the previous pin) predates #:lock/#:with-timeout, which
+      # src/timeout.lisp needs. v0.4.0 is the earliest tag confirmed to
+      # export both (verified with `git show v0.4.0:src/package.lisp`).
+      url = "github:nerima-lisp/cl-concurrent-kit/v0.4.0";
       flake = false;
     };
     cl-regex-kit = {
       # Replaces cl-ppcre: a from-scratch Thompson-NFA + Pike-VM engine.
       #
-      # !!! PIN IS PROVISIONAL — VERIFY BEFORE RELYING ON CI !!!
-      #
-      # Two things cl-tmux depends on are UNCOMMITTED in cl-regex-kit's working
-      # tree as of 2026-08-02 and are in NO tag:
-      #   * :template-syntax :backslash (src/api-replace.lisp), without which
-      #     every user's #{s/PAT/REP/} emits the replacement template literally.
-      #   * the src/pike-vm-capture.lisp fix for a misplaced paren at HEAD
-      #     ab36bda that made SCAN always return NIL.
-      # Advance this to the first tag carrying BOTH.
+      # v0.3.0 already ships :template-syntax :backslash
+      # (src/api-replace.lisp) and the src/pike-vm-capture.lisp paren fix
+      # (verified with `git show v0.3.0:src/api-replace.lisp`).
       #
       # Depends on cl-parser-kit, which is already an input above; siblings are
       # consumed as source, so that one checkout serves both.
@@ -179,6 +165,7 @@
       cl-boundary-kit,
       cl-log-kit,
       cl-dataflow,
+      cl-date-kit,
       cl-parser-kit,
       cl-tty-kit,
       cl-process-kit,
@@ -241,6 +228,7 @@
         cl-boundary-kit
         cl-log-kit
         cl-dataflow
+        cl-date-kit
         cl-parser-kit
         cl-tty-kit
         cl-process-kit
