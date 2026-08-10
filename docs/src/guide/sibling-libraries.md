@@ -35,7 +35,7 @@ Its regression suite (`cl-tmux/weave`) uses
 `around-each` fixtures, a property test, and cl-prolog's own `deftest-queries`
 bridge — and runs as the `weave` flake check.
 
-## The other nine
+## The other eleven
 
 - [cl-cli](https://github.com/nerima-lisp/cl-cli) parses the top-level
   `cl-tmux [flags] [command [flags]]` global flags
@@ -97,6 +97,14 @@ bridge — and runs as the `weave` flake check.
   `commands-copy-mode-search.lisp`. This is the one adoption that changes
   behaviour rather than only moving it; the retirement note below states
   exactly how.
+- [cl-codec-kit](https://github.com/nerima-lisp/cl-codec-kit) replaced `babel`
+  as the UTF-8 string↔octet codec for protocol frames, PTY output and OSC
+  payloads (`string-to-octets` / `octets-to-string`). See the retirement note
+  below for the two decode-behavior differences from babel.
+- [cl-host-kit](https://github.com/nerima-lisp/cl-host-kit) supplies
+  pathname/string host operations — `split-string` and the directory helpers.
+  It briefly carried the codec call sites too, for one day during the `babel`
+  retirement, before they were re-pointed at cl-codec-kit directly.
 
 ## External dependencies
 

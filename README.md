@@ -76,7 +76,7 @@ Tests live in `t/` and run under
 set `CL_TMUX_TEST_SYSTEM` to pick one of `cl-tmux/test` (default),
 `cl-tmux/weave` or `cl-tmux/dataflow`.
 
-cl-tmux is the org's L4 application package and its testbed: it runs on ten
+cl-tmux is the org's L4 application package and its testbed: it runs on twelve
 sibling libraries — [cl-cli](https://github.com/nerima-lisp/cl-cli),
 [cl-boundary-kit](https://github.com/nerima-lisp/cl-boundary-kit),
 [cl-dataflow](https://github.com/nerima-lisp/cl-dataflow),
@@ -85,7 +85,9 @@ sibling libraries — [cl-cli](https://github.com/nerima-lisp/cl-cli),
 [cl-process-kit](https://github.com/nerima-lisp/cl-process-kit),
 [cl-history-kit](https://github.com/nerima-lisp/cl-history-kit),
 [cl-concurrent-kit](https://github.com/nerima-lisp/cl-concurrent-kit),
-[cl-regex-kit](https://github.com/nerima-lisp/cl-regex-kit) — plus
+[cl-regex-kit](https://github.com/nerima-lisp/cl-regex-kit),
+[cl-codec-kit](https://github.com/nerima-lisp/cl-codec-kit),
+[cl-host-kit](https://github.com/nerima-lisp/cl-host-kit) — plus
 [cl-prolog](https://github.com/nerima-lisp/cl-prolog) for cold-path reasoning
 read-models. It has **no external dependencies**: it was the last repository in
 the org with any, and the final two (`bordeaux-threads`, `cl-ppcre`) were

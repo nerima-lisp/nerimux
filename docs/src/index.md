@@ -39,15 +39,24 @@ of what is implemented and what is deliberately different.
 
 ## What it is built on
 
-- **SBCL** — the Lisp implementation (PTYs via `sb-ext:run-program`, POSIX via
-  `sb-posix`, signals via `sb-posix:kill`).
+- **SBCL** — the Lisp implementation (signals via `sb-posix:kill`).
+- **cl-tty-kit** — PTY spawn/raw-mode/fd-io, `ioctl` window size, colour
+  downsampling, and character display widths.
+- **cl-process-kit** — timeout-guarded subprocess run, and `select(2)` over
+  raw fds.
 - **cl-concurrent-kit** — one reader thread per PTY pane, plus the locks and
   the preemptive `with-timeout` that bound `run-shell` and `pipe-pane`.
 - **cl-regex-kit** — regexes (format `s///` and `m/r:` matching).
 - **cl-codec-kit** — UTF-8 string↔octet conversion for protocol frames, PTY
   output and OSC payloads.
-- **cl-tty-kit** — PTY spawn/raw-mode/fd-io, `ioctl` window size, colour
-  downsampling, and character display widths.
+- **cl-host-kit** — pathname/string host operations.
+- **cl-prolog** — cold-path relational reasoning over key bindings and the
+  command table.
+- **cl-cli** — startup argv/flag parsing.
+- **cl-boundary-kit** — the process boundary behind `run-shell`/`if-shell`.
+- **cl-dataflow** — the copy-mode lifecycle state machine.
+- **cl-parser-kit** — the command-line tokenizer.
+- **cl-history-kit** — command-prompt history store and recall.
 
 **cl-tmux has no external dependencies.** Every name above except SBCL is a
 `nerima-lisp` sibling. Four external libraries were retired to get here:
