@@ -54,10 +54,10 @@
   ;;                          which has neither construct either.
   :depends-on (:cl-concurrent-kit ; threads, locks, condvars and preemptive deadlines
                :cl-regex-kit     ; regex engine behind the format #{m/r:...} and #{s///:} modifiers
-               :cl-prolog        ; dependency-free Prolog engine (cold-path reasoning)
+               :cl-prolog-kit    ; dependency-free Prolog engine (cold-path reasoning)
                :cl-cli           ; startup argv/flag parsing (main-startup-flags)
                :cl-boundary-kit  ; process boundary for run-shell/if-shell
-               :cl-dataflow      ; copy-mode lifecycle state machine (src/dataflow)
+               :cl-dataflow-kit  ; copy-mode lifecycle state machine (src/dataflow)
                :cl-parser-kit    ; commands-tokenizer combinator rewrite
                :cl-tty-kit       ; PTY spawn/raw-mode/fd-io, ioctl window size, colour downsampling
                :cl-process-kit   ; timeout-guarded subprocess run, and select(2) over raw fds
@@ -390,7 +390,7 @@
        (:file "events-loop-timers") ; CPS process-byte + escape/repeat timer plumbing + synchronize-panes
        (:file "events-loop")))
      ;; Prolog-backed cold-path reasoning read-model.  Loads after config
-     ;; (for the key-table store) and cl-prolog (a core dependency); never on
+     ;; (for the key-table store) and cl-prolog-kit (a core dependency); never on
      ;; the hot dispatch path.  See src/reasoning/package.lisp.
      (:module "reasoning"
       :serial t
@@ -399,9 +399,9 @@
        (:file "key-rulebase")
        (:file "key-tables")
        (:file "command-rulebase")))
-     ;; cl-dataflow-backed cold-path read-model: the copy-mode lifecycle as an
+     ;; cl-dataflow-kit-backed cold-path read-model: the copy-mode lifecycle as an
      ;; inspectable state machine.  Loads after domain/terminal (screen
-     ;; accessors) and cl-prolog (a cl-dataflow dependency); never on the hot
+     ;; accessors) and cl-prolog-kit (a cl-dataflow-kit dependency); never on the hot
      ;; dispatch path.  See src/dataflow/package.lisp.
      (:module "dataflow"
       :serial t
@@ -454,12 +454,12 @@
              (funcall (find-symbol "RUN-TESTS" (find-package "CL-TMUX/TEST")))))
 
 ;; The Prolog-backed reasoning read-model now lives in the core `cl-tmux'
-;; system (src/reasoning/, with cl-prolog a core dependency); it powers
+;; system (src/reasoning/, with cl-prolog-kit a core dependency); it powers
 ;; cold-path introspection and is compiled into the shipped binary.
 
 ;; cl-weave regression suite for the reasoning read-model.  It exercises the
-;; reasoning API through custom cl-weave matchers and reuses cl-prolog's own
-;; cl-weave bridge (`cl-prolog/weave:deftest-queries') for raw Prolog queries.
+;; reasoning API through custom cl-weave matchers and reuses cl-prolog-kit's own
+;; cl-weave bridge (`cl-prolog-kit/weave:deftest-queries') for raw Prolog queries.
 ;; Run with: (asdf:test-system :cl-tmux/weave)
 (defsystem "cl-tmux/weave"
   :description "cl-weave suite for the cl-tmux Prolog reasoning read-model."
@@ -470,7 +470,7 @@
   :homepage "https://github.com/nerima-lisp/cl-tmux"
   :bug-tracker "https://github.com/nerima-lisp/cl-tmux/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-tmux.git")
-  :depends-on ("cl-tmux" "cl-weave" "cl-prolog" "cl-prolog/weave")
+  :depends-on ("cl-tmux" "cl-weave" "cl-prolog-kit" "cl-prolog-kit/weave")
   :pathname "t/weave"
   :serial t
   :components ((:file "package")
@@ -483,11 +483,11 @@
              (unless (funcall (find-symbol "RUN-WEAVE-TESTS" (find-package "CL-TMUX/WEAVE-TESTS")))
                (error "cl-tmux cl-weave suite failed."))))
 
-;; cl-weave regression suite for the cl-dataflow copy-mode lifecycle
+;; cl-weave regression suite for the cl-dataflow-kit copy-mode lifecycle
 ;; read-model (src/dataflow/), mirroring cl-tmux/weave above.
 ;; Run with: (asdf:test-system :cl-tmux/dataflow)
 (defsystem "cl-tmux/dataflow"
-  :description "cl-weave suite for the cl-tmux cl-dataflow copy-mode lifecycle read-model."
+  :description "cl-weave suite for the cl-tmux cl-dataflow-kit copy-mode lifecycle read-model."
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
@@ -495,7 +495,7 @@
   :homepage "https://github.com/nerima-lisp/cl-tmux"
   :bug-tracker "https://github.com/nerima-lisp/cl-tmux/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-tmux.git")
-  :depends-on ("cl-tmux" "cl-weave" "cl-dataflow")
+  :depends-on ("cl-tmux" "cl-weave" "cl-dataflow-kit")
   :pathname "t/dataflow"
   :serial t
   :components ((:file "package")
@@ -504,4 +504,4 @@
   :perform (test-op (op c)
              (declare (ignore op c))
              (unless (funcall (find-symbol "RUN-DATAFLOW-TESTS" (find-package "CL-TMUX/DATAFLOW-TESTS")))
-               (error "cl-tmux cl-dataflow suite failed."))))
+               (error "cl-tmux cl-dataflow-kit suite failed."))))

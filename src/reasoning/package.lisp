@@ -1,21 +1,21 @@
 ;;;; Package for the Prolog-backed key-binding reasoning read-model.
 ;;;;
 ;;;; This subsystem is an *additive* introspection layer built on the
-;;;; dependency-free `cl-prolog' engine.  It projects cl-tmux's live
+;;;; dependency-free `cl-prolog-kit' engine.  It projects cl-tmux's live
 ;;;; key-table store into a Prolog rulebase and answers relational
 ;;;; questions about it that the imperative store cannot express directly
 ;;;; (reverse lookup, cross-table conflicts, repeatable-command inference).
 ;;;;
 ;;;; It lives in its own `reasoning' module within the core `cl-tmux' ASDF
-;;;; system (cl-prolog is a core dependency; see src/reasoning/'s module
+;;;; system (cl-prolog-kit is a core dependency; see src/reasoning/'s module
 ;;;; comment in cl-tmux.asd), loaded after `application/config' so it can
 ;;;; reference cl-tmux/config's public helpers directly.
 ;;;;
-;;;; `\=', `\+', and `findall' are imported from cl-prolog: builtin goals
+;;;; `\=', `\+', and `findall' are imported from cl-prolog-kit: builtin goals
 ;;;; dispatch on symbol identity, so inequality/negation/collection goals in
 ;;;; clause data must reference the engine's own symbols, whereas the domain
 ;;;; predicates below are ordinary symbols owned by this package.
-;;;; (cl-prolog's SETOF/3 was tried here and reverted — see the note above
+;;;; (cl-prolog-kit's SETOF/3 was tried here and reverted — see the note above
 ;;;; REPEATABLE-COMMANDS in key-rulebase.lisp: its term-ordering comparator
 ;;;; can't sort raw Lisp strings, which this domain's command/table names
 ;;;; are built from. FINDALL/3 does not sort or dedupe internally, so it has
@@ -24,10 +24,10 @@
 
 (defpackage #:cl-tmux/reasoning
   (:use #:cl)
-  (:import-from #:cl-prolog #:|\\=| #:|\\+| #:findall)
+  (:import-from #:cl-prolog-kit #:|\\=| #:|\\+| #:findall)
   (:import-from #:cl-tmux/config #:key-display-string)
   (:documentation
-   "A cl-prolog read-model over cl-tmux key tables: projection, a small
+   "A cl-prolog-kit read-model over cl-tmux key tables: projection, a small
     rule set, and query helpers for binding introspection.")
   (:export
    ;; Projection + rulebase construction

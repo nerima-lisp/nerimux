@@ -2,8 +2,8 @@
 ;;;;
 ;;;; This suite is the "advanced usage" of both dogfooded libraries at once:
 ;;;;   * cl-weave  — describe/it, custom matchers, and around-each fixtures
-;;;;   * cl-prolog — queried through the reasoning API and, for raw queries,
-;;;;                 through cl-prolog's own cl-weave bridge (deftest-queries).
+;;;;   * cl-prolog-kit — queried through the reasoning API and, for raw queries,
+;;;;                 through cl-prolog-kit's own cl-weave bridge (deftest-queries).
 
 (defpackage #:cl-tmux/weave-tests
   (:use #:cl #:cl-weave)
@@ -40,8 +40,8 @@
                 #:usage
                 #:accepts-flag
                 #:scriptable)
-  ;; cl-prolog's own cl-weave helpers for asserting raw queries.
-  (:import-from #:cl-prolog/weave
+  ;; cl-prolog-kit's own cl-weave helpers for asserting raw queries.
+  (:import-from #:cl-prolog-kit/weave
                 #:assert-query
                 #:deftest-queries)
   (:export #:run-weave-tests))

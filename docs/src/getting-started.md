@@ -77,7 +77,7 @@ cl-tmux-coverage ./coverage-report    # sb-cover report via cl-weave
 | Check | What it covers |
 |---|---|
 | `default` | the full unit + integration suite (`cl-tmux/test`) |
-| `weave` | the cl-prolog reasoning read-model (`cl-tmux/weave`) |
+| `weave` | the cl-prolog-kit reasoning read-model (`cl-tmux/weave`) |
 | `dataflow` | the copy-mode lifecycle read-model (`cl-tmux/dataflow`) |
 | `formatting` | treefmt / nixfmt over every tracked Nix file |
 | `docs` | this site, built with `mkdocs --strict` |

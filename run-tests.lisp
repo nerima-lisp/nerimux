@@ -11,7 +11,7 @@
 ;;;; suite. The three registered suites are:
 ;;;;
 ;;;;   cl-tmux/test      the full unit + integration suite (checks.default)
-;;;;   cl-tmux/weave     the cl-prolog reasoning read-model (checks.weave)
+;;;;   cl-tmux/weave     the cl-prolog-kit reasoning read-model (checks.weave)
 ;;;;   cl-tmux/dataflow  the copy-mode lifecycle read-model (checks.dataflow)
 ;;;;
 ;;;; Every one of them defines its own ASDF :perform (test-op ...) that signals

@@ -1,4 +1,4 @@
-;;;; cl-weave specs for the cl-prolog key-binding reasoning read-model.
+;;;; cl-weave specs for the cl-prolog-kit key-binding reasoning read-model.
 
 (in-package #:cl-tmux/weave-tests)
 
@@ -105,9 +105,9 @@
     (expect (list *rulebase* (getf fact :table) (getf fact :key))
             :to-resolve-to (getf fact :command))))
 
-;; Raw-query block through cl-prolog's own cl-weave bridge: each spec builds a
+;; Raw-query block through cl-prolog-kit's own cl-weave bridge: each spec builds a
 ;; fresh rulebase and asserts a literal Prolog query against it.  This is the
-;; two libraries meeting — cl-prolog/weave:deftest-queries emitting cl-weave
+;; two libraries meeting — cl-prolog-kit/weave:deftest-queries emitting cl-weave
 ;; cases over a cl-tmux-derived rulebase.
 (deftest-queries "raw prolog key-binding queries" ((fresh-default-rulebase))
   ("prefix c runs new-window"
