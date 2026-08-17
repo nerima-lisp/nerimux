@@ -5,10 +5,10 @@ it is where `nerima-lisp` libraries get exercised against a real workload. Each
 one below was adopted where it is a genuine fit for something cl-tmux already
 did by hand — not bolted on beside it.
 
-## Cold-path reasoning with cl-prolog
+## Cold-path reasoning with cl-prolog-kit
 
 `src/reasoning/` is a declarative read-model built on
-[cl-prolog](https://github.com/nerima-lisp/cl-prolog), a dependency-free Common
+[cl-prolog-kit](https://github.com/nerima-lisp/cl-prolog-kit), a dependency-free Common
 Lisp Prolog engine that is a **core dependency** of cl-tmux (compiled into the
 binary). It projects cl-tmux's declarative tables into Prolog rulebases and
 answers relational questions the flat tables cannot express directly.
@@ -32,7 +32,7 @@ Two domains ship today, key bindings and the canonical command table:
 
 Its regression suite (`cl-tmux/weave`) uses
 [cl-weave](https://github.com/nerima-lisp/cl-weave) — custom matchers,
-`around-each` fixtures, a property test, and cl-prolog's own `deftest-queries`
+`around-each` fixtures, a property test, and cl-prolog-kit's own `deftest-queries`
 bridge — and runs as the `weave` flake check.
 
 ## The other eleven
@@ -46,9 +46,9 @@ bridge — and runs as the `weave` flake check.
   the process boundary (`cl-tmux/config:*process-boundary*`) that `run-shell` /
   `if-shell` and config-time shell directives run through, so tests can swap in
   a fake process without shelling out for real.
-- [cl-dataflow](https://github.com/nerima-lisp/cl-dataflow) models the
+- [cl-dataflow-kit](https://github.com/nerima-lisp/cl-dataflow-kit) models the
   copy-mode lifecycle as an inspectable state machine (`src/dataflow/`), the
-  cl-dataflow counterpart to `src/reasoning/` above — same cold-path-only rule,
+  cl-dataflow-kit counterpart to `src/reasoning/` above — same cold-path-only rule,
   same dedicated flake check (`dataflow`).
 - [cl-tty-kit](https://github.com/nerima-lisp/cl-tty-kit) backs the PTY layer:
   pane spawn, byte-transparent master-fd read/write, raw mode, and

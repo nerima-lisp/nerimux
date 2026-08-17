@@ -10,7 +10,7 @@
     # `github:nerima-lisp/cl-weave` follows that repo's default branch, so an
     # upstream push to main would break this repo's CI without warning.
     #
-    # cl-weave and cl-prolog are consumed as flakes, so they take
+    # cl-weave and cl-prolog-kit are consumed as flakes, so they take
     # `inputs.nixpkgs.follows`: without it each drags in its own nixpkgs,
     # inflating flake.lock and rebuilding the same derivations twice.
     cl-weave = {
@@ -23,8 +23,8 @@
       inputs.paredit-cli.url = "github:nerima-lisp/paredit-cli/v1.4.0";
     };
 
-    cl-prolog = {
-      url = "github:nerima-lisp/cl-prolog/v1.3.0";
+    cl-prolog-kit = {
+      url = "github:nerima-lisp/cl-prolog-kit/v1.5.0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -55,8 +55,8 @@
       url = "github:nerima-lisp/cl-log-kit/v2.0.1";
       flake = false;
     };
-    cl-dataflow = {
-      url = "github:nerima-lisp/cl-dataflow/v1.1.1";
+    cl-dataflow-kit = {
+      url = "github:nerima-lisp/cl-dataflow-kit/v1.2.0";
       flake = false;
     };
     # Transitive only: cl-log-kit depends on cl-date-kit >= 0.2.0, and
@@ -160,11 +160,11 @@
       self,
       nixpkgs,
       cl-weave,
-      cl-prolog,
+      cl-prolog-kit,
       cl-cli,
       cl-boundary-kit,
       cl-log-kit,
-      cl-dataflow,
+      cl-dataflow-kit,
       cl-date-kit,
       cl-parser-kit,
       cl-tty-kit,
@@ -222,12 +222,12 @@
       # goes on ASDF's central registry rather than through nixpkgs Lisp
       # packaging. This one list drives every sbcl invocation below.
       siblingRepos = [
-        cl-prolog
+        cl-prolog-kit
         cl-weave
         cl-cli
         cl-boundary-kit
         cl-log-kit
-        cl-dataflow
+        cl-dataflow-kit
         cl-date-kit
         cl-parser-kit
         cl-tty-kit
@@ -442,10 +442,10 @@
         # /dev/ptmx is unavailable, so a sandboxed run stays meaningful.
         default = mkTestCheck system "cl-tmux-tests" "cl-tmux/test";
 
-        # The cl-prolog-backed reasoning read-model (src/reasoning/).
+        # The cl-prolog-kit-backed reasoning read-model (src/reasoning/).
         weave = mkTestCheck system "cl-tmux-weave-tests" "cl-tmux/weave";
 
-        # The cl-dataflow-backed copy-mode lifecycle read-model (src/dataflow/).
+        # The cl-dataflow-kit-backed copy-mode lifecycle read-model (src/dataflow/).
         dataflow = mkTestCheck system "cl-tmux-dataflow-tests" "cl-tmux/dataflow";
 
         # Fails `nix flake check` when any tracked file is unformatted,

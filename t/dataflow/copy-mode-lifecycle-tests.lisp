@@ -1,4 +1,4 @@
-;;;; cl-weave specs for the cl-dataflow copy-mode lifecycle read-model.
+;;;; cl-weave specs for the cl-dataflow-kit copy-mode lifecycle read-model.
 
 (in-package #:cl-tmux/dataflow-tests)
 
@@ -6,7 +6,7 @@
 
   (describe "structure"
     (it "starts in the normal state"
-      (expect (cl-dataflow:state-machine-state (copy-mode-lifecycle-machine))
+      (expect (cl-dataflow-kit:state-machine-state (copy-mode-lifecycle-machine))
               :to-equal "normal"))
 
     (it "has exactly the three documented states"
@@ -28,34 +28,34 @@
 
   (describe "transitions"
     (it "enter moves normal -> copy-mode"
-      (expect (cl-dataflow:state-machine-state
-               (cl-dataflow:run-state-machine (copy-mode-lifecycle-machine) '("enter")))
+      (expect (cl-dataflow-kit:state-machine-state
+               (cl-dataflow-kit:run-state-machine (copy-mode-lifecycle-machine) '("enter")))
               :to-equal "copy-mode"))
 
     (it "begin-selection moves copy-mode -> selecting"
-      (expect (cl-dataflow:state-machine-state
-               (cl-dataflow:run-state-machine (copy-mode-lifecycle-machine)
+      (expect (cl-dataflow-kit:state-machine-state
+               (cl-dataflow-kit:run-state-machine (copy-mode-lifecycle-machine)
                                               '("enter" "begin-selection")))
               :to-equal "selecting"))
 
     (it "cancel-selection returns selecting -> copy-mode, not all the way to normal"
-      (expect (cl-dataflow:state-machine-state
-               (cl-dataflow:run-state-machine (copy-mode-lifecycle-machine)
+      (expect (cl-dataflow-kit:state-machine-state
+               (cl-dataflow-kit:run-state-machine (copy-mode-lifecycle-machine)
                                               '("enter" "begin-selection" "cancel-selection")))
               :to-equal "copy-mode"))
 
     (it "yank returns selecting -> normal in one step (cancel + exit, per the Prolog rule)"
-      (expect (cl-dataflow:state-machine-state
-               (cl-dataflow:run-state-machine (copy-mode-lifecycle-machine)
+      (expect (cl-dataflow-kit:state-machine-state
+               (cl-dataflow-kit:run-state-machine (copy-mode-lifecycle-machine)
                                               '("enter" "begin-selection" "yank")))
               :to-equal "normal"))
 
     (it "exit returns to normal from either copy-mode or selecting"
-      (expect (cl-dataflow:state-machine-state
-               (cl-dataflow:run-state-machine (copy-mode-lifecycle-machine) '("enter" "exit")))
+      (expect (cl-dataflow-kit:state-machine-state
+               (cl-dataflow-kit:run-state-machine (copy-mode-lifecycle-machine) '("enter" "exit")))
               :to-equal "normal")
-      (expect (cl-dataflow:state-machine-state
-               (cl-dataflow:run-state-machine (copy-mode-lifecycle-machine)
+      (expect (cl-dataflow-kit:state-machine-state
+               (cl-dataflow-kit:run-state-machine (copy-mode-lifecycle-machine)
                                               '("enter" "begin-selection" "exit")))
               :to-equal "normal")))
 

@@ -35,7 +35,7 @@ Usage: (expect (list rulebase table key) :to-be-unbound)."
 
 Usage: (expect rulebase :to-prove '(binding \"prefix\" #\\c :new-window))."
   (destructuring-bind (goal) expected
-    (values (cl-prolog:prolog-succeeds-p actual goal)
+    (values (cl-prolog-kit:prolog-succeeds-p actual goal)
             (list :rulebase :opaque)
             (list :goal goal))))
 

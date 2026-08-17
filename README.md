@@ -79,7 +79,7 @@ set `CL_TMUX_TEST_SYSTEM` to pick one of `cl-tmux/test` (default),
 cl-tmux is the org's L4 application package and its testbed: it runs on twelve
 sibling libraries — [cl-cli](https://github.com/nerima-lisp/cl-cli),
 [cl-boundary-kit](https://github.com/nerima-lisp/cl-boundary-kit),
-[cl-dataflow](https://github.com/nerima-lisp/cl-dataflow),
+[cl-dataflow-kit](https://github.com/nerima-lisp/cl-dataflow-kit),
 [cl-parser-kit](https://github.com/nerima-lisp/cl-parser-kit),
 [cl-tty-kit](https://github.com/nerima-lisp/cl-tty-kit),
 [cl-process-kit](https://github.com/nerima-lisp/cl-process-kit),
@@ -88,7 +88,7 @@ sibling libraries — [cl-cli](https://github.com/nerima-lisp/cl-cli),
 [cl-regex-kit](https://github.com/nerima-lisp/cl-regex-kit),
 [cl-codec-kit](https://github.com/nerima-lisp/cl-codec-kit),
 [cl-host-kit](https://github.com/nerima-lisp/cl-host-kit) — plus
-[cl-prolog](https://github.com/nerima-lisp/cl-prolog) for cold-path reasoning
+[cl-prolog-kit](https://github.com/nerima-lisp/cl-prolog-kit) for cold-path reasoning
 read-models. It has **no external dependencies**: it was the last repository in
 the org with any, and the final two (`bordeaux-threads`, `cl-ppcre`) were
 replaced by siblings on 2026-08-02. See

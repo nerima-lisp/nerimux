@@ -72,8 +72,8 @@ cl-tmux/
 │   │   └── dispatch/       #   command table, handlers, control mode
 │   ├── infrastructure/     # adapters: PTY, sockets, input, control mode
 │   ├── presentation/       # renderer, events, prompt
-│   ├── reasoning/          # cl-prolog cold-path read-models (keys, commands)
-│   └── dataflow/           # cl-dataflow cold-path read-model (copy-mode lifecycle)
+│   ├── reasoning/          # cl-prolog-kit cold-path read-models (keys, commands)
+│   └── dataflow/           # cl-dataflow-kit cold-path read-model (copy-mode lifecycle)
 └── t/
     ├── unit/               # 250+ feature-focused spec files
     ├── integration/        # PTY/socket/runtime integration specs

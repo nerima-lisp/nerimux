@@ -84,8 +84,21 @@
                ;; *default-shell*, which init-default-shell fills from $SHELL and
                ;; the `set-shell` directive accepts unvalidated.  Same reasoning
                ;; as format-context-os-probe.lisp:38-40.
+               ;;
+               ;; :environment is likewise required, not optional.  process-kit:spawn
+               ;; forwards ENVIRONMENT straight to SB-EXT:RUN-PROGRAM's :environment,
+               ;; and SBCL treats an *explicit* NIL there as "run with an empty
+               ;; environment", not "inherit" -- inheritance only happens when the
+               ;; keyword is left out entirely.  spawn's own &key list always supplies
+               ;; the keyword (defaulting to NIL), so every other call site in this
+               ;; repo (pty.lisp, pane-spawn.lisp, pty-port.lisp) threads an explicit
+               ;; environment through for exactly this reason.  Without it here, COMMAND
+               ;; runs under SHELL with $PATH unset, so a bare command name (`cat`,
+               ;; anything not given as an absolute path) fails to resolve inside the
+               ;; child shell -- silently, since :error is nil below.
                (process-kit:spawn shell (list "-c" command)
                                   :search t
+                                  :environment (sb-ext:posix-environ)
                                   :input (if pane-output-to-command-p :stream nil)
                                   :output (if command-output-to-pane-p :stream nil)
                                   :error nil))
