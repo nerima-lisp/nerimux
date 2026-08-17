@@ -1,17 +1,29 @@
 # cl-tmux
 
-A tmux-compatible terminal multiplexer written entirely in Common Lisp.
+A workspace-oriented terminal multiplexer written entirely in Common Lisp.
 
-cl-tmux reimplements tmux's behavior — commands, options, format strings, copy
-mode, hooks, mouse, client/server — on top of SBCL, with no custom C code.
-Every verified behavior is pinned by a regression suite of 11,000+ checks that
-runs hermetically through Nix.
+The primary UI navigates an organization → repository → worktree → pane
+workspace. A thin client attaches to a headless runtime, while the existing
+tmux-compatible command and server surface remains available during migration.
+Every verified behavior is pinned by a regression suite that runs hermetically
+through Nix.
 
 Start at [Getting started](getting-started.md), or read the
 [compatibility statement](reference/compatibility.md) for the precise account
 of what is implemented and what is deliberately different.
 
-## Feature highlights
+## Workspace UI
+
+- **Overview** — navigate the organization → repository → worktree tree and
+  inspect pane state in the selected worktree.
+- **Detail and attention views** — focus a worktree or collect unread, bell,
+  exit, dirty, and conflict signals that need attention.
+- **Global picker** — press `C-p` to search organizations, repositories,
+  worktrees, panes, metadata, and attention items.
+- **Thin-client sessions** — `C-q d` detaches one client while the runtime and
+  pane processes remain resident for later attach.
+
+## Compatibility and feature highlights
 
 - **Commands** — every primary command name in tmux's command table resolves
   (~100 commands: `split-window`, `send-keys`, `capture-pane`, `display-menu`,

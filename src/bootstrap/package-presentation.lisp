@@ -56,6 +56,12 @@
   (:export
    #:render-session
    #:render-session-to-string
+   #:render-session-to-tui-string
+   #:render-workspace-overview-to-string
+   #:render-workspace-overview-to-tui-string
+   #:render-workspace-attention-to-string
+   #:render-workspace-attention-to-tui-string
+   #:benchmark-workspace-overview
    #:clear-display
    #:enable-mouse-reporting
    #:disable-mouse-reporting

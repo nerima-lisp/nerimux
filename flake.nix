@@ -148,6 +148,20 @@
       url = "github:nerima-lisp/cl-host-kit/v0.2.5";
       flake = false;
     };
+    cl-tui-kit = {
+      # The headless surface/layout/backend boundary used by cl-tmux's
+      # per-client renderer. Pin the API that exposes make-surface and the
+      # ANSI backend used by the deterministic frame adapter.
+      url = "github:nerima-lisp/cl-tui-kit/v4.1.3";
+      flake = false;
+    };
+    cl-vcs-kit = {
+      # ghq/repository/worktree discovery for the global picker. The adapter
+      # keeps discovery off the UI thread while this source provides the
+      # stable VCS observation API.
+      url = "github:nerima-lisp/cl-vcs-kit/v0.2.0";
+      flake = false;
+    };
 
     treefmt-nix = {
       url = "github:numtide/treefmt-nix";
@@ -174,6 +188,8 @@
       cl-regex-kit,
       cl-codec-kit,
       cl-host-kit,
+      cl-tui-kit,
+      cl-vcs-kit,
       treefmt-nix,
       ...
     }:
@@ -237,6 +253,8 @@
         cl-regex-kit
         cl-codec-kit
         cl-host-kit
+        cl-tui-kit
+        cl-vcs-kit
       ];
 
       # Colon-separated source roots, read by run-tests.lisp. Keeping the list

@@ -4,12 +4,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Documentation](https://img.shields.io/badge/docs-MkDocs%20Material-0a7a5a)](https://nerima-lisp.github.io/cl-tmux/)
 
-A tmux-compatible terminal multiplexer written entirely in Common Lisp.
-cl-tmux reimplements tmux's behavior — commands, options, format strings, copy
-mode, hooks, mouse, client/server — on top of SBCL, with no custom C code. It
-targets people who want tmux's semantics in a program they can read, extend and
-introspect from a REPL; every verified behavior is pinned by a regression suite
-of 11,000+ checks that runs hermetically through Nix.
+A workspace-oriented terminal multiplexer written entirely in Common Lisp.
+The primary UI navigates an organization → repository → worktree → pane
+workspace, with a thin client attached to a headless runtime. The tmux-compatible
+server and command surface remain available during the migration, and every
+verified behavior is pinned by a regression suite that runs hermetically through
+Nix.
 
 Full documentation is published at <https://nerima-lisp.github.io/cl-tmux/>.
 The source for that site lives in [docs/src/](docs/src/).
@@ -17,14 +17,20 @@ The source for that site lives in [docs/src/](docs/src/).
 ## Quick Start
 
 ```bash
-nix run github:nerima-lisp/cl-tmux    # run directly
+nix run github:nerima-lisp/cl-tmux -- attach
 
-cl-tmux new-session -s work           # create a session on the server
-cl-tmux attach -t work                # attach; C-b d detaches
-cl-tmux list-sessions                 # what's running
+cl-tmux attach                         # open the workspace overview
+cl-tmux attach organization/repository # focus a repository/worktree
+cl-tmux attach /path/to/worktree       # open a local worktree
 ```
 
-The prefix is `C-b` and the defaults follow tmux. cl-tmux reads a real
+`attach` auto-starts the headless runtime and connects a thin client. Use
+`C-q d` to detach and `C-p` to open the global picker. A selector containing a
+slash is resolved as an organization/repository selector or a local worktree
+path. Running `cl-tmux` with no command remains the standalone compatibility
+entry point.
+
+The compatibility command surface follows tmux where it is implemented. cl-tmux reads a real
 `.tmux.conf` — including `%if`, `%hidden`, variable assignments, brace blocks
 and `source-file` — from `$CL_TMUX_CONF`, then
 `~/.config/cl-tmux/cl-tmux.conf`, then your existing tmux config.

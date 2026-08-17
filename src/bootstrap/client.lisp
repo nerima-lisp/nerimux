@@ -75,11 +75,24 @@
   (when (member server-socket-fd ready)
     (%receive-server-frame stream)))
 
-(defun run-client (name &key detach-others)
+(defun %client-working-directory ()
+  (or (ignore-errors (namestring (truename *default-pathname-defaults*)))
+      (ignore-errors (namestring *default-pathname-defaults*))
+      ""))
+
+(defun %send-client-attach-target (stream target)
+  (send-frame stream
+              (msg-command :attach-target nil
+                           (list (or target "")
+                                 (%client-working-directory)))))
+
+(defun run-client (name &key detach-others target)
   "Attach to the server at (socket-path NAME): forward stdin + resizes, render
    the frames the server returns, and exit on detach / server close.
    When DETACH-OTHERS is T, send a detach-others command before attaching so
-   the server disconnects any currently attached clients."
+   the server disconnects any currently attached clients.  TARGET is an
+   optional explicit organization/repository/worktree selector; the current
+   working directory is sent for cwd-based attach selection."
   (require :sb-posix)
   (let ((socket (connect-to (socket-path name))))
     (unwind-protect
@@ -97,6 +110,7 @@
              ;; in this client process) to the server in the attach frame's flags
              ;; byte, so the server enforces it per-connection.
              (send-frame stream (msg-attach *term-rows* *term-cols* *client-read-only*))
+             (%send-client-attach-target stream target)
              (loop
                (%maybe-send-resize stream)
                (let ((ready (select-fds (list 0 server-socket-fd) +poll-timeout-us+)))

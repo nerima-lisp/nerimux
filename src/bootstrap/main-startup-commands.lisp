@@ -5,10 +5,12 @@
 
 (in-package :cl-tmux)
 
-(defun %attach-session (name detach-others-p)
+(defun %attach-session (name detach-others-p &key target)
   "Ensure NAME's server is running, then attach the client."
   (%ensure-server-running name)
-  (run-client name :detach-others detach-others-p))
+  (if target
+      (run-client name :detach-others detach-others-p :target target)
+      (run-client name :detach-others detach-others-p)))
 
 (defun %attach-unless-detached (name detach)
   "Attach to NAME when DETACH is not requested."
@@ -25,10 +27,19 @@
   (%forward-startup-command server-name "new-session" raw-args)
   (%attach-unless-detached server-name detach))
 
+(defun %workspace-attach-target-p (name)
+  (and (stringp name)
+       (plusp (length name))
+       (or (char= (char name 0) #\/) (find #\/ name))))
+
 (defun run-attach-simple (name)
   "Auto-start a server for NAME if not running, then attach as a client.
-   This is the handler for the bare 'attach' mode (no flag parsing)."
-  (%attach-session name nil))
+   This is the handler for the bare 'attach' mode (no flag parsing).  A path or
+   slash-qualified selector attaches to the default workspace server and is
+   resolved by the server against the current catalog."
+  (if (%workspace-attach-target-p name)
+      (%attach-session "0" nil :target name)
+      (%attach-session name nil)))
 
 (defun run-attach-with-flags (raw-args)
   "Parse attach flags from RAW-ARGS and attach to the named session.
@@ -131,11 +142,12 @@
   "One-page usage summary for -h/--help and bad-flag errors."
   (format nil "usage: cl-tmux [-L socket-name] [-S socket-path] [command [flags]]~%~
                ~%~
-               Run with no command to start a standalone session.~%~
+               Run `attach` to open the workspace UI; no command starts the
+               standalone compatibility session.~%~
                ~%~
                Commands:~%~
                ~2Tserver [name]~24Trun a headless server owning session NAME~%~
-               ~2Tattach [name]~24Tattach to session NAME (auto-starts a server)~%~
+               ~2Tattach [selector]~24Tattach to the workspace UI (auto-starts a server)~%~
                ~2Tattach-session -t name~30T-d detach others, -r read-only~%~
                ~2Tnew-session [-s name] [-n window] [-d] [-c dir]~%~
                ~2Thas-session -t name~24Texit 0 when the session exists~%~

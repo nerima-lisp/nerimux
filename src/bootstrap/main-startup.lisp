@@ -63,7 +63,7 @@
    Each entry in *startup-modes* is a plist (handler-symbol &key :raw-args-p).
    :raw-args-p T modes receive the full argv tail; all others receive a single
    session name (defaulting to \"0\").
-   Unrecognized or absent modes fall through to run-standalone.
+   Unrecognized or absent modes preserve the standalone compatibility path.
    Any ERROR signaled by mode dispatch (e.g. an unsupported per-mode flag like
    new-session's %parse-new-session-flags rejecting an unknown argument) is
    caught here and reported the same way %parse-global-cli-argv already
@@ -90,7 +90,7 @@
    instead of silently starting a standalone session on a typo.
    When MODE names a command and a default-session server is already running
    (its socket exists), forward MODE + REST to it as a command client; otherwise
-   run the standalone multiplexer.
+   run the standalone compatibility multiplexer.
    Guarding on an existing socket keeps cl-tmux (no args) and the no-server
    case unchanged; only an explicit subcommand against a live server forwards."
   (labels ((dash-flag-p (name)

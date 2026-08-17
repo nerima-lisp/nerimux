@@ -20,6 +20,15 @@
   "The socket path this server actually bound (#{socket_path}); NIL in
    standalone mode where no socket exists.")
 
+(defvar *runtime-server-name* "default"
+  "Name used to select the server's persistent runtime snapshot.")
+
+(defvar *runtime-state-restore-function* nil
+  "Function called with the initial session before reader threads start.")
+
+(defvar *runtime-state-save-function* nil
+  "Function called with the session while the server is shutting down.")
+
 (defvar *client-flags* nil
   "The single client's flag list (refresh-client -f, #{client_flags}):
    a list of flag-name strings, e.g. (\"no-output\" \"read-only\").")
@@ -207,11 +216,14 @@
         *resize-pending*   nil
         *server-sessions*  nil
         *session-groups*   nil
-        *group-id-counter* 0)
+        *group-id-counter* 0
+        *runtime-server-name* name)
   (let* ((session (create-initial-session *term-rows* *term-cols*))
          (path    (socket-path name)))
-    (server-add-session session)
     (setf *bound-socket-path* path)
+    (server-add-session session)
+    (when *runtime-state-restore-function*
+      (funcall *runtime-state-restore-function* session))
     (ignore-errors (delete-file path))
     (let ((listener (make-listener path)))
       (dolist (pane (all-panes session))

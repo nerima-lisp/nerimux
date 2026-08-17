@@ -40,6 +40,9 @@
           (when (pane-pipe-fd pane)
             (pipe-pane-write pane bytes))
           (pane-feed pane bytes)
+          (cl-tmux/model:pane-mark-output pane bytes)
+          (when (find 7 bytes)
+            (cl-tmux/model:pane-mark-bell pane))
           (cl-tmux/hooks:run-hooks cl-tmux/hooks:+hook-pane-output+ pane bytes)
           (%update-window-on-pane-output (cl-tmux/model:pane-window pane) pane)
           (%mark-dirty)
@@ -84,7 +87,11 @@
       (when code
         (ecase kind
           (:exited   (setf (cl-tmux/model:pane-dead-status pane) code))
-          (:signaled (setf (cl-tmux/model:pane-dead-signal pane) code)))))
+          (:signaled (setf (cl-tmux/model:pane-dead-signal pane) code))))
+      (cl-tmux/model:pane-mark-process-exit
+       pane
+       :status (and (eq kind :exited) code)
+       :signal (and (eq kind :signaled) code)))
     (setf (cl-tmux/model:pane-dead-time pane) (get-universal-time))
     (close-pane-pty pane)
     (setf (pane-fd pane) -1

@@ -25,12 +25,15 @@
       (screen-cell screen col live-row)
       *display-blank-cell*))
 
-(defun screen-display-cell (screen col row)
+(defun screen-display-cell (screen col row &optional viewport)
   "Cell shown at viewport position (COL, ROW) for the current scroll state.
    With copy-offset 0 this is the live grid cell.  When scrolled back by N
    lines the top N rows come from the scrollback buffer and the live grid
-   is shifted down by N rows.  Out-of-range reads return *display-blank-cell*."
-  (let ((offset (if (screen-copy-mode-p screen) (screen-copy-offset screen) 0)))
+   is shifted down by N rows.  VIEWPORT adds a client-local scroll offset
+   without mutating the shared screen's copy-mode state.  Out-of-range reads
+   return *display-blank-cell*."
+  (let ((offset (+ (if (screen-copy-mode-p screen) (screen-copy-offset screen) 0)
+                  (max 0 (or viewport 0)))))
     (if (< row offset)
         (%scrollback-cell screen col (- offset row))
         (%live-grid-cell  screen col (- row offset)))))

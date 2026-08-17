@@ -19,7 +19,7 @@
     (t (or (cl-tmux/options:get-option "base-index") 0))))
 
 (defun %cmd-new-window (session &key name start-dir detach at-index after-current
-                                     before-current)
+                                     before-current (start-reader-p t))
   "Create a new window in SESSION and start a reader thread for it.
    NAME: window name (defaults to shell basename).
    START-DIR: start directory for the new pane's shell.
@@ -27,6 +27,7 @@
    AT-INDEX: when an integer, try to assign that specific window id.
    AFTER-CURRENT: when T, insert after the current window's id.
    BEFORE-CURRENT: when T, insert at (before) the current window's id.
+   START-READER-P: when NIL, leave reader startup to the caller.
    Returns the new window."
   (let* ((rows     (- *term-rows* *status-height*))
          (cols     *term-cols*)
@@ -37,7 +38,8 @@
                                                :after-current  after-current
                                                :before-current before-current))
          (win      (session-new-window session win-name rows cols base start-dir)))
-    (start-reader-thread (window-active-pane win))
+    (when start-reader-p
+      (start-reader-thread (window-active-pane win)))
     (cl-tmux/hooks:run-hooks cl-tmux/hooks:+hook-after-new-window+ win)
     (when (and detach prev-win)
       (session-select-window session prev-win))

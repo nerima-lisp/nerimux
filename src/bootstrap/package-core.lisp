@@ -101,6 +101,71 @@
    ;; Port adapter (installs cl-tmux/ports vars at server startup)
    #:install-pty-port))
 
+(defpackage #:cl-tmux/vcs
+  (:use #:cl)
+  (:documentation
+   "INFRASTRUCTURE layer: the optional cl-vcs-kit adapter.  Translates ghq and
+    worktree observations into the pure repository hierarchy and installs the
+    corresponding domain ports.  The package is resolved at runtime so the core
+    system remains loadable when the optional sibling is not pinned.")
+  (:export
+   #:vcs-package-available-p
+   #:install-vcs-port
+   #:scan-repositories
+   #:list-repository-worktrees
+   #:worktree-status
+   #:refresh-repository-status
+   #:scan-repositories-async
+   #:refresh-repositories-async
+   #:refresh-workspace-status-async
+   #:workspace-organizations
+   #:set-workspace-organizations
+   #:refresh-workspace-organizations
+   #:refresh-workspace-organizations-async
+   #:create-worktree
+   #:delete-worktree
+   #:create-worktree-async
+   #:delete-worktree-async))
+
+(defpackage #:cl-tmux/persistence
+  (:use #:cl)
+  (:documentation
+   "DOMAIN layer: versioned, data-only runtime snapshots.  Serialization is
+    deliberately reader-safe so restoring sessions, clients, worktrees, tags,
+    and notes never evaluates persisted input.")
+  (:export
+   #:+runtime-snapshot-version+
+   #:runtime-snapshot #:runtime-snapshot-p
+   #:make-runtime-snapshot
+   #:runtime-snapshot-version
+   #:runtime-snapshot-sessions
+   #:runtime-snapshot-clients
+   #:runtime-snapshot-worktrees
+   #:runtime-snapshot-tags
+   #:runtime-snapshot-notes
+   #:runtime-snapshot->plist
+   #:serialize-runtime-snapshot
+   #:deserialize-runtime-snapshot
+   #:save-runtime-snapshot
+   #:load-runtime-snapshot))
+
+(defpackage #:cl-tmux/picker
+  (:use #:cl)
+  (:documentation
+   "APPLICATION layer: a pure global picker projection over organizations,
+    repositories, and worktrees.  It owns filtering and selection only; UI and
+    command transports remain outside this package.")
+  (:export
+   #:picker-item #:picker-item-p
+   #:picker-item-id #:picker-item-kind #:picker-item-label
+   #:picker-item-organization #:picker-item-repository #:picker-item-worktree
+   #:picker-item-pane
+   #:picker-item-attention-p
+   #:build-global-picker-items
+   #:filter-global-picker-items
+   #:select-global-picker-item
+   #:benchmark-global-picker))
+
 ;;; ── Client/server wire protocol ──────────────────────────────────────────
 
 (defpackage #:cl-tmux/protocol

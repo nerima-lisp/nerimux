@@ -122,5 +122,10 @@
             ;; #{pane_dead_status} and friends read empty.
             (pane-dead-status pane) nil
             (pane-dead-signal pane) nil
-            (pane-dead-time pane) nil))
+            (pane-dead-time pane) nil
+            (pane-unread-output-p pane) nil
+            (pane-bell-p pane) nil
+            (pane-process-exited-p pane) nil
+            (pane-non-zero-exit-p pane) nil
+            (pane-startup-failed-p pane) nil))
     pane))

@@ -191,5 +191,7 @@
    #:*clock-mode-pane-id*
    #:stop-reader-threads
    #:start-status-timer
+   #:*runtime-restore-report*
+   #:*runtime-save-report*
    #:+max-message-log-entries+
    #:+max-prompt-history+))

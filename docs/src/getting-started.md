@@ -6,52 +6,52 @@ Nix is the only supported build path: it pins SBCL and every Lisp dependency,
 so a build either reproduces exactly or fails loudly.
 
 ```bash
-nix run github:nerima-lisp/cl-tmux    # run directly
+nix run github:nerima-lisp/cl-tmux -- attach
 ```
 
 From a checkout:
 
 ```bash
 nix build .                           # → ./result/bin/cl-tmux
-./result/bin/cl-tmux
+./result/bin/cl-tmux attach
 ```
 
 ## Usage
 
 ```bash
-cl-tmux                          # standalone session (no server)
-cl-tmux new-session -s work      # create session "work" on the server
-cl-tmux attach -t work           # attach; C-b d detaches, server keeps running
-cl-tmux attach -t work -r        # read-only attach
-cl-tmux list-sessions            # what's running
-cl-tmux kill-server              # stop everything
-cl-tmux -C                       # control mode (text protocol on stdin/stdout)
-cl-tmux -V                       # print version; --help prints a usage summary
+cl-tmux attach                         # open the workspace overview
+cl-tmux attach organization/repository # focus a repository/worktree
+cl-tmux attach /path/to/worktree       # open a local worktree
 ```
 
-Socket selection works like tmux: `-L <name>` picks a named socket in the
+`attach` auto-starts the headless runtime and connects a thin client. A selector
+containing a slash is resolved as an organization/repository selector or a
+local worktree path. Running `cl-tmux` with no command remains the standalone
+compatibility entry point. Socket selection works like tmux: `-L <name>` picks a named socket in the
 per-user directory (created `0700` under `$TMUX_TMPDIR`, falling back to the
 system temp dir), and `-S <path>` uses an explicit path.
 
 ## Default key bindings
 
-The prefix is **`C-b`**. Common defaults (see `C-b ?` / `list-keys` for the
-full table, including `-N` notes):
+The workspace UI uses **`C-q`** as its prefix. The initial view is the overview;
+`C-p` opens the global picker across organizations, repositories, worktrees, and
+panes.
 
 | Key | Action |
 |---|---|
-| `c` / `n` / `p` / digits | New / next / previous / select window |
-| `"` / `%` | Split pane horizontally / vertically |
-| `o`, arrow keys | Move between panes |
-| `C-arrows` / `M-arrows` | Resize pane by 1 / 5 (repeatable) |
-| `[` / `]` | Enter copy mode / paste buffer |
-| `x` / `&` | Kill pane / window (with confirmation) |
-| `,` / `$` | Rename window / session |
-| `d` | Detach |
+| `C-q d` | Detach while keeping the runtime session resident |
+| `C-p` | Open the global picker |
+| `o` / `d` / `a` | Overview / detail / attention view |
+| `j` / `k` / arrows | Move the selection |
+| `Enter` | Focus the selected worktree, pane, or attention item |
+| `r` | Refresh the workspace catalog and VCS state |
+| `i` / `c` / `:` | Input / copy / command mode |
+| `Esc` | Close or cancel the active modal or mode |
 
-All bindings are re-bindable with `bind-key` / `unbind-key`, in the config file
-or at the command prompt, including custom key tables. See
-[Configuration](guide/configuration.md).
+The compatibility server/client commands and tmux-style bindings remain
+available for existing workflows. See [Compatibility](reference/compatibility.md)
+for that command surface and [Configuration](guide/configuration.md) for
+configuration details.
 
 ## Development
 

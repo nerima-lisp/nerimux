@@ -109,7 +109,27 @@
           (:file "session-state-structural")
           (:file "session-lifecycle-tests")
           (:file "session-window-tests") ; start-directory, all-panes ordering, window flags
-          (:file "session-environment-tests"))) ; environment overlay, process helpers, child env merge
+          (:file "session-environment-tests") ; environment overlay, process helpers, child env merge
+          (:file "organization-tests")
+          (:file "repository-tests")
+          (:file "worktree-tests")
+          (:file "attention-tests")))
+        (:module "domain/ports"
+         :serial t
+         :components
+         ((:file "vcs-port-tests")))
+        (:module "infrastructure/vcs"
+         :serial t
+         :components
+         ((:file "vcs-tests")))
+        (:module "domain/persistence"
+         :serial t
+         :components
+         ((:file "runtime-state-tests")))
+        (:module "application/picker"
+         :serial t
+         :components
+         ((:file "global-picker-tests")))
         (:module "domain/format"
          :serial t
          :components
@@ -189,7 +209,8 @@
          (:file "renderer-pane-selection-tests") ; direct unit tests for %compute-selection-bounds
          (:file "renderer-compose-effects-tests") ; direct unit tests for %render-passthrough/%render-clipboard drain gating
          (:file "renderer-overlay-layer-tests") ; direct unit tests for %render-overlay-layer's popup>menu>overlay>cursor priority dispatch
-         (:file "renderer-pane-search-tests"))) ; direct unit tests for %render-copy-search-matches's current-vs-plain match style branch
+         (:file "renderer-pane-search-tests") ; direct unit tests for %render-copy-search-matches's current-vs-plain match style branch
+         (:file "renderer-tui-kit-tests"))) ; headless cl-tui-kit surface/backend adapter
         (:module "application/dispatch"
          :serial t
          :components
@@ -329,7 +350,8 @@
           (:file "server-session-listing-tests") ; list-sessions, rename-session, switch-client, session groups
           (:file "server-session-message-tests") ; session groups, dispatch, attach/resize edge cases
           (:file "server-socket-path-tests") ; socket paths and stale sockets
-          (:file "server-client-cps-tests"))) ; client key CPS, runtime registry, resize edge cases
+          (:file "server-client-cps-tests") ; client key CPS, runtime registry, resize edge cases
+          (:file "runtime-lifecycle-tests")))
         (:module "infrastructure/pty"
          :serial t
          :components
