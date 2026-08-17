@@ -111,3 +111,58 @@ round-trip、connection slot への read-only state、read-only client の pane 
 - 現在実行中の worktree は、実行中セッションを壊さないため削除対象にしない。
 - PTY 5件の失敗が残っているため、テスト全体を green と報告してはならない。PTY
   実装または実行環境の切り分けは別作業として残る。
+
+## 2026-08-18 追加反映
+
+このセクションは、上記記録の続きとして、同じ依頼（unstage/branch/worktree を作業
+単位で main に反映し、完了分は削除し、docs を更新する）を再度受けて行った作業を
+記録する。
+
+### 統合した作業単位
+
+| 作業単位 | 内容 | 反映方法 |
+| --- | --- | --- |
+| ローカル main の origin 未反映分 | workspace runtime/picker、flake lock、依存 lock、このファイルを含む4 commit（8351773, d22d722, 99134ba, 02d8c09）が origin/main に一度も push されていなかった | `sync/local-main-to-origin` branch から PR #3 を作成し、GitHub 上で `origin/main`（`feat/rename-cl-prolog-dataflow-kit` の PR #2 merge 済み、172a36a）へ merge。commit `c095961`。ローカル main は `git merge --ff-only origin/main` で追従させ、main 自体への直接 commit は作らなかった。|
+| `feat/rename-cl-prolog-dataflow-kit` | cl-prolog → cl-prolog-kit, cl-dataflow → cl-dataflow-kit の rename | 既に GitHub PR #2 で `origin/main` に merge 済みだった。上記 PR #3 で ローカル main に反映。worktree と branch を削除。|
+
+### 保留にした作業単位
+
+| 作業単位 | 内容 | 保留理由 |
+| --- | --- | --- |
+| `workspace-overview` branch (97ebf05) | organization/repository/worktree/pane の全画面 overview + worktree 操作 (attach/lock/unlock/delete/prune) | main の `render-session-to-string` は既に client 単位の `:overview`/`:detail`/`:attention` view（`client-conn-view`、cl-tui-kit ベースの `renderer-tui-kit.lisp` 経由）を実装済みで、`workspace-overview` は同じ関数名を session 単位の `workspace-mode-p` 分岐で上書きしようとする、独立して書かれた別アーキテクチャだった。ドメインモデルも `cl-tmux/model`（main）と `cl-tmux/workspace`（このbranch）で重複している。機械的な merge では両者の分岐ロジックが同じ入口を奪い合い、正しく動作しないコードになるため、今回は統合を見送った。branch と worktree (`20260817T154253-d1ea1c1`) は削除せず保持している。次に着手する際は、まず `client-conn-view` 方式と `workspace-mode-p` 方式のどちらを正とするかを決め、選ばれなかった側の呼び出しグラフ（renderer、dispatch、ドメインモデル）を書き換える前提で見積もること。|
+
+### 削除した worktree / branch
+
+| 対象 | 種別 | 削除理由 |
+| --- | --- | --- |
+| `.worktrees/20260817T134857-d1ea1c1` | worktree (detached, d1ea1c1) | 変更なし、main の祖先 commit と同一。 |
+| `.worktrees/20260817T145609-d1ea1c1` | worktree (detached, d1ea1c1) | commit 差分なし。未追跡の EXECUTION.md 草稿（workspace UI/UX 仕様）のみ保持していたため、`docs/notes/workspace-ui-ux-design.md` として保存した上で削除。 |
+| `.worktrees/20260817T164626-d1ea1c1` + `feat/rename-cl-prolog-dataflow-kit` | worktree + branch | 内容は origin/main と今回のローカル main 両方から到達可能になったため。 |
+| `.worktrees/20260818T-integration` + `integration/current-work-units` | worktree (conflict 未解決) + branch | rename 作業とローカル main を統合済みの上で `workspace-overview` を merge しようとして 5 ファイルが conflict したまま放置されていた。`workspace-overview` の統合自体を保留したため、この試みは前提から不要になった。 |
+| `.worktrees/20260818T054124-172a36a` | worktree (detached, 172a36a) | 既に origin/main に含まれる merge commit を見ているだけで、固有の変更なし。 |
+| `.worktrees/20260818T055112-02d8c09` + `sync/local-main-to-origin` | worktree + branch | PR #3 が merge 済みで、内容が main から到達可能になったため。remote branch は GitHub 側の自動削除設定で既に削除されていた。 |
+
+保持: `workspace-overview` branch とその worktree (`.worktrees/20260817T154253-d1ea1c1`)。理由は上記「保留にした作業単位」を参照。
+
+### 検証
+
+PR #3 のブランチ tip に対して、ローカル (aarch64/x86_64 の macOS 開発機) と CI
+(GitHub Actions, `x86_64-linux`) の両方で `nix run .#test` 相当を実行した。
+
+- ローカル: exit status 0、4487 total、4486 passed、1 skipped、0 todo、
+  0 failed、0 errored。前回記録した PTY 4件の失敗はこの回では再現しなかった
+  （テスト内容・実装は今回変更していないため、環境依存の非決定性と考えられる。
+  再現条件の切り分けは別作業として残る）。
+- CI: `nix flake check` が `checks.x86_64-linux.default` で fail。原因は
+  `renderer-suite/tui-kit > keeps the mandatory overview scale within the
+  initial and scroll budgets` の 1 件で、`initial-frame-ms` が 116（予算 100）
+  だった。2 回連続で同じ結果・同じ margin。このベンチマークテストは
+  `8351773`（前回セッションの実装、今回の変更内容には含まれない）に既に存在し、
+  origin へ push されたのは今回の PR #3 が初めてであり、CI で実行されたのも
+  今回が初めてだった。ローカルでは同テストを含めて 0 failed だったため、CI
+  ハードウェアの速度に対して 100ms の予算が厳しすぎる環境依存の失敗である
+  可能性が高いが、確定はしていない。予算値やテスト自体は変更していない。
+  ユーザーの判断により、この CI 失敗を記録した上で PR #3 を merge した。
+
+この CI 失敗の原因切り分けと、必要であれば予算値の見直しは、別作業として残る。
+今回の統合では、この失敗を隠すための実装変更やテストの弱体化は行っていない。
