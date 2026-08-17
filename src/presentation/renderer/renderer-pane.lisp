@@ -102,7 +102,8 @@
                          sel
                          sgr-reg
                          def-fg def-bg selection-style-fg selection-style-bg
-                         mark-style-fg mark-style-bg)
+                         mark-style-fg mark-style-bg
+                         &optional viewport)
   "Render one row of cells to STREAM, highlighting selected cells.
    SEL is the frame's SELECTION-BOUNDS, forwarded to each cell.
    SGR-REG is a sgr-register struct used as mutable state across rows (last-emitted
@@ -123,7 +124,7 @@
   (loop with rev-screen = (and (screen-reverse-screen screen)
                                cl-tmux/terminal/types:+attr-reverse+)
         for col below pane-col-count
-        for cell = (screen-display-cell screen col row)
+        for cell = (screen-display-cell screen col row viewport)
         ;; A continuation cell (width 0) is the right half of a double-width
         ;; glyph the terminal already drew — emit nothing.
         unless (zerop (cell-width cell))
@@ -209,7 +210,8 @@
                           line-number-gutter-width content-origin-x content-width
                           origin-x origin-y
                           line-number-base-style line-number-current-style line-number-mode
-                          colours)
+                          colours
+                          &optional viewport)
   "Render every row of PANE's screen content (and line-number gutter, when
    active) to STREAM under the screen lock, then clear the screen's dirty flag.
    COLOURS is the PANE-STYLE-COLOURS struct from %resolve-pane-style-colours."
@@ -241,13 +243,14 @@
                               sgr-reg
                               (pane-style-def-fg colours) (pane-style-def-bg colours)
                               (pane-style-selection-fg colours) (pane-style-selection-bg colours)
-                              (pane-style-mark-fg colours) (pane-style-mark-bg colours))))
+                              (pane-style-mark-fg colours) (pane-style-mark-bg colours)
+                              viewport)))
         ;; Close any hyperlink still open at the end of the pane (OSC 8 ; ;).
         (when (sgr-reg-hyperlink sgr-reg)
           (write-string (format nil "~C]8;;~C\\" #\Escape #\Escape) stream)))))
   (screen-clear-dirty screen))
 
-(defun render-pane (stream session pane)
+(defun render-pane (stream session pane &key (viewport 0))
   "Draw the pane's screen into the real terminal at the pane's (x, y) offset.
    When *clock-mode-pane-id* matches (pane-id pane), draw a clock overlay."
   (let* ((screen      (pane-screen  pane))
@@ -268,7 +271,8 @@
                          line-number-gutter-width content-origin-x content-width
                          origin-x origin-y
                          line-number-base-style line-number-current-style line-number-mode
-                         (%resolve-pane-style-colours pane))
+                         (%resolve-pane-style-colours pane)
+                         viewport)
       ;; Copy-mode overlay is rendered as a right-aligned slice so it does not
       ;; repaint the whole pane row.
       (%render-copy-mode-position-overlay stream session pane

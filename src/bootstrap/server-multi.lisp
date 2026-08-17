@@ -5,18 +5,15 @@
 ;;;; server.lisp (accept → serve-one-until-detach → accept-next).
 ;;;;
 ;;;; The loop owns a registry of connected clients (*clients*).  Each iteration:
-;;;;   1. broadcasts a freshly rendered frame to every client when *dirty*;
+;;;;   1. renders and sends a client-specific frame when *dirty*;
 ;;;;   2. select()s on the listener fd + every client fd together;
 ;;;;   3. accepts a new connection when the listener is readable;
 ;;;;   4. dispatches a message from each readable client (keys/resize/detach/cmd).
 ;;;;
 ;;;; The session, PTYs, and per-pane reader threads are unchanged — the reader
-;;;; threads still set *dirty* when pane output arrives, and the broadcast step
-;;;; fans that single rendered frame out to all clients.  Because every client
-;;;; receives the SAME frame, the session is rendered at the SMALLEST attached
-;;;; client's geometry (%effective-client-size) so no client is sent a frame
-;;;; larger than its terminal.  (Per-client independent sizing is a future
-;;;; refinement; this matches tmux's window-size "smallest" mode.)
+;;;; threads still set *dirty* when pane output arrives.  The shared session
+;;;; layout continues to use %effective-client-size for PTY compatibility, but
+;;;; the presentation frame is rendered independently for each client.
 ;;;;
 ;;;; Reuses the shared pieces from server.lisp / protocol / transport:
 ;;;;   process-client-keys, decode-size, decode-command-payload, render-…,
@@ -24,11 +21,14 @@
 
 ;;; ── Client connection registry ──────────────────────────────────────────────
 
+(defparameter +default-workspace-prefix-key-code+ #x11
+  "Control-Q, the workspace UI prefix used by the multi-client overview.")
+
 (defstruct (client-conn (:constructor %make-client-conn))
   "One attached client: its socket, a cached binary STREAM and FD, a private
    keystroke STATE (so each client has independent prefix/copy-mode state), the
    ROWS×COLS geometry it last reported, an optional command-stdin target pane,
-   and its private message log."
+   its private UI state, cached frame, and private message log."
   socket
   stream
   fd
@@ -39,11 +39,34 @@
   ;; processed with *client-read-only* bound so pane input/paste/mouse are dropped.
   (read-only-p nil)
   (rows 24 :type fixnum)
-  (cols 80 :type fixnum))
+  (cols 80 :type fixnum)
+  (focus nil)
+  (selected-tree-object nil)
+  (selected-worktree nil)
+  (tree-scroll 0 :type fixnum)
+  (workspace-prefix-code +default-workspace-prefix-key-code+ :type fixnum)
+  (ui-prefix-p nil :type boolean)
+  (viewport 0 :type fixnum)
+  (mode :normal)
+  (command-buffer "" :type string)
+  (command-return-view nil)
+  (view :detail)
+  (attach-target nil)
+  (attach-cwd nil)
+  (picker-items nil)
+  (picker-query "" :type string)
+  (picker-regex-p nil :type boolean)
+  (picker-index 0 :type fixnum)
+  (attention-items nil :type list)
+  (attention-index 0 :type fixnum)
+  (frame nil))
 
 (defvar *clients* nil
   "List of CLIENT-CONN structs currently attached to the multi-client server.
    Mutated only by the single server event loop, so it needs no locking.")
+
+(defvar *workspace-catalog-refresh-started-p* nil
+  "Whether the initial asynchronous ghq/worktree catalog refresh was started.")
 
 ;;; with-loop-safe-error is defined in server-multi-dispatch.lisp (which loads
 ;;; first) so it is available at compile time to every user, including here.
@@ -77,15 +100,16 @@
 (defun %effective-client-size ()
   "Return (values ROWS COLS) the session should render at, per the `window-size`
    option over the attached clients:
-     smallest — min over all clients (default; the only size every client can
-                fully display in cl-tmux's shared single-frame broadcast model);
+     smallest — min over all clients (default; the safe shared session-layout
+                size for every client);
      largest  — max over all clients;
      latest   — the most recently attached/resized client (*clients* is kept
                 most-recent-first);
      manual   — keep the current *term-rows*/*term-cols* (no auto-resize).
    Falls back to *term-rows*/*term-cols* when no clients are attached.
    NOTE: largest/latest can exceed a smaller client's terminal — they are honoured
-   for parity, but smallest stays the safe default for the shared-frame design."
+   for parity, but smallest stays the safe default for the shared session-layout
+   design."
   (if (null *clients*)
       (values *term-rows* *term-cols*)
       (let ((mode (or (cl-tmux/options:get-option "window-size") "smallest")))
@@ -116,22 +140,82 @@
    the session model and the two dynamic vars."
   (msg-frame (render-session-to-string session *term-rows* *term-cols*)))
 
+(defun %render-client-frame (session conn)
+  "Render SESSION for CONN's geometry and cache the encoded frame on CONN.
+   Session layout remains governed by the effective shared size; this boundary
+   only controls the client-facing surface dimensions."
+  (when (eq (client-conn-view conn) :attention)
+    (%refresh-client-attention conn))
+  (let ((frame
+          (msg-frame
+           (cond
+             ((and (eq (client-conn-view conn) :attention)
+                   (not (eq (client-conn-mode conn) :picker)))
+              (render-workspace-attention-to-tui-string
+               (cl-tmux/vcs:workspace-organizations)
+               (client-conn-rows conn)
+               (client-conn-cols conn)
+               :focus-pane (client-conn-focus conn)
+               :selected-object
+               (nth (client-conn-attention-index conn)
+                    (client-conn-attention-items conn))
+               :messages (client-conn-message-log conn)
+               :recovery-items *runtime-recovery-items*
+               :mode (client-conn-mode conn)
+               :prefix-code (client-conn-workspace-prefix-code conn)))
+             ((and (eq (client-conn-view conn) :overview)
+                   (not (eq (client-conn-mode conn) :picker)))
+              (render-workspace-overview-to-tui-string
+               (cl-tmux/vcs:workspace-organizations)
+               (client-conn-rows conn)
+               (client-conn-cols conn)
+               :focus-pane (client-conn-focus conn)
+               :selected-tree-object
+               (client-conn-selected-tree-object conn)
+               :selected-worktree (client-conn-selected-worktree conn)
+               :tree-scroll (client-conn-tree-scroll conn)
+               :messages (client-conn-message-log conn)
+               :mode (client-conn-mode conn)
+               :prefix-code (client-conn-workspace-prefix-code conn)))
+             (t
+              (render-session-to-tui-string
+               session
+               (client-conn-rows conn)
+               (client-conn-cols conn)
+               :focus-pane (client-conn-focus conn)
+               :viewport (client-conn-viewport conn)
+               :mode (client-conn-mode conn)
+               :command-buffer (client-conn-command-buffer conn)
+               :picker-items
+               (when (eq (client-conn-mode conn) :picker)
+                 (%client-picker-visible-items conn))
+               :picker-query (client-conn-picker-query conn)
+               :picker-index (client-conn-picker-index conn)
+               :picker-regex-p (client-conn-picker-regex-p conn)))))))
+    (setf (client-conn-frame conn) frame)
+    frame))
+
+(defun %send-client-frame (conn frame)
+  "Cache and send FRAME to one client connection."
+  (setf (client-conn-frame conn) frame)
+  (send-frame (client-conn-stream conn) frame))
+
 (defun %send-broadcast-frame (frame)
   "Effect boundary: send the pre-rendered FRAME to every attached client.
    A client whose send raises an error is silently dropped so one dead peer
    cannot wedge the broadcast loop."
   (dolist (conn (copy-list *clients*))
     (with-loop-safe-error (nil :on-error (%drop-client conn))
-      (send-frame (client-conn-stream conn) frame))))
+      (%send-client-frame conn frame))))
 
 (defun %broadcast-frame (session)
-  "When *dirty* and at least one client is attached, render ONE frame via
-   %render-frame (pure) and broadcast it via %send-broadcast-frame (effect
-   boundary), then clear *dirty*.  Factored into pure/effect layers so
-   each step is independently testable."
+  "When *dirty* and at least one client is attached, render one frame per
+   client at that client's geometry, send it, and then clear *dirty*."
   (when (and *dirty* *clients*)
     (setf *dirty* nil)
-    (%send-broadcast-frame (%render-frame session))))
+    (dolist (conn (copy-list *clients*))
+      (with-loop-safe-error (nil :on-error (%drop-client conn))
+        (%send-client-frame conn (%render-client-frame session conn))))))
 
 (defun %client-fds ()
   "The socket fds of every attached client (for the select read-set)."
@@ -148,8 +232,35 @@
                                  :fd     (socket-fd socket)
                                  :state  (make-input-state)
                                  :rows   *term-rows*
-                                 :cols   *term-cols*)))
+                                 :cols   *term-cols*
+                                 :mode   :normal
+                                 :view   :overview
+                                 :viewport 0)))
     (push conn *clients*)
+    (when (fboundp '%runtime-restore-messages)
+      (dolist (message (funcall (symbol-function '%runtime-restore-messages)))
+        (push message (client-conn-message-log conn))))
+    (when (and (not *workspace-catalog-refresh-started-p*)
+               (cl-tmux/vcs:vcs-package-available-p))
+      (setf *workspace-catalog-refresh-started-p* t)
+      (ignore-errors
+        (cl-tmux/vcs:refresh-workspace-organizations-async
+         :on-complete
+         (lambda (organizations)
+           (dolist (client (remove-duplicates
+                            (remove-if-not #'%client-live-p
+                                           (copy-list *clients*))
+                            :test #'eq))
+             (%rebind-client-selection client organizations)
+             (setf (client-conn-picker-items client)
+                   (cl-tmux/picker:build-global-picker-items organizations))
+             (%picker-clamp-index client
+                                  (%client-picker-visible-items client)))
+           (%mark-dirty))
+         :on-error
+         (lambda (condition)
+           (declare (ignore condition))
+           (%mark-dirty)))))
     (cl-tmux/hooks:run-hooks cl-tmux/hooks:+hook-client-attached+)
     (%mark-dirty)
     conn))
@@ -158,6 +269,7 @@
   "Remove CONN: optionally send a bye frame, close its socket, fire the
    client-detached hook, and unregister it.  Safe to call more than once."
   (when (member conn *clients*)
+    (setf (client-conn-ui-prefix-p conn) nil)
     (when bye
       (ignore-errors (send-frame (client-conn-stream conn) (msg-bye))))
     (ignore-errors (close-socket (client-conn-socket conn)))

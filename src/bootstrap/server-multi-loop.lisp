@@ -86,5 +86,7 @@
          ;; exit-empty: terminate once the last session has been destroyed.
          (when (%exit-when-empty-p)
            (setf *running* nil)))
+    (when *runtime-state-save-function*
+      (funcall *runtime-state-save-function* session))
     (dolist (conn (copy-list *clients*))
       (%drop-client conn :bye t))))

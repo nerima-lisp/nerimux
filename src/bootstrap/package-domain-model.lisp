@@ -28,6 +28,7 @@
    #:pane-pipe-output-thread
    #:pane-pipe-process
    #:pane-window
+   #:pane-worktree
    #:pane-marked
    #:pane-title
    #:pane-tty
@@ -36,6 +37,26 @@
    #:pane-dead-status
    #:pane-dead-signal
    #:pane-dead-time
+   #:pane-tags
+   #:pane-note
+   #:pane-unread-output-p
+   #:pane-bell-p
+   #:pane-process-exited-p
+   #:pane-non-zero-exit-p
+   #:pane-startup-failed-p
+   #:pane-last-output-time
+   #:pane-last-focused-time
+   #:pane-last-output
+   #:pane-notification
+   #:pane-mark-output
+   #:pane-mark-bell
+   #:pane-mark-process-exit
+   #:pane-mark-startup-failure
+   #:pane-notify
+   #:pane-clear-unread-output
+   #:pane-mark-focused
+   #:pane-attention-p
+   #:pane-attention-reasons
    #:pane-input-disabled
    #:pane-local-options
    #:respawn-pane
@@ -134,7 +155,34 @@
    #:+default-update-environment+
    #:*update-environment*
    #:get-update-environment-vars
-   #:layout-node-bounding-box))
+   #:layout-node-bounding-box
+   ;; Repository/worktree hierarchy used by the ghq-backed overview.
+   #:organization #:organization-p #:make-organization
+   #:organization-id #:organization-host #:organization-name
+   #:organization-repositories #:organization-active-worktree-count
+   #:organization-attention-count #:organization-missing-p
+   #:organization-tags #:organization-notes #:organization-recent-activity
+   #:organization-key #:organization-repository-count
+   #:organization-add-repository #:organization-recompute-counts
+   #:repository #:repository-p #:make-repository
+   #:repository-id #:repository-organization #:repository-specification
+   #:repository-path #:repository-local-path #:repository-remote
+   #:repository-backend #:repository-worktrees #:repository-main-worktree
+   #:repository-dirty-p #:repository-conflict-p
+   #:repository-ahead #:repository-behind #:repository-missing-p
+   #:repository-tags #:repository-notes #:repository-recent-activity
+   #:repository-key #:repository-add-worktree
+   #:repository-worktree-by-path #:repository-recompute-status
+   #:worktree #:worktree-p #:make-worktree
+   #:worktree-id #:worktree-repository #:worktree-path
+   #:worktree-branch #:worktree-head #:worktree-status
+   #:worktree-panes #:worktree-dirty-p #:worktree-conflict-p
+   #:worktree-ahead #:worktree-behind #:worktree-bare-p
+   #:worktree-locked-p #:worktree-prunable-p #:worktree-missing-p
+   #:worktree-tags #:worktree-notes #:worktree-recent-activity
+   #:worktree-key #:worktree-attention-p #:worktree-attention-reasons
+   #:organization-attention-worktrees
+   #:worktree-add-pane))
 
 ;; No :import-from for #:cl-tmux/model: the :use here was inert. All 44 model
 ;; references in src/domain/format/ are already written cl-tmux/model:-qualified,

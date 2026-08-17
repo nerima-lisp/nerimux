@@ -63,7 +63,11 @@
                :cl-process-kit   ; timeout-guarded subprocess run, and select(2) over raw fds
                :cl-history-kit   ; command-prompt history store + recall navigation (runtime-history)
                :cl-codec-kit     ; string<->octet UTF-8 codec (protocol, PTY, OSC payloads)
-               :cl-host-kit)     ; pathname/string host ops (split-string, directory helpers)
+               :cl-host-kit      ; pathname/string host ops (split-string, directory helpers)
+               :cl-tui-kit/ansi  ; headless surface/backend rendering for per-client frames
+               :cl-tui-kit/layout ; geometry and viewport layout for client frames
+               :cl-tui-kit/widgets ; widget rendering for client frames
+               :cl-vcs-kit)      ; ghq/repository/worktree discovery
   :components
   ((:module "src"
     :serial t
@@ -95,7 +99,8 @@
      (:module "domain/ports"
       :serial t
       :components
-      ((:file "pty-port")))   ; PTY port abstraction: port vars + port fns (loads before infra so defvars are declared)
+      ((:file "pty-port")
+       (:file "vcs-port")))   ; port abstractions (load before infrastructure adapters)
      (:module "infrastructure/pty"
       :serial t
       :components
@@ -149,7 +154,10 @@
      (:module "domain/model"
       :serial t
       :components
-      ((:file "pane-core")         ; leaf PTY data and feed helpers
+      ((:file "organization")      ; ghq organization aggregate
+       (:file "repository")        ; ghq repository aggregate
+       (:file "worktree")           ; worktree aggregate and relationships
+       (:file "pane-core")         ; leaf PTY data and feed helpers
        (:file "pane-geometry")     ; geometry update + PTY/screen resize helpers
        (:file "layout")            ; tree structure + traversal (uses pane-reposition)
        (:file "layout-persistence") ; layout string serialization
@@ -164,6 +172,14 @@
        (:file "session-environment-overlay")    ; session overlay tables and env access
        (:file "session-environment-child")      ; child env snapshot assembly
        (:file "pane-spawn")))                   ; PTY-backed pane factory + respawn
+     (:module "domain/persistence"
+      :serial t
+      :components
+      ((:file "runtime-state")))                ; versioned reader-safe runtime snapshot
+     (:module "infrastructure/vcs"
+      :serial t
+      :components
+      ((:file "vcs")))             ; optional cl-vcs-kit adapter
      (:module "domain/format"
       :serial t
       :components
@@ -184,6 +200,10 @@
       :serial t
       :components
       ((:file "session-repository"))) ; Repository pattern: session store protocol + *session-repo* var
+     (:module "application/picker"
+      :serial t
+      :components
+      ((:file "global-picker")))                 ; pure organization/repository/worktree picker
      ;; target resolution is a domain/model service; placed in the model directory
      ;; via :pathname so its load slot (after format) stays byte-identical.
      (:module "domain-model-target"
@@ -271,6 +291,7 @@
        (:file "renderer-compose-overlay")   ; overlay rendering + mouse mode sequences
        (:file "renderer-compose-effects")   ; bell / cursor / queue drain effects
        (:file "renderer-compose")        ; session frame compositing + entry points
+       (:file "renderer-tui-kit")        ; headless cl-tui-kit surface/backend adapter
        (:file "renderer")))         ; documentation stub (intentionally empty)
      (:module "infrastructure/input"
       :serial t
@@ -417,6 +438,7 @@
        (:file "server-multi-dispatch") ; multi-client attach/resize/key/command handlers
        (:file "server-multi")  ; multi-client client registry + dispatch helpers
        (:file "server-multi-loop") ; multi-client select-multiplexed serve loop
+       (:file "runtime-lifecycle") ; atomic runtime snapshot restore/save hooks
        (:file "client-command") ; command-client I/O helpers
        (:file "client")
        (:file "main")

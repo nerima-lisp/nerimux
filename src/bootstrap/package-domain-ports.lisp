@@ -16,7 +16,20 @@
    #:spawn-pty
    #:write-pty
    #:resize-pty
-   #:close-pty))
+   #:close-pty
+   #:*vcs-list-repositories*
+   #:*vcs-list-worktrees*
+   #:*vcs-status*
+   #:*vcs-scan-async*
+   #:*vcs-create-worktree*
+   #:*vcs-delete-worktree*
+   #:vcs-list-repositories
+   #:vcs-list-worktrees
+   #:vcs-worktree-status
+   #:vcs-status
+   #:vcs-scan-async
+   #:vcs-create-worktree
+   #:vcs-delete-worktree))
 
 (defpackage #:cl-tmux/repository
   (:use #:cl)

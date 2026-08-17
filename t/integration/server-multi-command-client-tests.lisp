@@ -147,3 +147,188 @@
                         (cl-tmux::read-frame (cl-tmux/net:socket-stream client))
                       (declare (ignore payload))
                       (expect (eql cl-tmux::+msg-frame+ type)))))))))))))
+
+  (it "multi-broadcast-renders-private-client-surfaces"
+    (with-isolated-hooks
+      (with-fake-session (s :npanes 2)
+        (let* ((window (session-active-window s))
+               (panes (window-panes window))
+               (pane1 (first panes))
+               (pane2 (second panes)))
+          (with-test-listener (listener path (%test-socket-path "mprivate") :backlog 4)
+            (let* ((client1 (cl-tmux/net:connect-to path))
+                   (server1 (cl-tmux/net:accept-connection listener))
+                   (client2 (cl-tmux/net:connect-to path))
+                   (server2 (cl-tmux/net:accept-connection listener))
+                   (cl-tmux::*clients* nil)
+                   (cl-tmux::*workspace-catalog-refresh-started-p* t)
+                   (conn1 nil)
+                   (conn2 nil))
+              (unwind-protect
+                   (when (and client1 client2 server1 server2 pane1 pane2)
+                     (setf conn1 (cl-tmux::%add-client server1)
+                           conn2 (cl-tmux::%add-client server2))
+                     (setf (cl-tmux::client-conn-view conn1) :detail
+                           (cl-tmux::client-conn-focus conn1) pane1
+                           (cl-tmux::client-conn-rows conn1) 24
+                           (cl-tmux::client-conn-cols conn1) 80
+                           (cl-tmux::client-conn-view conn2) :detail
+                           (cl-tmux::client-conn-focus conn2) pane2
+                           (cl-tmux::client-conn-rows conn2) 12
+                           (cl-tmux::client-conn-cols conn2) 40)
+                     (pane-feed pane1
+                                (cl-codec-kit:string-to-octets
+                                 "client-one" :encoding :utf-8))
+                     (pane-feed pane2
+                                (cl-codec-kit:string-to-octets
+                                 "client-two" :encoding :utf-8))
+                     (setf cl-tmux::*dirty* t)
+                     (cl-tmux::%broadcast-frame s)
+                     (flet ((read-frame-text (client)
+                              (let ((ready (cl-tmux/pty:select-fds
+                                            (list (cl-tmux/net:socket-fd client))
+                                            1000000)))
+                                (expect ready :to-be-truthy)
+                                (when ready
+                                  (multiple-value-bind (type payload)
+                                      (cl-tmux::read-frame
+                                       (cl-tmux/net:socket-stream client))
+                                    (expect (eql cl-tmux::+msg-frame+ type))
+                                    (decode-text payload))))))
+                       (let ((frame1 (read-frame-text client1))
+                             (frame2 (read-frame-text client2)))
+                         (expect (and frame1 (plusp (length frame1)))
+                                 :to-be-truthy)
+                         (expect (and frame2 (plusp (length frame2)))
+                                 :to-be-truthy)
+                         (expect (and frame1 frame2 (not (string= frame1 frame2)))
+                                 :to-be-truthy))))
+                (dolist (conn (remove nil (list conn1 conn2)))
+                  (when (member conn cl-tmux::*clients*)
+                    (cl-tmux::%drop-client conn)))
+                (dolist (socket (remove nil (list client1 client2 server1 server2)))
+                  (ignore-errors (cl-tmux/net:close-socket socket))))))))))
+
+  (it "multi-socket-c-q-d-detaches-with-session-resident"
+    (with-isolated-hooks
+      (with-fake-session (s)
+        (let* ((window (session-active-window s))
+               (pane (window-active-pane window))
+               (cl-tmux::*clients* nil)
+               (cl-tmux::*workspace-catalog-refresh-started-p* t))
+          (with-test-listener (listener path (%test-socket-path "mdetach") :backlog 4)
+            (let* ((client1 (cl-tmux/net:connect-to path))
+                   (server1 (cl-tmux/net:accept-connection listener))
+                   (client2 nil)
+                   (server2 nil)
+                   (conn1 nil)
+                   (conn2 nil))
+              (flet ((send-and-dispatch (client conn frame)
+                       (send-frame (cl-tmux/net:socket-stream client) frame)
+                       (let ((ready (cl-tmux/pty:select-fds
+                                     (list (cl-tmux::client-conn-fd conn))
+                                     1000000)))
+                         (expect ready :to-be-truthy)
+                         (when ready
+                           (cl-tmux::%read-and-dispatch-client-message s conn)))))
+                (unwind-protect
+                     (when (and client1 server1 pane)
+                       (setf conn1 (cl-tmux::%add-client server1))
+                       (expect (null (send-and-dispatch
+                                      client1 conn1 (msg-attach 24 80)))
+                               :to-be-truthy)
+                       (expect (null (send-and-dispatch
+                                      client1 conn1 (msg-key (vector #x11))))
+                               :to-be-truthy)
+                       (expect (eq :drop
+                                   (send-and-dispatch
+                                    client1 conn1
+                                    (msg-key (vector (char-code #\d)))))
+                               :to-be-truthy)
+                       (cl-tmux::%apply-client-disposition :drop conn1)
+                       (expect (null cl-tmux::*clients*) :to-be-truthy)
+                       (expect (eq pane (window-active-pane window))
+                               :to-be-truthy)
+                       (setf client2 (cl-tmux/net:connect-to path)
+                             server2 (cl-tmux/net:accept-connection listener))
+                       (expect client2 :to-be-truthy)
+                       (expect server2 :to-be-truthy)
+                       (when (and client2 server2)
+                         (setf conn2 (cl-tmux::%add-client server2))
+                         (expect (null (send-and-dispatch
+                                        client2 conn2 (msg-attach 24 80)))
+                                 :to-be-truthy)
+                         (expect (member conn2 cl-tmux::*clients*)
+                                 :to-be-truthy)))
+                  (dolist (conn (remove nil (list conn1 conn2)))
+                    (when (member conn cl-tmux::*clients*)
+                      (cl-tmux::%drop-client conn)))
+                  (dolist (socket
+                            (remove nil (list client1 client2 server1 server2)))
+                    (ignore-errors (cl-tmux/net:close-socket socket)))))))))))
+
+  (it "multi-socket-renders-live-pty-output"
+    (with-pty-available
+      (with-session (s 8 40)
+        (with-loop-state
+          (let* ((window (session-active-window s))
+                 (pane (window-active-pane window))
+                 (marker "cl-tmux-live-pty-marker")
+                 (cl-tmux::*clients* nil)
+                 (cl-tmux::*workspace-catalog-refresh-started-p* t))
+            (with-test-listener (listener path (%test-socket-path "mpty")
+                                           :backlog 2)
+              (let* ((client (cl-tmux/net:connect-to path))
+                     (server (cl-tmux/net:accept-connection listener))
+                     (conn nil))
+                (flet ((screen-text (screen-pane)
+                         (let ((screen (pane-screen screen-pane)))
+                           (cl-concurrent-kit:with-lock-held
+                               ((cl-tmux/terminal:screen-lock screen))
+                             (with-output-to-string (output)
+                               (dotimes (y (screen-height screen))
+                                 (dotimes (x (screen-width screen))
+                                   (write-char
+                                    (cell-char (screen-cell screen x y))
+                                    output)))))))
+                       (send-and-dispatch (frame)
+                         (send-frame (cl-tmux/net:socket-stream client) frame)
+                         (let ((ready (select-fds
+                                       (list (cl-tmux::client-conn-fd conn))
+                                       1000000)))
+                           (expect ready :to-be-truthy)
+                           (when ready
+                             (cl-tmux::%read-and-dispatch-client-message s conn)))))
+                  (unwind-protect
+                       (when (and client server pane)
+                         (setf conn (cl-tmux::%add-client server))
+                         (expect (null (send-and-dispatch (msg-attach 8 40)))
+                                 :to-be-truthy)
+                         (setf (cl-tmux::client-conn-view conn) :detail
+                               (cl-tmux::client-conn-focus conn) pane)
+                         (cl-tmux::start-reader-thread pane)
+                         (pty-write (pane-fd pane)
+                                    (format nil "printf '%s\\n' ~A~%" marker))
+                         (loop repeat 100
+                               until (search marker (screen-text pane))
+                               do (sleep 0.05))
+                         (expect (search marker (screen-text pane))
+                                 :to-be-truthy)
+                         (setf cl-tmux::*dirty* t)
+                         (cl-tmux::%broadcast-frame s)
+                         (let ((ready (select-fds
+                                       (list (cl-tmux/net:socket-fd client))
+                                       1000000)))
+                           (expect ready :to-be-truthy)
+                           (when ready
+                             (multiple-value-bind (type payload)
+                                 (cl-tmux::read-frame
+                                  (cl-tmux/net:socket-stream client))
+                               (expect (eql cl-tmux::+msg-frame+ type))
+                               (expect (search marker
+                                               (decode-text payload))
+                                       :to-be-truthy)))))
+                    (when (and conn (member conn cl-tmux::*clients*))
+                      (cl-tmux::%drop-client conn))
+                    (dolist (socket (remove nil (list client server)))
+                      (ignore-errors (cl-tmux/net:close-socket socket))))))))))))
