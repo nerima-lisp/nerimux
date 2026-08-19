@@ -54,10 +54,8 @@
   ;;                          which has neither construct either.
   :depends-on (:cl-concurrent-kit ; threads, locks, condvars and preemptive deadlines
                :cl-regex-kit     ; regex engine behind the format #{m/r:...} and #{s///:} modifiers
-               :cl-prolog-kit    ; dependency-free Prolog engine (cold-path reasoning)
                :cl-cli           ; startup argv/flag parsing (main-startup-flags)
                :cl-boundary-kit  ; process boundary for run-shell/if-shell
-               :cl-dataflow-kit  ; copy-mode lifecycle state machine (src/dataflow)
                :cl-parser-kit    ; commands-tokenizer combinator rewrite
                :cl-tty-kit       ; PTY spawn/raw-mode/fd-io, ioctl window size, colour downsampling
                :cl-process-kit   ; timeout-guarded subprocess run, and select(2) over raw fds
@@ -410,25 +408,6 @@
        (:file "events-keystroke-repeat-states") ; prefix/root repeat CPS states
        (:file "events-loop-timers") ; CPS process-byte + escape/repeat timer plumbing + synchronize-panes
        (:file "events-loop")))
-     ;; Prolog-backed cold-path reasoning read-model.  Loads after config
-     ;; (for the key-table store) and cl-prolog-kit (a core dependency); never on
-     ;; the hot dispatch path.  See src/reasoning/package.lisp.
-     (:module "reasoning"
-      :serial t
-      :components
-      ((:file "package")
-       (:file "key-rulebase")
-       (:file "key-tables")
-       (:file "command-rulebase")))
-     ;; cl-dataflow-kit-backed cold-path read-model: the copy-mode lifecycle as an
-     ;; inspectable state machine.  Loads after domain/terminal (screen
-     ;; accessors) and cl-prolog-kit (a cl-dataflow-kit dependency); never on the hot
-     ;; dispatch path.  See src/dataflow/package.lisp.
-     (:module "dataflow"
-      :serial t
-      :components
-      ((:file "package")
-       (:file "copy-mode-lifecycle")))
      (:module "bootstrap-server"
       :pathname "bootstrap"
       :serial t
@@ -475,9 +454,54 @@
   :perform (test-op (op c)
              (funcall (find-symbol "RUN-TESTS" (find-package "NERIMUX/TEST")))))
 
-;; The Prolog-backed reasoning read-model now lives in the core `nerimux'
-;; system (src/reasoning/, with cl-prolog-kit a core dependency); it powers
-;; cold-path introspection and is compiled into the shipped binary.
+;; The two cold-path read-models below are OPTIONAL systems, not part of core
+;; `nerimux'.  Neither has a single call site anywhere in src/ outside its own
+;; directory, so carrying them in core bought nothing at runtime while forcing
+;; cl-prolog-kit and cl-dataflow-kit into the shipped binary's dependency
+;; closure.  They stay in-tree because nerimux is the org's L4 testbed and these
+;; are how cl-prolog-kit and cl-dataflow-kit get dogfooded; they are simply no
+;; longer loaded by `(asdf:load-system "nerimux")'.
+;;
+;; Naming: the source systems could not reuse "nerimux/dataflow" — that name was
+;; already taken by the cl-weave TEST system below, and renaming it would break
+;; the documented NERIMUX_TEST_SYSTEM values in README.md and run-tests.lisp.
+;; Hence nerimux/dataflow-model (source) alongside nerimux/dataflow (test).
+
+(defsystem "nerimux/reasoning"
+  :description "Prolog-backed cold-path reasoning read-model (keys, commands)."
+  :author "takeokunn <bararararatty@gmail.com>"
+  :maintainer "takeokunn <bararararatty@gmail.com>"
+  :license "MIT"
+  :version "0.2.0"
+  :homepage "https://github.com/nerima-lisp/nerimux"
+  :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
+  :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
+  ;; Needs the whole `nerimux' system, not just nerimux/config: command-rulebase
+  ;; reaches *COMMAND-USAGE-TABLE* out of the NERIMUX package with find-symbol,
+  ;; which no compiler-visible edge records.  This :depends-on is the only thing
+  ;; guaranteeing that symbol exists by the time the rulebase runs.
+  :depends-on ("nerimux" "cl-prolog-kit")
+  :pathname "src/reasoning"
+  :serial t
+  :components ((:file "package")
+               (:file "key-rulebase")
+               (:file "key-tables")
+               (:file "command-rulebase")))
+
+(defsystem "nerimux/dataflow-model"
+  :description "cl-dataflow-kit copy-mode lifecycle read-model."
+  :author "takeokunn <bararararatty@gmail.com>"
+  :maintainer "takeokunn <bararararatty@gmail.com>"
+  :license "MIT"
+  :version "0.2.0"
+  :homepage "https://github.com/nerima-lisp/nerimux"
+  :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
+  :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
+  :depends-on ("nerimux" "cl-dataflow-kit")
+  :pathname "src/dataflow"
+  :serial t
+  :components ((:file "package")
+               (:file "copy-mode-lifecycle")))
 
 ;; cl-weave regression suite for the reasoning read-model.  It exercises the
 ;; reasoning API through custom cl-weave matchers and reuses cl-prolog-kit's own
@@ -492,7 +516,7 @@
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  :depends-on ("nerimux" "cl-weave" "cl-prolog-kit" "cl-prolog-kit/weave")
+  :depends-on ("nerimux" "nerimux/reasoning" "cl-weave" "cl-prolog-kit" "cl-prolog-kit/weave")
   :pathname "t/weave"
   :serial t
   :components ((:file "package")
@@ -517,7 +541,7 @@
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  :depends-on ("nerimux" "cl-weave" "cl-dataflow-kit")
+  :depends-on ("nerimux" "nerimux/dataflow-model" "cl-weave" "cl-dataflow-kit")
   :pathname "t/dataflow"
   :serial t
   :components ((:file "package")

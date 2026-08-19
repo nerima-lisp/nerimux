@@ -54,7 +54,8 @@ loaded by `src/bootstrap/package.lisp`.
 ```
 nerimux/
 ├── flake.nix               # Nix build + checks (pure Lisp, no C compilation)
-├── nerimux.asd             # ASDF systems: nerimux, /test, /weave, /dataflow
+├── nerimux.asd             # ASDF systems: nerimux, /test, /weave, /dataflow,
+│                           #   plus optional /reasoning and /dataflow-model
 ├── run-tests.lisp          # single Lisp-level test entry point
 ├── src/
 │   ├── bootstrap/          # packages, entry point, runtime, server/client loops
@@ -72,8 +73,8 @@ nerimux/
 │   │   └── dispatch/       #   command table, handlers, control mode
 │   ├── infrastructure/     # adapters: PTY, sockets, input, control mode
 │   ├── presentation/       # renderer, events, prompt
-│   ├── reasoning/          # cl-prolog-kit cold-path read-models (keys, commands)
-│   └── dataflow/           # cl-dataflow-kit cold-path read-model (copy-mode lifecycle)
+│   ├── reasoning/          # cl-prolog-kit cold-path read-models — OPTIONAL system
+│   └── dataflow/           # cl-dataflow-kit cold-path read-model — OPTIONAL system
 └── t/
     ├── unit/               # 250+ feature-focused spec files
     ├── integration/        # PTY/socket/runtime integration specs
@@ -84,3 +85,10 @@ nerimux/
 
 The cold-path read-models under `src/reasoning/` and `src/dataflow/` are
 described in [Dogfooded sibling libraries](../guide/sibling-libraries.md).
+
+They are **not part of the core `nerimux` system**. Neither has a call site
+anywhere in `src/` outside its own directory, so loading them into the shipped
+binary bought nothing at runtime while pulling `cl-prolog-kit` and
+`cl-dataflow-kit` into its dependency closure. They now live in the optional
+systems `nerimux/reasoning` and `nerimux/dataflow-model`, which their existing
+test suites (`nerimux/weave` and `nerimux/dataflow`) depend on explicitly.

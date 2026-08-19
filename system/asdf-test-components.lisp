@@ -351,7 +351,8 @@
           (:file "server-session-message-tests") ; session groups, dispatch, attach/resize edge cases
           (:file "server-socket-path-tests") ; socket paths and stale sockets
           (:file "server-client-cps-tests") ; client key CPS, runtime registry, resize edge cases
-          (:file "runtime-lifecycle-tests")))
+          (:file "runtime-lifecycle-tests")
+          (:file "system-composition-tests"))) ; core excludes the optional reasoning/dataflow kits
         (:module "infrastructure/pty"
          :serial t
          :components

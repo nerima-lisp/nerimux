@@ -85,7 +85,6 @@ set `NERIMUX_TEST_SYSTEM` to pick one of `nerimux/test` (default),
 nerimux is the org's L4 application package and its testbed: it runs on twelve
 sibling libraries — [cl-cli](https://github.com/nerima-lisp/cl-cli),
 [cl-boundary-kit](https://github.com/nerima-lisp/cl-boundary-kit),
-[cl-dataflow-kit](https://github.com/nerima-lisp/cl-dataflow-kit),
 [cl-parser-kit](https://github.com/nerima-lisp/cl-parser-kit),
 [cl-tty-kit](https://github.com/nerima-lisp/cl-tty-kit),
 [cl-process-kit](https://github.com/nerima-lisp/cl-process-kit),
@@ -93,9 +92,14 @@ sibling libraries — [cl-cli](https://github.com/nerima-lisp/cl-cli),
 [cl-concurrent-kit](https://github.com/nerima-lisp/cl-concurrent-kit),
 [cl-regex-kit](https://github.com/nerima-lisp/cl-regex-kit),
 [cl-codec-kit](https://github.com/nerima-lisp/cl-codec-kit),
-[cl-host-kit](https://github.com/nerima-lisp/cl-host-kit) — plus
-[cl-prolog-kit](https://github.com/nerima-lisp/cl-prolog-kit) for cold-path reasoning
-read-models. It has **no external dependencies**: it was the last repository in
+[cl-host-kit](https://github.com/nerima-lisp/cl-host-kit),
+[cl-tui-kit](https://github.com/nerima-lisp/cl-tui-kit) and
+[cl-vcs-kit](https://github.com/nerima-lisp/cl-vcs-kit).
+[cl-prolog-kit](https://github.com/nerima-lisp/cl-prolog-kit) and
+[cl-dataflow-kit](https://github.com/nerima-lisp/cl-dataflow-kit) are dogfooded
+too, but back the optional `nerimux/reasoning` and `nerimux/dataflow-model`
+systems rather than the shipped binary.
+It has **no external dependencies**: it was the last repository in
 the org with any, and the final two (`bordeaux-threads`, `cl-ppcre`) were
 replaced by siblings on 2026-08-02. See
 [Dogfooded sibling libraries](https://nerima-lisp.github.io/nerimux/guide/sibling-libraries/).

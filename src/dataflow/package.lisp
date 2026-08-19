@@ -1,8 +1,11 @@
 ;;;; Package for the cl-dataflow-kit-backed copy-mode lifecycle read-model.
 ;;;;
 ;;;; This subsystem is an *additive* introspection layer built on the
-;;;; dependency-free `cl-dataflow-kit' state-machine primitives (which in turn sit
-;;;; on `cl-prolog-kit', already a core dependency -- see src/reasoning/).  It
+;;;; dependency-free `cl-dataflow-kit' state-machine primitives (which in turn
+;;;; sit on `cl-prolog-kit' -- see src/reasoning/).  It ships as the OPTIONAL
+;;;; `nerimux/dataflow-model' ASDF system rather than as part of core `nerimux',
+;;;; for the same reason src/reasoning/ does: nothing in src/ outside this
+;;;; directory calls it.  It
 ;;;; makes the copy-mode lifecycle -- already documented as a Prolog-style
 ;;;; rule table at the top of commands-copy-mode.lisp -- an inspectable,
 ;;;; exportable (DOT/Mermaid) state machine, and offers a pure function that

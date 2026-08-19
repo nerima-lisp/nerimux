@@ -6,10 +6,12 @@
 ;;;; questions about it that the imperative store cannot express directly
 ;;;; (reverse lookup, cross-table conflicts, repeatable-command inference).
 ;;;;
-;;;; It lives in its own `reasoning' module within the core `nerimux' ASDF
-;;;; system (cl-prolog-kit is a core dependency; see src/reasoning/'s module
-;;;; comment in nerimux.asd), loaded after `application/config' so it can
-;;;; reference nerimux/config's public helpers directly.
+;;;; It ships as the OPTIONAL `nerimux/reasoning' ASDF system, not as part of
+;;;; core `nerimux' -- nothing in src/ outside this directory calls it, so
+;;;; loading it into core pulled cl-prolog-kit into the shipped binary for no
+;;;; runtime benefit.  The system depends on the whole of `nerimux' because it
+;;;; reads nerimux/config's key-table helpers and reaches *COMMAND-USAGE-TABLE*
+;;;; out of the NERIMUX package by name; see the comment on the defsystem.
 ;;;;
 ;;;; `\=', `\+', and `findall' are imported from cl-prolog-kit: builtin goals
 ;;;; dispatch on symbol identity, so inequality/negation/collection goals in

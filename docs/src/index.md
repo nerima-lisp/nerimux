@@ -62,13 +62,21 @@ of what is implemented and what is deliberately different.
 - **cl-codec-kit** — UTF-8 string↔octet conversion for protocol frames, PTY
   output and OSC payloads.
 - **cl-host-kit** — pathname/string host operations.
-- **cl-prolog-kit** — cold-path relational reasoning over key bindings and the
-  command table.
 - **cl-cli** — startup argv/flag parsing.
 - **cl-boundary-kit** — the process boundary behind `run-shell`/`if-shell`.
-- **cl-dataflow-kit** — the copy-mode lifecycle state machine.
 - **cl-parser-kit** — the command-line tokenizer.
 - **cl-history-kit** — command-prompt history store and recall.
+- **cl-tui-kit** — headless surface rendering, layout and widgets for the
+  per-client frames (workspace overview, detail, picker).
+- **cl-vcs-kit** — ghq organization/repository/worktree discovery.
+
+Two further siblings are dogfooded in-tree but are **not** in the shipped
+binary's dependency closure — they back the optional `nerimux/reasoning` and
+`nerimux/dataflow-model` systems, which nothing at runtime calls:
+
+- **cl-prolog-kit** — cold-path relational reasoning over key bindings and the
+  command table.
+- **cl-dataflow-kit** — the copy-mode lifecycle state machine.
 
 **nerimux has no external dependencies.** Every name above except SBCL is a
 `nerima-lisp` sibling. Four external libraries were retired to get here:

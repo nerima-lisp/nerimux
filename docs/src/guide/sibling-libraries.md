@@ -9,16 +9,23 @@ did by hand — not bolted on beside it.
 
 `src/reasoning/` is a declarative read-model built on
 [cl-prolog-kit](https://github.com/nerima-lisp/cl-prolog-kit), a dependency-free Common
-Lisp Prolog engine that is a **core dependency** of nerimux (compiled into the
-binary). It projects nerimux's declarative tables into Prolog rulebases and
-answers relational questions the flat tables cannot express directly.
+Lisp Prolog engine. It projects nerimux's declarative tables into Prolog rulebases
+and answers relational questions the flat tables cannot express directly.
+
+It ships as the **optional** `nerimux/reasoning` system and is **not** compiled
+into the binary. Nothing in `src/` outside `src/reasoning/` calls it, so loading
+it into core pulled cl-prolog-kit into the shipped dependency closure for no
+runtime benefit. Load it explicitly to use the API below.
 
 It is used strictly on **cold paths** — introspection, validation, diagnostics
 — never the hot per-keystroke dispatch loop, which stays imperative for speed.
 
-Two domains ship today, key bindings and the canonical command table:
+Two domains ship today, key bindings and the canonical command table. Because
+the system is optional, load it before using the API:
 
 ```lisp
+(asdf:load-system "nerimux/reasoning")
+
 (let ((rb (nerimux/reasoning:current-key-rulebase)))
   (nerimux/reasoning:key-command rb "prefix" #\c)   ; => :NEW-WINDOW, T
   (nerimux/reasoning:keys-running rb :new-window)   ; => (("prefix" . #\c))
@@ -35,7 +42,7 @@ Its regression suite (`nerimux/weave`) uses
 `around-each` fixtures, a property test, and cl-prolog-kit's own `deftest-queries`
 bridge — and runs as the `weave` flake check.
 
-## The other eleven
+## The other siblings
 
 - [cl-cli](https://github.com/nerima-lisp/cl-cli) parses the top-level
   `nerimux [flags] [command [flags]]` global flags
@@ -49,7 +56,8 @@ bridge — and runs as the `weave` flake check.
 - [cl-dataflow-kit](https://github.com/nerima-lisp/cl-dataflow-kit) models the
   copy-mode lifecycle as an inspectable state machine (`src/dataflow/`), the
   cl-dataflow-kit counterpart to `src/reasoning/` above — same cold-path-only rule,
-  same dedicated flake check (`dataflow`).
+  same dedicated flake check (`dataflow`), and likewise an optional system
+  (`nerimux/dataflow-model`) rather than part of the shipped binary.
 - [cl-tty-kit](https://github.com/nerima-lisp/cl-tty-kit) backs the PTY layer:
   pane spawn, byte-transparent master-fd read/write, raw mode, and
   terminal-size queries all delegate to it (`src/infrastructure/pty/`). It also
@@ -105,6 +113,13 @@ bridge — and runs as the `weave` flake check.
   pathname/string host operations — `split-string` and the directory helpers.
   It briefly carried the codec call sites too, for one day during the `babel`
   retirement, before they were re-pointed at cl-codec-kit directly.
+- [cl-tui-kit](https://github.com/nerima-lisp/cl-tui-kit) renders the
+  per-client frames — headless surface/backend, layout and widgets behind the
+  workspace overview, detail and picker views
+  (`src/presentation/renderer/renderer-tui-kit.lisp`).
+- [cl-vcs-kit](https://github.com/nerima-lisp/cl-vcs-kit) discovers ghq
+  organizations, repositories and worktrees behind the workspace tree
+  (`src/infrastructure/vcs/`).
 
 ## External dependencies
 
