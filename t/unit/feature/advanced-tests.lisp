@@ -73,11 +73,9 @@
 
   ;;; ── synchronize-panes: sends keystrokes to all panes ─────────────────────────
 
-  ;; When synchronize-panes is T, %forward-octets-synchronized writes to all panes.
-  ;; We test using the dispatch path by enabling the option and verifying
-  ;; that all panes in the window would receive the bytes.  Since we have no
-  ;; real PTY here, we just verify the option toggle works and the function
-  ;; exists without erroring.
+  ;; synchronize-panes previously drove the keystroke-forwarding fanout
+  ;; (removed with presentation/events); the option itself is still a
+  ;; first-class registered option, so this verifies the toggle round-trips.
   (it "synchronize-panes-sends-to-all"
     (let ((prev (nerimux/options:get-option "synchronize-panes")))
       (unwind-protect
@@ -208,28 +206,6 @@
         (expect (null (member new-win (session-windows s2))))
         (expect (eq win (session-active-window s2))))))
 
-  ;; unlink-window on a grouped session propagates the removal to every peer;
-  ;; a window left in NO session gets its pane PTYs closed (tmux destroys a
-  ;; fully-unreferenced window — previously the shells leaked until kill-server).
-  (it "session-group-unlink-window-tears-down-orphaned-ptys"
-    (with-grouped-sessions (s1 s2 win)
-      (let* ((win2 (%make-group-test-window 2))
-             (closed 0)
-             (real-pty-close (fdefinition 'nerimux/pty:pty-close)))
-        (session-insert-window s1 win2)
-        (session-select-window s1 win2)   ; unlink targets the active window
-        (let ((nerimux::*server-sessions* (list (cons "a" s1) (cons "b" s2)))
-              (nerimux/prompt:*overlay* nil))
-          (unwind-protect
-               (progn
-                 (setf (fdefinition 'nerimux/pty:pty-close)
-                       (lambda (&rest args) (declare (ignore args)) (incf closed)))
-                 (nerimux::%cmd-unlink-window s1 nil))
-            (setf (fdefinition 'nerimux/pty:pty-close) real-pty-close))
-          (expect (null (member win2 (session-windows s1))))
-          (expect (null (member win2 (session-windows s2))))
-          (expect (= 1 closed))))))
-
   ;; session-windows-changed on a session without a group is a no-op.
   (it "session-group-sync-ignores-ungrouped-sessions"
     (let* ((win (%make-group-test-window 1))
@@ -237,20 +213,6 @@
            (nerimux::*session-groups* nil))
       (finishes (nerimux/model:session-windows-changed s))
       (expect (equal (list win) (session-windows s)))))
-
-  ;;; ── choose-session overlay ───────────────────────────────────────────────────
-
-  ;; :choose-session opens an overlay listing sessions.
-  (it "choose-session-shows-overlay"
-    (with-fake-session (sess :nwindows 1)
-      (let ((*overlay* nil)
-            (nerimux::*dirty* nil)
-            (nerimux::*running* t)
-            (nerimux::*server-sessions* (list (cons (session-name sess) sess))))
-        (nerimux::dispatch-command sess :choose-session nil)
-        (assert-overlay-active ":choose-session must open an overlay")
-        (assert-overlay-contains (session-name sess) *overlay*
-                                 "overlay must contain the session name"))))
 
   ;;; ── update-environment ───────────────────────────────────────────────────────
 

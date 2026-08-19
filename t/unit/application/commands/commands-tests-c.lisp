@@ -3,11 +3,15 @@
 ;;;; commands tests — part C: pipe-pane, virtual-row-string, timeout, clamp-cursor,
 ;;;; selection-bounds, word/paragraph navigation, scroll helpers, extract-row-chars.
 
-(defun %run-pipe-pane-direction-case (args assertion)
+(defun %run-pipe-pane-direction-case (assertion &key (pane-output-to-command-p t)
+                                                       command-output-to-pane-p)
   (with-fake-session (sess :nwindows 1 :npanes 1)
     (let* ((*overlay* nil)
            (pane (session-active-pane sess))
-           (result (nerimux::%cmd-pipe-pane-arg sess args)))
+           (result (nerimux/commands:pipe-pane-open
+                    pane "cat"
+                    :pane-output-to-command-p pane-output-to-command-p
+                    :command-output-to-pane-p command-output-to-pane-p)))
       (expect result :to-be-truthy)
       (funcall assertion pane)
       (nerimux/commands:pipe-pane-close pane))))
@@ -39,55 +43,17 @@
       (finishes (nerimux/commands:pipe-pane-close pane)
                 "pipe-pane-close with no pipe must not signal")))
 
-  ;; pipe-pane -t 2 <cmd> opens the pipe on pane 2 (the -t target), NOT the active
-  ;; pane — the scriptable -t target is honoured.
-  (it "cmd-pipe-pane-t-pipes-target-pane"
-    (let* ((pa  (%make-test-pane :id 1)) (pb (%make-test-pane :id 2))
-           (win (make-window :id 1 :name "w" :width 20 :height 5
-                             :tree (make-layout-split :h (make-layout-leaf pa)
-                                                      (make-layout-leaf pb) 1/2)
-                             :panes (list pa pb)))
-           (sess (make-session :id 1 :name "0" :windows (list win))))
-      (session-select-window sess win)
-      (window-select-pane win pa)              ; pane 1 is active
-      (with-loop-state
-        (nerimux::%run-command-line sess "pipe-pane -t 2 cat")
-        (expect (pane-pipe-fd pb) :to-be-truthy)
-        (expect (null (pane-pipe-fd pa)))
-        ;; Clean up the forked cat process.
-        (nerimux/commands:pipe-pane-close pb))))
-
   ;; pipe-pane -I opens the reverse direction: command stdout is copied back to the pane.
   (it "cmd-pipe-pane-flag-i-enables-command-output-to-pane"
-    (%run-pipe-pane-direction-case '("-I" "cat")
-      (lambda (pane)
-        (assert-pipe-pane-open-command-output-state pane))))
+    (%run-pipe-pane-direction-case
+     (lambda (pane) (assert-pipe-pane-open-command-output-state pane))
+     :pane-output-to-command-p nil :command-output-to-pane-p t))
 
   ;; pipe-pane -O keeps the default pane stdout -> command stdin direction.
   (it "cmd-pipe-pane-flag-o-keeps-pane-output-to-command"
-    (%run-pipe-pane-direction-case '("-O" "cat")
-      (lambda (pane)
-        (assert-pipe-pane-open-output-to-command-state pane))))
-
-  ;; send-keys -X -t .%2 begin-selection acts on pane-id 2's copy mode, not the
-  ;; active pane, and restores focus to the original active pane afterward.
-  (it "cmd-send-keys-X-t-targets-pane-copy-mode"
-    (let* ((pa  (%make-test-pane :id 1)) (pb (%make-test-pane :id 2))
-           (win (make-window :id 1 :name "w" :width 20 :height 5
-                             :tree (make-layout-split :h (make-layout-leaf pa)
-                                                      (make-layout-leaf pb) 1/2)
-                             :panes (list pa pb)))
-           (sess (make-session :id 1 :name "0" :windows (list win))))
-      (session-select-window sess win)
-      (window-select-pane win pa)                       ; pane 1 active
-      (nerimux/commands::copy-mode-enter (pane-screen pa))
-      (nerimux/commands::copy-mode-enter (pane-screen pb))
-      (let ((nerimux::*server-sessions* (list (cons "0" sess))))
-        (with-loop-state
-          (nerimux::%run-command-line sess "send-keys -X -t .%2 begin-selection")
-          (expect (nerimux/terminal/types:screen-copy-selecting (pane-screen pb)) :to-be-truthy)
-          (expect (nerimux/terminal/types:screen-copy-selecting (pane-screen pa)) :to-be-falsy)
-          (expect (eq pa (nerimux/model:window-active-pane win)))))))
+    (%run-pipe-pane-direction-case
+     (lambda (pane) (assert-pipe-pane-open-output-to-command-state pane))
+     :pane-output-to-command-p t :command-output-to-pane-p nil))
 
   ;; pipe-pane-write is a no-op when pane has no open pipe.
   (it "pipe-pane-write-noop-when-no-pipe"

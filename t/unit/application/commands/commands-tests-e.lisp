@@ -4,15 +4,6 @@
 
 (describe "commands-suite"
 
-  ;; top/middle/bottom-line (vi H/M/L) move within the viewport; history-top/bottom
-  ;; (vi g/G) jump to the scrollback extremes — they must map to distinct actions.
-  (it "copy-mode-x-line-positions-vs-history-extremes"
-    (expect (eq :copy-mode-high   (copy-mode-x-command-value "top-line")))
-    (expect (eq :copy-mode-middle (copy-mode-x-command-value "middle-line")))
-    (expect (eq :copy-mode-low    (copy-mode-x-command-value "bottom-line")))
-    (expect (eq :copy-mode-top    (copy-mode-x-command-value "history-top")))
-    (expect (eq :copy-mode-bottom (copy-mode-x-command-value "history-bottom"))))
-
   ;; copy-mode-high/middle/low move the cursor to viewport row 0 / mid / height-1
   ;; without changing the scroll offset.
   (it "copy-mode-high-middle-low-set-viewport-row"
@@ -58,13 +49,6 @@
       (nerimux/commands::copy-mode-space-end s)
       (expect (= 6 (cdr (nerimux/terminal/types:screen-copy-cursor s))))))
 
-  ;; send -X next-word/etc. map to word motion; next-space/etc. to WORD motion.
-  (it "copy-mode-x-word-vs-space-mappings"
-    (expect (eq :copy-mode-word-forward  (copy-mode-x-command-value "next-word")))
-    (expect (eq :copy-mode-space-forward (copy-mode-x-command-value "next-space")))
-    (expect (eq :copy-mode-space-backward (copy-mode-x-command-value "previous-space")))
-    (expect (eq :copy-mode-space-end      (copy-mode-x-command-value "next-space-end"))))
-
   ;;; ── back-to-indentation (vi ^): first non-blank vs line-start (vi 0) ─────────
 
   ;; copy-mode-back-to-indentation (vi ^) moves to the first non-blank column —
@@ -84,12 +68,6 @@
       (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 4))
       (nerimux/commands::copy-mode-back-to-indentation s)
       (expect (= 0 (cdr (nerimux/terminal/types:screen-copy-cursor s))))))
-
-  ;; send -X back-to-indentation maps to the distinct :copy-mode-back-to-indentation
-  ;; action, not line-start.
-  (it "copy-mode-x-back-to-indentation-mapped"
-    (expect (eq :copy-mode-back-to-indentation
-                (copy-mode-x-command-value "back-to-indentation"))))
 
   ;;; ── copy-mode-move-cursor ────────────────────────────────────────────────────
 

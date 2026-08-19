@@ -44,14 +44,6 @@
    #:shadowing-bindings
    #:unique-bindings
    #:explain-binding
-   ;; Command-metadata read-model (second cold-path domain)
-   #:build-command-rulebase
-   #:current-command-rulebase
-   #:command-usage-facts
-   #:command-accepts-flag-p
-   #:commands-with-flag
-   #:flags-of-command
-   #:scriptable-commands
    ;; Prolog query vocabulary — the predicate symbols used inside the
    ;; rulebase, exported so callers (and tests) can pose raw queries.
    #:binding
@@ -60,8 +52,4 @@
    #:conflict
    #:shadows-root
    #:repeatable-command
-   #:unique-binding
-   #:command
-   #:usage
-   #:accepts-flag
-   #:scriptable))
+   #:unique-binding))

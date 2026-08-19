@@ -113,9 +113,10 @@
       (let ((applied (nerimux/config:load-config-from-string
                       "set-hook after-new-window next-window")))
         (expect (= 1 applied))
-        ;; Command hooks are now stored as raw strings (run via %run-command-line
-        ;; at hook-fire time) rather than pre-resolved keywords, so format
-        ;; expansion and argument passing work in hook commands.
+        ;; Command hooks are stored as raw command strings rather than
+        ;; pre-resolved keywords, preserving format expansion and argument
+        ;; passing in the stored hook text (the dispatch-layer runner that
+        ;; used to execute these strings at fire time has been removed).
         (expect (equal '("next-window") (nerimux/hooks:command-hooks "after-new-window"))))))
 
   ;; set-hook stores multi-token command strings (e.g. 'display-message #{session_name}').
@@ -136,41 +137,6 @@
       ;; This matches real tmux behavior where set-hook doesn't validate command names.
       (expect (equal '("no-such-command") (nerimux/hooks:command-hooks "after-new-window")))))
 
-  ;; run-command-hooks dispatches each registered command keyword on the session.
-  (it "run-command-hooks-dispatches-registered-commands"
-    (with-isolated-hooks
-      (with-fake-session (s :nwindows 2)
-        (nerimux/hooks:set-command-hook "after-new-window" :next-window)
-        (nerimux::run-command-hooks "after-new-window" s)
-        (expect (eq (second (session-windows s)) (session-active-window s))))))
-
-  ;;; ── set-hook as a RUNTIME command (command-prompt / bind / control mode) ─────
-
-  ;; set-hook run at runtime via %run-command-line registers the command hook, and
-  ;; the -g flag is skipped (EVENT is after-new-window, not "-g").
-  (it "runtime-set-hook-command-registers-with-g-flag"
-    (with-isolated-hooks
-      (with-fake-session (s)
-        (nerimux::%run-command-line s "set-hook -g after-new-window next-window")
-        (expect (equal '("next-window") (nerimux/hooks:command-hooks "after-new-window")))
-        (expect (null (nerimux/hooks:command-hooks "-g"))))))
-
-  ;; set-hook -u <event> run at runtime clears the event's command hooks.
-  (it "runtime-set-hook-u-unsets-command-hook"
-    (with-isolated-hooks
-      (with-fake-session (s)
-        (nerimux/hooks:set-command-hook "after-new-window" "next-window")
-        (nerimux::%run-command-line s "set-hook -u after-new-window")
-        (expect (null (nerimux/hooks:command-hooks "after-new-window"))))))
-
-  ;; set-hook -R <event> <command> run at runtime registers the hook and fires it immediately.
-  (it "runtime-set-hook-r-runs-event-hooks-immediately"
-    (with-isolated-hooks
-      (with-fake-session (s :nwindows 2)
-        (nerimux::%run-command-line s "set-hook -R after-new-window next-window")
-        (expect (equal '("next-window") (nerimux/hooks:command-hooks "after-new-window")))
-        (expect (eq (second (session-windows s)) (session-active-window s))))))
-
   ;; set-hook -g <event> <cmd> in .tmux.conf registers under EVENT, not "-g"
   ;; (regression: leading flags other than -r/-u were previously taken as the event).
   (it "config-set-hook-g-flag-registers-under-event"
@@ -178,20 +144,6 @@
       (nerimux/config:load-config-from-string "set-hook -g after-new-window next-window")
       (expect (equal '("next-window") (nerimux/hooks:command-hooks "after-new-window")))
       (expect (null (nerimux/hooks:command-hooks "-g")))))
-
-  ;; Killing a pane fires the after-kill-pane command hook through the runner.
-  (it "command-hook-fires-on-after-kill-pane-via-runner"
-    (with-isolated-hooks
-      (with-fake-session (s :nwindows 2 :npanes 2)
-        ;; Register s in *server-sessions* so %session-of-pane can find it when
-        ;; the command hook runner needs to dispatch :next-window against a session.
-        (let ((nerimux::*server-sessions* (list (cons (nerimux::session-name s) s))))
-          (nerimux/hooks:set-command-hook "after-kill-pane" :next-window)
-          ;; kill-pane fires after-kill-pane (now before window-remove-pane so the
-          ;; pane is still in *server-sessions*), then the runner dispatches :next-window.
-          ;; No fork: fake panes have fd -1 so pty-close is a guarded no-op.
-          (nerimux/commands:kill-pane s)
-          (expect (eq (second (session-windows s)) (session-active-window s)))))))
 
   ;;; ── *command-hook-runner* and run-command-hooks-via-runner ───────────────────
 
@@ -242,12 +194,12 @@
         (expect (search "after-new-window" desc))
         (expect (search "next-window" desc)))))
 
-  ;; :show-hooks dispatches without error and opens an overlay listing the hooks.
-  (it "dispatch-show-hooks-opens-overlay"
+  ;; show-overlay opens an overlay with describe-command-hooks' listing, the same
+  ;; behavior the deleted :show-hooks dispatch case used to drive.
+  (it "show-hooks-opens-overlay"
     (with-isolated-hooks
-      (with-fake-session (s)
-        (with-clean-overlay
-          (nerimux/hooks:set-command-hook "after-new-window" :next-window)
-          (nerimux::dispatch-command s :show-hooks nil)
-          (assert-overlay-active ":show-hooks must open an overlay")
-          (expect (search "after-new-window" (or *overlay* ""))))))))
+      (with-clean-overlay
+        (nerimux/hooks:set-command-hook "after-new-window" :next-window)
+        (show-overlay (nerimux/hooks:describe-command-hooks))
+        (assert-overlay-active "show-overlay must open an overlay")
+        (expect (search "after-new-window" (or *overlay* "")))))))

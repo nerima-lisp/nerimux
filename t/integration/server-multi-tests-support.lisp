@@ -5,5 +5,4 @@
 
 (defun %make-test-conn (&key (rows 24) (cols 80))
   "A socket-less CLIENT-CONN for dispatch tests (paths that never touch the socket)."
-  (nerimux::%make-client-conn :state (nerimux::make-input-state)
-                              :rows rows :cols cols))
+  (nerimux::%make-client-conn :rows rows :cols cols))

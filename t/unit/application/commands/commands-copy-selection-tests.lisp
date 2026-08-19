@@ -58,19 +58,6 @@
       (expect (equal (cons 0 3) (nerimux/terminal/types:screen-copy-cursor s)))
       (expect (nerimux/terminal/types:screen-dirty-p s) :to-be-falsy)))
 
-  ;; The send -X name clear-selection maps to the :copy-mode-clear-selection
-  ;; dispatch keyword.
-  (it "copy-mode-clear-selection-x-command-mapped"
-    (expect (eq :copy-mode-clear-selection
-                (copy-mode-x-command-value "clear-selection")))
-    (expect (eq :copy-mode-stop-selection
-                (copy-mode-x-command-value "stop-selection")))
-    (expect (eq :copy-mode-yank
-                (copy-mode-x-command-value "copy-selection-and-cancel")))
-    (expect (eq :copy-mode-toggle-position
-                (copy-mode-x-command-value "toggle-position")))
-    (expect (copy-mode-x-command-value "scroll-mouse") :to-be-falsy))
-
   ;; -- copy-mode-other-end ------------------------------------------------------
 
   ;; Swapping the two ends must not change the selected text or normalised bounds.

@@ -117,9 +117,9 @@ set-option -u status")
   ;; ── Bare arg-command shorthand rejection in bind (single-token path) ────────
   ;;
   ;; `bind X <command> args` (multi-token) already works — it is stored
-  ;; unvalidated and resolved at dispatch via *arg-command-table*.  A BARE
-  ;; `bind X <shorthand>` (single token) goes through %command-keyword, and the
-  ;; named-buffer family uses canonical command names only.
+  ;; unvalidated as a deferred token list.  A BARE `bind X <shorthand>` (single
+  ;; token) goes through %command-keyword, and the named-buffer family uses
+  ;; canonical command names only.
 
   ;; Named-buffer shorthand spellings (deleteb/loadb/pasteb/saveb/showb) are
   ;; rejected because nerimux accepts canonical command names only.

@@ -17,18 +17,6 @@
       (dolist (sub '("new-window" "detach" "select-window"))
         (expect (search sub text)))))
 
-  ;; Runtime prefix dispatch resolves a named single-byte key binding (Enter, byte
-  ;; 13) via candidate probing, so `bind Enter <cmd>` is reachable — not just
-  ;; printable single characters (audit #35).
-  (it "prefix-named-single-byte-key-reachable-at-runtime"
-    (with-isolated-config
-      (nerimux/config:load-config-from-string "bind Enter next-window")
-      (let ((entry (nerimux::%key-table-entry-by-candidates
-                    nerimux/config:+table-prefix+
-                    (nerimux::%single-byte-key-candidates 13))))
-        (expect (not (null entry)))
-        (expect (eq :next-window (nerimux/config:key-table-command entry))))))
-
   ;; Default prefix multi-byte keys are present in the key table and resize arrows are repeatable.
   (it "default-prefix-string-bindings-are-listed-and-repeatable"
     (with-isolated-config
@@ -68,9 +56,12 @@
         (#\H :resize-left           "H resizes the pane left")
         (#\J :resize-down           "J resizes the pane down")
         (#\K :resize-up             "K resizes the pane up")
-        (#\L :last-session          "L selects the last session (extended binding overrides bootstrap resize-right default)")
+        ;; L and ! were rebound to :last-session / :break-pane by the extended
+        ;; binding set in presentation/events, which is gone; the bootstrap
+        ;; defaults in config-prefix-defaults.lisp are what stands now.
+        (#\L :resize-right          "L resizes the pane right")
         (#\$ :rename-session        "$ renames the session")
-        (#\! :break-pane            "! breaks the pane (extended binding overrides bootstrap if-shell default)")
+        (#\! :if-shell              "! runs if-shell")
         (#\0 :select-window         "digit 0 selects window 0")
         (#\9 :select-window         "digit 9 selects window 9"))))
 

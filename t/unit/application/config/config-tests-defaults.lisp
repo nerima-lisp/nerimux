@@ -50,12 +50,13 @@
                     (#\H :resize-left)
                     (#\J :resize-down)
                     (#\K :resize-up)
-                    ;; #\L and #\! are rebound to their tmux-correct commands by
-                    ;; events-loop.lisp (loaded after config.lisp): L = last-session
-                    ;; (switch-client -l), ! = break-pane.
-                    (#\L :last-session)
+                    ;; L and ! used to be rebound to :last-session / :break-pane
+                    ;; by the extended binding set in presentation/events, which
+                    ;; was deleted with the tmux keystroke pipeline.  What the
+                    ;; store holds now is the bootstrap default set alone.
+                    (#\L :resize-right)
                     (#\$ :rename-session)
-                    (#\! :break-pane)))
+                    (#\! :if-shell)))
       (let ((key (first pair))
             (expected (second pair)))
         (expect (eq expected (lookup-key-binding key)))))

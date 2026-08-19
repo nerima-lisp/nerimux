@@ -32,7 +32,6 @@
   socket
   stream
   fd
-  state
   stdin-target
   (message-log nil)
   ;; T when the client attached read-only (attach-session -r): its keys/mouse are
@@ -224,13 +223,11 @@
 ;;; ── Connection lifecycle ────────────────────────────────────────────────────
 
 (defun %add-client (socket)
-  "Register SOCKET as a new client: build its CLIENT-CONN (with a fresh keystroke
-   state seeded to the current geometry), fire the client-attached hook, and mark
+  "Register SOCKET as a new client: build its CLIENT-CONN, fire the client-attached hook, and mark
    the screen dirty so the new client gets an immediate paint.  Returns the conn."
   (let ((conn (%make-client-conn :socket socket
                                  :stream (socket-stream socket)
                                  :fd     (socket-fd socket)
-                                 :state  (make-input-state)
                                  :rows   *term-rows*
                                  :cols   *term-cols*
                                  :mode   :normal

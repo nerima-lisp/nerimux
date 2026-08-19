@@ -60,12 +60,15 @@
 
   ;;; ── display-panes overlay active ─────────────────────────────────────────────
 
-  ;; :display-panes activates the overlay (overlay-active-p returns T).
+  ;; show-display-panes-overlay activates the overlay (overlay-active-p returns T)
+  ;; and sets *display-panes-active*, the same effect the deleted :display-panes
+  ;; dispatch case used to drive through show-transient-overlay.
   (it "display-panes-overlay-active"
-    (with-fake-session (sess :nwindows 1 :npanes 2)
-      (let ((*overlay* nil))
-        (nerimux::dispatch-command sess :display-panes nil)
-        (assert-overlay-active ":display-panes must activate the overlay"))))
+    (let ((*overlay* nil)
+          (*display-panes-active* nil))
+      (show-display-panes-overlay "")
+      (assert-overlay-active "show-display-panes-overlay must activate the overlay")
+      (expect *display-panes-active* :to-be-truthy)))
 
   ;;; ── respawn-pane resets fd/pid ───────────────────────────────────────────────
 

@@ -78,7 +78,10 @@
       (let ((applied (load-config-from-string "bind M-z next-window")))
         (expect (= 1 applied))
         (expect (eq :next-window (lookup-key-binding "M-z")))
-        (expect (eq :zoom-toggle (lookup-key-binding #\z))))))
+        ;; The multichar token must not also bind the bare character.  #\z has
+        ;; no default binding now that the extended set from presentation/events
+        ;; is gone, so an unbound lookup is the sharper assertion.
+        (expect (null (lookup-key-binding #\z))))))
 
   ;;; bind -N "note" (tmux 3.1+ key-binding description)
 

@@ -68,12 +68,6 @@
    Also isolates prompt/overlay/menu/popup state so that UI state created by
    one test does not leak into subsequent event-loop tests."
   `(let ((nerimux::*dirty* nil)
-         (nerimux::*last-mouse-click* nil)
-         (nerimux::*key-table* nil)
-         ;; Tests feed key bytes microseconds apart, a rate no real terminal
-         ;; produces for typed keys.  Reset key history to avoid triggering the
-         ;; assume-paste-time heuristic on every second key.
-         (nerimux::*last-ground-key-time* nil)
          (nerimux::*server-marked-pane* nil)
          (nerimux::*client-read-only* nil)
          (nerimux/prompt:*prompt* nil)

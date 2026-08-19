@@ -22,12 +22,6 @@
                 #:shadowing-bindings
                 #:unique-bindings
                 #:explain-binding
-                ;; Command-metadata read-model
-                #:current-command-rulebase
-                #:command-accepts-flag-p
-                #:commands-with-flag
-                #:flags-of-command
-                #:scriptable-commands
                 ;; Prolog query vocabulary (predicate symbols)
                 #:binding
                 #:conflict
@@ -35,11 +29,7 @@
                 #:unique-binding
                 #:repeatable
                 #:repeatable-command
-                #:note
-                #:command
-                #:usage
-                #:accepts-flag
-                #:scriptable)
+                 #:note)
   ;; cl-prolog-kit's own cl-weave helpers for asserting raw queries.
   (:import-from #:cl-prolog-kit/weave
                 #:assert-query

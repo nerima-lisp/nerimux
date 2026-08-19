@@ -119,46 +119,10 @@
   ("copy-mode and copy-mode-vi conflict on some key"
    (conflict ?key "copy-mode" ?command-1 "copy-mode-vi" ?command-2) :succeeds))
 
-;;;; Second cold-path domain: command metadata.
 
-(describe "nerimux command-metadata reasoning"
-  (it "projects the canonical command table into a rulebase"
-    (let ((rb (current-command-rulebase)))
-      (expect rb :to-prove '(command "bind-key"))
-      (expect rb :to-prove '(command "kill-server"))))
-
-  (it "derives the flags a command accepts from its usage string"
-    (let ((rb (current-command-rulebase)))
-      ;; bind-key: "[-nrN] [-T key-table] [-X] key [note] command ..."
-      (expect (command-accepts-flag-p rb "bind-key" "T") :to-be-truthy)
-      (expect (command-accepts-flag-p rb "bind-key" "r") :to-be-truthy)
-      (expect (command-accepts-flag-p rb "bind-key" "z") :to-be-falsy)))
-
-  (it "identifies scriptable (no-argument) commands"
-    (let ((rb (current-command-rulebase)))
-      (expect (scriptable-commands rb) :to-contain "kill-server")
-      (expect (scriptable-commands rb) :to-contain "detach-client")))
-
-  (it "reverse-maps a flag to the commands that accept it"
-    (let ((rb (current-command-rulebase)))
-      ;; -t (target) is accepted by many commands
-      (expect (commands-with-flag rb "t") :to-contain "kill-pane")
-      (expect (commands-with-flag rb "t") :to-satisfy
-              (lambda (names) (> (length names) 10)))))
-
-  (it "maps a command to the flags it accepts"
-    (let ((rb (current-command-rulebase)))
-      ;; bind-key: "[-nrN] [-T key-table] [-X] key [note] command ..."
-      (expect (flags-of-command rb "bind-key") :to-contain "T")
-      (expect (flags-of-command rb "bind-key") :to-contain "r")
-      (expect (flags-of-command rb "kill-server") :to-equal nil))))
-
-(deftest-queries "raw prolog command-metadata queries" ((current-command-rulebase))
-  ("bind-key is a canonical command"
-   (command "bind-key") :succeeds)
-  ("bind-key accepts the -T flag"
-   (accepts-flag "bind-key" "T") :succeeds)
-  ("kill-server accepts no flags"
-   (accepts-flag "kill-server" ?flag) :fails)
-  ("kill-server is scriptable"
-   (scriptable "kill-server") :succeeds))
+;;;; The second cold-path domain — command metadata — was removed with the
+;;;; tmux command table it projected.  command-rulebase.lisp read
+;;;; *COMMAND-USAGE-TABLE* out of the NERIMUX package by name; once
+;;;; application/dispatch/ was deleted that find-symbol returned NIL and the
+;;;; rulebase degraded to an empty table rather than erroring.  These tests are
+;;;; what caught it.

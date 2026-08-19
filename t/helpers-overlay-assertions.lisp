@@ -113,14 +113,6 @@
          (expect (overlay-active-p) :to-be-truthy)
          ,@body))))
 
-(defmacro with-dispatch-overlay ((session-spec command &key args context)
-                                 &body body)
-  "Run DISPATCH-COMMAND for COMMAND in a fake session and assert an overlay opens."
-  `(with-overlay-session (,session-spec :context ,(or context "dispatch-command must open an overlay"))
-       (nerimux::dispatch-command ,(if (consp session-spec) (first session-spec) session-spec)
-                                  ,command ,args)
-     ,@body))
-
 (defmacro with-run-command-line-overlay ((session-spec command &key context)
                                          &body body)
   "Run %RUN-COMMAND-LINE for COMMAND in a fake session and assert an overlay opens."
@@ -137,20 +129,6 @@
                                        ,command)
            (expect (overlay-active-p) :to-be-truthy)
            ,@body))))
-
-(defmacro with-dispatch-prompt ((session-spec command &key args label context)
-                                &body body)
-  "Run DISPATCH-COMMAND for COMMAND in a fake session and assert a prompt opens."
-  (declare (ignore context))
-  (let ((session-var (if (consp session-spec) (first session-spec) session-spec))
-        (session-args (if (consp session-spec) (rest session-spec) nil)))
-    `(with-fake-session (,session-var ,@session-args)
-       (let ((*prompt* nil))
-         (nerimux::dispatch-command ,session-var ,command ,args)
-         (expect (prompt-active-p) :to-be-truthy)
-         ,(when label
-            `(expect (string= ,label (prompt-label *prompt*))))
-         ,@body))))
 
 (defmacro assert-overlay-rejects-before-row (overlay message row-token
                                             &optional (context "overlay"))

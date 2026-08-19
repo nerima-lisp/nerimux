@@ -303,110 +303,17 @@
      ;; dispatch context, subdivided into cohesive sub-areas. Load order is
      ;; byte-identical to the old flat module; handlers split early (support)
      ;; / late (rest) via the :pathname trick (dispatch-handlers-2).
-     (:module "application/dispatch/core"
-      :serial t
-      :components
-      ((:file "dispatch-core")            ; cyclic navigation primitives
-       (:file "dispatch-core-overlays")   ; overlay rendering helpers
-       (:file "dispatch-core-targets")    ; target-string resolution helpers
-       (:file "dispatch-core-context")    ; target/session guard macros + active context
-       (:file "dispatch-core-hooks")      ; command-hook dispatch helpers
-       (:file "dispatch-core-window-cmds") ; window/pane/split command factories
-       (:file "dispatch-core-focus")      ; focus event delivery helpers
-       (:file "dispatch-core-pane-ops")   ; pane, layout, and window-list helpers
-       (:file "dispatch-core-commands"))) ; copy-mode table, format helpers, new-session, named-command table (loads dispatch-command-specs* fragments)
-     (:module "application/dispatch/handlers"
-      :serial t
-      :components
-      ((:file "dispatch-handlers-support"))) ; shared prompt/menu helpers for dispatch handlers
-     (:module "application/dispatch/commands"
-      :serial t
-      :components
-      ((:file "dispatch-commands-input")    ; shared flag parser and command-input macros
-       (:file "dispatch-commands-target")   ; shared target resolution helpers
-       (:file "dispatch-commands-prompt")   ; command-prompt substitution/CPS helpers
-       (:file "dispatch-commands")          ; display/prompt/pane %cmd-* handlers
-       (:file "dispatch-commands-flag-accessors") ; generated command flag accessors
-       (:file "dispatch-commands-buffer")   ; paste-buffer %cmd-* handlers
-       (:file "dispatch-commands-buffer-ui") ; popup/menu/confirm/list-keys %cmd-* handlers
-       (:file "dispatch-commands-copy-mode-entry") ; copy-mode entry %cmd-* handler
-       (:file "dispatch-commands-option-scope-facts") ; set-option scope accessor facts
-       (:file "dispatch-commands-option")   ; set-option (CPS) + show-options %cmd-*
-       (:file "dispatch-commands-option-pane") ; rename/select %cmd-* handlers (loads option-pane-window/pane fragments)
-       (:file "dispatch-commands-lifecycle") ; kill/link/unlink/swap/move/source-file %cmd-*
-       (:file "dispatch-commands-pane-layout-facts") ; select-layout canonical facts
-       (:file "dispatch-commands-pane")   ; layout/window/pane helpers + *key-table*
-       (:file "dispatch-commands-session-service") ; session switching/destruction services
-       (:file "dispatch-commands-client-session") ; switch/attach/detach %cmd-* handlers
-       (:file "dispatch-commands-session-create") ; new-session %cmd-* handler
-       (:file "dispatch-commands-session-destroy") ; kill-session %cmd-* handler
-       (:file "dispatch-commands-window-resize") ; resize-window %cmd-* handler
-       (:file "dispatch-commands-pane-x-facts") ; copy-mode -X canonical fact tables
-       (:file "dispatch-commands-pane-x") ; send-keys -X dispatch logic
-       (:file "dispatch-commands-shell")   ; run-shell and if-shell %cmd-* handlers
-       (:file "dispatch-commands-capture-pane") ; capture-pane %cmd-* handler
-       (:file "dispatch-commands-pane-ops") ; resize/join/break/clear/rotate %cmd-* handlers
-       (:file "dispatch-commands-list-data") ; *command-usage-table* pure data (canonical-name → usage-flags)
-       (:file "dispatch-commands-list-registry") ; list-commands registry projection
-       (:file "dispatch-commands-list-overlay") ; list overlay presentation helpers
-       (:file "dispatch-commands-list-query") ; list read-model queries and formatters
-       (:file "dispatch-commands-list-parser") ; list-* tmux-compatible arg parser
-       (:file "dispatch-commands-list")    ; list-sessions/windows/panes/clients %cmd-* handlers
-       (:file "dispatch-commands-list-commands") ; list-commands + wait-for arg parsing/handlers
-       (:file "dispatch-commands-auto")   ; window-nav/session-mgmt %cmd-* (find-window, refresh/lock, hooks, bind)
-       (:file "dispatch-commands-auto-env") ; show-environment/set-environment helpers + %cmd-* handlers
-       (:file "dispatch-commands-auto-pane") ; pane input/prefix runtime commands %cmd-* (send-keys, send-prefix)
-       (:file "dispatch-commands-auto-pane-process") ; pane process/pipe runtime commands %cmd-* (respawn, pipe-pane)
-       (:file "dispatch-commands-server") ; server-access ACL
-       (:file "dispatch-commands-server-customize") ; customize-mode tree browser
-       (:file "dispatch-commands-runner"))) ; *arg-command-table* + %run-command-tokens + %run-command-line
-     (:module "dispatch-handlers-2"
-      :pathname "application/dispatch/handlers"
-      :serial t
-      :components
-      ((:file "dispatch-prefix")          ; prefix-key dispatcher, reached from presentation/events
-       (:file "dispatch-handlers")        ; command handler rule table part I (detach through wait-for)
-       (:file "dispatch-handlers-copy-mode") ; copy-mode command handler rule table
-       (:file "dispatch-handlers-b-menu") ; popup/menu overlays
-       (:file "dispatch-handlers-b-server") ; server/env/prompt-history handlers
-       (:file "dispatch-handlers-b-prompt") ; prompt-driven dispatch handlers
-       (:file "dispatch-handlers-b")     ; command handler rule table part II (break/join through mark/layout)
-       (:file "dispatch-handlers-b-tail") ; session/window/misc handlers
-       (:file "dispatch-handlers-buffer"))) ; paste-buffer command handler helpers
-     (:module "presentation/events"
-      :serial t
-      :components
-      ((:file "events-constants")  ; VT100 / mouse / CSI byte constants (pure data, no logic)
-       (:file "events-core")
-       (:file "events-loop-bindings") ; extended prefix key-binding table installation
-       (:file "events-mouse-status") ; status bar mouse handling
-       (:file "events-mouse-state") ; mouse dispatch dynamic state and pure counters
-       (:file "events-mouse-layout") ; pane-border hit testing and drag resize
-       (:file "events-mouse-bindings") ; mouse key names, actions, and context
-       (:file "events-mouse-passthrough") ; pane X10/SGR mouse passthrough
-       (:file "events-mouse-actions") ; built-in mouse actions
-       (:file "events-mouse-dispatch") ; mouse event dispatch coordinator
-       (:file "events-overlay-pager") ; overlay pager escape handler
-       (:file "events-key-names") ; arrow/key-name fact tables and CSI-u parsing
-       (:file "events-key-bindings") ; key-table lookup and binding execution
-       (:file "events-keystroke-escape")  ; escape decoder coordinator + CSI-u helpers
-       (:file "events-keystroke-escape-mouse") ; X10/SGR mouse escape parsing
-       (:file "events-keystroke-escape-prompt") ; prompt-local ESC sequences
-       (:file "events-keystroke-escape-keys") ; SS3 / CSI-tilde key-name resolution
-       (:file "events-keystroke-state") ; shared dynamic state and escape-buffer utility
-       (:file "events-keystroke-menu") ; active menu key dispatch rules
-       (:file "events-keystroke-copy-mode") ; copy-mode digit prefix and table dispatch
-       (:file "events-keystroke") ; CPS ground-state coordinator
-       (:file "events-prefix-csi-continuation") ; post-prefix CSI/SS3 CPS continuation
-       (:file "events-keystroke-repeat-states") ; prefix/root repeat CPS states
-       (:file "events-loop-timers") ; CPS process-byte + escape/repeat timer plumbing + synchronize-panes
-       (:file "events-loop")))
+ ; copy-mode table, format helpers, new-session, named-command table (loads dispatch-command-specs* fragments)
+ ; shared prompt/menu helpers for dispatch handlers
+ ; *arg-command-table* + %run-command-tokens + %run-command-line
+ ; paste-buffer command handler helpers
      (:module "bootstrap-server"
       :pathname "bootstrap"
       :serial t
       :components
       ((:file "session-registry")  ; session registry + group management
        (:file "server")
+       (:file "workspace-window") ; workspace window creation
        (:file "server-multi-dispatch") ; multi-client attach/resize/key/command handlers
        (:file "server-multi")  ; multi-client client registry + dispatch helpers
        (:file "server-multi-loop") ; multi-client select-multiplexed serve loop
@@ -476,8 +383,7 @@
   :serial t
   :components ((:file "package")
                (:file "key-rulebase")
-               (:file "key-tables")
-               (:file "command-rulebase")))
+               (:file "key-tables")))
 
 (defsystem "nerimux/dataflow-model"
   :description "cl-dataflow-kit copy-mode lifecycle read-model."

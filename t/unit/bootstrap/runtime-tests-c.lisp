@@ -73,8 +73,7 @@
   ;; add-message-log also appends to the current client's message log.
   (it "add-message-log-mirrors-to-current-client-log"
     (let ((nerimux::*message-log* nil)
-          (nerimux::*current-client-conn* (nerimux::%make-client-conn
-                                           :state (nerimux::make-input-state))))
+          (nerimux::*current-client-conn* (nerimux::%make-client-conn)))
       (nerimux::add-message-log "client-scoped")
       (expect (string= "client-scoped" (cdr (first nerimux::*message-log*))))
       (expect (string= "client-scoped"

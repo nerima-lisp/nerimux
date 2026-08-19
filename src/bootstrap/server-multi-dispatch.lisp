@@ -477,7 +477,7 @@ display label back into a target string."
        (handler-case
            (let ((*term-rows* (client-conn-rows conn))
                  (*term-cols* (client-conn-cols conn)))
-             (let* ((window (%cmd-new-window
+             (let* ((window (%workspace-new-window
                              session
                              :name (%worktree-window-name worktree)
                              :start-dir path))
@@ -558,7 +558,7 @@ display label back into a target string."
            (%client-notify conn "runtime pane is unavailable")))
       ((eq kind :orphan-pane)
        (handler-case
-           (let* ((window (%cmd-new-window
+           (let* ((window (%workspace-new-window
                            session
                            :name (or (getf item :window-name) "recovered")
                            :start-dir path

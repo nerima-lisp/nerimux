@@ -49,10 +49,10 @@ panes.
 | `i` / `c` / `:` | Input / copy / command mode |
 | `Esc` | Close or cancel the active modal or mode |
 
-The compatibility server/client commands and tmux-style bindings remain
-available for existing workflows. See [Compatibility](reference/compatibility.md)
-for that command surface and [Configuration](guide/configuration.md) for
-configuration details.
+The tmux keystroke pipeline (prefix bindings, `bind`/`unbind`, hooks) and the
+tmux command surface are gone; see [Compatibility](reference/compatibility.md)
+for what changed. nerimux still parses `.tmux.conf` syntax at startup — see
+[Configuration](guide/configuration.md) for what a config file can do today.
 
 ## Development
 

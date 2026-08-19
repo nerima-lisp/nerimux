@@ -33,42 +33,6 @@
        (with-fake-session (,session-var ,@session-args)
          ,@body))))
 
-(defmacro with-pty-run-command-line-overlay ((session-spec command &key context)
-                                             &body body)
-  "Run %RUN-COMMAND-LINE for COMMAND in a fake session only when PTYs exist."
-  (let ((session-var (if (consp session-spec) (first session-spec) session-spec))
-        (session-args (if (consp session-spec) (rest session-spec) nil)))
-    `(with-pty-session (,session-var ,@session-args)
-       (with-run-command-line-overlay (,session-var ,command :context ,context)
-         ,@body))))
-
-(defmacro with-pty-command-preserving-focus ((session-spec command &key count-form active-form
-                                                           count-context focus-context)
-                                              &body body)
-  "Run COMMAND in a PTY-backed fake session and assert it changes COUNT-FORM
-   while leaving ACTIVE-FORM unchanged."
-  (let ((session-var (if (consp session-spec) (first session-spec) session-spec))
-        (session-args (if (consp session-spec) (rest session-spec) nil)))
-    `(with-pty-session (,session-var ,@session-args)
-       (let ((before-count ,count-form)
-             (before-active ,active-form))
-         (nerimux::%run-command-line ,session-var ,command)
-         (let ((after-count ,count-form))
-           (expect (> after-count before-count)))
-         (expect (eq before-active ,active-form))
-         ,@body))))
-
-(defmacro with-pty-command-increasing-count ((session-spec command &key count-form count-context)
-                                             &body body)
-  "Run COMMAND in a PTY-backed fake session and assert it increases COUNT-FORM."
-  (let ((session-var (if (consp session-spec) (first session-spec) session-spec))
-        (session-args (if (consp session-spec) (rest session-spec) nil)))
-    `(with-pty-session (,session-var ,@session-args)
-       (let ((before-count ,count-form))
-         (nerimux::%run-command-line ,session-var ,command)
-         (expect (> ,count-form before-count))
-         ,@body))))
-
 (defun %forkpty-with-retry (rows cols &key (attempts 3))
   "Spawn a PTY shell, retrying transient allocation failures.
    Even after pty-available-p succeeds, the sandboxed builder can transiently

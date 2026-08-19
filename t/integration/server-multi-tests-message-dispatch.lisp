@@ -313,7 +313,7 @@
                 :branch "feature/new"))
              (conn (%make-test-conn :rows 17 :cols 63))
              (captured-geometry nil)
-             (original-new-window (fdefinition 'nerimux::%cmd-new-window)))
+             (original-new-window (fdefinition 'nerimux::%workspace-new-window)))
         (nerimux/model:organization-add-repository organization repository)
         (nerimux/model:repository-add-worktree repository worktree)
         (setf (nerimux::client-conn-mode conn) :picker
@@ -323,7 +323,7 @@
               (nerimux::client-conn-picker-query conn) "feature")
         (unwind-protect
              (progn
-               (setf (fdefinition 'nerimux::%cmd-new-window)
+               (setf (fdefinition 'nerimux::%workspace-new-window)
                      (lambda (session &rest args)
                        (declare (ignore args))
                        (setf captured-geometry
@@ -331,7 +331,7 @@
                        (nerimux/model:session-active-window session)))
                (expect (nerimux::%select-client-picker-item s conn))
                (expect (equal '(17 63) captured-geometry)))
-          (setf (fdefinition 'nerimux::%cmd-new-window)
+          (setf (fdefinition 'nerimux::%workspace-new-window)
                 original-new-window)))))
 
   (it "multi-client-command-vocabulary-normalizes-to-tmux"

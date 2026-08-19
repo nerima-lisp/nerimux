@@ -8,27 +8,6 @@
 ;;; universally available on POSIX systems.  Background mode is verified via the
 ;;; T return value without inspecting the process object.
 
-(defparameter *run-shell-removed-flag-cases*
-  '("run-shell -d 0 echo rejected"
-    "run-shell -t %1 echo rejected"))
-
-(defmacro with-run-shell-removed-flag-case ((command) &body body)
-  `(dolist (,command *run-shell-removed-flag-cases*)
-     ,@body))
-
-(defparameter *run-shell-overlay-output-cases*
-  '(("run-shell -E 'printf out; printf err >&2'"
-     ("out" "err")
-     "run-shell -E must capture stdout and stderr")
-    ("run-shell -C 'display-message from-run-shell-C'"
-     ("from-run-shell-C")
-     "run-shell -C must dispatch the supplied tmux command")))
-
-(defmacro with-run-shell-overlay-output-case ((command needles context) &body body)
-  `(dolist (case *run-shell-overlay-output-cases*)
-     (destructuring-bind (,command ,needles ,context) case
-       ,@body)))
-
 (describe "commands-suite"
 
   ;;; ── rename-window ────────────────────────────────────────────────────────────
@@ -168,38 +147,6 @@
       (expect (stringp out))
       (expect (search "delayed" out))
       (expect (>= elapsed 1/20))))
-
-  ;; %run-command-line run-shell rejects the removed -d and -t flags.
-  (it "run-command-line-run-shell-rejects-removed-delay-and-target-flags"
-    (with-run-shell-removed-flag-case (command)
-      (with-fake-session (s)
-        (with-run-command-line-overlay (s command :context command)
-          (assert-overlay-contains "run-shell: unsupported argument" *overlay* command)
-          (assert-overlay-not-contains "rejected" *overlay* command)))))
-
-  ;; %run-command-line run-shell -c runs the shell command from the supplied directory.
-  (it "run-command-line-run-shell-c-controls-working-directory"
-    (let ((dir (merge-pathnames
-                (format nil "nerimux-run-shell-dispatch-cwd-~D/" (random 1000000))
-                (host-kit:temporary-directory))))
-      (unwind-protect
-           (let* ((created (ensure-directories-exist dir))
-                  (expected (string-right-trim '(#\/)
-                                               (namestring (truename created)))))
-             (with-fake-session (s)
-               (let ((command (format nil "run-shell -c ~A pwd" (namestring created))))
-                 (with-run-command-line-overlay (s command :context command)
-                   (assert-overlay-not-contains "unsupported argument" *overlay* command)
-                   (assert-overlay-contains expected *overlay* command)))))
-        (ignore-errors (host-kit:delete-directory-tree dir :validate t)))))
-
-  ;; %run-command-line run-shell renders output-producing flag behavior through the overlay.
-  (it "run-command-line-run-shell-overlay-output-table"
-    (with-run-shell-overlay-output-case (command needles context)
-      (with-fake-session (s)
-        (with-run-command-line-overlay (s command :context context)
-          (assert-overlay-not-contains "unsupported argument" *overlay* context)
-          (assert-overlay-contains-all needles *overlay* context)))))
 
   ;;; ── if-shell ─────────────────────────────────────────────────────────────────
 

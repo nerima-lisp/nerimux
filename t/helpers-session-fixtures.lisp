@@ -41,21 +41,6 @@
        (setf nerimux/buffer:*paste-buffers* old-buffers
              nerimux/buffer:*buffer-auto-index* old-index))))
 
-(defmacro with-auto-rename-session ((screen-var pane-var win-var sess-var
-                                     &key (win-name "w") (pid -1)) &body body)
-  "Build a 20x5 single-pane session for %maybe-rename-window-from-title tests.
-   Runs BODY inside WITH-LOOP-STATE for event-loop isolation."
-  `(let* ((,screen-var (make-screen 20 5))
-          (,pane-var   (make-pane :id 1 :fd -1 :pid ,pid :x 0 :y 0 :width 20 :height 5
-                                  :screen ,screen-var))
-          (,win-var    (make-window :id 1 :name ,win-name :width 20 :height 5
-                                   :panes (list ,pane-var)
-                                   :tree  (make-layout-leaf ,pane-var)))
-          (,sess-var   (make-session :id 1 :name "0" :windows (list ,win-var))))
-     (window-select-pane ,win-var ,pane-var)
-     (session-select-window ,sess-var ,win-var)
-     (with-loop-state ,@body)))
-
 (defmacro with-minimal-loop-session ((pane-var win-var sess-var &rest keys) &body body)
   "Combine with-minimal-session + with-loop-state for dispatch tests."
   `(with-minimal-session (,pane-var ,win-var ,sess-var ,@keys)
@@ -117,47 +102,6 @@
    select-pane command tests and similar command dispatch checks."
   `(with-fake-session (,var :nwindows 1 :npanes 2)
      ,@body))
-
-(defmacro with-copy-mode-state ((session-var screen-var state-var) &body body)
-  "Run BODY with SESSION-VAR bound to a fresh fake session in copy mode,
-   SCREEN-VAR bound to its active screen, and STATE-VAR bound to a fresh input-state.
-   Wraps everything in WITH-LOOP-STATE for proper event-loop isolation.
-   Leading DECLARE forms in BODY are hoisted before the copy-mode-enter dispatch
-   so they remain valid (CL prohibits declare after an executable form)."
-  (let* ((decls (loop for f in body
-                      while (and (consp f) (eq (car f) 'declare))
-                      collect f))
-         (forms (nthcdr (length decls) body)))
-    `(let ((,session-var (make-fake-session)))
-       (with-loop-state
-         (let ((,screen-var (active-screen ,session-var))
-               (,state-var  (nerimux::make-input-state)))
-           ,@decls
-           (nerimux::dispatch-command ,session-var :copy-mode-enter nil)
-           ,@forms)))))
-
-(defmacro with-copy-mode-vi-state ((session-var screen-var state-var) &body body)
-  "Run BODY in an isolated vi copy-mode key-table configuration."
-  `(with-copy-mode-keys-state (,session-var ,screen-var ,state-var "vi")
-     ,@body))
-
-(defmacro with-copy-mode-emacs-state ((session-var screen-var state-var) &body body)
-  "Run BODY in an isolated emacs copy-mode key-table configuration."
-  `(with-copy-mode-keys-state (,session-var ,screen-var ,state-var "emacs")
-     ,@body))
-
-(defmacro with-copy-mode-keys-state ((session-var screen-var state-var mode-keys)
-                                     &body body)
-  "Run BODY with MODE-KEYS selected and copy mode already active."
-  `(with-isolated-config
-     (nerimux/options:set-option "mode-keys" ,mode-keys)
-     (with-copy-mode-state (,session-var ,screen-var ,state-var)
-       ,@body)))
-
-(defun send-copy-mode-bytes (session state bytes)
-  "Feed BYTES through PROCESS-BYTE for copy-mode dispatch tests."
-  (dolist (byte bytes)
-    (nerimux::process-byte session byte state)))
 
 (defmacro with-option-session ((var &rest make-args) &body body)
   "Bind VAR to a fresh fake session and run BODY inside WITH-ISOLATED-CONFIG.

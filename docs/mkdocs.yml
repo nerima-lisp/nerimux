@@ -1,5 +1,5 @@
 site_name: nerimux
-site_description: A tmux-compatible terminal multiplexer in Common Lisp
+site_description: A workspace-oriented terminal multiplexer in Common Lisp
 site_url: https://nerima-lisp.github.io/nerimux/
 repo_url: https://github.com/nerima-lisp/nerimux
 repo_name: nerima-lisp/nerimux

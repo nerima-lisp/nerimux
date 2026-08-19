@@ -103,26 +103,32 @@
       (expect (= 13 (pane-height p0)))
       (expect (= 7  (pane-height p1)))))
 
-  ;;; ── resize-pane -x / -y: absolute size (command arg form) ────────────────────
+  ;;; ── resize-pane: absolute size via a computed delta ──────────────────────────
+  ;;;
+  ;;; The tmux resize-pane -x/-y command-line flags resolved an absolute target
+  ;;; size to a (target - current) delta and applied it through RESIZE-PANE's
+  ;;; :right/:down border move; that resolution was dispatch-layer sugar.
+  ;;; RESIZE-PANE itself only ever took a relative amount, so these drive it with
+  ;;; the same delta computation directly.
 
-  ;; resize-pane -x N sets the active pane's width to N (both grow and shrink paths).
+  ;; An absolute width target N (the old -x N) grows or shrinks the active pane
+  ;; to exactly N via a :right delta of (N - current-width).
   (it "resize-pane-x-absolute-table"
-    (dolist (row '(("25" 25 "resize-pane -x 25 grows pane from 20 to 25")
-                   ("15" 15 "resize-pane -x 15 shrinks pane from 20 to 15")))
-      (destructuring-bind (n-str expected desc) row
+    (dolist (row '((25 "resize-pane -x 25 grows pane from 20 to 25")
+                   (15 "resize-pane -x 15 shrinks pane from 20 to 15")))
+      (destructuring-bind (target desc) row
         (declare (ignore desc))
         (let* ((win (%vsplit-window 20))
-               (p0  (first (window-panes win)))
-               (s   (%make-session-with-window win)))
-          (nerimux::%cmd-resize-pane-arg s (list "-x" n-str))
-          (expect (= expected (pane-width p0)))))))
+               (p0  (first (window-panes win))))
+          (resize-pane win :right (- target (pane-width p0)))
+          (expect (= target (pane-width p0)))))))
 
-  ;; resize-pane -y N sets the active pane to an absolute height of N.
+  ;; An absolute height target N (the old -y N) sets the active pane to exactly N
+  ;; via a :down delta of (N - current-height).
   (it "resize-pane-y-absolute-sets-height"
     (let* ((win (%hsplit-window 10))
-           (p0  (first (window-panes win)))
-           (s   (%make-session-with-window win)))
-      (nerimux::%cmd-resize-pane-arg s '("-y" "13"))
+           (p0  (first (window-panes win))))
+      (resize-pane win :down (- 13 (pane-height p0)))
       (expect (= 13 (pane-height p0)))))
 
   ;;; ── copy-mode-scroll ─────────────────────────────────────────────────────────

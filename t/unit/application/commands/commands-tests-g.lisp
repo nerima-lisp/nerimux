@@ -60,7 +60,14 @@
                 (dolist (case ',rows)
                   (%check-copy-mode-find-case ,width ,height ,text ,term case))))))
 
-;;; ── join-pane / move-pane (scriptable %cmd-join-pane-arg) ────────────────────
+;;; ── join-pane / move-pane ─────────────────────────────────────────────────────
+;;;
+;;; The tmux command-line surface (join-pane/move-pane's -s/-t target strings and
+;;; -d "keep destination active" flag) was scriptable argument parsing on top of
+;;; the domain JOIN-PANE function; that parsing layer is gone.  These tests drive
+;;; JOIN-PANE directly with the resolved objects and replicate the -d/no -d
+;;; activation choice the old dispatch wrapper made, since JOIN-PANE itself never
+;;; touches window focus.
 
 (defun %join-arg-fixture (&key (width 18) (height 14))
   "Two single-pane windows (\"src\", \"dst\") in one session, dst current.
@@ -77,8 +84,18 @@
     (window-select-pane dst-win dst-pane)
     (values sess src-win src-pane dst-win dst-pane)))
 
-(defun %join-command-args (&rest flags)
-  (list* "-s" ":src" "-t" ":dst" flags))
+(defun %run-join-pane-case (sess src-win src-pane dst-win direction
+                            &key before full size keep-destination-active)
+  "Drive JOIN-PANE the way the join-pane/move-pane command line did: on success,
+   activate the moved pane in DST-WIN unless KEEP-DESTINATION-ACTIVE (the old -d
+   flag) is set, and mark the model dirty."
+  (let ((result (nerimux/commands:join-pane sess src-win src-pane dst-win direction
+                                            :before before :full full :size size)))
+    (when result
+      (unless keep-destination-active
+        (window-select-pane dst-win src-pane))
+      (setf nerimux::*dirty* t))
+    result))
 
 (defun %pane-in-window-p (pane window)
   (not (null (member pane (window-panes window)))))
@@ -103,18 +120,11 @@
   '((:h "-l 8 on a horizontal split" pane-width 9 8)
     (:v "-l 8 on a vertical split"   pane-height 5 8)))
 
-(defun %join-command-direction-flag (direction)
-  (ecase direction
-    (:h "-h")
-    (:v "-v")))
-
 (defun %check-cmd-join-pane-before-case (case)
   (destructuring-bind (direction desc pos-access cross-access window-cross-access) case
     (with-join-command-fixture (sess src-win src-pane dst-win dst-pane)
-      (declare (ignore src-win))
-      (let ((result (nerimux::%cmd-join-pane-arg
-                     sess
-                     (%join-command-args "-b" (%join-command-direction-flag direction)))))
+      (let ((result (%run-join-pane-case sess src-win src-pane dst-win direction
+                                         :before t)))
         (check-table
          (list (list (not (null result)) t
                      (format nil "~A must accept the -b layout flag" desc))
@@ -136,10 +146,8 @@
 (defun %check-cmd-join-pane-full-window-case (case)
   (destructuring-bind (direction desc pane-access window-access) case
     (with-join-command-fixture (sess src-win src-pane dst-win dst-pane)
-      (declare (ignore src-win))
-      (let ((result (nerimux::%cmd-join-pane-arg
-                     sess
-                     (%join-command-args "-f" (%join-command-direction-flag direction)))))
+      (let ((result (%run-join-pane-case sess src-win src-pane dst-win direction
+                                         :full t)))
         (check-table
          (list (list (not (null result)) t
                      (format nil "~A must accept the -f layout flag" desc))
@@ -155,10 +163,8 @@
 (defun %check-cmd-join-pane-size-hint-case (case)
   (destructuring-bind (direction desc pane-access other-size expected-size) case
     (with-join-command-fixture (sess src-win src-pane dst-win dst-pane)
-      (declare (ignore src-win))
-      (let ((result (nerimux::%cmd-join-pane-arg
-                     sess
-                     (%join-command-args "-l" "8" (%join-command-direction-flag direction)))))
+      (let ((result (%run-join-pane-case sess src-win src-pane dst-win direction
+                                         :size 8)))
         (check-table
          (list (list (not (null result)) t
                      (format nil "~A must accept the -l layout flag" desc))
@@ -310,31 +316,33 @@
   (it "join-pane-returns-nil-on-nil-args"
     (expect (null (nerimux/commands:join-pane nil nil nil nil :h))))
 
-  ;; join-pane -s SRC -t DST moves SRC's active pane into DST's window and, without
-  ;; -d, makes the joined pane active.  The emptied source window is removed.
+  ;; join-pane moves the source pane into the destination window and, without the
+  ;; keep-destination-active choice, makes the joined pane active.  The emptied
+  ;; source window is removed.
   (it "cmd-join-pane-moves-source-into-destination"
     (with-join-command-fixture (sess src-win src-pane dst-win dst-pane)
       (declare (ignore dst-pane))
-      (nerimux::%cmd-join-pane-arg sess (%join-command-args "-v"))
+      (%run-join-pane-case sess src-win src-pane dst-win :v)
       (check-table
        (list (list (%pane-in-window-p src-pane dst-win) t
                    "src-pane must now be in dst-window")
              (list (null (member src-win (session-windows sess))) t
                    "emptied src-window must be removed from the session")
              (list (eq src-pane (window-active-pane dst-win)) t
-                   "the joined pane becomes active (no -d)"))
+                   "the joined pane becomes active (no keep-destination-active)"))
        :test #'eq)))
 
-  ;; join-pane -d moves the pane but leaves the destination's original pane active.
+  ;; join-pane with keep-destination-active moves the pane but leaves the
+  ;; destination's original pane active (the old -d flag's behaviour).
   (it "cmd-join-pane-d-keeps-destination-active"
     (with-join-command-fixture (sess src-win src-pane dst-win dst-pane)
-      (declare (ignore src-win))
-      (nerimux::%cmd-join-pane-arg sess (%join-command-args "-d"))
+      (%run-join-pane-case sess src-win src-pane dst-win :v
+                           :keep-destination-active t)
       (check-table
        (list (list (%pane-in-window-p src-pane dst-win) t
-                   "src-pane is still moved into dst-window with -d")
+                   "src-pane is still moved into dst-window with keep-destination-active")
              (list (eq dst-pane (window-active-pane dst-win)) t
-                   "-d keeps the destination's original pane active"))
+                   "keep-destination-active keeps the destination's original pane active"))
        :test #'eq)))
 
   ;; join-pane -b inserts the moved pane before the destination pane.
@@ -350,16 +358,4 @@
   ;; join-pane -l applies the requested size hint on the split axis.
   (it "cmd-join-pane-l-honors-size-hint"
     (dolist (case *cmd-join-pane-size-hint-cases*)
-      (%check-cmd-join-pane-size-hint-case case)))
-
-  ;; join-pane with src and dst the same window is a no-op (guarded, no crash).
-  (it "cmd-join-pane-same-window-is-noop"
-    (with-join-command-fixture (sess src-win src-pane dst-win dst-pane)
-      (declare (ignore src-pane dst-win dst-pane))
-      (nerimux::%cmd-join-pane-arg sess '("-s" ":src" "-t" ":src"))
-      (check-table
-       (list (list (= 1 (length (window-panes src-win))) t
-                   "same-window join leaves the source pane in place")
-             (list (not (null (member src-win (session-windows sess)))) t
-                   "the source window is not removed by a same-window no-op"))
-       :test #'eq))))
+      (%check-cmd-join-pane-size-hint-case case))))

@@ -1,59 +1,12 @@
 (in-package #:nerimux/test)
 
-;;;; window tests — part C: find-window-by-name, list-windows-format,
-;;;; auto-rename-from-osc, format-window, move/swap/rotate coverage.
+;;;; window tests — part C: window-remove-pane, format-window, move/swap/rotate coverage.
+;;;; (find-window-by-name, list-windows-format, and auto-rename-from-osc tested the
+;;;;  dispatch-layer %format-window-list / %maybe-rename-window-from-title, both
+;;;;  removed with application/dispatch and presentation/events; no domain-level
+;;;;  replacement exists, so those cases were deleted rather than rewritten.)
 
 (describe "model-suite"
-
-  ;; %format-window-list includes matching window names.
-  (it "find-window-by-name"
-    (let* ((w0 (make-window :id 1 :name "bash" :width 80 :height 24
-                            :panes (list (make-no-pty-pane 1 0 0 80 24))))
-           (w1 (make-window :id 2 :name "vim" :width 80 :height 24
-                            :panes (list (make-no-pty-pane 2 0 0 80 24))))
-           (sess (make-session :id 1 :name "s" :windows (list w0 w1))))
-      (session-select-window sess w0)
-      (let ((listing (nerimux::%format-window-list sess)))
-        (expect (search "bash" listing))
-        (expect (search "vim"  listing)))))
-
-  ;; ── list-windows-format ──────────────────────────────────────────────────────
-
-  ;; %format-window-list includes the window's stored id, name, dimensions, and active marker.
-  (it "list-windows-format"
-    (let* ((p0  (make-no-pty-pane 1 0 0 80 24))
-           ;; Use id=0 so that the listing shows "0:" as the index prefix.
-           (w0  (make-window :id 0 :name "main" :width 80 :height 24
-                             :panes (list p0)))
-           (sess (make-session :id 1 :name "s" :windows (list w0))))
-      (session-select-window sess w0)
-      (let ((listing (nerimux::%format-window-list sess)))
-        (expect (search "main"    listing))
-        (expect (search "80x24"   listing))
-        (expect (search "[active]" listing))
-        (expect (search "0:"      listing)))))
-
-  ;; ── auto-rename-from-osc ─────────────────────────────────────────────────────
-  ;;
-  ;; These tests call the production function nerimux::%maybe-rename-window-from-title
-  ;; directly, rather than duplicating the rename logic inline.  This ensures the
-  ;; tests verify the real code path and provide genuine coverage confidence.
-
-  ;; When window-automatic-rename-p is T, window-name is updated from OSC title.
-  (it "auto-rename-from-osc"
-    (with-auto-rename-session (screen p0 w0 sess :win-name "original")
-      (setf (window-automatic-rename-p w0) t)
-      (setf (screen-title screen) "new-title")
-      (nerimux::%maybe-rename-window-from-title sess)
-      (expect (string= "new-title" (window-name w0)))))
-
-  ;; When window-automatic-rename-p is NIL, window-name is NOT updated from OSC title.
-  (it "auto-rename-disabled-ignores-osc"
-    (with-auto-rename-session (screen p0 w0 sess :win-name "kept")
-      (setf (window-automatic-rename-p w0) nil)
-      (setf (screen-title screen) "ignored-title")
-      (nerimux::%maybe-rename-window-from-title sess)
-      (expect (string= "kept" (window-name w0)))))
 
   ;; ── window-remove-pane (no PTY) ──────────────────────────────────────────────
 

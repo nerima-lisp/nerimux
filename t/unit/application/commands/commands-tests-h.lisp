@@ -144,152 +144,127 @@
           (expect (= 2 (window-id new-win)))
           (expect (null (find 0 (session-windows sess) :key #'window-id)))))))
 
-  ;;; ── break-pane (scriptable %cmd-break-pane-arg) ──────────────────────────────
+  ;;; ── break-pane keyword variants ───────────────────────────────────────────────
+  ;;;
+  ;;; The break-pane/clear-history/rotate-window tmux command-line surface (flag
+  ;;; parsing, target-string resolution, unsupported-argument rejection, -P/-F
+  ;;; overlay formatting) was dispatch-layer sugar on top of these domain
+  ;;; functions; that layer is gone.  These tests drive BREAK-PANE, CLEAR-SCROLLBACK,
+  ;;; and rotate-window-arg-equivalent domain functions directly via keyword
+  ;;; arguments, which is exactly what the old dispatch wrapper reduced to.
 
-  ;; break-pane always moves the active pane to a new window; -d controls
-  ;; whether the session switches to that new window.
-  ;; Each row: (args expect-switch-to-new description).
+  ;; break-pane always moves the active pane to a new window; :select controls
+  ;; whether the session switches to that new window (the old -d flag).
+  ;; Each row: (select expect-switch-to-new description).
   (it "cmd-break-pane-switch-variants-table"
-    (dolist (row '((()     t   "no -d: session switches to the new window")
-                   (("-d") nil "-d: session stays on the current window")))
-      (destructuring-bind (args expect-switch desc) row
+    (dolist (row '((t   t   "no -d: session switches to the new window")
+                   (nil nil "-d: session stays on the current window")))
+      (destructuring-bind (select expect-switch desc) row
         (declare (ignore desc))
         (multiple-value-bind (sess win p0 p1) (%break-arg-fixture)
           (declare (ignore p1))
           (with-command-test-state (sess)
-            (nerimux::%cmd-break-pane-arg sess args)
+            (nerimux/commands:break-pane sess :select select)
             (expect (= 2 (length (session-windows sess))))
             (let* ((new-win (find-if (lambda (w) (not (eq w win))) (session-windows sess)))
                    (expected-active (if expect-switch new-win win)))
               (expect (member p0 (window-panes new-win)))
               (expect (eq expected-active (session-active-window sess)))))))))
 
-  ;; break-pane -n NAME gives the new window that name.
+  ;; break-pane :name gives the new window that name (the old -n flag).
   (it "cmd-break-pane-n-names-new-window"
     (multiple-value-bind (sess win p0 p1) (%break-arg-fixture)
       (declare (ignore p0 p1))
       (with-command-test-state (sess)
-        (nerimux::%cmd-break-pane-arg sess '("-n" "logs"))
+        (nerimux/commands:break-pane sess :name "logs")
         (let ((new-win (find-if (lambda (w) (not (eq w win))) (session-windows sess))))
           (expect (string= "logs" (window-name new-win)))))))
 
-  ;; break-pane rejects unsupported arguments before mutation.
-  (it "cmd-break-pane-rejects-unsupported-arguments-before-moving-pane"
-    (dolist (case (list (list '("-Z") "unknown flag")
-                        (list '("extra") "positional argument")))
-      (destructuring-bind (args description) case
-        (multiple-value-bind (sess win p0 p1) (%break-arg-fixture)
-          (with-command-rejection-state (sess
-                                         (nerimux::%cmd-break-pane-arg sess args)
-                                         "break-pane: unsupported argument"
-                                         description)
-            (expect (= 1 (length (session-windows sess))))
-            (expect (equal (list p0 p1) (window-panes win)))
-            (expect (eq win (session-active-window sess))))))))
-
-  ;; break-pane -t places the new window at the requested free index.
+  ;; break-pane :target-window-id places the new window at the requested free index
+  ;; (the old -t flag).
   (it "cmd-break-pane-t-places-new-window-at-target-index"
     (multiple-value-bind (sess win p0 p1) (%break-arg-fixture)
       (declare (ignore p1))
       (with-command-test-state (sess)
-        (expect (nerimux::%cmd-break-pane-arg sess '("-d" "-t" ":5")) :to-be-truthy)
+        (expect (nerimux/commands:break-pane sess :select nil :target-window-id 5)
+                :to-be-truthy)
         (let ((new-win (find 5 (session-windows sess) :key #'window-id)))
           (expect new-win :to-be-truthy)
           (expect (member p0 (window-panes new-win))))
         (expect (eq win (session-active-window sess))))))
 
-  ;; break-pane -t rejects an occupied target index before moving the pane.
+  ;; break-pane rejects an occupied target index before moving the pane.
   (it "cmd-break-pane-t-occupied-index-is-rejected-before-moving-pane"
     (multiple-value-bind (sess win p0 p1) (%break-arg-fixture)
       (let ((other (%break-extra-window 2)))
         (session-insert-window sess other)
         (with-command-test-state (sess)
-          (expect (nerimux::%cmd-break-pane-arg sess '("-d" "-t" ":2")) :to-be-falsy)
+          (expect (nerimux/commands:break-pane sess :select nil :target-window-id 2)
+                  :to-be-falsy)
           (expect (equal '(1 2) (mapcar #'window-id (session-windows sess))))
           (expect (equal (list p0 p1) (window-panes win)))
           (expect (eq win (session-active-window sess)))
           (expect nerimux::*dirty* :to-be-falsy)))))
 
-  ;; break-pane -a inserts after the target index and shifts collisions upward.
+  ;; break-pane :insert-after inserts after the target index and shifts collisions
+  ;; upward (the old -a flag).
   (it "cmd-break-pane-a-shifts-colliding-windows-after-target"
     (multiple-value-bind (sess win p0 p1) (%break-arg-fixture)
       (declare (ignore p1))
       (let ((other (%break-extra-window 2)))
         (session-insert-window sess other)
         (with-command-test-state (sess)
-          (expect (nerimux::%cmd-break-pane-arg sess '("-d" "-a" "-t" ":1")) :to-be-truthy)
+          (expect (nerimux/commands:break-pane
+                   sess :select nil :target-window-id 1 :insert-after t)
+                  :to-be-truthy)
           (expect (equal '(1 2 3) (mapcar #'window-id (session-windows sess))))
           (let ((new-win (find 2 (session-windows sess) :key #'window-id)))
             (expect (member p0 (window-panes new-win))))
           (expect (= 3 (window-id other)))
           (expect (eq win (session-active-window sess)))))))
 
-  ;; break-pane -b inserts before the target index and shifts collisions upward.
+  ;; break-pane :insert-before inserts before the target index and shifts
+  ;; collisions upward (the old -b flag).
   (it "cmd-break-pane-b-shifts-colliding-windows-before-target"
     (multiple-value-bind (sess win p0 p1) (%break-arg-fixture)
       (declare (ignore p1))
       (let ((other (%break-extra-window 2)))
         (session-insert-window sess other)
         (with-command-test-state (sess)
-          (expect (nerimux::%cmd-break-pane-arg sess '("-d" "-b" "-t" ":1")) :to-be-truthy)
+          (expect (nerimux/commands:break-pane
+                   sess :select nil :target-window-id 1 :insert-before t)
+                  :to-be-truthy)
           (expect (equal '(1 2 3) (mapcar #'window-id (session-windows sess))))
           (let ((new-win (find 1 (session-windows sess) :key #'window-id)))
             (expect (member p0 (window-panes new-win))))
           (expect (= 2 (window-id win)))
           (expect (= 3 (window-id other)))))))
 
-  ;; break-pane -P -F prints pane information with the requested format.
-  (it "cmd-break-pane-p-f-prints-custom-format"
-    (multiple-value-bind (sess win p0 p1) (%break-arg-fixture)
-      (declare (ignore win p0 p1))
-      (with-command-test-state (sess :overlay t)
-        (expect (nerimux::%cmd-break-pane-arg
-                 sess '("-d" "-P" "-F" "MARK#{pane_id}")) :to-be-truthy)
-        (assert-overlay-uses-custom-format '("MARK" "1") *overlay*
-                                           "break-pane -P -F overlay"))))
+  ;;; ── clear-history ────────────────────────────────────────────────────────────
 
-  ;;; ── clear-history (scriptable %cmd-clear-history-arg) ────────────────────────
+  ;; clear-scrollback empties the target pane's scrollback.
+  (it "cmd-clear-history-clears-scrollback"
+    (multiple-value-bind (sess win screen) (%clear-history-fixture)
+      (declare (ignore win))
+      (with-command-test-state (sess)
+        (nerimux/terminal/actions:clear-scrollback screen)
+        (expect (null (nerimux/terminal/types:screen-scrollback screen))))))
 
-  ;; clear-history clears the target pane's scrollback for any flag combination.
-  ;; Each row: (args expected-message).
-  (it "cmd-clear-history-all-forms-clear-scrollback"
-    (dolist (row '((("-t" ":w") "clear-history -t must empty the target pane's scrollback")
-                   (nil         "clear-history must default to the active pane and empty its scrollback")
-                   (("-H")      "clear-history -H must clear the scrollback")))
-      (destructuring-bind (args msg) row
-        (declare (ignore msg))
-        (multiple-value-bind (sess win screen) (%clear-history-fixture)
-          (declare (ignore win))
-          (with-command-test-state (sess)
-            (nerimux::%cmd-clear-history-arg sess args)
-            (expect (null (nerimux/terminal/types:screen-scrollback screen))))))))
+  ;;; ── rotate-window ────────────────────────────────────────────────────────────
 
-  ;;; ── rotate-window (scriptable %cmd-rotate-window-arg) ────────────────────────
-
-  ;; rotate-window with no direction rotates forward: first pane moves to end.
+  ;; window-rotate with :up (the default, tmux forward) moves the first pane to end.
   (it "cmd-rotate-window-forward-default"
     (multiple-value-bind (sess win p0 p1 p2) (%rotate-window-fixture)
       (declare (ignore p2))
       (with-command-test-state (sess)
-        (nerimux::%cmd-rotate-window-arg sess '("-t" ":w"))
+        (nerimux/model:window-rotate win :up)
         (expect (eq p1 (first (window-panes win))))
         (expect (eq p0 (car (last (window-panes win))))))))
 
-  ;; rotate-window rejects the removed -Z zoom-preservation flag.
-  (it "cmd-rotate-window-rejects-zoom-flag"
-    (multiple-value-bind (sess win p0 p1 p2) (%rotate-window-fixture)
-      (with-command-rejection-state (sess
-                                     (nerimux::%cmd-rotate-window-arg sess '("-Z" "-t" ":w"))
-                                     "rotate-window: unsupported argument"
-                                     "rotate-window -Z")
-        (expect (equal (list p0 p1 p2) (window-panes win)))
-        (assert-overlay-active
-         "rejected -Z must show an error overlay"))))
-
-  ;; rotate-window -D -t :w rotates backward: the last pane moves to the front.
+  ;; window-rotate :down (tmux backward) moves the last pane to the front.
   (it "cmd-rotate-window-d-rotates-backward"
     (multiple-value-bind (sess win p0 p1 p2) (%rotate-window-fixture)
       (declare (ignore p0 p1))
       (with-command-test-state (sess)
-        (nerimux::%cmd-rotate-window-arg sess '("-D" "-t" ":w"))
+        (nerimux/model:window-rotate win :down)
         (expect (eq p2 (first (window-panes win))))))))

@@ -14,14 +14,12 @@
 Runs against a private `*key-tables*' so the global store is untouched."
   (let ((nerimux/config:*key-tables* (make-hash-table :test #'equal)))
     (nerimux/config:initialize-default-key-tables)
-    (nerimux::install-extended-key-bindings)
     (current-key-rulebase)))
 
 (defun fresh-default-snapshot ()
   "Return the binding-plist snapshot for the standard default key bindings."
   (let ((nerimux/config:*key-tables* (make-hash-table :test #'equal)))
     (nerimux/config:initialize-default-key-tables)
-    (nerimux::install-extended-key-bindings)
     (snapshot-key-bindings)))
 
 ;;; The suite binds *RULEBASE* per test through an around-each fixture (see

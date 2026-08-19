@@ -3,10 +3,11 @@
 A workspace-oriented terminal multiplexer written entirely in Common Lisp.
 
 The primary UI navigates an organization → repository → worktree → pane
-workspace. A thin client attaches to a headless runtime, while the existing
-tmux-compatible command and server surface remains available during migration.
-Every verified behavior is pinned by a regression suite that runs hermetically
-through Nix.
+workspace. A thin client attaches to a headless runtime over a Unix socket;
+all key handling, layout, and rendering happen server-side, so the client
+itself carries no session state. There is no standalone in-process mode —
+`nerimux attach` and `nerimux server` are the only ways in. Every verified
+behavior is pinned by a regression suite that runs hermetically through Nix.
 
 Start at [Getting started](getting-started.md), or read the
 [compatibility statement](reference/compatibility.md) for the precise account
@@ -25,28 +26,39 @@ of what is implemented and what is deliberately different.
 
 ## Compatibility and feature highlights
 
-- **Commands** — every primary command name in tmux's command table resolves
-  (~100 commands: `split-window`, `send-keys`, `capture-pane`, `display-menu`,
-  `display-popup`, `command-prompt`, `choose-tree`, `if-shell`, …), with
-  flag-level behavior closed against upstream tmux across repeated audits.
+nerimux's tmux-compatible command table, key-table/prefix-key dispatch, and
+control mode (`-C`) were removed when the UI became workspace-only; see
+[Compatibility](reference/compatibility.md) for the precise, current account
+of what an attached client can and cannot do. What remains:
+
 - **Terminal emulation** — VT100/ANSI with 16/256/true color, alternate
   screen, scroll regions, origin mode, G0–G3 charsets with line-drawing
   remap, DECDHL/DECDWL double-size lines, bracketed paste, SGR mouse,
   OSC 52 clipboard, OSC 133 prompt marks, and UTF-8 with wide (CJK) cells.
-- **Copy mode** — vi-style navigation, selection (including rectangle),
-  incremental search, prompt jumping, and 90+ `send-keys -X` commands.
-- **Format strings** — the full `#{...}` modifier set
-  (`b: d: U: L: n: =N: pN: s/// E: t: m: C: a: q: l:`, comparison/boolean
-  operators, `W:`/`S:`/`P:` iteration) over 160+ format variables.
-- **Options & hooks** — 120+ options across server/session/window/pane
-  scopes, 28 hook events with `set-hook` scoping, key tables, and
-  `bind-key -N` notes.
-- **Client/server** — detach/attach over per-user Unix sockets
-  (`-L`/`-S`, `$TMUX_TMPDIR`), multiple sessions, and session groups sharing
-  one window set.
+- **Copy mode** — vi-style cursor movement (`hjkl`/arrows), scroll to top/
+  bottom (`g`/`G`), begin selection and yank (`space`, `y`), and forward/
+  backward search (`/`, `?`, then `n`/`N` to repeat) — the fixed key set the
+  workspace UI's copy-mode handler binds directly, not through `send-keys
+  -X`, which no longer has a caller. Rectangle selection, prompt jumping, and
+  incremental (type-ahead) search still exist as functions in
+  `application/commands/copy-mode/` but have no key bound to them here.
+- **Format strings** — the `#{...}` modifier engine that renders the status
+  bar and pane titles.
+- **Options** — options across server/session/window/pane scopes, applied
+  live from `.tmux.conf`. Internal hook events still fire around pane and
+  client lifecycle (attach, detach, output, exit, new window), but the
+  `set-hook` *directive* no longer reaches them: the runner it dispatched
+  through was installed by the deleted command layer, so a `set-hook` line
+  parses and stores without effect. See
+  [Compatibility](reference/compatibility.md).
+- **Client/server** — detach/attach over a per-user Unix socket (`-L`/`-S`,
+  `$TMUX_TMPDIR`), rendering a separate frame per attached client from one
+  shared pane layout.
 - **Configuration** — real `.tmux.conf` syntax: `%if`/`%elif`/`%else`,
   `%hidden`, variable assignments, `source-file`, brace blocks, and tmux
-  quoting rules. See [Configuration](guide/configuration.md).
+  quoting rules apply options and hooks. `bind-key` directives still parse
+  but have no runtime effect — there is no key-table dispatch left to read
+  them. See [Configuration](guide/configuration.md).
 
 ## What it is built on
 
@@ -64,7 +76,10 @@ of what is implemented and what is deliberately different.
 - **cl-cli** — startup argv/flag parsing.
 - **cl-boundary-kit** — the process boundary behind `run-shell`/`if-shell`.
 - **cl-parser-kit** — the command-line tokenizer.
-- **cl-history-kit** — command-prompt history store and recall.
+- **cl-history-kit** — command-prompt history storage in
+  `src/presentation/prompt/` and `bootstrap/runtime-history.lisp`; the
+  workspace UI's `:` command line does not currently call it, so this is
+  shipped but presently unreached from an attached client.
 - **cl-tui-kit** — headless surface rendering, layout and widgets for the
   per-client frames (workspace overview, detail, picker).
 - **cl-vcs-kit** — ghq organization/repository/worktree discovery.

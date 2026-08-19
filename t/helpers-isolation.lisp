@@ -30,7 +30,6 @@
                      nerimux/options:*server-options*)
             h)))
      (nerimux/config::initialize-default-key-tables)
-     (nerimux::install-extended-key-bindings)
      ,@body))
 
 (defmacro with-isolated-key-tables (&body body)

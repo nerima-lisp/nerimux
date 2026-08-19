@@ -6,10 +6,10 @@
 
 A workspace-oriented terminal multiplexer written entirely in Common Lisp.
 The primary UI navigates an organization → repository → worktree → pane
-workspace, with a thin client attached to a headless runtime. The tmux-compatible
-server and command surface remain available during the migration, and every
-verified behavior is pinned by a regression suite that runs hermetically through
-Nix.
+workspace, with a thin client attached to a headless runtime. The entry
+surface is workspace-only — `attach` and `server` are the only commands —
+and every verified behavior is pinned by a regression suite that runs
+hermetically through Nix.
 
 Full documentation is published at <https://nerima-lisp.github.io/nerimux/>.
 The source for that site lives in [docs/src/](docs/src/).
@@ -30,14 +30,14 @@ slash is resolved as an organization/repository selector or a local worktree
 path. `attach` and `server` are the only commands; anything else — including
 `nerimux` with no arguments — prints the usage summary and exits non-zero.
 
-The compatibility command surface follows tmux where it is implemented. nerimux reads a real
-`.tmux.conf` — including `%if`, `%hidden`, variable assignments, brace blocks
-and `source-file` — from `$NERIMUX_CONF`, then
-`~/.config/nerimux/nerimux.conf`, then your existing tmux config.
-
-One deliberate difference: only canonical command names are accepted. Short
-aliases (`neww`, `splitw`, …) are rejected rather than silently supported, so
-typos fail loudly.
+nerimux still parses a real `.tmux.conf` — `%if`, `%hidden`, variable
+assignments, brace blocks and `source-file` — from `$NERIMUX_CONF`, then
+`~/.config/nerimux/nerimux.conf`, then your existing tmux config. `run-shell`,
+`if-shell`, `set-environment` and the `set-option` values that drive the
+status bar, pane borders, `default-shell` and status height still take
+effect. `bind`/`unbind` and `set-hook` directives are still parsed and
+validated, but have no runtime effect now that the tmux keystroke and
+hook-dispatch pipelines are gone.
 
 ## Install
 

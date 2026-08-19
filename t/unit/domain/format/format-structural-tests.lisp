@@ -131,20 +131,13 @@
         (nerimux/commands:copy-mode-enter (nerimux/model:pane-screen pane))
         (expect (string= "copy-mode" (expand "#{client_key_table}"))))))
 
-  ;; #{mouse_x}/#{mouse_y} resolve *current-mouse-event* (bound only during a real
-  ;; mouse dispatch) by name; previously only the "unbound" fallback was exercised.
-  (it "format-context-mouse-coordinates-present-during-dispatch"
-    (let ((nerimux::*current-mouse-event* (list :col 5 :row 10)))
-      (with-format-context (sess win pane ctx) ()
-        (declare (ignore sess win pane))
-        (expect (string= "5"  (nerimux/format:expand-format "#{mouse_x}" ctx)))
-        (expect (string= "10" (nerimux/format:expand-format "#{mouse_y}" ctx))))))
-
-  ;; Outside a mouse dispatch (*current-mouse-event* unbound/NIL), both variables
-  ;; expand to the empty string rather than erroring or defaulting to "0".
+  ;; #{mouse_x}/#{mouse_y} resolve NERIMUX::*CURRENT-MOUSE-EVENT* by name (so the
+  ;; format layer stays free of any umbrella package) rather than depending on it
+  ;; directly.  That special was only ever bound by the mouse-dispatch pipeline in
+  ;; presentation/events, which has been removed with no replacement, so it is now
+  ;; permanently unbound in production and both variables always expand to "".
   (it "format-context-mouse-coordinates-empty-outside-dispatch"
-    (let ((nerimux::*current-mouse-event* nil))
-      (with-format-context (sess win pane ctx) ()
-        (declare (ignore sess win pane))
-        (expect (string= "" (nerimux/format:expand-format "#{mouse_x}" ctx)))
-        (expect (string= "" (nerimux/format:expand-format "#{mouse_y}" ctx)))))))
+    (with-format-context (sess win pane ctx) ()
+      (declare (ignore sess win pane))
+      (expect (string= "" (nerimux/format:expand-format "#{mouse_x}" ctx)))
+      (expect (string= "" (nerimux/format:expand-format "#{mouse_y}" ctx))))))
