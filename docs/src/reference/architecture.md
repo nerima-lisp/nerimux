@@ -70,8 +70,8 @@ nerimux/
 │   ├── application/        # use cases: command dispatch, config loading
 │   │   ├── commands/       #   command implementations; tokenizer on cl-parser-kit
 │   │   ├── config/         #   tmux.conf directives; shell calls on cl-boundary-kit
-│   │   └── dispatch/       #   command table, handlers, control mode
-│   ├── infrastructure/     # adapters: PTY, sockets, input, control mode
+│   │   └── dispatch/       #   command table, handlers, prefix-key dispatch
+│   ├── infrastructure/     # adapters: PTY, sockets, input, VCS
 │   ├── presentation/       # renderer, events, prompt
 │   ├── reasoning/          # cl-prolog-kit cold-path read-models — OPTIONAL system
 │   └── dataflow/           # cl-dataflow-kit cold-path read-model — OPTIONAL system

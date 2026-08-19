@@ -37,8 +37,18 @@ is deliberately different, and where the remaining risk lives.
 - **Client/server.** Per-user socket directories (`-L`/`-S`, `$TMUX_TMPDIR`,
   mode `0700`, stale-socket recovery), detach/attach, multiple sessions,
   session groups sharing one window set, winlink indexes (`link-window`),
-  control mode (`-C` `%output`/`%window-pane-changed`/…), and hooks
-  (including alert hooks and scoped hooks).
+  and hooks (including alert hooks and scoped hooks).
+
+## Removed
+
+- **Control mode (`-C` / `nerimux control`) is gone.** It was implemented —
+  the `%output`/`%window-pane-changed` notification protocol for
+  iTerm2/tmuxp/libtmux-style automation — and was removed deliberately when
+  nerimux narrowed to a workspace-oriented multiplexer for a single
+  interactive user. `-C` is now an unrecognized flag and exits with the usage
+  message rather than being silently accepted. This entry exists so a reader
+  diffing against an older revision does not read the deletion as an
+  oversight.
 
 ## Intentionally different
 

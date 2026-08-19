@@ -45,19 +45,16 @@
 
 (defun %dispatch-global-cli-flag-actions (invocation mode-args)
   "Run the flag-driven entry points that today double as *startup-modes* mode
-   names (-V/-h/-C), so they work regardless of where they appear in argv.
+   names (-V/-h), so they work regardless of where they appear in argv.
    Returns T when one of them ran (the caller must not also dispatch a mode)."
   (cond
     ((cl-cli:option-value invocation :print-version) (run-version nil) t)
     ((cl-cli:option-value invocation :print-help)    (run-usage nil)   t)
-    ((plusp (or (cl-cli:option-value invocation :control) 0))
-     (run-control-mode (rest mode-args))
-     t)
     (t nil)))
 
 (defun main ()
   "Binary entry point - dispatches on the first argv item via *startup-modes*.
-   Global tmux(1)-compatible flags (-2/-C/-D/-L/-N/-S/-T/-V/-c/-f/-h/-l/-u/-v)
+   Global tmux(1)-compatible flags (-2/-D/-L/-N/-S/-T/-V/-c/-f/-h/-l/-u/-v)
    are parsed by *cli-app* (cl-cli, see main-startup-flags.lisp) from anywhere
    in the leading flag run, in any order, before mode dispatch.
    Each entry in *startup-modes* is a plist (handler-symbol &key :raw-args-p).

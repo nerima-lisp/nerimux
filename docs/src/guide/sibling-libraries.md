@@ -92,8 +92,8 @@ bridge — and runs as the `weave` flake check.
   the better editing ergonomics over strict Up/Down parity.
 - [cl-concurrent-kit](https://github.com/nerima-lisp/cl-concurrent-kit) replaced
   `bordeaux-threads` as the threading vocabulary: the per-pane PTY reader
-  threads and the config-time background `run-shell`, the screen mutex and the
-  control-mode output lock, the `wait-for` channel's condition variable, and the
+  threads and the config-time background `run-shell`, the screen mutex, the
+  `wait-for` channel's condition variable, and the
   preemptive `with-timeout` that bounds `run-shell`, `pipe-pane` and the PTY
   child-exit wait. See the retirement note below for the two API differences
   that matter when reading pre-migration code.

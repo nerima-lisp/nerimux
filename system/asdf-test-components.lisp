@@ -153,10 +153,6 @@
          ((:file "buffer-tests-ring")
           (:file "buffer-tests-clipboard")
           (:file "buffer-tests-named")))
-        (:module "infrastructure/control-mode"
-         :serial t
-         :components
-         ((:file "control-mode-tests")))
         (:module "domain/options"
          :serial t
          :components
@@ -260,10 +256,8 @@
           (:file "dispatch-tests-environment-set") ; set-environment dispatch
           (:file "dispatch-tests-environment-show-overlays") ; show-environment and overlay dispatch
           (:file "dispatch-tests-session-flag-targets") ; flag parsers, target resolvers, new-window/split-window/new-session command cases
-          (:file "dispatch-tests-session-c") ; options, move-window, new-session -s/-A/-t, control-mode REPL - part III
+          (:file "dispatch-tests-session-c") ; options, move-window, new-session -s/-A/-t - part III
           (:file "dispatch-tests-session-new-session") ; new-session duplicate, grouped sessions, new-window -S
-          (:file "dispatch-tests-session-control-mode-repl") ; control-mode REPL framing and unknown-command handling
-          (:file "dispatch-tests-session-control-mode-notifications") ; control-mode notifications, active-change, %output relay
           (:file "dispatch-tests-session-server-lifecycle") ; named command reachability for server lifecycle
           (:file "dispatch-tests-session-d") ; display-popup, send-keys -N/-H, capture-pane - part IV
           (:file "dispatch-tests-session-d-tail") ; named paste-buffer and join-pane marked-pane - part IVb

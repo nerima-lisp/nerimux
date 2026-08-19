@@ -214,18 +214,6 @@
            #:list-paste-buffers #:list-paste-buffers-with-names
            #:delete-paste-buffer #:delete-buffer-by-name #:clear-paste-buffers))
 
-(defpackage #:nerimux/control
-  (:use #:cl)
-  (:shadow #:control-error)
-  (:documentation "tmux control mode (-C) wire-protocol line formatters.")
-  (:export #:control-begin #:control-end #:control-error #:control-format-reply
-           #:control-escape-output #:control-output
-           #:control-session-changed #:control-session-renamed
-           #:control-window-add #:control-window-close #:control-window-renamed
-           #:control-layout-change #:control-unlinked-window-add
-           #:control-window-pane-changed #:control-session-window-changed
-           #:control-client-session-changed #:control-exit))
-
 (defpackage #:nerimux/hooks
   (:use #:cl)
   (:documentation

@@ -155,7 +155,6 @@
                ~2Tlist-sessions | list-windows | list-commands~%~
                ~2Tdisplay-message | show-options | show-window-options~%~
                ~2Tsource-file path~24Tapply a config file and exit~%~
-               ~2T-C | control~24Tcontrol mode (text protocol on stdin/stdout)~%~
                ~2T-V | --version~24Tprint the version and exit~%~
                ~%~
                Any other command word is forwarded to a running server~%~
@@ -216,9 +215,6 @@
         (%startup-mode "show-window-options" run-show-window-options :raw-args-p t)
         ;; source-file: load a config file directly (useful for testing configs).
         (%startup-mode "source-file" run-source-file :raw-args-p t)
-        ;; -C / control: control mode - text protocol on stdin/stdout (iTerm2/tmuxp).
-        (%startup-mode "-C" run-control-mode :raw-args-p t)
-        (%startup-mode "control" run-control-mode :raw-args-p t)
         ;; -V: print the version and exit (tmux -V). --version/-h/--help are
         ;; nerimux conveniences; tmux only prints usage on a bad flag.
         (%startup-mode "-V" run-version :raw-args-p t)

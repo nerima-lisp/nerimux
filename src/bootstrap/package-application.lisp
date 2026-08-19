@@ -136,9 +136,10 @@
         #:nerimux/protocol
         #:nerimux/transport
         #:nerimux/net)
-  ;; The reader/timer thread machinery in runtime*.lisp and the control-mode output
-  ;; lock.  runtime.lisp calls sb-thread:join-thread directly for its :TIMEOUT
-  ;; argument, so no join/alive-p name is imported here.
+  ;; The reader/timer thread machinery in runtime*.lisp, and the wait-for
+  ;; channel lock (runtime.lisp).  runtime.lisp calls sb-thread:join-thread
+  ;; directly for its :TIMEOUT argument, so no join/alive-p name is imported
+  ;; here.
   (:import-from #:cl-concurrent-kit
                 #:make-thread
                 #:make-lock

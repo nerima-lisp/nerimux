@@ -42,9 +42,8 @@ of what is implemented and what is deliberately different.
   scopes, 28 hook events with `set-hook` scoping, key tables, and
   `bind-key -N` notes.
 - **Client/server** — detach/attach over per-user Unix sockets
-  (`-L`/`-S`, `$TMUX_TMPDIR`), multiple sessions, session groups sharing one
-  window set, and control mode (`-C`) for tools like tmuxp/libtmux-style
-  automation.
+  (`-L`/`-S`, `$TMUX_TMPDIR`), multiple sessions, and session groups sharing
+  one window set.
 - **Configuration** — real `.tmux.conf` syntax: `%if`/`%elif`/`%else`,
   `%hidden`, variable assignments, `source-file`, brace blocks, and tmux
   quoting rules. See [Configuration](guide/configuration.md).

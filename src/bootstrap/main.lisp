@@ -94,12 +94,11 @@
 (defun %initialize-session-environment ()
   "Set up the shared session environment before spawning any panes.
    Installs the PTY adapter into the nerimux/ports domain abstraction
-   (run-server was the only caller of install-pty-port; run-standalone and
-   run-control-mode create panes too, so they need it here), loads the
-   default shell, wires the %if condition evaluator, installs the
-   history/alternate-screen/scroll-on-clear option callbacks, and applies the
-   user config file.  Called from both run-standalone and run-control-mode
-   to avoid duplicating the initialization boilerplate."
+   (run-server was the only caller of install-pty-port; run-standalone creates
+   panes too, so it needs it here), loads the default shell, wires the %if
+   condition evaluator, installs the history/alternate-screen/scroll-on-clear
+   option callbacks, and applies the user config file.  Called from
+   run-standalone."
   (install-pty-port)
   (nerimux/config:init-default-shell)
   (setf nerimux/config:*config-condition-evaluator* (%make-format-condition-evaluator))
@@ -211,33 +210,3 @@
                                (when *status-timer* (list *status-timer*))))
   (setf *status-timer* nil)
   (%close-all-pane-ptys session))
-
-(defun run-control-mode (&optional args)
-  "Control mode (-C): drive nerimux over the text protocol on stdin/stdout instead
-   of a curses UI (for iTerm2 / tmuxp / libtmux).  Sets up the initial session like
-   run-standalone (config load, pane spawn, reader threads), emits the opening
-   %session-changed, then runs the control REPL until the client closes stdin.
-   The REPL framing + notifications are unit-tested via control-mode-loop; this is
-   the thin process-entry glue."
-  (declare (ignore args))
-  (require :sb-posix)
-  (%initialize-session-environment)
-  ;; A control client may have no controlling tty; fall back to the shared
-  ;; default terminal size (terminal-size returns rows then cols, matching
-  ;; the runtime defaults).
-  (multiple-value-bind (rows cols) (ignore-errors (terminal-size))
-    (setf *term-rows* (or rows nerimux/pty:+default-term-rows+)
-          *term-cols* (or cols nerimux/pty:+default-term-cols+)))
-  (let* ((session (create-initial-session *term-rows* *term-cols*))
-         (readers (progn (server-add-session session)
-                         (mapcar #'start-reader-thread (all-panes session)))))
-    (setf *running* t)
-    (write-line (nerimux/control:control-session-changed
-                 (session-id session) (session-name session))
-                *standard-output*)
-    (force-output *standard-output*)
-    (unwind-protect
-         (control-mode-loop session *standard-input* *standard-output*)
-      (setf *running* nil)
-      (stop-reader-threads readers)
-      (%close-all-pane-ptys session))))

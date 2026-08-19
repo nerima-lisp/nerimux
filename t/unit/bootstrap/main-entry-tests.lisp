@@ -50,15 +50,36 @@
   (it "run-attach-with-flags-is-fbound"
     (expect (fboundp 'nerimux::run-attach-with-flags)))
 
-  ;; argv (nerimux -C) routes to run-control-mode.
-  (it "dispatch-control-mode-flag"
-    (let ((called nil))
+  ;; Control mode (-C) was removed with the tmux compatibility surface. Both
+  ;; entry points it had are gone: the "-C"/"control" *startup-modes* rows and
+  ;; the :control cl-cli option that %dispatch-global-cli-flag-actions read.
+  (it "control-mode-startup-modes-are-gone"
+    (expect (null (nerimux::%startup-mode-entry "-C")))
+    (expect (null (nerimux::%startup-mode-entry "control")))
+    (expect (not (fboundp 'nerimux::run-control-mode))))
+
+  ;; The above pins the tables; this pins the observable behaviour, which is
+  ;; what a user actually hits.  -C is now rejected by cl-cli's global option
+  ;; parser (main-startup-flags.lisp *cli-app* no longer declares it), so the
+  ;; rejection happens inside %parse-global-cli-argv -- BEFORE
+  ;; %dispatch-unknown-mode's dash-flag branch is reached.  Without this test,
+  ;; re-registering -C as a cl-cli option pointing somewhere else would leave
+  ;; the table assertions above green.
+  (it "control-mode-flag-exits-with-usage"
+    (let ((standalone-called nil)
+          exit-code
+          errout)
       (with-stubbed-fdefinition
-          ((nerimux::run-control-mode
-            (lambda (&rest a) (declare (ignore a)) (setf called t))))
-        (let ((sb-ext:*posix-argv* (list "nerimux" "-C")))
-          (nerimux::main))
-        (expect called :to-be-truthy))))
+          ((nerimux::run-standalone
+            (lambda (&rest a) (declare (ignore a)) (setf standalone-called t))))
+        (setf errout
+              (with-output-to-string (*error-output*)
+                (with-stubbed-exit exit-code
+                  (let ((sb-ext:*posix-argv* (list "nerimux" "-C")))
+                    (nerimux::main))))))
+      (expect (eql 1 exit-code))
+      (expect (search "usage: nerimux" errout) :to-be-truthy)
+      (expect standalone-called :to-be-falsy)))
 
   ;; An unrecognised argv[0] (not a known startup mode, not a -flag) forwards
   ;; to a live default-session server as a command client, rather than

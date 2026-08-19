@@ -221,10 +221,6 @@
       :serial t
       :components
       ((:file "buffer")))   ; paste-buffer ring (uses options for buffer-limit)
-     (:module "infrastructure/control-mode"
-      :serial t
-      :components
-      ((:file "control-mode")))  ; control mode (-C) wire-protocol formatters
      (:module "domain/hooks"
       :serial t
       :components
@@ -364,15 +360,12 @@
        (:file "dispatch-commands-server") ; server-access ACL
        (:file "dispatch-commands-server-customize") ; customize-mode tree browser
        (:file "dispatch-commands-runner"))) ; *arg-command-table* + %run-command-tokens + %run-command-line
-     (:module "application/dispatch/control"
-      :serial t
-      :components
-      ((:file "dispatch-control")))       ; control-mode REPL + dispatch-prefix-command
      (:module "dispatch-handlers-2"
       :pathname "application/dispatch/handlers"
       :serial t
       :components
-      ((:file "dispatch-handlers")        ; command handler rule table part I (detach through wait-for)
+      ((:file "dispatch-prefix")          ; prefix-key dispatcher, reached from presentation/events
+       (:file "dispatch-handlers")        ; command handler rule table part I (detach through wait-for)
        (:file "dispatch-handlers-copy-mode") ; copy-mode command handler rule table
        (:file "dispatch-handlers-b-menu") ; popup/menu overlays
        (:file "dispatch-handlers-b-server") ; server/env/prompt-history handlers

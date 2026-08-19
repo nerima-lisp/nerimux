@@ -1,8 +1,8 @@
 (in-package #:nerimux/test)
 
-;;;; Options, session management, control mode, and server-lifecycle tests.
+;;;; Options, session management, and server-lifecycle tests.
 ;;;;  (dispatch-commands-option.lisp, dispatch-commands-auto.lisp,
-;;;;   session-registry.lisp, dispatch-control.lisp, dispatch-handlers.lisp)
+;;;;   session-registry.lisp, dispatch-handlers.lisp)
 
 (describe "dispatch-suite"
 
