@@ -17,11 +17,11 @@ into the binary. Nothing in `src/` outside `src/reasoning/` calls it, so loading
 it into core pulled cl-prolog-kit into the shipped dependency closure for no
 runtime benefit. Load it explicitly to use the API below.
 
-It is used strictly on **cold paths** — introspection, validation, diagnostics
-— never the hot per-keystroke dispatch loop, which stays imperative for speed.
+It is used strictly on a **cold path** — introspection over the key-table
+store — never anything nerimux runs on its imperative runtime path.
 
-Two domains ship today, key bindings and the canonical command table. Because
-the system is optional, load it before using the API:
+One domain ships today: key bindings. Because the system is optional, load it
+before using the API:
 
 ```lisp
 (asdf:load-system "nerimux/reasoning")
@@ -30,17 +30,34 @@ the system is optional, load it before using the API:
   (nerimux/reasoning:key-command rb "prefix" #\c)   ; => :NEW-WINDOW, T
   (nerimux/reasoning:keys-running rb :new-window)   ; => (("prefix" . #\c))
   (nerimux/reasoning:binding-conflicts rb))         ; keys bound differently across tables
-
-(let ((rb (nerimux/reasoning:current-command-rulebase)))
-  (nerimux/reasoning:command-accepts-flag-p rb "bind-key" "T") ; => T
-  (nerimux/reasoning:commands-with-flag rb "t")               ; commands taking -t target
-  (nerimux/reasoning:scriptable-commands rb))                 ; commands taking no arguments
 ```
 
 Its regression suite (`nerimux/weave`) uses
 [cl-weave](https://github.com/nerima-lisp/cl-weave) — custom matchers,
 `around-each` fixtures, a property test, and cl-prolog-kit's own `deftest-queries`
-bridge — and runs as the `weave` flake check.
+bridge — and runs as the `weave` flake check (`nix flake check`; see the
+`weave` derivation in `flake.nix`).
+
+### Retired: the command-rulebase domain
+
+Until this session's workspace-only conversion, a second domain shipped
+alongside key bindings: `command-rulebase.lisp` projected the tmux command
+table (accepted flags, target-taking commands, no-argument "scriptable"
+commands) into its own Prolog rulebase, behind `current-command-rulebase`,
+`command-accepts-flag-p`, `commands-with-flag`, `flags-of-command`,
+`scriptable-commands`, `command-usage-facts`, and `build-command-rulebase`.
+
+Deleting the tmux command table it projected (`src/application/dispatch/`)
+did not break that domain outright — it broke it silently. The projection
+reached the table's data by `find-symbol`, an edge no compiler tracks, so
+with the table gone the lookup returned `NIL` and the "rulebase" it built was
+just the static rules over zero facts: every query would have kept returning
+empty answers instead of failing to load. The `nerimux/weave` regression
+suite is what caught it. `command-rulebase.lisp` and the exports above were
+then removed outright, rather than left to reason silently over nothing; only
+the key-binding domain survives. This was a deliberate deletion, not an
+oversight — do not reintroduce those exports unless the command table they
+projected comes back with them.
 
 ## The other siblings
 
@@ -80,16 +97,20 @@ bridge — and runs as the `weave` flake check.
   stay on cl-boundary-kit, which supplies the injectable test double
   (`make-test-process-boundary`) that cl-process-kit has no equivalent for.
 - [cl-history-kit](https://github.com/nerima-lisp/cl-history-kit) replaced the
-  hand-rolled list-and-cursor walk behind `:command-prompt`'s Up/Down recall
-  (`runtime-history.lisp`, `prompt.lisp`). Storage, capacity, and navigation
-  are now cl-history-kit's: `history-add`/`history-entries` for the store,
-  `history-merge` to carry entries across a capacity change when
+  hand-rolled list-and-cursor walk behind the prompt subsystem's Up/Down
+  recall (`runtime-history.lisp`, `prompt.lisp`). Storage, capacity, and
+  navigation are now cl-history-kit's: `history-add`/`history-entries` for the
+  store, `history-merge` to carry entries across a capacity change when
   `prompt-history-limit` is set at runtime, and `history-previous`/
   `history-next` for recall. This is a deliberate behavior change from real
   tmux: cl-history-kit's recall is **prefix-filtered** (the buffer at the
   start of a walk becomes both its match filter and its restore origin,
   zsh-style), where tmux's own Up/Down is an unfiltered raw walk. Chosen for
-  the better editing ergonomics over strict Up/Down parity.
+  the better editing ergonomics over strict Up/Down parity. The tmux
+  `:command-prompt` command this was originally written for lost its handler
+  along with the rest of `src/application/dispatch/`; the prompt/history
+  machinery survives because copy-mode search (`commands-copy-mode-search.lisp`)
+  opens the same prompt for its own query input.
 - [cl-concurrent-kit](https://github.com/nerima-lisp/cl-concurrent-kit) replaced
   `bordeaux-threads` as the threading vocabulary: the per-pane PTY reader
   threads and the config-time background `run-shell`, the screen mutex, the
@@ -99,12 +120,17 @@ bridge — and runs as the `weave` flake check.
   that matter when reading pre-migration code.
 - [cl-regex-kit](https://github.com/nerima-lisp/cl-regex-kit) replaced
   `cl-ppcre` behind every regular expression nerimux exposes: the `#{m/r:…}`
-  match and `#{s/…/…/}` substitute format modifiers, copy-mode search and its
-  match highlighting, and `list-commands -F` placeholder expansion. Its
+  match and `#{s/…/…/}` substitute format modifiers (`format-modifiers.lisp`),
+  copy-mode search and its match highlighting
+  (`commands-copy-mode-search.lisp`, `renderer-pane-search.lisp`), and the
+  workspace picker's fuzzy/regex query matching (`global-picker.lisp`). Its
   `escape` also subsumed a hand-rolled metacharacter escaper in
   `commands-copy-mode-search.lisp`. This is the one adoption that changes
   behaviour rather than only moving it; the retirement note below states
-  exactly how.
+  exactly how. (The tmux `list-commands -F` placeholder expansion this
+  section used to cite is gone along with `list-commands`'s handler — see
+  the command-rulebase retirement note above for the same underlying
+  removal.)
 - [cl-codec-kit](https://github.com/nerima-lisp/cl-codec-kit) replaced `babel`
   as the UTF-8 string↔octet codec for protocol frames, PTY output and OSC
   payloads (`string-to-octets` / `octets-to-string`). See the retirement note

@@ -38,60 +38,36 @@
                 (expect (null (nerimux/pty:select-fds
                                (list (nerimux/net:socket-fd client)) 200000))))))))))
 
-  ;; run-command-client forwards a command to the server as a decodable
-  ;; +msg-command+ frame (the `nerimux <command>` CLI path).  A -t target rides
-  ;; along in the args for the server to parse.
+  ;; A client that connects and sends a +msg-command+ frame directly (the
+  ;; surviving wire-level path client.lisp itself uses for :attach-target and
+  ;; :detach-other-clients) decodes on the server side as a command keyword
+  ;; plus its argument list.  This used to be driven through the now-deleted
+  ;; run-command-client CLI helper; the socket-level encode/decode contract it
+  ;; exercised survives independently of that helper, so the frame is built
+  ;; and sent directly here instead.
   (it "command-client-sends-decodable-command-frame"
-    (let ((name (format nil "cmdtest-~D" (get-universal-time)))
-          (nerimux::*socket-path-override* (%test-socket-path "cmdtest")))
-      (with-test-listener (listener path (nerimux::socket-path name) :backlog 4)
-        (nerimux::run-command-client name '("next-window" "-t" "2"))
-        (let ((server-sock (nerimux/net:accept-connection listener)))
-          (expect server-sock :to-be-truthy)
-          (when server-sock
-            (let ((ready (nerimux/pty:select-fds
-                          (list (nerimux/net:socket-fd server-sock)) 1000000)))
-              (expect ready :to-be-truthy)
-              (when ready
-                (multiple-value-bind (type payload)
-                    (nerimux::read-frame (nerimux/net:socket-stream server-sock))
-                  (expect (eql nerimux::+msg-command+ type))
-                  (multiple-value-bind (cmd target args)
-                      (nerimux::decode-command-payload payload)
-                    (declare (ignore target))
-                    (expect (eq :next-window cmd))
-                    (expect (equal '("-t" "2") args)))))))))))
-
-  ;; run-command-client sends stdin after the split-window -I command frame.
-  (it "command-client-split-window-I-forwards-stdin-frame"
-    (let ((name (format nil "cmdinput-~D" (get-universal-time)))
-          (nerimux::*socket-path-override* (%test-socket-path "cmdinput")))
-      (with-test-listener (listener path (nerimux::socket-path name) :backlog 4)
-        (with-input-from-string (*standard-input* "client stdin")
-          (nerimux::run-command-client name '("split-window" "-I")))
-        (let ((server-sock (nerimux/net:accept-connection listener)))
-          (expect server-sock :to-be-truthy)
-          (when server-sock
-            (let ((ready (nerimux/pty:select-fds
-                          (list (nerimux/net:socket-fd server-sock)) 1000000)))
-              (expect ready :to-be-truthy)
-              (when ready
-                (multiple-value-bind (type payload)
-                    (nerimux::read-frame (nerimux/net:socket-stream server-sock))
-                  (expect (eql nerimux::+msg-command+ type))
-                  (multiple-value-bind (cmd target args)
-                      (nerimux::decode-command-payload payload)
-                    (declare (ignore target))
-                    (expect (eq :split-window cmd))
-                    (expect (equal '("-I") args))))))
-            (let ((ready (nerimux/pty:select-fds
-                          (list (nerimux/net:socket-fd server-sock)) 1000000)))
-              (expect ready :to-be-truthy)
-              (when ready
-                (multiple-value-bind (type payload)
-                    (nerimux::read-frame (nerimux/net:socket-stream server-sock))
-                  (expect (eql nerimux::+msg-key+ type))
-                  (expect (string= "client stdin" (nerimux::decode-text payload)))))))))))
+    (with-test-listener (listener path (%test-socket-path "cmdtest") :backlog 4)
+      (let ((client (nerimux/net:connect-to path)))
+        (expect client :to-be-truthy)
+        (when client
+          (send-frame (nerimux/net:socket-stream client)
+                      (nerimux::msg-command "next-window" nil '("-t" "2")))
+          (force-output (nerimux/net:socket-stream client))
+          (let ((server-sock (nerimux/net:accept-connection listener)))
+            (expect server-sock :to-be-truthy)
+            (when server-sock
+              (let ((ready (nerimux/pty:select-fds
+                            (list (nerimux/net:socket-fd server-sock)) 1000000)))
+                (expect ready :to-be-truthy)
+                (when ready
+                  (multiple-value-bind (type payload)
+                      (nerimux::read-frame (nerimux/net:socket-stream server-sock))
+                    (expect (eql nerimux::+msg-command+ type))
+                    (multiple-value-bind (cmd target args)
+                        (nerimux::decode-command-payload payload)
+                      (declare (ignore target))
+                      (expect (eq :next-window cmd))
+                      (expect (equal '("-t" "2") args))))))))))))
 
   ;;; -- exit-unattached: terminate when the last client detaches ----------------
 

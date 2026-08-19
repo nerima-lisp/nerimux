@@ -1700,19 +1700,6 @@ display label back into a target string."
       args
       (cons "-k" args)))
 
-(defun %canonical-client-command (cmd target args)
-  "Translate the UI command vocabulary to the existing tmux dispatcher."
-  (case cmd
-    (:close (values :kill-pane target args))
-    (:restart (values :respawn-pane target (%client-restart-args args)))
-    (:split (values :split-window target (%client-split-args args)))
-    (:resize (values :resize-pane target (%client-directional-args args)))
-    (:rename (values :rename-window target args))
-    (:move (values :select-pane target (%client-directional-args args)))
-    (:swap (values :swap-pane target (%client-directional-args args)))
-    (:layout (values :select-layout target args))
-    (otherwise (values cmd target args))))
-
 ;;; define-multi-msg-dispatch builds %handle-multi-client-message from a
 ;;; declarative rule table, delegating to define-message-dispatch-fn (server.lisp)
 ;;; so both event loops share the same COND-expansion engine.  TYPE, PAYLOAD,

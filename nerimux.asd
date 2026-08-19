@@ -318,7 +318,6 @@
        (:file "server-multi")  ; multi-client client registry + dispatch helpers
        (:file "server-multi-loop") ; multi-client select-multiplexed serve loop
        (:file "runtime-lifecycle") ; atomic runtime snapshot restore/save hooks
-       (:file "client-command") ; command-client I/O helpers
        (:file "client")
        (:file "main-startup-flags") ; global cl-cli flag definitions
        (:file "main-startup-socket") ; socket discovery + server auto-start helpers
@@ -374,10 +373,13 @@
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  ;; Needs the whole `nerimux' system, not just nerimux/config: command-rulebase
-  ;; reaches *COMMAND-USAGE-TABLE* out of the NERIMUX package with find-symbol,
-  ;; which no compiler-visible edge records.  This :depends-on is the only thing
-  ;; guaranteeing that symbol exists by the time the rulebase runs.
+  ;; Depends on "nerimux" for nerimux/config's key-table store, which is what
+  ;; this read-model projects.  The second domain it used to carry —
+  ;; command-rulebase, reaching *COMMAND-USAGE-TABLE* out of the NERIMUX package
+  ;; by find-symbol — went with the tmux command table: with the table deleted
+  ;; that lookup returned NIL and the rulebase built itself over zero facts
+  ;; instead of failing, so it was removed rather than left reasoning silently
+  ;; over nothing.  See the retirement note in guide/sibling-libraries.md.
   :depends-on ("nerimux" "cl-prolog-kit")
   :pathname "src/reasoning"
   :serial t

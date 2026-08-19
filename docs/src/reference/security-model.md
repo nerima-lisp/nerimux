@@ -18,6 +18,22 @@ socket model. Anyone who can write to that socket can run commands as the
 owning user. The directory permissions, not the protocol, are what confines
 this.
 
+## No access control beyond the socket boundary
+
+Earlier versions offered `server-access` (a read-write/read-only ACL command)
+and `attach-session -r` (a read-only attach flag). Both are gone from the
+current CLI — see [Compatibility: Removed](compatibility.md#removed) for the
+detail. Every client that reaches the socket therefore has full read-write
+capability equivalent to the socket owner.
+
+Be precise about *why*: the server does still contain per-connection read-only
+enforcement — `client-conn-read-only-p` gates pane input in
+`src/bootstrap/server-multi-dispatch.lisp`, driven by a flag in the attach
+frame, and it is still covered by tests. What is gone is any way for a client
+to *request* it, since `attach-session -r` was the only writer. So the
+mechanism is intact and unreachable, and in practice the directory permissions
+above are the whole boundary.
+
 ## Escape-sequence input from panes is untrusted
 
 Programs running inside panes emit bytes that the VT100/ANSI parser consumes.

@@ -13,7 +13,9 @@
 ;;; ── Bindable keyword set ─────────────────────────────────────────────────
 ;;;
 ;;; These are the keywords that can appear as the command argument of a bind
-;;; directive and are dispatched directly by nerimux:dispatch-command.  They
+;;; directive.  NOTE: nothing dispatches them any more -- nerimux:dispatch-command
+;;; went with the tmux command table, so this list now only validates the NAME a
+;;; bind line may mention, never routes to an implementation.  They
 ;;; form the directly-bindable subset — commands whose names canonically map
 ;;; to a single keyword without any argument parsing at key-press time.
 
@@ -77,7 +79,9 @@
     :set-window-option :set-session-option)
   "Command keywords a config-file bind directive may target.
    Type: list of keyword symbols.
-   This is the user-bindable subset of commands nerimux:dispatch-command handles.
+   This was the user-bindable subset of commands nerimux:dispatch-command handled;
+   that dispatcher is gone, so membership here now only decides whether a bind
+   line's target name is accepted at parse time.
    It deliberately EXCLUDES copy-mode-internal commands (:copy-mode-exit,
    :copy-mode-begin-selection, :copy-mode-yank), which are produced by copy-mode
    interception rather than by key lookup.  Prompt-only dispatcher IDs are also

@@ -203,7 +203,9 @@ Uses the safe SBCL idiom to avoid string-constant redefinition errors."
 
 ;;; The command-hook RUNNER breaks a package layering cycle: kill-pane and
 ;;; kill-window live in nerimux/commands, which cannot reference the nerimux
-;;; package's run-command-hooks (that one needs dispatch-command).  The nerimux
+;;; package's run-command-hooks (that one needed dispatch-command, which no
+;;; longer exists -- nothing installs a runner today, so command hooks never
+;;; fire).  The nerimux
 ;;; package installs its run-command-hooks here at load; lower layers fire
 ;;; command hooks indirectly through the runner.
 

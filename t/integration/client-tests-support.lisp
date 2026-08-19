@@ -75,7 +75,7 @@
              ,@body))))))
 
 ;;; with-guarded-socket-test/fd: variant exposing raw socket objects so tests
-;;; that need socket-fd (e.g. %read-command-reply's select-fds parameter) can
+;;; that need socket-fd (e.g. %receive-if-ready's select-fds parameter) can
 ;;; obtain it without duplicating the full socket lifecycle.
 ;;;
 ;;; Binds SERVER-SOCK/CLIENT-SOCK (socket objects), SERVER-STREAM/CLIENT-STREAM

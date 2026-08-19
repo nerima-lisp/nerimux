@@ -12,8 +12,10 @@ without a link to a number on this page.
 ## `nix flake check` runtime
 
 **Target**: 5 minutes. **Cap**: 10 minutes. nerimux is recorded as the
-larger of the two expected exceptions, with 304 test files and roughly 52,000
-lines of test code.
+larger of the two expected exceptions. For today's size, run
+`find t -name '*.lisp' | wc -l` and `wc -l` over the same set — the figure moved
+sharply during the workspace-only conversion and a number written here goes
+stale faster than it is read.
 
 Measured on the development machine (aarch64-darwin, Apple silicon), with the
 sibling libraries and nixpkgs dependencies already in the local store, so the
@@ -28,8 +30,31 @@ Both runs build the test derivations from scratch; only the dependency closure
 is shared. The `docs` derivation is a `mkdocs build` of eight pages and is
 noise at this scale.
 
-Suite sizes at the second measurement: `default` 4277 cases (4276 passed, 1
-skipped), `weave` 26, `dataflow` 17.
+Suite sizes at that second measurement: `default` 4277 cases (4276 passed, 1
+skipped), `weave` 26, `dataflow` 17. **All three rows above are stale.** The
+workspace-only conversion deleted the tmux command table and keystroke pipeline
+along with their tests, so `default` is 3335 cases and `weave` is 18 today
+(measured on this branch); `dataflow` is unchanged at 17. The wall-clock rows
+have not been re-measured against the smaller tree — they describe a 2026-07-26
+configuration with roughly a third more test code, and should not be quoted as
+current.
+
+## Shipped core image size
+
+The workspace-only conversion removed 95 source files (the tmux command table,
+the keystroke pipeline, control mode, the standalone entry point). Both sides
+measured on the same host (aarch64-darwin) with the same flake lock, via
+`nix build .#nerimux` and `stat` on `lib/nerimux/nerimux.core`:
+
+| Tree | `nerimux.core` |
+|---|---|
+| `63647c9`, before the conversion | 18,352,592 bytes |
+| after the conversion | 17,552,576 bytes |
+
+800,016 bytes smaller. The build uses `save-lisp-and-die ... :compression t` on
+both sides, so the two figures are comparable. This is image size only — no
+runtime latency claim is made here, and none of the removed code was on a hot
+path.
 
 ### Result
 

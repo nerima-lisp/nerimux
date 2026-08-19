@@ -171,7 +171,6 @@
    #:*session-groups*
    #:*group-id-counter*
    #:server-new-session-in-group
-   #:new-session
    #:resolve-target
    #:resolve-target-context
    #:find-session-by-target

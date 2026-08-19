@@ -166,3 +166,71 @@ PR #3 のブランチ tip に対して、ローカル (aarch64/x86_64 の macOS 
 
 この CI 失敗の原因切り分けと、必要であれば予算値の見直しは、別作業として残る。
 今回の統合では、この失敗を隠すための実装変更やテストの弱体化は行っていない。
+
+## 2026-08-19 workspace-only 化
+
+このセクションは、上記までの記録とは別のセッション・別の作業単位を記録する。
+上記の PTY テストのベースラインおよび CI ベンチマーク失敗の記述、直前セクションの
+「保留にした作業単位」に書かれた `workspace-overview` branch の保持状態は、この
+セッションの開始時点で既に古い。`workspace-overview` branch と、それを指していた
+worktree (`.worktrees/20260817T154253-d1ea1c1`) は、このセッション開始前の時点で
+既にどこにも存在しないことを確認した
+(`git branch -a` に該当なし、`git cat-file -t 97ebf05` は `Not a valid object
+name` で失敗)。保持を判断した経緯自体は上記セクションの記録として残すが、現在の
+保持対象ではない。
+
+この節は branch `feat/workspace-only-phase2` 上の5 commitを記録する
+(`git log --oneline 9082bf7^..HEAD` で再現できる)。
+
+| commit | 内容 |
+| --- | --- |
+| `9082bf7` | reasoning/dataflow の read-model を optional system として切り出す |
+| `d3e8fc5` | tmux control mode (`-C`) を削除する |
+| `3a78ce1` | CLI のエントリ面を `attach`/`server` に縮小する |
+| `5379e4f` | tmux keystroke と command の fallthrough を削除する |
+| `2a5fa47` | tmux command table と keystroke pipeline を削除する |
+
+この5 commitの結果、nerimux は workspace-only (organization → repository →
+worktree → pane) のマルチプレクサになった。除去されたのは次の各要素である。
+
+- tmux command table 全体 (`src/application/dispatch/`)。`%cmd-*` handler、
+  dispatch table、`dispatch-command` を含む。
+- tmux keystroke pipeline (`src/presentation/events/`)。prefix key、key
+  table、mouse dispatch、CPS key-stream parser を含む。
+- control mode (`-C` / `nerimux control`)。
+- 単体で動く standalone multiplexer。引数なしの `nerimux` は usage を出して
+  非 0 で終了する。
+- `attach`/`server` 以外の CLI subcommand。`new-session`、`has-session`、
+  `kill-server`、`list-sessions` などは CLI からもコマンドプロンプトからも
+  解決しない。
+- `src/bootstrap/client-command.lisp`、`src/reasoning/command-rulebase.lisp`。
+
+`find src -name '*.lisp' | wc -l` は今日時点で 181、`find t -name '*.lisp' |
+wc -l` は 240 を返す。統合直前の状態からの差分は
+`git diff --shortstat 9082bf7^..HEAD` で確認できる (このセッションで実行した
+結果は 240 files changed, 1164 insertions(+), 26592 deletions(-))。
+
+この削除に伴い、以下の2点は「実装が消えた」ケースと「配線だけ失われ実装は残る」
+ケースを分けて確認する必要があった。
+
+1. `server-access`(read-write/read-only の ACL command) は
+   `src/application/dispatch/commands/dispatch-commands-server.lisp` ごと
+   完全に削除された。`grep -rn server-access src/` は
+   `src/application/config/config-commands.lisp` の `*known-command-names*`
+   (bind-key target を検証する文字列リスト) にしか一致せず、実装は存在しない。
+2. `attach-session -r` は wire flag (`+attach-flag-read-only+`,
+   `src/infrastructure/net/protocol.lisp`) と server 側の per-connection
+   enforcement (`client-conn-read-only-p`,
+   `src/bootstrap/server-multi-dispatch.lisp`) の両方をそのまま残している。
+   削除されたのは CLI 側の `-r` flag parsing だけであり、`*client-read-only*`
+   (`src/bootstrap/runtime.lisp`) を non-nil にする経路がどこにもなくなった。
+   つまり「削除」ではなく「配線を失って到達不能になった」状態である。
+
+この区別と、影響を受けた他の claim (dispatch/events 由来の Sprint 1〜3 の各
+機能) の詳細な突き合わせは `docs/notes/permissions-and-verification.md` の
+冒頭注記と `docs/notes/coverage-audit-history.md` の該当箇所の "Since
+removed" 注記、および公開ドキュメントの
+`docs/src/reference/compatibility.md`(Removed節) と
+`docs/src/reference/security-model.md`(No access control beyond the socket
+boundary節) に記録した。`docs/src/reference/security-model.md` は
+`nix build .#docs`(`mkdocs build --strict`) で exit code 0 を確認済み。

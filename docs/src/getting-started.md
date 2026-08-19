@@ -83,7 +83,7 @@ nerimux-coverage ./coverage-report    # sb-cover report via cl-weave
 | `formatting` | treefmt / nixfmt over every tracked Nix file |
 | `docs` | this site, built with `mkdocs --strict` |
 
-The main suite (290+ test files, 11,000+ checks) runs on
+The main suite (`find t -name '*.lisp' | wc -l` for today's file count) runs on
 [cl-weave](https://github.com/nerima-lisp/cl-weave) and covers the VT100
 emulator, layout geometry, command dispatch, format engine, options/hooks,
 copy mode, the client/server protocol, and live PTY integration against a real

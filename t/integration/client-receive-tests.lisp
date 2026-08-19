@@ -81,14 +81,18 @@
           (expect (null result))
           (expect (string= "HELLO" painted))))))
 
-  ;; ── %utf8-char-byte-count table-driven tests ────────────────────────────────
+  ;; ── UTF-8 byte-width table-driven tests ─────────────────────────────────────
   ;;
-  ;; %utf8-char-byte-count is a private helper with four boundary thresholds.
-  ;; These table-driven tests make every boundary condition explicit — analogous
-  ;; to the %command-client-split-window-input-p table above — so the split
-  ;; points are auditable without requiring Unicode knowledge.
+  ;; %utf8-char-byte-count (the client-command-client's private UTF-8 byte-width
+  ;; helper) was deleted along with the rest of the command-client CLI path.
+  ;; The boundary table below survives by retargeting it at
+  ;; cl-codec-kit:string-size-in-octets, the codec library's public equivalent —
+  ;; it reports the same UTF-8 octet width for a single character, driven
+  ;; through the actual encoder cl-codec-kit uses rather than a bespoke
+  ;; reimplementation, so the four threshold boundaries (0x80, 0x800, 0x10000)
+  ;; stay covered.
 
-  ;; %utf8-char-byte-count returns the correct UTF-8 byte width for
+  ;; cl-codec-kit:string-size-in-octets returns the correct UTF-8 byte width for
   ;; boundary values in each of the four encoding ranges.  Tests at and just below
   ;; each threshold (0x80, 0x800, 0x10000) make the boundaries explicit.
   (it "utf8-char-byte-count-table"
@@ -108,7 +112,8 @@
         (declare (ignore description))
         ;; Guard: skip codepoints beyond the Lisp image's char-code-limit.
         (when (< code char-code-limit)
-          (let ((got (nerimux::%utf8-char-byte-count (code-char code))))
+          (let ((got (cl-codec-kit:string-size-in-octets
+                      (string (code-char code)) :encoding :utf-8)))
             (expect (= expected got)))))))
 
   ;; ── %receive-if-ready behavior ──────────────────────────────────────────────

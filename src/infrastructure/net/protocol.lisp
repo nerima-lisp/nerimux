@@ -201,23 +201,21 @@
    This is deliberately the opposite policy from SPLIT-ON-NUL-BYTES in
    protocol-command.lisp, which decodes strictly.  The two differ because the
    payloads differ in kind.  DECODE-TEXT is only ever applied to *display* text
-   — +msg-frame+ rendered screen content (client.lisp) and +msg-reply+ command
-   output (client-command.lisp) — which is written to stdout and never re-parsed,
-   interned, or dispatched on.  A command payload, by contrast, is interned and
-   executed, so there a repaired string would be a guess with consequences.
+   — +msg-frame+ rendered screen content — which is written to stdout and never
+   re-parsed, interned, or dispatched on.  A command payload, by contrast, is
+   interned and executed, so there a repaired string would be a guess with
+   consequences.
 
-   One caller does inspect the result, and stating the exception precisely is
-   what keeps this rationale honest.  %READ-COMMAND-REPLY (client-command.lisp)
-   branches on (PLUSP (LENGTH TEXT)) and on whether the last character is a
-   newline, to decide whether to print at all and whether to add a trailing one.
-   A fully malformed +msg-reply+ payload therefore decodes to a NON-EMPTY run of
-   U+FFFD, prints as that run, and ends in U+FFFD rather than a newline, so one
-   extra TERPRI is synthesised.  That is a cosmetic difference in already-garbled
-   output, not a changed decision, so the policy stands.  CLIENT.LISP has no such
-   test: %DECODE-SERVER-FRAME classifies on the frame TYPE alone and
-   %RECEIVE-SERVER-FRAME only WRITE-STRINGs the text it returns.
+   There is exactly one caller today: CLIENT.LISP's %DECODE-SERVER-FRAME, which
+   classifies on the frame TYPE alone, and %RECEIVE-SERVER-FRAME, which only
+   WRITE-STRINGs the text it returns.  Neither inspects the decoded string, so
+   the lenient policy has no behavioural edge case to state.  It used to: the
+   +msg-reply+ reader in client-command.lisp branched on (PLUSP (LENGTH TEXT))
+   and on a trailing newline, which a fully-malformed payload could perturb by
+   one synthesised TERPRI.  That reader went with the CLI command client, and
+   nothing sends +msg-reply+ any more.
 
-   Leniency also matters because neither caller establishes a handler: signalling
+   Leniency also matters because the caller establishes no handler: signalling
    here would unwind the client's event loop and kill the user's attached
    terminal mid-render over a single bad byte.  The replacement character is
    passed explicitly rather than relying on the encoding's own default, matching

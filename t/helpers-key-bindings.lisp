@@ -25,10 +25,6 @@
         (second command)
         command)))
 
-(defun copy-mode-x-command-value (name)
-  "Return the copy-mode -X command keyword bound to NAME."
-  (cdr (assoc name nerimux::*copy-mode-x-commands* :test #'string-equal)))
-
 (defun alist-value (key alist &key (test #'eql))
   "Return the value bound to KEY in ALIST."
   (cdr (assoc key alist :test test)))

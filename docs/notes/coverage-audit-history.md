@@ -85,6 +85,15 @@ These are the features needed to make nerimux useful as a daily driver. Implemen
 
 **Tests:** `t/unit/target-tests.lisp` and `t/unit/target-tests-b.lisp` already cover the target lookup and command-routing surfaces.
 
+**Since removed.** The dispatch-routing half of this entry is gone:
+`dispatch-core.lisp` and every `dispatch-commands*.lisp` under
+`src/application/dispatch/` were deleted with the rest of the tmux command
+table. `resolve-target` itself still exists in `src/domain/model/target.lisp`,
+but it has no remaining call site outside that file (`grep -rn resolve-target
+src/` today only finds the definition and its package export) — `-t` target
+resolution is unreachable from any entry point. See
+`docs/src/reference/compatibility.md#removed`.
+
 ---
 
 ### S1-2: Multi-session server [implemented]
@@ -100,6 +109,14 @@ These are the features needed to make nerimux useful as a daily driver. Implemen
 
 **Tests:** `t/unit/server-tests.lisp` and related dispatch tests already cover session registry and selection behavior.
 
+**Since removed.** `new-session`, `kill-session`, `list-sessions`, and
+`switch-client` are no longer wired through any dispatch command table —
+`src/application/dispatch/` (which held that wiring) was deleted along with
+the rest of the tmux command surface. `src/bootstrap/session-registry.lisp`
+still holds the multi-session registry itself, but nothing in the current
+tree calls it from a live command; the surviving CLI is `attach`/`server`
+only. See `docs/src/reference/compatibility.md#removed`.
+
 ---
 
 ### S1-3: new-session and kill-session commands [implemented]
@@ -109,6 +126,13 @@ These are the features needed to make nerimux useful as a daily driver. Implemen
 **Implemented in:** `src/bootstrap/main-startup.lisp`, `src/application/dispatch/dispatch-command-specs-core-session.lisp`, `src/application/dispatch/dispatch-handlers.lisp`, `src/application/dispatch/dispatch-commands-pane.lisp`, `src/bootstrap/main.lisp`, `t/unit/main-tests.lisp`, `t/unit/server-tests.lisp`, `t/unit/dispatch-tests-session-f.lisp`, `t/unit/dispatch-tests-commands-e.lisp`, `t/integration/server-multi-tests.lisp`
 
 **Notes:** `run-new-session` already handles startup forwarding and `%ensure-server-running`; `:new-session` / `:kill-session` are wired in dispatch and covered by tests.
+
+**Since removed.** `:new-session` / `:kill-session` dispatch is gone — the
+files this entry cites (`dispatch-command-specs-core-session.lisp`,
+`dispatch-handlers.lisp`, `dispatch-commands-pane.lisp`) no longer exist.
+`docs/src/reference/compatibility.md#removed` lists `nerimux new-session` as
+one of the CLI entry points that no longer resolves; only `%ensure-server-running`
+(still used by the `attach` startup mode itself) survives.
 
 ---
 
@@ -122,6 +146,19 @@ These are the features needed to make nerimux useful as a daily driver. Implemen
 
 **Notes:** `select-pane -L/-R/-U/-D` already routes through directional neighbor lookup and the prefix arrow-key bindings are already wired. Keep this section only for parity audits against tmux edge cases.
 
+**Since removed, but re-routed.** The command route and the tmux prefix
+key-binding route are gone: `dispatch-commands-option.lisp`,
+`dispatch-handlers.lisp`, and `dispatch-core.lisp` no longer exist, and the
+prefix arrow-key bindings lived in the keystroke pipeline
+(`src/presentation/events/`), also deleted. `select-pane -L/-R/-U/-D` as a
+typed or bound tmux command no longer resolves. `pane-neighbor` itself
+(`src/domain/model/window-neighbor.lisp`) is not dead code, though: it is
+still called from `src/bootstrap/server-multi-dispatch.lisp:796` and
+`src/application/commands/commands.lisp:58-59` as part of the new workspace
+input pipeline, so directional pane navigation likely still works through
+whatever key path those call sites wire up — verifying that live path was
+out of scope for this sweep.
+
 ---
 
 ### S1-5: Pane zoom toggle (resize-pane -Z, C-b z) [implemented]
@@ -131,6 +168,15 @@ These are the features needed to make nerimux useful as a daily driver. Implemen
 **Implemented in:** `src/presentation/events/events-loop.lisp`, `src/application/config/config.lisp`, `src/domain/model/window.lisp`, `src/application/dispatch/dispatch-commands.lisp`, `src/application/dispatch/dispatch-handlers.lisp`, `t/unit/events-tests-g.lisp`, `t/unit/dispatch-tests-c.lisp`, `t/unit/window-tests.lisp`, `t/unit/config-tests.lisp`
 
 **Notes:** `C-b z` / `#\z` and the zoom-toggle command path already route through `window-zoom-toggle`.
+
+**Since removed.** Both routes cited are gone: `events-loop.lisp`
+(`src/presentation/events/`, the prefix-key path) and `dispatch-commands.lisp`
+/ `dispatch-handlers.lisp` (`src/application/dispatch/`, the command path) no
+longer exist. `window-zoom-toggle` itself
+(`src/domain/model/window-operations.lisp:125`) still exists but today has no
+functional caller — `grep -rn window-zoom-toggle src/` finds only its
+definition, its package export, and a docstring mention in
+`renderer-compose.lisp:42`; it is dead code, unlike `pane-neighbor` above.
 
 ---
 
@@ -144,6 +190,16 @@ These are the features needed to make nerimux useful as a daily driver. Implemen
 - `show-options` and `set-option` are already exposed through the dispatch command registry and exercised by tests.
 
 **Tests:** `t/unit/config-tests.lisp` already covers option lookup and directive behavior.
+
+**Since removed, partially.** `dispatch-commands-option.lisp` (the
+`set-option`/`show-options` typed-command route through
+`src/application/dispatch/`) is gone, so those names no longer resolve as
+commands. The `.tmux.conf` **directive** route is a separate, narrower story:
+`docs/src/reference/compatibility.md#config-file-what-still-runs` has the
+current, maintained breakdown of which `set`-family directives still have a
+live reader (`default-shell`, `status`, `escape-time`,
+`update-environment`) versus which now parse into state nothing reads
+(`bind-key`, `prefix`, `mouse`, `set-hook`).
 
 ---
 
@@ -170,6 +226,16 @@ These are the features needed to make nerimux useful as a daily driver. Implemen
 
 **Notes:** `copy-mode-select-word`, `copy-mode-yank`, and the paste-buffer plumbing already exist; this section is now a parity audit reference only.
 
+**Re-routed, not removed.** `dispatch-commands-pane-x.lisp` (the old
+dispatch entry) is gone, but copy mode itself was not deleted: the files
+above moved into `src/application/commands/copy-mode/` (one file per concern,
+e.g. `commands-copy-mode-word.lisp`, `commands-copy-mode-clip.lisp`), and per
+`docs/src/reference/compatibility.md#what-still-works-the-way-tmux-works`,
+copy mode is reachable today through the workspace wire protocol — client
+copy-mode messages are handled directly in
+`src/bootstrap/server-multi-dispatch.lisp` rather than the deleted keystroke
+pipeline.
+
 ---
 
 ### S1-9: Server auto-start on client connect [implemented]
@@ -180,9 +246,31 @@ These are the features needed to make nerimux useful as a daily driver. Implemen
 
 **Notes:** startup auto-forwarding / `ensure-server-running` behavior is already wired; keep this section only for parity audits.
 
+**Still true, one path stale.** `src/bootstrap/main.lisp` was deleted in
+this branch's `3a78ce1` ("reduce the CLI entry surface to attach and
+server") when the CLI was narrowed to `attach`/`server`; the surviving
+startup files are `main-startup.lisp` and the `main-startup-*.lisp` split.
+The feature itself is unaffected: `run-attach-simple`
+(`src/bootstrap/main-startup-commands.lisp`) still calls
+`%ensure-server-running` on every attach.
+
 ---
 
 ## 4. Sprint 2 — P2 Medium-Value Features
+
+**Since removed (Session/Window/Pane management below).** All three
+subsections describe tmux command names (`rename-session`, `move-window`,
+`swap-pane`, `capture-pane`, etc.) reached through
+`src/application/dispatch/`, which was deleted in its entirety along with
+the rest of the tmux command table — no tmux command name resolves from any
+entry point today. The underlying domain-model files each subsection also
+cites (`session.lisp`, the `window-*.lisp` split, `screen.lisp`, `options.lisp`)
+generally still exist, but "implemented" below described a full path from
+command name to effect, and that path's dispatch half is gone. Terminal
+emulation and Status bar below are unaffected — none of their cited files
+live under `src/application/dispatch/` or `src/presentation/events/`.
+Config/options below is a mixed case; see the note on that subsection. See
+`docs/src/reference/compatibility.md#removed`.
 
 ### Session management
 - **Implemented**: `rename-session`, `list-sessions`, `switch-client`, `has-session`, `last-session`, `source-file`, and `display-message` already exist in the dispatch/runtime path. The current codebase also handles `attach-session` targets and the `-d` / `-r` attach flags.
@@ -208,6 +296,16 @@ These are the features needed to make nerimux useful as a daily driver. Implemen
 - **Implemented**: `bind-key -n`, `bind-key -r`, `bind-key -T`, `show-options`, and `server-options` are already implemented.
 - **Remaining follow-up**: the config file tokenizer deserves a separate pass if quote/escape fidelity needs to be improved further.
 - **Relevant code**: `src/application/config/config.lisp`, `src/application/config/config-directives.lisp`, `src/domain/options/options.lisp`.
+- **Since removed, partially.** `bind-key`/`unbind-key` still parse and
+  populate `*key-tables*`, but per
+  `docs/src/reference/compatibility.md#config-file-what-still-runs` the only
+  remaining reader of that table is a `list-keys`-style formatter that
+  nothing calls from a live entry point — the keystroke pipeline that used to
+  consult a key-table on every keypress is gone, so a `bind-key` line in
+  `.tmux.conf` now has no observable effect. `show-options`/`server-options`
+  as typed dispatch commands are gone with the rest of
+  `src/application/dispatch/`; the underlying option storage in
+  `src/domain/options/options.lisp` is unaffected.
 
 ### Status bar
 - **Implemented**: status on/off, status position, status style, status interval, and status justification are already present in the renderer/options path.
@@ -223,6 +321,15 @@ These are the features needed to make nerimux useful as a daily driver. Implemen
 - **lock-session / lock-client**: implemented in `src/application/dispatch/dispatch-command-specs-core-session.lisp`, `src/application/dispatch/dispatch-handlers-b.lisp`, and `src/presentation/renderer/renderer-lock.lisp`; the renderer overlays a lock screen and accepts a passphrase via command prompt.
 - **update-environment**: implemented via `src/application/config/config-directives-set.lisp` and `src/domain/model/session.lisp`; session creation copies the configured client environment variables into server-spawned PTY environments.
 
+**Since removed, partially.** `new-session -t` and `lock-session`/`lock-client`
+were dispatch commands; `src/application/dispatch/dispatch-command-specs-core-session.lisp`,
+`dispatch-handlers-b.lisp`, and `src/presentation/renderer/renderer-lock.lisp`
+no longer exist, so neither is reachable today. `update-environment` is
+unaffected — it is on `compatibility.md`'s "Still effective" list, since
+`src/application/config/config-directives-set.lisp` and
+`src/domain/model/session.lisp` are config-directive/domain-model code, not
+dispatch.
+
 ### Advanced window/pane operations
 - **link-window / unlink-window**: implemented in `src/application/dispatch/dispatch-commands-lifecycle.lisp`, `src/application/dispatch/dispatch-command-specs-core-window.lisp`, and `src/application/dispatch/dispatch-handlers-b.lisp`; windows can be shared across sessions at the window level.
 - **break-pane (C-b !)**: implemented in `src/application/commands/commands.lisp`; detaches the active pane into a new window while preserving layout-tree consistency.
@@ -230,10 +337,28 @@ These are the features needed to make nerimux useful as a daily driver. Implemen
 - **pipe-pane**: implemented in `src/application/commands/commands.lisp`, `src/application/dispatch/dispatch-handlers-b.lisp`, and `src/application/dispatch/dispatch-command-specs-core-window.lisp`; subprocess teeing and pane pipe lifecycle are already wired.
 - **synchronize-panes** window option: implemented in `src/presentation/events/events-loop.lisp` and `src/presentation/events/events-keystroke.lisp`; when enabled, active-pane input is also written to the other panes in the window.
 
+**Since removed.** Every dispatch/handler file this section cites
+(`dispatch-commands-lifecycle.lisp`, `dispatch-command-specs-core-window.lisp`,
+`dispatch-handlers-b.lisp`) and both event-pipeline files for
+`synchronize-panes` (`events-loop.lisp`, `events-keystroke.lisp`) are gone.
+None of `link-window`, `unlink-window`, `break-pane`, `join-pane`,
+`move-pane`, `pipe-pane`, or `synchronize-panes` resolves as a command today.
+This sweep did not check whether `src/application/commands/commands.lisp`
+still holds unreachable logic for `break-pane`/`join-pane`/`move-pane` or was
+itself pruned.
+
 ### Built-in named layouts
 - **even-horizontal, even-vertical, main-horizontal, main-vertical, tiled**: implemented in `src/domain/model/window-layout.lisp`; named layouts rebuild the layout tree with the expected split rules.
 - **select-layout and C-b Space / C-b M-1–M-5**: implemented via `src/application/dispatch/dispatch-command-specs-core-window.lisp`, `src/application/dispatch/dispatch-handlers-b.lisp`, and the key-binding tables; `cmd-select-layout` cycles through or jumps to a named layout.
 - **layout-persistence (layout string)**: implemented in `src/domain/model/layout-persistence.lisp`; `layout->string` and `string->layout` encode and decode persisted layouts.
+
+**Since removed, partially.** `select-layout` and its key bindings are gone —
+`dispatch-command-specs-core-window.lisp`/`dispatch-handlers-b.lisp` no
+longer exist and the prefix key-binding table lived in the deleted keystroke
+pipeline. The named-layout algorithms in `src/domain/model/window-layout.lisp`
+and the encode/decode pair in `src/domain/model/layout-persistence.lisp`
+still exist as domain-model code (both files are present in the tree today);
+this sweep did not verify whether anything still calls them.
 
 ### Mouse support
 - **Mouse reporting modes (?1000h/1002h/1003h/1006h)**: implemented in `src/domain/terminal/modes.lisp`, `src/presentation/events/events-mouse.lisp`, `src/presentation/renderer/renderer-compose-protocols.lisp`, and `src/presentation/renderer/renderer-compose-overlay.lisp`; these rows are runtime-covered and gated by the session `mouse` option.
@@ -243,6 +368,12 @@ These are the features needed to make nerimux useful as a daily driver. Implemen
 - **Mouse text selection**: implemented in `src/presentation/events/events-mouse.lisp`; drag enters copy mode, updates the copy cursor, and yanks on button release.
 - **Mouse status bar click**: implemented in `src/presentation/events/events-mouse.lisp`; status-bar clicks map the column to a window and call `:select-window`.
 - All mouse features above are gated behind `(get-option session "mouse")` and exercised by `t/unit/mouse-tests.lisp`.
+
+**Since removed.** `src/presentation/events/events-mouse.lisp` — the file
+every bullet above cites — no longer exists, and (unlike copy mode) mouse
+handling was not re-routed: `grep -n mouse src/bootstrap/server-multi-dispatch.lisp`
+finds nothing. None of mouse pane selection, border resize, wheel scroll, text
+selection, or status-bar click is reachable today.
 
 ### Scripting and hooks
 - **hooks system**: implemented in `src/domain/hooks/hooks.lisp`, `src/application/dispatch/dispatch-core.lisp`, and the dispatch handler files; hook names are stored in the runtime and executed as command strings.
@@ -254,12 +385,40 @@ These are the features needed to make nerimux useful as a daily driver. Implemen
 - **display-menu**: implemented in `src/application/dispatch/dispatch-handlers-b-menu.lisp`, `src/application/dispatch/dispatch-command-specs-core-misc.lisp`, `src/presentation/prompt/overlay.lisp`, and `src/presentation/renderer/renderer-overlay.lisp`; the unit tests already exercise menu placement and selection.
 - **key-tables**: implemented in `src/application/config/config.lisp`, `src/application/config/config-directives.lisp`, and the keystroke dispatch files; `copy-mode` / `prefix` / `root` tables and repeatable bindings are already present.
 
+**Since removed, partially.** `hooks system`, `confirm-before`, `wait-for`,
+`display-popup`, `display-menu`, and `key-tables`'s "keystroke dispatch
+files" all depended on `src/application/dispatch/`, now gone —
+`*command-hook-runner*` (the piece that would fire a stored hook) has no
+assignment anywhere in the tree today, and `wait-for`/`display-popup`/
+`display-menu`/`confirm-before` survive only as strings in
+`src/application/config/config-commands.lisp`'s `*known-command-names*` list
+(bind-target validation, not an implementation) — the same situation as
+`server-access` in `docs/notes/permissions-and-verification.md`.
+**`run-shell`/`if-shell` are unaffected**: they are config-file directives
+(`src/application/config/config-directives-run-shell.lisp`,
+`config-directives-if-shell.lisp`, both present), not dispatch commands, and
+`docs/src/reference/compatibility.md#config-file-what-still-runs` confirms
+they still execute.
+
 ### Control mode and advanced client/server
 - **control mode (tmux -C)**: implemented in `src/infrastructure/control-mode/control-mode.lisp`, `src/bootstrap/main.lisp`, and `src/application/dispatch/dispatch-control.lisp`; notifications are emitted as `%begin`/`%end`-delimited blocks and covered by the control-mode unit tests.
   **Since removed.** This audit entry records what was true when it was written; the capability and all three files above no longer exist. See `git log -- src/infrastructure/control-mode/` and the "Removed" section of `docs/src/reference/compatibility.md`. The entry is left standing rather than rewritten, because this file is a dated record of past audits, not a description of the current tree.
 - **concurrent multi-client**: implemented in `src/bootstrap/server-multi.lisp`; the server event loop already broadcasts frame diffs to connected clients, with integration coverage in `t/integration/server-multi-tests.lisp`.
 - **command protocol over socket**: implemented in `src/bootstrap/client.lisp` and `src/bootstrap/server-multi.lisp`; `run-command-client` is covered by `t/integration/client-tests.lisp` and `t/integration/server-multi-tests.lisp`.
 - **read-only client**: implemented via `*client-read-only*` in `src/bootstrap/runtime.lisp`, `src/presentation/events/events-loop.lisp`, `src/presentation/events/events-mouse.lisp`, `src/application/dispatch/dispatch-commands-auto.lisp`, and `src/application/dispatch/dispatch-handlers.lisp`; input forwarding is skipped for read-only clients.
+
+**Since removed, partially — the enforcement moved, but nothing sets the
+flag any more.** The `events-*`/`dispatch-*` files this bullet cites are
+gone, but the mechanism was re-routed rather than deleted: the connection-side
+enforcement now lives in `src/bootstrap/server-multi-dispatch.lisp`
+(`client-conn-read-only-p`, gating pane input at the lines around 80 and
+904), driven by the same `+attach-flag-read-only+` wire bit. What is
+actually gone is the CLI path that ever set the bit: `attach-session -r`
+was the only way to request it, and that flag parsing was removed with the
+rest of the command surface. `*client-read-only*` in
+`src/bootstrap/runtime.lisp` stays permanently `nil` today — see
+`docs/src/reference/compatibility.md#removed` and the fuller writeup in
+`docs/notes/permissions-and-verification.md`.
 
 ### Additional terminal emulation
 - **Line drawing / ACS**: ESC `(0` / ESC `(B` character set switching and ACS remapping are already implemented in `src/domain/terminal/parser.lisp`, `src/domain/terminal/modes.lisp`, and `src/domain/terminal/cursor.lisp`; keep the remaining coverage/docs aligned with that implementation.
@@ -280,14 +439,30 @@ Mouse handling is implemented across:
 - `src/domain/terminal/csi.lisp` — DECRQM reporting for the mouse modes
 - `src/application/config/config-directives.lisp` / `src/domain/options/options.lisp` — `mouse` boolean option and the option-change hook
 
+**Since removed.** `src/presentation/events/events-mouse.lisp` is gone and
+was not re-routed (see the Sprint 3 "Mouse support" note above); mouse
+handling no longer spans event dispatch because there is no event dispatch
+layer left.
+
 ### Format strings (Sprint 1-7) touches renderer, config, and all command output
 The format pipeline is split across `src/domain/format/format-helpers.lisp`, `src/domain/format/format-strftime.lisp`, `src/domain/format/format.lisp`, `src/domain/format/format-engine.lisp`, and `src/domain/format/format-context.lisp`. Keep those files ahead of renderer/dispatch layers in `nerimux.asd`, and treat `format-context-from-session` as the builder that turns session/window/pane state into the plist consumed by `expand-format`.
 
 ### Multi-session server and protocol framing are already target-aware
 `src/infrastructure/net/protocol.lisp` already encodes and decodes target-bearing commands, and `src/bootstrap/server-multi.lisp` reconstructs the command line with `-t <target>` before dispatch. Keep new wire messages target-aware so they remain compatible with multi-session routing.
 
+**Since removed, partially.** The "before dispatch" reconstruction step is
+gone with the dispatch layer: `grep -n '\-t <target>\|reconstruct' src/bootstrap/server-multi.lisp src/infrastructure/net/protocol.lisp`
+finds nothing today. `protocol.lisp` itself is unaffected and still encodes
+the workspace wire messages used by the current architecture.
+
 ### Key-table system (Sprint 2 config, Sprint 3 scripting)
 The key-table system is already implemented. `src/application/config/config.lisp` defines named tables and repeatable bindings, `src/application/config/config-directives.lisp` parses `bind -n`, `bind -r`, `bind -T`, and the keystroke dispatch path resolves the active table at runtime. Keep this section as a reminder that future bindings should reuse the existing table model instead of flattening it again.
+
+**Since removed.** "the keystroke dispatch path resolves the active table at
+runtime" no longer holds — `src/presentation/events/` is gone. Parsing and
+storage (`config.lisp`, the `config-directives-*.lisp` split) still work per
+the Sprint 2 "Config / options" note above, but nothing reads the resolved
+table at runtime any more.
 
 ### Colors require asd component ordering
 The color type change in `src/domain/terminal/screen.lisp` (Sprint 0-2) will break `src/domain/terminal/sgr.lisp`, `src/presentation/renderer/renderer.lisp`, and `src/presentation/renderer/renderer-pane.lisp` if they are compiled before the new color struct is defined. `screen.lisp` is already first in the terminal subsystem ordering — verify the `.asd` `:depends-on` or `:serial t` ordering is `screen → cursor → modes → sgr → csi → parser`.

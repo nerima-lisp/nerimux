@@ -25,15 +25,17 @@ reachable from a live client:
   Implementation: `src/domain/terminal/` (34 files, including
   `parser-dcs.lisp`, `screen.lisp`, `scroll.lisp`,
   `parser-osc-dispatch.lisp` for OSC 133).
-- **Copy mode.** vi-style navigation, selection (including rectangle),
-  search, word/line/paragraph motions, and paste buffers. Reachable today
-  through the workspace wire protocol rather than a tmux keystroke pipeline:
-  client copy-mode messages are handled directly in
-  `src/bootstrap/server-multi-dispatch.lisp` (`%client-enter-copy-mode`,
-  `%client-exit-copy-mode`, and the cursor/selection/search calls around
-  lines 892–1019), which call into the same navigation primitives as before
-  (`src/application/commands/copy-mode/commands-copy-mode.lisp`,
-  `copy-mode-enter`/`copy-mode-exit`/`copy-mode-scroll` at lines 25–96).
+- **Copy mode**, but a smaller key set than tmux's. What an attached client
+  can actually reach is the fixed `cond` in
+  `src/bootstrap/server-multi-dispatch.lisp` (`%handle-client-copy-key-payload`):
+  `Esc`/`q` to exit, `hjkl` and the arrows to move, `g`/`G` to jump to top and
+  bottom, `Space` to begin a selection, `y` to yank, `/` and `?` to search with
+  `n`/`N` to repeat. Selection is linear.
+  Rectangle selection, word/line/paragraph motions, prompt jumping, incremental
+  search and the paste-buffer commands still exist as functions under
+  `src/application/commands/copy-mode/`, but nothing binds a key to them now
+  that the tmux key tables are gone — they are present and unreachable, in the
+  same sense as the inert config directives below.
 - **Client/server socket model.** Per-user socket directories under
   `$TMUX_TMPDIR`/`$TMPDIR`/`/tmp`, `-L`/`-S` overrides, mode `0700`
   directories, stale-socket recovery, and detach/attach with the session
@@ -81,6 +83,10 @@ reachable from a live client:
   deleted outright. No tmux command name resolves any more, from any entry
   point. This is the reason several `.tmux.conf` directives described below
   now store state that nothing reads.
+  - `server-access` went with it. That was the read-write/read-only ACL over
+    connected clients, so nerimux now has no per-client authorization layer at
+    all — the socket's own permissions are the whole boundary. See the
+    [security model](security-model.md).
 - **The tmux keystroke pipeline is gone.** `src/presentation/events/`
   (25 files) — the prefix key, key tables, mouse dispatch, and the CPS
   key-stream parser — was deleted. tmux prefix bindings (`C-b c`, etc.) no
@@ -108,6 +114,16 @@ But the command-table removal above splits what a directive *does* into two
 groups, and a directive parsing without error is no longer evidence that it
 has an effect:
 
+One trap before the split: the directive **verbs** this parser dispatches are
+not all the canonical tmux spellings. `src/application/config/` recognizes
+`bind`, `unbind` and `unbind-all` — *not* `bind-key`/`unbind-key` — and
+`set-option`, `set-window-option`, `set-session-option` — *not* the `set`
+alias. A line using a spelling it does not recognize is dropped silently, so
+`set -g default-shell /bin/zsh` does nothing while
+`set-option -g default-shell /bin/zsh` works. Note this cuts against the
+"canonical names only" rule stated below, which describes the deleted command
+parser rather than the config directive parser.
+
 **Still effective** — these `set-option` names have a runtime consumer
 outside the config layer, verified by tracing each variable to its reader:
 
@@ -125,7 +141,7 @@ outside the config layer, verified by tracing each variable to its reader:
 nothing reads that state any more because their only consumer lived in the
 deleted dispatch/events layers:
 
-- **`bind-key`/`unbind-key`.** Still populate `*key-tables*`
+- **`bind`/`unbind`.** Still populate `*key-tables*`
   (`src/application/config/config-key-table-store.lisp`), but the only
   reader of `key-table-lookup` left in the tree is the `list-keys`-style
   formatter in `config-listing.lisp`, and nothing calls that formatter from

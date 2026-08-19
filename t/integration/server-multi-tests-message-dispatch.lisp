@@ -334,42 +334,12 @@
           (setf (fdefinition 'nerimux::%workspace-new-window)
                 original-new-window)))))
 
-  (it "multi-client-command-vocabulary-normalizes-to-tmux"
-    (check-table
-     (list
-      (list (multiple-value-list
-             (nerimux::%canonical-client-command :close "%.0" nil))
-            '(:kill-pane "%.0" nil)
-            "close becomes kill-pane")
-      (list (multiple-value-list
-             (nerimux::%canonical-client-command :restart nil '("echo")))
-            '(:respawn-pane nil ("-k" "echo"))
-            "restart forces respawn-pane -k")
-      (list (multiple-value-list
-             (nerimux::%canonical-client-command :split nil '("horizontal")))
-            '(:split-window nil ("-h"))
-            "horizontal split uses split-window -h")
-      (list (multiple-value-list
-             (nerimux::%canonical-client-command :resize nil '("left" "7")))
-            '(:resize-pane nil ("-L" "7"))
-            "left resize uses resize-pane -L")
-      (list (multiple-value-list
-             (nerimux::%canonical-client-command :rename nil '("work")))
-            '(:rename-window nil ("work"))
-            "rename becomes rename-window")
-      (list (multiple-value-list
-             (nerimux::%canonical-client-command :move nil '("down")))
-            '(:select-pane nil ("-D"))
-            "move becomes select-pane")
-      (list (multiple-value-list
-             (nerimux::%canonical-client-command :swap nil '("right")))
-            '(:swap-pane nil ("-R"))
-            "swap becomes swap-pane")
-      (list (multiple-value-list
-             (nerimux::%canonical-client-command :layout nil '("even-horizontal")))
-            '(:select-layout nil ("even-horizontal"))
-            "layout becomes select-layout"))
-     :test #'equal))
+  ;; The workspace->tmux command vocabulary translation
+  ;; (%canonical-client-command: :close -> :kill-pane, :split -> :split-window,
+  ;; and so on) was deleted with the tmux command table it fed.  Its only
+  ;; consumer was %dispatch-forwarded-command; once that went, the translation
+  ;; had nothing to translate for, and this test was the only thing still
+  ;; calling it.
 
   ;; A resize moves the client to the front of *clients* so window-size "latest"
   ;; tracks the just-resized client.
