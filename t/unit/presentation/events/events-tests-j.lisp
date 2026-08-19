@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Events tests: vi-normal-key dispatch.
 
@@ -27,7 +27,7 @@
                           (with-vi-normal-prompt (get-buf)
                             ,setup
                             (let ((pos-before (prompt-cursor-index *prompt*)))
-                              (expect (cl-tmux::%handle-vi-normal-key ,byte) :to-be-truthy)
+                              (expect (nerimux::%handle-vi-normal-key ,byte) :to-be-truthy)
                               (expect (= ,expected (prompt-cursor-index *prompt*))))))))))
 
 (defmacro define-vi-normal-insert-mode-cases (&body cases)
@@ -41,7 +41,7 @@
                           (with-vi-normal-prompt (get-buf)
                             ,setup
                             (let ((pos-before (prompt-cursor-index *prompt*)))
-                              (expect (cl-tmux::%handle-vi-normal-key ,byte) :to-be-truthy)
+                              (expect (nerimux::%handle-vi-normal-key ,byte) :to-be-truthy)
                               ,@(when expected-cursor
                                   `((expect (= ,expected-cursor (prompt-cursor-index *prompt*)))))
                               (expect (prompt-vi-normal-p *prompt*) :to-be-falsy))))))))
@@ -85,7 +85,7 @@
   (it "vi-normal-key-x-deletes-char-under-cursor"
     (with-vi-normal-prompt (get-buf)
       (prompt-cursor-bol)
-      (expect (cl-tmux::%handle-vi-normal-key 120) :to-be-truthy)
+      (expect (nerimux::%handle-vi-normal-key 120) :to-be-truthy)
       (expect (string= "ello" (funcall get-buf)))))
 
   ;; %handle-vi-normal-key with D (68) kills from cursor to end of line.
@@ -93,10 +93,10 @@
     (with-vi-normal-prompt (get-buf)
       ;; Position at index 2 (between 'e' and 'l').
       (prompt-cursor-bol)
-      (cl-tmux::handle-prompt-key 6)   ; C-f → index 1
-      (cl-tmux::handle-prompt-key 6)   ; C-f → index 2
+      (nerimux::handle-prompt-key 6)   ; C-f → index 1
+      (nerimux::handle-prompt-key 6)   ; C-f → index 2
       (setf (prompt-vi-normal-p *prompt*) t) ; re-enable; handle-prompt-key may exit
-      (expect (cl-tmux::%handle-vi-normal-key 68) :to-be-truthy)
+      (expect (nerimux::%handle-vi-normal-key 68) :to-be-truthy)
       (expect (string= "he" (funcall get-buf)))))
 
   (define-vi-normal-insert-mode-cases
@@ -131,7 +131,7 @@
       (let ((submitted nil))
         (prompt-start "test" "hello" (lambda (s) (setf submitted s)))
         (setf (prompt-vi-normal-p *prompt*) t)
-        (expect (cl-tmux::%handle-vi-normal-key 13) :to-be-truthy)
+        (expect (nerimux::%handle-vi-normal-key 13) :to-be-truthy)
         (expect (string= "hello" submitted))
         (expect (prompt-active-p) :to-be-falsy))))
 
@@ -140,7 +140,7 @@
     (with-clean-prompt
       (prompt-start "test" "hello" (lambda (s) (declare (ignore s)) nil))
       (setf (prompt-vi-normal-p *prompt*) t)
-      (expect (cl-tmux::%handle-vi-normal-key 27) :to-be-truthy)
+      (expect (nerimux::%handle-vi-normal-key 27) :to-be-truthy)
       (expect (prompt-active-p) :to-be-falsy)))
 
   ;; %handle-vi-normal-key with C-c (3) cancels the prompt.
@@ -148,7 +148,7 @@
     (with-clean-prompt
       (prompt-start "test" "hello" (lambda (s) (declare (ignore s)) nil))
       (setf (prompt-vi-normal-p *prompt*) t)
-      (expect (cl-tmux::%handle-vi-normal-key 3) :to-be-truthy)
+      (expect (nerimux::%handle-vi-normal-key 3) :to-be-truthy)
       (expect (prompt-active-p) :to-be-falsy)))
 
   ;; %handle-vi-normal-key with an unrecognised byte returns NIL (fall through).
@@ -156,13 +156,13 @@
     (with-vi-normal-prompt (get-buf)
       ;; get-buf is ignorable (declared by with-vi-normal-prompt).
       ;; Byte 33 = '!' — not a vi navigation key.
-      (expect (cl-tmux::%handle-vi-normal-key 33) :to-be-falsy)))
+      (expect (nerimux::%handle-vi-normal-key 33) :to-be-falsy)))
 
   ;; %handle-vi-normal-key is a no-op (returns NIL) when no prompt is active.
   (it "vi-normal-key-noop-when-prompt-absent"
     (with-clean-prompt
       ;; *prompt* is NIL; the function should short-circuit immediately.
-      (expect (cl-tmux::%handle-vi-normal-key 104) :to-be-falsy)))
+      (expect (nerimux::%handle-vi-normal-key 104) :to-be-falsy)))
 
   ;; %handle-vi-normal-key is a no-op when the prompt is in insert (not vi-normal) mode.
   (it "vi-normal-key-noop-when-not-in-vi-normal-mode"
@@ -170,12 +170,12 @@
       (prompt-start "test" "hello" (lambda (s) (declare (ignore s)) nil))
       ;; vi-normal-p is NIL by default.
       (expect (prompt-vi-normal-p *prompt*) :to-be-falsy)
-      (expect (cl-tmux::%handle-vi-normal-key 104) :to-be-falsy)))
+      (expect (nerimux::%handle-vi-normal-key 104) :to-be-falsy)))
 
   ;;; ── define-prompt-vi-key-rules macro smoke test ─────────────────────────────
 
   ;; define-prompt-vi-key-rules must be a defined macro and %handle-vi-normal-key
   ;; must be a defined function (verifies the macro fired at load time).
   (it "define-prompt-vi-key-rules-is-defined"
-    (expect (macro-function 'cl-tmux::define-prompt-vi-key-rules))
-    (expect (fboundp 'cl-tmux::%handle-vi-normal-key))))
+    (expect (macro-function 'nerimux::define-prompt-vi-key-rules))
+    (expect (fboundp 'nerimux::%handle-vi-normal-key))))

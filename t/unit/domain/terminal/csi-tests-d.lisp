@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; csi tests — part D: rep (REP), da-response, DECRQM, XTWINOPS, CPR,
 ;;;; DA-response table, REP-count-zero.
@@ -22,7 +22,7 @@
   (it "rep-noop-when-no-last-char"
     (with-screen (s 20 5)
       ;; No characters written — last-char is NIL.
-      (expect (null (cl-tmux/terminal/types:screen-last-char s)))
+      (expect (null (nerimux/terminal/types:screen-last-char s)))
       (feed s (esc "[3b"))     ; REP 3 — no-op
       ;; Cursor must be at origin and screen must be blank.
       (check-cursor s 0 0)
@@ -32,7 +32,7 @@
   (it "rep-uses-last-printed-char"
     (with-screen (s 20 5)
       (feed s "AB")            ; writes A at 0, B at 1; last-char = B
-      (expect (char= #\B (cl-tmux/terminal/types:screen-last-char s)))
+      (expect (char= #\B (nerimux/terminal/types:screen-last-char s)))
       (feed s (esc "[2b"))     ; REP 2: writes B twice more
       (expect (char= #\B (char-at s 2 0)))
       (expect (char= #\B (char-at s 3 0))))))
@@ -44,9 +44,9 @@
   ;; CSI c (DA1) queues the VT100 response string ESC[?1;2c.
   (it "da1-response"
     (with-screen (s 20 5)
-      (expect (null (cl-tmux/terminal/types:screen-response-queue s)))
+      (expect (null (nerimux/terminal/types:screen-response-queue s)))
       (feed s (esc "[c"))        ; DA1
-      (let ((q (cl-tmux/terminal/types:screen-response-queue s)))
+      (let ((q (nerimux/terminal/types:screen-response-queue s)))
         (expect (consp q))
         (expect (some (lambda (r) (search "?1;2c" r)) q)))))
 
@@ -54,25 +54,25 @@
   (it "da2-response"
     (with-screen (s 20 5)
       (feed s (esc "[>c"))       ; DA2
-      (let ((q (cl-tmux/terminal/types:screen-response-queue s)))
+      (let ((q (nerimux/terminal/types:screen-response-queue s)))
         (expect (consp q))
         (expect (some (lambda (r) (search ">1;" r)) q)))))
 
-  ;; CSI > q (XTVERSION) replies with cl-tmux's own runtime version.
-  (it "xtversion-reports-cl-tmux-version"
+  ;; CSI > q (XTVERSION) replies with nerimux's own runtime version.
+  (it "xtversion-reports-nerimux-version"
     (with-screen (s 20 5)
       (feed s (esc "[>q"))       ; XTVERSION
-      (expect (string= (format nil "~CP>|cl-tmux ~A~C\\"
+      (expect (string= (format nil "~CP>|nerimux ~A~C\\"
                                #\Escape
-                               (cl-tmux/version:version-string)
+                               (nerimux/version:version-string)
                                #\Escape)
-                       (first (cl-tmux/terminal/types:screen-response-queue s))))))
+                       (first (nerimux/terminal/types:screen-response-queue s))))))
 
   ;; CSI = c (DA3 / tertiary device attributes) queues the DECRPTUI reply.
   (it "da3-response"
     (with-screen (s 20 5)
       (feed s (esc "[=c"))       ; DA3
-      (let ((q (cl-tmux/terminal/types:screen-response-queue s)))
+      (let ((q (nerimux/terminal/types:screen-response-queue s)))
         (expect (consp q))
         (expect (some (lambda (r) (search "!|00000000" r)) q)))))
 
@@ -82,7 +82,7 @@
   (it "decrqm-reports-set-mode"
     (with-screen (s 20 5)
       (feed s (esc "[?25$p"))
-      (let ((q (cl-tmux/terminal/types:screen-response-queue s)))
+      (let ((q (nerimux/terminal/types:screen-response-queue s)))
         (expect (some (lambda (r) (search (format nil "~C[?25;1$y" #\Escape) r)) q)))))
 
   ;; After ?25l (hide cursor) DECRQM reports the mode as RESET (Pm=2).
@@ -90,14 +90,14 @@
     (with-screen (s 20 5)
       (feed s (esc "[?25l"))     ; hide cursor
       (feed s (esc "[?25$p"))
-      (let ((q (cl-tmux/terminal/types:screen-response-queue s)))
+      (let ((q (nerimux/terminal/types:screen-response-queue s)))
         (expect (some (lambda (r) (search (format nil "~C[?25;2$y" #\Escape) r)) q)))))
 
   ;; DECRQM for an unrecognised mode reports Pm=0 (not recognised).
   (it "decrqm-unknown-mode-reports-zero"
     (with-screen (s 20 5)
       (feed s (esc "[?9999$p"))
-      (let ((q (cl-tmux/terminal/types:screen-response-queue s)))
+      (let ((q (nerimux/terminal/types:screen-response-queue s)))
         (expect (some (lambda (r) (search (format nil "~C[?9999;0$y" #\Escape) r)) q)))))
 
   ;; DECRQM ?5 reports DECSCNM (reverse-video screen): reset by default, set after ?5h.
@@ -105,22 +105,22 @@
     (with-screen (s 20 5)
       (feed s (esc "[?5$p"))
       (expect (some (lambda (r) (search (format nil "~C[?5;2$y" #\Escape) r))
-                    (cl-tmux/terminal/types:screen-response-queue s)))
+                    (nerimux/terminal/types:screen-response-queue s)))
       (feed s (esc "[?5h"))
       (feed s (esc "[?5$p"))
       (expect (some (lambda (r) (search (format nil "~C[?5;1$y" #\Escape) r))
-                    (cl-tmux/terminal/types:screen-response-queue s)))))
+                    (nerimux/terminal/types:screen-response-queue s)))))
 
   ;; DECRQM ?7 reports DECAWM (autowrap): set by default, reset after ?7l.
   (it "decrqm-reports-decawm-mode-7"
     (with-screen (s 20 5)
       (feed s (esc "[?7$p"))
       (expect (some (lambda (r) (search (format nil "~C[?7;1$y" #\Escape) r))
-                    (cl-tmux/terminal/types:screen-response-queue s)))
+                    (nerimux/terminal/types:screen-response-queue s)))
       (feed s (esc "[?7l"))
       (feed s (esc "[?7$p"))
       (expect (some (lambda (r) (search (format nil "~C[?7;2$y" #\Escape) r))
-                    (cl-tmux/terminal/types:screen-response-queue s)))))
+                    (nerimux/terminal/types:screen-response-queue s)))))
 
   ;; DECRQM ?1006 reports the SGR mouse-encoding state, set after ?1006h.
   (it "decrqm-reports-sgr-mouse-mode-1006"
@@ -128,7 +128,7 @@
       (feed s (esc "[?1006h"))
       (feed s (esc "[?1006$p"))
       (expect (some (lambda (r) (search (format nil "~C[?1006;1$y" #\Escape) r))
-                    (cl-tmux/terminal/types:screen-response-queue s)))))
+                    (nerimux/terminal/types:screen-response-queue s)))))
 
   ;; ANSI-mode DECRQM (CSI 4 $ p, no ? marker) reports IRM: reset by default, set
   ;; after CSI 4 h.  Reply has NO ? marker (ESC [ 4 ; Pm $ y).
@@ -136,11 +136,11 @@
     (with-screen (s 20 5)
       (feed s (esc "[4$p"))
       (expect (some (lambda (r) (search (format nil "~C[4;2$y" #\Escape) r))
-                    (cl-tmux/terminal/types:screen-response-queue s)))
+                    (nerimux/terminal/types:screen-response-queue s)))
       (feed s (esc "[4h"))
       (feed s (esc "[4$p"))
       (expect (some (lambda (r) (search (format nil "~C[4;1$y" #\Escape) r))
-                    (cl-tmux/terminal/types:screen-response-queue s)))))
+                    (nerimux/terminal/types:screen-response-queue s)))))
 
   ;; ANSI-mode DECRQM (CSI 20 $ p) reports LNM: set after CSI 20 h.
   (it "decrqm-ansi-reports-lnm-mode-20"
@@ -148,7 +148,7 @@
       (feed s (esc "[20h"))
       (feed s (esc "[20$p"))
       (expect (some (lambda (r) (search (format nil "~C[20;1$y" #\Escape) r))
-                    (cl-tmux/terminal/types:screen-response-queue s))))))
+                    (nerimux/terminal/types:screen-response-queue s))))))
 
 ;;; ── XTWINOPS size reports (CSI Ps t) ─────────────────────────────────────────
 
@@ -158,14 +158,14 @@
   (it "xtwinops-18-reports-text-area-chars"
     (with-screen (s 20 5)
       (feed s (esc "[18t"))
-      (let ((q (cl-tmux/terminal/types:screen-response-queue s)))
+      (let ((q (nerimux/terminal/types:screen-response-queue s)))
         (expect (some (lambda (r) (string= (format nil "~C[8;5;20t" #\Escape) r)) q)))))
 
   ;; CSI 19 t reports the screen size in characters: ESC [ 9 ; rows ; cols t.
   (it "xtwinops-19-reports-screen-chars"
     (with-screen (s 20 5)
       (feed s (esc "[19t"))
-      (let ((q (cl-tmux/terminal/types:screen-response-queue s)))
+      (let ((q (nerimux/terminal/types:screen-response-queue s)))
         (expect (some (lambda (r) (string= (format nil "~C[9;5;20t" #\Escape) r)) q)))))
 
   ;; A window-manipulation XTWINOPS op (CSI 8 ; 24 ; 80 t resize) enqueues no reply —
@@ -173,7 +173,7 @@
   (it "xtwinops-resize-op-no-reply"
     (with-screen (s 20 5)
       (feed s (esc "[8;24;80t"))
-      (expect (null (cl-tmux/terminal/types:screen-response-queue s)))))
+      (expect (null (nerimux/terminal/types:screen-response-queue s)))))
 
   ;; ── CPR (cursor position report, CSI 6 n) ────────────────────────────────────
 
@@ -181,7 +181,7 @@
   (it "cpr-at-home-replies-1-1"
     (with-screen (s 20 5)
       (feed s (esc "[6n"))       ; CPR — report cursor position
-      (let ((q (cl-tmux/terminal/types:screen-response-queue s)))
+      (let ((q (nerimux/terminal/types:screen-response-queue s)))
         (expect (consp q))
         (expect (some (lambda (r) (search "[1;1R" r)) q)))))
 
@@ -190,7 +190,7 @@
     (with-screen (s 20 5)
       (feed s (esc "[3;5H"))     ; CUP → row 3, col 5 (1-based)
       (feed s (esc "[6n"))       ; CPR
-      (let ((q (cl-tmux/terminal/types:screen-response-queue s)))
+      (let ((q (nerimux/terminal/types:screen-response-queue s)))
         (expect (some (lambda (r) (search "[3;5R" r)) q)))))
 
   ;; In DECOM origin mode, CPR row is relative to the scroll-top margin (row 1 = margin top).
@@ -203,7 +203,7 @@
       ;; CUP in DECOM mode: row 3 col 1 (1-based relative) → absolute row 4 (0-based)
       (feed s (esc "[3;1H"))
       (feed s (esc "[6n"))      ; CPR
-      (let ((q (cl-tmux/terminal/types:screen-response-queue s)))
+      (let ((q (nerimux/terminal/types:screen-response-queue s)))
         (expect (some (lambda (r) (search "[3;1R" r)) q)))))
 
   ;; ── DA response table: both responses enqueue without error ──────────────────
@@ -222,7 +222,7 @@
             (sig (second entry)))
         (with-screen (s 20 5)
           (feed s (esc seq))
-          (let ((q (cl-tmux/terminal/types:screen-response-queue s)))
+          (let ((q (nerimux/terminal/types:screen-response-queue s)))
             (expect (consp q))
             (expect (some (lambda (r) (search sig r)) q)))))))
 
@@ -248,8 +248,8 @@
 
   ;; %decrqm-flag-code returns 1 for T (set, wire code) and 2 for NIL (reset).
   (it "decrqm-flag-code-table"
-    (expect (= 1 (cl-tmux/terminal/csi::%decrqm-flag-code t)))
-    (expect (= 2 (cl-tmux/terminal/csi::%decrqm-flag-code nil))))
+    (expect (= 1 (nerimux/terminal/csi::%decrqm-flag-code t)))
+    (expect (= 2 (nerimux/terminal/csi::%decrqm-flag-code nil))))
 
   ;; %decrqm-ansi-mode-state reports IRM (mode 4) as 1 when insert-mode T, 2 when NIL.
   (it "decrqm-ansi-mode-state-irm-table"
@@ -258,19 +258,19 @@
       (destructuring-bind (insert-mode-val expected desc) row
         (declare (ignore desc))
         (with-screen (s 20 5)
-          (setf (cl-tmux/terminal/types:screen-insert-mode s) insert-mode-val)
-          (expect (= expected (cl-tmux/terminal/csi::%decrqm-ansi-mode-state s 4)))))))
+          (setf (nerimux/terminal/types:screen-insert-mode s) insert-mode-val)
+          (expect (= expected (nerimux/terminal/csi::%decrqm-ansi-mode-state s 4)))))))
 
   ;; %decrqm-ansi-mode-state reports LNM (mode 20) as 1 (set) when newline-mode is T.
   (it "decrqm-ansi-mode-state-lnm-set"
     (with-screen (s 20 5)
-      (setf (cl-tmux/terminal/types:screen-newline-mode s) t)
-      (expect (= 1 (cl-tmux/terminal/csi::%decrqm-ansi-mode-state s 20)))))
+      (setf (nerimux/terminal/types:screen-newline-mode s) t)
+      (expect (= 1 (nerimux/terminal/csi::%decrqm-ansi-mode-state s 20)))))
 
   ;; %decrqm-ansi-mode-state returns 0 for an unrecognised ANSI mode.
   (it "decrqm-ansi-mode-state-unknown-returns-0"
     (with-screen (s 20 5)
-      (expect (= 0 (cl-tmux/terminal/csi::%decrqm-ansi-mode-state s 999))))))
+      (expect (= 0 (nerimux/terminal/csi::%decrqm-ansi-mode-state s 999))))))
 
 ;;; ── Coverage gap: enqueue-da3-reply and enqueue-xtversion-reply ─────────────
 ;;;
@@ -278,16 +278,16 @@
 
 (describe "terminal-suite/da3-xtversion-direct"
 
-  ;; enqueue-da3-reply contains '!|00000000'; enqueue-xtversion-reply contains 'cl-tmux'.
+  ;; enqueue-da3-reply contains '!|00000000'; enqueue-xtversion-reply contains 'nerimux'.
   (it "enqueue-reply-substring-table"
-    (dolist (row (list (list #'cl-tmux/terminal/csi::enqueue-da3-reply      "!|00000000" "DA3 reply")
-                       (list #'cl-tmux/terminal/csi::enqueue-xtversion-reply "cl-tmux"    "XTVERSION reply")))
+    (dolist (row (list (list #'nerimux/terminal/csi::enqueue-da3-reply      "!|00000000" "DA3 reply")
+                       (list #'nerimux/terminal/csi::enqueue-xtversion-reply "nerimux"    "XTVERSION reply")))
       (destructuring-bind (fn expected desc) row
         (declare (ignore desc))
         (with-screen (s 20 5)
           (funcall fn s)
           (expect (some (lambda (r) (search expected r))
-                        (cl-tmux/terminal/types:screen-response-queue s))))))))
+                        (nerimux/terminal/types:screen-response-queue s))))))))
 
 ;;; ── Coverage gap: enqueue-xtwinops-reply direct tests ───────────────────────
 ;;;
@@ -302,12 +302,12 @@
       (destructuring-bind (op expected desc) row
         (declare (ignore desc))
         (with-screen (s 30 8)
-          (cl-tmux/terminal/csi::enqueue-xtwinops-reply s op)
+          (nerimux/terminal/csi::enqueue-xtwinops-reply s op)
           (expect (some (lambda (r) (search expected r))
-                        (cl-tmux/terminal/types:screen-response-queue s)))))))
+                        (nerimux/terminal/types:screen-response-queue s)))))))
 
   ;; enqueue-xtwinops-reply with an unsupported op enqueues nothing.
   (it "enqueue-xtwinops-reply-op-99-no-reply"
     (with-screen (s 20 5)
-      (cl-tmux/terminal/csi::enqueue-xtwinops-reply s 99)
-      (expect (null (cl-tmux/terminal/types:screen-response-queue s))))))
+      (nerimux/terminal/csi::enqueue-xtwinops-reply s 99)
+      (expect (null (nerimux/terminal/types:screen-response-queue s))))))

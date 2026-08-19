@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; layout tests — part C: layout persistence internals (split-bounding-box,
 ;;;; node-to-string) and layout-find-parent deep-tree traversal.
@@ -16,7 +16,7 @@
         (let* ((l0   (tl-leaf 1 1 1))
                (l1   (tl-leaf 2 1 1))
                (tree (make-layout-split orient l0 l1)))
-          (cl-tmux/model::layout-assign tree x y w h)
+          (nerimux/model::layout-assign tree x y w h)
           (multiple-value-bind (min-x min-y width height)
               (layout-node-bounding-box tree)
             (expect (= exp-x min-x))
@@ -36,7 +36,7 @@
            (l2    (tl-leaf 3 1 1))
            (inner (make-layout-split :v l1 l2))
            (outer (make-layout-split :h l0 inner)))
-      (cl-tmux/model::layout-assign outer 0 0 81 21)
+      (nerimux/model::layout-assign outer 0 0 81 21)
       ;; Sanity: outer's own bounding box does equal the top-level assign rectangle.
       (multiple-value-bind (ox oy ow oh) (layout-node-bounding-box outer)
         (expect (= 0  ox))
@@ -57,13 +57,13 @@
   (it "node-to-string-leaf-and-nil"
     (let* ((p    (tl-pane 7 20 10))
            (leaf (make-layout-leaf p)))
-      (cl-tmux/model::layout-assign leaf 3 5 20 10)
-      (let ((s (cl-tmux/model::%node->string leaf)))
+      (nerimux/model::layout-assign leaf 3 5 20 10)
+      (let ((s (nerimux/model::%node->string leaf)))
         (expect (stringp s))
         (expect (search "20x10" s))
         (expect (search ",3,5," s))
         (expect (search "7" s))))
-    (expect (string= "" (cl-tmux/model::%node->string nil))))
+    (expect (string= "" (nerimux/model::%node->string nil))))
 
   ;;; ── layout-find-parent deep tree ─────────────────────────────────────────────
 
@@ -109,7 +109,7 @@
         (declare (ignore desc))
         (let ((pane (make-pane :id 1 :fd -1 :pid -1 :width width :height height
                                :screen (make-screen width height))))
-          (expect (eq expected (cl-tmux/model::%split-fits-p pane orient)))))))
+          (expect (eq expected (nerimux/model::%split-fits-p pane orient)))))))
 
   ;;; ── Table-driven: %layout-checksum known-value tests ─────────────────────────
 
@@ -118,10 +118,10 @@
     (dolist (c (list (list ""           "0000" "empty string checksum must be 0000")
                      (list "a"         "0061" "single-char 'a' (97 decimal = 0x61)")
                      (let ((s "1x1,0,0,1"))
-                       (list s (cl-tmux/model::%layout-checksum s) "checksum must be deterministic"))))
+                       (list s (nerimux/model::%layout-checksum s) "checksum must be deterministic"))))
       (destructuring-bind (input expected desc) c
         (declare (ignore desc))
-        (expect (string= expected (cl-tmux/model::%layout-checksum input))))))
+        (expect (string= expected (nerimux/model::%layout-checksum input))))))
 
   ; resize-direction-orientation-all-directions-table removed.
   ; The identical 4-case mapping is already tested in layout-geometry-tests.lisp
@@ -130,7 +130,7 @@
   ;;; ── main-horizontal / main-vertical honour main-pane size ────────────────────
   ;;;
   ;;; apply-named-layout takes the main pane's size (tmux's main-pane-width /
-  ;;; main-pane-height options, read by the cl-tmux-layer caller).  The main (first)
+  ;;; main-pane-height options, read by the nerimux-layer caller).  The main (first)
   ;;; pane is sized to exactly that many cells along the outer axis; the rest share
   ;;; the remainder.
 
@@ -140,12 +140,12 @@
   ;; :main-horizontal sizes the main pane to main-pane-height.
   (it "main-layout-honours-main-pane-size"
     (let ((win (%three-pane-window 100 30)))
-      (cl-tmux/model:apply-named-layout win :main-vertical 60 24)
+      (nerimux/model:apply-named-layout win :main-vertical 60 24)
       (let ((p0 (first (window-panes win))))
         (expect (= 60 (pane-width p0)))
         (expect (< (pane-width (second (window-panes win))) 60))))
     (let ((win (%three-pane-window 100 40)))
-      (cl-tmux/model:apply-named-layout win :main-horizontal 80 15)
+      (nerimux/model:apply-named-layout win :main-horizontal 80 15)
       (let ((p0 (first (window-panes win)))
             (p1 (second (window-panes win))))
         (expect (= 15 (pane-height p0)))
@@ -157,7 +157,7 @@
     (let ((win (make-window :id 1 :name "w" :width 200 :height 50
                             :panes (list (make-no-pty-pane 1 0 0 200 50)
                                          (make-no-pty-pane 2 0 0 200 50)))))
-      (cl-tmux/model:apply-named-layout win :main-vertical)
+      (nerimux/model:apply-named-layout win :main-vertical)
       (expect (= 80 (pane-width (first (window-panes win)))))))
 
   ;;; ── other-pane-width / -height override main-pane-* when set ─────────────────
@@ -171,12 +171,12 @@
   (it "main-layout-other-pane-size-overrides-main"
     ;; :main-vertical: available=119; other-pane-width 30 fits (89 >= main 80) → main 89.
     (let ((win (%three-pane-window 120 30)))
-      (cl-tmux/model:apply-named-layout win :main-vertical 80 24 30 0)
+      (nerimux/model:apply-named-layout win :main-vertical 80 24 30 0)
       (expect (= 89 (pane-width (first (window-panes win)))))
       (expect (= 30 (pane-width (second (window-panes win))))))
     ;; :main-horizontal: available=49; other-pane-height 20 fits (29 >= main 24) → main 29.
     (let ((win (%three-pane-window 100 50)))
-      (cl-tmux/model:apply-named-layout win :main-horizontal 80 24 0 20)
+      (nerimux/model:apply-named-layout win :main-horizontal 80 24 0 20)
       (expect (= 29 (pane-height (first (window-panes win)))))
       (expect (= 20 (pane-height (second (window-panes win)))))))
 
@@ -184,5 +184,5 @@
   ;; main-pane-width applies instead.
   (it "main-vertical-other-pane-width-too-big-falls-back-to-main"
     (let ((win (%three-pane-window 120 30)))
-      (cl-tmux/model:apply-named-layout win :main-vertical 80 24 200 0)
+      (nerimux/model:apply-named-layout win :main-vertical 80 24 200 0)
       (expect (= 80 (pane-width (first (window-panes win))))))))

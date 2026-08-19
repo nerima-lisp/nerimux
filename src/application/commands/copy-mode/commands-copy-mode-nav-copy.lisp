@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/commands)
+(in-package #:nerimux/commands)
 
 ;;; Copy-mode copy-to-buffer helpers.
 
@@ -10,7 +10,7 @@
   "Extract characters from SCREEN at ROW, right-trim trailing spaces, and push to the paste buffer."
   (let ((trimmed (%copy-row-range-text screen row from-col to-col)))
     (when (plusp (length trimmed))
-      (cl-tmux/buffer:add-paste-buffer trimmed))))
+      (nerimux/buffer:add-paste-buffer trimmed))))
 
 (defmacro define-copy-to-buffer-commands (&rest specs)
   "Generate copy-to-paste-buffer command PAIRS from a declarative

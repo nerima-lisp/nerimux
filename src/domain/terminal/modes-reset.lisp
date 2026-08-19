@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/actions)
+(in-package #:nerimux/terminal/actions)
 
 ;;;; Terminal modes — full/soft/hard resets (reset-terminal-modes, RIS, DECSTR, DECALN).
 

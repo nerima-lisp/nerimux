@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; config directive tests — key token parsing, command names, and listing labels
 
@@ -6,7 +6,7 @@
 
   ;;; Navigation-key spellings
   ;;;
-  ;;; cl-tmux config parsing is canonical-only.  PPage/PgUp/NPage/PgDn/IC/DC are
+  ;;; nerimux config parsing is canonical-only.  PPage/PgUp/NPage/PgDn/IC/DC are
   ;;; not folded into PageUp/PageDown/Insert/Delete; they remain
   ;;; distinct string key names if a user binds them explicitly.
 
@@ -15,7 +15,7 @@
   (it "parse-key-token-keeps-navigation-spellings-verbatim"
     (check-table
      (loop for token in '("PPage" "PgUp" "NPage" "PgDn" "IC" "DC" "PageUp" "PageDown")
-           collect (list (cl-tmux/config::%parse-key-token token)
+           collect (list (nerimux/config::%parse-key-token token)
                          token
                          (format nil "~A remains a distinct key name" token)))
      :test #'string=))
@@ -24,10 +24,10 @@
   ;; PageUp binding as an implicit side effect.
   (it "bind-navigation-key-spelling-stays-distinct-from-canonical-binding"
     (with-isolated-config
-      (cl-tmux/config:apply-config-directive '("bind" "-n" "PPage" "next-window"))
-      (let ((entry (cl-tmux/config:key-table-lookup "root" "PPage")))
-        (expect (eq :next-window (cl-tmux/config:key-table-command entry))))
-      (expect (null (cl-tmux/config:key-table-lookup "root" "PageUp")))))
+      (nerimux/config:apply-config-directive '("bind" "-n" "PPage" "next-window"))
+      (let ((entry (nerimux/config:key-table-lookup "root" "PPage")))
+        (expect (eq :next-window (nerimux/config:key-table-command entry))))
+      (expect (null (nerimux/config:key-table-lookup "root" "PageUp")))))
 
   ;;; %parse-control-char (config-tokenizer.lisp)
   ;;;
@@ -52,7 +52,7 @@
                       (list "_"     (code-char 31) "C-_ -> US")
                       (list "1"     nil            "C-1 is not a controllable key")
                       (list "ab"    nil            "multi-char rest is not a single key"))
-           collect (list (cl-tmux/config::%parse-control-char input)
+           collect (list (nerimux/config::%parse-control-char input)
                          expected
                          desc))
      :test #'equal))
@@ -70,7 +70,7 @@
                   ("breakp"            nil "break-pane's alias is rejected")
                   ("totally-bogus-xyz" nil "a genuine typo is not known")
                   (""                  nil "the empty string is not known"))
-           collect (list (and (cl-tmux/config::%known-command-name-p input) t)
+           collect (list (and (nerimux/config::%known-command-name-p input) t)
                          expected
                          desc))
      :test #'eq))
@@ -86,5 +86,5 @@
                       (list #\%       "%"       "a punctuation character key becomes a 1-char string")
                       (list "Up"      "Up"      "a string key passes through unchanged")
                       (list "C-Right" "C-Right" "a multi-char named key passes through unchanged"))
-           collect (list (cl-tmux/config::key-label input) expected desc))
+           collect (list (nerimux/config::key-label input) expected desc))
      :test #'string=)))

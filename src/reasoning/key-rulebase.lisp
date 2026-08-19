@@ -23,7 +23,7 @@
 ;;;; terms — `cl-prolog-kit:unify' compares constants with `equal', so characters,
 ;;;; strings, keywords, and command lists all unify by value.
 
-(in-package #:cl-tmux/reasoning)
+(in-package #:nerimux/reasoning)
 
 (defun %reasoning-rules ()
   "Return the static rule clauses as fresh `cl-prolog-kit' clause values.
@@ -31,7 +31,7 @@
 The inequality goals reference `cl-prolog-kit:\\=' explicitly: builtin goals
 dispatch on symbol identity, so a same-named symbol from this package would
 raise an existence error instead of resolving to the engine's builtin."
-  (let ((root cl-tmux/config:+table-root+))
+  (let ((root nerimux/config:+table-root+))
     (list
      ;; A key is in conflict when two distinct tables bind it to distinct
      ;; commands.  Solutions are symmetric (t1/t2 swap); callers dedupe.

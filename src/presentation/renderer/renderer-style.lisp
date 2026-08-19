@@ -1,6 +1,6 @@
-(in-package #:cl-tmux/renderer)
+(in-package #:nerimux/renderer)
 
-;;;; Style-string parsing and SGR emission for the cl-tmux renderer.
+;;;; Style-string parsing and SGR emission for the nerimux renderer.
 ;;;;
 ;;;; This file extends the style-string parsing in renderer.lisp with the
 ;;;; logic that consumes the declarative dispatch tables defined in
@@ -11,7 +11,7 @@
 ;;;; renderer-pane.lisp uses instead of its own duplicated cond.
 ;;;;
 ;;;; Load order: renderer-format → renderer-style-data → renderer-style → renderer-pane → renderer.
-;;;; All files share the cl-tmux/renderer package (no defpackage here).
+;;;; All files share the nerimux/renderer package (no defpackage here).
 
 ;;; ── Single-source border-colour lookup ───────────────────────────────────────
 ;;;
@@ -32,7 +32,7 @@
    single (default), rounded, double, heavy, simple (ASCII +/-|), padded/none
    (blank); an unknown value falls back to single.  Shared by the popup and menu
    box renderers."
-  (%dispatch-border-charset (cl-tmux/options:get-option option-name "single")))
+  (%dispatch-border-charset (nerimux/options:get-option option-name "single")))
 
 (defun %popup-border-charset ()
   "Return box-drawing characters for the popup-border-lines option.
@@ -170,4 +170,4 @@
 (defun %effective-status-style ()
   "Return the current status-bar style string from the `status-style` option.
    Returns an empty string when the option is unset."
-  (cl-tmux/options:get-option "status-style" ""))
+  (nerimux/options:get-option "status-style" ""))

@@ -1,11 +1,11 @@
-(in-package #:cl-tmux/renderer)
+(in-package #:nerimux/renderer)
 
 ;;;; Copy-mode line-number gutter rendering.
 
 (defun %copy-mode-line-number-mode ()
   "Return the current copy-mode line-number mode string."
   (string-downcase
-   (string-trim " " (cl-tmux/options:get-option "copy-mode-line-numbers" "off"))))
+   (string-trim " " (nerimux/options:get-option "copy-mode-line-numbers" "off"))))
 
 (defun %copy-mode-line-number-style-spec (style-string)
   "Return NIL, :DEFAULT, or an SGR string for STYLE-STRING.

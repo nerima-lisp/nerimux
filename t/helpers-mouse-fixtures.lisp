@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Mouse fixture helpers.
 
@@ -7,9 +7,9 @@
    This keeps mouse-enabled and mouse-disabled tests symmetric."
   `(unwind-protect
        (progn
-         (cl-tmux/options:set-option "mouse" ,mouse)
+         (nerimux/options:set-option "mouse" ,mouse)
          ,@body)
-     (cl-tmux/options:set-option "mouse" nil)))
+     (nerimux/options:set-option "mouse" nil)))
 
 (defmacro with-two-pane-mouse-session ((sess-var win-var p0-var p1-var
                                         &key (mouse t))
@@ -35,7 +35,7 @@
                                    :windows (list ,win-var) :active ,win-var)))
      (with-mouse-option (,mouse)
        (with-loop-state
-         (let ((cl-tmux::*term-rows* 25) (cl-tmux::*term-cols* 81))
+         (let ((nerimux::*term-rows* 25) (nerimux::*term-cols* 81))
            ,@body)))))
 
 (defmacro with-single-pane-mouse-session ((sess-var win-var p0-var &key (mouse t))
@@ -52,5 +52,5 @@
                                    :windows (list ,win-var) :active ,win-var)))
      (with-mouse-option (,mouse)
        (with-loop-state
-         (let ((cl-tmux::*term-rows* 25) (cl-tmux::*term-cols* 40))
+         (let ((nerimux::*term-rows* 25) (nerimux::*term-cols* 40))
            ,@body)))))

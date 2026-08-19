@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 (defparameter *dispatch-command-specs-core-window-entries*
   '((:kill-window '%cmd-kill-window ("kill-window"))

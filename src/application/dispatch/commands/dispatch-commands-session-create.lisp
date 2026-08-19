@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; -- Session creation command --------------------------------------------------
 
@@ -28,7 +28,7 @@
   "Return the default detached session dimensions, or NIL when attached."
   (when detach-p
     (multiple-value-bind (cols rows)
-        (%parse-wxh (cl-tmux/options:get-option "default-size" "80x24"))
+        (%parse-wxh (nerimux/options:get-option "default-size" "80x24"))
       (values cols rows))))
 
 (defun %new-session-dimensions-from-flags (flags detach-p)
@@ -108,9 +108,9 @@
            (pane (and win (window-active-pane win)))
            (template (if (and fmt (plusp (length fmt))) fmt "#{session_name}:")))
       (show-transient-overlay
-       (cl-tmux/format:expand-format
+       (nerimux/format:expand-format
         template
-        (cl-tmux/format:format-context-from-session sess win pane))))))
+        (nerimux/format:format-context-from-session sess win pane))))))
 
 (defun %new-session-apply-environment (sess env-pairs)
   "Persist new-session -e VAR=val pairs onto SESS's environment overlay so they
@@ -118,19 +118,19 @@
    them up via *pane-extra-env* at fork time)."
   (when sess
     (dolist (pair env-pairs)
-      (cl-tmux/model:session-set-environment sess (car pair) (cdr pair)))))
+      (nerimux/model:session-set-environment sess (car pair) (cdr pair)))))
 
 (defun %new-session-create-fresh (suppress-env-p env-pairs *pane-extra-env*
                                    name rows cols start-dir win-name
                                    detach-p print-p print-fmt)
   "Create a brand-new session NAME (the default new-session path, taken when
    -A and -t <group> are absent).  *PANE-EXTRA-ENV* is dynamically rebound
-   (its earmuffed name IS the parameter, per its cl-tmux/model defvar) so the
+   (its earmuffed name IS the parameter, per its nerimux/model defvar) so the
    initial pane inherits ENV-PAIRS via -e; SUPPRESS-ENV-P (-E) additionally
    suppresses update-environment for the whole creation via
-   cl-tmux/model:*suppress-update-environment*.  Returns the finalized
+   nerimux/model:*suppress-update-environment*.  Returns the finalized
    session, printing -P/-F info first when PRINT-P."
-  (let* ((cl-tmux/model:*suppress-update-environment* suppress-env-p)
+  (let* ((nerimux/model:*suppress-update-environment* suppress-env-p)
          (*pane-extra-env* (or env-pairs *pane-extra-env*))
          (new-sess (new-session name rows cols :start-dir start-dir)))
     ;; Persist -c as the session working directory for future windows.

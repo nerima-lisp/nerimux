@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; socket-path and stale-socket tests
 
@@ -8,79 +8,79 @@
 
   ;; socket-path embeds the session name in the filename and always ends with .sock.
   (it "socket-path-properties-table"
-    (dolist (row '(("mysess" "cl-tmux-mysess.sock" "session name embedded in path")
+    (dolist (row '(("mysess" "nerimux-mysess.sock" "session name embedded in path")
                    ("anysess" ".sock" "path always ends with .sock")))
       (destructuring-bind (sess expected desc) row
         (declare (ignore desc))
-        (let ((path (cl-tmux::socket-path sess)))
+        (let ((path (nerimux::socket-path sess)))
           (expect (search expected path))))))
 
   ;; socket-path returns distinct paths for distinct session names.
   (it "socket-path-distinct-for-different-names"
-    (let ((p1 (cl-tmux::socket-path "alpha"))
-          (p2 (cl-tmux::socket-path "beta")))
+    (let ((p1 (nerimux::socket-path "alpha"))
+          (p2 (nerimux::socket-path "beta")))
       (expect (string/= p1 p2))))
 
   ;; socket-path embeds $TMPDIR in the result when it is set, overriding /tmp.
   (it "socket-path-uses-tmpdir-env-var"
     (with-temporary-posix-environment-variable ("TMUX_TMPDIR" nil)
       (with-temporary-posix-environment-variable ("TMPDIR" "/var/folders/test")
-        (let ((path (cl-tmux::socket-path "envtest")))
+        (let ((path (nerimux::socket-path "envtest")))
           (expect (search "/var/folders/test" path))))))
 
   ;; socket-path uses /tmp as the socket directory when $TMPDIR is unset.
   (it "socket-path-falls-back-to-tmp-when-no-tmpdir"
     (with-temporary-posix-environment-variable ("TMUX_TMPDIR" nil)
       (with-temporary-posix-environment-variable ("TMPDIR" nil)
-        (let ((path (cl-tmux::socket-path "tmptestfb")))
+        (let ((path (nerimux::socket-path "tmptestfb")))
           (expect (search "/tmp" path))))))
 
   ;; socket-path prefers $TMUX_TMPDIR over $TMPDIR (tmux precedence).
   (it "socket-path-tmux-tmpdir-beats-tmpdir"
     (with-temporary-posix-environment-variable ("TMUX_TMPDIR" "/tmp/tmux-tmpdir-test")
-      (let ((path (cl-tmux::socket-path "envtest2")))
+      (let ((path (nerimux::socket-path "envtest2")))
         (expect (search "/tmp/tmux-tmpdir-test" path)))))
 
   ;; Sockets live in a per-UID directory.
   (it "socket-path-uses-per-uid-directory"
     (with-temporary-posix-environment-variable ("TMUX_TMPDIR" nil)
-      (let ((path (cl-tmux::socket-path "uidtest")))
-        (expect (search (format nil "cl-tmux-~D/" (sb-posix:getuid)) path)))))
+      (let ((path (nerimux::socket-path "uidtest")))
+        (expect (search (format nil "nerimux-~D/" (sb-posix:getuid)) path)))))
 
   ;; The global -S flag returns its path verbatim; -L replaces the socket name.
   (it "socket-path-honors-global-flag-overrides"
-    (let ((cl-tmux::*socket-path-override* "/tmp/custom-cl-tmux.sock")
-          (cl-tmux::*socket-name-override* nil))
-      (expect (string= "/tmp/custom-cl-tmux.sock" (cl-tmux::socket-path "whatever"))))
-    (let ((cl-tmux::*socket-path-override* nil)
-          (cl-tmux::*socket-name-override* "mylabel"))
-      (let ((path (cl-tmux::socket-path "ignored-name")))
-        (expect (search "cl-tmux-mylabel.sock" path))
+    (let ((nerimux::*socket-path-override* "/tmp/custom-nerimux.sock")
+          (nerimux::*socket-name-override* nil))
+      (expect (string= "/tmp/custom-nerimux.sock" (nerimux::socket-path "whatever"))))
+    (let ((nerimux::*socket-path-override* nil)
+          (nerimux::*socket-name-override* "mylabel"))
+      (let ((path (nerimux::socket-path "ignored-name")))
+        (expect (search "nerimux-mylabel.sock" path))
         (expect (null (search "ignored-name" path))))))
 
   ;;; -- stale-socket ------------------------------------------------------------
 
   ;; %stale-socket-p returns T for an existing file that refuses connections.
   (it "stale-socket-p-detects-dead-socket-file"
-    (expect (null (cl-tmux::%stale-socket-p "/nonexistent/cl-tmux-stale-probe.sock")))
-    (let ((path (format nil "~A/cl-tmux-stale-test-~D.sock"
+    (expect (null (nerimux::%stale-socket-p "/nonexistent/nerimux-stale-probe.sock")))
+    (let ((path (format nil "~A/nerimux-stale-test-~D.sock"
                         (string-right-trim "/" (or (sb-ext:posix-getenv "TMPDIR") "/tmp"))
                         (random 1000000))))
       (unwind-protect
            (progn
              (with-open-file (s path :direction :output :if-does-not-exist :create)
                (declare (ignore s)))
-             (expect (eq t (and (cl-tmux::%stale-socket-p path) t))))
+             (expect (eq t (and (nerimux::%stale-socket-p path) t))))
         (ignore-errors (delete-file path)))))
 
   ;; %stale-socket-p returns NIL when a live listener accepts on the path.
   (it "stale-socket-p-live-listener-is-not-stale"
-    (let ((path (cl-tmux/net::%make-probe-socket-path)))
-      (if (cl-tmux/net:unix-socket-available-p)
-          (let ((listener (cl-tmux/net:make-listener path)))
+    (let ((path (nerimux/net::%make-probe-socket-path)))
+      (if (nerimux/net:unix-socket-available-p)
+          (let ((listener (nerimux/net:make-listener path)))
             (unwind-protect
-                 (expect (null (cl-tmux::%stale-socket-p path)))
-              (cl-tmux/net:close-socket listener)
+                 (expect (null (nerimux::%stale-socket-p path)))
+              (nerimux/net:close-socket listener)
               (ignore-errors (delete-file path))))
           (expect t :to-be-truthy))))
 
@@ -92,11 +92,11 @@
   ;; would otherwise see `new-session -d` "succeed" with no server running.
   (it "ensure-server-running-signals-when-socket-never-appears"
     (with-stubbed-fdefinition
-        ((cl-tmux::%launch-server-and-poll-when-live
+        ((nerimux::%launch-server-and-poll-when-live
           (lambda (&rest args) (declare (ignore args)) nil)))
-      (let ((cl-tmux::*socket-path-override*
-              "/nonexistent-dir-xyz/cl-tmux-never-appears.sock")
-            (cl-tmux::*socket-name-override* nil))
+      (let ((nerimux::*socket-path-override*
+              "/nonexistent-dir-xyz/nerimux-never-appears.sock")
+            (nerimux::*socket-name-override* nil))
         (signals error
-          (cl-tmux::%ensure-server-running "test-session")
+          (nerimux::%ensure-server-running "test-session")
           "must signal when the socket never appears after launch-and-poll")))))

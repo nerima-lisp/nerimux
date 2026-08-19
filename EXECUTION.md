@@ -129,7 +129,7 @@ round-trip、connection slot への read-only state、read-only client の pane 
 
 | 作業単位 | 内容 | 保留理由 |
 | --- | --- | --- |
-| `workspace-overview` branch (97ebf05) | organization/repository/worktree/pane の全画面 overview + worktree 操作 (attach/lock/unlock/delete/prune) | main の `render-session-to-string` は既に client 単位の `:overview`/`:detail`/`:attention` view（`client-conn-view`、cl-tui-kit ベースの `renderer-tui-kit.lisp` 経由）を実装済みで、`workspace-overview` は同じ関数名を session 単位の `workspace-mode-p` 分岐で上書きしようとする、独立して書かれた別アーキテクチャだった。ドメインモデルも `cl-tmux/model`（main）と `cl-tmux/workspace`（このbranch）で重複している。機械的な merge では両者の分岐ロジックが同じ入口を奪い合い、正しく動作しないコードになるため、今回は統合を見送った。branch と worktree (`20260817T154253-d1ea1c1`) は削除せず保持している。次に着手する際は、まず `client-conn-view` 方式と `workspace-mode-p` 方式のどちらを正とするかを決め、選ばれなかった側の呼び出しグラフ（renderer、dispatch、ドメインモデル）を書き換える前提で見積もること。|
+| `workspace-overview` branch (97ebf05) | organization/repository/worktree/pane の全画面 overview + worktree 操作 (attach/lock/unlock/delete/prune) | main の `render-session-to-string` は既に client 単位の `:overview`/`:detail`/`:attention` view（`client-conn-view`、cl-tui-kit ベースの `renderer-tui-kit.lisp` 経由）を実装済みで、`workspace-overview` は同じ関数名を session 単位の `workspace-mode-p` 分岐で上書きしようとする、独立して書かれた別アーキテクチャだった。ドメインモデルも `nerimux/model`（main）と `nerimux/workspace`（このbranch）で重複している。機械的な merge では両者の分岐ロジックが同じ入口を奪い合い、正しく動作しないコードになるため、今回は統合を見送った。branch と worktree (`20260817T154253-d1ea1c1`) は削除せず保持している。次に着手する際は、まず `client-conn-view` 方式と `workspace-mode-p` 方式のどちらを正とするかを決め、選ばれなかった側の呼び出しグラフ（renderer、dispatch、ドメインモデル）を書き換える前提で見積もること。|
 
 ### 削除した worktree / branch
 

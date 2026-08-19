@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/config)
+(in-package #:nerimux/config)
 
 ;;;; Default copy-mode key-binding data tables.
 ;;;;

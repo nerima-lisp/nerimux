@@ -2,7 +2,7 @@
 
 The organization-wide contribution guide lives in
 [nerima-lisp/.github](https://github.com/nerima-lisp/.github/blob/main/CONTRIBUTING.md).
-This page records only the rules specific to cl-tmux — the ones that are easy
+This page records only the rules specific to nerimux — the ones that are easy
 to trip over and that no general guide would mention.
 
 ## The flake only sees git-tracked files
@@ -35,7 +35,7 @@ Nix sandbox on some platforms — so a sandboxed check run is still meaningful.
 
 ## Behavior changes need a tmux reference
 
-cl-tmux aims for behavioral parity with tmux. When changing or adding
+nerimux aims for behavioral parity with tmux. When changing or adding
 command/format/escape behavior, state in the pull request what tmux does — man
 page section, upstream source, or a transcript from a real tmux session — and
 add a regression test that pins it.
@@ -62,6 +62,6 @@ Include:
 1. What you ran — command line, config file, and the byte/escape sequence if it
    is an emulation bug.
 2. What tmux does in the same situation.
-3. What cl-tmux does instead.
+3. What nerimux does instead.
 
 A failing cl-weave test case is the ideal bug report.

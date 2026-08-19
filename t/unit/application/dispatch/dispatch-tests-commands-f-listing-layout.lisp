@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Dispatch tests — part F2: tree/session listing and window layout helpers.
 
@@ -17,7 +17,7 @@
                                 :tree  (make-layout-leaf pane))))
       (window-select-pane win pane)
       (let ((output (with-output-to-string (s)
-                      (cl-tmux::%format-tree-entry s "mysess" "mysess"
+                      (nerimux::%format-tree-entry s "mysess" "mysess"
                                                   (list win) win))))
         (expect (search "* mysess" output))
         (expect (search "test-win" output))))
@@ -30,7 +30,7 @@
                                 :tree  (make-layout-leaf pane))))
       (window-select-pane win pane)
       (let ((output (with-output-to-string (s)
-                      (cl-tmux::%format-tree-entry s "other" "current"
+                      (nerimux::%format-tree-entry s "other" "current"
                                                   (list win) win))))
         (expect (search "* other" output) :to-be-falsy)
         (expect (search "  other" output)))))
@@ -41,8 +41,8 @@
   (it "dispatch-choose-session-shows-session-list"
     (with-fake-session (s :nwindows 1)
       (let ((*overlay* nil)
-            (cl-tmux::*server-sessions* nil))
-        (cl-tmux::dispatch-command s :choose-session nil)
+            (nerimux::*server-sessions* nil))
+        (nerimux::dispatch-command s :choose-session nil)
         (assert-overlay-contains (session-name s) *overlay*
                                  ":choose-session"))))
 
@@ -58,7 +58,7 @@
   (it "dispatch-resize-commands-do-not-error"
     (with-fake-session (s)
       (dolist (cmd '(:resize-left :resize-right :resize-up :resize-down))
-        (finishes (cl-tmux::dispatch-command s cmd nil)
+        (finishes (nerimux::dispatch-command s cmd nil)
                   "~A must not signal an error" cmd))))
 
   ;;; ── :rotate-window / :rotate-window-reverse / :split-*-no-focus dispatch ────
@@ -70,5 +70,5 @@
     (dolist (cmd '(:rotate-window :rotate-window-reverse
                    :split-horizontal-no-focus :split-vertical-no-focus))
       (with-fake-session (s :nwindows 1 :npanes 1)
-        (finishes (cl-tmux::dispatch-command s cmd nil)
+        (finishes (nerimux::dispatch-command s cmd nil)
                   "~A must not signal an error" cmd)))))

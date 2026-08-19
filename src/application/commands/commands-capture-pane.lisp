@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/commands)
+(in-package #:nerimux/commands)
 
 ;;; ── capture-pane -e: reconstruct SGR escapes from cell attributes ───────────
 ;;;
@@ -43,7 +43,7 @@
    and +true-color-bit+ true-colour, matching the cell colour encoding."
   (cond
     ;; Branch 0: terminal default colour (SGR 39 fg / 49 bg).
-    ((= color cl-tmux/terminal/types:+default-color+) (if is-bg "49" "39"))
+    ((= color nerimux/terminal/types:+default-color+) (if is-bg "49" "39"))
     ;; Branch 1: 24-bit true-colour — +true-color-bit+ set, RGB in low 24 bits.
     ((>= color +true-color-bit+)
      (format nil "~D;2;~D;~D;~D" (if is-bg 48 38)
@@ -162,7 +162,7 @@
                          collect (%capture-pane-row-string screen row escapes trim))
      :wrapped-flags (when join
                       (loop for row from 0 below (screen-height screen)
-                            collect (cl-tmux/terminal/types:%line-wrapped-p screen row))))))
+                            collect (nerimux/terminal/types:%line-wrapped-p screen row))))))
 
 (defun %emit-capture-pane-snapshot (snapshot join escapes trim)
   "Render a SNAPSHOT to a string outside the screen lock."

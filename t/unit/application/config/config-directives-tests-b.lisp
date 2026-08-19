@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; bind args, tokenizer, canonical set directives, server flag,
 ;;;; terminal-option routing - part II
@@ -10,7 +10,7 @@
   ;; %parse-bind-key-args with valid key+command returns all four values.
   (it "parse-bind-key-args-returns-all-values"
     (multiple-value-bind (table key kw repeatable)
-        (cl-tmux/config::%parse-bind-key-args '("z" "new-window"))
+        (nerimux/config::%parse-bind-key-args '("z" "new-window"))
       (check-table (list (list table "prefix"    "table defaults to prefix")
                          (list key   #\z         "key must be #\\z")
                          (list kw    :new-window "command must be :new-window"))
@@ -20,7 +20,7 @@
   ;; %parse-bind-key-args with -T uses the given table name.
   (it "parse-bind-key-args-T-flag-specifies-table"
     (multiple-value-bind (table key kw ignored-rep)
-        (cl-tmux/config::%parse-bind-key-args '("-T" "copy-mode" "q" "copy-mode-enter"))
+        (nerimux/config::%parse-bind-key-args '("-T" "copy-mode" "q" "copy-mode-enter"))
       (declare (ignore ignored-rep))
       (check-table (list (list table "copy-mode"      "table must be copy-mode")
                          (list key   #\q              "key must be #\\q")
@@ -30,7 +30,7 @@
   ;; %parse-bind-key-args with -r sets repeatable to T.
   (it "parse-bind-key-args-r-flag-sets-repeatable"
     (multiple-value-bind (table ignored-key kw repeatable)
-        (cl-tmux/config::%parse-bind-key-args '("-r" "H" "resize-left"))
+        (nerimux/config::%parse-bind-key-args '("-r" "H" "resize-left"))
       (declare (ignore ignored-key))
       (expect (string= "prefix" table))
       (expect (eq :resize-left kw))
@@ -41,7 +41,7 @@
   ;; %tokenize-backslash-escape at the very end of input does not signal.
   (it "tokenize-backslash-escape-at-end-produces-partial-token"
     (finishes
-      (let ((toks (cl-tmux/config::%config-tokens "abc\\")))
+      (let ((toks (nerimux/config::%config-tokens "abc\\")))
         ;; The backslash is at EOL — just one partial token, no error.
         (expect (= 1 (length toks))))))
 
@@ -50,7 +50,7 @@
   ;; %config-tokens: an unmatched double-quote is treated as a literal character.
   (it "tokenize-double-quoted-unmatched-treats-as-literal"
     ;; Input: a single \" with no closing quote.
-    (let ((tokens (cl-tmux/config::%config-tokens "\"")))
+    (let ((tokens (nerimux/config::%config-tokens "\"")))
       ;; The lone \" starts a token but has no closing quote — the opening \" is
       ;; a literal so we get a token containing the character.
       (expect (= 1 (length tokens)))))
@@ -75,7 +75,7 @@
                      ("'hello world'"                 ("hello world"))
                      ("'a\\b'"                        ("a\\b"))))
       (destructuring-bind (input expected) entry
-        (let ((result (cl-tmux/config::%config-tokens input)))
+        (let ((result (nerimux/config::%config-tokens input)))
           (expect (equal expected result))))))
 
   ;;; ── apply-config-directive on nil/empty input ─────────────────────────────
@@ -92,11 +92,11 @@
 
   ;; Each canonical set-option directive command stores a value in the global options table.
   (it "set-option-directive-commands-table-driven"
-    (dolist (verb cl-tmux/config::+set-directive-commands+)
+    (dolist (verb nerimux/config::+set-directive-commands+)
       (with-fresh-global-options
         (let ((result (apply-config-directive (list verb "status-interval" "7"))))
           (expect (eq t result))
-          (expect (= 7 (cl-tmux/options:get-option "status-interval")))))))
+          (expect (= 7 (nerimux/options:get-option "status-interval")))))))
 
   ;; Short tmux aliases are not accepted; config directives use canonical commands only.
   (it "set-option-short-aliases-are-rejected"
@@ -105,7 +105,7 @@
         (let ((option-name "@short-alias-probe"))
           (assert-config-directive-rejected (list verb option-name "7") verb)
           (assert-config-directive-rejected (list verb "-g" option-name "7") verb)
-          (expect (null (cl-tmux/options:get-option option-name nil)))))))
+          (expect (null (nerimux/options:get-option option-name nil)))))))
 
   ;;; ── set-option -s server option routing ──────────────────────────────────────────
 
@@ -113,16 +113,16 @@
   (it "apply-set-directive-server-flag"
     ;; exit-empty is in *server-option-registry* but NOT in *option-registry* /
     ;; *global-options*, so the assertion 'not in global-options' is clean.
-    (let ((cl-tmux/options:*server-options* (make-hash-table :test #'equal)))
+    (let ((nerimux/options:*server-options* (make-hash-table :test #'equal)))
       (assert-set-directive-option-state '("set-option" "-s" "exit-empty" "off")
                                          "exit-empty" nil
                                          :context "set-option -s exit-empty off"
                                          :server-p t)
-      (expect (null (cl-tmux/options:get-server-option "exit-empty")))
-      (expect (null (cl-tmux/options:get-option "exit-empty" nil)))))
+      (expect (null (nerimux/options:get-server-option "exit-empty")))
+      (expect (null (nerimux/options:get-option "exit-empty" nil)))))
 
   ;; terminal-overrides/features are ACCEPTED and stored like real tmux (they
-  ;; appear in virtually every real .tmux.conf); cl-tmux applies no
+  ;; appear in virtually every real .tmux.conf); nerimux applies no
   ;; terminal-matching behavior but must not break config transparency.
   (it "apply-set-directive-accepts-terminal-matching-options"
     (dolist (form '(("set-option" "-g" "terminal-overrides" "xterm*:RGB")
@@ -131,4 +131,4 @@
         (destructuring-bind (verb flag name value) form
           (declare (ignore verb flag))
           (assert-config-directive-applied form (format nil "~S" form))
-          (expect (equal value (cl-tmux/options:get-option name nil))))))))
+          (expect (equal value (nerimux/options:get-option name nil))))))))

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Session lifecycle tests: PTY-backed session / window creation flows.
 ;;;;
@@ -97,7 +97,7 @@
         (expect w0 :to-be-truthy)
         (expect w2 :to-be-truthy)
         ;; Kill the middle window (id=1).
-        (cl-tmux/commands:kill-window session w1)
+        (nerimux/commands:kill-window session w1)
         (let ((remaining (session-windows session)))
           (expect (= 2 (length remaining)))
           (expect (find 0 remaining :key #'window-id) :to-be-truthy)
@@ -111,10 +111,10 @@
   (it "create-initial-session-increments-id-counter"
     (unless (pty-available-p)
       (skip "no PTY available (sandboxed environment)"))
-    (let ((before cl-tmux/model::*session-id-counter*))
+    (let ((before nerimux/model::*session-id-counter*))
       (with-session (sess1 24 80)
         (expect (= (1+ before) (session-id sess1)))
-        (expect (= (1+ before) cl-tmux/model::*session-id-counter*)))))
+        (expect (= (1+ before) nerimux/model::*session-id-counter*)))))
 
   ;; create-initial-session sets session-last-active to a non-zero universal time.
   (it "create-initial-session-session-touch-called"

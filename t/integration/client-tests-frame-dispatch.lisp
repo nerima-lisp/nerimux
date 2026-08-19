@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 (describe "client-suite"
 
@@ -6,7 +6,7 @@
   ;;;
   ;;; These tests drive with-incoming-frame directly via a Unix-domain socket
   ;;; stream pair.  We write frames from one end and read from the other, exactly
-  ;;; as run-client does.  The macro is in cl-tmux/transport and is used by both
+  ;;; as run-client does.  The macro is in nerimux/transport and is used by both
   ;;; server (serve-client) and client (run-client).
 
   ;; with-incoming-frame dispatches +msg-bye+ correctly — the :return path that

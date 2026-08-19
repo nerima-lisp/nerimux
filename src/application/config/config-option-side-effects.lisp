@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/config)
+(in-package #:nerimux/config)
 
 ;;; -- Option runtime side effects + set-hook directive -------------------------
 ;;;
@@ -10,8 +10,8 @@
 ;;; handler; it lives here because it shares no code with the fixed-arity
 ;;; set-option table in config-directives-set.lisp.
 
-(declaim (special cl-tmux/model:*update-environment*
-                  cl-tmux/model:+default-update-environment+))
+(declaim (special nerimux/model:*update-environment*
+                  nerimux/model:+default-update-environment+))
 
 ;;; ── Option side-effect helpers ───────────────────────────────────────────────
 
@@ -84,15 +84,15 @@
   ;; escape-time: sync into server-options so every set form takes effect.
   ("escape-time"
    (if unset-p
-       (cl-tmux/options:set-server-option "escape-time" 10)
+       (nerimux/options:set-server-option "escape-time" 10)
        (when (%nonempty-string-p value)
-         (cl-tmux/options:set-server-option "escape-time" value))))
+         (nerimux/options:set-server-option "escape-time" value))))
   ;; status: off/false/0 hides the bar; numeric line count (capped at 5) or on/true → 1.
   ("status"
    (if unset-p
        (setf *status-height* 1)
        (let* ((off-p (member value '("off" "false" "0") :test #'equal))
-              (n     (cl-tmux::%parse-integer-or-nil value :junk-allowed t)))
+              (n     (nerimux::%parse-integer-or-nil value :junk-allowed t)))
          (setf *status-height*
                (cond (off-p 0)
                      ((and n (> n 0)) (min n +max-status-lines+))
@@ -106,10 +106,10 @@
   ;; update-environment: propagate the space-separated variable list into the model.
   ("update-environment"
    (if unset-p
-       (setf cl-tmux/model:*update-environment*
-             (copy-list cl-tmux/model:+default-update-environment+))
+       (setf nerimux/model:*update-environment*
+             (copy-list nerimux/model:+default-update-environment+))
        (when (%nonempty-string-p value)
-         (setf cl-tmux/model:*update-environment*
+         (setf nerimux/model:*update-environment*
                (remove-if (lambda (s) (zerop (length s)))
                           (host-kit:split-string value :separator '(#\Space))))))))
 
@@ -162,15 +162,15 @@
                           (t (%parse-hook-object-id target)))))
       (when event
         (if remove-p
-            (progn (cl-tmux/hooks:clear-command-hooks event) t)
+            (progn (nerimux/hooks:clear-command-hooks event) t)
             (when cmd-str
               ;; Store the raw command string for execution at hook-fire time.
               ;; Without -a, set-hook REPLACES the event's hook (tmux semantics);
               ;; with -a it appends, preserving any prior hooks.
               (if append-p
-                  (cl-tmux/hooks:append-command-hook event cmd-str
+                  (nerimux/hooks:append-command-hook event cmd-str
                                                      scope-value scope-kind)
-                  (cl-tmux/hooks:set-command-hook event cmd-str
+                  (nerimux/hooks:set-command-hook event cmd-str
                                                   scope-value scope-kind))
               t))))))
 

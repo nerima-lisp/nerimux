@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Frame transport tests (src/transport.lisp) — part II: validation,
 ;;;; security boundaries, and direct CPS-phase coverage.
@@ -26,7 +26,7 @@
   (let* ((total (+ +header-size+ actual-payload-bytes))
          (frame (make-array total :element-type '(unsigned-byte 8) :initial-element 0)))
     (setf (aref frame 0) +msg-frame+)
-    (replace frame (cl-tmux/protocol:u32-octets declared-payload-length) :start1 1)
+    (replace frame (nerimux/protocol:u32-octets declared-payload-length) :start1 1)
     frame))
 
 (describe "transport-suite"
@@ -68,7 +68,7 @@
         ;; Declared length is exactly one byte over the allowed ceiling.
         (signals error
           (send-frame out (%make-frame-with-declared-length
-                           (1+ cl-tmux/transport::+max-frame-payload-bytes+)
+                           (1+ nerimux/transport::+max-frame-payload-bytes+)
                            0))
           "declared length = max+1 must signal (exceeds +max-frame-payload-bytes+)")
         ;; Declared length is the maximum u32 value -- an extreme case.
@@ -86,10 +86,10 @@
   ;; %payload-length-acceptable-p must return true for 0 and for the exact ceiling
   ;; +max-frame-payload-bytes+, and for a mid-range value.
   (it "payload-length-acceptable-p-accepts-valid-lengths"
-    (expect (cl-tmux/transport::%payload-length-acceptable-p 0) :to-be-truthy)
-    (expect (cl-tmux/transport::%payload-length-acceptable-p 1) :to-be-truthy)
-    (expect (cl-tmux/transport::%payload-length-acceptable-p
-             cl-tmux/transport::+max-frame-payload-bytes+)
+    (expect (nerimux/transport::%payload-length-acceptable-p 0) :to-be-truthy)
+    (expect (nerimux/transport::%payload-length-acceptable-p 1) :to-be-truthy)
+    (expect (nerimux/transport::%payload-length-acceptable-p
+             nerimux/transport::+max-frame-payload-bytes+)
             :to-be-truthy))
 
   ;; %payload-length-acceptable-p must return NIL for values that exceed the ceiling,
@@ -98,11 +98,11 @@
   ;; read-frame would attempt to allocate the declared buffer before the peer
   ;; has sent any payload bytes.
   (it "payload-length-acceptable-p-rejects-oversized-lengths"
-    (expect (cl-tmux/transport::%payload-length-acceptable-p -1) :to-be-falsy)
-    (expect (cl-tmux/transport::%payload-length-acceptable-p
-             (1+ cl-tmux/transport::+max-frame-payload-bytes+))
+    (expect (nerimux/transport::%payload-length-acceptable-p -1) :to-be-falsy)
+    (expect (nerimux/transport::%payload-length-acceptable-p
+             (1+ nerimux/transport::+max-frame-payload-bytes+))
             :to-be-falsy)
-    (expect (cl-tmux/transport::%payload-length-acceptable-p #xFFFFFFFF) :to-be-falsy))
+    (expect (nerimux/transport::%payload-length-acceptable-p #xFFFFFFFF) :to-be-falsy))
 
   ;;; ── read-frame rejects oversized declared payload-length in stream ──────────
   ;;;
@@ -121,11 +121,11 @@
       ;; Write a 5-byte header whose length field is max+1 (one byte over the ceiling).
       ;; No payload bytes follow -- a real attacker would stop here.
       (with-output-octet-stream (out path)
-        (let* ((oversized-length (1+ cl-tmux/transport::+max-frame-payload-bytes+))
+        (let* ((oversized-length (1+ nerimux/transport::+max-frame-payload-bytes+))
                (header (make-array +header-size+ :element-type '(unsigned-byte 8)
                                                  :initial-element 0)))
           (setf (aref header 0) +msg-frame+)
-          (replace header (cl-tmux/protocol:u32-octets oversized-length) :start1 1)
+          (replace header (nerimux/protocol:u32-octets oversized-length) :start1 1)
           (write-sequence header out)))
       (with-open-file (in path :element-type '(unsigned-byte 8))
         (expect (null (read-frame in))))))
@@ -139,7 +139,7 @@
         (let ((header (make-array +header-size+ :element-type '(unsigned-byte 8)
                                                 :initial-element 0)))
           (setf (aref header 0) +msg-frame+)
-          (replace header (cl-tmux/protocol:u32-octets #xFFFFFFFF) :start1 1)
+          (replace header (nerimux/protocol:u32-octets #xFFFFFFFF) :start1 1)
           (write-sequence header out)))
       (with-open-file (in path :element-type '(unsigned-byte 8))
         (expect (null (read-frame in))))))
@@ -155,22 +155,22 @@
   ;; %validate-outgoing-frame must not signal for well-formed frames produced by
   ;; the msg-* constructors.
   (it "validate-outgoing-frame-accepts-well-formed-frames"
-    (finishes (cl-tmux/transport::%validate-outgoing-frame (msg-detach))
+    (finishes (nerimux/transport::%validate-outgoing-frame (msg-detach))
               "%validate-outgoing-frame must not signal for a valid empty frame")
-    (finishes (cl-tmux/transport::%validate-outgoing-frame (msg-key #(1 2 3)))
+    (finishes (nerimux/transport::%validate-outgoing-frame (msg-key #(1 2 3)))
               "%validate-outgoing-frame must not signal for a valid key frame")
-    (finishes (cl-tmux/transport::%validate-outgoing-frame (msg-resize 24 80))
+    (finishes (nerimux/transport::%validate-outgoing-frame (msg-resize 24 80))
               "%validate-outgoing-frame must not signal for a valid resize frame"))
 
   ;; %validate-outgoing-frame signals an error when the frame vector has fewer
   ;; than +header-size+ bytes (not a valid frame at all).
   (it "validate-outgoing-frame-rejects-too-short-vector"
     (signals error
-      (cl-tmux/transport::%validate-outgoing-frame
+      (nerimux/transport::%validate-outgoing-frame
        (make-array 0 :element-type '(unsigned-byte 8)))
       "empty vector must signal")
     (signals error
-      (cl-tmux/transport::%validate-outgoing-frame
+      (nerimux/transport::%validate-outgoing-frame
        (make-array (1- +header-size+) :element-type '(unsigned-byte 8)))
       "vector shorter than header must signal"))
 
@@ -178,20 +178,20 @@
   ;; in the frame header exceeds +max-frame-payload-bytes+.
   (it "validate-outgoing-frame-rejects-oversized-declared-length"
     (signals error
-      (cl-tmux/transport::%validate-outgoing-frame
+      (nerimux/transport::%validate-outgoing-frame
        (%make-frame-with-declared-length
-        (1+ cl-tmux/transport::+max-frame-payload-bytes+) 0))
+        (1+ nerimux/transport::+max-frame-payload-bytes+) 0))
       "declared length = max+1 must signal"))
 
   ;; %validate-outgoing-frame signals an error when total frame length does not
   ;; equal +header-size+ + declared payload length (self-inconsistent frame).
   (it "validate-outgoing-frame-rejects-self-inconsistent-length"
     (signals error
-      (cl-tmux/transport::%validate-outgoing-frame
+      (nerimux/transport::%validate-outgoing-frame
        (%make-frame-with-declared-length 5 0))
       "declared=5 actual=0 must signal (header claims more bytes than present)")
     (signals error
-      (cl-tmux/transport::%validate-outgoing-frame
+      (nerimux/transport::%validate-outgoing-frame
        (%make-frame-with-declared-length 0 3))
       "declared=0 actual=3 must signal (header claims fewer bytes than present)"))
 
@@ -216,7 +216,7 @@
           (write-sequence frame out :end +header-size+))
         (with-open-file (in path :element-type '(unsigned-byte 8))
           (let ((captured-length nil))
-            (cl-tmux/transport::%read-header-k
+            (nerimux/transport::%read-header-k
              in
              (lambda (buffer payload-length)
                (declare (ignore buffer))
@@ -233,7 +233,7 @@
       (with-open-file (in path :element-type '(unsigned-byte 8))
         (let ((called nil))
           (let ((result
-                 (cl-tmux/transport::%read-header-k
+                 (nerimux/transport::%read-header-k
                   in
                   (lambda (buffer payload-length)
                     (declare (ignore buffer payload-length))
@@ -249,16 +249,16 @@
     (with-temp-octet-file (path)
       ;; Craft a 5-byte header whose length field = max+1.
       (with-output-octet-stream (out path)
-        (let* ((oversized (1+ cl-tmux/transport::+max-frame-payload-bytes+))
+        (let* ((oversized (1+ nerimux/transport::+max-frame-payload-bytes+))
                (header    (make-array +header-size+ :element-type '(unsigned-byte 8)
                                                     :initial-element 0)))
           (setf (aref header 0) +msg-frame+)
-          (replace header (cl-tmux/protocol:u32-octets oversized) :start1 1)
+          (replace header (nerimux/protocol:u32-octets oversized) :start1 1)
           (write-sequence header out)))
       (with-open-file (in path :element-type '(unsigned-byte 8))
         (let ((called nil))
           (let ((result
-                 (cl-tmux/transport::%read-header-k
+                 (nerimux/transport::%read-header-k
                   in
                   (lambda (buffer payload-length)
                     (declare (ignore buffer payload-length))
@@ -289,7 +289,7 @@
                                                      :adjustable t
                                                      :fill-pointer +header-size+))
                (captured nil))
-          (cl-tmux/transport::%read-payload-k
+          (nerimux/transport::%read-payload-k
            header-buf 4 in
            (lambda (complete-buffer)
              (setf captured (subseq complete-buffer +header-size+))))
@@ -308,7 +308,7 @@
                                                      :fill-pointer +header-size+))
                (called nil))
           (let ((result
-                 (cl-tmux/transport::%read-payload-k
+                 (nerimux/transport::%read-payload-k
                   header-buf 4 in
                   (lambda (complete-buffer)
                     (declare (ignore complete-buffer))

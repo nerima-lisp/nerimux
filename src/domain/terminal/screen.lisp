@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/types)
+(in-package #:nerimux/terminal/types)
 
 ;;;; Screen struct definition and pure grid operations (DATA layer).
 ;;;;
@@ -38,9 +38,9 @@
   (scroll-bottom (1- +default-screen-height+) :type fixnum)
   ;; CPS parser: a closure (screen byte) -> next-state-fn.
   ;; The DATA defstruct carries a placeholder (#'identity) so that the
-  ;; cl-tmux/terminal/parser package need not be present at defstruct compile time.
+  ;; nerimux/terminal/parser package need not be present at defstruct compile time.
   ;; make-screen (below) overwrites this slot with the real ground-state function
-  ;; after all packages are loaded (cl-tmux.asd guarantees parser loads before emulator).
+  ;; after all packages are loaded (nerimux.asd guarantees parser loads before emulator).
   (parser #'identity :type function)
   ;; Dirty flag: set whenever a cell changes; cleared by renderer after paint
   (dirty-p t :type boolean)
@@ -230,7 +230,7 @@
    Allocates the mutex here (CONSTRUCT layer) so that the
    defstruct default for the lock slot can be NIL, keeping the DATA layer free
    of side-effecting allocations at load time.
-   The CPS parser is wired to CL-TMUX/TERMINAL/PARSER:GROUND-STATE after
+   The CPS parser is wired to NERIMUX/TERMINAL/PARSER:GROUND-STATE after
    construction so that the DATA-layer defstruct carries no compile-time
    forward-reference to the CPS layer."
   (let ((screen (%make-screen :width         width
@@ -240,7 +240,7 @@
                                :lock          (make-lock :name "screen"))))
     ;; Wire the real ground-state now that all packages are loaded.
     (setf (screen-parser screen)
-          (lambda (s byte) (cl-tmux/terminal/parser:ground-state s byte)))
+          (lambda (s byte) (nerimux/terminal/parser:ground-state s byte)))
     screen))
 
 ;;; ── Grid helpers ───────────────────────────────────────────────────────────

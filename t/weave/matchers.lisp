@@ -6,7 +6,7 @@
 ;;;;   (values PASS-P REPORTED-ACTUAL REPORTED-EXPECTED).
 ;;;; They compose with `:not' automatically.
 
-(in-package #:cl-tmux/weave-tests)
+(in-package #:nerimux/weave-tests)
 
 (cl-weave:defmatcher :to-resolve-to (actual expected)
   "Passes when a (RULEBASE TABLE KEY) triple resolves to the expected command.

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; events tests: CSI-u extended key parsing and dispatch
 
@@ -35,43 +35,43 @@
                  (127 1 "BSpace"  "BSpace (code 127 mod 1)")))
       (destructuring-bind (code mod expected desc) c
         (declare (ignore desc))
-        (expect (string= expected (cl-tmux::%csi-u-key-name code mod))))))
+        (expect (string= expected (nerimux::%csi-u-key-name code mod))))))
 
   ;; An unhandled (control/out-of-range) codepoint yields NIL.
   (it "csi-u-key-name-unhandled-codepoint"
-    (expect (null (cl-tmux::%csi-u-key-name 0 1)))
-    (expect (null (cl-tmux::%csi-u-key-name 7 5)))
-    (expect (null (cl-tmux::%csi-u-base-key 200))))
+    (expect (null (nerimux::%csi-u-key-name 0 1)))
+    (expect (null (nerimux::%csi-u-key-name 7 5)))
+    (expect (null (nerimux::%csi-u-base-key 200))))
 
   ;;; ── Extended keys (CSI u) parameter parsing ──────────────────────────────────
 
   ;; %csi-u-parse-params reads <codepoint>[;<mod>] from a u-terminated buffer.
   (it "csi-u-parse-params-cases"
     (multiple-value-bind (cp mod)
-        (cl-tmux::%csi-u-parse-params (%csi-u-buf 57 55 59 53) 7)  ; 97 ; 5
+        (nerimux::%csi-u-parse-params (%csi-u-buf 57 55 59 53) 7)  ; 97 ; 5
       (expect (= 97 cp)) (expect (= 5 mod)))
     (multiple-value-bind (cp mod)
-        (cl-tmux::%csi-u-parse-params (%csi-u-buf 49 51) 5)        ; 13 (no ; mod)
+        (nerimux::%csi-u-parse-params (%csi-u-buf 49 51) 5)        ; 13 (no ; mod)
       (expect (= 13 cp)) (expect (= 1 mod)))
     (multiple-value-bind (cp mod)
-        (cl-tmux::%csi-u-parse-params (%csi-u-buf 57 59 53 58 49) 8) ; 9 ; 5:1 (subparam)
+        (nerimux::%csi-u-parse-params (%csi-u-buf 57 59 53 58 49) 8) ; 9 ; 5:1 (subparam)
       (expect (= 9 cp)) (expect (= 5 mod))))
 
   ;; The state-machine predicates recognise CSI-u prefixes and full sequences,
   ;; and reject mouse / arrow CSI shapes.
   (it "csi-u-terminated-and-accumulating-predicates"
     (let ((full (%csi-u-buf 57 55 59 53)))                ; ESC [ 97 ; 5 u  (len 7)
-      (expect (cl-tmux::%csi-u-terminated-p full 7) :to-be-truthy)
-      (expect (cl-tmux::%csi-u-accumulating-p full 7) :to-be-falsy))
+      (expect (nerimux::%csi-u-terminated-p full 7) :to-be-truthy)
+      (expect (nerimux::%csi-u-accumulating-p full 7) :to-be-falsy))
     ;; ESC [ 9 7  — mid-accumulation digit prefix
     (let ((v (make-array 8 :element-type '(unsigned-byte 8) :fill-pointer 0 :adjustable t)))
       (dolist (b '(27 91 57 55)) (vector-push-extend b v))
-      (expect (cl-tmux::%csi-u-accumulating-p v 4) :to-be-truthy)
-      (expect (cl-tmux::%csi-u-terminated-p v 4) :to-be-falsy))
+      (expect (nerimux::%csi-u-accumulating-p v 4) :to-be-truthy)
+      (expect (nerimux::%csi-u-terminated-p v 4) :to-be-falsy))
     ;; ESC [ M …  (X10 mouse) and ESC [ <  (SGR) must NOT look like CSI-u
     (let ((m (make-array 4 :element-type '(unsigned-byte 8) :fill-pointer 0 :adjustable t)))
       (dolist (b '(27 91 77)) (vector-push-extend b m))    ; ESC [ M
-      (expect (cl-tmux::%csi-u-accumulating-p m 3) :to-be-falsy)))
+      (expect (nerimux::%csi-u-accumulating-p m 3) :to-be-falsy)))
 
   ;;; ── Extended keys (CSI u) end-to-end through process-byte ────────────────────
 
@@ -80,11 +80,11 @@
   ;; multi-digit codepoint 97 must not be dropped by the generic forward.
   (it "root-csi-u-name-binding-fires"
     (with-isolated-config
-      (cl-tmux/config:apply-config-directive '("bind" "-n" "C-S-a" "next-window"))
+      (nerimux/config:apply-config-directive '("bind" "-n" "C-S-a" "next-window"))
       (with-fake-session (s :nwindows 2)
-        (let ((state (cl-tmux::make-input-state)))
+        (let ((state (nerimux::make-input-state)))
           (dolist (b '(27 91 57 55 59 54 117))  ; ESC [ 9 7 ; 6 u
-            (cl-tmux::process-byte s b state))
+            (nerimux::process-byte s b state))
           (expect (eq (second (session-windows s)) (session-active-window s)))))))
 
   ;; bind -n S-Tab next-window: Shift+Tab (ESC [ 9 ; 2 u) runs next-window.  The
@@ -92,23 +92,23 @@
   ;; be misread as a bare ESC [ 9 arrow/copy escape.
   (it "root-csi-u-shift-tab-single-digit-codepoint"
     (with-isolated-config
-      (cl-tmux/config:apply-config-directive '("bind" "-n" "S-Tab" "next-window"))
+      (nerimux/config:apply-config-directive '("bind" "-n" "S-Tab" "next-window"))
       (with-fake-session (s :nwindows 2)
-        (let ((state (cl-tmux::make-input-state)))
+        (let ((state (nerimux::make-input-state)))
           (dolist (b '(27 91 57 59 50 117))  ; ESC [ 9 ; 2 u
-            (cl-tmux::process-byte s b state))
+            (nerimux::process-byte s b state))
           (expect (eq (second (session-windows s)) (session-active-window s)))))))
 
   ;; In emacs mode, CSI-u Ctrl+Meta keys use the copy-mode table as C-M-* keys.
   (it "copy-mode-csi-u-control-meta-key-uses-copy-mode-table"
     (with-isolated-config
-      (cl-tmux/options:set-option "mode-keys" "emacs")
-      (cl-tmux/config:key-table-bind "copy-mode-vi" "C-M-b" :copy-mode-page-up)
-      (cl-tmux/config:key-table-bind "copy-mode" "C-M-b" :copy-mode-exit)
+      (nerimux/options:set-option "mode-keys" "emacs")
+      (nerimux/config:key-table-bind "copy-mode-vi" "C-M-b" :copy-mode-page-up)
+      (nerimux/config:key-table-bind "copy-mode" "C-M-b" :copy-mode-exit)
       (with-copy-mode-state (s screen state)
           (dolist (b '(27 91 57 56 59 55 117)) ; ESC [ 98 ; 7 u
-            (cl-tmux::process-byte s b state))
-        (expect (cl-tmux/terminal:screen-copy-mode-p screen) :to-be-falsy))))
+            (nerimux::process-byte s b state))
+        (expect (nerimux/terminal:screen-copy-mode-p screen) :to-be-falsy))))
 
   ;; A digit CSI that ends in '~' (F5 = ESC [ 15 ~), not 'u', is not a CSI-u chord:
   ;; the safety-net branch forwards the whole sequence raw to the pane rather than
@@ -117,10 +117,10 @@
     (with-pipe-fds (rfd wfd)
       (with-fake-session (s :nwindows 1)
         (setf (pane-fd (window-active-pane (session-active-window s))) wfd)
-        (let ((state (cl-tmux::make-input-state)))
+        (let ((state (nerimux::make-input-state)))
           (dolist (b '(27 91 49 53 126))  ; ESC [ 1 5 ~
-            (cl-tmux::process-byte s b state))
-          (let ((ready (cl-tmux/pty:select-fds (list rfd) 200000)))
+            (nerimux::process-byte s b state))
+          (let ((ready (nerimux/pty:select-fds (list rfd) 200000)))
             (expect ready :to-be-truthy)
             (when ready
               (let ((bytes (read-octets-from-fd rfd 16)))
@@ -134,12 +134,12 @@
     (with-pipe-fds (rfd wfd)
       (with-fake-session (s :nwindows 1)
         (setf (pane-fd (window-active-pane (session-active-window s))) wfd)
-        (let ((state (cl-tmux::make-input-state)))
+        (let ((state (nerimux::make-input-state)))
           (dolist (b '(27 91 49 53))  ; ESC [ 1 5
-            (cl-tmux::process-byte s b state))
-          (expect (cl-tmux/pty:select-fds (list rfd) 20000) :to-be-falsy)
-          (cl-tmux::process-byte s 126 state)
-          (let ((ready (cl-tmux/pty:select-fds (list rfd) 200000)))
+            (nerimux::process-byte s b state))
+          (expect (nerimux/pty:select-fds (list rfd) 20000) :to-be-falsy)
+          (nerimux::process-byte s 126 state)
+          (let ((ready (nerimux/pty:select-fds (list rfd) 200000)))
             (expect ready :to-be-truthy)
             (when ready
               (let ((bytes (read-octets-from-fd rfd 16)))

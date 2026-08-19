@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; -- Environment inspection and mutation commands ---------------------------
 ;;;
@@ -63,19 +63,19 @@
   "Return (values NAMES VALUE-FN HIDDEN-NAMES) for SCOPE."
   (ecase scope
     (:global
-     (values (cl-tmux/model:process-environment-names)
-             #'cl-tmux/model:process-environment-value
-             cl-tmux/model:*global-hidden-environment-names*))
+     (values (nerimux/model:process-environment-names)
+             #'nerimux/model:process-environment-value
+             nerimux/model:*global-hidden-environment-names*))
     (:target
-     (values (cl-tmux/model:session-environment-names target-session)
+     (values (nerimux/model:session-environment-names target-session)
              (lambda (name)
-               (cl-tmux/model:session-environment-value target-session name))
-             (cl-tmux/model:session-environment-hidden target-session)))
+               (nerimux/model:session-environment-value target-session name))
+             (nerimux/model:session-environment-hidden target-session)))
     (:session
-     (values (cl-tmux/model:session-environment-names session)
+     (values (nerimux/model:session-environment-names session)
              (lambda (name)
-               (cl-tmux/model:session-environment-value session name))
-             (cl-tmux/model:session-environment-hidden session)))))
+               (nerimux/model:session-environment-value session name))
+             (nerimux/model:session-environment-hidden session)))))
 
 (defun %show-environment-entry-text (name value-fn shell-p)
   (multiple-value-bind (value source)
@@ -92,27 +92,27 @@
     (:global
      (cond
        (remove-p
-        (setf cl-tmux/model:*global-hidden-environment-names*
-              (delete name cl-tmux/model:*global-hidden-environment-names*
+        (setf nerimux/model:*global-hidden-environment-names*
+              (delete name nerimux/model:*global-hidden-environment-names*
                       :test #'string=))
-        (cl-tmux/model:process-unset-environment name))
+        (nerimux/model:process-unset-environment name))
        (t
         (if hidden-p
-            (pushnew name cl-tmux/model:*global-hidden-environment-names*
+            (pushnew name nerimux/model:*global-hidden-environment-names*
                      :test #'string=)
-            (setf cl-tmux/model:*global-hidden-environment-names*
-                  (delete name cl-tmux/model:*global-hidden-environment-names*
+            (setf nerimux/model:*global-hidden-environment-names*
+                  (delete name nerimux/model:*global-hidden-environment-names*
                           :test #'string=)))
-        (cl-tmux/model:process-set-environment name value))))
+        (nerimux/model:process-set-environment name value))))
     (:target
      (if remove-p
-         (cl-tmux/model:session-unset-environment target-session name)
-         (cl-tmux/model:session-set-environment target-session name value
+         (nerimux/model:session-unset-environment target-session name)
+         (nerimux/model:session-set-environment target-session name value
                                                 :hidden hidden-p)))
     (:session
      (if remove-p
-         (cl-tmux/model:session-unset-environment session name)
-         (cl-tmux/model:session-set-environment session name value
+         (nerimux/model:session-unset-environment session name)
+         (nerimux/model:session-set-environment session name value
                                                 :hidden hidden-p)))))
 
 (defun %cmd-show-environment-arg (session args)
@@ -157,9 +157,9 @@
            (raw-value (format nil "~{~A~^ ~}" (rest positionals)))
            ;; -F: expand the value as a format string before storing.
            (value (if (%flag-present-p flags #\F)
-                      (cl-tmux/format:expand-format
+                      (nerimux/format:expand-format
                        raw-value
-                       (cl-tmux/format:format-context-from-session
+                       (nerimux/format:format-context-from-session
                         session
                         (session-active-window session)
                         (session-active-pane session)))

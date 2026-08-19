@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; render-status-bar, render-session, clear-display, and status-pane indicators
 
@@ -54,10 +54,10 @@
     ;; per call as cl-ppcre's string-accepting regex-replace-all allowed.
     (let ((sgr (cl-regex-kit:compile-regex (format nil "~C\\[[0-9;]*m" #\Escape))))
       (flet ((vis (s) (cl-regex-kit:replace-all sgr s ""))
-             (compose (spec) (cl-tmux/renderer::%compose-aligned-line spec "" 10)))
+             (compose (spec) (nerimux/renderer::%compose-aligned-line spec "" 10)))
         (expect (string= "AB      CD" (vis (compose "AB#[align=right]CD"))))
         (expect (string= "    XX    " (vis (compose "#[align=centre]XX"))))
-        (expect (= 10 (cl-tmux/renderer::%visible-length
+        (expect (= 10 (nerimux/renderer::%visible-length
                        (compose "L#[align=centre]C#[align=right]R")))))))
 
   ;; When status-format[0] is set, the bar renders from that template with
@@ -90,7 +90,7 @@
   ;; (window 1) and never the prompt text — pinning the active/inactive exclusion.
   (it "status-bar-no-prompt-when-inactive"
     (with-minimal-status-bar-options
-      (let ((cl-tmux/prompt:*prompt* nil))
+      (let ((nerimux/prompt:*prompt* nil))
         (let* ((sess (make-renderer-test-session 40 10 :content ""))
                (out  (render-status-bar-output sess 10 40)))
           ;; window-status-current-format renders active window as " 1:1* "
@@ -135,7 +135,7 @@
         ;; highlight.  The renderer now fills the full terminal width with visible
         ;; glyphs and preserves that SGR, so the raw length may exceed WIDTH while
         ;; the on-screen width does not.
-        (expect (<= (cl-tmux/renderer::%visible-length content) width))
+        (expect (<= (nerimux/renderer::%visible-length content) width))
         ;; The full line (left text + gap + time) is longer than the terminal, so
         ;; the HH:MM time string (right portion) is truncated off the visible content.
         ;; We verify this by checking the content is shorter than the full line would be.
@@ -145,8 +145,8 @@
   ;; "LABEL: BUFFER" text — the prompt text appears and the normal
   ;; window-list (1:1*) is absent.
   (it "render-status-bar-active-prompt-replaces-left-segment"
-    (let ((cl-tmux/prompt:*prompt* nil))
-      (cl-tmux/prompt:prompt-start "rename-window" "abc" nil)
+    (let ((nerimux/prompt:*prompt* nil))
+      (nerimux/prompt:prompt-start "rename-window" "abc" nil)
       (unwind-protect
            (let* ((sess (make-renderer-test-session 60 10 :content ""))
                   (out  (render-status-bar-output sess 10 60)))
@@ -154,7 +154,7 @@
              (expect (search "rename-window: abc" out))
              ;; When prompt is active, the window list (1:1*) is suppressed.
              (expect (null (search "1:1*" out))))
-        (cl-tmux/prompt:prompt-clear))))
+        (nerimux/prompt:prompt-clear))))
 
   ;;; ── render-session-to-string (full frame) ───────────────────────────────────
 
@@ -236,9 +236,9 @@
   (it "status-pane-indicator-with-active-pane"
     (let* ((screen (make-screen 10 5))
            (pane   (make-pane :id 7 :x 0 :y 0 :width 10 :height 5 :fd -1 :screen screen))
-           (out    (cl-tmux/renderer::%status-pane-indicator pane)))
+           (out    (nerimux/renderer::%status-pane-indicator pane)))
       (expect (search "#7" out))))
 
   ;; %status-pane-indicator returns the empty string for a NIL pane.
   (it "status-pane-indicator-nil-returns-empty"
-    (expect (string= "" (cl-tmux/renderer::%status-pane-indicator nil)))))
+    (expect (string= "" (nerimux/renderer::%status-pane-indicator nil)))))

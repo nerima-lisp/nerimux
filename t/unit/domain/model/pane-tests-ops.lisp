@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Pane tests - pane/window operations.
 
@@ -64,7 +64,7 @@
   (it "display-panes-overlay-active"
     (with-fake-session (sess :nwindows 1 :npanes 2)
       (let ((*overlay* nil))
-        (cl-tmux::dispatch-command sess :display-panes nil)
+        (nerimux::dispatch-command sess :display-panes nil)
         (assert-overlay-active ":display-panes must activate the overlay"))))
 
   ;;; ── respawn-pane resets fd/pid ───────────────────────────────────────────────

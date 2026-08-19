@@ -19,8 +19,8 @@
 ;; This is the only sibling :use that was measured and kept. The others removed in
 ;; the same change (format, transport, sgr, and both #:cffi forms) turned out to
 ;; need between zero and twenty names.
-(defpackage #:cl-tmux/terminal/actions
-  (:use #:cl #:cl-tmux/terminal/types)
+(defpackage #:nerimux/terminal/actions
+  (:use #:cl #:nerimux/terminal/types)
   (:documentation
    "DOMAIN layer, the BEHAVIOUR half of the terminal emulator.  Every mutation of a
     SCREEN lands here: cursor motion and tab stops, character writing, scrolling and
@@ -107,11 +107,11 @@
    #:set-screen-cwd))
 
 ;; sgr package: apply-sgr + the inverse %pen-to-sgr-params (DECRQSS reports)
-(defpackage #:cl-tmux/terminal/sgr
+(defpackage #:nerimux/terminal/sgr
   (:use #:cl)
   ;; SGR touches exactly one part of a screen -- the pen -- so the list is short
   ;; and, unlike the grid accessors, fixed by ECMA-48 rather than by our struct.
-  (:import-from #:cl-tmux/terminal/types
+  (:import-from #:nerimux/terminal/types
                 ;; Attribute bits (SGR 1-9, 21, 53)
                 #:+attr-bold+
                 #:+attr-dim+
@@ -147,26 +147,26 @@
    #:apply-sgr
    #:%pen-to-sgr-params))
 
-(defpackage #:cl-tmux/terminal/csi
+(defpackage #:nerimux/terminal/csi
   (:use #:cl
-        #:cl-tmux/terminal/types
-        #:cl-tmux/terminal/actions
-        #:cl-tmux/terminal/sgr)
+        #:nerimux/terminal/types
+        #:nerimux/terminal/actions
+        #:nerimux/terminal/sgr)
   (:documentation
    "DOMAIN layer: the CSI rule table.  Maps a parsed control sequence — final byte,
-    private-marker, and parameters — onto the cl-tmux/terminal/actions call it means,
+    private-marker, and parameters — onto the nerimux/terminal/actions call it means,
     and generates the replies the host expects back (DSR/CPR cursor reports, DA1/DA2
     device attributes, DECRQM mode state, XTWINOPS size reports).  Declarative on
     purpose: the sequence set is a specification, not an algorithm.")
   (:export
    #:execute-csi))
 
-(defpackage #:cl-tmux/terminal/parser
+(defpackage #:nerimux/terminal/parser
   (:use #:cl
-        #:cl-tmux/terminal/types
-        #:cl-tmux/terminal/actions
-        #:cl-tmux/terminal/csi)
-  ;; cl-tmux/buffer is used for OSC 52 clipboard paste storage.
+        #:nerimux/terminal/types
+        #:nerimux/terminal/actions
+        #:nerimux/terminal/csi)
+  ;; nerimux/buffer is used for OSC 52 clipboard paste storage.
   ;; We reference it by qualified name to avoid circular deps.
   (:documentation
    "DOMAIN layer: the byte-level VT100 state machine, written in continuation-passing
@@ -190,9 +190,9 @@
    #:csi-final-byte-before-p
    #:csi-final-byte-p))
 
-(defpackage #:cl-tmux/terminal/emulator
+(defpackage #:nerimux/terminal/emulator
   (:use #:cl
-        #:cl-tmux/terminal/types)
+        #:nerimux/terminal/types)
   (:documentation
    "DOMAIN layer: the emulator's entry point, and nothing else.  SCREEN-PROCESS-BYTES
     drives a run of raw PTY octets through the CPS parser loop.  It is a package of
@@ -203,14 +203,14 @@
 
 ;;; ── Terminal umbrella (re-export facade) ─────────────────────────────────
 
-(defpackage #:cl-tmux/terminal
+(defpackage #:nerimux/terminal
   (:use #:cl
-        #:cl-tmux/terminal/types
-        #:cl-tmux/terminal/actions
-        #:cl-tmux/terminal/sgr
-        #:cl-tmux/terminal/csi
-        #:cl-tmux/terminal/parser
-        #:cl-tmux/terminal/emulator)
+        #:nerimux/terminal/types
+        #:nerimux/terminal/actions
+        #:nerimux/terminal/sgr
+        #:nerimux/terminal/csi
+        #:nerimux/terminal/parser
+        #:nerimux/terminal/emulator)
   (:documentation
    "DOMAIN layer: the terminal facade.  The six sub-packages above split the emulator
     by mechanism, which is the right seam for the emulator's own authors and the

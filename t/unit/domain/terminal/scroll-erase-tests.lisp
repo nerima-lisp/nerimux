@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Erase tests for erase.lisp through parser and direct action paths.
 ;;;; Suite: erase.
@@ -70,8 +70,8 @@
            (expand-call (call)
              (destructuring-bind (kind mode) call
                (ecase kind
-                 (:display `(cl-tmux/terminal/actions:erase-display s ,mode))
-                 (:line `(cl-tmux/terminal/actions:erase-line s ,mode)))))
+                 (:display `(nerimux/terminal/actions:erase-display s ,mode))
+                 (:line `(nerimux/terminal/actions:erase-line s ,mode)))))
            (expand-row-string (row expected)
              `(expect (string= ,expected (row-string s ,row))))
            (expand-cell (expected x y)
@@ -94,8 +94,8 @@
                    `(it ,(string-downcase (symbol-name name))
                       (with-screen (s ,width ,height)
                         ,@(mapcar #'expand-setup (case-option options :setup))
-                        (setf (cl-tmux/terminal/types:screen-cursor-x s) ,x
-                              (cl-tmux/terminal/types:screen-cursor-y s) ,y)
+                        (setf (nerimux/terminal/types:screen-cursor-x s) ,x
+                              (nerimux/terminal/types:screen-cursor-y s) ,y)
                         ,(expand-call (case-option options :call))
                         ,@(mapcar #'expand-assertion
                                   (case-option options :assertions)))))))))
@@ -160,32 +160,32 @@
   ;; With scroll-on-clear on, ESC[2J moves the visible content into the scrollback
   ;; before erasing, so a full-screen clear stays in history.
   (it "scroll-on-clear-on-pushes-screen-to-history"
-    (let ((cl-tmux/terminal/actions::*scroll-on-clear-function* (lambda () t)))
+    (let ((nerimux/terminal/actions::*scroll-on-clear-function* (lambda () t)))
       (with-screen (s 5 3)
         (fill-screen s)
-        (expect (null (cl-tmux/terminal/types:screen-scrollback s)))
+        (expect (null (nerimux/terminal/types:screen-scrollback s)))
         (feed s (esc "[2J"))
-        (expect (= 3 (length (cl-tmux/terminal/types:screen-scrollback s))))
+        (expect (= 3 (length (nerimux/terminal/types:screen-scrollback s))))
         (dotimes (y 3)
           (expect (row-blank-p s y))))))
 
   ;; With scroll-on-clear off (no policy installed), ESC[2J erases without pushing to
   ;; the scrollback — the existing default behaviour.
   (it "scroll-on-clear-off-discards-content"
-    (let ((cl-tmux/terminal/actions::*scroll-on-clear-function* nil))
+    (let ((nerimux/terminal/actions::*scroll-on-clear-function* nil))
       (with-screen (s 5 3)
         (fill-screen s)
         (feed s (esc "[2J"))
-        (expect (null (cl-tmux/terminal/types:screen-scrollback s))))))
+        (expect (null (nerimux/terminal/types:screen-scrollback s))))))
 
   ;; scroll-on-clear does not push to history on the alternate screen (no scrollback).
   (it "scroll-on-clear-skips-alternate-screen"
-    (let ((cl-tmux/terminal/actions::*scroll-on-clear-function* (lambda () t)))
+    (let ((nerimux/terminal/actions::*scroll-on-clear-function* (lambda () t)))
       (with-screen (s 5 3)
         (feed s (esc "[?1049h"))
         (fill-screen s)
         (feed s (esc "[2J"))
-        (expect (null (cl-tmux/terminal/types:screen-scrollback s))))))
+        (expect (null (nerimux/terminal/types:screen-scrollback s))))))
 
   (define-direct-erase-cases
     (erase-display-direct-mode-0-from-cy-zero

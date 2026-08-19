@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Screen tests (src/terminal/screen.lisp).
 ;;;; Tests: make-screen construction, grid access, resize, dirty flag,
@@ -17,8 +17,8 @@
          (dotimes (x (screen-width ,s))
            (let ((c (screen-cell ,s x y)))
              (expect (char= #\Space (cell-char c)))
-             (expect (= cl-tmux/terminal/types:+default-color+ (cell-fg c)))
-             (expect (= cl-tmux/terminal/types:+default-color+ (cell-bg c)))))))))
+             (expect (= nerimux/terminal/types:+default-color+ (cell-fg c)))
+             (expect (= nerimux/terminal/types:+default-color+ (cell-bg c)))))))))
 
 ;;; ── SUITE: screen construction ───────────────────────────────────────────────
 
@@ -39,13 +39,13 @@
   ;; A freshly created screen is dirty.
   (it "make-screen-dirty-flag-is-true"
     (with-screen (s 10 5)
-      (expect (cl-tmux/terminal/types:screen-dirty-p s) :to-be-truthy)))
+      (expect (nerimux/terminal/types:screen-dirty-p s) :to-be-truthy)))
 
   ;; The default scroll region spans the full screen height.
   (it "make-screen-scroll-region-is-full-height"
     (with-screen (s 80 24)
-      (expect (= 0  (cl-tmux/terminal/types:screen-scroll-top    s)))
-      (expect (= 23 (cl-tmux/terminal/types:screen-scroll-bottom s)))))
+      (expect (= 0  (nerimux/terminal/types:screen-scroll-top    s)))
+      (expect (= 23 (nerimux/terminal/types:screen-scroll-bottom s)))))
 
   ;; Every cell in a new screen is a space with default attributes.
   (it "make-screen-all-cells-are-blank"
@@ -55,7 +55,7 @@
   ;; The cursor is visible on a fresh screen.
   (it "make-screen-cursor-visible-defaults-true"
     (with-screen (s 10 5)
-      (expect (cl-tmux/terminal/types:screen-cursor-visible s) :to-be-truthy)))
+      (expect (nerimux/terminal/types:screen-cursor-visible s) :to-be-truthy)))
 
   ;; Copy mode is off on a fresh screen.
   (it "make-screen-copy-mode-defaults-false"
@@ -66,12 +66,12 @@
   ;; The response queue is NIL on a fresh screen.
   (it "make-screen-response-queue-starts-empty"
     (with-screen (s 10 5)
-      (expect (null (cl-tmux/terminal/types:screen-response-queue s)))))
+      (expect (null (nerimux/terminal/types:screen-response-queue s)))))
 
   ;; The saved-cursor slot is NIL on a fresh screen.
   (it "make-screen-saved-cursor-starts-nil"
     (with-screen (s 10 5)
-      (expect (null (cl-tmux/terminal/types:screen-saved-cursor s)))))
+      (expect (null (nerimux/terminal/types:screen-saved-cursor s)))))
 
   ;; The scrollback buffer is empty on a fresh screen.
   (it "make-screen-scrollback-starts-empty"
@@ -85,14 +85,14 @@
   ;; screen-p returns T for an object created by make-screen.
   (it "screen-p-returns-true-for-make-screen"
     (let ((s (make-screen 10 5)))
-      (expect (cl-tmux/terminal/types:screen-p s) :to-be-truthy)))
+      (expect (nerimux/terminal/types:screen-p s) :to-be-truthy)))
 
   ;; screen-p returns NIL for non-screen objects.
   (it "screen-p-returns-false-for-non-screen"
-    (expect (cl-tmux/terminal/types:screen-p 42) :to-be-falsy)
-    (expect (cl-tmux/terminal/types:screen-p "hello") :to-be-falsy)
-    (expect (cl-tmux/terminal/types:screen-p nil) :to-be-falsy)
-    (expect (cl-tmux/terminal/types:screen-p (cl-tmux/terminal/types:make-cell)) :to-be-falsy)))
+    (expect (nerimux/terminal/types:screen-p 42) :to-be-falsy)
+    (expect (nerimux/terminal/types:screen-p "hello") :to-be-falsy)
+    (expect (nerimux/terminal/types:screen-p nil) :to-be-falsy)
+    (expect (nerimux/terminal/types:screen-p (nerimux/terminal/types:make-cell)) :to-be-falsy)))
 
 ;;; ── SUITE: %make-screen direct constructor ───────────────────────────────────
 
@@ -101,12 +101,12 @@
   ;; %make-screen with explicit :width/:height/:cells produces the right geometry.
   (it "percent-make-screen-produces-screen-of-correct-dimensions"
     (let* ((w 15) (h 6)
-           (cells (cl-tmux/terminal/types:%make-blank-cells (* w h)))
-           (s (cl-tmux/terminal/types:%make-screen :width w :height h :cells cells
+           (cells (nerimux/terminal/types:%make-blank-cells (* w h)))
+           (s (nerimux/terminal/types:%make-screen :width w :height h :cells cells
                                                     :scroll-bottom (1- h))))
       (expect (= w (screen-width  s)))
       (expect (= h (screen-height s)))
-      (expect (cl-tmux/terminal/types:screen-p s)))))
+      (expect (nerimux/terminal/types:screen-p s)))))
 
 ;;; ── SUITE: screen-cell and setf screen-cell ──────────────────────────────────
 
@@ -121,7 +121,7 @@
   ;; setf screen-cell stores a cell at the given coordinates.
   (it "setf-screen-cell-stores-cell-at-position"
     (with-screen (s 5 3)
-      (let ((new-cell (cl-tmux/terminal/types:make-cell :char #\Z :fg 3 :bg 1)))
+      (let ((new-cell (nerimux/terminal/types:make-cell :char #\Z :fg 3 :bg 1)))
         (setf (screen-cell s 2 1) new-cell)
         (let ((read-back (screen-cell s 2 1)))
           (expect (char= #\Z (cell-char read-back)))
@@ -145,7 +145,7 @@
         (destructuring-bind (x y ch desc) case
           (declare (ignore desc))
           (setf (screen-cell s x y)
-                (cl-tmux/terminal/types:make-cell :char ch))
+                (nerimux/terminal/types:make-cell :char ch))
           (expect (char= ch (char-at s x y))))))))
 
 ;;; ── SUITE: cursor accessors ──────────────────────────────────────────────────
@@ -210,19 +210,19 @@
   (it "resize-updates-scroll-region-to-full-height"
     (with-screen (s 10 10)
       ;; Set a narrow scroll region first
-      (setf (cl-tmux/terminal/types:screen-scroll-top    s) 2
-            (cl-tmux/terminal/types:screen-scroll-bottom s) 7)
+      (setf (nerimux/terminal/types:screen-scroll-top    s) 2
+            (nerimux/terminal/types:screen-scroll-bottom s) 7)
       (screen-resize s 10 15)
-      (expect (= 0  (cl-tmux/terminal/types:screen-scroll-top    s)))
-      (expect (= 14 (cl-tmux/terminal/types:screen-scroll-bottom s)))))
+      (expect (= 0  (nerimux/terminal/types:screen-scroll-top    s)))
+      (expect (= 14 (nerimux/terminal/types:screen-scroll-bottom s)))))
 
   ;; screen-resize always marks the screen dirty.
   (it "resize-marks-screen-dirty"
     (with-screen (s 10 5)
       (screen-clear-dirty s)
-      (expect (cl-tmux/terminal/types:screen-dirty-p s) :to-be-falsy)
+      (expect (nerimux/terminal/types:screen-dirty-p s) :to-be-falsy)
       (screen-resize s 20 8)
-      (expect (cl-tmux/terminal/types:screen-dirty-p s) :to-be-truthy)))
+      (expect (nerimux/terminal/types:screen-dirty-p s) :to-be-truthy)))
 
   ;; Resizing smaller keeps the overlapping top-left region of content.
   (it "resize-smaller-preserves-top-left-content"
@@ -240,13 +240,13 @@
   (it "copy-overlapping-cells-copies-top-left-rectangle"
     (with-screen (s 4 4)
       (let ((old-width 3)
-            (old-cells (cl-tmux/terminal/types:%make-blank-cells 9)))
+            (old-cells (nerimux/terminal/types:%make-blank-cells 9)))
         ;; Old grid (3x3, row-major): "ABC" / "DEF" / "GHI"
         (loop for i from 0
               for ch across "ABCDEFGHI"
               do (setf (aref old-cells i)
-                       (cl-tmux/terminal/types:make-cell :char ch)))
-        (cl-tmux/terminal/types::%copy-overlapping-cells s old-cells old-width 2 2)
+                       (nerimux/terminal/types:make-cell :char ch)))
+        (nerimux/terminal/types::%copy-overlapping-cells s old-cells old-width 2 2)
         (expect (char= #\A (char-at s 0 0)))
         (expect (char= #\B (char-at s 1 0)))
         (expect (char= #\D (char-at s 0 1)))
@@ -272,4 +272,4 @@
       (expect (<= (screen-cursor-x s) 19))
       (expect (<= (screen-cursor-y s) 7))
       ;; The alt-cells vector is still present (we did not exit alt-screen).
-      (expect (cl-tmux/terminal/types:screen-alt-cells s) :to-be-truthy))))
+      (expect (nerimux/terminal/types:screen-alt-cells s) :to-be-truthy))))

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/buffer)
+(in-package #:nerimux/buffer)
 
 (defconstant +default-buffer-limit+ 50
   "Fallback capacity for the paste-buffer ring when buffer-limit has not been configured.")
@@ -17,7 +17,7 @@
 (defun %buffer-limit ()
   "Return the configured buffer-limit, defaulting to +default-buffer-limit+ when
    options are not yet initialised."
-  (or (ignore-errors (cl-tmux/options:get-option "buffer-limit"))
+  (or (ignore-errors (nerimux/options:get-option "buffer-limit"))
       +default-buffer-limit+))
 
 (defun %next-auto-buffer-name ()
@@ -122,7 +122,7 @@
    application clipboard writes entirely.  \"on\"/\"external\" (the default) accept
    them.  The gate lives here (not in the terminal parser) so the parser layer
    stays decoupled from the options layer."
-  (unless (string-equal (or (ignore-errors (cl-tmux/options:get-option "set-clipboard"))
+  (unless (string-equal (or (ignore-errors (nerimux/options:get-option "set-clipboard"))
                             "on")
                         "off")
     (add-paste-buffer text)))
@@ -134,7 +134,7 @@
    The handler honours set-clipboard (off → ignore inbound writes).
    Called once at load time; separated from top-level to make the coupling explicit
    and allow re-initialisation if the handler variable is reset."
-  (setf cl-tmux/terminal/parser:*osc52-handler* #'%osc52-inbound-clipboard))
+  (setf nerimux/terminal/parser:*osc52-handler* #'%osc52-inbound-clipboard))
 
 ;; Wire OSC 52 handler at module load time via an explicit named call.
 (initialize-osc52-handler)

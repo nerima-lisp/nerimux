@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Tests for bootstrap environment initialization and teardown helpers.
 
@@ -13,13 +13,13 @@
                  (""                   ""       "empty string → empty string")))
       (destructuring-bind (input expected desc) c
         (declare (ignore desc))
-        (expect (string= expected (cl-tmux::%hostname-short input))))))
+        (expect (string= expected (nerimux::%hostname-short input))))))
 
   ;; %safe-getenv returns a string for any variable name.
   (it "safe-getenv-returns-string"
-    (let ((result (cl-tmux::%safe-getenv "PATH")))
+    (let ((result (nerimux::%safe-getenv "PATH")))
       (expect (stringp result)))
-    (let ((result (cl-tmux::%safe-getenv "NONEXISTENT_VAR_XYZ_123")))
+    (let ((result (nerimux::%safe-getenv "NONEXISTENT_VAR_XYZ_123")))
       (expect (stringp result))
       (expect (string= "" result))))
 
@@ -33,21 +33,21 @@
                  ("/usr/bin/emacs"   "emacs")
                  ("emacsclient -c"   "emacs")))
       (destructuring-bind (input expected) c
-        (expect (string= expected (cl-tmux::%mode-keys-from-editor-string input)))))
-    (expect (null (cl-tmux::%mode-keys-from-editor-string nil)))
-    (expect (null (cl-tmux::%mode-keys-from-editor-string ""))))
+        (expect (string= expected (nerimux::%mode-keys-from-editor-string input)))))
+    (expect (null (nerimux::%mode-keys-from-editor-string nil)))
+    (expect (null (nerimux::%mode-keys-from-editor-string ""))))
 
   ;; %build-hostname-context returns a plist with :hostname, :term, :version, etc.
   (it "build-hostname-context-has-expected-keys"
-    (let ((ctx (cl-tmux::%build-hostname-context)))
+    (let ((ctx (nerimux::%build-hostname-context)))
       (expect (stringp (getf ctx :hostname)))
       (expect (stringp (getf ctx :version)))
       (expect (stringp (getf ctx :term)))
-      (expect (string= (cl-tmux/version:version-string) (getf ctx :version)))))
+      (expect (string= (nerimux/version:version-string) (getf ctx :version)))))
 
   ;; %make-format-condition-evaluator returns a callable closure that returns a string.
   (it "make-format-condition-evaluator"
-    (let ((evaluator (cl-tmux::%make-format-condition-evaluator)))
+    (let ((evaluator (nerimux::%make-format-condition-evaluator)))
       (expect (functionp evaluator))
       (expect (stringp (funcall evaluator "1")))))
 
@@ -56,7 +56,7 @@
   ;; %enable-negotiated-terminal-features is defined as a function (extracted from
   ;; run-standalone's raw-mode setup).
   (it "enable-negotiated-terminal-features-is-fbound"
-    (expect (fboundp 'cl-tmux::%enable-negotiated-terminal-features)))
+    (expect (fboundp 'nerimux::%enable-negotiated-terminal-features)))
 
   ;; %enable-negotiated-terminal-features only emits mouse/focus escape sequences
   ;; when the corresponding session option is on; with mouse, extended-keys, and
@@ -64,7 +64,7 @@
   (it "enable-negotiated-terminal-features-honors-option-gating"
     (with-isolated-options ("mouse" nil "extended-keys" "off" "focus-events" nil)
       (let ((output (with-output-to-string (*standard-output*)
-                      (cl-tmux::%enable-negotiated-terminal-features))))
+                      (nerimux::%enable-negotiated-terminal-features))))
         (expect (zerop (length output))))))
 
   ;; %enable-negotiated-terminal-features emits an escape sequence when the mouse
@@ -72,7 +72,7 @@
   (it "enable-negotiated-terminal-features-emits-mouse-sequence-when-on"
     (with-isolated-options ("mouse" t "extended-keys" "off" "focus-events" nil)
       (let ((output (with-output-to-string (*standard-output*)
-                      (cl-tmux::%enable-negotiated-terminal-features))))
+                      (nerimux::%enable-negotiated-terminal-features))))
         (expect (plusp (length output)))
         (expect (find #\Escape output)))))
 
@@ -84,7 +84,7 @@
   (it "close-all-pane-ptys-closes-every-pane-fd"
     (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
     (let ((session (create-initial-session 24 80)))
-      (cl-tmux::%close-all-pane-ptys session)
+      (nerimux::%close-all-pane-ptys session)
       (dolist (pane (all-panes session))
         (signals sb-posix:syscall-error
           (sb-posix:close (pane-fd pane))))))
@@ -94,8 +94,8 @@
   (it "close-all-pane-ptys-ignores-already-closed-fds"
     (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
     (let ((session (create-initial-session 24 80)))
-      (cl-tmux::%close-all-pane-ptys session)
-      (finishes (cl-tmux::%close-all-pane-ptys session)
+      (nerimux::%close-all-pane-ptys session)
+      (finishes (nerimux::%close-all-pane-ptys session)
                 "a second call on already-closed fds must not error")))
 
   ;;; ── %cleanup-after-session ────────────────────────────────────────────────────
@@ -106,11 +106,11 @@
     (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
     (with-isolated-options ()
       (let ((session (create-initial-session 24 80))
-            (cl-tmux::*status-timer* nil)
-            (cl-tmux::*running* t))
-        (cl-tmux::%cleanup-after-session session nil)
-        (expect (null cl-tmux::*status-timer*))
-        (finishes (cl-tmux::%close-all-pane-ptys session)
+            (nerimux::*status-timer* nil)
+            (nerimux::*running* t))
+        (nerimux::%cleanup-after-session session nil)
+        (expect (null nerimux::*status-timer*))
+        (finishes (nerimux::%close-all-pane-ptys session)
                   "panes must already have closed fds (idempotent close)"))))
 
   ;;; ── %initialize-session-environment ───────────────────────────────────────────
@@ -121,21 +121,21 @@
   (it "initialize-session-environment-wires-condition-evaluator-and-loads-config"
     (with-isolated-options ()
       (let ((load-called nil)
-            (cl-tmux/config:*config-condition-evaluator*
-              cl-tmux/config:*config-condition-evaluator*)
-            (cl-tmux/terminal:*history-limit-function*
-              cl-tmux/terminal:*history-limit-function*)
-            (cl-tmux/terminal:*alternate-screen-enabled-function*
-              cl-tmux/terminal:*alternate-screen-enabled-function*)
-            (cl-tmux/terminal:*scroll-on-clear-function*
-              cl-tmux/terminal:*scroll-on-clear-function*))
+            (nerimux/config:*config-condition-evaluator*
+              nerimux/config:*config-condition-evaluator*)
+            (nerimux/terminal:*history-limit-function*
+              nerimux/terminal:*history-limit-function*)
+            (nerimux/terminal:*alternate-screen-enabled-function*
+              nerimux/terminal:*alternate-screen-enabled-function*)
+            (nerimux/terminal:*scroll-on-clear-function*
+              nerimux/terminal:*scroll-on-clear-function*))
         (with-stubbed-fdefinition
-            ((cl-tmux::load-config-file
+            ((nerimux::load-config-file
               (lambda (&rest args) (declare (ignore args)) (setf load-called t) 0)))
-          (cl-tmux::%initialize-session-environment)
+          (nerimux::%initialize-session-environment)
           (expect load-called :to-be-truthy)
-          (expect (functionp cl-tmux/config:*config-condition-evaluator*))
-          (expect (functionp cl-tmux/terminal:*history-limit-function*))))))
+          (expect (functionp nerimux/config:*config-condition-evaluator*))
+          (expect (functionp nerimux/terminal:*history-limit-function*))))))
 
   ;;; ── %apply-editor-mode-keys ────────────────────────────────────────────────────
 
@@ -144,21 +144,21 @@
   (it "apply-editor-mode-keys-sets-vi-from-visual-env"
     (with-isolated-options ()
       (with-stubbed-fdefinition
-          ((cl-tmux::%safe-getenv
+          ((nerimux::%safe-getenv
             (lambda (name) (if (string= name "VISUAL") "/usr/bin/vim" ""))))
-        (cl-tmux::%apply-editor-mode-keys)
-        (expect (string= "vi" (cl-tmux/options:get-option "status-keys")))
-        (expect (string= "vi" (cl-tmux/options:get-option "mode-keys"))))))
+        (nerimux::%apply-editor-mode-keys)
+        (expect (string= "vi" (nerimux/options:get-option "status-keys")))
+        (expect (string= "vi" (nerimux/options:get-option "mode-keys"))))))
 
   ;; %apply-editor-mode-keys leaves the registry defaults untouched when neither
   ;; $VISUAL nor $EDITOR is set.
   (it "apply-editor-mode-keys-no-op-when-no-editor-env"
     (with-isolated-options ()
-      (let ((before (cl-tmux/options:get-option "mode-keys")))
+      (let ((before (nerimux/options:get-option "mode-keys")))
         (with-stubbed-fdefinition
-            ((cl-tmux::%safe-getenv (lambda (name) (declare (ignore name)) "")))
-          (cl-tmux::%apply-editor-mode-keys)
-          (expect (equal before (cl-tmux/options:get-option "mode-keys")))))))
+            ((nerimux::%safe-getenv (lambda (name) (declare (ignore name)) "")))
+          (nerimux::%apply-editor-mode-keys)
+          (expect (equal before (nerimux/options:get-option "mode-keys")))))))
 
   ;;; ── %die-with-message ─────────────────────────────────────────────────────────
 
@@ -168,35 +168,35 @@
     (let (exit-code (output (make-string-output-stream)))
       (let ((*error-output* output))
         (with-stubbed-exit exit-code
-          (cl-tmux::%die-with-message "boom: ~A~%" "reason")))
+          (nerimux::%die-with-message "boom: ~A~%" "reason")))
       (expect (eql 1 exit-code))
       (expect (search "boom: reason" (get-output-stream-string output)))))
 
   ;;; ── %wire-option-callbacks ────────────────────────────────────────────────────
 
-  ;; %wire-option-callbacks wires cl-tmux/terminal:*history-limit-function*.
+  ;; %wire-option-callbacks wires nerimux/terminal:*history-limit-function*.
   (it "wire-option-callbacks-sets-history-limit-function"
-    (let ((old cl-tmux/terminal:*history-limit-function*))
+    (let ((old nerimux/terminal:*history-limit-function*))
       (unwind-protect
            (progn
-             (cl-tmux::%wire-option-callbacks)
-             (expect (functionp cl-tmux/terminal:*history-limit-function*)))
-        (setf cl-tmux/terminal:*history-limit-function* old))))
+             (nerimux::%wire-option-callbacks)
+             (expect (functionp nerimux/terminal:*history-limit-function*)))
+        (setf nerimux/terminal:*history-limit-function* old))))
 
-  ;; %wire-option-callbacks wires cl-tmux/terminal:*alternate-screen-enabled-function*.
+  ;; %wire-option-callbacks wires nerimux/terminal:*alternate-screen-enabled-function*.
   (it "wire-option-callbacks-sets-alternate-screen-function"
-    (let ((old cl-tmux/terminal:*alternate-screen-enabled-function*))
+    (let ((old nerimux/terminal:*alternate-screen-enabled-function*))
       (unwind-protect
            (progn
-             (cl-tmux::%wire-option-callbacks)
-             (expect (functionp cl-tmux/terminal:*alternate-screen-enabled-function*)))
-        (setf cl-tmux/terminal:*alternate-screen-enabled-function* old))))
+             (nerimux::%wire-option-callbacks)
+             (expect (functionp nerimux/terminal:*alternate-screen-enabled-function*)))
+        (setf nerimux/terminal:*alternate-screen-enabled-function* old))))
 
-  ;; %wire-option-callbacks wires cl-tmux/terminal:*scroll-on-clear-function*.
+  ;; %wire-option-callbacks wires nerimux/terminal:*scroll-on-clear-function*.
   (it "wire-option-callbacks-sets-scroll-on-clear-function"
-    (let ((old cl-tmux/terminal:*scroll-on-clear-function*))
+    (let ((old nerimux/terminal:*scroll-on-clear-function*))
       (unwind-protect
            (progn
-             (cl-tmux::%wire-option-callbacks)
-             (expect (functionp cl-tmux/terminal:*scroll-on-clear-function*)))
-        (setf cl-tmux/terminal:*scroll-on-clear-function* old)))))
+             (nerimux::%wire-option-callbacks)
+             (expect (functionp nerimux/terminal:*scroll-on-clear-function*)))
+        (setf nerimux/terminal:*scroll-on-clear-function* old)))))

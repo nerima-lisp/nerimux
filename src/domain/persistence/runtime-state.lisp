@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/persistence)
+(in-package #:nerimux/persistence)
 
 (defconstant +runtime-snapshot-version+ 1)
 

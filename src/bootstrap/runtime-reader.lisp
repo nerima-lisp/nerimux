@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; PTY reader thread — CPS state machine.
 ;;;;
@@ -40,11 +40,11 @@
           (when (pane-pipe-fd pane)
             (pipe-pane-write pane bytes))
           (pane-feed pane bytes)
-          (cl-tmux/model:pane-mark-output pane bytes)
+          (nerimux/model:pane-mark-output pane bytes)
           (when (find 7 bytes)
-            (cl-tmux/model:pane-mark-bell pane))
-          (cl-tmux/hooks:run-hooks cl-tmux/hooks:+hook-pane-output+ pane bytes)
-          (%update-window-on-pane-output (cl-tmux/model:pane-window pane) pane)
+            (nerimux/model:pane-mark-bell pane))
+          (nerimux/hooks:run-hooks nerimux/hooks:+hook-pane-output+ pane bytes)
+          (%update-window-on-pane-output (nerimux/model:pane-window pane) pane)
           (%mark-dirty)
           #'reader-idle-state))))
 
@@ -69,7 +69,7 @@
    When 'remain-on-exit' is set, write a notice to the pane screen and
    transition to reader-remain-on-exit-state so the pane stays visible.
    Otherwise return NIL to stop the reader loop immediately."
-  (cl-tmux/hooks:run-hooks cl-tmux/hooks:+hook-pane-exited+ pane)
+  (nerimux/hooks:run-hooks nerimux/hooks:+hook-pane-exited+ pane)
   ;; The child has exited and the master fd is now at EOF.  Mark the pane DEAD:
   ;; close the master fd (nothing else closes it on the remain-on-exit path — a
   ;; leak) and reset pane-fd/pane-pid to -1.  #{pane_dead} keys on (<= pane-fd 0)
@@ -83,28 +83,28 @@
     ;; exit code / signal / time drive #{pane_dead_status}/#{pane_dead_signal}/
     ;; #{pane_dead_time} and the remain-on-exit banner.
     (multiple-value-bind (code kind)
-        (ignore-errors (cl-tmux/pty:pty-child-exit-status (pane-fd pane)))
+        (ignore-errors (nerimux/pty:pty-child-exit-status (pane-fd pane)))
       (when code
         (ecase kind
-          (:exited   (setf (cl-tmux/model:pane-dead-status pane) code))
-          (:signaled (setf (cl-tmux/model:pane-dead-signal pane) code))))
-      (cl-tmux/model:pane-mark-process-exit
+          (:exited   (setf (nerimux/model:pane-dead-status pane) code))
+          (:signaled (setf (nerimux/model:pane-dead-signal pane) code))))
+      (nerimux/model:pane-mark-process-exit
        pane
        :status (and (eq kind :exited) code)
        :signal (and (eq kind :signaled) code)))
-    (setf (cl-tmux/model:pane-dead-time pane) (get-universal-time))
+    (setf (nerimux/model:pane-dead-time pane) (get-universal-time))
     (close-pane-pty pane)
     (setf (pane-fd pane) -1
           (pane-pid pane) -1))
   (let ((remain-on-exit
-          (handler-case (cl-tmux/options:get-option-for-context "remain-on-exit" :pane pane)
+          (handler-case (nerimux/options:get-option-for-context "remain-on-exit" :pane pane)
             (error () nil))))
     (when remain-on-exit
       ;; Write the remain-on-exit-format banner (reverse-video) to the pane screen.
       (%write-remain-on-exit-banner pane)
       ;; tmux fires pane-died (in addition to the unconditional pane-exited above)
       ;; only on the remain-on-exit branch, where the dead pane stays visible.
-      (cl-tmux/hooks:run-hooks cl-tmux/hooks:+hook-pane-died+ pane)
+      (nerimux/hooks:run-hooks nerimux/hooks:+hook-pane-died+ pane)
       (%mark-dirty)
       ;; Return the parking state: the driver loop calls it on each tick.
       #'reader-remain-on-exit-state)))

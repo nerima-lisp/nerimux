@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/config)
+(in-package #:nerimux/config)
 
 ;;; source-file directive handling.
 
@@ -18,7 +18,7 @@
 (defun %source-file-report-missing (path)
   "Report tmux-style source-file diagnostics for missing paths."
   (ignore-errors
-    (let ((fn (find-symbol "ADD-MESSAGE-LOG" "CL-TMUX")))
+    (let ((fn (find-symbol "ADD-MESSAGE-LOG" "NERIMUX")))
       (when (and fn (fboundp fn))
         (funcall fn (format nil "No such file or directory: ~A" path))))))
 
@@ -55,7 +55,7 @@
   "Resolve one source-file positional RAW to its on-disk path."
   (%expand-leading-tilde
    (if format-p
-       (or (ignore-errors (cl-tmux/format:expand-format raw nil)) raw)
+       (or (ignore-errors (nerimux/format:expand-format raw nil)) raw)
        raw)))
 
 (defun %source-file-glob-matches (expanded quiet)

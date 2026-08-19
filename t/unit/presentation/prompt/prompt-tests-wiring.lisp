@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Wiring and display tests split out from prompt-tests.lisp so the base file
 ;;;; stays focused on prompt state, cursor, and kill/edit behaviour.
@@ -11,10 +11,10 @@
   (it "handle-prompt-key-types-and-applies"
     (with-rename-window (win)
       (prompt-start "rename-window" "" (lambda (name) (rename-window win name)))
-      (cl-tmux::handle-prompt-key (char-code #\n))
-      (cl-tmux::handle-prompt-key (char-code #\e))
-      (cl-tmux::handle-prompt-key (char-code #\w))
-      (cl-tmux::handle-prompt-key 13)            ; Enter
+      (nerimux::handle-prompt-key (char-code #\n))
+      (nerimux::handle-prompt-key (char-code #\e))
+      (nerimux::handle-prompt-key (char-code #\w))
+      (nerimux::handle-prompt-key 13)            ; Enter
       (expect (string= "new" (window-name win)))
       (expect (null (prompt-active-p)))))
 
@@ -22,8 +22,8 @@
   (it "handle-prompt-key-escape-cancels"
     (with-rename-window (win)
       (prompt-start "rename-window" "old" (lambda (name) (rename-window win name)))
-      (cl-tmux::handle-prompt-key (char-code #\x))
-      (cl-tmux::handle-prompt-key 27)            ; Esc
+      (nerimux::handle-prompt-key (char-code #\x))
+      (nerimux::handle-prompt-key 27)            ; Esc
       (expect (null (prompt-active-p)))
       (expect (string= "old" (window-name win)))))
 
@@ -32,7 +32,7 @@
     (dolist (byte '(127 8))
       (with-clean-prompt
         (prompt-start "rename-window" "ab" (make-noop-submit))
-        (cl-tmux::handle-prompt-key byte)
+        (nerimux::handle-prompt-key byte)
         (expect (string= "a" (prompt-buffer *prompt*))))))
 
   ;;; -- handle-prompt-key edge bytes (new coverage) -----------------------------
@@ -42,17 +42,17 @@
   (it "handle-prompt-key-ignores-control-byte"
     (with-clean-prompt
       (prompt-start "rename-window" "ab" (make-noop-submit))
-      (cl-tmux::handle-prompt-key 9)              ; Tab -- matches no clause
+      (nerimux::handle-prompt-key 9)              ; Tab -- matches no clause
       (expect (string= "ab" (prompt-buffer *prompt*)))
       (expect (prompt-active-p))
-      (expect (eq t cl-tmux::*dirty*))))
+      (expect (eq t nerimux::*dirty*))))
 
   ;; Enter on an empty buffer dismisses the prompt but does NOT rename the window
   ;; because rename-window ignores empty strings (matching real tmux behaviour).
   (it "handle-prompt-key-enter-empty-is-noop-for-rename"
     (with-rename-window (win)
       (prompt-start "rename-window" "" (lambda (name) (rename-window win name)))
-      (cl-tmux::handle-prompt-key 13)
+      (nerimux::handle-prompt-key 13)
       (expect (string= "old" (window-name win)))
       (expect (null (prompt-active-p)))))
 
@@ -61,7 +61,7 @@
     (with-clean-prompt
       (prompt-start "p" "hello" (make-noop-submit))
       (expect (prompt-active-p))
-      (cl-tmux::handle-prompt-key 3)   ; byte 3 = C-c
+      (nerimux::handle-prompt-key 3)   ; byte 3 = C-c
       (expect (not (prompt-active-p)))))
 
   ;;; -- Status-bar display ------------------------------------------------------

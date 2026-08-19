@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; renderer-pane tests — part C: %apply-border-style branch coverage,
 ;;;; draw-clock, render-pane-clock-mode, draw-pane-number, in-sel-branch.
@@ -16,7 +16,7 @@
   (defun %border-style-output (style)
     "Return the string emitted by %apply-border-style for STYLE."
     (with-output-to-string (s)
-      (cl-tmux/renderer::%apply-border-style s style)))
+      (nerimux/renderer::%apply-border-style s style)))
 
   ;; NIL and "default" styles emit only the reset SGR (ESC[0m).
   (it "apply-border-style-resets-table"
@@ -31,8 +31,8 @@
   (it "pane-border-style-applied-directly"
     (with-isolated-options ("pane-border-style" "fg=red"
                             "pane-active-border-style" "fg=green,bg=black")
-      (let ((normal (cl-tmux/options:get-option "pane-border-style" ""))
-            (active (cl-tmux/options:get-option "pane-active-border-style" "")))
+      (let ((normal (nerimux/options:get-option "pane-border-style" ""))
+            (active (nerimux/options:get-option "pane-active-border-style" "")))
         (expect (search "fg=red" normal))
         (expect (search "fg=green" active))
         (expect (search "bg=black" active)))))
@@ -40,7 +40,7 @@
   ;; mode-style is read directly from the global option (no deprecated-option fold-in).
   (it "mode-style-applied-directly"
     (with-isolated-options ("mode-style" "fg=black,bg=yellow,bold")
-      (let ((eff (cl-tmux/options:get-option "mode-style" "")))
+      (let ((eff (nerimux/options:get-option "mode-style" "")))
         (expect (search "fg=black" eff))
         (expect (search "bg=yellow" eff))
         (expect (search "bold" eff)))))
@@ -67,21 +67,21 @@
   ;; pane that is wide and tall enough.
   (it "draw-clock-to-screen-emits-digits"
     (let ((out (with-output-to-string (s)
-                 (cl-tmux/renderer::draw-clock-to-screen s 0 0 20 6))))
+                 (nerimux/renderer::draw-clock-to-screen s 0 0 20 6))))
       (expect (plusp (length out)))
       (expect (find #\█ out))))
 
   ;; draw-clock-to-screen produces no output when the pane is too narrow (< 13 cols).
   (it "draw-clock-to-screen-too-small-emits-nothing"
     (let ((out (with-output-to-string (s)
-                 (cl-tmux/renderer::draw-clock-to-screen s 0 0 5 3))))
+                 (nerimux/renderer::draw-clock-to-screen s 0 0 5 3))))
       (expect (string= "" out))))
 
   ;; When *clock-mode-pane-id* matches the pane id, render-pane draws the clock overlay.
   (it "render-pane-clock-mode-overlay"
     (with-copy-mode-render-fixture (sess pane screen 20 6)
       (declare (ignore screen))
-      (let ((cl-tmux::*clock-mode-pane-id* (pane-id pane)))
+      (let ((nerimux::*clock-mode-pane-id* (pane-id pane)))
         (let ((out (render-pane-output sess pane)))
           (expect (find #\█ out))))))
 
@@ -89,7 +89,7 @@
   (it "render-pane-no-clock-when-id-mismatch"
     (with-copy-mode-render-fixture (sess pane screen 20 6)
       (declare (ignore screen))
-      (let ((cl-tmux::*clock-mode-pane-id* 99))
+      (let ((nerimux::*clock-mode-pane-id* 99))
         (let ((out (render-pane-output sess pane)))
           (expect (null (find #\█ out)))))))
 
@@ -109,7 +109,7 @@
     (with-copy-mode-render-fixture (sess pane screen 20 6
                                     :position-format "COPY-BANNER")
       (setf (screen-copy-mode-p screen) t
-            (cl-tmux/terminal/types:screen-copy-hide-position screen) t)
+            (nerimux/terminal/types:screen-copy-hide-position screen) t)
       (let ((out (render-pane-output sess pane)))
         (expect (null (search "COPY-BANNER" out))))))
 
@@ -178,7 +178,7 @@
                                     :content "ABCDEFGH"
                                     :options '("copy-mode-line-numbers" "absolute"))
       (setf (screen-copy-mode-p screen) t
-            (cl-tmux/terminal/types:screen-copy-mode-entered-by-mouse-p screen) t)
+            (nerimux/terminal/types:screen-copy-mode-entered-by-mouse-p screen) t)
       (let ((vis (%strip-csi-sequences (render-pane-output sess pane))))
         (expect (string= "ABCDEFGH" vis)))))
 
@@ -200,16 +200,16 @@
   ;; clock-mode-style 24 (the default) leaves the hour unchanged.
   (it "clock-display-hour-24-hour-default"
     (with-isolated-options ()
-      (expect (= 13 (cl-tmux/renderer::%clock-display-hour 13)))
-      (expect (= 0  (cl-tmux/renderer::%clock-display-hour 0)))))
+      (expect (= 13 (nerimux/renderer::%clock-display-hour 13)))
+      (expect (= 0  (nerimux/renderer::%clock-display-hour 0)))))
 
   ;; clock-mode-style 12 converts to a 12-hour clock (0→12, 13→1, 12→12, 23→11).
   (it "clock-display-hour-12-hour"
     (with-isolated-options ("clock-mode-style" 12)
-      (expect (= 12 (cl-tmux/renderer::%clock-display-hour 0)))
-      (expect (= 1  (cl-tmux/renderer::%clock-display-hour 13)))
-      (expect (= 12 (cl-tmux/renderer::%clock-display-hour 12)))
-      (expect (= 11 (cl-tmux/renderer::%clock-display-hour 23)))))
+      (expect (= 12 (nerimux/renderer::%clock-display-hour 0)))
+      (expect (= 1  (nerimux/renderer::%clock-display-hour 13)))
+      (expect (= 12 (nerimux/renderer::%clock-display-hour 12)))
+      (expect (= 11 (nerimux/renderer::%clock-display-hour 23)))))
 
   ;; clock-mode-colour maps to its foreground SGR code; an unknown name falls back
   ;; to bright cyan (96).
@@ -220,14 +220,14 @@
       (destructuring-bind (colour expected desc) c
         (declare (ignore desc))
         (with-isolated-options ("clock-mode-colour" colour)
-          (expect (string= expected (cl-tmux/renderer::%clock-face-sgr)))))))
+          (expect (string= expected (nerimux/renderer::%clock-face-sgr)))))))
 
   ;;; -- display-panes per-pane big numbers (C-b q) ------------------------------
 
   ;; %draw-pane-number-to-screen emits block-element digits for a pane number.
   (it "draw-pane-number-emits-big-digits"
     (let ((out (with-output-to-string (s)
-                 (cl-tmux/renderer::%draw-pane-number-to-screen s 0 0 20 6 7 nil))))
+                 (nerimux/renderer::%draw-pane-number-to-screen s 0 0 20 6 7 nil))))
       (expect (find #\█ out))))
 
   ;; %draw-pane-number-to-screen colours the active pane with display-panes-active-
@@ -236,16 +236,16 @@
     (with-isolated-options ("display-panes-colour" "green"
                             "display-panes-active-colour" "red")
       (let ((inactive (with-output-to-string (s)
-                        (cl-tmux/renderer::%draw-pane-number-to-screen s 0 0 20 6 1 nil)))
+                        (nerimux/renderer::%draw-pane-number-to-screen s 0 0 20 6 1 nil)))
             (active   (with-output-to-string (s)
-                        (cl-tmux/renderer::%draw-pane-number-to-screen s 0 0 20 6 1 t))))
+                        (nerimux/renderer::%draw-pane-number-to-screen s 0 0 20 6 1 t))))
         (expect (search (format nil "~C[32m" #\Escape) inactive))
         (expect (search (format nil "~C[31m" #\Escape) active)))))
 
   ;; %draw-pane-number-to-screen renders nothing in a pane smaller than 3x3.
   (it "draw-pane-number-too-small-emits-nothing"
     (expect (string= "" (with-output-to-string (s)
-                      (cl-tmux/renderer::%draw-pane-number-to-screen s 0 0 2 2 1 nil)))))
+                      (nerimux/renderer::%draw-pane-number-to-screen s 0 0 2 2 1 nil)))))
 
   ;;; -- in-sel branch coverage via render-pane ----------------------------------
 
@@ -316,7 +316,7 @@
                                               :cursor-row 1
                                               :cursor-col 3
                                               :selecting-p nil)
-          (cl-tmux/commands::copy-mode-set-mark screen)
+          (nerimux/commands::copy-mode-set-mark screen)
           (let ((out (render-pane-output sess pane)))
             (expect (= 1 (%count-substring "38;5;88" out)))
             (expect (= 1 (%count-substring "48;5;172" out)))

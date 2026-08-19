@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 (declaim (special *clients*))
 
@@ -36,7 +36,7 @@
        (let ((n (%parse-integer-or-nil target-str)))
          (if n
              (find n wins :key (lambda (w)
-                                 (cl-tmux/model:session-window-index session w)))
+                                 (nerimux/model:session-window-index session w)))
              (find target-str wins :key #'window-name :test #'string-equal)))))))
 
 (defun %resolve-client-target (target-str)

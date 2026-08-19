@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; -- list-sessions/windows/panes/clients %cmd-* handlers ---------------------
 
@@ -53,7 +53,7 @@
    -F format expands tmux client variables such as #{client_name},
    #{client_width}, #{client_height}, and #{client_session}.
    -f filter keeps expanded rows containing FILTER, case-insensitively.
-   cl-tmux currently broadcasts one active session to all attached clients, so
+   nerimux currently broadcasts one active session to all attached clients, so
    -t selects the session used for format expansion rather than filtering a
    per-client session list."
   (flags positionals "Fft" :allowed-flags (#\F #\f #\t) :max-positionals 0

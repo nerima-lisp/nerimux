@@ -14,7 +14,7 @@
 ;;;;   copy_mode(cancel, Screen)          :- ...
 ;;;;   copy_mode(yank, Screen)            :- ..., cancel, exit.
 
-(in-package #:cl-tmux/dataflow)
+(in-package #:nerimux/dataflow)
 
 (defun copy-mode-lifecycle-machine ()
   "Return a fresh cl-dataflow-kit state machine for the copy-mode lifecycle,
@@ -36,8 +36,8 @@
    \"selecting\"), read directly off SCREEN's own copy-mode-p / copy-selecting
    slots.  Pure: never mutates SCREEN."
   (cond
-    ((not (cl-tmux/terminal:screen-copy-mode-p screen)) "normal")
-    ((cl-tmux/terminal:screen-copy-selecting screen)    "selecting")
+    ((not (nerimux/terminal:screen-copy-mode-p screen)) "normal")
+    ((nerimux/terminal:screen-copy-selecting screen)    "selecting")
     (t                                                  "copy-mode")))
 
 (defun copy-mode-lifecycle-states ()

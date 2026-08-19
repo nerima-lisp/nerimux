@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;; Forward declarations for the mouse escape parser split into
 ;; events-keystroke-escape-mouse.lisp.
@@ -121,10 +121,10 @@
        (= (aref buffer 3) +byte-csi-semi+)))
 
 (defun %escape-digit-leading-csi-accumulating-p (buffer length)
-  (%escape-digit-leading-csi-p buffer length #'cl-tmux/terminal/parser:csi-final-byte-before-p))
+  (%escape-digit-leading-csi-p buffer length #'nerimux/terminal/parser:csi-final-byte-before-p))
 
 (defun %escape-digit-leading-csi-complete-p (buffer length)
-  (%escape-digit-leading-csi-p buffer length #'cl-tmux/terminal/parser:csi-final-byte-p))
+  (%escape-digit-leading-csi-p buffer length #'nerimux/terminal/parser:csi-final-byte-p))
 
 (defun %escape-digit-leading-csi-p (buffer length final-byte-predicate)
   "Shared shape for a digit-leading CSI sequence (ESC [ <digit> ...): true when
@@ -153,8 +153,8 @@
     ;; command-prompt -e: the prompt closes when the client loses focus.
     (when (and (not focus-in-p)
                (prompt-active-p)
-               (cl-tmux/prompt:prompt-close-on-focus-out cl-tmux/prompt:*prompt*))
-      (cl-tmux/prompt:prompt-clear)
+               (nerimux/prompt:prompt-close-on-focus-out nerimux/prompt:*prompt*))
+      (nerimux/prompt:prompt-clear)
       (setf *dirty* t))
     (%notify-pane-focus (session-active-pane session) focus-in-p))
   (%ground-values))

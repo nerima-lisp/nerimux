@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 (describe "client-suite"
 
@@ -20,7 +20,7 @@
                    (nil                                  nil "nil args → false")))
       (destructuring-bind (args expected description) row
         (declare (ignore description))
-        (let ((got (if (cl-tmux::%command-client-split-window-input-p args) t nil)))
+        (let ((got (if (nerimux::%command-client-split-window-input-p args) t nil)))
           (expect (eq expected got))))))
 
   ;;; ── %read-command-client-stdin-octets ───────────────────────────────────────
@@ -34,7 +34,7 @@
   ;; and returns their UTF-8 byte encoding.
   (it "read-command-client-stdin-octets-ascii"
     (let ((*standard-input* (make-string-input-stream "hello")))
-      (let ((octets (cl-tmux::%read-command-client-stdin-octets)))
+      (let ((octets (nerimux::%read-command-client-stdin-octets)))
         (expect (typep octets '(vector (unsigned-byte 8))))
         (expect (string= "hello" (cl-codec-kit:octets-to-string octets :encoding :utf-8))))))
 
@@ -42,31 +42,31 @@
   ;; stdin is immediately at EOF.
   (it "read-command-client-stdin-octets-empty"
     (let ((*standard-input* (make-string-input-stream "")))
-      (let ((octets (cl-tmux::%read-command-client-stdin-octets)))
+      (let ((octets (nerimux::%read-command-client-stdin-octets)))
         (expect (zerop (length octets))))))
 
   ;; %read-command-client-stdin-octets encodes multibyte characters correctly.
   (it "read-command-client-stdin-octets-unicode"
     (let ((*standard-input* (make-string-input-stream "日本語")))
-      (let ((octets (cl-tmux::%read-command-client-stdin-octets)))
+      (let ((octets (nerimux::%read-command-client-stdin-octets)))
         (expect (string= "日本語" (cl-codec-kit:octets-to-string octets :encoding :utf-8))))))
 
   ;;; ── %read-command-reply socket-roundtrip tests ───────────────────────────────
   ;;;
-  ;;; These tests require the raw socket-fd via cl-tmux/net:socket-fd for the
+  ;;; These tests require the raw socket-fd via nerimux/net:socket-fd for the
   ;;; select-fds call inside %read-command-reply.  The with-guarded-socket-test/fd
   ;;; macro defined above abstracts the full socket lifecycle — no inline
   ;;; unwind-protect duplication.
 
   ;; %read-command-reply reads the server's +msg-reply+ frame and writes its
-  ;; text to *standard-output* — the client side of `cl-tmux display -p`.
+  ;; text to *standard-output* — the client side of `nerimux display -p`.
   (it "read-command-reply-prints-reply-to-stdout"
     (with-guarded-socket-test/fd
         (:server-stream server-stream :client-stream client-stream :client-fd client-fd)
       (send-frame server-stream (msg-reply "OUTPUT-TEXT"))
       (force-output server-stream)
       (let ((output (with-output-to-string (*standard-output*)
-                      (cl-tmux::%read-command-reply client-stream client-fd))))
+                      (nerimux::%read-command-reply client-stream client-fd))))
         (expect (search "OUTPUT-TEXT" output)))))
 
   ;; %read-command-reply returns promptly with NO output when the server
@@ -77,7 +77,7 @@
       ;; Server closes without sending a reply → client sees EOF.
       (close-socket server-sock)
       (let ((output (with-output-to-string (*standard-output*)
-                      (cl-tmux::%read-command-reply client-stream client-fd))))
+                      (nerimux::%read-command-reply client-stream client-fd))))
         (expect (string= "" output)))))
 
   ;;; ── run-command-client nil-args guard ────────────────────────────────────────
@@ -91,7 +91,7 @@
   (it "run-command-client-nil-args-is-noop"
     ;; We verify the nil-args branch by confirming the call completes without
     ;; error even when no server is listening (no connection attempt is made).
-    (finishes (cl-tmux::run-command-client "no-such-session" nil)))
+    (finishes (nerimux::run-command-client "no-such-session" nil)))
 
   ;;; ── %maybe-send-resize behavior ──────────────────────────────────────────────
   ;;;
@@ -104,27 +104,27 @@
   (it "maybe-send-resize-sends-frame-when-pending"
     (with-guarded-socket-test
       ;; Set resize-pending and known dimensions.
-      (let ((cl-tmux::*resize-pending* t)
-            (cl-tmux::*term-rows*      24)
-            (cl-tmux::*term-cols*      80))
+      (let ((nerimux::*resize-pending* t)
+            (nerimux::*term-rows*      24)
+            (nerimux::*term-cols*      80))
         ;; Call the helper with server-side as the stream to write on.
-        (cl-tmux::%maybe-send-resize server-side)
+        (nerimux::%maybe-send-resize server-side)
         (force-output server-side)
         ;; The helper clears *resize-pending*.
-        (expect cl-tmux::*resize-pending* :to-be-falsy)
+        (expect nerimux::*resize-pending* :to-be-falsy)
         ;; A +msg-resize+ frame must be readable from the other end.
         (with-incoming-frame (type payload client-side)
           ((null type) (fail "%maybe-send-resize: got EOF instead of resize frame"))
           ((= type +msg-resize+)
            (multiple-value-bind (rows cols) (decode-size payload)
-             (expect (= cl-tmux::*term-rows* rows))
-             (expect (= cl-tmux::*term-cols* cols))))
+             (expect (= nerimux::*term-rows* rows))
+             (expect (= nerimux::*term-cols* cols))))
           (t (fail "%maybe-send-resize: unexpected frame type ~D" type))))))
 
   ;; %maybe-send-resize is a no-op when *resize-pending* is NIL.
   (it "maybe-send-resize-does-nothing-when-not-pending"
-    (let ((cl-tmux::*resize-pending* nil))
-      (expect (cl-tmux::%maybe-send-resize nil) :to-be-falsy)))
+    (let ((nerimux::*resize-pending* nil))
+      (expect (nerimux::%maybe-send-resize nil) :to-be-falsy)))
 
   ;;; ── %forward-stdin-byte behavior ─────────────────────────────────────────────
   ;;;
@@ -141,5 +141,5 @@
     ;; pending data — either way the function must return NIL without signalling.
     ;; Pass NIL as the stream so no socket write can happen even if the byte test
     ;; were to incorrectly find data.
-    (let ((result (ignore-errors (cl-tmux::%forward-stdin-byte nil))))
+    (let ((result (ignore-errors (nerimux::%forward-stdin-byte nil))))
       (expect (null result)))))

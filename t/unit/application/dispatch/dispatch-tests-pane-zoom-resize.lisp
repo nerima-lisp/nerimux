@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Pane zoom, navigation, and resize dispatch cases.
 
@@ -18,13 +18,13 @@
         (with-two-pane-h-session (s win p0 p1)
           (with-command-test-state (s :overlay t)
             ;; Arm last-pane's target and zoom the window.
-            (cl-tmux/model:window-select-pane win p1)
-            (cl-tmux/model:window-select-pane win p0)
-            (cl-tmux/model:window-zoom-toggle win)
-            (expect (cl-tmux/model:window-zoom-p win) :to-be-truthy)
-            (cl-tmux::%run-command-line s command)
+            (nerimux/model:window-select-pane win p1)
+            (nerimux/model:window-select-pane win p0)
+            (nerimux/model:window-zoom-toggle win)
+            (expect (nerimux/model:window-zoom-p win) :to-be-truthy)
+            (nerimux::%run-command-line s command)
             (expect (eq expect-zoomed
-                        (and (cl-tmux/model:window-zoom-p win) t))))))))
+                        (and (nerimux/model:window-zoom-p win) t))))))))
 
   ;; Pane-navigation commands reject the removed -Z flag before
   ;; mutating pane focus/order or zoom state.
@@ -40,15 +40,15 @@
           (let (before-panes)
             (with-command-rejection-state (s
                                             (progn
-                                              (cl-tmux/model:window-zoom-toggle win)
+                                              (nerimux/model:window-zoom-toggle win)
                                               (setf before-panes
-                                                    (copy-list (cl-tmux/model:window-panes win)))
-                                              (cl-tmux::%run-command-line s command))
+                                                    (copy-list (nerimux/model:window-panes win)))
+                                              (nerimux::%run-command-line s command))
                                             "unsupported argument"
                                             desc)
-              (expect (eq p0 (cl-tmux/model:window-active-pane win)))
-              (expect (equal before-panes (cl-tmux/model:window-panes win)))
-              (expect (cl-tmux/model:window-zoom-p win) :to-be-truthy)))))))
+              (expect (eq p0 (nerimux/model:window-active-pane win)))
+              (expect (equal before-panes (nerimux/model:window-panes win)))
+              (expect (nerimux/model:window-zoom-p win) :to-be-truthy)))))))
 
   ;; The interactive pane-navigation keyword handlers unzoom a zoomed window before
   ;; moving. Previously a zoomed window's single-leaf tree made them no-ops.
@@ -63,54 +63,54 @@
         (with-two-pane-h-session (s win p0 p1)
           (with-command-test-state (s :overlay t)
             ;; Arm last-pane's target, focus p0, then zoom.
-            (cl-tmux/model:window-select-pane win p1)
-            (cl-tmux/model:window-select-pane win p0)
-            (cl-tmux/model:window-zoom-toggle win)
-            (expect (cl-tmux/model:window-zoom-p win) :to-be-truthy)
-            (cl-tmux::dispatch-command s command nil)
-            (expect (cl-tmux/model:window-zoom-p win) :to-be-falsy)
+            (nerimux/model:window-select-pane win p1)
+            (nerimux/model:window-select-pane win p0)
+            (nerimux/model:window-zoom-toggle win)
+            (expect (nerimux/model:window-zoom-p win) :to-be-truthy)
+            (nerimux::dispatch-command s command nil)
+            (expect (nerimux/model:window-zoom-p win) :to-be-falsy)
             (if expect-moved
-                (expect (eq p1 (cl-tmux/model:window-active-pane win)))
-                (expect (eq p0 (cl-tmux/model:window-active-pane win)))))))))
+                (expect (eq p1 (nerimux/model:window-active-pane win)))
+                (expect (eq p0 (nerimux/model:window-active-pane win)))))))))
 
   ;; resize-pane -T drops the rows below the cursor and pulls rows out of the
   ;; scrollback to refill the screen; the cursor lands on the bottom row.
   (it "resize-pane-T-trims-below-cursor-from-history"
     (with-fake-session (s)
-      (let* ((pane   (cl-tmux/model:session-active-pane s))
-             (screen (cl-tmux/model:pane-screen pane))
-             (h      (cl-tmux/terminal/types:screen-height screen)))
+      (let* ((pane   (nerimux/model:session-active-pane s))
+             (screen (nerimux/model:pane-screen pane))
+             (h      (nerimux/terminal/types:screen-height screen)))
         ;; History: one saved row of 'H' cells (newest).
-        (let ((saved (make-array (cl-tmux/terminal/types:screen-width screen))))
+        (let ((saved (make-array (nerimux/terminal/types:screen-width screen))))
           (dotimes (col (length saved))
-            (setf (aref saved col) (cl-tmux/terminal/types:make-cell :char #\H)))
-          (push saved (cl-tmux/terminal/types:screen-scrollback screen)))
+            (setf (aref saved col) (nerimux/terminal/types:make-cell :char #\H)))
+          (push saved (nerimux/terminal/types:screen-scrollback screen)))
         ;; Visible content: 'A' on row 0, cursor on row 0 -> everything below trims.
-        (setf (cl-tmux/terminal/types:cell-char
-               (cl-tmux/terminal/types:screen-cell screen 0 0)) #\A)
-        (setf (cl-tmux/terminal/types:screen-cursor-y screen) 0)
-        (cl-tmux::%cmd-resize-pane-arg s '("-T"))
-        (expect (= (1- h) (cl-tmux/terminal/types:screen-cursor-y screen)))
-        (expect (char= #\A (cl-tmux/terminal/types:cell-char
-                            (cl-tmux/terminal/types:screen-cell screen 0 (1- h)))))
-        (expect (char= #\H (cl-tmux/terminal/types:cell-char
-                            (cl-tmux/terminal/types:screen-cell screen 0 (- h 2)))))
-        (expect (null (cl-tmux/terminal/types:screen-scrollback screen))))))
+        (setf (nerimux/terminal/types:cell-char
+               (nerimux/terminal/types:screen-cell screen 0 0)) #\A)
+        (setf (nerimux/terminal/types:screen-cursor-y screen) 0)
+        (nerimux::%cmd-resize-pane-arg s '("-T"))
+        (expect (= (1- h) (nerimux/terminal/types:screen-cursor-y screen)))
+        (expect (char= #\A (nerimux/terminal/types:cell-char
+                            (nerimux/terminal/types:screen-cell screen 0 (1- h)))))
+        (expect (char= #\H (nerimux/terminal/types:cell-char
+                            (nerimux/terminal/types:screen-cell screen 0 (- h 2)))))
+        (expect (null (nerimux/terminal/types:screen-scrollback screen))))))
 
   ;; resize-pane -M with an in-flight mouse event on a pane border arms the
   ;; border-drag state used by MouseDrag1Border.
   (it "resize-pane-M-arms-border-drag-state"
     (with-two-pane-h-session (s win p0 p1)
       (with-command-test-state (s :overlay t)
-        (let* ((border-col (+ (cl-tmux/model:pane-x p0)
-                              (cl-tmux/model:pane-width p0)))
-               (cl-tmux::*mouse-drag-state* nil)
-               (cl-tmux::*current-mouse-event*
+        (let* ((border-col (+ (nerimux/model:pane-x p0)
+                              (nerimux/model:pane-width p0)))
+               (nerimux::*mouse-drag-state* nil)
+               (nerimux::*current-mouse-event*
                  (list :btn 32 :col border-col
-                       :row (cl-tmux/model:pane-y p0) :release-p nil)))
-          (cl-tmux::%cmd-resize-pane-arg s '("-M"))
-          (expect cl-tmux::*mouse-drag-state* :to-be-truthy))
-        (let ((cl-tmux::*mouse-drag-state* nil)
-              (cl-tmux::*current-mouse-event* nil))
-          (cl-tmux::%cmd-resize-pane-arg s '("-M"))
-          (expect (null cl-tmux::*mouse-drag-state*)))))))
+                       :row (nerimux/model:pane-y p0) :release-p nil)))
+          (nerimux::%cmd-resize-pane-arg s '("-M"))
+          (expect nerimux::*mouse-drag-state* :to-be-truthy))
+        (let ((nerimux::*mouse-drag-state* nil)
+              (nerimux::*current-mouse-event* nil))
+          (nerimux::%cmd-resize-pane-arg s '("-M"))
+          (expect (null nerimux::*mouse-drag-state*)))))))

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Display-menu and list-keys dispatch cases.
 
@@ -13,14 +13,14 @@
         (declare (ignore desc))
         (with-fake-session (s)
           (let ((*overlay* nil)
-                (cl-tmux/prompt:*active-menu* nil))
-            (cl-tmux::%run-command-line s command)
-            (expect cl-tmux/prompt:*active-menu* :to-be-truthy)
-            (cl-tmux::dispatch-command s :menu-select 13)
-            (expect (string= "1" (cl-tmux/options:get-option "@menu-ran" nil)))
+                (nerimux/prompt:*active-menu* nil))
+            (nerimux::%run-command-line s command)
+            (expect nerimux/prompt:*active-menu* :to-be-truthy)
+            (nerimux::dispatch-command s :menu-select 13)
+            (expect (string= "1" (nerimux/options:get-option "@menu-ran" nil)))
             (if expect-open
-                (expect cl-tmux/prompt:*active-menu* :to-be-truthy)
-                (expect (null cl-tmux/prompt:*active-menu*))))))))
+                (expect nerimux/prompt:*active-menu* :to-be-truthy)
+                (expect (null nerimux/prompt:*active-menu*))))))))
 
   ;; list-keys -N lists bindings carrying bind -N notes (with the note text);
   ;; -a additionally includes un-noted bindings.
@@ -28,14 +28,14 @@
     (with-isolated-config
      (with-fake-session (s)
       (let ((*overlay* nil))
-        (cl-tmux::%run-command-line
+        (nerimux::%run-command-line
          s "bind -N \"Split the pane\" Y split-window")
-        (cl-tmux::%run-command-line s "bind Z kill-pane")
+        (nerimux::%run-command-line s "bind Z kill-pane")
         (let ((*overlay* nil))
-          (cl-tmux::%run-command-line s "list-keys -N -T prefix")
+          (nerimux::%run-command-line s "list-keys -N -T prefix")
           (expect (search "Split the pane" *overlay*))
           (expect (null (search "Z " *overlay*))))
         (let ((*overlay* nil))
-          (cl-tmux::%run-command-line s "list-keys -N -a -T prefix")
+          (nerimux::%run-command-line s "list-keys -N -a -T prefix")
           (expect (search "Split the pane" *overlay*))
           (expect (search "Z" *overlay*))))))))

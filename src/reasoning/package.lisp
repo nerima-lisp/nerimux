@@ -1,15 +1,15 @@
 ;;;; Package for the Prolog-backed key-binding reasoning read-model.
 ;;;;
 ;;;; This subsystem is an *additive* introspection layer built on the
-;;;; dependency-free `cl-prolog-kit' engine.  It projects cl-tmux's live
+;;;; dependency-free `cl-prolog-kit' engine.  It projects nerimux's live
 ;;;; key-table store into a Prolog rulebase and answers relational
 ;;;; questions about it that the imperative store cannot express directly
 ;;;; (reverse lookup, cross-table conflicts, repeatable-command inference).
 ;;;;
-;;;; It lives in its own `reasoning' module within the core `cl-tmux' ASDF
+;;;; It lives in its own `reasoning' module within the core `nerimux' ASDF
 ;;;; system (cl-prolog-kit is a core dependency; see src/reasoning/'s module
-;;;; comment in cl-tmux.asd), loaded after `application/config' so it can
-;;;; reference cl-tmux/config's public helpers directly.
+;;;; comment in nerimux.asd), loaded after `application/config' so it can
+;;;; reference nerimux/config's public helpers directly.
 ;;;;
 ;;;; `\=', `\+', and `findall' are imported from cl-prolog-kit: builtin goals
 ;;;; dispatch on symbol identity, so inequality/negation/collection goals in
@@ -22,12 +22,12 @@
 ;;;; no such limitation — %FINDALL below is the shared query helper built on
 ;;;; it.)
 
-(defpackage #:cl-tmux/reasoning
+(defpackage #:nerimux/reasoning
   (:use #:cl)
   (:import-from #:cl-prolog-kit #:|\\=| #:|\\+| #:findall)
-  (:import-from #:cl-tmux/config #:key-display-string)
+  (:import-from #:nerimux/config #:key-display-string)
   (:documentation
-   "A cl-prolog-kit read-model over cl-tmux key tables: projection, a small
+   "A cl-prolog-kit read-model over nerimux key tables: projection, a small
     rule set, and query helpers for binding introspection.")
   (:export
    ;; Projection + rulebase construction

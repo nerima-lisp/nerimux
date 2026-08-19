@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 (define-command-input-handler %cmd-kill-window (session args)
   "kill-window [-a] [-t target]: kill a window or all windows except the current.
@@ -38,7 +38,7 @@
                         (t (window-id src-win))))
          (collision (find desired (session-windows dst-sess)
                           :key (lambda (w)
-                                 (cl-tmux/model:session-window-index
+                                 (nerimux/model:session-window-index
                                   dst-sess w))))
          (dst-active (session-active-window dst-sess)))
     (if (and collision (not kill-p))
@@ -48,8 +48,8 @@
           (session-insert-window dst-sess src-win)
           ;; Record the destination session's winlink index when it
           ;; differs from the window's own id.
-          (cl-tmux/model:set-session-window-index dst-sess src-win desired)
-          (cl-tmux/hooks:run-hooks cl-tmux/hooks:+hook-window-linked+ src-win)
+          (nerimux/model:set-session-window-index dst-sess src-win desired)
+          (nerimux/hooks:run-hooks nerimux/hooks:+hook-window-linked+ src-win)
           ;; -k may select a replacement while removing the collision;
           ;; -d means link without changing the destination current window.
           (if detach-p
@@ -134,7 +134,7 @@
        (when (zerop (%window-session-count win))
          (dolist (pane (window-panes win))
            (close-pane-pty pane)))
-       (cl-tmux/hooks:run-hooks cl-tmux/hooks:+hook-window-unlinked+ win)
+       (nerimux/hooks:run-hooks nerimux/hooks:+hook-window-unlinked+ win)
        (show-overlay "unlink-window: unlinked"))
       (kill-p
        ;; Only in this session and -k given — destroy it.
@@ -214,7 +214,7 @@
          (dst (and dst-str (%resolve-window-target session dst-str))))
     (when (%swap-window-ids session src dst)
       ;; Without -d the swapped window becomes the current window.  tmux selects
-      ;; the moved content in both the destination and source sessions; cl-tmux's
+      ;; the moved content in both the destination and source sessions; nerimux's
       ;; swap is intra-session, so the moved source window becomes current.
       (unless (%flag-present-p flags #\d)
         (session-select-window session src)))))
@@ -225,7 +225,7 @@
    binding (bind r source-file ~/.tmux.conf).  A missing file or parse error never
    crashes the session.  SESSION unused."
   (declare (ignore session))
-  (cl-tmux/config:source-files args))
+  (nerimux/config:source-files args))
 
 (defun %window-id-occupied-p (session id exclude)
   "T when some window OTHER than EXCLUDE in SESSION already has window-id ID."
@@ -273,7 +273,7 @@
    -t n: destination window-id (numeric index to assign to the window).
    -r: renumber all windows sequentially from base-index (repack gaps).
    -a: insert AFTER the destination window (index n+1).
-   -b: insert BEFORE the destination window (index n) — cl-tmux's default
+   -b: insert BEFORE the destination window (index n) — nerimux's default
        placement, accepted explicitly.
    -k: if the destination index is occupied, KILL the occupying window instead
        of shuffling the windows up to make room.
@@ -293,7 +293,7 @@
     (cond
       ;; -r: repack all windows sequentially from base-index
       (repack
-       (let* ((base (or (cl-tmux/options:get-option "base-index") 0))
+       (let* ((base (or (nerimux/options:get-option "base-index") 0))
               (sorted (sort (copy-list (session-windows session))
                             #'< :key #'window-id)))
          (loop for win in sorted

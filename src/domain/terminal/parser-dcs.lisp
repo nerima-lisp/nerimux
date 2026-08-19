@@ -4,7 +4,7 @@
 ;;; make-dcs-k, make-charset-designator-k, make-ignore-final-byte-k, and
 ;;; make-hash-line-size-k.
 
-(in-package #:cl-tmux/terminal/parser)
+(in-package #:nerimux/terminal/parser)
 
 ;;; ESC P introduces a DCS; collect bytes until ESC \ (ST).
 ;;;
@@ -68,7 +68,7 @@
 (defun %xtgettcap-value (capname)
   "The XTGETTCAP answer for terminfo capability CAPNAME:
    :BOOLEAN for a present boolean cap, a string for a numeric/string cap, or NIL
-   when unknown.  cl-tmux renders 24-bit colour, so it advertises Tc and RGB
+   when unknown.  nerimux renders 24-bit colour, so it advertises Tc and RGB
    (true-colour) and colors=256 — letting apps that probe via XTGETTCAP enable
    true-colour output."
   (cond
@@ -117,7 +117,7 @@
   (cond
     ((string= request "m")
      (%dcs-reply t (format nil "$r~Am"
-                           (cl-tmux/terminal/sgr:%pen-to-sgr-params
+                           (nerimux/terminal/sgr:%pen-to-sgr-params
                             (screen-cur-fg screen) (screen-cur-bg screen)
                             (screen-cur-attrs screen) (screen-cur-attrs2 screen)))))
     ((string= request "r")
@@ -198,9 +198,9 @@
 
 (defun make-ignore-final-byte-k ()
   "Return a CPS state that consumes one trailing byte and returns to ground with
-   no effect — for two-byte ESC sequences cl-tmux accepts but does not model:
+   no effect — for two-byte ESC sequences nerimux accepts but does not model:
      ESC SP <final>   S7C1T / S8C1T (7/8-bit C1) and ANSI conformance levels
-     ESC %  <final>   charset selection (ESC % G = UTF-8, which cl-tmux already is)
+     ESC %  <final>   charset selection (ESC % G = UTF-8, which nerimux already is)
    Consuming the trailing byte avoids it printing as a stray char (the bug when
    the introducer was unhandled and the sequence aborted)."
   (lambda (screen byte)

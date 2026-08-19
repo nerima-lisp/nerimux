@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/options)
+(in-package #:nerimux/options)
 
 ;;;; Option display helpers: show-options/show-window-options rendering.
 
@@ -104,7 +104,7 @@
 (defun %window-local-option-present-p (name window)
   "Return true when WINDOW has an explicit local option NAME."
   (and window
-       (%hash-present-p name (cl-tmux/model:window-local-options window))))
+       (%hash-present-p name (nerimux/model:window-local-options window))))
 
 (defun %global-window-option-present-p (name)
   "Return true when NAME exists in the global/default option table."
@@ -133,7 +133,7 @@ scope, but unset @ user options are invalid."
 (defun %window-local-option-value (name window)
   "Return WINDOW-local option NAME and its present-p flag."
   (if window
-      (gethash name (cl-tmux/model:window-local-options window))
+      (gethash name (nerimux/model:window-local-options window))
       (values nil nil)))
 
 (defun %window-option-names-for-display (window inherited-p global-p)
@@ -152,7 +152,7 @@ scope, but unset @ user options are invalid."
        (maphash (lambda (name value)
                   (declare (ignore value))
                   (push name names))
-                (cl-tmux/model:window-local-options window))
+                (nerimux/model:window-local-options window))
        (sort names #'string<)))
     (t '())))
 

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/format)
+(in-package #:nerimux/format)
 
 ;;; -- W:/S:/P: iteration expanders --------------------------------------------
 ;;;
@@ -31,19 +31,19 @@
         ""
         (multiple-value-bind (active-fmt inactive-fmt) (%split-active-inactive rest)
           (%iterate-fmt
-           (cl-tmux/model:session-windows session)
-           (cl-tmux/model:session-active-window session)
+           (nerimux/model:session-windows session)
+           (nerimux/model:session-active-window session)
            active-fmt inactive-fmt
            (lambda (win)
-             (format-context-from-session session win (cl-tmux/model:window-active-pane win)))
-           (or (cl-tmux/options:get-option "window-status-separator") " "))))))
+             (format-context-from-session session win (nerimux/model:window-active-pane win)))
+           (or (nerimux/options:get-option "window-status-separator") " "))))))
 
 (defun %all-server-sessions ()
-  "The list of live session objects from cl-tmux's *server-sessions* registry,
+  "The list of live session objects from nerimux's *server-sessions* registry,
    read by runtime symbol lookup to avoid a compile-time dependency on the umbrella
    package (the same indirection #{session_count} uses).  NIL when empty/unbound."
   (ignore-errors
-    (mapcar #'cdr (symbol-value (find-symbol "*SERVER-SESSIONS*" "CL-TMUX")))))
+    (mapcar #'cdr (symbol-value (find-symbol "*SERVER-SESSIONS*" "NERIMUX")))))
 
 (defun %expand-session-iteration (rest context)
   "Expand a #{S:ACTIVE,INACTIVE} session-list modifier.  Iterates every server
@@ -57,8 +57,8 @@
       (%iterate-fmt
        sessions cur-session active-fmt inactive-fmt
        (lambda (sess)
-         (let* ((win  (cl-tmux/model:session-active-window sess))
-                (pane (and win (cl-tmux/model:window-active-pane win))))
+         (let* ((win  (nerimux/model:session-active-window sess))
+                (pane (and win (nerimux/model:window-active-pane win))))
            (format-context-from-session sess win pane)))))))
 
 (defun %expand-pane-iteration (rest context)
@@ -67,12 +67,12 @@
    with INACTIVE.  Results are concatenated without separator.  Returns \"\" when
    there is no window."
   (let* ((session (getf context :%session))
-         (window  (and session (cl-tmux/model:session-active-window session))))
+         (window  (and session (nerimux/model:session-active-window session))))
     (if (null window)
         ""
         (multiple-value-bind (active-fmt inactive-fmt) (%split-active-inactive rest)
           (%iterate-fmt
-           (cl-tmux/model:window-panes window)
-           (cl-tmux/model:window-active-pane window)
+           (nerimux/model:window-panes window)
+           (nerimux/model:window-active-pane window)
            active-fmt inactive-fmt
            (lambda (pane) (format-context-from-session session window pane)))))))

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/options)
+(in-package #:nerimux/options)
 
 ;;; Global option storage
 

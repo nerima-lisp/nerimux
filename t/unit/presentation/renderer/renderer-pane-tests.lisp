@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Pane and border rendering tests.
 ;;;;
@@ -41,10 +41,10 @@
              (pane   (first (window-panes (session-active-window sess))))
              (screen (pane-screen pane)))
         (setf (screen-cell screen 0 0)
-              (cl-tmux/terminal/types:make-cell :char #\A))
-        (setf (cl-tmux/terminal/types:screen-reverse-screen screen) nil)
+              (nerimux/terminal/types:make-cell :char #\A))
+        (setf (nerimux/terminal/types:screen-reverse-screen screen) nil)
         (let ((normal (render-pane-output sess pane)))
-          (setf (cl-tmux/terminal/types:screen-reverse-screen screen) t)
+          (setf (nerimux/terminal/types:screen-reverse-screen screen) t)
           (let ((reversed (render-pane-output sess pane)))
             (let ((normal-snippet (%snippet-around normal #\A))
                   (reversed-snippet (%snippet-around reversed #\A)))
@@ -59,7 +59,7 @@
     (let* ((sess   (make-renderer-test-session 5 2))
            (pane   (first (window-panes (session-active-window sess))))
            (screen (pane-screen pane)))
-      (cl-tmux/test::utf8-feed screen "あ")
+      (nerimux/test::utf8-feed screen "あ")
       (let ((out (render-pane-output sess pane)))
         (expect (= 1 (count #\あ out))))))
 
@@ -94,21 +94,21 @@
     (dolist (c '(("red" 1) ("brightred" 9) ("colour235" 235)
                  ("default" nil) ("" nil) (nil nil)))
       (destructuring-bind (name expected) c
-        (expect (eql expected (cl-tmux/renderer::%color-name-to-cell-color name)))))
+        (expect (eql expected (nerimux/renderer::%color-name-to-cell-color name)))))
     (expect (= (logior #x1000000 #xff8800)
-               (cl-tmux/renderer::%color-name-to-cell-color "#ff8800"))))
+               (nerimux/renderer::%color-name-to-cell-color "#ff8800"))))
 
   ;; %window-style-default-colors returns the fg/bg cell numbers a style sets, NIL
   ;; for ones it omits, and (NIL NIL) for an empty style.
   (it "window-style-default-colors-extracts-fg-bg"
     (multiple-value-bind (fg bg)
-        (cl-tmux/renderer::%window-style-default-colors "fg=red,bg=colour235")
+        (nerimux/renderer::%window-style-default-colors "fg=red,bg=colour235")
       (expect (= 1 fg)) (expect (= 235 bg)))
     (multiple-value-bind (fg bg)
-        (cl-tmux/renderer::%window-style-default-colors "bg=colour52")
+        (nerimux/renderer::%window-style-default-colors "bg=colour52")
       (expect (null fg)) (expect (= 52 bg)))
     (multiple-value-bind (fg bg)
-        (cl-tmux/renderer::%window-style-default-colors "")
+        (nerimux/renderer::%window-style-default-colors "")
       (expect (null fg)) (expect (null bg))))
 
   ;; With window-style set, a pane's default-bg (0) cells render with the style's
@@ -121,16 +121,16 @@
         (let ((out (render-pane-output sess pane)))
           (expect (not (search "48;5;52" out))))
         ;; Opt in: window-style recolours the default-bg cells.
-        (cl-tmux/options:set-option "window-style" "bg=colour52")
+        (nerimux/options:set-option "window-style" "bg=colour52")
         (let ((out (render-pane-output sess pane)))
           (expect (search "48;5;52" out))))))
 
   ;; %pane-cell-base-colors only substitutes the pane defaults: an explicit
   ;; non-default background survives unchanged.
   (it "pane-cell-base-colors-preserves-explicit-background"
-    (let ((cell (cl-tmux/terminal/types:make-cell :char #\X :fg cl-tmux/terminal/types:+default-color+ :bg 200)))
+    (let ((cell (nerimux/terminal/types:make-cell :char #\X :fg nerimux/terminal/types:+default-color+ :bg 200)))
       (multiple-value-bind (fg bg)
-          (cl-tmux/renderer::%pane-cell-base-colors cell 31 52)
+          (nerimux/renderer::%pane-cell-base-colors cell 31 52)
         (expect (= 31 fg))
         (expect (= 200 bg)))))
 
@@ -138,18 +138,18 @@
   ;; colour is the +default-color+ sentinel; explicit white(7)/black(0) survive.
   (it "pane-cell-base-colors-recolours-only-default-sentinel"
     ;; Default-sentinel cell: both fg and bg get the pane defaults.
-    (let ((cell (cl-tmux/terminal/types:make-cell
+    (let ((cell (nerimux/terminal/types:make-cell
                  :char #\X
-                 :fg cl-tmux/terminal/types:+default-color+
-                 :bg cl-tmux/terminal/types:+default-color+)))
+                 :fg nerimux/terminal/types:+default-color+
+                 :bg nerimux/terminal/types:+default-color+)))
       (multiple-value-bind (fg bg)
-          (cl-tmux/renderer::%pane-cell-base-colors cell 31 52)
+          (nerimux/renderer::%pane-cell-base-colors cell 31 52)
         (expect (= 31 fg))
         (expect (= 52 bg))))
     ;; Explicit white(7)/black(0): NOT recoloured (this is the gap fix).
-    (let ((cell (cl-tmux/terminal/types:make-cell :char #\X :fg 7 :bg 0)))
+    (let ((cell (nerimux/terminal/types:make-cell :char #\X :fg 7 :bg 0)))
       (multiple-value-bind (fg bg)
-          (cl-tmux/renderer::%pane-cell-base-colors cell 31 52)
+          (nerimux/renderer::%pane-cell-base-colors cell 31 52)
         (expect (= 7 fg))
         (expect (= 0 bg)))))
 
@@ -160,8 +160,8 @@
     (let* ((l0   (tl-leaf 1 1 1))
            (l1   (tl-leaf 2 1 1))
            (tree (make-layout-split :h l0 l1)))
-      (cl-tmux/model::layout-assign tree 0 0 81 24)
-      (let ((rect (cl-tmux/renderer::layout-subtree-rect tree)))
+      (nerimux/model::layout-assign tree 0 0 81 24)
+      (let ((rect (nerimux/renderer::layout-subtree-rect tree)))
         (expect (= 0  (getf rect :x)))
         (expect (= 0  (getf rect :y)))
         (expect (= 81 (getf rect :w)))
@@ -175,10 +175,10 @@
            (p0  (layout-leaf-pane l0))
            (p1  (layout-leaf-pane l1))
            (p-other (make-pane :id 99 :fd -1 :pid -1 :screen (make-screen 1 1))))
-      (expect (cl-tmux/renderer::subtree-contains-p tree p0) :to-be-truthy)
-      (expect (cl-tmux/renderer::subtree-contains-p tree p1) :to-be-truthy)
-      (expect (cl-tmux/renderer::subtree-contains-p tree p-other) :to-be-falsy)
-      (expect (cl-tmux/renderer::subtree-contains-p tree nil) :to-be-falsy)))
+      (expect (nerimux/renderer::subtree-contains-p tree p0) :to-be-truthy)
+      (expect (nerimux/renderer::subtree-contains-p tree p1) :to-be-truthy)
+      (expect (nerimux/renderer::subtree-contains-p tree p-other) :to-be-falsy)
+      (expect (nerimux/renderer::subtree-contains-p tree nil) :to-be-falsy)))
 
   ;; -- render-tree-borders -----------------------------------------------------
 
@@ -187,7 +187,7 @@
     (let* ((l0   (tl-leaf 1 1 1))
            (l1   (tl-leaf 2 1 1))
            (tree (make-layout-split :h l0 l1)))
-      (cl-tmux/model::layout-assign tree 0 0 81 24)
+      (nerimux/model::layout-assign tree 0 0 81 24)
       (let ((out (render-tree-borders-output tree (layout-leaf-pane l0) 81)))
         (expect (plusp (length out)))
         (expect (find #\│ out)))))
@@ -196,17 +196,17 @@
   ;; arrows-only (no colour); off disables everything.
   (it "border-indicators-colour-p-honours-option"
     (with-isolated-options ("pane-border-indicators" "off")
-      (expect (not (cl-tmux/renderer::%border-indicators-colour-p)))
-      (expect (not (cl-tmux/renderer::%border-indicators-arrows-p))))
+      (expect (not (nerimux/renderer::%border-indicators-colour-p)))
+      (expect (not (nerimux/renderer::%border-indicators-arrows-p))))
     (with-isolated-options ("pane-border-indicators" "colour")
-      (expect (cl-tmux/renderer::%border-indicators-colour-p) :to-be-truthy)
-      (expect (not (cl-tmux/renderer::%border-indicators-arrows-p))))
+      (expect (nerimux/renderer::%border-indicators-colour-p) :to-be-truthy)
+      (expect (not (nerimux/renderer::%border-indicators-arrows-p))))
     (with-isolated-options ("pane-border-indicators" "both")
-      (expect (cl-tmux/renderer::%border-indicators-colour-p) :to-be-truthy)
-      (expect (cl-tmux/renderer::%border-indicators-arrows-p) :to-be-truthy))
+      (expect (nerimux/renderer::%border-indicators-colour-p) :to-be-truthy)
+      (expect (nerimux/renderer::%border-indicators-arrows-p) :to-be-truthy))
     (with-isolated-options ("pane-border-indicators" "arrows")
-      (expect (not (cl-tmux/renderer::%border-indicators-colour-p)))
-      (expect (cl-tmux/renderer::%border-indicators-arrows-p) :to-be-truthy)))
+      (expect (not (nerimux/renderer::%border-indicators-colour-p)))
+      (expect (nerimux/renderer::%border-indicators-arrows-p) :to-be-truthy)))
 
   ;; pane-border-indicators arrows/both draw an arrow glyph on the separator
   ;; pointing at the active pane; colour-only does not.
@@ -214,7 +214,7 @@
     (let* ((l0   (tl-leaf 1 1 1))
            (l1   (tl-leaf 2 1 1))
            (tree (make-layout-split :h l0 l1)))
-      (cl-tmux/model::layout-assign tree 0 0 81 24)
+      (nerimux/model::layout-assign tree 0 0 81 24)
       (let ((ap (layout-leaf-pane l0)))
         (with-isolated-options ("pane-border-indicators" "arrows")
           (expect (find #\← (render-tree-borders-output tree ap 81))))
@@ -232,13 +232,13 @@
     (let* ((l0   (tl-leaf 1 1 1))
            (l1   (tl-leaf 2 1 1))
            (tree (make-layout-split :h l0 l1)))
-      (cl-tmux/model::layout-assign tree 0 0 81 24)
+      (nerimux/model::layout-assign tree 0 0 81 24)
       (let ((ap (layout-leaf-pane l0)))
         (with-isolated-options ("pane-border-lines" "padded")
           (expect (not (find #\│ (render-tree-borders-output tree ap 81)))))
         (with-isolated-options ("pane-border-lines" "number")
           (let ((out (render-tree-borders-output tree ap 81)))
-            (expect (find (char (format nil "~D" (cl-tmux/model:pane-id
+            (expect (find (char (format nil "~D" (nerimux/model:pane-id
                                               (layout-leaf-pane l0)))
                             0)
                       out)))))))
@@ -249,7 +249,7 @@
     (let* ((l0   (tl-leaf 1 1 1))
            (l1   (tl-leaf 2 1 1))
            (tree (make-layout-split :h l0 l1)))
-      (cl-tmux/model::layout-assign tree 0 0 81 24)
+      (nerimux/model::layout-assign tree 0 0 81 24)
       (let ((ap (layout-leaf-pane l0)))
         (with-isolated-options ("pane-border-indicators" "colour"
                                 "pane-active-border-style" "fg=green")
@@ -264,24 +264,24 @@
   ;; fall back to single.
   (it "pane-border-chars-follow-pane-border-lines"
     (with-isolated-config
-      (flet ((chars () (multiple-value-list (cl-tmux/renderer::%pane-border-chars))))
+      (flet ((chars () (multiple-value-list (nerimux/renderer::%pane-border-chars))))
         (dolist (c '(("single" (#\│ #\─))
                      ("double" (#\║ #\═))
                      ("heavy"  (#\┃ #\━))
                      ("simple" (#\| #\-))
                      ("number" (#\│ #\─))))
           (destructuring-bind (style expected) c
-            (cl-tmux/options:set-option "pane-border-lines" style)
+            (nerimux/options:set-option "pane-border-lines" style)
             (expect (equal expected (chars))))))))
 
   ;; With pane-border-lines double, the vertical separator uses ║ not │.
   (it "render-tree-borders-honours-pane-border-lines-double"
     (with-isolated-config
-      (cl-tmux/options:set-option "pane-border-lines" "double")
+      (nerimux/options:set-option "pane-border-lines" "double")
       (let* ((l0   (tl-leaf 1 1 1))
              (l1   (tl-leaf 2 1 1))
              (tree (make-layout-split :h l0 l1)))
-        (cl-tmux/model::layout-assign tree 0 0 81 24)
+        (nerimux/model::layout-assign tree 0 0 81 24)
         (let ((out (render-tree-borders-output tree (layout-leaf-pane l0) 81)))
           (expect (find #\║ out))
           (expect (not (find #\│ out))))))))

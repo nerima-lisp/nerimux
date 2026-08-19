@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/actions)
+(in-package #:nerimux/terminal/actions)
 
 ;;;; Alt-screen enter/exit helpers.
 

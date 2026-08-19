@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Events tests: input policy for rename, backspace, and assume-paste.
 
@@ -11,7 +11,7 @@
                           (with-screen (sc 20 5)
                             (setf (screen-title sc) ,title)
                             (expect (string= ,expected
-                                             (cl-tmux::%rename-from-osc-title sc
+                                             (nerimux::%rename-from-osc-title sc
                                                                               ,allow-title)))))))))
 
 (defmacro define-backspace-option-byte-cases (&body cases)
@@ -21,10 +21,10 @@
              collect (locally (declare (ignore doc assertion-message))
                        `(it ,(string-downcase (symbol-name name))
                           (with-isolated-config
-                            (cl-tmux/options:set-server-option "backspace"
+                            (nerimux/options:set-server-option "backspace"
                                                                ,option-value)
                             (expect (eql ,expected
-                                        (cl-tmux::%backspace-option-byte)))))))))
+                                        (nerimux::%backspace-option-byte)))))))))
 
 (describe "events-suite"
 
@@ -49,7 +49,7 @@
       ;; pane-pid is <= 0 by default in with-auto-rename-session.
       (setf (screen-title screen) "osc-title")
       (expect (string= "osc-title"
-                       (cl-tmux::%auto-rename-name sess win pane screen :allow-title t)))))
+                       (nerimux::%auto-rename-name sess win pane screen :allow-title t)))))
 
   (define-backspace-option-byte-cases
     (backspace-option-byte-c-question-is-del
@@ -78,22 +78,22 @@
   (it "translate-backspace-octets-rewrites-del"
     (with-isolated-config
       (let ((octets (coerce #(97 127 98) '(vector (unsigned-byte 8)))))
-        (cl-tmux/options:set-server-option "backspace" "C-h")
-        (expect (equalp #(97 8 98) (cl-tmux::%translate-backspace-octets octets)))
-        (cl-tmux/options:set-server-option "backspace" "C-?")
-        (expect (eq octets (cl-tmux::%translate-backspace-octets octets))))))
+        (nerimux/options:set-server-option "backspace" "C-h")
+        (expect (equalp #(97 8 98) (nerimux::%translate-backspace-octets octets)))
+        (nerimux/options:set-server-option "backspace" "C-?")
+        (expect (eq octets (nerimux::%translate-backspace-octets octets))))))
 
   ;; %assume-paste-byte-p: NIL with no key history; T within the window after a
   ;; forwarded key; NIL when assume-paste-time is 0.
   (it "assume-paste-byte-p-table"
     (with-isolated-config
-      (let ((cl-tmux::*last-ground-key-time* nil))
-        (expect (null (cl-tmux::%assume-paste-byte-p)))
-        (cl-tmux/options:set-option "assume-paste-time" 1000) ; generous 1s window
-        (cl-tmux::%stamp-ground-key-time)
-        (expect (eq t (and (cl-tmux::%assume-paste-byte-p) t)))
-        (cl-tmux/options:set-option "assume-paste-time" 0)
-        (expect (null (cl-tmux::%assume-paste-byte-p))))))
+      (let ((nerimux::*last-ground-key-time* nil))
+        (expect (null (nerimux::%assume-paste-byte-p)))
+        (nerimux/options:set-option "assume-paste-time" 1000) ; generous 1s window
+        (nerimux::%stamp-ground-key-time)
+        (expect (eq t (and (nerimux::%assume-paste-byte-p) t)))
+        (nerimux/options:set-option "assume-paste-time" 0)
+        (expect (null (nerimux::%assume-paste-byte-p))))))
 
   ;; A root -n bound key arriving within assume-paste-time of pane content is
   ;; forwarded to the pane instead of running the binding (tmux paste protection);
@@ -105,14 +105,14 @@
         (declare (ignore desc))
         (with-isolated-config
           (with-fake-session (s :nwindows 2)
-            (cl-tmux/options:set-option "assume-paste-time" paste-ms)
-            (cl-tmux/config:key-table-bind "root" #\x :next-window)
-            (let ((first-win (cl-tmux/model:session-active-window s))
-                  (state (cl-tmux::make-input-state)))
+            (nerimux/options:set-option "assume-paste-time" paste-ms)
+            (nerimux/config:key-table-bind "root" #\x :next-window)
+            (let ((first-win (nerimux/model:session-active-window s))
+                  (state (nerimux::make-input-state)))
               ;; Plain content byte: forwarded, stamps the burst clock.
-              (cl-tmux::process-byte s (char-code #\a) state)
+              (nerimux::process-byte s (char-code #\a) state)
               ;; Bound key arrives "immediately" (microseconds later).
-              (cl-tmux::process-byte s (char-code #\x) state)
+              (nerimux::process-byte s (char-code #\x) state)
               (if expect-switch
-                  (expect (not (eq first-win (cl-tmux/model:session-active-window s))))
-                  (expect (eq first-win (cl-tmux/model:session-active-window s)))))))))))
+                  (expect (not (eq first-win (nerimux/model:session-active-window s))))
+                  (expect (eq first-win (nerimux/model:session-active-window s)))))))))))

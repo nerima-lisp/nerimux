@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/ports)
+(in-package #:nerimux/ports)
 
 ;;;; VCS port
 
@@ -22,7 +22,7 @@
 
 (defun %require-vcs-port (function name)
   (or function
-      (error "VCS port ~A is not installed. Call CL-TMUX/VCS:INSTALL-VCS-PORT."
+      (error "VCS port ~A is not installed. Call NERIMUX/VCS:INSTALL-VCS-PORT."
              name)))
 
 (defun vcs-list-repositories (&rest arguments)

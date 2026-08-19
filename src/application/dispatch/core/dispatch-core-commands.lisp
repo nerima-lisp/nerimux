@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Copy-mode key overrides, format helpers, new-session factory,
 ;;;;  and named-command table (C-b : prompt resolution).
@@ -32,7 +32,7 @@
     (server-add-session session)
     (dolist (pane (all-panes session))
       (start-reader-thread pane))
-    (cl-tmux/hooks:run-hooks cl-tmux/hooks:+hook-session-created+ session)
+    (nerimux/hooks:run-hooks nerimux/hooks:+hook-session-created+ session)
     session))
 
 (define-copy-mode-key-overrides
@@ -65,7 +65,7 @@
 
 (defun %active-copy-mode-table ()
   "Return the copy-mode key table selected by the mode-keys option."
-  (if (string= (cl-tmux/options:get-option "mode-keys" "emacs") "vi")
+  (if (string= (nerimux/options:get-option "mode-keys" "emacs") "vi")
       "copy-mode-vi"
       +table-copy-mode+))
 
@@ -146,8 +146,8 @@
 
 (defun %toggle-synchronize-panes ()
   "Toggle the 'synchronize-panes' option and show a status overlay."
-  (let ((current (cl-tmux/options:get-option "synchronize-panes")))
-    (cl-tmux/options:set-option "synchronize-panes" (not current))
+  (let ((current (nerimux/options:get-option "synchronize-panes")))
+    (nerimux/options:set-option "synchronize-panes" (not current))
     (show-overlay (if (not current)
                       "synchronize-panes: ON"
                       "synchronize-panes: OFF"))))
@@ -165,7 +165,7 @@
                             (name  (first parts))
                             (value (second parts)))
                        (when (and name value)
-                         (cl-tmux/options:set-option name value))))))
+                         (nerimux/options:set-option name value))))))
 
 ;;; -- Paste helper --------------------------------------------------------------
 ;;;
@@ -191,7 +191,7 @@
    with -p, while the default interactive bindings (prefix ], mouse paste,
    buffer mode) all pass -p — hence BRACKET-P defaults to true for the
    interactive keyword-handler callers."
-  (when (and text (cl-tmux/model:pane-live-p pane))
+  (when (and text (nerimux/model:pane-live-p pane))
     (let* ((screen    (pane-screen pane))
            (bracketed (and bracket-p (screen-bracketed-paste screen))))
       (when bracketed
@@ -213,7 +213,7 @@
 ;;; file stays focused on helper code and table construction.
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (let* ((root (or (ignore-errors (asdf:system-source-directory :cl-tmux))
+  (let* ((root (or (ignore-errors (asdf:system-source-directory :nerimux))
                    *load-pathname*
                    *compile-file-pathname*
                    *default-pathname-defaults*))

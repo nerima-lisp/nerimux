@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; command tokenizer, kill-window reselection, copy-mode find, join-pane tests
 
@@ -19,7 +19,7 @@
 (defun %window-after-kill-case-values (window-specs killed-id expected-id)
   (let* ((windows (mapcar #'%make-window-after-kill-window window-specs))
          (expected (find expected-id windows :key #'window-id)))
-    (values (cl-tmux/commands::%window-after-kill windows killed-id)
+    (values (nerimux/commands::%window-after-kill windows killed-id)
             expected)))
 
 (defmacro define-window-after-kill-cases (&body cases)
@@ -38,7 +38,7 @@
 (defun %copy-mode-find-result (fn width height text term row col)
   (let ((s (make-screen width height)))
     (feed s text)
-    (cl-tmux/commands::copy-mode-enter s)
+    (nerimux/commands::copy-mode-enter s)
     (funcall fn s term row col)))
 
 (defun %check-copy-mode-find-case (width height text term case)
@@ -88,7 +88,7 @@
   `(multiple-value-bind (,sess ,src-win ,src-pane ,dst-win ,dst-pane)
        (%join-arg-fixture)
      (with-registered-sessions (("0" ,sess))
-       (let ((cl-tmux::*dirty* nil))
+       (let ((nerimux::*dirty* nil))
          ,@body))))
 
 (defparameter *cmd-join-pane-before-cases*
@@ -112,7 +112,7 @@
   (destructuring-bind (direction desc pos-access cross-access window-cross-access) case
     (with-join-command-fixture (sess src-win src-pane dst-win dst-pane)
       (declare (ignore src-win))
-      (let ((result (cl-tmux::%cmd-join-pane-arg
+      (let ((result (nerimux::%cmd-join-pane-arg
                      sess
                      (%join-command-args "-b" (%join-command-direction-flag direction)))))
         (check-table
@@ -129,7 +129,7 @@
                         (funcall cross-access dst-pane))
                      t
                      (format nil "~A must keep the split full on the cross axis" desc))
-               (list cl-tmux::*dirty* t
+               (list nerimux::*dirty* t
                      (format nil "~A must mark the model dirty" desc)))
          :test #'eq)))))
 
@@ -137,7 +137,7 @@
   (destructuring-bind (direction desc pane-access window-access) case
     (with-join-command-fixture (sess src-win src-pane dst-win dst-pane)
       (declare (ignore src-win))
-      (let ((result (cl-tmux::%cmd-join-pane-arg
+      (let ((result (nerimux::%cmd-join-pane-arg
                      sess
                      (%join-command-args "-f" (%join-command-direction-flag direction)))))
         (check-table
@@ -148,7 +148,7 @@
                         (funcall pane-access dst-pane))
                      t
                      (format nil "~A must span the full window on the split axis" desc))
-               (list cl-tmux::*dirty* t
+               (list nerimux::*dirty* t
                      (format nil "~A must mark the model dirty" desc)))
          :test #'eq)))))
 
@@ -156,7 +156,7 @@
   (destructuring-bind (direction desc pane-access other-size expected-size) case
     (with-join-command-fixture (sess src-win src-pane dst-win dst-pane)
       (declare (ignore src-win))
-      (let ((result (cl-tmux::%cmd-join-pane-arg
+      (let ((result (nerimux::%cmd-join-pane-arg
                      sess
                      (%join-command-args "-l" "8" (%join-command-direction-flag direction)))))
         (check-table
@@ -168,7 +168,7 @@
                             (sort (list expected-size other-size) #'<))
                      t
                      (format nil "~A must honor the requested size hint" desc))
-               (list cl-tmux::*dirty* t
+               (list nerimux::*dirty* t
                      (format nil "~A must mark the model dirty" desc)))
          :test #'eq)))))
 
@@ -194,30 +194,30 @@
                  ("\"xy"           ("xy")          "unterminated double quote")))
       (destructuring-bind (input expected desc) c
         (declare (ignore desc))
-        (expect (equal expected (cl-tmux/commands:tokenize-command-string input))))))
+        (expect (equal expected (nerimux/commands:tokenize-command-string input))))))
 
   ;;; ── add-message-log ──────────────────────────────────────────────────────────
 
   ;; add-message-log prepends a (timestamp . text) cons to *message-log*.
   (it "add-message-log-prepends-entry"
-    (let ((cl-tmux::*message-log* nil))
-      (cl-tmux::add-message-log "first-message")
-      (expect cl-tmux::*message-log* :to-be-truthy)
-      (expect (string= "first-message" (cdr (first cl-tmux::*message-log*))))))
+    (let ((nerimux::*message-log* nil))
+      (nerimux::add-message-log "first-message")
+      (expect nerimux::*message-log* :to-be-truthy)
+      (expect (string= "first-message" (cdr (first nerimux::*message-log*))))))
 
   ;; add-message-log caps *message-log* at the message-limit option, not a constant.
   (it "add-message-log-caps-honors-message-limit-option"
     (with-isolated-options ("message-limit" 3)
-      (let ((cl-tmux::*message-log* nil))
-        (loop repeat 10 do (cl-tmux::add-message-log "x"))
-        (expect (= 3 (length cl-tmux::*message-log*))))))
+      (let ((nerimux::*message-log* nil))
+        (loop repeat 10 do (nerimux::add-message-log "x"))
+        (expect (= 3 (length nerimux::*message-log*))))))
 
   ;; add-message-log puts newest entry first.
   (it "add-message-log-ordering"
-    (let ((cl-tmux::*message-log* nil))
-      (cl-tmux::add-message-log "first")
-      (cl-tmux::add-message-log "second")
-      (expect (string= "second" (cdr (first cl-tmux::*message-log*))))))
+    (let ((nerimux::*message-log* nil))
+      (nerimux::add-message-log "first")
+      (nerimux::add-message-log "second")
+      (expect (string= "second" (cdr (first nerimux::*message-log*))))))
 
   (define-window-after-kill-cases
     (window-after-kill-prefers-mru
@@ -271,16 +271,16 @@
      5
      "abc def abc"
      "abc"
-     ((cl-tmux/commands::%copy-mode-find-forward  0 1  0 8 "forward from col 1 finds second 'abc' at col 8")
-      (cl-tmux/commands::%copy-mode-find-backward 0 11 0 8 "backward from col 11 finds 'abc' at col 8")))
+     ((nerimux/commands::%copy-mode-find-forward  0 1  0 8 "forward from col 1 finds second 'abc' at col 8")
+      (nerimux/commands::%copy-mode-find-backward 0 11 0 8 "backward from col 11 finds 'abc' at col 8")))
     (copy-mode-find-no-match-returns-nil-nil
      "%copy-mode-find-forward and %copy-mode-find-backward both return (values nil nil) when no match exists."
      20
      5
      "hello world"
      "zzz"
-     ((cl-tmux/commands::%copy-mode-find-forward  0 0 nil nil "forward: no match")
-      (cl-tmux/commands::%copy-mode-find-backward 0 5 nil nil "backward: no match"))))
+     ((nerimux/commands::%copy-mode-find-forward  0 0 nil nil "forward: no match")
+      (nerimux/commands::%copy-mode-find-backward 0 5 nil nil "backward: no match"))))
 
   ;;; ── join-pane ────────────────────────────────────────────────────────────────
 
@@ -299,7 +299,7 @@
       (session-select-window sess src-win)
       (window-select-pane src-win src-pane)
       (window-select-pane dst-win dst-pane)
-      (let ((result (cl-tmux/commands:join-pane sess src-win src-pane dst-win :h)))
+      (let ((result (nerimux/commands:join-pane sess src-win src-pane dst-win :h)))
         (expect (eq src-pane result))
         ;; src-window had only one pane -- it must have been killed.
         (expect (member src-win (session-windows sess)) :to-be-falsy)
@@ -308,14 +308,14 @@
 
   ;; join-pane returns NIL immediately when any required argument is NIL.
   (it "join-pane-returns-nil-on-nil-args"
-    (expect (null (cl-tmux/commands:join-pane nil nil nil nil :h))))
+    (expect (null (nerimux/commands:join-pane nil nil nil nil :h))))
 
   ;; join-pane -s SRC -t DST moves SRC's active pane into DST's window and, without
   ;; -d, makes the joined pane active.  The emptied source window is removed.
   (it "cmd-join-pane-moves-source-into-destination"
     (with-join-command-fixture (sess src-win src-pane dst-win dst-pane)
       (declare (ignore dst-pane))
-      (cl-tmux::%cmd-join-pane-arg sess (%join-command-args "-v"))
+      (nerimux::%cmd-join-pane-arg sess (%join-command-args "-v"))
       (check-table
        (list (list (%pane-in-window-p src-pane dst-win) t
                    "src-pane must now be in dst-window")
@@ -329,7 +329,7 @@
   (it "cmd-join-pane-d-keeps-destination-active"
     (with-join-command-fixture (sess src-win src-pane dst-win dst-pane)
       (declare (ignore src-win))
-      (cl-tmux::%cmd-join-pane-arg sess (%join-command-args "-d"))
+      (nerimux::%cmd-join-pane-arg sess (%join-command-args "-d"))
       (check-table
        (list (list (%pane-in-window-p src-pane dst-win) t
                    "src-pane is still moved into dst-window with -d")
@@ -356,7 +356,7 @@
   (it "cmd-join-pane-same-window-is-noop"
     (with-join-command-fixture (sess src-win src-pane dst-win dst-pane)
       (declare (ignore src-pane dst-win dst-pane))
-      (cl-tmux::%cmd-join-pane-arg sess '("-s" ":src" "-t" ":src"))
+      (nerimux::%cmd-join-pane-arg sess '("-s" ":src" "-t" ":src"))
       (check-table
        (list (list (= 1 (length (window-panes src-win))) t
                    "same-window join leaves the source pane in place")

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Session registry and session-group management.
 ;;;;
@@ -14,29 +14,29 @@
 
 ;;; ── In-memory session store (concrete repository) ────────────────────────────
 ;;;
-;;; Implements the cl-tmux/repository protocol by delegating to the global
+;;; Implements the nerimux/repository protocol by delegating to the global
 ;;; *server-sessions* alist already maintained by server-* functions.
 
 (defstruct in-memory-session-store
   "Concrete Repository implementation backed by *server-sessions*.")
 
-(defmethod cl-tmux/repository:repo-find-session
+(defmethod nerimux/repository:repo-find-session
     ((store in-memory-session-store) name)
   (server-find-session name))
 
-(defmethod cl-tmux/repository:repo-add-session
+(defmethod nerimux/repository:repo-add-session
     ((store in-memory-session-store) session)
   (server-add-session session))
 
-(defmethod cl-tmux/repository:repo-remove-session
+(defmethod nerimux/repository:repo-remove-session
     ((store in-memory-session-store) name)
   (server-remove-session name))
 
-(defmethod cl-tmux/repository:repo-all-sessions
+(defmethod nerimux/repository:repo-all-sessions
     ((store in-memory-session-store))
   (server-all-sessions))
 
-(defmethod cl-tmux/repository:repo-current-session
+(defmethod nerimux/repository:repo-current-session
     ((store in-memory-session-store))
   (server-current-session))
 
@@ -172,7 +172,7 @@
    recursion).  A peer whose active window vanished from the shared set falls
    back to the first remaining window — a pure focus repair, deliberately not
    session-select-window (no timestamp/flag side effects on a passive peer)."
-  (let* ((group-id (cl-tmux/model:session-group session))
+  (let* ((group-id (nerimux/model:session-group session))
          (entry    (and group-id (assoc group-id *session-groups*))))
     (when entry
       (dolist (peer (cdr entry))
@@ -184,9 +184,9 @@
 (defun %sync-peer-session-windows (peer session)
   (unless (eq peer session)
     (setf (session-windows peer) (session-windows session))
-    (unless (member (cl-tmux/model:session-active peer)
+    (unless (member (nerimux/model:session-active peer)
                     (session-windows peer))
-      (setf (cl-tmux/model:session-active peer)
+      (setf (nerimux/model:session-active peer)
             (first (session-windows peer))))))
 
-(setf cl-tmux/model:*session-windows-sync-function* #'%sync-group-session-windows)
+(setf nerimux/model:*session-windows-sync-function* #'%sync-group-session-windows)

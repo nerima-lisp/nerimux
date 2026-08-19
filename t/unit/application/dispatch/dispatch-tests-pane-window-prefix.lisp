@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Dispatch pane/window/prefix tests.
 
@@ -17,7 +17,7 @@
              (p3  (find 3 (window-panes win) :key #'pane-id)))
         (expect (eq p1 (first (window-panes win))))
         (expect (eq p3 (car (last (window-panes win)))))
-        (cl-tmux::%run-command-line s "swap-pane -s 1 -t 3")
+        (nerimux::%run-command-line s "swap-pane -s 1 -t 3")
         (expect (eq p3 (first (window-panes win))))
         (expect (eq p1 (car (last (window-panes win))))))))
 
@@ -28,7 +28,7 @@
              (p1  (find 1 (window-panes win) :key #'pane-id))
              (p2  (find 2 (window-panes win) :key #'pane-id)))
         (expect (eq p1 (first (window-panes win))))
-        (cl-tmux::%run-command-line s "swap-pane -t 2")
+        (nerimux::%run-command-line s "swap-pane -t 2")
         (expect (eq p2 (first (window-panes win)))))))
 
   ;; Without -d, swap-pane -t 2 makes the -t (dst) pane the active pane,
@@ -39,7 +39,7 @@
              (p1  (find 1 (window-panes win) :key #'pane-id))
              (p2  (find 2 (window-panes win) :key #'pane-id)))
         (expect (eq p1 (window-active-pane win)))
-        (cl-tmux::%run-command-line s "swap-pane -t 2")
+        (nerimux::%run-command-line s "swap-pane -t 2")
         (expect (eq p2 (window-active-pane win))))))
 
   ;; swap-pane rejects unsupported flags, unknown flags, and positional tokens
@@ -53,7 +53,7 @@
         (let* ((win (session-active-window s))
                (before (copy-list (window-panes win)))
                (*overlay* nil))
-          (expect (null (cl-tmux::%run-command-line s command)))
+          (expect (null (nerimux::%run-command-line s command)))
           (expect (equal before (window-panes win)))
           (assert-overlay-contains "unsupported argument" *overlay* command)))))
 
@@ -68,10 +68,10 @@
         (declare (ignore desc))
         (with-two-pane-h-session (sess win p0 p1)
           (when select-p1 (window-select-pane win p1))
-          (cl-tmux::dispatch-command sess cmd nil)
+          (nerimux::dispatch-command sess cmd nil)
           (expect (eq p1 (first  (window-panes win))))
           (expect (eq p0 (second (window-panes win))))
-          (expect cl-tmux::*dirty* :to-be-truthy)))))
+          (expect nerimux::*dirty* :to-be-truthy)))))
 
   ;;; ── :kill-pane-confirm dispatch ──────────────────────────────────────────────
 
@@ -84,11 +84,11 @@
         (declare (ignore desc))
         (with-fake-two-pane-session (s)
           (let ((*prompt* nil))
-            (cl-tmux::dispatch-command s :kill-pane-confirm nil)
+            (nerimux::dispatch-command s :kill-pane-confirm nil)
             (expect (prompt-active-p))
             (expect (prompt-single-key *prompt*) :to-be-truthy)
             (when answer
-              (cl-tmux::handle-prompt-key (char-code (char answer 0)))
+              (nerimux::handle-prompt-key (char-code (char answer 0)))
               (expect (prompt-active-p) :to-be-falsy))
             (expect (= expected-count
                        (length (window-panes (session-active-window s))))))))))
@@ -104,11 +104,11 @@
         (declare (ignore desc))
         (with-fake-session (s :nwindows 2)
           (let ((*prompt* nil))
-            (cl-tmux::dispatch-command s :kill-window-confirm nil)
+            (nerimux::dispatch-command s :kill-window-confirm nil)
             (expect (prompt-active-p))
             (expect (prompt-single-key *prompt*) :to-be-truthy)
             (when answer
-              (cl-tmux::handle-prompt-key (char-code (char answer 0)))
+              (nerimux::handle-prompt-key (char-code (char answer 0)))
               (expect (prompt-active-p) :to-be-falsy))
             (expect (= expected-count (length (session-windows s)))))))))
 
@@ -117,7 +117,7 @@
     (with-fake-session (s :nwindows 1)
       (let ((*prompt* nil))
         (let ((wname (window-name (session-active-window s))))
-          (cl-tmux::dispatch-command s :kill-window-confirm nil)
+          (nerimux::dispatch-command s :kill-window-confirm nil)
           (expect (prompt-active-p))
           (expect (search wname (prompt-label *prompt*)))))))
 
@@ -129,8 +129,8 @@
     ;; that dispatching :send-prefix does not signal any error and marks dirty.
     (with-fake-session (s)
       ;; Should not error even with fd=-1 (the guard (> fd 0) protects the write).
-      (finishes (cl-tmux::dispatch-command s :send-prefix nil))
-      (expect cl-tmux::*dirty* :to-be-truthy)))
+      (finishes (nerimux::dispatch-command s :send-prefix nil))
+      (expect nerimux::*dirty* :to-be-truthy)))
 
   ;; :send-prefix does not inject the prefix byte when the client is read-only.
   (it "dispatch-send-prefix-read-only-does-not-write"
@@ -138,17 +138,17 @@
       (with-fake-session (s)
         (let* ((pane (window-active-pane (session-active-window s)))
                (writes nil)
-               (orig (fdefinition 'cl-tmux/pty:pty-write)))
+               (orig (fdefinition 'nerimux/pty:pty-write)))
           (setf (pane-fd pane) 9999)
           (unwind-protect
                (progn
-                 (setf (fdefinition 'cl-tmux/pty:pty-write)
+                 (setf (fdefinition 'nerimux/pty:pty-write)
                        (lambda (fd bytes)
                          (push (list fd (coerce bytes 'list)) writes)))
-                 (let ((cl-tmux::*client-read-only* t))
-                   (cl-tmux::dispatch-command s :send-prefix nil))
+                 (let ((nerimux::*client-read-only* t))
+                   (nerimux::dispatch-command s :send-prefix nil))
                  (expect (null writes)))
-            (setf (fdefinition 'cl-tmux/pty:pty-write) orig))))))
+            (setf (fdefinition 'nerimux/pty:pty-write) orig))))))
 
   ;;; ── unbound prefix key no-op ─────────────────────────────────────────────────
 
@@ -158,13 +158,13 @@
     ;; raw bytes into the pane.  After the fix it must be a silent no-op.
     (with-fake-session (s)
       ;; Dispatching an unknown command must return NIL and must not error.
-      (expect (null (cl-tmux::dispatch-command s :no-such-command-xyz nil)))
-      (expect cl-tmux::*dirty* :to-be-truthy)))
+      (expect (null (nerimux::dispatch-command s :no-such-command-xyz nil)))
+      (expect nerimux::*dirty* :to-be-truthy)))
 
   ;;; ── :paste-buffer bracketed-paste wrapping ───────────────────────────────────
 
   ;; :paste-buffer with an empty paste buffer is a no-op (no error, marks dirty).
   (it "dispatch-paste-buffer-no-crash-without-buffer"
     (with-fake-session (s)
-      (finishes (cl-tmux::dispatch-command s :paste-buffer nil))
-      (expect cl-tmux::*dirty* :to-be-truthy))))
+      (finishes (nerimux::dispatch-command s :paste-buffer nil))
+      (expect nerimux::*dirty* :to-be-truthy))))

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/sgr)
+(in-package #:nerimux/terminal/sgr)
 
 ;;;; SGR (Select Graphic Rendition) macro-driven dispatch.
 ;;;;

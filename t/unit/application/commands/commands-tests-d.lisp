@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; rename hooks, server-access, customize-mode, copy-mode-toggle/append/copy-pipe — part VIII
 
@@ -11,7 +11,7 @@
     (with-isolated-hooks
       (let ((hook-win nil)
             (hook-name nil))
-        (cl-tmux/hooks:add-hook cl-tmux/hooks:+hook-after-rename-window+
+        (nerimux/hooks:add-hook nerimux/hooks:+hook-after-rename-window+
                                 (lambda (w n) (setf hook-win w hook-name n)))
         (let ((win (make-window :id 1 :name "old" :width 20 :height 5 :panes nil)))
           (rename-window win "new")
@@ -34,7 +34,7 @@
   (it "rename-window-fires-window-renamed-hook"
     (with-isolated-hooks
       (let ((fired nil))
-        (cl-tmux/hooks:add-hook cl-tmux/hooks:+hook-window-renamed+
+        (nerimux/hooks:add-hook nerimux/hooks:+hook-window-renamed+
                                 (lambda (&rest _) (declare (ignore _)) (setf fired t)))
         (let ((win (make-window :id 1 :name "old" :width 20 :height 5 :panes nil)))
           (rename-window win "new"))
@@ -43,12 +43,12 @@
   ;; %cmd-rename-session fires +hook-session-renamed+.
   (it "cmd-rename-session-fires-session-renamed-hook"
     (with-isolated-hooks
-      (let ((cl-tmux::*server-sessions* nil)
+      (let ((nerimux::*server-sessions* nil)
             (s (make-fake-session :nwindows 1))
             (fired nil))
-        (cl-tmux/hooks:add-hook cl-tmux/hooks:+hook-session-renamed+
+        (nerimux/hooks:add-hook nerimux/hooks:+hook-session-renamed+
                                 (lambda (&rest _) (declare (ignore _)) (setf fired t)))
-        (cl-tmux::%cmd-rename-session s '("newname"))
+        (nerimux::%cmd-rename-session s '("newname"))
         (expect fired :to-be-truthy))))
 
   ;; %cmd-select-pane fires +hook-after-select-pane+ regardless of which form it took.
@@ -56,9 +56,9 @@
     (with-isolated-hooks
       (with-fake-two-pane-session (s)
         (let ((fired nil))
-          (cl-tmux/hooks:add-hook cl-tmux/hooks:+hook-after-select-pane+
+          (nerimux/hooks:add-hook nerimux/hooks:+hook-after-select-pane+
                                   (lambda (&rest _) (declare (ignore _)) (setf fired t)))
-          (cl-tmux::%cmd-select-pane s '("-m"))
+          (nerimux::%cmd-select-pane s '("-m"))
           (expect fired :to-be-truthy)))))
 
   ;; %cmd-select-window fires +hook-after-select-window+ (tmux's per-command hook).
@@ -66,9 +66,9 @@
     (with-isolated-hooks
       (with-fake-session (s :nwindows 2)
         (let ((fired nil))
-          (cl-tmux/hooks:add-hook cl-tmux/hooks:+hook-after-select-window+
+          (nerimux/hooks:add-hook nerimux/hooks:+hook-after-select-window+
                                   (lambda (&rest _) (declare (ignore _)) (setf fired t)))
-          (cl-tmux::%cmd-select-window s '("-n"))   ; select next window
+          (nerimux::%cmd-select-window s '("-n"))   ; select next window
           (expect fired :to-be-truthy)))))
 
   ;; session-window-changed fires when the active window actually changes (the
@@ -77,9 +77,9 @@
     (with-isolated-hooks
       (with-fake-session (s :nwindows 2)
         (let ((fired nil))
-          (cl-tmux/hooks:add-hook cl-tmux/hooks:+hook-session-window-changed+
+          (nerimux/hooks:add-hook nerimux/hooks:+hook-session-window-changed+
                                   (lambda (&rest _) (declare (ignore _)) (setf fired t)))
-          (cl-tmux::%cmd-select-window s '("-n"))   ; switch to the next window
+          (nerimux::%cmd-select-window s '("-n"))   ; switch to the next window
           (expect fired :to-be-truthy)))))
 
   ;; window-pane-changed fires when a window's active pane changes (any select-pane
@@ -88,9 +88,9 @@
     (with-isolated-hooks
       (with-fake-two-pane-session (s)
         (let ((fired nil))
-          (cl-tmux/hooks:add-hook cl-tmux/hooks:+hook-window-pane-changed+
+          (nerimux/hooks:add-hook nerimux/hooks:+hook-window-pane-changed+
                                   (lambda (&rest _) (declare (ignore _)) (setf fired t)))
-          (cl-tmux::%run-command-line s "select-pane -t 2")   ; switch to pane 2
+          (nerimux::%run-command-line s "select-pane -t 2")   ; switch to pane 2
           (expect fired :to-be-truthy)))))
 
   ;; resize-pane fires +hook-after-resize-pane+ (covers both the resize-pane command
@@ -98,9 +98,9 @@
   (it "resize-pane-fires-after-resize-pane-hook"
     (with-isolated-hooks
       (with-fake-two-pane-session (s)
-        (let* ((win (cl-tmux/model:session-active-window s))
+        (let* ((win (nerimux/model:session-active-window s))
                (fired nil))
-          (cl-tmux/hooks:add-hook cl-tmux/hooks:+hook-after-resize-pane+
+          (nerimux/hooks:add-hook nerimux/hooks:+hook-after-resize-pane+
                                   (lambda (&rest _) (declare (ignore _)) (setf fired t)))
           (resize-pane win :up 2)
           (expect fired :to-be-truthy)))))
@@ -114,49 +114,49 @@
       (destructuring-bind (cmd user expected desc) row
         (declare (ignore desc))
         (with-fake-session (s :nwindows 1)
-          (let ((cl-tmux::*server-access-list* nil) (*overlay* nil))
-            (cl-tmux::%run-command-line s cmd)
+          (let ((nerimux::*server-access-list* nil) (*overlay* nil))
+            (nerimux::%run-command-line s cmd)
             (expect (equal expected
-                           (alist-value user cl-tmux::*server-access-list*
+                           (alist-value user nerimux::*server-access-list*
                                         :test #'string=))))))))
 
   ;; A bare `server-access -w USER` (no -a/-d) upgrades an existing entry to read-write.
   (it "server-access-w-modifies-existing-user-permission"
     (with-fake-session (s :nwindows 1)
-      (let ((cl-tmux::*server-access-list* (list (cons "carol" :read-only)))
+      (let ((nerimux::*server-access-list* (list (cons "carol" :read-only)))
             (*overlay* nil))
-        (cl-tmux::%run-command-line s "server-access -w carol")
+        (nerimux::%run-command-line s "server-access -w carol")
         (expect (equal :read-write
-                       (alist-value "carol" cl-tmux::*server-access-list*
+                       (alist-value "carol" nerimux::*server-access-list*
                                     :test #'string=))))))
 
   ;; Modifying (no -a) an unknown user is an error and must NOT create an entry,
   ;; matching tmux's `server-access user` semantics.
   (it "server-access-modify-unknown-user-is-error-no-entry-created"
     (with-fake-session (s :nwindows 1)
-      (let ((cl-tmux::*server-access-list* nil) (*overlay* nil))
-        (cl-tmux::%run-command-line s "server-access -w nobody")
-        (expect (null cl-tmux::*server-access-list*)))))
+      (let ((nerimux::*server-access-list* nil) (*overlay* nil))
+        (nerimux::%run-command-line s "server-access -w nobody")
+        (expect (null nerimux::*server-access-list*)))))
 
   ;; server-access -d USER removes USER from the access list.
   (it "server-access-delete-removes-user"
     (with-fake-session (s :nwindows 1)
-      (let ((cl-tmux::*server-access-list*
+      (let ((nerimux::*server-access-list*
               (list (cons "alice" :read-write) (cons "bob" :read-only)))
             (*overlay* nil))
-        (cl-tmux::%run-command-line s "server-access -d alice")
-        (expect (null (assoc "alice" cl-tmux::*server-access-list* :test #'string=)))
+        (nerimux::%run-command-line s "server-access -d alice")
+        (expect (null (assoc "alice" nerimux::*server-access-list* :test #'string=)))
         (expect (equal :read-only
-                       (alist-value "bob" cl-tmux::*server-access-list*
+                       (alist-value "bob" nerimux::*server-access-list*
                                     :test #'string=))))))
 
   ;; server-access -l renders each entry as `name: permission` in the overlay.
   (it "server-access-l-lists-entries-in-overlay"
     (with-fake-session (s :nwindows 1)
-      (let ((cl-tmux::*server-access-list*
+      (let ((nerimux::*server-access-list*
               (list (cons "alice" :read-write)))
             (*overlay* nil))
-        (cl-tmux::%run-command-line s "server-access -l")
+        (nerimux::%run-command-line s "server-access -l")
         (assert-overlay-contains "alice" (overlay-lines)
                                  "server-access -l listing")
         (assert-overlay-contains "read-write" (overlay-lines)
@@ -168,10 +168,10 @@
       (dolist (args '(("-a" "-k" "dave")
                       ("-a" "dave" "extra")))
         (let* ((initial (list (cons "alice" :read-write)))
-               (cl-tmux::*server-access-list* (copy-tree initial))
+               (nerimux::*server-access-list* (copy-tree initial))
                (*overlay* nil))
-          (expect (cl-tmux::%cmd-server-access s args) :to-be-falsy)
-          (expect (equal initial cl-tmux::*server-access-list*))
+          (expect (nerimux::%cmd-server-access s args) :to-be-falsy)
+          (expect (equal initial nerimux::*server-access-list*))
           (assert-overlay-contains "unsupported argument" *overlay*
                                    args)))))
 
@@ -182,7 +182,7 @@
   (it "bare-list-commands-lists-commands-not-unknown"
     (with-fake-session (s :nwindows 1)
       (let ((*overlay* nil))
-        (cl-tmux::%run-command-line s "list-commands")
+        (nerimux::%run-command-line s "list-commands")
         (assert-overlay-not-contains "unknown command" (overlay-lines)
                                      "bare list-commands")
         (assert-overlay-contains "new-window" (overlay-lines)
@@ -192,7 +192,7 @@
   (it "bare-list-panes-lists-panes-not-unknown"
     (with-fake-two-pane-session (s)
       (let ((*overlay* nil))
-        (cl-tmux::%run-command-line s "list-panes")
+        (nerimux::%run-command-line s "list-panes")
         (assert-overlay-not-contains "unknown command" (overlay-lines)
                                      "bare list-panes")
         (assert-overlay-contains "(active)" (overlay-lines)
@@ -205,7 +205,7 @@
   (it "customize-mode-renders-grouped-tree-with-option-values"
     (with-fake-session (s :nwindows 1)
       (let ((*overlay* nil))
-        (cl-tmux::%run-command-line s "customize-mode")
+        (nerimux::%run-command-line s "customize-mode")
         (assert-overlay-contains "Session/Window Options" (overlay-lines)
                                  "customize-mode tree")
         (assert-overlay-contains "mode-keys" (overlay-lines)
@@ -218,7 +218,7 @@
   (it "customize-mode-f-filter-restricts-to-matching-entries"
     (with-fake-session (s :nwindows 1)
       (let ((*overlay* nil))
-        (cl-tmux::%run-command-line s "customize-mode -f mode-keys")
+        (nerimux::%run-command-line s "customize-mode -f mode-keys")
         (assert-overlay-contains "mode-keys" (overlay-lines)
                                  "customize-mode -f mode-keys")
         (assert-overlay-not-contains "status-interval" (overlay-lines)
@@ -230,7 +230,7 @@
     (with-fake-session (s :nwindows 1)
       (dolist (line '("customize-mode mode-keys"))
         (let ((*overlay* nil))
-          (expect (null (cl-tmux::%run-command-line s line)))
+          (expect (null (nerimux::%run-command-line s line)))
           (assert-overlay-contains "customize-mode: unsupported argument"
                                    (overlay-lines) line)
           (assert-overlay-not-contains "Session/Window Options"
@@ -245,7 +245,7 @@
                       "customize-mode -t :.0"
                       "customize-mode -F #{pane_id}"))
         (let ((*overlay* nil))
-          (cl-tmux::%run-command-line s line)
+          (nerimux::%run-command-line s line)
           (assert-overlay-not-contains "unsupported argument"
                                        (overlay-lines) line)))))
 
@@ -253,5 +253,5 @@
   (it "customize-mode-keyword-dispatch-opens-overlay"
     (with-fake-session (s :nwindows 1)
       (let ((*overlay* nil))
-        (cl-tmux::dispatch-command s :customize-mode nil)
+        (nerimux::dispatch-command s :customize-mode nil)
         (assert-overlay-active ":customize-mode must open an overlay")))))

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; -- list-commands and wait-for -------------------------------------------
 ;;;

@@ -1,6 +1,6 @@
 ;;;; cl-weave specs for the cl-dataflow-kit copy-mode lifecycle read-model.
 
-(in-package #:cl-tmux/dataflow-tests)
+(in-package #:nerimux/dataflow-tests)
 
 (describe "copy-mode lifecycle state machine"
 

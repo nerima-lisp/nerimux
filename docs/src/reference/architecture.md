@@ -45,16 +45,16 @@ CPS parser) one level further down.
 
 ## Source layout
 
-`src/` is nested rather than flat — the one place cl-tmux deviates from the
+`src/` is nested rather than flat — the one place nerimux deviates from the
 organization's package standard, and a deliberate exception: at 266 source
 files a flat directory stops being navigable. Package definitions are
 correspondingly split across several `src/bootstrap/package-*.lisp` fragments
 loaded by `src/bootstrap/package.lisp`.
 
 ```
-cl-tmux/
+nerimux/
 ├── flake.nix               # Nix build + checks (pure Lisp, no C compilation)
-├── cl-tmux.asd             # ASDF systems: cl-tmux, /test, /weave, /dataflow
+├── nerimux.asd             # ASDF systems: nerimux, /test, /weave, /dataflow
 ├── run-tests.lisp          # single Lisp-level test entry point
 ├── src/
 │   ├── bootstrap/          # packages, entry point, runtime, server/client loops

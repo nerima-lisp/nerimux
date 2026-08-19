@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Core dispatch navigation tests.
 
@@ -8,10 +8,10 @@
 
   ;; define-cyclic-navigators is a defined macro that generated next-cyclic and prev-cyclic.
   (it "define-cyclic-navigators-macro-is-defined"
-    (expect (macro-function 'cl-tmux::define-cyclic-navigators))
+    (expect (macro-function 'nerimux::define-cyclic-navigators))
     ;; Both generated functions are symmetric: stepping n and -n return to original.
-    (expect (eql 'a (cl-tmux::prev-cyclic '(a b c)
-                                          (cl-tmux::next-cyclic '(a b c) 'a)))))
+    (expect (eql 'a (nerimux::prev-cyclic '(a b c)
+                                          (nerimux::next-cyclic '(a b c) 'a)))))
 
   ;;; ── with-active-pane macro ──────────────────────────────────────────────────
 
@@ -19,26 +19,26 @@
   (it "with-active-pane-returns-nil-for-empty-session"
     (with-fake-session (s :nwindows 0)
       ;; %active-screen uses with-active-pane internally
-      (expect (null (cl-tmux::%active-screen s)))))
+      (expect (null (nerimux::%active-screen s)))))
 
   ;; with-active-pane is a defined macro.
   (it "with-active-pane-macro-is-defined"
-    (expect (macro-function 'cl-tmux::with-active-pane)))
+    (expect (macro-function 'nerimux::with-active-pane)))
 
   ;;; ── Window / pane selection ────────────────────────────────────────────────
 
   ;; C-b n moves to the next window and wraps around.
   (it "dispatch-next-window-cycles"
     (with-fake-session (s :nwindows 2)
-      (cl-tmux::dispatch-command s :next-window nil)
+      (nerimux::dispatch-command s :next-window nil)
       (expect (eq (second (session-windows s)) (session-active-window s)))
-      (cl-tmux::dispatch-command s :next-window nil)
+      (nerimux::dispatch-command s :next-window nil)
       (expect (eq (first (session-windows s)) (session-active-window s)))))
 
   ;; C-b p from the first window wraps to the last.
   (it "dispatch-prev-window-wraps"
     (with-fake-session (s :nwindows 2)
-      (cl-tmux::dispatch-command s :prev-window nil)
+      (nerimux::dispatch-command s :prev-window nil)
       (expect (eq (second (session-windows s)) (session-active-window s)))))
 
   ;; %notify-pane-focus fires pane-focus-in / pane-focus-out independent of ?1004.
@@ -47,13 +47,13 @@
       (let* ((s        (make-fake-session :nwindows 1 :npanes 1))
              (pane     (session-active-pane s))
              (in-fired nil) (out-fired nil))
-        (cl-tmux/hooks:add-hook "pane-focus-in"
+        (nerimux/hooks:add-hook "pane-focus-in"
                                 (lambda (&rest _) (declare (ignore _)) (setf in-fired t)))
-        (cl-tmux/hooks:add-hook "pane-focus-out"
+        (nerimux/hooks:add-hook "pane-focus-out"
                                 (lambda (&rest _) (declare (ignore _)) (setf out-fired t)))
-        (cl-tmux::%notify-pane-focus pane t)
+        (nerimux::%notify-pane-focus pane t)
         (expect in-fired :to-be-truthy)
-        (cl-tmux::%notify-pane-focus pane nil)
+        (nerimux::%notify-pane-focus pane nil)
         (expect out-fired :to-be-truthy))))
 
   ;; Switching panes fires focus-out for the old pane and focus-in for the new.
@@ -63,11 +63,11 @@
              (win       (session-active-window s))
              (panes     (window-panes win))
              (in-count 0) (out-count 0))
-        (cl-tmux/hooks:add-hook "pane-focus-in"
+        (nerimux/hooks:add-hook "pane-focus-in"
                                 (lambda (&rest _) (declare (ignore _)) (incf in-count)))
-        (cl-tmux/hooks:add-hook "pane-focus-out"
+        (nerimux/hooks:add-hook "pane-focus-out"
                                 (lambda (&rest _) (declare (ignore _)) (incf out-count)))
-        (cl-tmux::%select-pane-with-focus win (second panes))
+        (nerimux::%select-pane-with-focus win (second panes))
         (expect (= 1 out-count))
         (expect (= 1 in-count)))))
 
@@ -79,14 +79,14 @@
       (destructuring-bind (abbrev desc) row
         (declare (ignore desc))
         (with-fake-session (s :nwindows 2)
-          (cl-tmux::%run-command-tokens s (list abbrev))
+          (nerimux::%run-command-tokens s (list abbrev))
           (expect (eq (second (session-windows s)) (session-active-window s)))))))
 
   ;; %run-command-tokens resolves the canonical 'rename-window' command through
   ;; *arg-command-table* to rename the active window.
   (it "run-command-tokens-canonical-rename-window-with-arg"
     (with-fake-session (s :nwindows 1)
-      (cl-tmux::%run-command-tokens s '("rename-window" "myname"))
+      (nerimux::%run-command-tokens s '("rename-window" "myname"))
       (expect (string= "myname" (window-name (session-active-window s))))))
 
   ;; C-b o moves to the next pane within the active window.
@@ -96,23 +96,23 @@
              (p0  (first  (window-panes win)))
              (p1  (second (window-panes win))))
         (expect (eq p0 (window-active-pane win)))
-        (cl-tmux::dispatch-command s :next-pane nil)
+        (nerimux::dispatch-command s :next-pane nil)
         (expect (eq p1 (window-active-pane win))))))
 
   ;; C-b <n>: :select-window uses the pressed digit byte to pick the window.
   (it "dispatch-select-window-by-digit"
     (with-fake-session (s :nwindows 3)
-      (cl-tmux::dispatch-command s :select-window (char-code #\2))
+      (nerimux::dispatch-command s :select-window (char-code #\2))
       (expect (eq (third (session-windows s)) (session-active-window s)))
-      (cl-tmux::dispatch-command s :select-window (char-code #\0))
+      (nerimux::dispatch-command s :select-window (char-code #\0))
       (expect (eq (first (session-windows s)) (session-active-window s)))))
 
   ;; An unrecognized command falls through to the passthrough branch: it returns
   ;; NIL (no quit), doesn't error, and still marks the session dirty.
   (it "dispatch-unknown-command-passes-through"
     (with-fake-session (s)
-      (expect (null (cl-tmux::dispatch-command s :no-such-command (char-code #\a))))
-      (expect cl-tmux::*dirty* :to-be-truthy)))
+      (expect (null (nerimux::dispatch-command s :no-such-command (char-code #\a))))
+      (expect nerimux::*dirty* :to-be-truthy)))
 
   ;; Registry integrity meta-test: every arg-command spec must name a handler
   ;; that is actually fbound.  Each spec stores its handler as a bare
@@ -122,7 +122,7 @@
   ;; trips an undefined-function error.  One assertion over the whole table
   ;; guards the entire class — including every command added later.
   (it "every-arg-command-handler-is-fbound"
-    (let ((unbound (loop for (names . handler) in cl-tmux::*arg-command-table*
+    (let ((unbound (loop for (names . handler) in nerimux::*arg-command-table*
                          unless (fboundp handler)
                            collect (list handler :for names))))
       (expect (null unbound)))))

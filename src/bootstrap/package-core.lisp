@@ -1,4 +1,4 @@
-(defpackage #:cl-tmux/config
+(defpackage #:nerimux/config
   (:use #:cl)
   (:documentation
    "APPLICATION layer: everything that turns a .tmux.conf into runtime state.  Two
@@ -63,23 +63,23 @@
    #:%parse-prefix-key
    ;; ORCHESTRATE-layer shell initializer
    #:init-default-shell
-   ;; Lazy SB-POSIX symbol lookup (shared with cl-tmux/model's process
+   ;; Lazy SB-POSIX symbol lookup (shared with nerimux/model's process
    ;; environment helpers, which used to carry their own identical copy)
    #:find-posix-function))
 
 ;; No :import-from for the sibling kits: every descriptor-level operator in
 ;; src/infrastructure/pty/ is written qualified (cl-tty-kit:, process-kit:,
 ;; sb-posix:), which is what makes the system-call surface legible. This used to
-;; say the same about cffi:, which cl-tmux no longer depends on.
-(defpackage #:cl-tmux/pty
+;; say the same about cffi:, which nerimux no longer depends on.
+(defpackage #:nerimux/pty
   (:use #:cl)
   (:documentation
    "INFRASTRUCTURE layer: the pseudo-terminal device itself.  Forks a shell under a
     PTY, moves octets across the master fd, drives termios raw mode and TIOCSWINSZ
-    geometry, and multiplexes readiness with select(2) — cl-tmux needs to poll PTY,
+    geometry, and multiplexes readiness with select(2) — nerimux needs to poll PTY,
     socket, and stdin fds together, which is the one libc call sb-posix does not
     expose.  Supplies the concrete adapters that install-pty-port stores into
-    cl-tmux/ports.")
+    nerimux/ports.")
   (:export
    ;; PTY lifecycle
    #:forkpty-with-shell    ; (rows cols) → (values master-fd child-pid slave-path)
@@ -98,10 +98,10 @@
    #:terminal-size         ; () → (values rows cols)
    #:+default-term-rows+   ; fallback terminal rows when ioctl fails/is unavailable
    #:+default-term-cols+   ; fallback terminal columns when ioctl fails/is unavailable
-   ;; Port adapter (installs cl-tmux/ports vars at server startup)
+   ;; Port adapter (installs nerimux/ports vars at server startup)
    #:install-pty-port))
 
-(defpackage #:cl-tmux/vcs
+(defpackage #:nerimux/vcs
   (:use #:cl)
   (:documentation
    "INFRASTRUCTURE layer: the optional cl-vcs-kit adapter.  Translates ghq and
@@ -127,7 +127,7 @@
    #:create-worktree-async
    #:delete-worktree-async))
 
-(defpackage #:cl-tmux/persistence
+(defpackage #:nerimux/persistence
   (:use #:cl)
   (:documentation
    "DOMAIN layer: versioned, data-only runtime snapshots.  Serialization is
@@ -149,7 +149,7 @@
    #:save-runtime-snapshot
    #:load-runtime-snapshot))
 
-(defpackage #:cl-tmux/picker
+(defpackage #:nerimux/picker
   (:use #:cl)
   (:documentation
    "APPLICATION layer: a pure global picker projection over organizations,
@@ -168,14 +168,14 @@
 
 ;;; ── Client/server wire protocol ──────────────────────────────────────────
 
-(defpackage #:cl-tmux/protocol
+(defpackage #:nerimux/protocol
   (:use #:cl)
   (:documentation
    "INFRASTRUCTURE layer: the client/server wire format, as a pure codec.  Encodes
     and decodes the frames a detached client exchanges with the server — keystrokes
     and resizes upstream, rendered frames downstream — plus the delimiter-separated
     command payload.  Deliberately holds no sockets and no global state, so the
-    format is unit-testable without a server; the I/O sits in cl-tmux/transport.")
+    format is unit-testable without a server; the I/O sits in nerimux/transport.")
   (:export
    ;; Message type tags + header size
    #:+msg-attach+ #:+msg-key+ #:+msg-resize+ #:+msg-detach+ #:+msg-frame+ #:+msg-bye+
@@ -204,18 +204,18 @@
 
 ;;; ── Client/server stream transport ───────────────────────────────────────
 
-(defpackage #:cl-tmux/transport
+(defpackage #:nerimux/transport
   (:use #:cl)
   ;; Four names out of the codec's forty: the header size and payload-length
   ;; offset needed to know how much to read, the length decoder, and DECODE-FRAME.
-  ;; Everything else in cl-tmux/protocol is for packet authors, not for the pipe.
-  (:import-from #:cl-tmux/protocol
+  ;; Everything else in nerimux/protocol is for packet authors, not for the pipe.
+  (:import-from #:nerimux/protocol
                 #:+header-size+
                 #:+payload-length-offset+
                 #:read-u32
                 #:decode-frame)
   (:documentation
-   "INFRASTRUCTURE layer: the impure shell around the cl-tmux/protocol codec.  Moves
+   "INFRASTRUCTURE layer: the impure shell around the nerimux/protocol codec.  Moves
     whole frames across any binary stream — a socket stream in production, a
     temp-file stream in tests — under a wall-clock budget that keeps a hung peer
     from blocking a reader forever.  Does no framing of its own.")
@@ -224,7 +224,7 @@
    #:read-frame            ; (stream) → (values type payload) or NIL at EOF
    #:with-incoming-frame)) ; macro — read + Prolog-dispatch one frame from a stream
 
-(defpackage #:cl-tmux/net
+(defpackage #:nerimux/net
   (:use #:cl)
   (:documentation
    "INFRASTRUCTURE layer: the Unix-domain socket underneath detach-attach.  Thin

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Shell conditional, named dispatch, and message command tests
 
@@ -20,7 +20,7 @@
       (destructuring-bind (cmd expected msg) row
         (with-fake-session (s)
           (let ((*overlay* nil))
-            (cl-tmux::%run-command-line s cmd)
+            (nerimux::%run-command-line s cmd)
             (assert-overlay-contains expected (overlay-lines) msg))))))
 
   ;; if-shell -t <pane> -F evaluates the condition in the target pane's context,
@@ -30,8 +30,8 @@
       (let* ((win (session-active-window s))
              (target (find 2 (window-panes win) :key #'pane-id))
              (*overlay* nil))
-        (setf (cl-tmux/model:pane-title target) "target-title")
-        (cl-tmux::%run-command-line
+        (setf (nerimux/model:pane-title target) "target-title")
+        (nerimux::%run-command-line
          s "if-shell -t %2 -F \"#{pane_title}\" \"display-message target\" \"display-message active\"")
         (assert-overlay-contains "target" (overlay-lines)
                                   "if-shell -F must evaluate against the target pane")
@@ -41,7 +41,7 @@
   (it "run-command-line-if-shell-F-empty-condition-no-then"
     (with-fake-session (s)
       (let ((*overlay* nil))
-        (cl-tmux::%run-command-line s "if-shell -F \"\" \"display-message x\"")
+        (nerimux::%run-command-line s "if-shell -F \"\" \"display-message x\"")
         (assert-overlay-inactive
          "an empty (falsey) condition with no else must not run THEN"))))
 
@@ -51,7 +51,7 @@
                        "if-shell -F 1 \"display-message x\" \"display-message y\" extra"))
       (with-fake-session (s)
         (let ((*overlay* nil))
-          (expect (null (cl-tmux::%run-command-line s command)))
+          (expect (null (nerimux::%run-command-line s command)))
           (assert-overlay-contains "if-shell: unsupported argument"
                                     (overlay-lines) command)))))
 
@@ -63,15 +63,15 @@
     ;; that would prevent later PTY tests from forking.
     (with-fake-session (s :nwindows 2)
       (let ((*overlay* nil))
-        (cl-tmux::%dispatch-named-command s "next-window")
-        (expect cl-tmux::*dirty* :to-be-truthy)
+        (nerimux::%dispatch-named-command s "next-window")
+        (expect nerimux::*dirty* :to-be-truthy)
         (expect (eq (second (session-windows s)) (session-active-window s))))))
 
   ;; %dispatch-named-command with an unrecognized name shows an overlay.
   (it "dispatch-named-command-unknown-shows-overlay"
     (with-fake-session (s)
       (let ((*overlay* nil))
-        (cl-tmux::%dispatch-named-command s "totally-unknown-xyz")
+        (nerimux::%dispatch-named-command s "totally-unknown-xyz")
         (assert-overlay-contains "unknown command" (overlay-lines)
                                   "unknown command")
         (assert-overlay-contains "totally-unknown-xyz" (overlay-lines)
@@ -83,8 +83,8 @@
   (it "dispatch-show-messages-empty-log-shows-overlay"
     (with-fake-session (s)
       (let ((*overlay* nil)
-            (cl-tmux::*message-log* nil))
-        (cl-tmux::dispatch-command s :show-messages nil)
+            (nerimux::*message-log* nil))
+        (nerimux::dispatch-command s :show-messages nil)
         (assert-overlay-contains "no messages" (overlay-lines)
                                   ":show-messages"))))
 
@@ -92,8 +92,8 @@
   (it "dispatch-show-messages-populated-log-shows-entries"
     (with-fake-session (s)
       (let ((*overlay* nil)
-            (cl-tmux::*message-log* (list (cons 0 "hello") (cons 1 "world"))))
-        (cl-tmux::dispatch-command s :show-messages nil)
+            (nerimux::*message-log* (list (cons 0 "hello") (cons 1 "world"))))
+        (nerimux::dispatch-command s :show-messages nil)
         (expect (equal '("hello" "world") (overlay-lines)))
         (assert-overlay-contains "hello" (overlay-lines)
                                   ":show-messages")
@@ -104,12 +104,12 @@
   (it "dispatch-show-messages-defaults-to-current-client-log"
     (with-fake-session (s)
       (let* ((*overlay* nil)
-             (cl-tmux::*message-log* (list (cons 0 "global")))
-             (cl-tmux::*current-client-conn*
-               (cl-tmux::%make-client-conn
-                :state (cl-tmux::make-input-state)
+             (nerimux::*message-log* (list (cons 0 "global")))
+             (nerimux::*current-client-conn*
+               (nerimux::%make-client-conn
+                :state (nerimux::make-input-state)
                 :message-log (list (cons 1 "client")))))
-        (cl-tmux::dispatch-command s :show-messages nil)
+        (nerimux::dispatch-command s :show-messages nil)
         (expect (equal '("client") (overlay-lines)))
         (assert-overlay-not-contains "global" (overlay-lines)
                                      ":show-messages"))))
@@ -118,16 +118,16 @@
   (it "run-command-line-show-messages-targets-client-log"
     (with-fake-session (s)
       (let* ((*overlay* nil)
-             (a (cl-tmux::%make-client-conn
-                 :state (cl-tmux::make-input-state)
+             (a (nerimux::%make-client-conn
+                 :state (nerimux::make-input-state)
                  :message-log (list (cons 0 "alpha"))))
-             (b (cl-tmux::%make-client-conn
-                 :state (cl-tmux::make-input-state)
+             (b (nerimux::%make-client-conn
+                 :state (nerimux::make-input-state)
                  :message-log (list (cons 0 "beta"))))
-             (cl-tmux::*clients* (list a b))
-             (cl-tmux::*current-client-conn* a)
-             (cl-tmux::*message-log* (list (cons 0 "global"))))
-        (cl-tmux::%run-command-line s "show-messages -t client-1")
+             (nerimux::*clients* (list a b))
+             (nerimux::*current-client-conn* a)
+             (nerimux::*message-log* (list (cons 0 "global"))))
+        (nerimux::%run-command-line s "show-messages -t client-1")
         (expect (equal '("beta") (overlay-lines)))
         (assert-overlay-not-contains "alpha" (overlay-lines)
                                      "show-messages -t client-1")
@@ -137,15 +137,15 @@
   ;; show-messages rejects stale tmux parity flags.
   (it "run-command-line-show-messages-rejects-stale-flags"
     (with-fake-session (s)
-      (let* ((client (cl-tmux::%make-client-conn
-                      :state (cl-tmux::make-input-state)
+      (let* ((client (nerimux::%make-client-conn
+                      :state (nerimux::make-input-state)
                       :message-log (list (cons 0 "alpha") (cons 1 "beta"))))
-             (cl-tmux::*clients* (list client))
-             (cl-tmux::*message-log* (list (cons 0 "alpha") (cons 1 "beta"))))
+             (nerimux::*clients* (list client))
+             (nerimux::*message-log* (list (cons 0 "alpha") (cons 1 "beta"))))
         (dolist (line '("show-messages -J"
                         "show-messages -T"))
           (let ((*overlay* nil))
-            (cl-tmux::%run-command-line s line)
+            (nerimux::%run-command-line s line)
             (assert-overlay-active line)
             (assert-overlay-contains "show-messages: unsupported argument"
                                      (overlay-lines) line)

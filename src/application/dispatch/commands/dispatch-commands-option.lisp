@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; -- set-option scope helpers + show-options %cmd-* handlers -----------------
 ;;;
@@ -20,9 +20,9 @@
 (defun %expand-F-flag (flags session raw-value)
   "Expand RAW-VALUE as a format string when FLAGS contains -F; else return as-is."
   (if (%flag-present-p flags #\F)
-      (cl-tmux/format:expand-format
+      (nerimux/format:expand-format
        raw-value
-       (cl-tmux/format:format-context-from-session
+       (nerimux/format:format-context-from-session
         session (session-active-window session) (session-active-pane session)))
       raw-value))
 
@@ -51,8 +51,8 @@
       ;; options_scope_from_name).  A window-scoped option (not a user @-option)
       ;; routes to the -t / active window; session/server names stay :global.
       ((and name (not globalp)
-            (not (cl-tmux/options:user-option-name-p name))
-            (eq :window (cl-tmux/options:option-scope-from-name name)))
+            (not (nerimux/options:user-option-name-p name))
+            (eq :window (nerimux/options:option-scope-from-name name)))
        (let ((win (%resolve-window-target-or-active session target-str)))
          (funcall k (if win :window :global) win)))
       (t
@@ -64,19 +64,19 @@
    options_get_only, used by set-option -o (only-if-unset)."
   (ecase scope
     (:pane
-     (nth-value 1 (gethash name (cl-tmux/model:pane-local-options target))))
+     (nth-value 1 (gethash name (nerimux/model:pane-local-options target))))
     (:window
-     (nth-value 1 (gethash name (cl-tmux/model:window-local-options target))))
+     (nth-value 1 (gethash name (nerimux/model:window-local-options target))))
     (:global
-     (nth-value 1 (gethash name cl-tmux/options:*global-options*)))
+     (nth-value 1 (gethash name nerimux/options:*global-options*)))
     (:server
-     (nth-value 1 (gethash name cl-tmux/options:*server-options*)))))
+     (nth-value 1 (gethash name nerimux/options:*server-options*)))))
 
 (defun %scope-append (name value scope target)
   "Append VALUE to option NAME in the store identified by SCOPE / TARGET.
    Style options (e.g. status-style) join with ',' via append-option-value."
   (%scope-setter scope name
-                 (cl-tmux/options:append-option-value
+                 (nerimux/options:append-option-value
                   name (%scope-getter scope name target nil) value)
                  target))
 
@@ -110,7 +110,7 @@
         ;; Side-effects for special options (prefix/status/escape-time
         ;; etc.) run after the operation.  Passes RAW value —
         ;; side-effect parsers expect strings, not coerced types.
-        (cl-tmux/config:apply-option-side-effects name value unset-p))))
+        (nerimux/config:apply-option-side-effects name value unset-p))))
 
 (defun %cmd-set-option (session args)
   "set-option [-aFgopqsuUw] [-t target] <name> <value...>: set an option.
@@ -133,7 +133,7 @@
            (only-if-unset-p (%flag-present-p flags #\o)))
       (cond
         ((null name) nil)
-        ((cl-tmux/config::%unsupported-set-option-p name)
+        ((nerimux/config::%unsupported-set-option-p name)
          ;; -q suppresses the unknown-option error overlay.
          (unless quiet-p
            (%overlayf "set-option: unsupported option ~A" name))
@@ -162,7 +162,7 @@
 
 (defun %show-option-value-only (name scope)
   "Return only NAME's value for `show-options -v`, or NIL when NAME is unset."
-  (let* ((line (cl-tmux/options:show-option name scope))
+  (let* ((line (nerimux/options:show-option name scope))
          (prefix (format nil "~A " name)))
     (when (and (not (search "(not set)" line))
                (>= (length line) (length prefix))
@@ -176,8 +176,8 @@
    reuses the existing command-hook formatter so the display path stays aligned."
   (if (%flag-present-p flags #\H)
       (if (plusp (length text))
-          (format nil "~A~%~A" text (cl-tmux/hooks:describe-command-hooks))
-          (cl-tmux/hooks:describe-command-hooks))
+          (format nil "~A~%~A" text (nerimux/hooks:describe-command-hooks))
+          (nerimux/hooks:describe-command-hooks))
       text))
 
 (defun %show-options-overlay (text flags)
@@ -232,11 +232,11 @@
        (or single-renderer
            (lambda (name inherited-p)
              (declare (ignore inherited-p))
-             (cl-tmux/options:show-option name scope)))
+             (nerimux/options:show-option name scope)))
        (or all-renderer
            (lambda (inherited-p)
              (declare (ignore inherited-p))
-             (cl-tmux/options:show-options scope)))))))
+             (nerimux/options:show-options scope)))))))
 
 (defun %cmd-show-options-arg (session args)
   "show-options with arguments."
@@ -255,11 +255,11 @@
        positionals
        (lambda (name inherited-p)
          (declare (ignore inherited-p))
-         (cl-tmux/options:show-window-option name win :value-only-p t))
+         (nerimux/options:show-window-option name win :value-only-p t))
        (lambda (name inherited-p)
-         (cl-tmux/options:show-window-option name win :inherited-p inherited-p))
+         (nerimux/options:show-window-option name win :inherited-p inherited-p))
        (lambda (inherited-p)
-         (cl-tmux/options:show-window-options win :inherited-p inherited-p))))))
+         (nerimux/options:show-window-options win :inherited-p inherited-p))))))
 
 (defun %cmd-show-session-options-arg (session args)
   "show-session-options with arguments; consumes tmux flags."

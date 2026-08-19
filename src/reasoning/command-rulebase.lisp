@@ -1,6 +1,6 @@
 ;;;; Command-metadata reasoning: a second cold-path Prolog read-model.
 ;;;;
-;;;; Projects cl-tmux's canonical command table (`*command-usage-table*',
+;;;; Projects nerimux's canonical command table (`*command-usage-table*',
 ;;;; name → getopt usage string) into a rulebase so callers can ask relational
 ;;;; questions the flat table cannot answer directly: which commands accept a
 ;;;; given flag, which take no arguments, which flags a command supports.
@@ -15,7 +15,7 @@
 ;;;; This is strictly cold-path (introspection / validation), never the hot
 ;;;; dispatch loop.
 
-(in-package #:cl-tmux/reasoning)
+(in-package #:nerimux/reasoning)
 
 (defun %parse-usage-flags (usage)
   "Extract the single-character option flags declared in a getopt USAGE string.
@@ -45,7 +45,7 @@ Returns a de-duplicated list of one-character strings, in first-seen order."
   "Return the canonical command table as (NAME . USAGE) pairs.
 
 Reads the internal `*command-usage-table*'; a cold-path introspection use."
-  (copy-alist (symbol-value (find-symbol "*COMMAND-USAGE-TABLE*" :cl-tmux))))
+  (copy-alist (symbol-value (find-symbol "*COMMAND-USAGE-TABLE*" :nerimux))))
 
 (defun %command-rules ()
   "Static rule clauses for the command-metadata rulebase."

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/types)
+(in-package #:nerimux/terminal/types)
 
 ;;;; Immutable cell type and Unicode character-width table.
 ;;;;
@@ -132,7 +132,7 @@
   "CODE-CHAR guarded against invalid code points; falls back to U+FFFD.
 
    A lone surrogate counts as invalid.  A child process can emit the three bytes
-   ED A0 80, which cl-tmux's own UTF-8 continuation decoder (parser-utf8.lisp)
+   ED A0 80, which nerimux's own UTF-8 continuation decoder (parser-utf8.lisp)
    reassembles into code point #xD800; without this guard that lone surrogate
    would be stored in a screen cell and then reach
    CL-CODEC-KIT:STRING-TO-OCTETS on the render/broadcast path (protocol.lisp

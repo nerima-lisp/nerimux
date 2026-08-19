@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; send-keys command tests
 
@@ -70,20 +70,20 @@
 
   ;; send-keys-to-pane is a no-op for a NIL pane and for a pane with fd=-1.
   (it "send-keys-to-pane-noop"
-    (finishes (cl-tmux/commands:send-keys-to-pane nil "hello"))
+    (finishes (nerimux/commands:send-keys-to-pane nil "hello"))
     (let ((pane (%make-test-pane)))
-      (finishes (cl-tmux/commands:send-keys-to-pane pane "hello"))))
+      (finishes (nerimux/commands:send-keys-to-pane pane "hello"))))
 
   ;;; send-keys key-name translation
 
   ;; %escape-sequence prepends exactly one ESC char to the concatenation of its
   ;; TAIL string arguments, regardless of how many TAIL arguments are given.
   (it "escape-sequence-prepends-single-esc"
-    (expect (string= (string (code-char 27)) (cl-tmux/commands::%escape-sequence)))
+    (expect (string= (string (code-char 27)) (nerimux/commands::%escape-sequence)))
     (expect (string= (concatenate 'string (string (code-char 27)) "[A")
-                      (cl-tmux/commands::%escape-sequence "[A")))
+                      (nerimux/commands::%escape-sequence "[A")))
     (expect (string= (concatenate 'string (string (code-char 27)) "[" "1" ";" "5" "A")
-                      (cl-tmux/commands::%escape-sequence "[" "1" ";" "5" "A"))))
+                      (nerimux/commands::%escape-sequence "[" "1" ";" "5" "A"))))
 
   (define-command-case-table-test key-name-to-bytes-table
     "%key-name-to-bytes maps named, control, meta, and CSI-modified keys to their byte sequences."
@@ -103,8 +103,8 @@
 
   ;; %key-name-to-bytes returns NIL for text that is not a key name.
   (it "key-name-to-bytes-unknown-returns-nil"
-    (expect (null (cl-tmux/commands::%key-name-to-bytes "hello")))
-    (expect (null (cl-tmux/commands::%key-name-to-bytes "echo"))))
+    (expect (null (nerimux/commands::%key-name-to-bytes "hello")))
+    (expect (null (nerimux/commands::%key-name-to-bytes "echo"))))
 
   (define-command-case-table-test translate-send-keys-keys-vs-literal
     "%translate-send-keys parses arguments shell-style and translates each: key
@@ -118,8 +118,8 @@
     (with-pipe-fds (rfd wfd)
       (let ((pane (make-pane :id 1 :x 0 :y 0 :width 20 :height 5 :fd wfd
                              :screen (make-screen 20 5))))
-        (cl-tmux/commands:send-keys-to-pane pane "Enter")
-        (let ((ready (cl-tmux/pty:select-fds (list rfd) 200000)))
+        (nerimux/commands:send-keys-to-pane pane "Enter")
+        (let ((ready (nerimux/pty:select-fds (list rfd) 200000)))
           (expect ready :to-be-truthy)
           (when ready
             (let ((bytes (read-octets-from-fd rfd 4)))

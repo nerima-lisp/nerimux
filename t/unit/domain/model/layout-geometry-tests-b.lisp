@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; layout-geometry tests — part B: %ranges-overlap-p, pane-center-x/y,
 ;;;; closest-to-center, layout-split-axis-extent v-split, resize-find-split nested,
@@ -20,7 +20,7 @@
                    (nil 10 5 0  3 "[10,15) and [0,3) are disjoint")))
       (destructuring-bind (expected s1 e1 s2 e2 desc) row
         (declare (ignore desc))
-        (expect (eq expected (cl-tmux/model::%ranges-overlap-p s1 e1 s2 e2))))))
+        (expect (eq expected (nerimux/model::%ranges-overlap-p s1 e1 s2 e2))))))
 
   ;;; ── %pane-center-x / %pane-center-y direct tests ────────────────────────────
 
@@ -28,13 +28,13 @@
   (it "pane-center-x-returns-midpoint"
     (let ((pane (make-pane :id 1 :fd -1 :pid -1 :x 10 :y 0 :width 20 :height 5
                            :screen (make-screen 20 5))))
-      (expect (= 20 (cl-tmux/model::%pane-center-x pane)))))
+      (expect (= 20 (nerimux/model::%pane-center-x pane)))))
 
   ;; %pane-center-y returns pane-y + half the height (integer arithmetic).
   (it "pane-center-y-returns-midpoint"
     (let ((pane (make-pane :id 1 :fd -1 :pid -1 :x 0 :y 4 :width 10 :height 8
                            :screen (make-screen 10 8))))
-      (expect (= 8 (cl-tmux/model::%pane-center-y pane)))))
+      (expect (= 8 (nerimux/model::%pane-center-y pane)))))
 
   ;;; ── %closest-to-center direct tests ─────────────────────────────────────────
   ;;;
@@ -50,8 +50,8 @@
     (with-center-test-panes ((pane 0 0 10 10 4)
                               (a    1 0  0 10 4)
                               (b    2 0  8 10 4))
-      (expect (eq b (cl-tmux/model::%closest-to-center (list a b) pane
-                                                    #'cl-tmux/model::%pane-center-y)))))
+      (expect (eq b (nerimux/model::%closest-to-center (list a b) pane
+                                                    #'nerimux/model::%pane-center-y)))))
 
   ;; %closest-to-center favors the earlier candidate on an exact tie.
   (it "closest-to-center-tie-favors-first-candidate"
@@ -63,8 +63,8 @@
     (with-center-test-panes ((pane 0 0 10 10 4)
                               (a    1 0  8 10 4)
                               (b    2 0 12 10 4))
-      (expect (eq a (cl-tmux/model::%closest-to-center (list a b) pane
-                                                    #'cl-tmux/model::%pane-center-y)))))
+      (expect (eq a (nerimux/model::%closest-to-center (list a b) pane
+                                                    #'nerimux/model::%pane-center-y)))))
 
   ;; %closest-to-center correctly picks the middle candidate among three.
   (it "closest-to-center-three-candidates-non-trivial"
@@ -77,8 +77,8 @@
                               (near-left 2 16 0 4 10)
                               (far-right 3 40 0 4 10))
       (expect (eq near-left
-              (cl-tmux/model::%closest-to-center (list far-left near-left far-right)
-                                                  pane #'cl-tmux/model::%pane-center-x)))))
+              (nerimux/model::%closest-to-center (list far-left near-left far-right)
+                                                  pane #'nerimux/model::%pane-center-x)))))
 
   ;;; ── layout-split-axis-extent with :v split ───────────────────────────────────
 
@@ -87,11 +87,11 @@
     (let* ((l0   (tl-leaf 1 1 1))
            (l1   (tl-leaf 2 1 1))
            (tree (make-layout-split :v l0 l1)))
-      (cl-tmux/model::layout-assign tree 0 0 80 21)
+      (nerimux/model::layout-assign tree 0 0 80 21)
       ;; The :v extent = total bounding box height = 21.
-      (expect (= 21 (cl-tmux/model::layout-split-axis-extent tree :v)))
+      (expect (= 21 (nerimux/model::layout-split-axis-extent tree :v)))
       ;; The :h extent = 80 (full width).
-      (expect (= 80 (cl-tmux/model::layout-split-axis-extent tree :h)))))
+      (expect (= 80 (nerimux/model::layout-split-axis-extent tree :h)))))
 
   ;;; ── resize-find-split in a nested tree ───────────────────────────────────────
 
@@ -106,7 +106,7 @@
            (outer (make-layout-split :h left inner)))
       ;; 'top' is :first of inner (:v). Searching for :h ancestor reaches outer.
       (multiple-value-bind (split side)
-          (cl-tmux/model::resize-find-split outer top :h)
+          (nerimux/model::resize-find-split outer top :h)
         (expect (eq outer split))
         (expect (eq :second side)))))
 
@@ -116,16 +116,16 @@
   (it "pane-at-position-out-of-bounds-returns-nil"
     (with-h-split-81-24 (p0 p1 win)
       ;; Row 24 is one past the bottom of all 24-row panes.
-      (expect (null (cl-tmux/model:pane-at-position win 0 24)))
+      (expect (null (nerimux/model:pane-at-position win 0 24)))
       ;; Column 81 is one past the right edge of the 81-column window.
-      (expect (null (cl-tmux/model:pane-at-position win 81 0)))))
+      (expect (null (nerimux/model:pane-at-position win 81 0)))))
 
   ;;; ── orient-case with non-keyword signals ecase error ────────────────────────
 
   ;; orient-case raises a condition for an orientation other than :h or :v.
   (it "orient-case-signals-on-unknown-orientation"
     (signals error
-      (cl-tmux/model::orient-case :diagonal :h :horiz :v :vert)))
+      (nerimux/model::orient-case :diagonal :h :horiz :v :vert)))
 
   ;;; ── Table-driven: split-child-geometry boundary dimensions ───────────────────
   ;;;
@@ -139,7 +139,7 @@
     (let ((pane (make-pane :id 1 :fd -1 :pid -1 :x 0 :y 0 :width 40 :height 11
                            :screen (make-screen 40 11))))
       (multiple-value-bind (nx ny nw nh)
-          (cl-tmux/model::split-child-geometry pane :v)
+          (nerimux/model::split-child-geometry pane :v)
         (expect (= 0  nx))
         (expect (= 6  ny))
         (expect (= 40 nw))
@@ -152,7 +152,7 @@
     (let ((pane (make-pane :id 1 :fd -1 :pid -1 :x 0 :y 0 :width 11 :height 24
                            :screen (make-screen 11 24))))
       (multiple-value-bind (nx ny nw nh)
-          (cl-tmux/model::split-child-geometry pane :h)
+          (nerimux/model::split-child-geometry pane :h)
         (expect (= 6  nx))
         (expect (= 0  ny))
         (expect (= 5  nw))
@@ -187,12 +187,12 @@
   (it "define-axis-rules-generates-correct-dispatch"
     (let ((pane (make-pane :id 1 :fd -1 :pid -1 :width 30 :height 12
                            :screen (make-screen 30 12))))
-      (expect (= 12 (cl-tmux/model::%orient-pane-extent pane :v)))
-      (expect (= 30 (cl-tmux/model::%orient-pane-extent pane :h)))))
+      (expect (= 12 (nerimux/model::%orient-pane-extent pane :v)))
+      (expect (= 30 (nerimux/model::%orient-pane-extent pane :h)))))
 
   ;; *neighbor-filters* alist contains entries for :right :left :down :up.
   (it "neighbor-filters-alist-has-all-four-directions"
-    (let ((dirs (mapcar #'car cl-tmux/model::*neighbor-filters*)))
+    (let ((dirs (mapcar #'car nerimux/model::*neighbor-filters*)))
       (expect (member :right dirs))
       (expect (member :left  dirs))
       (expect (member :down  dirs))
@@ -200,7 +200,7 @@
 
   ;; *neighbor-center-fn* alist maps all four directions to center functions.
   (it "neighbor-center-fn-alist-has-all-four-directions"
-    (let ((dirs (mapcar #'car cl-tmux/model::*neighbor-center-fn*)))
+    (let ((dirs (mapcar #'car nerimux/model::*neighbor-center-fn*)))
       (expect (member :right dirs))
       (expect (member :left  dirs))
       (expect (member :down  dirs))
@@ -221,5 +221,5 @@
            (l2    (tl-leaf 3 1 1))
            (inner (make-layout-split :h l0 l1))
            (outer (make-layout-split :v inner l2)))
-      (expect (= 3 (cl-tmux/model::layout-min-extent outer :v)))
-      (expect (= 5 (cl-tmux/model::layout-min-extent outer :h))))))
+      (expect (= 3 (nerimux/model::layout-min-extent outer :v)))
+      (expect (= 5 (nerimux/model::layout-min-extent outer :h))))))

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Session tests — start-directory slot, all-panes ordering, and window flag clearing.
 
@@ -9,13 +9,13 @@
   ;; session-start-directory defaults to NIL for a freshly created session.
   (it "session-start-directory-defaults-nil"
     (let ((sess (make-session :id 1 :name "s")))
-      (expect (null (cl-tmux/model::session-start-directory sess)))))
+      (expect (null (nerimux/model::session-start-directory sess)))))
 
   ;; session-start-directory can be set to a path string and read back.
   (it "session-start-directory-settable"
     (let ((sess (make-session :id 1 :name "s")))
-      (setf (cl-tmux/model::session-start-directory sess) "/home/user")
-      (expect (string= "/home/user" (cl-tmux/model::session-start-directory sess)))))
+      (setf (nerimux/model::session-start-directory sess) "/home/user")
+      (expect (string= "/home/user" (nerimux/model::session-start-directory sess)))))
 
   ;;; ── session-select-window clears activity/silence flags ─────────────────────
 
@@ -24,14 +24,14 @@
     (let* ((w0   (make-window :id 0 :name "a" :activity-flag t))
            (sess (make-session :id 1 :name "s" :windows (list w0))))
       (session-select-window sess w0)
-      (expect (cl-tmux/model::window-activity-flag w0) :to-be-falsy)))
+      (expect (nerimux/model::window-activity-flag w0) :to-be-falsy)))
 
   ;; session-select-window clears the window-silence-flag when selecting a window.
   (it "session-select-window-clears-silence-flag"
     (let* ((w0   (make-window :id 0 :name "a" :silence-flag t))
            (sess (make-session :id 1 :name "s" :windows (list w0))))
       (session-select-window sess w0)
-      (expect (cl-tmux/model::window-silence-flag w0) :to-be-falsy)))
+      (expect (nerimux/model::window-silence-flag w0) :to-be-falsy)))
 
   ;;; ── all-panes ordering ───────────────────────────────────────────────────────
 

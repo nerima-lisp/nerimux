@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Real-world .tmux.conf end-to-end fixture for config directives.
 ;;;; config-directives-tests.lisp declares config-directives-suite.
@@ -46,7 +46,7 @@
     "# ── conditionals / shell / sequences ─"
     "if \"true\" \"set-option -g @cond-ok yes\""
     "run-shell -b \"true\""
-    "source-file -q /nonexistent-cl-tmux-local.conf"
+    "source-file -q /nonexistent-nerimux-local.conf"
     "set-option -g @multi 1; set-option -g @multi2 2"
     "%if #{==:never,ever}"
     "set-option -g @never 1"
@@ -54,7 +54,7 @@
     ""
     "# ── wave 2: terminal-overrides / env / rebind / hooks / continuation ─"
     "set-option -ga terminal-overrides \",xterm-256color:Tc\""
-    "set-environment -g CLTMUX_FIXTURE_ENV fixture-value"
+    "set-environment -g NERIMUX_FIXTURE_ENV fixture-value"
     "bind x kill-pane"
     "unbind x"
     "bind r source-file -q /nonexistent-reload.conf \\; display-message \"reloaded\""
@@ -72,49 +72,49 @@
   (it "real-world-tmux-conf-loads-with-effects"
     (with-isolated-config
      (with-isolated-hooks
-      (let ((cl-tmux/config:*config-condition-evaluator*
-              (lambda (cond-str) (cl-tmux/format:expand-format cond-str nil)))
+      (let ((nerimux/config:*config-condition-evaluator*
+              (lambda (cond-str) (nerimux/format:expand-format cond-str nil)))
             (path (merge-pathnames
-                   (format nil "cl-tmux-realworld-~D.conf" (random 1000000))
+                   (format nil "nerimux-realworld-~D.conf" (random 1000000))
                    (host-kit:temporary-directory))))
         (unwind-protect
              (progn
                (with-open-file (s path :direction :output :if-exists :supersede)
                  (dolist (line +real-world-tmux-conf-lines+)
                    (write-line line s)))
-               (expect (cl-tmux/config:load-config-file path) :to-be-truthy)
+               (expect (nerimux/config:load-config-file path) :to-be-truthy)
                ;; Options (typed coercion + strings + styles + formats).
-               (expect (eql 5000 (cl-tmux/options:get-option "history-limit")))
-               (expect (eq t (cl-tmux/options:get-option "mouse")))
-               (expect (eq t (cl-tmux/options:get-option "renumber-windows")))
+               (expect (eql 5000 (nerimux/options:get-option "history-limit")))
+               (expect (eq t (nerimux/options:get-option "mouse")))
+               (expect (eq t (nerimux/options:get-option "renumber-windows")))
                (expect (string= "#[fg=green](#S) "
-                            (cl-tmux/options:get-option "status-left")))
+                            (nerimux/options:get-option "status-left")))
                (expect (string= "fg=black,bg=white"
-                            (cl-tmux/options:get-option "window-status-current-style")))
-               (expect (string= "vi" (cl-tmux/options:get-option "mode-keys")))
+                            (nerimux/options:get-option "window-status-current-style")))
+               (expect (string= "vi" (nerimux/options:get-option "mode-keys")))
                ;; User options (@-prefixed) including the `;` sequence line.
                (expect (string= "tmux-plugins/tmux-sensible"
-                            (cl-tmux/options:get-option "@plugin")))
-               (expect (string= "yes" (cl-tmux/options:get-option "@cond-ok")))
-               (expect (string= "1" (cl-tmux/options:get-option "@multi")))
-               (expect (string= "2" (cl-tmux/options:get-option "@multi2")))
+                            (nerimux/options:get-option "@plugin")))
+               (expect (string= "yes" (nerimux/options:get-option "@cond-ok")))
+               (expect (string= "1" (nerimux/options:get-option "@multi")))
+               (expect (string= "2" (nerimux/options:get-option "@multi2")))
                ;; %if false branch must NOT have run.
-               (expect (null (cl-tmux/options:get-option "@never" nil)))
+               (expect (null (nerimux/options:get-option "@never" nil)))
                ;; Bindings: prefix table, repeat flag path,
                ;; and the copy-mode-vi table.
-               (expect (cl-tmux/config:key-table-lookup "prefix" #\-) :to-be-truthy)
-               (expect (cl-tmux/config:key-table-lookup "prefix" #\h) :to-be-truthy)
-               (expect (cl-tmux/config:key-table-lookup "copy-mode-vi" #\v) :to-be-truthy)
-               (expect (cl-tmux/config:key-table-lookup "copy-mode-vi" #\y) :to-be-truthy)
+               (expect (nerimux/config:key-table-lookup "prefix" #\-) :to-be-truthy)
+               (expect (nerimux/config:key-table-lookup "prefix" #\h) :to-be-truthy)
+               (expect (nerimux/config:key-table-lookup "copy-mode-vi" #\v) :to-be-truthy)
+               (expect (nerimux/config:key-table-lookup "copy-mode-vi" #\y) :to-be-truthy)
                ;; Wave 2: terminal-overrides append (present in virtually every
                ;; real config), env, unbind, reload binding, set-hook, and
                ;; backslash line continuation.
                (expect (search "xterm-256color:Tc"
-                           (or (cl-tmux/options:get-option "terminal-overrides" nil) "")))
+                           (or (nerimux/options:get-option "terminal-overrides" nil) "")))
                (expect (string= "fixture-value"
-                            (or (sb-ext:posix-getenv "CLTMUX_FIXTURE_ENV") "")))
-               (expect (null (cl-tmux/config:key-table-lookup "prefix" #\x)))
-               (expect (cl-tmux/config:key-table-lookup "prefix" #\r) :to-be-truthy)
-               (expect (gethash "after-new-window" cl-tmux/hooks::*command-hooks*) :to-be-truthy)
-               (expect (string= "joined" (cl-tmux/options:get-option "@continued"))))
+                            (or (sb-ext:posix-getenv "NERIMUX_FIXTURE_ENV") "")))
+               (expect (null (nerimux/config:key-table-lookup "prefix" #\x)))
+               (expect (nerimux/config:key-table-lookup "prefix" #\r) :to-be-truthy)
+               (expect (gethash "after-new-window" nerimux/hooks::*command-hooks*) :to-be-truthy)
+               (expect (string= "joined" (nerimux/options:get-option "@continued"))))
           (ignore-errors (delete-file path))))))))

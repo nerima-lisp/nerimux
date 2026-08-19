@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Events tests: menu key dispatch.
 
@@ -10,15 +10,15 @@
    CAPTURED-VAR instead of actually dispatching.  Restores the original
    definition via unwind-protect."
   `(let ((,captured-var nil)
-         (orig (fdefinition 'cl-tmux::dispatch-command)))
+         (orig (fdefinition 'nerimux::dispatch-command)))
      (unwind-protect
           (progn
-            (setf (fdefinition 'cl-tmux::dispatch-command)
+            (setf (fdefinition 'nerimux::dispatch-command)
                   (lambda (session cmd arg)
                     (declare (ignore session arg))
                     (push cmd ,captured-var)))
             ,@body)
-       (setf (fdefinition 'cl-tmux::dispatch-command) orig))))
+       (setf (fdefinition 'nerimux::dispatch-command) orig))))
 
 (defmacro define-dispatch-menu-key-cases (&body cases)
   "Define menu-key dispatch routing tests from declarative rows."
@@ -31,11 +31,11 @@
              collect `(it ,(string-downcase (symbol-name name))
                         (with-fake-session (s)
                           (with-dispatch-capture (dispatched)
-                            (let ((cl-tmux::*dirty* nil))
-                              (cl-tmux::%dispatch-menu-key s ,byte)
+                            (let ((nerimux::*dirty* nil))
+                              (nerimux::%dispatch-menu-key s ,byte)
                               (expect (member ,expected-command dispatched))
                               ,@(when dirty-message
-                                  `((expect cl-tmux::*dirty* :to-be-truthy))))))))))
+                                  `((expect nerimux::*dirty* :to-be-truthy))))))))))
 
 (defmacro define-dispatch-menu-digit-cases (&body cases)
   "Define numeric %DISPATCH-MENU-KEY tests from declarative rows."
@@ -50,21 +50,21 @@
              for dirty-message = (eighth case)
              collect `(it ,(string-downcase (symbol-name name))
                         (with-fake-session (s)
-                          (let ((cl-tmux/prompt:*active-menu*
-                                  (cl-tmux/prompt:make-menu
+                          (let ((nerimux/prompt:*active-menu*
+                                  (nerimux/prompt:make-menu
                                    :items ,items
                                    :selected-index ,selected-index)))
                             (with-dispatch-capture (dispatched)
-                              (let ((cl-tmux::*dirty* nil))
-                                (cl-tmux::%dispatch-menu-key
+                              (let ((nerimux::*dirty* nil))
+                                (nerimux::%dispatch-menu-key
                                  s
                                  (+ (char-code #\0) ,digit))
                                 (expect (= ,expected-index
-                                          (cl-tmux/prompt:menu-selected-index
-                                           cl-tmux/prompt:*active-menu*)))
+                                          (nerimux/prompt:menu-selected-index
+                                           nerimux/prompt:*active-menu*)))
                                 (expect (equal ,expected-dispatched dispatched))
                                 ,@(when dirty-message
-                                    `((expect cl-tmux::*dirty* :to-be-truthy)))))))))))
+                                    `((expect nerimux::*dirty* :to-be-truthy)))))))))))
 
 (describe "events-suite"
 
@@ -99,8 +99,8 @@
   (it "dispatch-menu-key-returns-nil"
     (with-fake-session (s)
       (with-dispatch-capture (dispatched)
-        (expect (cl-tmux::%dispatch-menu-key s 106) :to-be-falsy)
-        (expect (cl-tmux::%dispatch-menu-key s 13) :to-be-falsy)
+        (expect (nerimux::%dispatch-menu-key s 106) :to-be-falsy)
+        (expect (nerimux::%dispatch-menu-key s 13) :to-be-falsy)
         ;; dispatched accumulates cmds from the capture lambda; verify it's a list
         (expect (listp dispatched) :to-be-truthy))))
 

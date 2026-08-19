@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Shared helpers for dispatch command registry construction.
 

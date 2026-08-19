@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Window-level tests: pure split math and axis helpers.
 
@@ -21,8 +21,8 @@
       (destructuring-bind (side direction expected desc) row
         (declare (ignore desc))
         (if expected
-            (expect (cl-tmux/model::%grow-first-p side direction) :to-be-truthy)
-            (expect (cl-tmux/model::%grow-first-p side direction) :to-be-falsy)))))
+            (expect (nerimux/model::%grow-first-p side direction) :to-be-truthy)
+            (expect (nerimux/model::%grow-first-p side direction) :to-be-falsy)))))
 
   ;;; ── split-child-geometry direct tests (pure, no PTY) ─────────────────────
 
@@ -36,7 +36,7 @@
         (let ((p (make-pane :id 1 :x 0 :y 0 :width w :height h :fd -1 :pid -1
                             :screen (make-screen w h))))
           (multiple-value-bind (px py pw ph)
-              (cl-tmux/model::split-child-geometry p orient)
+              (nerimux/model::split-child-geometry p orient)
             (expect (eql ex px))
             (expect (eql ey py))
             (expect (eql ew pw))
@@ -53,7 +53,7 @@
       (destructuring-bind (orient avail ratio delta grow-first expected desc) row
         (declare (ignore desc))
         (expect (equal expected
-                   (cl-tmux/model::%new-split-ratio orient avail ratio delta grow-first))))))
+                   (nerimux/model::%new-split-ratio orient avail ratio delta grow-first))))))
 
   ;;; ── %requested-cells-from-hint direct tests (pure, no PTY) ───────────────────
 
@@ -74,7 +74,7 @@
       (destructuring-bind (hint avail orient expected desc) row
         (declare (ignore desc))
         (expect (eql expected
-                 (cl-tmux/model::%requested-cells-from-hint hint avail orient))))))
+                 (nerimux/model::%requested-cells-from-hint hint avail orient))))))
 
   ;;; ── %ratio-from-size-hint direct tests (pure, no PTY) ─────────────────────────
 
@@ -82,14 +82,14 @@
   ;; and its sibling keep at least the axis floor (+pane-min-width+ for :h).
   (it "ratio-from-size-hint-clamps-to-axis-floor"
     ;; avail=10, :h axis-floor=2; requesting 1 cell must clamp up to 2/10.
-    (expect (= 1/5 (cl-tmux/model::%ratio-from-size-hint 1 10 :h)))
+    (expect (= 1/5 (nerimux/model::%ratio-from-size-hint 1 10 :h)))
     ;; avail=10, :h axis-floor=2; requesting 9 cells must clamp down to leave
     ;; axis-floor=2 for the first child, i.e. (10-2)/10 = 8/10.
-    (expect (= 4/5 (cl-tmux/model::%ratio-from-size-hint 9 10 :h))))
+    (expect (= 4/5 (nerimux/model::%ratio-from-size-hint 9 10 :h))))
 
   ;; %ratio-from-size-hint returns the exact ratio for a hint safely within bounds.
   (it "ratio-from-size-hint-mid-range-passes-through"
-    (expect (= 1/4 (cl-tmux/model::%ratio-from-size-hint 20 80 :h))))
+    (expect (= 1/4 (nerimux/model::%ratio-from-size-hint 20 80 :h))))
 
   ;;; ── Private helper tests ────────────────────────────────────────────────────
 
@@ -106,8 +106,8 @@
         (let ((p (make-pane :id 1 :fd -1 :pid -1 :width w :height h
                             :screen (make-screen w h))))
           (if expected
-              (expect (cl-tmux/model::%split-fits-p p orient) :to-be-truthy)
-              (expect (cl-tmux/model::%split-fits-p p orient) :to-be-falsy))))))
+              (expect (nerimux/model::%split-fits-p p orient) :to-be-truthy)
+              (expect (nerimux/model::%split-fits-p p orient) :to-be-falsy))))))
 
   ;; window-split :full refuses root splits that cannot leave both panes at min size.
   (it "window-split-full-obeys-axis-minimums"

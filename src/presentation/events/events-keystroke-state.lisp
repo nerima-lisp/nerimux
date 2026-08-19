@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Shared keystroke state and escape-buffer construction.
 
@@ -41,7 +41,7 @@
    previous pane-forwarded key.  assume-paste-time 0 (or a non-integer value)
    disables the heuristic."
   (let ((prev *last-ground-key-time*)
-        (ms   (let ((value (cl-tmux/options:get-option "assume-paste-time")))
+        (ms   (let ((value (nerimux/options:get-option "assume-paste-time")))
                 (if (integerp value) value 0))))
     (and prev
          (plusp ms)

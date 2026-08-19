@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; renderer-format tests — part B: render-cell-attrs all-attributes table,
 ;;;; attrs2 double-underline/overline, ul-color, move-to, dispatch-style-token remaining,
@@ -65,7 +65,7 @@
   (it "move-to-large-coordinates"
     (expect (string= (format nil "~C[100;200H" #\Escape)
                      (with-output-to-string (s)
-                       (cl-tmux/renderer::move-to s 99 199)))))
+                       (nerimux/renderer::move-to s 99 199)))))
 
   ;;; ── %dispatch-style-token remaining tokens ───────────────────────────────────
 
@@ -78,7 +78,7 @@
       "dispatch-style-token-extra-attrs: ~A → ~A"
       (token key)
     (let ((cell (list nil)))
-      (expect (cl-tmux/renderer::%dispatch-style-token token cell) :to-be-truthy)
+      (expect (nerimux/renderer::%dispatch-style-token token cell) :to-be-truthy)
       (expect (getf (car cell) key) :to-be-truthy)))
 
   ;; %dispatch-style-token clears the correct plist key for each 'no*' token.
@@ -89,7 +89,7 @@
       "dispatch-style-token-no-attrs: ~A → ~A"
       (token key)
     (let ((cell (list (list key t))))
-      (cl-tmux/renderer::%dispatch-style-token token cell)
+      (nerimux/renderer::%dispatch-style-token token cell)
       (expect (null (getf (car cell) key)))))
 
   ;;; ── %emit-style-attrs remaining attributes ───────────────────────────────────
@@ -105,7 +105,7 @@
             (:strikethrough "9"))
       "emit-style-attrs ~A → ~A"
       (key code)
-    (let ((parts (cl-tmux/renderer::%emit-style-attrs (list key t) nil)))
+    (let ((parts (nerimux/renderer::%emit-style-attrs (list key t) nil)))
       (expect (member code parts :test #'string=))))
 
   ;;; ── parse-style-string remaining attributes ──────────────────────────────────
@@ -118,18 +118,18 @@
             ("strikethrough" :strikethrough))
       "parse-style-string-attributes ~A → ~A"
       (name key)
-    (let ((p (cl-tmux/renderer:parse-style-string name)))
+    (let ((p (nerimux/renderer:parse-style-string name)))
       (expect (getf p key))))
 
   ;; parse-style-string parses both fg= and bg= in a combined style string.
   (it "parse-style-string-fg-and-bg-combined"
-    (let ((p (cl-tmux/renderer:parse-style-string "fg=green,bg=blue")))
+    (let ((p (nerimux/renderer:parse-style-string "fg=green,bg=blue")))
       (expect (string= "green" (getf p :fg)))
       (expect (string= "blue"  (getf p :bg)))))
 
   ;; parse-style-string trims whitespace from each token before dispatching.
   (it "parse-style-string-whitespace-trimmed-around-tokens"
-    (let ((p (cl-tmux/renderer:parse-style-string " bold , reverse ")))
+    (let ((p (nerimux/renderer:parse-style-string " bold , reverse ")))
       (expect (getf p :bold))
       (expect (getf p :reverse))))
 
@@ -141,17 +141,17 @@
             (:italics   "3"))
       "style-to-sgr-attributes ~A → ~A"
       (key code)
-    (let ((sgr (cl-tmux/renderer:style-to-sgr (list key t))))
+    (let ((sgr (nerimux/renderer:style-to-sgr (list key t))))
       (expect (search code sgr))))
 
   ;; style-to-sgr with :fg "colour200" includes 38;5;200.
   (it "style-to-sgr-fg-colour-n"
-    (let ((sgr (cl-tmux/renderer:style-to-sgr '(:fg "colour200"))))
+    (let ((sgr (nerimux/renderer:style-to-sgr '(:fg "colour200"))))
       (expect (search "38;5;200" sgr))))
 
   ;; style-to-sgr with an empty plist (no keys set) returns the default SGR.
   (it "style-to-sgr-empty-plist-returns-default"
-    (expect (string= "44;97" (cl-tmux/renderer:style-to-sgr '()))))
+    (expect (string= "44;97" (nerimux/renderer:style-to-sgr '()))))
 
   ;;; ── %color-name-to-sgr-number brightblack / brightwhite ─────────────────────
 
@@ -161,7 +161,7 @@
       "color-name-to-sgr-number-bright: ~*~*~A"
       (color is-bg expected desc)
     (declare (ignore desc))
-    (expect (string= expected (cl-tmux/renderer::%color-name-to-sgr-number color is-bg))))
+    (expect (string= expected (nerimux/renderer::%color-name-to-sgr-number color is-bg))))
 
   ;;; ── %border-color-sgr all named colours table ────────────────────────────────
 
@@ -171,7 +171,7 @@
             ("cyan"    36) ("white"   37))
       "border-color-sgr ~A → ~A"
       (name code)
-    (expect (= code (cl-tmux/renderer::%border-color-sgr name))))
+    (expect (= code (nerimux/renderer::%border-color-sgr name))))
 
   ;;; ── %dispatch-border-charset padded/none styles ──────────────────────────────
   ;;;
@@ -183,7 +183,7 @@
       "dispatch-border-charset-all-spaces: ~A"
       (style)
     (multiple-value-bind (tl tr bl br h v)
-        (cl-tmux/renderer::%dispatch-border-charset style)
+        (nerimux/renderer::%dispatch-border-charset style)
       (expect (char= #\Space tl))
       (expect (char= #\Space tr))
       (expect (char= #\Space bl))
@@ -194,7 +194,7 @@
   ;; %dispatch-border-charset with an unknown style returns the single-line characters.
   (it "dispatch-border-charset-unknown-falls-back-to-single"
     (multiple-value-bind (tl tr bl br h v)
-        (cl-tmux/renderer::%dispatch-border-charset "this-is-unknown")
+        (nerimux/renderer::%dispatch-border-charset "this-is-unknown")
       (expect (char= #\┌ tl))
       (expect (char= #\┐ tr))
       (expect (char= #\└ bl))
@@ -208,7 +208,7 @@
   (it "border-charset-for-reads-named-option"
     (with-isolated-options ("popup-border-lines" "double")
       (multiple-value-bind (tl tr bl br h v)
-          (cl-tmux/renderer::%border-charset-for "popup-border-lines")
+          (nerimux/renderer::%border-charset-for "popup-border-lines")
         (expect (char= #\╔ tl))
         (expect (char= #\╗ tr))
         (expect (char= #\╚ bl))
@@ -220,7 +220,7 @@
   (it "border-charset-for-defaults-to-single-when-unset"
     (with-isolated-config
       (multiple-value-bind (tl tr bl br h v)
-          (cl-tmux/renderer::%border-charset-for "menu-border-lines")
+          (nerimux/renderer::%border-charset-for "menu-border-lines")
         (expect (char= #\┌ tl))
         (expect (char= #\┐ tr))
         (expect (char= #\└ bl))
@@ -233,7 +233,7 @@
   (it "popup-border-charset-delegates-to-popup-border-lines-option"
     (with-isolated-options ("popup-border-lines" "heavy")
       (multiple-value-bind (tl tr bl br h v)
-          (cl-tmux/renderer::%popup-border-charset)
+          (nerimux/renderer::%popup-border-charset)
         (expect (char= #\┏ tl))
         (expect (char= #\┓ tr))
         (expect (char= #\┗ bl))
@@ -251,20 +251,20 @@
       "center-coord: ~*~*~A"
       (total size expected desc)
     (declare (ignore desc))
-    (expect (= expected (cl-tmux/renderer::%center-coord total size))))
+    (expect (= expected (nerimux/renderer::%center-coord total size))))
 
   ;;; ── %emit-sgr (raw SGR code emission) ────────────────────────────────────────
 
   ;; %emit-sgr writes ESC[CODEm for an integer or string code.
   (it "emit-sgr-writes-escape-sequence-for-code"
     (expect (string= (format nil "~C[44m" #\Escape)
-                     (with-output-to-string (s) (cl-tmux/renderer::%emit-sgr s 44))))
+                     (with-output-to-string (s) (nerimux/renderer::%emit-sgr s 44))))
     (expect (string= (format nil "~C[44;97m" #\Escape)
-                     (with-output-to-string (s) (cl-tmux/renderer::%emit-sgr s "44;97")))))
+                     (with-output-to-string (s) (nerimux/renderer::%emit-sgr s "44;97")))))
 
   ;; %emit-sgr with a NIL code writes nothing to the stream.
   (it "emit-sgr-nil-code-is-a-no-op"
-    (expect (string= "" (with-output-to-string (s) (cl-tmux/renderer::%emit-sgr s nil)))))
+    (expect (string= "" (with-output-to-string (s) (nerimux/renderer::%emit-sgr s nil)))))
 
   ;;; ── %classify-color-name (colour-name classification) ────────────────────────
 
@@ -277,13 +277,13 @@
       "classify-color-name: ~*~*~*~A"
       (name expected-kind expected-payload desc)
     (declare (ignore desc))
-    (multiple-value-bind (kind payload) (cl-tmux/renderer::%classify-color-name name)
+    (multiple-value-bind (kind payload) (nerimux/renderer::%classify-color-name name)
       (expect (eql expected-kind kind))
       (expect (eql expected-payload payload))))
 
   ;; %classify-color-name with a non-numeric colourN suffix returns :colour-n with a
   ;; NIL payload (junk-allowed parse failure).
   (it "classify-color-name-colour-n-unparseable-suffix"
-    (multiple-value-bind (kind payload) (cl-tmux/renderer::%classify-color-name "colourxyz")
+    (multiple-value-bind (kind payload) (nerimux/renderer::%classify-color-name "colourxyz")
       (expect (eql :colour-n kind))
       (expect (null payload)))))

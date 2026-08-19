@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Configuration and key-binding core model tests.
 ;;;;
@@ -17,13 +17,13 @@
 ;;; uses these symbols unqualified.  Nesting this inside DESCRIBE would only
 ;;; run it once the whole DESCRIBE form's body executes, which is too late —
 ;;; the reader would have already interned fresh, unrelated symbols in
-;;; cl-tmux/test while reading the DESCRIBE form's nested IT bodies.
+;;; nerimux/test while reading the DESCRIBE form's nested IT bodies.
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (import '(cl-tmux/config:lookup-key-binding
-            cl-tmux/config:+prefix-key-code+
-            cl-tmux/config:+ctrl-mask+
-            cl-tmux/config:key-table-bind
-            cl-tmux/config:key-table-unbind)))
+  (import '(nerimux/config:lookup-key-binding
+            nerimux/config:+prefix-key-code+
+            nerimux/config:+ctrl-mask+
+            nerimux/config:key-table-bind
+            nerimux/config:key-table-unbind)))
 
 (describe "config-suite"
 
@@ -57,11 +57,11 @@
 
   ;; Every value in the prefix key-table is a keyword symbol or a command token form.
   (it "all-bindings-have-keyword-or-list-values"
-    (let* ((tbl (cl-tmux/config:ensure-key-table "prefix"))
+    (let* ((tbl (nerimux/config:ensure-key-table "prefix"))
            (keys nil))
       (maphash (lambda (k v) (declare (ignore k)) (push v keys)) tbl)
       (dolist (entry keys)
-        (let ((cmd (cl-tmux/config:key-table-command entry)))
+        (let ((cmd (nerimux/config:key-table-command entry)))
           (expect (or (keywordp cmd)
                       (and (consp cmd)
                            (or (every (lambda (part)
@@ -75,7 +75,7 @@
 
   ;; Every key in the prefix key-table is a character or a string.
   (it "all-bindings-have-char-or-string-keys"
-    (let* ((tbl (cl-tmux/config:ensure-key-table "prefix"))
+    (let* ((tbl (nerimux/config:ensure-key-table "prefix"))
            (keys nil))
       (maphash (lambda (k v) (declare (ignore v)) (push k keys)) tbl)
       (dolist (k keys)
@@ -96,28 +96,28 @@
     ;; this test's custom binding set, save and restore its real definition — else
     ;; later tests that rebuild defaults via initialize-default-key-tables would
     ;; inherit a prefix table missing #\d, #\x, etc. (a cross-test cascade).
-    (let ((cl-tmux/config:*key-tables* (make-hash-table :test #'equal))
+    (let ((nerimux/config:*key-tables* (make-hash-table :test #'equal))
           (saved-installer
-            (fdefinition 'cl-tmux/config::install-default-prefix-bindings)))
+            (fdefinition 'nerimux/config::install-default-prefix-bindings)))
       (unwind-protect
            (progn
              (define-initial-key-bindings
                (#\c :new-window)
                (:digits :select-window))
-             (cl-tmux/config::install-default-prefix-bindings)
+             (nerimux/config::install-default-prefix-bindings)
              ;; #\c → :new-window
-             (let ((entry (cl-tmux/config:key-table-lookup "prefix" #\c)))
+             (let ((entry (nerimux/config:key-table-lookup "prefix" #\c)))
                (expect (not (null entry)))
-               (expect (eq :new-window (cl-tmux/config:key-table-command entry))))
+               (expect (eq :new-window (nerimux/config:key-table-command entry))))
              ;; digits 0-9 → :select-window
              (dolist (d '(#\0 #\1 #\5 #\9))
-               (let ((entry (cl-tmux/config:key-table-lookup "prefix" d)))
+               (let ((entry (nerimux/config:key-table-lookup "prefix" d)))
                  (expect (not (null entry)))
-                 (expect (eq :select-window (cl-tmux/config:key-table-command entry)))))
+                 (expect (eq :select-window (nerimux/config:key-table-command entry)))))
              ;; 11 total entries: 1 char + 10 digits
-             (let ((tbl (cl-tmux/config:ensure-key-table "prefix")))
+             (let ((tbl (nerimux/config:ensure-key-table "prefix")))
                (expect (= 11 (hash-table-count tbl)))))
-        (setf (fdefinition 'cl-tmux/config::install-default-prefix-bindings)
+        (setf (fdefinition 'nerimux/config::install-default-prefix-bindings)
               saved-installer))))
 
   ;; ── key-table-bind / key-table-unbind ─────────────────────────────────────
@@ -135,7 +135,7 @@
     (with-isolated-config
       (key-table-bind "prefix" #\z :new-window)
       (expect (eq :new-window (lookup-key-binding #\z)))
-      (let* ((tbl (cl-tmux/config:ensure-key-table "prefix"))
+      (let* ((tbl (nerimux/config:ensure-key-table "prefix"))
              (before (hash-table-count tbl)))
         (key-table-bind "prefix" #\z :detach)
         (expect (eq :detach (lookup-key-binding #\z)))

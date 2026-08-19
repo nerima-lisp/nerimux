@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/config)
+(in-package #:nerimux/config)
 
 ;;;; Config command-name registry: bindable keyword set, known canonical command
 ;;;; names, and the resolution helpers.
@@ -13,7 +13,7 @@
 ;;; ── Bindable keyword set ─────────────────────────────────────────────────
 ;;;
 ;;; These are the keywords that can appear as the command argument of a bind
-;;; directive and are dispatched directly by cl-tmux:dispatch-command.  They
+;;; directive and are dispatched directly by nerimux:dispatch-command.  They
 ;;; form the directly-bindable subset — commands whose names canonically map
 ;;; to a single keyword without any argument parsing at key-press time.
 
@@ -77,7 +77,7 @@
     :set-window-option :set-session-option)
   "Command keywords a config-file bind directive may target.
    Type: list of keyword symbols.
-   This is the user-bindable subset of commands cl-tmux:dispatch-command handles.
+   This is the user-bindable subset of commands nerimux:dispatch-command handles.
    It deliberately EXCLUDES copy-mode-internal commands (:copy-mode-exit,
    :copy-mode-begin-selection, :copy-mode-yank), which are produced by copy-mode
    interception rather than by key lookup.  Prompt-only dispatcher IDs are also
@@ -86,13 +86,13 @@
 
 ;;; ── Command alias policy ─────────────────────────────────────────────────
 ;;;
-;;; cl-tmux accepts canonical command names only.  tmux short aliases such as
+;;; nerimux accepts canonical command names only.  tmux short aliases such as
 ;;; neww/splitw/killp are deliberately not kept as a compatibility layer.
 
 ;;; ── Known canonical command names ────────────────────────────────────────
 ;;;
 ;;; This list covers all primary command names from tmux's cmd_table that
-;;; cl-tmux either implements or accepts as valid bind targets.  Combined with
+;;; nerimux either implements or accepts as valid bind targets.  Combined with
 ;;; *bindable-commands*, it allows %known-command-name-p to accept canonical
 ;;; commands while rejecting aliases and genuine typos.
 
@@ -118,12 +118,12 @@
     "show-window-options" "source-file" "split-window" "start-server"
     "suspend-client" "swap-pane" "swap-window" "switch-client" "unbind-key"
     "unlink-window" "wait-for"
-    ;; cl-tmux additions / internal command names that are valid bind targets.
+    ;; nerimux additions / internal command names that are valid bind targets.
     "copy-mode-enter" "choose-session" "detach" "detach-all-clients"
     "show-server-options" "show-session-options" "set-session-option"
     "server-info" "display-info" "mark-pane" "clear-mark" "zoom-toggle"
     "synchronize-panes")
-  "Canonical tmux/cl-tmux command names accepted as bind targets.  Combined with
+  "Canonical tmux/nerimux command names accepted as bind targets.  Combined with
    *bindable-commands*, this lets %known-command-name-p accept canonical command
    names while rejecting aliases and typos.")
 

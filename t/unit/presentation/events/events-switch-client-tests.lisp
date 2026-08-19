@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; switch-client and custom key table event tests
 
@@ -9,65 +9,65 @@
   ;; switch-client -T <table> sets *key-table*; -T root resets it to NIL.
   (it "cmd-switch-client-T-sets-and-resets-key-table"
     (with-fake-session (s :nwindows 1)
-        (cl-tmux::%cmd-switch-client s '("-T" "resize"))
-        (expect (string= "resize" cl-tmux::*key-table*))
-        (cl-tmux::%cmd-switch-client s '("-T" "root"))
-        (expect (null cl-tmux::*key-table*))))
+        (nerimux::%cmd-switch-client s '("-T" "resize"))
+        (expect (string= "resize" nerimux::*key-table*))
+        (nerimux::%cmd-switch-client s '("-T" "root"))
+        (expect (null nerimux::*key-table*))))
 
   ;; In a custom key table, a bound key dispatches from THAT table and the table
   ;; persists (modal mode).
   (it "custom-key-table-dispatches-from-active-table-and-persists"
     (with-isolated-config
       (with-fake-session (s :nwindows 2)
-          (cl-tmux/config:apply-config-directive '("bind" "-T" "resize" "x" "next-window"))
-          (setf cl-tmux::*key-table* "resize")
-          (let ((state (cl-tmux::make-input-state)))
-            (cl-tmux::process-byte s 120 state)  ; 'x'
+          (nerimux/config:apply-config-directive '("bind" "-T" "resize" "x" "next-window"))
+          (setf nerimux::*key-table* "resize")
+          (let ((state (nerimux::make-input-state)))
+            (nerimux::process-byte s 120 state)  ; 'x'
             (expect (eq (second (session-windows s)) (session-active-window s)))
-            (expect (string= "resize" cl-tmux::*key-table*))))))
+            (expect (string= "resize" nerimux::*key-table*))))))
 
   ;; A binding in a custom table running 'switch-client -T root' exits the table.
   (it "custom-key-table-binding-can-switch-back-to-root"
     (with-isolated-config
       (with-fake-session (s :nwindows 1)
-          (cl-tmux/config:apply-config-directive
+          (nerimux/config:apply-config-directive
            '("bind" "-T" "resize" "q" "switch-client" "-T" "root"))
-          (setf cl-tmux::*key-table* "resize")
-          (let ((state (cl-tmux::make-input-state)))
-            (cl-tmux::process-byte s 113 state)  ; 'q'
-            (expect (null cl-tmux::*key-table*))))))
+          (setf nerimux::*key-table* "resize")
+          (let ((state (nerimux::make-input-state)))
+            (nerimux::process-byte s 113 state)  ; 'q'
+            (expect (null nerimux::*key-table*))))))
 
   ;;; ── switch-client session selection (-t / -n / -p / -l) ─────────────────────
 
   (defun %make-three-session-registry ()
     "Build three registered sessions named 0/1/2 (current = 1) with deterministic
      last-active stamps 10/30/20, and return them as (values s0 s1 s2).  Caller
-     must run inside a binding that isolates cl-tmux::*server-sessions*."
+     must run inside a binding that isolates nerimux::*server-sessions*."
     (let ((s0 (make-fake-session :nwindows 1))
           (s1 (make-fake-session :nwindows 1))
           (s2 (make-fake-session :nwindows 1)))
-      (setf (cl-tmux::session-name s0) "0" (cl-tmux::session-last-active s0) 10
-            (cl-tmux::session-name s1) "1" (cl-tmux::session-last-active s1) 30
-            (cl-tmux::session-name s2) "2" (cl-tmux::session-last-active s2) 20
-            cl-tmux::*server-sessions*
+      (setf (nerimux::session-name s0) "0" (nerimux::session-last-active s0) 10
+            (nerimux::session-name s1) "1" (nerimux::session-last-active s1) 30
+            (nerimux::session-name s2) "2" (nerimux::session-last-active s2) 20
+            nerimux::*server-sessions*
             (list (cons "0" s0) (cons "1" s1) (cons "2" s2)))
       (values s0 s1 s2)))
 
   (defun %assert-switch-client-selection (current args expected description)
     "Assert that SWITCH-CLIENT selects EXPECTED from CURRENT with ARGS."
     (declare (ignore description))
-    (expect (eq expected (cl-tmux::%cmd-switch-client current args))))
+    (expect (eq expected (nerimux::%cmd-switch-client current args))))
 
   (defun %assert-switch-client-rejection (session args)
     "Assert that SWITCH-CLIENT rejects ARGS without mutating the session state."
     (let ((*overlay* nil)
-          (cl-tmux::*dirty* nil))
-      (expect (cl-tmux::%cmd-switch-client session args) :to-be-falsy)
+          (nerimux::*dirty* nil))
+      (expect (nerimux::%cmd-switch-client session args) :to-be-falsy)
       (assert-overlay-contains "switch-client: unsupported argument"
                                (overlay-lines)
                                (format nil "~S must report the rejection" args))
-      (expect (eq session (cl-tmux::server-current-session)))
-      (expect cl-tmux::*dirty* :to-be-falsy)))
+      (expect (eq session (nerimux::server-current-session)))
+      (expect nerimux::*dirty* :to-be-falsy)))
 
   ;; switch-client -t <name> makes the named session the front (touched) one.
   (it "cmd-switch-client-t-switches-to-named-session"
@@ -75,11 +75,11 @@
       (with-empty-registry
         (multiple-value-bind (s0 s1 s2) (%make-three-session-registry)
           (declare (ignore s0 s1))
-          (%assert-switch-client-selection (cl-tmux::server-find-session "1")
+          (%assert-switch-client-selection (nerimux::server-find-session "1")
                                            '("-t" "2")
                                            s2
                                            "-t 2 selects session named 2")
-          (expect cl-tmux::*dirty* :to-be-truthy)))))
+          (expect nerimux::*dirty* :to-be-truthy)))))
 
   ;; switch-client -n / -p move to the next / previous session cyclically.
   (it "cmd-switch-client-n-and-p-cycle-sessions"
@@ -109,11 +109,11 @@
       (with-empty-registry
         (multiple-value-bind (s0 s1 s2) (%make-three-session-registry)
           (declare (ignore s0 s1))
-          (%assert-switch-client-selection (cl-tmux::server-find-session "1")
+          (%assert-switch-client-selection (nerimux::server-find-session "1")
                                            '("-t" "2" "-T" "resize")
                                            s2
                                            "-t still switches the session when -T is also given")
-          (expect (string= "resize" cl-tmux::*key-table*))))))
+          (expect (string= "resize" nerimux::*key-table*))))))
 
   ;; switch-client rejects unsupported flags before switching sessions.
   (it "cmd-switch-client-rejects-unsupported-flags"
@@ -134,10 +134,10 @@
       (with-empty-registry
         (multiple-value-bind (s0 s1 s2) (%make-three-session-registry)
           (declare (ignore s0 s2))
-          (setf cl-tmux::*dirty* nil)
+          (setf nerimux::*dirty* nil)
           (%assert-switch-client-selection s1 '("-r") t
                                            "-r returns true as a handled refresh request")
-          (expect cl-tmux::*dirty* :to-be-truthy)))))
+          (expect nerimux::*dirty* :to-be-truthy)))))
 
   ;;; ── Default M-1..M-5 preset-layout bindings (tmux defaults) ─────────────────
 
@@ -176,7 +176,7 @@
     (with-fake-session (s)
       (let ((screen (active-screen s)))
         (seed-scrollback screen 30)
-        (finishes (cl-tmux::%cmd-copy-mode-arg s '("-u"))
+        (finishes (nerimux::%cmd-copy-mode-arg s '("-u"))
           "copy-mode-enter -u must not signal an error")
         (expect (screen-copy-mode-p screen) :to-be-truthy)
         (expect (= 30 (screen-copy-offset screen))))))
@@ -186,8 +186,8 @@
   (it "prefix-meta-1-applies-layout-end-to-end"
     (with-isolated-config
       (with-fake-two-pane-session (s)
-          (let ((state (cl-tmux::make-input-state)))
+          (let ((state (nerimux::make-input-state)))
             (dolist (b '(2 27 49))  ; C-b ESC 1
-              (cl-tmux::process-byte s b state))
+              (nerimux::process-byte s b state))
             ;; Layout applied: the window still has its two panes and a usable tree.
             (expect (= 2 (length (window-panes (session-active-window s))))))))))

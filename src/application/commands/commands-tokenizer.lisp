@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/commands)
+(in-package #:nerimux/commands)
 
 ;;;; Command-string tokeniser: shell-style quote/escape splitting shared by
 ;;;; multi-argument commands such as send-keys (and, in future,
@@ -19,7 +19,7 @@
 ;;;; the CURRENT argument -- so it stays hand-written; what cl-parser-kit
 ;;;; contributes is the rule/skip composition, span tracking, and the same
 ;;;; resource-limit guards (*maximum-tokenizer-source-length* et al.) every
-;;;; other cl-tmux tokenizer built on it gets for free.
+;;;; other nerimux tokenizer built on it gets for free.
 
 (defun %consume-single-quoted (string start length accumulator)
   "Consume a single-quoted literal span from STRING beginning at START.

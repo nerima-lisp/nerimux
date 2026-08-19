@@ -1,6 +1,6 @@
 ;;;; format modifier expansion
 
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 (describe "format-suite"
 
@@ -22,7 +22,7 @@
                  ("#{||:#{a},#{b}}" (:a "" :b "x") "1" "operands expand before the truthiness test")))
       (destructuring-bind (spec ctx expected desc) c
         (declare (ignore desc))
-        (expect (string= expected (cl-tmux/format:expand-format spec ctx))))))
+        (expect (string= expected (nerimux/format:expand-format spec ctx))))))
 
   ;; #{&&:a,b} returns 1 only when both operands are truthy.
   (it "format-modifier-logical-and"

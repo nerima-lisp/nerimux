@@ -1,6 +1,6 @@
 # tmux compatibility statement
 
-cl-tmux targets **behavioral parity with tmux**, validated by a large
+nerimux targets **behavioral parity with tmux**, validated by a large
 regression suite (11,000+ cl-weave checks) that pins each verified behavior.
 This document states what that means in practice: what is implemented, what
 is deliberately different, and where the remaining risk lives.
@@ -8,7 +8,7 @@ is deliberately different, and where the remaining risk lives.
 ## Implemented
 
 - **Commands.** Every primary command name in tmux's command table resolves
-  in cl-tmux (verified by a deterministic diff against upstream's `cmd_table`,
+  in nerimux (verified by a deterministic diff against upstream's `cmd_table`,
   both directions — no missing names, no invented ones). Flag-level behavior
   has been closed against upstream semantics across multiple audit sweeps;
   each closed item is pinned by a regression test.
@@ -57,7 +57,7 @@ is deliberately different, and where the remaining risk lives.
   report a device path).
 - **`:command-prompt` history recall is prefix-filtered, not a raw walk.**
   Real tmux's Up/Down cycles the command-prompt history list unfiltered,
-  ignoring whatever has been typed. cl-tmux delegates recall to
+  ignoring whatever has been typed. nerimux delegates recall to
   [cl-history-kit](https://github.com/nerima-lisp/cl-history-kit), whose
   `history-previous`/`history-next` treat the buffer at the start of a walk as
   a prefix filter (zsh-style) — chosen deliberately for the editing ergonomics

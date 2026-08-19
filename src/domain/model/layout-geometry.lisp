@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/model)
+(in-package #:nerimux/model)
 
 ;;; ── Tree geometry: rectangle assignment ────────────────────────────────────
 

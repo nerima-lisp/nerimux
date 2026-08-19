@@ -1,7 +1,7 @@
-# cl-tmux Implementation Roadmap: 100% tmux Feature Coverage
+# nerimux Implementation Roadmap: 100% tmux Feature Coverage
 
 > **Historical document.** This was the working roadmap used while driving
-> cl-tmux from a minimal multiplexer to full tmux command coverage. Every
+> nerimux from a minimal multiplexer to full tmux command coverage. Every
 > sprint item below has since been implemented; the file is kept as an audit
 > trail of the coverage-closing process. For the *current* compatibility
 > statement, see [the compatibility statement](../src/reference/compatibility.md).
@@ -70,7 +70,7 @@ These are correctness defects that break existing functionality or make the mult
 
 ## 3. Sprint 1 — P1 High-Value Features
 
-These are the features needed to make cl-tmux useful as a daily driver. Implement in the order listed, as later items depend on earlier ones.
+These are the features needed to make nerimux useful as a daily driver. Implement in the order listed, as later items depend on earlier ones.
 
 ### S1-1: Session targeting (-t flag resolution) [implemented]
 
@@ -280,7 +280,7 @@ Mouse handling is implemented across:
 - `src/application/config/config-directives.lisp` / `src/domain/options/options.lisp` — `mouse` boolean option and the option-change hook
 
 ### Format strings (Sprint 1-7) touches renderer, config, and all command output
-The format pipeline is split across `src/domain/format/format-helpers.lisp`, `src/domain/format/format-strftime.lisp`, `src/domain/format/format.lisp`, `src/domain/format/format-engine.lisp`, and `src/domain/format/format-context.lisp`. Keep those files ahead of renderer/dispatch layers in `cl-tmux.asd`, and treat `format-context-from-session` as the builder that turns session/window/pane state into the plist consumed by `expand-format`.
+The format pipeline is split across `src/domain/format/format-helpers.lisp`, `src/domain/format/format-strftime.lisp`, `src/domain/format/format.lisp`, `src/domain/format/format-engine.lisp`, and `src/domain/format/format-context.lisp`. Keep those files ahead of renderer/dispatch layers in `nerimux.asd`, and treat `format-context-from-session` as the builder that turns session/window/pane state into the plist consumed by `expand-format`.
 
 ### Multi-session server and protocol framing are already target-aware
 `src/infrastructure/net/protocol.lisp` already encodes and decodes target-bearing commands, and `src/bootstrap/server-multi.lisp` reconstructs the command line with `-t <target>` before dispatch. Keep new wire messages target-aware so they remain compatible with multi-session routing.
@@ -309,7 +309,7 @@ The test suite is organized by scope:
 - `t/e2e/`: end-to-end smoke checks that run against a built binary.
   - Current file: `t/e2e/e2e-smoke.lisp`
 
-Unit and integration tests are wired through `cl-tmux.asd` and `t/suite.lisp`. E2E checks are intentionally kept out of the ASDF `cl-tmux/test` system and run separately.
+Unit and integration tests are wired through `nerimux.asd` and `t/suite.lisp`. E2E checks are intentionally kept out of the ASDF `nerimux/test` system and run separately.
 
 Run the full test suite with:
 

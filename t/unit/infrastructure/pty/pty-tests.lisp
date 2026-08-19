@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Unit tests for pty.lisp: argument-assembly helpers.
 ;;;; These cover %spawn-directory and %string-non-empty-p without spawning a
@@ -11,52 +11,52 @@
 
   ;; %string-non-empty-p returns T for a non-empty string.
   (it "string-non-empty-p-true-for-non-empty-string"
-    (expect (cl-tmux/pty::%string-non-empty-p "hello") :to-be-truthy))
+    (expect (nerimux/pty::%string-non-empty-p "hello") :to-be-truthy))
 
   ;; %string-non-empty-p returns NIL for an empty string.
   (it "string-non-empty-p-false-for-empty-string"
-    (expect (cl-tmux/pty::%string-non-empty-p "") :to-be-falsy))
+    (expect (nerimux/pty::%string-non-empty-p "") :to-be-falsy))
 
   ;; %string-non-empty-p returns NIL for NIL.
   (it "string-non-empty-p-false-for-nil"
-    (expect (cl-tmux/pty::%string-non-empty-p nil) :to-be-falsy))
+    (expect (nerimux/pty::%string-non-empty-p nil) :to-be-falsy))
 
   ;; %string-non-empty-p returns NIL for non-string values.
   (it "string-non-empty-p-false-for-non-string"
-    (expect (cl-tmux/pty::%string-non-empty-p 42) :to-be-falsy)
-    (expect (cl-tmux/pty::%string-non-empty-p '(a b)) :to-be-falsy))
+    (expect (nerimux/pty::%string-non-empty-p 42) :to-be-falsy)
+    (expect (nerimux/pty::%string-non-empty-p '(a b)) :to-be-falsy))
 
   ;;; ── %spawn-directory ─────────────────────────────────────────────────────────
 
   ;; %spawn-directory returns NIL when START-DIR is NIL.
   (it "spawn-directory-nil-input-returns-nil"
-    (expect (null (cl-tmux/pty::%spawn-directory nil))))
+    (expect (null (nerimux/pty::%spawn-directory nil))))
 
   ;; %spawn-directory returns NIL when START-DIR is an empty string.
   (it "spawn-directory-empty-string-returns-nil"
-    (expect (null (cl-tmux/pty::%spawn-directory ""))))
+    (expect (null (nerimux/pty::%spawn-directory ""))))
 
   ;; %spawn-directory returns a non-NIL truename for an existing directory.
   (it "spawn-directory-existing-path-returns-truename"
-    (let ((result (cl-tmux/pty::%spawn-directory "/tmp")))
+    (let ((result (nerimux/pty::%spawn-directory "/tmp")))
       (expect result :to-be-truthy)))
 
   ;; %spawn-directory returns NIL for a non-existent directory path.
   ;; The simplified implementation uses ignore-errors so failures silently yield NIL.
   (it "spawn-directory-nonexistent-path-returns-nil"
-    (let ((result (cl-tmux/pty::%spawn-directory
+    (let ((result (nerimux/pty::%spawn-directory
                    "/nonexistent/path/that/does/not/exist/xyz")))
       (expect (null result))))
 
   ;;; ── forkpty-with-shell reachability ─────────────────────────────────────────
 
-  ;; forkpty-with-shell is exported from cl-tmux/pty and callable.
+  ;; forkpty-with-shell is exported from nerimux/pty and callable.
   (it "forkpty-with-shell-is-fbound"
-    (expect (fboundp 'cl-tmux/pty:forkpty-with-shell)))
+    (expect (fboundp 'nerimux/pty:forkpty-with-shell)))
 
-  ;; set-pty-size is exported from cl-tmux/pty and callable.
+  ;; set-pty-size is exported from nerimux/pty and callable.
   (it "set-pty-size-is-fbound"
-    (expect (fboundp 'cl-tmux/pty:set-pty-size)))
+    (expect (fboundp 'nerimux/pty:set-pty-size)))
 
   ;;; ── forkpty-with-shell end-to-end (real PTY) ─────────────────────────────────
 
@@ -93,7 +93,7 @@
   (it "set-pty-size-round-trips-non-square-size-on-real-pty"
     (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
     (with-pty-shell (fd pid)
-      (finishes (cl-tmux/pty:set-pty-size fd 30 100)
+      (finishes (nerimux/pty:set-pty-size fd 30 100)
                 "set-pty-size must not signal on a live PTY master fd")
       (multiple-value-bind (cols rows) (cl-tty-kit:terminal-size fd)
         (expect (eql 100 cols))
@@ -103,19 +103,19 @@
 
   ;; cl-tty-kit:set-terminal-size demands POSITIVE dimensions and signals before
   ;; the ioctl; the cffi path it replaced passed a 0x0 winsize through and ignored
-  ;; the -1 return.  Pinned here because CL-TMUX/MODEL:PANE-REPOSITION's
+  ;; the -1 return.  Pinned here because NERIMUX/MODEL:PANE-REPOSITION's
   ;; (plusp width) / (plusp content-height) guard exists solely to keep a
   ;; degenerate layout away from this behaviour — if the kit ever went back to
   ;; tolerating 0, that guard would become dead code rather than stay load-bearing.
   (it "set-pty-size-signals-on-a-zero-dimension"
     (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
     (with-pty-shell (fd pid)
-      (signals error (cl-tmux/pty:set-pty-size fd 0 80))
-      (signals error (cl-tmux/pty:set-pty-size fd 24 0))))
+      (signals error (nerimux/pty:set-pty-size fd 0 80))
+      (signals error (nerimux/pty:set-pty-size fd 24 0))))
 
   ;;; ── select-fds: the dead-pane fd sentinel ───────────────────────────────────
 
-  ;; pane-fd -1 is cl-tmux's documented "no PTY / dead pane" sentinel, and the
+  ;; pane-fd -1 is nerimux's documented "no PTY / dead pane" sentinel, and the
   ;; event loop can still hold one in its poll set for the iteration in which a
   ;; pane is torn down.  process-kit's %validate-fds requires (INTEGER 0) and
   ;; raises a BARE TYPE-ERROR, which is NOT process-kit:fd-wait-failed and so is
@@ -123,9 +123,9 @@
   ;; is an unhandled error out of the event loop, where the hand-rolled %select
   ;; this replaced made it a silent no-op.
   (it "select-fds-drops-the-negative-fd-sentinel"
-    (finishes (cl-tmux/pty:select-fds (list -1) 0)
+    (finishes (nerimux/pty:select-fds (list -1) 0)
               "select-fds must not signal on the pane-fd -1 sentinel")
-    (expect (null (cl-tmux/pty:select-fds (list -1) 0))))
+    (expect (null (nerimux/pty:select-fds (list -1) 0))))
 
   ;; ...and dropping it must not collapse the whole poll: live fds in the same
   ;; call are still reported.  This is what filtering buys over widening the
@@ -133,14 +133,14 @@
   (it "select-fds-with-sentinel-still-reports-a-live-ready-fd"
     (with-pipe-fds (rfd wfd)
       (write-byte-to-fd wfd 99)
-      (expect (equal (list rfd) (cl-tmux/pty:select-fds (list -1 rfd) 200000)))))
+      (expect (equal (list rfd) (nerimux/pty:select-fds (list -1 rfd) 200000)))))
 
   ;;; ── pty-child-exit-status ────────────────────────────────────────────────────
 
   ;; pty-child-exit-status returns NIL for an fd with no registered process
   ;; (a foreign fd or a synthetic test pane never went through forkpty-with-shell).
   (it "pty-child-exit-status-unknown-fd-returns-nil"
-    (expect (null (cl-tmux/pty:pty-child-exit-status 999999))))
+    (expect (null (nerimux/pty:pty-child-exit-status 999999))))
 
   ;; pty-child-exit-status bounds its wait: a still-running child (never told
   ;; to exit) with a tiny override timeout returns NIL rather than blocking
@@ -148,7 +148,7 @@
   (it "pty-child-exit-status-times-out-on-a-live-child"
     (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
     (with-pty-shell (fd pid)
-      (expect (null (cl-tmux/pty:pty-child-exit-status fd 0.05)))))
+      (expect (null (nerimux/pty:pty-child-exit-status fd 0.05)))))
 
   ;; The two properties pty-child-exit-status's bounded wait rests on, pinned
   ;; WITHOUT a PTY so they still hold on CI, where the live-child test above and
@@ -191,14 +191,14 @@
   (it "pty-child-exit-status-reports-exited-code"
     (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
     (multiple-value-bind (fd pid)
-        (cl-tmux/pty:forkpty-with-shell 24 80 :default-command "exit 7")
+        (nerimux/pty:forkpty-with-shell 24 80 :default-command "exit 7")
       (unwind-protect
            (progn
              (sleep 0.3)
-             (multiple-value-bind (code kind) (cl-tmux/pty:pty-child-exit-status fd)
+             (multiple-value-bind (code kind) (nerimux/pty:pty-child-exit-status fd)
                (expect (= 7 code))
                (expect (eq :exited kind))))
-        (cl-tmux/pty:pty-close fd pid))))
+        (nerimux/pty:pty-close fd pid))))
 
   ;;; ── pty-write / pty-read-blocking (real pipe) ────────────────────────────────
 
@@ -223,7 +223,7 @@
   (it "pty-write-empty-octet-vector-is-noop"
     (with-pipe-fds (rfd wfd)
       (pty-write wfd (make-array 0 :element-type '(unsigned-byte 8)))
-      (expect (null (cl-tmux/pty:select-fds (list rfd) 10000)))))
+      (expect (null (nerimux/pty:select-fds (list rfd) 10000)))))
 
   ;; pty-read-blocking returns NIL when the write end of the pipe is closed
   ;; before any data is written (EOF).
@@ -237,7 +237,7 @@
   ;; terminal-size returns (values rows cols), both positive integers — either
   ;; the real ioctl-reported size or the documented fallback.
   (it "terminal-size-returns-two-positive-values"
-    (multiple-value-bind (rows cols) (cl-tmux/pty:terminal-size)
+    (multiple-value-bind (rows cols) (nerimux/pty:terminal-size)
       (expect (integerp rows))
       (expect (integerp cols))
       (expect (plusp rows))
@@ -249,7 +249,7 @@
   ;; and does not request a PATH search.
   (it "target-program-and-args-with-default-command-uses-sh-c"
     (multiple-value-bind (program args search-p)
-        (cl-tmux/pty::%target-program-and-args "echo hi")
+        (nerimux/pty::%target-program-and-args "echo hi")
       (expect (string= "/bin/sh" program))
       (expect (equal '("-c" "echo hi") args))
       (expect search-p :to-be-falsy)))
@@ -257,9 +257,9 @@
   ;; %target-program-and-args with a NIL/empty DEFAULT-COMMAND returns the
   ;; configured default shell directly, with no extra args.
   (it "target-program-and-args-nil-command-uses-default-shell"
-    (let ((cl-tmux/config:*default-shell* "/bin/zsh"))
+    (let ((nerimux/config:*default-shell* "/bin/zsh"))
       (multiple-value-bind (program args search-p)
-          (cl-tmux/pty::%target-program-and-args nil)
+          (nerimux/pty::%target-program-and-args nil)
         (expect (string= "/bin/zsh" program))
         (expect (null args))
         (expect search-p :to-be-falsy))))
@@ -267,9 +267,9 @@
   ;; %target-program-and-args requests a PATH search (SEARCH-P = T) when the
   ;; configured default shell is not an absolute path.
   (it "target-program-and-args-relative-shell-requests-path-search"
-    (let ((cl-tmux/config:*default-shell* "zsh"))
+    (let ((nerimux/config:*default-shell* "zsh"))
       (multiple-value-bind (program args search-p)
-          (cl-tmux/pty::%target-program-and-args "")
+          (nerimux/pty::%target-program-and-args "")
         (declare (ignore args))
         (expect (string= "zsh" program))
         (expect search-p :to-be-truthy))))
@@ -277,22 +277,22 @@
   ;;; ── install-pty-port ─────────────────────────────────────────────────────────
 
   ;; install-pty-port sets *spawn-pty*, *write-pty*, *resize-pty*, and *close-pty*
-  ;; to the corresponding cl-tmux/pty functions.
+  ;; to the corresponding nerimux/pty functions.
   (it "install-pty-port-wires-all-four-ports"
-    (let ((cl-tmux/ports:*spawn-pty*  nil)
-          (cl-tmux/ports:*write-pty*  nil)
-          (cl-tmux/ports:*resize-pty* nil)
-          (cl-tmux/ports:*close-pty*  nil))
-      (cl-tmux/pty:install-pty-port)
-      (expect (eq #'cl-tmux/pty:forkpty-with-shell cl-tmux/ports:*spawn-pty*))
-      (expect (eq #'cl-tmux/pty:pty-write cl-tmux/ports:*write-pty*))
-      (expect (eq #'cl-tmux/pty:set-pty-size cl-tmux/ports:*resize-pty*))
-      (expect (eq #'cl-tmux/pty:pty-close cl-tmux/ports:*close-pty*))))
+    (let ((nerimux/ports:*spawn-pty*  nil)
+          (nerimux/ports:*write-pty*  nil)
+          (nerimux/ports:*resize-pty* nil)
+          (nerimux/ports:*close-pty*  nil))
+      (nerimux/pty:install-pty-port)
+      (expect (eq #'nerimux/pty:forkpty-with-shell nerimux/ports:*spawn-pty*))
+      (expect (eq #'nerimux/pty:pty-write nerimux/ports:*write-pty*))
+      (expect (eq #'nerimux/pty:set-pty-size nerimux/ports:*resize-pty*))
+      (expect (eq #'nerimux/pty:pty-close nerimux/ports:*close-pty*))))
 
   ;;; ── terminal-size fallback constants ─────────────────────────────────────────
 
   ;; +default-term-rows+ and +default-term-cols+ are the shared terminal-size
   ;; fallback constants (24x80), matching *term-rows*/*term-cols* defvar defaults.
   (it "default-term-rows-cols-are-positive-fixnums"
-    (expect (= 24 cl-tmux/pty:+default-term-rows+))
-    (expect (= 80 cl-tmux/pty:+default-term-cols+))))
+    (expect (= 24 nerimux/pty:+default-term-rows+))
+    (expect (= 80 nerimux/pty:+default-term-cols+))))

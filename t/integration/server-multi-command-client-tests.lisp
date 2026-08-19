@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Multi-client server integration tests: command-client, exit policy, broadcast
 
@@ -7,52 +7,52 @@
   ;;; -- Command client: forwards a command to the server ------------------------
 
   ;; A forwarded display-message produces a +msg-reply+ carrying the command's output
-  ;; text — the server side of the `cl-tmux display -p` stdout channel.
+  ;; text — the server side of the `nerimux display -p` stdout channel.
   (it "command-client-receives-output-reply"
     (with-isolated-hooks
       (with-fake-session (s)
         (with-test-listener (listener path (%test-socket-path "reply") :backlog 4)
-          (let* ((client      (cl-tmux/net:connect-to path))
-                 (server-sock (cl-tmux/net:accept-connection listener))
-                 (cl-tmux::*clients* nil))
+          (let* ((client      (nerimux/net:connect-to path))
+                 (server-sock (nerimux/net:accept-connection listener))
+                 (nerimux::*clients* nil))
             (when server-sock
-              (let ((conn    (cl-tmux::%add-client server-sock))
-                    (payload (cl-tmux/protocol::encode-command-payload
+              (let ((conn    (nerimux::%add-client server-sock))
+                    (payload (nerimux/protocol::encode-command-payload
                               :display-message :args '("hello"))))
                 ;; Run the forwarded command; the server replies with its output.
-                (cl-tmux::%handle-multi-client-message
-                 cl-tmux::+msg-command+ payload s conn)
+                (nerimux::%handle-multi-client-message
+                 nerimux::+msg-command+ payload s conn)
                 (expect (string= "hello"
-                                  (cdr (first (cl-tmux::client-conn-message-log conn)))))
-                (let ((ready (cl-tmux/pty:select-fds
-                              (list (cl-tmux/net:socket-fd client)) 1000000)))
+                                  (cdr (first (nerimux::client-conn-message-log conn)))))
+                (let ((ready (nerimux/pty:select-fds
+                              (list (nerimux/net:socket-fd client)) 1000000)))
                   (expect ready :to-be-truthy)
                   (when ready
                     (multiple-value-bind (type payload)
-                        (cl-tmux::read-frame (cl-tmux/net:socket-stream client))
-                      (expect (eql cl-tmux::+msg-reply+ type))
-                      (expect (search "hello" (cl-tmux::decode-text payload)))))))))))))
+                        (nerimux::read-frame (nerimux/net:socket-stream client))
+                      (expect (eql nerimux::+msg-reply+ type))
+                      (expect (search "hello" (nerimux::decode-text payload)))))))))))))
 
   ;; run-command-client forwards a command to the server as a decodable
-  ;; +msg-command+ frame (the `cl-tmux <command>` CLI path).  A -t target rides
+  ;; +msg-command+ frame (the `nerimux <command>` CLI path).  A -t target rides
   ;; along in the args for the server to parse.
   (it "command-client-sends-decodable-command-frame"
     (let ((name (format nil "cmdtest-~D" (get-universal-time)))
-          (cl-tmux::*socket-path-override* (%test-socket-path "cmdtest")))
-      (with-test-listener (listener path (cl-tmux::socket-path name) :backlog 4)
-        (cl-tmux::run-command-client name '("next-window" "-t" "2"))
-        (let ((server-sock (cl-tmux/net:accept-connection listener)))
+          (nerimux::*socket-path-override* (%test-socket-path "cmdtest")))
+      (with-test-listener (listener path (nerimux::socket-path name) :backlog 4)
+        (nerimux::run-command-client name '("next-window" "-t" "2"))
+        (let ((server-sock (nerimux/net:accept-connection listener)))
           (expect server-sock :to-be-truthy)
           (when server-sock
-            (let ((ready (cl-tmux/pty:select-fds
-                          (list (cl-tmux/net:socket-fd server-sock)) 1000000)))
+            (let ((ready (nerimux/pty:select-fds
+                          (list (nerimux/net:socket-fd server-sock)) 1000000)))
               (expect ready :to-be-truthy)
               (when ready
                 (multiple-value-bind (type payload)
-                    (cl-tmux::read-frame (cl-tmux/net:socket-stream server-sock))
-                  (expect (eql cl-tmux::+msg-command+ type))
+                    (nerimux::read-frame (nerimux/net:socket-stream server-sock))
+                  (expect (eql nerimux::+msg-command+ type))
                   (multiple-value-bind (cmd target args)
-                      (cl-tmux::decode-command-payload payload)
+                      (nerimux::decode-command-payload payload)
                     (declare (ignore target))
                     (expect (eq :next-window cmd))
                     (expect (equal '("-t" "2") args)))))))))))
@@ -60,33 +60,33 @@
   ;; run-command-client sends stdin after the split-window -I command frame.
   (it "command-client-split-window-I-forwards-stdin-frame"
     (let ((name (format nil "cmdinput-~D" (get-universal-time)))
-          (cl-tmux::*socket-path-override* (%test-socket-path "cmdinput")))
-      (with-test-listener (listener path (cl-tmux::socket-path name) :backlog 4)
+          (nerimux::*socket-path-override* (%test-socket-path "cmdinput")))
+      (with-test-listener (listener path (nerimux::socket-path name) :backlog 4)
         (with-input-from-string (*standard-input* "client stdin")
-          (cl-tmux::run-command-client name '("split-window" "-I")))
-        (let ((server-sock (cl-tmux/net:accept-connection listener)))
+          (nerimux::run-command-client name '("split-window" "-I")))
+        (let ((server-sock (nerimux/net:accept-connection listener)))
           (expect server-sock :to-be-truthy)
           (when server-sock
-            (let ((ready (cl-tmux/pty:select-fds
-                          (list (cl-tmux/net:socket-fd server-sock)) 1000000)))
+            (let ((ready (nerimux/pty:select-fds
+                          (list (nerimux/net:socket-fd server-sock)) 1000000)))
               (expect ready :to-be-truthy)
               (when ready
                 (multiple-value-bind (type payload)
-                    (cl-tmux::read-frame (cl-tmux/net:socket-stream server-sock))
-                  (expect (eql cl-tmux::+msg-command+ type))
+                    (nerimux::read-frame (nerimux/net:socket-stream server-sock))
+                  (expect (eql nerimux::+msg-command+ type))
                   (multiple-value-bind (cmd target args)
-                      (cl-tmux::decode-command-payload payload)
+                      (nerimux::decode-command-payload payload)
                     (declare (ignore target))
                     (expect (eq :split-window cmd))
                     (expect (equal '("-I") args))))))
-            (let ((ready (cl-tmux/pty:select-fds
-                          (list (cl-tmux/net:socket-fd server-sock)) 1000000)))
+            (let ((ready (nerimux/pty:select-fds
+                          (list (nerimux/net:socket-fd server-sock)) 1000000)))
               (expect ready :to-be-truthy)
               (when ready
                 (multiple-value-bind (type payload)
-                    (cl-tmux::read-frame (cl-tmux/net:socket-stream server-sock))
-                  (expect (eql cl-tmux::+msg-key+ type))
-                  (expect (string= "client stdin" (cl-tmux::decode-text payload)))))))))))
+                    (nerimux::read-frame (nerimux/net:socket-stream server-sock))
+                  (expect (eql nerimux::+msg-key+ type))
+                  (expect (string= "client stdin" (nerimux::decode-text payload)))))))))))
 
   ;;; -- exit-unattached: terminate when the last client detaches ----------------
 
@@ -94,29 +94,29 @@
   ;; is on; default (off) keeps the session alive across detaches.
   (it "exit-after-last-detach-respects-option"
     (with-fresh-options
-      (let ((cl-tmux::*clients* nil))
-        (cl-tmux/options:set-option "exit-unattached" t)
-        (expect (cl-tmux::%exit-after-last-detach-p) :to-be-truthy))
-      (let ((cl-tmux::*clients* nil))
-        (cl-tmux/options:set-option "exit-unattached" nil)
-        (expect (cl-tmux::%exit-after-last-detach-p) :to-be-falsy))
-      (let ((cl-tmux::*clients* (list (cl-tmux::%make-client-conn))))
-        (cl-tmux/options:set-option "exit-unattached" t)
-        (expect (cl-tmux::%exit-after-last-detach-p) :to-be-falsy))))
+      (let ((nerimux::*clients* nil))
+        (nerimux/options:set-option "exit-unattached" t)
+        (expect (nerimux::%exit-after-last-detach-p) :to-be-truthy))
+      (let ((nerimux::*clients* nil))
+        (nerimux/options:set-option "exit-unattached" nil)
+        (expect (nerimux::%exit-after-last-detach-p) :to-be-falsy))
+      (let ((nerimux::*clients* (list (nerimux::%make-client-conn))))
+        (nerimux/options:set-option "exit-unattached" t)
+        (expect (nerimux::%exit-after-last-detach-p) :to-be-falsy))))
 
   ;; %exit-when-empty-p is true only when NO sessions remain AND exit-empty is on
   ;; (default); off keeps the server alive with zero sessions.
   (it "exit-when-empty-respects-option"
     (with-fresh-options
-      (let ((cl-tmux::*server-sessions* nil))
-        (cl-tmux/options:set-option "exit-empty" t)
-        (expect (cl-tmux::%exit-when-empty-p) :to-be-truthy))
-      (let ((cl-tmux::*server-sessions* nil))
-        (cl-tmux/options:set-option "exit-empty" nil)
-        (expect (cl-tmux::%exit-when-empty-p) :to-be-falsy))
-      (let ((cl-tmux::*server-sessions* (list (cons "0" (make-fake-session)))))
-        (cl-tmux/options:set-option "exit-empty" t)
-        (expect (cl-tmux::%exit-when-empty-p) :to-be-falsy))))
+      (let ((nerimux::*server-sessions* nil))
+        (nerimux/options:set-option "exit-empty" t)
+        (expect (nerimux::%exit-when-empty-p) :to-be-truthy))
+      (let ((nerimux::*server-sessions* nil))
+        (nerimux/options:set-option "exit-empty" nil)
+        (expect (nerimux::%exit-when-empty-p) :to-be-falsy))
+      (let ((nerimux::*server-sessions* (list (cons "0" (make-fake-session)))))
+        (nerimux/options:set-option "exit-empty" t)
+        (expect (nerimux::%exit-when-empty-p) :to-be-falsy))))
 
   ;;; -- Integration: a broadcast frame reaches every attached client ------------
 
@@ -126,27 +126,27 @@
     (with-isolated-hooks
       (with-fake-session (s)
         (with-test-listener (listener path (%test-socket-path "mtest") :backlog 4)
-          (let* ((client1 (cl-tmux/net:connect-to path))
-                 (server1 (cl-tmux/net:accept-connection listener))
-                 (client2 (cl-tmux/net:connect-to path))
-                 (server2 (cl-tmux/net:accept-connection listener))
-                 (cl-tmux::*clients* nil))
+          (let* ((client1 (nerimux/net:connect-to path))
+                 (server1 (nerimux/net:accept-connection listener))
+                 (client2 (nerimux/net:connect-to path))
+                 (server2 (nerimux/net:accept-connection listener))
+                 (nerimux::*clients* nil))
             (when (and server1 server2)
-              (cl-tmux::%add-client server1)
-              (cl-tmux::%add-client server2)
-              (setf cl-tmux::*dirty* t)
-              (cl-tmux::%broadcast-frame s)
+              (nerimux::%add-client server1)
+              (nerimux::%add-client server2)
+              (setf nerimux::*dirty* t)
+              (nerimux::%broadcast-frame s)
               ;; Both client sockets must now have a frame to read.  Gate the
               ;; reads on select so a missing frame fails fast (not hangs).
               (dolist (client (list client1 client2))
-                (let ((ready (cl-tmux/pty:select-fds
-                              (list (cl-tmux/net:socket-fd client)) 1000000)))
+                (let ((ready (nerimux/pty:select-fds
+                              (list (nerimux/net:socket-fd client)) 1000000)))
                   (expect ready :to-be-truthy)
                   (when ready
                     (multiple-value-bind (type payload)
-                        (cl-tmux::read-frame (cl-tmux/net:socket-stream client))
+                        (nerimux::read-frame (nerimux/net:socket-stream client))
                       (declare (ignore payload))
-                      (expect (eql cl-tmux::+msg-frame+ type)))))))))))))
+                      (expect (eql nerimux::+msg-frame+ type)))))))))))))
 
   (it "multi-broadcast-renders-private-client-surfaces"
     (with-isolated-hooks
@@ -156,44 +156,44 @@
                (pane1 (first panes))
                (pane2 (second panes)))
           (with-test-listener (listener path (%test-socket-path "mprivate") :backlog 4)
-            (let* ((client1 (cl-tmux/net:connect-to path))
-                   (server1 (cl-tmux/net:accept-connection listener))
-                   (client2 (cl-tmux/net:connect-to path))
-                   (server2 (cl-tmux/net:accept-connection listener))
-                   (cl-tmux::*clients* nil)
-                   (cl-tmux::*workspace-catalog-refresh-started-p* t)
+            (let* ((client1 (nerimux/net:connect-to path))
+                   (server1 (nerimux/net:accept-connection listener))
+                   (client2 (nerimux/net:connect-to path))
+                   (server2 (nerimux/net:accept-connection listener))
+                   (nerimux::*clients* nil)
+                   (nerimux::*workspace-catalog-refresh-started-p* t)
                    (conn1 nil)
                    (conn2 nil))
               (unwind-protect
                    (when (and client1 client2 server1 server2 pane1 pane2)
-                     (setf conn1 (cl-tmux::%add-client server1)
-                           conn2 (cl-tmux::%add-client server2))
-                     (setf (cl-tmux::client-conn-view conn1) :detail
-                           (cl-tmux::client-conn-focus conn1) pane1
-                           (cl-tmux::client-conn-rows conn1) 24
-                           (cl-tmux::client-conn-cols conn1) 80
-                           (cl-tmux::client-conn-view conn2) :detail
-                           (cl-tmux::client-conn-focus conn2) pane2
-                           (cl-tmux::client-conn-rows conn2) 12
-                           (cl-tmux::client-conn-cols conn2) 40)
+                     (setf conn1 (nerimux::%add-client server1)
+                           conn2 (nerimux::%add-client server2))
+                     (setf (nerimux::client-conn-view conn1) :detail
+                           (nerimux::client-conn-focus conn1) pane1
+                           (nerimux::client-conn-rows conn1) 24
+                           (nerimux::client-conn-cols conn1) 80
+                           (nerimux::client-conn-view conn2) :detail
+                           (nerimux::client-conn-focus conn2) pane2
+                           (nerimux::client-conn-rows conn2) 12
+                           (nerimux::client-conn-cols conn2) 40)
                      (pane-feed pane1
                                 (cl-codec-kit:string-to-octets
                                  "client-one" :encoding :utf-8))
                      (pane-feed pane2
                                 (cl-codec-kit:string-to-octets
                                  "client-two" :encoding :utf-8))
-                     (setf cl-tmux::*dirty* t)
-                     (cl-tmux::%broadcast-frame s)
+                     (setf nerimux::*dirty* t)
+                     (nerimux::%broadcast-frame s)
                      (flet ((read-frame-text (client)
-                              (let ((ready (cl-tmux/pty:select-fds
-                                            (list (cl-tmux/net:socket-fd client))
+                              (let ((ready (nerimux/pty:select-fds
+                                            (list (nerimux/net:socket-fd client))
                                             1000000)))
                                 (expect ready :to-be-truthy)
                                 (when ready
                                   (multiple-value-bind (type payload)
-                                      (cl-tmux::read-frame
-                                       (cl-tmux/net:socket-stream client))
-                                    (expect (eql cl-tmux::+msg-frame+ type))
+                                      (nerimux::read-frame
+                                       (nerimux/net:socket-stream client))
+                                    (expect (eql nerimux::+msg-frame+ type))
                                     (decode-text payload))))))
                        (let ((frame1 (read-frame-text client1))
                              (frame2 (read-frame-text client2)))
@@ -204,36 +204,36 @@
                          (expect (and frame1 frame2 (not (string= frame1 frame2)))
                                  :to-be-truthy))))
                 (dolist (conn (remove nil (list conn1 conn2)))
-                  (when (member conn cl-tmux::*clients*)
-                    (cl-tmux::%drop-client conn)))
+                  (when (member conn nerimux::*clients*)
+                    (nerimux::%drop-client conn)))
                 (dolist (socket (remove nil (list client1 client2 server1 server2)))
-                  (ignore-errors (cl-tmux/net:close-socket socket))))))))))
+                  (ignore-errors (nerimux/net:close-socket socket))))))))))
 
   (it "multi-socket-c-q-d-detaches-with-session-resident"
     (with-isolated-hooks
       (with-fake-session (s)
         (let* ((window (session-active-window s))
                (pane (window-active-pane window))
-               (cl-tmux::*clients* nil)
-               (cl-tmux::*workspace-catalog-refresh-started-p* t))
+               (nerimux::*clients* nil)
+               (nerimux::*workspace-catalog-refresh-started-p* t))
           (with-test-listener (listener path (%test-socket-path "mdetach") :backlog 4)
-            (let* ((client1 (cl-tmux/net:connect-to path))
-                   (server1 (cl-tmux/net:accept-connection listener))
+            (let* ((client1 (nerimux/net:connect-to path))
+                   (server1 (nerimux/net:accept-connection listener))
                    (client2 nil)
                    (server2 nil)
                    (conn1 nil)
                    (conn2 nil))
               (flet ((send-and-dispatch (client conn frame)
-                       (send-frame (cl-tmux/net:socket-stream client) frame)
-                       (let ((ready (cl-tmux/pty:select-fds
-                                     (list (cl-tmux::client-conn-fd conn))
+                       (send-frame (nerimux/net:socket-stream client) frame)
+                       (let ((ready (nerimux/pty:select-fds
+                                     (list (nerimux::client-conn-fd conn))
                                      1000000)))
                          (expect ready :to-be-truthy)
                          (when ready
-                           (cl-tmux::%read-and-dispatch-client-message s conn)))))
+                           (nerimux::%read-and-dispatch-client-message s conn)))))
                 (unwind-protect
                      (when (and client1 server1 pane)
-                       (setf conn1 (cl-tmux::%add-client server1))
+                       (setf conn1 (nerimux::%add-client server1))
                        (expect (null (send-and-dispatch
                                       client1 conn1 (msg-attach 24 80)))
                                :to-be-truthy)
@@ -245,27 +245,27 @@
                                     client1 conn1
                                     (msg-key (vector (char-code #\d)))))
                                :to-be-truthy)
-                       (cl-tmux::%apply-client-disposition :drop conn1)
-                       (expect (null cl-tmux::*clients*) :to-be-truthy)
+                       (nerimux::%apply-client-disposition :drop conn1)
+                       (expect (null nerimux::*clients*) :to-be-truthy)
                        (expect (eq pane (window-active-pane window))
                                :to-be-truthy)
-                       (setf client2 (cl-tmux/net:connect-to path)
-                             server2 (cl-tmux/net:accept-connection listener))
+                       (setf client2 (nerimux/net:connect-to path)
+                             server2 (nerimux/net:accept-connection listener))
                        (expect client2 :to-be-truthy)
                        (expect server2 :to-be-truthy)
                        (when (and client2 server2)
-                         (setf conn2 (cl-tmux::%add-client server2))
+                         (setf conn2 (nerimux::%add-client server2))
                          (expect (null (send-and-dispatch
                                         client2 conn2 (msg-attach 24 80)))
                                  :to-be-truthy)
-                         (expect (member conn2 cl-tmux::*clients*)
+                         (expect (member conn2 nerimux::*clients*)
                                  :to-be-truthy)))
                   (dolist (conn (remove nil (list conn1 conn2)))
-                    (when (member conn cl-tmux::*clients*)
-                      (cl-tmux::%drop-client conn)))
+                    (when (member conn nerimux::*clients*)
+                      (nerimux::%drop-client conn)))
                   (dolist (socket
                             (remove nil (list client1 client2 server1 server2)))
-                    (ignore-errors (cl-tmux/net:close-socket socket)))))))))))
+                    (ignore-errors (nerimux/net:close-socket socket)))))))))))
 
   (it "multi-socket-renders-live-pty-output"
     (with-pty-available
@@ -273,18 +273,18 @@
         (with-loop-state
           (let* ((window (session-active-window s))
                  (pane (window-active-pane window))
-                 (marker "cl-tmux-live-pty-marker")
-                 (cl-tmux::*clients* nil)
-                 (cl-tmux::*workspace-catalog-refresh-started-p* t))
+                 (marker "nerimux-live-pty-marker")
+                 (nerimux::*clients* nil)
+                 (nerimux::*workspace-catalog-refresh-started-p* t))
             (with-test-listener (listener path (%test-socket-path "mpty")
                                            :backlog 2)
-              (let* ((client (cl-tmux/net:connect-to path))
-                     (server (cl-tmux/net:accept-connection listener))
+              (let* ((client (nerimux/net:connect-to path))
+                     (server (nerimux/net:accept-connection listener))
                      (conn nil))
                 (flet ((screen-text (screen-pane)
                          (let ((screen (pane-screen screen-pane)))
                            (cl-concurrent-kit:with-lock-held
-                               ((cl-tmux/terminal:screen-lock screen))
+                               ((nerimux/terminal:screen-lock screen))
                              (with-output-to-string (output)
                                (dotimes (y (screen-height screen))
                                  (dotimes (x (screen-width screen))
@@ -292,21 +292,21 @@
                                     (cell-char (screen-cell screen x y))
                                     output)))))))
                        (send-and-dispatch (frame)
-                         (send-frame (cl-tmux/net:socket-stream client) frame)
+                         (send-frame (nerimux/net:socket-stream client) frame)
                          (let ((ready (select-fds
-                                       (list (cl-tmux::client-conn-fd conn))
+                                       (list (nerimux::client-conn-fd conn))
                                        1000000)))
                            (expect ready :to-be-truthy)
                            (when ready
-                             (cl-tmux::%read-and-dispatch-client-message s conn)))))
+                             (nerimux::%read-and-dispatch-client-message s conn)))))
                   (unwind-protect
                        (when (and client server pane)
-                         (setf conn (cl-tmux::%add-client server))
+                         (setf conn (nerimux::%add-client server))
                          (expect (null (send-and-dispatch (msg-attach 8 40)))
                                  :to-be-truthy)
-                         (setf (cl-tmux::client-conn-view conn) :detail
-                               (cl-tmux::client-conn-focus conn) pane)
-                         (cl-tmux::start-reader-thread pane)
+                         (setf (nerimux::client-conn-view conn) :detail
+                               (nerimux::client-conn-focus conn) pane)
+                         (nerimux::start-reader-thread pane)
                          (pty-write (pane-fd pane)
                                     (format nil "printf '%s\\n' ~A~%" marker))
                          (loop repeat 100
@@ -314,21 +314,21 @@
                                do (sleep 0.05))
                          (expect (search marker (screen-text pane))
                                  :to-be-truthy)
-                         (setf cl-tmux::*dirty* t)
-                         (cl-tmux::%broadcast-frame s)
+                         (setf nerimux::*dirty* t)
+                         (nerimux::%broadcast-frame s)
                          (let ((ready (select-fds
-                                       (list (cl-tmux/net:socket-fd client))
+                                       (list (nerimux/net:socket-fd client))
                                        1000000)))
                            (expect ready :to-be-truthy)
                            (when ready
                              (multiple-value-bind (type payload)
-                                 (cl-tmux::read-frame
-                                  (cl-tmux/net:socket-stream client))
-                               (expect (eql cl-tmux::+msg-frame+ type))
+                                 (nerimux::read-frame
+                                  (nerimux/net:socket-stream client))
+                               (expect (eql nerimux::+msg-frame+ type))
                                (expect (search marker
                                                (decode-text payload))
                                        :to-be-truthy)))))
-                    (when (and conn (member conn cl-tmux::*clients*))
-                      (cl-tmux::%drop-client conn))
+                    (when (and conn (member conn nerimux::*clients*))
+                      (nerimux::%drop-client conn))
                     (dolist (socket (remove nil (list client server)))
-                      (ignore-errors (cl-tmux/net:close-socket socket))))))))))))
+                      (ignore-errors (nerimux/net:close-socket socket))))))))))))

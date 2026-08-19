@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/commands)
+(in-package #:nerimux/commands)
 
 ;;;; send-keys key-name data tables: the named-key alist and the CSI-modifier
 ;;;; shape table used by commands-keys.lisp's translation logic.

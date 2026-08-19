@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Pane tests - geometry, feed, next-pane-id, split-window.
 
@@ -64,7 +64,7 @@
       (destructuring-bind (status expected-y expected-h desc) row
         (declare (ignore desc))
         (with-fresh-options
-          (cl-tmux/options:set-option "pane-border-status" status)
+          (nerimux/options:set-option "pane-border-status" status)
           (let ((pane (make-no-pty-pane 1 0 0 20 5)))
             (pane-reposition pane 0 0 80 24)
             (expect (= expected-y (pane-y pane)))
@@ -91,9 +91,9 @@
   ;; still performs it for a sane geometry.
   (it "pane-reposition-degenerate-dimensions-skip-the-pty-resize"
     (with-fresh-options
-      (cl-tmux/options:set-option "pane-border-status" "off")
+      (nerimux/options:set-option "pane-border-status" "off")
       (let* ((calls nil)
-             (cl-tmux/ports:*resize-pty*
+             (nerimux/ports:*resize-pty*
                (lambda (fd rows cols) (push (list fd rows cols) calls)))
              (pane (make-no-pty-pane 1 0 0 20 5)))
         (setf (pane-fd pane) 3)              ; positive: the fd guard passes
@@ -116,17 +116,17 @@
   (it "next-pane-id-returns-base-index-for-empty-window"
     (let ((win (make-window :id 1 :name "w" :panes nil)))
       ;; With pane-base-index=0 (default), first pane id is 0.
-      (expect (= (or (cl-tmux/options:get-option "pane-base-index") 0)
-                 (cl-tmux/model::next-pane-id win)))))
+      (expect (= (or (nerimux/options:get-option "pane-base-index") 0)
+                 (nerimux/model::next-pane-id win)))))
 
   ;; next-pane-id returns the lowest id >= pane-base-index not already in use.
   (it "next-pane-id-fills-lowest-gap"
-    (let* ((base (or (cl-tmux/options:get-option "pane-base-index") 0))
+    (let* ((base (or (nerimux/options:get-option "pane-base-index") 0))
            (p1  (make-no-pty-pane (+ base 1) 0 0 10 5))
            (p3  (make-no-pty-pane (+ base 3) 0 0 10 5))
            (win (make-window :id 1 :name "w" :panes (list p1 p3))))
       ;; The lowest gap above base should be filled.
-      (expect (= base (cl-tmux/model::next-pane-id win)))))
+      (expect (= base (nerimux/model::next-pane-id win)))))
 
   ;; ── split-window -d flag (no-focus) ─────────────────────────────────────────
 

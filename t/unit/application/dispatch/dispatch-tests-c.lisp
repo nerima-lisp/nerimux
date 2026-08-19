@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; dispatch tests — part C: focus events on window switch (deliver-in/out),
 ;;;; list-keys overlay, select-pane, zoom-toggle, rename-session,
@@ -17,10 +17,10 @@
                (p1 (window-active-pane w1)))
           ;; Make the SECOND window's pane a live, focus-aware PTY.
           (setf (pane-fd p1) wfd)
-          (setf (cl-tmux/terminal/types:screen-focus-events (pane-screen p1)) t)
-          (cl-tmux::%cmd-cycle-window s #'cl-tmux::next-cyclic)
+          (setf (nerimux/terminal/types:screen-focus-events (pane-screen p1)) t)
+          (nerimux::%cmd-cycle-window s #'nerimux::next-cyclic)
           (expect (eq w1 (session-active-window s)))
-          (let ((ready (cl-tmux/pty:select-fds (list rfd) 200000)))  ; 200 ms
+          (let ((ready (nerimux/pty:select-fds (list rfd) 200000)))  ; 200 ms
             (expect ready :to-be-truthy)
             (when ready
               (let ((bytes (read-octets-from-fd rfd 3)))
@@ -36,9 +36,9 @@
                (p0 (window-active-pane w0)))
           ;; The FIRST (currently active) window's pane is the live, focus-aware PTY.
           (setf (pane-fd p0) wfd)
-          (setf (cl-tmux/terminal/types:screen-focus-events (pane-screen p0)) t)
-          (cl-tmux::%cmd-cycle-window s #'cl-tmux::next-cyclic)
-          (let ((ready (cl-tmux/pty:select-fds (list rfd) 200000)))
+          (setf (nerimux/terminal/types:screen-focus-events (pane-screen p0)) t)
+          (nerimux::%cmd-cycle-window s #'nerimux::next-cyclic)
+          (let ((ready (nerimux/pty:select-fds (list rfd) 200000)))
             (expect ready :to-be-truthy)
             (when ready
               (let ((bytes (read-octets-from-fd rfd 3)))
@@ -52,12 +52,12 @@
     (with-fake-session (s :nwindows 2 :npanes 1)
       (let ((w0 (first  (session-windows s)))
             (w1 (second (session-windows s))))
-        (setf (cl-tmux/terminal/types:screen-focus-events
+        (setf (nerimux/terminal/types:screen-focus-events
                (pane-screen (window-active-pane w0))) t)
-        (setf (cl-tmux/terminal/types:screen-focus-events
+        (setf (nerimux/terminal/types:screen-focus-events
                (pane-screen (window-active-pane w1))) t)
         (expect (eq w0 (session-active-window s)))
-        (finishes (cl-tmux::%cmd-cycle-window s #'cl-tmux::next-cyclic))
+        (finishes (nerimux::%cmd-cycle-window s #'nerimux::next-cyclic))
         (expect (eq w1 (session-active-window s))))))
 
   ;;; ── list-keys overlay ───────────────────────────────────────────────────────
@@ -66,14 +66,14 @@
   (it "dispatch-list-keys-shows-overlay"
     (with-fake-session (s)
       (let ((*overlay* nil))
-        (cl-tmux::dispatch-command s :list-keys nil)
+        (nerimux::dispatch-command s :list-keys nil)
         (assert-overlay-active "list-keys should open the help overlay"))))
 
   ;; %run-command-line list-keys [key] shows only matching bindings.
   (it "run-command-line-list-keys-filters-by-key"
     (with-fake-session (s)
       (let ((*overlay* nil))
-        (cl-tmux::%run-command-line s "list-keys -T prefix C-Right")
+        (nerimux::%run-command-line s "list-keys -T prefix C-Right")
         (expect (search "bind-key -T prefix -r C-Right resize-pane -R 1" *overlay*))
         (expect (null (search "bind-key -T prefix Up select-pane-up" *overlay*))))))
 
@@ -81,10 +81,10 @@
   (it "run-command-line-list-keys-dash-1-keeps-only-first-line"
     (with-fake-session (s)
       (let ((*overlay* nil))
-        (cl-tmux::%run-command-line s "list-keys -T prefix")
+        (nerimux::%run-command-line s "list-keys -T prefix")
         (let ((full *overlay*))
           (setf *overlay* nil)
-          (cl-tmux::%run-command-line s "list-keys -T prefix -1")
+          (nerimux::%run-command-line s "list-keys -T prefix -1")
           (let* ((newline (position #\Newline full))
                  (first-line (if newline (subseq full 0 newline) full)))
             (expect (string= *overlay* first-line))
@@ -92,11 +92,11 @@
 
   ;; define-command-handlers is a defined macro.
   (it "define-command-handlers-macro-is-defined"
-    (expect (macro-function 'cl-tmux::define-command-handlers)))
+    (expect (macro-function 'nerimux::define-command-handlers)))
 
   ;; define-copy-mode-key-overrides is a defined macro.
   (it "define-copy-mode-key-overrides-macro-is-defined"
-    (expect (macro-function 'cl-tmux::define-copy-mode-key-overrides)))
+    (expect (macro-function 'nerimux::define-copy-mode-key-overrides)))
 
   ;;; ── select-pane-left/right/up/down dispatch ─────────────────────────────────
   ;;;
@@ -113,7 +113,7 @@
         (declare (ignore desc))
         (with-two-pane-h-session (sess win p0 p1)
           (when start-p1 (window-select-pane win p1))
-          (cl-tmux::dispatch-command sess cmd nil)
+          (nerimux::dispatch-command sess cmd nil)
           (expect (eq (if expected-p1 p1 p0) (window-active-pane win)))))))
 
   ;; :select-pane-down/:select-pane-up move the active pane in a vertical split.
@@ -124,7 +124,7 @@
         (declare (ignore desc))
         (with-two-pane-v-session (sess win p0 p1)
           (when start-p1 (window-select-pane win p1))
-          (cl-tmux::dispatch-command sess cmd nil)
+          (nerimux::dispatch-command sess cmd nil)
           (expect (eq (if expected-p1 p1 p0) (window-active-pane win)))))))
 
   ;;; ── zoom-toggle dispatch ────────────────────────────────────────────────────
@@ -133,11 +133,11 @@
   (it "dispatch-zoom-toggle-sets-zoom-flag"
     (with-two-pane-h-session (sess win p0 p1)
       (expect (and p0 p1))
-      (cl-tmux::dispatch-command sess :zoom-toggle nil)
-      (expect (cl-tmux/model:window-zoom-p win) :to-be-truthy)
+      (nerimux::dispatch-command sess :zoom-toggle nil)
+      (expect (nerimux/model:window-zoom-p win) :to-be-truthy)
       ;; Toggle back off.
-      (cl-tmux::dispatch-command sess :zoom-toggle nil)
-      (expect (cl-tmux/model:window-zoom-p win) :to-be-falsy)))
+      (nerimux::dispatch-command sess :zoom-toggle nil)
+      (expect (nerimux/model:window-zoom-p win) :to-be-falsy)))
 
   ;;; ── rename-session dispatch ─────────────────────────────────────────────────
 
@@ -146,7 +146,7 @@
   (it "dispatch-rename-session-opens-prompt"
     (with-fake-session (s :nwindows 1)
       (let ((*prompt* nil))
-        (cl-tmux::dispatch-command s :rename-session nil)
+        (nerimux::dispatch-command s :rename-session nil)
         (expect (prompt-active-p))
         (expect (string= "0" (prompt-buffer *prompt*)))
         (funcall (prompt-on-submit *prompt*) "newsess")
@@ -165,14 +165,14 @@
         (declare (ignore desc))
         (with-two-pane-h-session (sess win p0 p1)
           (when start-p1 (window-select-pane win p1))
-          (cl-tmux::%select-pane-in-direction sess dir)
+          (nerimux::%select-pane-in-direction sess dir)
           (expect (eq (if expected-p1 p1 p0) (window-active-pane win)))))))
 
   ;; %select-pane-in-direction :down from the top pane selects the bottom pane.
   (it "select-pane-in-direction-vertical-down-selects-lower-pane"
     (with-two-pane-v-session (sess win p0 p1)
       (expect (eq p0 (window-active-pane win)))
-      (cl-tmux::%select-pane-in-direction sess :down)
+      (nerimux::%select-pane-in-direction sess :down)
       (expect (eq p1 (window-active-pane win)))))
 
   ;;; ── %apply-named-layout-to-session ──────────────────────────────────────────
@@ -181,7 +181,7 @@
   ;; equal-width columns and rebuilds the window tree.
   (it "apply-named-layout-even-horizontal-repositions-panes"
     (with-two-pane-layout-session (sess win p0 p1)
-      (cl-tmux::%apply-named-layout-to-session sess :even-horizontal)
+      (nerimux::%apply-named-layout-to-session sess :even-horizontal)
       ;; After even-horizontal: avail-w = 81 - 1 = 80, each-w = 40.
       ;; p0 should be at x=0, p1 at x=41, both width=40.
       (expect (= 0  (pane-x p0)))
@@ -194,7 +194,7 @@
   (it "apply-named-layout-even-vertical-repositions-panes"
     ;; Use a vertical split (80×21) so the height arithmetic matches the assertions.
     (with-two-pane-v-session (sess win p0 p1)
-      (cl-tmux::%apply-named-layout-to-session sess :even-vertical)
+      (nerimux::%apply-named-layout-to-session sess :even-vertical)
       ;; After even-vertical on an 80×21 window: avail-h = 21 - 1 = 20, each-h = 10.
       ;; p0 should be at y=0, p1 at y=11, both height=10.
       (expect (= 0  (pane-y p0)))
@@ -205,7 +205,7 @@
   ;; %apply-named-layout-to-session with no active window is a no-op.
   (it "apply-named-layout-noop-for-empty-session"
     (with-fake-session (sess :nwindows 0)
-      (finishes (cl-tmux::%apply-named-layout-to-session sess :even-horizontal)
+      (finishes (nerimux::%apply-named-layout-to-session sess :even-horizontal)
                 "calling with no active window must not signal an error")))
 
   ;;; ── :list-windows dispatch ───────────────────────────────────────────────────
@@ -214,15 +214,15 @@
   (it "dispatch-list-windows-shows-overlay"
     (with-fake-session (s :nwindows 1)
       (let ((*overlay* nil))
-        (cl-tmux::dispatch-command s :list-windows nil)
+        (nerimux::dispatch-command s :list-windows nil)
         (assert-overlay-active ":list-windows must open the overlay")
-        (expect cl-tmux::*dirty* :to-be-truthy))))
+        (expect nerimux::*dirty* :to-be-truthy))))
 
   ;; :list-windows overlay text includes the active window name.
   (it "dispatch-list-windows-overlay-contains-window-name"
     (with-fake-session (s :nwindows 2)
       (let ((*overlay* nil))
-        (cl-tmux::dispatch-command s :list-windows nil)
+        (nerimux::dispatch-command s :list-windows nil)
         (assert-overlay-contains "1" *overlay*
                                  "list-windows"))))
 
@@ -233,8 +233,8 @@
   (it "dispatch-list-sessions-empty-registry-shows-overlay"
     (with-fake-session (s :nwindows 1)
       (let ((*overlay* nil)
-            (cl-tmux::*server-sessions* nil))
-        (cl-tmux::dispatch-command s :list-sessions nil)
+            (nerimux::*server-sessions* nil))
+        (nerimux::dispatch-command s :list-sessions nil)
         (assert-overlay-contains (session-name s) *overlay*
                                  ":list-sessions fallback"))))
 
@@ -244,8 +244,8 @@
     (with-fake-session (s :nwindows 1)
       (let ((name (session-name s)))
         (let ((*overlay* nil)
-              (cl-tmux::*server-sessions* (list (cons name s))))
-          (cl-tmux::dispatch-command s :list-sessions nil)
+              (nerimux::*server-sessions* (list (cons name s))))
+          (nerimux::dispatch-command s :list-sessions nil)
           (assert-overlay-contains name *overlay*
                                    ":list-sessions")
           (assert-overlay-contains "*" *overlay*
@@ -258,41 +258,41 @@
   (it "dispatch-display-panes-shows-pane-numbers"
     (with-two-pane-h-session (sess win p0 p1)
       (expect (and win p0 p1))
-      (let ((*overlay* nil) (cl-tmux/prompt:*display-panes-active* nil))
-        (cl-tmux::dispatch-command sess :display-panes nil)
+      (let ((*overlay* nil) (nerimux/prompt:*display-panes-active* nil))
+        (nerimux::dispatch-command sess :display-panes nil)
         (assert-overlay-active ":display-panes opens the (timing) overlay")
-        (expect cl-tmux/prompt:*display-panes-active* :to-be-truthy)
-        (let ((frame (cl-tmux/renderer:render-session-to-string sess 24 81)))
+        (expect nerimux/prompt:*display-panes-active* :to-be-truthy)
+        (let ((frame (nerimux/renderer:render-session-to-string sess 24 81)))
           (expect (find #\█ frame))))))
 
   ;; :display-panes sets *dirty* to T.
   (it "dispatch-display-panes-marks-dirty"
     (with-fake-session (sess :nwindows 1 :npanes 1)
       (let ((*overlay* nil))
-        (cl-tmux::dispatch-command sess :display-panes nil)
-        (expect cl-tmux::*dirty* :to-be-truthy))))
+        (nerimux::dispatch-command sess :display-panes nil)
+        (expect nerimux::*dirty* :to-be-truthy))))
 
   ;; %run-command-line display-panes accepts -d and arms pane numbers.
   (it "run-command-line-display-panes-arms-overlay"
     (with-fake-session (sess :nwindows 1 :npanes 1)
       (let ((*overlay* nil)
-            (cl-tmux/prompt:*display-panes-active* nil)
-            (saved (cl-tmux/options:get-option "display-panes-time" 1000)))
+            (nerimux/prompt:*display-panes-active* nil)
+            (saved (nerimux/options:get-option "display-panes-time" 1000)))
         (unwind-protect
              (progn
-               (cl-tmux/options:set-option "display-panes-time" 1000)
-               (cl-tmux::%run-command-line sess "display-panes -d 125")
+               (nerimux/options:set-option "display-panes-time" 1000)
+               (nerimux::%run-command-line sess "display-panes -d 125")
                (assert-overlay-active "display-panes command must open the timing overlay")
-               (expect cl-tmux/prompt:*display-panes-active* :to-be-truthy)
-               (expect (= 1000 (cl-tmux/options:get-option "display-panes-time"))))
-          (cl-tmux/options:set-option "display-panes-time" saved)))))
+               (expect nerimux/prompt:*display-panes-active* :to-be-truthy)
+               (expect (= 1000 (nerimux/options:get-option "display-panes-time"))))
+          (nerimux/options:set-option "display-panes-time" saved)))))
 
   ;; display-panes rejects arguments that do not affect the local pane-number overlay.
   (it "run-command-line-display-panes-rejects-non-domain-args"
     (with-fake-session (sess :nwindows 1 :npanes 1)
       (dolist (args '(("-b") ("-N") ("-F" "#{pane_id}") ("-t" "client0") ("template")))
         (let ((*overlay* nil))
-          (cl-tmux::%cmd-display-panes-arg sess args)
+          (nerimux::%cmd-display-panes-arg sess args)
           (assert-overlay-contains "display-panes: unsupported argument"
                                    *overlay*
                                    (format nil "~S must be rejected" args)))))))

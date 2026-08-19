@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; Mouse key names and dispatch actions are data classification, not effects.
 

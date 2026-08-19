@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; -- Shell execution commands ------------------------------------------------
 ;;;
@@ -68,9 +68,9 @@
 (defun %cmd-if-shell-format-arg (session target-session target-window target-pane
                                   cond-str then-str else-str)
   "Handle IF-SHELL when -F is present by expanding the condition as a format."
-  (let* ((ctx    (cl-tmux/format:format-context-from-session
+  (let* ((ctx    (nerimux/format:format-context-from-session
                   target-session target-window target-pane))
-         (result (cl-tmux/format:expand-format cond-str ctx)))
+         (result (nerimux/format:expand-format cond-str ctx)))
     (%if-shell-run-branch session then-str else-str
                           (%if-shell-format-result-truthy-p result))))
 

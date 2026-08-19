@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/format)
+(in-package #:nerimux/format)
 
 ;;;; Core #{...} modifier, operator, conditional, and value expansion.
 
@@ -14,7 +14,7 @@
    Missing, empty, or non-timestamp values expand to the empty string."
   (let* ((looked-up (%lookup context (%variable-to-keyword rest)))
          (ts        (and (stringp looked-up) (plusp (length looked-up))
-                         (cl-tmux::%parse-integer-or-nil looked-up :junk-allowed t))))
+                         (nerimux::%parse-integer-or-nil looked-up :junk-allowed t))))
     (when (and ts (plusp ts))
       (write-string (%strftime-format-at "" ts) out))))
 
@@ -34,7 +34,7 @@
 (defun %expand-charcode-modifier (rest context out)
   "#{a:N} — character whose code is N (bare literal or nested #{...} operand)."
   (let* ((n-str (if (search "#{" rest) (expand-format rest context) rest))
-         (code  (cl-tmux::%parse-integer-or-nil n-str :junk-allowed t))
+         (code  (nerimux::%parse-integer-or-nil n-str :junk-allowed t))
          ;; The surrogate block is excluded for the same reason SAFE-CODE-CHAR
          ;; excludes it: CHAR-CODE-LIMIT admits D800-DFFF, but a lone surrogate
          ;; cannot be UTF-8 encoded, and an expanded format string reaches
@@ -43,7 +43,7 @@
          ;; rather than render one bad glyph.  Emitting nothing matches the
          ;; existing out-of-range behavior of this modifier.
          (ch    (and code (<= 0 code (1- char-code-limit))
-                     (not (cl-tmux/terminal/types:surrogate-code-point-p code))
+                     (not (nerimux/terminal/types:surrogate-code-point-p code))
                      (ignore-errors (code-char code)))))
     (when ch (write-string (string ch) out))))
 

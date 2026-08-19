@@ -1,4 +1,4 @@
-;;;; Package bootstrap for cl-tmux.
+;;;; Package bootstrap for nerimux.
 ;;;;
 ;;;; Keep the package declarations in fragment files loaded here so ASDF's
 ;;;; serial source order can continue to rely on this single entry point.
@@ -10,7 +10,7 @@
     ;; Direct source loads fall back from src/bootstrap/package.lisp to the
     ;; repository root before resolving fragment paths.
     (let* ((source-path (or *load-pathname* *compile-file-pathname*))
-           (root (or (ignore-errors (asdf:system-source-directory :cl-tmux))
+           (root (or (ignore-errors (asdf:system-source-directory :nerimux))
                      (and source-path (merge-pathnames #P"../../" source-path))))
            (base (merge-pathnames #P"src/" root)))
       (load (merge-pathnames #P"bootstrap/package-version.lisp" base))
@@ -23,15 +23,15 @@
       (load (merge-pathnames #P"bootstrap/package-application.lisp" base)))
     (setf *package-fragments-loaded* t)))
 
-(declaim (notinline cl-tmux::client-conn-stream
-                    (setf cl-tmux::client-conn-stream)
-                    cl-tmux::client-conn-rows
-                    (setf cl-tmux::client-conn-rows)
-                    cl-tmux::client-conn-cols
-                    (setf cl-tmux::client-conn-cols)
-                    cl-tmux::client-conn-message-log
-                    (setf cl-tmux::client-conn-message-log)
-                    cl-tmux/model:window-tree
-                    (setf cl-tmux/model:window-tree)
-                    cl-tmux/model:window-last-layout-tree
-                    (setf cl-tmux/model:window-last-layout-tree)))
+(declaim (notinline nerimux::client-conn-stream
+                    (setf nerimux::client-conn-stream)
+                    nerimux::client-conn-rows
+                    (setf nerimux::client-conn-rows)
+                    nerimux::client-conn-cols
+                    (setf nerimux::client-conn-cols)
+                    nerimux::client-conn-message-log
+                    (setf nerimux::client-conn-message-log)
+                    nerimux/model:window-tree
+                    (setf nerimux/model:window-tree)
+                    nerimux/model:window-last-layout-tree
+                    (setf nerimux/model:window-last-layout-tree)))

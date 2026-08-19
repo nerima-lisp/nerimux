@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; -- Pane process and pipe commands ----------------------------------------
 ;;;
@@ -33,7 +33,7 @@
     (with-target-context (target-session win pane session target-str)
         (declare (ignore target-session))
         (when (and win pane)
-          (if (and (not kill-p) (cl-tmux/model:pane-live-p pane))
+          (if (and (not kill-p) (nerimux/model:pane-live-p pane))
               ;; tmux: respawn-pane without -k on a still-running pane is an error.
               (show-overlay "respawn-pane: pane is active (use -k to force respawn)")
               (let ((new-pane (respawn-pane session pane
@@ -59,7 +59,7 @@
             ;; tmux: respawn-window without -k while panes are running is an error.
             (show-overlay "respawn-window: window has active panes (use -k to force)")
             (progn
-              (dolist (pane (cl-tmux/model:window-panes win))
+              (dolist (pane (nerimux/model:window-panes win))
                 (let ((new-pane (respawn-pane session pane
                                               :start-dir start-dir
                                               :default-command default-command

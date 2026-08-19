@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/model)
+(in-package #:nerimux/model)
 
 ;;; ── Session ID counter ──────────────────────────────────────────────────────
 
@@ -70,7 +70,7 @@
   "Fork a shell and install it as WINDOW's sole full-screen leaf pane.
    START-DIR: when non-NIL, the shell starts in that directory.
    The initial pane id respects the pane-base-index option."
-  (let* ((pane-base-index (or (cl-tmux/options:get-option "pane-base-index") 0))
+  (let* ((pane-base-index (or (nerimux/options:get-option "pane-base-index") 0))
          (pane (%fork-pane nil pane-base-index 0 0 cols rows :start-dir start-dir)))
     (setf (window-panes  window) (list pane)
           (window-active window) pane
@@ -195,7 +195,7 @@
          ;; Reserve one row at the bottom for the status bar.
          (pane-rows (- rows *status-height*))
          ;; Respect base-index for the first window id.
-         (base-index  (or (cl-tmux/options:get-option "base-index") 0)))
+         (base-index  (or (nerimux/options:get-option "base-index") 0)))
     (session-new-window session (%shell-basename) pane-rows cols base-index start-dir)
     session))
 

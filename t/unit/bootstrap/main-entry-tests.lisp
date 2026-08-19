@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Tests for CLI entry point reachability and command forwarding.
 
@@ -32,9 +32,9 @@
   `(let ((,forwarded-var nil)
          ,exit-code-var)
      (with-stubbed-fdefinition
-         ((cl-tmux::%running-server-name
+         ((nerimux::%running-server-name
            (lambda (&optional preferred) (declare (ignore preferred)) ,server-name))
-          (cl-tmux::run-command-client
+          (nerimux::run-command-client
            (lambda (name args) (setf ,forwarded-var (list name args)))))
        ,@body)))
 
@@ -44,20 +44,20 @@
 
   ;; run-attach-simple is defined as a function.
   (it "run-attach-simple-is-fbound"
-    (expect (fboundp 'cl-tmux::run-attach-simple)))
+    (expect (fboundp 'nerimux::run-attach-simple)))
 
   ;; run-attach-with-flags is defined as a function.
   (it "run-attach-with-flags-is-fbound"
-    (expect (fboundp 'cl-tmux::run-attach-with-flags)))
+    (expect (fboundp 'nerimux::run-attach-with-flags)))
 
-  ;; argv (cl-tmux -C) routes to run-control-mode.
+  ;; argv (nerimux -C) routes to run-control-mode.
   (it "dispatch-control-mode-flag"
     (let ((called nil))
       (with-stubbed-fdefinition
-          ((cl-tmux::run-control-mode
+          ((nerimux::run-control-mode
             (lambda (&rest a) (declare (ignore a)) (setf called t))))
-        (let ((sb-ext:*posix-argv* (list "cl-tmux" "-C")))
-          (cl-tmux::main))
+        (let ((sb-ext:*posix-argv* (list "nerimux" "-C")))
+          (nerimux::main))
         (expect called :to-be-truthy))))
 
   ;; An unrecognised argv[0] (not a known startup mode, not a -flag) forwards
@@ -74,27 +74,27 @@
       (with-open-file (out path :direction :output :if-does-not-exist :create))
       (let (forwarded (standalone-called nil))
         (with-stubbed-fdefinition
-            ((cl-tmux::socket-path (lambda (name) (declare (ignore name)) path))
-             (cl-tmux::run-command-client
+            ((nerimux::socket-path (lambda (name) (declare (ignore name)) path))
+             (nerimux::run-command-client
               (lambda (name args) (setf forwarded (list name args))))
-             (cl-tmux::run-standalone
+             (nerimux::run-standalone
               (lambda () (setf standalone-called t))))
           ;; "rename-window" is not itself a *startup-modes* entry (unlike
           ;; list-sessions/kill-server/etc., which main dispatches directly);
           ;; it can only reach a live server as a forwarded command.
-          (let ((sb-ext:*posix-argv* (list "cl-tmux" "rename-window" "new-name")))
-            (cl-tmux::main))
+          (let ((sb-ext:*posix-argv* (list "nerimux" "rename-window" "new-name")))
+            (nerimux::main))
           (expect (equal (list "0" (list "rename-window" "new-name")) forwarded))
           (expect (null standalone-called))))))
 
   ;; Without a server, all client commands exit with code 1.
   (it "run-commands-exit-when-no-server"
-    (dolist (row '((cl-tmux::run-kill-server         nil)
-                    (cl-tmux::run-list-sessions        nil)
-                    (cl-tmux::run-list-windows         nil)
-                    (cl-tmux::run-display-message      ("-p" "hello"))
-                    (cl-tmux::run-show-options         ("-g"))
-                    (cl-tmux::run-show-window-options  ("-g"))))
+    (dolist (row '((nerimux::run-kill-server         nil)
+                    (nerimux::run-list-sessions        nil)
+                    (nerimux::run-list-windows         nil)
+                    (nerimux::run-display-message      ("-p" "hello"))
+                    (nerimux::run-show-options         ("-g"))
+                    (nerimux::run-show-window-options  ("-g"))))
       (destructuring-bind (fn args) row
         (let (exit-code)
           (with-stubbed-exit exit-code
@@ -103,17 +103,17 @@
 
   ;; Commands forward their name and args to an existing server and exit cleanly.
   (it "run-commands-forward-to-server"
-    (dolist (row '(("0"    cl-tmux::run-kill-server         ("-q")
+    (dolist (row '(("0"    nerimux::run-kill-server         ("-q")
                             ("kill-server" "-q"))
-                    ("work" cl-tmux::run-list-sessions        ("-F" "#{session_name}")
+                    ("work" nerimux::run-list-sessions        ("-F" "#{session_name}")
                             ("list-sessions" "-F" "#{session_name}"))
-                    ("work" cl-tmux::run-list-windows         ("-F" "#{window_name}")
+                    ("work" nerimux::run-list-windows         ("-F" "#{window_name}")
                             ("list-windows" "-F" "#{window_name}"))
-                    ("work" cl-tmux::run-display-message      ("-p" "hello")
+                    ("work" nerimux::run-display-message      ("-p" "hello")
                             ("display-message" "-p" "hello"))
-                    ("work" cl-tmux::run-show-options         ("-g")
+                    ("work" nerimux::run-show-options         ("-g")
                             ("show-options" "-g"))
-                    ("work" cl-tmux::run-show-window-options  ("-g")
+                    ("work" nerimux::run-show-window-options  ("-g")
                             ("show-window-options" "-g"))))
       (destructuring-bind (server fn args expected-fwd) row
         (with-stubbed-server server (forwarded exit-code)
@@ -127,13 +127,13 @@
     (let ((forwarded nil)
           (attached nil))
       (with-stubbed-fdefinition
-          ((cl-tmux::%running-server-name
+          ((nerimux::%running-server-name
             (lambda (&optional preferred) (declare (ignore preferred)) "0"))
-           (cl-tmux::run-command-client
+           (nerimux::run-command-client
             (lambda (name args) (setf forwarded (list name args))))
-           (cl-tmux::run-client
+           (nerimux::run-client
             (lambda (&rest args) (setf attached args))))
-        (cl-tmux::run-new-session '("-s" "work" "-n" "shell" "-c" "/tmp" "-d"))
+        (nerimux::run-new-session '("-s" "work" "-n" "shell" "-c" "/tmp" "-d"))
         (expect (equal '("0" ("new-session" "-s" "work" "-n" "shell" "-c" "/tmp" "-d"))
                        forwarded))
         (expect (null attached)))))
@@ -144,15 +144,15 @@
           (ensured nil)
           (probes '()))
       (with-stubbed-fdefinition
-          ((cl-tmux::%running-server-name
+          ((nerimux::%running-server-name
             (lambda (&optional preferred)
               (push preferred probes)
               (and (null preferred) "alpha")))
-           (cl-tmux::run-command-client
+           (nerimux::run-command-client
             (lambda (name args) (setf forwarded (list name args))))
-           (cl-tmux::%ensure-server-running
+           (nerimux::%ensure-server-running
             (lambda (name) (setf ensured name))))
-        (cl-tmux::run-new-session '("-d" "-s" "beta" "-n" "two"))
+        (nerimux::run-new-session '("-d" "-s" "beta" "-n" "two"))
         (expect (equal '("alpha" ("new-session" "-d" "-s" "beta" "-n" "two"))
                        forwarded))
         (expect (null ensured))
@@ -163,9 +163,9 @@
     (let (exit-code
           (output (make-string-output-stream)))
       (let ((*error-output* output)
-            (cl-tmux::*message-log* nil))
+            (nerimux::*message-log* nil))
         (with-stubbed-exit exit-code
-          (cl-tmux::run-source-file (list "/nonexistent/no-such-file.conf"))))
+          (nerimux::run-source-file (list "/nonexistent/no-such-file.conf"))))
       (expect (eql 1 exit-code))
       (let ((text (get-output-stream-string output)))
         (expect (search "No such file or directory: /nonexistent/no-such-file.conf"
@@ -175,51 +175,51 @@
   (it "run-has-session-no-socket-exits-1"
     (let (exit-code)
       (with-stubbed-exit exit-code
-        (cl-tmux::run-has-session (list "-t" "no-such-session-xyz")))
+        (nerimux::run-has-session (list "-t" "no-such-session-xyz")))
       (expect (eql 1 exit-code))))
 
   ;; run-has-session with a socket FILE nothing listens on exits 1 — a stale
   ;; socket left by a crashed server is not a live session.
   (it "run-has-session-stale-socket-exits-1"
-    (let ((cl-tmux::*socket-path-override*
-            (format nil "~A/cl-tmux-has-session-stale-~D.sock"
+    (let ((nerimux::*socket-path-override*
+            (format nil "~A/nerimux-has-session-stale-~D.sock"
                     (string-right-trim "/" (or (sb-ext:posix-getenv "TMPDIR") "/tmp"))
                     (random 1000000)))
           exit-code)
       (unwind-protect
            (progn
-             (with-open-file (s cl-tmux::*socket-path-override*
+             (with-open-file (s nerimux::*socket-path-override*
                                 :direction :output :if-does-not-exist :create)
                (declare (ignore s)))
              (with-stubbed-exit exit-code
-               (cl-tmux::run-has-session '("-t" "whatever")))
+               (nerimux::run-has-session '("-t" "whatever")))
              (expect (eql 1 exit-code)))
-        (ignore-errors (delete-file cl-tmux::*socket-path-override*)))))
+        (ignore-errors (delete-file nerimux::*socket-path-override*)))))
 
   ;; CLI helper handlers are all fbound.
   (it "run-commands-are-fbound"
-    (dolist (sym '(cl-tmux::run-kill-server
-		 cl-tmux::run-list-sessions
-		 cl-tmux::run-list-windows
-		 cl-tmux::run-list-commands
-		 cl-tmux::run-display-message
-		 cl-tmux::run-show-options
-		 cl-tmux::run-show-window-options
-		 cl-tmux::run-source-file
-		 cl-tmux::run-has-session))
+    (dolist (sym '(nerimux::run-kill-server
+		 nerimux::run-list-sessions
+		 nerimux::run-list-windows
+		 nerimux::run-list-commands
+		 nerimux::run-display-message
+		 nerimux::run-show-options
+		 nerimux::run-show-window-options
+		 nerimux::run-source-file
+		 nerimux::run-has-session))
       (expect (fboundp sym))))
 
   ;;; ── -V / --version / -h / --help / bad-flag usage ───────────────────────────
 
-  ;; run-version prints "cl-tmux <version>" to stdout and exits 0.
+  ;; run-version prints "nerimux <version>" to stdout and exits 0.
   (it "run-version-prints-version-and-exits-zero"
     (let (exit-code output)
       (setf output
             (with-output-to-string (*standard-output*)
               (with-stubbed-exit exit-code
-                (cl-tmux::run-version nil))))
+                (nerimux::run-version nil))))
       (expect (eql 0 exit-code))
-      (expect (string= (format nil "cl-tmux ~A~%" (cl-tmux/version:version-string))
+      (expect (string= (format nil "nerimux ~A~%" (nerimux/version:version-string))
                        output))))
 
   ;; run-usage prints a usage summary to stdout and exits 0.
@@ -228,9 +228,9 @@
       (setf output
             (with-output-to-string (*standard-output*)
               (with-stubbed-exit exit-code
-                (cl-tmux::run-usage nil))))
+                (nerimux::run-usage nil))))
       (expect (eql 0 exit-code))
-      (expect (eql 0 (search "usage: cl-tmux" output)))))
+      (expect (eql 0 (search "usage: nerimux" output)))))
 
   ;; argv -V/--version routes to run-version; -h/--help routes to run-usage.
   (it "dispatch-version-and-help-flags"
@@ -239,12 +239,12 @@
       (destructuring-bind (flag expected) c
         (let ((called nil))
           (with-stubbed-fdefinition
-              ((cl-tmux::run-version
+              ((nerimux::run-version
                 (lambda (&rest a) (declare (ignore a)) (setf called :version)))
-               (cl-tmux::run-usage
+               (nerimux::run-usage
                 (lambda (&rest a) (declare (ignore a)) (setf called :usage))))
-            (let ((sb-ext:*posix-argv* (list "cl-tmux" flag)))
-              (cl-tmux::main))
+            (let ((sb-ext:*posix-argv* (list "nerimux" flag)))
+              (nerimux::main))
             (expect (eq expected called)))))))
 
   ;; An unknown dash-flag is a usage error (stderr + exit 1), not a silent
@@ -254,19 +254,19 @@
           exit-code
           errout)
       (with-stubbed-fdefinition
-          ((cl-tmux::run-standalone
+          ((nerimux::run-standalone
             (lambda (&rest a) (declare (ignore a)) (setf standalone-called t))))
         (setf errout
               (with-output-to-string (*error-output*)
                 (with-stubbed-exit exit-code
-                  (let ((sb-ext:*posix-argv* (list "cl-tmux" "-Z")))
-                    (cl-tmux::main))))))
+                  (let ((sb-ext:*posix-argv* (list "nerimux" "-Z")))
+                    (nerimux::main))))))
       (expect (eql 1 exit-code))
       ;; cl-cli (main-startup-flags.lisp *cli-app*) now rejects -Z during global
-      ;; flag parsing and prints its own diagnostic (e.g. "cl-tmux: Unknown
-      ;; option...") before the usage block, so "usage: cl-tmux" no longer
+      ;; flag parsing and prints its own diagnostic (e.g. "nerimux: Unknown
+      ;; option...") before the usage block, so "usage: nerimux" no longer
       ;; starts at position 0 -- it just needs to be present.
-      (expect (search "usage: cl-tmux" errout) :to-be-truthy)
+      (expect (search "usage: nerimux" errout) :to-be-truthy)
       (expect standalone-called :to-be-falsy))))
 
   ;; A mode-specific flag-parser ERROR (e.g. new-session rejecting an
@@ -274,15 +274,15 @@
   ;; top level and reported as a clean stderr message + exit 1 -- never left
   ;; to propagate into the raw SBCL debugger the saved core would otherwise
   ;; drop a real user into. Found via a manual smoke test of the built
-  ;; binary (`cl-tmux new-session -x 80` hit the debugger), see main's
+  ;; binary (`nerimux new-session -x 80` hit the debugger), see main's
   ;; handler-case.
   (it "unhandled-mode-error-prints-message-and-exits-one"
     (let (exit-code errout)
       (setf errout
             (with-output-to-string (*error-output*)
               (with-stubbed-exit exit-code
-                (let ((sb-ext:*posix-argv* (list "cl-tmux" "new-session" "-x" "80")))
-                  (cl-tmux::main)))))
+                (let ((sb-ext:*posix-argv* (list "nerimux" "new-session" "-x" "80")))
+                  (nerimux::main)))))
       (expect (eql 1 exit-code))
-      (expect (search "cl-tmux:" errout) :to-be-truthy)
+      (expect (search "nerimux:" errout) :to-be-truthy)
       (expect (search "-x" errout) :to-be-truthy)))

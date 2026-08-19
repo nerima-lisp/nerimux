@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Session and buffer fixtures.
 
@@ -19,8 +19,8 @@
        (declare (ignore _p0 _p1))
        (session-select-window ,sess ,win0)
        (with-loop-state
-         (let ((cl-tmux::*term-rows* ,rows)
-               (cl-tmux::*term-cols* ,cols))
+         (let ((nerimux::*term-rows* ,rows)
+               (nerimux::*term-cols* ,cols))
            ,@body)))))
 
 (defmacro with-empty-session ((var) &body body)
@@ -32,14 +32,14 @@
 (defmacro with-empty-buffers (&body body)
   "Run BODY with an empty paste buffer ring.
    Isolates buffer state so tests cannot contaminate each other."
-  `(let ((old-buffers cl-tmux/buffer:*paste-buffers*)
-         (old-index cl-tmux/buffer:*buffer-auto-index*))
+  `(let ((old-buffers nerimux/buffer:*paste-buffers*)
+         (old-index nerimux/buffer:*buffer-auto-index*))
      (unwind-protect
           (progn
-            (cl-tmux/buffer:clear-paste-buffers)
+            (nerimux/buffer:clear-paste-buffers)
             ,@body)
-       (setf cl-tmux/buffer:*paste-buffers* old-buffers
-             cl-tmux/buffer:*buffer-auto-index* old-index))))
+       (setf nerimux/buffer:*paste-buffers* old-buffers
+             nerimux/buffer:*buffer-auto-index* old-index))))
 
 (defmacro with-auto-rename-session ((screen-var pane-var win-var sess-var
                                      &key (win-name "w") (pid -1)) &body body)
@@ -80,7 +80,7 @@
          (tree  (%fake-window-tree panes)))
     (let ((win (make-window :id id :name name :width 20 :height 5
                             :panes panes :tree tree :active (first panes))))
-      (dolist (p panes) (setf (cl-tmux/model:pane-window p) win))
+      (dolist (p panes) (setf (nerimux/model:pane-window p) win))
       win)))
 
 (defun %fake-window-tree (panes)
@@ -131,9 +131,9 @@
     `(let ((,session-var (make-fake-session)))
        (with-loop-state
          (let ((,screen-var (active-screen ,session-var))
-               (,state-var  (cl-tmux::make-input-state)))
+               (,state-var  (nerimux::make-input-state)))
            ,@decls
-           (cl-tmux::dispatch-command ,session-var :copy-mode-enter nil)
+           (nerimux::dispatch-command ,session-var :copy-mode-enter nil)
            ,@forms)))))
 
 (defmacro with-copy-mode-vi-state ((session-var screen-var state-var) &body body)
@@ -150,14 +150,14 @@
                                      &body body)
   "Run BODY with MODE-KEYS selected and copy mode already active."
   `(with-isolated-config
-     (cl-tmux/options:set-option "mode-keys" ,mode-keys)
+     (nerimux/options:set-option "mode-keys" ,mode-keys)
      (with-copy-mode-state (,session-var ,screen-var ,state-var)
        ,@body)))
 
 (defun send-copy-mode-bytes (session state bytes)
   "Feed BYTES through PROCESS-BYTE for copy-mode dispatch tests."
   (dolist (byte bytes)
-    (cl-tmux::process-byte session byte state)))
+    (nerimux::process-byte session byte state)))
 
 (defmacro with-option-session ((var &rest make-args) &body body)
   "Bind VAR to a fresh fake session and run BODY inside WITH-ISOLATED-CONFIG.
@@ -179,8 +179,8 @@
   `(with-isolated-config
      (with-mouse-option (,mouse)
        (with-fake-session (,var :nwindows ,nwindows :npanes ,npanes)
-         (let ((cl-tmux::*term-rows* ,rows)
-               (cl-tmux::*term-cols* ,cols))
+         (let ((nerimux::*term-rows* ,rows)
+               (nerimux::*term-cols* ,cols))
            ,@body)))))
 
 (defmacro with-minimal-session ((pane-var win-var sess-var

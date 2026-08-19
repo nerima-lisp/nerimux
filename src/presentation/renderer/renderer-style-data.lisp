@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/renderer)
+(in-package #:nerimux/renderer)
 
 ;;;; Declarative dispatch tables backing the style-string parsing and SGR
 ;;;; emission logic in renderer-style.lisp.
@@ -9,7 +9,7 @@
 ;;;; parsing/emission logic that consumes them.
 ;;;;
 ;;;; Load order: renderer-format → renderer-style-data → renderer-style → renderer-pane → renderer.
-;;;; All files share the cl-tmux/renderer package (no defpackage here).
+;;;; All files share the nerimux/renderer package (no defpackage here).
 
 ;;; ── Style-token cond table (macro-generated) ─────────────────────────────────
 ;;;

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Option scope canonical facts.
 
@@ -35,18 +35,18 @@ functions so each fact row stays data-shaped."
 
 (define-scope-accessor-table
   (:pane
-   (cl-tmux/options:get-option-for-pane name target)
-   (cl-tmux/options:set-option-for-pane name value target)
-   (remhash name (cl-tmux/model:pane-local-options target)))
+   (nerimux/options:get-option-for-pane name target)
+   (nerimux/options:set-option-for-pane name value target)
+   (remhash name (nerimux/model:pane-local-options target)))
   (:window
-   (cl-tmux/options:get-option-for-window name target)
-   (cl-tmux/options:set-option-for-window name value target)
-   (remhash name (cl-tmux/model:window-local-options target)))
+   (nerimux/options:get-option-for-window name target)
+   (nerimux/options:set-option-for-window name value target)
+   (remhash name (nerimux/model:window-local-options target)))
   (:global
-   (cl-tmux/options:get-option name default)
-   (cl-tmux/options:set-option name value)
-   (remhash name cl-tmux/options:*global-options*))
+   (nerimux/options:get-option name default)
+   (nerimux/options:set-option name value)
+   (remhash name nerimux/options:*global-options*))
   (:server
-   (cl-tmux/options:get-server-option name default)
-   (cl-tmux/options:set-server-option name value)
-   (remhash name cl-tmux/options:*server-options*)))
+   (nerimux/options:get-server-option name default)
+   (nerimux/options:set-server-option name value)
+   (remhash name nerimux/options:*server-options*)))

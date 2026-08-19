@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; events tests: copy-mode numeric-prefix repeat counts.
 
@@ -27,58 +27,58 @@
   ;; many times; digits 1-9 always start/continue accumulation.
   (it "copy-mode-numeric-prefix-repeats-scroll-table"
     (with-isolated-config
-      (cl-tmux/options:set-option "mode-keys" "vi")
+      (nerimux/options:set-option "mode-keys" "vi")
       (dolist (c (list (list "3j" 0 3 "3j must move the cursor down 3 rows")
                         (list "9j" 0 4 "9j must move the cursor to the viewport bottom")))
         (destructuring-bind (keys start-row expected-row desc) c
           (declare (ignore desc))
           (with-copy-mode-state (s screen input-state)
             (seed-scrollback screen 10)
-            (setf (cl-tmux/terminal/types:screen-copy-cursor screen)
+            (setf (nerimux/terminal/types:screen-copy-cursor screen)
                   (cons start-row 0))
             (loop for ch across keys
-                  do (cl-tmux::process-byte s (char-code ch) input-state))
+                  do (nerimux::process-byte s (char-code ch) input-state))
             (expect (= expected-row
-                   (car (cl-tmux/terminal/types:screen-copy-cursor screen))))
-            (expect (null cl-tmux::*copy-mode-prefix-k*)))))))
+                   (car (nerimux/terminal/types:screen-copy-cursor screen))))
+            (expect (null nerimux::*copy-mode-prefix-k*)))))))
 
   ;; "12j" accumulates a two-digit prefix (1 then 2 -> 12) before dispatching.
   (it "copy-mode-numeric-prefix-multi-digit-accumulates"
     (with-isolated-config
-      (cl-tmux/options:set-option "mode-keys" "vi")
+      (nerimux/options:set-option "mode-keys" "vi")
       (with-copy-mode-state (s screen input-state)
         (seed-scrollback screen 20)
-        (setf (cl-tmux/terminal/types:screen-copy-cursor screen) (cons 0 0))
-        (cl-tmux::process-byte s (char-code #\1) input-state)
-        (expect (functionp cl-tmux::*copy-mode-prefix-k*))
-        (cl-tmux::process-byte s (char-code #\2) input-state)
-        (expect (functionp cl-tmux::*copy-mode-prefix-k*))
-        (cl-tmux::process-byte s (char-code #\j) input-state)
-        (expect (= 4 (car (cl-tmux/terminal/types:screen-copy-cursor screen))))
-        (expect (null cl-tmux::*copy-mode-prefix-k*)))))
+        (setf (nerimux/terminal/types:screen-copy-cursor screen) (cons 0 0))
+        (nerimux::process-byte s (char-code #\1) input-state)
+        (expect (functionp nerimux::*copy-mode-prefix-k*))
+        (nerimux::process-byte s (char-code #\2) input-state)
+        (expect (functionp nerimux::*copy-mode-prefix-k*))
+        (nerimux::process-byte s (char-code #\j) input-state)
+        (expect (= 4 (car (nerimux/terminal/types:screen-copy-cursor screen))))
+        (expect (null nerimux::*copy-mode-prefix-k*)))))
 
   ;; A bare '0' (no prior non-zero prefix digit) is the vi 'beginning of line'
   ;; command, not the start of a numeric prefix — matching tmux's vi convention.
   (it "copy-mode-bare-zero-goes-to-line-start-not-accumulated"
     (with-isolated-config
-      (cl-tmux/options:set-option "mode-keys" "vi")
+      (nerimux/options:set-option "mode-keys" "vi")
       (with-copy-mode-state (s screen input-state)
         (seed-scrollback screen 10)
-        (expect (null cl-tmux::*copy-mode-prefix-k*))
-        (cl-tmux::process-byte s (char-code #\0) input-state)
-        (expect (null cl-tmux::*copy-mode-prefix-k*)))))
+        (expect (null nerimux::*copy-mode-prefix-k*))
+        (nerimux::process-byte s (char-code #\0) input-state)
+        (expect (null nerimux::*copy-mode-prefix-k*)))))
 
   ;; Once a non-zero digit has started a prefix, a following '0' DOES continue
   ;; the accumulation (vi convention: "10j" means repeat count 10).
   (it "copy-mode-zero-after-nonzero-prefix-is-accumulated"
     (with-isolated-config
-      (cl-tmux/options:set-option "mode-keys" "vi")
+      (nerimux/options:set-option "mode-keys" "vi")
       (with-copy-mode-state (s screen input-state)
         (seed-scrollback screen 20)
-        (setf (cl-tmux/terminal/types:screen-copy-cursor screen) (cons 0 0))
-        (cl-tmux::process-byte s (char-code #\1) input-state)
-        (expect (functionp cl-tmux::*copy-mode-prefix-k*))
-        (cl-tmux::process-byte s (char-code #\0) input-state)
-        (expect (functionp cl-tmux::*copy-mode-prefix-k*))
-        (cl-tmux::process-byte s (char-code #\j) input-state)
-        (expect (= 4 (car (cl-tmux/terminal/types:screen-copy-cursor screen))))))))
+        (setf (nerimux/terminal/types:screen-copy-cursor screen) (cons 0 0))
+        (nerimux::process-byte s (char-code #\1) input-state)
+        (expect (functionp nerimux::*copy-mode-prefix-k*))
+        (nerimux::process-byte s (char-code #\0) input-state)
+        (expect (functionp nerimux::*copy-mode-prefix-k*))
+        (nerimux::process-byte s (char-code #\j) input-state)
+        (expect (= 4 (car (nerimux/terminal/types:screen-copy-cursor screen))))))))

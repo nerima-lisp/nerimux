@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; select-layout-spread, new key bindings, choose-window, mouse reporting helpers, standard tmux defaults — part VII
 
@@ -10,7 +10,7 @@
   (it "dispatch-select-layout-spread-applies-even-horizontal"
     (with-fake-session (s)
       (expect (null (handler-case
-                        (cl-tmux::dispatch-command s :select-layout-spread nil)
+                        (nerimux::dispatch-command s :select-layout-spread nil)
                       (error (e) e))))))
 
   ;; ── New key bindings: z, ', and grouping ────────────────────────────────────
@@ -35,15 +35,15 @@
   (it "dispatch-zoom-toggle-via-lowercase-z"
     (with-isolated-config
       (with-fake-session (s)
-        (let ((state (cl-tmux::make-input-state)))
-          (cl-tmux::process-byte s 2 state)
-          (expect (null (cl-tmux::process-byte s (char-code #\z) state)))))))
+        (let ((state (nerimux::make-input-state)))
+          (nerimux::process-byte s 2 state)
+          (expect (null (nerimux::process-byte s (char-code #\z) state)))))))
 
   ;; :select-window-prompt opens a prompt without signaling.
   (it "dispatch-select-window-prompt-opens-prompt"
     (with-fake-session (s :nwindows 2)
       (let ((*prompt* nil))
-        (cl-tmux::dispatch-command s :select-window-prompt nil)
+        (nerimux::dispatch-command s :select-window-prompt nil)
         (expect (prompt-active-p)))))
 
   ;; ── choose-window uses menu system ──────────────────────────────────────────
@@ -52,17 +52,17 @@
   (it "dispatch-choose-window-shows-menu-overlay"
     (with-fake-session (s :nwindows 2)
       (let ((*overlay* nil) (*prompt* nil))
-        (cl-tmux::dispatch-command s :choose-window nil)
+        (nerimux::dispatch-command s :choose-window nil)
         (assert-overlay-active ":choose-window must show an overlay")
         ;; choose-window now uses j/k menu navigation, not a text prompt.
-        (expect (not (null cl-tmux/prompt:*active-menu*))))))
+        (expect (not (null nerimux/prompt:*active-menu*))))))
 
   ;; ── Mouse reporting helpers ──────────────────────────────────────────────────
 
   ;; enable-mouse-reporting emits the three DEC private mode sequences.
   (it "enable-mouse-reporting-writes-sequences"
     (let ((output (with-output-to-string (*standard-output*)
-                    (cl-tmux/renderer:enable-mouse-reporting))))
+                    (nerimux/renderer:enable-mouse-reporting))))
       ;; Must contain all three mode strings
       (expect (search "?1000h" output))
       (expect (search "?1002h" output))
@@ -71,7 +71,7 @@
   ;; disable-mouse-reporting emits the three DEC private mode disable sequences.
   (it "disable-mouse-reporting-writes-disable-sequences"
     (let ((output (with-output-to-string (*standard-output*)
-                    (cl-tmux/renderer:disable-mouse-reporting))))
+                    (nerimux/renderer:disable-mouse-reporting))))
       (expect (search "?1006l" output))
       (expect (search "?1002l" output))
       (expect (search "?1000l" output))))
@@ -151,7 +151,7 @@
   (it "dispatch-mouse-scroll-up-enters-copy-mode"
     (with-single-pane-mouse-session (sess win p0)
       (seed-scrollback (pane-screen p0) 5)
-      (cl-tmux::%dispatch-mouse-event sess 64 5 5 nil)
+      (nerimux::%dispatch-mouse-event sess 64 5 5 nil)
       (expect (screen-copy-mode-p (pane-screen p0)))))
 
   ;; Mouse scroll-down (btn=65) exits copy mode when the viewport is at the bottom (offset=0).
@@ -159,16 +159,16 @@
     (with-single-pane-mouse-session (sess win p0)
       (let ((screen (pane-screen p0)))
         (seed-scrollback screen 5)
-        (cl-tmux/commands::copy-mode-enter screen)
+        (nerimux/commands::copy-mode-enter screen)
         ;; offset already at 0 — scroll down should exit copy mode
-        (cl-tmux::%dispatch-mouse-event sess 65 5 5 nil)
+        (nerimux::%dispatch-mouse-event sess 65 5 5 nil)
         (expect (screen-copy-mode-p screen) :to-be-falsy))))
 
   ;; %dispatch-mouse-event is a no-op when the 'mouse' option is false.
   (it "dispatch-mouse-gated-by-mouse-option"
     (with-single-pane-mouse-session (sess win p0 :mouse nil)
       ;; With mouse off, click must not enter copy mode.
-      (cl-tmux::%dispatch-mouse-event sess 0 5 5 nil)
+      (nerimux::%dispatch-mouse-event sess 0 5 5 nil)
       (expect (screen-copy-mode-p (pane-screen p0)) :to-be-falsy)))
 
   ;; ── %status-col-to-window helper ─────────────────────────────────────────────
@@ -184,7 +184,7 @@
       (session-select-window sess win)
       ;; Session prefix is " mysess" = 1 + 6 = 7 chars.
       ;; First window "win0" entry starts at column 7; col 0 is before it.
-      (expect (null (cl-tmux::%status-col-to-window sess 0)))))
+      (expect (null (nerimux::%status-col-to-window sess 0)))))
 
   ;; %status-col-to-window returns the window when the column falls within its entry.
   (it "status-col-to-window-returns-window-for-column-in-entry"
@@ -198,17 +198,17 @@
       ;; Session prefix " s" = 2 chars.
       ;; Window "w" entry = 4 + 1 = 5 chars starting at col 2.
       ;; Column 2 is within that entry.
-      (expect (eq win (cl-tmux::%status-col-to-window sess 2)))))
+      (expect (eq win (nerimux::%status-col-to-window sess 2)))))
 
   ;; ── Mouse button constant sanity checks ──────────────────────────────────────
 
   ;; Named mouse button constants must have the correct integer values.
   (it "mouse-button-constants-have-expected-values"
-    (dolist (c `((0  ,cl-tmux::+mouse-btn-left+        "left button must be 0")
-                 (3  ,cl-tmux::+mouse-btn-release-x10+ "X10 release must be 3")
-                 (32 ,cl-tmux::+mouse-btn-motion+       "motion must be 32")
-                 (64 ,cl-tmux::+mouse-btn-scroll-up+    "scroll-up must be 64")
-                 (65 ,cl-tmux::+mouse-btn-scroll-down+  "scroll-down must be 65")))
+    (dolist (c `((0  ,nerimux::+mouse-btn-left+        "left button must be 0")
+                 (3  ,nerimux::+mouse-btn-release-x10+ "X10 release must be 3")
+                 (32 ,nerimux::+mouse-btn-motion+       "motion must be 32")
+                 (64 ,nerimux::+mouse-btn-scroll-up+    "scroll-up must be 64")
+                 (65 ,nerimux::+mouse-btn-scroll-down+  "scroll-down must be 65")))
       (destructuring-bind (expected constant desc) c
         (declare (ignore desc))
         (expect (= expected constant)))))
@@ -225,7 +225,7 @@
            (len (length buf)))
       (declare (ignore seq))
       (multiple-value-bind (btn col row release-p)
-          (cl-tmux::%parse-sgr-mouse buf len)
+          (nerimux::%parse-sgr-mouse buf len)
         (expect (= 0 btn))
         (expect (= 9 col))
         (expect (= 4 row))
@@ -238,7 +238,7 @@
                             :initial-contents (map 'list #'char-code s)))
            (len (length buf)))
       (multiple-value-bind (btn col row release-p)
-          (cl-tmux::%parse-sgr-mouse buf len)
+          (nerimux::%parse-sgr-mouse buf len)
         (expect (= 0 btn))
         (expect (= 9 col))
         (expect (= 4 row))
@@ -250,7 +250,7 @@
            (buf (make-array (length s) :element-type '(unsigned-byte 8)
                             :initial-contents (map 'list #'char-code s)))
            (len (length buf)))
-      (expect (cl-tmux::%sgr-mouse-sequence-p buf len))))
+      (expect (nerimux::%sgr-mouse-sequence-p buf len))))
 
   ;; %sgr-mouse-terminated-p returns T when the last byte is 'M' or 'm'.
   (it "sgr-mouse-terminated-p-detects-final-byte"
@@ -261,8 +261,8 @@
              (release-str (format nil "~C[<0;5;3m" #\Escape))
              (pb (buf-from press-str))
              (rb (buf-from release-str)))
-        (expect (cl-tmux::%sgr-mouse-terminated-p pb (length pb)))
-        (expect (cl-tmux::%sgr-mouse-terminated-p rb (length rb))))))
+        (expect (nerimux::%sgr-mouse-terminated-p pb (length pb)))
+        (expect (nerimux::%sgr-mouse-terminated-p rb (length rb))))))
 
   ;; ── define-cps-state: ignorable session/byte args ────────────────────────────
 
@@ -271,8 +271,8 @@
     ;; Both session and byte are declared ignorable — verify no compile warnings
     ;; by just calling the function and checking the return type.
     (with-fake-session (s)
-      (let ((state (cl-tmux::make-input-state)))
-        (expect (null (cl-tmux::process-byte s 0 state))))))
+      (let ((state (nerimux::make-input-state)))
+        (expect (null (nerimux::process-byte s 0 state))))))
 
   ;; ── Overlay arrow-key scrolling via escape sequence ─────────────────────────
   ;;
@@ -287,10 +287,10 @@
         (with-fake-session (s)
           (let ((*overlay* nil))
             (show-overlay (format nil "~{line~A~%~}" (loop for i from 1 to 20 collect i)))
-            (let ((state (cl-tmux::make-input-state)))
-              (cl-tmux::process-byte s 27 state)
-              (cl-tmux::process-byte s 91 state)
-              (cl-tmux::process-byte s arrow-byte state))
+            (let ((state (nerimux::make-input-state)))
+              (nerimux::process-byte s 27 state)
+              (nerimux::process-byte s 91 state)
+              (nerimux::process-byte s arrow-byte state))
             (assert-overlay-active desc))))))
 
   ;; A lone ESC (ESC + non-'[' byte) while an overlay is open dismisses it.
@@ -298,10 +298,10 @@
     (with-fake-session (s)
       (let ((*overlay* nil))
         (show-overlay "some text")
-        (let ((state (cl-tmux::make-input-state)))
+        (let ((state (nerimux::make-input-state)))
           ;; ESC then 'x' — not a CSI sequence → dismiss
-          (cl-tmux::process-byte s 27 state)
-          (cl-tmux::process-byte s (char-code #\x) state))
+          (nerimux::process-byte s 27 state)
+          (nerimux::process-byte s (char-code #\x) state))
         (assert-overlay-inactive
             "overlay must be dismissed by bare ESC"))))
 
@@ -315,7 +315,7 @@
       ;; Move cursor to end first (EOL)
       (prompt-cursor-eol)
       (expect (= 5 (prompt-cursor-index *prompt*)))
-      (cl-tmux::handle-prompt-key 1)  ; C-a
+      (nerimux::handle-prompt-key 1)  ; C-a
       (expect (= 0 (prompt-cursor-index *prompt*)))))
 
   ;; C-e (byte 5) moves the cursor to the end of the prompt line.
@@ -326,7 +326,7 @@
       ;; Cursor starts at end; move to BOL first
       (prompt-cursor-bol)
       (expect (= 0 (prompt-cursor-index *prompt*)))
-      (cl-tmux::handle-prompt-key 5)  ; C-e
+      (nerimux::handle-prompt-key 5)  ; C-e
       (expect (= 5 (prompt-cursor-index *prompt*)))))
 
   ;; C-c (byte 3) cancels the prompt without running on-submit.
@@ -335,7 +335,7 @@
       (let ((submitted nil))
         (prompt-start "test" "abc"
                       (lambda (buf) (setf submitted buf)))
-        (cl-tmux::handle-prompt-key 3)  ; C-c
+        (nerimux::handle-prompt-key 3)  ; C-c
         (expect (prompt-active-p) :to-be-falsy)
         (expect (null submitted)))))
 
@@ -344,5 +344,5 @@
     (with-clean-prompt
       (prompt-start "test" ""
                     (lambda (buf) (declare (ignore buf)) nil))
-      (cl-tmux::handle-prompt-key (char-code #\A))
+      (nerimux::handle-prompt-key (char-code #\A))
       (expect (string= "A" (prompt-buffer *prompt*))))))

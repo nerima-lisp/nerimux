@@ -1,6 +1,6 @@
-(in-package #:cl-tmux/renderer)
+(in-package #:nerimux/renderer)
 
-;;;; Session-frame compositing for the cl-tmux renderer.
+;;;; Session-frame compositing for the nerimux renderer.
 ;;;;
 ;;;; This file owns the full-frame pipeline: lock-screen overlay, pane/border
 ;;;; rendering, overlay dispatch, mouse sequences, bell emission, cursor
@@ -9,7 +9,7 @@
 ;;;; Status-bar composition lives in renderer-statusbar.lisp (loaded just before
 ;;;; this file).
 ;;;;
-;;;; Load order (declared in cl-tmux.asd): renderer-format → renderer-style
+;;;; Load order (declared in nerimux.asd): renderer-format → renderer-style
 ;;;;             → renderer-pane → renderer-overlay → renderer-statusbar
 ;;;;             → renderer-compose-protocols → renderer-compose-overlay
 ;;;;             → renderer-compose-effects → renderer-compose
@@ -53,7 +53,7 @@
 
 (defun %picker-item-display-text (item)
   (let ((prefix
-          (case (cl-tmux/picker:picker-item-kind item)
+          (case (nerimux/picker:picker-item-kind item)
             (:organization "org ")
             (:repository "repo")
             (:worktree "  wt ")
@@ -61,8 +61,8 @@
             (otherwise "     "))))
     (format nil "~A ~:[ ~;!~] ~A"
             prefix
-            (cl-tmux/picker:picker-item-attention-p item)
-            (cl-tmux/picker:picker-item-label item))))
+            (nerimux/picker:picker-item-attention-p item)
+            (nerimux/picker:picker-item-label item))))
 
 (defun %write-picker-box-line (stream row col text inner-width &key selected attention)
   (move-to stream row col)
@@ -111,7 +111,7 @@
                  (%picker-item-display-text item)
                  inner-width
                  :selected (= item-index index)
-                 :attention (cl-tmux/picker:picker-item-attention-p item))))
+                 :attention (nerimux/picker:picker-item-attention-p item))))
       (when (= last-index first-index)
         (%write-picker-box-line stream (+ top 2) left "no matches"
                                 inner-width))
@@ -634,12 +634,12 @@
                                (find focus-pane panes :test #'eq))
                           (session-active-pane session)))
          ;; Status row count from the `status` option (0..5).  The pane layout
-         ;; reserves the matching count via cl-tmux/config:*status-height*, kept
+         ;; reserves the matching count via nerimux/config:*status-height*, kept
          ;; in sync by the `status` option's side-effect — so the bar and the
          ;; pane area stay in lockstep in normal use.
          (status-lines (status-line-count))
          (status-on   (> status-lines 0))
-         (status-pos  (cl-tmux/options:get-option "status-position" "bottom")))
+         (status-pos  (nerimux/options:get-option "status-position" "bottom")))
     (cursor-invisible buffer)
     (if (session-locked-p session)
         (render-lock-screen buffer terminal-rows terminal-cols)
@@ -648,13 +648,13 @@
                                      :viewport viewport)
           ;; pane-border-status title lines (drawn after borders so they overwrite border cells)
           (when (and window panes
-                     (string/= (cl-tmux/options:get-option "pane-border-status" "off") "off"))
+                     (string/= (nerimux/options:get-option "pane-border-status" "off") "off"))
             (dolist (pane panes)
               (%render-pane-border-status buffer pane session window)))
           ;; display-panes (C-b q): big per-pane numbers while the display-panes overlay
           ;; is active, coloured by display-panes-(active-)colour.  Drawn after borders so
           ;; the numbers overlay the pane content, before the top overlay layer.
-          (when (and cl-tmux/prompt:*display-panes-active* (overlay-active-p) window panes)
+          (when (and nerimux/prompt:*display-panes-active* (overlay-active-p) window panes)
             (dolist (pane panes)
               (%draw-pane-number-to-screen buffer (pane-x pane) (pane-y pane)
                                            (pane-width pane) (pane-height pane)
@@ -683,12 +683,12 @@
           ;; Relay bells from background windows (bell-action 'any'/'other').
           (%render-background-bells buffer session window)
           ;; set-titles: emit OSC 0 to set the outer terminal window title.
-          (when (cl-tmux/options:get-option "set-titles")
-            (let* ((title-fmt (cl-tmux/options:get-option "set-titles-string" "#W"))
+          (when (nerimux/options:get-option "set-titles")
+            (let* ((title-fmt (nerimux/options:get-option "set-titles-string" "#W"))
                    (win        (session-active-window session))
                    (pane       (session-active-pane session))
-                   (ctx        (cl-tmux/format:format-context-from-session session win pane))
-                   (title      (cl-tmux/format:expand-format title-fmt ctx)))
+                   (ctx        (nerimux/format:format-context-from-session session win pane))
+                   (title      (nerimux/format:expand-format title-fmt ctx)))
               (format buffer "~C]0;~A~C" +esc+ title (code-char 7))))))
     (get-output-stream-string buffer)))
 

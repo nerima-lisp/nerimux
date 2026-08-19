@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; layout tests — part B: named-layout helpers (%layout-even-h/v, %layout-main,
 ;;;; %layout-tiled, %build-grid-tree), apply-named-layout dispatch, layout
@@ -16,8 +16,8 @@
 
   ;; %layout-even-h and %layout-even-v with a single pane both assign the full window rect.
   (it "layout-even-single-pane-fills-window-table"
-    (dolist (row (list (list #'cl-tmux/model::%layout-even-h "even-h")
-                       (list #'cl-tmux/model::%layout-even-v "even-v")))
+    (dolist (row (list (list #'nerimux/model::%layout-even-h "even-h")
+                       (list #'nerimux/model::%layout-even-v "even-v")))
       (destructuring-bind (layout-fn desc) row
         (let* ((pane (tl-pane 1 80 24))
                (win  (make-window :id 1 :name "w" :width 80 :height 24
@@ -40,7 +40,7 @@
                              :tree  (make-layout-split :h
                                        (make-layout-leaf p0)
                                        (make-layout-leaf p1)))))
-      (cl-tmux/model::%layout-even-h win (list p0 p1) 81 24)
+      (nerimux/model::%layout-even-h win (list p0 p1) 81 24)
       (check-table (list (list (pane-x p0)    0  "p0 must start at column 0")
                          (list (pane-width p0) 40 "p0 must have 40 cols")
                          (list (pane-x p1)    41 "p1 must start one column past the separator")
@@ -57,7 +57,7 @@
                              :tree  (make-layout-split :v
                                        (make-layout-leaf p0)
                                        (make-layout-leaf p1)))))
-      (cl-tmux/model::%layout-even-v win (list p0 p1) 80 25)
+      (nerimux/model::%layout-even-v win (list p0 p1) 80 25)
       (check-table (list (list (pane-y p0)     0  "p0 must start at row 0")
                          (list (pane-height p0) 12 "p0 must have 12 rows")
                          (list (pane-y p1)     13 "p1 must start one row past the separator")
@@ -70,8 +70,8 @@
            (win  (make-window :id 1 :name "w" :width 80 :height 24
                               :panes (list pane)
                               :tree  (make-layout-leaf pane))))
-      (cl-tmux/model::%layout-main win (list pane) 80 24 :v :h 12)
-      (expect (cl-tmux/model::layout-leaf-p (window-tree win)))
+      (nerimux/model::%layout-main win (list pane) 80 24 :v :h 12)
+      (expect (nerimux/model::layout-leaf-p (window-tree win)))
       (expect (= 80 (pane-width  pane)))
       (expect (= 24 (pane-height pane)))))
 
@@ -84,10 +84,10 @@
                              :tree  (make-layout-split :v
                                        (make-layout-leaf p0)
                                        (make-layout-leaf p1)))))
-      (cl-tmux/model::%layout-main win (list p0 p1) 80 24 :v :h 12)
+      (nerimux/model::%layout-main win (list p0 p1) 80 24 :v :h 12)
       (let ((tree (window-tree win)))
-        (expect (cl-tmux/model::layout-split-p tree))
-        (expect (eq :v (cl-tmux/model::layout-split-orientation tree))))))
+        (expect (nerimux/model::layout-split-p tree))
+        (expect (eq :v (nerimux/model::layout-split-orientation tree))))))
 
   ;; %layout-even-h with three panes distributes them into equal-width columns.
   ;; Exercises the multi-pane arithmetic path (n >= 3) directly at the helper level.
@@ -98,8 +98,8 @@
            (p2  (tl-pane 3 1 1))
            (win (make-window :id 1 :name "w" :width 82 :height 24
                              :panes (list p0 p1 p2)
-                             :tree  (cl-tmux/model::%build-flat-tree (list p0 p1 p2) :h))))
-      (cl-tmux/model::%layout-even-h win (list p0 p1 p2) 82 24)
+                             :tree  (nerimux/model::%build-flat-tree (list p0 p1 p2) :h))))
+      (nerimux/model::%layout-even-h win (list p0 p1 p2) 82 24)
       (expect (= 0 (pane-x p0)))
       (expect (> (pane-width p0) 0))
       (expect (< (pane-x p0) (pane-x p1)))
@@ -116,8 +116,8 @@
            (p2  (tl-pane 3 1 1))
            (win (make-window :id 1 :name "w" :width 80 :height 25
                              :panes (list p0 p1 p2)
-                             :tree  (cl-tmux/model::%build-flat-tree (list p0 p1 p2) :v))))
-      (cl-tmux/model::%layout-even-v win (list p0 p1 p2) 80 25)
+                             :tree  (nerimux/model::%build-flat-tree (list p0 p1 p2) :v))))
+      (nerimux/model::%layout-even-v win (list p0 p1 p2) 80 25)
       (expect (= 0 (pane-y p0)))
       (expect (> (pane-height p0) 0))
       (expect (< (pane-y p0) (pane-y p1)))
@@ -142,8 +142,8 @@
                              :tree  (make-layout-split :h
                                        (make-layout-leaf p0)
                                        (make-layout-leaf p1)))))
-      (cl-tmux/model::%layout-tiled win (list p0 p1) 2 81 24)
-      (expect (cl-tmux/model::layout-split-p (window-tree win)))
+      (nerimux/model::%layout-tiled win (list p0 p1) 2 81 24)
+      (expect (nerimux/model::layout-split-p (window-tree win)))
       ;; Both panes must cover the window (non-zero dimensions).
       (expect (> (pane-width p0) 0))
       (expect (> (pane-width p1) 0))))
@@ -153,23 +153,23 @@
     ;; 4 panes in an 81x25 window: 2 cols × 2 rows.
     ;; cols = ceil(sqrt 4) = 2, rows = ceil(4/2) = 2.
     (let* ((panes (loop for i from 1 to 4 collect (tl-pane i 1 1)))
-           (win   (tl-window (cl-tmux/model::%build-flat-tree panes :h) 25 81)))
-      (cl-tmux/model::%layout-tiled win panes 4 81 25)
+           (win   (tl-window (nerimux/model::%build-flat-tree panes :h) 25 81)))
+      (nerimux/model::%layout-tiled win panes 4 81 25)
       ;; All four panes must have positive dimensions.
       (dolist (p panes)
         (expect (> (pane-width  p) 0))
         (expect (> (pane-height p) 0)))
       ;; Tree must be a :v split of two horizontal rows.
       (let ((tree (window-tree win)))
-        (expect (cl-tmux/model::layout-split-p tree))
-        (expect (eq :v (cl-tmux/model::layout-split-orientation tree))))))
+        (expect (nerimux/model::layout-split-p tree))
+        (expect (eq :v (nerimux/model::layout-split-orientation tree))))))
 
   ;; %layout-tiled with 3 panes: ceil(sqrt 3)=2 cols, 2 rows, last row has 1 pane.
   (it "layout-tiled-three-panes-last-row-partial"
     ;; cols = 2, rows = 2, last row has only 1 pane → right cell is empty.
     (let* ((panes (loop for i from 1 to 3 collect (tl-pane i 1 1)))
-           (win   (tl-window (cl-tmux/model::%build-flat-tree panes :h) 25 81)))
-      (cl-tmux/model::%layout-tiled win panes 3 81 25)
+           (win   (tl-window (nerimux/model::%build-flat-tree panes :h) 25 81)))
+      (nerimux/model::%layout-tiled win panes 3 81 25)
       (dolist (p panes)
         (expect (> (pane-width  p) 0))
         (expect (> (pane-height p) 0)))))
@@ -177,21 +177,21 @@
   ;; %build-grid-tree with a single row-group returns a flat :h chain.
   (it "build-grid-tree-single-row-returns-flat-h-tree"
     (let* ((panes (loop for i from 1 to 3 collect (tl-pane i 10 5)))
-           (tree  (cl-tmux/model::%build-grid-tree (list panes))))
+           (tree  (nerimux/model::%build-grid-tree (list panes))))
       ;; Single row → same as %build-flat-tree panes :h
-      (expect (cl-tmux/model::layout-split-p tree))
-      (expect (eq :h (cl-tmux/model::layout-split-orientation tree)))))
+      (expect (nerimux/model::layout-split-p tree))
+      (expect (eq :h (nerimux/model::layout-split-orientation tree)))))
 
   ;; %build-grid-tree with two rows builds a :v split of two :h rows.
   (it "build-grid-tree-two-rows-returns-v-split-of-h-rows"
     (let* ((row0 (loop for i from 1 to 2 collect (tl-pane i 10 5)))
            (row1 (loop for i from 3 to 4 collect (tl-pane i 10 5)))
-           (tree (cl-tmux/model::%build-grid-tree (list row0 row1))))
-      (expect (cl-tmux/model::layout-split-p tree))
-      (expect (eq :v (cl-tmux/model::layout-split-orientation tree)))
-      (expect (cl-tmux/model::layout-split-p (cl-tmux/model::layout-split-first tree)))
-      (expect (eq :h (cl-tmux/model::layout-split-orientation
-                      (cl-tmux/model::layout-split-first tree))))))
+           (tree (nerimux/model::%build-grid-tree (list row0 row1))))
+      (expect (nerimux/model::layout-split-p tree))
+      (expect (eq :v (nerimux/model::layout-split-orientation tree)))
+      (expect (nerimux/model::layout-split-p (nerimux/model::layout-split-first tree)))
+      (expect (eq :h (nerimux/model::layout-split-orientation
+                      (nerimux/model::layout-split-first tree))))))
 
   ;;; ── apply-named-layout — high-level named layout dispatch ───────────────────
 
@@ -201,7 +201,7 @@
     (let* ((panes (loop for i from 1 to 3 collect (tl-pane i 1 1)))
            (win   (make-window :id 1 :name "w" :width 82 :height 24
                                :panes panes
-                               :tree  (cl-tmux/model::%build-flat-tree panes :h))))
+                               :tree  (nerimux/model::%build-flat-tree panes :h))))
       (apply-named-layout win :even-horizontal)
       (dolist (p (window-panes win))
         (expect (> (pane-width  p) 0))
@@ -211,7 +211,7 @@
     (let* ((panes (loop for i from 1 to 3 collect (tl-pane i 1 1)))
            (win   (make-window :id 1 :name "w" :width 80 :height 25
                                :panes panes
-                               :tree  (cl-tmux/model::%build-flat-tree panes :v))))
+                               :tree  (nerimux/model::%build-flat-tree panes :v))))
       (apply-named-layout win :even-vertical)
       (dolist (p (window-panes win))
         (expect (> (pane-width  p) 0))
@@ -225,7 +225,7 @@
     (let* ((panes (loop for i from 1 to 3 collect (tl-pane i 1 1)))
            (win   (make-window :id 1 :name "w" :width 80 :height 25
                                :panes panes
-                               :tree  (cl-tmux/model::%build-flat-tree panes :v))))
+                               :tree  (nerimux/model::%build-flat-tree panes :v))))
       (apply-named-layout win :main-horizontal)
       (expect (= 0 (pane-y (first (window-panes win)))))
       (let ((first-pane-bottom (+ (pane-y (first (window-panes win)))
@@ -235,7 +235,7 @@
     (let* ((panes (loop for i from 1 to 3 collect (tl-pane i 1 1)))
            (win   (make-window :id 1 :name "w" :width 81 :height 24
                                :panes panes
-                               :tree  (cl-tmux/model::%build-flat-tree panes :h))))
+                               :tree  (nerimux/model::%build-flat-tree panes :h))))
       (apply-named-layout win :main-vertical)
       (expect (= 0 (pane-x (first (window-panes win)))))
       (let ((first-pane-right (+ (pane-x (first (window-panes win)))

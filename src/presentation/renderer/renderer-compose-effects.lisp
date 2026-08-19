@@ -1,6 +1,6 @@
-(in-package #:cl-tmux/renderer)
+(in-package #:nerimux/renderer)
 
-;;;; Session-frame side effects for the cl-tmux renderer.
+;;;; Session-frame side effects for the nerimux renderer.
 ;;;;
 ;;;; This file owns the post-layout output effects: bell emission, cursor
 ;;;; restoration, background bell relay, and draining passthrough / clipboard
@@ -37,15 +37,15 @@
    alert path on the sticky-flag transition instead."
   (when active-pane
     (let* ((bell-pending (screen-consume-bell (pane-screen active-pane)))
-           (bell-action  (or (cl-tmux/options:get-option "bell-action") "any"))
-           (visual-bell  (cl-tmux/options:get-option "visual-bell"))
+           (bell-action  (or (nerimux/options:get-option "bell-action") "any"))
+           (visual-bell  (nerimux/options:get-option "visual-bell"))
            (relay-bell   (and bell-pending
                               (not (member bell-action '("none" "other") :test #'string=)))))
       (when relay-bell
         (%emit-bell buffer visual-bell)
         ;; tmux notifies alert-bell for the current window when bell-action
         ;; applies to it (any/current) — the same condition as the relay.
-        (cl-tmux/hooks:run-hooks cl-tmux/hooks:+hook-alert-bell+
+        (nerimux/hooks:run-hooks nerimux/hooks:+hook-alert-bell+
                                  (pane-window active-pane)))))
   (when (or (null active-pane)
             (screen-cursor-visible (pane-screen active-pane)))
@@ -58,8 +58,8 @@
    bell-action 'any': relay bells from every non-active window pane.
    bell-action 'other': same (non-active is by definition 'other').
    bell-action 'current'/'none': no relay from background windows."
-  (let* ((bell-action  (or (cl-tmux/options:get-option "bell-action") "any"))
-         (visual-bell  (cl-tmux/options:get-option "visual-bell"))
+  (let* ((bell-action  (or (nerimux/options:get-option "bell-action") "any"))
+         (visual-bell  (nerimux/options:get-option "visual-bell"))
          (relay-p      (member bell-action '("any" "other") :test #'string=)))
     ;; Always consume pending bells (a bell suppressed by bell-action must not
     ;; ring later when its window becomes active); relay only when permitted.
@@ -76,9 +76,9 @@
    QUEUE-READER reads the current queue from a screen object.
    QUEUE-WRITER clears the queue on a screen object after draining it.
    The actual read-and-clear is delegated to the terminal LOGIC layer via
-   cl-tmux/terminal:screen-drain-queue so this presentation-layer code never
+   nerimux/terminal:screen-drain-queue so this presentation-layer code never
    mutates a screen slot directly."
-  (let* ((mode (or (cl-tmux/options:get-option option default) default))
+  (let* ((mode (or (nerimux/options:get-option option default) default))
          (emit (member mode allowed :test #'string=)))
     (dolist (pane panes)
       (let ((screen (pane-screen pane)))

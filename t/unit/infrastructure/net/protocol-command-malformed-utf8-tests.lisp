@@ -1,11 +1,11 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Malformed UTF-8 on the +msg-command+ control channel.
 ;;;;
 ;;;; These tests pin a decision, not merely an observed behaviour, so the
 ;;;; assertions below are deliberately two-sided.
 ;;;;
-;;;; cl-tmux decodes wire payloads under two OPPOSITE policies, chosen per
+;;;; nerimux decodes wire payloads under two OPPOSITE policies, chosen per
 ;;;; channel:
 ;;;;
 ;;;;   SPLIT-ON-NUL-BYTES (protocol-command.lisp) — STRICT.  Its fields are
@@ -45,7 +45,7 @@
     (let ((payload (make-array 2 :element-type '(unsigned-byte 8)
                                  :initial-contents '(#xFF #x00))))
       (signals cl-codec-kit:decode-error
-        (cl-tmux/protocol:split-on-nul-bytes payload))))
+        (nerimux/protocol:split-on-nul-bytes payload))))
 
   ;; A multi-byte sequence truncated by the field delimiter must be refused too:
   ;; the field boundary must not be mistaken for a decodable character.
@@ -53,7 +53,7 @@
     (let ((payload (make-array 3 :element-type '(unsigned-byte 8)
                                  :initial-contents '(#xE3 #x81 #x00))))
       (signals cl-codec-kit:decode-error
-        (cl-tmux/protocol:split-on-nul-bytes payload))))
+        (nerimux/protocol:split-on-nul-bytes payload))))
 
   ;; The full decoder inherits that strictness: a VALID command name ("ls")
   ;; followed by a malformed ARGUMENT field still refuses the whole payload.
@@ -120,13 +120,13 @@
       (with-fake-session (s)
         (with-test-listener (listener path (%test-socket-path "malformed-utf8")
                                       :backlog 4)
-          (let ((attacker  (cl-tmux/net:connect-to path))
+          (let ((attacker  (nerimux/net:connect-to path))
                 (bystander nil))
             (unwind-protect
-                 (let* ((attacker-sock  (cl-tmux/net:accept-connection listener))
-                        (ignored        (setf bystander (cl-tmux/net:connect-to path)))
-                        (bystander-sock (cl-tmux/net:accept-connection listener))
-                        (cl-tmux::*clients* nil))
+                 (let* ((attacker-sock  (nerimux/net:accept-connection listener))
+                        (ignored        (setf bystander (nerimux/net:connect-to path)))
+                        (bystander-sock (nerimux/net:accept-connection listener))
+                        (nerimux::*clients* nil))
                    (declare (ignore ignored))
                    ;; The fixture is ASSERTED, never branched on.  ACCEPT-CONNECTION
                    ;; returns NIL on timeout by design (net.lisp), so a (WHEN (AND
@@ -136,22 +136,22 @@
                    ;; WITH-LOOP-SAFE-ERROR guard as a matched pair.
                    (expect attacker-sock :to-be-truthy)
                    (expect bystander-sock :to-be-truthy)
-                   (let ((bad-conn  (cl-tmux::%add-client attacker-sock))
-                         (good-conn (cl-tmux::%add-client bystander-sock))
+                   (let ((bad-conn  (nerimux::%add-client attacker-sock))
+                         (good-conn (nerimux::%add-client bystander-sock))
                          (payload   (make-array 2 :element-type '(unsigned-byte 8)
                                                   :initial-contents '(#xFF #x00)))
                          (result    :never-ran))
-                     (send-frame (cl-tmux/net:socket-stream attacker)
+                     (send-frame (nerimux/net:socket-stream attacker)
                                  (encode-frame +msg-command+ payload))
                      ;; The decode error must not escape the event loop.
                      (finishes
                        (setf result
-                             (cl-tmux::%dispatch-ready-clients
-                              s (list (cl-tmux::client-conn-fd bad-conn)))))
+                             (nerimux::%dispatch-ready-clients
+                              s (list (nerimux::client-conn-fd bad-conn)))))
                      ;; It must not end the session either.
                      (expect (not (eq :quit result)))
                      ;; And it must cost exactly one client: the sender.
-                     (expect (equal (list good-conn) cl-tmux::*clients*))))
-              (ignore-errors (cl-tmux/net:close-socket attacker))
+                     (expect (equal (list good-conn) nerimux::*clients*))))
+              (ignore-errors (nerimux/net:close-socket attacker))
               (when bystander
-                (ignore-errors (cl-tmux/net:close-socket bystander))))))))))
+                (ignore-errors (nerimux/net:close-socket bystander))))))))))

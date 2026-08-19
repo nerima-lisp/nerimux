@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Tests for src/target.lisp — session/window/pane target resolution.
 ;;;;
@@ -16,17 +16,17 @@
   ;; %parse-integer-or-nil must return NIL when STRING does not represent an integer.
   (it "parse-integer-or-nil-returns-nil-for-non-integer-string"
     (dolist (bad '("" "abc" "1.5" "12abc" " "))
-      (expect (null (cl-tmux::%parse-integer-or-nil bad)))))
+      (expect (null (nerimux::%parse-integer-or-nil bad)))))
 
   ;; %parse-integer-or-nil must return NIL when given NIL (not a string).
   (it "parse-integer-or-nil-returns-nil-for-nil-input"
-    (expect (null (cl-tmux::%parse-integer-or-nil nil))))
+    (expect (null (nerimux::%parse-integer-or-nil nil))))
 
   ;; %parse-integer-or-nil must return the integer value when the string is valid.
   (it "parse-integer-or-nil-parses-valid-integer"
     (dolist (pair '(("0" 0) ("42" 42) ("-3" -3)))
       (destructuring-bind (str expected) pair
-        (expect (= expected (cl-tmux::%parse-integer-or-nil str))))))
+        (expect (= expected (nerimux::%parse-integer-or-nil str))))))
 
   ;;; ── %parse-session-component direct tests ───────────────────────────────────
   ;;;
@@ -42,14 +42,14 @@
                  (""           nil nil nil         "NIL for empty string")))
       (destructuring-bind (input colon-pos dot-pos expected desc) c
         (declare (ignore desc))
-        (expect (equal expected (cl-tmux::%parse-session-component input colon-pos dot-pos))))))
+        (expect (equal expected (nerimux::%parse-session-component input colon-pos dot-pos))))))
 
   ;;; ── %parse-target ────────────────────────────────────────────────────────────
 
   ;; %parse-target with NIL or empty string returns (nil nil nil) for all three components.
   (it "parse-target-nil-and-empty-return-all-nil"
     (dolist (input '(nil ""))
-      (multiple-value-bind (s w p) (cl-tmux::%parse-target input)
+      (multiple-value-bind (s w p) (nerimux::%parse-target input)
         (expect (null s))
         (expect (null w))
         (expect (null p)))))
@@ -68,7 +68,7 @@
                  ("work"       "work"      nil   nil   "plain name stays session")))
       (destructuring-bind (input expected-s expected-w expected-p desc) c
         (declare (ignore desc))
-        (multiple-value-bind (s w p) (cl-tmux::%parse-target input)
+        (multiple-value-bind (s w p) (nerimux::%parse-target input)
           (expect (equal expected-s s))
           (expect (equal expected-w w))
           (expect (equal expected-p p))))))
@@ -78,7 +78,7 @@
   ;; find-session-by-target returns NIL when target-str is NIL.
   (it "find-session-by-target-nil-target-returns-nil"
     (let ((sess (make-session :id 1 :name "main" :windows nil)))
-      (expect (null (cl-tmux::find-session-by-target
+      (expect (null (nerimux::find-session-by-target
                  (list (cons "main" sess)) nil)))))
 
   ;; find-session-by-target finds a session by exact name match.
@@ -86,28 +86,28 @@
     (let* ((s1 (make-session :id 1 :name "alpha" :windows nil))
            (s2 (make-session :id 2 :name "beta"  :windows nil))
            (registry (list (cons "alpha" s1) (cons "beta" s2))))
-      (expect (eq s1 (cl-tmux::find-session-by-target registry "alpha")))
-      (expect (eq s2 (cl-tmux::find-session-by-target registry "beta")))))
+      (expect (eq s1 (nerimux::find-session-by-target registry "alpha")))
+      (expect (eq s2 (nerimux::find-session-by-target registry "beta")))))
 
   ;; find-session-by-target matches $N by session-id.
   (it "find-session-by-target-dollar-id"
     (let* ((s1 (make-session :id 1 :name "first"  :windows nil))
            (s2 (make-session :id 2 :name "second" :windows nil))
            (registry (list (cons "first" s1) (cons "second" s2))))
-      (expect (eq s1 (cl-tmux::find-session-by-target registry "$1")))
-      (expect (eq s2 (cl-tmux::find-session-by-target registry "$2")))))
+      (expect (eq s1 (nerimux::find-session-by-target registry "$1")))
+      (expect (eq s2 (nerimux::find-session-by-target registry "$2")))))
 
   ;; find-session-by-target matches by name prefix when no exact match.
   (it "find-session-by-target-prefix-match"
     (let* ((s1 (make-session :id 1 :name "longname" :windows nil))
            (registry (list (cons "longname" s1))))
-      (expect (eq s1 (cl-tmux::find-session-by-target registry "long")))))
+      (expect (eq s1 (nerimux::find-session-by-target registry "long")))))
 
   ;; find-session-by-target returns NIL when no session matches.
   (it "find-session-by-target-no-match-returns-nil"
     (let* ((s1 (make-session :id 1 :name "alpha" :windows nil))
            (registry (list (cons "alpha" s1))))
-      (expect (null (cl-tmux::find-session-by-target registry "beta")))))
+      (expect (null (nerimux::find-session-by-target registry "beta")))))
 
   ;;; ── find-window-by-target ────────────────────────────────────────────────────
 
@@ -115,44 +115,44 @@
   (it "find-window-by-target-nil-inputs-return-nil"
     (let* ((w1 (make-window :id 1 :name "w1" :width 80 :height 24))
            (sess (make-session :id 1 :name "s" :windows (list w1))))
-      (expect (null (cl-tmux::find-window-by-target nil "w1")))
-      (expect (null (cl-tmux::find-window-by-target sess nil)))))
+      (expect (null (nerimux::find-window-by-target nil "w1")))
+      (expect (null (nerimux::find-window-by-target sess nil)))))
 
   ;; find-window-by-target finds by exact window name.
   (it "find-window-by-target-exact-name"
     (let* ((w1 (make-window :id 1 :name "editor" :width 80 :height 24))
            (w2 (make-window :id 2 :name "shell"  :width 80 :height 24))
            (sess (make-session :id 1 :name "s" :windows (list w1 w2))))
-      (expect (eq w1 (cl-tmux::find-window-by-target sess "editor")))
-      (expect (eq w2 (cl-tmux::find-window-by-target sess "shell")))))
+      (expect (eq w1 (nerimux::find-window-by-target sess "editor")))
+      (expect (eq w2 (nerimux::find-window-by-target sess "shell")))))
 
   ;; find-window-by-target finds by @N notation.
   (it "find-window-by-target-at-id"
     (let* ((w1 (make-window :id 1 :name "win1" :width 80 :height 24))
            (w2 (make-window :id 2 :name "win2" :width 80 :height 24))
            (sess (make-session :id 1 :name "s" :windows (list w1 w2))))
-      (expect (eq w1 (cl-tmux::find-window-by-target sess "@1")))
-      (expect (eq w2 (cl-tmux::find-window-by-target sess "@2")))))
+      (expect (eq w1 (nerimux::find-window-by-target sess "@1")))
+      (expect (eq w2 (nerimux::find-window-by-target sess "@2")))))
 
   ;; find-window-by-target finds by 0-based numeric index.
   (it "find-window-by-target-numeric-index"
     (let* ((w1 (make-window :id 1 :name "win1" :width 80 :height 24))
            (w2 (make-window :id 2 :name "win2" :width 80 :height 24))
            (sess (make-session :id 1 :name "s" :windows (list w1 w2))))
-      (expect (eq w1 (cl-tmux::find-window-by-target sess "0")))
-      (expect (eq w2 (cl-tmux::find-window-by-target sess "1")))))
+      (expect (eq w1 (nerimux::find-window-by-target sess "0")))
+      (expect (eq w2 (nerimux::find-window-by-target sess "1")))))
 
   ;; find-window-by-target falls back to name prefix.
   (it "find-window-by-target-prefix-match"
     (let* ((w1 (make-window :id 1 :name "editwin" :width 80 :height 24))
            (sess (make-session :id 1 :name "s" :windows (list w1))))
-      (expect (eq w1 (cl-tmux::find-window-by-target sess "edit")))))
+      (expect (eq w1 (nerimux::find-window-by-target sess "edit")))))
 
   ;; find-window-by-target returns NIL when no window matches.
   (it "find-window-by-target-no-match-returns-nil"
     (let* ((w1 (make-window :id 1 :name "alpha" :width 80 :height 24))
            (sess (make-session :id 1 :name "s" :windows (list w1))))
-      (expect (null (cl-tmux::find-window-by-target sess "beta")))))
+      (expect (null (nerimux::find-window-by-target sess "beta")))))
 
   ;;; ── find-pane-by-target ──────────────────────────────────────────────────────
 
@@ -161,8 +161,8 @@
     (let* ((p1  (make-no-pty-pane 1 0 0 40 24))
            (win (make-window :id 1 :name "w" :width 80 :height 24
                              :panes (list p1))))
-      (expect (null (cl-tmux::find-pane-by-target nil "%1")))
-      (expect (null (cl-tmux::find-pane-by-target win nil)))))
+      (expect (null (nerimux::find-pane-by-target nil "%1")))
+      (expect (null (nerimux::find-pane-by-target win nil)))))
 
   ;; find-pane-by-target finds by %N notation.
   (it "find-pane-by-target-percent-id"
@@ -170,8 +170,8 @@
            (p2  (make-no-pty-pane 2 41 0 40 24))
            (win (make-window :id 1 :name "w" :width 81 :height 24
                              :panes (list p1 p2))))
-      (expect (eq p1 (cl-tmux::find-pane-by-target win "%1")))
-      (expect (eq p2 (cl-tmux::find-pane-by-target win "%2")))))
+      (expect (eq p1 (nerimux::find-pane-by-target win "%1")))
+      (expect (eq p2 (nerimux::find-pane-by-target win "%2")))))
 
   ;; find-pane-by-target finds by 0-based numeric index.
   (it "find-pane-by-target-numeric-index"
@@ -179,16 +179,16 @@
            (p2  (make-no-pty-pane 2 41 0 40 24))
            (win (make-window :id 1 :name "w" :width 81 :height 24
                              :panes (list p1 p2))))
-      (expect (eq p1 (cl-tmux::find-pane-by-target win "0")))
-      (expect (eq p2 (cl-tmux::find-pane-by-target win "1")))))
+      (expect (eq p1 (nerimux::find-pane-by-target win "0")))
+      (expect (eq p2 (nerimux::find-pane-by-target win "1")))))
 
   ;; find-pane-by-target returns NIL when pane id does not exist.
   (it "find-pane-by-target-no-match-returns-nil"
     (let* ((p1  (make-no-pty-pane 1 0 0 80 24))
            (win (make-window :id 1 :name "w" :width 80 :height 24
                              :panes (list p1))))
-      (expect (null (cl-tmux::find-pane-by-target win "%99")))
-      (expect (null (cl-tmux::find-pane-by-target win "5")))))
+      (expect (null (nerimux::find-pane-by-target win "%99")))
+      (expect (null (nerimux::find-pane-by-target win "5")))))
 
   ;;; ── resolve-target ───────────────────────────────────────────────────────────
 
@@ -196,7 +196,7 @@
   (it "resolve-target-nil-returns-current-defaults"
     (multiple-value-bind (sess win p1) (make-single-pane-session)
       (multiple-value-bind (rs rw rp)
-          (cl-tmux::resolve-target nil nil
+          (nerimux::resolve-target nil nil
                                    :current-session sess
                                    :current-window  win
                                    :current-pane    p1)
@@ -210,7 +210,7 @@
         (make-single-pane-session :session-name "mysess")
       (let ((registry (list (cons "mysess" sess))))
         (multiple-value-bind (rs rw rp)
-            (cl-tmux::resolve-target registry "mysess")
+            (nerimux::resolve-target registry "mysess")
           (expect (eq sess rs))
           (expect (eq win  rw))
           (expect (eq p1   rp))))))
@@ -228,7 +228,7 @@
       (session-select-window sess w1)
       (let ((registry (list (cons "work" sess))))
         (multiple-value-bind (rs rw _rp)
-            (cl-tmux::resolve-target registry "work:shell")
+            (nerimux::resolve-target registry "work:shell")
           (declare (ignore _rp))
           (expect (eq sess rs))
           (expect (eq w2   rw))))))
@@ -245,7 +245,7 @@
       (session-select-window sess win)
       (let ((registry (list (cons "s" sess))))
         (multiple-value-bind (_rs _rw rp)
-            (cl-tmux::resolve-target registry "s:w.%2")
+            (nerimux::resolve-target registry "s:w.%2")
           (declare (ignore _rs _rw))
           (expect (eq p2 rp))))))
 
@@ -261,7 +261,7 @@
       (window-select-pane win p1)
       (session-select-window sess win)
       (multiple-value-bind (_rs _rw rp)
-          (cl-tmux::resolve-target nil "%2"
+          (nerimux::resolve-target nil "%2"
                                    :current-session sess :current-window win)
         (declare (ignore _rs _rw))
         (expect (eq p2 rp)))))
@@ -271,7 +271,7 @@
     (multiple-value-bind (sess _win _p1) (make-single-pane-session)
       (declare (ignore _win _p1))
       (multiple-value-bind (rs _rw _rp)
-          (cl-tmux::resolve-target nil "nonexistent"
+          (nerimux::resolve-target nil "nonexistent"
                                    :current-session sess)
         (declare (ignore _rw _rp))
         ;; When the named session is not found, current-session is used.

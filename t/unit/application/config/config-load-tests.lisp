@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; config directive tests — load strings, streams, files, and config paths
 
@@ -7,7 +7,7 @@
 (defun config-path (override xdg home)
   "Namestring of the resolved config path for the given env values + HOME
    (HOME a directory pathname)."
-  (namestring (cl-tmux/config::%config-path-from override xdg home)))
+  (namestring (nerimux/config::%config-path-from override xdg home)))
 
 (describe "config-directives-suite"
 
@@ -40,15 +40,15 @@ set-option -ga @x b~%~
 bind -n F1 next-window~%~
 set-option -g prefix C-a~%"))))
         (expect (= 8 applied))
-        (expect (string= "top" (cl-tmux/options:get-option "status-position")))
-        (expect (string= "fg=red" (cl-tmux/options:get-option "status-left-style")))
-        (expect (null (cl-tmux/options:get-option "monitor-bell")))
-        (expect (null (cl-tmux/options:get-option "alternate-screen")))
-        (expect (string= "ab" (cl-tmux/options:get-option "@x")))
+        (expect (string= "top" (nerimux/options:get-option "status-position")))
+        (expect (string= "fg=red" (nerimux/options:get-option "status-left-style")))
+        (expect (null (nerimux/options:get-option "monitor-bell")))
+        (expect (null (nerimux/options:get-option "alternate-screen")))
+        (expect (string= "ab" (nerimux/options:get-option "@x")))
         (expect (eq :next-window
-                    (cl-tmux/config:key-table-command
-                     (cl-tmux/config:key-table-lookup "root" "F1"))))
-        (expect (= 1 cl-tmux/config:*prefix-key-code*)))))
+                    (nerimux/config:key-table-command
+                     (nerimux/config:key-table-lookup "root" "F1"))))
+        (expect (= 1 nerimux/config:*prefix-key-code*)))))
 
   ;; A single-char quote key parses as the character.
   (it "load-from-string-multichar-and-quote-key"
@@ -64,10 +64,10 @@ set-option -g prefix C-a~%"))))
   ;; %config-path-from: override wins; XDG used when set; ~/.config fallback; empty = unset.
   (it "config-path-table"
     (dolist (c '(("/custom/my.conf" "/x/cfg"  #p"/home/u/" "/custom/my.conf"                  "explicit override wins")
-                 (nil               "/x/cfg"  #p"/home/u/" "/x/cfg/cl-tmux/cl-tmux.conf"      "XDG set")
-                 (nil               "/x/cfg/" #p"/home/u/" "/x/cfg/cl-tmux/cl-tmux.conf"      "XDG trailing slash")
-                 (nil               nil       #p"/home/u/" "/home/u/.config/cl-tmux/cl-tmux.conf" "no XDG fallback")
-                 (""                ""        #p"/home/u/" "/home/u/.config/cl-tmux/cl-tmux.conf" "empty env = unset")))
+                 (nil               "/x/cfg"  #p"/home/u/" "/x/cfg/nerimux/nerimux.conf"      "XDG set")
+                 (nil               "/x/cfg/" #p"/home/u/" "/x/cfg/nerimux/nerimux.conf"      "XDG trailing slash")
+                 (nil               nil       #p"/home/u/" "/home/u/.config/nerimux/nerimux.conf" "no XDG fallback")
+                 (""                ""        #p"/home/u/" "/home/u/.config/nerimux/nerimux.conf" "empty env = unset")))
       (destructuring-bind (override xdg home expected desc) c
         (declare (ignore desc))
         (expect (string= expected (config-path override xdg home))))))
@@ -77,7 +77,7 @@ set-option -g prefix C-a~%"))))
   ;; load-config-file on a non-existent path returns NIL.
   (it "load-config-file-missing-returns-nil"
     (with-isolated-config
-      (expect (null (load-config-file #p"/nonexistent/cl-tmux-xyz.conf")))))
+      (expect (null (load-config-file #p"/nonexistent/nerimux-xyz.conf")))))
 
   ;;; load-config-from-stream
 

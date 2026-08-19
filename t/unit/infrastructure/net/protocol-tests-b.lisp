@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Protocol field and text codec tests.
 
@@ -10,22 +10,22 @@
   (it "read-u32-decodes-big-endian"
     (let ((buffer (make-array 8 :element-type '(unsigned-byte 8)
                                 :initial-contents '(0 0 0 0 0 0 1 0))))
-      (expect (= 0      (cl-tmux/protocol:read-u32 buffer 0)))
-      (expect (= 256    (cl-tmux/protocol:read-u32 buffer 4)))
-      (let ((buf2 (cl-tmux/protocol:u32-octets #xDEADBEEF)))
-        (expect (= #xDEADBEEF (cl-tmux/protocol:read-u32 buf2 0))))))
+      (expect (= 0      (nerimux/protocol:read-u32 buffer 0)))
+      (expect (= 256    (nerimux/protocol:read-u32 buffer 4)))
+      (let ((buf2 (nerimux/protocol:u32-octets #xDEADBEEF)))
+        (expect (= #xDEADBEEF (nerimux/protocol:read-u32 buf2 0))))))
 
   ;; ── split-on-nul-bytes ──────────────────────────────────────────────────────
 
   ;; split-on-nul-bytes on an empty buffer returns an empty list.
   (it "split-on-nul-bytes-empty-input-returns-empty-list"
-    (expect (null (cl-tmux/protocol:split-on-nul-bytes #()))))
+    (expect (null (nerimux/protocol:split-on-nul-bytes #()))))
 
   ;; split-on-nul-bytes with one NUL-terminated field returns a one-element list.
   (it "split-on-nul-bytes-single-field"
     (let* ((bytes (cl-codec-kit:string-to-octets "hello" :encoding :utf-8))
            (buf   (concatenate '(simple-array (unsigned-byte 8) (*)) bytes #(0))))
-      (expect (equal '("hello") (cl-tmux/protocol:split-on-nul-bytes buf)))))
+      (expect (equal '("hello") (nerimux/protocol:split-on-nul-bytes buf)))))
 
   ;; split-on-nul-bytes with multiple NUL-separated fields returns them all.
   (it "split-on-nul-bytes-multiple-fields"
@@ -35,12 +35,12 @@
            (buf (concatenate '(simple-array (unsigned-byte 8) (*))
                              a #(0) b #(0) c #(0))))
       (expect (equal '("alpha" "beta" "gamma")
-                     (cl-tmux/protocol:split-on-nul-bytes buf)))))
+                     (nerimux/protocol:split-on-nul-bytes buf)))))
 
   ;; split-on-nul-bytes with no NUL byte returns an empty list (no complete field).
   (it "split-on-nul-bytes-no-nul-returns-empty-list"
     (let ((buf (cl-codec-kit:string-to-octets "no-nul" :encoding :utf-8)))
-      (expect (null (cl-tmux/protocol:split-on-nul-bytes buf)))))
+      (expect (null (nerimux/protocol:split-on-nul-bytes buf)))))
 
   ;; ── command-name-to-string ──────────────────────────────────────────────────
 
@@ -52,7 +52,7 @@
                  ("select-pane" "select-pane" "string → pass through")))
       (destructuring-bind (input expected desc) c
         (declare (ignore desc))
-        (expect (string= expected (cl-tmux/protocol:command-name-to-string input))))))
+        (expect (string= expected (nerimux/protocol:command-name-to-string input))))))
 
   ;; ── assemble-command-fields ─────────────────────────────────────────────────
 
@@ -64,19 +64,19 @@
                  ("resize-pane" "2:0"  ("-U" "5")   ("2:0" "resize-pane" "-U" "5") "target + name + args")))
       (destructuring-bind (name target args expected desc) c
         (declare (ignore desc))
-        (expect (equal expected (cl-tmux/protocol:assemble-command-fields name target args))))))
+        (expect (equal expected (nerimux/protocol:assemble-command-fields name target args))))))
 
   ;; ── encode-fields-to-buffer ─────────────────────────────────────────────────
 
   ;; encode-fields-to-buffer with no fields produces an empty buffer.
   (it "encode-fields-to-buffer-empty-fields-produces-empty-buffer"
-    (let ((buf (cl-tmux/protocol:encode-fields-to-buffer '())))
+    (let ((buf (nerimux/protocol:encode-fields-to-buffer '())))
       (expect (= 0 (length buf)))))
 
   ;; encode-fields-to-buffer packs one field followed by a NUL byte.
   (it "encode-fields-to-buffer-single-field-has-trailing-nul"
     (let* ((field-bytes (cl-codec-kit:string-to-octets "hello" :encoding :utf-8))
-           (buf (cl-tmux/protocol:encode-fields-to-buffer (list field-bytes))))
+           (buf (nerimux/protocol:encode-fields-to-buffer (list field-bytes))))
       (expect (= 6 (length buf)))
       (expect (= 0 (aref buf 5)))))
 
@@ -84,7 +84,7 @@
   (it "encode-fields-to-buffer-multiple-fields-split-by-nuls"
     (let* ((f1  (cl-codec-kit:string-to-octets "ab" :encoding :utf-8))
            (f2  (cl-codec-kit:string-to-octets "cd" :encoding :utf-8))
-           (buf (cl-tmux/protocol:encode-fields-to-buffer (list f1 f2))))
+           (buf (nerimux/protocol:encode-fields-to-buffer (list f1 f2))))
       ;; Layout: a b NUL c d NUL → 6 bytes
       (expect (= 6 (length buf)))
       (expect (= 0 (aref buf 2)))
@@ -185,14 +185,14 @@
            (buf   (concatenate '(simple-array (unsigned-byte 8) (*))
                                a #(0) b)))
       (expect (equal '("alpha")
-                     (cl-tmux/protocol:split-on-nul-bytes buf)))))
+                     (nerimux/protocol:split-on-nul-bytes buf)))))
 
   ;; ── assemble-command-fields preserves arg order ──────────────────────────────
 
   ;; assemble-command-fields appends many args in the supplied order.
   (it "assemble-command-fields-preserves-multiple-args-order"
     (expect (equal '("cmd" "a" "b" "c" "d")
-                   (cl-tmux/protocol:assemble-command-fields "cmd" nil '("a" "b" "c" "d")))))
+                   (nerimux/protocol:assemble-command-fields "cmd" nil '("a" "b" "c" "d")))))
 
   ;; ── encode-fields-to-buffer / split-on-nul-bytes are symmetric ──────────────
 
@@ -203,6 +203,6 @@
            (octets   (mapcar (lambda (s)
                                (cl-codec-kit:string-to-octets s :encoding :utf-8))
                              strings))
-           (buf      (cl-tmux/protocol:encode-fields-to-buffer octets))
-           (decoded  (cl-tmux/protocol:split-on-nul-bytes buf)))
+           (buf      (nerimux/protocol:encode-fields-to-buffer octets))
+           (decoded  (nerimux/protocol:split-on-nul-bytes buf)))
       (expect (equal strings decoded)))))

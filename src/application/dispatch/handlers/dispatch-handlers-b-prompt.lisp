@@ -1,6 +1,6 @@
 ;;;; Prompt-driven command handlers
 
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 (define-command-handlers
   (:command-prompt
@@ -17,10 +17,10 @@
                     (lambda (input)
                       (let* ((parts   (host-kit:split-string input :separator " "))
                              (key-tok (and (first parts)
-                                          (cl-tmux/config::%parse-key-token (first parts))))
+                                          (nerimux/config::%parse-key-token (first parts))))
                              (cmd-str (second parts))
                              (kw      (and cmd-str
-                                           (cl-tmux/config::%command-keyword cmd-str))))
+                                           (nerimux/config::%command-keyword cmd-str))))
                         (if kw
                             (progn
                               (key-table-bind +table-prefix+ key-tok kw)
@@ -30,7 +30,7 @@
   (:unbind-key
    (prompt-nonempty "unbind key: "
                     (lambda (input)
-                      (let ((k (cl-tmux/config::%parse-key-token input)))
+                      (let ((k (nerimux/config::%parse-key-token input)))
                         (key-table-unbind +table-prefix+ k)
                         (%overlayf "unbound ~A" k)))))
   (:select-window-prompt

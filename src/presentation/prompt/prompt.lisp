@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/prompt)
+(in-package #:nerimux/prompt)
 
 ;;;; Single-line input prompt -- buffer editing and display.
 ;;;;

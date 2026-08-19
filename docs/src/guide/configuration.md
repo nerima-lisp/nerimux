@@ -1,12 +1,12 @@
 # Configuration
 
-cl-tmux reads a tmux-style config at startup.
+nerimux reads a tmux-style config at startup.
 
 ## Path resolution
 
-1. `$CL_TMUX_CONF`, if set.
-2. `$XDG_CONFIG_HOME/cl-tmux/cl-tmux.conf` (default
-   `~/.config/cl-tmux/cl-tmux.conf`).
+1. `$NERIMUX_CONF`, if set.
+2. `$XDG_CONFIG_HOME/nerimux/nerimux.conf` (default
+   `~/.config/nerimux/nerimux.conf`).
 3. Your existing tmux config, as a fallback:
    `$XDG_CONFIG_HOME/tmux/tmux.conf`, `~/.config/tmux/tmux.conf`, or
    `~/.tmux.conf`.
@@ -51,7 +51,7 @@ variable assignments, line continuations, and tmux quoting/escape rules.
 `splitw`, `killp`, …) are rejected rather than silently supported, so typos
 fail loudly instead of resolving to something unintended.
 
-Spell commands out in configs you share between tmux and cl-tmux. This is the
+Spell commands out in configs you share between tmux and nerimux. This is the
 single behavioral difference most likely to bite when reusing an existing
 `.tmux.conf`; the rest are catalogued in the
 [compatibility statement](../reference/compatibility.md).

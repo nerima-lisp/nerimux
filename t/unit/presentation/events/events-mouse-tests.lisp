@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; event mouse dispatch, X10 sequences, middle-click paste, defaults
 
@@ -14,14 +14,14 @@
   (it "dispatch-mouse-event-left-click-selects-pane"
     (with-two-pane-mouse-session (sess win p0 p1)
       ;; Click in the right pane (col 50, row 5)
-      (cl-tmux::%dispatch-mouse-event sess 0 50 5 nil)
+      (nerimux::%dispatch-mouse-event sess 0 50 5 nil)
       (expect (eq p1 (window-active-pane win)))))
 
   ;; %dispatch-mouse-event with release-p=T does not switch the active pane.
   (it "dispatch-mouse-event-release-does-not-select"
     (with-two-pane-mouse-session (sess win p0 p1)
       ;; Release event (btn=0, release-p=T) — must not change active pane
-      (cl-tmux::%dispatch-mouse-event sess 0 50 5 t)
+      (nerimux::%dispatch-mouse-event sess 0 50 5 t)
       (expect (eq p0 (window-active-pane win)))))
 
   ;; X10 mouse press ESC [ M <btn+32> <col+33> <row+33> fed one byte at a time
@@ -44,11 +44,11 @@
         (with-two-pane-mouse-session (sess win p0 p1)
           ;; Give the right pane (p1) a live PTY and stage a paste-buffer.
           (setf (pane-fd p1) wfd)
-          (cl-tmux/buffer:add-paste-buffer "PASTE-ME")
+          (nerimux/buffer:add-paste-buffer "PASTE-ME")
           ;; Middle-click at col 50 (within p1, x=41..80), row 5.
-          (cl-tmux::%dispatch-mouse-event sess 1 50 5 nil)
+          (nerimux::%dispatch-mouse-event sess 1 50 5 nil)
           (expect (eq p1 (window-active-pane win)))
-          (let ((ready (cl-tmux/pty:select-fds (list rfd) 200000)))  ; 200 ms
+          (let ((ready (nerimux/pty:select-fds (list rfd) 200000)))  ; 200 ms
             (expect ready :to-be-truthy)
             (when ready
               (let ((bytes (read-octets-from-fd rfd 8)))
@@ -63,9 +63,9 @@
         (with-two-pane-mouse-session (sess win p0 p1)
           (setf (pane-fd p1) wfd)
           ;; No add-paste-buffer → get-paste-buffer 0 is NIL.
-          (cl-tmux::%dispatch-mouse-event sess 1 50 5 nil)
+          (nerimux::%dispatch-mouse-event sess 1 50 5 nil)
           (expect (eq p1 (window-active-pane win)))
-          (expect (null (cl-tmux/pty:select-fds (list rfd) 20000)))))))
+          (expect (null (nerimux/pty:select-fds (list rfd) 20000)))))))
 
   ;; A middle-button RELEASE event must not paste (only the press does).
   (it "mouse-middle-click-release-does-not-paste"
@@ -73,10 +73,10 @@
       (with-pipe-fds (rfd wfd)
         (with-two-pane-mouse-session (sess win p0 p1)
           (setf (pane-fd p1) wfd)
-          (cl-tmux/buffer:add-paste-buffer "NOPE")
+          (nerimux/buffer:add-paste-buffer "NOPE")
           ;; release-p = T → no paste
-          (cl-tmux::%dispatch-mouse-event sess 1 50 5 t)
-          (expect (null (cl-tmux/pty:select-fds (list rfd) 20000)))))))
+          (nerimux::%dispatch-mouse-event sess 1 50 5 t)
+          (expect (null (nerimux/pty:select-fds (list rfd) 20000)))))))
 
   ;; Fresh screen mouse defaults: mouse-mode=0, mouse-sgr-mode=nil.
   (it "mouse-mode-defaults-table"

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; cursor tests — part B: %place-wide-char, table-driven cursor movement,
 ;;;; combining-char-p, write-char combining, DEC special graphics charset.
@@ -9,7 +9,7 @@
   ;; %place-wide-char writes a width-2 lead cell and width-0 continuation.
   (it "place-wide-char-writes-lead-and-continuation"
     (with-screen (s 10 5)
-      (cl-tmux/terminal/actions::%place-wide-char s 0 0 #\中 7 0 0 0 0 nil)
+      (nerimux/terminal/actions::%place-wide-char s 0 0 #\中 7 0 0 0 0 nil)
       (let ((lead (screen-cell s 0 0))
             (cont (screen-cell s 1 0)))
         (expect (char= #\中 (cell-char lead)))
@@ -20,7 +20,7 @@
   (it "place-wide-char-at-last-column-no-continuation"
     (with-screen (s 5 5)
       ;; Place a wide char at x=4 (last column); x+1=5 >= width, so no continuation
-      (cl-tmux/terminal/actions::%place-wide-char s 4 0 #\中 7 0 0 0 0 nil)
+      (nerimux/terminal/actions::%place-wide-char s 4 0 #\中 7 0 0 0 0 nil)
       (let ((lead (screen-cell s 4 0)))
         (expect (char= #\中 (cell-char lead)))
         (expect (= 2 (cell-width lead)))))))
@@ -41,38 +41,38 @@
       (dolist (c cases)
         (destructuring-bind (sx sy dir n ex ey) c
           (with-screen (s 10 10)
-            (setf (cl-tmux/terminal/types:screen-cursor-x s) sx
-                  (cl-tmux/terminal/types:screen-cursor-y s) sy)
+            (setf (nerimux/terminal/types:screen-cursor-x s) sx
+                  (nerimux/terminal/types:screen-cursor-y s) sy)
             (ecase dir
-              (up    (cl-tmux/terminal/actions:cursor-up    s n))
-              (down  (cl-tmux/terminal/actions:cursor-down  s n))
-              (left  (cl-tmux/terminal/actions:cursor-left  s n))
-              (right (cl-tmux/terminal/actions:cursor-right s n)))
+              (up    (nerimux/terminal/actions:cursor-up    s n))
+              (down  (nerimux/terminal/actions:cursor-down  s n))
+              (left  (nerimux/terminal/actions:cursor-left  s n))
+              (right (nerimux/terminal/actions:cursor-right s n)))
             (expect (= ex (screen-cursor-x s)))
             (expect (= ey (screen-cursor-y s)))))))))
 
 ;;; ── SUITE: combining-char-p predicate ───────────────────────────────────────
 ;;;
-;;; combining-char-p is exported from cl-tmux/terminal/actions and must return
+;;; combining-char-p is exported from nerimux/terminal/actions and must return
 ;;; T only for Unicode combining marks (category M*).
 
 (describe "terminal-suite/combining-char-p-suite"
 
   ;; combining-char-p returns T for code points in the Combining Diacritical Marks block (U+0300-U+036F).
   (it "combining-char-p-returns-true-for-combining-diacritical-marks"
-    (expect (cl-tmux/terminal/actions:combining-char-p (code-char #x0300)))
-    (expect (cl-tmux/terminal/actions:combining-char-p (code-char #x036F))))
+    (expect (nerimux/terminal/actions:combining-char-p (code-char #x0300)))
+    (expect (nerimux/terminal/actions:combining-char-p (code-char #x036F))))
 
   ;; combining-char-p returns T for code points in the Combining Half Marks block (U+FE20-U+FE2F).
   (it "combining-char-p-returns-true-for-combining-half-marks"
-    (expect (cl-tmux/terminal/actions:combining-char-p (code-char #xFE20)))
-    (expect (cl-tmux/terminal/actions:combining-char-p (code-char #xFE2F))))
+    (expect (nerimux/terminal/actions:combining-char-p (code-char #xFE20)))
+    (expect (nerimux/terminal/actions:combining-char-p (code-char #xFE2F))))
 
   ;; combining-char-p returns NIL for ordinary ASCII characters.
   (it "combining-char-p-returns-false-for-ascii-printable"
-    (expect (cl-tmux/terminal/actions:combining-char-p #\A) :to-be-falsy)
-    (expect (cl-tmux/terminal/actions:combining-char-p #\Space) :to-be-falsy)
-    (expect (cl-tmux/terminal/actions:combining-char-p #\Null) :to-be-falsy))
+    (expect (nerimux/terminal/actions:combining-char-p #\A) :to-be-falsy)
+    (expect (nerimux/terminal/actions:combining-char-p #\Space) :to-be-falsy)
+    (expect (nerimux/terminal/actions:combining-char-p #\Null) :to-be-falsy))
 
   ;; Table-driven test across the combining blocks.
   ;;
@@ -96,8 +96,8 @@
     (declare (ignore description))
     (let ((ch (code-char cp)))
       (if expected
-          (expect (cl-tmux/terminal/actions:combining-char-p ch))
-          (expect (cl-tmux/terminal/actions:combining-char-p ch) :to-be-falsy)))))
+          (expect (nerimux/terminal/actions:combining-char-p ch))
+          (expect (nerimux/terminal/actions:combining-char-p ch) :to-be-falsy)))))
 
 ;;; ── SUITE: write-char-at-cursor combining-char path ─────────────────────────
 ;;;
@@ -113,7 +113,7 @@
     (with-screen (s 10 5)
       (feed s "a")                          ; cursor at col 1
       ;; Feed a combining acute accent (U+0301) directly
-      (cl-tmux/terminal/actions:write-char-at-cursor s (code-char #x0301))
+      (nerimux/terminal/actions:write-char-at-cursor s (code-char #x0301))
       ;; Cursor must not have moved
       (check-cursor s 1 0)))
 
@@ -121,24 +121,24 @@
   (it "write-char-at-cursor-combining-appended-to-cell"
     (with-screen (s 10 5)
       ;; Write 'a', then a combining acute accent
-      (cl-tmux/terminal/actions:write-char-at-cursor s #\a)
-      (cl-tmux/terminal/actions:write-char-at-cursor s (code-char #x0301))
+      (nerimux/terminal/actions:write-char-at-cursor s #\a)
+      (nerimux/terminal/actions:write-char-at-cursor s (code-char #x0301))
       (let ((cell (screen-cell s 0 0)))
         ;; The base char must still be 'a'
         (expect (char= #\a (cell-char cell)))
         ;; The combining slot must contain the diacritic
         (expect (member (code-char #x0301)
-                        (cl-tmux/terminal/types:cell-combining cell))))))
+                        (nerimux/terminal/types:cell-combining cell))))))
 
   ;; A combining mark at cursor col 0 is appended to col 0 (no prev cell).
   (it "write-char-at-cursor-combining-at-col-zero-uses-col-zero"
     (with-screen (s 10 5)
       ;; With cursor at col 0, a combining mark attaches to col 0.
-      (cl-tmux/terminal/actions:write-char-at-cursor s (code-char #x0300))
+      (nerimux/terminal/actions:write-char-at-cursor s (code-char #x0300))
       ;; Cursor stays at 0
       (check-cursor s 0 0)
       ;; No crash and screen is dirty
-      (expect (cl-tmux/terminal/types:screen-dirty-p s)))))
+      (expect (nerimux/terminal/types:screen-dirty-p s)))))
 
 ;;; ── SUITE: DEC special graphics charset remapping ────────────────────────────
 ;;;
@@ -150,24 +150,24 @@
   ;; After designate-charset :g0 :dec-graphics, writing 'j' places the box-drawing corner U+2518.
   (it "set-charset-dec-graphics-remaps-box-drawing"
     (with-screen (s 10 5)
-      (cl-tmux/terminal/actions:designate-charset s :g0 :dec-graphics)
-      (cl-tmux/terminal/actions:write-char-at-cursor s #\j)
+      (nerimux/terminal/actions:designate-charset s :g0 :dec-graphics)
+      (nerimux/terminal/actions:write-char-at-cursor s #\j)
       ;; 'j' maps to U+2518 (LOWER RIGHT CORNER ┘)
       (expect (char= #\┘ (char-at s 0 0)))))
 
   ;; After designate-charset :g0 :dec-graphics, writing 'q' places the horizontal line U+2500.
   (it "set-charset-dec-graphics-remaps-horizontal-line"
     (with-screen (s 10 5)
-      (cl-tmux/terminal/actions:designate-charset s :g0 :dec-graphics)
-      (cl-tmux/terminal/actions:write-char-at-cursor s #\q)
+      (nerimux/terminal/actions:designate-charset s :g0 :dec-graphics)
+      (nerimux/terminal/actions:write-char-at-cursor s #\q)
       ;; 'q' maps to U+2500 (BOX DRAWINGS LIGHT HORIZONTAL ─)
       (expect (char= #\─ (char-at s 0 0)))))
 
   ;; After designate-charset :g0 :ascii (default), characters are written unchanged.
   (it "set-charset-ascii-no-remapping"
     (with-screen (s 10 5)
-      (cl-tmux/terminal/actions:designate-charset s :g0 :ascii)
-      (cl-tmux/terminal/actions:write-char-at-cursor s #\j)
+      (nerimux/terminal/actions:designate-charset s :g0 :ascii)
+      (nerimux/terminal/actions:write-char-at-cursor s #\j)
       ;; In ASCII mode, 'j' is 'j'
       (expect (char= #\j (char-at s 0 0)))))
 
@@ -198,17 +198,17 @@
       (in expected desc)
     (declare (ignore desc))
     (with-screen (s 10 5)
-      (cl-tmux/terminal/actions:designate-charset s :g0 :dec-graphics)
-      (cl-tmux/terminal/actions:write-char-at-cursor s in)
+      (nerimux/terminal/actions:designate-charset s :g0 :dec-graphics)
+      (nerimux/terminal/actions:write-char-at-cursor s in)
       (expect (char= expected (char-at s 0 0)))))
 
   ;; Characters not in the DEC graphics table pass through unchanged.
   (it "set-charset-dec-graphics-unmapped-char-passes-through"
     (with-screen (s 10 5)
-      (cl-tmux/terminal/actions:designate-charset s :g0 :dec-graphics)
+      (nerimux/terminal/actions:designate-charset s :g0 :dec-graphics)
       ;; '#\5' (a digit) is not in the DEC special-graphics set — only certain
       ;; lowercase letters and symbols are remapped, so digits/uppercase pass through.
-      (cl-tmux/terminal/actions:write-char-at-cursor s #\5)
+      (nerimux/terminal/actions:write-char-at-cursor s #\5)
       (expect (char= #\5 (char-at s 0 0)))))
 
   ;; ESC ( 0 activates DEC graphics charset; subsequent chars are remapped.

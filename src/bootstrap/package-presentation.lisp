@@ -1,6 +1,6 @@
 ;;; Presentation and input packages.
 
-(defpackage #:cl-tmux/prompt
+(defpackage #:nerimux/prompt
   (:use #:cl)
   (:documentation
    "PRESENTATION layer: the transient interactive UI that sits on top of the panes.
@@ -42,9 +42,9 @@
    #:*active-menu*
    #:show-menu #:close-menu #:menu-active-p))
 
-(defpackage #:cl-tmux/renderer
+(defpackage #:nerimux/renderer
   (:use #:cl
-        #:cl-tmux/model #:cl-tmux/terminal #:cl-tmux/prompt)
+        #:nerimux/model #:nerimux/terminal #:nerimux/prompt)
   (:import-from #:cl-concurrent-kit #:with-lock-held)
   (:documentation
    "PRESENTATION layer: the only package that writes to the real terminal.  Composites
@@ -82,9 +82,9 @@
 ;; cl-tty-kit:fd-read-octets qualified in full, which is what keeps the
 ;; descriptor-level surface legible. (It formerly wrote cffi: forms here; cffi
 ;; is no longer a dependency.)
-(defpackage #:cl-tmux/input
+(defpackage #:nerimux/input
   (:use #:cl
-        #:cl-tmux/config #:cl-tmux/pty)
+        #:nerimux/config #:nerimux/pty)
   (:documentation
    "INFRASTRUCTURE layer: keyboard input, read from fd 0 rather than from a Lisp
     stream.  A multiplexer has to see each keystroke the moment it arrives and has to

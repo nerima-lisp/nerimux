@@ -1,11 +1,11 @@
-(in-package #:cl-tmux/net)
+(in-package #:nerimux/net)
 
 ;;;; Unix-domain socket primitives for client/server detach-attach.
 ;;;;
 ;;;; Thin wrappers over sb-bsd-sockets so the server/client loops (and tests)
 ;;;; speak in terms of make-listener / accept-connection / connect-to / a binary
 ;;;; socket-stream, rather than the raw contrib API.  Frame I/O over the stream
-;;;; lives in cl-tmux/transport; message framing in cl-tmux/protocol.
+;;;; lives in nerimux/transport; message framing in nerimux/protocol.
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (require :sb-bsd-sockets))
@@ -80,7 +80,7 @@
 (defun %make-probe-socket-path ()
   "Generate a unique throwaway socket path in the temp directory."
   (let ((directory (string-right-trim "/" (or (sb-ext:posix-getenv "TMPDIR") "/tmp"))))
-    (format nil "~A/cl-tmux-probe-~D-~D.sock"
+    (format nil "~A/nerimux-probe-~D-~D.sock"
             directory (get-universal-time) (random 1000000))))
 
 (defun unix-socket-available-p ()

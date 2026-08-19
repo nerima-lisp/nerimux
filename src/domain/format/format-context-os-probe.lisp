@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/format)
+(in-package #:nerimux/format)
 
 ;;;; OS introspection probes for format-context.
 ;;;;
@@ -82,7 +82,7 @@
   "Query the OS for the current working directory of PANE's shell process.
    On Linux reads /proc/PID/cwd via readlink; on macOS uses lsof -p PID -a -d cwd.
    Returns a non-empty path string, or NIL on failure (no PID, OS error, timeout)."
-  (let ((pid (and pane (cl-tmux/model:pane-pid pane))))
+  (let ((pid (and pane (nerimux/model:pane-pid pane))))
     (when (and pid (> pid 0))
       (or
        ;; Linux: /proc/PID/cwd is a symlink to the cwd.
@@ -109,7 +109,7 @@
    only when the cached entry is missing or older than +PANE-COMMAND-CACHE-TTL+
    seconds.  Falls back to the shell basename when OS introspection is unavailable
    (no PID, pgrep/ps absent, or PID already gone)."
-  (let ((pid (and pane (cl-tmux/model:pane-pid pane))))
+  (let ((pid (and pane (nerimux/model:pane-pid pane))))
     (if (and pid (> pid 0))
         (let* ((cached (gethash pid *pane-command-cache*))
                (now    (get-universal-time))
@@ -117,8 +117,8 @@
                            (> (- now (car cached)) +pane-command-cache-ttl+))))
           (if stale
               (let ((cmd (or (%fetch-pane-command pid)
-                             (cl-tmux/model::%shell-basename))))
+                             (nerimux/model::%shell-basename))))
                 (setf (gethash pid *pane-command-cache*) (cons now cmd))
                 cmd)
               (cdr cached)))
-        (cl-tmux/model::%shell-basename))))
+        (nerimux/model::%shell-basename))))

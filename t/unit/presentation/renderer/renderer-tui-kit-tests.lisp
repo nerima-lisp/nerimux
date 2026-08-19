@@ -1,11 +1,11 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 (describe "renderer-suite/tui-kit"
 
   (it "maps ANSI cursor movement into a headless surface"
     (let* ((escape (string (code-char 27)))
            (surface
-             (cl-tmux/renderer::%surface-from-ansi-frame
+             (nerimux/renderer::%surface-from-ansi-frame
               (format nil "alpha~A[2;3Hxy" escape)
               3
               10))
@@ -15,13 +15,13 @@
 
   (it "applies the client viewport through the widget path"
     (let* ((top
-             (cl-tmux/renderer::%surface-from-ansi-frame
+             (nerimux/renderer::%surface-from-ansi-frame
               (format nil "line-0~%line-1~%line-2")
               2
               10
               :viewport 0))
            (scrolled
-             (cl-tmux/renderer::%surface-from-ansi-frame
+             (nerimux/renderer::%surface-from-ansi-frame
               (format nil "line-0~%line-1~%line-2")
               2
               10
@@ -34,7 +34,7 @@
 
   (it "presents a complete frame through a fresh ANSI backend"
     (let ((output
-            (cl-tmux/renderer::%render-ansi-frame-with-tui-kit
+            (nerimux/renderer::%render-ansi-frame-with-tui-kit
              "hello"
              2
              8)))
@@ -43,24 +43,24 @@
 
   (it "renders the workspace hierarchy through the tree widget"
     (let* ((worktree
-             (cl-tmux/model:make-worktree
+             (nerimux/model:make-worktree
               :id "wt-tree"
               :path "/repo/work"
               :branch "feature/tree"))
            (repository
-             (cl-tmux/model:make-repository
+             (nerimux/model:make-repository
               :id "repo-tree"
               :specification "github.com/team/tree"
               :local-path "/repo"
               :worktrees (list worktree)))
            (organization
-             (cl-tmux/model:make-organization
+             (nerimux/model:make-organization
               :id "github.com/team"
               :host "github.com"
               :name "team"
               :repositories (list repository)))
            (output
-             (cl-tmux/renderer:render-workspace-overview-to-tui-string
+             (nerimux/renderer:render-workspace-overview-to-tui-string
               (list organization)
               12
               100
@@ -71,18 +71,18 @@
 
   (it "renders the picker through input, list, form, and modal widgets"
     (let* ((worktree
-             (cl-tmux/model:make-worktree
+             (nerimux/model:make-worktree
               :id "wt-picker-widget"
               :path "/repo/work"
               :branch "feature/picker-widget"))
            (repository
-             (cl-tmux/model:make-repository
+             (nerimux/model:make-repository
               :id "repo-picker-widget"
               :specification "github.com/team/picker-widget"
               :local-path "/repo"
               :worktrees (list worktree)))
            (organization
-             (cl-tmux/model:make-organization
+             (nerimux/model:make-organization
               :id "github.com/team"
               :host "github.com"
               :name "team"
@@ -90,12 +90,12 @@
            (items
              (remove-if-not
               (lambda (item)
-                (eq :worktree (cl-tmux/picker:picker-item-kind item)))
-              (cl-tmux/picker:build-global-picker-items
+                (eq :worktree (nerimux/picker:picker-item-kind item)))
+              (nerimux/picker:build-global-picker-items
                (list organization))))
            (surface
-             (cl-tmux/renderer::%surface-from-ansi-frame "" 16 80)))
-      (cl-tmux/renderer::%render-picker-widget
+             (nerimux/renderer::%surface-from-ansi-frame "" 16 80)))
+      (nerimux/renderer::%render-picker-widget
        surface 16 80 items "feature" 0 nil)
       (let ((output (cl-tui-kit/core:surface-string surface)))
         (expect (search "GLOBAL PICKER" output))
@@ -104,8 +104,8 @@
 
   (it "routes client picker mode through the public tui renderer"
     (let ((output
-            (cl-tmux/renderer:render-session-to-tui-string
-             (cl-tmux/model:make-session :id 22 :name "picker")
+            (nerimux/renderer:render-session-to-tui-string
+             (nerimux/model:make-session :id 22 :name "picker")
              16
              80
              :mode :picker
@@ -114,30 +114,30 @@
       (expect (search "no matches" output))))
 
   (it "renders the bare repository overview with pane attention and preview"
-    (let* ((pane (cl-tmux/model:make-pane :id 7 :title "editor"))
+    (let* ((pane (nerimux/model:make-pane :id 7 :title "editor"))
            (worktree
-             (cl-tmux/model:make-worktree
+             (nerimux/model:make-worktree
               :id "wt"
               :path "/repo/work"
               :branch "feature/ui"
               :panes (list pane)))
            (repository
-             (cl-tmux/model:make-repository
+             (nerimux/model:make-repository
               :id "repo"
               :specification "github.com/team/repo"
               :local-path "/repo"
               :worktrees (list worktree)))
            (organization
-             (cl-tmux/model:make-organization
+             (nerimux/model:make-organization
               :id "github.com/team"
               :host "github.com"
               :name "team"
               :repositories (list repository)))
            (output
              (progn
-               (cl-tmux/model:worktree-add-pane worktree pane)
-               (cl-tmux/model:pane-mark-output pane #(111 107))
-               (cl-tmux/renderer:render-workspace-overview-to-string
+               (nerimux/model:worktree-add-pane worktree pane)
+               (nerimux/model:pane-mark-output pane #(111 107))
+               (nerimux/renderer:render-workspace-overview-to-string
                 (list organization)
                 12
                 100
@@ -151,31 +151,31 @@
       (expect (search "output: ok" output))))
 
   (it "renders a selectable attention cursor"
-    (let* ((pane (cl-tmux/model:make-pane :id 8 :title "shell"))
+    (let* ((pane (nerimux/model:make-pane :id 8 :title "shell"))
            (worktree
-             (cl-tmux/model:make-worktree
+             (nerimux/model:make-worktree
               :id "wt-attention"
               :path "/repo/work"
               :branch "feature/attention"
               :dirty-p t
               :panes (list pane)))
            (repository
-             (cl-tmux/model:make-repository
+             (nerimux/model:make-repository
               :id "repo-attention"
               :specification "github.com/team/attention"
               :local-path "/repo"
               :worktrees (list worktree)))
            (organization
-             (cl-tmux/model:make-organization
+             (nerimux/model:make-organization
               :id "github.com/team"
               :host "github.com"
               :name "team"
               :repositories (list repository)))
            (output
              (progn
-               (cl-tmux/model:worktree-add-pane worktree pane)
-               (cl-tmux/model:pane-mark-output pane #(111 107))
-               (cl-tmux/renderer:render-workspace-attention-to-tui-string
+               (nerimux/model:worktree-add-pane worktree pane)
+               (nerimux/model:pane-mark-output pane #(111 107))
+               (nerimux/renderer:render-workspace-attention-to-tui-string
                 (list organization)
                 10
                 100
@@ -192,7 +192,7 @@
                    :label "runtime orphan-pane pane/8 shell"
                    :reasons '(:runtime-recovery :orphan-pane)))
            (output
-             (cl-tmux/renderer:render-workspace-attention-to-tui-string
+             (nerimux/renderer:render-workspace-attention-to-tui-string
               nil
               10
               100
@@ -204,7 +204,7 @@
 
   (it "keeps the mandatory overview scale within the initial and scroll budgets"
     (let ((result
-            (cl-tmux/renderer:benchmark-workspace-overview
+            (nerimux/renderer:benchmark-workspace-overview
              :organization-count 1000
              :repository-count 1000
              :worktree-count 5000

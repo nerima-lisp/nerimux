@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; -- Window/pane/session structural commands ----------------------------------------
 ;;;
@@ -30,11 +30,11 @@
           ;; -o: swap the current tree with the one saved before the last
           ;; layout change and relayout.
           ((%flag-present-p flags #\o)
-           (let ((prev (cl-tmux/model:window-last-layout-tree win)))
+           (let ((prev (nerimux/model:window-last-layout-tree win)))
              (when prev
-               (setf (cl-tmux/model:window-last-layout-tree win)
-                     (cl-tmux/model:window-tree win)
-                     (cl-tmux/model:window-tree win) prev)
+               (setf (nerimux/model:window-last-layout-tree win)
+                     (nerimux/model:window-tree win)
+                     (nerimux/model:window-tree win) prev)
                (window-relayout win (window-height win) (window-width win))
                (setf *dirty* t))))
           ((%flag-present-p flags #\n) (%cycle-layout session win :next))
@@ -79,14 +79,14 @@
                              :message "display-panes: unsupported argument")
     (declare (ignore positionals))
     (let* ((duration (%display-panes-duration-from-flags flags))
-           (saved (cl-tmux/options:get-option "display-panes-time" 1000)))
+           (saved (nerimux/options:get-option "display-panes-time" 1000)))
       (unwind-protect
            (progn
              (when duration
-               (cl-tmux/options:set-option "display-panes-time" duration))
+               (nerimux/options:set-option "display-panes-time" duration))
              (dispatch-command session :display-panes nil))
         (when duration
-          (cl-tmux/options:set-option "display-panes-time" saved))))))
+          (nerimux/options:set-option "display-panes-time" saved))))))
 
 (defun %format-pane-info (session win pane)
   "Return a short pane info string: session:window.pane geometry.
@@ -103,17 +103,17 @@
    as the format context.  Returns the expanded string, or NIL when RAW-DIR is NIL."
   (when raw-dir
     (multiple-value-bind (win pane) (%active-window-pane session)
-      (let ((ctx (cl-tmux/format:format-context-from-session session win pane)))
-        (cl-tmux/format:expand-format raw-dir ctx)))))
+      (let ((ctx (nerimux/format:format-context-from-session session win pane)))
+        (nerimux/format:expand-format raw-dir ctx)))))
 
 (defun %show-pane-info-overlay (session win pane print-fmt)
   "Show a transient pane-info overlay for the -P flag.
    Uses PRINT-FMT if given, otherwise the default session:window.pane summary."
   (show-transient-overlay
    (if print-fmt
-       (cl-tmux/format:expand-format
+       (nerimux/format:expand-format
         print-fmt
-        (cl-tmux/format:format-context-from-session session win pane))
+        (nerimux/format:format-context-from-session session win pane))
        (%format-pane-info session win pane))))
 
 (defun %display-panes-duration-from-flags (flags)
@@ -239,8 +239,8 @@
   ;; -Z: zoom the window after the split (tmux SPAWN_ZOOM).
   (when (and result (%flag-present-p flags #\Z))
     (let ((rwin (pane-window result)))
-      (when (and rwin (not (cl-tmux/model:window-zoom-p rwin)))
-        (cl-tmux/model:window-zoom-toggle rwin))))
+      (when (and rwin (not (nerimux/model:window-zoom-p rwin)))
+        (nerimux/model:window-zoom-toggle rwin))))
   result)
 
 (defun %cmd-split-window (session args)

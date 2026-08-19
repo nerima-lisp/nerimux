@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Renderer pane and session fixtures.
 
@@ -20,12 +20,12 @@
    OFFSET (default 0) sets the copy-mode scroll offset.
    RECT non-nil sets rectangle-select mode."
   (let ((screen (make-screen w h)))
-    (setf (cl-tmux/terminal/types:screen-copy-mode-p        screen) t
-          (cl-tmux/terminal/types:screen-copy-selecting     screen) t
-          (cl-tmux/terminal/types:screen-copy-offset        screen) offset
-          (cl-tmux/terminal/types:screen-copy-mark          screen) (cons mark-row   mark-col)
-          (cl-tmux/terminal/types:screen-copy-cursor        screen) (cons cursor-row cursor-col)
-          (cl-tmux/terminal/types:screen-copy-rect-select-p screen) (and rect t))
+    (setf (nerimux/terminal/types:screen-copy-mode-p        screen) t
+          (nerimux/terminal/types:screen-copy-selecting     screen) t
+          (nerimux/terminal/types:screen-copy-offset        screen) offset
+          (nerimux/terminal/types:screen-copy-mark          screen) (cons mark-row   mark-col)
+          (nerimux/terminal/types:screen-copy-cursor        screen) (cons cursor-row cursor-col)
+          (nerimux/terminal/types:screen-copy-rect-select-p screen) (and rect t))
     screen))
 
 (defun make-renderer-test-session (w h &key (content ""))

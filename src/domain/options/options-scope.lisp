@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/options)
+(in-package #:nerimux/options)
 
 ;;;; Scope-resolution helpers for the option API.
 ;;;;
@@ -64,7 +64,7 @@
                         :start2 0 :end2 prefix-len)
                (char= (char name (1- name-len)) #\])
                (%decimal-digits-p name prefix-len (1- name-len)))
-      (cl-tmux::%parse-integer-or-nil name
+      (nerimux::%parse-integer-or-nil name
                                       :start prefix-len
                                       :end (1- name-len)))))
 

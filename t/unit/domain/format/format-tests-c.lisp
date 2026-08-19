@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; format arithmetic, additional variables, geometry, content-search, direct unit tests — part III
 
@@ -20,13 +20,13 @@
   ;; #{e|+|1,#{window_index}} expands to window_index+1.
   (it "format-arithmetic-with-variable"
     (let ((ctx (list :window-index 5)))
-      (expect (string= "6" (cl-tmux/format:expand-format "#{e|+|1,#{window_index}}" ctx)))))
+      (expect (string= "6" (nerimux/format:expand-format "#{e|+|1,#{window_index}}" ctx)))))
 
   ;; #{e|/|5,0} returns 0 (no error).
   (it "format-arithmetic-divide-by-zero"
     (expect (string= "0" (fmt "#{e|/|5,0}"))))
 
-  ;; #{e|m|A,B} is not a cl-tmux arithmetic operator.
+  ;; #{e|m|A,B} is not a nerimux arithmetic operator.
   (it "format-arithmetic-rejects-modulo-m-alias"
     (expect (string= "" (fmt "#{e|m|10,3}")))
     (expect (string= "" (fmt "#{e|m|9,3}")))
@@ -66,30 +66,30 @@
 
   ;;; ── Additional format variables ─────────────────────────────────────────────
 
-  ;; #{version} expands to the cl-tmux runtime version.
-  (it "format-context-version-is-cl-tmux-version"
+  ;; #{version} expands to the nerimux runtime version.
+  (it "format-context-version-is-nerimux-version"
     (let* ((sess (make-fake-session :nwindows 1))
-           (win  (first (cl-tmux/model:session-windows sess)))
-           (pane (first (cl-tmux/model:window-panes win)))
-           (ctx  (cl-tmux/format:format-context-from-session sess win pane)))
-      (expect (string= (cl-tmux/version:version-string)
-                       (cl-tmux/format:expand-format "#{version}" ctx)))))
+           (win  (first (nerimux/model:session-windows sess)))
+           (pane (first (nerimux/model:window-panes win)))
+           (ctx  (nerimux/format:format-context-from-session sess win pane)))
+      (expect (string= (nerimux/version:version-string)
+                       (nerimux/format:expand-format "#{version}" ctx)))))
 
   ;; #{pane_format} is 1 when a pane is in context.
   (it "format-context-pane-format-is-1-when-pane-present"
     (let* ((sess (make-fake-session :nwindows 1 :npanes 1))
-           (win  (first (cl-tmux/model:session-windows sess)))
-           (pane (first (cl-tmux/model:window-panes win)))
-           (ctx  (cl-tmux/format:format-context-from-session sess win pane)))
-      (expect (string= "1" (cl-tmux/format:expand-format "#{pane_format}" ctx)))))
+           (win  (first (nerimux/model:session-windows sess)))
+           (pane (first (nerimux/model:window-panes win)))
+           (ctx  (nerimux/format:format-context-from-session sess win pane)))
+      (expect (string= "1" (nerimux/format:expand-format "#{pane_format}" ctx)))))
 
   ;; #{window_format} is 1 when a window is in context.
   (it "format-context-window-format-is-1-when-window-present"
     (let* ((sess (make-fake-session :nwindows 1))
-           (win  (first (cl-tmux/model:session-windows sess)))
-           (pane (first (cl-tmux/model:window-panes win)))
-           (ctx  (cl-tmux/format:format-context-from-session sess win pane)))
-      (expect (string= "1" (cl-tmux/format:expand-format "#{window_format}" ctx)))))
+           (win  (first (nerimux/model:session-windows sess)))
+           (pane (first (nerimux/model:window-panes win)))
+           (ctx  (nerimux/format:format-context-from-session sess win pane)))
+      (expect (string= "1" (nerimux/format:expand-format "#{window_format}" ctx)))))
 
   ;;; ── Bare strftime codes (%H, %M, %S, etc.) ──────────────────────────────────
   ;;;
@@ -98,25 +98,25 @@
 
   ;; Bare %H:%M in a format string expands to the current HH:MM time.
   (it "format-bare-strftime-hour-minute"
-    (let ((result (cl-tmux/format:expand-format "%H:%M" nil)))
+    (let ((result (nerimux/format:expand-format "%H:%M" nil)))
       ;; Should look like HH:MM (10 chars: 2 digits, colon, 2 digits)
       (expect (= 5 (length result)))
       (expect (char= #\: (char result 2)))))
 
   ;; Bare %% expands to a literal %.
   (it "format-bare-strftime-percent-escape"
-    (expect (string= "%" (cl-tmux/format:expand-format "%%" nil))))
+    (expect (string= "%" (nerimux/format:expand-format "%%" nil))))
 
   ;; Bare %H and #{session_name} can coexist in one template.
   (it "format-bare-strftime-mixed-with-hash-var"
-    (let* ((result (cl-tmux/format:expand-format "%H:00 #{session_name}"
+    (let* ((result (nerimux/format:expand-format "%H:00 #{session_name}"
                                                  '(:session-name "main"))))
       ;; Should end with ":00 main" (hour prefix varies)
       (expect (search ":00 main" result))))
 
   ;; A %X where X is not a strftime letter passes through unchanged.
   (it "format-bare-strftime-unknown-letter-is-literal"
-    (expect (string= "test%q" (cl-tmux/format:expand-format "test%q" nil))))
+    (expect (string= "test%q" (nerimux/format:expand-format "test%q" nil))))
 
   ;;; ── @user-option fallback in format variables ────────────────────────────────
   ;;;
@@ -126,14 +126,14 @@
   ;; #{@my-var} falls back to *global-options* when not in context.
   (it "format-user-option-at-variable"
     (with-isolated-config
-      (cl-tmux/options:set-option "@my-var" "hello")
-      (let ((result (cl-tmux/format:expand-format "#{@my-var}" nil)))
+      (nerimux/options:set-option "@my-var" "hello")
+      (let ((result (nerimux/format:expand-format "#{@my-var}" nil)))
         (expect (string= "hello" result)))))
 
   ;; #{@nonexistent} returns empty string when option not set.
   (it "format-user-option-unknown-returns-empty"
     (with-isolated-config
-      (let ((result (cl-tmux/format:expand-format "#{@nonexistent}" nil)))
+      (let ((result (nerimux/format:expand-format "#{@nonexistent}" nil)))
         (expect (string= "" result)))))
 
   ;;; ── Version guard patterns ───────────────────────────────────────────────────
@@ -141,12 +141,12 @@
   ;; #{version} can be expanded and consumed by comparison modifiers.
   (it "format-version-guard-comparison"
     (let* ((sess (make-fake-session :nwindows 1))
-           (win  (first (cl-tmux/model:session-windows sess)))
-           (pane (first (cl-tmux/model:window-panes win)))
-           (ctx  (cl-tmux/format:format-context-from-session sess win pane)))
+           (win  (first (nerimux/model:session-windows sess)))
+           (pane (first (nerimux/model:window-panes win)))
+           (ctx  (nerimux/format:format-context-from-session sess win pane)))
       ;; Comparison parsing currently treats dotted versions as integers with
       ;; junk allowed; this test only verifies version expansion remains usable.
-      (expect (stringp (cl-tmux/format:expand-format "#{version}" ctx)))))
+      (expect (stringp (nerimux/format:expand-format "#{version}" ctx)))))
 
   ;;; ── #{pane_synchronized} respects per-window scoping ─────────────────────────
 
@@ -155,18 +155,18 @@
   ;; window with no override (global stays nil).
   (it "format-pane-synchronized-window-local-override"
     (with-isolated-config
-      (cl-tmux/options:set-option "synchronize-panes" nil)
+      (nerimux/options:set-option "synchronize-panes" nil)
       (let* ((sess (make-fake-session :nwindows 1))
-             (win  (first (cl-tmux/model:session-windows sess)))
-             (pane (first (cl-tmux/model:window-panes win))))
-        (cl-tmux/options:set-option-for-window "synchronize-panes" "on" win)
-        (let ((ctx (cl-tmux/format:format-context-from-session sess win pane)))
-          (expect (string= "1" (cl-tmux/format:expand-format "#{pane_synchronized}" ctx))))
+             (win  (first (nerimux/model:session-windows sess)))
+             (pane (first (nerimux/model:window-panes win))))
+        (nerimux/options:set-option-for-window "synchronize-panes" "on" win)
+        (let ((ctx (nerimux/format:format-context-from-session sess win pane)))
+          (expect (string= "1" (nerimux/format:expand-format "#{pane_synchronized}" ctx))))
         ;; A second, fresh window with no override falls back to the global NIL → "0".
         (let* ((win2  (make-fake-window 99 "w2"))
-               (pane2 (first (cl-tmux/model:window-panes win2)))
-               (ctx2  (cl-tmux/format:format-context-from-session sess win2 pane2)))
-          (expect (string= "0" (cl-tmux/format:expand-format "#{pane_synchronized}" ctx2)))))))
+               (pane2 (first (nerimux/model:window-panes win2)))
+               (ctx2  (nerimux/format:format-context-from-session sess win2 pane2)))
+          (expect (string= "0" (nerimux/format:expand-format "#{pane_synchronized}" ctx2)))))))
 
   ;;; ── geometry-derived variables: window_width/height, pane_at_* ───────────────
   ;;;
@@ -181,50 +181,50 @@
   ;; #{pane_tty} expands to the pane's slave PTY device path.
   (it "format-pane-tty-from-pane"
     (let ((pane (make-no-pty-pane 1 0 0 80 24)))
-      (setf (cl-tmux/model:pane-tty pane) "/dev/pts/7")
+      (setf (nerimux/model:pane-tty pane) "/dev/pts/7")
       (expect (string= "/dev/pts/7"
-                       (cl-tmux/format:expand-format
+                       (nerimux/format:expand-format
                         "#{pane_tty}"
-                        (cl-tmux/format:format-context-from-session nil nil pane))))))
+                        (nerimux/format:format-context-from-session nil nil pane))))))
 
   ;; #{pane_tty} is empty for a pane with no PTY (default "") and for a NIL pane.
   (it "format-pane-tty-empty-when-no-pty-or-nil"
     (let ((pane (make-no-pty-pane 1 0 0 80 24)))
-      (expect (string= "" (cl-tmux/format:expand-format
+      (expect (string= "" (nerimux/format:expand-format
                            "#{pane_tty}"
-                           (cl-tmux/format:format-context-from-session nil nil pane)))))
-    (expect (string= "" (cl-tmux/format:expand-format
+                           (nerimux/format:format-context-from-session nil nil pane)))))
+    (expect (string= "" (nerimux/format:expand-format
                          "#{pane_tty}"
-                         (cl-tmux/format:format-context-from-session nil nil nil)))))
+                         (nerimux/format:format-context-from-session nil nil nil)))))
 
   ;; #{window_width} / #{window_height} expand to the window's layout dimensions.
   ;; make-fake-window builds a 20x5 window, so the expansions are "20"/"5".
   (it "format-window-width-height-from-window"
     (let* ((sess (make-fake-session :nwindows 1))
-           (win  (first (cl-tmux/model:session-windows sess)))
-           (pane (first (cl-tmux/model:window-panes win)))
-           (ctx  (cl-tmux/format:format-context-from-session sess win pane)))
-      (expect (string= "20" (cl-tmux/format:expand-format "#{window_width}" ctx)))
-      (expect (string= "5" (cl-tmux/format:expand-format "#{window_height}" ctx)))))
+           (win  (first (nerimux/model:session-windows sess)))
+           (pane (first (nerimux/model:window-panes win)))
+           (ctx  (nerimux/format:format-context-from-session sess win pane)))
+      (expect (string= "20" (nerimux/format:expand-format "#{window_width}" ctx)))
+      (expect (string= "5" (nerimux/format:expand-format "#{window_height}" ctx)))))
 
   ;; For a single-pane window (pane fills the window) all pane_at_* flags are "1".
   ;; make-fake-window's lone pane is x=0 y=0 w=20 h=5 in a 20x5 window.
   (it "format-pane-at-edges-single-pane-all-true"
     (let* ((sess (make-fake-session :nwindows 1))
-           (win  (first (cl-tmux/model:session-windows sess)))
-           (pane (first (cl-tmux/model:window-panes win)))
-           (ctx  (cl-tmux/format:format-context-from-session sess win pane)))
+           (win  (first (nerimux/model:session-windows sess)))
+           (pane (first (nerimux/model:window-panes win)))
+           (ctx  (nerimux/format:format-context-from-session sess win pane)))
       (dolist (spec '("#{pane_at_top}" "#{pane_at_bottom}"
                       "#{pane_at_left}" "#{pane_at_right}"))
-        (expect (string= "1" (cl-tmux/format:expand-format spec ctx))))))
+        (expect (string= "1" (nerimux/format:expand-format spec ctx))))))
 
   ;; For a laid-out horizontal split (make-two-pane-h-window from helpers-layout-fixtures.lisp: 81x24, p0 x=0 w=40,
   ;; p1 x=41 w=40), the left pane is NOT at the right edge and the right pane is
   ;; NOT at the left edge, while both span the full height (at top and bottom).
   (it "format-pane-at-edges-horizontal-split"
     (multiple-value-bind (win p0 p1) (make-two-pane-h-window)
-      (let ((ctx0 (cl-tmux/format:format-context-from-session nil win p0))
-            (ctx1 (cl-tmux/format:format-context-from-session nil win p1)))
+      (let ((ctx0 (nerimux/format:format-context-from-session nil win p0))
+            (ctx1 (nerimux/format:format-context-from-session nil win p1)))
         (dolist (c `((,ctx0 "#{pane_at_left}"   "1" "left pane at left edge")
                      (,ctx0 "#{pane_at_right}"  "0" "left pane NOT at right edge (0+40≠81)")
                      (,ctx0 "#{pane_at_top}"    "1" "left pane at top edge")
@@ -237,7 +237,7 @@
                      (,ctx0 "#{window_height}"  "24" "window_height equals split window height")))
           (destructuring-bind (ctx spec expected desc) c
             (declare (ignore desc))
-            (expect (string= expected (cl-tmux/format:expand-format spec ctx))))))))
+            (expect (string= expected (nerimux/format:expand-format spec ctx))))))))
 
   ;;; ── pane_at_top/bottom "0" branches + NIL-safe defaults ──────────────────────
   ;;;
@@ -253,30 +253,30 @@
   ;; while both span the full width.
   (it "format-pane-at-edges-vertical-split"
     (with-v-split-window (win p0 p1)
-      (let ((ctx0 (cl-tmux/format:format-context-from-session nil win p0))
-            (ctx1 (cl-tmux/format:format-context-from-session nil win p1)))
+      (let ((ctx0 (nerimux/format:format-context-from-session nil win p0))
+            (ctx1 (nerimux/format:format-context-from-session nil win p1)))
         (dolist (c `((,ctx0 "#{pane_at_top}"    "1") (,ctx0 "#{pane_at_bottom}" "0")
                      (,ctx0 "#{pane_at_left}"   "1") (,ctx0 "#{pane_at_right}"  "1")
                      (,ctx1 "#{pane_at_top}"    "0") (,ctx1 "#{pane_at_bottom}" "1")
                      (,ctx1 "#{pane_at_left}"   "1") (,ctx1 "#{pane_at_right}"  "1")))
           (destructuring-bind (ctx spec expected) c
-            (expect (string= expected (cl-tmux/format:expand-format spec ctx))))))))
+            (expect (string= expected (nerimux/format:expand-format spec ctx))))))))
 
   ;; With NIL session/window/pane, geometry vars are empty-safe: window_width/height
   ;; expand to "0" and every pane_at_* flag is "0".
   (it "format-pane-at-edges-and-window-dims-default-when-nil"
-    (let ((ctx (cl-tmux/format:format-context-from-session nil nil nil)))
+    (let ((ctx (nerimux/format:format-context-from-session nil nil nil)))
       (dolist (spec '("#{window_width}" "#{window_height}"
                       "#{pane_at_top}" "#{pane_at_bottom}"
                       "#{pane_at_left}" "#{pane_at_right}"))
-        (expect (string= "0" (cl-tmux/format:expand-format spec ctx))))))
+        (expect (string= "0" (nerimux/format:expand-format spec ctx))))))
 
   ;; Pane present but window NIL: pane_at_top/left resolve from the pane's coords,
   ;; but pane_at_bottom/right short-circuit to "0" (far-edge needs the window).
   (it "format-pane-at-bottom-right-default-when-window-nil"
     (let* ((pane (make-no-pty-pane 1 0 0 40 24))
-           (ctx  (cl-tmux/format:format-context-from-session nil nil pane)))
+           (ctx  (nerimux/format:format-context-from-session nil nil pane)))
       (dolist (c '(("#{pane_at_top}"    "1") ("#{pane_at_left}"   "1")
                    ("#{pane_at_bottom}" "0") ("#{pane_at_right}"  "0")))
         (destructuring-bind (spec expected) c
-          (expect (string= expected (cl-tmux/format:expand-format spec ctx))))))))
+          (expect (string= expected (nerimux/format:expand-format spec ctx))))))))

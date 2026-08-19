@@ -1,11 +1,11 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; ── Event-loop iteration ────────────────────────────────────────────────────
 
 (defun %exit-when-empty-and-option-enabled-p (items option-name)
   "True when ITEMS is empty and OPTION-NAME is enabled."
   (and (null items)
-       (cl-tmux/options:get-option option-name)))
+       (nerimux/options:get-option option-name)))
 
 (defun %exit-after-last-detach-p ()
   "True when no clients remain attached AND the exit-unattached option is on — the

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/commands)
+(in-package #:nerimux/commands)
 
 ;;; ── Pane operations ────────────────────────────────────────────────────────
 ;;;
@@ -97,7 +97,7 @@
 (defun %break-pane-create-window (session src-win pane new-id name select)
   (let* ((rows    (window-height src-win))
          (cols    (window-width  src-win))
-         (wname   (or name (cl-tmux/model::%shell-basename)))
+         (wname   (or name (nerimux/model::%shell-basename)))
          (new-win (make-window :id new-id :name wname :width cols :height rows)))
     ;; Install the pane as the sole leaf in the new window's tree.
     (setf (window-panes new-win) (list pane)
@@ -140,9 +140,9 @@
       (%break-pane-create-window
        session src-win pane
        (or target-id
-           (cl-tmux/model::%next-window-id
+           (nerimux/model::%next-window-id
             session
-            (or (cl-tmux/options:get-option "base-index") 0)))
+            (or (nerimux/options:get-option "base-index") 0)))
        name select))))
 
 ;;; ── join-pane / move-pane ───────────────────────────────────────────────────
@@ -174,10 +174,10 @@
    FULL splits are checked against the whole window's axis extent; otherwise
    against the ACTIVE pane's own extent."
   (if full
-      (cl-tmux/model::%split-axis-fits-p
-       (cl-tmux/model::%window-axis-extent dst-window direction)
+      (nerimux/model::%split-axis-fits-p
+       (nerimux/model::%window-axis-extent dst-window direction)
        direction)
-      (cl-tmux/model::%split-fits-p active direction)))
+      (nerimux/model::%split-fits-p active direction)))
 
 (defun %join-pane-build-split-node (src-pane dst-window active tree active-leaf
                                     direction before full size)
@@ -189,10 +189,10 @@
    `%ratio-from-size-hint` returns the desired share for the NEW pane, hence
    the ratio is inverted on the BEFORE-less branch."
   (let* ((available (1- (if full
-                            (cl-tmux/model::%window-axis-extent dst-window direction)
-                            (cl-tmux/model::%orient-pane-extent active direction))))
+                            (nerimux/model::%window-axis-extent dst-window direction)
+                            (nerimux/model::%orient-pane-extent active direction))))
          (new-ratio (if size
-                        (cl-tmux/model::%ratio-from-size-hint size available direction)
+                        (nerimux/model::%ratio-from-size-hint size available direction)
                         1/2))
          (anchor    (if full tree active-leaf))
          (new-node  (make-layout-leaf src-pane)))
@@ -210,7 +210,7 @@
       ;; Refresh the destination layout before deriving the split size.  Test
       ;; fixtures can carry stale pane dimensions even when the window/tree size
       ;; is current, and `-l` must be computed from the rendered pane extent.
-      (cl-tmux/model:window-relayout-current dst-window)
+      (nerimux/model:window-relayout-current dst-window)
       (multiple-value-bind (refreshed-active refreshed-tree refreshed-active-leaf)
           (%join-pane-active-leaf dst-window)
         ;; Match split-window's layout rules: -f uses the full window extent,
@@ -222,7 +222,7 @@
                              refreshed-active-leaf direction before full size)))
             (if full
                 (setf (window-tree dst-window) new-split)
-                (cl-tmux/model::%replace-in-tree dst-window refreshed-active-leaf new-split))
+                (nerimux/model::%replace-in-tree dst-window refreshed-active-leaf new-split))
             (setf (window-panes dst-window) (layout-leaves (window-tree dst-window))
                   (pane-window src-pane) dst-window)
             (window-relayout dst-window (window-height dst-window) (window-width dst-window))

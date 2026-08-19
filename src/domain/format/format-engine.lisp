@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/format)
+(in-package #:nerimux/format)
 
 ;;;; CPS character processor and expand-format public entry points.
 

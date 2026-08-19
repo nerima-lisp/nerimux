@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/renderer)
+(in-package #:nerimux/renderer)
 
 ;;;; Terminal renderer: composites all pane screens onto the real terminal.
 ;;;;
@@ -6,7 +6,7 @@
 ;;;; Each render call does a full repaint, buffered in a string stream and
 ;;;; flushed in one write to minimise flicker.
 ;;;;
-;;;; File layout (all in the cl-tmux/renderer package):
+;;;; File layout (all in the nerimux/renderer package):
 ;;;;
 ;;;;   renderer-format.lisp   — ANSI escape-code primitives (move-to, SGR, cursor)
 ;;;;   renderer-style-data.lisp — Declarative style/SGR/border-charset dispatch tables

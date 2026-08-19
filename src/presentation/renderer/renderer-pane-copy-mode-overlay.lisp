@@ -1,15 +1,15 @@
-(in-package #:cl-tmux/renderer)
+(in-package #:nerimux/renderer)
 
 ;;;; Copy-mode position overlay rendering.
 
 (defun %copy-mode-position-overlay-text (session pane)
-  (let* ((ctx (cl-tmux/format:format-context-from-session session
+  (let* ((ctx (nerimux/format:format-context-from-session session
                                                           (pane-window pane)
                                                           pane))
-         (format-template (cl-tmux/options:get-option "copy-mode-position-format" ""))
-         (style-template (cl-tmux/options:get-option "copy-mode-position-style" ""))
-         (expanded-format (cl-tmux/format:expand-format format-template ctx))
-         (expanded-style (cl-tmux/format:expand-format style-template ctx))
+         (format-template (nerimux/options:get-option "copy-mode-position-format" ""))
+         (style-template (nerimux/options:get-option "copy-mode-position-style" ""))
+         (expanded-format (nerimux/format:expand-format format-template ctx))
+         (expanded-style (nerimux/format:expand-format style-template ctx))
          (style-sgr (let ((trimmed (string-trim " " expanded-style)))
                       (unless (zerop (length trimmed))
                         (%status-sgr-from-style trimmed)))))

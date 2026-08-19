@@ -1,8 +1,8 @@
 # Benchmarks
 
 This page records measured numbers. It exists because
-`PERFORMANCE_STANDARD.md` names cl-tmux as one of the packages whose runtime is
-dominated by caller-sized input, and because cl-tmux is one of two repositories
+`PERFORMANCE_STANDARD.md` names nerimux as one of the packages whose runtime is
+dominated by caller-sized input, and because nerimux is one of two repositories
 expected to miss the organization-wide `nix flake check` target. Without a
 recorded baseline there is no way to tell whether a change made things slower.
 
@@ -11,13 +11,13 @@ without a link to a number on this page.
 
 ## `nix flake check` runtime
 
-**Target**: 5 minutes. **Cap**: 10 minutes. cl-tmux is recorded as the
+**Target**: 5 minutes. **Cap**: 10 minutes. nerimux is recorded as the
 larger of the two expected exceptions, with 304 test files and roughly 52,000
 lines of test code.
 
 Measured on the development machine (aarch64-darwin, Apple silicon), with the
 sibling libraries and nixpkgs dependencies already in the local store, so the
-figures cover cl-tmux's own derivations only:
+figures cover nerimux's own derivations only:
 
 | Date | Scope | Wall clock |
 |---|---|---|
@@ -35,7 +35,7 @@ skipped), `weave` 26, `dataflow` 17.
 
 The suite comes in **under the 5-minute target** on this machine, which is a
 better outcome than `PERFORMANCE_STANDARD.md` anticipated when it recorded
-cl-tmux as an exception on test-suite size alone. Two things explain the gap
+nerimux as an exception on test-suite size alone. Two things explain the gap
 between size and runtime:
 
 - The three test derivations are independent, so `nix flake check` builds them
@@ -58,7 +58,7 @@ fully cold build.
 ### How to reproduce
 
 ```bash
-cd cl-tmux
+cd nerimux
 time nix flake check --print-build-logs
 ```
 
@@ -71,6 +71,6 @@ time nix build .#checks.$(nix eval --raw --impure --expr builtins.currentSystem)
 ## Not yet measured
 
 `PERFORMANCE_STANDARD.md` also asks for a startup-time measurement, because
-cl-tmux saves a compressed core (`:compression t`) and a terminal multiplexer
+nerimux saves a compressed core (`:compression t`) and a terminal multiplexer
 sits where a human waits for it. That measurement does not exist yet and is
 not claimed anywhere.

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/format)
+(in-package #:nerimux/format)
 
 ;;;; External shell-command expansion port for #(command).
 

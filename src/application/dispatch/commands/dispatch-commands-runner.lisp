@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; -- Arg-command dispatch table + command-line runners ------------------------------
 ;;;
@@ -64,8 +64,8 @@
   "Tokenise INPUT (one command line, shell-style) and run it.
    When the tokenised line contains \";\" tokens, splits into multiple commands
    and runs each in sequence, matching tmux's command-prompt behaviour."
-  (let* ((tokens    (cl-tmux/commands:tokenize-command-string input))
-         (sequences (cl-tmux/config::%split-on-semicolons tokens)))
+  (let* ((tokens    (nerimux/commands:tokenize-command-string input))
+         (sequences (nerimux/config::%split-on-semicolons tokens)))
     (if (= (length sequences) 1)
         (%run-command-tokens session (first sequences))
         (dolist (subcmd sequences)

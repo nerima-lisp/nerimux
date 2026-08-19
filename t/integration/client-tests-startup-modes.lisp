@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;; ── *startup-modes* handler symbols are symbols ──────────────────────────────
 ;;;
@@ -10,18 +10,18 @@
   ;; Every entry in *startup-modes* stores its handler as a symbol, not a
   ;; function object.  This is required so test stubs with (setf fdefinition) work.
   (it "startup-modes-all-handlers-are-symbols"
-    (dolist (entry cl-tmux::*startup-modes*)
+    (dolist (entry nerimux::*startup-modes*)
       (let ((handler (first (cdr entry))))
         (expect (symbolp handler)))))
 
   ;; *startup-modes* server/attach/attach-session entries have the expected handlers.
   (it "startup-modes-mode-handlers-table"
-    (dolist (c '(("server"          cl-tmux::run-server             nil "server → run-server")
-                 ("attach"          cl-tmux::run-attach-simple       nil "attach → run-attach-simple")
-                 ("attach-session"  cl-tmux::run-attach-with-flags    t  "attach-session → run-attach-with-flags")))
+    (dolist (c '(("server"          nerimux::run-server             nil "server → run-server")
+                 ("attach"          nerimux::run-attach-simple       nil "attach → run-attach-simple")
+                 ("attach-session"  nerimux::run-attach-with-flags    t  "attach-session → run-attach-with-flags")))
       (destructuring-bind (mode handler raw-args-p desc) c
         (declare (ignore desc))
-        (let ((entry (assoc mode cl-tmux::*startup-modes* :test #'equal)))
+        (let ((entry (assoc mode nerimux::*startup-modes* :test #'equal)))
           (expect entry :to-be-truthy)
           (expect (eq handler (first (cdr entry))))
           (when raw-args-p

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/renderer)
+(in-package #:nerimux/renderer)
 
 ;;; Selection bounds and hit-testing for pane rendering.
 

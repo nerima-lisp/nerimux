@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 (defparameter *dispatch-command-specs-core-session-entries*
   '((:new-window '%cmd-new-window-arg ("new-window"))

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; -- Popup, menu, confirmation, and key-list %cmd-* handlers ------------------
 
@@ -8,7 +8,7 @@
 
 (defun %popup-border-chars ()
   "Return popup border drawing characters for the text overlay."
-  (multiple-value-bind (tl tr bl br h v) (cl-tmux/renderer:%popup-border-charset)
+  (multiple-value-bind (tl tr bl br h v) (nerimux/renderer:%popup-border-charset)
     (declare (ignore v))
     (values tl tr bl br h)))
 
@@ -88,10 +88,10 @@
       (let* ((custom-prompt (%confirm-prompt-from-flags flags))
              (assume-yes    (%flag-present-p flags #\y))
              (cmd-line      (format nil "~{~A~^ ~}" positionals))
-             (ctx           (cl-tmux/format:format-context-from-session
+             (ctx           (nerimux/format:format-context-from-session
                              session window pane))
              (prompt-text   (if custom-prompt
-                                (cl-tmux/format:expand-format-safe custom-prompt ctx)
+                                (nerimux/format:expand-format-safe custom-prompt ctx)
                                 (format nil "~A? (y/n)" cmd-line))))
         (when (plusp (length cmd-line))
           (if assume-yes
@@ -108,12 +108,12 @@
            (key        (first positionals))
            (output     (cond
                          ((%flag-present-p flags #\N)
-                          (cl-tmux/config:describe-key-binding-notes
+                          (nerimux/config:describe-key-binding-notes
                            table-name (%flag-present-p flags #\a)))
                          (key
-                          (cl-tmux/config:describe-key-bindings-for-key table-name key))
+                          (nerimux/config:describe-key-bindings-for-key table-name key))
                          (t
-                          (cl-tmux/config:describe-key-bindings-for-table table-name))))
+                          (nerimux/config:describe-key-bindings-for-table table-name))))
            (output     (if (%flag-present-p flags #\1)
                            (let ((newline (position #\Newline output)))
                              (if newline

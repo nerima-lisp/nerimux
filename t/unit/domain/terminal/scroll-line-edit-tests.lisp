@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; CSI line-edit parser-path tests for edit.lisp.
 ;;;; Suite: delete-insert-chars.

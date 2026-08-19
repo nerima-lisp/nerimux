@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/actions)
+(in-package #:nerimux/terminal/actions)
 
 ;;;; Scroll operations and scroll-region setup.
 ;;;;
@@ -37,17 +37,17 @@
 ;;; The history-limit callback is set at startup by the higher-level layer
 ;;; (buffer.lisp / main.lisp) once the options package is loaded.  NIL means
 ;;; fall back to the compile-time constant.  Injecting the cap as a callback
-;;; rather than probing cl-tmux/options at call time keeps this file pure
+;;; rather than probing nerimux/options at call time keeps this file pure
 ;;; (no runtime package discovery) and testable in isolation.
 (defvar *history-limit-function* nil
   "A zero-argument function returning the current history-limit integer, or NIL.
-   Install (lambda () (cl-tmux/options:get-option \"history-limit\")) at startup.")
+   Install (lambda () (nerimux/options:get-option \"history-limit\")) at startup.")
 
 (declaim (inline %effective-history-limit))
 (defun %effective-history-limit ()
   "Return the history-limit in effect: callback result if available, else +max-scrollback-lines+."
   (or (and *history-limit-function* (funcall *history-limit-function*))
-      cl-tmux/config:+max-scrollback-lines+))
+      nerimux/config:+max-scrollback-lines+))
 
 (defun trim-scroll-history (screen)
   "Cap the scrollback buffer of SCREEN to the current history-limit.
@@ -75,7 +75,7 @@
 ;;; terminal layer stays free of any options dependency.
 (defvar *scroll-on-clear-function* nil
   "A zero-argument function returning whether the `scroll-on-clear` option is on,
-   or NIL.  Install (lambda () (cl-tmux/options:get-option \"scroll-on-clear\")) at
+   or NIL.  Install (lambda () (nerimux/options:get-option \"scroll-on-clear\")) at
    startup.  When NIL (unset) scroll-on-clear is treated as OFF, so the clear-erase
    behaviour is unchanged until a policy is installed.")
 

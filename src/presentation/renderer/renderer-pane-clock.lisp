@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/renderer)
+(in-package #:nerimux/renderer)
 
 ;;; Clock-mode and display-panes big-digit rendering.
 ;;;
@@ -25,7 +25,7 @@
 (defun %clock-display-hour (hour)
   "Convert HOUR (0–23) to the displayed hour per the clock-mode-style option:
    24 (default) → unchanged; 12 → a 12-hour clock (0 → 12, 13–23 → 1–11)."
-  (if (eql 12 (cl-tmux/options:get-option "clock-mode-style" 24))
+  (if (eql 12 (nerimux/options:get-option "clock-mode-style" 24))
       (let ((h (mod hour 12))) (if (zerop h) 12 h))
       hour))
 
@@ -34,7 +34,7 @@
    (a foreground colour name mapped to its SGR code; falls back to bright cyan
    when the name is unknown)."
   (format nil "~D" (or (%border-color-sgr
-                        (cl-tmux/options:get-option "clock-mode-colour" "blue"))
+                        (nerimux/options:get-option "clock-mode-colour" "blue"))
                        96)))
 
 ;;; +min-clock-width+ : minimum terminal columns required to render the HH:MM clock.
@@ -120,8 +120,8 @@
            (start-col (%center-coord pw num-w))
            (start-row (%center-coord ph 3))
            (colour    (if active-p
-                          (cl-tmux/options:get-option "display-panes-active-colour" "red")
-                          (cl-tmux/options:get-option "display-panes-colour" "blue")))
+                          (nerimux/options:get-option "display-panes-active-colour" "red")
+                          (nerimux/options:get-option "display-panes-colour" "blue")))
            (sgr       (or (%border-color-sgr colour) 34)))
       (%emit-sgr stream sgr)
       (%blit-rows stream rows ox oy start-row start-col pw)

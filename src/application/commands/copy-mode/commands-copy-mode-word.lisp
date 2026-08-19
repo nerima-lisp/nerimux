@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/commands)
+(in-package #:nerimux/commands)
 
 ;;; ── Copy-mode word / WORD navigation ───────────────────────────────────────
 ;;;
@@ -19,7 +19,7 @@
 (defun %word-separator-p (ch)
   "Return T when CH is a word separator according to the 'word-separators' option.
    Default separators: space, hyphen, underscore, at-sign."
-  (let ((seps (or (cl-tmux/options:get-option "word-separators") " -_@")))
+  (let ((seps (or (nerimux/options:get-option "word-separators") " -_@")))
     (find ch seps :test #'char=)))
 
 (defun %space-separator-p (ch)

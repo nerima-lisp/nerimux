@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Binary entry point.
 ;;;;
@@ -11,9 +11,9 @@
 ;;;; in server.lisp / client.lisp.
 ;;;;
 ;;;; main dispatches on argv:
-;;;;   cl-tmux                 → standalone in-process multiplexer (default)
-;;;;   cl-tmux server [NAME]   → headless server owning a session
-;;;;   cl-tmux attach [NAME]   → attach a thin client to a running server
+;;;;   nerimux                 → standalone in-process multiplexer (default)
+;;;;   nerimux server [NAME]   → headless server owning a session
+;;;;   nerimux attach [NAME]   → attach a thin client to a running server
 
 (defun %hostname-short (hostname)
   "Return the short form of HOSTNAME: the part before the first dot,
@@ -33,7 +33,7 @@
     (list :hostname   hostname
           :host       hostname
           :host-short (%hostname-short hostname)
-          :version    (cl-tmux/version:version-string)
+          :version    (nerimux/version:version-string)
           ;; Environment variables commonly used in %if guards.
           ;; #{TERM} guards on default-terminal and terminal-overrides.
           ;; #{TERM_PROGRAM} detects iTerm2 / Apple Terminal / WezTerm / kitty.
@@ -55,7 +55,7 @@
   (lambda (condition-string)
     (let ((context (%build-hostname-context)))
       (handler-case
-          (cl-tmux/format:expand-format condition-string context)
+          (nerimux/format:expand-format condition-string context)
         (error () "1")))))
 
 (defun %mode-keys-from-editor-string (editor)
@@ -77,23 +77,23 @@
          (editor (if (plusp (length visual)) visual (%safe-getenv "EDITOR")))
          (keys   (%mode-keys-from-editor-string editor)))
     (when keys
-      (cl-tmux/options:set-option "status-keys" keys)
-      (cl-tmux/options:set-option "mode-keys" keys))))
+      (nerimux/options:set-option "status-keys" keys)
+      (nerimux/options:set-option "mode-keys" keys))))
 
 (defun %wire-option-callbacks ()
   "Install the option-reader callbacks that the terminal/emulator layer uses.
    Pure assignment — no I/O, no process spawning.  Extracted from %initialize-session-environment
    so the callback wiring is unit-testable independently of the config-file load."
-  (setf cl-tmux/terminal:*history-limit-function*
-        (lambda () (cl-tmux/options:get-option "history-limit")))
-  (setf cl-tmux/terminal:*alternate-screen-enabled-function*
-        (lambda () (cl-tmux/options:get-option "alternate-screen")))
-  (setf cl-tmux/terminal:*scroll-on-clear-function*
-        (lambda () (cl-tmux/options:get-option "scroll-on-clear"))))
+  (setf nerimux/terminal:*history-limit-function*
+        (lambda () (nerimux/options:get-option "history-limit")))
+  (setf nerimux/terminal:*alternate-screen-enabled-function*
+        (lambda () (nerimux/options:get-option "alternate-screen")))
+  (setf nerimux/terminal:*scroll-on-clear-function*
+        (lambda () (nerimux/options:get-option "scroll-on-clear"))))
 
 (defun %initialize-session-environment ()
   "Set up the shared session environment before spawning any panes.
-   Installs the PTY adapter into the cl-tmux/ports domain abstraction
+   Installs the PTY adapter into the nerimux/ports domain abstraction
    (run-server was the only caller of install-pty-port; run-standalone and
    run-control-mode create panes too, so they need it here), loads the
    default shell, wires the %if condition evaluator, installs the
@@ -101,8 +101,8 @@
    user config file.  Called from both run-standalone and run-control-mode
    to avoid duplicating the initialization boilerplate."
   (install-pty-port)
-  (cl-tmux/config:init-default-shell)
-  (setf cl-tmux/config:*config-condition-evaluator* (%make-format-condition-evaluator))
+  (nerimux/config:init-default-shell)
+  (setf nerimux/config:*config-condition-evaluator* (%make-format-condition-evaluator))
   (%apply-editor-mode-keys)
   (%wire-option-callbacks)
   (ignore-errors (load-config-file nil)))
@@ -116,18 +116,18 @@
    single named step in the startup sequence."
   ;; Enable mouse reporting on the outer terminal when the "mouse" session
   ;; option is true.
-  (when (cl-tmux/options:get-option "mouse")
-    (cl-tmux/renderer:enable-mouse-reporting))
+  (when (nerimux/options:get-option "mouse")
+    (nerimux/renderer:enable-mouse-reporting))
   ;; Enable extended (CSI-u) key reporting on the outer terminal when the
   ;; "extended-keys" option is "on"/"always", so modified keys arrive as
   ;; ESC [ <codepoint> ; <mod> u for %handle-escape-csi-u to decode.
-  (cl-tmux/renderer:enable-extended-keys
-   (cl-tmux/options:get-option "extended-keys"))
+  (nerimux/renderer:enable-extended-keys
+   (nerimux/options:get-option "extended-keys"))
   ;; Request focus in/out reporting from the outer terminal when the
   ;; focus-events option is on, so %notify-pane-focus can forward focus to
   ;; the active pane's application.
-  (when (cl-tmux/options:get-option "focus-events")
-    (cl-tmux/renderer:enable-focus-reporting)))
+  (when (nerimux/options:get-option "focus-events")
+    (nerimux/renderer:enable-focus-reporting)))
 
 (defun %die-with-message (format-string &rest format-args)
   "Print FORMAT-STRING/FORMAT-ARGS to *error-output* and exit with code 1.
@@ -176,9 +176,9 @@
         (event-loop session))
     (sb-posix:syscall-error (c)
       ;; Most likely: stdin is not a TTY.
-      (%die-with-message "~&cl-tmux: ~A~%  (is stdin a terminal?)~%" c))
+      (%die-with-message "~&nerimux: ~A~%  (is stdin a terminal?)~%" c))
     (error (c)
-      (%die-with-message "~&cl-tmux: unhandled error: ~A~%" c))))
+      (%die-with-message "~&nerimux: unhandled error: ~A~%" c))))
 
 (defun run-standalone ()
   "Standalone in-process multiplexer: own a session and run the event loop on
@@ -204,16 +204,16 @@
    Disables extended-keys and focus reporting on the outer terminal, signals
    shutdown, joins reader threads and the status timer, and closes all pane fds.
    Extracted from run-standalone to reduce visual nesting depth."
-  (ignore-errors (cl-tmux/renderer:disable-extended-keys))
-  (when (cl-tmux/options:get-option "focus-events")
-    (ignore-errors (cl-tmux/renderer:disable-focus-reporting)))
+  (ignore-errors (nerimux/renderer:disable-extended-keys))
+  (when (nerimux/options:get-option "focus-events")
+    (ignore-errors (nerimux/renderer:disable-focus-reporting)))
   (stop-reader-threads (append reader-threads
                                (when *status-timer* (list *status-timer*))))
   (setf *status-timer* nil)
   (%close-all-pane-ptys session))
 
 (defun run-control-mode (&optional args)
-  "Control mode (-C): drive cl-tmux over the text protocol on stdin/stdout instead
+  "Control mode (-C): drive nerimux over the text protocol on stdin/stdout instead
    of a curses UI (for iTerm2 / tmuxp / libtmux).  Sets up the initial session like
    run-standalone (config load, pane spawn, reader threads), emits the opening
    %session-changed, then runs the control REPL until the client closes stdin.
@@ -226,13 +226,13 @@
   ;; default terminal size (terminal-size returns rows then cols, matching
   ;; the runtime defaults).
   (multiple-value-bind (rows cols) (ignore-errors (terminal-size))
-    (setf *term-rows* (or rows cl-tmux/pty:+default-term-rows+)
-          *term-cols* (or cols cl-tmux/pty:+default-term-cols+)))
+    (setf *term-rows* (or rows nerimux/pty:+default-term-rows+)
+          *term-cols* (or cols nerimux/pty:+default-term-cols+)))
   (let* ((session (create-initial-session *term-rows* *term-cols*))
          (readers (progn (server-add-session session)
                          (mapcar #'start-reader-thread (all-panes session)))))
     (setf *running* t)
-    (write-line (cl-tmux/control:control-session-changed
+    (write-line (nerimux/control:control-session-changed
                  (session-id session) (session-name session))
                 *standard-output*)
     (force-output *standard-output*)

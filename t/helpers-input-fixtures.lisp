@@ -1,11 +1,11 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Prompt, overlay, input, and format-context fixtures.
 
 (defmacro with-clean-prompt (&body body)
-  "Dynamically bind *prompt* to NIL and cl-tmux::*dirty* to NIL so prompt
+  "Dynamically bind *prompt* to NIL and nerimux::*dirty* to NIL so prompt
    state never leaks between tests and dirty flags start clean."
-  `(let ((*prompt* nil) (cl-tmux::*dirty* nil)) ,@body))
+  `(let ((*prompt* nil) (nerimux::*dirty* nil)) ,@body))
 
 (defmacro with-clean-overlay (&body body)
   "Dynamically bind the four overlay specials (*overlay*, *overlay-scroll-offset*,
@@ -25,22 +25,22 @@
 
 (defmacro with-input-state ((var) &body body)
   "Bind VAR to a fresh make-input-state for use with process-byte tests."
-  `(let ((,var (cl-tmux::make-input-state)))
+  `(let ((,var (nerimux::make-input-state)))
      ,@body))
 
 (defun feed-bytes (session input-state bytes)
   "Feed each element of BYTES to SESSION through INPUT-STATE one byte at a
-   time via cl-tmux::process-byte, returning the outcome of the final byte.
+   time via nerimux::process-byte, returning the outcome of the final byte.
    Removes the repeated 'feed ESC, feed the next byte, ...' one-call-per-byte
    pattern used to simulate multi-byte escape sequences (arrow keys, X10/SGR
    mouse reports, focus-in/out) arriving on the wire one octet at a time."
   (let ((outcome nil))
     (dolist (byte bytes outcome)
-      (setf outcome (cl-tmux::process-byte session byte input-state)))))
+      (setf outcome (nerimux::process-byte session byte input-state)))))
 
 (defun seed-scrollback (screen n)
   "Give SCREEN N dummy scrollback rows so copy-mode-scroll has room to move."
-  (setf (cl-tmux/terminal/types::screen-scrollback screen)
+  (setf (nerimux/terminal/types::screen-scrollback screen)
         (loop repeat n collect (vector))))
 
 ;;; The 4-line let* that builds sess/win/pane/ctx from make-fake-session appears
@@ -53,8 +53,8 @@
    format context of a fresh fake session with NWINDOWS windows and NPANES panes.
    Eliminates the recurring 4-line let* fixture in format-tests.lisp."
   `(let* ((,sess-var (make-fake-session :nwindows ,nwindows :npanes ,npanes))
-          (,win-var  (first (cl-tmux/model:session-windows ,sess-var)))
-          (,pane-var (first (cl-tmux/model:window-panes ,win-var)))
-          (,ctx-var  (cl-tmux/format:format-context-from-session
+          (,win-var  (first (nerimux/model:session-windows ,sess-var)))
+          (,pane-var (first (nerimux/model:window-panes ,win-var)))
+          (,ctx-var  (nerimux/format:format-context-from-session
                       ,sess-var ,win-var ,pane-var)))
      ,@body))

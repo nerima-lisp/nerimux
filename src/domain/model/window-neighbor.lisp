@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/model)
+(in-package #:nerimux/model)
 
 ;;;; Directional pane navigation — find the pane adjacent to a given pane.
 ;;;;

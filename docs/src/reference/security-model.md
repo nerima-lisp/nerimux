@@ -3,11 +3,11 @@
 How to report a vulnerability is covered by the organization-wide
 [security policy](https://github.com/nerima-lisp/.github/blob/main/SECURITY.md).
 Report suspected vulnerabilities privately through
-[GitHub Security Advisories](https://github.com/nerima-lisp/cl-tmux/security/advisories/new)
+[GitHub Security Advisories](https://github.com/nerima-lisp/nerimux/security/advisories/new)
 rather than opening a public issue, and include reproduction steps and the
 platform (OS, SBCL version, terminal).
 
-This page records the part that is specific to cl-tmux: what the threat model
+This page records the part that is specific to nerimux: what the threat model
 actually is, so that a reporter can tell a bug from intended behavior.
 
 ## The socket directory is the security boundary

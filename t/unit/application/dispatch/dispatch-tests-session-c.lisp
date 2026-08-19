@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Options, session management, control mode, and server-lifecycle tests.
 ;;;;  (dispatch-commands-option.lisp, dispatch-commands-auto.lisp,
@@ -9,7 +9,7 @@
   ;;; ── main-pane-width/height options flow into the main layouts ────────────────
 
   ;; %apply-named-layout-to-session :main-vertical sizes the main pane from the
-  ;; main-pane-width option (read at the cl-tmux layer, threaded into the model).
+  ;; main-pane-width option (read at the nerimux layer, threaded into the model).
   (it "apply-named-layout-main-vertical-reads-main-pane-width-option"
     (with-isolated-options ("main-pane-width" 50)
       (let* ((p0  (make-no-pty-pane 1 0 0 100 30))
@@ -18,7 +18,7 @@
                                :panes (list p0 p1)))
              (sess (make-session :id 1 :name "0" :windows (list win))))
         (session-select-window sess win)
-        (cl-tmux::%apply-named-layout-to-session sess :main-vertical)
+        (nerimux::%apply-named-layout-to-session sess :main-vertical)
         (expect (= 50 (pane-width p0))))))
 
   ;; %apply-named-layout-to-session :main-vertical reads other-pane-width and sizes
@@ -31,20 +31,20 @@
                                :panes (list p0 p1)))
              (sess (make-session :id 1 :name "0" :windows (list win))))
         (session-select-window sess win)
-        (cl-tmux::%apply-named-layout-to-session sess :main-vertical)
+        (nerimux::%apply-named-layout-to-session sess :main-vertical)
         (expect (= 25 (pane-width p1))))))
 
   ;;; ── default-size: detached new-session sizing ────────────────────────────────
 
   ;; %parse-wxh parses "WxH" into (values W H); rejects malformed input.
   (it "parse-wxh-parses-size-strings"
-    (multiple-value-bind (w h) (cl-tmux::%parse-wxh "80x24")
+    (multiple-value-bind (w h) (nerimux::%parse-wxh "80x24")
       (expect (= 80 w)) (expect (= 24 h)))
-    (multiple-value-bind (w h) (cl-tmux::%parse-wxh "100x40")
+    (multiple-value-bind (w h) (nerimux::%parse-wxh "100x40")
       (expect (= 100 w)) (expect (= 40 h)))
-    (multiple-value-bind (w h) (cl-tmux::%parse-wxh "junk")
+    (multiple-value-bind (w h) (nerimux::%parse-wxh "junk")
       (expect (null w)) (expect (null h)))
-    (multiple-value-bind (w h) (cl-tmux::%parse-wxh "80x")
+    (multiple-value-bind (w h) (nerimux::%parse-wxh "80x")
       (expect (null w)) (expect (null h))))
 
   ;; new-session -d with no -x/-y sizes the detached session from the default-size
@@ -53,10 +53,10 @@
     (with-isolated-config
       (with-isolated-options ("default-size" "100x40")
         (with-fake-session (s)
-          (let* ((cl-tmux::*server-sessions* nil)
-                 (new (cl-tmux::%cmd-new-session-arg s '("-d" "-s" "bg")))
+          (let* ((nerimux::*server-sessions* nil)
+                 (new (nerimux::%cmd-new-session-arg s '("-d" "-s" "bg")))
                  (win (session-active-window new))
-                 (expected-height (- 40 cl-tmux/config:*status-height*)))
+                 (expected-height (- 40 nerimux/config:*status-height*)))
             (expect (= 100 (window-width win)))
             (expect (= expected-height (window-height win))))))))
 
@@ -66,26 +66,26 @@
   ;; value; an unknown value falls back to single.
   (it "popup-border-chars-per-style"
     (with-isolated-options ("popup-border-lines" "double")
-      (multiple-value-bind (tl tr bl br h) (cl-tmux::%popup-border-chars)
+      (multiple-value-bind (tl tr bl br h) (nerimux::%popup-border-chars)
         (expect (char= #\╔ tl)) (expect (char= #\╗ tr)) (expect (char= #\╚ bl))
         (expect (char= #\╝ br)) (expect (char= #\═ h))))
     (with-isolated-options ("popup-border-lines" "rounded")
-      (multiple-value-bind (tl tr bl br h) (cl-tmux::%popup-border-chars)
+      (multiple-value-bind (tl tr bl br h) (nerimux::%popup-border-chars)
         (declare (ignore h))
         (expect (char= #\╭ tl)) (expect (char= #\╮ tr)) (expect (char= #\╰ bl)) (expect (char= #\╯ br))))
     (with-isolated-options ("popup-border-lines" "simple")
-      (multiple-value-bind (tl tr bl br h) (cl-tmux::%popup-border-chars)
+      (multiple-value-bind (tl tr bl br h) (nerimux::%popup-border-chars)
         (expect (char= #\+ tl)) (expect (char= #\+ tr)) (expect (char= #\+ bl))
         (expect (char= #\+ br)) (expect (char= #\- h))))
     (with-isolated-options ("popup-border-lines" "bogus")
-      (multiple-value-bind (tl tr bl br h) (cl-tmux::%popup-border-chars)
+      (multiple-value-bind (tl tr bl br h) (nerimux::%popup-border-chars)
         (declare (ignore tr bl br h))
         (expect (char= #\┌ tl)))))
 
   ;; %format-popup-overlay draws the box with the popup-border-lines characters.
   (it "format-popup-overlay-uses-border-lines-option"
     (with-isolated-options ("popup-border-lines" "double")
-      (let ((result (cl-tmux::%format-popup-overlay "t" "body")))
+      (let ((result (nerimux::%format-popup-overlay "t" "body")))
         (expect (search "╔" result))
         (expect (search "╝" result))
         (expect (search "body" result)))))
@@ -99,25 +99,25 @@
     (with-fake-session (s0)
       (let ((s1 (make-fake-session)))
         (with-empty-registry
-          (expect (eq s0 (cl-tmux::%current-session s0))))
-        (setf (cl-tmux::session-last-active s0) 10
-              (cl-tmux::session-last-active s1) 20)
+          (expect (eq s0 (nerimux::%current-session s0))))
+        (setf (nerimux::session-last-active s0) 10
+              (nerimux::session-last-active s1) 20)
         (with-registered-sessions (("0" s0) ("1" s1))
-          (expect (eq s1 (cl-tmux::%current-session s0)))
-          (setf (cl-tmux::session-last-active s0) 30)
-          (expect (eq s0 (cl-tmux::%current-session s1)))))))
+          (expect (eq s1 (nerimux::%current-session s0)))
+          (setf (nerimux::session-last-active s0) 30)
+          (expect (eq s0 (nerimux::%current-session s1)))))))
 
   ;; %switch-to-session(target) makes target the %current-session, so the loop's
   ;; re-resolution displays it (end-to-end switch → display).
   (it "switch-to-session-makes-it-the-current-session"
     (with-fake-session (s0)
       (let ((s1 (make-fake-session)))
-        (setf (cl-tmux::session-last-active s0) 100
-              (cl-tmux::session-last-active s1) 50)
+        (setf (nerimux::session-last-active s0) 100
+              (nerimux::session-last-active s1) 50)
         (with-registered-sessions (("0" s0) ("1" s1))
-          (expect (eq s0 (cl-tmux::%current-session s0)))
-          (cl-tmux::%switch-to-session s1)
-          (expect (eq s1 (cl-tmux::%current-session s0)))))))
+          (expect (eq s0 (nerimux::%current-session s0)))
+          (nerimux::%switch-to-session s1)
+          (expect (eq s1 (nerimux::%current-session s0)))))))
 
   ;;; ── detach-on-destroy: client fate when its session is destroyed ─────────────
 
@@ -131,37 +131,37 @@
         (with-fake-session (s1)
           (with-isolated-options ("detach-on-destroy" opt-val)
             (with-registered-sessions (("1" s1))
-              (expect (eq expected (cl-tmux::%detach-on-destroy-action "0")))))))))
+              (expect (eq expected (nerimux::%detach-on-destroy-action "0")))))))))
 
   ;; With no surviving sessions, detach-on-destroy always detaches (:quit).
   (it "detach-on-destroy-no-survivors-always-quits"
     (with-loop-state
       (with-isolated-options ("detach-on-destroy" "off")
         (with-empty-registry
-          (expect (eq :quit (cl-tmux::%detach-on-destroy-action "0")))))))
+          (expect (eq :quit (nerimux::%detach-on-destroy-action "0")))))))
 
   ;; %alphabetical-neighbour finds the next/prev surviving session by name, wrapping.
   (it "alphabetical-neighbour-prev-next-and-wrap"
     (let ((sa (make-fake-session)) (sc (make-fake-session)) (se (make-fake-session)))
-      (setf (cl-tmux::session-name sa) "a"
-            (cl-tmux::session-name sc) "c"
-            (cl-tmux::session-name se) "e")
+      (setf (nerimux::session-name sa) "a"
+            (nerimux::session-name sc) "c"
+            (nerimux::session-name se) "e")
       (with-registered-sessions (("a" sa) ("c" sc) ("e" se))
-        (expect (eq se (cl-tmux::%alphabetical-neighbour "c"  1)))
-        (expect (eq sa (cl-tmux::%alphabetical-neighbour "c" -1)))
-        (expect (eq sa (cl-tmux::%alphabetical-neighbour "z"  1)))
-        (expect (eq se (cl-tmux::%alphabetical-neighbour "0" -1))))))
+        (expect (eq se (nerimux::%alphabetical-neighbour "c"  1)))
+        (expect (eq sa (nerimux::%alphabetical-neighbour "c" -1)))
+        (expect (eq sa (nerimux::%alphabetical-neighbour "z"  1)))
+        (expect (eq se (nerimux::%alphabetical-neighbour "0" -1))))))
 
   ;; detach-on-destroy next switches to the alphabetically-next surviving session.
   (it "detach-on-destroy-next-switches-to-alphabetical-neighbour"
     (with-fake-session (sa)
       (with-isolated-options ("detach-on-destroy" "next")
         (let ((sc (make-fake-session)))
-          (setf (cl-tmux::session-name sa) "a" (cl-tmux::session-last-active sa) 5
-                (cl-tmux::session-name sc) "c" (cl-tmux::session-last-active sc) 5)
+          (setf (nerimux::session-name sa) "a" (nerimux::session-last-active sa) 5
+                (nerimux::session-name sc) "c" (nerimux::session-last-active sc) 5)
           (with-registered-sessions (("a" sa) ("c" sc))
-            (expect (null (cl-tmux::%detach-on-destroy-action "b")))
-            (expect (eq sc (cl-tmux::%current-session sa))))))))
+            (expect (null (nerimux::%detach-on-destroy-action "b")))
+            (expect (eq sc (nerimux::%current-session sa))))))))
 
   ;; :kill-session on→:quit (detach); off→nil (switch to survivor).
   ;; Each row: (opt-val expected description).
@@ -173,9 +173,9 @@
         (with-fake-session (s1)
           (with-isolated-options ("detach-on-destroy" opt-val)
             (let ((s2 (make-fake-session)))
-              (setf (cl-tmux::session-name s1) "cur" (cl-tmux::session-name s2) "other")
+              (setf (nerimux::session-name s1) "cur" (nerimux::session-name s2) "other")
               (with-registered-sessions (("cur" s1) ("other" s2))
-                (expect (eq expected (cl-tmux::dispatch-command s1 :kill-session nil))))))))))
+                (expect (eq expected (nerimux::dispatch-command s1 :kill-session nil))))))))))
 
   ;;; ── destroy-unattached: destroy the session left behind on a switch ──────────
 
@@ -189,66 +189,66 @@
         (with-fake-session (a)
           (with-isolated-options ("destroy-unattached" opt-val)
             (let ((b (make-fake-session)))
-              (setf (cl-tmux::session-name a) "a" (cl-tmux::session-last-active a) 20
-                    (cl-tmux::session-name b) "b" (cl-tmux::session-last-active b) 10)
+              (setf (nerimux::session-name a) "a" (nerimux::session-last-active a) 20
+                    (nerimux::session-name b) "b" (nerimux::session-last-active b) 10)
               (with-registered-sessions (("a" a) ("b" b))
-                (cl-tmux::%switch-to-session b)
+                (nerimux::%switch-to-session b)
                 (if expect-a-survives
-                    (expect (cl-tmux::server-find-session "a") :to-be-truthy)
-                    (expect (cl-tmux::server-find-session "a") :to-be-falsy))
-                (expect (cl-tmux::server-find-session "b") :to-be-truthy))))))))
+                    (expect (nerimux::server-find-session "a") :to-be-truthy)
+                    (expect (nerimux::server-find-session "a") :to-be-falsy))
+                (expect (nerimux::server-find-session "b") :to-be-truthy))))))))
 
   ;; Switching to the already-current session destroys nothing (old == target).
   (it "destroy-unattached-no-destroy-switching-to-current"
     (with-fake-session (a)
       (with-isolated-options ("destroy-unattached" t)
-        (setf (cl-tmux::session-name a) "a" (cl-tmux::session-last-active a) 20)
+        (setf (nerimux::session-name a) "a" (nerimux::session-last-active a) 20)
         (with-registered-sessions (("a" a))
-          (cl-tmux::%switch-to-session a)
-          (expect (cl-tmux::server-find-session "a"))))))
+          (nerimux::%switch-to-session a)
+          (expect (nerimux::server-find-session "a"))))))
 
   ;;; ── rename-session: registry key + duplicate-name refusal ────────────────────
 
   ;; %rename-session-checked re-keys *server-sessions* under the new name.
   (it "rename-session-checked-updates-registry-key"
     (with-fake-session (s)
-      (setf (cl-tmux::session-name s) "old")
+      (setf (nerimux::session-name s) "old")
       (with-registered-sessions (("old" s))
-        (expect (eq t (cl-tmux::%rename-session-checked s "new")))
-        (expect (string= "new" (cl-tmux::session-name s)))
-        (expect (eq s (cl-tmux::server-find-session "new")))
-        (expect (null (cl-tmux::server-find-session "old"))))))
+        (expect (eq t (nerimux::%rename-session-checked s "new")))
+        (expect (string= "new" (nerimux::session-name s)))
+        (expect (eq s (nerimux::server-find-session "new")))
+        (expect (null (nerimux::server-find-session "old"))))))
 
   ;; Renaming onto a name already used by a DIFFERENT session is refused — the other
   ;; session must not be orphaned.
   (it "rename-session-checked-refuses-duplicate-name"
     (with-fake-session (a)
       (let ((b (make-fake-session)))
-        (setf (cl-tmux::session-name a) "a" (cl-tmux::session-name b) "b")
+        (setf (nerimux::session-name a) "a" (nerimux::session-name b) "b")
         (with-registered-sessions (("a" a) ("b" b))
-          (expect (null (cl-tmux::%rename-session-checked a "b")))
-          (expect (string= "a" (cl-tmux::session-name a)))
-          (expect (eq b (cl-tmux::server-find-session "b")))
-          (expect (eq a (cl-tmux::server-find-session "a")))))))
+          (expect (null (nerimux::%rename-session-checked a "b")))
+          (expect (string= "a" (nerimux::session-name a)))
+          (expect (eq b (nerimux::server-find-session "b")))
+          (expect (eq a (nerimux::server-find-session "a")))))))
 
   ;; Renaming a session to its own current name succeeds as a harmless no-op.
   (it "rename-session-checked-to-own-name-noop-success"
     (with-fake-session (s)
-      (setf (cl-tmux::session-name s) "x")
+      (setf (nerimux::session-name s) "x")
       (with-registered-sessions (("x" s))
-        (expect (eq t (cl-tmux::%rename-session-checked s "x")))
-        (expect (eq s (cl-tmux::server-find-session "x"))))))
+        (expect (eq t (nerimux::%rename-session-checked s "x")))
+        (expect (eq s (nerimux::server-find-session "x"))))))
 
   ;; %rename-session-checked fires +hook-session-renamed+ on a successful rename.
   (it "rename-session-checked-fires-hook"
     (with-isolated-hooks
       (with-fake-session (s)
         (let ((fired nil))
-          (setf (cl-tmux::session-name s) "old")
-          (cl-tmux/hooks:add-hook cl-tmux/hooks:+hook-session-renamed+
+          (setf (nerimux::session-name s) "old")
+          (nerimux/hooks:add-hook nerimux/hooks:+hook-session-renamed+
                                   (lambda (&rest _) (declare (ignore _)) (setf fired t)))
           (with-registered-sessions (("old" s))
-            (cl-tmux::%rename-session-checked s "new")
+            (nerimux::%rename-session-checked s "new")
             (expect fired :to-be-truthy))))))
 
   ;;; ── move-window: index collision shifts others up; -a inserts after ──────────
@@ -257,15 +257,15 @@
   (it "window-id-occupied-and-shuffle-helpers"
     (with-fake-session (s :nwindows 3)
       (let* ((w0 (find 0 (session-windows s) :key #'window-id)))
-        (expect (cl-tmux::%window-id-occupied-p s 1 nil) :to-be-truthy)
-        (expect (cl-tmux::%window-id-occupied-p s 9 nil) :to-be-falsy)
-        (expect (cl-tmux::%window-id-occupied-p s 0 w0) :to-be-falsy))))
+        (expect (nerimux::%window-id-occupied-p s 1 nil) :to-be-truthy)
+        (expect (nerimux::%window-id-occupied-p s 9 nil) :to-be-falsy)
+        (expect (nerimux::%window-id-occupied-p s 0 w0) :to-be-falsy))))
 
   ;; move-window -s W -t N to a free index just reassigns the id.
   (it "move-window-to-free-index"
     (with-fake-session (s :nwindows 2)
       (let* ((w1 (find 1 (session-windows s) :key #'window-id)))
-        (cl-tmux::%cmd-move-window s '("-s" "1" "-t" "5"))
+        (nerimux::%cmd-move-window s '("-s" "1" "-t" "5"))
         (expect (= 5 (window-id w1)))
         (expect (find 0 (session-windows s) :key #'window-id)))))
 
@@ -274,7 +274,7 @@
     (with-fake-session (s :nwindows 3)
       (let* ((w0 (find 0 (session-windows s) :key #'window-id))
              (w2 (find 2 (session-windows s) :key #'window-id)))
-        (cl-tmux::%cmd-move-window s '("-s" "2" "-t" "0"))
+        (nerimux::%cmd-move-window s '("-s" "2" "-t" "0"))
         (expect (= 0 (window-id w2)))
         (expect (= 1 (window-id w0)))
         (expect (= 3 (length (remove-duplicates (mapcar #'window-id (session-windows s)))))))))
@@ -283,6 +283,6 @@
   (it "move-window-a-inserts-after-target"
     (with-fake-session (s :nwindows 3)
       (let* ((w2 (find 2 (session-windows s) :key #'window-id)))
-        (cl-tmux::%cmd-move-window s '("-s" "2" "-a" "-t" "0"))
+        (nerimux::%cmd-move-window s '("-s" "2" "-a" "-t" "0"))
         (expect (= 1 (window-id w2)))
         (expect (= 3 (length (remove-duplicates (mapcar #'window-id (session-windows s))))))))))

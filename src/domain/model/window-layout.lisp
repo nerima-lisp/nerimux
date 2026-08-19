@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/model)
+(in-package #:nerimux/model)
 
 ;;;; Named layout application — reposition all panes in a window.
 ;;;;
@@ -52,7 +52,7 @@
       main-vertical / main-horizontal layouts (tmux's main-pane-width/-height
       options); OTHER-PANE-WIDTH / OTHER-PANE-HEIGHT (other-pane-*; 0 = unset)
       override them when set and fitting.  The option values are read by the
-      cl-tmux-layer caller and passed in as plain integers, since this model-layer
+      nerimux-layer caller and passed in as plain integers, since this model-layer
       code loads before options.  Rebuilds the window tree and calls layout-assign."
      (declare (ignorable main-pane-width main-pane-height
                          other-pane-width other-pane-height))
@@ -108,7 +108,7 @@
    main pane overrides it — the other region takes OTHER-SIZE and the main pane the
    rest.  When MAIN-SIZE alone leaves no room, the main pane is capped so at least
    one cell remains for the others."
-  (let ((min 1))                          ; cl-tmux pane minimum (%assign-split clamps too)
+  (let ((min 1))                          ; nerimux pane minimum (%assign-split clamps too)
     (cond
       ((>= (+ main-size min) available) (max min (- available min)))
       ((and other-size (plusp other-size)

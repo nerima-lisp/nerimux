@@ -1,6 +1,6 @@
-;;;; Pane fixture helpers for cl-tmux tests.
+;;;; Pane fixture helpers for nerimux tests.
 
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 (defun make-no-pty-pane (id x y w h)
   "Build a pane with no real PTY and a matching virtual screen."

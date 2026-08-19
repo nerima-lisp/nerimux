@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/control)
+(in-package #:nerimux/control)
 
 ;;;; tmux control mode (-C) wire protocol.
 ;;;;

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/model)
+(in-package #:nerimux/model)
 
 ;;; ── Window ─────────────────────────────────────────────────────────────────
 
@@ -92,7 +92,7 @@
 (defun next-pane-id (window)
   "Smallest pane id >= pane-base-index not already used in WINDOW.
    Window-level concern: queries pane membership, not geometry."
-  (let* ((base (or (cl-tmux/options:get-option "pane-base-index") 0))
+  (let* ((base (or (nerimux/options:get-option "pane-base-index") 0))
          (used (mapcar #'pane-id (window-panes window))))
     (loop for i from base
           unless (member i used) return i)))

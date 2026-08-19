@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; window tests — part B: apply-named-layout (main-horizontal/vertical/tiled),
 ;;;; last-window by recency, move-window, swap-window, rotate-window,
@@ -247,11 +247,11 @@
                                      :h (make-layout-leaf p1)
                                      (make-layout-leaf p2) 1/2) 1/2))))
       (window-select-pane win p0)
-      (cl-tmux/model:window-zoom-toggle win)
+      (nerimux/model:window-zoom-toggle win)
       (window-rotate win :up)
-      (expect (cl-tmux/model::window-zoom-p win) :to-be-truthy)
+      (expect (nerimux/model::window-zoom-p win) :to-be-truthy)
       (expect (equal (list p0) (window-panes win)))
-      (cl-tmux/model:window-zoom-toggle win)
+      (nerimux/model:window-zoom-toggle win)
       (expect (equal (list p1 p2 p0) (window-panes win)))))
 
   ;; window-rotate :down moves the last pane to the front of the panes list.

@@ -1,12 +1,12 @@
-(in-package #:cl-tmux/renderer)
+(in-package #:nerimux/renderer)
 
-;;;; Status bar composition for the cl-tmux renderer.
+;;;; Status bar composition for the nerimux renderer.
 ;;;;
 ;;;; This file owns the status bar: option lookup, format expansion, justify
 ;;;; logic, and the render-status-bar entry point.  It has no knowledge of
 ;;;; session-frame compositing; that lives in renderer-compose.lisp.
 ;;;;
-;;;; Load order (declared in cl-tmux.asd): renderer-format → renderer-style
+;;;; Load order (declared in nerimux.asd): renderer-format → renderer-style
 ;;;;             → renderer-statusbar-layout → renderer-pane → renderer-overlay
 ;;;;             → renderer-statusbar → renderer-compose
 
@@ -42,12 +42,12 @@
 (defun %window-has-bell-p (window)
   "T when WINDOW's sticky bell flag is set and monitor-bell is on for it.
    Mirrors the #{window_bell_flag} computation in format-context.lisp."
-  (and (cl-tmux/options:get-option-for-context "monitor-bell" :window window)
+  (and (nerimux/options:get-option-for-context "monitor-bell" :window window)
        (window-bell-flag window)))
 
 (defun %window-option (window name)
   "Read NAME from WINDOW's option context."
-  (cl-tmux/options:get-option-for-context name :window window))
+  (nerimux/options:get-option-for-context name :window window))
 
 (defun %window-status-style (session window active-p)
   "Resolve the status-bar style string for WINDOW's tab.
@@ -70,14 +70,14 @@
   "Write WINDOW's status-bar tab label (format-expanded, per-window styled,
    with any inline #[attr] blocks resolved) to WINDOW-STREAM.  ACTIVE-WINDOW
    selects window-status-current-format/-style over the plain variants."
-  (let* ((context  (cl-tmux/format:format-context-from-window session window))
+  (let* ((context  (nerimux/format:format-context-from-window session window))
          (active-p (eq window active-window))
-         (fmt      (cl-tmux/options:get-option-for-context
+         (fmt      (nerimux/options:get-option-for-context
                     (if active-p "window-status-current-format" "window-status-format")
                     :window window))
          ;; Style honors alert state (bell/activity/last) for non-active windows.
          (style    (%window-status-style session window active-p))
-         (label    (cl-tmux/format:expand-format fmt context)))
+         (label    (nerimux/format:expand-format fmt context)))
     ;; Apply the per-window style, then expand any inline #[attr] blocks
     ;; embedded in the label.  Within a window label, #[default] reverts to
     ;; the window's own style (or the status default when it is unstyled).
@@ -108,10 +108,10 @@
    (bell > activity > last > normal).
    window-status-separator stays global — it sits between windows and has no
    single owning window."
-  (let ((separator (cl-tmux/options:get-option "window-status-separator" " ")))
+  (let ((separator (nerimux/options:get-option "window-status-separator" " ")))
     (with-output-to-string (window-stream)
       (let ((first-p t))
-        (dolist (window (cl-tmux/model:session-windows-in-index-order session))
+        (dolist (window (nerimux/model:session-windows-in-index-order session))
           (unless first-p (write-string separator window-stream))
           (setf first-p nil)
           (%render-window-tab session window active-window window-stream))))))
@@ -137,7 +137,7 @@
   "Render the single-template status bar path for STATUS-FMT0."
   (%render-status-line stream status-row sgr-code
                        (%compose-aligned-line
-                        (cl-tmux/format:expand-format-safe status-fmt0 context)
+                        (nerimux/format:expand-format-safe status-fmt0 context)
                         sgr-code terminal-cols)))
 
 (defun %status-bar-default-segments (session context sgr-code)
@@ -155,19 +155,19 @@
                          sgr-code))
          (right-raw   (%status-expand-style-blocks
                        (%status-format-or-default
-                        "status-right" context #'cl-tmux/format::%current-time-string)
+                        "status-right" context #'nerimux/format::%current-time-string)
                        sgr-code))
          (left-style-sgr  (%status-segment-style-sgr "status-left-style"  sgr-code))
          (right-style-sgr (%status-segment-style-sgr "status-right-style" sgr-code))
          (left        (%apply-segment-style
                        (%clamp-status-segment
-                        left-raw (cl-tmux/options:get-option "status-left-length" 40))
+                        left-raw (nerimux/options:get-option "status-left-length" 40))
                        left-style-sgr sgr-code))
          (right       (%apply-segment-style
                        (%clamp-status-segment
-                        right-raw (cl-tmux/options:get-option "status-right-length" 40))
+                        right-raw (nerimux/options:get-option "status-right-length" 40))
                        right-style-sgr sgr-code))
-         (justify     (cl-tmux/options:get-option "status-justify" "left")))
+         (justify     (nerimux/options:get-option "status-justify" "left")))
     (values left right justify)))
 
 (defun %render-status-bar-default (stream session status-row sgr-code context terminal-cols)
@@ -189,12 +189,12 @@
          (active-pane   (session-active-pane session))
          ;; Pass terminal dimensions so #{client_width} / #{client_height} work
          ;; in status-left, status-right, and window-status-format strings.
-         (context       (cl-tmux/format:format-context-from-session
+         (context       (nerimux/format:format-context-from-session
                          session active-window active-pane
                        :client-width  terminal-cols
                        :client-height (max 0 (- terminal-rows 1))))
          (sgr-code    (%status-sgr-from-style (%effective-status-style)))
-         (status-fmt0 (cl-tmux/options:get-option "status-format[0]" "")))
+         (status-fmt0 (nerimux/options:get-option "status-format[0]" "")))
     ;; status-format[0] template path: when SET (and no prompt is active) the bar
     ;; is rendered from that single format, with #[align=…] regions positioned by
     ;; %compose-aligned-line and #{W:…}/#{…} expanded.  Procedural path follows.
@@ -208,11 +208,11 @@
    TERMINAL-COLS with the base status style.  An unset/blank status-format[INDEX]
    draws a blank styled row (which is still required, since the pane area has
    shrunk to leave this row to the status region)."
-  (let* ((fmt      (cl-tmux/options:get-option
+  (let* ((fmt      (nerimux/options:get-option
                     (format nil "status-format[~D]" index) ""))
          (sgr-code (%status-sgr-from-style
                     (%effective-status-style)))
-         (context  (cl-tmux/format:format-context-from-session
+         (context  (nerimux/format:format-context-from-session
                     session (session-active-window session)
                     (session-active-pane session)
                     :client-width terminal-cols))
@@ -221,7 +221,7 @@
          ;; centre] work in the extra rows too.  An empty format composes to a
          ;; blank styled row.
          (expanded (if (and (stringp fmt) (plusp (length fmt)))
-                       (cl-tmux/format:expand-format-safe fmt context)
+                       (nerimux/format:expand-format-safe fmt context)
                        ""))
          (line     (%compose-aligned-line expanded sgr-code terminal-cols)))
     (%render-status-line stream row sgr-code line)))
@@ -231,8 +231,8 @@
    off/false/0/nil → 0; an explicit positive integer N → min(N,5) (tmux caps at
    5); any other truthy value (on/t) → 1.  This is the renderer's source of truth
    for how many status rows to draw; the pane layout reserves the matching count
-   via cl-tmux/config:*status-height* (kept in sync by the `status` side-effect)."
-  (let ((v (cl-tmux/options:get-option "status" t)))
+   via nerimux/config:*status-height* (kept in sync by the `status` side-effect)."
+  (let ((v (nerimux/options:get-option "status" t)))
     (%status-line-count-from-value v)))
 
 (defparameter +status-line-false-values+
@@ -247,7 +247,7 @@
   "Map a raw STATUS string value to the number of rows to render."
   (if (member v +status-line-false-values+ :test #'equal)
       0
-      (let ((n (cl-tmux::%parse-integer-or-nil v :junk-allowed t)))
+      (let ((n (nerimux::%parse-integer-or-nil v :junk-allowed t)))
         (cond
           ((null n) 1)
           ((plusp n) (%clamp-status-line-count n))

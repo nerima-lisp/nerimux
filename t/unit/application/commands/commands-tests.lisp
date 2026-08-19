@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; resize-pane, copy-mode-scroll, select-window, rename-session — part I
 
@@ -6,7 +6,7 @@
 ;;;
 ;;; Tree-based split windows: assembled with make-layout-leaf / make-layout-split
 ;;; to use the tree-layout path.  tl-leaf / tl-window helpers are defined
-;;; in layout-tree-tests.lisp and share the same cl-tmux/test package.
+;;; in layout-tree-tests.lisp and share the same nerimux/test package.
 
 (defun %vsplit-window (&optional (each 20))
   "Vertical split: two EACH-wide panes, one separator column between them."
@@ -54,7 +54,7 @@
   (let ((s (make-screen 20 5)))
     (setf (screen-scrollback s)
           (loop repeat n collect (make-array 0)))
-    (cl-tmux/commands::copy-mode-enter s)
+    (nerimux/commands::copy-mode-enter s)
     s))
 
 (describe "commands-suite"
@@ -114,7 +114,7 @@
         (let* ((win (%vsplit-window 20))
                (p0  (first (window-panes win)))
                (s   (%make-session-with-window win)))
-          (cl-tmux::%cmd-resize-pane-arg s (list "-x" n-str))
+          (nerimux::%cmd-resize-pane-arg s (list "-x" n-str))
           (expect (= expected (pane-width p0)))))))
 
   ;; resize-pane -y N sets the active pane to an absolute height of N.
@@ -122,7 +122,7 @@
     (let* ((win (%hsplit-window 10))
            (p0  (first (window-panes win)))
            (s   (%make-session-with-window win)))
-      (cl-tmux::%cmd-resize-pane-arg s '("-y" "13"))
+      (nerimux::%cmd-resize-pane-arg s '("-y" "13"))
       (expect (= 13 (pane-height p0)))))
 
   ;;; ── copy-mode-scroll ─────────────────────────────────────────────────────────
@@ -131,16 +131,16 @@
   ;; to the scrollback length.
   (it "copy-mode-scroll-back-clamps-to-scrollback-length"
     (let ((s (%screen-with-scrollback 3)))
-      (cl-tmux/commands::copy-mode-scroll s 100)
+      (nerimux/commands::copy-mode-scroll s 100)
       (expect (= 3 (screen-copy-offset s)))
-      (expect (cl-tmux/terminal/types:screen-dirty-p s) :to-be-truthy)))
+      (expect (nerimux/terminal/types:screen-dirty-p s) :to-be-truthy)))
 
   ;; Scrolling forward (negative delta) past the live view clamps the offset at 0.
   (it "copy-mode-scroll-forward-clamps-at-zero"
     (let ((s (%screen-with-scrollback 3)))
-      (cl-tmux/commands::copy-mode-scroll s 100)   ; first jump to the oldest line
+      (nerimux/commands::copy-mode-scroll s 100)   ; first jump to the oldest line
       (expect (= 3 (screen-copy-offset s)))
-      (cl-tmux/commands::copy-mode-scroll s -100)  ; then race back to live
+      (nerimux/commands::copy-mode-scroll s -100)  ; then race back to live
       (expect (= 0 (screen-copy-offset s)))))
 
   ;; A full-row selection made while scrolled back into the scrollback yanks the
@@ -150,8 +150,8 @@
   (it "copy-mode-selection-honours-scroll-offset"
     (let ((s (make-screen 8 3)))
       (feed-lines s "AAA" "BBB" "CCC" "DDD" "EEE")
-      (cl-tmux/commands::copy-mode-enter s)
-      (cl-tmux/commands::copy-mode-scroll s 1000)   ; scroll fully back
+      (nerimux/commands::copy-mode-enter s)
+      (nerimux/commands::copy-mode-scroll s 1000)   ; scroll fully back
       (expect (plusp (screen-copy-offset s)))
       (let ((w      (screen-width s))
             (offset (screen-copy-offset s)))
@@ -163,31 +163,31 @@
                 (screen-copy-cursor      s) (cons 0 w)
                 (screen-copy-selecting   s) t)
           (expect (string= expected
-                           (string-right-trim " " (or (cl-tmux/commands::%selection-text s) ""))))))))
+                           (string-right-trim " " (or (nerimux/commands::%selection-text s) ""))))))))
 
   ;; copy-mode-enter with :exit-on-bottom t sets the screen slot.
   (it "copy-mode-enter-e-sets-exit-on-bottom"
     (let ((s (make-screen 20 5)))
-      (cl-tmux/commands::copy-mode-enter s :exit-on-bottom t)
-      (expect (cl-tmux/terminal/types:screen-copy-exit-on-bottom s) :to-be-truthy)))
+      (nerimux/commands::copy-mode-enter s :exit-on-bottom t)
+      (expect (nerimux/terminal/types:screen-copy-exit-on-bottom s) :to-be-truthy)))
 
   ;; With exit-on-bottom (copy-mode -e), scrolling back down to the live bottom
   ;; (offset 0) auto-exits copy mode.
   (it "copy-mode-e-auto-exits-on-scroll-to-bottom"
     (let ((s (%screen-with-scrollback 3)))
       ;; Re-enter with -e semantics and scroll up into the scrollback.
-      (cl-tmux/commands::copy-mode-enter s :exit-on-bottom t)
-      (cl-tmux/commands::copy-mode-scroll s 2)        ; scroll back 2 lines (offset 2)
+      (nerimux/commands::copy-mode-enter s :exit-on-bottom t)
+      (nerimux/commands::copy-mode-scroll s 2)        ; scroll back 2 lines (offset 2)
       (expect (= 2 (screen-copy-offset s)))
       (expect (screen-copy-mode-p s) :to-be-truthy)
-      (cl-tmux/commands::copy-mode-scroll s -100)     ; race back to the live bottom
+      (nerimux/commands::copy-mode-scroll s -100)     ; race back to the live bottom
       (expect (screen-copy-mode-p s) :to-be-falsy)))
 
   ;; copy-mode -e does NOT exit while scrolling upward (positive delta).
   (it "copy-mode-e-no-exit-while-scrolling-up"
     (let ((s (%screen-with-scrollback 3)))
-      (cl-tmux/commands::copy-mode-enter s :exit-on-bottom t)
-      (cl-tmux/commands::copy-mode-scroll s 100)      ; scroll up to oldest
+      (nerimux/commands::copy-mode-enter s :exit-on-bottom t)
+      (nerimux/commands::copy-mode-scroll s 100)      ; scroll up to oldest
       (expect (screen-copy-mode-p s) :to-be-truthy)))
 
   ;; Outside copy mode, copy-mode-scroll does nothing: offset stays put and the
@@ -196,7 +196,7 @@
     (let ((s (make-screen 20 5)))
       (setf (screen-scrollback s) (list (make-array 0) (make-array 0)))
       (expect (screen-copy-mode-p s) :to-be-falsy)
-      (expect (null (cl-tmux/commands::copy-mode-scroll s 100)))
+      (expect (null (nerimux/commands::copy-mode-scroll s 100)))
       (expect (= 0 (screen-copy-offset s)))))
 
   ;;; ── select-window-by-number ─────────────────────────────────────────────────
@@ -242,7 +242,7 @@
   ;; rename-session sets the session's name to the supplied string.
   (it "rename-session-changes-session-name"
     (let ((sess (make-session :id 1 :name "old" :windows nil)))
-      (cl-tmux/commands:rename-session sess "new")
+      (nerimux/commands:rename-session sess "new")
       (expect (string= "new" (session-name sess)))))
 
   ;; rename-session with "" or NIL is a no-op: the session name remains unchanged.
@@ -252,5 +252,5 @@
       (destructuring-bind (new-name desc) row
         (declare (ignore desc))
         (let ((sess (make-session :id 1 :name "keep" :windows nil)))
-          (cl-tmux/commands:rename-session sess new-name)
+          (nerimux/commands:rename-session sess new-name)
           (expect (string= "keep" (session-name sess))))))))

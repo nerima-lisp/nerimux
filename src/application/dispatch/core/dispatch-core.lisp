@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Declarative command dispatch - cyclic navigation primitives.
 ;;;;

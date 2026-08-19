@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/config)
+(in-package #:nerimux/config)
 
 ;;; run-shell / run directive handling.
 
@@ -59,7 +59,7 @@
     (if background
         (progn
           (cl-concurrent-kit:make-thread #'apply-command
-                                         :name "cl-tmux config run-shell -C")
+                                         :name "nerimux config run-shell -C")
           t)
         (progn
           (apply-command)

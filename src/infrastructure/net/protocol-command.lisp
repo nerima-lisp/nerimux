@@ -1,10 +1,10 @@
-(in-package #:cl-tmux/protocol)
+(in-package #:nerimux/protocol)
 
 ;;;; +msg-command+ payload codec — NUL-delimited field encoding/decoding.
 ;;;;
 ;;;; This file is the pure, transport-agnostic codec for the command message
 ;;;; type.  It lives in the same package as protocol.lisp so all codec
-;;;; primitives are co-located in cl-tmux/protocol.
+;;;; primitives are co-located in nerimux/protocol.
 ;;;;
 ;;;; Payload format: NUL-delimited fields.
 ;;;;   [target NUL] command-keyword-name NUL [arg NUL ...]

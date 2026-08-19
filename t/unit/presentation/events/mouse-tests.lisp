@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Tests for mouse support: SGR/X10 parsing, status-bar click, option gating.
 
@@ -23,7 +23,7 @@
                                 :adjustable t
                                 :initial-contents (coerce seq 'list))))
           (multiple-value-bind (btn col row release-p)
-              (cl-tmux::%parse-sgr-mouse buf (fill-pointer buf))
+              (nerimux::%parse-sgr-mouse buf (fill-pointer buf))
             (expect (= expected-btn btn))
             (expect (= expected-col col))
             (expect (= expected-row row))
@@ -48,7 +48,7 @@
           (declare (ignore desc))
           (let ((buf (buf-from (format nil fmt #\Escape))))
             (multiple-value-bind (btn col row release-p)
-                (cl-tmux::%parse-sgr-mouse buf (fill-pointer buf))
+                (nerimux::%parse-sgr-mouse buf (fill-pointer buf))
               (expect (null btn))
               (expect (null col))
               (expect (null row))
@@ -60,14 +60,14 @@
   (it "parse-x10-mouse-bytes"
     ;; btn=0 → raw=32; col=0 → raw=33; row=1 → raw=34
     (with-single-pane-mouse-session (sess win p0)
-      (let ((state (cl-tmux::make-input-state)))
+      (let ((state (nerimux::make-input-state)))
         ;; ESC [ M 32 33 34  (btn=0, col=0, row=1)
-        (cl-tmux::process-byte sess 27 state)
-        (cl-tmux::process-byte sess 91 state)
-        (cl-tmux::process-byte sess 77 state)
-        (cl-tmux::process-byte sess 32 state)
-        (cl-tmux::process-byte sess 33 state)
-        (cl-tmux::process-byte sess 34 state)
+        (nerimux::process-byte sess 27 state)
+        (nerimux::process-byte sess 91 state)
+        (nerimux::process-byte sess 77 state)
+        (nerimux::process-byte sess 32 state)
+        (nerimux::process-byte sess 33 state)
+        (nerimux::process-byte sess 34 state)
         ;; Focus is unchanged (single pane, clicking in it); no error expected.
         (expect (eq p0 (window-active-pane win))))))
 
@@ -77,14 +77,14 @@
   (it "mouse-option-gating-off-by-default"
     (with-two-pane-h-session (sess win p0 p1 :mouse nil)
       ;; Click in right pane — should NOT change focus because mouse is off
-      (cl-tmux::%dispatch-mouse-event sess 0 50 5 nil)
+      (nerimux::%dispatch-mouse-event sess 0 50 5 nil)
       (expect (eq p0 (window-active-pane win)))))
 
   ;; When the 'mouse' option is T, left-click changes active pane.
   (it "mouse-option-gating-on"
     (with-two-pane-mouse-session (sess win p0 p1)
       ;; Click in right pane (col 50, row 5 — within pane area, not status bar)
-      (cl-tmux::%dispatch-mouse-event sess 0 50 5 nil)
+      (nerimux::%dispatch-mouse-event sess 0 50 5 nil)
       (expect (eq p1 (window-active-pane win)))))
 
   ;;; ── Status bar click ─────────────────────────────────────────────────────────
@@ -94,8 +94,8 @@
     (with-two-window-status-session (sess win0 win1)
       ;; Session name "0" contributes columns 0-1.  With the custom formats
       ;; above, win0 occupies column 2, '|' is column 3, and win1 starts at 4.
-      (expect (eq win1 (cl-tmux::%status-col-to-window sess 4)))
-      (cl-tmux::%dispatch-mouse-event sess 0 4 5 nil)
+      (expect (eq win1 (nerimux::%status-col-to-window sess 4)))
+      (nerimux::%dispatch-mouse-event sess 0 4 5 nil)
       (expect (eq win1 (session-active-window sess)))))
 
   ;; %status-col-to-window returns the window whose label contains the given col.
@@ -112,11 +112,11 @@
       ;; Session name "s" = 1 char; prefix = " s" = 2 chars.
       ;; win0 active " 1:a* " = 6 chars, columns 2–7.
       ;; The separator adds column 8, so win1 starts at column 9.
-      (let ((found0 (cl-tmux::%status-col-to-window sess 3)))
+      (let ((found0 (nerimux::%status-col-to-window sess 3)))
         (expect (eq win0 found0)))
-      (let ((found1 (cl-tmux::%status-col-to-window sess 9)))
+      (let ((found1 (nerimux::%status-col-to-window sess 9)))
         (expect (eq win1 found1)))
-      (let ((found-nil (cl-tmux::%status-col-to-window sess 1)))
+      (let ((found-nil (nerimux::%status-col-to-window sess 1)))
         (expect (null found-nil)))))
 
   ;;; ── Wheel scroll enters copy mode ────────────────────────────────────────────
@@ -127,7 +127,7 @@
       (let ((sc (pane-screen p0)))
         (seed-scrollback sc 10)
         (expect (screen-copy-mode-p sc) :to-be-falsy)
-        (cl-tmux::%dispatch-mouse-event sess 64 0 0 nil)
+        (nerimux::%dispatch-mouse-event sess 64 0 0 nil)
         (expect (screen-copy-mode-p sc) :to-be-truthy))))
 
   ;; Wheel-down (btn 65) while at offset 0 exits copy mode.
@@ -135,10 +135,10 @@
     (with-single-pane-mouse-session (sess win p0)
       (let ((sc (pane-screen p0)))
         ;; Enter copy mode manually
-        (cl-tmux/commands:copy-mode-enter sc)
+        (nerimux/commands:copy-mode-enter sc)
         (expect (screen-copy-mode-p sc) :to-be-truthy)
         ;; Already at offset 0 — wheel-down should exit copy mode
-        (cl-tmux::%dispatch-mouse-event sess 65 0 0 nil)
+        (nerimux::%dispatch-mouse-event sess 65 0 0 nil)
         (expect (screen-copy-mode-p sc) :to-be-falsy))))
 
   ;;; ── Mouse key-table bindings (bind -n WheelUpPane / MouseDown1Pane) ──────────
@@ -146,42 +146,42 @@
   ;; %mouse-key-name maps (button, release-p, location) to tmux mouse key names.
   (it "mouse-key-name-builds-tmux-names"
     (check-table
-     (list (list (cl-tmux::%mouse-key-name 64 nil :pane)   "WheelUpPane"
+     (list (list (nerimux::%mouse-key-name 64 nil :pane)   "WheelUpPane"
                  "wheel-up in pane")
-           (list (cl-tmux::%mouse-key-name 65 nil :pane)   "WheelDownPane"
+           (list (nerimux::%mouse-key-name 65 nil :pane)   "WheelDownPane"
                  "wheel-down in pane")
-           (list (cl-tmux::%mouse-key-name 0 nil :pane)    "MouseDown1Pane"
+           (list (nerimux::%mouse-key-name 0 nil :pane)    "MouseDown1Pane"
                  "left press in pane")
-           (list (cl-tmux::%mouse-key-name 0 t :pane)      "MouseUp1Pane"
+           (list (nerimux::%mouse-key-name 0 t :pane)      "MouseUp1Pane"
                  "left release in pane")
-           (list (cl-tmux::%mouse-key-name 1 nil :pane)    "MouseDown2Pane"
+           (list (nerimux::%mouse-key-name 1 nil :pane)    "MouseDown2Pane"
                  "middle press in pane")
-           (list (cl-tmux::%mouse-key-name 2 nil :status)  "MouseDown3Status"
+           (list (nerimux::%mouse-key-name 2 nil :status)  "MouseDown3Status"
                  "right press on status")
-           (list (cl-tmux::%mouse-key-name 64 nil :status) "WheelUpStatus"
+           (list (nerimux::%mouse-key-name 64 nil :status) "WheelUpStatus"
                  "wheel-up on status")
-           (list (cl-tmux::%mouse-key-name 32 nil :pane)   nil
+           (list (nerimux::%mouse-key-name 32 nil :pane)   nil
                  "motion has no standard name"))
      :test #'equal))
 
   ;; %mouse-event-action turns raw mouse state into a symbolic built-in action.
   (it "mouse-event-action-classifies-built-in-behavior"
     (check-table
-     (list (list (cl-tmux::%mouse-event-action 0 nil :status) :status-click
+     (list (list (nerimux::%mouse-event-action 0 nil :status) :status-click
                  "left click on status")
-           (list (cl-tmux::%mouse-event-action 64 nil :pane) :scroll-up
+           (list (nerimux::%mouse-event-action 64 nil :pane) :scroll-up
                  "wheel-up")
-           (list (cl-tmux::%mouse-event-action 65 nil :pane) :scroll-down
+           (list (nerimux::%mouse-event-action 65 nil :pane) :scroll-down
                  "wheel-down")
-           (list (cl-tmux::%mouse-event-action 0 nil :pane) :left-press
+           (list (nerimux::%mouse-event-action 0 nil :pane) :left-press
                  "left press in pane")
-           (list (cl-tmux::%mouse-event-action 0 t :pane) :left-release
+           (list (nerimux::%mouse-event-action 0 t :pane) :left-release
                  "left release")
-           (list (cl-tmux::%mouse-event-action 1 nil :pane) :middle-press
+           (list (nerimux::%mouse-event-action 1 nil :pane) :middle-press
                  "middle press")
-           (list (cl-tmux::%mouse-event-action 32 nil :pane) :motion
+           (list (nerimux::%mouse-event-action 32 nil :pane) :motion
                  "motion")
-           (list (cl-tmux::%mouse-event-action 2 nil :status) nil
+           (list (nerimux::%mouse-event-action 2 nil :status) nil
                  "right click on status is unbound"))
      :test #'eql))
 
@@ -189,27 +189,27 @@
   ;; copy-mode scroll.
   (it "mouse-wheel-up-binding-fires-and-overrides-default"
     (with-isolated-mouse-session (s :nwindows 2)
-      (cl-tmux/config:apply-config-directive
+      (nerimux/config:apply-config-directive
        '("bind" "-n" "WheelUpPane" "next-window"))
-      (cl-tmux::%dispatch-mouse-event s 64 0 0 nil)
+      (nerimux::%dispatch-mouse-event s 64 0 0 nil)
       (expect (eq (second (session-windows s)) (session-active-window s)))
       (expect (screen-copy-mode-p (active-screen s)) :to-be-falsy)))
 
   ;; With no WheelUpPane binding, wheel-up still enters copy mode (default).
   (it "mouse-unbound-wheel-up-keeps-default-behavior"
     (with-isolated-mouse-session (s)
-      (cl-tmux::%dispatch-mouse-event s 64 0 0 nil)
+      (nerimux::%dispatch-mouse-event s 64 0 0 nil)
       (expect (screen-copy-mode-p (active-screen s)) :to-be-truthy)))
 
   ;; In copy mode, a copy-mode-vi mouse binding fires, overriding the built-in
   ;; wheel scroll (the copy-mode table is consulted before the root table).
   (it "mouse-copy-mode-table-binding-fires"
     (with-isolated-mouse-session (s :nwindows 2)
-      (cl-tmux/options:set-option "mode-keys" "vi")
-      (cl-tmux/config:apply-config-directive
+      (nerimux/options:set-option "mode-keys" "vi")
+      (nerimux/config:apply-config-directive
        '("bind" "-T" "copy-mode-vi" "WheelUpPane" "next-window"))
-      (cl-tmux/commands:copy-mode-enter (active-screen s))
-      (cl-tmux::%dispatch-mouse-event s 64 0 0 nil)
+      (nerimux/commands:copy-mode-enter (active-screen s))
+      (nerimux::%dispatch-mouse-event s 64 0 0 nil)
       (expect (eq (second (session-windows s)) (session-active-window s)))))
 
   ;;; ── Double / triple click detection ─────────────────────────────────────────
@@ -217,22 +217,22 @@
   ;; %mouse-click-count increments when a press is within the threshold at the same cell.
   (it "mouse-click-count-increments-within-threshold"
     (check-table
-     (list (list (cl-tmux::%mouse-click-count '(1000 5 0 1) 1200 5 0 500)
+     (list (list (nerimux::%mouse-click-count '(1000 5 0 1) 1200 5 0 500)
                  2 "within 500ms, same cell → 2")
-           (list (cl-tmux::%mouse-click-count '(1000 5 0 2) 1400 5 0 500)
+           (list (nerimux::%mouse-click-count '(1000 5 0 2) 1400 5 0 500)
                  3 "third click within threshold → 3"))))
 
   ;; %mouse-click-count resets to 1 when the press is too slow, at a different cell,
   ;; or there is no previous click.
   (it "mouse-click-count-resets-when-slow-or-moved"
     (check-table
-     (list (list (cl-tmux::%mouse-click-count '(1000 5 0 1) 1600 5 0 500)
+     (list (list (nerimux::%mouse-click-count '(1000 5 0 1) 1600 5 0 500)
                  1 "beyond threshold → reset to 1")
-           (list (cl-tmux::%mouse-click-count '(1000 5 0 1) 1100 6 0 500)
+           (list (nerimux::%mouse-click-count '(1000 5 0 1) 1100 6 0 500)
                  1 "different column → reset")
-           (list (cl-tmux::%mouse-click-count '(1000 5 0 1) 1100 5 1 500)
+           (list (nerimux::%mouse-click-count '(1000 5 0 1) 1100 5 1 500)
                  1 "different row → reset")
-           (list (cl-tmux::%mouse-click-count nil 1000 5 0 500)
+           (list (nerimux::%mouse-click-count nil 1000 5 0 500)
                  1 "no previous click → 1"))))
 
   ;; Two quick left-clicks at the same cell select the word under the pointer.
@@ -241,9 +241,9 @@
       (feed (active-screen s) "foo bar baz")
       ;; Two presses at col 5 row 0 (inside "bar"); the rapid succession is
       ;; naturally within double-click-time (500ms).
-      (cl-tmux::%dispatch-mouse-event s 0 5 0 nil)
-      (cl-tmux::%dispatch-mouse-event s 0 5 0 nil)
-      (expect (string= "bar" (cl-tmux/commands::%selection-text (active-screen s))))))
+      (nerimux::%dispatch-mouse-event s 0 5 0 nil)
+      (nerimux::%dispatch-mouse-event s 0 5 0 nil)
+      (expect (string= "bar" (nerimux/commands::%selection-text (active-screen s))))))
 
   ;;; ── Border-at-position ───────────────────────────────────────────────────────
 
@@ -252,12 +252,12 @@
     (with-h-split-81-24 (p0 p1 win)
       ;; Separator is at column 40
       (multiple-value-bind (split orient)
-          (cl-tmux::%border-at-position win 40 5)
+          (nerimux::%border-at-position win 40 5)
         (expect split :to-be-truthy)
         (expect (eq :h orient)))
       ;; Not a border at col 0
       (multiple-value-bind (split orient)
-          (cl-tmux::%border-at-position win 0 5)
+          (nerimux::%border-at-position win 0 5)
         (declare (ignore orient))
         (expect split :to-be-falsy))))
 
@@ -270,7 +270,7 @@
                              :panes (list p0)
                              :tree  (make-layout-leaf p0))))
       (multiple-value-bind (split orient)
-          (cl-tmux::%border-at-position win 40 12)
+          (nerimux::%border-at-position win 40 12)
         (declare (ignore orient))
         (expect split :to-be-falsy))))
 
@@ -284,8 +284,8 @@
                             :x 0 :y 0 :width 40 :height 24
                             :screen scr)))
       ;; Default mouse-mode is 0 — no tracking requested
-      (expect (zerop (cl-tmux/terminal/types:screen-mouse-mode scr)))
-      (expect (cl-tmux::%try-mouse-passthrough nil pane 0 5 3 nil) :to-be-falsy)))
+      (expect (zerop (nerimux/terminal/types:screen-mouse-mode scr)))
+      (expect (nerimux::%try-mouse-passthrough nil pane 0 5 3 nil) :to-be-falsy)))
 
   ;; In X10 mouse mode (mode 1), release events must NOT be forwarded to the
   ;; pane; only button presses are forwarded in this mode.
@@ -294,10 +294,10 @@
            (pane (make-pane :id 1 :fd -1 :pid -1
                             :x 0 :y 0 :width 40 :height 24
                             :screen scr)))
-      (setf (cl-tmux/terminal/types:screen-mouse-mode scr) 1)
+      (setf (nerimux/terminal/types:screen-mouse-mode scr) 1)
       ;; Release with fd=-1 returns NIL from %encode-mouse-for-pane (fd guard),
       ;; but the filter for mode=1 should reject release events before fd-check.
-      (expect (cl-tmux::%try-mouse-passthrough nil pane 0 5 3 t) :to-be-falsy)))
+      (expect (nerimux::%try-mouse-passthrough nil pane 0 5 3 t) :to-be-falsy)))
 
   ;; In button-event mode (mode 2), release events ARE forwarded.
   (it "mouse-passthrough-mode2-forwards-release"
@@ -306,7 +306,7 @@
              (pane (make-pane :id 1 :fd wfd :pid -1
                               :x 0 :y 0 :width 40 :height 24
                               :screen scr)))
-        (setf (cl-tmux/terminal/types:screen-mouse-mode scr) 2)
-        (let ((result (cl-tmux::%try-mouse-passthrough nil pane 0 5 3 t)))
+        (setf (nerimux/terminal/types:screen-mouse-mode scr) 2)
+        (let ((result (nerimux::%try-mouse-passthrough nil pane 0 5 3 t)))
           (expect (eq result t)))
-        (expect (cl-tmux/pty:select-fds (list rfd) 20000) :to-be-truthy)))))
+        (expect (nerimux/pty:select-fds (list rfd) 20000) :to-be-truthy)))))

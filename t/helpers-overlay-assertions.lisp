@@ -1,6 +1,6 @@
-;;;; Overlay, prompt, and sequence assertion helpers for cl-tmux tests.
+;;;; Overlay, prompt, and sequence assertion helpers for nerimux tests.
 
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 (defun overlay-text (overlay)
   "Normalize OVERLAY contents to a string suitable for substring checks."
@@ -33,8 +33,8 @@
   (declare (ignore context args))
   `(progn
      (expect (null ,form))
-     (expect cl-tmux::*dirty* :to-be-falsy)
-     (assert-overlay-contains ,message cl-tmux::*overlay*)))
+     (expect nerimux::*dirty* :to-be-falsy)
+     (assert-overlay-contains ,message nerimux::*overlay*)))
 
 (defmacro with-temporary-posix-environment-variable ((name value) &body body)
   "Bind NAME to VALUE in the real process environment for BODY and restore it."
@@ -117,7 +117,7 @@
                                  &body body)
   "Run DISPATCH-COMMAND for COMMAND in a fake session and assert an overlay opens."
   `(with-overlay-session (,session-spec :context ,(or context "dispatch-command must open an overlay"))
-       (cl-tmux::dispatch-command ,(if (consp session-spec) (first session-spec) session-spec)
+       (nerimux::dispatch-command ,(if (consp session-spec) (first session-spec) session-spec)
                                   ,command ,args)
      ,@body))
 
@@ -129,11 +129,11 @@
         (session-args (if (consp session-spec) (rest session-spec) nil)))
     (if session-args
         `(with-overlay-session (,session-spec)
-             (cl-tmux::%run-command-line ,session-var
+             (nerimux::%run-command-line ,session-var
                                          ,command)
            ,@body)
         `(let ((*overlay* nil))
-           (cl-tmux::%run-command-line ,session-var
+           (nerimux::%run-command-line ,session-var
                                        ,command)
            (expect (overlay-active-p) :to-be-truthy)
            ,@body))))
@@ -146,7 +146,7 @@
         (session-args (if (consp session-spec) (rest session-spec) nil)))
     `(with-fake-session (,session-var ,@session-args)
        (let ((*prompt* nil))
-         (cl-tmux::dispatch-command ,session-var ,command ,args)
+         (nerimux::dispatch-command ,session-var ,command ,args)
          (expect (prompt-active-p) :to-be-truthy)
          ,(when label
             `(expect (string= ,label (prompt-label *prompt*))))

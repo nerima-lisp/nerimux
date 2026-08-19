@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Dispatch test suite and shared support macros.
 ;;;;
@@ -12,13 +12,13 @@
   "Bind SESSION-VAR and SCREEN-VAR in an active copy-mode session.
    Optional FEED seeds the screen before BODY runs."
   `(with-fake-session (,session-var)
-     (cl-tmux::dispatch-command ,session-var :copy-mode-enter nil)
+     (nerimux::dispatch-command ,session-var :copy-mode-enter nil)
      (let ((,screen-var (active-screen ,session-var)))
        ,@(when feed `((feed ,screen-var ,feed)))
        ,@body)))
 
 (defmacro with-mocked-respawn-pane ((respawn-mock-var reader-mock-var) &body body)
-  "Execute BODY with cl-tmux/model:respawn-pane and cl-tmux::start-reader-thread
+  "Execute BODY with nerimux/model:respawn-pane and nerimux::start-reader-thread
    replaced by cl-weave mock functions, bound to RESPAWN-MOCK-VAR and
    READER-MOCK-VAR (originals restored automatically on exit via
    cl-weave:with-mocked-functions).  Query call history with
@@ -33,20 +33,20 @@
          (,reader-mock-var
           (make-mock-function (lambda (pane) (declare (ignore pane))))))
      (with-mocked-functions
-         (((fdefinition 'cl-tmux/model:respawn-pane) ,respawn-mock-var)
-          ((fdefinition 'cl-tmux::start-reader-thread) ,reader-mock-var))
+         (((fdefinition 'nerimux/model:respawn-pane) ,respawn-mock-var)
+          ((fdefinition 'nerimux::start-reader-thread) ,reader-mock-var))
        ,@body)))
 
 (defmacro with-stubbed-switch-to-session ((target-var) &body body)
-  "Execute BODY with cl-tmux::%switch-to-session replaced by a stub that
+  "Execute BODY with nerimux::%switch-to-session replaced by a stub that
    records its TARGET argument into TARGET-VAR.  Restores the original
    function via unwind-protect."
   (let ((orig (gensym "ORIG-SWITCH-TO-SESSION")))
     `(let* ((,target-var nil)
-            (,orig (fdefinition 'cl-tmux::%switch-to-session)))
+            (,orig (fdefinition 'nerimux::%switch-to-session)))
        (unwind-protect
            (progn
-             (setf (fdefinition 'cl-tmux::%switch-to-session)
+             (setf (fdefinition 'nerimux::%switch-to-session)
                    (lambda (target) (setf ,target-var target)))
              ,@body)
-         (setf (fdefinition 'cl-tmux::%switch-to-session) ,orig)))))
+         (setf (fdefinition 'nerimux::%switch-to-session) ,orig)))))

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 (describe "layout-tree-suite"
 
@@ -22,13 +22,13 @@
     (let* ((l0    (tl-leaf 1 1 1))
            (l1    (tl-leaf 2 1 1))
            (split (make-layout-split :h l0 l1)))
-      (multiple-value-bind (p s) (cl-tmux/model::%direct-child-side split l0)
+      (multiple-value-bind (p s) (nerimux/model::%direct-child-side split l0)
         (expect (eq split p))
         (expect (eq :first s)))
-      (multiple-value-bind (p s) (cl-tmux/model::%direct-child-side split l1)
+      (multiple-value-bind (p s) (nerimux/model::%direct-child-side split l1)
         (expect (eq split p))
         (expect (eq :second s)))
-      (multiple-value-bind (p s) (cl-tmux/model::%direct-child-side split (tl-leaf 99 1 1))
+      (multiple-value-bind (p s) (nerimux/model::%direct-child-side split (tl-leaf 99 1 1))
         (expect (null p))
         (expect (null s)))))
 
@@ -64,5 +64,5 @@
       (expect (null (layout-find-leaf tree (make-pane :id 99 :fd -1 :pid -1
                                                   :screen (make-screen 1 1))))))
     ;; layout-min-extent: fold with extra orient arg -- nil case returns 0
-    (expect (= 0 (cl-tmux/model::layout-min-extent nil :h)))
-    (expect (= 0 (cl-tmux/model::layout-min-extent nil :v)))))
+    (expect (= 0 (nerimux/model::layout-min-extent nil :h)))
+    (expect (= 0 (nerimux/model::layout-min-extent nil :v)))))

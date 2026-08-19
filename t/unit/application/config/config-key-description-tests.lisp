@@ -1,11 +1,11 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Key binding description and list-keys rendering tests.
 
 ;;; ── Import the config symbols we need ────────────────────────────────────
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (import '(cl-tmux/config:describe-key-bindings)))
+  (import '(nerimux/config:describe-key-bindings)))
 
 (describe "config-suite"
 
@@ -22,27 +22,27 @@
   ;; printable single characters (audit #35).
   (it "prefix-named-single-byte-key-reachable-at-runtime"
     (with-isolated-config
-      (cl-tmux/config:load-config-from-string "bind Enter next-window")
-      (let ((entry (cl-tmux::%key-table-entry-by-candidates
-                    cl-tmux/config:+table-prefix+
-                    (cl-tmux::%single-byte-key-candidates 13))))
+      (nerimux/config:load-config-from-string "bind Enter next-window")
+      (let ((entry (nerimux::%key-table-entry-by-candidates
+                    nerimux/config:+table-prefix+
+                    (nerimux::%single-byte-key-candidates 13))))
         (expect (not (null entry)))
-        (expect (eq :next-window (cl-tmux/config:key-table-command entry))))))
+        (expect (eq :next-window (nerimux/config:key-table-command entry))))))
 
   ;; Default prefix multi-byte keys are present in the key table and resize arrows are repeatable.
   (it "default-prefix-string-bindings-are-listed-and-repeatable"
     (with-isolated-config
-      (let ((up-entry (cl-tmux/config:key-table-lookup "prefix" "Up"))
-            (ctrl-right-entry (cl-tmux/config:key-table-lookup "prefix" "C-Right"))
-            (meta-right-entry (cl-tmux/config:key-table-lookup "prefix" "M-Right"))
-            (text (cl-tmux/config:describe-key-bindings-for-table "prefix")))
-        (expect (eq :select-pane-up (cl-tmux/config:key-table-command up-entry)))
+      (let ((up-entry (nerimux/config:key-table-lookup "prefix" "Up"))
+            (ctrl-right-entry (nerimux/config:key-table-lookup "prefix" "C-Right"))
+            (meta-right-entry (nerimux/config:key-table-lookup "prefix" "M-Right"))
+            (text (nerimux/config:describe-key-bindings-for-table "prefix")))
+        (expect (eq :select-pane-up (nerimux/config:key-table-command up-entry)))
         (expect (equal '("resize-pane" "-R" "1")
-                       (cl-tmux/config:key-table-command ctrl-right-entry)))
+                       (nerimux/config:key-table-command ctrl-right-entry)))
         (expect (equal '("resize-pane" "-R" "5")
-                       (cl-tmux/config:key-table-command meta-right-entry)))
-        (expect (cl-tmux/config:key-table-repeatable-p ctrl-right-entry))
-        (expect (cl-tmux/config:key-table-repeatable-p meta-right-entry))
+                       (nerimux/config:key-table-command meta-right-entry)))
+        (expect (nerimux/config:key-table-repeatable-p ctrl-right-entry))
+        (expect (nerimux/config:key-table-repeatable-p meta-right-entry))
         (expect (search "bind-key -T prefix Up select-pane-up" text))
         (expect (search "bind-key -T prefix -r C-Right resize-pane -R 1" text)))))
 
@@ -113,7 +113,7 @@
         ("Enter"   :copy-mode-copy-pipe-and-cancel          "Enter copy-pipe-and-cancel")
         ("BSpace"  :copy-mode-cursor-left                   "BSpace moves left")
         ("PageUp"  :copy-mode-page-up                       "PageUp pages up"))
-      (let ((text (cl-tmux/config:describe-key-bindings-for-table "copy-mode-vi")))
+      (let ((text (nerimux/config:describe-key-bindings-for-table "copy-mode-vi")))
         (dolist (fragment '("bind-key -T copy-mode-vi j copy-mode-cursor-down"
                             "bind-key -T copy-mode-vi Escape copy-mode-clear-selection"
                             "bind-key -T copy-mode-vi q copy-mode-exit"
@@ -187,7 +187,7 @@
          "M-{ moves to the previous paragraph")
         ("M-}" :copy-mode-next-paragraph
          "M-} moves to the next paragraph"))
-      (let ((text (cl-tmux/config:describe-key-bindings-for-table "copy-mode")))
+      (let ((text (nerimux/config:describe-key-bindings-for-table "copy-mode")))
         (expect (search "bind-key -T copy-mode C-Space copy-mode-begin-selection" text))
         (expect (search "bind-key -T copy-mode C-l copy-mode-cursor-centre-vertical" text))
         (expect (search "bind-key -T copy-mode M-f copy-mode-word-end" text))
@@ -203,26 +203,26 @@
   ;; Default copy-mode emacs q exits copy-mode and appears in list-keys output.
   (it "default-copy-mode-emacs-q-exits"
     (with-isolated-config
-      (let ((escape-entry (cl-tmux/config:key-table-lookup "copy-mode" "Escape"))
-            (q-entry (cl-tmux/config:key-table-lookup "copy-mode" #\q))
-            (text (cl-tmux/config:describe-key-bindings-for-table "copy-mode")))
+      (let ((escape-entry (nerimux/config:key-table-lookup "copy-mode" "Escape"))
+            (q-entry (nerimux/config:key-table-lookup "copy-mode" #\q))
+            (text (nerimux/config:describe-key-bindings-for-table "copy-mode")))
         (expect (eq :copy-mode-exit
-                    (cl-tmux/config:key-table-command escape-entry)))
+                    (nerimux/config:key-table-command escape-entry)))
         (expect (eq :copy-mode-exit
-                    (cl-tmux/config:key-table-command q-entry)))
+                    (nerimux/config:key-table-command q-entry)))
         (expect (search "bind-key -T copy-mode Escape copy-mode-exit" text))
         (expect (search "bind-key -T copy-mode q copy-mode-exit" text)))))
 
   ;; Default copy-mode emacs C-M-b/C-M-f jump between matching brackets.
   (it "default-copy-mode-emacs-control-meta-bracket-bindings"
     (with-isolated-config
-      (let ((prev-entry (cl-tmux/config:key-table-lookup "copy-mode" "C-M-b"))
-            (next-entry (cl-tmux/config:key-table-lookup "copy-mode" "C-M-f"))
-            (text (cl-tmux/config:describe-key-bindings-for-table "copy-mode")))
+      (let ((prev-entry (nerimux/config:key-table-lookup "copy-mode" "C-M-b"))
+            (next-entry (nerimux/config:key-table-lookup "copy-mode" "C-M-f"))
+            (text (nerimux/config:describe-key-bindings-for-table "copy-mode")))
         (expect (eq :copy-mode-previous-matching-bracket
-                    (cl-tmux/config:key-table-command prev-entry)))
+                    (nerimux/config:key-table-command prev-entry)))
         (expect (eq :copy-mode-next-matching-bracket
-                    (cl-tmux/config:key-table-command next-entry)))
+                    (nerimux/config:key-table-command next-entry)))
         (expect (search "bind-key -T copy-mode C-M-b copy-mode-previous-matching-bracket"
                         text))
         (expect (search "bind-key -T copy-mode C-M-f copy-mode-next-matching-bracket"
@@ -231,19 +231,19 @@
   ;; Default copy-mode emacs C-Up/C-Down and M-Up/M-Down match tmux scrolling keys.
   (it "default-copy-mode-emacs-modifier-arrow-bindings"
     (with-isolated-config
-      (let ((c-up-entry (cl-tmux/config:key-table-lookup "copy-mode" "C-Up"))
-            (c-down-entry (cl-tmux/config:key-table-lookup "copy-mode" "C-Down"))
-            (m-up-entry (cl-tmux/config:key-table-lookup "copy-mode" "M-Up"))
-            (m-down-entry (cl-tmux/config:key-table-lookup "copy-mode" "M-Down"))
-            (text (cl-tmux/config:describe-key-bindings-for-table "copy-mode")))
+      (let ((c-up-entry (nerimux/config:key-table-lookup "copy-mode" "C-Up"))
+            (c-down-entry (nerimux/config:key-table-lookup "copy-mode" "C-Down"))
+            (m-up-entry (nerimux/config:key-table-lookup "copy-mode" "M-Up"))
+            (m-down-entry (nerimux/config:key-table-lookup "copy-mode" "M-Down"))
+            (text (nerimux/config:describe-key-bindings-for-table "copy-mode")))
         (expect (eq :copy-mode-scroll-up-line
-                    (cl-tmux/config:key-table-command c-up-entry)))
+                    (nerimux/config:key-table-command c-up-entry)))
         (expect (eq :copy-mode-scroll-down-line
-                    (cl-tmux/config:key-table-command c-down-entry)))
+                    (nerimux/config:key-table-command c-down-entry)))
         (expect (eq :copy-mode-half-page-up
-                    (cl-tmux/config:key-table-command m-up-entry)))
+                    (nerimux/config:key-table-command m-up-entry)))
         (expect (eq :copy-mode-half-page-down
-                    (cl-tmux/config:key-table-command m-down-entry)))
+                    (nerimux/config:key-table-command m-down-entry)))
         (expect (search "bind-key -T copy-mode C-Up copy-mode-scroll-up-line" text))
         (expect (search "bind-key -T copy-mode M-Down copy-mode-half-page-down" text)))))
 
@@ -268,6 +268,6 @@
   ;; describe-key-bindings-for-key returns only bindings whose key label matches.
   (it "describe-key-bindings-for-key-filters-by-key-label"
     (with-isolated-config
-      (let ((text (cl-tmux/config:describe-key-bindings-for-key "prefix" "C-Right")))
+      (let ((text (nerimux/config:describe-key-bindings-for-key "prefix" "C-Right")))
         (expect (search "bind-key -T prefix -r C-Right resize-pane -R 1" text))
         (expect (null (search "bind-key -T prefix Up select-pane-up" text)))))))

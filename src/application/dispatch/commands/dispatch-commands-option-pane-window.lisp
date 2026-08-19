@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; -- rename/select window %cmd-* handlers -----------------------------------
 ;;;
@@ -36,7 +36,7 @@
         (server-remove-session (session-name session))
         (rename-session session new-name)
         (server-add-session session)
-        (cl-tmux/hooks:run-hooks cl-tmux/hooks:+hook-session-renamed+ session)
+        (nerimux/hooks:run-hooks nerimux/hooks:+hook-session-renamed+ session)
         t))))
 
 (defun %cmd-rename-session (session args)
@@ -108,4 +108,4 @@
                                      (%flag-present-p flags #\T))))
     ;; after-select-window: tmux's per-command hook (run-hooks now fires both the
     ;; add-hook and the .tmux.conf set-hook registries).
-    (cl-tmux/hooks:run-hooks cl-tmux/hooks:+hook-after-select-window+ session)))
+    (nerimux/hooks:run-hooks nerimux/hooks:+hook-after-select-window+ session)))

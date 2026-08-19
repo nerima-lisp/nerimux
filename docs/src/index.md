@@ -1,4 +1,4 @@
-# cl-tmux
+# nerimux
 
 A workspace-oriented terminal multiplexer written entirely in Common Lisp.
 
@@ -70,7 +70,7 @@ of what is implemented and what is deliberately different.
 - **cl-parser-kit** — the command-line tokenizer.
 - **cl-history-kit** — command-prompt history store and recall.
 
-**cl-tmux has no external dependencies.** Every name above except SBCL is a
+**nerimux has no external dependencies.** Every name above except SBCL is a
 `nerima-lisp` sibling. Four external libraries were retired to get here:
 **CFFI** and **babel** on 2026-08-01, then **bordeaux-threads** and
 **cl-ppcre** on 2026-08-02. Each was replaced by a sibling rather than by
@@ -81,17 +81,17 @@ it. Dropping the hand-written `ioctl` fixed a bug: it used a fixed prototype for
 a variadic syscall, which misfires on the arm64 ABI, so pane resize was a silent
 no-op on Apple Silicon. And cl-regex-kit is not a drop-in for cl-ppcre — it is
 RE2/Rust-style, with **no backreferences and no lookaround** in patterns. That
-is a deliberate trade, and it moves cl-tmux *closer* to real tmux, which
+is a deliberate trade, and it moves nerimux *closer* to real tmux, which
 compiles these same patterns with `regcomp()` + `REG_EXTENDED`, i.e. POSIX ERE,
 which has neither construct either. `\1` in a `#{s/…/…/}` **replacement** is
 unaffected: that is expanded by the substitution layer, not the engine, in
-cl-tmux exactly as in tmux's own `regsub.c`.
+nerimux exactly as in tmux's own `regsub.c`.
 
 See [Dogfooded sibling libraries](guide/sibling-libraries.md).
 
 ## Project
 
-- Source and issues: <https://github.com/nerima-lisp/cl-tmux>
+- Source and issues: <https://github.com/nerima-lisp/nerimux>
 - Contribution guide, code of conduct, security policy and support channels
   are the organization-wide files published from
   [nerima-lisp/.github](https://github.com/nerima-lisp/.github).

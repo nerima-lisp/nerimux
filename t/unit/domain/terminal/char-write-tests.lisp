@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; char-write tests (src/domain/terminal/char-write.lisp).
 ;;;;
@@ -48,8 +48,8 @@
       (expect (= width (char-width ch)))
       ;; And the predicate is that width being zero — nothing else.
       (if (zerop width)
-          (expect (cl-tmux/terminal/actions:combining-char-p ch))
-          (expect (cl-tmux/terminal/actions:combining-char-p ch) :to-be-falsy)))))
+          (expect (nerimux/terminal/actions:combining-char-p ch))
+          (expect (nerimux/terminal/actions:combining-char-p ch) :to-be-falsy)))))
 
 ;;; ── SUITE: U+3099 / U+309A — the defect this file exists for ────────────────
 ;;;
@@ -65,9 +65,9 @@
   ;; The marks contribute no columns: the cursor does not move past the base.
   (it "kana-sound-mark-does-not-advance-the-cursor"
     (with-screen (s 10 5)
-      (cl-tmux/terminal/actions:write-char-at-cursor s (code-char #x304B)) ; か
+      (nerimux/terminal/actions:write-char-at-cursor s (code-char #x304B)) ; か
       (check-cursor s 2 0)
-      (cl-tmux/terminal/actions:write-char-at-cursor s (code-char #x3099))
+      (nerimux/terminal/actions:write-char-at-cursor s (code-char #x3099))
       (check-cursor s 2 0)))
 
   ;; か + U+3099 occupies the same cells as the precomposed が.
@@ -100,8 +100,8 @@
             (cont (screen-cell s 1 0)))
         (expect (char= (code-char #x304B) (cell-char lead)))
         (expect (member (code-char #x3099)
-                        (cl-tmux/terminal/types:cell-combining lead)))
-        (expect (null (cl-tmux/terminal/types:cell-combining cont))))))
+                        (nerimux/terminal/types:cell-combining lead)))
+        (expect (null (nerimux/terminal/types:cell-combining cont))))))
 
   ;; The semi-voiced mark behaves identically: は + U+309A reads as ぱ's cells.
   (it "kana-semi-voiced-mark-attaches-to-the-lead-cell"
@@ -111,7 +111,7 @@
                            'string))
       (check-cursor s 2 0)
       (expect (member (code-char #x309A)
-                      (cl-tmux/terminal/types:cell-combining (screen-cell s 0 0)))))))
+                      (nerimux/terminal/types:cell-combining (screen-cell s 0 0)))))))
 
 ;;; ── SUITE: a plain combining mark still behaves ─────────────────────────────
 ;;;
@@ -130,7 +130,7 @@
         (expect (char= #\e (cell-char cell)))
         (expect (= 1 (cell-width cell)))
         (expect (member (code-char #x0301)
-                        (cl-tmux/terminal/types:cell-combining cell))))))
+                        (nerimux/terminal/types:cell-combining cell))))))
 
   ;; Several marks stack on one base, in the order they arrived.
   (it "stacked-combining-marks-accumulate-in-order"
@@ -138,7 +138,7 @@
       (utf8-feed s (coerce (list #\a (code-char #x0301) (code-char #x0308)) 'string))
       (check-cursor s 1 0)
       (expect (equal (list (code-char #x0301) (code-char #x0308))
-                     (cl-tmux/terminal/types:cell-combining (screen-cell s 0 0)))))))
+                     (nerimux/terminal/types:cell-combining (screen-cell s 0 0)))))))
 
 ;;; ── SUITE: Cf format characters combine (the decision, pinned) ──────────────
 ;;;
@@ -157,7 +157,7 @@
       (utf8-feed s (coerce (list #\a (code-char #x200D)) 'string))
       (check-cursor s 1 0)
       (expect (member (code-char #x200D)
-                      (cl-tmux/terminal/types:cell-combining (screen-cell s 0 0))))))
+                      (nerimux/terminal/types:cell-combining (screen-cell s 0 0))))))
 
   ;; An emoji ZWJ sequence costs only its glyphs: 2 + 0 + 2 columns, never 5.
   (it "emoji-zwj-sequence-costs-no-extra-column"
@@ -168,7 +168,7 @@
                            'string))
       (check-cursor s 4 0)
       (expect (member (code-char #x200D)
-                      (cl-tmux/terminal/types:cell-combining (screen-cell s 0 0))))))
+                      (nerimux/terminal/types:cell-combining (screen-cell s 0 0))))))
 
   ;; The other zero-width format controls take the same path.
   (it-each ((#x200B "zero width space")
@@ -183,16 +183,16 @@
       (utf8-feed s (coerce (list #\a (code-char cp)) 'string))
       (check-cursor s 1 0)
       (expect (member (code-char cp)
-                      (cl-tmux/terminal/types:cell-combining (screen-cell s 0 0))))))
+                      (nerimux/terminal/types:cell-combining (screen-cell s 0 0))))))
 
   ;; U+00AD SOFT HYPHEN is the Cf that CHAR-WIDTH exempts: it keeps its column.
   (it "soft-hyphen-is-not-combining"
     (with-screen (s 10 5)
-      (expect (cl-tmux/terminal/actions:combining-char-p (code-char #x00AD))
+      (expect (nerimux/terminal/actions:combining-char-p (code-char #x00AD))
               :to-be-falsy)
       (utf8-feed s (coerce (list #\a (code-char #x00AD)) 'string))
       (check-cursor s 2 0)
-      (expect (null (cl-tmux/terminal/types:cell-combining (screen-cell s 0 0)))))))
+      (expect (null (nerimux/terminal/types:cell-combining (screen-cell s 0 0)))))))
 
 ;;; ── SUITE: control codes are NOT combining ──────────────────────────────────
 ;;;
@@ -221,7 +221,7 @@
     (let ((ch (code-char cp)))
       ;; The width really is 0 — this is exactly the trap the guard exists for.
       (expect (= 0 (char-width ch)))
-      (expect (cl-tmux/terminal/actions:combining-char-p ch) :to-be-falsy)))
+      (expect (nerimux/terminal/actions:combining-char-p ch) :to-be-falsy)))
 
   ;; The C1 control that actually reaches WRITE-CODEPOINT: feeding C2 80 after a
   ;; base character must not glue U+0080 onto that character's cell.
@@ -230,7 +230,7 @@
       (utf8-feed s (coerce (list #\a (code-char #x0080)) 'string))
       (let ((cell (screen-cell s 0 0)))
         (expect (char= #\a (cell-char cell)))
-        (expect (null (cl-tmux/terminal/types:cell-combining cell))))
+        (expect (null (nerimux/terminal/types:cell-combining cell))))
       ;; It went to a cell of its own, so the cursor advanced past the base.
       (expect (= 2 (screen-cursor-x s)))))
 
@@ -240,4 +240,4 @@
     (with-screen (s 20 5)
       (feed s (format nil "a~C" #\Tab))
       (check-cursor s 8 0)
-      (expect (null (cl-tmux/terminal/types:cell-combining (screen-cell s 0 0)))))))
+      (expect (null (nerimux/terminal/types:cell-combining (screen-cell s 0 0)))))))

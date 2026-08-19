@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/config)
+(in-package #:nerimux/config)
 
 ;;; -- Simple directive instantiation + set-option flag handling ---------------
 ;;;
@@ -8,17 +8,17 @@
 ;;; Option runtime side effects and set-hook live in
 ;;; config-option-side-effects.lisp.
 
-(declaim (special cl-tmux/options:*global-options*
-                  cl-tmux/options:*server-options*))
+(declaim (special nerimux/options:*global-options*
+                  nerimux/options:*server-options*))
 
 ;;; ── Simple directive definitions ─────────────────────────────────────────
 ;;;
-;;; The set-option canonical commands all forward to cl-tmux/options:set-option
+;;; The set-option canonical commands all forward to nerimux/options:set-option
 ;;; at config-file load time, because no session/window/pane context is
 ;;; available during config parsing.
 ;;;
 ;;; Runtime commands that carry a window or pane context should call
-;;; cl-tmux/options:set-option-for-window / set-option-for-pane directly to
+;;; nerimux/options:set-option-for-window / set-option-for-pane directly to
 ;;; store in the per-struct local-options hash.
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
@@ -28,7 +28,7 @@
   (defun %set-directive-config-rule (command-name)
     "Return the canonical fixed-arity config rule for one set-family command."
     `(,command-name 2 (option-name option-value)
-      (cl-tmux/options:set-option option-name option-value)
+      (nerimux/options:set-option option-name option-value)
       t)))
 
 (defmacro define-core-config-directives ()
@@ -43,7 +43,7 @@
      ;; and the four call sites that compute a pane height that way have no floor
      ;; of their own.
      ("set-status-height" 1 (n)
-       (let ((height (cl-tmux::%parse-integer-or-nil n :junk-allowed t)))
+       (let ((height (nerimux::%parse-integer-or-nil n :junk-allowed t)))
          (when (and height (plusp height))
            (setf *status-height* (min height +max-status-lines+))
            t)))
@@ -99,16 +99,16 @@
 
 (defparameter +unsupported-set-option-names+
   '()
-  "Options whose tmux syntax implies behavior cl-tmux does not implement.
+  "Options whose tmux syntax implies behavior nerimux does not implement.
    Empty since terminal-overrides/terminal-features were un-rejected: real tmux
    ACCEPTS and stores them (they appear in virtually every real .tmux.conf, e.g.
    `set-option -ga terminal-overrides \",xterm-256color:Tc\"`), so rejecting them broke
-   config transparency even though cl-tmux applies no terminal-matching
+   config transparency even though nerimux applies no terminal-matching
    behavior.  Kept as a named list so a future genuinely-unrepresentable option
    has a documented home.")
 
 (defun %unsupported-set-option-p (name)
-  "Return T when NAME is a set-option target cl-tmux must reject."
+  "Return T when NAME is a set-option target nerimux must reject."
   (member name +unsupported-set-option-names+ :test #'string=))
 
 (defun %strip-set-flags (args)
@@ -151,15 +151,15 @@
 
 (defun %coerce-set-value (raw-value format-p hostname)
   "Coerce RAW-VALUE for storage.  When FORMAT-P is T, expand it as a format
-   string using a minimal context (HOSTNAME + cl-tmux version); on expansion
+   string using a minimal context (HOSTNAME + nerimux version); on expansion
    failure the raw string is returned unchanged.
    HOSTNAME must be pre-computed by the caller to keep this function pure
    (no I/O side-effects)."
   (if format-p
       (let ((ctx (list :hostname hostname
-                       :version (cl-tmux/version:version-string))))
+                       :version (nerimux/version:version-string))))
         (handler-case
-            (cl-tmux/format:expand-format raw-value ctx)
+            (nerimux/format:expand-format raw-value ctx)
           (error () raw-value)))
       raw-value))
 
@@ -168,12 +168,12 @@
    When SERVER-P is true, the server options store is used; otherwise the global
    options store.  The triple is consumed by %route-set-value."
   (if server-p
-      (values #'cl-tmux/options:get-server-option
-              #'cl-tmux/options:set-server-option
-              cl-tmux/options:*server-options*)
-      (values #'cl-tmux/options:get-option
-              #'cl-tmux/options:set-option
-              cl-tmux/options:*global-options*)))
+      (values #'nerimux/options:get-server-option
+              #'nerimux/options:set-server-option
+              nerimux/options:*server-options*)
+      (values #'nerimux/options:get-option
+              #'nerimux/options:set-option
+              nerimux/options:*global-options*)))
 
 (defun %set-option-already-present-p (name server-p)
   "True when NAME already has a stored value in the options table indicated by
@@ -194,7 +194,7 @@
       (append-p
        (funcall setter
                 name
-                (cl-tmux/options:append-option-value
+                (nerimux/options:append-option-value
                  name (funcall getter name nil) value)))
       (t
        (funcall setter name value)))))

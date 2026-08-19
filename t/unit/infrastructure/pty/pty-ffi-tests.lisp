@@ -1,9 +1,9 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Platform constant tests (src/infrastructure/pty/pty-ffi.lisp).
 ;;;;
 ;;;; This suite used to be ~110 lines of fd_set bit-manipulation tests covering
-;;;; cl-tmux's hand-rolled FD_ZERO/FD_SET/FD_ISSET over a foreign :uint32 array,
+;;;; nerimux's hand-rolled FD_ZERO/FD_SET/FD_ISSET over a foreign :uint32 array,
 ;;;; plus reachability checks on a cffi-declared %select and the TIOCGWINSZ /
 ;;;; TIOCSWINSZ request numbers. All of that was deleted, not merely retargeted:
 ;;;;
@@ -29,24 +29,24 @@
 
   ;; +stdout-fd+ is 1, the descriptor terminal-size queries.
   (it "stdout-fd-constant-is-1"
-    (expect (= 1 cl-tmux/pty::+stdout-fd+)))
+    (expect (= 1 nerimux/pty::+stdout-fd+)))
 
   ;;; ── Retired foreign surface ──────────────────────────────────────────────
 
-  ;; cl-tmux declares no foreign functions at all any more: cffi is gone from
+  ;; nerimux declares no foreign functions at all any more: cffi is gone from
   ;; :depends-on, and every syscall goes through cl-tty-kit, cl-process-kit or
   ;; sb-posix. A reintroduced %select/%read/%write here would mean someone
   ;; re-added a private C surface instead of extending the sibling kit.
   (it "no-hand-rolled-foreign-symbols-remain"
     (dolist (name '("%SELECT" "%READ" "%WRITE"))
-      (let ((sym (find-symbol name '#:cl-tmux/pty)))
+      (let ((sym (find-symbol name '#:nerimux/pty)))
         (expect (or (null sym) (not (fboundp sym))))))
     ;; The fd_set helpers moved to cl-process-kit wholesale.
     (dolist (name '("FD-ZERO!" "FD-SET!" "FD-ISSET-P" "+FD-SET-WORDS+"))
-      (expect (null (find-symbol name '#:cl-tmux/pty)))))
+      (expect (null (find-symbol name '#:nerimux/pty)))))
 
-  ;; The TIOC* request numbers belong to cl-tty-kit now. cl-tmux keeping its own
+  ;; The TIOC* request numbers belong to cl-tty-kit now. nerimux keeping its own
   ;; copy is how the two could drift on a platform where they differ.
   (it "ioctl-request-constants-moved-to-cl-tty-kit"
     (dolist (name '("+TIOCGWINSZ+" "+TIOCSWINSZ+"))
-      (expect (null (find-symbol name '#:cl-tmux/pty))))))
+      (expect (null (find-symbol name '#:nerimux/pty))))))

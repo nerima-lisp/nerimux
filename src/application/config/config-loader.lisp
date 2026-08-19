@@ -1,6 +1,6 @@
-(in-package #:cl-tmux/config)
+(in-package #:nerimux/config)
 
-(declaim (special cl-tmux/model:*global-hidden-environment-names*))
+(declaim (special nerimux/model:*global-hidden-environment-names*))
 
 ;;; -- Directive dispatch + comment stripping + single-line application --------
 ;;;
@@ -37,10 +37,10 @@
              (value (subseq token (1+ eq))))
         (%config-setenv name value)
         (if hidden-p
-            (pushnew name cl-tmux/model:*global-hidden-environment-names*
+            (pushnew name nerimux/model:*global-hidden-environment-names*
                      :test #'string=)
-            (setf cl-tmux/model:*global-hidden-environment-names*
-                  (delete name cl-tmux/model:*global-hidden-environment-names*
+            (setf nerimux/model:*global-hidden-environment-names*
+                  (delete name nerimux/model:*global-hidden-environment-names*
                           :test #'string=)))
         t))))
 

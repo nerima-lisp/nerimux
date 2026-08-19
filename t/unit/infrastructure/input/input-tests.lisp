@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Tests for src/input.lisp: with-raw-mode macroexpansion + export checks
 ;;;; + read-byte-nonblock happy path via a sb-posix pipe pair.
@@ -10,7 +10,7 @@
 
   ;; The expansion calls enable-raw-mode! on fd 0 before evaluating BODY.
   (it "with-raw-mode-expands-enable-before-body"
-    (let* ((form (macroexpand-1 '(cl-tmux/input::with-raw-mode :body-marker)))
+    (let* ((form (macroexpand-1 '(nerimux/input::with-raw-mode :body-marker)))
            (text (prin1-to-string form))
            (enable-pos (search "ENABLE-RAW-MODE!" text))
            (body-pos (search ":BODY-MARKER" text)))
@@ -27,7 +27,7 @@
   ;; the stack (handler-bind runs its handler before unwinding), recursing on
   ;; that lock from the same thread.
   (it "with-raw-mode-installs-disable-only-in-cleanup"
-    (let* ((form (macroexpand-1 '(cl-tmux/input::with-raw-mode :body-marker)))
+    (let* ((form (macroexpand-1 '(nerimux/input::with-raw-mode :body-marker)))
            (text (prin1-to-string form))
            (count 0)
            (start 0))
@@ -42,21 +42,21 @@
 
   ;; with-raw-mode is defined as a macro.
   (it "with-raw-mode-is-a-macro"
-    (expect (macro-function 'cl-tmux/input::with-raw-mode) :to-be-truthy))
+    (expect (macro-function 'nerimux/input::with-raw-mode) :to-be-truthy))
 
   ;; Public input symbols are exported and bound.
   (it "input-symbols-exported-and-fbound"
     ;; with-raw-mode is an exported macro.
-    (expect (macro-function (find-symbol "WITH-RAW-MODE" '#:cl-tmux/input)) :to-be-truthy)
+    (expect (macro-function (find-symbol "WITH-RAW-MODE" '#:nerimux/input)) :to-be-truthy)
     ;; read-byte-nonblock is an exported function.
-    (expect (fboundp (find-symbol "READ-BYTE-NONBLOCK" '#:cl-tmux/input)) :to-be-truthy)
+    (expect (fboundp (find-symbol "READ-BYTE-NONBLOCK" '#:nerimux/input)) :to-be-truthy)
     ;; Both names resolve as exported symbols of the package.
     (multiple-value-bind (sym status)
-        (find-symbol "WITH-RAW-MODE" '#:cl-tmux/input)
+        (find-symbol "WITH-RAW-MODE" '#:nerimux/input)
       (declare (ignore sym))
       (expect (eq :external status)))
     (multiple-value-bind (sym status)
-        (find-symbol "READ-BYTE-NONBLOCK" '#:cl-tmux/input)
+        (find-symbol "READ-BYTE-NONBLOCK" '#:nerimux/input)
       (declare (ignore sym))
       (expect (eq :external status))))
 
@@ -73,7 +73,7 @@
       ;; Write one known byte into the write end.
       (write-byte-to-fd wfd 42)
       ;; Poll the read end: data should be ready immediately.
-      (let ((ready (cl-tmux/pty:select-fds (list rfd) 200000)))  ; 200 ms timeout
+      (let ((ready (nerimux/pty:select-fds (list rfd) 200000)))  ; 200 ms timeout
         (expect ready :to-be-truthy)
         (when ready
           ;; Read exactly one byte (same mechanics as read-byte-nonblock, which
@@ -87,7 +87,7 @@
   (it "read-byte-nonblock-select-returns-nil-when-no-data"
     (with-pipe-fds (rfd _wfd)
       ;; The pipe has no data; select with a short timeout must return NIL.
-      (let ((ready (cl-tmux/pty:select-fds (list rfd) 10000)))  ; 10 ms
+      (let ((ready (nerimux/pty:select-fds (list rfd) 10000)))  ; 10 ms
         (expect (null ready)))))
 
   ;; select-fds inspects the read-set ONLY when select(2) reports a positive count:
@@ -97,23 +97,23 @@
   (it "select-fds-gates-on-positive-select-return"
     (with-pipe-fds (rfd wfd)
       ;; Idle pipe → NIL (gated; never inspects stale bits).
-      (expect (null (cl-tmux/pty:select-fds (list rfd) 10000)))
+      (expect (null (nerimux/pty:select-fds (list rfd) 10000)))
       ;; Write one byte → select reports a positive count → the fd is returned.
       (write-byte-to-fd wfd 7)
-      (expect (equal (list rfd) (cl-tmux/pty:select-fds (list rfd) 200000)))))
+      (expect (equal (list rfd) (nerimux/pty:select-fds (list rfd) 200000)))))
 
   ;; ── Package / constant coverage ─────────────────────────────────────────────
 
   ;; +poll-timeout-us+ is a positive fixnum used as the default select timeout.
   (it "poll-timeout-us-constant-is-positive"
     (let ((timeout (symbol-value
-                    (find-symbol "+POLL-TIMEOUT-US+" '#:cl-tmux/config))))
+                    (find-symbol "+POLL-TIMEOUT-US+" '#:nerimux/config))))
       (expect (integerp timeout))
       (expect (plusp timeout))))
 
   ;; The expansion emits a format newline after restoring raw mode for clean output.
   (it "with-raw-mode-expansion-contains-format-newline"
-    (let* ((form (macroexpand-1 '(cl-tmux/input::with-raw-mode :body-marker)))
+    (let* ((form (macroexpand-1 '(nerimux/input::with-raw-mode :body-marker)))
            (text (prin1-to-string form)))
       (expect (or (search "FORMAT" text) (search "format" text)) :to-be-truthy)))
 
@@ -124,21 +124,21 @@
   (it "read-byte-nonblock-with-zero-timeout-returns-nil-when-no-data"
     (with-pipe-fds (rfd _wfd)
       ;; Temporarily redirect the select call through read-byte-nonblock's
-      ;; internal use of cl-tmux/pty:select-fds with the pipe read-end.
+      ;; internal use of nerimux/pty:select-fds with the pipe read-end.
       ;; We cannot call read-byte-nonblock directly (it polls stdin fd 0), so
       ;; we validate the same mechanics: select-fds with timeout 0 on idle fd.
-      (let ((ready (cl-tmux/pty:select-fds (list rfd) 0)))
+      (let ((ready (nerimux/pty:select-fds (list rfd) 0)))
         (expect (null ready)))))
 
   ;; select-fds returns the fd in a ready list when data has been written.
   (it "read-byte-nonblock-select-returns-ready-list-when-data-present"
     (with-pipe-fds (rfd wfd)
       (write-byte-to-fd wfd 7)
-      (let ((ready (cl-tmux/pty:select-fds (list rfd) 200000)))
+      (let ((ready (nerimux/pty:select-fds (list rfd) 200000)))
         (expect (equal (list rfd) ready)))))
 
   ;; The expansion calls force-output to flush stdout after restoring the terminal.
   (it "with-raw-mode-expansion-has-force-output"
-    (let* ((form (macroexpand-1 '(cl-tmux/input::with-raw-mode :body-marker)))
+    (let* ((form (macroexpand-1 '(nerimux/input::with-raw-mode :body-marker)))
            (text (prin1-to-string form)))
       (expect (or (search "FORCE-OUTPUT" text) (search "force-output" text)) :to-be-truthy))))

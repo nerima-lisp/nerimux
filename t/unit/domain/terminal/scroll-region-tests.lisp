@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Scroll-region parser-path tests for scroll.lisp and edit.lisp.
 ;;;; Suite: scroll-region.

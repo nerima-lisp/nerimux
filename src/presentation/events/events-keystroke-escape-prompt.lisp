@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 (defun %prompt-csi-tilde-action (buffer length)
   "Return the prompt editing action for ESC [ <param> ~, or NIL."

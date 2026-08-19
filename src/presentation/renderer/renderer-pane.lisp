@@ -1,14 +1,14 @@
-(in-package #:cl-tmux/renderer)
+(in-package #:nerimux/renderer)
 
 ;;;; Pane and border rendering.
 ;;;;
 ;;;; Depends on the ANSI escape-code primitives from renderer-format.lisp
 ;;;; (loaded first in the same package) and the layout/model structures from
-;;;; cl-tmux/model.
+;;;; nerimux/model.
 
-;;; Forward-declare the cl-tmux special variable defined in runtime.lisp so
+;;; Forward-declare the nerimux special variable defined in runtime.lisp so
 ;;; SBCL does not warn about an unknown special during compilation of this file.
-(declaim (special cl-tmux::*clock-mode-pane-id*))
+(declaim (special nerimux::*clock-mode-pane-id*))
 
 ;;; ── Per-row cell rendering ───────────────────────────────────────────────────
 
@@ -118,11 +118,11 @@
   ;; terminal draws double-width/height lines.  Only active when any row
   ;; carries a size flag; unflagged rows then emit single-width (ESC # 5)
   ;; to reset a previously-flagged terminal line.
-  (let ((sizes (cl-tmux/terminal/types:screen-line-sizes screen)))
+  (let ((sizes (nerimux/terminal/types:screen-line-sizes screen)))
     (when (plusp (hash-table-count sizes))
       (format stream "~C#~C" #\Escape (or (gethash row sizes) #\5))))
   (loop with rev-screen = (and (screen-reverse-screen screen)
-                               cl-tmux/terminal/types:+attr-reverse+)
+                               nerimux/terminal/types:+attr-reverse+)
         for col below pane-col-count
         for cell = (screen-display-cell screen col row viewport)
         ;; A continuation cell (width 0) is the right half of a double-width
@@ -139,8 +139,8 @@
    are left untouched, matching tmux's COLOUR_DEFAULT-gated window-style recolour."
   (let ((raw-fg (cell-fg cell))
         (raw-bg (cell-bg cell)))
-    (values (if (and def-fg (= raw-fg cl-tmux/terminal/types:+default-color+)) def-fg raw-fg)
-            (if (and def-bg (= raw-bg cl-tmux/terminal/types:+default-color+)) def-bg raw-bg))))
+    (values (if (and def-fg (= raw-fg nerimux/terminal/types:+default-color+)) def-fg raw-fg)
+            (if (and def-bg (= raw-bg nerimux/terminal/types:+default-color+)) def-bg raw-bg))))
 
 (defun %pane-cell-mark-colors (row col sel-mark-row sel-mark-col
                                mark-style-fg mark-style-bg
@@ -167,10 +167,10 @@
 (defun %pane-cell-attrs (cell in-sel selection-style-colour mark-col-p rev-screen)
   (let ((attrs (logxor (cell-attrs cell)
                        (if (and in-sel (not selection-style-colour) (not mark-col-p))
-                           cl-tmux/terminal/types:+attr-reverse+ 0)
+                           nerimux/terminal/types:+attr-reverse+ 0)
                        (or rev-screen 0))))
     (if mark-col-p
-        (logior attrs cl-tmux/terminal/types:+attr-reverse+)
+        (logior attrs nerimux/terminal/types:+attr-reverse+)
         attrs)))
 
 (defstruct (pane-style-colours (:conc-name pane-style-))
@@ -191,16 +191,16 @@
    highlight when it provides colours; copy-mode-mark-style colours the marked row."
   (let* ((pane-win      (pane-window pane))
          (pane-active-p (and pane-win (eq pane (window-active-pane pane-win))))
-         (window-style  (cl-tmux/options:get-option-for-pane
+         (window-style  (nerimux/options:get-option-for-pane
                          (if pane-active-p "window-active-style" "window-style")
                          pane)))
     (multiple-value-bind (def-fg def-bg) (%window-style-default-colors window-style)
       (multiple-value-bind (selection-fg selection-bg)
           (%window-style-default-colors
-           (cl-tmux/options:get-option "copy-mode-selection-style" "reverse"))
+           (nerimux/options:get-option "copy-mode-selection-style" "reverse"))
         (multiple-value-bind (mark-fg mark-bg)
             (%window-style-default-colors
-             (cl-tmux/options:get-option "copy-mode-mark-style" "bg=red,fg=black"))
+             (nerimux/options:get-option "copy-mode-mark-style" "bg=red,fg=black"))
           (make-pane-style-colours
            :def-fg def-fg :def-bg def-bg
            :selection-fg selection-fg :selection-bg selection-bg
@@ -261,10 +261,10 @@
          (line-number-mode (%copy-mode-line-number-mode))
          (line-number-base-style
            (%copy-mode-line-number-style-spec
-            (cl-tmux/options:get-option "copy-mode-line-number-style" "")))
+            (nerimux/options:get-option "copy-mode-line-number-style" "")))
          (line-number-current-style
            (%copy-mode-line-number-style-spec
-            (cl-tmux/options:get-option "copy-mode-current-line-number-style" ""))))
+            (nerimux/options:get-option "copy-mode-current-line-number-style" ""))))
     (multiple-value-bind (line-number-gutter-width content-origin-x content-width)
         (%copy-mode-pane-geometry screen origin-x pane-height pane-width)
       (%render-pane-body stream screen pane-height
@@ -278,5 +278,5 @@
       (%render-copy-mode-position-overlay stream session pane
                                           content-origin-x origin-y content-width)
       ;; Clock-mode overlay: draw a digital clock if this pane is the clock pane.
-      (when (eql cl-tmux::*clock-mode-pane-id* (pane-id pane))
+      (when (eql nerimux::*clock-mode-pane-id* (pane-id pane))
         (draw-clock-to-screen stream content-origin-x origin-y content-width pane-height)))))

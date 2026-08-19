@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Dispatch session window lifecycle command tests
 
@@ -9,13 +9,13 @@
   ;; %parse-split-size: a plain integer is absolute cells; an N% value is a real
   ;; fraction of the parent pane.
   (it "parse-split-size-absolute-vs-percentage"
-    (expect (eql 30 (cl-tmux::%parse-split-size "30")))
-    (expect (= 0.30 (cl-tmux::%parse-split-size "30%")))
-    (expect (= 0.5 (cl-tmux::%parse-split-size "50%")))
-    (expect (= 1.0 (cl-tmux::%parse-split-size "100%")))
-    (expect (null (cl-tmux::%parse-split-size nil)))
-    (expect (floatp (cl-tmux::%parse-split-size "30%")))
-    (expect (integerp (cl-tmux::%parse-split-size "30"))))
+    (expect (eql 30 (nerimux::%parse-split-size "30")))
+    (expect (= 0.30 (nerimux::%parse-split-size "30%")))
+    (expect (= 0.5 (nerimux::%parse-split-size "50%")))
+    (expect (= 1.0 (nerimux::%parse-split-size "100%")))
+    (expect (null (nerimux::%parse-split-size nil)))
+    (expect (floatp (nerimux::%parse-split-size "30%")))
+    (expect (integerp (nerimux::%parse-split-size "30"))))
 
   ;; split-window with no flags, -h, or -l N% each adds one pane to the active window.
   ;; Each row: (command message).
@@ -26,20 +26,20 @@
       (destructuring-bind (cmd msg) row
         (with-pty-command-increasing-count
             (s cmd
-               :count-form (length (cl-tmux/model:window-panes
-                                    (cl-tmux/model:session-active-window s)))
+               :count-form (length (nerimux/model:window-panes
+                                    (nerimux/model:session-active-window s)))
                :count-context msg)))))
 
   ;; split-window rejects the removed -p percentage shorthand before adding panes.
   (it "run-command-line-split-window-rejects-percent-shorthand"
     (with-fake-session (s :nwindows 1 :npanes 1)
-      (let* ((win (cl-tmux/model:session-active-window s))
-             (before-panes (copy-list (cl-tmux/model:window-panes win))))
+      (let* ((win (nerimux/model:session-active-window s))
+             (before-panes (copy-list (nerimux/model:window-panes win))))
         (with-command-rejection-state (s
-                                       (cl-tmux::%run-command-line s "split-window -p 30")
+                                       (nerimux::%run-command-line s "split-window -p 30")
                                        "unsupported argument"
                                        "split-window -p 30")
-          (expect (equal before-panes (cl-tmux/model:window-panes win)))))))
+          (expect (equal before-panes (nerimux/model:window-panes win)))))))
 
   ;; split-window -I creates a no-PTY pane and writes stdin into its screen.
   (it "run-command-line-split-window-I-feeds-stdin-without-pty"
@@ -47,7 +47,7 @@
       (let* ((win (session-active-window s))
              (before (length (window-panes win)))
              (new-pane (with-input-from-string (*standard-input* "from stdin")
-                         (cl-tmux::%run-command-line s "split-window -I"))))
+                         (nerimux::%run-command-line s "split-window -I"))))
         (expect (= (1+ before) (length (window-panes win))))
         (expect (eq new-pane (car (last (window-panes win)))))
         (expect (= -1 (pane-fd new-pane)))
@@ -70,7 +70,7 @@
            (s   (make-session :id 1 :name "0" :windows (list win))))
       (session-select-window s win)
       (with-loop-state
-        (cl-tmux::%run-command-line s "split-window -f -v")
+        (nerimux::%run-command-line s "split-window -f -v")
         (expect (= 3 (length (window-panes win))))
         (let ((newest (car (last (window-panes win)))))
           (expect (= (window-width win) (pane-width newest)))))))
@@ -85,7 +85,7 @@
              (work-before (length (window-panes work))))
         (setf (window-name home) "home"
               (window-name work) "work")
-        (cl-tmux::%run-command-line s "split-window -t :work")
+        (nerimux::%run-command-line s "split-window -t :work")
         (expect (eq work (session-active-window s)))
         (expect (= home-before (length (window-panes home))))
         (expect (> (length (window-panes work)) work-before)))))
@@ -96,10 +96,10 @@
   (it "run-command-line-new-window-with-name"
     (with-pty-command-increasing-count
         (s "new-window -n myname"
-           :count-form (length (cl-tmux/model:session-windows s))
+           :count-form (length (nerimux/model:session-windows s))
            :count-context "new-window -n must create a window")
-      (let ((win (cl-tmux/model:session-active-window s)))
-        (expect (string= "myname" (cl-tmux/model:window-name win))))))
+      (let ((win (nerimux/model:session-active-window s)))
+        (expect (string= "myname" (nerimux/model:window-name win))))))
 
   ;; new-window -d -P -F '...' prints the CUSTOM format to the overlay instead of the
   ;; default session:window.pane [WxH] summary.
@@ -134,23 +134,23 @@
     (with-fake-session (s1)
       (let ((s2 (make-fake-session)))
         (with-registered-sessions (("a" s1) ("b" s2))
-          (cl-tmux::dispatch-command s1 :lock-server nil)
-          (expect (cl-tmux/model:session-locked-p s1))
-          (expect (cl-tmux/model:session-locked-p s2))))))
+          (nerimux::dispatch-command s1 :lock-server nil)
+          (expect (nerimux/model:session-locked-p s1))
+          (expect (nerimux/model:session-locked-p s2))))))
 
   ;;; ── dynamic prefix key ───────────────────────────────────────────────────────
 
   ;; *prefix-key-code* defaults to +prefix-key-code+ (2 = C-b).
   (it "dynamic-prefix-key-default-is-ctrl-b"
-    (expect (= cl-tmux/config:+prefix-key-code+ cl-tmux/config:*prefix-key-code*)))
+    (expect (= nerimux/config:+prefix-key-code+ nerimux/config:*prefix-key-code*)))
 
   ;; 'set-option -g prefix C-a' updates *prefix-key-code* to 1 (C-a).
   (it "apply-config-directive-set-prefix-updates-runtime-var"
-    (let ((cl-tmux/config:*prefix-key-code* cl-tmux/config:+prefix-key-code+)
-          (cl-tmux/config:*key-tables* (make-hash-table :test #'equal)))
-      (cl-tmux/config::initialize-default-key-tables)
-      (cl-tmux/config:apply-config-directive '("set-option" "-g" "prefix" "C-a"))
-      (expect (= 1 cl-tmux/config:*prefix-key-code*))))
+    (let ((nerimux/config:*prefix-key-code* nerimux/config:+prefix-key-code+)
+          (nerimux/config:*key-tables* (make-hash-table :test #'equal)))
+      (nerimux/config::initialize-default-key-tables)
+      (nerimux/config:apply-config-directive '("set-option" "-g" "prefix" "C-a"))
+      (expect (= 1 nerimux/config:*prefix-key-code*))))
 
   ;;; ── new-window -d (detached) ─────────────────────────────────────────────────
 
@@ -158,8 +158,8 @@
   (it "run-command-line-new-window-d-does-not-switch"
     (with-pty-command-preserving-focus
         (s "new-window -d"
-           :count-form (length (cl-tmux/model:session-windows s))
-           :active-form (cl-tmux/model:session-active-window s)
+           :count-form (length (nerimux/model:session-windows s))
+           :active-form (nerimux/model:session-active-window s)
            :count-context "new-window -d must create a window"
            :focus-context "new-window -d must not change the active window")))
 
@@ -169,9 +169,9 @@
   (it "run-command-line-split-window-d-does-not-switch"
     (with-pty-command-preserving-focus
         (s "split-window -d"
-           :count-form (length (cl-tmux/model:window-panes
-                                (cl-tmux/model:session-active-window s)))
-           :active-form (cl-tmux/model:window-active-pane
-                         (cl-tmux/model:session-active-window s))
+           :count-form (length (nerimux/model:window-panes
+                                (nerimux/model:session-active-window s)))
+           :active-form (nerimux/model:window-active-pane
+                         (nerimux/model:session-active-window s))
            :count-context "split-window -d must add a pane"
            :focus-context "split-window -d must not change the active pane"))))

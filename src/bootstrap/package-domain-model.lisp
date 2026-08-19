@@ -1,15 +1,15 @@
 ;;; Domain model and domain service packages.
 
-(defpackage #:cl-tmux/model
+(defpackage #:nerimux/model
   (:use #:cl
-        #:cl-tmux/config #:cl-tmux/ports #:cl-tmux/terminal)
+        #:nerimux/config #:nerimux/ports #:nerimux/terminal)
   (:import-from #:cl-concurrent-kit #:make-lock #:with-lock-held)
   (:documentation
    "DOMAIN layer: the aggregate every other package is ultimately about — session
     holds windows, a window holds panes, and a pane owns one PTY and one emulator
     screen.  Also owns the layout tree (the binary split tree, its geometry solver,
     resize and zoom) and the process environment that a session hands to the shells
-    it spawns.  Reaches the operating system only through cl-tmux/ports, so the model
+    it spawns.  Reaches the operating system only through nerimux/ports, so the model
     can be exercised without forking anything.")
   (:export
    #:pane
@@ -184,11 +184,11 @@
    #:organization-attention-worktrees
    #:worktree-add-pane))
 
-;; No :import-from for #:cl-tmux/model: the :use here was inert. All 44 model
-;; references in src/domain/format/ are already written cl-tmux/model:-qualified,
+;; No :import-from for #:nerimux/model: the :use here was inert. All 44 model
+;; references in src/domain/format/ are already written nerimux/model:-qualified,
 ;; which for this package is the more honest form anyway — the format language is
 ;; a read-only projection of a model it does not belong to.
-(defpackage #:cl-tmux/format
+(defpackage #:nerimux/format
   (:use #:cl)
   (:documentation
    "DOMAIN layer: the tmux format mini-language.  Expands #{pane_id}, #{window_name},
@@ -199,7 +199,7 @@
   (:export #:expand-format #:expand-format-safe
            #:format-context-from-session #:format-context-from-window))
 
-(defpackage #:cl-tmux/buffer
+(defpackage #:nerimux/buffer
   (:use #:cl)
   (:documentation
    "DOMAIN layer: the paste-buffer ring.  Holds the most-recent-first stack of named
@@ -214,7 +214,7 @@
            #:list-paste-buffers #:list-paste-buffers-with-names
            #:delete-paste-buffer #:delete-buffer-by-name #:clear-paste-buffers))
 
-(defpackage #:cl-tmux/control
+(defpackage #:nerimux/control
   (:use #:cl)
   (:shadow #:control-error)
   (:documentation "tmux control mode (-C) wire-protocol line formatters.")
@@ -226,7 +226,7 @@
            #:control-window-pane-changed #:control-session-window-changed
            #:control-client-session-changed #:control-exit))
 
-(defpackage #:cl-tmux/hooks
+(defpackage #:nerimux/hooks
   (:use #:cl)
   (:documentation
    "DOMAIN layer: the event-hook registry, the seam through which configuration
@@ -281,7 +281,7 @@
    #:*command-hook-runner*
    #:run-command-hooks-via-runner))
 
-(defpackage #:cl-tmux/options
+(defpackage #:nerimux/options
   (:use #:cl)
   (:documentation
    "DOMAIN layer: the option store and its scope rules.  tmux options are not a flat

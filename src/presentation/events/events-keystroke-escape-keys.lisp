@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 (defmacro define-key-lookup-table (fn-name param-var doc &rest specs)
   "Generate a key-lookup function FN-NAME(PARAM-VAR) → key-name-string | nil.

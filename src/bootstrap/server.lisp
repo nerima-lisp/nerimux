@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Detach-attach server: socket serve-loop.
 ;;;;
@@ -13,7 +13,7 @@
 ;;;; Session registry management (server-add/find/remove/all/current-session and
 ;;;; session groups) lives in session-registry.lisp.
 ;;;;
-;;;; with-incoming-frame is defined in cl-tmux/transport so both server and
+;;;; with-incoming-frame is defined in nerimux/transport so both server and
 ;;;; client can use it without creating a circular dependency.
 
 (defvar *bound-socket-path* nil
@@ -53,13 +53,13 @@
            (t "/tmp")))))
 
 (defun %socket-directory ()
-  "Per-UID socket directory <base>/cl-tmux-<uid> (tmux's /tmp/tmux-UID/),
+  "Per-UID socket directory <base>/nerimux-<uid> (tmux's /tmp/tmux-UID/),
    created mode 0700 when possible.  Returns the directory string without a
    trailing slash.  Creation/chmod failures are ignored — socket binding will
    surface a real permission problem with a better error."
   (require :sb-posix)
   (let* ((uid (handler-case (sb-posix:getuid) (error () 0)))
-         (dir (format nil "~A/cl-tmux-~D" (%socket-tmp-base) uid)))
+         (dir (format nil "~A/nerimux-~D" (%socket-tmp-base) uid)))
     (ignore-errors
       (ensure-directories-exist (format nil "~A/" dir))
       (sb-posix:chmod dir #o700))
@@ -72,7 +72,7 @@
    a verbatim path; -L (*socket-name-override*) picks a different socket name
    in the per-UID directory."
   (or *socket-path-override*
-      (format nil "~A/cl-tmux-~A.sock"
+      (format nil "~A/nerimux-~A.sock"
               (%socket-directory)
               (or *socket-name-override* name))))
 

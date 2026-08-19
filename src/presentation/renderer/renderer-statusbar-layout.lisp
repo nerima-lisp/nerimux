@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/renderer)
+(in-package #:nerimux/renderer)
 
 ;;;; Status bar layout helpers.
 ;;;;
@@ -95,11 +95,11 @@
 (defun %status-format-or-default (opt-name context default-fn)
   "Return the expanded format string for OPT-NAME when it differs from its registered default;
    otherwise call DEFAULT-FN.  CONTEXT is the format-expansion plist."
-  (let* ((spec    (gethash opt-name cl-tmux/options:*option-registry*))
-         (default (when spec (cl-tmux/options:option-spec-default spec)))
-         (current (cl-tmux/options:get-option opt-name nil)))
+  (let* ((spec    (gethash opt-name nerimux/options:*option-registry*))
+         (default (when spec (nerimux/options:option-spec-default spec)))
+         (current (nerimux/options:get-option opt-name nil)))
     (if (and current (not (equal current default)))
-        (cl-tmux/format:expand-format current context)
+        (nerimux/format:expand-format current context)
         (funcall default-fn))))
 
 (defun %status-segment-limit (max-length)
@@ -170,7 +170,7 @@
   "SGR parameter string for a status-segment style OPTION-NAME (status-left-style /
    status-right-style), falling back to BASE-SGR (the status-style) when the option
    is unset or \"default\"."
-  (let ((s (cl-tmux/options:get-option option-name "")))
+  (let ((s (nerimux/options:get-option option-name "")))
     (if (member s '("" "default") :test #'string-equal)
         base-sgr
         (%status-sgr-from-style s))))
@@ -187,7 +187,7 @@
 ;;; ── #[align=…] regions + status-format[0] template path ─────────────────────
 ;;;
 ;;; tmux's status line is a single format whose #[align=left|centre|right] blocks
-;;; divide it into three regions positioned within the terminal width.  cl-tmux
+;;; divide it into three regions positioned within the terminal width.  nerimux
 ;;; normally renders the bar procedurally (status-left + window-list + status-
 ;;; right); when status-format[0] is SET it instead expands that template and
 ;;; composes the regions here.  The procedural default path is unchanged.

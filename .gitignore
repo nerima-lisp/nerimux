@@ -55,10 +55,10 @@ coverage.dat
 # --- Repository-specific entries below this line ---
 
 # SBCL image and standalone binary. The names match :build-pathname and the
-# save-lisp-and-die target in cl-tmux.asd / flake.nix, so a local
+# save-lisp-and-die target in nerimux.asd / flake.nix, so a local
 # `asdf:make` or a hand-run build never lands in a commit.
-/cl-tmux
-/cl-tmux.core
+/nerimux
+/nerimux.core
 
 # Agent/editor harness state kept in-tree by local tooling only.
 /.claude/

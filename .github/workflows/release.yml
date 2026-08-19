@@ -30,7 +30,7 @@ jobs:
       # newest tag was still v0.6.0.
       - name: Verify tag matches .asd version
         env:
-          PACKAGE: cl-tmux
+          PACKAGE: nerimux
         run: |
           set -euo pipefail
           asd_version="$(sed -n 's/^[[:space:]]*:version "\([^"]*\)".*/\1/p' "$PACKAGE.asd" | head -n1)"

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Screen assertion DSL and command-state fixtures.
 
@@ -27,14 +27,14 @@
 (defmacro check-sgr-state (screen &key (fg 7) (bg 0) (attrs 0))
   "Assert the current SGR pen state (foreground, background, attribute bitmask)."
   `(progn
-     (expect (= ,fg (cl-tmux/terminal/types:screen-cur-fg ,screen)))
-     (expect (= ,bg (cl-tmux/terminal/types:screen-cur-bg ,screen)))
-     (expect (= ,attrs (cl-tmux/terminal/types:screen-cur-attrs ,screen)))))
+     (expect (= ,fg (nerimux/terminal/types:screen-cur-fg ,screen)))
+     (expect (= ,bg (nerimux/terminal/types:screen-cur-bg ,screen)))
+     (expect (= ,attrs (nerimux/terminal/types:screen-cur-attrs ,screen)))))
 
 (defmacro with-command-test-state ((sess &key overlay) &body body)
   "Run BODY with a single-session server state and a clean dirty flag."
-  `(let ((cl-tmux::*server-sessions* (list (cons "0" ,sess)))
-         (cl-tmux::*dirty* nil)
+  `(let ((nerimux::*server-sessions* (list (cons "0" ,sess)))
+         (nerimux::*dirty* nil)
          ,@(when overlay `((*overlay* nil))))
      ,@body))
 
@@ -43,10 +43,10 @@
    *term-rows*/*term-cols* seeded to ROWS/COLS, *dirty* cleared, and *running*
    set.  Extracted so tests exercising +msg-resize+/+msg-attach+/apply-client-size
    share one fixture instead of repeating the same four-binding LET."
-  `(let ((cl-tmux::*term-rows* ,rows)
-         (cl-tmux::*term-cols* ,cols)
-         (cl-tmux::*dirty*    nil)
-         (cl-tmux::*running*  t))
+  `(let ((nerimux::*term-rows* ,rows)
+         (nerimux::*term-cols* ,cols)
+         (nerimux::*dirty*    nil)
+         (nerimux::*running*  t))
      ,@body))
 
 (defmacro with-command-rejection-state ((sess command-form overlay-message
@@ -58,4 +58,4 @@
      (expect (null ,command-form))
      (expect (search ,overlay-message *overlay*))
      ,@body
-     (expect cl-tmux::*dirty* :to-be-falsy)))
+     (expect nerimux::*dirty* :to-be-falsy)))

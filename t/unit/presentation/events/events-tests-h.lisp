@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; events tests — part H: byte-constant values, make-input-state,
 ;;;; forward-octets synchronized/read-only, maybe-rename-window-from-title.
@@ -12,49 +12,49 @@
     ;; +byte-sgr-press+ was merged into +byte-ascii-m+ (same value 77); the
     ;; surviving constant's value is verified below via "ASCII M".
     (check-table
-     (list (list cl-tmux::+byte-esc+              27  "ESC must be 27")
-           (list cl-tmux::+byte-csi-bracket+       91  "CSI [ must be 91")
-           (list cl-tmux::+byte-arrow-up+          65  "CUU A must be 65")
-           (list cl-tmux::+byte-arrow-down+        66  "CUD B must be 66")
-           (list cl-tmux::+byte-arrow-left+        68  "CUB D must be 68")
-           (list cl-tmux::+byte-arrow-right+       67  "CUF C must be 67")
-           (list cl-tmux::+byte-q+                 113 "q must be 113")
-           (list cl-tmux::+byte-j+                 106 "j must be 106")
-           (list cl-tmux::+byte-k+                 107 "k must be 107")
-           (list cl-tmux::+byte-csi-param-1+       49  "CSI param 1 must be 49")
-           (list cl-tmux::+byte-csi-semi+          59  "CSI semi must be 59")
-           (list cl-tmux::+byte-csi-mod-ctrl+      53  "CSI ctrl modifier must be 53")
-           (list cl-tmux::+byte-csi-mod-meta+      51  "CSI meta modifier must be 51")
-           (list cl-tmux::+byte-tilde+             126 "tilde must be 126")
-           (list cl-tmux::+byte-sgr-lt+            60  "SGR < must be 60")
-           (list cl-tmux::+byte-digit-0+           48  "digit 0 must be 48")
-           (list cl-tmux::+byte-digit-9+           57  "digit 9 must be 57")
-           (list cl-tmux::+byte-page-up-param+     53  "PageUp param must be 53")
-           (list cl-tmux::+byte-page-down-param+   54  "PageDown param must be 54")
-           (list cl-tmux::+byte-ascii-m+           77  "ASCII M must be 77")
-           (list cl-tmux::+byte-sgr-release+       109 "SGR release final must be 109"))))
+     (list (list nerimux::+byte-esc+              27  "ESC must be 27")
+           (list nerimux::+byte-csi-bracket+       91  "CSI [ must be 91")
+           (list nerimux::+byte-arrow-up+          65  "CUU A must be 65")
+           (list nerimux::+byte-arrow-down+        66  "CUD B must be 66")
+           (list nerimux::+byte-arrow-left+        68  "CUB D must be 68")
+           (list nerimux::+byte-arrow-right+       67  "CUF C must be 67")
+           (list nerimux::+byte-q+                 113 "q must be 113")
+           (list nerimux::+byte-j+                 106 "j must be 106")
+           (list nerimux::+byte-k+                 107 "k must be 107")
+           (list nerimux::+byte-csi-param-1+       49  "CSI param 1 must be 49")
+           (list nerimux::+byte-csi-semi+          59  "CSI semi must be 59")
+           (list nerimux::+byte-csi-mod-ctrl+      53  "CSI ctrl modifier must be 53")
+           (list nerimux::+byte-csi-mod-meta+      51  "CSI meta modifier must be 51")
+           (list nerimux::+byte-tilde+             126 "tilde must be 126")
+           (list nerimux::+byte-sgr-lt+            60  "SGR < must be 60")
+           (list nerimux::+byte-digit-0+           48  "digit 0 must be 48")
+           (list nerimux::+byte-digit-9+           57  "digit 9 must be 57")
+           (list nerimux::+byte-page-up-param+     53  "PageUp param must be 53")
+           (list nerimux::+byte-page-down-param+   54  "PageDown param must be 54")
+           (list nerimux::+byte-ascii-m+           77  "ASCII M must be 77")
+           (list nerimux::+byte-sgr-release+       109 "SGR release final must be 109"))))
 
   ;;; ── make-input-state and input-state-continuation ────────────────────────────
 
   ;; make-input-state returns an input-state with continuation = %ground-input-state.
   (it "make-input-state-starts-in-ground-state"
-    (let ((state (cl-tmux::make-input-state)))
-      (expect (cl-tmux::input-state-p state))
-      (expect (functionp (cl-tmux::input-state-continuation state)))))
+    (let ((state (nerimux::make-input-state)))
+      (expect (nerimux::input-state-p state))
+      (expect (functionp (nerimux::input-state-continuation state)))))
 
   ;; After a complete 3-byte ESC [ A sequence, the continuation returns to ground.
   (it "input-state-continuation-is-reset-after-complete-sequence"
     (with-fake-session (s)
-      (let ((state (cl-tmux::make-input-state)))
+      (let ((state (nerimux::make-input-state)))
         ;; Feed ESC — transitions to escape accumulator
-        (cl-tmux::process-byte s 27 state)
-        (expect (not (eq #'cl-tmux::%ground-input-state
-                     (cl-tmux::input-state-continuation state))))
+        (nerimux::process-byte s 27 state)
+        (expect (not (eq #'nerimux::%ground-input-state
+                     (nerimux::input-state-continuation state))))
         ;; Feed [ A — completes the sequence, back to ground
-        (cl-tmux::process-byte s 91 state)
-        (cl-tmux::process-byte s 65 state)
-        (expect (eq #'cl-tmux::%ground-input-state
-                (cl-tmux::input-state-continuation state))))))
+        (nerimux::process-byte s 91 state)
+        (nerimux::process-byte s 65 state)
+        (expect (eq #'nerimux::%ground-input-state
+                (nerimux::input-state-continuation state))))))
 
   ;;; ── %forward-octets-synchronized — synchronize-panes broadcast ───────────────
 
@@ -72,14 +72,14 @@
            (sess (make-session :id 1 :name "0" :windows (list win))))
       (window-select-pane win p0)
       (session-select-window sess win)
-      (cl-tmux/options:set-option "synchronize-panes" t)
+      (nerimux/options:set-option "synchronize-panes" t)
       (unwind-protect
            ;; fd=-1 makes pty-write a no-op; we just verify no error is raised.
            (finishes
-             (cl-tmux::%forward-octets-synchronized
+             (nerimux::%forward-octets-synchronized
               sess
               (make-array 1 :element-type '(unsigned-byte 8) :initial-element 65)))
-        (cl-tmux/options:set-option "synchronize-panes" nil))))
+        (nerimux/options:set-option "synchronize-panes" nil))))
 
   ;;; ── *client-read-only* enforcement ──────────────────────────────────────────
 
@@ -92,18 +92,18 @@
                               :tree  (make-layout-leaf p0)))
            (sess (make-session :id 1 :name "0" :windows (list win)))
            (wrote nil)
-           (orig (fdefinition 'cl-tmux/pty:pty-write)))
+           (orig (fdefinition 'nerimux/pty:pty-write)))
       (window-select-pane win p0)
       (session-select-window sess win)
       (unwind-protect
-           (let ((cl-tmux::*client-read-only* t))
-             (setf (fdefinition 'cl-tmux/pty:pty-write)
+           (let ((nerimux::*client-read-only* t))
+             (setf (fdefinition 'nerimux/pty:pty-write)
                    (lambda (fd bytes) (declare (ignore fd bytes)) (setf wrote t)))
-             (cl-tmux::%forward-octets-synchronized
+             (nerimux::%forward-octets-synchronized
               sess
               (make-array 1 :element-type '(unsigned-byte 8) :initial-element 65))
              (expect wrote :to-be-falsy))
-        (setf (fdefinition 'cl-tmux/pty:pty-write) orig))))
+        (setf (fdefinition 'nerimux/pty:pty-write) orig))))
 
   ;; %forward-octets-synchronized is a no-op on fd<=0 panes regardless of read-only.
   (it "forward-octets-writes-when-not-read-only"
@@ -115,9 +115,9 @@
            (sess (make-session :id 1 :name "0" :windows (list win))))
       (window-select-pane win p0)
       (session-select-window sess win)
-      (let ((cl-tmux::*client-read-only* nil))
+      (let ((nerimux::*client-read-only* nil))
         (finishes
-          (cl-tmux::%forward-octets-synchronized
+          (nerimux::%forward-octets-synchronized
            sess
            (make-array 1 :element-type '(unsigned-byte 8) :initial-element 65))))))
 
@@ -129,7 +129,7 @@
     (with-auto-rename-session (screen pane win sess :win-name "old-name")
       (setf (screen-title screen) "new-title")
       (setf (window-automatic-rename-p win) t)
-      (cl-tmux::%maybe-rename-window-from-title sess)
+      (nerimux::%maybe-rename-window-from-title sess)
       (expect (string= "new-title" (window-name win)))))
 
   ;; %maybe-rename-window-from-title does not rename when title=name or auto-rename is off.
@@ -141,7 +141,7 @@
         (with-auto-rename-session (screen pane win sess :win-name win-name)
           (setf (screen-title screen) new-title)
           (setf (window-automatic-rename-p win) auto-rename-p)
-          (cl-tmux::%maybe-rename-window-from-title sess)
+          (nerimux::%maybe-rename-window-from-title sess)
           (expect (string= win-name (window-name win)))))))
 
   ;; %maybe-rename-window-from-title is suppressed for a window whose window-local
@@ -155,10 +155,10 @@
       (with-isolated-config
         ;; Global automatic-rename / allow-rename stay on; only the per-window
         ;; option is turned off, so get-option-for-context :window returns NIL.
-        (cl-tmux/options:set-option "automatic-rename" t)
-        (cl-tmux/options:set-option "allow-rename" t)
-        (cl-tmux/options:set-option-for-window "automatic-rename" "off" win)
-        (cl-tmux::%maybe-rename-window-from-title sess)
+        (nerimux/options:set-option "automatic-rename" t)
+        (nerimux/options:set-option "allow-rename" t)
+        (nerimux/options:set-option-for-window "automatic-rename" "off" win)
+        (nerimux::%maybe-rename-window-from-title sess)
         (expect (string= "original" (window-name win))))))
 
   ;; Companion to the suppression test: with window-local automatic-rename ON the
@@ -168,10 +168,10 @@
       (setf (screen-title screen) "new-title")
       (setf (window-automatic-rename-p win) t)
       (with-isolated-config
-        (cl-tmux/options:set-option "automatic-rename" t)
-        (cl-tmux/options:set-option "allow-rename" t)
-        (cl-tmux/options:set-option-for-window "automatic-rename" "on" win)
-        (cl-tmux::%maybe-rename-window-from-title sess)
+        (nerimux/options:set-option "automatic-rename" t)
+        (nerimux/options:set-option "allow-rename" t)
+        (nerimux/options:set-option-for-window "automatic-rename" "on" win)
+        (nerimux::%maybe-rename-window-from-title sess)
         (expect (string= "new-title" (window-name win))))))
 
   ;; `set -g allow-rename off` must NOT freeze automatic command-following — it
@@ -181,10 +181,10 @@
     (with-auto-rename-session (screen pane win sess :win-name "old" :pid 12345)
       (setf (window-automatic-rename-p win) t)
       (with-isolated-config
-        (cl-tmux/options:set-option "automatic-rename" t)
-        (cl-tmux/options:set-option "allow-rename" nil)        ; OFF
-        (cl-tmux/options:set-option "automatic-rename-format" "MYCMD")
-        (cl-tmux::%maybe-rename-window-from-title sess)
+        (nerimux/options:set-option "automatic-rename" t)
+        (nerimux/options:set-option "allow-rename" nil)        ; OFF
+        (nerimux/options:set-option "automatic-rename-format" "MYCMD")
+        (nerimux::%maybe-rename-window-from-title sess)
         (expect (string= "MYCMD" (window-name win))))))
 
   ;; With allow-rename off, an app's OSC title must NOT rename the window (the
@@ -194,9 +194,9 @@
       (setf (screen-title screen) "APPTITLE")
       (setf (window-automatic-rename-p win) t)
       (with-isolated-config
-        (cl-tmux/options:set-option "automatic-rename" t)
-        (cl-tmux/options:set-option "allow-rename" nil)        ; OFF
-        (cl-tmux::%maybe-rename-window-from-title sess)
+        (nerimux/options:set-option "automatic-rename" t)
+        (nerimux/options:set-option "allow-rename" nil)        ; OFF
+        (nerimux::%maybe-rename-window-from-title sess)
         (expect (string= "keep" (window-name win))))))
 
   ;; %auto-rename-name with :allow-title NIL returns empty for a process-less pane
@@ -204,8 +204,8 @@
   (it "auto-rename-name-allow-title-nil-suppresses-osc-title"
     (with-auto-rename-session (screen pane win sess)
       (setf (screen-title screen) "T")
-      (expect (string= "" (cl-tmux::%auto-rename-name sess win pane screen :allow-title nil)))
-      (expect (string= "T" (cl-tmux::%auto-rename-name sess win pane screen :allow-title t)))))
+      (expect (string= "" (nerimux::%auto-rename-name sess win pane screen :allow-title nil)))
+      (expect (string= "T" (nerimux::%auto-rename-name sess win pane screen :allow-title t)))))
 
   ;; Auto-rename must keep working after the first rename: %maybe-rename-window-
   ;; from-title must NOT disable automatic-rename, so a later title change renames
@@ -215,13 +215,13 @@
     (with-auto-rename-session (screen pane win sess :win-name "old")
       (setf (window-automatic-rename-p win) t)
       (with-isolated-config
-        (cl-tmux/options:set-option "automatic-rename" t)
-        (cl-tmux/options:set-option "allow-rename" t)
+        (nerimux/options:set-option "automatic-rename" t)
+        (nerimux/options:set-option "allow-rename" t)
         (setf (screen-title screen) "first")
-        (cl-tmux::%maybe-rename-window-from-title sess)
+        (nerimux::%maybe-rename-window-from-title sess)
         (expect (string= "first" (window-name win)))
         (expect (window-automatic-rename-p win) :to-be-truthy)
         ;; A second title change must rename again (the bug made this a no-op).
         (setf (screen-title screen) "second")
-        (cl-tmux::%maybe-rename-window-from-title sess)
+        (nerimux::%maybe-rename-window-from-title sess)
         (expect (string= "second" (window-name win)))))))

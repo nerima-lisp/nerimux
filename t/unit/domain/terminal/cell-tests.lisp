@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Cell tests (src/terminal/cell.lisp).
 ;;;; Tests: attribute constants, cell struct, blank-cell, clamp,
@@ -13,28 +13,28 @@
 
   ;; Each attribute constant occupies exactly the declared bit position in its byte.
   (it "attr-bit-values-table"
-    (check-table (list (list #b00000001 cl-tmux/terminal/types:+attr-bold+              "bold is bit 0")
-                       (list #b00000010 cl-tmux/terminal/types:+attr-dim+               "dim is bit 1")
-                       (list #b00000100 cl-tmux/terminal/types:+attr-reverse+           "reverse is bit 2")
-                       (list #b00001000 cl-tmux/terminal/types:+attr-underline+         "underline is bit 3")
-                       (list #b00010000 cl-tmux/terminal/types:+attr-blink+             "blink is bit 4")
-                       (list #b00100000 cl-tmux/terminal/types:+attr-italic+            "italic is bit 5")
-                       (list #b01000000 cl-tmux/terminal/types:+attr-conceal+           "conceal is bit 6")
-                       (list #b10000000 cl-tmux/terminal/types:+attr-strikethrough+     "strikethrough is bit 7")
-                       (list #b00000001 cl-tmux/terminal/types:+attr2-double-underline+ "double-underline is attrs2 bit 0")
-                       (list #b00000010 cl-tmux/terminal/types:+attr2-overline+         "overline is attrs2 bit 1"))
+    (check-table (list (list #b00000001 nerimux/terminal/types:+attr-bold+              "bold is bit 0")
+                       (list #b00000010 nerimux/terminal/types:+attr-dim+               "dim is bit 1")
+                       (list #b00000100 nerimux/terminal/types:+attr-reverse+           "reverse is bit 2")
+                       (list #b00001000 nerimux/terminal/types:+attr-underline+         "underline is bit 3")
+                       (list #b00010000 nerimux/terminal/types:+attr-blink+             "blink is bit 4")
+                       (list #b00100000 nerimux/terminal/types:+attr-italic+            "italic is bit 5")
+                       (list #b01000000 nerimux/terminal/types:+attr-conceal+           "conceal is bit 6")
+                       (list #b10000000 nerimux/terminal/types:+attr-strikethrough+     "strikethrough is bit 7")
+                       (list #b00000001 nerimux/terminal/types:+attr2-double-underline+ "double-underline is attrs2 bit 0")
+                       (list #b00000010 nerimux/terminal/types:+attr2-overline+         "overline is attrs2 bit 1"))
                  :test #'equal))
 
   ;; All eight primary attribute constants are distinct powers of 2.
   (it "attr-constants-are-distinct-single-bits"
-    (let ((constants (list cl-tmux/terminal/types:+attr-bold+
-                           cl-tmux/terminal/types:+attr-dim+
-                           cl-tmux/terminal/types:+attr-reverse+
-                           cl-tmux/terminal/types:+attr-underline+
-                           cl-tmux/terminal/types:+attr-blink+
-                           cl-tmux/terminal/types:+attr-italic+
-                           cl-tmux/terminal/types:+attr-conceal+
-                           cl-tmux/terminal/types:+attr-strikethrough+)))
+    (let ((constants (list nerimux/terminal/types:+attr-bold+
+                           nerimux/terminal/types:+attr-dim+
+                           nerimux/terminal/types:+attr-reverse+
+                           nerimux/terminal/types:+attr-underline+
+                           nerimux/terminal/types:+attr-blink+
+                           nerimux/terminal/types:+attr-italic+
+                           nerimux/terminal/types:+attr-conceal+
+                           nerimux/terminal/types:+attr-strikethrough+)))
       (expect (= 8 (length (remove-duplicates constants))))
       (expect (every #'(lambda (c) (= 1 (logcount c))) constants)))))
 
@@ -44,66 +44,66 @@
 
   ;; make-cell with no arguments returns a space/default-color/no-attrs cell.
   (it "make-cell-default-slots"
-    (let ((c (cl-tmux/terminal/types:make-cell)))
+    (let ((c (nerimux/terminal/types:make-cell)))
       (expect (char= #\Space (cell-char c)))
-      (check-table (list (list (cell-fg   c)                             cl-tmux/terminal/types:+default-color+ "default fg must be the default-colour sentinel")
-                         (list (cell-bg   c)                             cl-tmux/terminal/types:+default-color+ "default bg must be the default-colour sentinel")
+      (check-table (list (list (cell-fg   c)                             nerimux/terminal/types:+default-color+ "default fg must be the default-colour sentinel")
+                         (list (cell-bg   c)                             nerimux/terminal/types:+default-color+ "default bg must be the default-colour sentinel")
                          (list (cell-attrs c)                            0 "default attrs must be 0")
-                         (list (cl-tmux/terminal/types:cell-attrs2    c) 0 "default attrs2 must be 0")
-                         (list (cl-tmux/terminal/types:cell-ul-color  c) 0 "default ul-color must be 0")
+                         (list (nerimux/terminal/types:cell-attrs2    c) 0 "default attrs2 must be 0")
+                         (list (nerimux/terminal/types:cell-ul-color  c) 0 "default ul-color must be 0")
                          (list (cell-width c)                            1 "default width must be 1"))
                    :test #'equal)
-      (expect (null (cl-tmux/terminal/types:cell-combining c)))))
+      (expect (null (nerimux/terminal/types:cell-combining c)))))
 
   ;; make-cell with explicit keyword arguments stores all supplied values.
   (it "make-cell-custom-slots"
-    (let ((c (cl-tmux/terminal/types:make-cell :char #\A :fg 2 :bg 5 :attrs 3
+    (let ((c (nerimux/terminal/types:make-cell :char #\A :fg 2 :bg 5 :attrs 3
                                                 :attrs2 1 :ul-color 4 :width 2)))
       (expect (char= #\A (cell-char c)))
       (check-table (list (list (cell-fg   c)                            2 "fg")
                          (list (cell-bg   c)                            5 "bg")
                          (list (cell-attrs c)                           3 "attrs")
-                         (list (cl-tmux/terminal/types:cell-attrs2   c) 1 "attrs2")
-                         (list (cl-tmux/terminal/types:cell-ul-color c) 4 "ul-color")
+                         (list (nerimux/terminal/types:cell-attrs2   c) 1 "attrs2")
+                         (list (nerimux/terminal/types:cell-ul-color c) 4 "ul-color")
                          (list (cell-width c)                           2 "width"))
                    :test #'equal)))
 
   ;; make-cell :width 0 produces a valid continuation placeholder.
   (it "make-cell-continuation-width-zero"
-    (let ((c (cl-tmux/terminal/types:make-cell :char #\Space :width 0)))
+    (let ((c (nerimux/terminal/types:make-cell :char #\Space :width 0)))
       (expect (= 0 (cell-width c)))))
 
   ;; cell-p returns T for a struct produced by make-cell.
   (it "cell-p-returns-true-for-cell"
-    (let ((c (cl-tmux/terminal/types:make-cell)))
-      (expect (cl-tmux/terminal/types:cell-p c) :to-be-truthy)))
+    (let ((c (nerimux/terminal/types:make-cell)))
+      (expect (nerimux/terminal/types:cell-p c) :to-be-truthy)))
 
   ;; cell-p returns NIL for non-cell objects.
   (it "cell-p-returns-false-for-non-cell"
-    (expect (cl-tmux/terminal/types:cell-p 42) :to-be-falsy)
-    (expect (cl-tmux/terminal/types:cell-p "hello") :to-be-falsy)
-    (expect (cl-tmux/terminal/types:cell-p nil) :to-be-falsy))
+    (expect (nerimux/terminal/types:cell-p 42) :to-be-falsy)
+    (expect (nerimux/terminal/types:cell-p "hello") :to-be-falsy)
+    (expect (nerimux/terminal/types:cell-p nil) :to-be-falsy))
 
   ;; make-cell :combining with a list stores the combining characters.
   (it "make-cell-combining-slot"
-    (let ((c (cl-tmux/terminal/types:make-cell
+    (let ((c (nerimux/terminal/types:make-cell
               :combining (list (code-char #x0300) (code-char #x0301)))))
-      (expect (= 2 (length (cl-tmux/terminal/types:cell-combining c))))))
+      (expect (= 2 (length (nerimux/terminal/types:cell-combining c))))))
 
   ;; blank-cell returns a space-character cell with default colours and width 1.
   (it "blank-cell-returns-default-cell"
-    (let ((c (cl-tmux/terminal/types:blank-cell)))
+    (let ((c (nerimux/terminal/types:blank-cell)))
       (expect (char= #\Space (cell-char c)))
-      (check-table (list (list (cell-fg    c) cl-tmux/terminal/types:+default-color+ "blank-cell fg must be the default-colour sentinel")
-                         (list (cell-bg    c) cl-tmux/terminal/types:+default-color+ "blank-cell bg must be the default-colour sentinel")
+      (check-table (list (list (cell-fg    c) nerimux/terminal/types:+default-color+ "blank-cell fg must be the default-colour sentinel")
+                         (list (cell-bg    c) nerimux/terminal/types:+default-color+ "blank-cell bg must be the default-colour sentinel")
                          (list (cell-attrs c) 0 "blank-cell attrs must be 0")
                          (list (cell-width c) 1 "blank-cell width must be 1"))
                    :test #'equal)))
 
   ;; Each call to blank-cell returns a structurally equal but distinct object.
   (it "blank-cell-returns-fresh-instance-each-call"
-    (let ((c1 (cl-tmux/terminal/types:blank-cell))
-          (c2 (cl-tmux/terminal/types:blank-cell)))
+    (let ((c1 (nerimux/terminal/types:blank-cell))
+          (c2 (nerimux/terminal/types:blank-cell)))
       (expect (not (eq c1 c2))))))
 
 ;;; ── %make-blank-cells ────────────────────────────────────────────────────────
@@ -112,24 +112,24 @@
 
   ;; %make-blank-cells returns a simple-vector of the requested length.
   (it "make-blank-cells-returns-simple-vector-of-correct-length"
-    (let ((v (cl-tmux/terminal/types:%make-blank-cells 10)))
+    (let ((v (nerimux/terminal/types:%make-blank-cells 10)))
       (expect (simple-vector-p v))
       (expect (= 10 (length v)))))
 
   ;; Every element returned by %make-blank-cells is a default space cell.
   (it "make-blank-cells-all-elements-are-blank"
-    (let ((v (cl-tmux/terminal/types:%make-blank-cells 5)))
+    (let ((v (nerimux/terminal/types:%make-blank-cells 5)))
       (dotimes (i 5)
         (let ((c (aref v i)))
-          (expect (cl-tmux/terminal/types:cell-p c))
+          (expect (nerimux/terminal/types:cell-p c))
           (expect (char= #\Space (cell-char c)))
-          (expect (= cl-tmux/terminal/types:+default-color+ (cell-fg c)))
-          (expect (= cl-tmux/terminal/types:+default-color+ (cell-bg c)))
+          (expect (= nerimux/terminal/types:+default-color+ (cell-fg c)))
+          (expect (= nerimux/terminal/types:+default-color+ (cell-bg c)))
           (expect (= 1 (cell-width c)))))))
 
   ;; %make-blank-cells with n=0 returns an empty simple-vector.
   (it "make-blank-cells-zero-length-returns-empty-vector"
-    (let ((v (cl-tmux/terminal/types:%make-blank-cells 0)))
+    (let ((v (nerimux/terminal/types:%make-blank-cells 0)))
       (expect (simple-vector-p v))
       (expect (= 0 (length v))))))
 
@@ -158,7 +158,7 @@
                     (99  7  7  7  "lo=hi, v above: always returns lo/hi")))
       (destructuring-bind (v lo hi expected desc) case
         (declare (ignore desc))
-        (expect (= expected (cl-tmux/terminal/types:clamp v lo hi)))))))
+        (expect (= expected (nerimux/terminal/types:clamp v lo hi)))))))
 
 ;;; ── safe-code-char ───────────────────────────────────────────────────────────
 
@@ -166,18 +166,18 @@
 
   ;; safe-code-char returns the character for a valid code point.
   (it "safe-code-char-valid-codepoint"
-    (expect (char= #\A (cl-tmux/terminal/types:safe-code-char 65)))
-    (expect (char= #\a (cl-tmux/terminal/types:safe-code-char 97))))
+    (expect (char= #\A (nerimux/terminal/types:safe-code-char 65)))
+    (expect (char= #\a (nerimux/terminal/types:safe-code-char 97))))
 
   ;; safe-code-char with code point 0 returns the NUL character.
   (it "safe-code-char-zero-returns-null-char"
-    (expect (= 0 (char-code (cl-tmux/terminal/types:safe-code-char 0)))))
+    (expect (= 0 (char-code (nerimux/terminal/types:safe-code-char 0)))))
 
   ;; safe-code-char returns U+FFFD for a code point outside char-code-limit.
   (it "safe-code-char-invalid-codepoint-returns-replacement"
     ;; char-code-limit is implementation-defined but always > 0x110000 on SBCL.
     ;; Use a known-bad value well above Unicode range.
-    (let ((replacement (cl-tmux/terminal/types:safe-code-char
+    (let ((replacement (nerimux/terminal/types:safe-code-char
                         (+ char-code-limit 1))))
       (expect (= #xFFFD (char-code replacement)))))
 
@@ -185,10 +185,10 @@
   ;;
   ;; safe-code-char table: well-known code-points map to expected characters.
   (it "safe-code-char-table"
-    (check-table (list (list (cl-tmux/terminal/types:safe-code-char 65) #\A    "U+0041 = LATIN CAPITAL LETTER A")
-                       (list (cl-tmux/terminal/types:safe-code-char 97) #\a    "U+0061 = LATIN SMALL LETTER A")
-                       (list (cl-tmux/terminal/types:safe-code-char 32) #\Space "U+0020 = SPACE")
-                       (list (cl-tmux/terminal/types:safe-code-char 10) #\Newline "U+000A = LINE FEED"))
+    (check-table (list (list (nerimux/terminal/types:safe-code-char 65) #\A    "U+0041 = LATIN CAPITAL LETTER A")
+                       (list (nerimux/terminal/types:safe-code-char 97) #\a    "U+0061 = LATIN SMALL LETTER A")
+                       (list (nerimux/terminal/types:safe-code-char 32) #\Space "U+0020 = SPACE")
+                       (list (nerimux/terminal/types:safe-code-char 10) #\Newline "U+000A = LINE FEED"))
                  :test #'equal))
 
   ;;; ── Lone surrogates ────────────────────────────────────────────────────────
@@ -199,7 +199,7 @@
   ;;; the block — so the old (< cp char-code-limit) guard admitted a lone
   ;;; surrogate into a screen cell.
   ;;;
-  ;;; That matters because cl-tmux's own UTF-8 continuation decoder
+  ;;; That matters because nerimux's own UTF-8 continuation decoder
   ;;; (parser-utf8.lisp) will happily reassemble the three bytes ED A0 80 into
   ;;; code point #xD800 — i.e. ANY child process can produce one on demand — and
   ;;; the cell then reaches CL-CODEC-KIT:STRING-TO-OCTETS on the render/broadcast
@@ -209,29 +209,29 @@
 
   ;; surrogate-code-point-p covers exactly D800-DFFF and nothing on either side.
   (it "surrogate-code-point-p-covers-exactly-the-surrogate-block"
-    (expect (cl-tmux/terminal/types:surrogate-code-point-p #xD800) :to-be-truthy)
-    (expect (cl-tmux/terminal/types:surrogate-code-point-p #xDBFF) :to-be-truthy)
-    (expect (cl-tmux/terminal/types:surrogate-code-point-p #xDC00) :to-be-truthy)
-    (expect (cl-tmux/terminal/types:surrogate-code-point-p #xDFFF) :to-be-truthy)
+    (expect (nerimux/terminal/types:surrogate-code-point-p #xD800) :to-be-truthy)
+    (expect (nerimux/terminal/types:surrogate-code-point-p #xDBFF) :to-be-truthy)
+    (expect (nerimux/terminal/types:surrogate-code-point-p #xDC00) :to-be-truthy)
+    (expect (nerimux/terminal/types:surrogate-code-point-p #xDFFF) :to-be-truthy)
     ;; Boundaries: one below and one above the block are ordinary characters.
-    (expect (cl-tmux/terminal/types:surrogate-code-point-p #xD7FF) :to-be-falsy)
-    (expect (cl-tmux/terminal/types:surrogate-code-point-p #xE000) :to-be-falsy))
+    (expect (nerimux/terminal/types:surrogate-code-point-p #xD7FF) :to-be-falsy)
+    (expect (nerimux/terminal/types:surrogate-code-point-p #xE000) :to-be-falsy))
 
   ;; safe-code-char substitutes U+FFFD for a lone surrogate rather than
   ;; returning an unencodable character.
   (it "safe-code-char-lone-surrogate-returns-replacement"
     (dolist (cp '(#xD800 #xDBFF #xDC00 #xDFFF))
-      (expect (= #xFFFD (char-code (cl-tmux/terminal/types:safe-code-char cp)))))
+      (expect (= #xFFFD (char-code (nerimux/terminal/types:safe-code-char cp)))))
     ;; The characters immediately outside the block are returned unchanged.
-    (expect (= #xD7FF (char-code (cl-tmux/terminal/types:safe-code-char #xD7FF))))
-    (expect (= #xE000 (char-code (cl-tmux/terminal/types:safe-code-char #xE000)))))
+    (expect (= #xD7FF (char-code (nerimux/terminal/types:safe-code-char #xD7FF))))
+    (expect (= #xE000 (char-code (nerimux/terminal/types:safe-code-char #xE000)))))
 
   ;; The point of the guard: whatever safe-code-char returns must be UTF-8
   ;; encodable, because it lands in a screen cell that is later encoded for the
   ;; wire. This is the assertion that would have caught the regression.
   (it "safe-code-char-result-is-always-utf8-encodable"
     (dolist (cp '(#xD800 #xDBFF #xDFFF #x41 #xD7FF #xE000 #x1F600))
-      (let ((string (string (cl-tmux/terminal/types:safe-code-char cp))))
+      (let ((string (string (nerimux/terminal/types:safe-code-char cp))))
         (expect (cl-codec-kit:string-to-octets string :encoding :utf-8)
                 :to-be-truthy)))))
 
@@ -349,37 +349,37 @@
   ;; Code points in the Combining Diacritical Marks block are combining.
   (it "combining-char-p-diacritic-marks-return-true"
     ;; U+0300 COMBINING GRAVE ACCENT (first in the block)
-    (expect (cl-tmux/terminal/actions:combining-char-p (code-char #x0300)) :to-be-truthy)
+    (expect (nerimux/terminal/actions:combining-char-p (code-char #x0300)) :to-be-truthy)
     ;; U+036F last in Combining Diacritical Marks
-    (expect (cl-tmux/terminal/actions:combining-char-p (code-char #x036F)) :to-be-truthy))
+    (expect (nerimux/terminal/actions:combining-char-p (code-char #x036F)) :to-be-truthy))
 
   ;; Ordinary ASCII characters are not combining.
   (it "combining-char-p-ascii-returns-false"
-    (expect (cl-tmux/terminal/actions:combining-char-p #\a) :to-be-falsy)
-    (expect (cl-tmux/terminal/actions:combining-char-p #\Space) :to-be-falsy))
+    (expect (nerimux/terminal/actions:combining-char-p #\a) :to-be-falsy)
+    (expect (nerimux/terminal/actions:combining-char-p #\Space) :to-be-falsy))
 
   ;; Combining Half Marks (U+FE20-FE2F) are combining.
   (it "combining-char-p-half-marks-return-true"
-    (expect (cl-tmux/terminal/actions:combining-char-p (code-char #xFE20)) :to-be-truthy))
+    (expect (nerimux/terminal/actions:combining-char-p (code-char #xFE20)) :to-be-truthy))
 
   ;; Writing a combining char appends it to the previous cell; cursor does not move.
   (it "write-char-at-cursor-combining-char-appended-not-advanced"
     (with-screen (s 10 5)
       (feed s "a")                        ; base character at col 0; cursor now at col 1
       ;; Write a combining grave accent (U+0300)
-      (cl-tmux/terminal/actions:write-char-at-cursor s (code-char #x0300))
+      (nerimux/terminal/actions:write-char-at-cursor s (code-char #x0300))
       ;; Cursor must still be at col 1 (not advanced)
       (check-cursor s 1 0)
       ;; The combining list of cell (0,0) must contain the diacritic
-      (let ((combining (cl-tmux/terminal/types:cell-combining (cell-at s 0 0))))
+      (let ((combining (nerimux/terminal/types:cell-combining (cell-at s 0 0))))
         (expect (member (code-char #x0300) combining)))))
 
   ;; A combining char at column 0 is appended to cell (0,0) -- no underflow.
   (it "write-char-at-cursor-combining-at-col-zero-appended-to-col-zero"
     (with-screen (s 10 5)
       ;; cursor starts at col 0; write a combining char without first writing a base
-      (cl-tmux/terminal/actions:write-char-at-cursor s (code-char #x0301))
+      (nerimux/terminal/actions:write-char-at-cursor s (code-char #x0301))
       ;; cursor must remain at col 0
       (check-cursor s 0 0)
       ;; No error and combining list on (0,0) must contain the mark
-      (expect (member (code-char #x0301) (cl-tmux/terminal/types:cell-combining (cell-at s 0 0)))))))
+      (expect (member (code-char #x0301) (nerimux/terminal/types:cell-combining (cell-at s 0 0)))))))

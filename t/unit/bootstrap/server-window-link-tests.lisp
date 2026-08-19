@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Cross-session window linking, unlinking, and grouped-session teardown.
 
@@ -9,46 +9,46 @@
     (with-empty-registry
       (let* ((alpha (make-fake-session :nwindows 1))
              (beta  (make-fake-session :nwindows 1))
-             (win   (first (cl-tmux/model:session-windows alpha))))
-        (setf (cl-tmux/model:session-name alpha) "alpha"
-              (cl-tmux/model:session-name beta)  "beta")
-        (cl-tmux::server-add-session alpha)
-        (cl-tmux::server-add-session beta)
-        (expect (= 1 (cl-tmux::%window-session-count win)))
-        (cl-tmux/model:session-insert-window beta win)
-        (expect (= 2 (cl-tmux::%window-session-count win))))))
+             (win   (first (nerimux/model:session-windows alpha))))
+        (setf (nerimux/model:session-name alpha) "alpha"
+              (nerimux/model:session-name beta)  "beta")
+        (nerimux::server-add-session alpha)
+        (nerimux::server-add-session beta)
+        (expect (= 1 (nerimux::%window-session-count win)))
+        (nerimux/model:session-insert-window beta win)
+        (expect (= 2 (nerimux::%window-session-count win))))))
 
   ;; link-window -s src -t dst makes the source window appear in dst (no collision).
   (it "link-window-shares-window-into-destination"
     (with-empty-registry
       (let* ((alpha (make-fake-session :nwindows 1))
              (beta  (make-fake-session :nwindows 1))
-             (alpha-win (first (cl-tmux/model:session-windows alpha))))
-        (setf (cl-tmux/model:session-name alpha) "alpha"
-              (cl-tmux/model:session-name beta)  "beta")
-        (setf (cl-tmux/model:window-id (first (cl-tmux/model:session-windows beta))) 9)
-        (cl-tmux::server-add-session alpha)
-        (cl-tmux::server-add-session beta)
-        (let ((cl-tmux/prompt:*overlay* nil))
-          (cl-tmux::%cmd-link-window alpha '("-s" "alpha:0" "-t" "beta")))
-        (expect (member alpha-win (cl-tmux/model:session-windows beta)) :to-be-truthy))))
+             (alpha-win (first (nerimux/model:session-windows alpha))))
+        (setf (nerimux/model:session-name alpha) "alpha"
+              (nerimux/model:session-name beta)  "beta")
+        (setf (nerimux/model:window-id (first (nerimux/model:session-windows beta))) 9)
+        (nerimux::server-add-session alpha)
+        (nerimux::server-add-session beta)
+        (let ((nerimux/prompt:*overlay* nil))
+          (nerimux::%cmd-link-window alpha '("-s" "alpha:0" "-t" "beta")))
+        (expect (member alpha-win (nerimux/model:session-windows beta)) :to-be-truthy))))
 
   ;; unlink-window on a window shared by 2 sessions removes it from the target only.
   (it "unlink-window-shared-removes-from-one-session-only"
     (with-empty-registry
       (let* ((alpha (make-fake-session :nwindows 1))
              (beta  (make-fake-session :nwindows 1))
-             (win   (first (cl-tmux/model:session-windows alpha))))
-        (setf (cl-tmux/model:session-name alpha) "alpha"
-              (cl-tmux/model:session-name beta)  "beta")
-        (cl-tmux::server-add-session alpha)
-        (cl-tmux::server-add-session beta)
-        (cl-tmux/model:session-insert-window beta win)
-        (cl-tmux/model:session-select-window beta win)
-        (let ((cl-tmux/prompt:*overlay* nil))
-          (cl-tmux::%cmd-unlink-window beta nil))
-        (expect (member win (cl-tmux/model:session-windows beta)) :to-be-falsy)
-        (expect (member win (cl-tmux/model:session-windows alpha)) :to-be-truthy))))
+             (win   (first (nerimux/model:session-windows alpha))))
+        (setf (nerimux/model:session-name alpha) "alpha"
+              (nerimux/model:session-name beta)  "beta")
+        (nerimux::server-add-session alpha)
+        (nerimux::server-add-session beta)
+        (nerimux/model:session-insert-window beta win)
+        (nerimux/model:session-select-window beta win)
+        (let ((nerimux/prompt:*overlay* nil))
+          (nerimux::%cmd-unlink-window beta nil))
+        (expect (member win (nerimux/model:session-windows beta)) :to-be-falsy)
+        (expect (member win (nerimux/model:session-windows alpha)) :to-be-truthy))))
 
   ;; link-window fires +hook-window-linked+ when a window is linked in.
   (it "link-window-fires-window-linked-hook"
@@ -57,15 +57,15 @@
         (let* ((alpha (make-fake-session :nwindows 1))
                (beta  (make-fake-session :nwindows 1))
                (fired nil))
-          (setf (cl-tmux/model:session-name alpha) "alpha"
-                (cl-tmux/model:session-name beta)  "beta")
-          (setf (cl-tmux/model:window-id (first (cl-tmux/model:session-windows beta))) 9)
-          (cl-tmux::server-add-session alpha)
-          (cl-tmux::server-add-session beta)
-          (cl-tmux/hooks:add-hook "window-linked"
+          (setf (nerimux/model:session-name alpha) "alpha"
+                (nerimux/model:session-name beta)  "beta")
+          (setf (nerimux/model:window-id (first (nerimux/model:session-windows beta))) 9)
+          (nerimux::server-add-session alpha)
+          (nerimux::server-add-session beta)
+          (nerimux/hooks:add-hook "window-linked"
                                   (lambda (&rest _) (declare (ignore _)) (setf fired t)))
-          (let ((cl-tmux/prompt:*overlay* nil))
-            (cl-tmux::%cmd-link-window alpha '("-s" "alpha:0" "-t" "beta")))
+          (let ((nerimux/prompt:*overlay* nil))
+            (nerimux::%cmd-link-window alpha '("-s" "alpha:0" "-t" "beta")))
           (expect fired :to-be-truthy)))))
 
   ;; unlink-window fires +hook-window-unlinked+ when a shared window is unlinked.
@@ -74,18 +74,18 @@
       (with-isolated-hooks
         (let* ((alpha (make-fake-session :nwindows 1))
                (beta  (make-fake-session :nwindows 1))
-               (win   (first (cl-tmux/model:session-windows alpha)))
+               (win   (first (nerimux/model:session-windows alpha)))
                (fired nil))
-          (setf (cl-tmux/model:session-name alpha) "alpha"
-                (cl-tmux/model:session-name beta)  "beta")
-          (cl-tmux::server-add-session alpha)
-          (cl-tmux::server-add-session beta)
-          (cl-tmux/model:session-insert-window beta win)
-          (cl-tmux/model:session-select-window beta win)
-          (cl-tmux/hooks:add-hook "window-unlinked"
+          (setf (nerimux/model:session-name alpha) "alpha"
+                (nerimux/model:session-name beta)  "beta")
+          (nerimux::server-add-session alpha)
+          (nerimux::server-add-session beta)
+          (nerimux/model:session-insert-window beta win)
+          (nerimux/model:session-select-window beta win)
+          (nerimux/hooks:add-hook "window-unlinked"
                                   (lambda (&rest _) (declare (ignore _)) (setf fired t)))
-          (let ((cl-tmux/prompt:*overlay* nil))
-            (cl-tmux::%cmd-unlink-window beta nil))
+          (let ((nerimux/prompt:*overlay* nil))
+            (nerimux::%cmd-unlink-window beta nil))
           (expect fired :to-be-truthy)))))
 
   ;; %destroy-session removes the session AND fires +hook-session-closed+.
@@ -94,10 +94,10 @@
       (with-isolated-hooks
         (let ((fired nil))
           (with-fake-session (s :nwindows 1)
-            (cl-tmux::server-add-session s)
-            (cl-tmux/hooks:add-hook "session-closed"
+            (nerimux::server-add-session s)
+            (nerimux/hooks:add-hook "session-closed"
                                     (lambda (&rest _) (declare (ignore _)) (setf fired t)))
-            (cl-tmux::%destroy-session s)
+            (nerimux::%destroy-session s)
             (expect fired :to-be-truthy))))))
 
   ;; Destroying ONE session in a group must NOT close the PTYs of a window another
@@ -107,21 +107,21 @@
       (let ((target  (make-fake-session :nwindows 1))
             (grouped (make-fake-session :nwindows 1))
             (closed  0))
-        (setf (cl-tmux::session-name target)  "base"
-              (cl-tmux::session-name grouped) "clone"
-              (cl-tmux::session-windows grouped) (cl-tmux::session-windows target))
-        (cl-tmux::server-add-session target)
-        (cl-tmux::server-add-session grouped)
-        (let ((orig (fdefinition 'cl-tmux/pty:pty-close)))
+        (setf (nerimux::session-name target)  "base"
+              (nerimux::session-name grouped) "clone"
+              (nerimux::session-windows grouped) (nerimux::session-windows target))
+        (nerimux::server-add-session target)
+        (nerimux::server-add-session grouped)
+        (let ((orig (fdefinition 'nerimux/pty:pty-close)))
           (unwind-protect
                (progn
-                 (setf (fdefinition 'cl-tmux/pty:pty-close)
+                 (setf (fdefinition 'nerimux/pty:pty-close)
                        (lambda (fd pid) (declare (ignore fd pid)) (incf closed)))
-                 (cl-tmux::%destroy-session grouped))
-            (setf (fdefinition 'cl-tmux/pty:pty-close) orig)))
+                 (nerimux::%destroy-session grouped))
+            (setf (fdefinition 'nerimux/pty:pty-close) orig)))
         (expect (zerop closed))
-        (expect (null (cl-tmux::server-find-session "clone")))
-        (expect (not (null (cl-tmux::server-find-session "base")))))))
+        (expect (null (nerimux::server-find-session "clone")))
+        (expect (not (null (nerimux::server-find-session "base")))))))
 
   ;; Regression guard: an ungrouped (single-reference) session's PTYs ARE still
   ;; closed on destroy - the reference-counted guard does not change the common case.
@@ -129,15 +129,15 @@
     (with-empty-registry
       (let ((sess   (make-fake-session :nwindows 1 :npanes 2))
             (closed  0))
-        (setf (cl-tmux::session-name sess) "solo")
-        (cl-tmux::server-add-session sess)
-        (let ((orig (fdefinition 'cl-tmux/pty:pty-close)))
+        (setf (nerimux::session-name sess) "solo")
+        (nerimux::server-add-session sess)
+        (let ((orig (fdefinition 'nerimux/pty:pty-close)))
           (unwind-protect
                (progn
-                 (setf (fdefinition 'cl-tmux/pty:pty-close)
+                 (setf (fdefinition 'nerimux/pty:pty-close)
                        (lambda (fd pid) (declare (ignore fd pid)) (incf closed)))
-                 (cl-tmux::%destroy-session sess))
-            (setf (fdefinition 'cl-tmux/pty:pty-close) orig)))
+                 (nerimux::%destroy-session sess))
+            (setf (fdefinition 'nerimux/pty:pty-close) orig)))
         (expect (= 2 closed)))))
 
   ;; rename-session removes+re-adds its registry entry but must NOT fire
@@ -147,20 +147,20 @@
       (with-isolated-hooks
         (let ((s (make-fake-session :nwindows 1))
               (fired nil))
-          (cl-tmux::server-add-session s)
-          (cl-tmux/hooks:add-hook "session-closed"
+          (nerimux::server-add-session s)
+          (nerimux/hooks:add-hook "session-closed"
                                   (lambda (&rest _) (declare (ignore _)) (setf fired t)))
-          (cl-tmux::%cmd-rename-session s '("renamed"))
+          (nerimux::%cmd-rename-session s '("renamed"))
           (expect fired :to-be-falsy)))))
 
   ;; unlink-window on a window present in only one session is refused without -k.
   (it "unlink-window-only-session-needs-k-flag"
     (with-empty-registry
       (let* ((alpha (make-fake-session :nwindows 2))
-             (win   (first (cl-tmux/model:session-windows alpha))))
-        (setf (cl-tmux/model:session-name alpha) "alpha")
-        (cl-tmux::server-add-session alpha)
-        (cl-tmux/model:session-select-window alpha win)
-        (let ((cl-tmux/prompt:*overlay* nil))
-          (cl-tmux::%cmd-unlink-window alpha nil))
-        (expect (member win (cl-tmux/model:session-windows alpha)) :to-be-truthy)))))
+             (win   (first (nerimux/model:session-windows alpha))))
+        (setf (nerimux/model:session-name alpha) "alpha")
+        (nerimux::server-add-session alpha)
+        (nerimux/model:session-select-window alpha win)
+        (let ((nerimux/prompt:*overlay* nil))
+          (nerimux::%cmd-unlink-window alpha nil))
+        (expect (member win (nerimux/model:session-windows alpha)) :to-be-truthy)))))

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/config)
+(in-package #:nerimux/config)
 
 ;;; ── Key-table system ──────────────────────────────────────────────────────
 ;;;

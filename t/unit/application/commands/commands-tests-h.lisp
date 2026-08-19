@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; copy-mode-exit, break-pane, clear-history, rotate-window — part VI
 
@@ -36,9 +36,9 @@
          (sess   (make-session :id 1 :name "0" :windows (list win))))
     (session-select-window sess win)
     (window-select-pane win pane)
-    (setf (cl-tmux/terminal/types:screen-scrollback screen)
+    (setf (nerimux/terminal/types:screen-scrollback screen)
           (list (make-array 10 :initial-element
-                            (cl-tmux/terminal/types:make-cell
+                            (nerimux/terminal/types:make-cell
                              :char #\X :fg 7 :bg 0 :attrs 0 :width 1))))
     (values sess win screen)))
 
@@ -66,16 +66,16 @@
   (it "copy-mode-exit-resets-all-copy-state"
     (let ((s (copy-mode-screen)))
       ;; Set all copy-mode fields to non-default values.
-      (setf (cl-tmux/terminal/types:screen-copy-offset    s) 5
-            (cl-tmux/terminal/types:screen-copy-mark      s) (cons 2 3)
-            (cl-tmux/terminal/types:screen-copy-cursor    s) (cons 2 5)
-            (cl-tmux/terminal/types:screen-copy-selecting s) t)
-      (cl-tmux/commands::copy-mode-exit s)
+      (setf (nerimux/terminal/types:screen-copy-offset    s) 5
+            (nerimux/terminal/types:screen-copy-mark      s) (cons 2 3)
+            (nerimux/terminal/types:screen-copy-cursor    s) (cons 2 5)
+            (nerimux/terminal/types:screen-copy-selecting s) t)
+      (nerimux/commands::copy-mode-exit s)
       (expect (screen-copy-mode-p s) :to-be-falsy)
-      (expect (= 0 (cl-tmux/terminal/types:screen-copy-offset s)))
-      (expect (null (cl-tmux/terminal/types:screen-copy-mark s)))
-      (expect (null (cl-tmux/terminal/types:screen-copy-cursor s)))
-      (expect (cl-tmux/terminal/types:screen-copy-selecting s) :to-be-falsy)))
+      (expect (= 0 (nerimux/terminal/types:screen-copy-offset s)))
+      (expect (null (nerimux/terminal/types:screen-copy-mark s)))
+      (expect (null (nerimux/terminal/types:screen-copy-cursor s)))
+      (expect (nerimux/terminal/types:screen-copy-selecting s) :to-be-falsy)))
 
   ;;; ── copy-mode-half-page-down ─────────────────────────────────────────────────
 
@@ -83,8 +83,8 @@
   (it "copy-mode-half-page-down-scrolls-forward-by-half-height"
     (let ((s (%screen-with-scrollback 30)))
       ;; First scroll back enough to allow scrolling forward.
-      (setf (cl-tmux/terminal/types:screen-copy-offset s) 20)
-      (cl-tmux/commands::copy-mode-half-page-down s)
+      (setf (nerimux/terminal/types:screen-copy-offset s) 20)
+      (nerimux/commands::copy-mode-half-page-down s)
       ;; height=5, floor(5/2)=2, so offset decreases by 2: 20-2=18.
       (expect (= 18 (screen-copy-offset s)))))
 
@@ -99,13 +99,13 @@
            (sess (make-session :id 1 :name "0" :windows (list win))))
       (session-select-window sess win)
       (window-select-pane win pane)
-      (expect (null (cl-tmux/commands:break-pane sess)))))
+      (expect (null (nerimux/commands:break-pane sess)))))
 
   ;; break-pane when session has no active window returns NIL.
   (it "break-pane-nil-src-win-returns-nil"
     ;; Build a session with no windows to exercise the nil-src-win guard.
     (let ((sess (make-session :id 1 :name "0" :windows nil)))
-      (expect (null (cl-tmux/commands:break-pane sess)))))
+      (expect (null (nerimux/commands:break-pane sess)))))
 
   ;; break-pane removes the active pane and places it in a new window.
   (it "break-pane-moves-pane-to-new-window"
@@ -119,7 +119,7 @@
            (sess (make-session :id 1 :name "0" :windows (list win))))
       (session-select-window sess win)
       (window-select-pane win p0)
-      (let ((new-win (cl-tmux/commands:break-pane sess)))
+      (let ((new-win (nerimux/commands:break-pane sess)))
         (expect new-win :to-be-truthy)
         (expect (member new-win (session-windows sess)))
         (expect (member p0 (window-panes new-win)))
@@ -140,7 +140,7 @@
              (sess (make-session :id 1 :name "0" :windows (list win))))
         (session-select-window sess win)
         (window-select-pane win p0)
-        (let ((new-win (cl-tmux/commands:break-pane sess)))
+        (let ((new-win (nerimux/commands:break-pane sess)))
           (expect (= 2 (window-id new-win)))
           (expect (null (find 0 (session-windows sess) :key #'window-id)))))))
 
@@ -157,7 +157,7 @@
         (multiple-value-bind (sess win p0 p1) (%break-arg-fixture)
           (declare (ignore p1))
           (with-command-test-state (sess)
-            (cl-tmux::%cmd-break-pane-arg sess args)
+            (nerimux::%cmd-break-pane-arg sess args)
             (expect (= 2 (length (session-windows sess))))
             (let* ((new-win (find-if (lambda (w) (not (eq w win))) (session-windows sess)))
                    (expected-active (if expect-switch new-win win)))
@@ -169,7 +169,7 @@
     (multiple-value-bind (sess win p0 p1) (%break-arg-fixture)
       (declare (ignore p0 p1))
       (with-command-test-state (sess)
-        (cl-tmux::%cmd-break-pane-arg sess '("-n" "logs"))
+        (nerimux::%cmd-break-pane-arg sess '("-n" "logs"))
         (let ((new-win (find-if (lambda (w) (not (eq w win))) (session-windows sess))))
           (expect (string= "logs" (window-name new-win)))))))
 
@@ -180,7 +180,7 @@
       (destructuring-bind (args description) case
         (multiple-value-bind (sess win p0 p1) (%break-arg-fixture)
           (with-command-rejection-state (sess
-                                         (cl-tmux::%cmd-break-pane-arg sess args)
+                                         (nerimux::%cmd-break-pane-arg sess args)
                                          "break-pane: unsupported argument"
                                          description)
             (expect (= 1 (length (session-windows sess))))
@@ -192,7 +192,7 @@
     (multiple-value-bind (sess win p0 p1) (%break-arg-fixture)
       (declare (ignore p1))
       (with-command-test-state (sess)
-        (expect (cl-tmux::%cmd-break-pane-arg sess '("-d" "-t" ":5")) :to-be-truthy)
+        (expect (nerimux::%cmd-break-pane-arg sess '("-d" "-t" ":5")) :to-be-truthy)
         (let ((new-win (find 5 (session-windows sess) :key #'window-id)))
           (expect new-win :to-be-truthy)
           (expect (member p0 (window-panes new-win))))
@@ -204,11 +204,11 @@
       (let ((other (%break-extra-window 2)))
         (session-insert-window sess other)
         (with-command-test-state (sess)
-          (expect (cl-tmux::%cmd-break-pane-arg sess '("-d" "-t" ":2")) :to-be-falsy)
+          (expect (nerimux::%cmd-break-pane-arg sess '("-d" "-t" ":2")) :to-be-falsy)
           (expect (equal '(1 2) (mapcar #'window-id (session-windows sess))))
           (expect (equal (list p0 p1) (window-panes win)))
           (expect (eq win (session-active-window sess)))
-          (expect cl-tmux::*dirty* :to-be-falsy)))))
+          (expect nerimux::*dirty* :to-be-falsy)))))
 
   ;; break-pane -a inserts after the target index and shifts collisions upward.
   (it "cmd-break-pane-a-shifts-colliding-windows-after-target"
@@ -217,7 +217,7 @@
       (let ((other (%break-extra-window 2)))
         (session-insert-window sess other)
         (with-command-test-state (sess)
-          (expect (cl-tmux::%cmd-break-pane-arg sess '("-d" "-a" "-t" ":1")) :to-be-truthy)
+          (expect (nerimux::%cmd-break-pane-arg sess '("-d" "-a" "-t" ":1")) :to-be-truthy)
           (expect (equal '(1 2 3) (mapcar #'window-id (session-windows sess))))
           (let ((new-win (find 2 (session-windows sess) :key #'window-id)))
             (expect (member p0 (window-panes new-win))))
@@ -231,7 +231,7 @@
       (let ((other (%break-extra-window 2)))
         (session-insert-window sess other)
         (with-command-test-state (sess)
-          (expect (cl-tmux::%cmd-break-pane-arg sess '("-d" "-b" "-t" ":1")) :to-be-truthy)
+          (expect (nerimux::%cmd-break-pane-arg sess '("-d" "-b" "-t" ":1")) :to-be-truthy)
           (expect (equal '(1 2 3) (mapcar #'window-id (session-windows sess))))
           (let ((new-win (find 1 (session-windows sess) :key #'window-id)))
             (expect (member p0 (window-panes new-win))))
@@ -243,7 +243,7 @@
     (multiple-value-bind (sess win p0 p1) (%break-arg-fixture)
       (declare (ignore win p0 p1))
       (with-command-test-state (sess :overlay t)
-        (expect (cl-tmux::%cmd-break-pane-arg
+        (expect (nerimux::%cmd-break-pane-arg
                  sess '("-d" "-P" "-F" "MARK#{pane_id}")) :to-be-truthy)
         (assert-overlay-uses-custom-format '("MARK" "1") *overlay*
                                            "break-pane -P -F overlay"))))
@@ -261,8 +261,8 @@
         (multiple-value-bind (sess win screen) (%clear-history-fixture)
           (declare (ignore win))
           (with-command-test-state (sess)
-            (cl-tmux::%cmd-clear-history-arg sess args)
-            (expect (null (cl-tmux/terminal/types:screen-scrollback screen))))))))
+            (nerimux::%cmd-clear-history-arg sess args)
+            (expect (null (nerimux/terminal/types:screen-scrollback screen))))))))
 
   ;;; ── rotate-window (scriptable %cmd-rotate-window-arg) ────────────────────────
 
@@ -271,7 +271,7 @@
     (multiple-value-bind (sess win p0 p1 p2) (%rotate-window-fixture)
       (declare (ignore p2))
       (with-command-test-state (sess)
-        (cl-tmux::%cmd-rotate-window-arg sess '("-t" ":w"))
+        (nerimux::%cmd-rotate-window-arg sess '("-t" ":w"))
         (expect (eq p1 (first (window-panes win))))
         (expect (eq p0 (car (last (window-panes win))))))))
 
@@ -279,7 +279,7 @@
   (it "cmd-rotate-window-rejects-zoom-flag"
     (multiple-value-bind (sess win p0 p1 p2) (%rotate-window-fixture)
       (with-command-rejection-state (sess
-                                     (cl-tmux::%cmd-rotate-window-arg sess '("-Z" "-t" ":w"))
+                                     (nerimux::%cmd-rotate-window-arg sess '("-Z" "-t" ":w"))
                                      "rotate-window: unsupported argument"
                                      "rotate-window -Z")
         (expect (equal (list p0 p1 p2) (window-panes win)))
@@ -291,5 +291,5 @@
     (multiple-value-bind (sess win p0 p1 p2) (%rotate-window-fixture)
       (declare (ignore p0 p1))
       (with-command-test-state (sess)
-        (cl-tmux::%cmd-rotate-window-arg sess '("-D" "-t" ":w"))
+        (nerimux::%cmd-rotate-window-arg sess '("-D" "-t" ":w"))
         (expect (eq p2 (first (window-panes win))))))))

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; csi tests — part B: ECH, DECRQM, XTWINOPS, CPR, DA table,
 ;;;; REP count=0, VPR/CNL/HPR, ICH, DCH, ED/EL, SGR in CSI, IL/DL,
@@ -54,7 +54,7 @@
       (check-cursor s 2 0)
       ;; DSR must have queued the terminal-OK status reply.
       (expect (some (lambda (r) (search "[0n" r))
-                    (cl-tmux/terminal/types:screen-response-queue s))))))
+                    (nerimux/terminal/types:screen-response-queue s))))))
 
 ;;; ── SUITE: ich-dch ───────────────────────────────────────────────────────────
 
@@ -168,8 +168,8 @@
     (with-screen (s 10 10)
       (feed s (esc "[3;8H"))    ; move cursor away from home
       (feed s (esc "[3;8r"))    ; DECSTBM: top=3 (1-based) → 2, bottom=8 → 7
-      (expect (= 2 (cl-tmux/terminal/types:screen-scroll-top s)))
-      (expect (= 7 (cl-tmux/terminal/types:screen-scroll-bottom s)))
+      (expect (= 2 (nerimux/terminal/types:screen-scroll-top s)))
+      (expect (= 7 (nerimux/terminal/types:screen-scroll-bottom s)))
       ;; DECSTBM homes the cursor.
       (check-cursor s 0 0)))
 
@@ -180,8 +180,8 @@
       (feed s (esc "[3;8r"))
       ;; Then reset with no params (p1=0 → top defaults to 1-1=0; p2=0 → bottom = height-1).
       (feed s (esc "[r"))
-      (expect (= 0 (cl-tmux/terminal/types:screen-scroll-top s)))
-      (expect (= 9 (cl-tmux/terminal/types:screen-scroll-bottom s)))))
+      (expect (= 0 (nerimux/terminal/types:screen-scroll-top s)))
+      (expect (= 9 (nerimux/terminal/types:screen-scroll-bottom s)))))
 
   ;; After DECSTBM, scrolling operates within the defined region.
   (it "decstbm-csi-scroll-region-constrains-scroll"
@@ -202,12 +202,12 @@
     (with-screen (s 10 10)
       ;; First set a valid region
       (feed s (esc "[3;8r"))
-      (expect (= 2 (cl-tmux/terminal/types:screen-scroll-top s)))
-      (expect (= 7 (cl-tmux/terminal/types:screen-scroll-bottom s)))
+      (expect (= 2 (nerimux/terminal/types:screen-scroll-top s)))
+      (expect (= 7 (nerimux/terminal/types:screen-scroll-bottom s)))
       ;; Now send invalid: top=8 (0-based 7) > bottom=3 (0-based 2)
       (feed s (esc "[8;3r"))
-      (expect (= 0 (cl-tmux/terminal/types:screen-scroll-top s)))
-      (expect (= 9 (cl-tmux/terminal/types:screen-scroll-bottom s))))))
+      (expect (= 0 (nerimux/terminal/types:screen-scroll-top s)))
+      (expect (= 9 (nerimux/terminal/types:screen-scroll-bottom s))))))
 
 ;;; ── SUITE: execute-csi-direct ────────────────────────────────────────────────
 
@@ -216,29 +216,29 @@
   ;; execute-csi called directly with final #\H and params '(3 5) positions cursor.
   (it "execute-csi-cup-direct"
     (with-screen (s 20 10)
-      (cl-tmux/terminal/csi:execute-csi s #\H nil nil '(3 5))
+      (nerimux/terminal/csi:execute-csi s #\H nil nil '(3 5))
       ;; CUP: row=3 (1-based) → y=2; col=5 (1-based) → x=4
       (check-cursor s 4 2)))
 
   ;; execute-csi with final #\m and params '(31) sets foreground via the SGR path.
   (it "execute-csi-sgr-direct"
     (with-screen (s 20 10)
-      (cl-tmux/terminal/csi:execute-csi s #\m nil nil '(31))
-      (expect (= 1 (cl-tmux/terminal/types:screen-cur-fg s)))))
+      (nerimux/terminal/csi:execute-csi s #\m nil nil '(31))
+      (expect (= 1 (nerimux/terminal/types:screen-cur-fg s)))))
 
   ;; execute-csi with an unrecognized final byte is silently ignored (no error, no state change).
   (it "execute-csi-unknown-final-is-noop"
     (with-screen (s 20 10)
-      (finishes (cl-tmux/terminal/csi:execute-csi s #\z nil nil '()))
+      (finishes (nerimux/terminal/csi:execute-csi s #\z nil nil '()))
       ;; Screen state must be at defaults.
       (check-cursor s 0 0)
-      (check-sgr-state s :fg cl-tmux/terminal/types:+default-color+ :bg cl-tmux/terminal/types:+default-color+ :attrs 0)))
+      (check-sgr-state s :fg nerimux/terminal/types:+default-color+ :bg nerimux/terminal/types:+default-color+ :attrs 0)))
 
   ;; execute-csi with a recognized final but unrecognized intermed byte is silently ignored.
   (it "execute-csi-unknown-intermed-is-noop"
     (with-screen (s 20 10)
       ;; #\! intermed with #\H final is not defined — should be a no-op.
-      (finishes (cl-tmux/terminal/csi:execute-csi s #\H #\! nil '(3 5)))
+      (finishes (nerimux/terminal/csi:execute-csi s #\H #\! nil '(3 5)))
       ;; Cursor must remain at origin (no CUP fired).
       (check-cursor s 0 0))))
 
@@ -255,7 +255,7 @@
         (declare (ignore desc))
         (with-screen (s sw sh)
           (multiple-value-bind (top bottom)
-              (cl-tmux/terminal/csi::%csi-decstbm-params s p1 p2)
+              (nerimux/terminal/csi::%csi-decstbm-params s p1 p2)
             (when expected-top
               (expect (= expected-top top)))
             (when expected-bottom
@@ -272,11 +272,11 @@
 
   ;; define-csi-rules is a defined macro in the csi package.
   (it "define-csi-rules-macro-is-defined"
-    (expect (macro-function 'cl-tmux/terminal/csi::define-csi-rules)))
+    (expect (macro-function 'nerimux/terminal/csi::define-csi-rules)))
 
   ;; execute-csi (exported) has a non-empty docstring injected by define-csi-rules.
   (it "execute-csi-has-docstring"
-    (let ((doc (documentation 'cl-tmux/terminal/csi:execute-csi 'function)))
+    (let ((doc (documentation 'nerimux/terminal/csi:execute-csi 'function)))
       (expect (and (stringp doc) (plusp (length doc))))))
 
   ;; %csi-leading-int returns a plain integer as-is, the head of a colon-group
@@ -288,7 +288,7 @@
                        (list '(nil 3) 0  "colon-group with NIL head → 0")))
       (destructuring-bind (param expected desc) row
         (declare (ignore desc))
-        (expect (= expected (cl-tmux/terminal/csi::%csi-leading-int param)))))))
+        (expect (= expected (nerimux/terminal/csi::%csi-leading-int param)))))))
 
 ;;; ── SUITE: csi-decstr-ansi-mode-dispatch ─────────────────────────────────────
 ;;;
@@ -304,19 +304,19 @@
     (with-screen (s 10 5)
       (feed s "ABCDE")
       (feed s (esc "[4h"))          ; enable IRM first
-      (expect (cl-tmux/terminal/types:screen-insert-mode s) :to-be-truthy)
+      (expect (nerimux/terminal/types:screen-insert-mode s) :to-be-truthy)
       (feed s (esc "[!p"))          ; DECSTR — soft reset
-      (expect (cl-tmux/terminal/types:screen-insert-mode s) :to-be-falsy)
+      (expect (nerimux/terminal/types:screen-insert-mode s) :to-be-falsy)
       (expect (string= "ABCDE" (row-string s 0 :end 5)))))
 
   ;; ESC[4h / ESC[4l (ANSI IRM, no private marker) toggle screen-insert-mode via
   ;; the execute-csi set-ansi-mode/reset-ansi-mode rules.
   (it "ansi-mode-h-l-via-csi-toggles-insert-mode"
     (with-screen (s 10 5)
-      (expect (cl-tmux/terminal/types:screen-insert-mode s) :to-be-falsy)
+      (expect (nerimux/terminal/types:screen-insert-mode s) :to-be-falsy)
       (feed s (esc "[4h"))
-      (expect (cl-tmux/terminal/types:screen-insert-mode s) :to-be-truthy)
+      (expect (nerimux/terminal/types:screen-insert-mode s) :to-be-truthy)
       (feed s (esc "[4l"))
-      (expect (cl-tmux/terminal/types:screen-insert-mode s) :to-be-falsy))))
+      (expect (nerimux/terminal/types:screen-insert-mode s) :to-be-falsy))))
 
 ;;; ── SUITE: csi-unknown-sequences ─────────────────────────────────────────────

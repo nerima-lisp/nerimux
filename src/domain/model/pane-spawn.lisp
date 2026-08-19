@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/model)
+(in-package #:nerimux/model)
 
 ;;; ── PTY-backed pane factory ─────────────────────────────────────────────────
 ;;;
@@ -21,8 +21,8 @@
   "Read the 'default-terminal' and 'default-command' options for PTY spawn calls.
    Returns (values term-or-nil command-or-nil) where a value is NIL when the
    option is unset or empty — matching the guard (and val (plusp (length val)))."
-  (let ((term (cl-tmux/options:get-option "default-terminal"))
-        (cmd  (cl-tmux/options:get-option "default-command")))
+  (let ((term (nerimux/options:get-option "default-terminal"))
+        (cmd  (nerimux/options:get-option "default-command")))
     (values (and term (plusp (length term)) term)
             (and cmd  (plusp (length cmd))  cmd))))
 
@@ -30,7 +30,7 @@
   "Spawn a PTY shell using the configured default-terminal and default-command.
    ROWS is the number of terminal rows; COLS is the number of terminal columns.
    Returns (values fd pid slave-path).  Shared by %fork-pane and respawn-pane.
-   Calls the cl-tmux/ports:spawn-pty port (installed by install-pty-port)."
+   Calls the nerimux/ports:spawn-pty port (installed by install-pty-port)."
   (spawn-pty rows cols
              :start-dir start-dir
              :default-command default-command

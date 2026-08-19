@@ -1,6 +1,6 @@
-;;;; CPS keystroke-pipeline helpers for cl-tmux tests.
+;;;; CPS keystroke-pipeline helpers for nerimux tests.
 
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;; ── Custom matcher: CPS "reset to ground state" assertions ──────────────────
 ;;;
@@ -9,7 +9,7 @@
 ;;; outcome — previously spelled out by hand at each call site as:
 ;;;   (multiple-value-bind (outcome next) (handler ...)
 ;;;     (expect (null outcome))
-;;;     (expect (eq #'cl-tmux::%ground-input-state next)))
+;;;     (expect (eq #'nerimux::%ground-input-state next)))
 ;;; A cl-weave custom matcher collapses that into a single readable assertion:
 ;;; (expect (multiple-value-list (handler ...)) :to-return-to-ground).
 (cl-weave:defmatcher :to-return-to-ground (actual expected)
@@ -18,6 +18,6 @@
    fully-consumed sequence that resets input to ground state."
   (declare (ignore expected))
   (destructuring-bind (outcome next) actual
-    (values (and (null outcome) (eq next #'cl-tmux::%ground-input-state))
+    (values (and (null outcome) (eq next #'nerimux::%ground-input-state))
             (list :outcome outcome :next next)
             (list :outcome nil :next :ground-input-state))))

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; Mouse dispatch state is intentionally tiny and explicit: parser state,
 ;;; pane routing, and copy-mode logic live in separate files.

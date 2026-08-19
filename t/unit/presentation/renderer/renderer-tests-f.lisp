@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; renderer tests — part F: parse-style-string, style-to-sgr,
 ;;;; status-left/right length enforcement, window-status-format,
@@ -14,7 +14,7 @@
                    (""  "empty-string input → nil")))
       (destructuring-bind (input desc) row
         (declare (ignore desc))
-        (expect (null (cl-tmux/renderer:parse-style-string input))))))
+        (expect (null (nerimux/renderer:parse-style-string input))))))
 
   ;; parse-style-string sets :fg or :bg to the parsed colour name.
   (it "parse-style-string-color-key-table"
@@ -23,7 +23,7 @@
                    ("fg=colour4" :fg "colour4"  "fg=colour4 → :fg \"colour4\"")))
       (destructuring-bind (input key expected desc) row
         (declare (ignore desc))
-        (let ((p (cl-tmux/renderer:parse-style-string input)))
+        (let ((p (nerimux/renderer:parse-style-string input)))
           (expect (string= expected (getf p key)))))))
 
   ;; parse-style-string sets boolean attribute keys to T.
@@ -32,12 +32,12 @@
                    ("reverse" :reverse "reverse → :reverse T")))
       (destructuring-bind (input key desc) row
         (declare (ignore desc))
-        (let ((p (cl-tmux/renderer:parse-style-string input)))
+        (let ((p (nerimux/renderer:parse-style-string input)))
           (expect (getf p key))))))
 
   ;; parse-style-string parses fg=green,bold,underline into a combined plist.
   (it "parse-style-string-multiple-attrs"
-    (let ((p (cl-tmux/renderer:parse-style-string "fg=green,bold,underline")))
+    (let ((p (nerimux/renderer:parse-style-string "fg=green,bold,underline")))
       (expect (string= "green" (getf p :fg)))
       (expect (getf p :bold))
       (expect (getf p :underline))))
@@ -46,7 +46,7 @@
 
   ;; style-to-sgr with NIL returns default blue-on-white SGR "44;97".
   (it "style-to-sgr-nil-returns-default"
-    (expect (string= "44;97" (cl-tmux/renderer:style-to-sgr nil))))
+    (expect (string= "44;97" (nerimux/renderer:style-to-sgr nil))))
 
   ;; style-to-sgr includes the correct SGR code substring for each attribute.
   (it "style-to-sgr-attrs-table"
@@ -57,7 +57,7 @@
                    ((:bg "colour4") "48;5;4" ":bg colour4 → SGR 48;5;4")))
       (destructuring-bind (style expected desc) row
         (declare (ignore desc))
-        (let ((sgr (cl-tmux/renderer:style-to-sgr style)))
+        (let ((sgr (nerimux/renderer:style-to-sgr style)))
           (expect (search expected sgr))))))
 
   ;;; ── status-left-length / status-right-length enforcement ────────────────────
@@ -65,8 +65,8 @@
   ;; status-left-length truncates the expanded left string to the configured max.
   (it "status-left-length-truncates-long-left"
     (with-isolated-options ()
-      (cl-tmux/options:set-option "status-left" "abcdefghij")
-      (cl-tmux/options:set-option "status-left-length" 5)
+      (nerimux/options:set-option "status-left" "abcdefghij")
+      (nerimux/options:set-option "status-left-length" 5)
       (let* ((sess (make-renderer-test-session 80 10))
              (out  (render-status-bar-output sess 11 80)))
         (expect (search "abcde" out))
@@ -75,8 +75,8 @@
   ;; status-right-length truncates the expanded right string to the configured max.
   (it "status-right-length-truncates-long-right"
     (with-isolated-options ()
-      (cl-tmux/options:set-option "status-right" "1234567890")
-      (cl-tmux/options:set-option "status-right-length" 4)
+      (nerimux/options:set-option "status-right" "1234567890")
+      (nerimux/options:set-option "status-right-length" 4)
       (let* ((sess (make-renderer-test-session 80 10))
              (out  (render-status-bar-output sess 11 80)))
         (expect (search "1234" out))
@@ -148,8 +148,8 @@
   ;; render-popup wraps the popup border in the popup-border-style SGR.
   (it "render-popup-honours-border-style-colour"
     (with-isolated-options ("popup-border-style" "fg=red")
-      (let* ((expected (cl-tmux/renderer:style-to-sgr
-                        (cl-tmux/renderer:parse-style-string "fg=red")))
+      (let* ((expected (nerimux/renderer:style-to-sgr
+                        (nerimux/renderer:parse-style-string "fg=red")))
              (popup (make-popup :title "T" :width 20 :height 6
                                 :pane nil :screen nil :close-on-exit nil))
              (out   (render-popup-output popup 24 80)))

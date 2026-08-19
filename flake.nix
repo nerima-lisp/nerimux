@@ -1,5 +1,5 @@
 {
-  description = "cl-tmux — a tmux-compatible terminal multiplexer in Common Lisp";
+  description = "nerimux — a tmux-compatible terminal multiplexer in Common Lisp";
 
   inputs = {
     # nixos-unstable, not nixpkgs-unstable: it advances only after the NixOS
@@ -19,7 +19,7 @@
       # cl-weave's own flake still declares its paredit-cli dev input under the
       # pre-migration owner; pin it to the org (and to a tag) so no takeokunn/*
       # rev survives in our lock. paredit-cli is a transitive dev tool only and
-      # is never linked into cl-tmux.
+      # is never linked into nerimux.
       inputs.paredit-cli.url = "github:nerima-lisp/paredit-cli/v1.4.0";
     };
 
@@ -50,7 +50,7 @@
     };
     # Transitive only: cl-boundary-kit depends on cl-log-kit, and siblings are
     # consumed as source, so the source has to be on the registry even though
-    # nothing in cl-tmux.asd names it. Not a direct dependency of cl-tmux.
+    # nothing in nerimux.asd names it. Not a direct dependency of nerimux.
     cl-log-kit = {
       url = "github:nerima-lisp/cl-log-kit/v2.0.1";
       flake = false;
@@ -61,7 +61,7 @@
     };
     # Transitive only: cl-log-kit depends on cl-date-kit >= 0.2.0, and
     # siblings are consumed as source, so the source has to be on the
-    # registry even though nothing in cl-tmux.asd names it directly.
+    # registry even though nothing in nerimux.asd names it directly.
     cl-date-kit = {
       url = "github:nerima-lisp/cl-date-kit/v1.0.0";
       flake = false;
@@ -72,14 +72,14 @@
     };
     cl-tty-kit = {
       # v1.1.0: adds set-terminal-size (ioctl TIOCSWINSZ), which replaces
-      # cl-tmux's own cffi ioctl call in pty.lisp. That call used a FIXED
+      # nerimux's own cffi ioctl call in pty.lisp. That call used a FIXED
       # prototype for a variadic syscall, which misfires on the arm64 ABI, so
       # pane resize was a silent no-op on Apple Silicon; cl-tty-kit goes
       # through sb-unix:unix-ioctl, which marshals the pointer correctly.
       #
       # (v1.0.2 was the previous pin, for the raw-mode fix: a duplicate defvar
       # shadowed *raw-mode-tcsetattr-function*'s platform-specific initial
-      # value, crashing cl-tmux every time it entered raw mode. Still present.)
+      # value, crashing nerimux every time it entered raw mode. Still present.)
       url = "github:nerima-lisp/cl-tty-kit/v1.2.0";
       flake = false;
     };
@@ -139,7 +139,7 @@
       # split-string and the pathname-directory-pathname/directory-pathname-p
       # helpers.
       #
-      # This pin was marked STALE while cl-tmux's octet conversion went through
+      # This pin was marked STALE while nerimux's octet conversion went through
       # this package's own string/octet wrappers, which exist only in the
       # uncommitted src/text-encoding.lisp and in no tag. Those call sites now
       # go to cl-codec-kit, and v0.2.1 does export split-string,
@@ -149,7 +149,7 @@
       flake = false;
     };
     cl-tui-kit = {
-      # The headless surface/layout/backend boundary used by cl-tmux's
+      # The headless surface/layout/backend boundary used by nerimux's
       # per-client renderer. Pin the API that exposes make-surface and the
       # ANSI backend used by the deterministic frame adapter.
       url = "github:nerima-lisp/cl-tui-kit/v4.1.3";
@@ -217,16 +217,16 @@
       pkgsFor = system: import nixpkgs { inherit system; };
 
       # Single source of truth for the version: the `:version` form in
-      # cl-tmux.asd. A release only ever edits the .asd, and every Nix package
+      # nerimux.asd. A release only ever edits the .asd, and every Nix package
       # follows automatically; release.yml refuses a tag that disagrees.
       #
       # Nix regexes are whole-string anchored and `.` never spans newlines, so
       # the version is extracted line-by-line rather than with one multi-line
-      # match. The first match wins, which is the `cl-tmux` system — the test
+      # match. The first match wins, which is the `nerimux` system — the test
       # systems repeat the same field further down the file.
       version =
         let
-          lines = nixpkgs.lib.splitString "\n" (builtins.readFile ./cl-tmux.asd);
+          lines = nixpkgs.lib.splitString "\n" (builtins.readFile ./nerimux.asd);
           versionLine = builtins.head (
             builtins.filter (line: builtins.match "[[:space:]]*:version \"[^\"]*\"" line != null) lines
           );
@@ -268,8 +268,8 @@
 
       # Plain SBCL, with NO Quicklisp-packaged libraries wrapped around it.
       #
-      # There is nothing left to wrap: cl-tmux has no external (non-org)
-      # dependencies. Every name in cl-tmux.asd's :depends-on is a nerima-lisp
+      # There is nothing left to wrap: nerimux has no external (non-org)
+      # dependencies. Every name in nerimux.asd's :depends-on is a nerima-lisp
       # sibling, and siblings are consumed as SOURCE via siblingRegistry above,
       # not through nixpkgs Lisp packaging.
       #
@@ -279,7 +279,7 @@
       #   bordeaux-threads -> cl-concurrent-kit                      (2026-08-02)
       #   cl-ppcre         -> cl-regex-kit                            (2026-08-02)
       #
-      # If a `pkgs.sbcl.withPackages` ever comes back here, cl-tmux.asd's
+      # If a `pkgs.sbcl.withPackages` ever comes back here, nerimux.asd's
       # :depends-on must gain the matching external name in the same commit —
       # a mismatch between the two fails only at load time.
 
@@ -312,8 +312,8 @@
               sbcl
               pkgs.coreutils
             ];
-            CL_TMUX_SIBLING_REGISTRY = siblingRegistry;
-            CL_TMUX_TEST_SYSTEM = testSystem;
+            NERIMUX_SIBLING_REGISTRY = siblingRegistry;
+            NERIMUX_TEST_SYSTEM = testSystem;
           }
           ''
             export HOME="$TMPDIR/home"
@@ -333,8 +333,8 @@
           sbcl = pkgs.sbcl;
         in
         rec {
-          cl-tmux = pkgs.stdenv.mkDerivation {
-            pname = "cl-tmux";
+          nerimux = pkgs.stdenv.mkDerivation {
+            pname = "nerimux";
             inherit version;
             src = self;
 
@@ -355,9 +355,9 @@
                 --eval "(require :asdf)" \
                 --eval "(push (truename \".\") asdf:*central-registry*)" \
                 ${siblingRegistryPushEvals} \
-                --eval "(asdf:load-system \"cl-tmux\")" \
-                --eval "(sb-ext:save-lisp-and-die \"cl-tmux.core\"
-                           :toplevel #'cl-tmux:main
+                --eval "(asdf:load-system \"nerimux\")" \
+                --eval "(sb-ext:save-lisp-and-die \"nerimux.core\"
+                           :toplevel #'nerimux:main
                            :executable nil
                            :compression t)" \
                 --quit
@@ -366,27 +366,27 @@
 
             installPhase = ''
               runHook preInstall
-              mkdir -p $out/lib/cl-tmux $out/bin
+              mkdir -p $out/lib/nerimux $out/bin
 
-              cp cl-tmux.core $out/lib/cl-tmux/
+              cp nerimux.core $out/lib/nerimux/
 
-              # Wrap sbcl so users just call "cl-tmux".
+              # Wrap sbcl so users just call "nerimux".
               # --noinform is a C-runtime option; it must precede --core.
               # --no-sysinit/userinit are Lisp options; they follow --core.
-              makeWrapper ${sbcl}/bin/sbcl $out/bin/cl-tmux \
-                --add-flags "--noinform --core $out/lib/cl-tmux/cl-tmux.core --no-sysinit --no-userinit"
+              makeWrapper ${sbcl}/bin/sbcl $out/bin/nerimux \
+                --add-flags "--noinform --core $out/lib/nerimux/nerimux.core --no-sysinit --no-userinit"
               runHook postInstall
             '';
 
             meta = {
               description = "A tmux-compatible terminal multiplexer in Common Lisp";
-              homepage = "https://github.com/nerima-lisp/cl-tmux";
+              homepage = "https://github.com/nerima-lisp/nerimux";
               license = pkgs.lib.licenses.mit;
-              mainProgram = "cl-tmux";
+              mainProgram = "nerimux";
             };
           };
 
-          default = cl-tmux;
+          default = nerimux;
 
           # Rendered documentation site (Material for MkDocs). Builds fully
           # offline: Material bundles all of its assets, so no network access is
@@ -396,7 +396,7 @@
           # The fileset covers docs/mkdocs.yml and docs/src only, so docs/notes/
           # (working records, deliberately unpublished) never reaches the site.
           docs = pkgs.stdenvNoCC.mkDerivation {
-            pname = "cl-tmux-docs";
+            pname = "nerimux-docs";
             inherit version;
             src = pkgs.lib.fileset.toSource {
               root = ./docs;
@@ -413,8 +413,8 @@
             '';
             dontInstall = true;
             meta = {
-              description = "Rendered MkDocs (Material) documentation for cl-tmux";
-              homepage = "https://github.com/nerima-lisp/cl-tmux";
+              description = "Rendered MkDocs (Material) documentation for nerimux";
+              homepage = "https://github.com/nerima-lisp/nerimux";
               license = pkgs.lib.licenses.mit;
             };
           };
@@ -427,14 +427,14 @@
           # is proven to run the full suite cleanly inside the Nix sandbox —
           # unlike an interactive `nix develop` shell, where this exact suite
           # is known to hang (a real PTY/tty artifact of that environment, not
-          # a suite bug; see the devShell cl-tmux-coverage helper below, which
+          # a suite bug; see the devShell nerimux-coverage helper below, which
           # calls this same script for local use once that hang is a non-issue
           # for the caller).
           coverage-report =
-            pkgs.runCommand "cl-tmux-coverage-report"
+            pkgs.runCommand "nerimux-coverage-report"
               {
                 nativeBuildInputs = [ sbcl ];
-                CL_TMUX_SIBLING_REGISTRY = siblingRegistry;
+                NERIMUX_SIBLING_REGISTRY = siblingRegistry;
               }
               ''
                 export HOME="$TMPDIR/home"
@@ -458,13 +458,13 @@
       checks = forAllSystems (system: {
         # The full unit + integration suite. PTY tests self-skip when
         # /dev/ptmx is unavailable, so a sandboxed run stays meaningful.
-        default = mkTestCheck system "cl-tmux-tests" "cl-tmux/test";
+        default = mkTestCheck system "nerimux-tests" "nerimux/test";
 
         # The cl-prolog-kit-backed reasoning read-model (src/reasoning/).
-        weave = mkTestCheck system "cl-tmux-weave-tests" "cl-tmux/weave";
+        weave = mkTestCheck system "nerimux-weave-tests" "nerimux/weave";
 
         # The cl-dataflow-kit-backed copy-mode lifecycle read-model (src/dataflow/).
-        dataflow = mkTestCheck system "cl-tmux-dataflow-tests" "cl-tmux/dataflow";
+        dataflow = mkTestCheck system "nerimux-dataflow-tests" "nerimux/dataflow";
 
         # Fails `nix flake check` when any tracked file is unformatted,
         # turning the formatter into an enforced CI gate.
@@ -485,14 +485,14 @@
           sbcl = pkgs.sbcl;
 
           test = pkgs.writeShellApplication {
-            name = "cl-tmux-test";
+            name = "nerimux-test";
             runtimeInputs = [
               sbcl
               pkgs.coreutils
             ];
             text = ''
-              export CL_TMUX_SIBLING_REGISTRY="${siblingRegistry}"
-              export CL_TMUX_TEST_SYSTEM="''${CL_TMUX_TEST_SYSTEM:-cl-tmux/test}"
+              export NERIMUX_SIBLING_REGISTRY="${siblingRegistry}"
+              export NERIMUX_TEST_SYSTEM="''${NERIMUX_TEST_SYSTEM:-nerimux/test}"
               # Run against a writable copy for the same reason the checks do:
               # the suite compiles in place and ${self} is read-only.
               work="$(mktemp -d)"
@@ -509,19 +509,19 @@
           # advertises; the test runner is reachable as `nix run .#test`.
           default = {
             type = "app";
-            program = "${self.packages.${system}.cl-tmux}/bin/cl-tmux";
+            program = "${self.packages.${system}.nerimux}/bin/nerimux";
             meta = {
-              description = "cl-tmux — a tmux-compatible terminal multiplexer in Common Lisp";
-              mainProgram = "cl-tmux";
+              description = "nerimux — a tmux-compatible terminal multiplexer in Common Lisp";
+              mainProgram = "nerimux";
             };
           };
 
           test = {
             type = "app";
-            program = "${test}/bin/cl-tmux-test";
+            program = "${test}/bin/nerimux-test";
             meta = {
-              description = "Run cl-tmux's test suite (CL_TMUX_TEST_SYSTEM selects which one)";
-              mainProgram = "cl-tmux-test";
+              description = "Run nerimux's test suite (NERIMUX_TEST_SYSTEM selects which one)";
+              mainProgram = "nerimux-test";
             };
           };
         }
@@ -536,38 +536,38 @@
         {
           default = pkgs.mkShell {
             packages = [ sbcl ];
-            CL_TMUX_SIBLING_REGISTRY = siblingRegistry;
+            NERIMUX_SIBLING_REGISTRY = siblingRegistry;
             shellHook = ''
               # Registers the central-registry entries the checks use, so an
-              # interactive `sbcl` session finds cl-tmux and every sibling
+              # interactive `sbcl` session finds nerimux and every sibling
               # library without repeating those --eval flags by hand. A plain
-              # `sbcl --load cl-tmux.asd` fails: .asd files read `defsystem` in
+              # `sbcl --load nerimux.asd` fails: .asd files read `defsystem` in
               # whatever package ASDF put the reader in, which is only set up
               # correctly once `(require :asdf)` and the registry pushes below
               # have run.
-              cl-tmux-sbcl() {
+              nerimux-sbcl() {
                 sbcl --eval "(require :asdf)" \
                      --eval "(push (truename \".\") asdf:*central-registry*)" \
                      ${siblingRegistryPushEvals} \
                      "$@"
               }
-              export -f cl-tmux-sbcl
+              export -f nerimux-sbcl
 
               # Delegates to scripts/coverage.lisp — the single source of
               # truth for the sb-cover instrumentation-order recipe (also used
               # by `nix build .#coverage-report`, which runs it hermetically
               # inside the Nix sandbox rather than this interactive shell).
-              cl-tmux-coverage() {
+              nerimux-coverage() {
                 local report_dir="''${1:-./coverage-report}/"
                 sbcl --script scripts/coverage.lisp "$report_dir"
                 echo "Coverage report: $report_dir" "cover-index.html"
               }
-              export -f cl-tmux-coverage
+              export -f nerimux-coverage
 
-              echo "cl-tmux dev shell"
+              echo "nerimux dev shell"
               echo "  run tests:       sbcl --script run-tests.lisp"
-              echo "  load in a REPL:  cl-tmux-sbcl --eval '(asdf:load-system \"cl-tmux\")'"
-              echo "  coverage report: cl-tmux-coverage [output-dir]"
+              echo "  load in a REPL:  nerimux-sbcl --eval '(asdf:load-system \"nerimux\")'"
+              echo "  coverage report: nerimux-coverage [output-dir]"
             '';
           };
         }

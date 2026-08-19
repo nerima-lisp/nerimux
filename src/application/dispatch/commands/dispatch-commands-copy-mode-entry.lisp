@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 (declaim (special *current-mouse-event*))
 
@@ -46,7 +46,7 @@
               (copy-mode-enter screen
                                :scroll-to-top (%copy-mode-scroll-to-top-p flags)
                                :exit-on-bottom (%copy-mode-exit-on-bottom-p flags))
-              (setf (cl-tmux/terminal/types:screen-copy-hide-position screen)
+              (setf (nerimux/terminal/types:screen-copy-hide-position screen)
                     (and (%flag-present-p flags #\H) t))
               (%copy-mode-mouse-entry session screen flags)
               (setf *dirty* t)))))))

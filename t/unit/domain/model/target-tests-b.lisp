@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; target tests — part B: %sigil-id, %name-prefix-p, edge cases for
 ;;;; find-session/window/pane-by-target, resolve-target window-only / multi-session,
@@ -20,7 +20,7 @@
                    (""     #\$  nil "empty string")))
       (destructuring-bind (input sigil expected desc) row
         (declare (ignore desc))
-        (expect (equal expected (cl-tmux::%sigil-id input sigil))))))
+        (expect (equal expected (nerimux::%sigil-id input sigil))))))
 
   ;;; ── %name-prefix-p (pure helper) ─────────────────────────────────────────────
 
@@ -33,40 +33,40 @@
                    (t   ""       "anything" "empty prefix matches anything")))
       (destructuring-bind (expected prefix name desc) row
         (declare (ignore desc))
-        (expect (eq expected (cl-tmux::%name-prefix-p prefix name))))))
+        (expect (eq expected (nerimux::%name-prefix-p prefix name))))))
 
   ;;; ── find-session-by-target edge cases ────────────────────────────────────────
 
   ;; find-session-by-target returns NIL when the registry is empty.
   (it "find-session-by-target-empty-registry-returns-nil"
-    (expect (null (cl-tmux::find-session-by-target nil "alpha"))))
+    (expect (null (nerimux::find-session-by-target nil "alpha"))))
 
   ;;; ── find-window-by-target edge cases ─────────────────────────────────────────
 
   ;; find-window-by-target returns NIL when the session has no windows.
   (it "find-window-by-target-empty-windows-returns-nil"
     (let ((sess (make-session :id 1 :name "s" :windows nil)))
-      (expect (null (cl-tmux::find-window-by-target sess "any")))))
+      (expect (null (nerimux::find-window-by-target sess "any")))))
 
   ;; find-window-by-target returns NIL when numeric index exceeds window count.
   (it "find-window-by-target-index-out-of-range-returns-nil"
     (let* ((w1   (make-window :id 1 :name "w1" :width 80 :height 24))
            (sess (make-session :id 1 :name "s" :windows (list w1))))
-      (expect (null (cl-tmux::find-window-by-target sess "5")))))
+      (expect (null (nerimux::find-window-by-target sess "5")))))
 
   ;;; ── find-pane-by-target edge cases ───────────────────────────────────────────
 
   ;; find-pane-by-target returns NIL when the window has no panes.
   (it "find-pane-by-target-empty-panes-returns-nil"
     (let ((win (make-window :id 1 :name "w" :width 80 :height 24 :panes nil)))
-      (expect (null (cl-tmux::find-pane-by-target win "%1")))))
+      (expect (null (nerimux::find-pane-by-target win "%1")))))
 
   ;; find-pane-by-target returns NIL when numeric index exceeds pane count.
   (it "find-pane-by-target-index-out-of-range-returns-nil"
     (let* ((p1  (make-no-pty-pane 1 0 0 80 24))
            (win (make-window :id 1 :name "w" :width 80 :height 24
                              :panes (list p1))))
-      (expect (null (cl-tmux::find-pane-by-target win "10")))))
+      (expect (null (nerimux::find-pane-by-target win "10")))))
 
   ;;; ── resolve-target: window-only target ───────────────────────────────────────
 
@@ -82,7 +82,7 @@
       (session-select-window sess w1)
       (let ((registry (list (cons "s" sess))))
         (multiple-value-bind (_rs rw _rp)
-            (cl-tmux::resolve-target registry ":beta"
+            (nerimux::resolve-target registry ":beta"
                                      :current-session sess
                                      :current-window  w1)
           (declare (ignore _rs _rp))
@@ -104,7 +104,7 @@
       (session-select-window s1 w1)
       (session-select-window s2 w2)
       (multiple-value-bind (rs _rw _rp)
-          (cl-tmux::resolve-target registry "two")
+          (nerimux::resolve-target registry "two")
         (declare (ignore _rw _rp))
         (expect (eq s2 rs)))))
 
@@ -117,7 +117,7 @@
                    (nil     nil     "%non-empty of NIL input must return NIL")))
       (destructuring-bind (input expected desc) row
         (declare (ignore desc))
-        (expect (equal expected (cl-tmux::%non-empty input))))))
+        (expect (equal expected (nerimux::%non-empty input))))))
 
   ;;; ── %parse-integer-or-nil pure helper ────────────────────────────────────────
 
@@ -133,7 +133,7 @@
                    (nil    nil nil                        "NIL input returns NIL")))
       (destructuring-bind (input expected args desc) row
         (declare (ignore desc))
-        (expect (eql expected (apply #'cl-tmux::%parse-integer-or-nil input args))))))
+        (expect (eql expected (apply #'nerimux::%parse-integer-or-nil input args))))))
 
   ;;; ── resolve-target with pane specified as numeric index ─────────────────────
 
@@ -148,7 +148,7 @@
       (session-select-window sess win)
       (let ((registry (list (cons "s" sess))))
         (multiple-value-bind (_rs _rw rp)
-            (cl-tmux::resolve-target registry "s:w.1")
+            (nerimux::resolve-target registry "s:w.1")
           (declare (ignore _rs _rw))
           (expect (eq p2 rp))))))
 
@@ -158,7 +158,7 @@
   (it "find-session-by-target-multi-digit-id"
     (let* ((sess (make-session :id 42 :name "big" :windows nil))
            (registry (list (cons "big" sess))))
-      (expect (eq sess (cl-tmux::find-session-by-target registry "$42")))))
+      (expect (eq sess (nerimux::find-session-by-target registry "$42")))))
 
   ;;; ── find-window-by-target: @N with multi-digit id ────────────────────────────
 
@@ -166,7 +166,7 @@
   (it "find-window-by-target-multi-digit-at-id"
     (let* ((w1   (make-window :id 99 :name "bigwin" :width 80 :height 24))
            (sess (make-session :id 1 :name "s" :windows (list w1))))
-      (expect (eq w1 (cl-tmux::find-window-by-target sess "@99")))))
+      (expect (eq w1 (nerimux::find-window-by-target sess "@99")))))
 
   ;;; ── find-pane-by-target: %N with multi-digit id ──────────────────────────────
 
@@ -175,7 +175,7 @@
     (let* ((p1  (make-no-pty-pane 15 0 0 80 24))
            (win (make-window :id 1 :name "w" :width 80 :height 24
                              :panes (list p1))))
-      (expect (eq p1 (cl-tmux::find-pane-by-target win "%15")))))
+      (expect (eq p1 (nerimux::find-pane-by-target win "%15")))))
 
   ;;; ── resolve-target: empty string is same as NIL ─────────────────────────────
 
@@ -183,7 +183,7 @@
   (it "resolve-target-empty-string-uses-current-defaults"
     (multiple-value-bind (sess win p1) (make-single-pane-session)
       (multiple-value-bind (rs rw rp)
-          (cl-tmux::resolve-target nil ""
+          (nerimux::resolve-target nil ""
                                    :current-session sess
                                    :current-window  win
                                    :current-pane    p1)
@@ -202,7 +202,7 @@
   (it "resolve-target-context-nil-target-defaults-to-session-active-objects"
     (multiple-value-bind (sess win pane) (make-single-pane-session)
       (multiple-value-bind (rs rw rp)
-          (cl-tmux::resolve-target-context nil sess nil)
+          (nerimux::resolve-target-context nil sess nil)
         (expect (eq sess rs))
         (expect (eq win  rw))
         (expect (eq pane rp)))))
@@ -219,7 +219,7 @@
       (window-select-pane w1 p1)
       (session-select-window sess w1)
       (multiple-value-bind (rs rw _rp)
-          (cl-tmux::resolve-target-context (list (cons "work" sess)) sess ":shell")
+          (nerimux::resolve-target-context (list (cons "work" sess)) sess ":shell")
         (declare (ignore _rp))
         (expect (eq sess rs))
         (expect (eq w2   rw)))))
@@ -230,7 +230,7 @@
   (it "resolve-target-context-falls-back-when-server-omits-session"
     (multiple-value-bind (sess win pane) (make-single-pane-session)
       (multiple-value-bind (rs rw rp)
-          (cl-tmux::resolve-target-context nil sess "0")
+          (nerimux::resolve-target-context nil sess "0")
         (expect (eq sess rs))
         (expect (eq win  rw))
         (expect (eq pane rp))))))

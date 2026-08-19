@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Copy-mode -X dispatch (send-keys -X).
 
@@ -66,7 +66,7 @@
    EXTRA-ARGS (a list of strings) holds any positional arguments after the command
    name; used by the copy-pipe commands to carry the pipe-command string."
   (let* ((pane   (or target-pane (session-active-pane session)))
-         (screen (and pane (cl-tmux/model:pane-screen pane))))
+         (screen (and pane (nerimux/model:pane-screen pane))))
     (cond
       ((and extra-args
             (%dispatch-send-keys-x-explicit-arg screen command-name extra-args))

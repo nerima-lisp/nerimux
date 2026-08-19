@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/format)
+(in-package #:nerimux/format)
 
 ;;; -- Glob / regex matching and pane content search --------------------------
 ;;;
@@ -65,17 +65,17 @@
    to bottom, with trailing spaces trimmed — the per-line content tmux's #{C:}
    search runs against.  Returns NIL when PANE has no live screen.  Read lazily
    (only when a #{C:} modifier actually fires), so non-search formats pay nothing."
-  (let ((scr (and pane (cl-tmux/model:pane-screen pane))))
+  (let ((scr (and pane (nerimux/model:pane-screen pane))))
     (when scr
-      (let ((w (cl-tmux/terminal:screen-width  scr))
-            (h (cl-tmux/terminal:screen-height scr)))
+      (let ((w (nerimux/terminal:screen-width  scr))
+            (h (nerimux/terminal:screen-height scr)))
         (loop for y below h
               collect (string-right-trim
                        '(#\Space)
                        (with-output-to-string (s)
                          (dotimes (x w)
-                           (write-char (cl-tmux/terminal:cell-char
-                                        (cl-tmux/terminal:screen-cell scr x y))
+                           (write-char (nerimux/terminal:cell-char
+                                        (nerimux/terminal:screen-cell scr x y))
                                        s)))))))))
 
 (defun %content-search-match-p (term line regex-p ci-p)

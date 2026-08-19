@@ -1,10 +1,10 @@
-(in-package #:cl-tmux/input)
+(in-package #:nerimux/input)
 
 ;;;; Keyboard input: raw-mode wrapper and non-blocking stdin reads.
 ;;;;
 ;;;; We read from fd 0 (stdin) at the descriptor level rather than through a
 ;;;; Lisp stream because Lisp streams may buffer; we need single bytes. The
-;;;; readiness poll goes through cl-tmux/pty:select-fds (cl-process-kit) and the
+;;;; readiness poll goes through nerimux/pty:select-fds (cl-process-kit) and the
 ;;;; read itself through cl-tty-kit:fd-read-octets, the same function
 ;;;; pty-read-blocking-into already uses for the PTY master side.
 
@@ -52,7 +52,7 @@
    so an unreadable stdin cannot take down the interactive key loop, matching
    both the previous behavior and this function's stated \"or NIL\" contract."
   (declare (type fixnum timeout-us))
-  (let ((ready (cl-tmux/pty:select-fds (list 0) timeout-us)))
+  (let ((ready (nerimux/pty:select-fds (list 0) timeout-us)))
     (when ready
       ;; Read exactly one byte from fd 0 directly (bypasses Lisp buffering).
       (let ((buffer (make-array 1 :element-type '(unsigned-byte 8))))

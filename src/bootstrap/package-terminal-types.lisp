@@ -5,7 +5,7 @@
 ;;;; package that owns the SCREEN and CELL structs, package-terminal.lisp the
 ;;;; five layers that act on them plus the facade over all six.
 
-(defpackage #:cl-tmux/terminal/types
+(defpackage #:nerimux/terminal/types
   (:use #:cl)
   (:import-from #:cl-concurrent-kit #:make-lock)
   (:documentation
@@ -14,7 +14,7 @@
     bits, width) and SCREEN (the grid, the cursor, the SGR pen, scrollback, and the
     dozens of DEC/ANSI mode flags) — together with their attribute-bit constants and
     pure grid access.  Owns no behaviour beyond allocation and slot access; every
-    mutation lives in cl-tmux/terminal/actions.")
+    mutation lives in nerimux/terminal/actions.")
   (:export
    ;; Attribute bit constants (LSB first, matching bit layout in cell.lisp)
    #:+attr-bold+

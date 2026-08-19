@@ -1,7 +1,7 @@
-;;;; Package definitions for cl-tmux.
+;;;; Package definitions for nerimux.
 ;;;; All package declarations live here so cross-package dependencies are explicit.
 
-(defpackage #:cl-tmux/version
+(defpackage #:nerimux/version
   (:use #:cl)
   (:documentation
    "BOOTSTRAP layer: the compiled-in release version, kept in a package of its own
@@ -10,8 +10,8 @@
     the #{version} format variable.")
   (:export #:version-string))
 
-(in-package #:cl-tmux/version)
+(in-package #:nerimux/version)
 
 (defun version-string ()
-  "Return the cl-tmux runtime version string."
+  "Return the nerimux runtime version string."
   "0.1.0")

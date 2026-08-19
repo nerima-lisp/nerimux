@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; cursor tests — part E: custom multi-stop tab-stop navigation
 ;;;; (%next-tab-stop / %prev-tab-stop via HTS/TBC with several stops set),
@@ -19,30 +19,30 @@
    call set-tab-stop (HTS), installing a clean multi-entry custom tab-stop list
    with exactly the given columns (set-tab-stop otherwise merges new stops into
    whatever list — including the expanded :default grid — is already present)."
-    (cl-tmux/terminal/actions:clear-tab-stops screen 3)   ; TBC 3: clear ALL stops
+    (nerimux/terminal/actions:clear-tab-stops screen 3)   ; TBC 3: clear ALL stops
     (dolist (col columns)
-      (setf (cl-tmux/terminal/types:screen-cursor-x screen) col)
-      (cl-tmux/terminal/actions:set-tab-stop screen)))
+      (setf (nerimux/terminal/types:screen-cursor-x screen) col)
+      (nerimux/terminal/actions:set-tab-stop screen)))
 
   ;; With custom stops at columns 3, 10, 15, cursor-ht from col 0 lands on 3, then
   ;; from col 3 lands on 10, then from col 10 lands on 15.
   (it "cursor-ht-with-three-custom-stops-advances-in-order"
     (with-screen (s 40 5)
       (%install-tab-stops s 3 10 15)
-      (setf (cl-tmux/terminal/types:screen-cursor-x s) 0)
-      (cl-tmux/terminal/actions:cursor-ht s)
+      (setf (nerimux/terminal/types:screen-cursor-x s) 0)
+      (nerimux/terminal/actions:cursor-ht s)
       (expect (= 3 (screen-cursor-x s)))
-      (cl-tmux/terminal/actions:cursor-ht s)
+      (nerimux/terminal/actions:cursor-ht s)
       (expect (= 10 (screen-cursor-x s)))
-      (cl-tmux/terminal/actions:cursor-ht s)
+      (nerimux/terminal/actions:cursor-ht s)
       (expect (= 15 (screen-cursor-x s)))))
 
   ;; cursor-ht past the last custom stop clamps to width-1 when no further stop exists.
   (it "cursor-ht-past-last-custom-stop-clamps-to-width-minus-one"
     (with-screen (s 20 5)
       (%install-tab-stops s 3 10)
-      (setf (cl-tmux/terminal/types:screen-cursor-x s) 10)
-      (cl-tmux/terminal/actions:cursor-ht s)
+      (setf (nerimux/terminal/types:screen-cursor-x s) 10)
+      (nerimux/terminal/actions:cursor-ht s)
       (expect (= 19 (screen-cursor-x s)))))
 
   ;; cursor-cbt with custom stops at 3, 10, 15 moves backward through them in
@@ -50,20 +50,20 @@
   (it "cursor-cbt-with-three-custom-stops-moves-back-in-order"
     (with-screen (s 40 5)
       (%install-tab-stops s 3 10 15)
-      (setf (cl-tmux/terminal/types:screen-cursor-x s) 18)
-      (cl-tmux/terminal/actions:cursor-cbt s 1)
+      (setf (nerimux/terminal/types:screen-cursor-x s) 18)
+      (nerimux/terminal/actions:cursor-cbt s 1)
       (expect (= 15 (screen-cursor-x s)))
-      (cl-tmux/terminal/actions:cursor-cbt s 1)
+      (nerimux/terminal/actions:cursor-cbt s 1)
       (expect (= 10 (screen-cursor-x s)))
-      (cl-tmux/terminal/actions:cursor-cbt s 1)
+      (nerimux/terminal/actions:cursor-cbt s 1)
       (expect (= 3 (screen-cursor-x s)))))
 
   ;; cursor-cbt before the first custom stop clamps to column 0.
   (it "cursor-cbt-before-first-custom-stop-clamps-to-zero"
     (with-screen (s 40 5)
       (%install-tab-stops s 10 20)
-      (setf (cl-tmux/terminal/types:screen-cursor-x s) 5)
-      (cl-tmux/terminal/actions:cursor-cbt s 1)
+      (setf (nerimux/terminal/types:screen-cursor-x s) 5)
+      (nerimux/terminal/actions:cursor-cbt s 1)
       (expect (= 0 (screen-cursor-x s)))))
 
   ;; %materialize-tab-stops returns the concrete custom list as-is once installed
@@ -71,14 +71,14 @@
   (it "materialize-tab-stops-returns-custom-list-unchanged"
     (with-screen (s 40 5)
       (%install-tab-stops s 5 12)
-      (let ((stops (cl-tmux/terminal/actions::%materialize-tab-stops s)))
+      (let ((stops (nerimux/terminal/actions::%materialize-tab-stops s)))
         (expect (equal '(5 12) stops)))))
 
   ;; %materialize-tab-stops expands the :default sentinel into the standard
   ;; every-8-columns grid for the screen's width.
   (it "materialize-tab-stops-expands-default-sentinel"
     (with-screen (s 20 5)
-      (let ((stops (cl-tmux/terminal/actions::%materialize-tab-stops s)))
+      (let ((stops (nerimux/terminal/actions::%materialize-tab-stops s)))
         (expect (equal '(8 16) stops))))))
 
 ;;; ── SUITE: cursor-cr / cursor-bs table-driven regression ────────────────────
@@ -98,7 +98,7 @@
       (destructuring-bind (start expected desc) row
         (declare (ignore desc))
         (with-cursor-at (s 10 5 start)
-          (cl-tmux/terminal/actions:cursor-cr s)
+          (nerimux/terminal/actions:cursor-cr s)
           (expect (= expected (screen-cursor-x s)))))))
 
   ;; cursor-bs decrements the column by 1, clamping at 0.
@@ -110,5 +110,5 @@
       (destructuring-bind (start expected desc) row
         (declare (ignore desc))
         (with-cursor-at (s 10 5 start)
-          (cl-tmux/terminal/actions:cursor-bs s)
+          (nerimux/terminal/actions:cursor-bs s)
           (expect (= expected (screen-cursor-x s))))))))

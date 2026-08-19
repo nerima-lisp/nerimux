@@ -1,6 +1,6 @@
 ;;; Command-client I/O helpers.
 
-(in-package :cl-tmux)
+(in-package :nerimux)
 
 (defconstant +command-reply-timeout-us+ 2000000
   "Microseconds the CLI command client waits for the server's +msg-reply+ before
@@ -22,7 +22,7 @@
    rendered +msg-frame+/bye the multi-client server may broadcast first), and
    write its text to *standard-output*.  Gives up after +command-reply-timeout-us+
    of silence, on EOF, or after +command-reply-max-frames+ ignored broadcasts.
-   This is the stdout side of `cl-tmux display -p ...`.
+   This is the stdout side of `nerimux display -p ...`.
    SOCKET-FD is the raw file descriptor for STREAM, used by select-fds."
   (loop repeat +command-reply-max-frames+ do
     (unless (select-fds (list socket-fd) +command-reply-timeout-us+)
@@ -62,7 +62,7 @@
   "Read command-client stdin as UTF-8 bytes for split-window -I forwarding.
    Stops at EOF or when +stdin-read-max-octets+ have been accumulated, whichever
    comes first -- prevents an indefinite hang when stdin is a long-running pipe
-   that never closes (e.g. `some-process | cl-tmux split-window -I`)."
+   that never closes (e.g. `some-process | nerimux split-window -I`)."
   (cl-codec-kit:string-to-octets
     (with-output-to-string (output-accumulator)
       (let ((byte-count 0))
@@ -82,8 +82,8 @@
 (defun run-command-client (name args)
   "Forward ARGS -- a command name followed by its arguments -- to the running server
    for session NAME as a single +msg-command+ frame, then print the server's text
-   reply (the command's output, e.g. `cl-tmux display -p '#{session_name}'`) and
-   exit.  This is the `cl-tmux <command>` CLI path: it drives a server from outside
+   reply (the command's output, e.g. `nerimux display -p '#{session_name}'`) and
+   exit.  This is the `nerimux <command>` CLI path: it drives a server from outside
    instead of attaching a terminal.  A target given as `-t <target>` flows through
    in ARGS -- the server parses it like any other flag.
    When ARGS is NIL (no command words provided) this is a deliberate no-op: the

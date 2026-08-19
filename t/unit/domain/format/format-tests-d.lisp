@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; shorthand table, %expand-brace edge cases, %truthy-p, %variable-to-keyword, pane/client vars, #(shell) — part IV
 
@@ -17,7 +17,7 @@
       (dolist (c cases)
         (destructuring-bind (tmpl key val expected) c
           (let ((ctx (if key (list key val) '())))
-            (expect (string= expected (cl-tmux/format:expand-format tmpl ctx))))))))
+            (expect (string= expected (nerimux/format:expand-format tmpl ctx))))))))
 
   ;;; ── %expand-brace edge cases ──────────────────────────────────────────────────
 
@@ -28,7 +28,7 @@
                  ("#(no_close" "paren without closing )")))
       (destructuring-bind (input desc) c
         (declare (ignore desc))
-        (let ((result (cl-tmux/format:expand-format input '())))
+        (let ((result (nerimux/format:expand-format input '())))
           (expect (char= #\# (char result 0)))))))
 
   ;; #[attrs] passes the full bracketed text through unchanged.
@@ -39,10 +39,10 @@
   (it "expand-format-conditional-context-variable-resolution"
     ;; When :window-active is "1" in the context, the true branch is returned.
     (expect (string= "YES"
-                 (cl-tmux/format:expand-format "#{?window_active,YES,NO}"
+                 (nerimux/format:expand-format "#{?window_active,YES,NO}"
                                                '(:window-active "1"))))
     (expect (string= "NO"
-                 (cl-tmux/format:expand-format "#{?window_active,YES,NO}"
+                 (nerimux/format:expand-format "#{?window_active,YES,NO}"
                                                '(:window-active "0")))))
 
   ;; #{?1,yes,no} / #{?0,yes,no} work without any context.
@@ -52,13 +52,13 @@
 
   ;; #{window_name} with no matching context key emits an empty string.
   (it "expand-format-brace-missing-key-uses-empty"
-    (expect (string= "" (cl-tmux/format:expand-format "#{window_name}" '()))))
+    (expect (string= "" (nerimux/format:expand-format "#{window_name}" '()))))
 
   ;; A template mixing shorthands, brace vars, and plain text expands correctly.
   (it "expand-format-mixed-template"
     (let ((ctx '(:session-name "main" :window-name "bash")))
       (expect (string= "session=main window=bash"
-                   (cl-tmux/format:expand-format "session=#{session_name} window=#W" ctx)))))
+                   (nerimux/format:expand-format "session=#{session_name} window=#W" ctx)))))
 
   ;;; ── %expand-shorthand unknown returns nil ────────────────────────────────────
 
@@ -72,7 +72,7 @@
   ;; format-context-from-window with NIL window returns safe defaults.
   (it "format-context-from-window-nil-window"
     (let* ((sess (make-fake-session :nwindows 1))
-           (ctx  (cl-tmux/format:format-context-from-window sess nil)))
+           (ctx  (nerimux/format:format-context-from-window sess nil)))
       (expect (stringp (getf ctx :session-name)))
       (expect (string= "" (getf ctx :window-name)))
       (expect (= 0 (getf ctx :window-index)))))
@@ -81,7 +81,7 @@
 
   ;; %lookup converts integer values to strings via princ-to-string.
   (it "lookup-integer-value-converted-to-string"
-    (expect (string= "42" (cl-tmux/format::%lookup (list :count 42) :count))))
+    (expect (string= "42" (nerimux/format::%lookup (list :count 42) :count))))
 
   ;;; ── Table-driven %truthy-p boundary tests ────────────────────────────────────
 
@@ -100,8 +100,8 @@
         (let ((input    (car c))
               (expected (cdr c)))
           (if expected
-              (expect (cl-tmux/format::%truthy-p input) :to-be-truthy)
-              (expect (cl-tmux/format::%truthy-p input) :to-be-falsy))))))
+              (expect (nerimux/format::%truthy-p input) :to-be-truthy)
+              (expect (nerimux/format::%truthy-p input) :to-be-falsy))))))
 
   ;;; ── %variable-to-keyword table-driven ────────────────────────────────────────
 
@@ -114,7 +114,7 @@
                    ("window_active" . :window-active)
                    ("time"          . :time))))
       (dolist (c cases)
-        (expect (eq (cdr c) (cl-tmux/format::%variable-to-keyword (car c)))))))
+        (expect (eq (cdr c) (nerimux/format::%variable-to-keyword (car c)))))))
 
   ;;; ── #{pane_title} expansion ───────────────────────────────────────────────────
 
@@ -126,26 +126,26 @@
   ;; format-context-from-session :pane-title uses the pane's title slot.
   (it "format-context-pane-title-from-pane-slot"
     (let* ((sess  (make-fake-session :nwindows 1 :npanes 1))
-           (win   (first (cl-tmux/model:session-windows sess)))
-           (pane  (first (cl-tmux/model:window-panes win))))
-      (setf (cl-tmux/model:pane-title pane) "my-pane-title")
-      (let ((ctx (cl-tmux/format:format-context-from-session sess win pane)))
+           (win   (first (nerimux/model:session-windows sess)))
+           (pane  (first (nerimux/model:window-panes win))))
+      (setf (nerimux/model:pane-title pane) "my-pane-title")
+      (let ((ctx (nerimux/format:format-context-from-session sess win pane)))
         (expect (string= "my-pane-title" (getf ctx :pane-title))))))
 
   ;; format-context-from-session :pane-title is empty when pane is NIL.
   (it "format-context-pane-title-nil-pane-returns-empty"
     (let* ((sess (make-fake-session :nwindows 1))
-           (win  (first (cl-tmux/model:session-windows sess)))
-           (ctx  (cl-tmux/format:format-context-from-session sess win nil)))
+           (win  (first (nerimux/model:session-windows sess)))
+           (ctx  (nerimux/format:format-context-from-session sess win nil)))
       (expect (string= "" (getf ctx :pane-title)))))
 
   ;; #{?pane_title,has-title,no-title} branches correctly on :pane-title.
   (it "expand-format-conditional-pane-title"
     (expect (string= "has-title"
-                 (cl-tmux/format:expand-format "#{?pane_title,has-title,no-title}"
+                 (nerimux/format:expand-format "#{?pane_title,has-title,no-title}"
                                                '(:pane-title "vim"))))
     (expect (string= "no-title"
-                 (cl-tmux/format:expand-format "#{?pane_title,has-title,no-title}"
+                 (nerimux/format:expand-format "#{?pane_title,has-title,no-title}"
                                                '(:pane-title "")))))
 
   ;;; ── #{client_width}, #{client_height}, #{client_tty} ─────────────────────────
@@ -170,38 +170,38 @@
   ;; #{client_name} defaults to the client tty path (tmux's default client name).
   (it "format-context-client-name-mirrors-tty"
     (let* ((sess (make-fake-session :nwindows 1))
-           (win  (first (cl-tmux/model:session-windows sess)))
-           (pane (first (cl-tmux/model:window-panes win)))
-           (ctx  (cl-tmux/format:format-context-from-session
+           (win  (first (nerimux/model:session-windows sess)))
+           (pane (first (nerimux/model:window-panes win)))
+           (ctx  (nerimux/format:format-context-from-session
                   sess win pane :client-tty "/dev/ttys004")))
       (expect (string= "/dev/ttys004"
-                   (cl-tmux/format:expand-format "#{client_name}" ctx)))))
+                   (nerimux/format:expand-format "#{client_name}" ctx)))))
 
   ;; #{client_session} expands to the name of the session the client is viewing.
   (it "format-context-client-session-is-session-name"
     (with-format-context (sess win pane ctx) ()
       ;; make-fake-session names the session "0".
-      (expect (string= (cl-tmux/model:session-name sess)
-                   (cl-tmux/format:expand-format "#{client_session}" ctx)))))
+      (expect (string= (nerimux/model:session-name sess)
+                   (nerimux/format:expand-format "#{client_session}" ctx)))))
 
   ;; #{client_pid} expands to a non-empty numeric PID string (single-process model).
   (it "format-context-client-pid-is-numeric"
     (with-format-context (sess win pane ctx) ()
-      (let ((pid (cl-tmux/format:expand-format "#{client_pid}" ctx)))
+      (let ((pid (nerimux/format:expand-format "#{client_pid}" ctx)))
         (expect (plusp (length pid)))
         (expect (every #'digit-char-p pid)))))
 
   ;; #{client_termname} expands to a string (the TERM env value or empty).
   (it "format-context-client-termname-is-string"
     (with-format-context (sess win pane ctx) ()
-      (expect (stringp (cl-tmux/format:expand-format "#{client_termname}" ctx)))))
+      (expect (stringp (nerimux/format:expand-format "#{client_termname}" ctx)))))
 
   ;; format-context-from-session forwards :client-width/:client-height/:client-tty.
   (it "format-context-client-keyword-args-propagated"
     (let* ((sess (make-fake-session :nwindows 1))
-           (win  (first (cl-tmux/model:session-windows sess)))
-           (pane (first (cl-tmux/model:window-panes win)))
-           (ctx  (cl-tmux/format:format-context-from-session sess win pane
+           (win  (first (nerimux/model:session-windows sess)))
+           (pane (first (nerimux/model:window-panes win)))
+           (ctx  (nerimux/format:format-context-from-session sess win pane
                                                              :client-width  200
                                                              :client-height 50
                                                              :client-tty    "/dev/pts/3")))
@@ -225,14 +225,14 @@
   (it "expand-format-shell-command-capture-is-bounded"
     (let* ((payload (make-string 5000 :initial-element #\x))
            (result (fmt (format nil "#(printf '~A')" payload)))
-           (limit cl-tmux/format::+format-shell-command-output-limit+))
+           (limit nerimux/format::+format-shell-command-output-limit+))
       (expect (= limit (length result)))
       (expect (every (lambda (ch) (char= ch #\x)) result))))
 
   ;; #(cmd) is routed through the bounded shell capture port.
   (it "expand-format-shell-command-wrapper-documents-port"
-    (let ((wrapped (cl-tmux/format::%format-shell-capture-command "printf foo"))
-          (limit (write-to-string cl-tmux/format::+format-shell-command-output-limit+)))
+    (let ((wrapped (nerimux/format::%format-shell-capture-command "printf foo"))
+          (limit (write-to-string nerimux/format::+format-shell-command-output-limit+)))
       (expect (search "printf foo" wrapped))
       (expect (search "head -c" wrapped))
       (expect (search limit wrapped))))

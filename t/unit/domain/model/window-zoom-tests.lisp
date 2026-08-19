@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 (describe "model-suite"
 
@@ -48,8 +48,8 @@
                                       (make-layout-leaf p1)
                                       1/2))))
       (window-select-pane win p0)
-      (cl-tmux/model:window-zoom-toggle win)
-      (expect (cl-tmux/model:window-zoom-p win) :to-be-truthy)
+      (nerimux/model:window-zoom-toggle win)
+      (expect (nerimux/model:window-zoom-p win) :to-be-truthy)
       (expect (equal (list p0) (window-panes win)))
       (expect (= 81 (pane-width  p0)))
       (expect (= 24 (pane-height p0)))
@@ -69,9 +69,9 @@
       (window-select-pane win p0)
       (let ((w0-before (pane-width p0))
             (w1-before (pane-width p1)))
-        (cl-tmux/model:window-zoom-toggle win)
-        (cl-tmux/model:window-zoom-toggle win)
-        (expect (cl-tmux/model:window-zoom-p win) :to-be-falsy)
+        (nerimux/model:window-zoom-toggle win)
+        (nerimux/model:window-zoom-toggle win)
+        (expect (nerimux/model:window-zoom-p win) :to-be-falsy)
         (expect (= 2 (length (window-panes win))))
         (expect (= w0-before (pane-width p0)))
         (expect (= w1-before (pane-width p1))))))
@@ -84,13 +84,13 @@
                              :panes (list p0)
                              :tree (make-layout-leaf p0))))
       (window-select-pane win p0)
-      (cl-tmux/model:window-zoom-toggle win)
-      (expect (cl-tmux/model:window-zoom-p win) :to-be-truthy)
+      (nerimux/model:window-zoom-toggle win)
+      (expect (nerimux/model:window-zoom-p win) :to-be-truthy)
       (expect (= 1 (length (window-panes win))))
       (expect (= 80 (pane-width  p0)))
       (expect (= 24 (pane-height p0)))
-      (cl-tmux/model:window-zoom-toggle win)
-      (expect (cl-tmux/model:window-zoom-p win) :to-be-falsy)
+      (nerimux/model:window-zoom-toggle win)
+      (expect (nerimux/model:window-zoom-p win) :to-be-falsy)
       (expect (= 1 (length (window-panes win))))))
 
   ;;; ── window-lock slot ─────────────────────────────────────────────────────────

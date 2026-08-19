@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/config)
+(in-package #:nerimux/config)
 
 ;;; Runtime services shared by config-time shell directives.
 
@@ -43,5 +43,5 @@
      (%run-config-shell-command-safe command
                                      :combine-stderr combine-stderr
                                      :directory directory))
-   :name "cl-tmux config run-shell")
+   :name "nerimux config run-shell")
   t)

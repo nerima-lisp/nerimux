@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Window/session list formatting and small dispatch helper tests.
 
@@ -10,7 +10,7 @@
   ;; lists each window by id and name.
   (it "format-window-list-includes-active-marker"
     (with-fake-session (s :nwindows 2)
-      (let* ((text (cl-tmux::%format-window-list s))
+      (let* ((text (nerimux::%format-window-list s))
              (aw   (session-active-window s)))
         (expect (stringp text))
         (expect (search (window-name aw) text))
@@ -19,7 +19,7 @@
   ;; %format-window-list includes the pane count for each window.
   (it "format-window-list-shows-pane-count"
     (with-fake-two-pane-session (s)
-      (let ((text (cl-tmux::%format-window-list s)))
+      (let ((text (nerimux::%format-window-list s)))
         (expect (search "pane" text)))))
 
   ;;; ── %format-session-list helper ──────────────────────────────────────────────
@@ -28,8 +28,8 @@
   ;; session-name one-line entry.
   (it "format-session-list-fallback-uses-session-name"
     (with-fake-session (s :nwindows 1)
-      (let ((cl-tmux::*server-sessions* nil))
-        (let ((text (cl-tmux::%format-session-list s)))
+      (let ((nerimux::*server-sessions* nil))
+        (let ((text (nerimux::%format-session-list s)))
           (expect (stringp text))
           (expect (search (session-name s) text))))))
 
@@ -38,8 +38,8 @@
   (it "format-session-list-marks-current-session"
     (with-fake-session (s :nwindows 1)
       (let* ((name (session-name s))
-             (cl-tmux::*server-sessions* (list (cons name s))))
-        (let ((text (cl-tmux::%format-session-list s)))
+             (nerimux::*server-sessions* (list (cons name s))))
+        (let ((text (nerimux::%format-session-list s)))
           (expect (search "*" text))
           (expect (search name text))))))
 
@@ -48,15 +48,15 @@
   ;; %copy-mode-call invokes FN on the active screen when copy mode is on.
   (it "copy-mode-call-invokes-fn-on-active-screen"
     (with-fake-session (s)
-      (cl-tmux::dispatch-command s :copy-mode-enter nil)
+      (nerimux::dispatch-command s :copy-mode-enter nil)
       (let ((called-with nil))
-        (cl-tmux::%copy-mode-call s (lambda (sc) (setf called-with sc)))
+        (nerimux::%copy-mode-call s (lambda (sc) (setf called-with sc)))
         (expect (eq (active-screen s) called-with)))))
 
   ;; %copy-mode-call on a windowless session is a no-op (no error).
   (it "copy-mode-call-skips-when-no-session-has-no-screen"
     (with-fake-session (s :nwindows 0)
-      (finishes (cl-tmux::%copy-mode-call s (lambda (screen) (declare (ignore screen)) nil))
+      (finishes (nerimux::%copy-mode-call s (lambda (screen) (declare (ignore screen)) nil))
                 "%copy-mode-call must not error when there is no active screen")))
 
   ;;; ── %handle-kill-result helper ────────────────────────────────────────────────
@@ -68,6 +68,6 @@
       (destructuring-bind (result expected-running desc) row
         (declare (ignore desc))
         (with-loop-state
-          (let ((ret (cl-tmux::%handle-kill-result result)))
+          (let ((ret (nerimux::%handle-kill-result result)))
             (expect (equal result ret))
-            (expect (eq expected-running cl-tmux::*running*))))))))
+            (expect (eq expected-running nerimux::*running*))))))))

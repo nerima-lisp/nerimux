@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Mode and screen-state tests covering src/domain/terminal/modes-alt-screen.lisp,
 ;;;; modes-reset.lisp (RIS), and modes-cursor-save.lisp (DECSC/DECRC).
@@ -43,20 +43,20 @@
   ;; alt buffer — full-screen app output stays on the MAIN screen (and scrollback).
   (it "alternate-screen-off-suppresses-alt-buffer"
     (with-screen (s 10 5)
-      (let ((cl-tmux/terminal:*alternate-screen-enabled-function* (lambda () nil)))
+      (let ((nerimux/terminal:*alternate-screen-enabled-function* (lambda () nil)))
         (feed s "primary")
         (feed s (esc "[?1049h"))   ; normally enters the alt screen — suppressed here
         (feed s "ALT")
-        (expect (null (cl-tmux/terminal/types::screen-alt-cells s)))
+        (expect (null (nerimux/terminal/types::screen-alt-cells s)))
         (expect (search "ALT" (row-string s 0 :end 10))))))
 
   ;; With the policy reporting on (default), ESC[?1049h still enters the alt screen.
   (it "alternate-screen-on-still-enters-alt-buffer"
     (with-screen (s 10 5)
-      (let ((cl-tmux/terminal:*alternate-screen-enabled-function* (lambda () t)))
+      (let ((nerimux/terminal:*alternate-screen-enabled-function* (lambda () t)))
         (feed s "hello")
         (feed s (esc "[?1049h"))
-        (expect (not (null (cl-tmux/terminal/types::screen-alt-cells s))))
+        (expect (not (null (nerimux/terminal/types::screen-alt-cells s))))
         (feed s (esc "[?1049l"))
         (expect (string= "hello" (row-string s 0 :end 5))))))
 
@@ -107,10 +107,10 @@
       (feed s (esc "(0"))                  ; G0 = DEC special graphics (line-drawing)
       (feed s (esc "7"))                   ; DECSC -- save (incl. charset)
       (feed s (esc "(B"))                  ; G0 = ASCII (change it)
-      (expect (eq :ascii (cl-tmux/terminal/types:screen-g0-charset s)))
+      (expect (eq :ascii (nerimux/terminal/types:screen-g0-charset s)))
       (feed s (esc "8"))                   ; DECRC -- restore
-      (expect (eq :dec-graphics (cl-tmux/terminal/types:screen-g0-charset s)))
-      (expect (eq :dec-graphics (cl-tmux/terminal/types:screen-charset s)))))
+      (expect (eq :dec-graphics (nerimux/terminal/types:screen-g0-charset s)))
+      (expect (eq :dec-graphics (nerimux/terminal/types:screen-charset s)))))
 
   ;; ESC 7 / ESC 8 round-trip the ACTIVE charset (which of G0/G1 is invoked via SO/SI).
   (it "decsc-decrc-preserves-active-charset"
@@ -119,10 +119,10 @@
       (feed s (string (code-char #x0E)))   ; SO -- invoke G1 (charset -> graphics)
       (feed s (esc "7"))                   ; DECSC -- save (active-g = g1)
       (feed s (string (code-char #x0F)))   ; SI -- invoke G0 (charset -> ascii)
-      (expect (eq :g0 (cl-tmux/terminal/types:screen-active-g s)))
+      (expect (eq :g0 (nerimux/terminal/types:screen-active-g s)))
       (feed s (esc "8"))                   ; DECRC -- restore
-      (expect (eq :g1 (cl-tmux/terminal/types:screen-active-g s)))
-      (expect (eq :dec-graphics (cl-tmux/terminal/types:screen-charset s)))))
+      (expect (eq :g1 (nerimux/terminal/types:screen-active-g s)))
+      (expect (eq :dec-graphics (nerimux/terminal/types:screen-charset s)))))
 
   ;; ESC 7 / ESC 8 round-trip DECOM origin mode (tmux records s->mode, incl. MODE_ORIGIN).
   (it "decsc-decrc-preserves-origin-mode"
@@ -130,9 +130,9 @@
       (feed s (esc "[?6h"))                ; DECOM origin mode ON
       (feed s (esc "7"))                   ; DECSC -- save (incl. origin mode)
       (feed s (esc "[?6l"))                ; DECOM origin mode OFF
-      (expect (not (cl-tmux/terminal/types:screen-origin-mode s)))
+      (expect (not (nerimux/terminal/types:screen-origin-mode s)))
       (feed s (esc "8"))                   ; DECRC -- restore
-      (expect (cl-tmux/terminal/types:screen-origin-mode s))))
+      (expect (nerimux/terminal/types:screen-origin-mode s))))
 
   ;; ESC 8 with no prior DECSC resets charset and origin mode to VT100 defaults.
   (it "decrc-without-save-resets-charset-and-origin-mode"
@@ -140,9 +140,9 @@
       (feed s (esc "(0"))                  ; G0 = dec-graphics
       (feed s (esc "[?6h"))                ; origin mode ON
       (feed s (esc "8"))                   ; DECRC with no prior save
-      (expect (eq :ascii (cl-tmux/terminal/types:screen-g0-charset s)))
-      (expect (eq :ascii (cl-tmux/terminal/types:screen-charset s)))
-      (expect (not (cl-tmux/terminal/types:screen-origin-mode s))))))
+      (expect (eq :ascii (nerimux/terminal/types:screen-g0-charset s)))
+      (expect (eq :ascii (nerimux/terminal/types:screen-charset s)))
+      (expect (not (nerimux/terminal/types:screen-origin-mode s))))))
 
 ;;; ── Direct modes function tests ──────────────────────────────────────────────
 
@@ -152,49 +152,49 @@
   (it "ris-action-clears-and-homes-cursor"
     (with-screen (s 10 5)
       (feed s "hello world")
-      (cl-tmux/terminal/actions:set-cursor s 5 3)
+      (nerimux/terminal/actions:set-cursor s 5 3)
       ;; Hide cursor first to verify RIS restores it.
-      (cl-tmux/terminal/actions:dec-pm-reset s '(25))
-      (cl-tmux/terminal/actions:ris-action s)
+      (nerimux/terminal/actions:dec-pm-reset s '(25))
+      (nerimux/terminal/actions:ris-action s)
       (check-cursor s 0 0)
       (expect (row-blank-p s 0))
       (expect (row-blank-p s 3))
-      (expect (= 0 (cl-tmux/terminal/types:screen-scroll-top s)))
-      (expect (= 4 (cl-tmux/terminal/types:screen-scroll-bottom s)))
-      (expect (cl-tmux/terminal/types:screen-cursor-visible s))))
+      (expect (= 0 (nerimux/terminal/types:screen-scroll-top s)))
+      (expect (= 4 (nerimux/terminal/types:screen-scroll-bottom s)))
+      (expect (nerimux/terminal/types:screen-cursor-visible s))))
 
   ;; save-cursor + restore-cursor round-trips the cursor position and SGR state.
   (it "save-and-restore-cursor"
     (with-screen (s 20 10)
       ;; Position and set SGR
-      (cl-tmux/terminal/actions:set-cursor s 7 4)
+      (nerimux/terminal/actions:set-cursor s 7 4)
       (feed s (format nil "~C[31;1m" #\Escape))   ; fg=1 (red), bold
-      (cl-tmux/terminal/actions:save-cursor s)
+      (nerimux/terminal/actions:save-cursor s)
       ;; Move away and reset
-      (cl-tmux/terminal/actions:set-cursor s 0 0)
+      (nerimux/terminal/actions:set-cursor s 0 0)
       (feed s (format nil "~C[0m" #\Escape))       ; SGR reset
       ;; Restore
-      (cl-tmux/terminal/actions:restore-cursor s)
+      (nerimux/terminal/actions:restore-cursor s)
       (check-cursor s 7 4)
-      (expect (= 1 (cl-tmux/terminal/types:screen-cur-fg s)))))
+      (expect (= 1 (nerimux/terminal/types:screen-cur-fg s)))))
 
   ;; restore-cursor with no prior save homes the cursor and resets SGR.
   (it "restore-cursor-without-save-homes-cursor"
     (with-screen (s 20 10)
-      (cl-tmux/terminal/actions:set-cursor s 9 5)
+      (nerimux/terminal/actions:set-cursor s 9 5)
       ;; No save-cursor called — restore should fall back to (0,0) + default SGR
-      (cl-tmux/terminal/actions:restore-cursor s)
+      (nerimux/terminal/actions:restore-cursor s)
       (check-cursor s 0 0)
-      (expect (= cl-tmux/terminal/types:+default-color+ (cl-tmux/terminal/types:screen-cur-fg s)))
-      (expect (= cl-tmux/terminal/types:+default-color+ (cl-tmux/terminal/types:screen-cur-bg s)))))
+      (expect (= nerimux/terminal/types:+default-color+ (nerimux/terminal/types:screen-cur-fg s)))
+      (expect (= nerimux/terminal/types:+default-color+ (nerimux/terminal/types:screen-cur-bg s)))))
 
   ;; dec-pm-set with param 1049 saves the primary grid and installs a blank alt grid.
   (it "dec-pm-set-1049-enters-alt-screen"
     (with-screen (s 10 5)
       (feed s "primary")
-      (cl-tmux/terminal/actions:dec-pm-set s '(1049))
+      (nerimux/terminal/actions:dec-pm-set s '(1049))
       ;; Alt-cells must be non-nil (primary grid was saved)
-      (expect (not (null (cl-tmux/terminal/types:screen-alt-cells s))))
+      (expect (not (null (nerimux/terminal/types:screen-alt-cells s))))
       ;; Cursor must be homed
       (check-cursor s 0 0)
       ;; Current grid (now the alt screen) must be blank
@@ -204,53 +204,53 @@
   (it "dec-pm-reset-1049-exits-alt-screen"
     (with-screen (s 10 5)
       (feed s "primary")
-      (cl-tmux/terminal/actions:dec-pm-set   s '(1049))  ; enter alt
+      (nerimux/terminal/actions:dec-pm-set   s '(1049))  ; enter alt
       (feed s "alt content")
-      (cl-tmux/terminal/actions:dec-pm-reset s '(1049))  ; exit alt
+      (nerimux/terminal/actions:dec-pm-reset s '(1049))  ; exit alt
       ;; Primary content must be back
       (expect (string= "primary" (row-string s 0 :end 7)))
       ;; Alt-cells slot must be cleared
-      (expect (null (cl-tmux/terminal/types:screen-alt-cells s)))))
+      (expect (null (nerimux/terminal/types:screen-alt-cells s)))))
 
   ;; dec-pm-set and dec-pm-reset with unrecognized mode numbers are no-ops.
   (it "dec-pm-unknown-mode-is-silently-ignored"
     (with-screen (s 10 5)
       (feed s "hello")
       ;; These should not signal errors or change screen state.
-      (finishes (cl-tmux/terminal/actions:dec-pm-set   s '(9999 42 0)))
-      (finishes (cl-tmux/terminal/actions:dec-pm-reset s '(9999 42 0)))
+      (finishes (nerimux/terminal/actions:dec-pm-set   s '(9999 42 0)))
+      (finishes (nerimux/terminal/actions:dec-pm-reset s '(9999 42 0)))
       ;; Screen is unchanged.
       (check-row s 0 "hello")))
 
   ;; dec-pm-set/reset with param 6 toggles DECOM origin-mode: set → T, reset → NIL.
   (it "dec-pm-mode-6-origin-mode-set-and-reset"
     (with-screen (s 20 5)
-      (expect (cl-tmux/terminal/types:screen-origin-mode s) :to-be-falsy)
-      (cl-tmux/terminal/actions:dec-pm-set s '(6))
-      (expect (cl-tmux/terminal/types:screen-origin-mode s) :to-be-truthy)
-      (cl-tmux/terminal/actions:dec-pm-reset s '(6))
-      (expect (cl-tmux/terminal/types:screen-origin-mode s) :to-be-falsy)))
+      (expect (nerimux/terminal/types:screen-origin-mode s) :to-be-falsy)
+      (nerimux/terminal/actions:dec-pm-set s '(6))
+      (expect (nerimux/terminal/types:screen-origin-mode s) :to-be-truthy)
+      (nerimux/terminal/actions:dec-pm-reset s '(6))
+      (expect (nerimux/terminal/types:screen-origin-mode s) :to-be-falsy)))
 
   ;; ESC[?25l hides the cursor (screen-cursor-visible → NIL); ESC[?25h shows it again (→ T).
   (it "dectcem-hide-and-show"
     (with-screen (s 20 5)
-      (expect (cl-tmux/terminal/types:screen-cursor-visible s))
+      (expect (nerimux/terminal/types:screen-cursor-visible s))
       (feed s (esc "[?25l"))
-      (expect (cl-tmux/terminal/types:screen-cursor-visible s) :to-be-falsy)
+      (expect (nerimux/terminal/types:screen-cursor-visible s) :to-be-falsy)
       (feed s (esc "[?25h"))
-      (expect (cl-tmux/terminal/types:screen-cursor-visible s))))
+      (expect (nerimux/terminal/types:screen-cursor-visible s))))
 
   ;; dec-pm-set 25 makes cursor-visible T; dec-pm-reset 25 makes it NIL.
   (it "dectcem-dec-pm-direct"
     (with-screen (s 20 5)
-      (setf (cl-tmux/terminal/types:screen-cursor-visible s) nil)
-      (cl-tmux/terminal/actions:dec-pm-set s '(25))
-      (expect (cl-tmux/terminal/types:screen-cursor-visible s))
-      (cl-tmux/terminal/actions:dec-pm-reset s '(25))
-      (expect (cl-tmux/terminal/types:screen-cursor-visible s) :to-be-falsy)))
+      (setf (nerimux/terminal/types:screen-cursor-visible s) nil)
+      (nerimux/terminal/actions:dec-pm-set s '(25))
+      (expect (nerimux/terminal/types:screen-cursor-visible s))
+      (nerimux/terminal/actions:dec-pm-reset s '(25))
+      (expect (nerimux/terminal/types:screen-cursor-visible s) :to-be-falsy)))
 
   ;; %make-blank-cells returns a vector of N blank cells (space char).
   (it "make-blank-cells-creates-blank-grid"
-    (let ((cells (cl-tmux/terminal/types::%make-blank-cells 6)))
+    (let ((cells (nerimux/terminal/types::%make-blank-cells 6)))
       (expect (= 6 (length cells)))
       (expect (every (lambda (c) (char= #\Space (cell-char c))) cells)))))

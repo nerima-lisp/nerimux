@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Declarative command dispatch - focus event delivery helpers.
 
@@ -37,12 +37,12 @@
     ;; Hook fires on every focus transition, regardless of whether the app
     ;; enabled ?1004 focus reporting (matches tmux's pane-focus-in/out hooks).
     ;; run-hooks fires both the add-hook and (via the pane's session) set-hook.
-    (cl-tmux/hooks:run-hooks (if focused-p
-                                 cl-tmux/hooks:+hook-pane-focus-in+
-                                 cl-tmux/hooks:+hook-pane-focus-out+)
+    (nerimux/hooks:run-hooks (if focused-p
+                                 nerimux/hooks:+hook-pane-focus-in+
+                                 nerimux/hooks:+hook-pane-focus-out+)
                              pane))
-  (when (cl-tmux/model:pane-live-p pane)
-    (let ((seq (cl-tmux/terminal/actions:focus-event-report
+  (when (nerimux/model:pane-live-p pane)
+    (let ((seq (nerimux/terminal/actions:focus-event-report
                 (pane-screen pane) focused-p)))
       (when seq
         (pty-write (pane-fd pane) (cl-codec-kit:string-to-octets seq :encoding :utf-8))))))
@@ -58,4 +58,4 @@
       (%notify-pane-focus new-pane t)
       ;; tmux's window-pane-changed event hook: WIN's active pane changed.
       ;; (run-hooks fires both registries, deriving the session from WIN.)
-      (cl-tmux/hooks:run-hooks cl-tmux/hooks:+hook-window-pane-changed+ win))))
+      (nerimux/hooks:run-hooks nerimux/hooks:+hook-window-pane-changed+ win))))

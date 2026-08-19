@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Session / window / misc handlers split out from dispatch-handlers-b.lisp.
 
@@ -69,7 +69,7 @@
   (:set-buffer
    (prompt-nonempty "set-buffer text"
                     (lambda (text)
-                      (cl-tmux/buffer:add-paste-buffer text)
+                      (nerimux/buffer:add-paste-buffer text)
                       (%overlayf "buffer set (~D chars)" (length text)))))
 
   ;; ── start-server ─────────────────────────────────────────────────────────

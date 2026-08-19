@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Tests for Sprint 3 advanced features:
 ;;;;  break-pane, synchronize-panes, layout persistence,
@@ -27,7 +27,7 @@
     (let ((win (make-window :id id :name (format nil "w~D" id)
                             :width 80 :height 24
                             :panes (list pane) :tree (make-layout-leaf pane))))
-      (setf (cl-tmux/model:pane-window pane) win)
+      (setf (nerimux/model:pane-window pane) win)
       (window-select-pane win pane)
       win)))
 
@@ -36,9 +36,9 @@
   `(let* ((,win (%make-group-test-window 1))
           (,s1  (make-session :id 1 :name "a" :windows (list ,win)))
           (,s2  (make-session :id 2 :name "b"))
-          (cl-tmux::*session-groups* nil))
+          (nerimux::*session-groups* nil))
      (session-select-window ,s1 ,win)
-     (cl-tmux::server-new-session-in-group ,s2 ,s1)
+     (nerimux::server-new-session-in-group ,s2 ,s1)
      ,@body))
 
 (describe "advanced-suite"
@@ -51,7 +51,7 @@
     (multiple-value-bind (sess win p0 p1) (%two-pane-session)
       (declare (ignore p1))
       ;; Break the active pane (p0) out.
-      (let ((new-win (cl-tmux/commands:break-pane sess)))
+      (let ((new-win (nerimux/commands:break-pane sess)))
         (expect new-win :to-be-truthy)
         (expect (= 2 (length (session-windows sess))))
         ;; The new window contains only the broken-out pane.
@@ -68,7 +68,7 @@
            (sess (make-session :id 1 :name "0" :windows (list win))))
       (window-select-pane win p0)
       (session-select-window sess win)
-      (expect (null (cl-tmux/commands:break-pane sess)))
+      (expect (null (nerimux/commands:break-pane sess)))
       (expect (= 1 (length (session-windows sess))))))
 
   ;;; ── synchronize-panes: sends keystrokes to all panes ─────────────────────────
@@ -79,21 +79,21 @@
   ;; real PTY here, we just verify the option toggle works and the function
   ;; exists without erroring.
   (it "synchronize-panes-sends-to-all"
-    (let ((prev (cl-tmux/options:get-option "synchronize-panes")))
+    (let ((prev (nerimux/options:get-option "synchronize-panes")))
       (unwind-protect
            (progn
-             (cl-tmux/options:set-option "synchronize-panes" t)
-             (expect (cl-tmux/options:get-option "synchronize-panes"))
-             (cl-tmux/options:set-option "synchronize-panes" nil)
-             (expect (not (cl-tmux/options:get-option "synchronize-panes"))))
-        (cl-tmux/options:set-option "synchronize-panes" prev))))
+             (nerimux/options:set-option "synchronize-panes" t)
+             (expect (nerimux/options:get-option "synchronize-panes"))
+             (nerimux/options:set-option "synchronize-panes" nil)
+             (expect (not (nerimux/options:get-option "synchronize-panes"))))
+        (nerimux/options:set-option "synchronize-panes" prev))))
 
   ;; synchronize-panes is a registered option with boolean type and default nil.
   (it "synchronize-panes-option-registered"
-    (let ((spec (gethash "synchronize-panes" cl-tmux/options:*option-registry*)))
+    (let ((spec (gethash "synchronize-panes" nerimux/options:*option-registry*)))
       (expect spec :to-be-truthy)
-      (expect (eq :boolean (cl-tmux/options:option-spec-type spec)))
-      (expect (null (cl-tmux/options:option-spec-default spec)))))
+      (expect (eq :boolean (nerimux/options:option-spec-type spec)))
+      (expect (null (nerimux/options:option-spec-default spec)))))
 
   ;;; ── Layout persistence: round-trip ──────────────────────────────────────────
 
@@ -101,7 +101,7 @@
   (it "layout-to-string-not-nil-for-window-with-tree"
     (multiple-value-bind (sess win p0 p1) (%two-pane-session)
       (declare (ignore sess p0 p1))
-      (let ((str (cl-tmux/model:layout->string win)))
+      (let ((str (nerimux/model:layout->string win)))
         (expect str :to-be-truthy)
         (expect (stringp str))
         (expect (plusp (length str))))))
@@ -110,13 +110,13 @@
   (it "layout-to-string-nil-for-empty-window"
     (let ((win (make-window :id 1 :name "w" :width 80 :height 24
                             :tree nil)))
-      (expect (null (cl-tmux/model:layout->string win)))))
+      (expect (null (nerimux/model:layout->string win)))))
 
   ;; layout->string result starts with a 4-character hex checksum.
   (it "layout-checksum-4-hex-chars"
     (multiple-value-bind (_sess win p0 p1) (%two-pane-session)
       (declare (ignore _sess p0 p1))
-      (let* ((str     (cl-tmux/model:layout->string win))
+      (let* ((str     (nerimux/model:layout->string win))
              (comma   (position #\, str))
              (csum    (and comma (subseq str 0 comma))))
         (expect (and csum (= 4 (length csum))))
@@ -131,7 +131,7 @@
     (multiple-value-bind (sess win p0 p1) (%two-pane-session)
       (declare (ignore win p0 p1))
       (setf (session-locked-p sess) t)
-      (let ((output (cl-tmux/renderer:render-session-to-string sess 24 80)))
+      (let ((output (nerimux/renderer:render-session-to-string sess 24 80)))
         (expect (search "locked" output)))
       (setf (session-locked-p sess) nil)))
 
@@ -150,7 +150,7 @@
       ;; Initially no pipe.
       (expect (null (pane-pipe-active-p p)))
       ;; Close is a no-op when there is no pipe.
-      (finishes (cl-tmux/commands:pipe-pane-close p))
+      (finishes (nerimux/commands:pipe-pane-close p))
       (expect (null (pane-pipe-fd p)))
       (expect (null (pane-pipe-output-stream p)))
       (expect (null (pane-pipe-output-thread p)))
@@ -162,7 +162,7 @@
           (bytes (make-array 5 :element-type '(unsigned-byte 8)
                                :initial-contents '(104 101 108 108 111))))
       (expect (null (pane-pipe-fd p)))
-      (finishes (cl-tmux/commands:pipe-pane-write p bytes))))
+      (finishes (nerimux/commands:pipe-pane-write p bytes))))
 
   ;;; ── Session groups ───────────────────────────────────────────────────────────
 
@@ -181,8 +181,8 @@
       (window-select-pane win p0)
       (session-select-window s1 win)
       ;; Bind sessions into a group.
-      (let ((cl-tmux::*session-groups* nil))
-        (cl-tmux::server-new-session-in-group s2 s1)
+      (let ((nerimux::*session-groups* nil))
+        (nerimux::server-new-session-in-group s2 s1)
         (expect (session-group s1) :to-be-truthy)
         (expect (eql (session-group s1) (session-group s2)))
         (expect (eq (session-windows s1) (session-windows s2))))))
@@ -203,8 +203,8 @@
       (let ((new-win (%make-group-test-window 2)))
         (session-insert-window s1 new-win)
         ;; Peer views the window that is about to be killed.
-        (setf (cl-tmux/model:session-active s2) new-win)
-        (cl-tmux/commands:kill-window s1 new-win)
+        (setf (nerimux/model:session-active s2) new-win)
+        (nerimux/commands:kill-window s1 new-win)
         (expect (null (member new-win (session-windows s2))))
         (expect (eq win (session-active-window s2))))))
 
@@ -215,17 +215,17 @@
     (with-grouped-sessions (s1 s2 win)
       (let* ((win2 (%make-group-test-window 2))
              (closed 0)
-             (real-pty-close (fdefinition 'cl-tmux/pty:pty-close)))
+             (real-pty-close (fdefinition 'nerimux/pty:pty-close)))
         (session-insert-window s1 win2)
         (session-select-window s1 win2)   ; unlink targets the active window
-        (let ((cl-tmux::*server-sessions* (list (cons "a" s1) (cons "b" s2)))
-              (cl-tmux/prompt:*overlay* nil))
+        (let ((nerimux::*server-sessions* (list (cons "a" s1) (cons "b" s2)))
+              (nerimux/prompt:*overlay* nil))
           (unwind-protect
                (progn
-                 (setf (fdefinition 'cl-tmux/pty:pty-close)
+                 (setf (fdefinition 'nerimux/pty:pty-close)
                        (lambda (&rest args) (declare (ignore args)) (incf closed)))
-                 (cl-tmux::%cmd-unlink-window s1 nil))
-            (setf (fdefinition 'cl-tmux/pty:pty-close) real-pty-close))
+                 (nerimux::%cmd-unlink-window s1 nil))
+            (setf (fdefinition 'nerimux/pty:pty-close) real-pty-close))
           (expect (null (member win2 (session-windows s1))))
           (expect (null (member win2 (session-windows s2))))
           (expect (= 1 closed))))))
@@ -234,8 +234,8 @@
   (it "session-group-sync-ignores-ungrouped-sessions"
     (let* ((win (%make-group-test-window 1))
            (s   (make-session :id 3 :name "solo" :windows (list win)))
-           (cl-tmux::*session-groups* nil))
-      (finishes (cl-tmux/model:session-windows-changed s))
+           (nerimux::*session-groups* nil))
+      (finishes (nerimux/model:session-windows-changed s))
       (expect (equal (list win) (session-windows s)))))
 
   ;;; ── choose-session overlay ───────────────────────────────────────────────────
@@ -244,10 +244,10 @@
   (it "choose-session-shows-overlay"
     (with-fake-session (sess :nwindows 1)
       (let ((*overlay* nil)
-            (cl-tmux::*dirty* nil)
-            (cl-tmux::*running* t)
-            (cl-tmux::*server-sessions* (list (cons (session-name sess) sess))))
-        (cl-tmux::dispatch-command sess :choose-session nil)
+            (nerimux::*dirty* nil)
+            (nerimux::*running* t)
+            (nerimux::*server-sessions* (list (cons (session-name sess) sess))))
+        (nerimux::dispatch-command sess :choose-session nil)
         (assert-overlay-active ":choose-session must open an overlay")
         (assert-overlay-contains (session-name sess) *overlay*
                                  "overlay must contain the session name"))))
@@ -256,7 +256,7 @@
 
   ;; *update-environment* is a list of environment variable names.
   (it "update-environment-default-list"
-    (let ((vars cl-tmux::*update-environment*))
+    (let ((vars nerimux::*update-environment*))
       (expect (listp vars))
       (expect (> (length vars) 0))
       (expect (every #'stringp vars)))))

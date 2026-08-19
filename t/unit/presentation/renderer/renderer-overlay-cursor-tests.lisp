@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Renderer overlay, cursor visibility, and message placement tests.
 
@@ -22,7 +22,7 @@
       (show-overlay (format nil "line one~%line two"))
       (unwind-protect
            (let ((buf (make-string-output-stream)))
-             (cl-tmux/renderer::render-overlay buf 20 10)
+             (nerimux/renderer::render-overlay buf 20 10)
              (let ((out (get-output-stream-string buf)))
                (expect (search "line" out))))
         (clear-overlay))))
@@ -30,7 +30,7 @@
   ;; render-overlay reads the message-style option for its SGR colour.
   (it "message-style-applied-to-overlay"
     (with-isolated-options ("message-style" "fg=white,bg=blue,bold")
-      (let ((eff (cl-tmux/options:get-option "message-style" "")))
+      (let ((eff (nerimux/options:get-option "message-style" "")))
         (expect (search "bold" eff))
         (expect (search "fg=white" eff))
         (expect (search "bg=blue" eff)))))
@@ -59,7 +59,7 @@
     (let* ((sess (make-renderer-test-session 30 5))
            (ap   (session-active-pane sess))
            (screen (pane-screen ap)))
-      (setf (cl-tmux/terminal/types:screen-cursor-visible screen) nil)
+      (setf (nerimux/terminal/types:screen-cursor-visible screen) nil)
       (let ((out (render-session-to-string sess 6 30)))
         (expect (search (format nil "~C[?25l" #\Escape) out))
         (expect (search (format nil "~C[?25h" #\Escape) out) :to-be-falsy))))
@@ -69,7 +69,7 @@
     (let* ((sess (make-renderer-test-session 30 5))
            (ap   (session-active-pane sess))
            (screen (pane-screen ap)))
-      (setf (cl-tmux/terminal/types:screen-cursor-visible screen) t)
+      (setf (nerimux/terminal/types:screen-cursor-visible screen) t)
       (let ((out (render-session-to-string sess 6 30)))
         (expect (search (format nil "~C[?25h" #\Escape) out)))))
 
@@ -97,20 +97,20 @@
       (destructuring-bind (height line position expected desc) row
         (declare (ignore desc))
         (with-isolated-config
-          (let ((cl-tmux/config:*status-height* height)
-                (cl-tmux/prompt:*overlay* "hello"))
-            (cl-tmux/options:set-option "message-line" line)
-            (cl-tmux/options:set-option "status-position" position)
+          (let ((nerimux/config:*status-height* height)
+                (nerimux/prompt:*overlay* "hello"))
+            (nerimux/options:set-option "message-line" line)
+            (nerimux/options:set-option "status-position" position)
             (let ((out (with-output-to-string (buf)
-                         (cl-tmux/renderer::render-overlay buf 20 10))))
+                         (nerimux/renderer::render-overlay buf 20 10))))
               (expect (search (format nil "[~D;1H" (1+ expected)) out))
               (expect (search "hello" out))))))))
 
   ;; A multi-line overlay (pager) draws from row 0 even when rows are supplied.
   (it "multi-line-overlay-stays-top-anchored"
     (with-isolated-config
-      (let ((cl-tmux/prompt:*overlay* (format nil "line1~%line2~%line3")))
+      (let ((nerimux/prompt:*overlay* (format nil "line1~%line2~%line3")))
         (let ((out (with-output-to-string (buf)
-                     (cl-tmux/renderer::render-overlay buf 20 10))))
+                     (nerimux/renderer::render-overlay buf 20 10))))
           (expect (search "[1;1H" out))
           (expect (search "line3" out)))))))

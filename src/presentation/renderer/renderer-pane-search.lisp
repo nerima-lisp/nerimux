@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/renderer)
+(in-package #:nerimux/renderer)
 
 ;;; Copy-mode search-match highlighting for pane rendering.
 
@@ -40,7 +40,7 @@
   "SGR attribute string for the tmux style option OPTION-NAME (falling back to
    DEFAULT when unset), or NIL when the resolved style string is empty.
    Parses the tmux style string via the renderer style pipeline."
-  (let ((style (cl-tmux/options:get-option option-name default)))
+  (let ((style (nerimux/options:get-option option-name default)))
     (when (and style (plusp (length style)))
       (style-to-sgr (parse-style-string style)))))
 

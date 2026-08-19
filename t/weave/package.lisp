@@ -5,11 +5,11 @@
 ;;;;   * cl-prolog-kit — queried through the reasoning API and, for raw queries,
 ;;;;                 through cl-prolog-kit's own cl-weave bridge (deftest-queries).
 
-(defpackage #:cl-tmux/weave-tests
+(defpackage #:nerimux/weave-tests
   (:use #:cl #:cl-weave)
   ;; cl-weave shadows cl:describe; take cl-weave's.
   (:shadowing-import-from #:cl-weave #:describe)
-  (:import-from #:cl-tmux/reasoning
+  (:import-from #:nerimux/reasoning
                 ;; Projection + construction
                 #:snapshot-key-bindings
                 #:build-key-rulebase

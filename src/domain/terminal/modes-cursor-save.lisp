@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/actions)
+(in-package #:nerimux/terminal/actions)
 
 ;;;; Terminal modes — cursor save/restore (DECSC/DECRC) and cursor shape (DECSCUSR).
 

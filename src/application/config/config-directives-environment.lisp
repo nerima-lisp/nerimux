@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/config)
+(in-package #:nerimux/config)
 
 ;;; set-environment directive handling.
 
@@ -19,12 +19,12 @@
 
 (defun %apply-set-environment-to-session (target-name remove-p var-name var-value)
   "Apply a `set-environment -t TARGET-NAME` directive to a session overlay."
-  (let ((session (and target-name (cl-tmux::server-find-session target-name))))
+  (let ((session (and target-name (nerimux::server-find-session target-name))))
     (when (and session var-name)
       (if remove-p
-          (cl-tmux/model:session-unset-environment session var-name)
+          (nerimux/model:session-unset-environment session var-name)
           (when var-value
-            (cl-tmux/model:session-set-environment session var-name var-value)))
+            (nerimux/model:session-set-environment session var-name var-value)))
       t)))
 
 (defun %apply-set-environment-to-process (remove-p var-name var-value)

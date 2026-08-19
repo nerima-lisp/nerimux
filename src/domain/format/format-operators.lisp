@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/format)
+(in-package #:nerimux/format)
 
 ;;; -- Comparison and logical format operators ---------------------------------
 ;;;

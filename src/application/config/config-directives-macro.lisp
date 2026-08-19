@@ -1,11 +1,11 @@
-(in-package #:cl-tmux/config)
+(in-package #:nerimux/config)
 
 ;;; ── Runtime sb-posix helpers ─────────────────────────────────────────────────
 ;;; ── Renderer mouse-reporting hook ────────────────────────────────────────────
 ;;;
 ;;; %apply-option-side-effects must call the renderer to enable/disable mouse
 ;;; reporting when the 'mouse' option changes, but the config layer cannot carry
-;;; a compile-time dependency on cl-tmux/renderer (circular).  A registered
+;;; a compile-time dependency on nerimux/renderer (circular).  A registered
 ;;; callback (consistent with *command-hook-runner*) is the solution: the
 ;;; renderer/orchestrate layer sets this at startup; config calls it without
 ;;; knowing who owns the terminal.
@@ -13,13 +13,13 @@
 (defvar *mouse-reporting-hook* nil
   "When non-NIL, a function (enable-p) called whenever the 'mouse' option changes.
    ENABLE-P is T to enable mouse reporting, NIL to disable it.  Set by the
-   orchestrate layer (events-loop or main.lisp) to cl-tmux/renderer:enable/disable.")
+   orchestrate layer (events-loop or main.lisp) to nerimux/renderer:enable/disable.")
 
 ;;; ── Environment-variable helper ─────────────────────────────────────────────
 ;;;
 ;;; set-environment directives need to mutate the process environment.
 ;;; SB-POSIX is looked up lazily at call time — it is not an ASDF dependency of
-;;; cl-tmux so it may not be loaded when this file first loads, but it IS loaded
+;;; nerimux so it may not be loaded when this file first loads, but it IS loaded
 ;;; before any runtime or test caller reaches these functions.
 
 (defun find-posix-function (name)

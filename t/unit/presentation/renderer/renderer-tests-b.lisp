@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; status-bar format, position, on/off, multi-line, BEL, parse-style, render-popup/menu — part II
 
@@ -11,7 +11,7 @@
   ;; session name rather than the literal variable syntax.
   (it "render-status-bar-custom-status-left-format-expands-session-name"
     (with-isolated-options ()
-      (cl-tmux/options:set-option "status-left" "sess:#{session_name}")
+      (nerimux/options:set-option "status-left" "sess:#{session_name}")
       (let* ((sess (make-renderer-test-session 60 10 :content ""))
              (out  (render-status-bar-output sess 10 60)))
         (expect (search "sess:0" out))
@@ -21,7 +21,7 @@
   ;; active window name instead of the default HH:MM clock.
   (it "render-status-bar-custom-status-right-format-expands-window-name"
     (with-isolated-options ()
-      (cl-tmux/options:set-option "status-right" "win:#{window_name}")
+      (nerimux/options:set-option "status-right" "win:#{window_name}")
       (let* ((sess (make-renderer-test-session 60 10 :content ""))
              (out  (render-status-bar-output sess 10 60)))
         (expect (search "win:1" out)))))
@@ -53,12 +53,12 @@
       (destructuring-bind (pos expected-y desc) c
         (declare (ignore desc))
         (with-isolated-options ("status-position" pos)
-          (let ((cl-tmux/config:*status-height* 1))
+          (let ((nerimux/config:*status-height* 1))
             (let* ((p0  (make-pane :id 1 :x 0 :y 0 :width 20 :height 5
                                    :fd -1 :pid -1 :screen (make-screen 20 5)))
                    (win (make-window :id 1 :name "w" :width 20 :height 6
                                      :tree (make-layout-leaf p0) :panes (list p0))))
-              (cl-tmux/model:window-relayout win 5 20)
+              (nerimux/model:window-relayout win 5 20)
               (expect (= expected-y (pane-y p0)))
               (expect (= 5 (pane-height p0)))))))))
 
@@ -68,28 +68,28 @@
   ;; or "default".
   (it "status-segment-style-falls-back-to-base-when-unset"
     (with-isolated-options ("status-left-style" "")
-      (expect (string= "44;97" (cl-tmux/renderer::%status-segment-style-sgr
+      (expect (string= "44;97" (nerimux/renderer::%status-segment-style-sgr
                                  "status-left-style" "44;97"))))
     (with-isolated-options ("status-left-style" "default")
-      (expect (string= "44;97" (cl-tmux/renderer::%status-segment-style-sgr
+      (expect (string= "44;97" (nerimux/renderer::%status-segment-style-sgr
                                  "status-left-style" "44;97")))))
 
   ;; %apply-segment-style wraps TEXT in the segment SGR and reverts to the base.
   (it "apply-segment-style-wraps-and-reverts"
-    (let ((out (cl-tmux/renderer::%apply-segment-style "TEXT" "31" "44")))
+    (let ((out (nerimux/renderer::%apply-segment-style "TEXT" "31" "44")))
       (expect (search (format nil "~C[31m" #\Escape) out))
       (expect (search "TEXT" out))
       (expect (search (format nil "~C[44m" #\Escape) out))))
 
   ;; %apply-segment-style returns TEXT unchanged when the segment SGR equals the base.
   (it "apply-segment-style-noop-when-equal-to-base"
-    (expect (string= "TEXT" (cl-tmux/renderer::%apply-segment-style "TEXT" "44" "44"))))
+    (expect (string= "TEXT" (nerimux/renderer::%apply-segment-style "TEXT" "44" "44"))))
 
   ;; status-left-style injects its SGR into the rendered status bar.
   (it "status-left-style-applied-in-rendered-bar"
     (with-isolated-options ("status-left" "L" "status-right" nil "status-style" ""
                             "status-left-style" "fg=red")
-      (let* ((expected (cl-tmux/renderer::%status-sgr-from-style "fg=red"))
+      (let* ((expected (nerimux/renderer::%status-sgr-from-style "fg=red"))
              (sess     (make-renderer-test-session 20 5))
              (out      (render-status-bar-output sess 6 20)))
         (expect out :to-contain-sgr expected))))
@@ -112,7 +112,7 @@
   ;; status-line-count maps the `status` option to a row count (0..5, tmux cap).
   (it "status-line-count-parses-option"
     (flet ((n (v) (with-isolated-options ("status" v)
-                    (cl-tmux/renderer::status-line-count))))
+                    (nerimux/renderer::status-line-count))))
       (expect (= 0 (n nil)))
       (expect (= 0 (n "off")))
       (expect (= 0 (n "0")))
@@ -156,7 +156,7 @@
     (with-isolated-options ("status-format[1]" "L1#[align=right]R1")
       (let* ((sess (make-renderer-test-session 30 10 :content ""))
              (out  (with-output-to-string (s)
-                     (cl-tmux/renderer::render-extra-status-line s sess 30 8 1)))
+                     (nerimux/renderer::render-extra-status-line s sess 30 8 1)))
              (vis  (cl-regex-kit:replace-all
                     (cl-regex-kit:compile-regex
                      (format nil "~C\\[[0-9;?]*[A-Za-z]" #\Escape))
@@ -177,20 +177,20 @@
         (let* ((sess  (make-renderer-test-session 20 5))
                (ap    (session-active-pane sess))
                (sc    (pane-screen ap)))
-          (setf (cl-tmux/terminal/types:screen-bell-pending sc) initial-pending)
+          (setf (nerimux/terminal/types:screen-bell-pending sc) initial-pending)
           (let ((out (render-session-to-string sess 6 20)))
             (expect (if initial-pending
                         (find (code-char 7) out)
                         (null (find (code-char 7) out))))
             (when initial-pending
-              (expect (cl-tmux/terminal/types:screen-bell-pending sc) :to-be-falsy)))))))
+              (expect (nerimux/terminal/types:screen-bell-pending sc) :to-be-falsy)))))))
 
   ;;; ── status-left expanded ─────────────────────────────────────────────────────
 
   ;; status-left #{session_name} expands to the actual session name.
   (it "status-left-expanded-session-name"
     (with-isolated-options ()
-      (cl-tmux/options:set-option "status-left" "#{session_name}")
+      (nerimux/options:set-option "status-left" "#{session_name}")
       (let* ((sess (make-renderer-test-session 40 10))
              (out  (render-status-bar-output sess 11 40)))
         (expect (search "0" out))

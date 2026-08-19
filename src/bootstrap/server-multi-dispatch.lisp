@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 (defvar *runtime-recovery-items* nil)
 
@@ -120,8 +120,8 @@ Any non-`d` byte after the prefix is passed through to the normal key pipeline.
 (defun %client-picker-items (conn)
   (or (client-conn-picker-items conn)
       (setf (client-conn-picker-items conn)
-            (cl-tmux/picker:build-global-picker-items
-             (cl-tmux/vcs:workspace-organizations)))))
+            (nerimux/picker:build-global-picker-items
+             (nerimux/vcs:workspace-organizations)))))
 
 (defun %picker-clamp-index (conn items)
   (setf (client-conn-picker-index conn)
@@ -133,7 +133,7 @@ Any non-`d` byte after the prefix is passed through to the normal key pipeline.
 (defun %deduplicate-client-picker-items (items)
   (let ((worktrees nil))
     (loop for item in items
-          for worktree = (cl-tmux/picker:picker-item-worktree item)
+          for worktree = (nerimux/picker:picker-item-worktree item)
           unless (and worktree (member worktree worktrees :test #'eq))
             collect (progn
                       (when worktree
@@ -141,7 +141,7 @@ Any non-`d` byte after the prefix is passed through to the normal key pipeline.
                       item))))
 
 (defun %client-picker-visible-items (conn)
-  (let* ((filtered (cl-tmux/picker:filter-global-picker-items
+  (let* ((filtered (nerimux/picker:filter-global-picker-items
                     (%client-picker-items conn)
                     (client-conn-picker-query conn)
                     :regex-p (client-conn-picker-regex-p conn)))
@@ -150,51 +150,51 @@ Any non-`d` byte after the prefix is passed through to the normal key pipeline.
     items))
 
 (defun %picker-item-worktree (item)
-  (or (cl-tmux/picker:picker-item-worktree item)
-      (let ((repository (cl-tmux/picker:picker-item-repository item)))
+  (or (nerimux/picker:picker-item-worktree item)
+      (let ((repository (nerimux/picker:picker-item-repository item)))
         (or (and repository
-                 (or (cl-tmux/model:repository-main-worktree repository)
-                     (first (cl-tmux/model:repository-worktrees repository))))
-            (let ((organization (cl-tmux/picker:picker-item-organization item)))
+                 (or (nerimux/model:repository-main-worktree repository)
+                     (first (nerimux/model:repository-worktrees repository))))
+            (let ((organization (nerimux/picker:picker-item-organization item)))
               (when organization
                 (loop for repository in
-                        (cl-tmux/model:organization-repositories organization)
+                        (nerimux/model:organization-repositories organization)
                       for worktree =
-                        (or (cl-tmux/model:repository-main-worktree repository)
-                            (first (cl-tmux/model:repository-worktrees repository)))
+                        (or (nerimux/model:repository-main-worktree repository)
+                            (first (nerimux/model:repository-worktrees repository)))
                       when worktree return worktree)))))))
 
-(defun %workspace-worktrees (&optional (organizations (cl-tmux/vcs:workspace-organizations)))
+(defun %workspace-worktrees (&optional (organizations (nerimux/vcs:workspace-organizations)))
   "Return the catalog worktrees in stable organization/repository order."
   (loop for organization in organizations
         append (loop for repository in
-                         (cl-tmux/model:organization-repositories organization)
+                         (nerimux/model:organization-repositories organization)
                      append (copy-list
-                             (cl-tmux/model:repository-worktrees repository)))))
+                             (nerimux/model:repository-worktrees repository)))))
 
 (defun %workspace-tree-objects
-    (&optional (organizations (cl-tmux/vcs:workspace-organizations)))
+    (&optional (organizations (nerimux/vcs:workspace-organizations)))
   (loop for organization in organizations
         append
         (cons organization
               (loop for repository in
-                        (cl-tmux/model:organization-repositories organization)
+                        (nerimux/model:organization-repositories organization)
                     append
                     (cons repository
                           (copy-list
-                           (cl-tmux/model:repository-worktrees repository)))))))
+                           (nerimux/model:repository-worktrees repository)))))))
 
 (defun %workspace-repository-attention-p (repository)
-  (or (cl-tmux/model:repository-dirty-p repository)
-      (cl-tmux/model:repository-conflict-p repository)
-      (plusp (cl-tmux/model:repository-ahead repository))
-      (plusp (cl-tmux/model:repository-behind repository))
-      (cl-tmux/model:repository-missing-p repository)
-      (some #'cl-tmux/model:worktree-attention-p
-            (cl-tmux/model:repository-worktrees repository))))
+  (or (nerimux/model:repository-dirty-p repository)
+      (nerimux/model:repository-conflict-p repository)
+      (plusp (nerimux/model:repository-ahead repository))
+      (plusp (nerimux/model:repository-behind repository))
+      (nerimux/model:repository-missing-p repository)
+      (some #'nerimux/model:worktree-attention-p
+            (nerimux/model:repository-worktrees repository))))
 
 (defun %workspace-attention-items
-    (&optional (organizations (cl-tmux/vcs:workspace-organizations))
+    (&optional (organizations (nerimux/vcs:workspace-organizations))
                (messages nil))
   "Return attention objects in the same order as the attention renderer.
 
@@ -203,12 +203,12 @@ entry can focus its pane or return to the matching worktree without parsing a
 display label back into a target string."
   (let ((items nil))
     (dolist (organization organizations)
-      (dolist (repository (cl-tmux/model:organization-repositories organization))
-        (dolist (worktree (cl-tmux/model:repository-worktrees repository))
-          (when (cl-tmux/model:worktree-attention-p worktree)
+      (dolist (repository (nerimux/model:organization-repositories organization))
+        (dolist (worktree (nerimux/model:repository-worktrees repository))
+          (when (nerimux/model:worktree-attention-p worktree)
             (push worktree items))
-          (dolist (pane (reverse (cl-tmux/model:worktree-panes worktree)))
-            (when (cl-tmux/model:pane-attention-p pane)
+          (dolist (pane (reverse (nerimux/model:worktree-panes worktree)))
+            (when (nerimux/model:pane-attention-p pane)
               (push pane items))))
         (when (%workspace-repository-attention-p repository)
           (push repository items))))
@@ -226,7 +226,7 @@ display label back into a target string."
             0)))
 
 (defun %refresh-client-attention
-    (conn &optional (organizations (cl-tmux/vcs:workspace-organizations)))
+    (conn &optional (organizations (nerimux/vcs:workspace-organizations)))
   (let* ((old-items (client-conn-attention-items conn))
          (old-object (nth (client-conn-attention-index conn) old-items))
          (items (%workspace-attention-items
@@ -242,15 +242,15 @@ display label back into a target string."
 (defun %workspace-worktree-matches-token-p (worktree token)
   (or (eq worktree token)
       (and (stringp token)
-           (or (string= token (cl-tmux/model:worktree-id worktree))
-               (string= token (cl-tmux/model:worktree-path worktree))
-               (and (cl-tmux/model:worktree-branch worktree)
+           (or (string= token (nerimux/model:worktree-id worktree))
+               (string= token (nerimux/model:worktree-path worktree))
+               (and (nerimux/model:worktree-branch worktree)
                     (string= token
                              (princ-to-string
-                              (cl-tmux/model:worktree-branch worktree))))))))
+                              (nerimux/model:worktree-branch worktree))))))))
 
 (defun %workspace-find-worktree (token &optional (organizations
-                                                  (cl-tmux/vcs:workspace-organizations)))
+                                                  (nerimux/vcs:workspace-organizations)))
   (when token
     (find-if (lambda (worktree)
                (%workspace-worktree-matches-token-p worktree token))
@@ -273,46 +273,46 @@ display label back into a target string."
       (find-if (lambda (worktree)
                  (%workspace-directory-prefix-p
                   token
-                  (cl-tmux/model:worktree-path worktree)))
+                  (nerimux/model:worktree-path worktree)))
                (%workspace-worktrees organizations))))
 
 (defun %worktree-selection-token (worktree)
   (and worktree
-       (or (cl-tmux/model:worktree-id worktree)
-           (cl-tmux/model:worktree-path worktree)
-           (and (cl-tmux/model:worktree-branch worktree)
-                (princ-to-string (cl-tmux/model:worktree-branch worktree))))))
+       (or (nerimux/model:worktree-id worktree)
+           (nerimux/model:worktree-path worktree)
+           (and (nerimux/model:worktree-branch worktree)
+                (princ-to-string (nerimux/model:worktree-branch worktree))))))
 
 (defun %organization-selection-token (organization)
   (and organization
-       (or (cl-tmux/model:organization-id organization)
-           (and (cl-tmux/model:organization-host organization)
-                (cl-tmux/model:organization-name organization)
+       (or (nerimux/model:organization-id organization)
+           (and (nerimux/model:organization-host organization)
+                (nerimux/model:organization-name organization)
                 (format nil "~A/~A"
-                        (cl-tmux/model:organization-host organization)
-                        (cl-tmux/model:organization-name organization))))))
+                        (nerimux/model:organization-host organization)
+                        (nerimux/model:organization-name organization))))))
 
 (defun %repository-selection-token (repository)
   (and repository
-       (or (cl-tmux/model:repository-id repository)
-           (cl-tmux/model:repository-specification repository)
-           (cl-tmux/model:repository-local-path repository)
-           (cl-tmux/model:repository-path repository))))
+       (or (nerimux/model:repository-id repository)
+           (nerimux/model:repository-specification repository)
+           (nerimux/model:repository-local-path repository)
+           (nerimux/model:repository-path repository))))
 
 (defun %tree-object-selection-token (object)
   (typecase object
-    (cl-tmux/model:organization
+    (nerimux/model:organization
      (list :organization (%organization-selection-token object)))
-    (cl-tmux/model:repository
+    (nerimux/model:repository
      (list :repository (%repository-selection-token object)))
-    (cl-tmux/model:worktree
+    (nerimux/model:worktree
      (list :worktree (%worktree-selection-token object)))))
 
 (defun %client-tree-object (conn)
   (or (client-conn-selected-tree-object conn)
       (client-conn-selected-worktree conn)
       (and (client-conn-focus conn)
-           (cl-tmux/model:pane-worktree (client-conn-focus conn)))))
+           (nerimux/model:pane-worktree (client-conn-focus conn)))))
 
 (defun %client-tree-selection-token (conn)
   (%tree-object-selection-token (%client-tree-object conn)))
@@ -320,7 +320,7 @@ display label back into a target string."
 (defun %client-selection-token (conn)
   (let ((worktree (or (client-conn-selected-worktree conn)
                       (and (client-conn-focus conn)
-                           (cl-tmux/model:pane-worktree
+                           (nerimux/model:pane-worktree
                             (client-conn-focus conn))))))
     (%worktree-selection-token worktree)))
 
@@ -354,7 +354,7 @@ display label back into a target string."
         (%set-client-selected-tree-object conn object))))
 
 (defun %set-client-selected-tree-object (conn object)
-  (let ((worktree (and (typep object 'cl-tmux/model:worktree) object)))
+  (let ((worktree (and (typep object 'nerimux/model:worktree) object)))
     (setf (client-conn-selected-tree-object conn) object
           (client-conn-selected-worktree conn) worktree)
     (when worktree
@@ -386,9 +386,9 @@ display label back into a target string."
       (%set-client-selected-tree-object conn object))))
 
 (defun %refresh-client-picker (conn &key on-complete on-error)
-  (if (cl-tmux/vcs:vcs-package-available-p)
+  (if (nerimux/vcs:vcs-package-available-p)
       (handler-case
-          (cl-tmux/vcs:refresh-workspace-organizations-async
+          (nerimux/vcs:refresh-workspace-organizations-async
            :on-complete
            (lambda (organizations)
              (dolist (client
@@ -398,7 +398,7 @@ display label back into a target string."
                         :test #'eq))
                (%rebind-client-selection client organizations)
                (setf (client-conn-picker-items client)
-                     (cl-tmux/picker:build-global-picker-items organizations))
+                     (nerimux/picker:build-global-picker-items organizations))
                (%picker-clamp-index client
                                     (%client-picker-visible-items client))
                (%refresh-client-attention client organizations))
@@ -414,9 +414,9 @@ display label back into a target string."
           (when (and on-error (%client-live-p conn))
             (funcall on-error condition))
           (%mark-dirty)))
-      (let ((organizations (cl-tmux/vcs:workspace-organizations)))
+      (let ((organizations (nerimux/vcs:workspace-organizations)))
         (setf (client-conn-picker-items conn)
-              (cl-tmux/picker:build-global-picker-items organizations))
+              (nerimux/picker:build-global-picker-items organizations))
         (%refresh-client-attention conn organizations)
         (when on-complete
           (funcall on-complete organizations))))
@@ -428,8 +428,8 @@ display label back into a target string."
         (client-conn-picker-regex-p conn) nil
         (client-conn-picker-index conn) 0
         (client-conn-picker-items conn)
-        (cl-tmux/picker:build-global-picker-items
-         (cl-tmux/vcs:workspace-organizations)))
+        (nerimux/picker:build-global-picker-items
+         (nerimux/vcs:workspace-organizations)))
   (%refresh-client-picker conn)
   (%mark-dirty)
   conn)
@@ -464,7 +464,7 @@ display label back into a target string."
   (and worktree
        (find worktree
              (all-panes session)
-             :key #'cl-tmux/model:pane-worktree
+             :key #'nerimux/model:pane-worktree
              :test #'eq)))
 
 (defun %open-client-worktree-pane (session conn worktree)
@@ -546,7 +546,7 @@ display label back into a target string."
       ((not (%runtime-recovery-valid-path-p path))
        (%client-notify conn "runtime recovery path is missing"))
       ((eq kind :lost-pane)
-       (if (and pane (not (cl-tmux/model:pane-live-p pane)))
+       (if (and pane (not (nerimux/model:pane-live-p pane)))
            (handler-case
                (progn
                  (respawn-pane session pane
@@ -554,9 +554,9 @@ display label back into a target string."
                                :default-command
                                (and (plusp (length command)) command))
                  (start-reader-thread pane)
-                 (let ((window (cl-tmux/model:pane-window pane)))
+                 (let ((window (nerimux/model:pane-window pane)))
                    (when window
-                     (cl-tmux/model:window-select-pane window pane)))
+                     (nerimux/model:window-select-pane window pane)))
                  (%set-client-focus conn pane)
                  (%remove-runtime-recovery-item item)
                  (%client-notify conn "runtime pane restarted"))
@@ -594,7 +594,7 @@ display label back into a target string."
                      (when worktree
                        (worktree-add-pane worktree new-pane)
                        (%set-client-selected-worktree conn worktree)))
-                   (cl-tmux/model:window-select-pane window new-pane)
+                   (nerimux/model:window-select-pane window new-pane)
                    (%set-client-focus conn new-pane)
                    (%remove-runtime-recovery-item item)
                    (%client-notify conn "runtime pane recreated"))
@@ -612,17 +612,17 @@ display label back into a target string."
   (let* ((items (%refresh-client-attention conn))
          (item (nth (client-conn-attention-index conn) items)))
     (cond
-      ((typep item 'cl-tmux/model:pane)
+      ((typep item 'nerimux/model:pane)
        (%set-client-focus conn item))
-      ((typep item 'cl-tmux/model:worktree)
+      ((typep item 'nerimux/model:worktree)
        (%set-client-selected-worktree conn item)
        (let ((pane (%client-worktree-pane session item)))
          (if pane
              (%set-client-focus conn pane)
              (%open-client-worktree-pane session conn item))))
-      ((typep item 'cl-tmux/model:repository)
-       (let* ((worktree (or (cl-tmux/model:repository-main-worktree item)
-                            (first (cl-tmux/model:repository-worktrees item))))
+      ((typep item 'nerimux/model:repository)
+       (let* ((worktree (or (nerimux/model:repository-main-worktree item)
+                            (first (nerimux/model:repository-worktrees item))))
               (pane (%client-worktree-pane session worktree)))
          (if worktree
              (progn
@@ -645,14 +645,14 @@ display label back into a target string."
          (worktree (and item (%picker-item-worktree item)))
          (object (or worktree
                      (and item
-                          (or (cl-tmux/picker:picker-item-repository item)
-                              (cl-tmux/picker:picker-item-organization item)))))
+                          (or (nerimux/picker:picker-item-repository item)
+                              (nerimux/picker:picker-item-organization item)))))
          (pane (%client-worktree-pane session worktree))
-         (window (and pane (cl-tmux/model:pane-window pane))))
+         (window (and pane (nerimux/model:pane-window pane))))
     (cond
       ((and pane window)
-       (cl-tmux/model:session-select-window session window)
-       (cl-tmux/model:window-select-pane window pane)
+       (nerimux/model:session-select-window session window)
+       (nerimux/model:window-select-pane window pane)
        (%set-client-selected-worktree conn worktree)
        (%set-client-focus conn pane)
        (%close-client-picker conn)
@@ -668,9 +668,9 @@ display label back into a target string."
        (%client-notify
         conn
         (typecase object
-          (cl-tmux/model:repository
+          (nerimux/model:repository
            "repository selected; use :wt-create --branch <branch> --confirm")
-          (cl-tmux/model:organization
+          (nerimux/model:organization
            "organization selected; select a repository first")
           (t "picker item has no worktree")))
        t)
@@ -801,7 +801,7 @@ display label back into a target string."
 
 (defun %client-select-pane-direction (session conn direction)
   (let* ((pane (%resolve-client-focus-pane session nil conn))
-         (window (and pane (cl-tmux/model:pane-window pane)))
+         (window (and pane (nerimux/model:pane-window pane)))
          (neighbor (and window (pane-neighbor window pane direction))))
     (if neighbor
         (progn
@@ -837,9 +837,9 @@ display label back into a target string."
        t)
       (worktree
        (or (%open-client-worktree-pane session conn worktree) t))
-      ((typep object 'cl-tmux/model:repository)
+      ((typep object 'nerimux/model:repository)
        (%client-start-worktree-create conn))
-      ((typep object 'cl-tmux/model:organization)
+      ((typep object 'nerimux/model:organization)
        (%client-start-worktree-create conn))
       (t
        (%client-notify conn "no worktree selected")
@@ -919,7 +919,7 @@ display label back into a target string."
                (%client-notify conn "no focused pane"))
               ((pane-live-p pane)
                (handler-case
-                   (cl-tmux/pty:pty-write (pane-fd pane) payload)
+                   (nerimux/pty:pty-write (pane-fd pane) payload)
                  (error (condition)
                    (%client-notify
                     conn
@@ -1135,7 +1135,7 @@ display label back into a target string."
         (client-conn-viewport conn) 0
         (client-conn-view conn) :detail)
   (when pane
-    (cl-tmux/model:pane-mark-focused pane))
+    (nerimux/model:pane-mark-focused pane))
   pane)
 
 (defun %set-client-view (conn view)
@@ -1234,7 +1234,7 @@ display label back into a target string."
           (and (stringp target) (plusp (length target)) target)
           (client-conn-attach-cwd conn)
           (and (stringp cwd) (plusp (length cwd)) cwd))
-    (%client-attach-selection conn (cl-tmux/vcs:workspace-organizations))
+    (%client-attach-selection conn (nerimux/vcs:workspace-organizations))
     (%mark-dirty)
     t))
 
@@ -1270,25 +1270,25 @@ display label back into a target string."
          (return-from %client-positional-branch arg))))))
 
 (defun %workspace-find-repository
-    (token &optional (organizations (cl-tmux/vcs:workspace-organizations)))
+    (token &optional (organizations (nerimux/vcs:workspace-organizations)))
   (when token
     (dolist (organization organizations)
       (dolist (repository
-                (cl-tmux/model:organization-repositories organization))
+                (nerimux/model:organization-repositories organization))
         (when (or (eq repository token)
                   (and (stringp token)
                        (some (lambda (value)
                                (and value
                                     (string= token
                                              (princ-to-string value))))
-                             (list (cl-tmux/model:repository-id repository)
-                                   (cl-tmux/model:repository-specification repository)
-                                   (cl-tmux/model:repository-local-path repository)
-                                   (cl-tmux/model:repository-path repository)))))
+                             (list (nerimux/model:repository-id repository)
+                                   (nerimux/model:repository-specification repository)
+                                   (nerimux/model:repository-local-path repository)
+                                   (nerimux/model:repository-path repository)))))
           (return-from %workspace-find-repository repository))))))
 
 (defun %workspace-find-organization
-    (token &optional (organizations (cl-tmux/vcs:workspace-organizations)))
+    (token &optional (organizations (nerimux/vcs:workspace-organizations)))
   (when token
     (find-if
      (lambda (organization)
@@ -1297,18 +1297,18 @@ display label back into a target string."
                 (some (lambda (value)
                         (and value
                              (string= token (princ-to-string value))))
-                      (list (cl-tmux/model:organization-id organization)
-                            (cl-tmux/model:organization-host organization)
-                            (cl-tmux/model:organization-name organization)
+                      (list (nerimux/model:organization-id organization)
+                            (nerimux/model:organization-host organization)
+                            (nerimux/model:organization-name organization)
                             (%organization-selection-token organization))))))
      organizations)))
 
 (defun %workspace-find-tree-object
-    (token &optional (organizations (cl-tmux/vcs:workspace-organizations)))
+    (token &optional (organizations (nerimux/vcs:workspace-organizations)))
   (cond
-    ((typep token 'cl-tmux/model:organization) token)
-    ((typep token 'cl-tmux/model:repository) token)
-    ((typep token 'cl-tmux/model:worktree) token)
+    ((typep token 'nerimux/model:organization) token)
+    ((typep token 'nerimux/model:repository) token)
+    ((typep token 'nerimux/model:worktree) token)
     ((and (consp token) (keywordp (first token)))
      (case (first token)
        (:organization
@@ -1328,23 +1328,23 @@ display label back into a target string."
               (%client-tree-object conn)
               (%workspace-find-tree-object (%client-selection-token conn))
               (and (client-conn-focus conn)
-                   (cl-tmux/model:pane-worktree (client-conn-focus conn))))))
+                   (nerimux/model:pane-worktree (client-conn-focus conn))))))
     (typecase object
-      (cl-tmux/model:repository object)
-      (cl-tmux/model:worktree
-       (cl-tmux/model:worktree-repository object))
-      (cl-tmux/model:organization
+      (nerimux/model:repository object)
+      (nerimux/model:worktree
+       (nerimux/model:worktree-repository object))
+      (nerimux/model:organization
        (let ((repositories
-               (cl-tmux/model:organization-repositories object)))
+               (nerimux/model:organization-repositories object)))
          (and (= (length repositories) 1)
               (first repositories)))))))
 
 (defun %client-operation-worktree (conn &optional target)
   (or (%workspace-find-worktree target)
-      (and (typep (%client-tree-object conn) 'cl-tmux/model:worktree)
+      (and (typep (%client-tree-object conn) 'nerimux/model:worktree)
            (%client-tree-object conn))
       (and (client-conn-focus conn)
-           (cl-tmux/model:pane-worktree (client-conn-focus conn)))))
+           (nerimux/model:pane-worktree (client-conn-focus conn)))))
 
 (defun %select-client-tree-relative (conn delta)
   (let* ((objects (%workspace-tree-objects))
@@ -1416,7 +1416,7 @@ display label back into a target string."
           ((not (and (stringp branch) (plusp (length branch))))
            (%client-notify conn "worktree create requires a branch")
            t)
-          ((not (cl-tmux/vcs:vcs-package-available-p))
+          ((not (nerimux/vcs:vcs-package-available-p))
            (%client-notify conn "VCS adapter unavailable")
            t)
           (t
@@ -1424,7 +1424,7 @@ display label back into a target string."
             conn
             (format nil "creating worktree ~A" branch))
            (handler-case
-               (cl-tmux/vcs:create-worktree-async
+               (nerimux/vcs:create-worktree-async
                 repository
                 :branch branch
                 :path path
@@ -1460,16 +1460,16 @@ display label back into a target string."
           ((not worktree)
            (%client-notify conn "worktree delete requires a worktree")
            t)
-          ((not (cl-tmux/vcs:vcs-package-available-p))
+          ((not (nerimux/vcs:vcs-package-available-p))
            (%client-notify conn "VCS adapter unavailable")
            t)
           (t
            (%client-notify
             conn
             (format nil "deleting worktree ~A"
-                    (cl-tmux/model:worktree-path worktree)))
+                    (nerimux/model:worktree-path worktree)))
            (handler-case
-               (cl-tmux/vcs:delete-worktree-async
+               (nerimux/vcs:delete-worktree-async
                 worktree
                 :force force
                 :on-complete
@@ -1689,7 +1689,7 @@ display label back into a target string."
   (with-loop-safe-error (condition
                           :on-error (progn
                                       (format *error-output*
-                                              "~&cl-tmux: command failed: ~{~A~^ ~}: ~A~%"
+                                              "~&nerimux: command failed: ~{~A~^ ~}: ~A~%"
                                               tokens condition)
                                       (force-output *error-output*)
                                       nil))
@@ -1702,7 +1702,7 @@ display label back into a target string."
   (when (client-conn-stream conn)
     (ignore-errors
       (send-frame (client-conn-stream conn)
-                  (msg-reply (or cl-tmux/prompt:*overlay* ""))))))
+                  (msg-reply (or nerimux/prompt:*overlay* ""))))))
 
 (defun %client-command-token-name (value)
   (cond ((stringp value) (string-downcase value))
@@ -1757,7 +1757,7 @@ display label back into a target string."
 
 (defun %dispatch-forwarded-command (session conn cmd target args)
   "Run a non-built-in forwarded command CMD/TARGET/ARGS server-side and reply to
-   CONN with its output — the CLI / control command-forwarding path (`cl-tmux
+   CONN with its output — the CLI / control command-forwarding path (`nerimux
    <cmd>` against a running server).  Sequencing contract: build tokens → run
    command → send reply → record stdin-target → mark dirty → return :quit if the
    command ended the session, else NIL."
@@ -1770,12 +1770,12 @@ display label back into a target string."
                              canonical-cmd canonical-args))
            ;; Capture the command's overlay text instead of showing it to
            ;; interactive clients, so it can be returned to the CLI command
-           ;; client — the `cl-tmux display -p` (and `list-sessions`, ...) path.
-           (cl-tmux/prompt:*overlay* nil)
+           ;; client — the `nerimux display -p` (and `list-sessions`, ...) path.
+           (nerimux/prompt:*overlay* nil)
            (*current-client-conn*   conn)
            (result (%run-forwarded-command-tokens session tokens input-command-p)))
       (%reply-with-command-output conn)
-      (when (and input-command-p (cl-tmux/model::pane-p result))
+      (when (and input-command-p (nerimux/model::pane-p result))
         (setf (client-conn-stdin-target conn) result))
       (%mark-dirty)
       (when (eq result :quit) :quit))))

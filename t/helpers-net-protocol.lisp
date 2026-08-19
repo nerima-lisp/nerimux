@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;; ── Shared transport / net fixtures ─────────────────────────────────────────
 ;;;
@@ -12,7 +12,7 @@
    runs (or future parallel test execution) never collide on the same path.
    Shared by transport-tests.lisp and net-tests.lisp."
   (let ((label (gensym "LABEL")))
-    `(let* ((,label (format nil "cl-tmux-wire-test-~D-~D.bin"
+    `(let* ((,label (format nil "nerimux-wire-test-~D-~D.bin"
                             (get-universal-time) (random 1000000)))
             (,path-var (namestring
                         (merge-pathnames ,label (host-kit:temporary-directory)))))
@@ -29,12 +29,12 @@
      ,@body))
 
 (defun write-frames-to-file (path &rest frames)
-  "Write each FRAME (octet vector) to PATH via cl-tmux/transport:send-frame.
+  "Write each FRAME (octet vector) to PATH via nerimux/transport:send-frame.
    Shared by transport-tests.lisp and net-tests.lisp."
   (with-open-file (out path :direction :output :if-exists :supersede
                             :element-type '(unsigned-byte 8))
     (dolist (frame frames)
-      (cl-tmux/transport:send-frame out frame))))
+      (nerimux/transport:send-frame out frame))))
 
 (defun round-trip-frame (frame)
   "Write FRAME to a temp file and return the first decoded frame from it.
@@ -63,7 +63,7 @@
    protocol-tests.lisp for pure codec-level round-trip assertions, as
    distinct from assert-round-tripped-frame-type's send-frame/read-frame
    transport-level check."
-  (multiple-value-bind (type payload next) (cl-tmux/protocol:decode-frame frame)
+  (multiple-value-bind (type payload next) (nerimux/protocol:decode-frame frame)
     (declare (ignore payload))
     (expect (= expected-type type))
     (expect (= (length frame) next))))
@@ -72,7 +72,7 @@
   "Decode FRAME in-memory (via decode-frame, no file I/O) and pass its payload
    to CHECK-FN. Shared by protocol-tests.lisp; the transport-level counterpart
    is assert-round-tripped-frame-payload."
-  (multiple-value-bind (type payload) (cl-tmux/protocol:decode-frame frame)
+  (multiple-value-bind (type payload) (nerimux/protocol:decode-frame frame)
     (declare (ignore type))
     (funcall check-fn payload)))
 
@@ -88,7 +88,7 @@
   "Bind PATH-VAR to a unique temp socket path, run BODY, then delete it.
    Shared by net-tests.lisp to eliminate duplicated path-building patterns."
   (let ((label (gensym "LABEL")))
-    `(let* ((,label (format nil "cl-tmux-test-~D-~D.sock"
+    `(let* ((,label (format nil "nerimux-test-~D-~D.sock"
                             (get-universal-time) (random 1000000)))
             (,path-var (namestring
                         (merge-pathnames ,label (host-kit:temporary-directory)))))
@@ -100,12 +100,12 @@
    connection.  Binds LISTENER-VAR, CLIENT-VAR, and CONN-VAR.  Closes all
    three sockets on exit, ignoring errors, eliminating the repeated
    listener→connect→accept→unwind-protect scaffold in the net test suite."
-  `(let ((,listener-var (cl-tmux/net:make-listener ,path)))
+  `(let ((,listener-var (nerimux/net:make-listener ,path)))
      (unwind-protect
-          (let* ((,client-var (cl-tmux/net:connect-to ,path))
-                 (,conn-var   (cl-tmux/net:accept-connection ,listener-var)))
+          (let* ((,client-var (nerimux/net:connect-to ,path))
+                 (,conn-var   (nerimux/net:accept-connection ,listener-var)))
             (unwind-protect
                  (locally ,@body)
-              (ignore-errors (cl-tmux/net:close-socket ,client-var))
-              (ignore-errors (cl-tmux/net:close-socket ,conn-var))))
-       (ignore-errors (cl-tmux/net:close-socket ,listener-var)))))
+              (ignore-errors (nerimux/net:close-socket ,client-var))
+              (ignore-errors (nerimux/net:close-socket ,conn-var))))
+       (ignore-errors (nerimux/net:close-socket ,listener-var)))))

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; parser tests — part B: combining-chars, ACS line-drawing, DCS passthrough,
 ;;;; XTGETTCAP, and DECRQSS helpers.
@@ -9,10 +9,10 @@
 
   ;; combining-char-p is T for code points in combining ranges, NIL otherwise.
   (it "combining-char-predicate-ranges"
-    (expect (cl-tmux/terminal/actions:combining-char-p (code-char #x0300)) :to-be-truthy)
-    (expect (cl-tmux/terminal/actions:combining-char-p (code-char #x036F)) :to-be-truthy)
-    (expect (cl-tmux/terminal/actions:combining-char-p #\a) :to-be-falsy)
-    (expect (cl-tmux/terminal/actions:combining-char-p #\Space) :to-be-falsy))
+    (expect (nerimux/terminal/actions:combining-char-p (code-char #x0300)) :to-be-truthy)
+    (expect (nerimux/terminal/actions:combining-char-p (code-char #x036F)) :to-be-truthy)
+    (expect (nerimux/terminal/actions:combining-char-p #\a) :to-be-falsy)
+    (expect (nerimux/terminal/actions:combining-char-p #\Space) :to-be-falsy))
 
   ;; A combining character appended after a base char is stored in the previous
   ;; cell's combining list without advancing the cursor.
@@ -28,7 +28,7 @@
         (check-cursor s 1 0)
         ;; The combining char must be in the previous cell's combining list
         (let ((cell (screen-cell s 0 0)))
-          (expect (member (code-char #x0301) (cl-tmux/terminal/types:cell-combining cell))))))))
+          (expect (member (code-char #x0301) (nerimux/terminal/types:cell-combining cell))))))))
 
 ;;; ── SUITE: acs-line-drawing ──────────────────────────────────────────────────
 
@@ -41,20 +41,20 @@
 (defmacro check-dec-graphics (char expected-char description)
   "Assert that %dec-graphics-char maps CHAR to EXPECTED-CHAR with DESCRIPTION."
   (declare (ignore description))
-  `(expect (char= ,expected-char (cl-tmux/terminal/actions::%dec-graphics-char ,char))))
+  `(expect (char= ,expected-char (nerimux/terminal/actions::%dec-graphics-char ,char))))
 
 (describe "terminal-suite/acs-line-drawing"
 
   ;; ESC ( 0 switches to DEC graphics; ESC ( B switches back to ASCII.
   (it "acs-charset-switch"
     (with-screen (s 20 5)
-      (expect (eq :ascii (cl-tmux/terminal/types:screen-charset s)))
+      (expect (eq :ascii (nerimux/terminal/types:screen-charset s)))
       ;; ESC ( 0
       (feed s (format nil "~C(0" #\Escape))
-      (expect (eq :dec-graphics (cl-tmux/terminal/types:screen-charset s)))
+      (expect (eq :dec-graphics (nerimux/terminal/types:screen-charset s)))
       ;; ESC ( B
       (feed s (format nil "~C(B" #\Escape))
-      (expect (eq :ascii (cl-tmux/terminal/types:screen-charset s)))))
+      (expect (eq :ascii (nerimux/terminal/types:screen-charset s)))))
 
   ;; In DEC graphics mode, each ASCII char maps to the correct box-drawing Unicode codepoint.
   (it "acs-line-drawing-maps-chars-table"
@@ -133,7 +133,7 @@
 
   ;; define-dec-graphics-table is a defined macro in the actions package.
   (it "define-dec-graphics-table-macro-is-defined"
-    (expect (macro-function 'cl-tmux/terminal/actions::define-dec-graphics-table))))
+    (expect (macro-function 'nerimux/terminal/actions::define-dec-graphics-table))))
 
 ;;; ── SUITE: dcs-parsing ───────────────────────────────────────────────────────
 
@@ -183,8 +183,8 @@
 
   ;; %hex-decode-string / %hex-encode-string convert XTGETTCAP hex cap names.
   (it "hex-decode-encode-roundtrip"
-    (flet ((decode (s) (cl-tmux/terminal/parser::%hex-decode-string s))
-           (encode (s) (cl-tmux/terminal/parser::%hex-encode-string s)))
+    (flet ((decode (s) (nerimux/terminal/parser::%hex-decode-string s))
+           (encode (s) (nerimux/terminal/parser::%hex-encode-string s)))
       (dolist (c `(("Tc"   ,(lambda () (decode "5463"))   "5463 -> Tc")
                    ("5463" ,(lambda () (encode "Tc"))     "Tc -> 5463")
                    ("256"  ,(lambda () (decode "323536")) "323536 -> 256")
@@ -203,7 +203,7 @@
         (declare (ignore desc))
         (with-screen (s 20 5)
           (%feed-dcs s dcs-input)
-          (expect (string= expected (first (cl-tmux/terminal/types:screen-response-queue s))))))))
+          (expect (string= expected (first (nerimux/terminal/types:screen-response-queue s))))))))
 
   ;;; ── DECRQSS (DCS $ q <setting> ST) ───────────────────────────────────────────
 
@@ -213,14 +213,14 @@
       (feed s (esc "[1;31m"))        ; bold red pen
       (%feed-dcs s "$qm")
       (expect (string= (format nil "~CP1$r0;1;31m~C\\" #\Escape #\Escape)
-                       (first (cl-tmux/terminal/types:screen-response-queue s))))))
+                       (first (nerimux/terminal/types:screen-response-queue s))))))
 
   ;; DECRQSS $q r reports the scroll region (1-based): ESC P 1 $ r top;bottom r ST.
   (it "decrqss-scroll-region-reports-margins"
     (with-screen (s 20 5)
       (%feed-dcs s "$qr")
       (expect (string= (format nil "~CP1$r1;5r~C\\" #\Escape #\Escape)
-                       (first (cl-tmux/terminal/types:screen-response-queue s))))))
+                       (first (nerimux/terminal/types:screen-response-queue s))))))
 
   ;; DECRQSS $q SP q reports the DECSCUSR cursor shape.
   (it "decrqss-cursor-style-reports-shape"
@@ -228,11 +228,11 @@
       (feed s (esc "[3 q"))          ; DECSCUSR shape 3
       (%feed-dcs s "$q q")
       (expect (string= (format nil "~CP1$r3 q~C\\" #\Escape #\Escape)
-                       (first (cl-tmux/terminal/types:screen-response-queue s))))))
+                       (first (nerimux/terminal/types:screen-response-queue s))))))
 
   ;; DECRQSS for an unsupported setting replies ESC P 0 $ r ST (invalid).
   (it "decrqss-unknown-reports-invalid"
     (with-screen (s 20 5)
       (%feed-dcs s "$qx")
       (expect (string= (format nil "~CP0$r~C\\" #\Escape #\Escape)
-                       (first (cl-tmux/terminal/types:screen-response-queue s)))))))
+                       (first (nerimux/terminal/types:screen-response-queue s)))))))

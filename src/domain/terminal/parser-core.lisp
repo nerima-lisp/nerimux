@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/parser)
+(in-package #:nerimux/terminal/parser)
 
 ;;;; Core parser predicates and state definition macro.
 

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 (defvar *runtime-restore-report* nil)
 
@@ -20,7 +20,7 @@
       (if (plusp (length result)) result "default"))))
 
 (defun %runtime-state-path ()
-  (let ((override (sb-ext:posix-getenv "CL_TMUX_RUNTIME_STATE")))
+  (let ((override (sb-ext:posix-getenv "NERIMUX_RUNTIME_STATE")))
     (if (and override (plusp (length override)))
         (pathname override)
         (let* ((xdg (sb-ext:posix-getenv "XDG_STATE_HOME"))
@@ -32,7 +32,7 @@
                        ".local/state/"
                        (user-homedir-pathname))))))
           (merge-pathnames
-           (format nil "cl-tmux/~A.runtime.lisp"
+           (format nil "nerimux/~A.runtime.lisp"
                    (%runtime-safe-server-name *runtime-server-name*))
            (pathname (format nil "~A/"
                              (string-right-trim "/" state-home))))))))
@@ -59,7 +59,7 @@
   (mapcar #'%runtime-safe-value (or values nil)))
 
 (defun %runtime-cell-string (cell)
-  (let ((character (cl-tmux/terminal:cell-char cell)))
+  (let ((character (nerimux/terminal:cell-char cell)))
     (if (characterp character) character #\Space)))
 
 (defun %runtime-row-string (row)
@@ -68,23 +68,23 @@
           do (write-char (%runtime-cell-string (elt row index)) stream))))
 
 (defun %runtime-screen-lines (screen)
-  (loop for y below (cl-tmux/terminal:screen-height screen)
+  (loop for y below (nerimux/terminal:screen-height screen)
         collect
         (with-output-to-string
           (stream)
-          (loop for x below (cl-tmux/terminal:screen-width screen)
+          (loop for x below (nerimux/terminal:screen-width screen)
                 do (write-char
                     (%runtime-cell-string
-                     (cl-tmux/terminal:screen-cell screen x y))
+                     (nerimux/terminal:screen-cell screen x y))
                     stream)))))
 
 (defun %runtime-screen-snapshot (screen)
   (when screen
     (with-lock-held
-        ((cl-tmux/terminal:screen-lock screen))
-      (let ((scrollback (cl-tmux/terminal:screen-scrollback screen)))
-        (list :width (cl-tmux/terminal:screen-width screen)
-              :height (cl-tmux/terminal:screen-height screen)
+        ((nerimux/terminal:screen-lock screen))
+      (let ((scrollback (nerimux/terminal:screen-scrollback screen)))
+        (list :width (nerimux/terminal:screen-width screen)
+              :height (nerimux/terminal:screen-height screen)
               :lines (%runtime-screen-lines screen)
               :scrollback-lines
               (loop for row in
@@ -159,7 +159,7 @@
         :picker-index (client-conn-picker-index client)))
 
 (defun %runtime-worktree-snapshots ()
-  (loop for organization in (cl-tmux/vcs:workspace-organizations)
+  (loop for organization in (nerimux/vcs:workspace-organizations)
         append
         (loop for repository in (organization-repositories organization)
               append
@@ -212,7 +212,7 @@
                           (mapcar #'pane-id (worktree-panes worktree)))))))
 
 (defun %runtime-snapshot-for-session (session)
-  (cl-tmux/persistence:make-runtime-snapshot
+  (nerimux/persistence:make-runtime-snapshot
    :sessions (list (%runtime-session-snapshot session))
    :clients (mapcar #'%runtime-client-snapshot
                     (if (boundp '*clients*) *clients* nil))
@@ -234,8 +234,8 @@
                           do (unless first (write-char #\Newline stream))
                              (write-string (or line "") stream)))))
             (with-lock-held
-                ((cl-tmux/terminal:screen-lock screen))
-              (cl-tmux/terminal:screen-process-bytes
+                ((nerimux/terminal:screen-lock screen))
+              (nerimux/terminal:screen-process-bytes
                screen
                (cl-codec-kit:string-to-octets text :encoding :utf-8)))))))))
 
@@ -584,7 +584,7 @@
               (nconc (%runtime-attach-worktree-panes
                       worktree state panes)
                      orphan-pane-ids))))
-    (cl-tmux/vcs:set-workspace-organizations (nreverse organizations))
+    (nerimux/vcs:set-workspace-organizations (nreverse organizations))
     (list :catalog-restored-p t
           :catalog-source :snapshot
           :matched-worktree-count matched-worktree-count
@@ -595,7 +595,7 @@
 
 (defun %runtime-restore-existing-worktree-catalog (session saved-worktrees)
   (let ((worktrees (%runtime-catalog-worktrees
-                    (cl-tmux/vcs:workspace-organizations)))
+                    (nerimux/vcs:workspace-organizations)))
         (panes (%runtime-session-panes session))
         (orphan-worktrees nil)
         (orphan-pane-ids nil)
@@ -641,7 +641,7 @@
            :lost-worktrees nil
            :orphan-pane-ids nil
            :lost-pane-ids nil))
-    ((cl-tmux/vcs:workspace-organizations)
+    ((nerimux/vcs:workspace-organizations)
      (%runtime-restore-existing-worktree-catalog session saved-worktrees))
     (t
      (%runtime-build-worktree-catalog session saved-worktrees))))
@@ -651,10 +651,10 @@
   (let* ((path (%runtime-state-path))
          (base (list :path (namestring path))))
     (handler-case
-        (let ((snapshot (cl-tmux/persistence:load-runtime-snapshot path)))
+        (let ((snapshot (nerimux/persistence:load-runtime-snapshot path)))
           (if snapshot
               (let ((saved-session
-                      (first (cl-tmux/persistence:runtime-snapshot-sessions
+                      (first (nerimux/persistence:runtime-snapshot-sessions
                               snapshot))))
                 (setf *runtime-restore-report*
                       (append base
@@ -667,7 +667,7 @@
                                         :reason :no-session))
                               (%runtime-restore-worktree-catalog
                                session
-                               (cl-tmux/persistence:runtime-snapshot-worktrees
+                               (nerimux/persistence:runtime-snapshot-worktrees
                                 snapshot))))
                 *runtime-restore-report*)
               (setf *runtime-restore-report*
@@ -690,18 +690,18 @@
   (let ((path (%runtime-state-path)))
     (handler-case
         (let ((snapshot (%runtime-snapshot-for-session session)))
-          (cl-tmux/persistence:save-runtime-snapshot snapshot path)
+          (nerimux/persistence:save-runtime-snapshot snapshot path)
           (setf *runtime-save-report*
                 (list :saved-p t
                       :path (namestring path)
                       :session-count
-                      (length (cl-tmux/persistence:runtime-snapshot-sessions
+                      (length (nerimux/persistence:runtime-snapshot-sessions
                                snapshot))
                       :client-count
-                      (length (cl-tmux/persistence:runtime-snapshot-clients
+                      (length (nerimux/persistence:runtime-snapshot-clients
                                snapshot))
                       :worktree-count
-                      (length (cl-tmux/persistence:runtime-snapshot-worktrees
+                      (length (nerimux/persistence:runtime-snapshot-worktrees
                                snapshot)))))
       (condition (condition)
        (setf *runtime-save-report*

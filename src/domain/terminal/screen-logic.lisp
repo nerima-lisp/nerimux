@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/types)
+(in-package #:nerimux/terminal/types)
 
 ;;;; Screen state-mutation helpers (LOGIC layer).
 ;;;;
@@ -11,9 +11,9 @@
 ;;;;   cell.lisp → screen.lisp → screen-metadata.lisp → screen-resize.lisp
 ;;;;   → screen-logic.lisp → …
 ;;;;
-;;;; All three functions are exported from cl-tmux/terminal/types (declared in
+;;;; All three functions are exported from nerimux/terminal/types (declared in
 ;;;; src/bootstrap/package-terminal.lisp) and re-exported through the
-;;;; cl-tmux/terminal umbrella package.
+;;;; nerimux/terminal umbrella package.
 
 ;;; ── Dirty-flag mutation ────────────────────────────────────────────────────
 
@@ -29,7 +29,7 @@
   "Return T and clear SCREEN's bell-pending flag when a BEL is pending.
    Returns NIL without side effects when no bell is pending.
 
-   The renderer (cl-tmux/renderer-compose) calls this once per frame to relay
+   The renderer (nerimux/renderer-compose) calls this once per frame to relay
    a BEL to the outer terminal; the atomic test-and-clear here ensures the bell
    is delivered exactly once even when multiple frames race."
   (when (screen-bell-pending screen)
@@ -51,7 +51,7 @@
 
 ;;; ── SGR pen reset ──────────────────────────────────────────────────────────
 ;;;
-;;; Both cl-tmux/terminal/sgr (DISPATCH layer) and cl-tmux/terminal/actions
+;;; Both nerimux/terminal/sgr (DISPATCH layer) and nerimux/terminal/actions
 ;;; (modes-reset / modes-cursor-save, LOGIC layer) perform an identical
 ;;; five-slot SGR reset.
 ;;; The canonical definition lives in this shared file so neither layer needs

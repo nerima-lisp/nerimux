@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/actions)
+(in-package #:nerimux/terminal/actions)
 
 ;;;; Prolog-like DEC PM rule table macro + the DEC private-mode dispatch table.
 ;;;;

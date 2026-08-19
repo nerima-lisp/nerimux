@@ -1,9 +1,9 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; -- Control mode (-C) REPL ------------------------------------------------
 ;;;
 ;;; A control client sends commands as text lines; each is run via %run-command-line
-;;; and the reply is framed by cl-tmux/control.  A command's textual output (what it
+;;; and the reply is framed by nerimux/control.  A command's textual output (what it
 ;;; would show in an overlay — list-sessions, display-message, ...) is captured by
 ;;; binding *overlay* around the run and reading it back into the reply body.
 
@@ -11,15 +11,15 @@
   "Run control-mode command LINE for SESSION as command NUMBER and return the
    framed %begin/.../%end reply string.  The command's overlay text is captured as
    the reply body; a signalled error closes the block with %error."
-  (let ((cl-tmux/prompt:*overlay* nil)
+  (let ((nerimux/prompt:*overlay* nil)
         (success t))
     (handler-case
         ;; An unknown command returns the :unknown-command sentinel → %error.
         (when (eq :unknown-command (%run-command-line session line))
           (setf success nil))
       (error () (setf success nil)))
-    (cl-tmux/control:control-format-reply
-     number (or cl-tmux/prompt:*overlay* "") :success success)))
+    (nerimux/control:control-format-reply
+     number (or nerimux/prompt:*overlay* "") :success success)))
 
 (defvar *control-output-lock* (make-lock :name "control-output")
   "Mutex serializing every write to a control-mode (-C) client's output stream.
@@ -40,17 +40,17 @@
 
 (defun %control-window-of (obj)
   "Return OBJ's window when OBJ is a pane, otherwise OBJ itself."
-  (if (cl-tmux/model::pane-p obj) (cl-tmux/model:pane-window obj) obj))
+  (if (nerimux/model::pane-p obj) (nerimux/model:pane-window obj) obj))
 
 (defun %control-emit-layout (output obj)
   "Emit a control-mode layout notification for OBJ when it resolves to a window."
   (let ((win (%control-window-of obj)))
     (when win
-      (let ((layout (cl-tmux/model:layout->string win)))
+      (let ((layout (nerimux/model:layout->string win)))
         (%control-emit output
-                       (cl-tmux/control:control-layout-change
+                       (nerimux/control:control-layout-change
                         (window-id win) layout layout
-                        (if (cl-tmux/model:window-zoom-p win) "Z" "*")))))))
+                        (if (nerimux/model:window-zoom-p win) "Z" "*")))))))
 
 (defmacro %define-hook-emitters (&body rows)
   "Expand ROWS — each (HOOK ARGS-LAMBDA-LIST . BODY) — into a list of
@@ -79,56 +79,56 @@
    hook's argument list; the changed object is the first argument."
   (let ((hook-pairs
           (%define-hook-emitters
-            (cl-tmux/hooks:+hook-after-new-window+ (win)
+            (nerimux/hooks:+hook-after-new-window+ (win)
               (%control-emit output
-                             (cl-tmux/control:control-window-add (window-id win))))
-            (cl-tmux/hooks:+hook-after-kill-window+ (win)
+                             (nerimux/control:control-window-add (window-id win))))
+            (nerimux/hooks:+hook-after-kill-window+ (win)
               (%control-emit output
-                             (cl-tmux/control:control-window-close (window-id win))))
-            (cl-tmux/hooks:+hook-window-renamed+ (win)
+                             (nerimux/control:control-window-close (window-id win))))
+            (nerimux/hooks:+hook-window-renamed+ (win)
               (%control-emit output
-                             (cl-tmux/control:control-window-renamed
+                             (nerimux/control:control-window-renamed
                               (window-id win) (window-name win))))
-            (cl-tmux/hooks:+hook-session-renamed+ (sess)
+            (nerimux/hooks:+hook-session-renamed+ (sess)
               (%control-emit output
-                             (cl-tmux/control:control-session-renamed
+                             (nerimux/control:control-session-renamed
                               (session-id sess) (session-name sess))))
             ;; Active-pane changed within a window (%window-pane-changed) and a
             ;; session's active window changed (%session-window-changed).  Guard the
             ;; NIL active-pane / active-window case so a partially-torn-down object
             ;; can't emit a malformed "@N %NIL" line.
-            (cl-tmux/hooks:+hook-window-pane-changed+ (win)
+            (nerimux/hooks:+hook-window-pane-changed+ (win)
               (let ((ap (and win (window-active-pane win))))
                 (when ap
                   (%control-emit output
-                                 (cl-tmux/control:control-window-pane-changed
+                                 (nerimux/control:control-window-pane-changed
                                   (window-id win) (pane-id ap))))))
-            (cl-tmux/hooks:+hook-session-window-changed+ (sess)
+            (nerimux/hooks:+hook-session-window-changed+ (sess)
               (let ((win (and sess (session-active-window sess))))
                 (when win
                   (%control-emit output
-                                 (cl-tmux/control:control-session-window-changed
+                                 (nerimux/control:control-session-window-changed
                                   (session-id sess) (window-id win))))))
             ;; Layout changes: resize fires with the window, split with the pane.
-            (cl-tmux/hooks:+hook-after-resize-pane+ (obj)
+            (nerimux/hooks:+hook-after-resize-pane+ (obj)
               (%control-emit-layout output obj))
-            (cl-tmux/hooks:+hook-after-split-window+ (obj)
+            (nerimux/hooks:+hook-after-split-window+ (obj)
               (%control-emit-layout output obj))
             ;; Pane PTY output: emit %output %<pane-id> <escaped-bytes>.
-            (cl-tmux/hooks:+hook-pane-output+ (pane raw)
+            (nerimux/hooks:+hook-pane-output+ (pane raw)
               (let ((data (if (stringp raw) raw (map 'string #'code-char raw))))
                 (when (and pane (plusp (length data)))
                   (%control-emit output
-                                 (cl-tmux/control:control-output
-                                  (cl-tmux/model:pane-id pane) data))))))))
-    (mapc (lambda (pair) (cl-tmux/hooks:add-hook (car pair) (cdr pair)))
+                                 (nerimux/control:control-output
+                                  (nerimux/model:pane-id pane) data))))))))
+    (mapc (lambda (pair) (nerimux/hooks:add-hook (car pair) (cdr pair)))
           hook-pairs)
     hook-pairs))
 
 (defun %remove-control-notifications (handlers)
   "Unregister the control-mode notification callbacks installed by
    %install-control-notifications (HANDLERS is its return value)."
-  (dolist (h handlers) (cl-tmux/hooks:remove-hook (car h) (cdr h))))
+  (dolist (h handlers) (nerimux/hooks:remove-hook (car h) (cdr h))))
 
 (defun control-mode-loop (session input output)
   "The control-mode (-C) REPL: read command lines from INPUT, run each as the next
@@ -151,7 +151,7 @@
                       (force-output output)))
       (%remove-control-notifications handlers))
     (with-lock-held (*control-output-lock*)
-      (write-line (cl-tmux/control:control-exit) output)
+      (write-line (nerimux/control:control-exit) output)
       (force-output output))))
 
 ;;; -- dispatch-prefix-command -----------------------------------------------

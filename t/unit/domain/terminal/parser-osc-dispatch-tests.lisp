@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; parser tests - OSC dispatch edge cases.
 
@@ -15,7 +15,7 @@
             (format nil "~C]notanumber~C" #\Escape (code-char 7))
             :encoding :utf-8)))
       ;; screen-title must remain at its default (NIL or empty string).
-      (let ((title (cl-tmux/terminal/types:screen-title s)))
+      (let ((title (nerimux/terminal/types:screen-title s)))
         (expect (or (null title) (string= "" title))))))
 
   ;; An OSC payload with a valid integer command but no matching rule is silently ignored.
@@ -28,7 +28,7 @@
             (format nil "~C]99;some-data~C" #\Escape (code-char 7))
             :encoding :utf-8)))
       ;; screen-title must remain unset (OSC 99 has no handler).
-      (let ((title (cl-tmux/terminal/types:screen-title s)))
+      (let ((title (nerimux/terminal/types:screen-title s)))
         (expect (or (null title) (string= "" title))))))
 
   ;; An OSC terminated immediately by BEL (empty payload) is consumed without error.
@@ -50,7 +50,7 @@
   ;; character, which is wrong for text that becomes a window title.  babel,
   ;; which this call site used before the codec migration, substituted U+FFFD
   ;; (its UTF-8 decoder hardcodes +REPL+ = #xFFFD).  U+FFFD is also what
-  ;; SAFE-CODE-CHAR substitutes everywhere else in cl-tmux.  If someone drops
+  ;; SAFE-CODE-CHAR substitutes everywhere else in nerimux.  If someone drops
   ;; the explicit :REPLACEMENT and lets the default apply, these fail.
   (it "osc-malformed-utf8-payload-is-replaced-with-u+fffd-not-sub"
     (with-screen (s 20 5)
@@ -60,7 +60,7 @@
         (make-array 8 :element-type '(unsigned-byte 8)
                       :initial-contents (list #x1B #x5D #x30 #x3B
                                               #xED #xA0 #x80 #x07)))
-      (let ((title (cl-tmux/terminal/types:screen-title s)))
+      (let ((title (nerimux/terminal/types:screen-title s)))
         (expect (stringp title))
         (expect (plusp (length title)))
         ;; Every character of the decoded body is the replacement character.
@@ -76,7 +76,7 @@
         (make-array 10 :element-type '(unsigned-byte 8)
                        :initial-contents (list #x1B #x5D #x30 #x3B
                                                #x41 #xED #xA0 #x80 #x42 #x07)))
-      (let ((title (cl-tmux/terminal/types:screen-title s)))
+      (let ((title (nerimux/terminal/types:screen-title s)))
         (expect (stringp title))
         (expect (char= #\A (char title 0)))
         (expect (char= #\B (char title (1- (length title)))))
