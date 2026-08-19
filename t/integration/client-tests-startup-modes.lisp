@@ -14,11 +14,14 @@
       (let ((handler (first (cdr entry))))
         (expect (symbolp handler)))))
 
-  ;; *startup-modes* server/attach/attach-session entries have the expected handlers.
+  ;; *startup-modes* entries have the expected handlers.  attach-session was
+  ;; removed with the tmux compatibility surface, so the table is now just the
+  ;; two real modes plus the version/usage flags.
   (it "startup-modes-mode-handlers-table"
-    (dolist (c '(("server"          nerimux::run-server             nil "server → run-server")
-                 ("attach"          nerimux::run-attach-simple       nil "attach → run-attach-simple")
-                 ("attach-session"  nerimux::run-attach-with-flags    t  "attach-session → run-attach-with-flags")))
+    (dolist (c '(("server"     nerimux::run-server        nil "server → run-server")
+                 ("attach"     nerimux::run-attach-simple nil "attach → run-attach-simple")
+                 ("-V"         nerimux::run-version         t "-V → run-version")
+                 ("-h"         nerimux::run-usage           t "-h → run-usage")))
       (destructuring-bind (mode handler raw-args-p desc) c
         (declare (ignore desc))
         (let ((entry (assoc mode nerimux::*startup-modes* :test #'equal)))

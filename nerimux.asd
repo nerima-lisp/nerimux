@@ -413,11 +413,9 @@
        (:file "runtime-lifecycle") ; atomic runtime snapshot restore/save hooks
        (:file "client-command") ; command-client I/O helpers
        (:file "client")
-       (:file "main")
-       (:file "main-startup-flags") ; startup flag parser macro + attach flag parser
+       (:file "main-startup-flags") ; global cl-cli flag definitions
        (:file "main-startup-socket") ; socket discovery + server auto-start helpers
-       (:file "main-startup-forwarding") ; startup command forwarding helpers + generated commands
-       (:file "main-startup-commands") ; attach/new-session/list/source/version handlers
+       (:file "main-startup-commands") ; attach/version/usage handlers + mode table
        (:file "main-startup"))))))
   ;; Build a standalone binary: (asdf:make :nerimux)
   :build-operation "program-op"

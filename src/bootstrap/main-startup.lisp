@@ -1,9 +1,8 @@
 ;;; Startup mode dispatch and CLI entry point.
 ;;;
 ;;; Socket discovery/server auto-start helpers live in main-startup-socket.lisp.
-;;; Command-client forwarding helpers live in main-startup-forwarding.lisp.
 ;;; Command handlers live in main-startup-commands.lisp.
-;;; This file owns the mode table and binary entry-point dispatch.
+;;; This file owns the binary entry-point dispatch.
 
 (in-package :nerimux)
 
@@ -60,13 +59,11 @@
    Each entry in *startup-modes* is a plist (handler-symbol &key :raw-args-p).
    :raw-args-p T modes receive the full argv tail; all others receive a single
    session name (defaulting to \"0\").
-   Unrecognized or absent modes preserve the standalone compatibility path.
-   Any ERROR signaled by mode dispatch (e.g. an unsupported per-mode flag like
-   new-session's %parse-new-session-flags rejecting an unknown argument) is
-   caught here and reported the same way %parse-global-cli-argv already
-   reports a malformed global flag: a one-line message on *error-output* and
-   exit 1 — never the raw SBCL debugger, which the saved core would otherwise
-   drop a real user into for any unhandled condition."
+   An unrecognized or absent mode is a usage error (%dispatch-unknown-mode).
+   Any ERROR signaled by mode dispatch is caught here and reported the same way
+   %parse-global-cli-argv already reports a malformed global flag: a one-line
+   message on *error-output* and exit 1 — never the raw SBCL debugger, which
+   the saved core would otherwise drop a real user into."
   (let ((invocation (%parse-global-cli-argv (%application-argv))))
     (if (null invocation)
         (sb-ext:exit :code 1)
@@ -83,28 +80,24 @@
 
 (defun %dispatch-unknown-mode (mode rest)
   "Handle an argv whose first item is not a known startup mode.
-   A dash flag is a usage error: print the usage summary to stderr and exit 1
-   instead of silently starting a standalone session on a typo.
-   When MODE names a command and a default-session server is already running
-   (its socket exists), forward MODE + REST to it as a command client; otherwise
-   run the standalone compatibility multiplexer.
-   Guarding on an existing socket keeps nerimux (no args) and the no-server
-   case unchanged; only an explicit subcommand against a live server forwards."
-  (labels ((dash-flag-p (name)
-             (%dash-flag-p name)))
-    (cond
-      ((dash-flag-p mode)
-       (write-string (%usage-string) *error-output*)
-       (sb-ext:exit :code 1))
-      ((and mode (probe-file (socket-path "0")))
-       (run-command-client "0" (cons mode rest)))
-      (t (run-standalone)))))
+   Every case is a usage error now: print the summary to stderr and exit 1.
+
+   This used to have two other branches.  A recognized-looking command word was
+   forwarded to a running server as a command client, and a bare `nerimux` with
+   no arguments started the standalone in-process multiplexer.  Both belonged to
+   the tmux compatibility surface: the forwarding branch is what actually made
+   `nerimux list-sessions` work, independently of the *startup-modes* table, so
+   removing the table entries alone would not have removed the capability.
+   The entry surface is now `attach` and `server`, and anything else — including
+   no argument at all — is rejected rather than guessed at."
+  (declare (ignore rest))
+  (declare (ignorable mode))
+  (write-string (%usage-string) *error-output*)
+  (sb-ext:exit :code 1))
 
 (defun %dispatch-startup-mode-entry (entry mode rest)
   (if entry
       (%dispatch-startup-mode-handler entry mode rest)
-      ;; No recognized mode: forward to a running server as a command client
-      ;; (`nerimux <command>` against an existing server), else run standalone.
       (%dispatch-unknown-mode mode rest)))
 
 (defun %dispatch-startup-mode-handler (entry mode rest)
@@ -115,5 +108,3 @@
     (if raw-args-p
         (funcall (symbol-function handler) rest)
         (funcall (symbol-function handler) (or (first rest) "0")))))
-
-(defun %dash-flag-p (name) (and name (plusp (length name)) (char= (char name 0) #\-)))

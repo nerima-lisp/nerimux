@@ -41,6 +41,20 @@ is deliberately different, and where the remaining risk lives.
 
 ## Removed
 
+- **The CLI is `attach` and `server` only.** `nerimux new-session`,
+  `has-session`, `kill-server`, `list-sessions`, `list-windows`,
+  `list-commands`, `display-message`, `show-options`, `show-window-options`,
+  `source-file` and `attach-session` are gone, along with the fallback that
+  forwarded any other unrecognized word to a running server as a command
+  client. `nerimux` with no arguments no longer starts a standalone in-process
+  multiplexer; it prints the usage summary and exits non-zero, as does any
+  unrecognized command. The server-side command table itself still exists and
+  is still reachable from inside an attached client.
+  - Consequence worth stating: `attach-session -r` was the only way to attach
+    read-only from the command line, so that capability is gone. The wire
+    protocol still carries the read-only attach flag and the server still
+    honours it per connection, but nothing sets it any more.
+
 - **Control mode (`-C` / `nerimux control`) is gone.** It was implemented —
   the `%output`/`%window-pane-changed` notification protocol for
   iTerm2/tmuxp/libtmux-style automation — and was removed deliberately when

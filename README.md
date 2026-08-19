@@ -27,8 +27,8 @@ nerimux attach /path/to/worktree       # open a local worktree
 `attach` auto-starts the headless runtime and connects a thin client. Use
 `C-q d` to detach and `C-p` to open the global picker. A selector containing a
 slash is resolved as an organization/repository selector or a local worktree
-path. Running `nerimux` with no command remains the standalone compatibility
-entry point.
+path. `attach` and `server` are the only commands; anything else — including
+`nerimux` with no arguments — prints the usage summary and exits non-zero.
 
 The compatibility command surface follows tmux where it is implemented. nerimux reads a real
 `.tmux.conf` — including `%if`, `%hidden`, variable assignments, brace blocks

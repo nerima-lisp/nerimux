@@ -65,28 +65,3 @@
     (unless (probe-file socket-path)
       (error "server failed to start (timed out waiting for socket at ~A)"
              socket-path))))
-
-(defun %socket-file-session-name (path)
-  "Extract the nerimux session/server name from a socket PATH, or NIL."
-  (when path
-    (let* ((name (pathname-name path))
-           (prefix "nerimux-"))
-      (when (and name
-                 (>= (length name) (length prefix))
-                 (string= prefix name :end2 (length prefix)))
-        (subseq name (length prefix))))))
-
-(defun %running-server-name (&optional preferred-name)
-  "Return the best known running server socket name, preferring PREFERRED-NAME.
-   Falls back to the default \"0\" socket, then to the first nerimux socket in
-   TMPDIR.  This supports CLI command forwarding even when the first server was
-   launched with `new-session -s NAME` or `attach NAME`."
-  (cond
-    ((and preferred-name (probe-file (socket-path preferred-name)))
-     preferred-name)
-    ((probe-file (socket-path "0")) "0")
-    (t
-     (let ((pattern (merge-pathnames
-                     "nerimux-*.sock"
-                     (parse-namestring (format nil "~A/" (%socket-directory))))))
-       (%socket-file-session-name (first (ignore-errors (directory pattern))))))))

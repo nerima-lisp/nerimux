@@ -26,8 +26,9 @@ nerimux attach /path/to/worktree       # open a local worktree
 
 `attach` auto-starts the headless runtime and connects a thin client. A selector
 containing a slash is resolved as an organization/repository selector or a
-local worktree path. Running `nerimux` with no command remains the standalone
-compatibility entry point. Socket selection works like tmux: `-L <name>` picks a named socket in the
+local worktree path. `attach` and `server` are the only commands; anything
+else — including `nerimux` with no arguments — prints the usage summary and
+exits non-zero. Socket selection works like tmux: `-L <name>` picks a named socket in the
 per-user directory (created `0700` under `$TMUX_TMPDIR`, falling back to the
 system temp dir), and `-S <path>` uses an explicit path.
 

@@ -20,8 +20,7 @@
   (it "client-functions-fbound-table"
     (dolist (sym '(nerimux::run-client
                    nerimux::%ensure-server-running
-                   nerimux::run-attach-simple
-                   nerimux::run-attach-with-flags))
+                   nerimux::run-attach-simple))
       (expect (fboundp sym)))))
 
 ;;; socket-path naming is tested canonically in server-tests.lisp since
