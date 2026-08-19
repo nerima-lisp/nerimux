@@ -1,136 +1,33 @@
 (in-package #:nerimux/test)
 
-;;;; Command forwarding and client-output tests for the multi-client server.
+;;;; Command dispatch and client-output tests for the multi-client server.
 
 (describe "server-multi-suite"
 
-  ;;; ── Forwarded commands / reply helpers ───────────────────────────────────────
+  ;;; ── Command dispatch ──────────────────────────────────────────────────────
 
-  ;; A general command message (e.g. next-window) is run server-side via
-  ;; %run-command-tokens — the CLI / control command-forwarding path.
-  (it "multi-handle-forwarded-command-runs-server-side"
+  ;; Any command the workspace UI does not recognize -- e.g. a bare tmux CLI
+  ;; command like `next-window` -- is no longer run against the tmux command
+  ;; table server-side (that command-forwarding path, %dispatch-forwarded-command
+  ;; et al, was removed).  It now produces a client notification and the
+  ;; dispatch returns NIL: the loop keeps running and CONN is neither quit nor
+  ;; dropped.
+  (it "multi-handle-unknown-command-notifies-without-quit-or-drop"
     (with-fake-session (s :nwindows 2)
-      (let ((conn (%make-test-conn))
-            (payload (nerimux/protocol::encode-command-payload :next-window)))
-        (expect (null (nerimux::%handle-multi-client-message
-                       nerimux::+msg-command+ payload s conn)))
-        (expect (eq (second (nerimux/model:session-windows s))
-                    (session-active-window s)))
-        (expect (null (nerimux::client-conn-message-log conn))))))
-
-  ;; A forwarded command carrying ARGUMENTS is reconstructed (<name> args...) and run
-  ;; server-side: `select-window -t 1` selects window-id 1 — verifying the arg path
-  ;; of command forwarding, not just the bare-command path above.
-  (it "multi-handle-forwarded-command-with-arg-runs"
-    (with-fake-session (s :nwindows 2)            ; window-ids 0,1
-      (let ((payload (nerimux/protocol::encode-command-payload
-                      :select-window :args '("-t" "1"))))
-        (nerimux::%handle-multi-client-message
-         nerimux::+msg-command+ payload s (%make-test-conn))
-        (expect (= 1 (nerimux/model:window-id (session-active-window s)))))))
-
-  ;; Forwarded split-window -I creates an input-only pane and routes later key bytes
-  ;; from the command client to that pane instead of the active interactive client.
-  (it "multi-handle-forwarded-split-window-I-routes-stdin-to-new-pane"
-    (with-fake-session (s :nwindows 1 :npanes 1)
       (let* ((conn (%make-test-conn))
-             (payload (nerimux/protocol::encode-command-payload
-                       :split-window :args '("-I"))))
+             (nerimux::*clients* (list conn))
+             (before (session-active-window s))
+             (payload (nerimux/protocol::encode-command-payload :next-window)))
         (expect (null (nerimux::%handle-multi-client-message
                        nerimux::+msg-command+ payload s conn)))
-        (let ((target (nerimux::client-conn-stdin-target conn)))
-          (expect (nerimux/model::pane-p target) :to-be-truthy)
-          (when target
-            (expect (= -1 (pane-fd target)))
-            (nerimux::%handle-multi-client-message
-             nerimux::+msg-key+
-             (cl-codec-kit:string-to-octets "forwarded stdin" :encoding :utf-8)
-             s conn)
-            (expect (search "forwarded stdin" (row-string (pane-screen target) 0))))))))
-
-  ;; A forwarded `new-session -d` command must run in the server process and add
-  ;; the new detached session to *server-sessions*.
-  (it "multi-handle-forwarded-new-session-creates-session"
-    (with-isolated-hooks
-      (with-fake-session (s)
-        (let ((nerimux::*server-sessions* (list (cons "0" s)))
-              (created nil))
-          (unwind-protect
-               (let ((payload (nerimux/protocol::encode-command-payload
-                               :new-session :args '("-d" "-s" "beta" "-n" "two"))))
-                 (nerimux::%handle-multi-client-message
-                  nerimux::+msg-command+ payload s (%make-test-conn))
-                 (setf created (nerimux::server-find-session "beta"))
-                 (expect (not (null created)))
-                 (when created
-                   (expect (string= "two"
-                                    (nerimux::window-name
-                                     (nerimux::session-active-window created))))))
-            (dolist (pane (and created (nerimux::all-panes created)))
-              (ignore-errors (nerimux/pty:pty-close
-                              (nerimux::pane-fd pane)
-                              (nerimux::pane-pid pane)))))))))
-
-  ;; A forwarded kill-server command must propagate :quit to the multi-client loop.
-  (it "multi-handle-forwarded-kill-server-quits-loop"
-    (with-fake-session (s)
-      (let ((payload (nerimux/protocol::encode-command-payload :kill-server))
-            (nerimux::*running* t))
-        (expect (eq :quit (nerimux::%handle-multi-client-message
-                           nerimux::+msg-command+ payload s (%make-test-conn))))
-        (expect nerimux::*running* :to-be-falsy))))
-
-  ;; %server-split-window-input-command-p is true only for :split-window
-  ;; carrying a flag token that contains the character I.
-  (it "server-split-window-input-command-p-table"
-    (dolist (row `((:split-window ("-I")   t   "split-window -I")
-                   (:splitw       ("-I")   nil "splitw alias rejected")
-                   (:split-window ("-Iv")  t   "-Iv combined flag contains I")
-                   (:split-window ("-v")   nil "split-window without -I")
-                   (:split-window ()       nil "split-window no flags")
-                   (:new-window   ("-I")   nil "different command with -I")))
-      (destructuring-bind (cmd args expected description) row
-        (declare (ignore description))
-        (let ((got (if (nerimux::%server-split-window-input-command-p cmd args) t nil)))
-          (expect (eq expected got))))))
-
-  ;; %forwarded-command-tokens reconstructs <name> -t <target> args... exactly as
-  ;; the interactive command-prompt would have typed it.
-  (it "forwarded-command-tokens-with-target-and-args"
-    (expect (equal '("select-window" "-t" "beta" "-a" "-b")
-                   (nerimux::%forwarded-command-tokens :select-window "beta" '("-a" "-b")))))
-
-  ;; %forwarded-command-tokens omits the -t clause entirely when TARGET is NIL.
-  (it "forwarded-command-tokens-without-target"
-    (expect (equal '("next-window")
-                   (nerimux::%forwarded-command-tokens :next-window nil nil))))
-
-  ;; %reply-with-command-output is a safe no-op for a CLIENT-CONN with no live
-  ;; stream (the socket-less test conn) — it must not signal.
-  (it "reply-with-command-output-noop-for-socketless-conn"
-    (let ((conn (%make-test-conn)))
-      (finishes (nerimux::%reply-with-command-output conn))))
-
-  ;; %reply-with-command-output sends the current nerimux/prompt:*overlay* text as
-  ;; a +msg-reply+ frame on CONN's live stream.
-  (it "reply-with-command-output-sends-overlay-text"
-    (with-test-listener (listener path (%test-socket-path "reply-helper") :backlog 4)
-      (let* ((client      (nerimux/net:connect-to path))
-             (server-sock (nerimux/net:accept-connection listener)))
-        (when server-sock
-          (let ((conn (nerimux::%make-client-conn :socket server-sock
-                                                   :stream (nerimux/net:socket-stream server-sock)
-                                                   :fd     (nerimux/net:socket-fd server-sock))))
-            (let ((nerimux/prompt:*overlay* "reply-text"))
-              (nerimux::%reply-with-command-output conn))
-            (let ((ready (nerimux/pty:select-fds
-                          (list (nerimux/net:socket-fd client)) 1000000)))
-              (expect (not (null ready)))
-              (when ready
-                (multiple-value-bind (type payload)
-                    (nerimux::read-frame (nerimux/net:socket-stream client))
-                  (expect (eql nerimux::+msg-reply+ type))
-                  (expect (string= "reply-text" (nerimux::decode-text payload)))))))))))
+        ;; The command did not run server-side: the active window is unchanged
+        ;; (next-window would have advanced it, as in the deleted
+        ;; multi-handle-forwarded-command-runs-server-side test).
+        (expect (eq before (session-active-window s)))
+        ;; CONN is still attached and was notified instead of the command running.
+        (expect (member conn nerimux::*clients* :test #'eq))
+        (expect (search "unknown command"
+                        (first (nerimux::client-conn-message-log conn)))))))
 
   ;; %drop-client (no bye, no socket) removes the conn from *clients*.
   (it "multi-drop-client-removes-from-registry"

@@ -6,9 +6,14 @@
 
   ;;; -- Command client: forwards a command to the server ------------------------
 
-  ;; A forwarded display-message produces a +msg-reply+ carrying the command's output
-  ;; text — the server side of the `nerimux display -p` stdout channel.
-  (it "command-client-receives-output-reply"
+  ;; A command the workspace UI does not recognize is rejected with a client
+  ;; notification and NO reply frame.  This used to be the server side of the
+  ;; `nerimux display -p` stdout channel: the command ran against the tmux
+  ;; command table and its output came back as +msg-reply+.  That fallthrough
+  ;; was removed with the tmux command surface, so the socket must now stay
+  ;; quiet — asserted here rather than only at the dispatch level, because the
+  ;; regression that matters is a stray frame reaching a real client.
+  (it "command-client-unknown-command-notifies-and-sends-no-reply"
     (with-isolated-hooks
       (with-fake-session (s)
         (with-test-listener (listener path (%test-socket-path "reply") :backlog 4)
@@ -19,19 +24,19 @@
               (let ((conn    (nerimux::%add-client server-sock))
                     (payload (nerimux/protocol::encode-command-payload
                               :display-message :args '("hello"))))
-                ;; Run the forwarded command; the server replies with its output.
-                (nerimux::%handle-multi-client-message
-                 nerimux::+msg-command+ payload s conn)
-                (expect (string= "hello"
-                                  (cdr (first (nerimux::client-conn-message-log conn)))))
-                (let ((ready (nerimux/pty:select-fds
-                              (list (nerimux/net:socket-fd client)) 1000000)))
-                  (expect ready :to-be-truthy)
-                  (when ready
-                    (multiple-value-bind (type payload)
-                        (nerimux::read-frame (nerimux/net:socket-stream client))
-                      (expect (eql nerimux::+msg-reply+ type))
-                      (expect (search "hello" (nerimux::decode-text payload)))))))))))))
+                (expect (null (nerimux::%handle-multi-client-message
+                               nerimux::+msg-command+ payload s conn)))
+                ;; %client-notify pushes the bare text, not a (timestamp . text)
+                ;; cons, so the log entry is the message itself.
+                (let ((entry (first (nerimux::client-conn-message-log conn))))
+                  (expect (stringp entry))
+                  (expect (search "unknown command" entry) :to-be-truthy)
+                  (expect (search "display-message" entry) :to-be-truthy))
+                ;; Nothing should be readable on the client socket.  A short
+                ;; timeout is enough: the reply, when it existed, was written
+                ;; synchronously during the dispatch call above.
+                (expect (null (nerimux/pty:select-fds
+                               (list (nerimux/net:socket-fd client)) 200000))))))))))
 
   ;; run-command-client forwards a command to the server as a decodable
   ;; +msg-command+ frame (the `nerimux <command>` CLI path).  A -t target rides

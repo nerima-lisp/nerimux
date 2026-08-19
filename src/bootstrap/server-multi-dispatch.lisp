@@ -61,35 +61,26 @@
            (%handle-client-copy-key-payload session conn payload))
           ((eq (client-conn-mode conn) :command)
            (%handle-client-command-key-payload session conn payload))
+          ;; A key the workspace UI does not bind is dropped in :normal mode.
+          ;; It used to fall through to process-client-keys, the tmux keystroke
+          ;; pipeline (prefix key + key tables) -- that fallthrough was the only
+          ;; thing making tmux prefix bindings reachable from an attached
+          ;; client.  Typing into a pane is what :input mode is for; a
+          ;; split-window -I stdin-target still gets fed directly.
           ((eq (client-conn-mode conn) :normal)
            (or (%handle-client-normal-key-payload session conn payload)
-               (let ((stdin-target (client-conn-stdin-target conn)))
-                 (if stdin-target
-                     (progn
-                       (pane-feed stdin-target payload)
-                       (%mark-dirty)
-                       nil)
-                     ;; Bind *client-read-only* so the shared leaf-level gating keeps attach -r
-                     ;; clients from writing to panes or forwarding mouse/paste input.
-                     (let ((*client-read-only* (client-conn-read-only-p conn)))
-                       (case (process-client-keys session payload (client-conn-state conn))
-                         (:quit   :quit)
-                         (:detach :drop)
-                         (t       (%mark-dirty) nil)))))))
+               (%feed-client-stdin-target conn payload)))
           (t
-           (let ((stdin-target (client-conn-stdin-target conn)))
-             (if stdin-target
-                 (progn
-                   (pane-feed stdin-target payload)
-                   (%mark-dirty)
-                   nil)
-                 ;; Bind *client-read-only* so the shared leaf-level gating keeps attach -r
-                 ;; clients from writing to panes or forwarding mouse/paste input.
-                 (let ((*client-read-only* (client-conn-read-only-p conn)))
-                   (case (process-client-keys session payload (client-conn-state conn))
-                     (:quit   :quit)
-                     (:detach :drop)
-                     (t       (%mark-dirty) nil))))))))))
+           (%feed-client-stdin-target conn payload))))))
+
+(defun %feed-client-stdin-target (conn payload)
+  "Feed PAYLOAD to CONN's split-window -I stdin target, if it has one.
+   Returns NIL either way: an unbound key is a no-op, not a loop disposition."
+  (let ((stdin-target (client-conn-stdin-target conn)))
+    (when (and stdin-target (not (client-conn-read-only-p conn)))
+      (pane-feed stdin-target payload)
+      (%mark-dirty))
+    nil))
 
 (defun %handle-workspace-prefix-key (conn payload)
   "Handle the client-local prefix and `d` detach binding.
@@ -1058,8 +1049,9 @@ display label back into a target string."
                                   (%handle-client-ui-command
                                    session conn cmd target args))
                             (unless handled-p
-                              (%dispatch-forwarded-command
-                               session conn cmd target args)))
+                              (%client-notify
+                               conn
+                               (format nil "unknown command: ~(~A~)" cmd))))
                           (%client-notify conn "empty command"))
                       (unless handled-p
                         (%client-restore-command-view conn)))
@@ -1658,51 +1650,17 @@ display label back into a target string."
       ;; The one built-in control command: drop all OTHER clients (attach -d).
       ((eq cmd :detach-other-clients) :detach-others)
       ((%handle-client-ui-command session conn cmd target args) nil)
-      ;; Any other named command is run server-side and replied to CONN.
-      (cmd (%dispatch-forwarded-command session conn cmd target args))
+      ;; Anything the workspace UI does not recognize is rejected.  This used to
+      ;; fall through to %dispatch-forwarded-command, which ran the name against
+      ;; the tmux command table server-side -- that fallthrough was the only
+      ;; thing making the tmux command surface reachable from the `:` prompt.
+      (cmd
+       (%client-notify conn (format nil "unknown command: ~(~A~)" cmd))
+       (%mark-dirty)
+       nil)
       (t (%mark-dirty) nil))))
 
 ;;; ── Per-client message dispatch ─────────────────────────────────────────────
-
-(defun %split-window-input-arg-p (arg)
-  "True when ARG requests split-window -I."
-  (and (> (length arg) 1)
-       (char= (char arg 0) #\-)
-       (find #\I arg :start 1)))
-
-(defun %server-split-window-input-command-p (cmd args)
-  "True when decoded command payload requests canonical split-window -I."
-  (and (eq cmd :split-window)
-       (some #'%split-window-input-arg-p args)))
-
-(defun %forwarded-command-tokens (cmd target args)
-  "Reconstruct the token line <name> [-t target] args... for a forwarded
-   command, matching what the command-prompt would have typed interactively."
-  (append (list (string-downcase (symbol-name cmd)))
-          (when target (list "-t" target))
-          args))
-
-(defun %run-forwarded-command-tokens (session tokens input-command-p)
-  "Run TOKENS server-side via %run-command-tokens, binding *defer-split-window-input*
-   per INPUT-COMMAND-P.  Catches and reports any error so a bad forwarded command
-   cannot take down the multi-client event loop; returns NIL on error."
-  (with-loop-safe-error (condition
-                          :on-error (progn
-                                      (format *error-output*
-                                              "~&nerimux: command failed: ~{~A~^ ~}: ~A~%"
-                                              tokens condition)
-                                      (force-output *error-output*)
-                                      nil))
-    (let ((*defer-split-window-input* input-command-p))
-      (%run-command-tokens session tokens))))
-
-(defun %reply-with-command-output (conn)
-  "Send CONN the captured overlay text (display-message, list-*, ...) as a
-   +msg-reply+ frame.  A no-op when CONN has no live socket (the test conn)."
-  (when (client-conn-stream conn)
-    (ignore-errors
-      (send-frame (client-conn-stream conn)
-                  (msg-reply (or nerimux/prompt:*overlay* ""))))))
 
 (defun %client-command-token-name (value)
   (cond ((stringp value) (string-downcase value))
@@ -1754,31 +1712,6 @@ display label back into a target string."
     (:swap (values :swap-pane target (%client-directional-args args)))
     (:layout (values :select-layout target args))
     (otherwise (values cmd target args))))
-
-(defun %dispatch-forwarded-command (session conn cmd target args)
-  "Run a non-built-in forwarded command CMD/TARGET/ARGS server-side and reply to
-   CONN with its output — the CLI / control command-forwarding path (`nerimux
-   <cmd>` against a running server).  Sequencing contract: build tokens → run
-   command → send reply → record stdin-target → mark dirty → return :quit if the
-   command ended the session, else NIL."
-  (multiple-value-bind (canonical-cmd canonical-target canonical-args)
-      (%canonical-client-command cmd target args)
-    (let* ((tokens          (%forwarded-command-tokens canonical-cmd
-                                                       canonical-target
-                                                       canonical-args))
-           (input-command-p (%server-split-window-input-command-p
-                             canonical-cmd canonical-args))
-           ;; Capture the command's overlay text instead of showing it to
-           ;; interactive clients, so it can be returned to the CLI command
-           ;; client — the `nerimux display -p` (and `list-sessions`, ...) path.
-           (nerimux/prompt:*overlay* nil)
-           (*current-client-conn*   conn)
-           (result (%run-forwarded-command-tokens session tokens input-command-p)))
-      (%reply-with-command-output conn)
-      (when (and input-command-p (nerimux/model::pane-p result))
-        (setf (client-conn-stdin-target conn) result))
-      (%mark-dirty)
-      (when (eq result :quit) :quit))))
 
 ;;; define-multi-msg-dispatch builds %handle-multi-client-message from a
 ;;; declarative rule table, delegating to define-message-dispatch-fn (server.lisp)

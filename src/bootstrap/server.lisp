@@ -90,40 +90,6 @@
     (when active-window
       (window-relayout active-window (- rows *status-height*) cols))))
 
-(defun %dispatch-byte-result (result)
-  "Map a single process-byte RESULT to a serve-loop disposition.
-   Returns :quit, :detach, or NIL (continue).
-   This is a pure predicate: it does NOT mutate *running*.
-   The caller (%handle-client-message) is responsible for clearing *running*
-   when the disposition is :quit."
-  (cond ((eq result :quit)   :quit)
-        ((eq result :detach) :detach)
-        (t                   nil)))
-
-(defun %process-bytes-cps (session bytes state index)
-  "CPS key-stream walker: process BYTES starting at INDEX through `process-byte`,
-   calling itself as the continuation after each byte that returns NIL.
-   Returns the first non-NIL disposition from `%dispatch-byte-result`, or NIL
-   when all bytes are consumed without a quit/detach."
-  (if (>= index (length bytes))
-      nil
-      (let ((disposition (%dispatch-byte-result
-                          (process-byte session (aref bytes index) state))))
-        (if disposition
-            disposition
-            (%process-bytes-cps session bytes state (1+ index))))))
-
-(defun process-client-keys (session payload state)
-  "Feed a client key PAYLOAD through `process-byte` (the shared keystroke
-   pipeline) one byte at a time via a CPS walker, updating keystroke STATE.
-   Returns the serve-loop disposition:
-     :quit   — a command ended the session (caller must clear *running*);
-     :detach — the user requested detach (the client should disconnect);
-     NIL     — keep serving (the caller should mark the screen dirty).
-   Takes the already-decoded PAYLOAD (not a socket), so the serve loop's
-   quit/detach decision is unit-testable without a live client connection."
-  (%process-bytes-cps session payload state 0))
-
 ;;; ── Message-type dispatch macro ──────────────────────────────────────────────
 ;;;
 ;;; define-msg-dispatch follows the define-csi-rules / with-incoming-frame
@@ -156,53 +122,6 @@
                    (destructuring-bind (condition &rest body) rule
                      `(,condition ,@body)))
                  rules))))
-
-(defmacro define-msg-dispatch (&rest rules)
-  "Build %handle-client-message from a declarative message-type rule table.
-   Each RULE is (condition &rest body).  TYPE, PAYLOAD, SESSION, and STATE are
-   bound in every rule body.  Delegates to define-message-dispatch-fn so this
-   macro and define-multi-msg-dispatch (server-multi.lisp + server-multi-loop.lisp) share the same
-   COND-expansion engine and cannot diverge in structure.
-
-   Prolog analogy:
-     handle_msg(nil,         _, _, _) :- disconnect.
-     handle_msg(msg_detach,  _, _, _) :- disconnect.
-     handle_msg(msg_attach,  p, s, _) :- apply_client_size(s, p).
-     handle_msg(msg_key,     p, s, k) :- process_client_keys(s, p, k)."
-  `(define-message-dispatch-fn
-       %handle-client-message
-       (type payload session state)
-       "Dispatch one incoming client message by TYPE.
-        Returns :quit (session ends, caller must clear *running*), :detach
-        (client disconnects cleanly), :disconnect (EOF / unknown-type teardown),
-        or NIL (continue serving).
-        SESSION is the current session; STATE is the per-client keystroke state."
-     ,@rules))
-
-(define-msg-dispatch
-  ;; EOF: peer closed the connection.
-  ((null type)
-   :disconnect)
-  ;; Client requested clean detach.
-  ((= type +msg-detach+)
-   :detach)
-  ;; Initial attach or resize: update terminal dimensions and mark dirty.
-  ((or (= type +msg-attach+) (= type +msg-resize+))
-   (apply-client-size session payload)
-   (%mark-dirty)
-   nil)
-  ;; Keystroke: run through the shared prefix/copy-mode pipeline.
-  ;; :quit arm also clears *running* here (effect boundary: %handle-client-message
-  ;; is the outermost pure-ish boundary; the caller %run-multi-server-loop may
-  ;; also act on :quit, but *running* must be cleared before that loop next polls).
-  ((= type +msg-key+)
-   (case (process-client-keys session payload state)
-     (:quit   (setf *running* nil) :quit)
-     (:detach :detach)
-     (t       (%mark-dirty) nil)))
-  ;; Unknown message type: treat as a graceful disconnect.
-  (t
-   :disconnect))
 
 (defun run-server (name)
   "Run a headless server owning a session, serving clients attaching to
