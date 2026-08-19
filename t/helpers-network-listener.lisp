@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;; ── Throwaway test-socket paths ─────────────────────────────────────────────
 ;;;
@@ -20,7 +20,7 @@
   "Unique throwaway socket path for LABEL (a descriptive tag embedded in the
    filename), under an existing $TMPDIR (or /tmp when unset or invalid)."
   (let ((dir (%test-socket-directory)))
-    (format nil "~A/cl-tmux-~A-~D.sock" dir label (get-universal-time))))
+    (format nil "~A/nerimux-~A-~D.sock" dir label (get-universal-time))))
 
 (defmacro with-test-listener ((listener-var path-var path-form &key backlog) &body body)
   "Bind PATH-VAR to PATH-FORM (e.g. (%test-socket-path \"label\") or an
@@ -29,15 +29,15 @@
    `skip`) when Unix-domain sockets are unavailable — factors out the
    make-listener/unwind-protect/close-socket/delete-file boilerplate shared by
    every multi-client socket-lifecycle test."
-  `(if (cl-tmux/net:unix-socket-available-p)
+  `(if (nerimux/net:unix-socket-available-p)
        (let* ((,path-var     ,path-form)
               (_             (ensure-directories-exist ,path-var))
               (,listener-var ,(if backlog
-                                   `(cl-tmux/net:make-listener ,path-var :backlog ,backlog)
-                                   `(cl-tmux/net:make-listener ,path-var))))
+                                   `(nerimux/net:make-listener ,path-var :backlog ,backlog)
+                                   `(nerimux/net:make-listener ,path-var))))
          (declare (ignore _))
          (unwind-protect
               (progn ,@body)
-           (cl-tmux/net:close-socket ,listener-var)
+           (nerimux/net:close-socket ,listener-var)
            (ignore-errors (delete-file ,path-var))))
        (skip "Unix-domain socket unavailable (sandbox)")))

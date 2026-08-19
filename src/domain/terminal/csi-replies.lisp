@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/csi)
+(in-package #:nerimux/terminal/csi)
 
 ;;;; CSI response-queue helper layer.
 ;;;;
@@ -47,8 +47,8 @@
    (format nil "~CP!|00000000~C\\" #\Escape #\Escape)
    "Push Tertiary Device Attributes (DCS P!|00000000 ST) onto SCREEN's response queue.")
   (enqueue-xtversion-reply
-   (format nil "~CP>|cl-tmux ~A~C\\" #\Escape (cl-tmux/version:version-string) #\Escape)
-   "Push XTVERSION reply (DCS>|cl-tmux VERSION ST) onto SCREEN's response queue."))
+   (format nil "~CP>|nerimux ~A~C\\" #\Escape (nerimux/version:version-string) #\Escape)
+   "Push XTVERSION reply (DCS>|nerimux VERSION ST) onto SCREEN's response queue."))
 
 (defun enqueue-cpr-reply (screen)
   "Push a Cursor Position Report (ESC [ row ; col R, 1-based) onto SCREEN's

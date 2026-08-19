@@ -6,27 +6,27 @@ Nix is the only supported build path: it pins SBCL and every Lisp dependency,
 so a build either reproduces exactly or fails loudly.
 
 ```bash
-nix run github:nerima-lisp/cl-tmux -- attach
+nix run github:nerima-lisp/nerimux -- attach
 ```
 
 From a checkout:
 
 ```bash
-nix build .                           # → ./result/bin/cl-tmux
-./result/bin/cl-tmux attach
+nix build .                           # → ./result/bin/nerimux
+./result/bin/nerimux attach
 ```
 
 ## Usage
 
 ```bash
-cl-tmux attach                         # open the workspace overview
-cl-tmux attach organization/repository # focus a repository/worktree
-cl-tmux attach /path/to/worktree       # open a local worktree
+nerimux attach                         # open the workspace overview
+nerimux attach organization/repository # focus a repository/worktree
+nerimux attach /path/to/worktree       # open a local worktree
 ```
 
 `attach` auto-starts the headless runtime and connects a thin client. A selector
 containing a slash is resolved as an organization/repository selector or a
-local worktree path. Running `cl-tmux` with no command remains the standalone
+local worktree path. Running `nerimux` with no command remains the standalone
 compatibility entry point. Socket selection works like tmux: `-L <name>` picks a named socket in the
 per-user directory (created `0700` under `$TMUX_TMPDIR`, falling back to the
 system temp dir), and `-S <path>` uses an explicit path.
@@ -62,12 +62,12 @@ nix flake check --print-build-logs   # build + every checks.* derivation
 nix fmt                          # treefmt (nixfmt)
 ```
 
-Inside `nix develop`, `cl-tmux-sbcl` wraps an `sbcl` invocation with ASDF and
+Inside `nix develop`, `nerimux-sbcl` wraps an `sbcl` invocation with ASDF and
 the sibling-library registry already set up:
 
 ```bash
-cl-tmux-sbcl --eval '(asdf:load-system "cl-tmux")' --eval '(cl-tmux:main)'
-cl-tmux-coverage ./coverage-report    # sb-cover report via cl-weave
+nerimux-sbcl --eval '(asdf:load-system "nerimux")' --eval '(nerimux:main)'
+nerimux-coverage ./coverage-report    # sb-cover report via cl-weave
 ```
 
 ## Testing
@@ -76,9 +76,9 @@ cl-tmux-coverage ./coverage-report    # sb-cover report via cl-weave
 
 | Check | What it covers |
 |---|---|
-| `default` | the full unit + integration suite (`cl-tmux/test`) |
-| `weave` | the cl-prolog-kit reasoning read-model (`cl-tmux/weave`) |
-| `dataflow` | the copy-mode lifecycle read-model (`cl-tmux/dataflow`) |
+| `default` | the full unit + integration suite (`nerimux/test`) |
+| `weave` | the cl-prolog-kit reasoning read-model (`nerimux/weave`) |
+| `dataflow` | the copy-mode lifecycle read-model (`nerimux/dataflow`) |
 | `formatting` | treefmt / nixfmt over every tracked Nix file |
 | `docs` | this site, built with `mkdocs --strict` |
 
@@ -93,7 +93,7 @@ session/socket/PTY state.
 To run a single suite by hand:
 
 ```bash
-CL_TMUX_TEST_SYSTEM=cl-tmux/weave sbcl --script run-tests.lisp
+NERIMUX_TEST_SYSTEM=nerimux/weave sbcl --script run-tests.lisp
 ```
 
 There is also an end-to-end smoke test that drives the real binary inside a
@@ -101,7 +101,7 @@ PTY. It is deliberately kept out of the ASDF test system:
 
 ```bash
 nix build .
-sbcl --no-sysinit --no-userinit --script t/e2e/e2e-smoke.lisp result/bin/cl-tmux
+sbcl --no-sysinit --no-userinit --script t/e2e/e2e-smoke.lisp result/bin/nerimux
 ```
 
 Measured suite runtimes are recorded in [Benchmarks](benchmarks.md).

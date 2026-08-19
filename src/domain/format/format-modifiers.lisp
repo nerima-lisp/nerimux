@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/format)
+(in-package #:nerimux/format)
 
 ;;; -- Format value-modifiers (#{mod:variable}) --------------------------------
 ;;;
@@ -38,7 +38,7 @@
   "Parse a =N / =-N truncation modifier MOD into its integer N (negative N keeps
    the tail), or NIL when MOD is not a truncation spec."
   (when (and (>= (length mod) 2) (char= (char mod 0) #\=))
-    (cl-tmux::%parse-integer-or-nil mod :start 1 :junk-allowed t)))
+    (nerimux::%parse-integer-or-nil mod :start 1 :junk-allowed t)))
 
 (defun %parse-substitute-spec (mod)
   "Parse a substitution modifier s<d>PAT<d>REP<d>[flags] into (values PAT REP
@@ -88,7 +88,7 @@
    Positive N left-aligns VALUE in a field of N chars (space-fill on the right).
    Negative N right-aligns VALUE in a field of ABS(N) chars (space-fill on the left)."
   (when (and (>= (length mod) 2) (char= (char mod 0) #\p))
-    (let ((n (cl-tmux::%parse-integer-or-nil mod :start 1 :junk-allowed t)))
+    (let ((n (nerimux::%parse-integer-or-nil mod :start 1 :junk-allowed t)))
       (when n
         (let* ((abs-n (abs n))
                (len   (length value)))

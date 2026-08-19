@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; -- Message log -------------------------------------------------------------
 
@@ -19,7 +19,7 @@
 (defun %message-log-limit ()
   "The effective message-log cap: the `message-limit` option (tmux default 1000),
    falling back to +max-message-log-entries+ when unset."
-  (%option-or-default (cl-tmux/options:get-option "message-limit")
+  (%option-or-default (nerimux/options:get-option "message-limit")
                       +max-message-log-entries+))
 
 (defun %append-message-log-entry (log entry)
@@ -55,7 +55,7 @@
 (defun %prompt-history-path ()
   "The configured history-file path (a non-empty string) or NIL when unset —
    NIL means command-prompt history is in-memory only (no persistence)."
-  (let ((p (ignore-errors (cl-tmux/options:get-option "history-file"))))
+  (let ((p (ignore-errors (nerimux/options:get-option "history-file"))))
     (and (stringp p) (plusp (length p)) p)))
 
 (defmacro %with-prompt-history-path ((path) &body body)
@@ -78,7 +78,7 @@
 (defun %effective-prompt-history-limit ()
   "The effective command-prompt history cap: the `prompt-history-limit` option
    (tmux default 100), falling back to +max-prompt-history+ when unset."
-  (%option-or-default (cl-tmux/options:get-option "prompt-history-limit")
+  (%option-or-default (nerimux/options:get-option "prompt-history-limit")
                       +max-prompt-history+))
 
 (defun %ensure-prompt-history-capacity ()

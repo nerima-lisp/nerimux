@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Dispatch tests — part F1: confirm-before, command-prompt, prompt-seeded
 ;;;; option helpers, and paste-to-pane.
@@ -15,7 +15,7 @@
   `(with-fake-session (sess)
      (with-clean-prompt
        (let ((*overlay* nil))
-         (cl-tmux::dispatch-command sess :confirm-before nil)
+         (nerimux::dispatch-command sess :confirm-before nil)
          (expect (prompt-active-p) :to-be-truthy)
          (let ((,on-submit-var (prompt-on-submit *prompt*)))
            ,@body)))))
@@ -39,24 +39,24 @@
   (it "confirm-before-arg-is-single-key-and-y-runs-command"
     (with-isolated-config
       (with-fake-session (s)
-        (let ((cl-tmux/prompt:*prompt* nil))
-          (cl-tmux::%cmd-confirm-before-arg s '("set-option" "-g" "status-left" "YES"))
+        (let ((nerimux/prompt:*prompt* nil))
+          (nerimux::%cmd-confirm-before-arg s '("set-option" "-g" "status-left" "YES"))
           (expect (prompt-active-p))
           (expect (prompt-single-key *prompt*) :to-be-truthy)
-          (cl-tmux::handle-prompt-key (char-code #\y))   ; single key, no Enter
+          (nerimux::handle-prompt-key (char-code #\y))   ; single key, no Enter
           (expect (null (prompt-active-p)))
-          (expect (string= "YES" (cl-tmux/options:get-option "status-left")))))))
+          (expect (string= "YES" (nerimux/options:get-option "status-left")))))))
 
   ;; A non-y single key cancels confirm-before without running the command.
   (it "confirm-before-arg-single-key-other-cancels"
     (with-isolated-config
       (with-fake-session (s)
-        (let ((cl-tmux/prompt:*prompt* nil))
-          (cl-tmux/options:set-option "status-left" "ORIG")
-          (cl-tmux::%cmd-confirm-before-arg s '("set-option" "-g" "status-left" "YES"))
-          (cl-tmux::handle-prompt-key (char-code #\n))   ; 'n' cancels
+        (let ((nerimux/prompt:*prompt* nil))
+          (nerimux/options:set-option "status-left" "ORIG")
+          (nerimux::%cmd-confirm-before-arg s '("set-option" "-g" "status-left" "YES"))
+          (nerimux::handle-prompt-key (char-code #\n))   ; 'n' cancels
           (expect (null (prompt-active-p)))
-          (expect (string= "ORIG" (cl-tmux/options:get-option "status-left")))))))
+          (expect (string= "ORIG" (nerimux/options:get-option "status-left")))))))
 
   ;; confirm-before -p expands tmux formats against the active window and pane.
   (it "confirm-before-arg-p-expands-format-prompt"
@@ -64,9 +64,9 @@
       (with-fake-session (s)
         (let* ((win (session-active-window s))
                (pane (window-active-pane win))
-               (cl-tmux/prompt:*prompt* nil))
+               (nerimux/prompt:*prompt* nil))
           (setf (window-name win) "work")
-          (cl-tmux::%cmd-confirm-before-arg
+          (nerimux::%cmd-confirm-before-arg
            s '("-p" "kill-window #W pane #P? (y/n)"
                "display-message" "ok"))
           (expect (prompt-active-p))
@@ -79,25 +79,25 @@
   (it "command-prompt-1-single-key-substitutes-one-keypress"
     (with-isolated-config
       (with-fake-session (s)
-        (let ((cl-tmux/prompt:*prompt* nil))
-          (cl-tmux::%cmd-command-prompt-arg
+        (let ((nerimux/prompt:*prompt* nil))
+          (nerimux::%cmd-command-prompt-arg
            s '("-1" "-p" "k:" "set-option -g status-left %1"))
           (expect (prompt-active-p))
           (expect (prompt-single-key *prompt*) :to-be-truthy)
-          (cl-tmux::handle-prompt-key (char-code #\Z))   ; one key, no Enter
+          (nerimux::handle-prompt-key (char-code #\Z))   ; one key, no Enter
           (expect (null (prompt-active-p)))
-          (expect (string= "Z" (cl-tmux/options:get-option "status-left")))))))
+          (expect (string= "Z" (nerimux/options:get-option "status-left")))))))
 
   ;; command-prompt -I seeds the prompt buffer before editing begins.
   (it "command-prompt-initial-text-seeds-buffer"
     (with-isolated-config
       (with-fake-session (s)
-        (let ((cl-tmux/prompt:*prompt* nil))
-          (cl-tmux::%cmd-command-prompt-arg s '("-I" "ls"))
+        (let ((nerimux/prompt:*prompt* nil))
+          (nerimux::%cmd-command-prompt-arg s '("-I" "ls"))
           (expect (prompt-active-p))
           (expect (string= "ls" (prompt-buffer *prompt*)))
           (expect (= 2 (prompt-cursor-index *prompt*)))
-          (cl-tmux::handle-prompt-key (char-code #\!))
+          (nerimux::handle-prompt-key (char-code #\!))
           (expect (string= "ls!" (prompt-buffer *prompt*)))))))
 
   ;;; ── %set-option-from-prompt helper ──────────────────────────────────────────
@@ -106,7 +106,7 @@
   (it "set-option-from-prompt-helper-opens-prompt"
     (with-loop-state
       (let ((*prompt* nil))
-        (cl-tmux::%set-option-from-prompt "test-label")
+        (nerimux::%set-option-from-prompt "test-label")
         (expect (prompt-active-p))
         (expect (string= "test-label" (prompt-label *prompt*))))))
 
@@ -114,7 +114,7 @@
   (it "set-option-from-prompt-sets-option"
     (with-loop-state
       (let ((*prompt* nil))
-        (cl-tmux::%set-option-from-prompt "set-window-option")
+        (nerimux::%set-option-from-prompt "set-window-option")
         (expect (prompt-active-p))
         ;; Submit "mouse on" which maps to set-option "mouse" "on"
         (finishes (funcall (prompt-on-submit *prompt*) "mouse on")
@@ -131,7 +131,7 @@
         (let* ((screen (make-screen 20 5))
                (pane   (make-pane :id 1 :fd -1 :pid -1 :x 0 :y 0 :width 20 :height 5
                                   :screen screen)))
-          (finishes (cl-tmux::%paste-to-pane pane text) desc)))))
+          (finishes (nerimux::%paste-to-pane pane text) desc)))))
 
   ;; %paste-to-pane wraps in ESC[200~/ESC[201~ only when the application enabled
   ;; bracketed paste AND bracket-p (tmux paste-buffer -p) is true.
@@ -146,17 +146,17 @@
                (pane   (make-pane :id 1 :fd 9999 :pid -1 :x 0 :y 0 :width 20 :height 5
                                   :screen screen))
                (written nil)
-               (real-pty-write (fdefinition 'cl-tmux/pty:pty-write)))
-          (setf (cl-tmux/terminal/types:screen-bracketed-paste screen) app-bracketed)
+               (real-pty-write (fdefinition 'nerimux/pty:pty-write)))
+          (setf (nerimux/terminal/types:screen-bracketed-paste screen) app-bracketed)
           (unwind-protect
                (progn
-                 (setf (fdefinition 'cl-tmux/pty:pty-write)
+                 (setf (fdefinition 'nerimux/pty:pty-write)
                        (lambda (fd octets)
                          (declare (ignore fd))
                          (push (cl-codec-kit:octets-to-string octets :encoding :utf-8)
                                written)))
-                 (cl-tmux::%paste-to-pane pane "hi" bracket-p))
-            (setf (fdefinition 'cl-tmux/pty:pty-write) real-pty-write))
+                 (nerimux::%paste-to-pane pane "hi" bracket-p))
+            (setf (fdefinition 'nerimux/pty:pty-write) real-pty-write))
           (let ((all (apply #'concatenate 'string (nreverse written))))
             (expect (search "hi" all))
             (if expect-wrapped

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Client lifecycle and outbound client tests (src/client.lisp).
 ;;;;
@@ -18,10 +18,10 @@
 
   ;; All key client mode functions are fbound.
   (it "client-functions-fbound-table"
-    (dolist (sym '(cl-tmux::run-client
-                   cl-tmux::%ensure-server-running
-                   cl-tmux::run-attach-simple
-                   cl-tmux::run-attach-with-flags))
+    (dolist (sym '(nerimux::run-client
+                   nerimux::%ensure-server-running
+                   nerimux::run-attach-simple
+                   nerimux::run-attach-with-flags))
       (expect (fboundp sym)))))
 
 ;;; socket-path naming is tested canonically in server-tests.lisp since
@@ -31,7 +31,7 @@
 ;;;
 ;;; These tests drive with-incoming-frame directly via a Unix-domain socket
 ;;; stream pair.  We write frames from one end and read from the other, exactly
-;;; as run-client does.  The macro is in cl-tmux/transport and is used by both
+;;; as run-client does.  The macro is in nerimux/transport and is used by both
 ;;; server (serve-client) and client (run-client).
 
 (defmacro with-client-test-socket-pair ((writer-stream reader-stream) &body body)
@@ -89,7 +89,7 @@
                                               (client-fd (gensym "CFD")))
                                         &body body)
   "Like with-guarded-socket-test but exposes socket objects and the client fd.
-   Useful when a test needs (cl-tmux/net:socket-fd client) alongside the stream."
+   Useful when a test needs (nerimux/net:socket-fd client) alongside the stream."
   (let ((path  (gensym "PATH"))
         (lstnr (gensym "LSTNR")))
     `(progn
@@ -103,7 +103,7 @@
                        (,server-sock  (accept-connection ,lstnr))
                        (,server-stream (socket-stream ,server-sock))
                        (,client-stream (socket-stream ,client-sock))
-                       (,client-fd     (cl-tmux/net:socket-fd ,client-sock)))
+                       (,client-fd     (nerimux/net:socket-fd ,client-sock)))
                   (declare (ignorable ,server-stream ,client-stream ,client-fd))
                   (unwind-protect
                        (progn ,@body)

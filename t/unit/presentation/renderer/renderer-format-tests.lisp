@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Escape-code format primitive tests.
 ;;;;
@@ -11,7 +11,7 @@
 
   (defun cell-attrs-string (fg bg attrs &optional (attrs2 0) (ul-color 0))
     (with-output-to-string (s)
-      (cl-tmux/renderer::render-cell-attrs s fg bg attrs attrs2 ul-color)))
+      (nerimux/renderer::render-cell-attrs s fg bg attrs attrs2 ul-color)))
 
   ;; ── move-to (1-based conversion) ────────────────────────────────────────────
 
@@ -19,10 +19,10 @@
   (it "move-to-is-one-based"
     (expect (string= (format nil "~C[1;1H" #\Escape)
                      (with-output-to-string (s)
-                       (cl-tmux/renderer::move-to s 0 0))))
+                       (nerimux/renderer::move-to s 0 0))))
     (expect (string= (format nil "~C[3;5H" #\Escape)
                      (with-output-to-string (s)
-                       (cl-tmux/renderer::move-to s 2 4)))))
+                       (nerimux/renderer::move-to s 2 4)))))
 
   ;; ── render-cell-attrs (SGR codes) ───────────────────────────────────────────
 
@@ -48,8 +48,8 @@
   ;; ── cursor-invisible / cursor-visible ───────────────────────────────────────
 
   ;; cursor-invisible emits ESC[?25l; cursor-visible emits ESC[?25h.
-  (it-each ((cl-tmux/renderer::cursor-invisible "?25l")
-            (cl-tmux/renderer::cursor-visible   "?25h"))
+  (it-each ((nerimux/renderer::cursor-invisible "?25l")
+            (nerimux/renderer::cursor-visible   "?25h"))
       "~A → ESC[~A"
       (fn suffix)
     (let ((out (with-output-to-string (s) (funcall fn s))))
@@ -60,13 +60,13 @@
   ;; reset-attrs writes ESC[0m to the stream.
   (it "reset-attrs-emits-sgr-zero-m"
     (let ((s (make-string-output-stream)))
-      (cl-tmux/renderer::reset-attrs s)
+      (nerimux/renderer::reset-attrs s)
       (expect (string= (format nil "~C[0m" #\Escape)
                        (get-output-stream-string s)))))
 
   ;; define-cell-attr-renderer is a defined macro.
   (it "define-cell-attr-renderer-macro-is-defined"
-    (expect (macro-function 'cl-tmux/renderer::define-cell-attr-renderer)))
+    (expect (macro-function 'nerimux/renderer::define-cell-attr-renderer)))
 
   ;; ── render-cell-attrs attribute-bit table ───────────────────────────────────
   ;;
@@ -112,7 +112,7 @@
             (""                      ("")))
       "%split-style-tokens ~S → ~S"
       (input expected)
-    (expect (equal expected (cl-tmux/renderer::%split-style-tokens input))))
+    (expect (equal expected (nerimux/renderer::%split-style-tokens input))))
 
   ;; ── %dispatch-style-token ───────────────────────────────────────────────────
 
@@ -123,36 +123,36 @@
       "%dispatch-style-token ~S sets ~S"
       (token key)
     (let ((cell (list nil)))
-      (expect (cl-tmux/renderer::%dispatch-style-token token cell) :to-be-truthy)
+      (expect (nerimux/renderer::%dispatch-style-token token cell) :to-be-truthy)
       (expect (getf (car cell) key) :to-be-truthy)))
 
   ;; %dispatch-style-token 'nobold' sets :bold NIL in result-cell.
   (it "dispatch-style-token-nobold"
     (let ((cell (list (list :bold t))))
-      (cl-tmux/renderer::%dispatch-style-token "nobold" cell)
+      (nerimux/renderer::%dispatch-style-token "nobold" cell)
       (expect (null (getf (car cell) :bold)))))
 
   ;; %dispatch-style-token returns NIL for an unknown token.
   (it "dispatch-style-token-unknown-returns-nil"
     (let ((cell (list nil)))
-      (expect (null (cl-tmux/renderer::%dispatch-style-token "completely-unknown" cell)))))
+      (expect (null (nerimux/renderer::%dispatch-style-token "completely-unknown" cell)))))
 
   ;; ── %emit-style-attrs ───────────────────────────────────────────────────────
 
   ;; %emit-style-attrs with :bold T pushes "1" onto parts.
   (it "emit-style-attrs-bold"
-    (let ((parts (cl-tmux/renderer::%emit-style-attrs '(:bold t) nil)))
+    (let ((parts (nerimux/renderer::%emit-style-attrs '(:bold t) nil)))
       (expect (member "1" parts :test #'string=))))
 
   ;; %emit-style-attrs pushes codes for all set attributes.
   (it "emit-style-attrs-reverse-and-underline"
-    (let ((parts (cl-tmux/renderer::%emit-style-attrs '(:reverse t :underline t) nil)))
+    (let ((parts (nerimux/renderer::%emit-style-attrs '(:reverse t :underline t) nil)))
       (expect (member "7" parts :test #'string=))
       (expect (member "4" parts :test #'string=))))
 
   ;; %emit-style-attrs with an empty style plist returns the unchanged parts.
   (it "emit-style-attrs-empty-style-returns-nil-parts"
-    (let ((parts (cl-tmux/renderer::%emit-style-attrs nil nil)))
+    (let ((parts (nerimux/renderer::%emit-style-attrs nil nil)))
       (expect (null parts))))
 
   ;; ── %border-color-sgr ───────────────────────────────────────────────────────
@@ -164,7 +164,7 @@
             ("notacolor" nil))
       "%border-color-sgr ~S → ~A"
       (color expected)
-    (expect (equal expected (cl-tmux/renderer::%border-color-sgr color))))
+    (expect (equal expected (nerimux/renderer::%border-color-sgr color))))
 
   ;; ── %color-name-to-sgr-number ───────────────────────────────────────────────
 
@@ -181,7 +181,7 @@
       "%color-name-to-sgr-number ~S bg=~A → ~A"
       (color is-bg expected)
     (expect (string= expected
-                     (cl-tmux/renderer::%color-name-to-sgr-number color is-bg))))
+                     (nerimux/renderer::%color-name-to-sgr-number color is-bg))))
 
   ;; ── %status-sgr-from-style ───────────────────────────────────────────────────
 
@@ -190,11 +190,11 @@
             (""))
       "%status-sgr-from-style ~S → default blue-on-white"
       (arg)
-    (expect (string= "44;97" (cl-tmux/renderer::%status-sgr-from-style arg))))
+    (expect (string= "44;97" (nerimux/renderer::%status-sgr-from-style arg))))
 
   ;; %status-sgr-from-style with 'bold' includes SGR code 1.
   (it "status-sgr-from-style-bold"
-    (let ((sgr (cl-tmux/renderer::%status-sgr-from-style "bold")))
+    (let ((sgr (nerimux/renderer::%status-sgr-from-style "bold")))
       (expect (search "1" sgr))))
 
   ;; ── %effective-status-style ─────────────────────────────────────────────────
@@ -202,13 +202,13 @@
   ;; %effective-status-style is empty when status-style is not set.
   (it "effective-status-style-empty-when-nothing-set"
     (with-isolated-config
-      (expect (string= "" (cl-tmux/renderer::%effective-status-style)))))
+      (expect (string= "" (nerimux/renderer::%effective-status-style)))))
 
   ;; %effective-status-style returns the status-style option value directly.
   (it "effective-status-style-returns-status-style"
     (with-isolated-config
-      (cl-tmux/options:set-option "status-style" "fg=white,bg=blue,bold")
-      (let ((eff (cl-tmux/renderer::%effective-status-style)))
+      (nerimux/options:set-option "status-style" "fg=white,bg=blue,bold")
+      (let ((eff (nerimux/renderer::%effective-status-style)))
         (expect (search "bold" eff))
         (expect (search "fg=white" eff))
         (expect (search "bg=blue" eff)))))
@@ -220,7 +220,7 @@
             (1 "1 q"))
       "set-cursor-shape ~A → ESC[~A"
       (shape suffix)
-    (let ((out (with-output-to-string (s) (cl-tmux/renderer::set-cursor-shape s shape))))
+    (let ((out (with-output-to-string (s) (nerimux/renderer::set-cursor-shape s shape))))
       (expect (search (format nil "~C[~A" #\Escape suffix) out))))
 
   ;; ── %emit-fg / %emit-bg palette boundaries ────────────────────────────────────
@@ -259,30 +259,30 @@
       "rgb-int-to-256: ~*~*~A"
       (n expected desc)
     (declare (ignore desc))
-    (expect (= expected (cl-tmux/renderer:%rgb-int-to-256 n))))
+    (expect (= expected (nerimux/renderer:%rgb-int-to-256 n))))
 
   ;; %maybe-downsample-color returns N unchanged when *color-downsample-fn* is
   ;; NIL (the default), for both true-colour and non-true-colour N.
   (it "maybe-downsample-color-nil-fn-returns-unchanged"
-    (let ((cl-tmux/renderer:*color-downsample-fn* nil))
-      (expect (= 42 (cl-tmux/renderer::%maybe-downsample-color 42)))
+    (let ((nerimux/renderer:*color-downsample-fn* nil))
+      (expect (= 42 (nerimux/renderer::%maybe-downsample-color 42)))
       (expect (= (logior #x1000000 255)
-                (cl-tmux/renderer::%maybe-downsample-color (logior #x1000000 255))))))
+                (nerimux/renderer::%maybe-downsample-color (logior #x1000000 255))))))
 
   ;; %maybe-downsample-color only applies *color-downsample-fn* to true-colour
   ;; values (bit 24 set); a non-true-colour N is returned unchanged even when
   ;; a downsample function is bound.
   (it "maybe-downsample-color-applies-fn-only-to-truecolor"
-    (let ((cl-tmux/renderer:*color-downsample-fn* (lambda (n) (declare (ignore n)) 99)))
-      (expect (= 99 (cl-tmux/renderer::%maybe-downsample-color (logior #x1000000 1))))
-      (expect (= 5  (cl-tmux/renderer::%maybe-downsample-color 5)))))
+    (let ((nerimux/renderer:*color-downsample-fn* (lambda (n) (declare (ignore n)) 99)))
+      (expect (= 99 (nerimux/renderer::%maybe-downsample-color (logior #x1000000 1))))
+      (expect (= 5  (nerimux/renderer::%maybe-downsample-color 5)))))
 
   ;; End-to-end: with *color-downsample-fn* bound to #'%rgb-int-to-256 (as
   ;; %apply-global-cli-invocation wires it for -2), render-cell-attrs emits the
   ;; downsampled 256-colour SGR form (;38;5;N) instead of raw true-colour
   ;; (;38;2;R;G;B) for a true-colour fg value.
   (it "render-cell-attrs-downsamples-truecolor-fg-when-fn-bound"
-    (let ((cl-tmux/renderer:*color-downsample-fn* #'cl-tmux/renderer:%rgb-int-to-256))
+    (let ((nerimux/renderer:*color-downsample-fn* #'nerimux/renderer:%rgb-int-to-256))
       (let ((out (cell-attrs-string (logior #x1000000 (ash 0 16) (ash 0 8) 255) 0 0)))
         (expect (search ";38;5;21" out))
         (expect (not (search ";38;2;" out))))))

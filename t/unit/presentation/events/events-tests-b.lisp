@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; events tests — part B: locked session, sgr-mouse edge cases, drag/modifier
 ;;;; arrow coverage, copy-mode cursor, vi navigation, table-driven, prompt-key.
@@ -11,8 +11,8 @@
   (it "process-byte-unlocks-locked-session"
     (with-fake-session (s)
       (setf (session-locked-p s) t)
-      (let ((state (cl-tmux::make-input-state)))
-        (expect (null (cl-tmux::process-byte s (char-code #\a) state)))
+      (let ((state (nerimux::make-input-state)))
+        (expect (null (nerimux::process-byte s (char-code #\a) state)))
         (expect (session-locked-p s) :to-be-falsy))))
 
   ;; ── process-byte with an active menu: menu takes priority over overlay ──────
@@ -23,14 +23,14 @@
   (it "process-byte-routes-to-active-menu-before-overlay"
     (with-fake-session (s)
       (let ((*overlay* "some overlay text")
-            (cl-tmux/prompt:*active-menu*
-              (cl-tmux/prompt:make-menu :items '(("one" . :a) ("two" . :b)))))
+            (nerimux/prompt:*active-menu*
+              (nerimux/prompt:make-menu :items '(("one" . :a) ("two" . :b)))))
         (with-input-state (input-state)
           ;; 'q' would dismiss a plain overlay, but with a menu active it must
           ;; instead dispatch :menu-dismiss and close the MENU, leaving the
           ;; overlay's own state untouched by the overlay-dismiss path.
-          (expect (null (cl-tmux::process-byte s (char-code #\q) input-state)))
-          (expect (cl-tmux/prompt:menu-active-p) :to-be-falsy)))))
+          (expect (null (nerimux::process-byte s (char-code #\q) input-state)))
+          (expect (nerimux/prompt:menu-active-p) :to-be-falsy)))))
 
   ;; ── %sgr-mouse-sequence-p edge cases ────────────────────────────────────────
 
@@ -41,13 +41,13 @@
                          :initial-contents (map 'list #'char-code s))))
       (let* ((short (mk-buf (format nil "~C[" #\Escape)))  ; only 2 bytes
              (len   (length short)))
-        (expect (null (cl-tmux::%sgr-mouse-sequence-p short len))))))
+        (expect (null (nerimux::%sgr-mouse-sequence-p short len))))))
 
   ;; %sgr-mouse-terminated-p returns NIL for a buffer of 3 or fewer bytes.
   (it "sgr-mouse-terminated-p-returns-nil-for-short-buffer"
     (let ((buf (make-array 3 :element-type '(unsigned-byte 8)
                              :initial-contents '(27 91 60))))
-      (expect (null (cl-tmux::%sgr-mouse-terminated-p buf 3)))))
+      (expect (null (nerimux::%sgr-mouse-terminated-p buf 3)))))
 
   ;; ── %apply-drag-resize coverage ─────────────────────────────────────────────
 
@@ -64,9 +64,9 @@
                                :panes (list p0 p1) :tree split)))
       (window-select-pane win p0)
       ;; Drag the border rightward: col=60 out of total ~81 columns.
-      (cl-tmux::%apply-drag-resize win split :h 60 5)
+      (nerimux::%apply-drag-resize win split :h 60 5)
       ;; The ratio must have changed from 1/2.
-      (expect (/= 1/2 (cl-tmux/model:layout-split-ratio split)))))
+      (expect (/= 1/2 (nerimux/model:layout-split-ratio split)))))
 
   ;; %apply-drag-resize on a :v split moves the separator to the dragged row.
   (it "apply-drag-resize-vertical-updates-ratio"
@@ -81,8 +81,8 @@
                                :panes (list p0 p1) :tree split)))
       (window-select-pane win p0)
       ;; Drag border downward: row=15 out of total ~21 rows.
-      (cl-tmux::%apply-drag-resize win split :v 5 15)
-      (expect (/= 1/2 (cl-tmux/model:layout-split-ratio split)))))
+      (nerimux::%apply-drag-resize win split :v 5 15)
+      (expect (/= 1/2 (nerimux/model:layout-split-ratio split)))))
 
   ;; ── %dispatch-modifier-arrow coverage ───────────────────────────────────────
 
@@ -91,26 +91,26 @@
     (with-fake-session (s)
       ;; Feed C-b ESC [ 1 ; 5 A (C-Up) through process-byte.
       ;; Expect no error and NIL return.
-      (let ((state (cl-tmux::make-input-state)))
-        (cl-tmux::process-byte s 2   state)   ; C-b prefix
-        (cl-tmux::process-byte s 27  state)   ; ESC
-        (cl-tmux::process-byte s 91  state)   ; [
-        (cl-tmux::process-byte s 49  state)   ; 1
-        (cl-tmux::process-byte s 59  state)   ; ;
-        (cl-tmux::process-byte s 53  state)   ; 5 (Ctrl)
-        (expect (member (cl-tmux::process-byte s 65 state) '(nil :repeatable))))))   ; A (Up)
+      (let ((state (nerimux::make-input-state)))
+        (nerimux::process-byte s 2   state)   ; C-b prefix
+        (nerimux::process-byte s 27  state)   ; ESC
+        (nerimux::process-byte s 91  state)   ; [
+        (nerimux::process-byte s 49  state)   ; 1
+        (nerimux::process-byte s 59  state)   ; ;
+        (nerimux::process-byte s 53  state)   ; 5 (Ctrl)
+        (expect (member (nerimux::process-byte s 65 state) '(nil :repeatable))))))   ; A (Up)
 
   ;; M-arrow (mod-byte=51) dispatches :resize-* command without signaling.
   (it "dispatch-modifier-arrow-meta-arrow-dispatches-resize-command"
     (with-fake-session (s)
-      (let ((state (cl-tmux::make-input-state)))
-        (cl-tmux::process-byte s 2   state)   ; C-b prefix
-        (cl-tmux::process-byte s 27  state)   ; ESC
-        (cl-tmux::process-byte s 91  state)   ; [
-        (cl-tmux::process-byte s 49  state)   ; 1
-        (cl-tmux::process-byte s 59  state)   ; ;
-        (cl-tmux::process-byte s 51  state)   ; 3 (Meta)
-        (expect (member (cl-tmux::process-byte s 66 state) '(nil :repeatable))))))   ; B (Down)
+      (let ((state (nerimux::make-input-state)))
+        (nerimux::process-byte s 2   state)   ; C-b prefix
+        (nerimux::process-byte s 27  state)   ; ESC
+        (nerimux::process-byte s 91  state)   ; [
+        (nerimux::process-byte s 49  state)   ; 1
+        (nerimux::process-byte s 59  state)   ; ;
+        (nerimux::process-byte s 51  state)   ; 3 (Meta)
+        (expect (member (nerimux::process-byte s 66 state) '(nil :repeatable))))))   ; B (Down)
 
   ;; ── copy-mode-set-cursor command coverage ────────────────────────────────────
 
@@ -118,19 +118,19 @@
   (it "copy-mode-set-cursor-updates-cursor-position"
     (with-fake-session (s)
       (let ((screen (active-screen s)))
-        (cl-tmux::dispatch-command s :copy-mode-enter nil)
+        (nerimux::dispatch-command s :copy-mode-enter nil)
         (expect (screen-copy-mode-p screen))
         ;; Place cursor at (3, 5)
-        (cl-tmux/commands::copy-mode-set-cursor screen 3 5)
+        (nerimux/commands::copy-mode-set-cursor screen 3 5)
         (expect (equal (cons 3 5) (screen-copy-cursor screen))))))
 
   ;; copy-mode-set-cursor clamps row/col to [0, height-1] / [0, width-1].
   (it "copy-mode-set-cursor-clamps-to-screen-bounds"
     (with-fake-session (s)
       (let ((screen (active-screen s)))
-        (cl-tmux::dispatch-command s :copy-mode-enter nil)
+        (nerimux::dispatch-command s :copy-mode-enter nil)
         ;; Attempt to set cursor far out of bounds.
-        (cl-tmux/commands::copy-mode-set-cursor screen 999 999)
+        (nerimux/commands::copy-mode-set-cursor screen 999 999)
         (let* ((cursor (screen-copy-cursor screen))
                (row    (car cursor))
                (col    (cdr cursor)))
@@ -145,13 +145,13 @@
     (with-copy-mode-vi-state (s screen state)
       (seed-scrollback screen 10)
       ;; Scroll viewport up so there is room both above and below cursor.
-      (cl-tmux/commands::copy-mode-scroll screen 5)
+      (nerimux/commands::copy-mode-scroll screen 5)
       (let ((initial-offset (screen-copy-offset screen)))
         ;; Place cursor at an interior row (not the bottom).
-        (setf (cl-tmux/terminal/types:screen-copy-cursor screen)
+        (setf (nerimux/terminal/types:screen-copy-cursor screen)
               (cons 0 0))
         ;; 'j' should move cursor down without touching the offset.
-        (cl-tmux::process-byte s (char-code #\j) state)
+        (nerimux::process-byte s (char-code #\j) state)
         (expect (= initial-offset (screen-copy-offset screen)))
         (let ((new-row (car (screen-copy-cursor screen))))
           (expect (= 1 new-row))))))
@@ -162,12 +162,12 @@
     (with-copy-mode-vi-state (s screen state)
       (seed-scrollback screen 10)
       ;; Scroll viewport up and place cursor at an interior row.
-      (cl-tmux/commands::copy-mode-scroll screen 5)
+      (nerimux/commands::copy-mode-scroll screen 5)
       (let ((initial-offset (screen-copy-offset screen)))
-        (setf (cl-tmux/terminal/types:screen-copy-cursor screen)
+        (setf (nerimux/terminal/types:screen-copy-cursor screen)
               (cons 5 0))
         ;; 'k' should move cursor up without touching the offset.
-        (cl-tmux::process-byte s (char-code #\k) state)
+        (nerimux::process-byte s (char-code #\k) state)
         (expect (= initial-offset (screen-copy-offset screen)))
         (let ((new-row (car (screen-copy-cursor screen))))
           (expect (= 4 new-row))))))
@@ -176,16 +176,16 @@
 
   ;; %prefix-csi-arrow-cmd returns the correct command keyword for each arrow byte.
   (it "prefix-csi-arrow-cmd-maps-all-four-directions"
-    (expect (eq :select-pane-up    (cl-tmux::%prefix-csi-arrow-cmd 65)))
-    (expect (eq :select-pane-down  (cl-tmux::%prefix-csi-arrow-cmd 66)))
-    (expect (eq :select-pane-right (cl-tmux::%prefix-csi-arrow-cmd 67)))
-    (expect (eq :select-pane-left  (cl-tmux::%prefix-csi-arrow-cmd 68))))
+    (expect (eq :select-pane-up    (nerimux::%prefix-csi-arrow-cmd 65)))
+    (expect (eq :select-pane-down  (nerimux::%prefix-csi-arrow-cmd 66)))
+    (expect (eq :select-pane-right (nerimux::%prefix-csi-arrow-cmd 67)))
+    (expect (eq :select-pane-left  (nerimux::%prefix-csi-arrow-cmd 68))))
 
   ;; %prefix-csi-arrow-cmd returns NIL for bytes that are not arrow final bytes.
   (it "prefix-csi-arrow-cmd-returns-nil-for-non-arrows"
-    (expect (null (cl-tmux::%prefix-csi-arrow-cmd 72)))
-    (expect (null (cl-tmux::%prefix-csi-arrow-cmd 0)))
-    (expect (null (cl-tmux::%prefix-csi-arrow-cmd 109))))
+    (expect (null (nerimux::%prefix-csi-arrow-cmd 72)))
+    (expect (null (nerimux::%prefix-csi-arrow-cmd 0)))
+    (expect (null (nerimux::%prefix-csi-arrow-cmd 109))))
 
   ;; ── %border-at-position direct tests ────────────────────────────────────────
 
@@ -203,7 +203,7 @@
       (declare (ignore win))
       ;; The separator col for p0 (x=0 w=40) is at col 40.
       (multiple-value-bind (found-split orientation)
-          (cl-tmux::%border-at-position
+          (nerimux::%border-at-position
            (make-window :id 1 :name "w" :width 81 :height 24
                         :panes (list p0 p1) :tree split)
            40 5)
@@ -222,7 +222,7 @@
            (win   (make-window :id 1 :name "w" :width 81 :height 24
                                :panes (list p0 p1) :tree split)))
       (multiple-value-bind (found-split orientation)
-          (cl-tmux::%border-at-position win 20 5)
+          (nerimux::%border-at-position win 20 5)
         (expect (null found-split))
         (expect (null orientation)))))
 
@@ -234,7 +234,7 @@
                              :panes (list p0)
                              :tree  (make-layout-leaf p0))))
       (multiple-value-bind (found-split orientation)
-          (cl-tmux::%border-at-position win 20 10)
+          (nerimux::%border-at-position win 20 10)
         (expect (null found-split))
         (expect (null orientation)))))
 
@@ -248,7 +248,7 @@
       (window-select-pane win0 p0)
       (session-select-window sess win0)
       ;; Col 0 is before the first entry — no window should be selected.
-      (cl-tmux::%mouse-status-bar-click sess 0)
+      (nerimux::%mouse-status-bar-click sess 0)
       (expect (eq win0 (session-active-window sess)))))
 
   ;; ── Copy-mode additional vi navigation keys ──────────────────────────────────
@@ -260,23 +260,23 @@
       (destructuring-bind (byte init-col expected-col desc) c
         (declare (ignore desc))
         (with-copy-mode-vi-state (s screen state)
-          (setf (cl-tmux/terminal/types:screen-copy-cursor screen) (cons 0 init-col))
-          (cl-tmux::process-byte s byte state)
+          (setf (nerimux/terminal/types:screen-copy-cursor screen) (cons 0 init-col))
+          (nerimux::process-byte s byte state)
           (expect (= expected-col (cdr (screen-copy-cursor screen))))))))
 
   ;; Plain 'i' (byte 105) exits copy mode without needing the C-b prefix.
   (it "copy-mode-i-exits-copy-mode"
     (with-copy-mode-vi-state (s screen state)
       (expect (screen-copy-mode-p screen))
-      (cl-tmux::process-byte s 105 state)
+      (nerimux::process-byte s 105 state)
       (expect (screen-copy-mode-p screen) :to-be-falsy)))
 
   ;; Plain '0' (byte 48) moves the cursor to the start of the current line.
   (it "copy-mode-zero-moves-to-line-start"
     (with-copy-mode-vi-state (s screen state)
       ;; Place cursor somewhere in the middle.
-      (setf (cl-tmux/terminal/types:screen-copy-cursor screen) (cons 2 5))
-      (cl-tmux::process-byte s 48 state)
+      (setf (nerimux/terminal/types:screen-copy-cursor screen) (cons 2 5))
+      (nerimux::process-byte s 48 state)
       (let ((col (cdr (screen-copy-cursor screen))))
         (expect (= 0 col)))))
 
@@ -286,19 +286,19 @@
     (with-copy-mode-vi-state (s screen state)
       (feed screen "abc")
       ;; Start at col 0.
-      (setf (cl-tmux/terminal/types:screen-copy-cursor screen) (cons 0 0))
-      (cl-tmux::process-byte s 36 state)
+      (setf (nerimux/terminal/types:screen-copy-cursor screen) (cons 0 0))
+      (nerimux::process-byte s 36 state)
       (expect (= 2 (cdr (screen-copy-cursor screen))))))
 
   ;; C-n (byte 14) moves the cursor down by 1 in copy mode (same as j).
   (it "copy-mode-ctrl-n-scrolls-down"
     (with-copy-mode-emacs-state (s screen state)
       (seed-scrollback screen 10)
-      (cl-tmux/commands::copy-mode-scroll screen 5)
-      (setf (cl-tmux/terminal/types:screen-copy-cursor screen)
+      (nerimux/commands::copy-mode-scroll screen 5)
+      (setf (nerimux/terminal/types:screen-copy-cursor screen)
             (cons (1- (screen-height screen)) 0))
       (let ((offset-before (screen-copy-offset screen)))
-        (cl-tmux::process-byte s 14 state)   ; C-n
+        (nerimux::process-byte s 14 state)   ; C-n
         (expect (= (1- offset-before) (screen-copy-offset screen))))))
 
   ;; C-p (byte 16) moves the cursor up by 1 in copy mode (same as k).
@@ -306,8 +306,8 @@
     (with-copy-mode-emacs-state (s screen state)
       (seed-scrollback screen 10)
       ;; Cursor at top row -> C-p scrolls viewport.
-      (setf (cl-tmux/terminal/types:screen-copy-cursor screen) (cons 0 0))
-      (cl-tmux::process-byte s 16 state)   ; C-p
+      (setf (nerimux/terminal/types:screen-copy-cursor screen) (cons 0 0))
+      (nerimux::process-byte s 16 state)   ; C-p
       (expect (= 1 (screen-copy-offset screen)))))
 
   ;; H (byte 72) moves cursor to row 0 (top); L (byte 76) moves cursor to last row (height-1).
@@ -317,8 +317,8 @@
       (destructuring-bind (byte init-row fixed-or-nil desc) c
         (declare (ignore desc))
         (with-copy-mode-vi-state (s screen state)
-          (setf (cl-tmux/terminal/types:screen-copy-cursor screen) (cons init-row 0))
-          (cl-tmux::process-byte s byte state)
+          (setf (nerimux/terminal/types:screen-copy-cursor screen) (cons init-row 0))
+          (nerimux::process-byte s byte state)
           (let* ((row    (car (screen-copy-cursor screen)))
                  (target (if (null fixed-or-nil)
                              (1- (screen-height screen))
@@ -328,7 +328,7 @@
   ;; Plain 'V' (byte 86) starts line-selection mode in copy mode without signaling.
   (it "copy-mode-V-begins-line-selection"
     (with-copy-mode-vi-state (s screen state)
-      (finishes (cl-tmux::process-byte s 86 state))
+      (finishes (nerimux::process-byte s 86 state))
       ;; V activates either regular selection or line-selection — check both.
       (expect (or (screen-copy-selecting screen)
                   (screen-copy-line-selection-p screen)))))
@@ -336,5 +336,5 @@
   ;; Plain Space (byte 32) starts selection in copy mode.
   (it "copy-mode-space-begins-selection"
     (with-copy-mode-vi-state (s screen state)
-      (finishes (cl-tmux::process-byte s 32 state))
+      (finishes (nerimux::process-byte s 32 state))
       (expect (screen-copy-selecting screen)))))

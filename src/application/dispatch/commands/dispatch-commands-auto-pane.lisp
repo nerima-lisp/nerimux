@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 (declaim (special *current-mouse-event*))
 
@@ -18,7 +18,7 @@
 (defun %send-keys-reset-target-pane-terminal-state (flags target-pane)
   "Apply send-keys -R to TARGET-PANE when requested by FLAGS."
   (when (and (%flag-present-p flags #\R) target-pane (pane-screen target-pane))
-    (cl-tmux/terminal/actions:ris-action (pane-screen target-pane))
+    (nerimux/terminal/actions:ris-action (pane-screen target-pane))
     (setf *dirty* t)))
 
 (defun %send-keys-regular (count positionals hex-p target-pane literal-p)
@@ -64,9 +64,9 @@
               ;; -F: expand #{...} in each key argument against the target.
               (positionals
                 (if (%flag-present-p flags #\F)
-                    (let ((ctx (cl-tmux/format:format-context-from-session
+                    (let ((ctx (nerimux/format:format-context-from-session
                                 target-session target-win target-pane)))
-                      (mapcar (lambda (k) (cl-tmux/format:expand-format k ctx))
+                      (mapcar (lambda (k) (nerimux/format:expand-format k ctx))
                               positionals))
                     positionals)))
           (%send-keys-reset-target-pane-terminal-state flags target-pane)
@@ -97,8 +97,8 @@
     (let* ((target-str (%flag-value flags #\t))
            (target-pane nil)
            (prefix-byte (if (%flag-present-p flags #\2)
-                            cl-tmux/config:*prefix2-key-code*
-                            cl-tmux/config:*prefix-key-code*)))
+                            nerimux/config:*prefix2-key-code*
+                            nerimux/config:*prefix-key-code*)))
       (with-target-context (target-session target-window pane session target-str)
         (declare (ignore target-session target-window))
         (setf target-pane pane))

@@ -1,8 +1,8 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; customize-mode tree browser.
 ;;; tmux's customize-mode opens an interactive tree of every option / hook / key
-;;; binding for editing in place.  cl-tmux renders it as a read-only customize
+;;; binding for editing in place.  nerimux renders it as a read-only customize
 ;;; tree overlay — the same depth as :choose-tree / :list-keys (the other "mode"
 ;;; commands here are informational overlays, not j/k-navigable panes); values
 ;;; are changed with set-option / bind.  The grouping (Server / Session+Window
@@ -23,7 +23,7 @@
 
 (defun %customize-value-string (value)
   "Render an option VALUE for the customize tree: T->on, NIL->off, strings as-is,
-   everything else via princ (mirrors cl-tmux/options' show-options formatter)."
+   everything else via princ (mirrors nerimux/options' show-options formatter)."
   (cond ((eq value t) "on")
         ((null value) "off")
         ((stringp value) value)
@@ -50,15 +50,15 @@
   (with-output-to-string (s)
     (let (server-pairs)
       (maphash (lambda (k v) (push (cons k v) server-pairs))
-               cl-tmux/options::*server-options*)
+               nerimux/options::*server-options*)
       (%customize-emit-options s "Server Options" server-pairs filter))
     (%customize-emit-options s "Session/Window Options"
-                             (cl-tmux/options:all-options) filter)
+                             (nerimux/options:all-options) filter)
     ;; Key bindings: filter the pre-rendered describe-key-bindings block by line.
     (let ((lines (remove-if
                   (lambda (l) (or (string= l "")
                                   (not (%customize-match-p l filter))))
-                  (%customize-split-lines (cl-tmux/config:describe-key-bindings)))))
+                  (%customize-split-lines (nerimux/config:describe-key-bindings)))))
       (when lines
         (format s "Key Bindings:~%")
         (dolist (l lines) (format s "  ~A~%" l))))))
@@ -68,7 +68,7 @@
    tree (options + key bindings) in an overlay.  -f FILTER limits the tree to
    entries whose name/line contains FILTER (case-insensitive substring).
    -N (no preview), -Z (zoom), -F format and -t target are accepted; their
-   arguments are consumed.  cl-tmux's tree is read-only; edit with set-option /
+   arguments are consumed.  nerimux's tree is read-only; edit with set-option /
    bind."
   (declare (ignore session))
   (with-command-input (flags positionals args "fFt"

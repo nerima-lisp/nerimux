@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; -- Session destruction command ----------------------------------------------
 
@@ -26,7 +26,7 @@
    alphabetical neighbour of DESTROYED-NAME so the loop moves there."
   (if (null *server-sessions*)
       :quit
-      (let ((mode (or (cl-tmux/options:get-option "detach-on-destroy") "on")))
+      (let ((mode (or (nerimux/options:get-option "detach-on-destroy") "on")))
         (cond
           ((string= mode "on") :quit)
           ((string= mode "previous")
@@ -50,7 +50,7 @@
                                 session)))
       (cond
         ;; -C: clear alerts instead of killing.  tmux resets every window's
-        ;; activity/silence (and bell) flags in the target session; cl-tmux does
+        ;; activity/silence (and bell) flags in the target session; nerimux does
         ;; not model bell separately, so clearing activity+silence is the faithful
         ;; subset.
         (clear-alerts

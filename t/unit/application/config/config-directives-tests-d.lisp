@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; set-g-status-off, bind-n, load-config patterns, bare-arg-cmds, %elif, line-continuation, comments, styles — part IV
 
@@ -12,13 +12,13 @@
                  ("on"  1 "'set-option -g status on' sets *status-height* to 1")))
       (destructuring-bind (value expected desc) c
         (declare (ignore desc))
-        (let ((orig cl-tmux/config:*status-height*))
+        (let ((orig nerimux/config:*status-height*))
           (unwind-protect
               (progn
-                (setf cl-tmux/config:*status-height* 0)
-                (cl-tmux/config:apply-config-directive (list "set-option" "-g" "status" value))
-                (expect (= expected cl-tmux/config:*status-height*)))
-            (setf cl-tmux/config:*status-height* orig))))))
+                (setf nerimux/config:*status-height* 0)
+                (nerimux/config:apply-config-directive (list "set-option" "-g" "status" value))
+                (expect (= expected nerimux/config:*status-height*)))
+            (setf nerimux/config:*status-height* orig))))))
 
   ;; ── bind -n with argument-bearing command ────────────────────────────────────
 
@@ -28,13 +28,13 @@
   ;; fire), so the binding is looked up by (code-char 28), not the string "C-\".
   (it "bind-n-split-window-with-c-flag"
     (with-isolated-key-tables
-      (cl-tmux/config:apply-config-directive
+      (nerimux/config:apply-config-directive
        '("bind" "-n" "C-\\" "split-window" "-c" "/tmp"))
       ;; C-\ → (logand (char-code #\\) #x1f) = 28 (FS).  The binding is keyed by
       ;; that control character so it matches the byte a real Ctrl-\ keypress sends.
-      (let ((entry (cl-tmux/config:key-table-lookup "root" (code-char 28))))
+      (let ((entry (nerimux/config:key-table-lookup "root" (code-char 28))))
         (expect (not (null entry)))
-        (let ((cmd (cl-tmux/config:key-table-command entry)))
+        (let ((cmd (nerimux/config:key-table-command entry)))
           (expect (consp cmd))
           (expect (string= "split-window" (first cmd)))
           (expect (member "-c" cmd :test #'string=))
@@ -45,11 +45,11 @@
   ;; 'bind r source-file x \; display y' stores a :sequence command list.
   (it "bind-key-semicolon-sequence-stored-as-sequence"
     (with-isolated-key-tables
-      (cl-tmux/config:apply-config-directive
+      (nerimux/config:apply-config-directive
        '("bind" "r" "source-file" "/tmp/x" ";" "display-message" "Reloaded"))
-      (let ((entry (cl-tmux/config:key-table-lookup "prefix" #\r)))
+      (let ((entry (nerimux/config:key-table-lookup "prefix" #\r)))
         (expect (not (null entry)))
-        (let ((cmd (cl-tmux/config:key-table-command entry)))
+        (let ((cmd (nerimux/config:key-table-command entry)))
           (expect (consp cmd))
           (expect (eq :sequence (car cmd)))
           (expect (= 2 (length (cdr cmd))))
@@ -80,7 +80,7 @@ bind c new-window -c #{pane_current_path}
 unbind-all
 bind r source-file /dev/null"))
         (expect (zerop (multiple-value-bind (result)
-                           (ignore-errors (cl-tmux/config:load-config-from-string common-config))
+                           (ignore-errors (nerimux/config:load-config-from-string common-config))
                          (declare (ignore result))
                          0))))))
 
@@ -89,30 +89,30 @@ bind r source-file /dev/null"))
   ;; list; key-press dispatch sends -X begin-selection to the pane's copy mode.
   (it "load-config-bind-T-copy-mode-vi-stores-correctly"
     (with-isolated-config
-      (cl-tmux/config:load-config-from-string
+      (nerimux/config:load-config-from-string
        "bind -T copy-mode-vi v send-keys -X begin-selection")
-      (let ((entry (cl-tmux/config:key-table-lookup "copy-mode-vi" #\v)))
+      (let ((entry (nerimux/config:key-table-lookup "copy-mode-vi" #\v)))
         (expect (not (null entry)))
-        (let ((cmd (cl-tmux/config:key-table-command entry)))
+        (let ((cmd (nerimux/config:key-table-command entry)))
           (expect (equal '("send-keys" "-X" "begin-selection") cmd))))))
 
   ;; 'set-option -s escape-time 0' stores in server options.
   (it "load-config-set-g-escape-time-stores-as-server-option"
     (with-isolated-config
-      (cl-tmux/config:load-config-from-string "set-option -s escape-time 0")
-      (expect (eql 0 (cl-tmux/options:get-server-option "escape-time")))))
+      (nerimux/config:load-config-from-string "set-option -s escape-time 0")
+      (expect (eql 0 (nerimux/options:get-server-option "escape-time")))))
 
   ;; 'set-option -u status' in a config file removes the option and restores the runtime
   ;; status height to its default.
   (it "load-config-set-u-restores-status-side-effects"
     (with-isolated-config
-      (setf cl-tmux/config:*status-height* 4)
-      (cl-tmux/config:load-config-from-string
+      (setf nerimux/config:*status-height* 4)
+      (nerimux/config:load-config-from-string
        "set-option -g status off
 set-option -u status")
-      (expect (= 1 cl-tmux/config:*status-height*))
-      (expect (null (nth-value 1 (gethash "status" cl-tmux/options:*global-options*))))
-      (expect (string= "on" (cl-tmux/options:get-option "status")))))
+      (expect (= 1 nerimux/config:*status-height*))
+      (expect (null (nth-value 1 (gethash "status" nerimux/options:*global-options*))))
+      (expect (string= "on" (nerimux/options:get-option "status")))))
 
   ;; ── Bare arg-command shorthand rejection in bind (single-token path) ────────
   ;;
@@ -122,37 +122,37 @@ set-option -u status")
   ;; named-buffer family uses canonical command names only.
 
   ;; Named-buffer shorthand spellings (deleteb/loadb/pasteb/saveb/showb) are
-  ;; rejected because cl-tmux accepts canonical command names only.
+  ;; rejected because nerimux accepts canonical command names only.
   (it "config-bind-rejects-named-buffer-shorthand-single-tokens"
     (dolist (abbrev '("deleteb" "loadb" "pasteb" "saveb" "showb"))
       (with-isolated-config
-        (expect (= 0 (cl-tmux/config:load-config-from-string
+        (expect (= 0 (nerimux/config:load-config-from-string
                       (format nil "bind X ~A" abbrev))))
         (expect (null (lookup-key-binding #\X)))))
     (with-isolated-config
-      (expect (= 0 (cl-tmux/config:load-config-from-string "bind X setb")))))
+      (expect (= 0 (nerimux/config:load-config-from-string "bind X setb")))))
 
   ;; Rejected shorthand spellings do not weaken typo rejection: an unknown
   ;; single-token command is still refused.
   (it "config-bind-rejects-unknown-single-token-still"
     (with-isolated-config
-      (expect (= 0 (cl-tmux/config:load-config-from-string "bind X totally-bogus-cmd")))))
+      (expect (= 0 (nerimux/config:load-config-from-string "bind X totally-bogus-cmd")))))
 
   ;; A realistic .tmux.conf written with canonical command names loads:
   ;; set-option/set-window-option/bind all apply, and command bodies are normalized for dispatch.
   (it "load-realistic-tmux-conf-with-canonical-commands"
     (with-isolated-config
-      (let ((applied (cl-tmux/config:load-config-from-string
+      (let ((applied (nerimux/config:load-config-from-string
                       "set-option -g status on
 set-window-option -g mode-keys vi
 bind c new-window
 bind | split-window -h
 bind -T copy-mode-vi v send-keys -X begin-selection")))
         (expect (= 5 applied))
-        (expect (string= "on" (cl-tmux/options:get-option "status")))
+        (expect (string= "on" (nerimux/options:get-option "status")))
         (expect (eq :new-window (lookup-key-binding #\c)))
         (expect (equal '("split-window" "-h") (lookup-key-binding #\|)))
-        (expect (not (null (cl-tmux/config:key-table-lookup "copy-mode-vi" #\v)))))))
+        (expect (not (null (nerimux/config:key-table-lookup "copy-mode-vi" #\v)))))))
 
   ;; ── %elif chains (4-state cond stack) ────────────────────────────────────────
   ;;
@@ -177,31 +177,31 @@ bind -T copy-mode-vi v send-keys -X begin-selection")))
       (destructuring-bind (config-str expected desc) c
         (declare (ignore desc))
         (with-isolated-config
-          (let ((cl-tmux/config:*config-condition-evaluator* (lambda (x) x)))
-            (expect (= expected (cl-tmux/config:load-config-from-string
+          (let ((nerimux/config:*config-condition-evaluator* (lambda (x) x)))
+            (expect (= expected (nerimux/config:load-config-from-string
                                  (format nil config-str)))))))))
 
   ;; ── Line continuation (trailing backslash) ───────────────────────────────────
 
   ;; %line-continues-p is T for an odd number of trailing backslashes.
   (it "line-continues-p-counts-trailing-backslashes"
-    (expect (cl-tmux/config::%line-continues-p "foo \\") :to-be-truthy)
-    (expect (cl-tmux/config::%line-continues-p "foo \\\\") :to-be-falsy)
-    (expect (cl-tmux/config::%line-continues-p "foo \\\\\\") :to-be-truthy)
-    (expect (cl-tmux/config::%line-continues-p "foo") :to-be-falsy)
-    (expect (cl-tmux/config::%line-continues-p "") :to-be-falsy))
+    (expect (nerimux/config::%line-continues-p "foo \\") :to-be-truthy)
+    (expect (nerimux/config::%line-continues-p "foo \\\\") :to-be-falsy)
+    (expect (nerimux/config::%line-continues-p "foo \\\\\\") :to-be-truthy)
+    (expect (nerimux/config::%line-continues-p "foo") :to-be-falsy)
+    (expect (nerimux/config::%line-continues-p "") :to-be-falsy))
 
   ;; A line ending in a single backslash continues onto the next line, forming one
   ;; directive.
   (it "config-line-continuation-joins-directive"
     (with-isolated-config
-      (expect (= 1 (cl-tmux/config:load-config-from-string
+      (expect (= 1 (nerimux/config:load-config-from-string
                     (format nil "bind a \\~%new-window"))))))
 
   ;; Without a trailing backslash, two lines remain two separate directives.
   (it "config-no-continuation-two-lines-two-directives"
     (with-isolated-config
-      (expect (= 2 (cl-tmux/config:load-config-from-string
+      (expect (= 2 (nerimux/config:load-config-from-string
                     (format nil "bind a new-window~%bind b next-window"))))))
 
   ;; %glob-pattern-p is true for * ? [ metacharacters; NIL for plain paths.
@@ -213,8 +213,8 @@ bind -T copy-mode-vi v send-keys -X begin-selection")))
       (destructuring-bind (path expected desc) row
         (declare (ignore desc))
         (if expected
-            (expect (cl-tmux/config::%glob-pattern-p path) :to-be-truthy)
-            (expect (cl-tmux/config::%glob-pattern-p path) :to-be-falsy)))))
+            (expect (nerimux/config::%glob-pattern-p path) :to-be-truthy)
+            (expect (nerimux/config::%glob-pattern-p path) :to-be-falsy)))))
 
   ;; ── # comment handling (inline, quote- and format-aware) ─────────────────────
 
@@ -229,19 +229,19 @@ bind -T copy-mode-vi v send-keys -X begin-selection")))
                  ("set x bar"              "set x bar"                 "no comment → unchanged")))
       (destructuring-bind (input expected desc) c
         (declare (ignore desc))
-        (expect (string= expected (cl-tmux/config::%strip-config-comment input))))))
+        (expect (string= expected (nerimux/config::%strip-config-comment input))))))
 
   ;; An inline # comment is stripped before the directive is applied.
   (it "config-inline-comment-not-in-value"
     (with-isolated-options ()
-      (cl-tmux/config:load-config-from-string "set-option -g status-left foo # a comment")
-      (expect (string= "foo" (cl-tmux/options:get-option "status-left")))))
+      (nerimux/config:load-config-from-string "set-option -g status-left foo # a comment")
+      (expect (string= "foo" (nerimux/options:get-option "status-left")))))
 
   ;; A #{...} inside a quoted value survives (not treated as a comment).
   (it "config-quoted-hash-preserved-in-value"
     (with-isolated-options ()
-      (cl-tmux/config:load-config-from-string "set-option -g status-left \"#{session_name}\"")
-      (expect (string= "#{session_name}" (cl-tmux/options:get-option "status-left")))))
+      (nerimux/config:load-config-from-string "set-option -g status-left \"#{session_name}\"")
+      (expect (string= "#{session_name}" (nerimux/options:get-option "status-left")))))
 
   ;; An inline # comment on an inner line of a multi-line brace block does not
   ;; truncate the block — both commands still bind.
@@ -249,8 +249,8 @@ bind -T copy-mode-vi v send-keys -X begin-selection")))
     (with-isolated-config
       (load-config-from-string
        (format nil "bind r {~%new-window  # make a window~%next-window~%}"))
-      (let* ((entry (cl-tmux/config:key-table-lookup "prefix" #\r))
-             (cmd   (cl-tmux/config:key-table-command entry)))
+      (let* ((entry (nerimux/config:key-table-lookup "prefix" #\r))
+             (cmd   (nerimux/config:key-table-command entry)))
         (expect (consp cmd))
         (expect (eq :sequence (first cmd)))
         (expect (= 2 (length (rest cmd)))))))
@@ -271,14 +271,14 @@ bind -T copy-mode-vi v send-keys -X begin-selection")))
                  ("set-option -g foo #bar"                                "set-option -g foo"                     "a '#' at a token start (after whitespace) still begins a comment")))
       (destructuring-bind (input expected desc) c
         (declare (ignore desc))
-        (expect (string= expected (cl-tmux/config::%strip-config-comment input))))))
+        (expect (string= expected (nerimux/config::%strip-config-comment input))))))
 
   ;; End-to-end: an unquoted hex colour survives apply-config-line into the option
   ;; value (it used to be truncated by comment stripping).
   (it "apply-config-line-keeps-hash-colour-end-to-end"
     (with-isolated-options ("status-style" "")
-      (cl-tmux/config::apply-config-line "set-option -g status-style bg=#1e1e1e")
-      (expect (string= "bg=#1e1e1e" (cl-tmux/options:get-option "status-style")))))
+      (nerimux/config::apply-config-line "set-option -g status-style bg=#1e1e1e")
+      (expect (string= "bg=#1e1e1e" (nerimux/options:get-option "status-style")))))
 
   ;; ── set-option -ag on style options inserts a ',' separator ─────────────────────────
   ;;
@@ -296,8 +296,8 @@ bind -T copy-mode-vi v send-keys -X begin-selection")))
     ;; Style option appended onto an empty value: no leading comma.
     (with-isolated-options ("mode-style" "")
       (apply-config-directive '("set-option" "-ag" "mode-style" "fg=green"))
-      (expect (string= "fg=green" (cl-tmux/options:get-option "mode-style"))))
+      (expect (string= "fg=green" (nerimux/options:get-option "mode-style"))))
     ;; Non-style string option: still plain (no comma).
     (with-isolated-options ("status-left" "A")
       (apply-config-directive '("set-option" "-ag" "status-left" "B"))
-      (expect (string= "AB" (cl-tmux/options:get-option "status-left"))))))
+      (expect (string= "AB" (nerimux/options:get-option "status-left"))))))

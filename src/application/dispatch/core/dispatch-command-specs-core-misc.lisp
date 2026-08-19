@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 (defparameter *dispatch-command-specs-core-misc-entries*
   '((:set-buffer '%cmd-set-buffer-arg ("set-buffer"))

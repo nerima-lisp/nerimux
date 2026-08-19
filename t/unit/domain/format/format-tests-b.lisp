@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; path-modifier, substitute, nested-braces, pane_current_path, strftime, context keys, glob, regex — part II
 
@@ -10,13 +10,13 @@
   (it-each (("/a/b/c" "c") ("/a/b/" "b") ("foo" "foo") ("/" "/"))
       "%path-basename ~S → ~S"
       (input expected)
-    (expect (string= expected (cl-tmux/format::%path-basename input))))
+    (expect (string= expected (nerimux/format::%path-basename input))))
 
   ;; %path-dirname handles roots, trailing slashes, and bare names.
   (it-each (("/a/b/c" "/a/b") ("/foo" "/") ("foo" "."))
       "%path-dirname ~S → ~S"
       (input expected)
-    (expect (string= expected (cl-tmux/format::%path-dirname input))))
+    (expect (string= expected (nerimux/format::%path-dirname input))))
 
   ;;; ── Substitute modifier: #{s/PAT/REP/[i]:var} ────────────────────────────────
 
@@ -68,16 +68,16 @@
   ;; each degrades the documented way (no match / string unchanged).
   (it "format-regex-user-pattern-octal-escape-is-refused"
     ;; Positive control first, so a blanket "never matches" bug cannot pass this.
-    (expect (cl-tmux/format::%regex-match-p "a.c" "abc"))
+    (expect (nerimux/format::%regex-match-p "a.c" "abc"))
     ;; \1 must NOT be read as the octal escape for U+0001.
-    (expect (null (cl-tmux/format::%regex-match-p
+    (expect (null (nerimux/format::%regex-match-p
                    "a\\1" (format nil "a~C" (code-char 1)))))
     ;; A genuine backreference is refused rather than mis-compiled.  cl-regex-kit
     ;; is RE2/Rust-style and has no backreferences -- neither does POSIX ERE,
     ;; which is what upstream tmux compiles these with (regcomp + REG_EXTENDED).
-    (expect (null (cl-tmux/format::%regex-match-p "([a-z]+)_\\1" "ab_ab")))
+    (expect (null (nerimux/format::%regex-match-p "([a-z]+)_\\1" "ab_ab")))
     ;; The substitute path degrades to "unchanged" on the same pattern.
-    (expect (string= "ab_ab" (cl-tmux/format::%regex-replace-all
+    (expect (string= "ab_ab" (nerimux/format::%regex-replace-all
                               "ab_ab" "([a-z]+)_\\1" "X" nil))))
 
   ;; Case-insensitivity survives the migration.  Callers pass (FIND #\i FLAGS),
@@ -86,22 +86,22 @@
   ;; %regex-replace-all that TYPE-ERROR is swallowed by their own degrade-to-NIL
   ;; handlers, so every /i pattern would quietly stop working.
   (it "format-regex-case-insensitive-flag-is-coerced-to-boolean"
-    (expect (cl-tmux/format::%regex-match-p "ABC" "xabcx" #\i))
-    (expect (null (cl-tmux/format::%regex-match-p "ABC" "xabcx" nil)))
-    (expect (string= "xQx" (cl-tmux/format::%regex-replace-all
+    (expect (nerimux/format::%regex-match-p "ABC" "xabcx" #\i))
+    (expect (null (nerimux/format::%regex-match-p "ABC" "xabcx" nil)))
+    (expect (string= "xQx" (nerimux/format::%regex-replace-all
                             "xabcx" "ABC" "Q" #\i))))
 
   ;; %regex-replace-all returns the input unchanged on a malformed regex and on an
   ;; empty pattern (never signals, never inserts per-position).
   (it "format-regex-replace-all-malformed-unit"
-    (expect (string= "a(b" (cl-tmux/format::%regex-replace-all "a(b" "(" "X" nil)))
-    (expect (string= "abc" (cl-tmux/format::%regex-replace-all "abc" "" "Z" nil))))
+    (expect (string= "a(b" (nerimux/format::%regex-replace-all "a(b" "(" "X" nil)))
+    (expect (string= "abc" (nerimux/format::%regex-replace-all "abc" "" "Z" nil))))
 
   ;;; ── Nested #{...} (balanced braces) + comparison operators ───────────────────
 
   ;; %matching-close-brace returns the OUTER close, skipping nested #{...}.
   (it "format-matching-close-brace-balances-nesting"
-    (flet ((mc (s) (cl-tmux/format::%matching-close-brace s 2)))  ; start past '#{'
+    (flet ((mc (s) (nerimux/format::%matching-close-brace s 2)))  ; start past '#{'
       ;; "#{=5:#{w}}" → content is "=5:#{w}", outer } at index 9
       (expect (= 9 (mc "#{=5:#{w}}")))
       ;; no nesting: first } (index 4) for "#{abc}"
@@ -183,20 +183,20 @@
   ;; cwd, and #{b:pane_current_path} gives its basename.
   (it "format-context-pane-current-path-from-osc7"
     (let* ((sess (make-fake-session :nwindows 1 :npanes 1))
-           (win  (first (cl-tmux/model:session-windows sess)))
-           (pane (first (cl-tmux/model:window-panes win))))
-      (setf (cl-tmux/terminal/types:screen-cwd (cl-tmux/model:pane-screen pane))
+           (win  (first (nerimux/model:session-windows sess)))
+           (pane (first (nerimux/model:window-panes win))))
+      (setf (nerimux/terminal/types:screen-cwd (nerimux/model:pane-screen pane))
             "/home/user/project")
-      (let ((ctx (cl-tmux/format:format-context-from-session sess win pane)))
+      (let ((ctx (nerimux/format:format-context-from-session sess win pane)))
         (expect (string= "/home/user/project"
-                         (cl-tmux/format:expand-format "#{pane_current_path}" ctx)))
+                         (nerimux/format:expand-format "#{pane_current_path}" ctx)))
         (expect (string= "project"
-                         (cl-tmux/format:expand-format "#{b:pane_current_path}" ctx))))))
+                         (nerimux/format:expand-format "#{b:pane_current_path}" ctx))))))
 
   ;; #{pane_current_path} is empty when no OSC 7 cwd has been reported (nil pane).
   (it "format-context-pane-current-path-defaults-empty"
-    (let ((ctx (cl-tmux/format:format-context-from-session nil nil nil)))
-      (expect (string= "" (cl-tmux/format:expand-format "#{pane_current_path}" ctx)))))
+    (let ((ctx (nerimux/format:format-context-from-session nil nil nil)))
+      (expect (string= "" (nerimux/format:expand-format "#{pane_current_path}" ctx)))))
 
   ;;; ── New modifiers: #{t:timestamp-var}, #{pN:var}, #{U:var}, #{L:var}, #{n:var}, #{l:var} ──
 
@@ -212,13 +212,13 @@
   (it "strftime-format-at-formats-given-timestamp"
     (let ((ts (encode-universal-time 5 30 14 15 6 2021)))   ; 2021-06-15 14:30:05 local
       (expect (string= "2021-06-15 14:30:05"
-                       (cl-tmux/format::%strftime-format-at "%Y-%m-%d %H:%M:%S" ts)))))
+                       (nerimux/format::%strftime-format-at "%Y-%m-%d %H:%M:%S" ts)))))
 
   ;; %strftime-format-at returns the empty string for NIL / zero / non-positive.
   (it-each ((nil) (0) (-1))
       "%strftime-format-at empty for ~S"
       (ts)
-    (expect (string= "" (cl-tmux/format::%strftime-format-at "%Y" ts))))
+    (expect (string= "" (nerimux/format::%strftime-format-at "%Y" ts))))
 
   ;; %days-in-month returns the correct day count for fixed-length months and
   ;; handles the Feb leap-year boundary (divisible-by-4, century, and
@@ -240,13 +240,13 @@
             (2  2000 29))  ; divisible by 400 → a leap year
       "%days-in-month ~A/~A → ~A"
       (month year expected)
-    (expect (= expected (cl-tmux/format::%days-in-month month year))))
+    (expect (= expected (nerimux/format::%days-in-month month year))))
 
   ;; #{t:VAR} (bare variable, no %) formats VAR's value as a timestamp via the
   ;; default format - tmux semantics, e.g. #{t:session_last_attached}.
   (it "format-t-modifier-formats-timestamp-variable"
     (let* ((ts       (encode-universal-time 0 0 12 1 1 2020))
-           (expected (cl-tmux/format::%strftime-format-at "" ts)))
+           (expected (nerimux/format::%strftime-format-at "" ts)))
       (expect (plusp (length expected)))
       (expect (string= expected (fmt "#{t:my_time}" :my-time (princ-to-string ts))))))
 
@@ -297,9 +297,9 @@
       ;; A bare variable name under l is also literal (not looked up).
       (expect (string= "session_name" (fmt "#{l:session_name}" :session-name "main"))))
     ;; Month abbreviations
-    (expect (plusp (length (cl-tmux/format::%strftime-format "%b"))))
+    (expect (plusp (length (nerimux/format::%strftime-format "%b"))))
     ;; Hour is in 0-23 range
-    (let ((h (parse-integer (cl-tmux/format::%strftime-format "%H") :junk-allowed t)))
+    (let ((h (parse-integer (nerimux/format::%strftime-format "%H") :junk-allowed t)))
       (expect (and h (>= h 0) (< h 24))))
     ;; %F is YYYY-MM-DD (10 chars)
-    (expect (= 10 (length (cl-tmux/format::%strftime-format "%F"))))))
+    (expect (= 10 (length (nerimux/format::%strftime-format "%F"))))))

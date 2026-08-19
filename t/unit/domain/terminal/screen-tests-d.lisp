@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Screen tests — part IV: boolean-slot macro, title/cwd/pending-wrap,
 ;;;; focus-events, and G0/G1/active-g charset state.
@@ -21,7 +21,7 @@
           (parent-suite 'terminal-suite))
   "Generate a describe block with three cl-weave tests for a boolean screen slot.
 
-   SLOT-ACCESSOR    — accessor symbol (e.g. cl-tmux/terminal/types:screen-insert-mode)
+   SLOT-ACCESSOR    — accessor symbol (e.g. nerimux/terminal/types:screen-insert-mode)
    SUITE-NAME       — unquoted symbol naming the describe block
    ENABLE-SEQUENCE  — form that feeds the enabling sequence to screen variable S
    DISABLE-SEQUENCE — form that feeds the disabling sequence to screen variable S"
@@ -55,27 +55,27 @@
   ;; screen-title-stack is NIL on a fresh screen.
   (it "screen-title-stack-defaults-nil"
     (with-screen (s 10 5)
-      (expect (null (cl-tmux/terminal/types:screen-title-stack s)))))
+      (expect (null (nerimux/terminal/types:screen-title-stack s)))))
 
   ;; ESC[>0t pushes the current title; ESC[<0t pops and restores it.
   (it "screen-title-stack-push-pop-via-sequences"
     (with-screen (s 10 5)
       (feed s (format nil "~C]2;MyTitle~C\\" #\Escape #\Escape))
-      (expect (string= "MyTitle" (cl-tmux/terminal/types:screen-title s)))
+      (expect (string= "MyTitle" (nerimux/terminal/types:screen-title s)))
       (feed s (esc "[>0t"))
-      (expect (not (null (cl-tmux/terminal/types:screen-title-stack s))))
+      (expect (not (null (nerimux/terminal/types:screen-title-stack s))))
       (feed s (format nil "~C]2;NewTitle~C\\" #\Escape #\Escape))
-      (expect (string= "NewTitle" (cl-tmux/terminal/types:screen-title s)))
+      (expect (string= "NewTitle" (nerimux/terminal/types:screen-title s)))
       (feed s (esc "[<0t"))
-      (expect (string= "MyTitle" (cl-tmux/terminal/types:screen-title s)))))
+      (expect (string= "MyTitle" (nerimux/terminal/types:screen-title s)))))
 
   ;; Pushing beyond +title-stack-max-depth+ does not grow the stack beyond the limit.
   (it "screen-title-stack-depth-limit"
     (with-screen (s 10 5)
-      (dotimes (_ (+ cl-tmux/terminal/types:+title-stack-max-depth+ 2))
+      (dotimes (_ (+ nerimux/terminal/types:+title-stack-max-depth+ 2))
         (feed s (esc "[>0t")))
-      (expect (<= (length (cl-tmux/terminal/types:screen-title-stack s))
-                  cl-tmux/terminal/types:+title-stack-max-depth+)))))
+      (expect (<= (length (nerimux/terminal/types:screen-title-stack s))
+                  nerimux/terminal/types:+title-stack-max-depth+)))))
 
 ;;; ── SUITE: screen-cwd ────────────────────────────────────────────────────────
 
@@ -84,19 +84,19 @@
   ;; screen-cwd is the empty string on a fresh screen.
   (it "screen-cwd-defaults-empty-string"
     (with-screen (s 10 5)
-      (expect (string= "" (cl-tmux/terminal/types:screen-cwd s)))))
+      (expect (string= "" (nerimux/terminal/types:screen-cwd s)))))
 
   ;; screen-cwd can be set to an arbitrary string via setf.
   (it "screen-cwd-can-be-set-directly"
     (with-screen (s 10 5)
-      (setf (cl-tmux/terminal/types:screen-cwd s) "/home/user/project")
-      (expect (string= "/home/user/project" (cl-tmux/terminal/types:screen-cwd s)))))
+      (setf (nerimux/terminal/types:screen-cwd s) "/home/user/project")
+      (expect (string= "/home/user/project" (nerimux/terminal/types:screen-cwd s)))))
 
   ;; OSC 7 ; file://host/path sets screen-cwd to a non-empty value.
   (it "screen-cwd-updated-by-osc7"
     (with-screen (s 20 5)
       (feed s (format nil "~C]7;file://localhost/tmp/foo~C\\" #\Escape #\Escape))
-      (expect (string/= "" (cl-tmux/terminal/types:screen-cwd s))))))
+      (expect (string/= "" (nerimux/terminal/types:screen-cwd s))))))
 
 ;;; ── SUITE: screen-pending-wrap ───────────────────────────────────────────────
 
@@ -105,33 +105,33 @@
   ;; screen-pending-wrap is NIL on a fresh screen.
   (it "screen-pending-wrap-defaults-false"
     (with-screen (s 10 5)
-      (expect (cl-tmux/terminal/types:screen-pending-wrap s) :to-be-falsy)))
+      (expect (nerimux/terminal/types:screen-pending-wrap s) :to-be-falsy)))
 
   ;; Writing a character into the last column with autowrap sets pending-wrap.
   (it "screen-pending-wrap-set-when-cursor-at-last-column"
     (with-screen (s 3 2)
       (feed s "abc")
-      (expect (cl-tmux/terminal/types:screen-pending-wrap s) :to-be-truthy)))
+      (expect (nerimux/terminal/types:screen-pending-wrap s) :to-be-truthy)))
 
   ;; pending-wrap is cleared when the next character triggers an actual wrap.
   (it "screen-pending-wrap-cleared-on-wrap"
     (with-screen (s 3 2)
       (feed s "abc")
-      (expect (cl-tmux/terminal/types:screen-pending-wrap s) :to-be-truthy)
+      (expect (nerimux/terminal/types:screen-pending-wrap s) :to-be-truthy)
       (feed s "d")
-      (expect (cl-tmux/terminal/types:screen-pending-wrap s) :to-be-falsy)))
+      (expect (nerimux/terminal/types:screen-pending-wrap s) :to-be-falsy)))
 
   ;; Any explicit cursor movement (CR) clears pending-wrap.
   (it "screen-pending-wrap-cleared-by-cursor-move"
     (with-screen (s 3 2)
       (feed s "abc")
       (feed s (string #\Return))
-      (expect (cl-tmux/terminal/types:screen-pending-wrap s) :to-be-falsy))))
+      (expect (nerimux/terminal/types:screen-pending-wrap s) :to-be-falsy))))
 
 ;;; ── SUITE: screen-focus-events (using define-boolean-slot-tests) ─────────────
 
 (define-boolean-slot-tests
-  cl-tmux/terminal/types:screen-focus-events
+  nerimux/terminal/types:screen-focus-events
   focus-events-suite
   (feed s (esc "[?1004h"))   ; ?1004h enables focus event reporting
   (feed s (esc "[?1004l"))   ; ?1004l disables focus event reporting
@@ -144,36 +144,36 @@
   ;; screen-g0-charset defaults to :ascii on a fresh screen.
   (it "screen-g0-charset-defaults-ascii"
     (with-screen (s 10 5)
-      (expect (eq :ascii (cl-tmux/terminal/types:screen-g0-charset s)))))
+      (expect (eq :ascii (nerimux/terminal/types:screen-g0-charset s)))))
 
   ;; screen-g1-charset defaults to :ascii on a fresh screen.
   (it "screen-g1-charset-defaults-ascii"
     (with-screen (s 10 5)
-      (expect (eq :ascii (cl-tmux/terminal/types:screen-g1-charset s)))))
+      (expect (eq :ascii (nerimux/terminal/types:screen-g1-charset s)))))
 
   ;; screen-active-g defaults to :g0 on a fresh screen.
   (it "screen-active-g-defaults-g0"
     (with-screen (s 10 5)
-      (expect (eq :g0 (cl-tmux/terminal/types:screen-active-g s)))))
+      (expect (eq :g0 (nerimux/terminal/types:screen-active-g s)))))
 
   ;; ESC ( 0 designates G0 as DEC special graphics.
   (it "screen-g0-charset-designated-by-esc-paren-0"
     (with-screen (s 10 5)
       (feed s (esc "(0"))
-      (expect (eq :dec-graphics (cl-tmux/terminal/types:screen-g0-charset s)))))
+      (expect (eq :dec-graphics (nerimux/terminal/types:screen-g0-charset s)))))
 
   ;; ESC ) 0 designates G1 as DEC special graphics.
   (it "screen-g1-charset-designated-by-esc-paren-0"
     (with-screen (s 10 5)
       (feed s (esc ")0"))
-      (expect (eq :dec-graphics (cl-tmux/terminal/types:screen-g1-charset s)))))
+      (expect (eq :dec-graphics (nerimux/terminal/types:screen-g1-charset s)))))
 
   ;; SO (0x0E) selects G1; SI (0x0F) selects G0.
   (it "screen-active-g-toggled-by-so-si"
     (with-screen (s 10 5)
       (screen-process-bytes s (make-array 1 :element-type '(unsigned-byte 8)
                                             :initial-contents '(#x0E)))
-      (expect (eq :g1 (cl-tmux/terminal/types:screen-active-g s)))
+      (expect (eq :g1 (nerimux/terminal/types:screen-active-g s)))
       (screen-process-bytes s (make-array 1 :element-type '(unsigned-byte 8)
                                             :initial-contents '(#x0F)))
-      (expect (eq :g0 (cl-tmux/terminal/types:screen-active-g s))))))
+      (expect (eq :g0 (nerimux/terminal/types:screen-active-g s))))))

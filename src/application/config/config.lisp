@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/config)
+(in-package #:nerimux/config)
 
 ;;; ASCII 2 = ^B.  tmux uses C-b as the default prefix.
 (defconstant +prefix-key-code+ 2)
@@ -179,7 +179,7 @@
   ;; Load prefix-table binding data: the define-initial-key-bindings
   ;; invocation, +default-prefix-arrow-bindings+, +default-prefix-resize-bindings+,
   ;; +default-copy-mode-named-navigation-bindings+.
-  (let ((root (or (ignore-errors (asdf:system-source-directory :cl-tmux))
+  (let ((root (or (ignore-errors (asdf:system-source-directory :nerimux))
                   *load-pathname*
                   *compile-file-pathname*)))
     (load (merge-pathnames #P"src/application/config/config-prefix-defaults.lisp" root))))
@@ -194,7 +194,7 @@
 (eval-when (:compile-toplevel :load-toplevel :execute)
   ;; Resolve against the system source directory (robust to CWD and to ASDF
   ;; loading the compiled fasl from its cache), matching package.lisp.
-  (let ((root (or (ignore-errors (asdf:system-source-directory :cl-tmux))
+  (let ((root (or (ignore-errors (asdf:system-source-directory :nerimux))
                   *load-pathname*
                   *compile-file-pathname*)))
     (load (merge-pathnames #P"src/application/config/config-listing.lisp" root))))
@@ -215,7 +215,7 @@
   ;; Load copy-mode binding data: +default-copy-mode-bindings+,
   ;; +default-copy-mode-vi-bindings+, install-default-copy-mode-bindings,
   ;; install-default-copy-mode-vi-bindings.
-  (let ((root (or (ignore-errors (asdf:system-source-directory :cl-tmux))
+  (let ((root (or (ignore-errors (asdf:system-source-directory :nerimux))
                   *load-pathname*
                   *compile-file-pathname*)))
     (load (merge-pathnames #P"src/application/config/config-copy-mode-defaults.lisp" root))))

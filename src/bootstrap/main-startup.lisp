@@ -5,12 +5,12 @@
 ;;; Command handlers live in main-startup-commands.lisp.
 ;;; This file owns the mode table and binary entry-point dispatch.
 
-(in-package :cl-tmux)
+(in-package :nerimux)
 
 (defun %application-argv ()
-  "Return cl-tmux application arguments from SBCL's process argv.
+  "Return nerimux application arguments from SBCL's process argv.
    The Nix wrapper starts the saved core as `sbcl --core ... --no-userinit ...`;
-   in that shape SBCL runtime options can appear before the real cl-tmux command."
+   in that shape SBCL runtime options can appear before the real nerimux command."
   (let* ((argv (rest sb-ext:*posix-argv*))
          (marker (or (position "--no-userinit" argv :test #'string= :from-end t)
                      (position "--end-toplevel-options" argv :test #'string= :from-end t))))
@@ -23,9 +23,9 @@
    (main-startup-flags.lisp).  Returns the parser invocation, or NIL and
    prints a usage error to *error-output* when ARGV is malformed."
   (handler-case
-      (cl-cli:parse-argv *cli-app* (cons "cl-tmux" argv))
+      (cl-cli:parse-argv *cli-app* (cons "nerimux" argv))
     (cl-cli:cli-usage-error (c)
-      (format *error-output* "~&cl-tmux: ~A~%" c)
+      (format *error-output* "~&nerimux: ~A~%" c)
       (write-string (%usage-string) *error-output*)
       nil)))
 
@@ -38,9 +38,9 @@
         (file        (cl-cli:option-value invocation :file)))
     (when socket-name (setf *socket-name-override* socket-name))
     (when socket-path (setf *socket-path-override* socket-path))
-    (when file (setf cl-tmux/config:*config-file-override* file))
-    (setf cl-tmux/renderer:*color-downsample-fn*
-          (when (cl-cli:option-value invocation :force-256) #'cl-tmux/renderer:%rgb-int-to-256)))
+    (when file (setf nerimux/config:*config-file-override* file))
+    (setf nerimux/renderer:*color-downsample-fn*
+          (when (cl-cli:option-value invocation :force-256) #'nerimux/renderer:%rgb-int-to-256)))
   (cl-cli:positional-value invocation :mode-args))
 
 (defun %dispatch-global-cli-flag-actions (invocation mode-args)
@@ -81,7 +81,7 @@
               (handler-case
                   (%dispatch-startup-mode-entry entry mode rest)
                 (error (c)
-                  (format *error-output* "~&cl-tmux: ~A~%" c)
+                  (format *error-output* "~&nerimux: ~A~%" c)
                   (sb-ext:exit :code 1)))))))))
 
 (defun %dispatch-unknown-mode (mode rest)
@@ -91,7 +91,7 @@
    When MODE names a command and a default-session server is already running
    (its socket exists), forward MODE + REST to it as a command client; otherwise
    run the standalone compatibility multiplexer.
-   Guarding on an existing socket keeps cl-tmux (no args) and the no-server
+   Guarding on an existing socket keeps nerimux (no args) and the no-server
    case unchanged; only an explicit subcommand against a live server forwards."
   (labels ((dash-flag-p (name)
              (%dash-flag-p name)))
@@ -107,7 +107,7 @@
   (if entry
       (%dispatch-startup-mode-handler entry mode rest)
       ;; No recognized mode: forward to a running server as a command client
-      ;; (`cl-tmux <command>` against an existing server), else run standalone.
+      ;; (`nerimux <command>` against an existing server), else run standalone.
       (%dispatch-unknown-mode mode rest)))
 
 (defun %dispatch-startup-mode-handler (entry mode rest)

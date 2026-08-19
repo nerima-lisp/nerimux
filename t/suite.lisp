@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Top-level test runner, on cl-weave.
 ;;;;
@@ -19,5 +19,5 @@ report the results, and signal an error (non-zero exit under Nix) on any
 failure or empty suite."
   (unless (cl-weave:run-all :reporter :spec :max-workers 1
                              :pass-with-no-tests nil)
-    (error "cl-tmux test suite failed"))
+    (error "nerimux test suite failed"))
   t)

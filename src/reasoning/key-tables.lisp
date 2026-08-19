@@ -1,12 +1,12 @@
 ;;;; Projection from the live key-table store into reasoning facts.
 ;;;;
-;;;; `snapshot-key-bindings' walks `cl-tmux/config:*key-tables*' (the same
+;;;; `snapshot-key-bindings' walks `nerimux/config:*key-tables*' (the same
 ;;;; store the dispatcher binds/looks up through) and produces the plist facts
 ;;;; consumed by `build-key-rulebase'.  Because it reads the *live* store, a
 ;;;; rulebase built from it reflects whatever the config file and runtime
 ;;;; `bind-key' commands have installed.
 
-(in-package #:cl-tmux/reasoning)
+(in-package #:nerimux/reasoning)
 
 (defun snapshot-key-bindings ()
   "Return the live key tables as a list of binding plists.
@@ -21,12 +21,12 @@ Each entry is (:table TABLE :key KEY :command COMMAND :repeatable BOOL
         (lambda (key entry)
           (push (list :table table
                       :key key
-                      :command (cl-tmux/config:key-table-command entry)
-                      :repeatable (and (cl-tmux/config:key-table-repeatable-p entry) t)
-                      :note (cl-tmux/config:key-table-note entry))
+                      :command (nerimux/config:key-table-command entry)
+                      :repeatable (and (nerimux/config:key-table-repeatable-p entry) t)
+                      :note (nerimux/config:key-table-note entry))
                 facts))
         inner))
-     cl-tmux/config:*key-tables*)
+     nerimux/config:*key-tables*)
     (nreverse facts)))
 
 (defun current-key-rulebase ()

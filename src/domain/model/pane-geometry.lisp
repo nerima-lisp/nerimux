@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/model)
+(in-package #:nerimux/model)
 
 ;;; ── pane-reposition ──────────────────────────────────────────────────────────
 ;;;
@@ -48,7 +48,7 @@
    pre-migration behaviour: the kernel is simply not told about a window that has
    no area to report.  The slot update and the screen-resize below still happen,
    so the pane's own geometry stays consistent with the layout that asked for it."
-  (let ((status (cl-tmux/options:get-option "pane-border-status" "off")))
+  (let ((status (nerimux/options:get-option "pane-border-status" "off")))
     (multiple-value-bind (content-y-offset content-height)
         (%pane-border-status-reservation status height)
       (%update-pane-geometry pane x (+ y content-y-offset) width content-height)

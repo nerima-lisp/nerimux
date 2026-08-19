@@ -17,7 +17,7 @@
   (commit `97ebf05`) として別実装されたが、`render-session-to-string` を
   session 単位の `workspace-mode-p` 分岐で上書きする設計であり、main の
   client 単位の view 方式と同じ入口を奪い合う。ドメインモデルも
-  `cl-tmux/workspace` として独自に重複している。そのため main への統合は
+  `nerimux/workspace` として独自に重複している。そのため main への統合は
   保留した（`EXECUTION.md` の「2026-08-18 追加反映」セクションを参照）。branch
   と worktree は削除せず保持している。
 
@@ -57,14 +57,14 @@ workspace面の入口は`attach`である。引数なしではoverviewを開き�
 初期選択を絞り込む。
 
 ```sh
-cl-tmux attach
-cl-tmux attach organization/repository
-cl-tmux attach /path/to/worktree
+nerimux attach
+nerimux attach organization/repository
+nerimux attach /path/to/worktree
 ```
 
 期待結果は次のとおりである。
 
-- `cl-tmux attach`: headless runtimeを起動または再利用し、thin clientでoverviewへ接続する。
+- `nerimux attach`: headless runtimeを起動または再利用し、thin clientでoverviewへ接続する。
 - `organization/repository`: 該当repositoryまたは配下のworktreeへfocusする。
 - `/path/to/worktree`: 指定pathのworktreeへfocusする。存在しない場合は、pathを修正する
   かpickerへ戻れるエラーを表示する。
@@ -72,7 +72,7 @@ cl-tmux attach /path/to/worktree
   候補が複数なら対象を選ばせる。
 - `C-q d`はclientをdetachするが、runtimeとworktreeごとのpaneは保持する。
 
-引数なしの`cl-tmux`はtmux互換のstandalone entry pointとして残す。workspaceの初期導線と
+引数なしの`nerimux`はtmux互換のstandalone entry pointとして残す。workspaceの初期導線と
 互換導線を同じ画面上で混同させない。
 
 ## 2. 利用者のメンタルモデル

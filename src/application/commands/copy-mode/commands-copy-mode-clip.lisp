@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/commands)
+(in-package #:nerimux/commands)
 
 ;;;; Rectangle selection text, copy-pipe helpers, yank, append-selection.
 ;;;; Uses selection helpers from commands-copy-mode-selection.lisp and search
@@ -67,7 +67,7 @@
    The subprocess is bounded by +copy-command-timeout+ seconds so a hanging
    copy-command does not block the event loop indefinitely."
   (when (and text (plusp (length text)))
-    (let ((cmd (ignore-errors (cl-tmux/options:get-option "copy-command"))))
+    (let ((cmd (ignore-errors (nerimux/options:get-option "copy-command"))))
       (when (and (stringp cmd) (plusp (length cmd)))
         (%run-shell-cmd-with-input cmd text)))))
 
@@ -75,9 +75,9 @@
   "When the set-clipboard option is on/external, enqueue an OSC 52 sequence on
    SCREEN's clipboard-queue so the renderer copies TEXT to the host's system
    clipboard on the next frame.  No-op when set-clipboard is off."
-  (let ((mode (or (ignore-errors (cl-tmux/options:get-option "set-clipboard")) "on")))
+  (let ((mode (or (ignore-errors (nerimux/options:get-option "set-clipboard")) "on")))
     (when (member mode '("on" "external") :test #'equal)
-      (push (cl-tmux/terminal/parser:osc52-clipboard-sequence text)
+      (push (nerimux/terminal/parser:osc52-clipboard-sequence text)
             (screen-clipboard-queue screen)))))
 
 (defun %copy-mode-do-yank (screen)
@@ -87,7 +87,7 @@
    selection or copy-mode state.  No-op when there is no selection text."
   (let ((text (%get-selection-text screen)))
     (when (and text (plusp (length text)))
-      (cl-tmux/buffer:add-paste-buffer text)
+      (nerimux/buffer:add-paste-buffer text)
       (%maybe-copy-to-clipboard screen text)
       (%run-copy-command text))))
 
@@ -143,12 +143,12 @@
   (when (screen-copy-mode-p screen)
     (let ((text (%get-selection-text screen)))
       (when (and text (plusp (length text)))
-        (let ((existing (cl-tmux/buffer:get-paste-buffer 0)))
+        (let ((existing (nerimux/buffer:get-paste-buffer 0)))
           (if existing
               (progn
-                (cl-tmux/buffer:delete-paste-buffer 0)
-                (cl-tmux/buffer:add-paste-buffer (concatenate 'string existing text)))
-              (cl-tmux/buffer:add-paste-buffer text)))
+                (nerimux/buffer:delete-paste-buffer 0)
+                (nerimux/buffer:add-paste-buffer (concatenate 'string existing text)))
+              (nerimux/buffer:add-paste-buffer text)))
         (%run-copy-command text)))
     ;; Do NOT exit copy mode — tmux append-selection keeps the user in copy mode.
     (setf (screen-dirty-p screen) t)))
@@ -186,7 +186,7 @@
    Returns NIL when neither source yields a usable command."
   (if (and (stringp cmd) (plusp (length cmd)))
       cmd
-      (let ((option-cmd (ignore-errors (cl-tmux/options:get-option "copy-command"))))
+      (let ((option-cmd (ignore-errors (nerimux/options:get-option "copy-command"))))
         (when (and (stringp option-cmd) (plusp (length option-cmd)))
           option-cmd))))
 
@@ -196,7 +196,7 @@
    Returns T when TEXT was non-empty and processed."
   (when (and text (plusp (length text)))
     (when copy-to-buffer-p
-      (cl-tmux/buffer:add-paste-buffer text))
+      (nerimux/buffer:add-paste-buffer text))
     (let ((effective-cmd (%resolve-copy-pipe-cmd cmd)))
       (when effective-cmd
         (%run-shell-cmd-with-input effective-cmd text)))

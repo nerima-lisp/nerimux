@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Emulator tests (src/terminal/emulator.lisp and scroll helpers).
 ;;;; Tests: copy-mode scrollback projection, screen-display-cell OOB,
@@ -61,13 +61,13 @@
     (with-screen (s 10 3)
       ;; Build a scrollback row that is only 3 wide (narrower than screen width 10).
       (let ((narrow-row (make-array 3 :initial-element
-                                      (cl-tmux/terminal/types:blank-cell))))
-        (setf (cl-tmux/terminal/types:screen-scrollback s) (list narrow-row))
-        (setf (cl-tmux/terminal/types:screen-copy-mode-p s) t
-              (cl-tmux/terminal/types:screen-copy-offset  s) 1))
+                                      (nerimux/terminal/types:blank-cell))))
+        (setf (nerimux/terminal/types:screen-scrollback s) (list narrow-row))
+        (setf (nerimux/terminal/types:screen-copy-mode-p s) t
+              (nerimux/terminal/types:screen-copy-offset  s) 1))
       ;; col 5 is outside the 3-wide row — should return the blank-cell fallback.
-      (let ((cell (cl-tmux/terminal/actions:screen-display-cell s 5 0)))
-        (expect (char= #\Space (cl-tmux/terminal/types:cell-char cell))))))
+      (let ((cell (nerimux/terminal/actions:screen-display-cell s 5 0)))
+        (expect (char= #\Space (nerimux/terminal/types:cell-char cell))))))
 
   ;; screen-display-cell returns the blank-cell fallback when live-row exceeds
   ;; screen-height.  This happens when the caller passes a row argument that is
@@ -78,18 +78,18 @@
       (feed-lines s "L0" "L1" "L2")
       ;; With copy-offset=0 (live grid mode) and height=3, valid live rows are 0-2.
       ;; Querying row=3 gives live-row=3 which equals height → OOB → blank cell.
-      (let ((cell (cl-tmux/terminal/actions:screen-display-cell s 0 3)))
-        (expect (char= #\Space (cl-tmux/terminal/types:cell-char cell))))))
+      (let ((cell (nerimux/terminal/actions:screen-display-cell s 0 3)))
+        (expect (char= #\Space (nerimux/terminal/types:cell-char cell))))))
 
   ;; screen-display-cell returns blank when the scrollback row vector is NIL.
   (it "display-cell-scrollback-nil-row-returns-blank"
     (with-screen (s 5 3)
       ;; Push a NIL (corrupted) scrollback entry
-      (setf (cl-tmux/terminal/types:screen-scrollback s) (list nil))
-      (setf (cl-tmux/terminal/types:screen-copy-mode-p s) t
-            (cl-tmux/terminal/types:screen-copy-offset  s) 1)
-      (let ((cell (cl-tmux/terminal/actions:screen-display-cell s 0 0)))
-        (expect (char= #\Space (cl-tmux/terminal/types:cell-char cell)))))))
+      (setf (nerimux/terminal/types:screen-scrollback s) (list nil))
+      (setf (nerimux/terminal/types:screen-copy-mode-p s) t
+            (nerimux/terminal/types:screen-copy-offset  s) 1)
+      (let ((cell (nerimux/terminal/actions:screen-display-cell s 0 0)))
+        (expect (char= #\Space (nerimux/terminal/types:cell-char cell)))))))
 
 ;;; ── SUITE: screen-process-bytes keyword arguments ────────────────────────────
 
@@ -131,34 +131,34 @@
   (it "trim-scroll-history-caps-at-effective-limit"
     (with-screen (s 5 3)
       ;; Install 5 dummy rows
-      (setf (cl-tmux/terminal/types:screen-scrollback s)
+      (setf (nerimux/terminal/types:screen-scrollback s)
             (loop repeat 5 collect (make-array 5 :initial-element
-                                                 (cl-tmux/terminal/types:blank-cell))))
+                                                 (nerimux/terminal/types:blank-cell))))
       ;; Override the limit function to return 3
-      (let ((cl-tmux/terminal/actions:*history-limit-function* (lambda () 3)))
-        (cl-tmux/terminal/actions:trim-scroll-history s))
-      (expect (<= (length (cl-tmux/terminal/types:screen-scrollback s)) 3))))
+      (let ((nerimux/terminal/actions:*history-limit-function* (lambda () 3)))
+        (nerimux/terminal/actions:trim-scroll-history s))
+      (expect (<= (length (nerimux/terminal/types:screen-scrollback s)) 3))))
 
   ;; trim-scroll-history does nothing when scrollback is within the limit.
   (it "trim-scroll-history-noop-when-within-limit"
     (with-screen (s 5 3)
-      (setf (cl-tmux/terminal/types:screen-scrollback s)
+      (setf (nerimux/terminal/types:screen-scrollback s)
             (loop repeat 2 collect (make-array 5 :initial-element
-                                                 (cl-tmux/terminal/types:blank-cell))))
-      (let ((cl-tmux/terminal/actions:*history-limit-function* (lambda () 100)))
-        (cl-tmux/terminal/actions:trim-scroll-history s))
-      (expect (= 2 (length (cl-tmux/terminal/types:screen-scrollback s))))))
+                                                 (nerimux/terminal/types:blank-cell))))
+      (let ((nerimux/terminal/actions:*history-limit-function* (lambda () 100)))
+        (nerimux/terminal/actions:trim-scroll-history s))
+      (expect (= 2 (length (nerimux/terminal/types:screen-scrollback s))))))
 
   ;; Scrolling a full screen through many lines caps scrollback at the default limit.
   (it "scroll-enforces-history-cap-during-feed"
     (with-screen (s 5 3)
       ;; Feed enough lines to cause many scrolls (default cap is +max-scrollback-lines+)
       ;; We use a small cap via *history-limit-function* to keep the test fast
-      (let ((cl-tmux/terminal/actions:*history-limit-function* (lambda () 5)))
+      (let ((nerimux/terminal/actions:*history-limit-function* (lambda () 5)))
         (loop for i below 20
               do (feed s (format nil "L~D" i))
               do (feed s (format nil "~C~C" #\Return #\Linefeed))))
-      (expect (<= (length (cl-tmux/terminal/types:screen-scrollback s)) 5)))))
+      (expect (<= (length (nerimux/terminal/types:screen-scrollback s)) 5)))))
 
 ;;; ── SUITE: decstbm (set scroll region) ──────────────────────────────────────
 
@@ -167,35 +167,35 @@
   ;; decstbm installs the specified scroll region (0-based).
   (it "decstbm-sets-scroll-region"
     (with-screen (s 10 10)
-      (cl-tmux/terminal/actions:decstbm s 2 7)
-      (expect (= 2 (cl-tmux/terminal/types:screen-scroll-top    s)))
-      (expect (= 7 (cl-tmux/terminal/types:screen-scroll-bottom s)))))
+      (nerimux/terminal/actions:decstbm s 2 7)
+      (expect (= 2 (nerimux/terminal/types:screen-scroll-top    s)))
+      (expect (= 7 (nerimux/terminal/types:screen-scroll-bottom s)))))
 
   ;; After decstbm, the cursor is at (0, 0).
   (it "decstbm-homes-cursor-to-origin"
     (with-screen (s 10 10)
-      (setf (cl-tmux/terminal/types:screen-cursor-x s) 5
-            (cl-tmux/terminal/types:screen-cursor-y s) 5)
-      (cl-tmux/terminal/actions:decstbm s 2 7)
+      (setf (nerimux/terminal/types:screen-cursor-x s) 5
+            (nerimux/terminal/types:screen-cursor-y s) 5)
+      (nerimux/terminal/actions:decstbm s 2 7)
       (check-cursor s 0 0)))
 
   ;; decstbm ignores a region where top >= bottom.
   (it "decstbm-rejects-invalid-region"
     (with-screen (s 10 10)
       ;; Pre-condition: default scroll region (0..9)
-      (let ((old-top    (cl-tmux/terminal/types:screen-scroll-top    s))
-            (old-bottom (cl-tmux/terminal/types:screen-scroll-bottom s)))
+      (let ((old-top    (nerimux/terminal/types:screen-scroll-top    s))
+            (old-bottom (nerimux/terminal/types:screen-scroll-bottom s)))
         ;; top=5, bottom=5 is invalid (not strictly less than)
-        (cl-tmux/terminal/actions:decstbm s 5 5)
+        (nerimux/terminal/actions:decstbm s 5 5)
         ;; Region should be unchanged
-        (expect (= old-top    (cl-tmux/terminal/types:screen-scroll-top    s)))
-        (expect (= old-bottom (cl-tmux/terminal/types:screen-scroll-bottom s))))))
+        (expect (= old-top    (nerimux/terminal/types:screen-scroll-top    s)))
+        (expect (= old-bottom (nerimux/terminal/types:screen-scroll-bottom s))))))
 
   ;; decstbm clamps bottom to height-1 when given a value >= height.
   (it "decstbm-clamps-bottom-to-height-minus-one"
     (with-screen (s 10 10)
-      (cl-tmux/terminal/actions:decstbm s 0 99)
-      (expect (= 9 (cl-tmux/terminal/types:screen-scroll-bottom s))))))
+      (nerimux/terminal/actions:decstbm s 0 99)
+      (expect (= 9 (nerimux/terminal/types:screen-scroll-bottom s))))))
 
 ;;; ── SUITE: screen-consume-bell ───────────────────────────────────────────────
 
@@ -206,10 +206,10 @@
     (with-screen (s 10 5)
       (screen-process-bytes s (make-array 1 :element-type '(unsigned-byte 8)
                                             :initial-contents '(#x07)))
-      (expect (cl-tmux/terminal/types:screen-bell-pending s))
-      (expect (cl-tmux/terminal/types:screen-consume-bell s))
-      (expect (cl-tmux/terminal/types:screen-bell-pending s) :to-be-falsy)
-      (expect (cl-tmux/terminal/types:screen-consume-bell s) :to-be-falsy))))
+      (expect (nerimux/terminal/types:screen-bell-pending s))
+      (expect (nerimux/terminal/types:screen-consume-bell s))
+      (expect (nerimux/terminal/types:screen-bell-pending s) :to-be-falsy)
+      (expect (nerimux/terminal/types:screen-consume-bell s) :to-be-falsy))))
 
 ;;; ── SUITE: screen-resize emulator integration ────────────────────────────────
 

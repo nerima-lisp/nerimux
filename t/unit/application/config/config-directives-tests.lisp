@@ -1,19 +1,19 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; config directive suite, bindable commands, basic apply/set directives — part I
 
 ;;; Import the config-directives symbols we need
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (import '(cl-tmux/config:lookup-key-binding
-            cl-tmux/config:*default-shell*
-            cl-tmux/config:*status-height*
-            cl-tmux/config:key-table-bind
-            cl-tmux/config:apply-config-directive
-            cl-tmux/config:load-config-from-string
-            cl-tmux/config:load-config-from-stream
-            cl-tmux/config:config-file-path
-            cl-tmux/config:load-config-file)))
+  (import '(nerimux/config:lookup-key-binding
+            nerimux/config:*default-shell*
+            nerimux/config:*status-height*
+            nerimux/config:key-table-bind
+            nerimux/config:apply-config-directive
+            nerimux/config:load-config-from-string
+            nerimux/config:load-config-from-stream
+            nerimux/config:config-file-path
+            nerimux/config:load-config-file)))
 
 ;;; NOTE: with-isolated-key-tables and with-temp-config-file are defined in
 ;;; t/helpers-overlay-assertions.lisp so all test suites can reuse them.
@@ -25,10 +25,10 @@
   ;; *bindable-commands* must exclude copy-mode-internal commands.
   (it "bindable-commands-excludes-copy-mode-internals"
     (expect (null (intersection '(:copy-mode-exit :copy-mode-up :copy-mode-down)
-                                cl-tmux/config::*bindable-commands*)))
+                                nerimux/config::*bindable-commands*)))
     (dolist (cmd '(:copy-mode-exit :copy-mode-up :copy-mode-down))
-      (expect (not (member cmd cl-tmux/config::*bindable-commands*))))
-    (expect (member :new-window cl-tmux/config::*bindable-commands*)))
+      (expect (not (member cmd nerimux/config::*bindable-commands*))))
+    (expect (member :new-window nerimux/config::*bindable-commands*)))
 
   ;;; apply-config-directive
 
@@ -42,7 +42,7 @@
   ;; apply-config-directive for an unknown command returns NIL and changes nothing.
   (it "apply-directive-unknown-returns-nil"
     (with-isolated-config
-      (let* ((tbl (cl-tmux/config:ensure-key-table "prefix"))
+      (let* ((tbl (nerimux/config:ensure-key-table "prefix"))
              (count-before (hash-table-count tbl))
              (shell-before    *default-shell*)
              (height-before   *status-height*))
@@ -61,7 +61,7 @@
       (assert-set-directive-option-state '("set-option" "-g" "status" "off")
                                          "status" "off"
                                          :context "set-option -g status off")
-      (expect (null (cl-tmux/options:get-option "-g")))))
+      (expect (null (nerimux/options:get-option "-g")))))
 
   ;; 'set-option -ag <name> <value>' appends to the option's current value.
   (it "apply-set-directive-append-flag"
@@ -94,7 +94,7 @@
   (it "set-mouse-invokes-mouse-reporting-hook"
     (with-isolated-config
       (let ((calls nil))
-        (let ((cl-tmux/config:*mouse-reporting-hook*
+        (let ((nerimux/config:*mouse-reporting-hook*
                 (lambda (on-p) (push on-p calls))))
           (assert-config-directive-applied '("set-option" "-g" "mouse" "on")
                                            "set-option -g mouse on")
@@ -105,7 +105,7 @@
   ;; 'set-option -g mouse on' is safe when *mouse-reporting-hook* is unset (NIL).
   (it "set-mouse-with-no-hook-does-not-signal"
     (with-isolated-config
-      (let ((cl-tmux/config:*mouse-reporting-hook* nil))
+      (let ((nerimux/config:*mouse-reporting-hook* nil))
         (finishes
           (assert-config-directive-applied '("set-option" "-g" "mouse" "on")
                                            "set-option -g mouse on with no hook")))))

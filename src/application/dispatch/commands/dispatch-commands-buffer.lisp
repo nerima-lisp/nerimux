@@ -1,10 +1,10 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; -- Named paste-buffer %cmd-* handlers --------------------------------------
 ;;;
-;;; cl-tmux's scriptable buffer commands use -b <name> as the canonical
+;;; nerimux's scriptable buffer commands use -b <name> as the canonical
 ;;; named-buffer selector. These arg-bearing handlers (registered in
-;;; *arg-command-table*) layer over cl-tmux/buffer's named-buffer API; the no-arg
+;;; *arg-command-table*) layer over nerimux/buffer's named-buffer API; the no-arg
 ;;; keyword handlers (:set-buffer etc. in dispatch-handlers) remain for the C-b
 ;;; interactive bindings.
 
@@ -12,19 +12,19 @@
   "Return NAME's paste buffer when NAME is non-NIL, otherwise the most recent
    paste buffer."
   (if name
-      (cl-tmux/buffer:get-named-buffer name)
-      (cl-tmux/buffer:get-paste-buffer 0)))
+      (nerimux/buffer:get-named-buffer name)
+      (nerimux/buffer:get-paste-buffer 0)))
 
 (defun %delete-named-or-latest-paste-buffer (name)
   "Delete NAME's paste buffer when NAME is non-NIL, otherwise the most recent
    paste buffer.  Mirrors %NAMED-OR-LATEST-PASTE-BUFFER's dispatch for the
    delete side."
   (if name
-      (cl-tmux/buffer:delete-buffer-by-name name)
-      (cl-tmux/buffer:delete-paste-buffer 0)))
+      (nerimux/buffer:delete-buffer-by-name name)
+      (nerimux/buffer:delete-paste-buffer 0)))
 
 (defun %buffer-positionals-text (positionals)
-  "Join POSITIONALS with spaces using cl-tmux command-line token semantics."
+  "Join POSITIONALS with spaces using nerimux command-line token semantics."
   (format nil "~{~A~^ ~}" positionals))
 
 (defun %buffer-read-file (path)
@@ -48,12 +48,12 @@
   "Honour set-buffer -w: enqueue an OSC 52 sequence on the active pane's screen
    so the host terminal copies TEXT to the system clipboard on the next frame.
    No-op when set-clipboard is off or there is no active pane."
-  (let ((mode (or (ignore-errors (cl-tmux/options:get-option "set-clipboard")) "on"))
+  (let ((mode (or (ignore-errors (nerimux/options:get-option "set-clipboard")) "on"))
         (pane (and session (session-active-pane session))))
     (when (and pane text (not (string= mode "off")))
       (let ((screen (pane-screen pane)))
         (when screen
-          (push (cl-tmux/terminal/parser:osc52-clipboard-sequence text)
+          (push (nerimux/terminal/parser:osc52-clipboard-sequence text)
                 (screen-clipboard-queue screen)))))))
 
 (define-command-input-handler %cmd-set-buffer-arg (session args)
@@ -72,15 +72,15 @@
          (data     (%buffer-positionals-text positionals)))
     (cond
       (new-name
-       (unless (cl-tmux/buffer:rename-paste-buffer name new-name)
+       (unless (nerimux/buffer:rename-paste-buffer name new-name)
          (show-overlay "no buffer")))
       (positionals
        (let ((stored data))
          (if append-p
              (let ((existing (or (%named-or-latest-paste-buffer name) "")))
                (setf stored (concatenate 'string existing data))
-               (cl-tmux/buffer:add-paste-buffer stored name))
-             (cl-tmux/buffer:add-paste-buffer data name))
+               (nerimux/buffer:add-paste-buffer stored name))
+             (nerimux/buffer:add-paste-buffer data name))
          (when to-clip
            (%set-buffer-send-to-clipboard session stored)))))))
 
@@ -93,7 +93,7 @@
 
 (defun %paste-buffer-text (raw no-replace &optional separator)
   "The text paste-buffer writes for buffer contents RAW.
-   cl-tmux replaces LF with CR by default so each pasted line submits like Enter;
+   nerimux replaces LF with CR by default so each pasted line submits like Enter;
    SEPARATOR (-s) overrides the replacement string (LF -> SEPARATOR); NO-REPLACE
    (-r) keeps the raw bytes and takes precedence over -s. Returns NIL when RAW is
    NIL."
@@ -178,4 +178,4 @@
   (let ((name (%buffer-name-from-flags flags))
         (path (first positionals)))
     (when path
-      (cl-tmux/buffer:add-paste-buffer (%buffer-read-file path) name))))
+      (nerimux/buffer:add-paste-buffer (%buffer-read-file path) name))))

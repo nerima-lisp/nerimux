@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; -- Session lifecycle services ------------------------------------------------
 
@@ -26,7 +26,7 @@
       (session-touch target)
       (setf *dirty* t)
       (when (and old (not (eq old target))
-                 (cl-tmux/options:get-option "destroy-unattached"))
+                 (nerimux/options:get-option "destroy-unattached"))
         (%destroy-session old))
       target)))
 
@@ -51,5 +51,5 @@
           (dolist (pane (window-panes win))
             (close-pane-pty pane)))
       (server-remove-session name)
-      (cl-tmux/hooks:run-hooks cl-tmux/hooks:+hook-session-closed+ session)
+      (nerimux/hooks:run-hooks nerimux/hooks:+hook-session-closed+ session)
       name))))

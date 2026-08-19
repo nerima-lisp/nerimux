@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Server / environment / prompt-history handlers split out from dispatch-handlers-b.lisp.
 
@@ -14,8 +14,8 @@
     (format nil "server info~%  sessions: ~D~%  term: ~Dx~D~%  prefix: C-~A (~D)"
             (length *server-sessions*)
             *term-cols* *term-rows*
-            (code-char (logior cl-tmux/config:*prefix-key-code* +ctrl-char-recover-mask+))
-            cl-tmux/config:*prefix-key-code*)))
+            (code-char (logior nerimux/config:*prefix-key-code* +ctrl-char-recover-mask+))
+            nerimux/config:*prefix-key-code*)))
   (:list-clients
    (show-built-overlay (s)
      (format s "clients~%")
@@ -51,7 +51,7 @@
                              (name  (first parts))
                              (value (format nil "~{~A~^ ~}" (rest parts))))
                         (when (and name (plusp (length name)))
-                          (cl-tmux/model:session-set-environment session name value)
+                          (nerimux/model:session-set-environment session name value)
                           (%overlayf "set ~A=~A" name value))))))
 
   ;; ── resize-window ────────────────────────────────────────────────────────

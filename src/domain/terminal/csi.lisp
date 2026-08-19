@@ -1,11 +1,11 @@
-(in-package #:cl-tmux/terminal/csi)
+(in-package #:nerimux/terminal/csi)
 
 ;;;; CSI (Control Sequence Introducer) declarative rule table.
 ;;;;
 ;;;; define-csi-rules in csi-dispatch.lisp builds EXECUTE-CSI from these facts.
 ;;;; Parameter interpretation lives in csi-parameters.lisp.
 ;;;; All grid mutations (insert/delete chars, scroll-region margins, alternate
-;;;; screen) live in cl-tmux/terminal/actions; the rule table below calls them
+;;;; screen) live in nerimux/terminal/actions; the rule table below calls them
 ;;;; directly.
 ;;;;
 ;;; The response-queue reply layer (DSR/DA1/DA2/DA3/XTVERSION/CPR fixed and

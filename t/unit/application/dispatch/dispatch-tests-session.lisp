@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Copy-mode paging dispatch tests.
 ;;;;  Continued in dispatch-tests-client-session-control.lisp and related responsibility files (coverage: previously untested
@@ -16,8 +16,8 @@
   "Enter copy mode on a fresh fake session bound to SESSION-VAR, run BODY.
    Used to test copy-mode dispatch commands in isolation."
   `(with-fake-session (,session-var)
-     (cl-tmux::dispatch-command ,session-var :copy-mode-enter nil)
-     (expect (cl-tmux::%copy-mode-active-p ,session-var))
+     (nerimux::dispatch-command ,session-var :copy-mode-enter nil)
+     (expect (nerimux::%copy-mode-active-p ,session-var))
      ,@body))
 
 (describe "dispatch-suite"
@@ -37,17 +37,17 @@
                      :copy-mode-begin-line-selection
                      :copy-mode-copy-end-of-line :copy-mode-copy-line
                      :copy-mode-search-next      :copy-mode-search-prev))
-        (finishes (cl-tmux::dispatch-command s cmd nil)
+        (finishes (nerimux::dispatch-command s cmd nil)
                   "~A must not signal an error in copy mode" cmd))))
 
   ;; :copy-mode-choose-buffer opens an overlay saying 'no paste buffers' when ring is empty.
   (it "dispatch-copy-mode-choose-buffer-no-buffers-shows-overlay"
     (with-fake-session (s)
-      (cl-tmux::dispatch-command s :copy-mode-enter nil)
-      (expect (cl-tmux::%copy-mode-active-p s))
+      (nerimux::dispatch-command s :copy-mode-enter nil)
+      (expect (nerimux::%copy-mode-active-p s))
       (let ((*overlay* nil)
-            (cl-tmux/buffer:*paste-buffers* nil))
-        (cl-tmux::dispatch-command s :copy-mode-choose-buffer nil)
+            (nerimux/buffer:*paste-buffers* nil))
+        (nerimux::dispatch-command s :copy-mode-choose-buffer nil)
         (assert-overlay-active ":copy-mode-choose-buffer must open an overlay")
         (assert-overlay-contains "no paste buffers" (overlay-lines)
                                  ":copy-mode-choose-buffer"))))
@@ -55,12 +55,12 @@
   ;; :copy-mode-choose-buffer with buffers lists them by index.
   (it "dispatch-copy-mode-choose-buffer-with-entries"
     (with-fake-session (s)
-      (cl-tmux::dispatch-command s :copy-mode-enter nil)
-      (expect (cl-tmux::%copy-mode-active-p s))
+      (nerimux::dispatch-command s :copy-mode-enter nil)
+      (expect (nerimux::%copy-mode-active-p s))
       (let ((*overlay* nil)
-            (cl-tmux/buffer:*paste-buffers* (list (cons "buffer1" "alpha")
+            (nerimux/buffer:*paste-buffers* (list (cons "buffer1" "alpha")
                                                   (cons "buffer0" "beta"))))
-        (cl-tmux::dispatch-command s :copy-mode-choose-buffer nil)
+        (nerimux::dispatch-command s :copy-mode-choose-buffer nil)
         (assert-overlay-active ":copy-mode-choose-buffer must open an overlay")
         (assert-overlay-contains "0:" (overlay-lines)
                                  ":copy-mode-choose-buffer")
@@ -72,12 +72,12 @@
   ;; Copy-mode dispatch commands do not error when copy mode is not active.
   (it "dispatch-copy-mode-commands-noop-outside-copy-mode"
     (with-fake-session (s)
-      (expect (cl-tmux::%copy-mode-active-p s) :to-be-falsy)
+      (expect (nerimux::%copy-mode-active-p s) :to-be-falsy)
       (dolist (cmd '(:copy-mode-page-up :copy-mode-page-down
                      :copy-mode-word-forward :copy-mode-word-backward
                      :copy-mode-line-start :copy-mode-line-end
                      :copy-mode-top :copy-mode-bottom))
-        (finishes (cl-tmux::dispatch-command s cmd nil)
+        (finishes (nerimux::dispatch-command s cmd nil)
                   "~A must not error when copy mode is off" cmd))))
 
   ;;; ── with-active-pane body execution ─────────────────────────────────────────
@@ -87,7 +87,7 @@
     (let* ((s  (make-fake-session))
            (ap (session-active-pane s))
            (result nil))
-      (cl-tmux::with-active-pane (p s)
+      (nerimux::with-active-pane (p s)
         (setf result p))
       (expect (eq ap result))))
 
@@ -95,7 +95,7 @@
   (it "with-active-pane-skips-body-for-windowless-session"
     (with-empty-session (s)
       (let ((called nil))
-        (cl-tmux::with-active-pane (_p s)
+        (nerimux::with-active-pane (_p s)
           (setf called (not (null _p))))
         (expect called :to-be-falsy))))
 
@@ -106,7 +106,7 @@
     (let* ((menu   (make-menu :title "T"
                                :items (list (cons "First" :k1) (cons "Second" :k2))
                                :selected-index 0))
-           (output (cl-tmux::%format-menu menu)))
+           (output (nerimux::%format-menu menu)))
       (expect (stringp output))
       (expect (search "▶" output))
       (expect (search "First" output))))
@@ -117,7 +117,7 @@
   (it "apply-named-layout-tiled-does-not-error"
     (with-two-pane-layout-session (sess win p0 p1)
       (expect (and win p0 p1))
-      (finishes (cl-tmux::%apply-named-layout-to-session sess :tiled)
+      (finishes (nerimux::%apply-named-layout-to-session sess :tiled)
                 "%apply-named-layout-to-session :tiled must not signal an error")))
 
   ;;; ── %handle-kill-result :detach does not clear *running* ─────────────────────
@@ -125,15 +125,15 @@
   ;; %handle-kill-result does NOT clear *running* for a :detach result.
   (it "handle-kill-result-preserves-running-for-detach"
     (with-loop-state
-      (cl-tmux::%handle-kill-result :detach)
-      (expect cl-tmux::*running* :to-be-truthy)))
+      (nerimux::%handle-kill-result :detach)
+      (expect nerimux::*running* :to-be-truthy)))
 
   ;;; ── %format-window-list empty session ───────────────────────────────────────
 
   ;; %format-window-list with no windows returns an empty string.
   (it "format-window-list-empty-session-returns-empty-string"
     (with-empty-session (s)
-      (let ((text (cl-tmux::%format-window-list s)))
+      (let ((text (nerimux::%format-window-list s)))
         (expect (stringp text))
         (expect (string= "" text)))))
 
@@ -143,8 +143,8 @@
   (it "format-session-list-shows-window-count"
     (let* ((s    (make-fake-session :nwindows 2))
            (name (session-name s)))
-      (let ((cl-tmux::*server-sessions* (list (cons name s))))
-        (let ((text (cl-tmux::%format-session-list s)))
+      (let ((nerimux::*server-sessions* (list (cons name s))))
+        (let ((text (nerimux::%format-session-list s)))
           (expect (search "2 window" text))))))
 
   ;;; ── dispatch-command outcome propagation ─────────────────────────────────────
@@ -152,14 +152,14 @@
   ;; dispatch-command propagates :quit when kill-window eliminates the last window.
   (it "dispatch-command-returns-quit-from-killing-last-window"
     (with-fake-session (s :nwindows 1)
-      (expect (eq :quit (cl-tmux::dispatch-command s :kill-window nil)))))
+      (expect (eq :quit (nerimux::dispatch-command s :kill-window nil)))))
 
   ;; dispatch-command returns NIL and marks *dirty* for :next-window.
   (it "dispatch-command-returns-nil-and-marks-dirty-for-next-window"
     (with-fake-session (s :nwindows 2)
-      (let ((result (cl-tmux::dispatch-command s :next-window nil)))
+      (let ((result (nerimux::dispatch-command s :next-window nil)))
         (expect (null result))
-        (expect cl-tmux::*dirty* :to-be-truthy))))
+        (expect nerimux::*dirty* :to-be-truthy))))
 
   ;;; ── %copy-mode-cmd exhaustive override-table coverage ───────────────────────
 
@@ -190,7 +190,7 @@
                     (#\= . :copy-mode-choose-buffer)))
       (let ((ch (car case))
             (kw (cdr case)))
-        (expect (eq kw (cl-tmux::%copy-mode-cmd ch))))))
+        (expect (eq kw (nerimux::%copy-mode-cmd ch))))))
 
   ;;; ── %format-tree-entry with multiple windows ─────────────────────────────────
 
@@ -212,7 +212,7 @@
       (window-select-pane win1 pane1)
       (let ((output
               (with-output-to-string (s)
-                (cl-tmux::%format-tree-entry s "sess" "sess"
+                (nerimux::%format-tree-entry s "sess" "sess"
                                             (list win0 win1) win0))))
         (expect (search "*0" output))
         (expect (search "alpha" output))
@@ -224,17 +224,17 @@
   (it "clear-scrollback-empties-history"
     (let ((s (make-screen 20 5)))
       (seed-scrollback s 3)
-      (expect (= 3 (length (cl-tmux/terminal/types::screen-scrollback s))))
-      (cl-tmux/terminal/actions:clear-scrollback s)
-      (expect (null (cl-tmux/terminal/types::screen-scrollback s)))))
+      (expect (= 3 (length (nerimux/terminal/types::screen-scrollback s))))
+      (nerimux/terminal/actions:clear-scrollback s)
+      (expect (null (nerimux/terminal/types::screen-scrollback s)))))
 
   ;; :clear-history clears the active pane's scrollback history.
   (it "dispatch-clear-history-empties-active-pane-scrollback"
     (with-fake-session (s)
       (let ((screen (pane-screen (window-active-pane (session-active-window s)))))
         (seed-scrollback screen 3)
-        (cl-tmux::dispatch-command s :clear-history nil)
-        (expect (null (cl-tmux/terminal/types::screen-scrollback screen))))))
+        (nerimux::dispatch-command s :clear-history nil)
+        (expect (null (nerimux/terminal/types::screen-scrollback screen))))))
 
   ;;; ── named-command table (C-b : prompt resolution) ─────────────────────────────
   )

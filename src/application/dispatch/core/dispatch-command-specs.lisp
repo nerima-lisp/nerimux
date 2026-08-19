@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Shared dispatch command registry data.
 ;;;; Loaded by dispatch-core-commands.lisp so the registry stays in one place.
@@ -9,7 +9,7 @@
   (load (merge-pathnames #p"application/dispatch/core/dispatch-command-specs-core.lisp"
                          (merge-pathnames #P"src/"
                                           (or (ignore-errors
-                                               (asdf:system-source-directory :cl-tmux))
+                                               (asdf:system-source-directory :nerimux))
                                               *load-pathname*
                                               *compile-file-pathname*)))))
 

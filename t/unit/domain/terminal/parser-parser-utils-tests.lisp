@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; parser tests - helper utilities and direct parser edge cases.
 
@@ -44,7 +44,7 @@
   (it "feed-osc-helper"
     (with-screen (s 20 5)
       (feed-osc s 0 "test-title")
-      (expect (string= "test-title" (cl-tmux/terminal/types:screen-title s)))))
+      (expect (string= "test-title" (nerimux/terminal/types:screen-title s)))))
 
   ;; csi-final-byte-p: a byte in [0x40 '@' .. 0x7E '~'] terminates a CSI sequence.
   (it-each ((#x40 t)      ; '@' — low boundary
@@ -55,7 +55,7 @@
             (#x7F nil))   ; DEL — above range
       "csi-final-byte-p #x~X → ~A"
       (byte expected)
-    (expect (eq expected (and (cl-tmux/terminal/parser:csi-final-byte-p byte) t))))
+    (expect (eq expected (and (nerimux/terminal/parser:csi-final-byte-p byte) t))))
 
   ;; csi-final-byte-before-p: T for any byte BELOW the final-byte range, i.e. the
   ;; CSI is still incomplete (a parameter / intermediate / marker byte).
@@ -67,7 +67,7 @@
             (#x7E nil))   ; '~' — high boundary
       "csi-final-byte-before-p #x~X → ~A"
       (byte expected)
-    (expect (eq expected (and (cl-tmux/terminal/parser:csi-final-byte-before-p byte) t)))))
+    (expect (eq expected (and (nerimux/terminal/parser:csi-final-byte-before-p byte) t)))))
 
 ;;; ── Coverage gap: zero-length buffer in screen-process-bytes ─────────────────
 ;;;
@@ -92,21 +92,21 @@
 
   ;; %base64-decode decodes a standard Base64 string ('hello' = aGVsbG8=).
   (it "base64-decode-basic-string"
-    (let ((result (cl-tmux/terminal/parser::%base64-decode "aGVsbG8=")))
+    (let ((result (nerimux/terminal/parser::%base64-decode "aGVsbG8=")))
       (expect (not (null result)))
       (expect (string= "hello"
                        (cl-codec-kit:octets-to-string result :encoding :utf-8)))))
 
   ;; %base64-decode on an empty string returns an empty byte vector.
   (it "base64-decode-empty-string"
-    (let ((result (cl-tmux/terminal/parser::%base64-decode "")))
+    (let ((result (nerimux/terminal/parser::%base64-decode "")))
       (expect (or (null result) (zerop (length result))))))
 
   ;; %base64-decode on input shorter than 4 chars does not crash.
   (it "base64-decode-truncated-group"
-    (finishes (cl-tmux/terminal/parser::%base64-decode "YQ"))
+    (finishes (nerimux/terminal/parser::%base64-decode "YQ"))
     ;; 'YQ' decodes to 'a' (no padding); should succeed without error.
-    (let ((result (cl-tmux/terminal/parser::%base64-decode "YQ==")))
+    (let ((result (nerimux/terminal/parser::%base64-decode "YQ==")))
       (expect (not (null result)))))
 
   ;;; ── Coverage gap: %parse-osc-command error branch ────────────────────────────
@@ -116,12 +116,12 @@
 
   ;; %parse-osc-command returns NIL when the command field is not a valid integer.
   (it "parse-osc-command-returns-nil-for-non-integer"
-    (let ((result (cl-tmux/terminal/parser::%parse-osc-command "notanumber" 10)))
+    (let ((result (nerimux/terminal/parser::%parse-osc-command "notanumber" 10)))
       (expect (null result))))
 
   ;; %parse-osc-command returns the integer for a valid command field.
   (it "parse-osc-command-returns-integer-for-valid-input"
-    (let ((result (cl-tmux/terminal/parser::%parse-osc-command "52;data" 2)))
+    (let ((result (nerimux/terminal/parser::%parse-osc-command "52;data" 2)))
       (expect (= 52 result))))
 
   ;;; ── Coverage gap: %handle-osc-52 no-inner-semicolon branch ──────────────────
@@ -132,9 +132,9 @@
   ;; %handle-osc-52 is a no-op when the body has no semicolon (malformed OSC 52).
   (it "handle-osc-52-no-inner-semicolon-is-noop"
     (let* ((received :not-called)
-           (cl-tmux/terminal/parser:*osc52-handler*
+           (nerimux/terminal/parser:*osc52-handler*
              (lambda (text) (setf received text))))
-      (finishes (cl-tmux/terminal/parser::%handle-osc-52 "nodatahere"))
+      (finishes (nerimux/terminal/parser::%handle-osc-52 "nodatahere"))
       (expect (eq :not-called received)))))
 
 ;;; ── CSI colon sub-parameters (ISO 8613-6) ───────────────────────────────────

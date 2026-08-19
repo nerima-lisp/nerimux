@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/parser)
+(in-package #:nerimux/terminal/parser)
 
 ;;;; OSC 7 and OSC 8 helpers.
 

@@ -1,6 +1,6 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
-;;; Public mouse-event dispatcher inside the cl-tmux package.  It coordinates
+;;; Public mouse-event dispatcher inside the nerimux package.  It coordinates
 ;;; option gating, pane passthrough, key-table binding lookup, and built-ins.
 
 (defun %dispatch-mouse-event-with-context (session active-window active-pane active-screen
@@ -21,7 +21,7 @@
          (multiple-value-bind (active-window active-pane active-screen in-copy copy-table)
              (%mouse-event-context session)
            (cond
-             ((not (cl-tmux/options:get-option "mouse"))
+             ((not (nerimux/options:get-option "mouse"))
               nil)
              ((%try-mouse-passthrough active-window active-pane btn col row release-p)
               nil)

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; Pane passthrough belongs to the protocol boundary: it translates tmux
 ;;; screen coordinates into the X10/SGR protocol requested by pane applications.
@@ -20,7 +20,7 @@
                         (code-char enc-btn)
                         (code-char enc-col)
                         (code-char enc-row))))))
-    (when (and encoded (cl-tmux/model:pane-live-p pane) (not *client-read-only*))
+    (when (and encoded (nerimux/model:pane-live-p pane) (not *client-read-only*))
       (pty-write (pane-fd pane) encoded)
       t)))
 

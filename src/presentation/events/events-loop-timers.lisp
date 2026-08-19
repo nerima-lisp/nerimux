@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; CPS process-byte dispatch, escape-time / repeat-time timer plumbing, and
 ;;;; the synchronize-panes input broadcast.
@@ -28,8 +28,8 @@
    repeatable key.  The first key of a repeat sequence (count 1) honours a
    non-zero initial-repeat-time; every other key (and a zero initial-repeat-time)
    uses repeat-time.  Mirrors tmux 3.5+'s server_client_repeat_time."
-  (let ((repeat-ms  (or (cl-tmux/options:get-option "repeat-time") 500))
-        (initial-ms (or (cl-tmux/options:get-option "initial-repeat-time") 0)))
+  (let ((repeat-ms  (or (nerimux/options:get-option "repeat-time") 500))
+        (initial-ms (or (nerimux/options:get-option "initial-repeat-time") 0)))
     (if (and (= repeat-key-count 1) (plusp initial-ms))
         initial-ms
         repeat-ms)))
@@ -104,7 +104,7 @@
    Implements the tmux 'escape-time' server option (default 500ms).
    Critical for vim/neovim: lone ESC in insert mode must reach the program promptly."
   (when (input-state-esc-entered-at state)
-    (let* ((esc-ms   (or (cl-tmux/options:get-server-option "escape-time") 500))
+    (let* ((esc-ms   (or (nerimux/options:get-server-option "escape-time") 500))
            (elapsed  (/ (- (get-internal-real-time)
                             (input-state-esc-entered-at state))
                          (/ internal-time-units-per-second 1000))))
@@ -125,7 +125,7 @@
                               (subseq accum 0 (fill-pointer accum))
                               (make-array 1 :element-type '(unsigned-byte 8)
                                             :initial-element +byte-esc+))))
-              (when (and pane (cl-tmux/model:pane-live-p pane) (not *client-read-only*))
+              (when (and pane (nerimux/model:pane-live-p pane) (not *client-read-only*))
                 (pty-write (pane-fd pane) bytes))))
         (setf (input-state-continuation state) #'%ground-input-state
               (input-state-esc-entered-at state) nil
@@ -141,7 +141,7 @@
   "The byte the `backspace' server option maps the client's DEL (0x7f) key to.
    tmux key syntax: C-? is 127 (the default — identity), C-x is a control code,
    a single character is its own code.  NIL for unset/unrecognised values."
-  (let ((value (cl-tmux/options:get-server-option "backspace")))
+  (let ((value (nerimux/options:get-server-option "backspace")))
     (when (stringp value)
       (cond
         ((string= value "C-?") 127)
@@ -182,7 +182,7 @@
         (pty-write (pane-fd active-pane) octets)
         ;; Broadcast when synchronize-panes is enabled, skipping disabled panes.
         ;; Read the window-local override (falls back to global then default).
-        (when (cl-tmux/options:get-option-for-context "synchronize-panes" :window window)
+        (when (nerimux/options:get-option-for-context "synchronize-panes" :window window)
           (dolist (pane (window-panes window))
             (unless (or (eq pane active-pane)
                         (pane-input-disabled pane))

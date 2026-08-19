@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; Layout hit-testing is pure pane geometry until a resize is explicitly
 ;;; applied.  The fact table keeps horizontal and vertical border rules aligned.

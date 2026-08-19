@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; pane lifecycle command tests: kill-pane, join-pane insertion, swap-two-panes
 
@@ -62,7 +62,7 @@
           (,src (make-pane :id 99 :x 0 :y 0 :width 10 :height 5
                            :fd -1 :pid -1 :screen (make-screen 10 5))))
      (window-select-pane ,win dst-pane)
-     (cl-tmux/commands::%join-pane-insert-into-dst ,src ,win :h)
+     (nerimux/commands::%join-pane-insert-into-dst ,src ,win :h)
      ,@body))
 
 (describe "commands-suite"

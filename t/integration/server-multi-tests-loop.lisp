@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Listener and readiness handling for the multi-client server loop.
 
@@ -11,35 +11,35 @@
   (it "accept-pending-connection-registers-client-when-listener-ready"
     (with-isolated-hooks
       (with-test-listener (listener path (%test-socket-path "accept-helper") :backlog 4)
-        (let* ((listener-fd (cl-tmux/net:socket-fd listener))
-               (cl-tmux::*clients* nil)
-               (peer (cl-tmux/net:connect-to path)))
+        (let* ((listener-fd (nerimux/net:socket-fd listener))
+               (nerimux::*clients* nil)
+               (peer (nerimux/net:connect-to path)))
           (unwind-protect
                (progn
                  ;; Give the connection a moment to become acceptable.
-                 (cl-tmux/pty:select-fds (list listener-fd) 1000000)
-                 (cl-tmux::%accept-pending-connection listener listener-fd (list listener-fd))
-                 (expect (= 1 (length cl-tmux::*clients*))))
-            (ignore-errors (cl-tmux/net:close-socket peer)))))))
+                 (nerimux/pty:select-fds (list listener-fd) 1000000)
+                 (nerimux::%accept-pending-connection listener listener-fd (list listener-fd))
+                 (expect (= 1 (length nerimux::*clients*))))
+            (ignore-errors (nerimux/net:close-socket peer)))))))
 
   ;; %accept-pending-connection does nothing when the listener fd is absent from
   ;; READY — no client is registered.
   (it "accept-pending-connection-noop-when-listener-not-ready"
     (with-isolated-hooks
       (with-test-listener (listener path (%test-socket-path "accept-helper-noop") :backlog 4)
-        (let ((listener-fd (cl-tmux/net:socket-fd listener))
-              (cl-tmux::*clients* nil))
-          (cl-tmux::%accept-pending-connection listener listener-fd nil)
-          (expect (null cl-tmux::*clients*))))))
+        (let ((listener-fd (nerimux/net:socket-fd listener))
+              (nerimux::*clients* nil))
+          (nerimux::%accept-pending-connection listener listener-fd nil)
+          (expect (null nerimux::*clients*))))))
 
   ;; %dispatch-ready-clients does not touch a client whose fd is absent from READY.
   (it "dispatch-ready-clients-skips-clients-not-in-ready-set"
     (with-fake-session (s)
       (let* ((conn (%make-test-conn))
-             (cl-tmux::*clients* (list conn)))
-        (setf (cl-tmux::client-conn-fd conn) 4242)
-        (expect (null (cl-tmux::%dispatch-ready-clients s nil)))
-        (expect (equal (list conn) cl-tmux::*clients*)))))
+             (nerimux::*clients* (list conn)))
+        (setf (nerimux::client-conn-fd conn) 4242)
+        (expect (null (nerimux::%dispatch-ready-clients s nil)))
+        (expect (equal (list conn) nerimux::*clients*)))))
 
   ;; %dispatch-ready-clients drops a client whose stream yields EOF (a real closed
   ;; socket), removing it from *clients*.
@@ -47,13 +47,13 @@
     (with-isolated-hooks
       (with-fake-session (s)
         (with-test-listener (listener path (%test-socket-path "dispatch-helper") :backlog 4)
-          (let* ((client      (cl-tmux/net:connect-to path))
-                 (server-sock (cl-tmux/net:accept-connection listener))
-                 (cl-tmux::*clients* nil))
+          (let* ((client      (nerimux/net:connect-to path))
+                 (server-sock (nerimux/net:accept-connection listener))
+                 (nerimux::*clients* nil))
             (when server-sock
-              (let ((conn (cl-tmux::%add-client server-sock)))
+              (let ((conn (nerimux::%add-client server-sock)))
                 ;; Client half-closes: server-side read now sees EOF.
-                (cl-tmux/net:close-socket client)
-                (let ((ready (list (cl-tmux::client-conn-fd conn))))
-                  (expect (null (cl-tmux::%dispatch-ready-clients s ready)))
-                  (expect (null cl-tmux::*clients*)))))))))))
+                (nerimux/net:close-socket client)
+                (let ((ready (list (nerimux::client-conn-fd conn))))
+                  (expect (null (nerimux::%dispatch-ready-clients s ready)))
+                  (expect (null nerimux::*clients*)))))))))))

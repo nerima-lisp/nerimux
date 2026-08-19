@@ -1,27 +1,27 @@
-;;;; End-to-end smoke test: drive the *real* cl-tmux binary inside a PTY.
+;;;; End-to-end smoke test: drive the *real* nerimux binary inside a PTY.
 ;;;;
 ;;;; This is not part of the ASDF test-system (it needs a built binary and a
 ;;;; real /dev/ptmx).  Run it from the dev shell:
 ;;;;
 ;;;;   nix build .
 ;;;;   sbcl --no-sysinit --no-userinit --script t/e2e/e2e-smoke.lisp \
-;;;;         result/bin/cl-tmux
+;;;;         result/bin/nerimux
 ;;;;
-;;;; The test spawns cl-tmux on a pseudo-terminal, types `echo <marker>` at the
-;;;; keyboard, and verifies the marker appears in cl-tmux's *rendered* output —
+;;;; The test spawns nerimux on a pseudo-terminal, types `echo <marker>` at the
+;;;; keyboard, and verifies the marker appears in nerimux's *rendered* output —
 ;;;; proving the full pipeline: stdin → key forward → inner shell → PTY reader
 ;;;; thread → screen → renderer.  Then it sends the detach key (C-b d) and
 ;;;; verifies the process exits cleanly.
 
 (require :asdf)
 (push (truename ".") asdf:*central-registry*)
-(asdf:load-system :cl-tmux)
-(use-package :cl-tmux/pty)
+(asdf:load-system :nerimux)
+(use-package :nerimux/pty)
 
 ;;; ── Timing constants ─────────────────────────────────────────────────────────
 
 (defconstant +e2e-startup-timeout-seconds+ 8
-  "Maximum seconds to wait for cl-tmux and its inner shell to initialize before typing.")
+  "Maximum seconds to wait for nerimux and its inner shell to initialize before typing.")
 
 (defconstant +e2e-startup-quiet-seconds+ 0.5
   "Seconds of quiet PTY output after first render before typing the marker command.")
@@ -30,12 +30,12 @@
   "Maximum seconds to wait for the marker to appear in the rendered output.")
 
 (defconstant +e2e-detach-settle-seconds+  0.5
-  "Seconds to let cl-tmux process the detach key before cleaning up the PTY.")
+  "Seconds to let nerimux process the detach key before cleaning up the PTY.")
 
-(defconstant +e2e-poll-timeout-us+ cl-tmux/config:+poll-timeout-us+
+(defconstant +e2e-poll-timeout-us+ nerimux/config:+poll-timeout-us+
   "Select timeout in microseconds when polling the PTY for output.")
 
-(defconstant +e2e-read-buf-size+   cl-tmux/config:+pty-buf-size+
+(defconstant +e2e-read-buf-size+   nerimux/config:+pty-buf-size+
   "PTY read buffer size in bytes.")
 
 (defconstant +e2e-search-window-bytes+ (* 64 1024)
@@ -76,7 +76,7 @@
               (return t))))))))
 
 (defun %wait-for-startup-render (fd seconds acc)
-  "Poll FD until cl-tmux has rendered at least once and output has gone quiet.
+  "Poll FD until nerimux has rendered at least once and output has gone quiet.
    The integration smoke drives a saved-core wrapper, whose startup time varies
    enough that a fixed sleep can type before raw mode and the first pane are ready."
   (let ((deadline (+ (get-internal-real-time)
@@ -101,12 +101,12 @@
 
 (defun e2e (binary)
   (format t "~&[e2e] driving ~A~%" binary)
-  (setf cl-tmux/config:*default-shell* binary)
+  (setf nerimux/config:*default-shell* binary)
   (multiple-value-bind (fd pid) (forkpty-with-shell 24 80)
     (unwind-protect
          (let ((marker "E2E_PROOF_4242")
                (acc    (%make-accumulator)))
-           ;; Let cl-tmux and its inner shell start up.
+           ;; Let nerimux and its inner shell start up.
            (%wait-for-startup-render fd +e2e-startup-timeout-seconds+ acc)
            ;; Type a command at the (emulated) keyboard.
            (pty-write fd (format nil "echo ~A~%" marker))
@@ -117,12 +117,12 @@
                                           :initial-contents (list 2 (char-code #\d))))
              (sleep +e2e-detach-settle-seconds+)
              (if found
-                 (progn (format t "[e2e] PASS — marker rendered by cl-tmux~%")
+                 (progn (format t "[e2e] PASS — marker rendered by nerimux~%")
                         (sb-ext:exit :code 0))
                  (progn (format t "[e2e] FAIL — marker not found in rendered output~%")
                         (format t "[e2e] captured ~D bytes~%" (fill-pointer acc))
                         (sb-ext:exit :code 1)))))
       (pty-close fd pid))))
 
-(let ((binary (or (second sb-ext:*posix-argv*) "result/bin/cl-tmux")))
+(let ((binary (or (second sb-ext:*posix-argv*) "result/bin/nerimux")))
   (e2e binary))

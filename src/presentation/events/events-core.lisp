@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Event processing — core macros, mouse dispatch, overlay handler.
 
@@ -152,7 +152,7 @@
    (let ((p *prompt*))
      (cond
        ;; vi mode: ESC enters normal mode (does NOT cancel the prompt).
-       ((and p (string-equal (cl-tmux/options:get-option "status-keys" "emacs") "vi")
+       ((and p (string-equal (nerimux/options:get-option "status-keys" "emacs") "vi")
              (not (prompt-vi-normal-p p)))
         (setf (prompt-vi-normal-p p) t))
        ;; emacs mode or already in vi-normal: cancel.

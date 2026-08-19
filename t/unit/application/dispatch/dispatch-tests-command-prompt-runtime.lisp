@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Dispatch command-prompt and command-line runtime tests.
 
@@ -10,9 +10,9 @@
   ;; the classic `command-prompt -p name: "new-window -n '%1'"` idiom.
   (it "substitute-percent-replaces-single-percent-args"
     (expect (string= "new-window -n 'shell'"
-                     (cl-tmux::%substitute-percent "new-window -n '%1'" '("shell"))))
+                     (nerimux::%substitute-percent "new-window -n '%1'" '("shell"))))
     (expect (string= "swap a b"
-                     (cl-tmux::%substitute-percent "swap %1 %2" '("a" "b")))))
+                     (nerimux::%substitute-percent "swap %1 %2" '("a" "b")))))
 
   ;; %% is a literal percent; a missing arg expands to empty; %1 does not match
   ;; inside %10; a non-arg %x is left verbatim.
@@ -23,7 +23,7 @@
                  ("%z"         ("a")        "%z"        "non-digit %x is left verbatim")))
       (destructuring-bind (template args expected desc) c
         (declare (ignore desc))
-        (expect (string= expected (cl-tmux::%substitute-percent template args))))))
+        (expect (string= expected (nerimux::%substitute-percent template args))))))
 
   ;;; ── :command-prompt dispatch ─────────────────────────────────────────────────
 
@@ -31,7 +31,7 @@
   (it "dispatch-command-prompt-opens-prompt"
     (with-fake-session (s)
       (let ((*prompt* nil))
-        (cl-tmux::dispatch-command s :command-prompt nil)
+        (nerimux::dispatch-command s :command-prompt nil)
         (expect (prompt-active-p))
         (expect (string= ": " (prompt-label *prompt*))))))
 
@@ -39,7 +39,7 @@
   (it "dispatch-command-prompt-empty-input-is-noop"
     (with-fake-session (s)
       (let ((*prompt* nil))
-        (cl-tmux::dispatch-command s :command-prompt nil)
+        (nerimux::dispatch-command s :command-prompt nil)
         (expect (prompt-active-p))
         (finishes (funcall (prompt-on-submit *prompt*) "")))))
 
@@ -47,7 +47,7 @@
   (it "dispatch-command-prompt-unknown-command-shows-overlay"
     (with-fake-session (s)
       (let ((*prompt* nil) (*overlay* nil))
-        (cl-tmux::dispatch-command s :command-prompt nil)
+        (nerimux::dispatch-command s :command-prompt nil)
         (funcall (prompt-on-submit *prompt*) "no-such-command-xyz")
         (assert-overlay-contains "unknown command" *overlay*
                                  "unknown command"))))
@@ -56,7 +56,7 @@
   (it "dispatch-command-prompt-known-command-executes"
     (with-fake-session (s :nwindows 1)
       (let ((*prompt* nil) (*overlay* nil))
-        (cl-tmux::dispatch-command s :command-prompt nil)
+        (nerimux::dispatch-command s :command-prompt nil)
         (funcall (prompt-on-submit *prompt*) "list-windows")
         (assert-overlay-active "list-windows via command-prompt must open an overlay"))))
 
@@ -67,7 +67,7 @@
   (it "command-prompt-display-message-expands-format"
     (with-fake-session (s)
       (let ((*prompt* nil) (*overlay* nil))
-        (cl-tmux::dispatch-command s :command-prompt nil)
+        (nerimux::dispatch-command s :command-prompt nil)
         (funcall (prompt-on-submit *prompt*) "display-message #{session_name}")
         (assert-overlay-contains "0" *overlay*
                                  "command-prompt display-message")
@@ -78,14 +78,14 @@
   (it "run-command-line-no-arg-command-falls-through"
     (with-fake-session (s :nwindows 2)
       (let ((*overlay* nil))
-        (cl-tmux::%run-command-line s "next-window")
+        (nerimux::%run-command-line s "next-window")
         (expect (eq (second (session-windows s)) (session-active-window s))))))
 
   ;; display-message with multiple unquoted args joins them with spaces.
   (it "run-command-line-display-message-joins-args"
     (with-fake-session (s)
       (let ((*overlay* nil))
-        (cl-tmux::%run-command-line s "display-message hello world")
+        (nerimux::%run-command-line s "display-message hello world")
         (assert-overlay-contains "hello world" *overlay*
                                  "display-message hello world"))))
 
@@ -94,7 +94,7 @@
   (it "display-message-l-flag-shows-literal-format"
     (with-fake-session (s)
       (let ((*overlay* nil))
-        (cl-tmux::%run-command-line s "display-message -l #{session_name}")
+        (nerimux::%run-command-line s "display-message -l #{session_name}")
         (assert-overlay-contains "#{session_name}" *overlay*
                                  "display-message -l")
         (assert-overlay-not-contains "0" *overlay*
@@ -111,24 +111,24 @@
                          "display-message -p #{session_name}"
                          "display-message -v #{session_name}"))
         (let ((*overlay* nil)
-              (cl-tmux::*message-log* nil))
-          (cl-tmux::%run-command-line s command)
+              (nerimux::*message-log* nil))
+          (nerimux::%run-command-line s command)
           (assert-overlay-contains "display-message: unsupported argument"
                                    *overlay*
                                    command)
-          (expect (null cl-tmux::*message-log*))))))
+          (expect (null nerimux::*message-log*))))))
 
   ;; display-message -F fmt uses FMT as the template instead of the positional args.
   (it "display-message-F-uses-format-flag"
     (with-fake-session (s)
       (let ((*overlay* nil))
-        (cl-tmux::%run-command-line s "display-message -F #{session_name}")
-        (expect (and *overlay* (search (cl-tmux::session-name s) *overlay*))))))
+        (nerimux::%run-command-line s "display-message -F #{session_name}")
+        (expect (and *overlay* (search (nerimux::session-name s) *overlay*))))))
 
   ;; %run-command-line with blank input does not signal an error.
   (it "run-command-line-empty-is-noop"
     (with-fake-session (s)
-      (finishes (cl-tmux::%run-command-line s "   "))))
+      (finishes (nerimux::%run-command-line s "   "))))
 
   ;;; ── %run-command-line semicolon-separated command chaining ───────────────────
   ;;;
@@ -142,7 +142,7 @@
   (it "run-command-line-semicolon-runs-both-commands"
     (with-fake-session (s :nwindows 2)
       (let ((*overlay* nil))
-        (cl-tmux::%run-command-line s "next-window ; display-message done")
+        (nerimux::%run-command-line s "next-window ; display-message done")
         (expect (eq (second (session-windows s)) (session-active-window s)))
         (assert-overlay-contains "done" *overlay*
                                  "run-command-line-semicolon-runs-both-commands"))))
@@ -152,7 +152,7 @@
   (it "run-command-line-semicolon-chain-runs-three-commands"
     (with-fake-session (s :nwindows 1)
       (let ((*overlay* nil))
-        (cl-tmux::%run-command-line
+        (nerimux::%run-command-line
          s "rename-window one ; rename-window two ; display-message chained-ok")
         (expect (string= "two" (window-name (session-active-window s))))
         (assert-overlay-contains "chained-ok" *overlay*

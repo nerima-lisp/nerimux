@@ -1,13 +1,13 @@
-(in-package #:cl-tmux/pty)
+(in-package #:nerimux/pty)
 
 ;;;; Platform constants for the PTY subsystem.
 ;;;;
 ;;;; This file is pure data: no side effects, no I/O, no process operations.
 ;;;;
-;;;; It used to declare cl-tmux's own C surface as well — a select(2) defcfun,
+;;;; It used to declare nerimux's own C surface as well — a select(2) defcfun,
 ;;;; a struct winsize, the TIOCGWINSZ/TIOCSWINSZ request numbers, and hand-rolled
 ;;;; FD_ZERO/FD_SET/FD_ISSET bit twiddling over a foreign :uint32 array. All of
-;;;; that is gone, and with it cl-tmux's last use of cffi:
+;;;; that is gone, and with it nerimux's last use of cffi:
 ;;;;
 ;;;;   * select(2)          -> process-kit:select-fds / wait-for-input, which
 ;;;;                           additionally retries EINTR against a fixed

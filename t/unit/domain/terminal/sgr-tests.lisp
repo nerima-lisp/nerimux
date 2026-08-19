@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; SGR tests (src/terminal/sgr.lisp).
 ;;;; Tests: sgr suite.
@@ -62,23 +62,23 @@
     (with-screen (s 10 2)
       (feed s (esc "[31;1mX"))
       (feed s (esc "[0mY"))
-      (check-cell s 1 0 :fg cl-tmux/terminal/types:+default-color+ :bg cl-tmux/terminal/types:+default-color+ :attrs 0)))
+      (check-cell s 1 0 :fg nerimux/terminal/types:+default-color+ :bg nerimux/terminal/types:+default-color+ :attrs 0)))
 
   ;; SGR 39 resets the foreground colour to the default (7) without touching bg or attrs.
   (it "sgr-default-fg-39"
     (with-screen (s 10 2)
       (feed s (esc "[31m"))    ; fg → 1 (red)
       (feed s (esc "[39mX"))   ; fg → default sentinel
-      (check-sgr-state s :fg cl-tmux/terminal/types:+default-color+ :bg cl-tmux/terminal/types:+default-color+ :attrs 0)
-      (expect (= cl-tmux/terminal/types:+default-color+ (fg-at s 0 0)))))
+      (check-sgr-state s :fg nerimux/terminal/types:+default-color+ :bg nerimux/terminal/types:+default-color+ :attrs 0)
+      (expect (= nerimux/terminal/types:+default-color+ (fg-at s 0 0)))))
 
   ;; SGR 49 resets the background colour to the default (0) without touching fg or attrs.
   (it "sgr-default-bg-49"
     (with-screen (s 10 2)
       (feed s (esc "[42m"))    ; bg → 2 (green)
       (feed s (esc "[49mX"))   ; bg → default sentinel
-      (check-sgr-state s :fg cl-tmux/terminal/types:+default-color+ :bg cl-tmux/terminal/types:+default-color+ :attrs 0)
-      (expect (= cl-tmux/terminal/types:+default-color+ (bg-at s 0 0)))))
+      (check-sgr-state s :fg nerimux/terminal/types:+default-color+ :bg nerimux/terminal/types:+default-color+ :attrs 0)
+      (expect (= nerimux/terminal/types:+default-color+ (bg-at s 0 0)))))
 
   ;; SGR 22 clears both the bold bit (0) and the dim bit (1).
   (it "sgr-bold-dim-off-22"
@@ -117,25 +117,25 @@
       (expect (logbitp 0 (attrs-at s 1 0)))))
 
   ;; apply-sgr 38;5;N/48;5;N sets fg/bg to the 256-colour palette index N.
-  (it-each ((38 cl-tmux/terminal/types:screen-cur-fg 200 "256-color fg=200")
-            (48 cl-tmux/terminal/types:screen-cur-bg  42 "256-color bg=42"))
+  (it-each ((38 nerimux/terminal/types:screen-cur-fg 200 "256-color fg=200")
+            (48 nerimux/terminal/types:screen-cur-bg  42 "256-color bg=42"))
       "sgr-256color-apply-sgr: ~*~*~*~A"
       (code accessor n desc)
     (declare (ignore desc))
     (with-screen (s 10 2)
-      (cl-tmux/terminal/sgr:apply-sgr s (list code 5 n))
+      (nerimux/terminal/sgr:apply-sgr s (list code 5 n))
       (expect (= n (funcall accessor s)))))
 
   ;; apply-sgr 38;2;R;G;B and 48;2;R;G;B encode true-colour fg/bg (bit 24 = truecolor flag).
-  (it-each (((38 2 255 128 0) cl-tmux/terminal/types:screen-cur-fg
+  (it-each (((38 2 255 128 0) nerimux/terminal/types:screen-cur-fg
              #.(logior #x1000000 (ash 255 16) (ash 128 8) 0) "truecolor fg 255;128;0")
-            ((48 2 0 128 255) cl-tmux/terminal/types:screen-cur-bg
+            ((48 2 0 128 255) nerimux/terminal/types:screen-cur-bg
              #.(logior #x1000000 (ash 0 16) (ash 128 8) 255) "truecolor bg 0;128;255"))
       "sgr-truecolor-apply-sgr: ~*~*~*~A"
       (params accessor expected desc)
     (declare (ignore desc))
     (with-screen (s 10 2)
-      (cl-tmux/terminal/sgr:apply-sgr s params)
+      (nerimux/terminal/sgr:apply-sgr s params)
       (expect (= expected (funcall accessor s)))))
 
   ;; ESC[38;5;N m and ESC[48;5;N m set fg/bg 256-colour indices via the terminal emulator.
@@ -151,8 +151,8 @@
   ;; SGR 38;2;0;0;0 encodes true-black: bit 24 set, R=G=B=0.
   (it "sgr-truecolor-black"
     (with-screen (s 10 2)
-      (cl-tmux/terminal/sgr:apply-sgr s '(38 2 0 0 0))
-      (expect (= #x1000000 (cl-tmux/terminal/types:screen-cur-fg s)))))
+      (nerimux/terminal/sgr:apply-sgr s '(38 2 0 0 0))
+      (expect (= #x1000000 (nerimux/terminal/types:screen-cur-fg s)))))
 
   ;;; ── colon-delimited (ISO 8613-6) SGR ─────────────────────────────────────────
   ;;;
@@ -164,9 +164,9 @@
   ;; apply-sgr with a colon group (a list) sets the true-colour encoding.
   (it "sgr-colon-group-direct-truecolor"
     (with-screen (s 10 2)
-      (cl-tmux/terminal/sgr:apply-sgr s '((38 2 255 128 0)))
+      (nerimux/terminal/sgr:apply-sgr s '((38 2 255 128 0)))
       (expect (= (logior #x1000000 (ash 255 16) (ash 128 8) 0)
-             (cl-tmux/terminal/types:screen-cur-fg s)))))
+             (nerimux/terminal/types:screen-cur-fg s)))))
 
   ;; ESC[38:2:255:128:0m (ISO 8613-6 colon true-colour) sets fg like the ; form.
   (it "sgr-colon-truecolor-fg-via-emulator"
@@ -209,26 +209,26 @@
   ;; A (4 3) colon group (undercurl) applies underline (4) — same pen attrs as SGR 4.
   (it "sgr-colon-undercurl-applies-underline"
     (with-screen (s 10 2)
-      (cl-tmux/terminal/sgr:apply-sgr s '(4))
-      (let ((plain-underline (cl-tmux/terminal/types:screen-cur-attrs s)))
-        (cl-tmux/terminal/sgr:apply-sgr s '(0))           ; reset pen
-        (cl-tmux/terminal/sgr:apply-sgr s '((4 3)))       ; undercurl colon group
-        (expect (= plain-underline (cl-tmux/terminal/types:screen-cur-attrs s))))))
+      (nerimux/terminal/sgr:apply-sgr s '(4))
+      (let ((plain-underline (nerimux/terminal/types:screen-cur-attrs s)))
+        (nerimux/terminal/sgr:apply-sgr s '(0))           ; reset pen
+        (nerimux/terminal/sgr:apply-sgr s '((4 3)))       ; undercurl colon group
+        (expect (= plain-underline (nerimux/terminal/types:screen-cur-attrs s))))))
 
   ;;; ── %pen-to-sgr-params (inverse SGR, for DECRQSS) ────────────────────────────
 
   ;; %pen-to-sgr-params reconstructs the SGR parameter string from fg/bg/attrs/unicode.
-  (it-each ((#.cl-tmux/terminal/types:+default-color+ #.cl-tmux/terminal/types:+default-color+ 0 0
+  (it-each ((#.nerimux/terminal/types:+default-color+ #.nerimux/terminal/types:+default-color+ 0 0
              "0"          "default pen")
-            (1 #.cl-tmux/terminal/types:+default-color+ 1 0  "0;1;31"       "bold red fg (default bg)")
-            (#.(logior #x1000000 (ash 255 16) (ash 128 8) 0) #.cl-tmux/terminal/types:+default-color+ 0 0
+            (1 #.nerimux/terminal/types:+default-color+ 1 0  "0;1;31"       "bold red fg (default bg)")
+            (#.(logior #x1000000 (ash 255 16) (ash 128 8) 0) #.nerimux/terminal/types:+default-color+ 0 0
              "0;38;2;255;128;0"        "truecolor fg (default bg)")
-            (#.cl-tmux/terminal/types:+default-color+ 12 0 0 "0;104"        "bright bg 12 (default fg)"))
+            (#.nerimux/terminal/types:+default-color+ 12 0 0 "0;104"        "bright bg 12 (default fg)"))
       "pen-to-sgr-params: ~*~*~*~*~*~A"
       (fg bg attrs unicode expected desc)
     (declare (ignore desc))
     (expect (string= expected
-                 (cl-tmux/terminal/sgr:%pen-to-sgr-params fg bg attrs unicode))))
+                 (nerimux/terminal/sgr:%pen-to-sgr-params fg bg attrs unicode))))
 
   ;;; ── Coverage gap: %pen-to-sgr-params attrs2 (double-underline / overline) ────
   ;;;
@@ -238,20 +238,20 @@
 
   ;; %pen-to-sgr-params emits ;21 for double-underline and ;53 for overline when
   ;; set in ATTRS2, and both together when both bits are set.
-  (it-each ((#.cl-tmux/terminal/types:+attr2-double-underline+
+  (it-each ((#.nerimux/terminal/types:+attr2-double-underline+
              "0;21" "double-underline bit alone -> ;21")
-            (#.cl-tmux/terminal/types:+attr2-overline+
+            (#.nerimux/terminal/types:+attr2-overline+
              "0;53" "overline bit alone -> ;53")
-            (#.(logior cl-tmux/terminal/types:+attr2-double-underline+
-                       cl-tmux/terminal/types:+attr2-overline+)
+            (#.(logior nerimux/terminal/types:+attr2-double-underline+
+                       nerimux/terminal/types:+attr2-overline+)
              "0;21;53" "both bits -> ;21;53 in declaration order"))
       "pen-to-sgr-params-attrs2: ~*~*~A"
       (attrs2 expected desc)
     (declare (ignore desc))
     (expect (string= expected
-                 (cl-tmux/terminal/sgr:%pen-to-sgr-params
-                  cl-tmux/terminal/types:+default-color+
-                  cl-tmux/terminal/types:+default-color+
+                 (nerimux/terminal/sgr:%pen-to-sgr-params
+                  nerimux/terminal/types:+default-color+
+                  nerimux/terminal/types:+default-color+
                   0 attrs2))))
 
   ;; SGR 0 after setting italic, conceal, and strikethrough zeroes all attr bits.
@@ -259,7 +259,7 @@
     (with-screen (s 10 2)
       (feed s (esc "[3;8;9mX"))    ; italic + conceal + strikethrough on
       (feed s (esc "[0mY"))        ; SGR reset
-      (check-cell s 1 0 :fg cl-tmux/terminal/types:+default-color+ :bg cl-tmux/terminal/types:+default-color+ :attrs 0)))
+      (check-cell s 1 0 :fg nerimux/terminal/types:+default-color+ :bg nerimux/terminal/types:+default-color+ :attrs 0)))
 
   ;; SGR 22 (bold+dim off) must NOT clear the italic bit (5).
   (it "sgr-22-does-not-clear-italic"

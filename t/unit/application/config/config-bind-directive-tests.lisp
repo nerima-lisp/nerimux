@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; config directive tests — bind, unbind, notes, brace blocks, and sequences
 
@@ -13,7 +13,7 @@
       (assert-config-directive-applied '("bind" "X" "display-message" "hello")
                                        "multi-token bind")
       (expect (equal '("display-message" "hello") (lookup-key-binding #\X)))
-      (expect (search "display-message hello" (cl-tmux/config:describe-key-bindings)))))
+      (expect (search "display-message hello" (nerimux/config:describe-key-bindings)))))
 
   ;; 'bind z new-window' still binds the key to the :new-window keyword (existing
   ;; single-command behaviour is preserved).
@@ -56,19 +56,19 @@
   (it "apply-directive-unbind-a-T-clears-named-table"
     (with-isolated-config
       (apply-config-directive '("bind" "-T" "mytable" "x" "new-window"))
-      (expect (not (null (cl-tmux/config:key-table-lookup "mytable" #\x))))
+      (expect (not (null (nerimux/config:key-table-lookup "mytable" #\x))))
       (assert-config-directive-applied '("unbind" "-a" "-T" "mytable")
                                        "unbind -a -T mytable")
-      (expect (null (cl-tmux/config:key-table-lookup "mytable" #\x)))))
+      (expect (null (nerimux/config:key-table-lookup "mytable" #\x)))))
 
   ;; unbind -a -n clears the root (no-prefix) key table.
   (it "apply-directive-unbind-a-n-clears-root-table"
     (with-isolated-config
       (apply-config-directive '("bind" "-n" "F1" "new-window"))
-      (expect (not (null (cl-tmux/config:key-table-lookup "root" "F1"))))
+      (expect (not (null (nerimux/config:key-table-lookup "root" "F1"))))
       (assert-config-directive-applied '("unbind" "-a" "-n")
                                        "unbind -a -n")
-      (expect (null (cl-tmux/config:key-table-lookup "root" "F1")))))
+      (expect (null (nerimux/config:key-table-lookup "root" "F1")))))
 
   ;;; multi-character key tokens
 
@@ -94,19 +94,19 @@
   (it "bind-note-flag-combined-with-n-and-r"
     (with-isolated-config
       (expect (= 1 (load-config-from-string "bind -n -N \"root note\" y next-window")))
-      (expect (eq :next-window (cl-tmux/config:key-table-command
-                                (cl-tmux/config:key-table-lookup "root" #\y))))
+      (expect (eq :next-window (nerimux/config:key-table-command
+                                (nerimux/config:key-table-lookup "root" #\y))))
       (expect (= 1 (load-config-from-string "bind -r -N \"repeat note\" z next-window")))
-      (let ((entry (cl-tmux/config:key-table-lookup "prefix" #\z)))
-        (expect (eq :next-window (cl-tmux/config:key-table-command entry)))
-        (expect (cl-tmux/config:key-table-repeatable-p entry)))))
+      (let ((entry (nerimux/config:key-table-lookup "prefix" #\z)))
+        (expect (eq :next-window (nerimux/config:key-table-command entry)))
+        (expect (nerimux/config:key-table-repeatable-p entry)))))
 
   ;; bind -N "note" key { cmd1 ; cmd2 } combines a note with a brace block.
   (it "bind-note-flag-multi-command-block"
     (with-isolated-config
       (load-config-from-string "bind -N \"reload\" R { split-window ; next-window }")
-      (let* ((entry (cl-tmux/config:key-table-lookup "prefix" #\R))
-             (cmd   (cl-tmux/config:key-table-command entry)))
+      (let* ((entry (nerimux/config:key-table-lookup "prefix" #\R))
+             (cmd   (nerimux/config:key-table-command entry)))
         (expect (and (consp cmd) (eq :sequence (first cmd))))
         (expect (= 2 (length (rest cmd)))))))
 
@@ -114,20 +114,20 @@
   (it "bind-note-flag-note-storage"
     (with-isolated-config
       (load-config-from-string "bind -N \"Go to next window\" x next-window")
-      (let ((entry (cl-tmux/config:key-table-lookup "prefix" #\x)))
-        (expect (eq :next-window (cl-tmux/config:key-table-command entry)))
-        (expect (string= "Go to next window" (cl-tmux/config:key-table-note entry)))))
+      (let ((entry (nerimux/config:key-table-lookup "prefix" #\x)))
+        (expect (eq :next-window (nerimux/config:key-table-command entry)))
+        (expect (string= "Go to next window" (nerimux/config:key-table-note entry)))))
     (with-isolated-config
       (load-config-from-string "bind y next-window")
-      (expect (null (cl-tmux/config:key-table-note
-                     (cl-tmux/config:key-table-lookup "prefix" #\y))))))
+      (expect (null (nerimux/config:key-table-note
+                     (nerimux/config:key-table-lookup "prefix" #\y))))))
 
   ;; list-keys / describe-key-bindings renders the -N note in -N "..." form for a
   ;; noted binding, and emits no -N marker for un-noted bindings.
   (it "describe-key-bindings-surfaces-note"
     (with-isolated-config
       (load-config-from-string "bind -N \"reload config\" R source-file ~/.tmux.conf")
-      (let ((output (cl-tmux/config:describe-key-bindings-for-table "prefix")))
+      (let ((output (nerimux/config:describe-key-bindings-for-table "prefix")))
         (expect (search "reload config" output))
         (expect (search "-N \"reload config\"" output)))))
 
@@ -137,10 +137,10 @@
   ;; non-block token list unchanged.
   (it "strip-brace-block-unwraps-braces"
     (expect (equal '("a" "b")
-                   (cl-tmux/config::%strip-brace-block '("{" "a" "b" "}"))))
+                   (nerimux/config::%strip-brace-block '("{" "a" "b" "}"))))
     (expect (equal '("a" "b")
-                   (cl-tmux/config::%strip-brace-block '("a" "b"))))
-    (expect (null (cl-tmux/config::%strip-brace-block '("{" "}")))))
+                   (nerimux/config::%strip-brace-block '("a" "b"))))
+    (expect (null (nerimux/config::%strip-brace-block '("{" "}")))))
 
   ;; %line-brace-delta nets '{' against '}' and ignores braces inside quotes.
   (it "line-brace-delta-counts-unquoted-braces"
@@ -150,7 +150,7 @@
                  (0  "display \"a { b }\""         "braces inside a double-quoted string are ignored")))
       (destructuring-bind (expected input desc) c
         (declare (ignore desc))
-        (expect (= expected (cl-tmux/config::%line-brace-delta input))))))
+        (expect (= expected (nerimux/config::%line-brace-delta input))))))
 
   ;; bind r { next-window } binds the single inner command as a keyword.
   (it "bind-single-line-brace-block-single-command"
@@ -163,8 +163,8 @@
   (it "bind-single-line-brace-block-multi-command"
     (with-isolated-config
       (load-config-from-string "bind r { split-window ; next-window }")
-      (let* ((entry (cl-tmux/config:key-table-lookup "prefix" #\r))
-             (cmd   (cl-tmux/config:key-table-command entry)))
+      (let* ((entry (nerimux/config:key-table-lookup "prefix" #\r))
+             (cmd   (nerimux/config:key-table-command entry)))
         (expect (consp cmd))
         (expect (eq :sequence (first cmd)))
         (expect (= 2 (length (rest cmd)))))))
@@ -182,8 +182,8 @@
       (let ((applied (load-config-from-string
                       (format nil "bind r {~%  split-window~%  next-window~%}~%"))))
         (expect (= 1 applied))
-        (let* ((entry (cl-tmux/config:key-table-lookup "prefix" #\r))
-               (cmd   (cl-tmux/config:key-table-command entry)))
+        (let* ((entry (nerimux/config:key-table-lookup "prefix" #\r))
+               (cmd   (nerimux/config:key-table-command entry)))
           (expect (and (consp cmd) (eq :sequence (first cmd))))
           (expect (= 2 (length (rest cmd))))))))
 
@@ -193,30 +193,30 @@
   ;; sequences and applies each segment in order (tmux command-sequence parity).
   (it "apply-config-line-splits-top-level-semicolons"
     (with-isolated-options ("status" "on" "status-style" "")
-      (expect (eq t (cl-tmux/config::apply-config-line
+      (expect (eq t (nerimux/config::apply-config-line
                      "set-option -g status off ; set-option -g status-style bg=red")))
-      (expect (string= "off" (cl-tmux/options:get-option "status")))
-      (expect (string= "bg=red" (cl-tmux/options:get-option "status-style")))))
+      (expect (string= "off" (nerimux/options:get-option "status")))
+      (expect (string= "bg=red" (nerimux/options:get-option "status-style")))))
 
   ;; apply-config-line discards empty segments produced by doubled/trailing `;'.
   ;; The separators are whitespace-delimited `;' tokens (an adjacent `;;' is one
   ;; token the tokenizer does not split -- a known limitation).
   (it "apply-config-line-ignores-empty-semicolon-segments"
     (with-isolated-options ("status" "on" "status-style" "")
-      (expect (eq t (cl-tmux/config::apply-config-line
+      (expect (eq t (nerimux/config::apply-config-line
                      "set-option -g status off ; ; set-option -g status-style bg=red ;")))
-      (expect (string= "off" (cl-tmux/options:get-option "status")))
-      (expect (string= "bg=red" (cl-tmux/options:get-option "status-style")))))
+      (expect (string= "off" (nerimux/options:get-option "status")))
+      (expect (string= "bg=red" (nerimux/options:get-option "status-style")))))
 
   ;; Regression: `bind r source-file ... \; display ...' keeps its `\;'-joined body
   ;; as one bind sequence.  apply-config-line must NOT pre-split a bind line -- bind
   ;; owns its `;' tokens and invokes %split-on-semicolons itself.
   (it "apply-config-line-bind-escaped-semicolon-stays-a-sequence"
     (with-isolated-config
-      (expect (eq t (cl-tmux/config::apply-config-line
+      (expect (eq t (nerimux/config::apply-config-line
                      "bind r source-file ~/.tmux.conf \\; display-message Reloaded")))
-      (let* ((entry (cl-tmux/config:key-table-lookup "prefix" #\r))
-             (cmd   (cl-tmux/config:key-table-command entry)))
+      (let* ((entry (nerimux/config:key-table-lookup "prefix" #\r))
+             (cmd   (nerimux/config:key-table-command entry)))
         (expect (and (consp cmd) (eq :sequence (first cmd))))
         (expect (= 2 (length (rest cmd)))))))
 

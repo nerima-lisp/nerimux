@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/model)
+(in-package #:nerimux/model)
 
 ;;; ── Session overlay environment ──────────────────────────────────────────────
 ;;;
@@ -112,6 +112,6 @@
 
 (defvar *global-hidden-environment-names* nil
   "Names marked hidden via set-environment -hg (tmux ENVIRON_HIDDEN on the
-   global environment).  cl-tmux maps the global environment onto the real
+   global environment).  nerimux maps the global environment onto the real
    process environment, so hidden globals are tracked here and stripped from
    child-process environments and plain show-environment listings.")

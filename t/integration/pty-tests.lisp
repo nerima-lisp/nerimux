@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; PTY integration tests.  These spawn a real shell over a pseudo-terminal
 ;;;; and exercise the spawn/write/read/select pipeline end to end.
@@ -7,7 +7,7 @@
 ;;;; When allocation fails we (skip) rather than fail, so the same suite runs
 ;;;; both in `nix develop` (real PTY) and `nix flake check` (sandboxed).
 ;;;;
-;;;; pty-available-p is imported from cl-tmux/pty; no local shadow needed.
+;;;; pty-available-p is imported from nerimux/pty; no local shadow needed.
 
 (defun drain-pty (fd &key (deadline-seconds 3.0) (stop-marker nil) (quiet-windows 1))
   "Read from FD until STOP-MARKER appears in the decoded output, DEADLINE-SECONDS
@@ -44,7 +44,7 @@
     (unless (pty-available-p)
       (skip "no PTY available (sandboxed environment)"))
     (with-pty-shell (fd pid)
-      (let ((marker "CLTMUX_MARKER_42"))
+      (let ((marker "NERIMUX_MARKER_42"))
         ;; Give the shell a moment to start, then send a command.
         (sleep 0.2)
         (pty-write fd (format nil "echo ~A~%" marker))
@@ -106,7 +106,7 @@
     (with-pty-shell (fd pid)
       (sleep 0.2)
       (sb-posix:kill pid 9)              ; SIGKILL — untrappable
-      (multiple-value-bind (code kind) (cl-tmux/pty:pty-child-exit-status fd)
+      (multiple-value-bind (code kind) (nerimux/pty:pty-child-exit-status fd)
         (expect (eq kind :signaled))
         (expect (= code 9)))))
 
@@ -142,29 +142,29 @@
   ;; pty-close must never kill(-1)/kill(0): a non-positive pid and a negative
   ;; master fd are both no-ops, so the call simply finishes without signalling.
   (it "pty-close-ignores-non-positive-pid"
-    (finishes (cl-tmux/pty:pty-close -1 -1))
-    (finishes (cl-tmux/pty:pty-close -1 0)))
+    (finishes (nerimux/pty:pty-close -1 -1))
+    (finishes (nerimux/pty:pty-close -1 0)))
 
   ;; terminal-size returns rows/cols clamped to the sane 1..+max-sane-*+ range.
   ;; In the sandbox ioctl fails and it falls back to 24x80 — still in range.
   (it "terminal-size-returns-sane-clamped-geometry"
-    (multiple-value-bind (rows cols) (cl-tmux/pty:terminal-size)
-      (expect (<= 1 rows cl-tmux/pty::+max-sane-rows+))
-      (expect (<= 1 cols cl-tmux/pty::+max-sane-cols+))))
+    (multiple-value-bind (rows cols) (nerimux/pty:terminal-size)
+      (expect (<= 1 rows nerimux/pty::+max-sane-rows+))
+      (expect (<= 1 cols nerimux/pty::+max-sane-cols+))))
 
   ;; The fallback 24x80 values used when ioctl fails are themselves sane.
   (it "terminal-size-fallback-values-are-sane"
-    (expect (<= 1 24 cl-tmux/pty::+max-sane-rows+))
-    (expect (<= 1 80 cl-tmux/pty::+max-sane-cols+)))
+    (expect (<= 1 24 nerimux/pty::+max-sane-rows+))
+    (expect (<= 1 80 nerimux/pty::+max-sane-cols+)))
 
   ;; +max-sane-rows+ and +max-sane-cols+ are positive and at least 80/24.
   (it "max-sane-bounds-are-reasonable"
-    (expect (>= cl-tmux/pty::+max-sane-rows+ 24))
-    (expect (>= cl-tmux/pty::+max-sane-cols+ 80)))
+    (expect (>= nerimux/pty::+max-sane-rows+ 24))
+    (expect (>= nerimux/pty::+max-sane-cols+ 80)))
 
   ;;; ── set-pty-size argument order ──────────────────────────────────────────────
   ;;;
-  ;;; cl-tmux's set-pty-size is (MASTER-FD ROWS COLS); cl-tty-kit's
+  ;;; nerimux's set-pty-size is (MASTER-FD ROWS COLS); cl-tty-kit's
   ;;; set-terminal-size is (COLUMNS ROWS &optional FD). The adapter must both
   ;;; transpose rows/cols AND move the fd. A round-trip on a DELIBERATELY
   ;;; NON-SQUARE size is the only thing that catches an inversion — 24x24 would
@@ -182,41 +182,41 @@
         (unwind-protect
              (progn
                ;; rows=40, cols=123 — distinct, and neither matches the spawn size.
-               (cl-tmux/pty:set-pty-size master 40 123)
+               (nerimux/pty:set-pty-size master 40 123)
                ;; cl-tty-kit:terminal-size returns (values COLUMNS ROWS).
                (multiple-value-bind (cols rows) (cl-tty-kit:terminal-size master)
                  (expect (eql 123 cols))
                  (expect (eql 40 rows))))
-          (cl-tmux/pty:pty-close master pid)))))
+          (nerimux/pty:pty-close master pid)))))
 
-  ;; cl-tmux/pty:terminal-size transposes cl-tty-kit's (COLUMNS ROWS) back into
-  ;; cl-tmux's (ROWS COLS) contract. Guarded by the sanity bounds, so an
+  ;; nerimux/pty:terminal-size transposes cl-tty-kit's (COLUMNS ROWS) back into
+  ;; nerimux's (ROWS COLS) contract. Guarded by the sanity bounds, so an
   ;; unavailable size falls back to 24x80 rather than reporting a transposed one.
   (it "terminal-size-returns-rows-first"
-    (multiple-value-bind (rows cols) (cl-tmux/pty:terminal-size)
+    (multiple-value-bind (rows cols) (nerimux/pty:terminal-size)
       (expect (integerp rows))
       (expect (integerp cols))
-      (expect (<= 1 rows cl-tmux/pty::+max-sane-rows+))
-      (expect (<= 1 cols cl-tmux/pty::+max-sane-cols+))))
+      (expect (<= 1 rows nerimux/pty::+max-sane-rows+))
+      (expect (<= 1 cols nerimux/pty::+max-sane-cols+))))
 
   ;; select-fds short-circuits on an empty fd list regardless of timeout,
   ;; returning nil without ever calling select(2).
   (it "select-fds-empty-list-returns-nil"
-    (expect (null (cl-tmux/pty:select-fds '() 0)))
-    (expect (null (cl-tmux/pty:select-fds '() 100000)))
-    (expect (null (cl-tmux/pty:select-fds '() -1))))
+    (expect (null (nerimux/pty:select-fds '() 0)))
+    (expect (null (nerimux/pty:select-fds '() 100000)))
+    (expect (null (nerimux/pty:select-fds '() -1))))
 
   ;; pty-write's etypecase accepts only strings and octet vectors; any other
   ;; type signals an error before any fd write is attempted.
   (it "pty-write-rejects-bad-type"
-    (signals error (cl-tmux/pty:pty-write -1 42))
-    (signals error (cl-tmux/pty:pty-write -1 '(1 2 3))))
+    (signals error (nerimux/pty:pty-write -1 42))
+    (signals error (nerimux/pty:pty-write -1 '(1 2 3))))
 
   ;; An empty octet vector is guarded by (plusp len): no write(2) is issued,
   ;; so writing to a bogus fd -1 finishes without error.
   (it "pty-write-empty-is-noop"
     (let ((empty (make-array 0 :element-type '(unsigned-byte 8))))
-      (finishes (cl-tmux/pty:pty-write -1 empty))))
+      (finishes (nerimux/pty:pty-write -1 empty))))
 
   ;; A negative fd is the "no PTY / dead pane" sentinel (pane-fd -1).  pty-write's
   ;; (>= fd 0) guard must silently skip the write for a NON-EMPTY octet payload,
@@ -227,7 +227,7 @@
   (it "pty-write-negative-fd-is-noop"
     (let ((bytes (make-array 3 :element-type '(unsigned-byte 8)
                                :initial-contents '(1 2 3))))
-      (finishes (cl-tmux/pty:pty-write -1 bytes))))
+      (finishes (nerimux/pty:pty-write -1 bytes))))
 
   ;;; ── Octet round-trip through the cl-tty-kit-backed I/O ──────────────────────
 
@@ -239,8 +239,8 @@
     (with-pipe-fds (rfd wfd)
       (let ((original (make-array 5 :element-type '(unsigned-byte 8)
                                     :initial-contents '(0 1 127 128 255))))
-        (cl-tmux/pty:pty-write wfd original)
-        (let ((recovered (cl-tmux/pty:pty-read-blocking rfd 4096)))
+        (nerimux/pty:pty-write wfd original)
+        (let ((recovered (nerimux/pty:pty-read-blocking rfd 4096)))
           (expect (equalp original recovered))
           (expect (typep recovered '(simple-array (unsigned-byte 8) (*))))))))
 
@@ -252,32 +252,32 @@
       ;; Close the write end so the read end gets EOF.
       (sb-posix:close wfd)
       ;; wfd is now closed; with-pipe-fds will call ignore-errors on the second close.
-      (let ((result (cl-tmux/pty:pty-read-blocking rfd 1)))
+      (let ((result (nerimux/pty:pty-read-blocking rfd 1)))
         (expect (null result)))))
 
   ;; select-fds always returns a list (possibly nil), never another type.
   (it "select-fds-returns-list-type"
-    (let ((result (cl-tmux/pty:select-fds '() 0)))
+    (let ((result (nerimux/pty:select-fds '() 0)))
       (expect (listp result))))
 
   ;; select-fds returns the readable fd in a list when data is available on a pipe.
   (it "select-fds-with-pipe-data-returns-ready-fd"
     (with-pipe-fds (rfd wfd)
       (write-byte-to-fd wfd 99)
-      (let ((ready (cl-tmux/pty:select-fds (list rfd) 200000)))
+      (let ((ready (nerimux/pty:select-fds (list rfd) 200000)))
         (expect (equal (list rfd) ready)))))
 
   ;; select-fds with timeout-us=0 returns NIL immediately on an idle fd.
   (it "select-fds-zero-timeout-is-non-blocking"
     (with-pipe-fds (rfd _wfd)
-      (let ((ready (cl-tmux/pty:select-fds (list rfd) 0)))
+      (let ((ready (nerimux/pty:select-fds (list rfd) 0)))
         (expect (null ready)))))
 
   ;; pty-read-blocking returns an (unsigned-byte 8) vector containing the written bytes.
   (it "pty-read-blocking-returns-octet-vector-when-data-available"
     (with-pipe-fds (rfd wfd)
       (write-octets-to-fd wfd #(1 2 3))
-      (let ((result (cl-tmux/pty:pty-read-blocking rfd 4096)))
+      (let ((result (nerimux/pty:pty-read-blocking rfd 4096)))
         (expect result :to-be-truthy)
         (expect (= 3 (length result)))
         (expect (= 1 (aref result 0)))
@@ -288,48 +288,48 @@
   (it "pty-close-positive-pid-negative-fd-is-noop"
     ;; We can't test the kill call directly without a real process, but pty-close
     ;; with a bogus high pid should not error (kill may fail with ESRCH, ignored).
-    (finishes (cl-tmux/pty:pty-close -1 99999999)
+    (finishes (nerimux/pty:pty-close -1 99999999)
               "pty-close with negative fd and unknown pid must not signal"))
 
   ;;; ── terminal-size rows/cols order ───────────────────────────────────────────
 
   ;; terminal-size delegates to cl-tty-kit:terminal-size (which returns COLUMNS
-  ;; first) and SWAPS to cl-tmux's (values ROWS COLS) contract.  This guards the
+  ;; first) and SWAPS to nerimux's (values ROWS COLS) contract.  This guards the
   ;; transpose: when a real TTY reports a non-square size, ROWS must be the row
   ;; count and COLS the column count — not swapped.  On the standard-ish 24x80
   ;; terminal, and on the sandbox fallback (also 24x80), rows<=cols; more
   ;; importantly rows must equal cl-tty-kit's ROWS value, cols its COLUMNS value.
   (it "terminal-size-returns-rows-then-cols-not-transposed"
-    (multiple-value-bind (rows cols) (cl-tmux/pty:terminal-size)
+    (multiple-value-bind (rows cols) (nerimux/pty:terminal-size)
       (multiple-value-bind (kit-cols kit-rows) (cl-tty-kit:terminal-size 1)
         (if (and (integerp kit-rows) (integerp kit-cols)
-                 (<= 1 kit-rows cl-tmux/pty::+max-sane-rows+)
-                 (<= 1 kit-cols cl-tmux/pty::+max-sane-cols+))
-            ;; Real TTY: cl-tmux's ROWS/COLS must map to cl-tty-kit's ROWS/COLUMNS.
+                 (<= 1 kit-rows nerimux/pty::+max-sane-rows+)
+                 (<= 1 kit-cols nerimux/pty::+max-sane-cols+))
+            ;; Real TTY: nerimux's ROWS/COLS must map to cl-tty-kit's ROWS/COLUMNS.
             (progn
               (expect (= rows kit-rows))
               (expect (= cols kit-cols)))
-            ;; No TTY / out-of-range: cl-tmux falls back to 24x80 (rows x cols).
+            ;; No TTY / out-of-range: nerimux falls back to 24x80 (rows x cols).
             (progn
-              (expect (= rows cl-tmux/pty:+default-term-rows+))
-              (expect (= cols cl-tmux/pty:+default-term-cols+)))))))
+              (expect (= rows nerimux/pty:+default-term-rows+))
+              (expect (= cols nerimux/pty:+default-term-cols+)))))))
 
   ;;; ── New coverage: spawn helpers and microsecond constants ──────────────────
 
   ;; %string-non-empty-p accepts only strings with positive length.
   (it "string-non-empty-p-rejects-empty-and-non-strings"
-    (expect (cl-tmux/pty::%string-non-empty-p "x") :to-be-truthy)
-    (expect (cl-tmux/pty::%string-non-empty-p "") :to-be-falsy)
-    (expect (cl-tmux/pty::%string-non-empty-p nil) :to-be-falsy)
-    (expect (cl-tmux/pty::%string-non-empty-p 42) :to-be-falsy))
+    (expect (nerimux/pty::%string-non-empty-p "x") :to-be-truthy)
+    (expect (nerimux/pty::%string-non-empty-p "") :to-be-falsy)
+    (expect (nerimux/pty::%string-non-empty-p nil) :to-be-falsy)
+    (expect (nerimux/pty::%string-non-empty-p 42) :to-be-falsy))
 
   ;; +microseconds-per-second+ is 1000000.
   (it "microseconds-per-second-is-one-million"
-    (expect (= 1000000 cl-tmux/pty::+microseconds-per-second+)))
+    (expect (= 1000000 nerimux/pty::+microseconds-per-second+)))
 
   ;;; ── %timeout-us-to-seconds ───────────────────────────────────────────────────
   ;;;
-  ;;; Replaces the old %setup-timeval tests. cl-tmux no longer decomposes a
+  ;;; Replaces the old %setup-timeval tests. nerimux no longer decomposes a
   ;;; struct timeval by hand — process-kit does that — so what is worth pinning
   ;;; here is only the unit conversion at the boundary, and in particular that
   ;;; it stays EXACT. A float would drift the deadline process-kit subtracts
@@ -337,22 +337,22 @@
 
   ;; 1500000 us is 3/2 second exactly, not 1.5f0.
   (it "timeout-us-to-seconds-converts-exactly"
-    (let ((seconds (cl-tmux/pty::%timeout-us-to-seconds 1500000)))
+    (let ((seconds (nerimux/pty::%timeout-us-to-seconds 1500000)))
       (expect (= 3/2 seconds))
       (expect (rationalp seconds))
       (expect (not (floatp seconds)))))
 
   ;; 0 us stays 0 — process-kit spells a non-blocking poll that way too.
   (it "timeout-us-to-seconds-zero-is-a-poll"
-    (expect (eql 0 (cl-tmux/pty::%timeout-us-to-seconds 0))))
+    (expect (eql 0 (nerimux/pty::%timeout-us-to-seconds 0))))
 
   ;; 50000 us (50 ms, the +poll-timeout-us+ value) is 1/20 second.
   (it "timeout-us-to-seconds-sub-second-timeout"
-    (expect (= 1/20 (cl-tmux/pty::%timeout-us-to-seconds 50000))))
+    (expect (= 1/20 (nerimux/pty::%timeout-us-to-seconds 50000))))
 
-  ;; A negative timeout is cl-tmux's "block indefinitely"; process-kit spells
+  ;; A negative timeout is nerimux's "block indefinitely"; process-kit spells
   ;; that NIL, so the conversion must produce NIL and not a negative number
   ;; (which process-kit's FD-WAIT-TIMEOUT type would reject outright).
   (it "timeout-us-to-seconds-negative-means-block-forever"
-    (expect (null (cl-tmux/pty::%timeout-us-to-seconds -1)))
-    (expect (null (cl-tmux/pty::%timeout-us-to-seconds -100)))))
+    (expect (null (nerimux/pty::%timeout-us-to-seconds -1)))
+    (expect (null (nerimux/pty::%timeout-us-to-seconds -100)))))

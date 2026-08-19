@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Command dispatch tests: target resolution and target context macros.
 
@@ -13,7 +13,7 @@
       (let* ((win  (first (session-windows s)))
              (pane (window-active-pane win)))
         (multiple-value-bind (rwin rpane)
-            (cl-tmux::%resolve-target-window-pane s nil win pane)
+            (nerimux::%resolve-target-window-pane s nil win pane)
           (expect (eq win rwin))
           (expect (eq pane rpane))))))
 
@@ -26,9 +26,9 @@
                (cur-pane (window-active-pane cur-win))
                (tgt-win  (second (session-windows s)))
                (tgt-pane (window-active-pane tgt-win))
-               (tgt-str  (format nil "@~A" (cl-tmux/model:window-id tgt-win))))
+               (tgt-str  (format nil "@~A" (nerimux/model:window-id tgt-win))))
           (multiple-value-bind (rwin rpane)
-              (cl-tmux::%resolve-target-window-pane s tgt-str cur-win cur-pane)
+              (nerimux::%resolve-target-window-pane s tgt-str cur-win cur-pane)
             (expect (eq tgt-win rwin))
             (expect (eq tgt-pane rpane)))))))
 
@@ -42,7 +42,7 @@
         (let* ((cur-win  (session-active-window s))
                (cur-pane (window-active-pane cur-win)))
           (multiple-value-bind (rwin rpane)
-              (cl-tmux::%resolve-target-window-pane s "@999" cur-win cur-pane)
+              (nerimux::%resolve-target-window-pane s "@999" cur-win cur-pane)
             (expect (eq cur-win rwin))
             (expect (eq cur-pane rpane)))))))
 
@@ -54,7 +54,7 @@
     (with-fake-session (s :nwindows 1)
       (let ((win (session-active-window s)))
         (multiple-value-bind (rsess rwin)
-            (cl-tmux::%resolve-target-session-window s nil win nil)
+            (nerimux::%resolve-target-session-window s nil win nil)
           (expect (eq s rsess))
           (expect (eq win rwin))))))
 
@@ -65,9 +65,9 @@
       (with-command-test-state (s)
         (let* ((cur-win (first (session-windows s)))
                (tgt-win (second (session-windows s)))
-               (tgt-str (format nil "@~A" (cl-tmux/model:window-id tgt-win))))
+               (tgt-str (format nil "@~A" (nerimux/model:window-id tgt-win))))
           (multiple-value-bind (rsess rwin)
-              (cl-tmux::%resolve-target-session-window s tgt-str cur-win nil)
+              (nerimux::%resolve-target-session-window s tgt-str cur-win nil)
             (expect (eq s rsess))
             (expect (eq tgt-win rwin)))))))
 
@@ -79,7 +79,7 @@
       (with-command-test-state (s)
         (let ((cur-win (session-active-window s)))
           (multiple-value-bind (rsess rwin)
-              (cl-tmux::%resolve-target-session-window s "@999" cur-win nil)
+              (nerimux::%resolve-target-session-window s "@999" cur-win nil)
             (expect (eq s rsess))
             (expect (eq cur-win rwin)))))))
 
@@ -90,15 +90,15 @@
   (it "resolve-window-target-or-active-falls-back-to-active-window"
     (with-fake-session (s :nwindows 1)
       (expect (eq (session-active-window s)
-              (cl-tmux::%resolve-window-target-or-active s nil)))))
+              (nerimux::%resolve-window-target-or-active s nil)))))
 
   ;; %resolve-window-target-or-active resolves TARGET-STR to a non-active window
   ;; when it names one.
   (it "resolve-window-target-or-active-resolves-named-target"
     (with-fake-session (s :nwindows 2)
       (let* ((tgt-win (second (session-windows s)))
-             (tgt-str (format nil "~A" (cl-tmux/model:window-id tgt-win))))
-        (expect (eq tgt-win (cl-tmux::%resolve-window-target-or-active s tgt-str))))))
+             (tgt-str (format nil "~A" (nerimux/model:window-id tgt-win))))
+        (expect (eq tgt-win (nerimux::%resolve-window-target-or-active s tgt-str))))))
 
   ;;; ── with-target-session macro ────────────────────────────────────────────────
 
@@ -106,25 +106,25 @@
   ;; TARGET-STR is NIL.
   (it "with-target-session-runs-body-with-session-when-target-str-nil"
     (with-fake-session (s)
-      (expect (eq s (cl-tmux::with-target-session (ts nil s) ts)))))
+      (expect (eq s (nerimux::with-target-session (ts nil s) ts)))))
 
   ;; with-target-session binds TARGET-SESSION to the resolved session when
   ;; TARGET-STR names one registered in *server-sessions*.
   (it "with-target-session-resolves-named-target"
     (let* ((s1 (make-fake-session))
            (s2 (make-fake-session)))
-      (setf (cl-tmux::session-name s1) "alpha"
-            (cl-tmux::session-name s2) "beta")
-      (let ((cl-tmux::*server-sessions* (list (cons "alpha" s1) (cons "beta" s2))))
-        (expect (eq s2 (cl-tmux::with-target-session (ts "beta" s1) ts))))))
+      (setf (nerimux::session-name s1) "alpha"
+            (nerimux::session-name s2) "beta")
+      (let ((nerimux::*server-sessions* (list (cons "alpha" s1) (cons "beta" s2))))
+        (expect (eq s2 (nerimux::with-target-session (ts "beta" s1) ts))))))
 
   ;; with-target-session with the default :skip ON-MISSING does not run BODY when
   ;; TARGET-STR fails to resolve.
   (it "with-target-session-on-missing-skip-returns-nil-without-running-body"
     (with-fake-session (s)
-      (let ((cl-tmux::*server-sessions* (list (cons "0" s)))
+      (let ((nerimux::*server-sessions* (list (cons "0" s)))
             (body-ran nil))
-        (expect (null (cl-tmux::with-target-session (ts "no-such-session" s)
+        (expect (null (nerimux::with-target-session (ts "no-such-session" s)
                     (setf body-ran t)
                     ts)))
         (expect body-ran :to-be-falsy))))
@@ -133,8 +133,8 @@
   ;; when TARGET-STR fails to resolve.
   (it "with-target-session-on-missing-current-runs-body-with-session"
     (with-fake-session (s)
-      (let ((cl-tmux::*server-sessions* (list (cons "0" s))))
-        (expect (eq s (cl-tmux::with-target-session (ts "no-such-session" s
+      (let ((nerimux::*server-sessions* (list (cons "0" s))))
+        (expect (eq s (nerimux::with-target-session (ts "no-such-session" s
                                                  :on-missing :current)
                     ts))))))
 
@@ -144,7 +144,7 @@
     (with-fake-session (s)
       (with-command-test-state (s :overlay t)
         (let ((body-ran nil))
-          (expect (null (cl-tmux::with-target-session (ts "no-such-session" s
+          (expect (null (nerimux::with-target-session (ts "no-such-session" s
                                                    :message "no session: ~A"
                                                    :on-missing :error)
                       (setf body-ran t)
@@ -160,7 +160,7 @@
     (with-fake-session (s :nwindows 1 :npanes 1)
       (with-command-test-state (s)
         (multiple-value-bind (ts tw tp)
-            (cl-tmux::with-target-context (ts tw tp s nil)
+            (nerimux::with-target-context (ts tw tp s nil)
               (values ts tw tp))
           (expect (eq s ts))
           (expect (eq (session-active-window s) tw))
@@ -174,9 +174,9 @@
       (with-command-test-state (s)
         (let* ((cur-pane (session-active-pane s))
                (tgt-win  (second (session-windows s)))
-               (tgt-str  (format nil "@~A" (cl-tmux/model:window-id tgt-win))))
+               (tgt-str  (format nil "@~A" (nerimux/model:window-id tgt-win))))
           (multiple-value-bind (ts tw tp)
-              (cl-tmux::with-target-context (ts tw tp s tgt-str)
+              (nerimux::with-target-context (ts tw tp s tgt-str)
                 (values ts tw tp))
             (expect (eq s ts))
             (expect (eq tgt-win tw))

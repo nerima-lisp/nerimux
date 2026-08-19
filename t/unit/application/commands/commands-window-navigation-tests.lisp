@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; find-window and next/previous/last-window command behavior
 
@@ -9,16 +9,16 @@
   (let* ((pa (%make-test-pane :id 1))
          (pb (%make-test-pane :id 2))
          (pg (%make-test-pane :id 3)))
-    (feed (cl-tmux/model:pane-screen pb) "beta content needle")
-    (feed (cl-tmux/model:pane-screen pg) "gamma regex marker")
-    (setf (cl-tmux/model:pane-title pa) "alpha pane")
-    (setf (cl-tmux/model:pane-title pb) "beta pane title")
-    (setf (cl-tmux/model:pane-title pg) "gamma pane title")
-    (setf (cl-tmux/terminal/types:screen-title (cl-tmux/model:pane-screen pa))
+    (feed (nerimux/model:pane-screen pb) "beta content needle")
+    (feed (nerimux/model:pane-screen pg) "gamma regex marker")
+    (setf (nerimux/model:pane-title pa) "alpha pane")
+    (setf (nerimux/model:pane-title pb) "beta pane title")
+    (setf (nerimux/model:pane-title pg) "gamma pane title")
+    (setf (nerimux/terminal/types:screen-title (nerimux/model:pane-screen pa))
           "alpha screen")
-    (setf (cl-tmux/terminal/types:screen-title (cl-tmux/model:pane-screen pb))
+    (setf (nerimux/terminal/types:screen-title (nerimux/model:pane-screen pb))
           "beta screen title")
-    (setf (cl-tmux/terminal/types:screen-title (cl-tmux/model:pane-screen pg))
+    (setf (nerimux/terminal/types:screen-title (nerimux/model:pane-screen pg))
           "gamma screen title")
     (let* ((wa (make-window :id 1 :name "alpha" :width 20 :height 5
                             :tree (make-layout-leaf pa) :panes (list pa)))
@@ -39,7 +39,7 @@
     (multiple-value-bind (sess wa wb wg) (%find-window-fixture)
       (declare (ignore wa wg))
       (with-command-test-state (sess)
-        (cl-tmux::%cmd-find-window-arg sess '("BET"))
+        (nerimux::%cmd-find-window-arg sess '("BET"))
         (expect (eq wb (session-active-window sess))))))
 
   ;; find-window matches pane titles, screen titles, and visible content by default.
@@ -47,13 +47,13 @@
     (multiple-value-bind (sess wa wb wg) (%find-window-fixture)
       (declare (ignore wa wg))
       (with-command-test-state (sess)
-        (cl-tmux::%cmd-find-window-arg sess '("pane title"))
+        (nerimux::%cmd-find-window-arg sess '("pane title"))
         (expect (eq wb (session-active-window sess)))
         (session-select-window sess wa)
-        (cl-tmux::%cmd-find-window-arg sess '("screen title"))
+        (nerimux::%cmd-find-window-arg sess '("screen title"))
         (expect (eq wb (session-active-window sess)))
         (session-select-window sess wa)
-        (cl-tmux::%cmd-find-window-arg sess '("content needle"))
+        (nerimux::%cmd-find-window-arg sess '("content needle"))
         (expect (eq wb (session-active-window sess))))))
 
   ;; find-window accepts -i, -r, -T, and -C search-mode flags.
@@ -61,16 +61,16 @@
     (multiple-value-bind (sess wa wb wg) (%find-window-fixture)
       (declare (ignore wa wg))
       (with-command-test-state (sess)
-        (cl-tmux::%cmd-find-window-arg sess '("-i" "BETA"))
+        (nerimux::%cmd-find-window-arg sess '("-i" "BETA"))
         (expect (eq wb (session-active-window sess)))
         (session-select-window sess wa)
-        (cl-tmux::%cmd-find-window-arg sess '("-r" "^g.*a$"))
+        (nerimux::%cmd-find-window-arg sess '("-r" "^g.*a$"))
         (expect (eq wg (session-active-window sess)))
         (session-select-window sess wa)
-        (cl-tmux::%cmd-find-window-arg sess '("-T" "screen title"))
+        (nerimux::%cmd-find-window-arg sess '("-T" "screen title"))
         (expect (eq wb (session-active-window sess)))
         (session-select-window sess wa)
-        (cl-tmux::%cmd-find-window-arg sess '("-C" "content needle"))
+        (nerimux::%cmd-find-window-arg sess '("-C" "content needle"))
         (expect (eq wb (session-active-window sess))))))
 
   ;; find-window -t scopes the search to the targeted session.
@@ -81,10 +81,10 @@
         (declare (ignore other-a other-c))
         (setf (session-name other) "other")
         (session-select-window other other-b)
-        (let ((cl-tmux::*server-sessions* (list (cons "0" cur)
+        (let ((nerimux::*server-sessions* (list (cons "0" cur)
                                                 (cons "other" other)))
-              (cl-tmux::*dirty* nil))
-          (cl-tmux::%cmd-find-window-arg cur '("-t" "other" "beta"))
+              (nerimux::*dirty* nil))
+          (nerimux::%cmd-find-window-arg cur '("-t" "other" "beta"))
           (expect (eq cur-a (session-active-window cur)))
           (expect (eq other-b (session-active-window other)))))))
 
@@ -92,7 +92,7 @@
   (it "cmd-find-window-no-match-leaves-active"
     (multiple-value-bind (sess wa wb wg) (%find-window-fixture)
       (declare (ignore wb wg))
-      (cl-tmux::%cmd-find-window-arg sess '("zzz"))
+      (nerimux::%cmd-find-window-arg sess '("zzz"))
       (expect (eq wa (session-active-window sess)))))
 
   ;; find-window rejects extra positional arguments.
@@ -101,7 +101,7 @@
       (declare (ignore wb wg))
       (session-select-window sess wa)
       (with-command-rejection-state (sess
-                                     (cl-tmux::%cmd-find-window-arg sess '("ALP" "extra"))
+                                     (nerimux::%cmd-find-window-arg sess '("ALP" "extra"))
                                      "find-window: unsupported argument"
                                      "find-window extra args")
         (expect (eq wa (session-active-window sess)))
@@ -114,11 +114,11 @@
       (declare (ignore wg))
       (session-select-window sess wa)
       (with-command-rejection-state (sess
-                                     (cl-tmux::%cmd-find-window-arg sess '("-Z" "beta"))
+                                     (nerimux::%cmd-find-window-arg sess '("-Z" "beta"))
                                      "find-window: unsupported argument"
                                      "find-window -Z")
         (expect (eq wa (session-active-window sess)))
-        (expect (cl-tmux/model:window-zoom-p wb) :to-be-falsy)
+        (expect (nerimux/model:window-zoom-p wb) :to-be-falsy)
         (assert-overlay-active
          "rejected -Z must show an error overlay"))))
 
@@ -126,8 +126,8 @@
   (it "window-matches-pattern-p-name"
     (multiple-value-bind (sess wa wb wg) (%find-window-fixture)
       (declare (ignore sess wb wg))
-      (expect (cl-tmux::%window-matches-pattern-p wa "ALP") :to-be-truthy)
-      (expect (cl-tmux::%window-matches-pattern-p wa "beta") :to-be-falsy)))
+      (expect (nerimux::%window-matches-pattern-p wa "ALP") :to-be-truthy)
+      (expect (nerimux::%window-matches-pattern-p wa "beta") :to-be-falsy)))
 
   ;;; ── next-window / previous-window (scriptable -t) ────────────────────────────
 
@@ -143,21 +143,21 @@
           (declare (ignore wa))
           (with-command-test-state (sess)
             (ecase dir
-              (:next     (cl-tmux::%cmd-next-window-arg     sess '()))
-              (:previous (cl-tmux::%cmd-previous-window-arg sess '())))
+              (:next     (nerimux::%cmd-next-window-arg     sess '()))
+              (:previous (nerimux::%cmd-previous-window-arg sess '())))
             (let ((expected (ecase expected-key (:wb wb) (:wg wg))))
               (expect (eq expected (session-active-window sess)))))))))
 
   ;; next-window/previous-window reject unsupported arguments before changing the
   ;; active window.
   (it "cmd-window-cycle-rejects-unsupported-arguments-before-cycling"
-    (dolist (case (list (list #'cl-tmux::%cmd-next-window-arg
+    (dolist (case (list (list #'nerimux::%cmd-next-window-arg
                               "next-window" '("-Z"))
-                        (list #'cl-tmux::%cmd-next-window-arg
+                        (list #'nerimux::%cmd-next-window-arg
                               "next-window" '("extra"))
-                        (list #'cl-tmux::%cmd-previous-window-arg
+                        (list #'nerimux::%cmd-previous-window-arg
                               "previous-window" '("-Z"))
-                        (list #'cl-tmux::%cmd-previous-window-arg
+                        (list #'nerimux::%cmd-previous-window-arg
                               "previous-window" '("extra"))))
       (destructuring-bind (command command-name args) case
         (multiple-value-bind (sess wa wb wg) (%find-window-fixture)
@@ -174,11 +174,11 @@
       (declare (ignore wg))
       (with-command-test-state (sess)
         (session-select-window sess wb)
-        (setf (cl-tmux/model:window-last-active-time wb) 40
-              (cl-tmux/model:window-last-active-time wa) 30)
-        (cl-tmux::%cmd-last-window-arg sess '())
+        (setf (nerimux/model:window-last-active-time wb) 40
+              (nerimux/model:window-last-active-time wa) 30)
+        (nerimux::%cmd-last-window-arg sess '())
         (expect (eq wa (session-active-window sess)))
-        (expect cl-tmux::*dirty* :to-be-truthy))))
+        (expect nerimux::*dirty* :to-be-truthy))))
 
   ;; last-window rejects unsupported arguments before changing the active window.
   (it "cmd-last-window-rejects-unsupported-arguments-before-switching"
@@ -186,10 +186,10 @@
       (multiple-value-bind (sess wa wb wg) (%find-window-fixture)
         (declare (ignore wg))
         (session-select-window sess wb)
-        (setf (cl-tmux/model:window-last-active-time wb) 40
-              (cl-tmux/model:window-last-active-time wa) 30)
+        (setf (nerimux/model:window-last-active-time wb) 40
+              (nerimux/model:window-last-active-time wa) 30)
         (with-command-rejection-state (sess
-                                       (cl-tmux::%cmd-last-window-arg sess args)
+                                       (nerimux::%cmd-last-window-arg sess args)
                                        "last-window: unsupported argument"
                                        (format nil "last-window rejects ~S" args))
           (expect (eq wb (session-active-window sess)))))))
@@ -209,9 +209,9 @@
            (other (make-session :id 2 :name "other" :windows (list o-a o-b))))
       (session-select-window cur cur-win)
       (session-select-window other o-a)
-      (let ((cl-tmux::*server-sessions* (list (cons "cur" cur) (cons "other" other)))
-            (cl-tmux::*dirty* nil))
-        (cl-tmux::%cmd-next-window-arg cur '("-t" "other"))
+      (let ((nerimux::*server-sessions* (list (cons "cur" cur) (cons "other" other)))
+            (nerimux::*dirty* nil))
+        (nerimux::%cmd-next-window-arg cur '("-t" "other"))
         (expect (eq o-b (session-active-window other)))
         (expect (eq cur-win (session-active-window cur))))))
 
@@ -230,11 +230,11 @@
            (other (make-session :id 2 :name "other" :windows (list o-a o-b))))
       (session-select-window cur cur-win)
       (session-select-window other o-b)
-      (setf (cl-tmux/model:window-last-active-time o-b) 40
-            (cl-tmux/model:window-last-active-time o-a) 30)
-      (let ((cl-tmux::*server-sessions* (list (cons "cur" cur) (cons "other" other)))
-            (cl-tmux::*dirty* nil))
-        (cl-tmux::%cmd-last-window-arg cur '("-t" "other"))
+      (setf (nerimux/model:window-last-active-time o-b) 40
+            (nerimux/model:window-last-active-time o-a) 30)
+      (let ((nerimux::*server-sessions* (list (cons "cur" cur) (cons "other" other)))
+            (nerimux::*dirty* nil))
+        (nerimux::%cmd-last-window-arg cur '("-t" "other"))
         (expect (eq o-a (session-active-window other)))
         (expect (eq cur-win (session-active-window cur))))))
 
@@ -250,11 +250,11 @@
         (multiple-value-bind (sess wa wb wg) (%find-window-fixture)
           (with-command-test-state (sess)
             (ecase flag-kw
-              (:activity (setf (cl-tmux/model:window-activity-flag wg) t))
-              (:silence  (setf (cl-tmux/model:window-silence-flag  wb) t))
+              (:activity (setf (nerimux/model:window-activity-flag wg) t))
+              (:silence  (setf (nerimux/model:window-silence-flag  wb) t))
               (:none     nil))
             (ecase dir
-              (:next     (cl-tmux::%cmd-next-window-arg     sess '("-a")))
-              (:previous (cl-tmux::%cmd-previous-window-arg sess '("-a"))))
+              (:next     (nerimux::%cmd-next-window-arg     sess '("-a")))
+              (:previous (nerimux::%cmd-previous-window-arg sess '("-a"))))
             (let ((expected (ecase expected-key (:wa wa) (:wb wb) (:wg wg))))
               (expect (eq expected (session-active-window sess))))))))))

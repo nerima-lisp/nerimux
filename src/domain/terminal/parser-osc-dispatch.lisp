@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/parser)
+(in-package #:nerimux/terminal/parser)
 
 ;;;; OSC command parsing and dispatch.
 
@@ -86,7 +86,7 @@
    title/clipboard/cwd handlers as display text.  U+FFFD is both what babel did
    here originally (its UTF-8 decoder hardcodes +REPL+ = #xFFFD for every
    decoding error, regardless of the encoding's own :DEFAULT-REPLACEMENT slot)
-   and what cl-tmux substitutes everywhere else it cannot represent a code
+   and what nerimux substitutes everywhere else it cannot represent a code
    point — see SAFE-CODE-CHAR and +UNICODE-REPLACEMENT-CHAR+ in cell.lisp.
 
    How MANY U+FFFD one bad sequence yields is not guaranteed: CL-CODEC-KIT

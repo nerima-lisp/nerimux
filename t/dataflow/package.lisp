@@ -2,11 +2,11 @@
 ;;;; read-model (src/dataflow/), mirroring t/weave/package.lisp for the
 ;;;; cl-prolog-kit reasoning read-model.
 
-(defpackage #:cl-tmux/dataflow-tests
+(defpackage #:nerimux/dataflow-tests
   (:use #:cl #:cl-weave)
   ;; cl-weave shadows cl:describe; take cl-weave's.
   (:shadowing-import-from #:cl-weave #:describe)
-  (:import-from #:cl-tmux/dataflow
+  (:import-from #:nerimux/dataflow
                 #:copy-mode-lifecycle-machine
                 #:screen-copy-mode-lifecycle-state
                 #:copy-mode-lifecycle-states
@@ -16,7 +16,7 @@
                 #:copy-mode-lifecycle-deterministic-p
                 #:copy-mode-lifecycle->dot
                 #:copy-mode-lifecycle->mermaid)
-  (:import-from #:cl-tmux/terminal
+  (:import-from #:nerimux/terminal
                 #:make-screen
                 #:screen-copy-mode-p
                 #:screen-copy-selecting)

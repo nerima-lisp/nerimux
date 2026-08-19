@@ -5,8 +5,8 @@
 ;;;; so the runner just walks the global registry.  `run-all' returns T only
 ;;;; when every event passed; the ASDF test-op turns a NIL into an error.
 
-(in-package #:cl-tmux/weave-tests)
+(in-package #:nerimux/weave-tests)
 
 (defun run-weave-tests (&key (reporter :spec))
-  "Run the cl-tmux reasoning cl-weave suite; return T on success."
+  "Run the nerimux reasoning cl-weave suite; return T on success."
   (cl-weave:run-all :reporter reporter))

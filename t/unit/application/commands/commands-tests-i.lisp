@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; rectangle-sel-text, run-copy-command, set-cursor, and send-keys-l
 
@@ -12,29 +12,29 @@
   ;; %rectangle-selection-text returns NIL when no selection is active.
   (it "rectangle-selection-text-returns-nil-when-no-selection"
     (let ((s (make-screen 20 5)))
-      (cl-tmux/commands::copy-mode-enter s)
-      (setf (cl-tmux/terminal/types:screen-copy-selecting s) nil)
-      (expect (null (cl-tmux/commands::%rectangle-selection-text s)))))
+      (nerimux/commands::copy-mode-enter s)
+      (setf (nerimux/terminal/types:screen-copy-selecting s) nil)
+      (expect (null (nerimux/commands::%rectangle-selection-text s)))))
 
   ;; %rectangle-selection-text returns NIL when mark is NIL even if selecting is T.
   (it "rectangle-selection-text-returns-nil-when-mark-nil"
     (let ((s (make-screen 20 5)))
-      (cl-tmux/commands::copy-mode-enter s)
-      (setf (cl-tmux/terminal/types:screen-copy-selecting s) t
-            (cl-tmux/terminal/types:screen-copy-mark      s) nil
-            (cl-tmux/terminal/types:screen-copy-cursor    s) (cons 0 5))
-      (expect (null (cl-tmux/commands::%rectangle-selection-text s)))))
+      (nerimux/commands::copy-mode-enter s)
+      (setf (nerimux/terminal/types:screen-copy-selecting s) t
+            (nerimux/terminal/types:screen-copy-mark      s) nil
+            (nerimux/terminal/types:screen-copy-cursor    s) (cons 0 5))
+      (expect (null (nerimux/commands::%rectangle-selection-text s)))))
 
   ;; %rectangle-selection-text returns the correct column slice for a single-row selection.
   (it "rectangle-selection-text-single-row"
     ;; Feed "hello world" to row 0; rectangle from col 0 to col 5 on row 0 only.
     (let ((s (make-screen 20 5)))
       (feed s "hello world")
-      (cl-tmux/commands::copy-mode-enter s)
-      (setf (cl-tmux/terminal/types:screen-copy-selecting    s) t
-            (cl-tmux/terminal/types:screen-copy-mark         s) (cons 0 0)
-            (cl-tmux/terminal/types:screen-copy-cursor       s) (cons 0 5))
-      (let ((text (cl-tmux/commands::%rectangle-selection-text s)))
+      (nerimux/commands::copy-mode-enter s)
+      (setf (nerimux/terminal/types:screen-copy-selecting    s) t
+            (nerimux/terminal/types:screen-copy-mark         s) (cons 0 0)
+            (nerimux/terminal/types:screen-copy-cursor       s) (cons 0 5))
+      (let ((text (nerimux/commands::%rectangle-selection-text s)))
         (expect (stringp text))
         (expect (string= "hello" text)))))
 
@@ -43,11 +43,11 @@
     ;; Row 0 = "abcde", row 1 = "ABCDE"; rectangle col 1-3 (2 chars per row).
     (let ((s (make-screen 10 5)))
       (feed s (format nil "abcde~C~CABCDE" #\Return #\Linefeed))
-      (cl-tmux/commands::copy-mode-enter s)
-      (setf (cl-tmux/terminal/types:screen-copy-selecting s) t
-            (cl-tmux/terminal/types:screen-copy-mark      s) (cons 0 1)
-            (cl-tmux/terminal/types:screen-copy-cursor    s) (cons 1 3))
-      (let ((text (cl-tmux/commands::%rectangle-selection-text s)))
+      (nerimux/commands::copy-mode-enter s)
+      (setf (nerimux/terminal/types:screen-copy-selecting s) t
+            (nerimux/terminal/types:screen-copy-mark      s) (cons 0 1)
+            (nerimux/terminal/types:screen-copy-cursor    s) (cons 1 3))
+      (let ((text (nerimux/commands::%rectangle-selection-text s)))
         (expect (stringp text))
         (expect (search "bc" text))
         (expect (search "BC" text))
@@ -61,26 +61,26 @@
 
   ;; %run-copy-command is a no-op for NIL and for an empty string.
   (it "run-copy-command-noop-when-nil-or-empty"
-    (finishes (cl-tmux/commands::%run-copy-command nil)
+    (finishes (nerimux/commands::%run-copy-command nil)
               "%run-copy-command with nil text must not signal")
-    (finishes (cl-tmux/commands::%run-copy-command "")
+    (finishes (nerimux/commands::%run-copy-command "")
               "%run-copy-command with empty text must not signal"))
 
   ;; %run-copy-command is a no-op when the 'copy-command' option is not set.
   (it "run-copy-command-noop-when-option-unset"
     ;; Fresh option table: 'copy-command' is absent.
     (with-fresh-global-options
-      (finishes (cl-tmux/commands::%run-copy-command "some text")
+      (finishes (nerimux/commands::%run-copy-command "some text")
                 "%run-copy-command with no copy-command option must not signal")))
 
   ;; %run-copy-command swallows errors from a malformed copy-command.
   (it "run-copy-command-does-not-crash-on-bad-command"
     ;; Set copy-command to a command that will fail (exit non-zero or not found).
-    (let ((cl-tmux/options:*global-options*
+    (let ((nerimux/options:*global-options*
            (let ((h (make-hash-table :test #'equal)))
              (setf (gethash "copy-command" h) "false")
              h)))
-      (finishes (cl-tmux/commands::%run-copy-command "hello")
+      (finishes (nerimux/commands::%run-copy-command "hello")
                 "%run-copy-command must not signal when the copy-command fails")))
 
   ;;; ── %resolve-copy-pipe-cmd (direct unit tests) ──────────────────────────────
@@ -89,7 +89,7 @@
   ;; copy-command option when CMD is empty.
   ;; Each row: (cmd expected description).
   (it "resolve-copy-pipe-cmd-explicit-and-fallback-table"
-    (let ((cl-tmux/options:*global-options*
+    (let ((nerimux/options:*global-options*
            (let ((h (make-hash-table :test #'equal)))
              (setf (gethash "copy-command" h) "fallback")
              h)))
@@ -97,26 +97,26 @@
                      (""          "fallback"  "empty CMD must use the global copy-command option")))
         (destructuring-bind (cmd expected desc) row
           (declare (ignore desc))
-          (expect (string= expected (cl-tmux/commands::%resolve-copy-pipe-cmd cmd)))))))
+          (expect (string= expected (nerimux/commands::%resolve-copy-pipe-cmd cmd)))))))
 
   ;; %resolve-copy-pipe-cmd returns NIL when neither CMD nor the global option is usable.
   (it "resolve-copy-pipe-cmd-returns-nil-when-unavailable"
     (with-fresh-global-options
-      (expect (null (cl-tmux/commands::%resolve-copy-pipe-cmd nil)))
-      (expect (null (cl-tmux/commands::%resolve-copy-pipe-cmd "")))))
+      (expect (null (nerimux/commands::%resolve-copy-pipe-cmd nil)))
+      (expect (null (nerimux/commands::%resolve-copy-pipe-cmd "")))))
 
   ;;; ── copy-mode-set-cursor (direct unit tests in commands group) ───────────────
   ;;;
-  ;;; copy-mode-set-cursor is exported from cl-tmux/commands and tested in
+  ;;; copy-mode-set-cursor is exported from nerimux/commands and tested in
   ;;; events-tests.lisp (via keystroke dispatch), but that test lives outside the
   ;;; commands audit scope.  Direct tests here make the commands group self-contained.
 
   ;; copy-mode-set-cursor sets the cursor to the given row and column.
   (it "copy-mode-set-cursor-positions-cursor"
     (let ((s (make-screen 20 5)))
-      (cl-tmux/commands::copy-mode-enter s)
-      (cl-tmux/commands:copy-mode-set-cursor s 2 7)
-      (expect (equal (cons 2 7) (cl-tmux/terminal/types:screen-copy-cursor s)))))
+      (nerimux/commands::copy-mode-enter s)
+      (nerimux/commands:copy-mode-set-cursor s 2 7)
+      (expect (equal (cons 2 7) (nerimux/terminal/types:screen-copy-cursor s)))))
 
   ;; copy-mode-set-cursor clamps both row and column to [0, bound-1].
   (it "copy-mode-set-cursor-clamps-table"
@@ -127,17 +127,17 @@
       (destructuring-bind (r c expected accessor desc) row
         (declare (ignore desc))
         (let ((s (make-screen 20 5)))
-          (cl-tmux/commands::copy-mode-enter s)
-          (cl-tmux/commands:copy-mode-set-cursor s r c)
-          (expect (= expected (funcall accessor (cl-tmux/terminal/types:screen-copy-cursor s))))))))
+          (nerimux/commands::copy-mode-enter s)
+          (nerimux/commands:copy-mode-set-cursor s r c)
+          (expect (= expected (funcall accessor (nerimux/terminal/types:screen-copy-cursor s))))))))
 
   ;; copy-mode-set-cursor is a no-op when not in copy mode.
   (it "copy-mode-set-cursor-noop-outside-copy-mode"
     (let ((s (make-screen 20 5)))
       ;; Do NOT enter copy mode.
-      (setf (cl-tmux/terminal/types:screen-copy-cursor s) (cons 1 1))
-      (cl-tmux/commands:copy-mode-set-cursor s 3 7)
-      (expect (equal (cons 1 1) (cl-tmux/terminal/types:screen-copy-cursor s)))))
+      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 1 1))
+      (nerimux/commands:copy-mode-set-cursor s 3 7)
+      (expect (equal (cons 1 1) (nerimux/terminal/types:screen-copy-cursor s)))))
 
   ;;; ── send-keys -l (literal) vs translated ────────────────────────────────────
   ;;;
@@ -151,7 +151,7 @@
 
   ;; Without -l, %translate-send-keys maps the key name "Enter" to a single CR byte (13).
   (it "send-keys-translated-enter-produces-cr"
-    (let ((bytes (cl-tmux/commands::%translate-send-keys "Enter")))
+    (let ((bytes (nerimux/commands::%translate-send-keys "Enter")))
       (expect (= 1 (length bytes)))
       (expect (= 13 (aref bytes 0)))))
 
@@ -164,7 +164,7 @@
       (expect (equalp #(69 110 116 101 114) literal-bytes))
       ;; The literal payload must differ from the translated (single-CR) payload.
       (expect (not (equalp literal-bytes
-                            (cl-tmux/commands::%translate-send-keys "Enter"))))))
+                            (nerimux/commands::%translate-send-keys "Enter"))))))
 
   ;; With -l, a multi-byte UTF-8 string is emitted as its raw UTF-8 octets:
   ;; "café" is 4 characters but encodes to 5 bytes (é = 2 bytes), so literal

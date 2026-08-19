@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Fuzz coverage for the CPS VT100 parser's single entry point,
 ;;;; screen-process-bytes (src/domain/terminal/emulator.lisp).

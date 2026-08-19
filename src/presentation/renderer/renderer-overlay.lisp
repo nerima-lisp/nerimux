@@ -1,15 +1,15 @@
-(in-package #:cl-tmux/renderer)
+(in-package #:nerimux/renderer)
 
-;;;; Popup and menu box-drawing for the cl-tmux renderer.
+;;;; Popup and menu box-drawing for the nerimux renderer.
 ;;;;
 ;;;; This file provides the concrete rendering functions for floating overlay
-;;;; boxes: render-popup (for cl-tmux popup panes) and render-menu (for
+;;;; boxes: render-popup (for nerimux popup panes) and render-menu (for
 ;;;; interactive choice lists).  Each is split into border + content helpers
 ;;;; that renderer.lisp composes via %render-overlay-dispatch.
 ;;;;
 ;;;; Load order: renderer-format → renderer-style → renderer-pane
 ;;;;             → renderer-overlay → renderer
-;;;; All files share the cl-tmux/renderer package (no defpackage here).
+;;;; All files share the nerimux/renderer package (no defpackage here).
 
 ;;; ── Named constants ──────────────────────────────────────────────────────────
 
@@ -154,9 +154,9 @@
    V-CHAR         — vertical side glyph (from menu-border-lines; default single │)."
   ;; menu-style colours the item rows; menu-selected-style the highlighted item.
   ;; Empty options → NIL SGR → no colour (the ▶ indicator alone marks selection).
-  (let ((base-sgr (let ((s (cl-tmux/options:get-option "menu-style" "")))
+  (let ((base-sgr (let ((s (nerimux/options:get-option "menu-style" "")))
                     (and (plusp (length s)) (%status-sgr-from-style s))))
-        (sel-sgr  (let ((s (cl-tmux/options:get-option "menu-selected-style" "")))
+        (sel-sgr  (let ((s (nerimux/options:get-option "menu-selected-style" "")))
                     (and (plusp (length s)) (%status-sgr-from-style s)))))
     (loop for (label . _cmd) in items
           for item-index from 0

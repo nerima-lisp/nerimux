@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; scroll tests — part C: direct-line-edit (insert/delete lines),
 ;;;; scroll-screen-to-history, DEC Rectangle operations (DECERA/DECFRA/DECCRA).
@@ -15,8 +15,8 @@
   (it "insert-lines-at-row-zero-pushes-content-down"
     (with-screen (s 5 4)
       (feed-lines s "AA" "BB" "CC")
-      (cl-tmux/terminal/actions:set-cursor s 0 0)
-      (cl-tmux/terminal/actions:insert-lines s 1)
+      (nerimux/terminal/actions:set-cursor s 0 0)
+      (nerimux/terminal/actions:insert-lines s 1)
       ;; Row 0 must be blank (newly inserted); old row 0 moves to row 1.
       (expect (row-blank-p s 0))
       (check-row s 1 "AA")))
@@ -25,8 +25,8 @@
   (it "delete-lines-at-row-zero-pulls-content-up"
     (with-screen (s 5 4)
       (feed-lines s "AA" "BB" "CC" "DD")
-      (cl-tmux/terminal/actions:set-cursor s 0 0)
-      (cl-tmux/terminal/actions:delete-lines s 1)
+      (nerimux/terminal/actions:set-cursor s 0 0)
+      (nerimux/terminal/actions:delete-lines s 1)
       ;; Old row 1 ("BB") becomes row 0; bottom row becomes blank.
       (check-row s 0 "BB")
       (expect (row-blank-p s 3))))
@@ -38,7 +38,7 @@
       (feed-lines s "AA" "BB" "CC" "DD" "EE")
       (feed s (esc "[3;5r"))      ; DECSTBM region rows 3-5 (0-based 2-4); homes cursor (0,0)
       (check-cursor s 0 0)        ; cursor is above scroll-top (row 2)
-      (cl-tmux/terminal/actions:insert-lines s 1)
+      (nerimux/terminal/actions:insert-lines s 1)
       (check-row s 0 "AA")        ; rows above the region must be untouched
       (check-row s 1 "BB")
       (check-row s 2 "CC")))
@@ -48,7 +48,7 @@
     (with-screen (s 5 5)
       (feed-lines s "AA" "BB" "CC" "DD" "EE")
       (feed s (esc "[3;5r"))      ; region rows 2-4 (0-based); cursor homed to (0,0)
-      (cl-tmux/terminal/actions:delete-lines s 1)
+      (nerimux/terminal/actions:delete-lines s 1)
       (check-row s 0 "AA")
       (check-row s 1 "BB")))
 
@@ -56,8 +56,8 @@
   (it "delete-lines-n-larger-than-region-blanks-all-region-rows"
     (with-screen (s 5 4)
       (feed-lines s "AA" "BB" "CC" "DD")
-      (cl-tmux/terminal/actions:set-cursor s 0 0)
-      (cl-tmux/terminal/actions:delete-lines s 99)
+      (nerimux/terminal/actions:set-cursor s 0 0)
+      (nerimux/terminal/actions:delete-lines s 99)
       ;; Every row must be blank
       (dotimes (y 4)
         (expect (row-blank-p s y)))))
@@ -66,8 +66,8 @@
   (it "insert-lines-n-larger-than-region-blanks-all-region-rows"
     (with-screen (s 5 4)
       (feed-lines s "AA" "BB" "CC" "DD")
-      (cl-tmux/terminal/actions:set-cursor s 0 0)
-      (cl-tmux/terminal/actions:insert-lines s 99)
+      (nerimux/terminal/actions:set-cursor s 0 0)
+      (nerimux/terminal/actions:insert-lines s 99)
       ;; Every row must be blank
       (dotimes (y 4)
         (expect (row-blank-p s y))))))
@@ -86,8 +86,8 @@
   (it "scroll-screen-to-history-pushes-all-rows"
     (with-screen (s 5 3)
       (feed-lines s "AA" "BB" "CC")
-      (cl-tmux/terminal/actions:scroll-screen-to-history s)
-      (expect (= 3 (length (cl-tmux/terminal/types:screen-scrollback s))))))
+      (nerimux/terminal/actions:scroll-screen-to-history s)
+      (expect (= 3 (length (nerimux/terminal/types:screen-scrollback s))))))
 
   ;; scroll-screen-to-history pushes rows top→bottom so the top row ends up OLDEST
   ;; (deepest in the newest-first scrollback list).  The bottom row is the most-recent
@@ -96,8 +96,8 @@
     (with-screen (s 5 3)
       ;; Write distinct content so we can identify which row is which.
       (feed-lines s "ROW0" "ROW1" "ROW2")
-      (cl-tmux/terminal/actions:scroll-screen-to-history s)
-      (let ((scrollback (cl-tmux/terminal/types:screen-scrollback s)))
+      (nerimux/terminal/actions:scroll-screen-to-history s)
+      (let ((scrollback (nerimux/terminal/types:screen-scrollback s)))
         ;; newest-first: index 0 = last pushed = row 2 (bottom row = most recent).
         (let ((newest-row (first scrollback))
               (oldest-row (first (last scrollback))))
@@ -113,10 +113,10 @@
     (with-screen (s 5 3)
       (feed-lines s "AA" "BB" "CC")
       ;; Enter the alternate screen.
-      (cl-tmux/terminal/actions:enter-alt-screen s)
-      (cl-tmux/terminal/actions:scroll-screen-to-history s)
+      (nerimux/terminal/actions:enter-alt-screen s)
+      (nerimux/terminal/actions:scroll-screen-to-history s)
       ;; Scrollback must remain empty — the alt screen has no history.
-      (expect (null (cl-tmux/terminal/types:screen-scrollback s)))))
+      (expect (null (nerimux/terminal/types:screen-scrollback s)))))
 
   ;; scroll-screen-to-history enforces the history limit after pushing all rows.
   (it "scroll-screen-to-history-respects-history-cap"
@@ -124,9 +124,9 @@
       ;; Pre-fill 10 rows with content.
       (dotimes (_ 10) (feed s "AAAAA"))
       ;; Install a small cap so the push will trim.
-      (let ((cl-tmux/terminal/actions:*history-limit-function* (lambda () 5)))
-        (cl-tmux/terminal/actions:scroll-screen-to-history s))
-      (expect (<= (length (cl-tmux/terminal/types:screen-scrollback s)) 5)))))
+      (let ((nerimux/terminal/actions:*history-limit-function* (lambda () 5)))
+        (nerimux/terminal/actions:scroll-screen-to-history s))
+      (expect (<= (length (nerimux/terminal/types:screen-scrollback s)) 5)))))
 
 ;;; ── SUITE: DEC Rectangle operations (DECERA / DECFRA / DECCRA) ───────────────
 ;;;
@@ -144,7 +144,7 @@
       (feed s "AAAAAAAAAA")     ; row 0 = "AAAAAAAAAA"
       (feed s "BBBBBBBBBB")     ; row 1
       ;; Erase a 3×2 rectangle: rows 1-2 (1-based), cols 2-4 (1-based)
-      (cl-tmux/terminal/actions:decera s 1 2 2 4)
+      (nerimux/terminal/actions:decera s 1 2 2 4)
       ;; Row 0 (1-based row 1), cols 1-3 (0-based) must be blank
       (expect (char= #\Space (char-at s 1 0)))
       (expect (char= #\Space (char-at s 2 0)))
@@ -158,7 +158,7 @@
     (with-screen (s 5 5)
       (feed s "AAAAA")
       ;; top > bottom (3 > 1 in 1-based) → degenerate
-      (cl-tmux/terminal/actions:decera s 3 1 1 5)
+      (nerimux/terminal/actions:decera s 3 1 1 5)
       (expect (char= #\A (char-at s 0 0)))))
 
   ;; DECERA parameters beyond the screen edge are clamped to the screen bounds.
@@ -166,7 +166,7 @@
     (with-screen (s 5 3)
       (feed s "AAAAA")
       ;; Rectangle extends beyond screen: bottom=99, right=99 → clamped to height-1, width-1
-      (cl-tmux/terminal/actions:decera s 1 1 99 99)
+      (nerimux/terminal/actions:decera s 1 1 99 99)
       ;; Entire screen must be erased (clamped to full screen)
       (dotimes (y 3)
         (expect (row-blank-p s y)))))
@@ -177,7 +177,7 @@
   (it "decfra-fills-rectangle-with-char"
     (with-screen (s 10 5)
       ;; Fill rows 1-2 (0-based 0-1), cols 2-4 (0-based 1-3) with 'X' (code 88).
-      (cl-tmux/terminal/actions:decfra s 88 1 2 2 4)
+      (nerimux/terminal/actions:decfra s 88 1 2 2 4)
       (expect (char= #\X (char-at s 1 0)))
       (expect (char= #\X (char-at s 2 0)))
       (expect (char= #\X (char-at s 3 0)))
@@ -190,7 +190,7 @@
   (it "decfra-zero-char-code-fills-with-space"
     (with-screen (s 5 3)
       (feed s "AAAAA")
-      (cl-tmux/terminal/actions:decfra s 0 1 1 1 5)
+      (nerimux/terminal/actions:decfra s 0 1 1 1 5)
       (dotimes (x 5)
         (expect (char= #\Space (char-at s x 0))))))
 
@@ -199,7 +199,7 @@
     (with-screen (s 5 3)
       (feed s "AAAAA")
       ;; left > right: 5 > 1 (inverted) → degenerate
-      (cl-tmux/terminal/actions:decfra s 88 1 5 1 1)
+      (nerimux/terminal/actions:decfra s 88 1 5 1 1)
       (expect (char= #\A (char-at s 0 0)))))
 
   ;;; ── DECCRA — Copy Rectangular Area ──────────────────────────────────────────
@@ -208,9 +208,9 @@
   (it "deccra-action-direct-copies-rectangle-to-target"
     (with-screen (s 10 5)
       ;; Write 'A' in a 3×2 block at rows 1-2 cols 1-3 (1-based).
-      (cl-tmux/terminal/actions:decfra s 65 1 1 2 3)  ; 'A'=65
+      (nerimux/terminal/actions:decfra s 65 1 1 2 3)  ; 'A'=65
       ;; Copy that block to rows 4-5 cols 6-8 (1-based).
-      (cl-tmux/terminal/actions:deccra s 1 1 2 3 4 6)
+      (nerimux/terminal/actions:deccra s 1 1 2 3 4 6)
       ;; Target: 0-based rows 3-4, cols 5-7 must contain 'A'.
       (expect (char= #\A (char-at s 5 3)))
       (expect (char= #\A (char-at s 6 3)))
@@ -223,11 +223,11 @@
   (it "deccra-overlapping-regions-are-handled-correctly"
     (with-screen (s 10 3)
       ;; Write 'A','B','C' in cols 0-2 of row 0.
-      (cl-tmux/terminal/actions:write-char-at-cursor s #\A)
-      (cl-tmux/terminal/actions:write-char-at-cursor s #\B)
-      (cl-tmux/terminal/actions:write-char-at-cursor s #\C)
+      (nerimux/terminal/actions:write-char-at-cursor s #\A)
+      (nerimux/terminal/actions:write-char-at-cursor s #\B)
+      (nerimux/terminal/actions:write-char-at-cursor s #\C)
       ;; Copy 1-based cols 1-3 row 1 to cols 2-4 row 1 (shift right by 1).
-      (cl-tmux/terminal/actions:deccra s 1 1 1 3 1 2)
+      (nerimux/terminal/actions:deccra s 1 1 1 3 1 2)
       ;; After the copy, cols 1-3 (0-based) of row 0 must contain A,B,C.
       (expect (char= #\A (char-at s 1 0)))
       (expect (char= #\B (char-at s 2 0)))
@@ -236,9 +236,9 @@
   ;; DECCRA with a degenerate source rectangle (top > bottom) is a no-op.
   (it "deccra-degenerate-source-is-noop"
     (with-screen (s 5 3)
-      (cl-tmux/terminal/actions:decfra s 65 1 1 3 5)   ; fill whole screen with 'A'
+      (nerimux/terminal/actions:decfra s 65 1 1 3 5)   ; fill whole screen with 'A'
       ;; Degenerate source: top=3 > bottom=1
-      (cl-tmux/terminal/actions:deccra s 3 1 1 5 1 1)
+      (nerimux/terminal/actions:deccra s 3 1 1 5 1 1)
       ;; Target must remain unchanged (still 'A' or blank — no copy occurred).
       (expect (char= #\A (char-at s 0 0)))))
 
@@ -246,9 +246,9 @@
   (it "deccra-target-clamped-to-screen-bounds"
     (with-screen (s 5 3)
       ;; Write 'Z' in a 2×2 block at rows 1-2 cols 1-2 (1-based).
-      (cl-tmux/terminal/actions:decfra s 90 1 1 2 2)   ; 'Z'=90
+      (nerimux/terminal/actions:decfra s 90 1 1 2 2)   ; 'Z'=90
       ;; Copy to rows 3-99 cols 4-99 (1-based) — extends well past the screen.
       ;; Only the in-bounds portion (row 2 col 3, i.e. 0-based row 2 col 3) should be written.
-      (cl-tmux/terminal/actions:deccra s 1 1 2 2 3 4)
+      (nerimux/terminal/actions:deccra s 1 1 2 2 3 4)
       ;; 0-based: target starts at row 2, col 3 — at least that cell must be 'Z'.
       (expect (char= #\Z (char-at s 3 2))))))

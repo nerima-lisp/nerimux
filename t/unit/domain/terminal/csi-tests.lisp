@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; CSI dispatch tests (src/terminal/csi.lisp).
 ;;;; Tests: cursor-movement suite.
@@ -197,10 +197,10 @@
             (expect (second entry)))
         (with-screen (s 20 5)
           (feed s (esc (format nil "[~A q" param)))
-          (expect (= expect (cl-tmux/terminal/types:screen-cursor-shape s))))))
+          (expect (= expect (nerimux/terminal/types:screen-cursor-shape s))))))
     ;; Verify default shape on a fresh screen is 1 (block blink).
     (with-screen (s 20 5)
-      (expect (= 1 (cl-tmux/terminal/types:screen-cursor-shape s))))))
+      (expect (= 1 (nerimux/terminal/types:screen-cursor-shape s))))))
 
 ;;; ── SUITE: cbt-cht ───────────────────────────────────────────────────────────
 
@@ -293,22 +293,22 @@
   (it "decrqm-accessor-mode-reports-set-and-reset"
     (with-screen (s 20 5)
       ;; focus-events defaults to NIL -> code 2 (reset)
-      (cl-tmux/terminal/csi::enqueue-decrqm-reply s 1004)
-      (let ((reply (first (cl-tmux/terminal/types:screen-response-queue s))))
+      (nerimux/terminal/csi::enqueue-decrqm-reply s 1004)
+      (let ((reply (first (nerimux/terminal/types:screen-response-queue s))))
         (expect (string= (format nil "~C[?1004;2$y" #\Escape) reply)))
       ;; enable focus-events -> code 1 (set)
-      (setf (cl-tmux/terminal/types:screen-response-queue s) nil)
-      (setf (cl-tmux/terminal/types:screen-focus-events s) t)
-      (cl-tmux/terminal/csi::enqueue-decrqm-reply s 1004)
-      (let ((reply (first (cl-tmux/terminal/types:screen-response-queue s))))
+      (setf (nerimux/terminal/types:screen-response-queue s) nil)
+      (setf (nerimux/terminal/types:screen-focus-events s) t)
+      (nerimux/terminal/csi::enqueue-decrqm-reply s 1004)
+      (let ((reply (first (nerimux/terminal/types:screen-response-queue s))))
         (expect (string= (format nil "~C[?1004;1$y" #\Escape) reply)))))
 
   ;; Modes declared :fixed always report the specified code regardless of state.
   ;; Mode 2026 (synchronized output) is :fixed 2 and must always report 2.
   (it "decrqm-fixed-mode-always-reports-given-code"
     (with-screen (s 20 5)
-      (cl-tmux/terminal/csi::enqueue-decrqm-reply s 2026)
-      (let ((reply (first (cl-tmux/terminal/types:screen-response-queue s))))
+      (nerimux/terminal/csi::enqueue-decrqm-reply s 2026)
+      (let ((reply (first (nerimux/terminal/types:screen-response-queue s))))
         (expect (string= (format nil "~C[?2026;2$y" #\Escape) reply)))))
 
   ;; Mouse-mode specs (e.g. mode 1000 = :mouse-mode 1) report 1 only when the
@@ -316,27 +316,27 @@
   (it "decrqm-mouse-mode-reports-active-and-inactive"
     (with-screen (s 20 5)
       ;; mouse-mode 0 by default: mode 1000 not active -> code 2
-      (cl-tmux/terminal/csi::enqueue-decrqm-reply s 1000)
+      (nerimux/terminal/csi::enqueue-decrqm-reply s 1000)
       (expect (string= (format nil "~C[?1000;2$y" #\Escape)
-                        (first (cl-tmux/terminal/types:screen-response-queue s))))
+                        (first (nerimux/terminal/types:screen-response-queue s))))
       ;; activate mouse mode 1: mode 1000 -> code 1
-      (setf (cl-tmux/terminal/types:screen-response-queue s) nil)
-      (setf (cl-tmux/terminal/types:screen-mouse-mode s) 1)
-      (cl-tmux/terminal/csi::enqueue-decrqm-reply s 1000)
+      (setf (nerimux/terminal/types:screen-response-queue s) nil)
+      (setf (nerimux/terminal/types:screen-mouse-mode s) 1)
+      (nerimux/terminal/csi::enqueue-decrqm-reply s 1000)
       (expect (string= (format nil "~C[?1000;1$y" #\Escape)
-                        (first (cl-tmux/terminal/types:screen-response-queue s))))))
+                        (first (nerimux/terminal/types:screen-response-queue s))))))
 
   ;; Mode 1049 (:alt-screen) reports 1 when the alternate screen buffer is active,
   ;; 2 otherwise.  Exercises the :alt-screen spec path via ESC sequences.
   (it "decrqm-alt-screen-mode-reflects-alternate-screen-state"
     (with-screen (s 20 5)
       ;; Default: primary screen -> code 2
-      (cl-tmux/terminal/csi::enqueue-decrqm-reply s 1049)
+      (nerimux/terminal/csi::enqueue-decrqm-reply s 1049)
       (expect (string= (format nil "~C[?1049;2$y" #\Escape)
-                        (first (cl-tmux/terminal/types:screen-response-queue s))))
+                        (first (nerimux/terminal/types:screen-response-queue s))))
       ;; Switch to alt screen via ESC[?1049h
-      (setf (cl-tmux/terminal/types:screen-response-queue s) nil)
+      (setf (nerimux/terminal/types:screen-response-queue s) nil)
       (feed s (esc "[?1049h"))
-      (cl-tmux/terminal/csi::enqueue-decrqm-reply s 1049)
+      (nerimux/terminal/csi::enqueue-decrqm-reply s 1049)
       (expect (string= (format nil "~C[?1049;1$y" #\Escape)
-                        (first (cl-tmux/terminal/types:screen-response-queue s)))))))
+                        (first (nerimux/terminal/types:screen-response-queue s)))))))

@@ -1,6 +1,6 @@
-(in-package #:cl-tmux/renderer)
+(in-package #:nerimux/renderer)
 
-;;;; Overlay and mouse-mode composition for the cl-tmux renderer.
+;;;; Overlay and mouse-mode composition for the nerimux renderer.
 ;;;;
 ;;;; This file owns the light-weight overlay text renderer and the mouse-mode
 ;;;; escape-sequence dispatch table used by renderer-compose.lisp.
@@ -12,11 +12,11 @@
    the status area — the bottom rows by default, the top rows when
    status-position is top — with message-line (0..4) selecting the line within
    a multi-line status bar (clamped to the status height)."
-  (let* ((height (max 1 cl-tmux/config:*status-height*))
-         (raw    (cl-tmux/options:get-option "message-line" 0))
+  (let* ((height (max 1 nerimux/config:*status-height*))
+         (raw    (nerimux/options:get-option "message-line" 0))
          (line   (if (integerp raw) (min (max raw 0) (1- height)) 0))
          (top-p  (string-equal
-                  (cl-tmux/options:get-option "status-position" "bottom")
+                  (nerimux/options:get-option "status-position" "bottom")
                   "top")))
     (if top-p
         line
@@ -31,8 +31,8 @@
    Applies the message-style option (or message-command-style when a prompt is
    active) so overlays respect the user's colour scheme."
   (let* ((style-opt (if (prompt-active-p)
-                        (cl-tmux/options:get-option "message-command-style" "")
-                        (cl-tmux/options:get-option "message-style" "")))
+                        (nerimux/options:get-option "message-command-style" "")
+                        (nerimux/options:get-option "message-style" "")))
          (sgr-code  (when (and style-opt (plusp (length style-opt)))
                       (%status-sgr-from-style style-opt))))
     (if sgr-code
@@ -104,7 +104,7 @@
   "Emit mouse-tracking mode sequences according to session and pane settings.
    When the session 'mouse' option is enabled, emit SGR + button-event sequences.
    Otherwise honour ACTIVE-PANE's screen-mouse-mode (X10/button-event/any-event)."
-  (let ((session-mouse (cl-tmux/options:get-option "mouse")))
+  (let ((session-mouse (nerimux/options:get-option "mouse")))
     (if session-mouse
         (progn
           (format stream "~C[?1006h" +esc+)

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/protocol)
+(in-package #:nerimux/protocol)
 
 ;;;; Wire protocol for client/server detach-attach.
 ;;;;

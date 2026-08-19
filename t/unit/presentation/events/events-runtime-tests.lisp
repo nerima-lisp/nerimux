@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; events tests: prompt UTF-8 decoding, event-loop cycle, automatic rename.
 
@@ -18,11 +18,11 @@
       (prompt-start "test" ""
                     (lambda (buf) (declare (ignore buf)) nil))
       ;; U+20AC in UTF-8: 0xE2 0x82 0xAC
-      (cl-tmux::handle-prompt-key #xE2)
-      (cl-tmux::handle-prompt-key #x82)
-      (cl-tmux::handle-prompt-key #xAC)
+      (nerimux::handle-prompt-key #xE2)
+      (nerimux::handle-prompt-key #x82)
+      (nerimux::handle-prompt-key #xAC)
       (expect (string= "€" (prompt-buffer *prompt*)))
-      (expect (null cl-tmux::*prompt-utf8-continuation*))))
+      (expect (null nerimux::*prompt-utf8-continuation*))))
 
   ;; A 4-byte UTF-8 sequence (U+1F600, grinning face) fed byte-by-byte into
   ;; handle-prompt-key decodes and inserts the correct character.
@@ -31,10 +31,10 @@
       (prompt-start "test" ""
                     (lambda (buf) (declare (ignore buf)) nil))
       ;; U+1F600 in UTF-8: 0xF0 0x9F 0x98 0x80
-      (cl-tmux::handle-prompt-key #xF0)
-      (cl-tmux::handle-prompt-key #x9F)
-      (cl-tmux::handle-prompt-key #x98)
-      (cl-tmux::handle-prompt-key #x80)
+      (nerimux::handle-prompt-key #xF0)
+      (nerimux::handle-prompt-key #x9F)
+      (nerimux::handle-prompt-key #x98)
+      (nerimux::handle-prompt-key #x80)
       (expect (string= (string (code-char #x1F600)) (prompt-buffer *prompt*)))))
 
   ;; A structurally-valid but out-of-range 4-byte lead byte (0xF7) combined with
@@ -52,12 +52,12 @@
       ;; signals and IGNORE-ERRORS returns NIL.
       (finishes
         (progn
-          (cl-tmux::handle-prompt-key #xF7)
-          (cl-tmux::handle-prompt-key #xBF)
-          (cl-tmux::handle-prompt-key #xBF)
-          (cl-tmux::handle-prompt-key #xBF)))
+          (nerimux::handle-prompt-key #xF7)
+          (nerimux::handle-prompt-key #xBF)
+          (nerimux::handle-prompt-key #xBF)
+          (nerimux::handle-prompt-key #xBF)))
       (expect (string= "" (prompt-buffer *prompt*)))
-      (expect (null cl-tmux::*prompt-utf8-continuation*))))
+      (expect (null nerimux::*prompt-utf8-continuation*))))
 
   ;;; ── Event-loop per-iteration cycle ────────────────────────────────────────────
   ;;;
@@ -73,7 +73,7 @@
   (it "read-and-dispatch-one-byte-idle-increments-counter"
     (with-fake-session (s)
       (with-input-state (input-state)
-        (let ((next (cl-tmux::%read-and-dispatch-one-byte s input-state 0)))
+        (let ((next (nerimux::%read-and-dispatch-one-byte s input-state 0)))
           (expect (= 1 next))))))
 
   ;; Once the idle counter reaches +event-loop-max-idle-iterations+, the next
@@ -81,9 +81,9 @@
   (it "read-and-dispatch-one-byte-idle-yields-and-resets-at-threshold"
     (with-fake-session (s)
       (with-input-state (input-state)
-        (let ((next (cl-tmux::%read-and-dispatch-one-byte
+        (let ((next (nerimux::%read-and-dispatch-one-byte
                      s input-state
-                     (1- cl-tmux::+event-loop-max-idle-iterations+))))
+                     (1- nerimux::+event-loop-max-idle-iterations+))))
           (expect (zerop next))))))
 
   ;; %process-one-event-cycle resolves the current session, drains repeat/escape
@@ -91,11 +91,11 @@
   ;; idle-counter value without touching *running*.
   (it "process-one-event-cycle-runs-without-error-and-returns-idle-counter"
     (with-fake-session (s)
-      (let ((state (cl-tmux::make-input-state))
-            (cl-tmux::*running* t))
-        (let ((next (cl-tmux::%process-one-event-cycle s state 0)))
+      (let ((state (nerimux::make-input-state))
+            (nerimux::*running* t))
+        (let ((next (nerimux::%process-one-event-cycle s state 0)))
           (expect (= 1 next))
-          (expect cl-tmux::*running* :to-be-truthy)))))
+          (expect nerimux::*running* :to-be-truthy)))))
 
   ;; EVENT-LOOP's LOOP WHILE *running* body never executes when *running* is
   ;; already NIL on entry, so the call returns at once instead of blocking —
@@ -103,8 +103,8 @@
   ;; without a live byte stream.
   (it "event-loop-returns-immediately-when-not-running"
     (with-fake-session (s)
-      (let ((cl-tmux::*running* nil))
-        (finishes (cl-tmux::event-loop s)))))
+      (let ((nerimux::*running* nil))
+        (finishes (nerimux::event-loop s)))))
 
   ;;; ── Automatic-rename helper decomposition ────────────────────────────────────
 
@@ -114,8 +114,8 @@
     (with-fake-session (s :nwindows 1)
       (let ((window (session-active-window s)))
         (setf (window-automatic-rename-p window) t)
-        (cl-tmux/options:set-option-for-window "automatic-rename" t window)
-        (expect (cl-tmux::%automatic-rename-enabled-p window) :to-be-truthy))))
+        (nerimux/options:set-option-for-window "automatic-rename" t window)
+        (expect (nerimux::%automatic-rename-enabled-p window) :to-be-truthy))))
 
   ;; %automatic-rename-enabled-p is NIL when the window's automatic-rename-p
   ;; struct flag is off, regardless of the option value.
@@ -123,4 +123,4 @@
     (with-fake-session (s :nwindows 1)
       (let ((window (session-active-window s)))
         (setf (window-automatic-rename-p window) nil)
-        (expect (cl-tmux::%automatic-rename-enabled-p window) :to-be-falsy)))))
+        (expect (nerimux::%automatic-rename-enabled-p window) :to-be-falsy)))))

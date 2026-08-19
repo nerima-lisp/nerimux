@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Pane tests - state, accessors, and defaults.
 
@@ -71,7 +71,7 @@
       (screen-clear-dirty screen)
       (pane-feed pane (cl-codec-kit:string-to-octets "A" :encoding :utf-8))
       ;; After writing a character the dirty flag must be set.
-      (expect (cl-tmux/terminal/types:screen-dirty-p screen) :to-be-truthy)))
+      (expect (nerimux/terminal/types:screen-dirty-p screen) :to-be-truthy)))
 
   ;;; ── %drain-response-queue writes replies back to a real PTY fd ──────────────
 
@@ -84,9 +84,9 @@
              (pane   (make-pane :id 1 :x 0 :y 0 :width 10 :height 5
                                 :fd write-fd :pid -1 :screen screen))
              (reply  (format nil "~C[?1;2c" #\Escape)))
-        (setf (cl-tmux/terminal/types:screen-response-queue screen) (list reply))
-        (cl-tmux/model::%drain-response-queue pane screen)
-        (expect (null (cl-tmux/terminal/types:screen-response-queue screen)))
+        (setf (nerimux/terminal/types:screen-response-queue screen) (list reply))
+        (nerimux/model::%drain-response-queue pane screen)
+        (expect (null (nerimux/terminal/types:screen-response-queue screen)))
         (expect (equalp (cl-codec-kit:string-to-octets reply :encoding :utf-8)
                         (pty-read-blocking read-fd 32))))))
 
@@ -96,7 +96,7 @@
     (let* ((screen (make-screen 10 5))
            (pane   (make-pane :id 1 :x 0 :y 0 :width 10 :height 5
                               :fd -1 :pid -1 :screen screen)))
-      (setf (cl-tmux/terminal/types:screen-response-queue screen)
+      (setf (nerimux/terminal/types:screen-response-queue screen)
             (list (format nil "~C[?1;2c" #\Escape)))
-      (finishes (cl-tmux/model::%drain-response-queue pane screen))
-      (expect (null (cl-tmux/terminal/types:screen-response-queue screen))))))
+      (finishes (nerimux/model::%drain-response-queue pane screen))
+      (expect (null (nerimux/terminal/types:screen-response-queue screen))))))

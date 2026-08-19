@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Interactive single-line input-prompt tests (prompt.lisp).
 ;;;;
@@ -7,7 +7,7 @@
 ;;;; prompt-editing-tests.lisp. Event-loop wiring and status-bar coverage live
 ;;;; in prompt-tests-wiring.lisp.
 ;;;; All prompt tests use with-clean-prompt (from helpers-input-fixtures.lisp) to guarantee
-;;;; that *prompt* and cl-tmux::*dirty* are reset; the raw let form is never used.
+;;;; that *prompt* and nerimux::*dirty* are reset; the raw let form is never used.
 
 ;;; -- Shared test helpers -----------------------------------------------------
 ;;; make-rename-window and with-prompt-at (below) are shared helpers used by

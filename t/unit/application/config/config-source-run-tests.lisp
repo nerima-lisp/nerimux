@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; config directive tests — source-file, run-shell, and path expansion
 
@@ -20,17 +20,17 @@
       (with-temp-config-file (p "set-option -g status-left SOURCEALIAS")
         (assert-config-directive-rejected (list "source" (namestring p))
                                           "source alias")
-        (expect (not (string= "SOURCEALIAS" (cl-tmux/options:get-option "status-left")))))))
+        (expect (not (string= "SOURCEALIAS" (nerimux/options:get-option "status-left")))))))
 
   ;; source-file on a nonexistent file returns NIL and logs tmux's diagnostic.
   (it "source-file-missing-returns-nil-and-logs"
     (with-isolated-config
-      (let ((cl-tmux::*message-log* nil))
+      (let ((nerimux::*message-log* nil))
         (expect (null (apply-config-directive
-                       '("source-file" "/nonexistent-cl-tmux-config-abc.conf"))))
-        (expect (= 1 (length cl-tmux::*message-log*)))
+                       '("source-file" "/nonexistent-nerimux-config-abc.conf"))))
+        (expect (= 1 (length nerimux::*message-log*)))
         (expect (search "No such file or directory"
-                        (cdr (first cl-tmux::*message-log*)))))))
+                        (cdr (first nerimux::*message-log*)))))))
 
   ;; source-file -n parses the file but executes NOTHING (tmux CMD_PARSE_PARSEONLY).
   ;; Asserts via an OPTION the file would set (a key like z has a DEFAULT binding, so
@@ -40,7 +40,7 @@
       (with-temp-config-file (p "set-option -g status-left PARSEONLY")
         (assert-config-directive-applied (list "source-file" "-n" (namestring p))
                                          "source-file -n parse only")
-        (expect (not (string= "PARSEONLY" (cl-tmux/options:get-option "status-left")))))))
+        (expect (not (string= "PARSEONLY" (nerimux/options:get-option "status-left")))))))
 
   ;; Control: WITHOUT -n the same file DOES set the option — isolating that -n is what
   ;; suppresses execution.
@@ -48,19 +48,19 @@
     (with-isolated-config
       (with-temp-config-file (p "set-option -g status-left EXECUTED")
         (apply-config-directive (list "source-file" (namestring p)))
-        (expect (string= "EXECUTED" (cl-tmux/options:get-option "status-left"))))))
+        (expect (string= "EXECUTED" (nerimux/options:get-option "status-left"))))))
 
   ;; Clustered -qn is also parse-only (q tolerated, n suppresses execution).
   (it "source-file-clustered-qn-does-not-execute"
     (with-isolated-config
       (with-temp-config-file (p "set-option -g status-left QNFLAG")
         (apply-config-directive (list "source-file" "-qn" (namestring p)))
-        (expect (not (string= "QNFLAG" (cl-tmux/options:get-option "status-left")))))))
+        (expect (not (string= "QNFLAG" (nerimux/options:get-option "status-left")))))))
 
   ;; %parse-source-file-flags parses clustered -Fnqv and returns the path positionals.
   (it "parse-source-file-flags-clustered"
     (multiple-value-bind (n q v f rest)
-        (cl-tmux/config::%parse-source-file-flags '("-Fnqv" "/path/to.conf"))
+        (nerimux/config::%parse-source-file-flags '("-Fnqv" "/path/to.conf"))
       (expect n :to-be-truthy)
       (expect q :to-be-truthy)
       (expect v :to-be-truthy)
@@ -70,7 +70,7 @@
   ;; %parse-source-file-flags consumes tmux's -t target-pane without treating it as a path.
   (it "parse-source-file-flags-target-pane"
     (multiple-value-bind (n q v f rest)
-        (cl-tmux/config::%parse-source-file-flags '("-q" "-t" "%1" "/path/to.conf"))
+        (nerimux/config::%parse-source-file-flags '("-q" "-t" "%1" "/path/to.conf"))
       (declare (ignore n v f))
       (expect q :to-be-truthy)
       (expect (equal '("/path/to.conf") rest))))
@@ -79,7 +79,7 @@
   (it "consume-leading-flag-tokens-stops-at-first-non-flag"
     (let ((seen '()))
       (expect (equal '("cmd" "arg")
-                     (cl-tmux/config::%consume-leading-flag-tokens
+                     (nerimux/config::%consume-leading-flag-tokens
                       '("-b" "-F" "cmd" "arg")
                       (lambda (tok rest)
                         (push tok seen)
@@ -94,10 +94,10 @@
       (with-temp-config-file (p "set-option -g status-left FFORMAT")
         ;; A plain path contains no #{} variables; expand-format returns it unchanged.
         ;; This test confirms the -F code path does not corrupt literal paths.
-        (let ((result (cl-tmux/config:apply-config-directive
+        (let ((result (nerimux/config:apply-config-directive
                        (list "source-file" "-F" (namestring p)))))
           (expect result :to-be-truthy)
-          (expect (string= "FFORMAT" (cl-tmux/options:get-option "status-left")))))))
+          (expect (string= "FFORMAT" (nerimux/options:get-option "status-left")))))))
 
   ;;; ── run-shell directive ───────────────────────────────────────────────────
 
@@ -135,20 +135,20 @@
       (destructuring-bind (expected cmd args desc) c
         (declare (ignore desc))
         (with-isolated-config
-          (let ((result (cl-tmux/config::%apply-run-shell-directive cmd args)))
+          (let ((result (nerimux/config::%apply-run-shell-directive cmd args)))
             (if expected
                 (expect (eq t result))
                 (expect (null result))))))))
 
   ;; run-shell -c runs the shell command from the requested start-directory.
   (it "run-shell-c-start-directory-controls-shell-cwd"
-    (let* ((tmp-dir (merge-pathnames "cl-tmux-run-shell-c/"
+    (let* ((tmp-dir (merge-pathnames "nerimux-run-shell-c/"
                                      (host-kit:temporary-directory)))
            (out-file (merge-pathnames "pwd.txt" tmp-dir)))
       (ensure-directories-exist tmp-dir)
       (unwind-protect
            (progn
-             (let ((handled (cl-tmux/config::%apply-run-shell-directive
+             (let ((handled (nerimux/config::%apply-run-shell-directive
                              "run-shell"
                              (list "-c" (namestring tmp-dir)
                                    (format nil "pwd > ~A" (namestring out-file))))))
@@ -170,10 +170,10 @@
       (destructuring-bind (verb option value desc) c
         (declare (ignore desc))
         (with-isolated-config
-          (let ((handled (cl-tmux/config::%apply-run-shell-directive
+          (let ((handled (nerimux/config::%apply-run-shell-directive
                           verb (list "-C" (format nil "set-option -g ~A ~A" option value)))))
             (expect (eq t handled))
-            (expect (string= value (cl-tmux/options:get-option option))))))))
+            (expect (string= value (nerimux/options:get-option option))))))))
 
   ;;; ── %expand-leading-tilde ──────────────────────────────────────────────────
 
@@ -190,4 +190,4 @@
                        (list "a/~/b"  "a/~/b"  "embedded ~ unchanged")))
         (destructuring-bind (input expected desc) c
           (declare (ignore desc))
-          (expect (string= expected (cl-tmux/config::%expand-leading-tilde input))))))))
+          (expect (string= expected (nerimux/config::%expand-leading-tilde input))))))))

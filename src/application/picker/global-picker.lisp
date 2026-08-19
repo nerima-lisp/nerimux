@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/picker)
+(in-package #:nerimux/picker)
 
 (defstruct (picker-item
             (:constructor %make-picker-item
@@ -26,63 +26,63 @@
         finally (return "")))
 
 (defun %organization-label (organization)
-  (let ((host (%picker-string (cl-tmux/model:organization-host organization)))
-        (name (%picker-string (cl-tmux/model:organization-name organization))))
+  (let ((host (%picker-string (nerimux/model:organization-host organization)))
+        (name (%picker-string (nerimux/model:organization-name organization))))
     (cond
       ((and (plusp (length host)) (plusp (length name)))
        (format nil "~A/~A" host name))
       ((plusp (length host)) host)
       ((plusp (length name)) name)
-      (t (%picker-string (cl-tmux/model:organization-id organization))))))
+      (t (%picker-string (nerimux/model:organization-id organization))))))
 
 (defun %repository-label (repository)
   (%first-picker-string
-   (cl-tmux/model:repository-specification repository)
-   (cl-tmux/model:repository-local-path repository)
-   (cl-tmux/model:repository-id repository)))
+   (nerimux/model:repository-specification repository)
+   (nerimux/model:repository-local-path repository)
+   (nerimux/model:repository-id repository)))
 
 (defun %worktree-label (worktree)
-  (let ((branch (%picker-string (cl-tmux/model:worktree-branch worktree)))
-        (path (%picker-string (cl-tmux/model:worktree-path worktree))))
+  (let ((branch (%picker-string (nerimux/model:worktree-branch worktree)))
+        (path (%picker-string (nerimux/model:worktree-path worktree))))
     (cond
       ((and (plusp (length branch)) (plusp (length path)))
        (format nil "~A — ~A" branch path))
       ((plusp (length branch)) branch)
       ((plusp (length path)) path)
-      (t (%picker-string (cl-tmux/model:worktree-id worktree))))))
+      (t (%picker-string (nerimux/model:worktree-id worktree))))))
 
 (defun %organization-id (organization)
   (format nil "organization/~A"
           (%first-picker-string
-           (cl-tmux/model:organization-id organization)
+           (nerimux/model:organization-id organization)
            (%organization-label organization))))
 
 (defun %repository-id (organization repository)
   (format nil "~A/repository/~A"
           (%organization-id organization)
           (%first-picker-string
-           (cl-tmux/model:repository-id repository)
+           (nerimux/model:repository-id repository)
            (%repository-label repository))))
 
 (defun %worktree-id (organization repository worktree)
   (format nil "~A/worktree/~A"
           (%repository-id organization repository)
           (%first-picker-string
-           (cl-tmux/model:worktree-id worktree)
+           (nerimux/model:worktree-id worktree)
            (%worktree-label worktree))))
 
 (defun %pane-label (pane)
   (format nil "pane/~D ~A"
-          (cl-tmux/model:pane-id pane)
+          (nerimux/model:pane-id pane)
           (%first-picker-string
-           (cl-tmux/model:pane-title pane)
-           (cl-tmux/model:pane-start-command pane)
+           (nerimux/model:pane-title pane)
+           (nerimux/model:pane-start-command pane)
            "shell")))
 
 (defun %pane-id (organization repository worktree pane)
   (format nil "~A/pane/~D"
           (%worktree-id organization repository worktree)
-          (cl-tmux/model:pane-id pane)))
+          (nerimux/model:pane-id pane)))
 
 (defun %make-organization-item (organization)
   (%make-picker-item
@@ -123,10 +123,10 @@
   (let ((items nil))
     (dolist (organization (reverse organizations) items)
       (dolist (repository
-               (reverse (cl-tmux/model:organization-repositories organization)))
+               (reverse (nerimux/model:organization-repositories organization)))
         (dolist (worktree
-                 (reverse (cl-tmux/model:repository-worktrees repository)))
-          (dolist (pane (reverse (cl-tmux/model:worktree-panes worktree)))
+                 (reverse (nerimux/model:repository-worktrees repository)))
+          (dolist (pane (reverse (nerimux/model:worktree-panes worktree)))
             (push (%make-pane-item organization repository worktree pane)
                   items))
           (push (%make-worktree-item organization repository worktree) items))
@@ -134,29 +134,29 @@
       (push (%make-organization-item organization) items))))
 
 (defun %repository-attention-p (repository)
-  (or (cl-tmux/model:repository-dirty-p repository)
-      (cl-tmux/model:repository-conflict-p repository)
-      (plusp (cl-tmux/model:repository-ahead repository))
-      (plusp (cl-tmux/model:repository-behind repository))
-      (cl-tmux/model:repository-missing-p repository)
-      (some #'cl-tmux/model:worktree-attention-p
-            (cl-tmux/model:repository-worktrees repository))))
+  (or (nerimux/model:repository-dirty-p repository)
+      (nerimux/model:repository-conflict-p repository)
+      (plusp (nerimux/model:repository-ahead repository))
+      (plusp (nerimux/model:repository-behind repository))
+      (nerimux/model:repository-missing-p repository)
+      (some #'nerimux/model:worktree-attention-p
+            (nerimux/model:repository-worktrees repository))))
 
 (defun picker-item-attention-p (item)
   (check-type item picker-item)
   (case (picker-item-kind item)
     (:organization
-     (or (cl-tmux/model:organization-missing-p
+     (or (nerimux/model:organization-missing-p
           (picker-item-organization item))
-         (plusp (cl-tmux/model:organization-attention-count
+         (plusp (nerimux/model:organization-attention-count
                  (picker-item-organization item)))
          (some #'%repository-attention-p
-               (cl-tmux/model:organization-repositories
+               (nerimux/model:organization-repositories
                 (picker-item-organization item)))))
     (:repository (%repository-attention-p (picker-item-repository item)))
-    (:worktree (cl-tmux/model:worktree-attention-p
+    (:worktree (nerimux/model:worktree-attention-p
                 (picker-item-worktree item)))
-    (:pane (cl-tmux/model:pane-attention-p (picker-item-pane item)))
+    (:pane (nerimux/model:pane-attention-p (picker-item-pane item)))
     (otherwise nil)))
 
 (defun %picker-item-search-text (item)
@@ -166,186 +166,186 @@
                    (picker-item-kind item)
                    (picker-item-label item)
                    (and (picker-item-organization item)
-                        (cl-tmux/model:organization-id
+                        (nerimux/model:organization-id
                          (picker-item-organization item)))
                    (and (picker-item-repository item)
-                        (cl-tmux/model:repository-id
+                        (nerimux/model:repository-id
                          (picker-item-repository item)))
                    (and (picker-item-worktree item)
-                        (cl-tmux/model:worktree-id
+                        (nerimux/model:worktree-id
                          (picker-item-worktree item)))
                    (and (picker-item-worktree item)
-                        (cl-tmux/model:worktree-branch
+                        (nerimux/model:worktree-branch
                          (picker-item-worktree item)))
                    (and (picker-item-worktree item)
-                        (cl-tmux/model:worktree-path
+                        (nerimux/model:worktree-path
                          (picker-item-worktree item)))
                    (and (picker-item-worktree item)
-                        (cl-tmux/model:worktree-head
+                        (nerimux/model:worktree-head
                          (picker-item-worktree item)))
                    (and (picker-item-organization item)
-                        (cl-tmux/model:organization-host
+                        (nerimux/model:organization-host
                          (picker-item-organization item)))
                    (and (picker-item-organization item)
-                        (cl-tmux/model:organization-name
+                        (nerimux/model:organization-name
                          (picker-item-organization item)))
                    (and (picker-item-organization item)
-                        (cl-tmux/model:organization-tags
+                        (nerimux/model:organization-tags
                          (picker-item-organization item)))
                    (and (picker-item-organization item)
-                        (cl-tmux/model:organization-notes
+                        (nerimux/model:organization-notes
                          (picker-item-organization item)))
                    (and (picker-item-organization item)
-                        (cl-tmux/model:organization-recent-activity
+                        (nerimux/model:organization-recent-activity
                          (picker-item-organization item)))
                    (and (picker-item-organization item)
-                        (when (cl-tmux/model:organization-missing-p
+                        (when (nerimux/model:organization-missing-p
                                (picker-item-organization item))
                           "missing"))
                    (and (picker-item-organization item)
                         (when (plusp
-                               (cl-tmux/model:organization-attention-count
+                               (nerimux/model:organization-attention-count
                                 (picker-item-organization item)))
                           (format nil
                                   "attention ~D"
-                                  (cl-tmux/model:organization-attention-count
+                                  (nerimux/model:organization-attention-count
                                    (picker-item-organization item)))))
                    (and (picker-item-organization item)
                         (format nil
                                 "repositories ~D worktrees ~D"
                                 (length
-                                 (cl-tmux/model:organization-repositories
+                                 (nerimux/model:organization-repositories
                                   (picker-item-organization item)))
-                                (cl-tmux/model:organization-active-worktree-count
+                                (nerimux/model:organization-active-worktree-count
                                  (picker-item-organization item))))
                    (and (picker-item-repository item)
-                        (cl-tmux/model:repository-specification
+                        (nerimux/model:repository-specification
                          (picker-item-repository item)))
                    (and (picker-item-repository item)
-                        (cl-tmux/model:repository-local-path
+                        (nerimux/model:repository-local-path
                          (picker-item-repository item)))
                    (and (picker-item-repository item)
-                        (cl-tmux/model:repository-remote
+                        (nerimux/model:repository-remote
                          (picker-item-repository item)))
                    (and (picker-item-repository item)
-                        (cl-tmux/model:repository-backend
+                        (nerimux/model:repository-backend
                          (picker-item-repository item)))
                    (and (picker-item-repository item)
-                        (when (cl-tmux/model:repository-dirty-p
+                        (when (nerimux/model:repository-dirty-p
                                (picker-item-repository item))
                           "dirty"))
                    (and (picker-item-repository item)
-                        (when (cl-tmux/model:repository-conflict-p
+                        (when (nerimux/model:repository-conflict-p
                                (picker-item-repository item))
                           "conflict"))
                    (and (picker-item-repository item)
-                        (when (plusp (cl-tmux/model:repository-ahead
+                        (when (plusp (nerimux/model:repository-ahead
                                       (picker-item-repository item)))
                           (format nil
                                   "ahead ~D"
-                                  (cl-tmux/model:repository-ahead
+                                  (nerimux/model:repository-ahead
                                    (picker-item-repository item)))))
                    (and (picker-item-repository item)
-                        (when (plusp (cl-tmux/model:repository-behind
+                        (when (plusp (nerimux/model:repository-behind
                                       (picker-item-repository item)))
                           (format nil
                                   "behind ~D"
-                                  (cl-tmux/model:repository-behind
+                                  (nerimux/model:repository-behind
                                    (picker-item-repository item)))))
                    (and (picker-item-repository item)
-                        (when (cl-tmux/model:repository-missing-p
+                        (when (nerimux/model:repository-missing-p
                                (picker-item-repository item))
                           "missing"))
                    (and (picker-item-repository item)
-                        (cl-tmux/model:repository-tags
+                        (nerimux/model:repository-tags
                          (picker-item-repository item)))
                    (and (picker-item-repository item)
-                        (cl-tmux/model:repository-notes
+                        (nerimux/model:repository-notes
                          (picker-item-repository item)))
                    (and (picker-item-repository item)
-                        (cl-tmux/model:repository-recent-activity
+                        (nerimux/model:repository-recent-activity
                          (picker-item-repository item)))
                    (and (picker-item-worktree item)
-                        (cl-tmux/model:worktree-status
+                        (nerimux/model:worktree-status
                          (picker-item-worktree item)))
                    (and (picker-item-worktree item)
-                        (when (cl-tmux/model:worktree-dirty-p
+                        (when (nerimux/model:worktree-dirty-p
                                (picker-item-worktree item))
                           "dirty"))
                    (and (picker-item-worktree item)
-                        (when (cl-tmux/model:worktree-conflict-p
+                        (when (nerimux/model:worktree-conflict-p
                                (picker-item-worktree item))
                           "conflict"))
                    (and (picker-item-worktree item)
-                        (when (plusp (cl-tmux/model:worktree-ahead
+                        (when (plusp (nerimux/model:worktree-ahead
                                       (picker-item-worktree item)))
                           (format nil
                                   "ahead ~D"
-                                  (cl-tmux/model:worktree-ahead
+                                  (nerimux/model:worktree-ahead
                                    (picker-item-worktree item)))))
                    (and (picker-item-worktree item)
-                        (when (plusp (cl-tmux/model:worktree-behind
+                        (when (plusp (nerimux/model:worktree-behind
                                       (picker-item-worktree item)))
                           (format nil
                                   "behind ~D"
-                                  (cl-tmux/model:worktree-behind
+                                  (nerimux/model:worktree-behind
                                    (picker-item-worktree item)))))
                    (and (picker-item-worktree item)
-                        (when (cl-tmux/model:worktree-bare-p
+                        (when (nerimux/model:worktree-bare-p
                                (picker-item-worktree item))
                           "bare"))
                    (and (picker-item-worktree item)
-                        (when (cl-tmux/model:worktree-locked-p
+                        (when (nerimux/model:worktree-locked-p
                                (picker-item-worktree item))
                           "locked"))
                    (and (picker-item-worktree item)
-                        (when (cl-tmux/model:worktree-prunable-p
+                        (when (nerimux/model:worktree-prunable-p
                                (picker-item-worktree item))
                           "prunable"))
                    (and (picker-item-worktree item)
-                        (when (cl-tmux/model:worktree-missing-p
+                        (when (nerimux/model:worktree-missing-p
                                (picker-item-worktree item))
                           "missing"))
                    (and (picker-item-worktree item)
-                        (cl-tmux/model:worktree-attention-reasons
+                        (nerimux/model:worktree-attention-reasons
                          (picker-item-worktree item)))
                    (and (picker-item-worktree item)
-                        (cl-tmux/model:worktree-tags
+                        (nerimux/model:worktree-tags
                          (picker-item-worktree item)))
                    (and (picker-item-worktree item)
-                        (cl-tmux/model:worktree-notes
+                        (nerimux/model:worktree-notes
                          (picker-item-worktree item)))
                    (and (picker-item-worktree item)
-                        (cl-tmux/model:worktree-recent-activity
+                        (nerimux/model:worktree-recent-activity
                          (picker-item-worktree item)))
                    (and (picker-item-pane item)
-                        (cl-tmux/model:pane-id (picker-item-pane item)))
+                        (nerimux/model:pane-id (picker-item-pane item)))
                    (and (picker-item-pane item)
-                        (cl-tmux/model:pane-title (picker-item-pane item)))
+                        (nerimux/model:pane-title (picker-item-pane item)))
                    (and (picker-item-pane item)
-                        (cl-tmux/model:pane-start-command
+                        (nerimux/model:pane-start-command
                          (picker-item-pane item)))
                    (and (picker-item-pane item)
-                        (cl-tmux/model:pane-start-path
+                        (nerimux/model:pane-start-path
                          (picker-item-pane item)))
                    (and (picker-item-pane item)
-                        (cl-tmux/model:pane-tags (picker-item-pane item)))
+                        (nerimux/model:pane-tags (picker-item-pane item)))
                    (and (picker-item-pane item)
-                        (cl-tmux/model:pane-note (picker-item-pane item)))
+                        (nerimux/model:pane-note (picker-item-pane item)))
                    (and (picker-item-pane item)
-                        (cl-tmux/model:pane-last-output
+                        (nerimux/model:pane-last-output
                          (picker-item-pane item)))
                    (and (picker-item-pane item)
-                        (cl-tmux/model:pane-notification
+                        (nerimux/model:pane-notification
                          (picker-item-pane item)))
                    (and (picker-item-pane item)
-                        (cl-tmux/model:pane-last-output-time
+                        (nerimux/model:pane-last-output-time
                          (picker-item-pane item)))
                    (and (picker-item-pane item)
-                        (cl-tmux/model:pane-last-focused-time
+                        (nerimux/model:pane-last-focused-time
                          (picker-item-pane item)))
                     (and (picker-item-pane item)
-                         (cl-tmux/model:pane-attention-reasons
+                         (nerimux/model:pane-attention-reasons
                           (picker-item-pane item)))))
       (let ((string (%picker-string value)))
         (when (plusp (length string))
@@ -402,7 +402,7 @@
            (coerce
             (loop for organization-index below organization-count
                   collect
-                  (cl-tmux/model:make-organization
+                  (nerimux/model:make-organization
                    :id (format nil "org-~4,'0D" organization-index)
                    :host "github.com"
                    :name (format nil "org-~4,'0D" organization-index)))
@@ -423,7 +423,7 @@
                (+ worktree-base
                   (if (< repository-index worktree-remainder) 1 0)))
              (repository
-               (cl-tmux/model:make-repository
+               (nerimux/model:make-repository
                 :id (format nil "repo-~4,'0D" repository-index)
                 :organization organization
                 :specification
@@ -435,7 +435,7 @@
              (worktrees nil))
         (dotimes (worktree-index repository-worktree-count)
           (let ((worktree
-                  (cl-tmux/model:make-worktree
+                  (nerimux/model:make-worktree
                    :id (format nil "worktree-~4,'0D-~4,'0D"
                                repository-index worktree-index)
                    :repository repository
@@ -448,10 +448,10 @@
                                  repository-index worktree-index))))
             (push worktree worktrees)
             (push worktree all-worktrees)))
-        (setf (cl-tmux/model:repository-worktrees repository)
+        (setf (nerimux/model:repository-worktrees repository)
               (nreverse worktrees)
-              (cl-tmux/model:repository-main-worktree repository)
-              (first (cl-tmux/model:repository-worktrees repository)))
+              (nerimux/model:repository-main-worktree repository)
+              (first (nerimux/model:repository-worktrees repository)))
         (push repository (aref repositories-by-organization organization-index))))
     (setf all-worktrees (nreverse all-worktrees))
     (loop for organization across organizations
@@ -459,13 +459,13 @@
           do (let ((repositories
                      (nreverse (aref repositories-by-organization
                                      organization-index))))
-               (setf (cl-tmux/model:organization-repositories organization)
+               (setf (nerimux/model:organization-repositories organization)
                      repositories
-                     (cl-tmux/model:organization-active-worktree-count organization)
+                     (nerimux/model:organization-active-worktree-count organization)
                      (loop for repository in repositories
-                           sum (length (cl-tmux/model:repository-worktrees
+                           sum (length (nerimux/model:repository-worktrees
                                         repository)))
-                     (cl-tmux/model:organization-attention-count organization)
+                     (nerimux/model:organization-attention-count organization)
                      0)))
     (let* ((worktree-vector (coerce all-worktrees 'vector))
            (worktree-count (length worktree-vector)))
@@ -473,12 +473,12 @@
         (let* ((worktree (aref worktree-vector
                                (mod pane-index worktree-count)))
                (pane
-                 (cl-tmux/model:make-pane
+                 (nerimux/model:make-pane
                   :id (1+ pane-index)
                   :title (format nil "pane-~4,'0D" pane-index)
                   :start-command "shell"
-                  :start-path (cl-tmux/model:worktree-path worktree))))
-          (cl-tmux/model:worktree-add-pane worktree pane))))
+                  :start-path (nerimux/model:worktree-path worktree))))
+          (nerimux/model:worktree-add-pane worktree pane))))
     (coerce organizations 'list)))
 
 (defun benchmark-global-picker (&key (organization-count 1000)

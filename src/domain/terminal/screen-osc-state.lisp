@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/actions)
+(in-package #:nerimux/terminal/actions)
 
 ;;;; Small screen-state setters driven by escape sequences: focus-event reports
 ;;;; (?1004), the pending-BEL flag, the OSC 0/2/7 title & cwd, the XTPUSHTITLE/

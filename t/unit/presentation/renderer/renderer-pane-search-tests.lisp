@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Direct unit tests for renderer-pane-search.lisp's %render-copy-search-matches.
 ;;;; Existing tests (renderer-pane-tests-b.lisp) already cover the base
@@ -16,16 +16,16 @@
   (it "copy-search-current-match-uses-current-style"
     (with-fake-session (s)
       (feed (active-screen s) "hello world hello")
-      (cl-tmux/commands::copy-mode-enter (active-screen s))
-      (setf (cl-tmux/terminal/types:screen-copy-search-term (active-screen s)) "hello")
+      (nerimux/commands::copy-mode-enter (active-screen s))
+      (setf (nerimux/terminal/types:screen-copy-search-term (active-screen s)) "hello")
       ;; "hello world hello" -> matches at columns [0,5) and [12,17); put the
       ;; cursor inside the second match.
-      (setf (cl-tmux/terminal/types:screen-copy-cursor (active-screen s)) (cons 0 13))
-      (let* ((match-sgr   (cl-tmux/renderer:style-to-sgr
-                           (cl-tmux/renderer:parse-style-string "bg=green")))
-             (current-sgr (cl-tmux/renderer:style-to-sgr
-                           (cl-tmux/renderer:parse-style-string "bg=magenta")))
-             (frame       (cl-tmux/renderer:render-session-to-string s 24 81)))
+      (setf (nerimux/terminal/types:screen-copy-cursor (active-screen s)) (cons 0 13))
+      (let* ((match-sgr   (nerimux/renderer:style-to-sgr
+                           (nerimux/renderer:parse-style-string "bg=green")))
+             (current-sgr (nerimux/renderer:style-to-sgr
+                           (nerimux/renderer:parse-style-string "bg=magenta")))
+             (frame       (nerimux/renderer:render-session-to-string s 24 81)))
         (expect frame :to-contain-sgr match-sgr)
         (expect frame :to-contain-sgr current-sgr))))
 
@@ -34,15 +34,15 @@
   (it "copy-search-cursor-off-match-uses-only-plain-style"
     (with-fake-session (s)
       (feed (active-screen s) "hello world hello")
-      (cl-tmux/commands::copy-mode-enter (active-screen s))
-      (setf (cl-tmux/terminal/types:screen-copy-search-term (active-screen s)) "hello")
+      (nerimux/commands::copy-mode-enter (active-screen s))
+      (setf (nerimux/terminal/types:screen-copy-search-term (active-screen s)) "hello")
       ;; Column 7 is inside "world", not a match.
-      (setf (cl-tmux/terminal/types:screen-copy-cursor (active-screen s)) (cons 0 7))
-      (let* ((match-sgr   (cl-tmux/renderer:style-to-sgr
-                           (cl-tmux/renderer:parse-style-string "bg=green")))
-             (current-sgr (cl-tmux/renderer:style-to-sgr
-                           (cl-tmux/renderer:parse-style-string "bg=magenta")))
-             (frame       (cl-tmux/renderer:render-session-to-string s 24 81)))
+      (setf (nerimux/terminal/types:screen-copy-cursor (active-screen s)) (cons 0 7))
+      (let* ((match-sgr   (nerimux/renderer:style-to-sgr
+                           (nerimux/renderer:parse-style-string "bg=green")))
+             (current-sgr (nerimux/renderer:style-to-sgr
+                           (nerimux/renderer:parse-style-string "bg=magenta")))
+             (frame       (nerimux/renderer:render-session-to-string s 24 81)))
         (expect frame :to-contain-sgr match-sgr)
         (expect frame :not :to-contain-sgr current-sgr))))
 
@@ -52,10 +52,10 @@
     (with-isolated-options ("copy-mode-current-match-style" "")
       (with-fake-session (s)
         (feed (active-screen s) "hello world hello")
-        (cl-tmux/commands::copy-mode-enter (active-screen s))
-        (setf (cl-tmux/terminal/types:screen-copy-search-term (active-screen s)) "hello")
-        (setf (cl-tmux/terminal/types:screen-copy-cursor (active-screen s)) (cons 0 13))
-        (let* ((match-sgr (cl-tmux/renderer:style-to-sgr
-                           (cl-tmux/renderer:parse-style-string "bg=green")))
-               (frame     (cl-tmux/renderer:render-session-to-string s 24 81)))
+        (nerimux/commands::copy-mode-enter (active-screen s))
+        (setf (nerimux/terminal/types:screen-copy-search-term (active-screen s)) "hello")
+        (setf (nerimux/terminal/types:screen-copy-cursor (active-screen s)) (cons 0 13))
+        (let* ((match-sgr (nerimux/renderer:style-to-sgr
+                           (nerimux/renderer:parse-style-string "bg=green")))
+               (frame     (nerimux/renderer:render-session-to-string s 24 81)))
           (expect frame :to-contain-sgr match-sgr))))))

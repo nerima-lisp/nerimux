@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Dispatch hook and command-listing tests.
 
@@ -9,26 +9,26 @@
   ;; programmatic add-hook registry.
   (it "set-hook-after-select-window-fires-config-command"
     (with-fake-session (s :nwindows 2)
-      (cl-tmux/hooks:clear-command-hooks "after-select-window")
+      (nerimux/hooks:clear-command-hooks "after-select-window")
       (let ((*overlay* nil))
-        (cl-tmux::%run-command-line
+        (nerimux::%run-command-line
          s "set-hook -g after-select-window \"display-message hooked\"")
-        (cl-tmux::%run-command-line s "select-window -n")
+        (nerimux::%run-command-line s "select-window -n")
         (assert-overlay-contains "hooked" *overlay*
                                  "the set-hook after-select-window command")
-        (cl-tmux/hooks:clear-command-hooks "after-select-window"))))
+        (nerimux/hooks:clear-command-hooks "after-select-window"))))
 
   ;; set-hook -g after-select-pane <cmd> fires when select-pane runs (config path).
   (it "set-hook-after-select-pane-fires-config-command"
     (with-fake-two-pane-session (s)
-      (cl-tmux/hooks:clear-command-hooks "after-select-pane")
+      (nerimux/hooks:clear-command-hooks "after-select-pane")
       (let ((*overlay* nil))
-        (cl-tmux::%run-command-line
+        (nerimux::%run-command-line
          s "set-hook -g after-select-pane \"display-message picked\"")
-        (cl-tmux::%run-command-line s "select-pane -t 2")
+        (nerimux::%run-command-line s "select-pane -t 2")
         (assert-overlay-contains "picked" *overlay*
                                  "the set-hook after-select-pane command")
-        (cl-tmux/hooks:clear-command-hooks "after-select-pane"))))
+        (nerimux/hooks:clear-command-hooks "after-select-pane"))))
 
   ;; window-pane-changed and pane-focus-in both fire on select-pane -t 2 via session lookup.
   (it "set-hook-select-pane-session-lookup-table"
@@ -36,30 +36,30 @@
                    ("pane-focus-in"       "focused" "must fire via session lookup")))
       (destructuring-bind (hook-name word desc) row
         (with-fake-two-pane-session (s)
-          (cl-tmux/hooks:clear-command-hooks hook-name)
-          (let ((cl-tmux::*server-sessions* (list (cons "0" s)))
+          (nerimux/hooks:clear-command-hooks hook-name)
+          (let ((nerimux::*server-sessions* (list (cons "0" s)))
                 (*overlay* nil))
-            (cl-tmux::%run-command-line
+            (nerimux::%run-command-line
              s (format nil "set-hook -g ~A \"display-message ~A\"" hook-name word))
-            (cl-tmux::%run-command-line s "select-pane -t 2")
+            (nerimux::%run-command-line s "select-pane -t 2")
             (assert-overlay-contains word *overlay*
                                      (format nil "~A ~A" hook-name desc))
-            (cl-tmux/hooks:clear-command-hooks hook-name))))))
+            (nerimux/hooks:clear-command-hooks hook-name))))))
 
   ;; set-hook -g after-rename-window <cmd> fires on rename — proving the unified
   ;; run-hooks now drives .tmux.conf set-hook for hooks whose firing point only
   ;; called run-hooks (after-rename-window was previously config-broken).
   (it "set-hook-after-rename-window-fires-config-via-unified-run-hooks"
     (with-fake-session (s :nwindows 1)
-      (cl-tmux/hooks:clear-command-hooks "after-rename-window")
-      (let ((cl-tmux::*server-sessions* (list (cons "0" s)))
+      (nerimux/hooks:clear-command-hooks "after-rename-window")
+      (let ((nerimux::*server-sessions* (list (cons "0" s)))
             (*overlay* nil))
-        (cl-tmux::%run-command-line
+        (nerimux::%run-command-line
          s "set-hook -g after-rename-window \"display-message renamed-hook\"")
-        (cl-tmux::%run-command-line s "rename-window newname")
+        (nerimux::%run-command-line s "rename-window newname")
         (assert-overlay-contains "renamed-hook" *overlay*
                                  "after-rename-window set-hook")
-        (cl-tmux/hooks:clear-command-hooks "after-rename-window"))))
+        (nerimux/hooks:clear-command-hooks "after-rename-window"))))
 
   ;; tmux 3.6a resolves unique prefixes for list-commands and reports the full
   ;; ambiguous candidate list.
@@ -73,7 +73,7 @@
                        "ambiguous command: list, could be: list-buffers, list-clients, list-commands, list-keys, list-panes, list-sessions, list-windows")))
         (destructuring-bind (line expected) case
           (let ((*overlay* nil))
-            (cl-tmux::%run-command-line s line)
+            (nerimux::%run-command-line s line)
             (assert-overlay-contains expected *overlay* line))))))
 
   ;; list-commands expands only the canonical local command_list fields.
@@ -85,7 +85,7 @@
                        "list-commands|[-F format] [command]")))
         (destructuring-bind (line expected) case
           (let ((*overlay* nil))
-            (cl-tmux::%run-command-line s line)
+            (nerimux::%run-command-line s line)
             (assert-overlay-contains expected *overlay* line)
             (assert-overlay-not-contains "#{command_list_name}" *overlay* line)
             (assert-overlay-not-contains "#{command_list_usage}" *overlay* line))))))
@@ -100,7 +100,7 @@
                        "command list-commands: too many arguments (need at most 1)")))
         (destructuring-bind (line expected) case
           (let ((*overlay* nil))
-            (cl-tmux::%run-command-line s line)
+            (nerimux::%run-command-line s line)
             (assert-overlay-contains expected *overlay* line)
             (assert-overlay-not-contains "new-window" *overlay* line))))))
 
@@ -108,5 +108,5 @@
   (it "run-command-line-rename-window-no-arg-opens-prompt"
     (with-fake-session (s :nwindows 1)
       (let ((*prompt* nil))
-        (cl-tmux::%run-command-line s "rename-window")
+        (nerimux::%run-command-line s "rename-window")
         (expect (prompt-active-p))))))

@@ -3,7 +3,7 @@
 ;;; Attach/new-session/list/source/version handlers live here.
 ;;; main-startup.lisp keeps the mode table, argv parsing, usage, and dispatch.
 
-(in-package :cl-tmux)
+(in-package :nerimux)
 
 (defun %attach-session (name detach-others-p &key target)
   "Ensure NAME's server is running, then attach the client."
@@ -120,12 +120,12 @@
    Applies config directives from PATH against the global defaults.
    Useful for pre-loading a config before the multiplexer starts."
   (let* ((args (or raw-args
-                   (let ((path (cl-tmux/config:config-file-path)))
+                   (let ((path (nerimux/config:config-file-path)))
                      (when (and path (probe-file path))
                        (list path)))))
          (previous-log *message-log*))
     (handler-case
-        (let ((ok (cl-tmux/config:source-files args)))
+        (let ((ok (nerimux/config:source-files args)))
           (%emit-source-file-diagnostics ok previous-log)
           (sb-ext:exit :code (if ok 0 1)))
       (error (c)
@@ -133,14 +133,14 @@
         (sb-ext:exit :code 1)))))
 
 (defun run-version (raw-args)
-  "Print the cl-tmux version to stdout and exit 0 (the tmux -V behaviour)."
+  "Print the nerimux version to stdout and exit 0 (the tmux -V behaviour)."
   (declare (ignore raw-args))
-  (format t "cl-tmux ~A~%" (cl-tmux/version:version-string))
+  (format t "nerimux ~A~%" (nerimux/version:version-string))
   (sb-ext:exit :code 0))
 
 (defun %usage-string ()
   "One-page usage summary for -h/--help and bad-flag errors."
-  (format nil "usage: cl-tmux [-L socket-name] [-S socket-path] [command [flags]]~%~
+  (format nil "usage: nerimux [-L socket-name] [-S socket-path] [command [flags]]~%~
                ~%~
                Run `attach` to open the workspace UI; no command starts the
                standalone compatibility session.~%~
@@ -159,7 +159,7 @@
                ~2T-V | --version~24Tprint the version and exit~%~
                ~%~
                Any other command word is forwarded to a running server~%~
-               (e.g. `cl-tmux send-keys -t 0 ls Enter`).~%"))
+               (e.g. `nerimux send-keys -t 0 ls Enter`).~%"))
 
 (defun run-usage (raw-args)
   "Print the usage summary to stdout and exit 0 (-h/--help)."
@@ -220,7 +220,7 @@
         (%startup-mode "-C" run-control-mode :raw-args-p t)
         (%startup-mode "control" run-control-mode :raw-args-p t)
         ;; -V: print the version and exit (tmux -V). --version/-h/--help are
-        ;; cl-tmux conveniences; tmux only prints usage on a bad flag.
+        ;; nerimux conveniences; tmux only prints usage on a bad flag.
         (%startup-mode "-V" run-version :raw-args-p t)
         (%startup-mode "--version" run-version :raw-args-p t)
         (%startup-mode "-h" run-usage :raw-args-p t)

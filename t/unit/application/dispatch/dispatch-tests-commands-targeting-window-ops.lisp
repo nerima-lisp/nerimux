@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Arg-taking target and window command dispatch tests
 
@@ -9,7 +9,7 @@
   ;; 'kill-window -t N' kills the window whose window-id is N.
   (it "run-command-line-kill-window-by-target"
     (with-fake-session (s :nwindows 3)
-      (cl-tmux::%run-command-line s "kill-window -t 1")
+      (nerimux::%run-command-line s "kill-window -t 1")
       (expect (= 2 (length (session-windows s))))
       (expect (null (find 1 (session-windows s) :key #'window-id)))))
 
@@ -17,7 +17,7 @@
   (it "run-command-line-kill-pane-by-target"
     (with-fake-two-pane-session (s)
       (let* ((win (session-active-window s)))   ; pane-ids 1,2
-        (cl-tmux::%run-command-line s "kill-pane -t 2")
+        (nerimux::%run-command-line s "kill-pane -t 2")
         (expect (= 1 (length (window-panes win))))
         (expect (null (find 2 (window-panes win) :key #'pane-id))))))
 
@@ -25,14 +25,14 @@
   (it "run-command-line-kill-pane-invalid-target-is-noop"
     (with-fake-two-pane-session (s)
       (let* ((win (session-active-window s)))
-        (cl-tmux::%run-command-line s "kill-pane -t 99")
+        (nerimux::%run-command-line s "kill-pane -t 99")
         (expect (= 2 (length (window-panes win)))))))
 
   ;; 'kill-window' with no -t kills the active window (name-table fallthrough).
   (it "run-command-line-kill-window-no-arg-kills-active"
     (with-fake-session (s :nwindows 2)
       (let* ((active (session-active-window s)))
-        (cl-tmux::%run-command-line s "kill-window")
+        (nerimux::%run-command-line s "kill-window")
         (expect (= 1 (length (session-windows s))))
         (expect (null (find active (session-windows s)))))))
 
@@ -48,7 +48,7 @@
            (with-fake-session (s :nwindows 2)
              (let ((before (copy-list (session-windows s)))
                    (*overlay* nil))
-               (cl-tmux::%run-command-line s cmd)
+               (nerimux::%run-command-line s cmd)
                (assert-overlay-contains message *overlay* cmd)
                (expect (equal before (session-windows s))))))
           (:panes
@@ -56,7 +56,7 @@
              (let* ((win (session-active-window s))
                     (before (copy-list (window-panes win)))
                     (*overlay* nil))
-               (cl-tmux::%run-command-line s cmd)
+               (nerimux::%run-command-line s cmd)
                (assert-overlay-contains message *overlay* cmd)
                (expect (equal before (window-panes win))))))))))
 
@@ -69,9 +69,9 @@
                 (session-name dst) "dst")
           (let ((src-before (copy-list (session-windows src)))
                 (dst-before (copy-list (session-windows dst)))
-                (cl-tmux::*server-sessions* (list (cons "src" src) (cons "dst" dst)))
+                (nerimux::*server-sessions* (list (cons "src" src) (cons "dst" dst)))
                 (*overlay* nil))
-            (cl-tmux::%run-command-line src cmd)
+            (nerimux::%run-command-line src cmd)
             (assert-overlay-contains "link-window: unsupported argument"
                                       *overlay* cmd)
             (expect (equal src-before (session-windows src)))
@@ -84,9 +84,9 @@
         (setf (session-name src) "src"
               (session-name dst) "dst")
         (let* ((src-win (session-active-window src))
-               (cl-tmux::*server-sessions* (list (cons "src" src) (cons "dst" dst)))
+               (nerimux::*server-sessions* (list (cons "src" src) (cons "dst" dst)))
                (*overlay* nil))
-          (cl-tmux::%run-command-line src "link-window -s 0 -t dst -k")
+          (nerimux::%run-command-line src "link-window -s 0 -t dst -k")
           (expect (eq src-win (session-active-window dst)))))))
 
   ;; 'link-window -d -s 0 -t dst -k' leaves the destination's active window unchanged.
@@ -96,9 +96,9 @@
         (setf (session-name src) "src"
               (session-name dst) "dst")
         (let* ((dst-active (session-active-window dst))
-               (cl-tmux::*server-sessions* (list (cons "src" src) (cons "dst" dst)))
+               (nerimux::*server-sessions* (list (cons "src" src) (cons "dst" dst)))
                (*overlay* nil))
-          (cl-tmux::%run-command-line src "link-window -d -s 0 -t dst -k")
+          (nerimux::%run-command-line src "link-window -d -s 0 -t dst -k")
           (expect (eq dst-active (session-active-window dst)))))))
 
   ;; unlink-window rejects unknown flags and extra positionals before mutating the window list.
@@ -107,7 +107,7 @@
       (with-fake-session (s :nwindows 2)
         (let ((before (copy-list (session-windows s)))
               (*overlay* nil))
-          (cl-tmux::%run-command-line s cmd)
+          (nerimux::%run-command-line s cmd)
           (assert-overlay-contains "unlink-window: unsupported argument"
                                     *overlay* cmd)
           (expect (equal before (session-windows s)))))))
@@ -121,7 +121,7 @@
       (let* ((w0 (find 0 (session-windows s) :key #'window-id))
              (w1 (find 1 (session-windows s) :key #'window-id))
              (w2 (find 2 (session-windows s) :key #'window-id)))
-        (cl-tmux::%run-command-line s "swap-window -s 0 -t 2")
+        (nerimux::%run-command-line s "swap-window -s 0 -t 2")
         (dolist (row (list (list w0 2 "window formerly #0 now has index 2")
                            (list w2 0 "window formerly #2 now has index 0")
                            (list w1 1 "the middle window keeps index 1")))
@@ -135,7 +135,7 @@
     (with-fake-session (s :nwindows 2)
       (let* ((active (session-active-window s))
              (w1     (find 1 (session-windows s) :key #'window-id)))
-        (cl-tmux::%run-command-line s "swap-window -t 1")
+        (nerimux::%run-command-line s "swap-window -t 1")
         (expect (= 1 (window-id active)))
         (expect (= 0 (window-id w1))))))
 
@@ -150,14 +150,14 @@
         (with-fake-session (s :nwindows 3)
           (let ((pre-win (find pre-id (session-windows s) :key #'window-id)))
             (session-select-window s pre-win)
-            (cl-tmux::%run-command-line s cmd)
+            (nerimux::%run-command-line s cmd)
             (expect (eq pre-win (session-active-window s))))))))
 
   ;; 'swap-window -s 0 -t 99' (no such dst) leaves the window indices unchanged.
   (it "run-command-line-swap-window-unknown-target-is-noop"
     (with-fake-session (s :nwindows 3)
       (let* ((ids-before  (mapcar #'window-id (session-windows s))))
-        (cl-tmux::%run-command-line s "swap-window -s 0 -t 99")
+        (nerimux::%run-command-line s "swap-window -s 0 -t 99")
         (expect (equal ids-before (mapcar #'window-id (session-windows s)))))))
 
   ;; swap-window rejects unknown flags and extra positionals before swapping.
@@ -168,7 +168,7 @@
       (with-fake-session (s :nwindows 3)
         (let ((before (mapcar #'window-id (session-windows s)))
               (*overlay* nil))
-          (expect (null (cl-tmux::%run-command-line s command)))
+          (expect (null (nerimux::%run-command-line s command)))
           (expect (equal before (mapcar #'window-id (session-windows s))))
           (assert-overlay-contains "swap-window: unsupported argument"
                                     (overlay-lines) command)))))
@@ -181,8 +181,8 @@
     (with-isolated-config
       (with-fake-session (s)
         (let ((*overlay* nil))
-          (cl-tmux/config:apply-config-directive '("bind" "X" "display-message" "hi"))
-          (cl-tmux::dispatch-prefix-command s (char-code #\X))
+          (nerimux/config:apply-config-directive '("bind" "X" "display-message" "hi"))
+          (nerimux::dispatch-prefix-command s (char-code #\X))
           (assert-overlay-contains "hi" (overlay-lines)
                                     "the bound display-message")))))
 
@@ -190,21 +190,21 @@
   ;; the set-option -g fix).
   (it "cmd-source-file-loads-config-file"
     (with-isolated-config
-      (let ((path (format nil "/tmp/cl-tmux-srcfile-~D.conf" (get-universal-time))))
+      (let ((path (format nil "/tmp/nerimux-srcfile-~D.conf" (get-universal-time))))
         (unwind-protect
              (progn
                (with-open-file (out path :direction :output :if-exists :supersede
                                          :if-does-not-exist :create)
                  (write-line "set-option -g status off" out))
-               (cl-tmux::%run-command-line (make-fake-session)
+               (nerimux::%run-command-line (make-fake-session)
                                            (format nil "source-file ~A" path))
-               (expect (string= "off" (cl-tmux/options:get-option "status"))))
+               (expect (string= "off" (nerimux/options:get-option "status"))))
           (ignore-errors (delete-file path))))))
 
   ;; source-file on a non-existent path is a safe no-op (no error signalled).
   (it "cmd-source-file-missing-path-no-crash"
-    (finishes (cl-tmux::%run-command-line (make-fake-session)
-                                          "source-file /no/such/cl-tmux-file.conf")
+    (finishes (nerimux::%run-command-line (make-fake-session)
+                                          "source-file /no/such/nerimux-file.conf")
               "source-file on a missing file must not signal"))
 
   ;; ── move-window -t <n> (renumber the active window) ──────────────────────────
@@ -213,7 +213,7 @@
   (it "run-command-line-move-window-to-free-number"
     (with-fake-session (s :nwindows 2)
       (let* ((win (session-active-window s)))
-        (cl-tmux::%run-command-line s "move-window -t 5")
+        (nerimux::%run-command-line s "move-window -t 5")
         (expect (= 5 (window-id win))))))
 
   ;; 'move-window -t N' onto a taken index moves the window there and shifts the
@@ -222,7 +222,7 @@
     (with-fake-session (s :nwindows 2)
       (let* ((win (session-active-window s))
              (w1  (find 1 (session-windows s) :key #'window-id)))
-        (cl-tmux::%run-command-line s "move-window -t 1")   ; 1 is taken
+        (nerimux::%run-command-line s "move-window -t 1")   ; 1 is taken
         (expect (= 1 (window-id win)))
         (expect (= 2 (window-id w1))))))
 
@@ -238,7 +238,7 @@
           (let* ((win   (session-active-window s))
                  (other (find 1 (session-windows s) :key #'window-id)))
             (session-select-window s other)
-            (cl-tmux::%run-command-line s cmd)
+            (nerimux::%run-command-line s cmd)
             (expect (eq (if detach-p other win) (session-active-window s))))))))
 
   ;; move-window rejects unknown flags and extra positionals before moving.
@@ -250,7 +250,7 @@
         (let ((before (mapcar #'window-id (session-windows s)))
               (active-before (session-active-window s))
               (*overlay* nil))
-          (expect (null (cl-tmux::%run-command-line s command)))
+          (expect (null (nerimux::%run-command-line s command)))
           (expect (equal before (mapcar #'window-id (session-windows s))))
           (expect (eq active-before (session-active-window s)))
           (assert-overlay-contains "move-window: unsupported argument"

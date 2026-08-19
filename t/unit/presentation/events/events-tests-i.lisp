@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Events tests — part IX: copy-mode v-select, middle-cursor-jump, mouse X10, CSI-tilde outside mode, CSI-3byte.
 
@@ -9,7 +9,7 @@
   ;; Plain 'v' (byte 118) also begins selection in copy mode.
   (it "copy-mode-v-begins-selection"
     (with-copy-mode-vi-state (s screen state)
-      (finishes (cl-tmux::process-byte s 118 state))
+      (finishes (nerimux::process-byte s 118 state))
       (expect (screen-copy-selecting screen))))
 
   ;;; ── Middle-screen cursor jump M ──────────────────────────────────────────────
@@ -18,8 +18,8 @@
   (it "copy-mode-M-moves-cursor-to-middle"
     (with-copy-mode-vi-state (s screen state)
       ;; Place cursor at row 0.
-      (setf (cl-tmux/terminal/types:screen-copy-cursor screen) (cons 0 0))
-      (cl-tmux::process-byte s (char-code #\M) state)
+      (setf (nerimux/terminal/types:screen-copy-cursor screen) (cons 0 0))
+      (nerimux::process-byte s (char-code #\M) state)
       (let* ((row    (car (screen-copy-cursor screen)))
              (height (screen-height screen))
              (mid    (floor height 2)))
@@ -37,7 +37,7 @@
                                                        (+ 50 33)  ; col 50 → 0-based 49
                                                        (+ 5 33)   ; row 5  → 0-based 4
                                                        ))))
-        (expect (multiple-value-list (cl-tmux::%handle-escape-x10-mouse sess buf))
+        (expect (multiple-value-list (nerimux::%handle-escape-x10-mouse sess buf))
           :to-return-to-ground))))
 
   ;;; ── %handle-escape-csi-tilde outside copy mode ──────────────────────────────
@@ -48,7 +48,7 @@
       ;; Build an ESC [ 5 ~ (PageUp) buffer — not in copy mode, no binding.
       (let ((buf (make-array 4 :element-type '(unsigned-byte 8)
                                :initial-contents (list 27 91 53 126))))
-        (expect (multiple-value-list (cl-tmux::%handle-escape-csi-tilde s buf 4))
+        (expect (multiple-value-list (nerimux::%handle-escape-csi-tilde s buf 4))
           :to-return-to-ground))))
 
   ;;; ── %handle-escape-csi-3byte: keep-accumulating for digit ───────────────────
@@ -62,7 +62,7 @@
                                :fill-pointer 3 :adjustable t
                                :initial-contents (list 27 91 53))))
         (multiple-value-bind (keep-accumulating next-state)
-            (cl-tmux::%handle-escape-csi-3byte s buf)
+            (nerimux::%handle-escape-csi-3byte s buf)
           (expect (eq t keep-accumulating))
           (expect (null next-state))))))
 
@@ -73,7 +73,7 @@
       (let ((buf (make-array 3 :element-type '(unsigned-byte 8)
                                :fill-pointer 3 :adjustable t
                                :initial-contents (list 27 91 65))))
-        (expect (multiple-value-list (cl-tmux::%handle-escape-csi-3byte s buf))
+        (expect (multiple-value-list (nerimux::%handle-escape-csi-3byte s buf))
           :to-return-to-ground))))
 
   ;;; ── SGR mouse: parse with scroll-wheel button encoding ───────────────────────
@@ -85,7 +85,7 @@
                             :initial-contents (map 'list #'char-code s)))
            (len (length buf)))
       (multiple-value-bind (btn col row release-p)
-          (cl-tmux::%parse-sgr-mouse buf len)
+          (nerimux::%parse-sgr-mouse buf len)
         (expect (= 64 btn))
         (expect (= 4  col))
         (expect (= 2  row))
@@ -98,7 +98,7 @@
                             :initial-contents (map 'list #'char-code s)))
            (len (length buf)))
       (multiple-value-bind (btn col row release-p)
-          (cl-tmux::%parse-sgr-mouse buf len)
+          (nerimux::%parse-sgr-mouse buf len)
         (expect (null btn))
         (expect (null col))
         (expect (null row))
@@ -110,11 +110,11 @@
   (it "sgr-mouse-left-click-via-process-byte-selects-pane"
     (with-two-pane-mouse-session (sess win p0 p1)
       (setf (screen-mouse-sgr-mode (pane-screen p0)) t)
-      (let ((state (cl-tmux::make-input-state))
+      (let ((state (nerimux::make-input-state))
             ;; ESC [ < 0 ; 50 ; 5 M  — btn=0, col=50, row=5 (1-based), press
             (seq   (format nil "~C[<0;50;5M" #\Escape)))
         (loop for ch across seq
-              do (cl-tmux::process-byte sess (char-code ch) state))
+              do (nerimux::process-byte sess (char-code ch) state))
         (expect (eq p1 (window-active-pane win))))))
 
   ;;; ── overlay-scroll: verify actual offset change ──────────────────────────────
@@ -142,7 +142,7 @@
                              :screen (make-screen 40 24)))
            (leaf (make-layout-leaf p0)))
       (multiple-value-bind (split orientation)
-          (cl-tmux::%border-check-node 20 10 leaf)
+          (nerimux::%border-check-node 20 10 leaf)
         (expect (null split))
         (expect (null orientation)))))
 
@@ -157,7 +157,7 @@
            (split (make-layout-split :h leaf0 leaf1 1/2)))
       ;; Separator column for p0 (x=0 w=40) is at col 40.
       (multiple-value-bind (found-split orientation)
-          (cl-tmux::%border-check-node 40 5 split)
+          (nerimux::%border-check-node 40 5 split)
         (expect (eq split found-split))
         (expect (eq :h orientation)))))
 
@@ -172,7 +172,7 @@
            (split (make-layout-split :v leaf0 leaf1 1/2)))
       ;; Separator row for p0 (y=0 h=10) is at row 10.
       (multiple-value-bind (found-split orientation)
-          (cl-tmux::%border-check-node 5 10 split)
+          (nerimux::%border-check-node 5 10 split)
         (expect (eq split found-split))
         (expect (eq :v orientation)))))
 
@@ -186,7 +186,7 @@
            (leaf1 (make-layout-leaf p1))
            (split (make-layout-split :h leaf0 leaf1 1/2)))
       (multiple-value-bind (found-split orientation)
-          (cl-tmux::%border-check-node 20 5 split)
+          (nerimux::%border-check-node 20 5 split)
         (expect (null found-split))
         (expect (null orientation)))))
 
@@ -207,7 +207,7 @@
            (outer-split (make-layout-split :h leaf0 inner-split 1/2)))
       ;; Hit the inner :v border at (col=50, row=10)
       (multiple-value-bind (found-split orientation)
-          (cl-tmux::%border-check-node 50 10 outer-split)
+          (nerimux::%border-check-node 50 10 outer-split)
         (expect (eq inner-split found-split))
         (expect (eq :v orientation)))))
 
@@ -215,13 +215,13 @@
 
   ;; %make-escape-buffer returns an adjustable byte vector seeded with the given byte.
   (it "make-escape-buffer-contains-seed-byte"
-    (let ((buf (cl-tmux::%make-escape-buffer 27)))
+    (let ((buf (nerimux::%make-escape-buffer 27)))
       (expect (= 1 (fill-pointer buf)))
       (expect (= 27 (aref buf 0)))))
 
   ;; %make-escape-buffer returns an adjustable vector so subsequent bytes can be pushed.
   (it "make-escape-buffer-is-adjustable"
-    (let ((buf (cl-tmux::%make-escape-buffer 27)))
+    (let ((buf (nerimux::%make-escape-buffer 27)))
       (vector-push-extend 91 buf)
       (expect (= 2 (fill-pointer buf)))
       (expect (= 91 (aref buf 1)))))

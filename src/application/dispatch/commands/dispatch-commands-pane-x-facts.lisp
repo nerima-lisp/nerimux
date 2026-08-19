@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Copy-mode -X facts (send-keys -X dispatch).
 

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/actions)
+(in-package #:nerimux/terminal/actions)
 
 ;;;; Terminal modes — ANSI (non-private) Set/Reset Mode, CSI Ps h / CSI Ps l.
 

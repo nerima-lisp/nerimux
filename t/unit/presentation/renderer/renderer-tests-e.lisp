@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; renderer tests — part E: %clamp-status-segment, set-cursor-shape in rendered output,
 ;;;; render-session nil-window, render-panes-borders nil-window, status-justify-line,
@@ -25,7 +25,7 @@
            (ap    (session-active-pane sess))
            (sc    (pane-screen ap)))
       ;; Set a non-default cursor shape (2 = steady block)
-      (setf (cl-tmux/terminal/types:screen-cursor-shape sc) 2)
+      (setf (nerimux/terminal/types:screen-cursor-shape sc) 2)
       (let ((out (render-session-to-string sess 6 20)))
         (expect (search (format nil "~C[2 q" #\Escape) out)))))
 
@@ -44,7 +44,7 @@
   (it "render-panes-borders-nil-window-finishes"
     (finishes
       (let ((buf (make-string-output-stream)))
-        (cl-tmux/renderer::%render-panes-and-borders buf nil nil nil nil 80))))
+        (nerimux/renderer::%render-panes-and-borders buf nil nil nil nil 80))))
 
   ;;; ── status-justify-line dispatch table ──────────────────────────────────────
 
@@ -56,7 +56,7 @@
       "status-justify-line: ~*~*~*~*~A"
       (justify left right cols desc)
     (declare (ignore desc))
-    (let ((result (cl-tmux/renderer::%status-justify-line left right cols justify)))
+    (let ((result (nerimux/renderer::%status-justify-line left right cols justify)))
       (expect (<= (length result) cols))
       (expect (search left result))))
 
@@ -69,7 +69,7 @@
       (show-overlay (format nil "line-A~%line-B~%line-C"))
       (unwind-protect
            (let ((buf (make-string-output-stream)))
-             (cl-tmux/renderer::render-overlay buf 30 10)
+             (nerimux/renderer::render-overlay buf 30 10)
              (let ((out (get-output-stream-string buf)))
                (expect (search "line-A" out))))
         (clear-overlay))))
@@ -81,12 +81,12 @@
     (let* ((left  "abcde")
            (time  "12:34")
            (cols  20)
-           (line  (cl-tmux/renderer::%justify-right left time cols)))
+           (line  (nerimux/renderer::%justify-right left time cols)))
       (expect (<= (length line) cols))))
 
   ;; %justify-right with empty left and time strings produces spaces up to cols.
   (it "status-bar-line-empty-left-and-time"
-    (let ((line (cl-tmux/renderer::%justify-right "" "" 10)))
+    (let ((line (nerimux/renderer::%justify-right "" "" 10)))
       (expect (<= (length line) 10))))
 
   ;;; ── render-session-to-string status on/off interaction ──────────────────────
@@ -109,17 +109,17 @@
 
   ;; %visible-length equals LENGTH for strings with no escape sequences.
   (it "visible-length-escape-free-equals-length"
-    (expect (= 5 (cl-tmux/renderer::%visible-length "hello")))
-    (expect (= 0 (cl-tmux/renderer::%visible-length "")))
+    (expect (= 5 (nerimux/renderer::%visible-length "hello")))
+    (expect (= 0 (nerimux/renderer::%visible-length "")))
     (expect (= (length "a:b 12:34")
-               (cl-tmux/renderer::%visible-length "a:b 12:34"))))
+               (nerimux/renderer::%visible-length "a:b 12:34"))))
 
   ;; %visible-length counts only visible cells, skipping CSI SGR escapes.
   (it "visible-length-skips-sgr-sequences"
     (let ((esc #\Escape))
-      (expect (= 2 (cl-tmux/renderer::%visible-length
+      (expect (= 2 (nerimux/renderer::%visible-length
                     (format nil "~C[32mhi~C[0m" esc esc))))
-      (expect (= 3 (cl-tmux/renderer::%visible-length
+      (expect (= 3 (nerimux/renderer::%visible-length
                     (format nil "~C[1;44;97mABC" esc))))))
 
   ;; %visible-truncate equals SUBSEQ for escape-free strings.
@@ -134,14 +134,14 @@
   (it "visible-truncate-passes-sgr-through"
     (let* ((esc  #\Escape)
            (in   (format nil "~C[32mABCDE" esc))
-           (out  (cl-tmux/renderer::%visible-truncate in 2)))
-      (expect (= 2 (cl-tmux/renderer::%visible-length out)))
+           (out  (nerimux/renderer::%visible-truncate in 2)))
+      (expect (= 2 (nerimux/renderer::%visible-length out)))
       (expect (search "AB" out))
       (expect (char= esc (char out 0)))))
 
   ;; %status-style-block-sgr turns fg=green into the SGR colour code 32.
   (it "status-style-block-fg-becomes-sgr"
-    (let ((out (cl-tmux/renderer::%status-style-block-sgr "fg=green" "44;97")))
+    (let ((out (nerimux/renderer::%status-style-block-sgr "fg=green" "44;97")))
       (expect (search (format nil "~C[32m" #\Escape) out))))
 
   ;; %status-style-block-sgr default/none/empty resets to the base status SGR.
@@ -155,7 +155,7 @@
   ;; %status-expand-style-blocks turns #[fg=green]X#[default] into SGR around X.
   (it "status-expand-style-blocks-converts-blocks"
     (let* ((esc #\Escape)
-           (out (cl-tmux/renderer::%status-expand-style-blocks
+           (out (nerimux/renderer::%status-expand-style-blocks
                  "#[fg=green]X#[default]Y" "44;97")))
       (expect (null (search "#[" out)))
       (expect (search (format nil "~C[32mX" esc) out))
@@ -165,16 +165,16 @@
   (it "clamp-status-segment-counts-visible-not-sgr"
     (let* ((esc #\Escape)
            (txt (format nil "~C[32mhello~C[0m" esc esc)))   ; 5 visible cells
-      (expect (string= txt (cl-tmux/renderer::%clamp-status-segment txt 5)))
-      (expect (= 3 (cl-tmux/renderer::%visible-length
-                    (cl-tmux/renderer::%clamp-status-segment txt 3))))))
+      (expect (string= txt (nerimux/renderer::%clamp-status-segment txt 5)))
+      (expect (= 3 (nerimux/renderer::%visible-length
+                    (nerimux/renderer::%clamp-status-segment txt 3))))))
 
   ;; %justify-right computes the gap from visible cells, so SGR doesn't shove content off-edge.
   (it "justify-right-ignores-sgr-width"
     (let* ((esc  #\Escape)
            (left (format nil "~C[32mABC~C[0m" esc esc))   ; 3 visible cells
-           (line (cl-tmux/renderer::%justify-right left "RR" 20)))
-      (expect (= 20 (cl-tmux/renderer::%visible-length line)))
+           (line (nerimux/renderer::%justify-right left "RR" 20)))
+      (expect (= 20 (nerimux/renderer::%visible-length line)))
       (expect (search "RR" line))))
 
   ;; render-status-bar expands status-left #[fg=green]…#[default] into real SGR,
@@ -201,18 +201,18 @@
     (declare (ignore desc))
     (with-isolated-options ("bell-action" bell-action "visual-bell" "off" "status" "off")
       (let* ((sess  (make-fake-session :nwindows 2))
-             (win2  (second (cl-tmux/model:session-windows sess)))
-             (pane2 (first (cl-tmux/model:window-panes win2))))
-        (setf (cl-tmux/terminal/types:screen-bell-pending
-               (cl-tmux/model:pane-screen pane2)) t)
-        (let ((out (cl-tmux/renderer::render-session-to-string sess 5 20)))
+             (win2  (second (nerimux/model:session-windows sess)))
+             (pane2 (first (nerimux/model:window-panes win2))))
+        (setf (nerimux/terminal/types:screen-bell-pending
+               (nerimux/model:pane-screen pane2)) t)
+        (let ((out (nerimux/renderer::render-session-to-string sess 5 20)))
           (if expected-bell-p
               (expect (find (code-char 7) out))
               (expect (null (find (code-char 7) out))))
           ;; The pending bell is consumed either way - a bell swallowed by
           ;; bell-action must not ring later when its window becomes active.
-          (expect (null (cl-tmux/terminal/types:screen-bell-pending
-                         (cl-tmux/model:pane-screen pane2))))))))
+          (expect (null (nerimux/terminal/types:screen-bell-pending
+                         (nerimux/model:pane-screen pane2))))))))
 
   ;; A BEL in the ACTIVE window fires the alert-bell hook with the window when
   ;; bell-action applies to the current window (any/current); other/none do not.
@@ -222,14 +222,14 @@
     (with-isolated-options ("bell-action" bell-action "status" "off")
       (with-isolated-hooks
         (let* ((sess     (make-fake-session :nwindows 1))
-               (win      (cl-tmux/model:session-active-window sess))
-               (pane     (cl-tmux/model:window-active-pane win))
+               (win      (nerimux/model:session-active-window sess))
+               (pane     (nerimux/model:window-active-pane win))
                (hook-win nil))
-          (setf (cl-tmux/terminal/types:screen-bell-pending
-                 (cl-tmux/model:pane-screen pane)) t)
-          (cl-tmux/hooks:add-hook "alert-bell"
+          (setf (nerimux/terminal/types:screen-bell-pending
+                 (nerimux/model:pane-screen pane)) t)
+          (nerimux/hooks:add-hook "alert-bell"
                                   (lambda (&rest args) (setf hook-win (first args))))
-          (cl-tmux/renderer::render-session-to-string sess 5 20)
+          (nerimux/renderer::render-session-to-string sess 5 20)
           (if expect-fired
               (expect (eq win hook-win))
               (expect (null hook-win)))))))
@@ -239,7 +239,7 @@
     (dolist (row '(("off" t) ("both" t) ("on" nil)))
       (destructuring-bind (visual expect-bel-p) row
         (let ((out (with-output-to-string (s)
-                     (cl-tmux/renderer::%emit-bell s visual))))
+                     (nerimux/renderer::%emit-bell s visual))))
           (if expect-bel-p
               (expect (find (code-char 7) out))
               (expect (null (find (code-char 7) out))))))))
@@ -249,4 +249,4 @@
     (dolist (visual '(nil "" "disabled"))
       (signals error
         (with-output-to-string (s)
-          (cl-tmux/renderer::%emit-bell s visual))))))
+          (nerimux/renderer::%emit-bell s visual))))))

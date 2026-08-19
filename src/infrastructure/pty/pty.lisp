@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/pty)
+(in-package #:nerimux/pty)
 
 ;;;; PTY management, terminal raw mode, and multiplexed I/O.
 ;;;;
@@ -15,8 +15,8 @@
 (defun set-pty-size (master-fd rows cols)
   "Notify the kernel PTY driver of a new ROWS×COLS window size.
 
-   ARGUMENT ORDER: this function keeps cl-tmux's (MASTER-FD ROWS COLS) contract —
-   it is installed as cl-tmux/ports:*resize-pty* and called from the domain — but
+   ARGUMENT ORDER: this function keeps nerimux's (MASTER-FD ROWS COLS) contract —
+   it is installed as nerimux/ports:*resize-pty* and called from the domain — but
    cl-tty-kit:set-terminal-size takes (COLUMNS ROWS &optional FD). The call below
    therefore both TRANSPOSES rows/cols and moves the fd to the end. Getting this
    wrong silently swaps every pane's width and height, so it is covered by two
@@ -49,7 +49,7 @@
    ROWS and COLS must both be POSITIVE. cl-tty-kit's %ASSERT-TERMINAL-DIMENSION
    rejects 0 (and anything negative) before attempting the ioctl, where the old
    cffi path passed a 0x0 winsize through and ignored the -1 return. A degenerate
-   layout can produce a zero content height, so CL-TMUX/MODEL:PANE-REPOSITION —
+   layout can produce a zero content height, so NERIMUX/MODEL:PANE-REPOSITION —
    the only caller that computes its dimensions rather than receiving them —
    guards (PLUSP WIDTH) and (PLUSP CONTENT-HEIGHT) alongside its fd guard."
   (cl-tty-kit:set-terminal-size cols rows master-fd))
@@ -61,7 +61,7 @@
    :synchronized so the reader thread (pty-child-exit-status reads) and teardown
    (pty-close remhash) can touch it concurrently without a coarse external lock.
    The cl-tty-kit PTY struct owns the SBCL process object and its master stream;
-   retaining it here keeps that stream (and therefore the master fd cl-tmux holds)
+   retaining it here keeps that stream (and therefore the master fd nerimux holds)
    reachable for the pane's lifetime, so SBCL's GC cannot close the fd out from
    under us.  pty-close / pty-child-exit-status reap through this table.")
 
@@ -83,10 +83,10 @@
    (SEARCH-P) unless it is already given as an absolute path."
   (if (%string-non-empty-p default-command)
       (values "/bin/sh" (list "-c" default-command) nil)
-      (values cl-tmux/config:*default-shell* nil
-              (not (and (stringp cl-tmux/config:*default-shell*)
-                        (plusp (length cl-tmux/config:*default-shell*))
-                        (char= (char cl-tmux/config:*default-shell* 0) #\/))))))
+      (values nerimux/config:*default-shell* nil
+              (not (and (stringp nerimux/config:*default-shell*)
+                        (plusp (length nerimux/config:*default-shell*))
+                        (char= (char nerimux/config:*default-shell* 0) #\/))))))
 
 (defun %remember-pty-process (master-fd pty)
   "Record the cl-tty-kit PTY struct so pty-close can reap it and so the struct
@@ -140,10 +140,10 @@
    stream and pid but not a portable slave-path, so SLAVE-PATH is currently the
    empty string."
   (declare (type fixnum rows cols))
-  ;; cl-tmux assembles the program/args/environment/directory; cl-tty-kit performs
-  ;; the actual sb-ext:run-program :pty t spawn (the same mechanism cl-tmux used
+  ;; nerimux assembles the program/args/environment/directory; cl-tty-kit performs
+  ;; the actual sb-ext:run-program :pty t spawn (the same mechanism nerimux used
   ;; directly before).  cl-tty-kit always searches PATH for a relative program,
-  ;; which subsumes cl-tmux's SEARCH-P (absolute programs like /bin/sh are found
+  ;; which subsumes nerimux's SEARCH-P (absolute programs like /bin/sh are found
   ;; regardless), so SEARCH-P is no longer threaded through.
   (multiple-value-bind (program args search-p)
       (%target-program-and-args default-command)
@@ -178,7 +178,7 @@
 ;;;
 ;;; Byte-transparent master-fd read/write is delegated to cl-tty-kit's
 ;;; fd-centric layer (fd-read-octets / fd-write-octets), which wraps the same
-;;; unix-read/unix-write calls cl-tmux formerly issued via CFFI.  cl-tmux keeps
+;;; unix-read/unix-write calls nerimux formerly issued via CFFI.  nerimux keeps
 ;;; its own type-guarding and empty-noop conventions here so callers and tests
 ;;; observe unchanged behavior.
 
@@ -234,13 +234,13 @@
    the whole process group (including this process), which must never happen.
    Likewise a negative MASTER-FD is not closed."
   (ignore-errors
-    ;; cl-tmux-specific teardown: SIGHUP (NOT cl-tty-kit's SIGTERM->SIGKILL
+    ;; nerimux-specific teardown: SIGHUP (NOT cl-tty-kit's SIGTERM->SIGKILL
     ;; escalation) then close the master.  Drop the retained cl-tty-kit PTY
     ;; struct from *pty-processes* so it is no longer reachable; closing its
     ;; SBCL process object closes the master stream (and fd), as before.
     ;; sb-posix:kill, NOT process-kit's signal API: that one is shaped around a
     ;; process handle it spawned and checks process-group ownership, whereas
-    ;; cl-tmux holds a bare pid from a cl-tty-kit PTY. sb-posix ships with SBCL
+    ;; nerimux holds a bare pid from a cl-tty-kit PTY. sb-posix ships with SBCL
     ;; and is not an external dependency.
     (when (> child-pid 0)
       (sb-posix:kill child-pid sb-posix:sighup))
@@ -256,7 +256,7 @@
   "Number of microseconds in one second; used in struct timeval decomposition.")
 
 (defun %timeout-us-to-seconds (timeout-us)
-  "Convert cl-tmux's microsecond timeout to process-kit's :TIMEOUT, in seconds.
+  "Convert nerimux's microsecond timeout to process-kit's :TIMEOUT, in seconds.
    A negative TIMEOUT-US means \"block indefinitely\", which process-kit spells
    NIL. The quotient is left exact (a RATIO, not a float) because process-kit
    subtracts it from a rational deadline across EINTR retries."
@@ -265,7 +265,7 @@
 
 (defun %selectable-fds (fds)
   "The sub-list of FDS that select(2) can be asked about at all: non-negative
-   integers.  A negative fd is cl-tmux's documented \"no PTY / dead pane\"
+   integers.  A negative fd is nerimux's documented \"no PTY / dead pane\"
    sentinel (pane-fd -1), the same value PTY-WRITE guards above, and the event
    loop can still be holding one in its poll set for the iteration in which a
    pane is torn down.
@@ -301,8 +301,8 @@
    Negative fds (the dead-pane sentinel) are dropped first; see %SELECTABLE-FDS.
 
    A thin wrapper over process-kit:wait-for-input rather than a direct call at
-   each site: cl-tmux's microsecond/-1 convention is used by ~45 call sites in
-   src/ and t/, and this one function is what the cl-tmux/ports layer and the
+   each site: nerimux's microsecond/-1 convention is used by ~45 call sites in
+   src/ and t/, and this one function is what the nerimux/ports layer and the
    test suite name. Converting here keeps that surface unchanged.
 
    Two behaviors improve on the hand-rolled select(2) this replaces.
@@ -363,7 +363,7 @@
 
    The underlying TIOCGWINSZ query is delegated to cl-tty-kit:terminal-size,
    which returns (values COLUMNS ROWS) — columns first.  We SWAP that to
-   cl-tmux's (values ROWS COLS) contract; a transpose here would corrupt every
+   nerimux's (values ROWS COLS) contract; a transpose here would corrupt every
    pane's geometry.  cl-tty-kit returns (values NIL NIL) when the size is
    unavailable, which fails the integerp/range check below and falls back."
   (multiple-value-bind (cols rows) (cl-tty-kit:terminal-size +stdout-fd+)
@@ -376,13 +376,13 @@
 ;;; ── Port adapter ─────────────────────────────────────────────────────────────
 ;;;
 ;;; install-pty-port wires this module's PTY functions into the
-;;; cl-tmux/ports abstraction layer so that domain code (cl-tmux/model) calls
-;;; through the port rather than referencing cl-tmux/pty symbols directly.
+;;; nerimux/ports abstraction layer so that domain code (nerimux/model) calls
+;;; through the port rather than referencing nerimux/pty symbols directly.
 ;;; Must be called before any pane is created (server startup or test setup).
 
 (defun install-pty-port ()
-  "Register this module as the active cl-tmux/ports PTY adapter."
-  (setf cl-tmux/ports:*spawn-pty* #'forkpty-with-shell
-        cl-tmux/ports:*write-pty* #'pty-write
-        cl-tmux/ports:*resize-pty* #'set-pty-size
-        cl-tmux/ports:*close-pty* #'pty-close))
+  "Register this module as the active nerimux/ports PTY adapter."
+  (setf nerimux/ports:*spawn-pty* #'forkpty-with-shell
+        nerimux/ports:*write-pty* #'pty-write
+        nerimux/ports:*resize-pty* #'set-pty-size
+        nerimux/ports:*close-pty* #'pty-close))

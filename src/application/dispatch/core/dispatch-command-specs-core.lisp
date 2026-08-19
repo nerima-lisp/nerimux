@@ -1,10 +1,10 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Shared dispatch command registry data.
 ;;;; Loaded by dispatch-core-commands.lisp so the registry stays in one place.
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (let* ((root (or (ignore-errors (asdf:system-source-directory :cl-tmux))
+  (let* ((root (or (ignore-errors (asdf:system-source-directory :nerimux))
                    *load-pathname*
                    *compile-file-pathname*
                    *default-pathname-defaults*))

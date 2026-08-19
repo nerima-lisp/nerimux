@@ -1,6 +1,6 @@
 # Permissions matrix and verification record
 
-この記録は、cl-tmux の「実際に接続を許す境界」、接続後の client mode、
+この記録は、nerimux の「実際に接続を許す境界」、接続後の client mode、
 server-access が保持する ACL モデルを分けて説明する。docs/mkdocs.yml の
 方針により docs/notes/ は公開ナビに載せない作業記録である。
 

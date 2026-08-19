@@ -1,9 +1,9 @@
-(in-package #:cl-tmux/repository)
+(in-package #:nerimux/repository)
 
 ;;;; Session Repository — domain-side protocol for session persistence.
 ;;;;
 ;;;; The domain defines what operations a session store must support.
-;;;; Infrastructure (bootstrap/session-registry.lisp, in the cl-tmux package)
+;;;; Infrastructure (bootstrap/session-registry.lisp, in the nerimux package)
 ;;;; implements the protocol using an in-memory alist backed by *server-sessions*.
 ;;;;
 ;;;; DDD pattern:
@@ -17,7 +17,7 @@
 ;;; ── Protocol ─────────────────────────────────────────────────────────────────
 ;;;
 ;;; These generic functions define the contract.  The in-memory implementation
-;;; in cl-tmux::server-* functions satisfies this contract.
+;;; in nerimux::server-* functions satisfies this contract.
 
 (defgeneric repo-find-session (store name)
   (:documentation

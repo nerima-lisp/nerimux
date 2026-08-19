@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Runtime state and per-pane I/O threading.
 ;;;;
@@ -141,7 +141,7 @@
   "When non-NIL, the pane-id of the pane displaying a digital clock overlay.")
 
 ;;; NOTE: popup, menu structs, *active-popup*, *active-menu* live in
-;;; src/prompt.lisp (cl-tmux/prompt package) so the renderer can see them.
+;;; src/prompt.lisp (nerimux/prompt package) so the renderer can see them.
 
 ;;; -- SIGWINCH ---------------------------------------------------------------
 

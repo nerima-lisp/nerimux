@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/config)
+(in-package #:nerimux/config)
 
 ;;; ── Key-binding accessors (thin wrappers over key-tables) ─────────────────
 

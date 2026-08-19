@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/hooks)
+(in-package #:nerimux/hooks)
 
 ;;; A hooks system that allows user-defined Lisp functions to run on events.
 ;;;
@@ -122,7 +122,7 @@ Uses the safe SBCL idiom to avoid string-constant redefinition errors."
 ;;; Distinct from the lisp-function hooks above: *command-hooks* maps an event
 ;;; name to a list of tmux command KEYWORDS to dispatch when the event fires.
 ;;; It is populated by the `set-hook <event> <command>` config directive.  The
-;;; actual dispatch (run-command-hooks) lives in the cl-tmux package because it
+;;; actual dispatch (run-command-hooks) lives in the nerimux package because it
 ;;; needs DISPATCH-COMMAND and a session; this layer only stores the bindings.
 
 (defvar *command-hooks* (make-hash-table :test #'equal)
@@ -202,14 +202,14 @@ Uses the safe SBCL idiom to avoid string-constant redefinition errors."
             (%format-command-hook-entry out entry))))))
 
 ;;; The command-hook RUNNER breaks a package layering cycle: kill-pane and
-;;; kill-window live in cl-tmux/commands, which cannot reference the cl-tmux
-;;; package's run-command-hooks (that one needs dispatch-command).  The cl-tmux
+;;; kill-window live in nerimux/commands, which cannot reference the nerimux
+;;; package's run-command-hooks (that one needs dispatch-command).  The nerimux
 ;;; package installs its run-command-hooks here at load; lower layers fire
 ;;; command hooks indirectly through the runner.
 
 (defvar *command-hook-runner* nil
   "A function (event-name session) that dispatches the command hooks for an
-   event, installed by the cl-tmux package at load.  NIL means no command-hook
+   event, installed by the nerimux package at load.  NIL means no command-hook
    dispatch yet (e.g. before the top-level package has finished loading).")
 
 (defun run-command-hooks-via-runner (event-name session)

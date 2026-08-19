@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/renderer)
+(in-package #:nerimux/renderer)
 
 (defun %make-frame-grid (rows cols)
   (let ((grid (make-array rows)))
@@ -183,7 +183,7 @@
          (layout
            (cl-tui-kit/layout:make-viewport-layout
             (cl-tui-kit/layout:make-layout-item
-             :cl-tmux-frame
+             :nerimux-frame
              :constraints
              (cl-tui-kit/core:make-constraints
               :min-width cols
@@ -191,7 +191,7 @@
               :min-height rows
               :preferred-height rows)))))
     (cl-tui-kit/layout:layout-child-rectangle
-     layout :cl-tmux-frame bounds)))
+     layout :nerimux-frame bounds)))
 
 (defun %workspace-tree-widget-key (node)
   (typecase node
@@ -278,7 +278,7 @@
                               (typep node 'repository))))))
     (cl-tui-kit/widgets:make-tree-widget
      model
-     :id :cl-tmux-workspace-tree
+     :id :nerimux-workspace-tree
      :rectangle rectangle
      :selected-key
      (and selected-tree-object
@@ -358,7 +358,7 @@
         (cl-tui-kit/widgets:render-widget
          (cl-tui-kit/widgets:make-list-widget
           model
-          :id :cl-tmux-workspace-tree
+          :id :nerimux-workspace-tree
           :rectangle rectangle
           :selected-key
           (and selected-tree-object
@@ -369,7 +369,7 @@
          rectangle))))))
 
 (defun %picker-widget-key (item)
-  (list :picker-item (cl-tmux/picker:picker-item-id item)))
+  (list :picker-item (nerimux/picker:picker-item-id item)))
 
 (defun %render-picker-widget
     (surface rows cols items query index regex-p)
@@ -395,17 +395,17 @@
             (format nil
                     "GLOBAL PICKER [~:[literal~;regex~]] | search workspace"
                     regex-p)
-            :id :cl-tmux-picker-title))
+            :id :nerimux-picker-title))
          (input
            (cl-tui-kit/widgets:make-input-widget
             :value query
             :placeholder "search workspace, repository, worktree, or pane"
-            :id :cl-tmux-picker-query
+            :id :nerimux-picker-query
             :focusable-p nil))
          (results
            (cl-tui-kit/widgets:make-list-widget
             list-model
-            :id :cl-tmux-picker-results
+            :id :nerimux-picker-results
             :selected-key
             (and selected-item (%picker-widget-key selected-item))
             :row-height 1
@@ -415,16 +415,16 @@
             (if items
                 (format nil "~D result~:P" (length items))
                 "no matches")
-            :id :cl-tmux-picker-status))
+            :id :nerimux-picker-status))
          (form
            (cl-tui-kit/widgets:make-form-widget
             (list title input results status)
-            :id :cl-tmux-picker-form
+            :id :nerimux-picker-form
             :focusable-p nil))
          (modal
            (cl-tui-kit/widgets:make-modal-widget
             form
-            :id :cl-tmux-global-picker
+            :id :nerimux-global-picker
             :rectangle (%frame-area rows cols)
             :open-p t
             :focusable-p nil
@@ -476,7 +476,7 @@
          (widget
            (cl-tui-kit/widgets:make-list-widget
             model
-            :id :cl-tmux-attention-results
+            :id :nerimux-attention-results
             :rectangle rectangle
             :selected-key
             (and selected-event (%attention-widget-key selected-event))
@@ -502,7 +502,7 @@
                (text
                  (cl-tui-kit/widgets:make-text-widget
                   (%frame-grid-text grid)
-                  :id :cl-tmux-frame
+                  :id :nerimux-frame
                   :rectangle content-rectangle))
                (viewport
                  (cl-tui-kit/core:make-viewport
@@ -513,7 +513,7 @@
                (root
                  (cl-tui-kit/widgets:make-viewport-widget
                   text
-                  :id :cl-tmux-client-viewport
+                  :id :nerimux-client-viewport
                   :rectangle rectangle
                   :viewport viewport
                   :content-width cols
@@ -642,7 +642,7 @@
                                              (rows 40)
                                              (cols 160))
   (let* ((organizations
-           (cl-tmux/picker::%benchmark-organizations
+           (nerimux/picker::%benchmark-organizations
             organization-count repository-count worktree-count pane-count))
          (scroll-offset
            (max 0 (- (+ organization-count repository-count worktree-count) 1)))

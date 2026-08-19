@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Main event loop: resize/dirty handling, automatic window renaming, and the
 ;;;; top-level read/dispatch/repaint cycle.
@@ -11,7 +11,7 @@
     (when window
       (window-relayout window (- *term-rows* *status-height*) *term-cols*)))
   ;; client-resized hook: the client terminal changed size (SIGWINCH).
-  (cl-tmux/hooks:run-hooks cl-tmux/hooks:+hook-client-resized+))
+  (nerimux/hooks:run-hooks nerimux/hooks:+hook-client-resized+))
 
 ;;; ── Automatic window renaming ────────────────────────────────────────────────
 ;;;
@@ -48,10 +48,10 @@
   "Expand automatic-rename-format for a real-PTY PANE and return the result.
    Falls back to (%rename-from-osc-title screen allow-title) when the format
    expansion yields an empty string."
-  (let* ((format-string (or (cl-tmux/options:get-option "automatic-rename-format")
+  (let* ((format-string (or (nerimux/options:get-option "automatic-rename-format")
                             "#{pane_current_command}"))
-         (context (cl-tmux/format:format-context-from-session session window pane))
-         (expanded-name (cl-tmux/format:expand-format format-string context)))
+         (context (nerimux/format:format-context-from-session session window pane))
+         (expanded-name (nerimux/format:expand-format format-string context)))
     (if (and expanded-name (plusp (length expanded-name)))
         expanded-name
         (%rename-from-osc-title screen allow-title))))
@@ -63,7 +63,7 @@
    Falls back to the OSC 0/2 screen title when the format yields an empty string.
    ALLOW-TITLE NIL (allow-rename off) suppresses the OSC-title fallback, so
    command-following still works but applications cannot rename via their title."
-  (let* ((pid (and pane (cl-tmux/model:pane-pid pane)))
+  (let* ((pid (and pane (nerimux/model:pane-pid pane)))
          (has-real-process (and pid (> pid 0))))
     (if has-real-process
         (%rename-from-format-string session window pane screen allow-title)
@@ -76,7 +76,7 @@
    Independent of allow-rename: command-following must keep working even with
    allow-rename off (that option only governs app-set OSC titles)."
   (and (window-automatic-rename-p active-window)
-       (cl-tmux/options:get-option-for-context
+       (nerimux/options:get-option-for-context
         "automatic-rename" :window active-window)))
 
 (defun %apply-automatic-rename (session active-window active-pane screen)
@@ -86,7 +86,7 @@
    allow-rename off` stops apps renaming windows via their title without
    freezing automatic command-following."
   (let ((new-name (%auto-rename-name session active-window active-pane screen
-                                     :allow-title (cl-tmux/options:get-option
+                                     :allow-title (nerimux/options:get-option
                                                    "allow-rename"))))
     (when (and (plusp (length new-name))
                (string/= new-name (window-name active-window)))

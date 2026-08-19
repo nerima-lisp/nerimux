@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; application cursor keys, default bindings, mark-pane, and root key-table dispatch
 
@@ -10,7 +10,7 @@
   (it "arrow-final-to-ss3-bytes-maps-arrows"
     ;; 65=A (up), 66=B (down), 67=C (right), 68=D (left)
     (dolist (final '(65 66 67 68))
-      (let ((ss3 (cl-tmux::%arrow-final-to-ss3-bytes final)))
+      (let ((ss3 (nerimux::%arrow-final-to-ss3-bytes final)))
         (expect (and ss3
                      (= 3 (length ss3))
                      (= 27  (aref ss3 0))
@@ -19,8 +19,8 @@
 
   ;; %arrow-final-to-ss3-bytes returns NIL for non-arrow final bytes.
   (it "arrow-final-to-ss3-bytes-returns-nil-for-non-arrows"
-    (expect (null (cl-tmux::%arrow-final-to-ss3-bytes 72)))  ; H = home, not arrow
-    (expect (null (cl-tmux::%arrow-final-to-ss3-bytes 109)))) ; m = SGR final
+    (expect (null (nerimux::%arrow-final-to-ss3-bytes 72)))  ; H = home, not arrow
+    (expect (null (nerimux::%arrow-final-to-ss3-bytes 109)))) ; m = SGR final
 
   ;;; ── New default key bindings ─────────────────────────────────────────────────
 
@@ -49,25 +49,25 @@
     (with-minimal-loop-session (p0 win sess)
       (let ((*overlay* nil))
         (expect (pane-marked p0) :to-be-falsy)
-        (cl-tmux::dispatch-command sess :mark-pane nil)
+        (nerimux::dispatch-command sess :mark-pane nil)
         (expect (pane-marked p0)))))
 
   ;; :mark-pane on an already-marked pane unmarks it (toggle).
   (it "dispatch-mark-pane-toggle-unmarks"
     (with-minimal-loop-session (p0 win sess)
       (let ((*overlay* nil))
-        (cl-tmux::dispatch-command sess :mark-pane nil)
+        (nerimux::dispatch-command sess :mark-pane nil)
         (expect (pane-marked p0))
-        (cl-tmux::dispatch-command sess :mark-pane nil)
+        (nerimux::dispatch-command sess :mark-pane nil)
         (expect (pane-marked p0) :to-be-falsy))))
 
   ;; :clear-mark clears the server-wide marked pane.
   (it "dispatch-clear-mark-unmarks-all-panes"
     (with-minimal-loop-session (p0 win sess)
       (let ((*overlay* nil))
-        (cl-tmux::dispatch-command sess :mark-pane nil)
+        (nerimux::dispatch-command sess :mark-pane nil)
         (expect (pane-marked p0))
-        (cl-tmux::dispatch-command sess :clear-mark nil)
+        (nerimux::dispatch-command sess :clear-mark nil)
         (expect (pane-marked p0) :to-be-falsy))))
 
   ;;; ── Root key-table lookup ────────────────────────────────────────────────────
@@ -75,12 +75,12 @@
   ;; A key bound in the root table (bind -n) fires without the C-b prefix.
   (it "root-table-binding-fires-without-prefix"
     (with-fake-session (s :nwindows 2)
-      (let ((state (cl-tmux::make-input-state)))
+      (let ((state (nerimux::make-input-state)))
         ;; Bind 'Z' in root table so it selects the next window without C-b.
         (key-table-bind "root" #\Z :next-window)
         (unwind-protect
              (progn
-               (cl-tmux::process-byte s (char-code #\Z) state)
+               (nerimux::process-byte s (char-code #\Z) state)
                (expect (eq (second (session-windows s)) (session-active-window s))))
           ;; Clean up: remove the root binding we added.
           (let ((tbl (gethash "root" *key-tables*)))
@@ -93,10 +93,10 @@
     (with-isolated-config
       (with-fake-session (s)
         (let ((*overlay* nil)
-              (state (cl-tmux::make-input-state)))
-          (cl-tmux/config:apply-config-directive
+              (state (nerimux::make-input-state)))
+          (nerimux/config:apply-config-directive
            '("bind" "-n" "Z" "display-message" "hi"))
-          (cl-tmux::process-byte s (char-code #\Z) state)
+          (nerimux::process-byte s (char-code #\Z) state)
           (assert-overlay-active "a -n command-line binding must fire without C-b")
           (assert-overlay-contains "hi" *overlay*
                                    "overlay must contain the bound command's output 'hi'"))))))

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;; ── PTY availability probe (test-only) ─────────────────────────────────────
 ;;;
@@ -11,7 +11,7 @@
    Used as a skip guard in integration tests that require /dev/ptmx."
   (handler-case
       (multiple-value-bind (fd pid) (forkpty-with-shell 8 20)
-        (cl-tmux/pty:pty-close fd pid)
+        (nerimux/pty:pty-close fd pid)
         t)
     (error () nil)))
 
@@ -52,7 +52,7 @@
     `(with-pty-session (,session-var ,@session-args)
        (let ((before-count ,count-form)
              (before-active ,active-form))
-         (cl-tmux::%run-command-line ,session-var ,command)
+         (nerimux::%run-command-line ,session-var ,command)
          (let ((after-count ,count-form))
            (expect (> after-count before-count)))
          (expect (eq before-active ,active-form))
@@ -65,7 +65,7 @@
         (session-args (if (consp session-spec) (rest session-spec) nil)))
     `(with-pty-session (,session-var ,@session-args)
        (let ((before-count ,count-form))
-         (cl-tmux::%run-command-line ,session-var ,command)
+         (nerimux::%run-command-line ,session-var ,command)
          (expect (> ,count-form before-count))
          ,@body))))
 
@@ -96,9 +96,9 @@
 ;;; ── PTY port initialization ─────────────────────────────────────────────────
 ;;;
 ;;; Any test that creates a real pane (create-initial-session, session-new-window,
-;;; respawn-pane) goes through cl-tmux/ports:spawn-pty.  Install the PTY adapter
+;;; respawn-pane) goes through nerimux/ports:spawn-pty.  Install the PTY adapter
 ;;; now so the port vars are non-NIL for the duration of the test run.
 ;;; Tests that need a mock port can rebind *spawn-pty* / *write-pty* / etc.
 ;;; around individual test bodies.
 
-(cl-tmux/pty:install-pty-port)
+(nerimux/pty:install-pty-port)

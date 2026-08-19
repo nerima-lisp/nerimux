@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 (declaim (special *current-mouse-event* *mouse-drag-state*))
 
@@ -31,11 +31,11 @@
     (#\x (let ((target-size (%parse-flag-int flags #\x)))
            (when target-size
              (%resize-pane-to-absolute-dimension win pane target-size
-                                                 #'cl-tmux/model:pane-width :right))))
+                                                 #'nerimux/model:pane-width :right))))
     (#\y (let ((target-size (%parse-flag-int flags #\y)))
            (when target-size
              (%resize-pane-to-absolute-dimension win pane target-size
-                                                 #'cl-tmux/model:pane-height :down))))))
+                                                 #'nerimux/model:pane-height :down))))))
 
 (defun %resize-pane-apply-relative-directions (flags win amount)
   (define-flag-dispatch (flags)
@@ -72,7 +72,7 @@
           ;; -T: history-trim below the cursor on the target pane's screen.
           ((%flag-present-p flags #\T)
            (when pane
-             (cl-tmux/terminal/actions:trim-below-cursor (pane-screen pane))
+             (nerimux/terminal/actions:trim-below-cursor (pane-screen pane))
              (setf *dirty* t)))
           ;; -M: arm the border-drag state from the in-flight mouse event.
           ((%flag-present-p flags #\M)
@@ -208,7 +208,7 @@
           (multiple-value-bind (src-win src-pane target-id)
               (%resolve-break-pane-endpoints session src-str target-str
                                              cur-win cur-pane after before)
-            (let ((new-win (cl-tmux/commands:break-pane
+            (let ((new-win (nerimux/commands:break-pane
                             session :src-window src-win :pane src-pane
                                     :name name :select (not detach)
                                     :target-window-id target-id
@@ -224,7 +224,7 @@
   "clear-history [-H] [-t target-pane]: clear a pane's scrollback history.
    -t target-pane: the pane to clear (default: the active pane); a window-only
    target clears that window's active pane.
-   -H: also clear the pane's hyperlinks (accepted; cl-tmux does not track
+   -H: also clear the pane's hyperlinks (accepted; nerimux does not track
        hyperlinks separately, so clearing the scrollback already covers it).
    This is the scriptable form; the interactive :clear-history keybinding (active
    pane) is unchanged.  tmux args \"Ht:\"."
@@ -237,7 +237,7 @@
       (with-target-context (target-session target-window pane session target-str)
         (declare (ignore target-session target-window))
         (when pane
-          (cl-tmux/terminal/actions:clear-scrollback (pane-screen pane))
+          (nerimux/terminal/actions:clear-scrollback (pane-screen pane))
           (setf *dirty* t)
           t)))))
 

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/model)
+(in-package #:nerimux/model)
 
 ;;; ── Tree-link mutation ──────────────────────────────────────────────────────
 ;;;
@@ -49,15 +49,15 @@
 
 (defun %status-top-offset ()
   "Rows reserved at the TOP of the window for a top-positioned status bar:
-   cl-tmux/config:*status-height* when the status is on AND status-position is
+   nerimux/config:*status-height* when the status is on AND status-position is
    \"top\", else 0.  Panes are laid out starting at this y so a top status bar
    never overlaps them (and a bottom bar leaves the top flush at y=0).  Reads the
    live status-height/option globals; safe because config loads before this file
    and the option symbol exists from package.lisp."
-  (if (and (plusp cl-tmux/config:*status-height*)
-           (string-equal (or (cl-tmux/options:get-option "status-position") "bottom")
+  (if (and (plusp nerimux/config:*status-height*)
+           (string-equal (or (nerimux/options:get-option "status-position") "bottom")
                          "top"))
-      cl-tmux/config:*status-height*
+      nerimux/config:*status-height*
       0))
 
 (defun %assign-window-tree (window w h &optional (top-offset 0))

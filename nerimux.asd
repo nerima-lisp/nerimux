@@ -10,21 +10,21 @@
     (load (merge-pathnames "system/asdf-test-components.lisp" *load-truename*))
     nil)
 
-(defsystem "cl-tmux"
+(defsystem "nerimux"
   :description "A tmux-compatible terminal multiplexer in Common Lisp"
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
   ;; Single source of truth for the version: flake.nix reads this form and
   ;; release.yml refuses to publish a tag that disagrees with it.
-  :version "0.1.0"
-  :homepage "https://github.com/nerima-lisp/cl-tmux"
-  :bug-tracker "https://github.com/nerima-lisp/cl-tmux/issues"
-  :source-control (:git "https://github.com/nerima-lisp/cl-tmux.git")
+  :version "0.2.0"
+  :homepage "https://github.com/nerima-lisp/nerimux"
+  :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
+  :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
   ;; NO EXTERNAL (non-org) DEPENDENCIES. Every name below is a nerima-lisp
   ;; sibling, so this system now satisfies DEPENDENCY_POLICY.md's default rule
   ;; outright rather than through the grandfather clause it used to rely on, and
-  ;; CODING_STANDARD.md's "外部依存を持つのは cl-tmux の1リポジトリだけです" no
+  ;; CODING_STANDARD.md's "外部依存を持つのは nerimux の1リポジトリだけです" no
   ;; longer describes any repository in the org.
   ;;
   ;; Four external dependencies were removed across the 2026-08-01/02 sweep, each
@@ -48,7 +48,7 @@
   ;;   * cl-ppcre          -> cl-regex-kit. This one is NOT behaviour-preserving:
   ;;                          cl-regex-kit is RE2/Rust-style with no
   ;;                          backreferences and no lookaround. That is a
-  ;;                          deliberate trade, and it moves cl-tmux CLOSER to
+  ;;                          deliberate trade, and it moves nerimux CLOSER to
   ;;                          upstream tmux, which compiles #{m/r:} and #{s///}
   ;;                          patterns with regcomp()+REG_EXTENDED — POSIX ERE,
   ;;                          which has neither construct either.
@@ -106,7 +106,7 @@
       :components
       ((:file "pty-ffi")       ; FFI declarations and platform constants
        (:file "pty-rawmode")   ; terminal raw mode management
-       (:file "pty")))         ; PTY lifecycle + install-pty-port adapter (references cl-tmux/ports vars)
+       (:file "pty")))         ; PTY lifecycle + install-pty-port adapter (references nerimux/ports vars)
      (:module "infrastructure/net"
       :serial t
       :components
@@ -447,52 +447,52 @@
        (:file "main-startup-forwarding") ; startup command forwarding helpers + generated commands
        (:file "main-startup-commands") ; attach/new-session/list/source/version handlers
        (:file "main-startup"))))))
-  ;; Build a standalone binary: (asdf:make :cl-tmux)
+  ;; Build a standalone binary: (asdf:make :nerimux)
   :build-operation "program-op"
-  :build-pathname "cl-tmux"
-  :entry-point "cl-tmux:main"
-  :in-order-to ((test-op (test-op "cl-tmux/test"))))
+  :build-pathname "nerimux"
+  :entry-point "nerimux:main"
+  :in-order-to ((test-op (test-op "nerimux/test"))))
 
-(defsystem "cl-tmux/test"
-  :description "Test suite for cl-tmux, authored natively in cl-weave"
+(defsystem "nerimux/test"
+  :description "Test suite for nerimux, authored natively in cl-weave"
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
-  :version "0.1.0"
-  :homepage "https://github.com/nerima-lisp/cl-tmux"
-  :bug-tracker "https://github.com/nerima-lisp/cl-tmux/issues"
-  :source-control (:git "https://github.com/nerima-lisp/cl-tmux.git")
-  :depends-on ("cl-tmux" "cl-weave")
+  :version "0.2.0"
+  :homepage "https://github.com/nerima-lisp/nerimux"
+  :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
+  :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
+  :depends-on ("nerimux" "cl-weave")
   ;; The component tree is ~295 files, so it lives in system/ and is spliced in
   ;; at read time by the #. form at the top of this file. The list itself is a
   ;; single (:module "t" ...) rooted at the standard test directory.
-  :components #.(symbol-value (find-symbol "*CL-TMUX-TEST-COMPONENTS*" :cl-user))
-  ;; Run with: (asdf:test-system "cl-tmux")
+  :components #.(symbol-value (find-symbol "*NERIMUX-TEST-COMPONENTS*" :cl-user))
+  ;; Run with: (asdf:test-system "nerimux")
   ;; Not HOST-KIT:SYMBOL-CALL: a .asd is read before :depends-on is ever
   ;; consulted, so a CL-HOST-KIT-prefixed token here would be a read-time
   ;; PACKAGE-DOES-NOT-EXIST error regardless of what the system depends on.
   ;; FIND-SYMBOL/FIND-PACKAGE/FUNCALL are CL, always present.
   :perform (test-op (op c)
-             (funcall (find-symbol "RUN-TESTS" (find-package "CL-TMUX/TEST")))))
+             (funcall (find-symbol "RUN-TESTS" (find-package "NERIMUX/TEST")))))
 
-;; The Prolog-backed reasoning read-model now lives in the core `cl-tmux'
+;; The Prolog-backed reasoning read-model now lives in the core `nerimux'
 ;; system (src/reasoning/, with cl-prolog-kit a core dependency); it powers
 ;; cold-path introspection and is compiled into the shipped binary.
 
 ;; cl-weave regression suite for the reasoning read-model.  It exercises the
 ;; reasoning API through custom cl-weave matchers and reuses cl-prolog-kit's own
 ;; cl-weave bridge (`cl-prolog-kit/weave:deftest-queries') for raw Prolog queries.
-;; Run with: (asdf:test-system :cl-tmux/weave)
-(defsystem "cl-tmux/weave"
-  :description "cl-weave suite for the cl-tmux Prolog reasoning read-model."
+;; Run with: (asdf:test-system :nerimux/weave)
+(defsystem "nerimux/weave"
+  :description "cl-weave suite for the nerimux Prolog reasoning read-model."
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
-  :version "0.1.0"
-  :homepage "https://github.com/nerima-lisp/cl-tmux"
-  :bug-tracker "https://github.com/nerima-lisp/cl-tmux/issues"
-  :source-control (:git "https://github.com/nerima-lisp/cl-tmux.git")
-  :depends-on ("cl-tmux" "cl-weave" "cl-prolog-kit" "cl-prolog-kit/weave")
+  :version "0.2.0"
+  :homepage "https://github.com/nerima-lisp/nerimux"
+  :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
+  :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
+  :depends-on ("nerimux" "cl-weave" "cl-prolog-kit" "cl-prolog-kit/weave")
   :pathname "t/weave"
   :serial t
   :components ((:file "package")
@@ -502,22 +502,22 @@
                (:file "entry"))
   :perform (test-op (op c)
              (declare (ignore op c))
-             (unless (funcall (find-symbol "RUN-WEAVE-TESTS" (find-package "CL-TMUX/WEAVE-TESTS")))
-               (error "cl-tmux cl-weave suite failed."))))
+             (unless (funcall (find-symbol "RUN-WEAVE-TESTS" (find-package "NERIMUX/WEAVE-TESTS")))
+               (error "nerimux cl-weave suite failed."))))
 
 ;; cl-weave regression suite for the cl-dataflow-kit copy-mode lifecycle
-;; read-model (src/dataflow/), mirroring cl-tmux/weave above.
-;; Run with: (asdf:test-system :cl-tmux/dataflow)
-(defsystem "cl-tmux/dataflow"
-  :description "cl-weave suite for the cl-tmux cl-dataflow-kit copy-mode lifecycle read-model."
+;; read-model (src/dataflow/), mirroring nerimux/weave above.
+;; Run with: (asdf:test-system :nerimux/dataflow)
+(defsystem "nerimux/dataflow"
+  :description "cl-weave suite for the nerimux cl-dataflow-kit copy-mode lifecycle read-model."
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
-  :version "0.1.0"
-  :homepage "https://github.com/nerima-lisp/cl-tmux"
-  :bug-tracker "https://github.com/nerima-lisp/cl-tmux/issues"
-  :source-control (:git "https://github.com/nerima-lisp/cl-tmux.git")
-  :depends-on ("cl-tmux" "cl-weave" "cl-dataflow-kit")
+  :version "0.2.0"
+  :homepage "https://github.com/nerima-lisp/nerimux"
+  :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
+  :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
+  :depends-on ("nerimux" "cl-weave" "cl-dataflow-kit")
   :pathname "t/dataflow"
   :serial t
   :components ((:file "package")
@@ -525,5 +525,5 @@
                (:file "entry"))
   :perform (test-op (op c)
              (declare (ignore op c))
-             (unless (funcall (find-symbol "RUN-DATAFLOW-TESTS" (find-package "CL-TMUX/DATAFLOW-TESTS")))
-               (error "cl-tmux cl-dataflow-kit suite failed."))))
+             (unless (funcall (find-symbol "RUN-DATAFLOW-TESTS" (find-package "NERIMUX/DATAFLOW-TESTS")))
+               (error "nerimux cl-dataflow-kit suite failed."))))

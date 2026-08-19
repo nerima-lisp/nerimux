@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Window/pane/split command factories.
 ;;;;
@@ -16,7 +16,7 @@
     ((and at-index (integerp at-index)) at-index)
     ((and after-current prev-win) (1+ (window-id prev-win)))
     ((and before-current prev-win) (window-id prev-win))
-    (t (or (cl-tmux/options:get-option "base-index") 0))))
+    (t (or (nerimux/options:get-option "base-index") 0))))
 
 (defun %cmd-new-window (session &key name start-dir detach at-index after-current
                                      before-current (start-reader-p t))
@@ -31,7 +31,7 @@
    Returns the new window."
   (let* ((rows     (- *term-rows* *status-height*))
          (cols     *term-cols*)
-         (win-name (or name (cl-tmux/model::%shell-basename)))
+         (win-name (or name (nerimux/model::%shell-basename)))
          (prev-win (session-active-window session))
          (base     (%compute-window-base-index prev-win
                                                :at-index      at-index
@@ -40,7 +40,7 @@
          (win      (session-new-window session win-name rows cols base start-dir)))
     (when start-reader-p
       (start-reader-thread (window-active-pane win)))
-    (cl-tmux/hooks:run-hooks cl-tmux/hooks:+hook-after-new-window+ win)
+    (nerimux/hooks:run-hooks nerimux/hooks:+hook-after-new-window+ win)
     (when (and detach prev-win)
       (session-select-window session prev-win))
     win))
@@ -90,8 +90,8 @@
     (when new
       (when (> (pane-fd new) 0)
         (start-reader-thread new))
-      (cl-tmux/hooks:run-hooks cl-tmux/hooks:+hook-after-split-window+ new)
+      (nerimux/hooks:run-hooks nerimux/hooks:+hook-after-split-window+ new)
       ;; A split creates a new pane — fire after-new-pane too (was defined but
       ;; never fired).
-      (cl-tmux/hooks:run-hooks cl-tmux/hooks:+hook-after-new-pane+ new))
+      (nerimux/hooks:run-hooks nerimux/hooks:+hook-after-new-pane+ new))
     new))

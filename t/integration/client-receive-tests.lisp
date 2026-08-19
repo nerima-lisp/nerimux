@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Client receive/decode integration tests (src/client.lisp).
 ;;;;
@@ -19,7 +19,7 @@
       (send-frame server-side (msg-bye))
       (force-output server-side)
       (multiple-value-bind (disposition text)
-          (cl-tmux::%decode-server-frame client-side)
+          (nerimux::%decode-server-frame client-side)
         (expect (eq :exit disposition))
         (expect (null text)))))
 
@@ -30,7 +30,7 @@
       (send-frame server-side (msg-frame "PURE-TEXT"))
       (force-output server-side)
       (multiple-value-bind (disposition text)
-          (cl-tmux::%decode-server-frame client-side)
+          (nerimux::%decode-server-frame client-side)
         (expect (eq :frame disposition))
         (expect (string= "PURE-TEXT" text)))))
 
@@ -40,7 +40,7 @@
       (close server-side)
       (sleep 0.05)
       (multiple-value-bind (disposition text)
-          (cl-tmux::%decode-server-frame client-side)
+          (nerimux::%decode-server-frame client-side)
         (expect (eq :exit disposition))
         (expect (null text)))))
 
@@ -54,7 +54,7 @@
     (with-guarded-socket-test
       (send-frame server-side (msg-bye))
       (force-output server-side)
-      (expect (eq :exit (cl-tmux::%receive-server-frame client-side)))))
+      (expect (eq :exit (nerimux::%receive-server-frame client-side)))))
 
   ;; %receive-server-frame returns :exit on EOF (server closed the stream).
   (it "receive-server-frame-returns-exit-on-eof"
@@ -63,7 +63,7 @@
       (close server-side)
       ;; Give the stream close a moment to propagate across the socket.
       (sleep 0.05)
-      (expect (eq :exit (cl-tmux::%receive-server-frame client-side)))))
+      (expect (eq :exit (nerimux::%receive-server-frame client-side)))))
 
   ;; %receive-server-frame writes +msg-frame+ content to *standard-output*
   ;; and returns NIL (continue the event loop).
@@ -77,7 +77,7 @@
       ;; captured "HELLO"), so we capture first and assert on the result after.
       (let (result)
         (let ((painted (with-output-to-string (*standard-output*)
-                         (setf result (cl-tmux::%receive-server-frame client-side)))))
+                         (setf result (nerimux::%receive-server-frame client-side)))))
           (expect (null result))
           (expect (string= "HELLO" painted))))))
 
@@ -108,7 +108,7 @@
         (declare (ignore description))
         ;; Guard: skip codepoints beyond the Lisp image's char-code-limit.
         (when (< code char-code-limit)
-          (let ((got (cl-tmux::%utf8-char-byte-count (code-char code))))
+          (let ((got (nerimux::%utf8-char-byte-count (code-char code))))
             (expect (= expected got)))))))
 
   ;; ── %receive-if-ready behavior ──────────────────────────────────────────────
@@ -122,7 +122,7 @@
   ;; NOT in the READY list — the non-blocking guard must prevent reads on idle fds.
   (it "receive-if-ready-returns-nil-when-fd-not-in-ready-set"
     ;; Any fd value not in the ready list; NIL stream ensures no I/O if guard fails.
-    (expect (null (cl-tmux::%receive-if-ready nil 99 '(0 1 2)))))
+    (expect (null (nerimux::%receive-if-ready nil 99 '(0 1 2)))))
 
   ;; %receive-if-ready returns :exit when the server socket fd is in
   ;; the READY list and %receive-server-frame returns :exit (+msg-bye+ frame).
@@ -132,8 +132,8 @@
       (send-frame server-stream (msg-bye))
       (force-output server-stream)
       ;; Wait for the frame to be readable.
-      (cl-tmux/pty:select-fds (list client-fd) 1000000)
+      (nerimux/pty:select-fds (list client-fd) 1000000)
       ;; Ready set contains the client fd: %receive-if-ready must dispatch.
-      (let ((result (cl-tmux::%receive-if-ready client-stream client-fd
+      (let ((result (nerimux::%receive-if-ready client-stream client-fd
                                                 (list client-fd))))
         (expect (eq :exit result))))))

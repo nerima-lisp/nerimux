@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/config)
+(in-package #:nerimux/config)
 
 ;;; -- %if / %elif / %else / %endif preprocessor + line joining ----------------
 ;;;
@@ -11,7 +11,7 @@
 ;;;
 ;;; The condition is a tmux format string that evaluates to "1" (truthy) or
 ;;; "" / "0" (falsy).  A dynamic callback (*config-condition-evaluator*) is used
-;;; so the config layer (which cannot depend on cl-tmux/format) can delegate
+;;; so the config layer (which cannot depend on nerimux/format) can delegate
 ;;; evaluation to the top-level package which has access to full format expansion.
 ;;; When the callback is unset, all %if conditions are treated as truthy so that
 ;;; no directives are silently skipped.

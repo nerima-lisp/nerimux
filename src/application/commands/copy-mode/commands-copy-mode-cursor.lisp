@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/commands)
+(in-package #:nerimux/commands)
 
 ;;; These top-level helpers are called from copy-mode-move-cursor for :up / :down.
 ;;; Keeping them at top level makes each path independently readable.

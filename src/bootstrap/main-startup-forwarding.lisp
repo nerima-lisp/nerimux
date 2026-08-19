@@ -1,6 +1,6 @@
 ;;; Startup command forwarding helpers.
 
-(in-package :cl-tmux)
+(in-package :nerimux)
 
 (defmacro %try-or-nil (&body body)
   "Run BODY, returning its value, or NIL if it signals an ERROR.

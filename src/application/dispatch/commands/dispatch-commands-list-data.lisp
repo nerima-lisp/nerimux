@@ -1,8 +1,8 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; list-commands usage string table — pure data, no logic.
 ;;;;
-;;;; Maps canonical command name → cl-tmux's supported usage-flags string.
+;;;; Maps canonical command name → nerimux's supported usage-flags string.
 ;;;; An empty string means the local scriptable command accepts no arguments.
 
 ;;;; Entries whose usage string would push the line past the 100-column limit are
@@ -136,4 +136,4 @@
     ("unbind-key"           . "[-anq] [-T key-table] key")
     ("unlink-window"        . "[-k] [-t target-window]")
     ("wait-for"             . "[-SLU] channel"))
-  "Maps canonical command name to cl-tmux's supported usage string.")
+  "Maps canonical command name to nerimux's supported usage string.")

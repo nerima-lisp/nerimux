@@ -1,8 +1,8 @@
-# cl-tmux
+# nerimux
 
-[![CI](https://github.com/nerima-lisp/cl-tmux/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nerima-lisp/cl-tmux/actions/workflows/ci.yml)
+[![CI](https://github.com/nerima-lisp/nerimux/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nerima-lisp/nerimux/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Documentation](https://img.shields.io/badge/docs-MkDocs%20Material-0a7a5a)](https://nerima-lisp.github.io/cl-tmux/)
+[![Documentation](https://img.shields.io/badge/docs-MkDocs%20Material-0a7a5a)](https://nerima-lisp.github.io/nerimux/)
 
 A workspace-oriented terminal multiplexer written entirely in Common Lisp.
 The primary UI navigates an organization → repository → worktree → pane
@@ -11,29 +11,29 @@ server and command surface remain available during the migration, and every
 verified behavior is pinned by a regression suite that runs hermetically through
 Nix.
 
-Full documentation is published at <https://nerima-lisp.github.io/cl-tmux/>.
+Full documentation is published at <https://nerima-lisp.github.io/nerimux/>.
 The source for that site lives in [docs/src/](docs/src/).
 
 ## Quick Start
 
 ```bash
-nix run github:nerima-lisp/cl-tmux -- attach
+nix run github:nerima-lisp/nerimux -- attach
 
-cl-tmux attach                         # open the workspace overview
-cl-tmux attach organization/repository # focus a repository/worktree
-cl-tmux attach /path/to/worktree       # open a local worktree
+nerimux attach                         # open the workspace overview
+nerimux attach organization/repository # focus a repository/worktree
+nerimux attach /path/to/worktree       # open a local worktree
 ```
 
 `attach` auto-starts the headless runtime and connects a thin client. Use
 `C-q d` to detach and `C-p` to open the global picker. A selector containing a
 slash is resolved as an organization/repository selector or a local worktree
-path. Running `cl-tmux` with no command remains the standalone compatibility
+path. Running `nerimux` with no command remains the standalone compatibility
 entry point.
 
-The compatibility command surface follows tmux where it is implemented. cl-tmux reads a real
+The compatibility command surface follows tmux where it is implemented. nerimux reads a real
 `.tmux.conf` — including `%if`, `%hidden`, variable assignments, brace blocks
-and `source-file` — from `$CL_TMUX_CONF`, then
-`~/.config/cl-tmux/cl-tmux.conf`, then your existing tmux config.
+and `source-file` — from `$NERIMUX_CONF`, then
+`~/.config/nerimux/nerimux.conf`, then your existing tmux config.
 
 One deliberate difference: only canonical command names are accepted. Short
 aliases (`neww`, `splitw`, …) are rejected rather than silently supported, so
@@ -43,8 +43,8 @@ typos fail loudly.
 
 ```nix
 # flake.nix
-inputs.cl-tmux = {
-  url = "github:nerima-lisp/cl-tmux/v0.1.0";
+inputs.nerimux = {
+  url = "github:nerima-lisp/nerimux/v0.1.0";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
@@ -54,17 +54,17 @@ than follow the default branch.
 
 Nix is the only supported build path: it pins SBCL and every Lisp dependency,
 so a build either reproduces exactly or fails loudly. From a checkout,
-`nix build .` produces `./result/bin/cl-tmux`.
+`nix build .` produces `./result/bin/nerimux`.
 
 ## Documentation
 
-- [Getting started](https://nerima-lisp.github.io/cl-tmux/getting-started/) —
+- [Getting started](https://nerima-lisp.github.io/nerimux/getting-started/) —
   install, usage, default key bindings, running the suite
-- [Configuration](https://nerima-lisp.github.io/cl-tmux/guide/configuration/) —
+- [Configuration](https://nerima-lisp.github.io/nerimux/guide/configuration/) —
   `.tmux.conf` syntax and path resolution
-- [Compatibility](https://nerima-lisp.github.io/cl-tmux/reference/compatibility/) —
+- [Compatibility](https://nerima-lisp.github.io/nerimux/reference/compatibility/) —
   what is implemented, what is deliberately different, where the risk is
-- [Architecture](https://nerima-lisp.github.io/cl-tmux/reference/architecture/) —
+- [Architecture](https://nerima-lisp.github.io/nerimux/reference/architecture/) —
   event flow, layering, source layout
 
 ## Development
@@ -79,10 +79,10 @@ nix fmt              # format Nix sources (treefmt)
 Tests live in `t/` and run under
 [cl-weave](https://github.com/nerima-lisp/cl-weave), the org's test framework.
 `sbcl --script run-tests.lisp` is the entry point CI and the flake both use;
-set `CL_TMUX_TEST_SYSTEM` to pick one of `cl-tmux/test` (default),
-`cl-tmux/weave` or `cl-tmux/dataflow`.
+set `NERIMUX_TEST_SYSTEM` to pick one of `nerimux/test` (default),
+`nerimux/weave` or `nerimux/dataflow`.
 
-cl-tmux is the org's L4 application package and its testbed: it runs on twelve
+nerimux is the org's L4 application package and its testbed: it runs on twelve
 sibling libraries — [cl-cli](https://github.com/nerima-lisp/cl-cli),
 [cl-boundary-kit](https://github.com/nerima-lisp/cl-boundary-kit),
 [cl-dataflow-kit](https://github.com/nerima-lisp/cl-dataflow-kit),
@@ -98,7 +98,7 @@ sibling libraries — [cl-cli](https://github.com/nerima-lisp/cl-cli),
 read-models. It has **no external dependencies**: it was the last repository in
 the org with any, and the final two (`bordeaux-threads`, `cl-ppcre`) were
 replaced by siblings on 2026-08-02. See
-[Dogfooded sibling libraries](https://nerima-lisp.github.io/cl-tmux/guide/sibling-libraries/).
+[Dogfooded sibling libraries](https://nerima-lisp.github.io/nerimux/guide/sibling-libraries/).
 
 ## Contributing
 

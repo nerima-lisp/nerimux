@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Unix-domain socket primitive tests (src/net.lisp).
 ;;;;
@@ -22,29 +22,29 @@
   ;;; path must be a non-empty string in the temp directory, and two successive
   ;;; calls must return distinct paths (collision-resistance).
 
-  ;; cl-tmux/net::%make-probe-socket-path must return a non-empty string.
+  ;; nerimux/net::%make-probe-socket-path must return a non-empty string.
   (it "make-probe-socket-path-returns-nonempty-string"
-    (let ((path (cl-tmux/net::%make-probe-socket-path)))
+    (let ((path (nerimux/net::%make-probe-socket-path)))
       (expect (stringp path))
       (expect (plusp (length path)))))
 
   ;; %make-probe-socket-path must produce a path inside the system temp directory.
   (it "make-probe-socket-path-is-in-temp-directory"
-    (let* ((path    (cl-tmux/net::%make-probe-socket-path))
+    (let* ((path    (nerimux/net::%make-probe-socket-path))
            (tmpdir  (string-right-trim "/" (or (sb-ext:posix-getenv "TMPDIR") "/tmp"))))
       (expect (and (> (length path) (length tmpdir))
                    (string= tmpdir (subseq path 0 (length tmpdir)))))))
 
   ;; %make-probe-socket-path must produce a path ending in ".sock".
   (it "make-probe-socket-path-has-sock-suffix"
-    (let ((path (cl-tmux/net::%make-probe-socket-path)))
+    (let ((path (nerimux/net::%make-probe-socket-path)))
       (expect (string= ".sock" (subseq path (- (length path) 5))))))
 
   ;; Two successive calls to %make-probe-socket-path must return different paths
   ;; (collision-resistance for concurrent test runs or parallel probing).
   (it "make-probe-socket-path-successive-calls-return-distinct-paths"
-    (let ((path1 (cl-tmux/net::%make-probe-socket-path))
-          (path2 (cl-tmux/net::%make-probe-socket-path)))
+    (let ((path1 (nerimux/net::%make-probe-socket-path))
+          (path2 (nerimux/net::%make-probe-socket-path)))
       (expect (not (string= path1 path2)))))
 
   ;;; ── unix-socket-available-p ──────────────────────────────────────────────
@@ -59,7 +59,7 @@
   ;; Connecting to a non-existent socket path signals an error.
   (it "connect-to-missing-path-signals"
     (signals error
-      (connect-to "/nonexistent-cl-tmux-dir/does-not-exist.sock")))
+      (connect-to "/nonexistent-nerimux-dir/does-not-exist.sock")))
 
   ;; Connecting to an empty-string path signals an error.
   (it "connect-to-empty-path-signals"
@@ -133,7 +133,7 @@
         (unwind-protect
              (with-mocked-functions
                  (((fdefinition 'sb-bsd-sockets:socket-accept) timeout-mock))
-               (expect (null (cl-tmux/net:accept-connection listener))))
+               (expect (null (nerimux/net:accept-connection listener))))
           (close-socket listener)))))
 
   ;;; ── Table-driven: multiple message types roundtrip ────────────────────────
@@ -201,18 +201,18 @@
 
   ;; +accept-timeout-seconds+ must be a positive integer for sb-ext:with-timeout.
   (it "accept-timeout-constant-is-positive-integer"
-    (expect (integerp cl-tmux/net::+accept-timeout-seconds+))
-    (expect (plusp cl-tmux/net::+accept-timeout-seconds+)))
+    (expect (integerp nerimux/net::+accept-timeout-seconds+))
+    (expect (plusp nerimux/net::+accept-timeout-seconds+)))
 
   ;; +socket-stream-timeout-seconds+ must be a positive integer for socket-make-stream.
   (it "socket-stream-timeout-constant-is-positive-integer"
-    (expect (integerp cl-tmux/net::+socket-stream-timeout-seconds+))
-    (expect (plusp cl-tmux/net::+socket-stream-timeout-seconds+)))
+    (expect (integerp nerimux/net::+socket-stream-timeout-seconds+))
+    (expect (plusp nerimux/net::+socket-stream-timeout-seconds+)))
 
   ;; +connect-timeout-seconds+ must be a positive integer for sb-ext:with-timeout.
   (it "connect-timeout-constant-is-positive-integer"
-    (expect (integerp cl-tmux/net::+connect-timeout-seconds+))
-    (expect (plusp cl-tmux/net::+connect-timeout-seconds+)))
+    (expect (integerp nerimux/net::+connect-timeout-seconds+))
+    (expect (plusp nerimux/net::+connect-timeout-seconds+)))
 
   ;;; ── Socket stream element type ────────────────────────────────────────────
 
@@ -242,7 +242,7 @@
             (multiple-value-bind (type payload) (read-frame server-stream)
               (expect (= +msg-command+ type))
               (multiple-value-bind (command target args)
-                  (cl-tmux/protocol:decode-command-payload payload)
+                  (nerimux/protocol:decode-command-payload payload)
                 (expect (eq :rename-window command))
                 (expect (string= "1:alpha" target))
                 (expect (equal '("new-name") args)))))))))
@@ -263,7 +263,7 @@
             (multiple-value-bind (type payload) (read-frame server-stream)
               (expect (= +msg-attach+ type))
               (multiple-value-bind (rows cols)
-                  (cl-tmux/protocol:decode-size payload)
+                  (nerimux/protocol:decode-size payload)
                 (expect (= 24 rows))
                 (expect (= 80 cols))))
             ;; server → client
@@ -271,7 +271,7 @@
             (multiple-value-bind (type payload) (read-frame client-stream)
               (expect (= +msg-frame+ type))
               (expect (string= "rendered output"
-                                (cl-tmux/protocol:decode-text payload)))))))))
+                                (nerimux/protocol:decode-text payload)))))))))
 
   ;;; ── make-listener / connect-to produce usable sockets ────────────────────
 

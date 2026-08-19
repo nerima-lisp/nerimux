@@ -1,9 +1,9 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Command-hook dispatch helpers.
 ;;;;
-;;;; run-command-hooks is installed as cl-tmux/hooks:*command-hook-runner* so
-;;;; lower layers (cl-tmux/commands kill-pane / kill-window, etc.) can fire
+;;;; run-command-hooks is installed as nerimux/hooks:*command-hook-runner* so
+;;;; lower layers (nerimux/commands kill-pane / kill-window, etc.) can fire
 ;;;; command hooks without depending on this (higher) dispatch layer directly.
 
 (defun %derive-hook-session (target)
@@ -12,9 +12,9 @@
    regardless of what object the firing point had.  NIL when unresolvable."
   (cond
     ((null target) nil)
-    ((cl-tmux/model::session-p target) target)
-    ((cl-tmux/model::window-p  target) (%session-of-window target))
-    ((cl-tmux/model::pane-p    target) (%session-of-pane   target))
+    ((nerimux/model::session-p target) target)
+    ((nerimux/model::window-p  target) (%session-of-window target))
+    ((nerimux/model::pane-p    target) (%session-of-pane   target))
     (t nil)))
 
 (defun %hook-scope-matches-p (kind value session target)
@@ -25,13 +25,13 @@
     (:scoped-session
      (string= value (session-name session)))
     (:scoped-window
-     (let ((win (cond ((cl-tmux/model::window-p target) target)
-                      ((cl-tmux/model::pane-p target)
-                       (cl-tmux/model:pane-window target)))))
-       (and win (eql value (cl-tmux/model:window-id win)))))
+     (let ((win (cond ((nerimux/model::window-p target) target)
+                      ((nerimux/model::pane-p target)
+                       (nerimux/model:pane-window target)))))
+       (and win (eql value (nerimux/model:window-id win)))))
     (:scoped-pane
-     (and (cl-tmux/model::pane-p target)
-          (eql value (cl-tmux/model:pane-id target))))))
+     (and (nerimux/model::pane-p target)
+          (eql value (nerimux/model:pane-id target))))))
 
 (defun %dispatch-hook-entry (session entry &optional target)
   "Dispatch a single hook ENTRY against SESSION.
@@ -42,7 +42,7 @@
    session/window/pane matches — tmux stores hooks per target and fires them
    for that scope only."
   (cond
-    ((cl-tmux/hooks:scoped-hook-entry-p entry)
+    ((nerimux/hooks:scoped-hook-entry-p entry)
      (destructuring-bind (kind value command) entry
        (when (%hook-scope-matches-p kind value session target)
          (%dispatch-hook-entry session command target))))
@@ -59,9 +59,9 @@
    also passed through for window/pane-scoped hook matching."
   (let ((session (%derive-hook-session target)))
     (when session
-      (dolist (entry (cl-tmux/hooks:command-hooks event-name))
+      (dolist (entry (nerimux/hooks:command-hooks event-name))
         (%dispatch-hook-entry session entry target)))))
 
 ;; Install run-command-hooks as the command-hook runner so lower layers
-;; (cl-tmux/commands kill-pane / kill-window) can fire command hooks too.
-(setf cl-tmux/hooks:*command-hook-runner* #'run-command-hooks)
+;; (nerimux/commands kill-pane / kill-window) can fire command hooks too.
+(setf nerimux/hooks:*command-hook-runner* #'run-command-hooks)

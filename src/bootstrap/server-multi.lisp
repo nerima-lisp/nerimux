@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Multi-client server: a single select(2)-multiplexed event loop that serves
 ;;;; MANY attached clients at once, instead of the one-client-at-a-time model in
@@ -112,7 +112,7 @@
    design."
   (if (null *clients*)
       (values *term-rows* *term-cols*)
-      (let ((mode (or (cl-tmux/options:get-option "window-size") "smallest")))
+      (let ((mode (or (nerimux/options:get-option "window-size") "smallest")))
         (cond
           ((string-equal mode "largest")
            (%client-size-reduce #'max))
@@ -152,7 +152,7 @@
              ((and (eq (client-conn-view conn) :attention)
                    (not (eq (client-conn-mode conn) :picker)))
               (render-workspace-attention-to-tui-string
-               (cl-tmux/vcs:workspace-organizations)
+               (nerimux/vcs:workspace-organizations)
                (client-conn-rows conn)
                (client-conn-cols conn)
                :focus-pane (client-conn-focus conn)
@@ -166,7 +166,7 @@
              ((and (eq (client-conn-view conn) :overview)
                    (not (eq (client-conn-mode conn) :picker)))
               (render-workspace-overview-to-tui-string
-               (cl-tmux/vcs:workspace-organizations)
+               (nerimux/vcs:workspace-organizations)
                (client-conn-rows conn)
                (client-conn-cols conn)
                :focus-pane (client-conn-focus conn)
@@ -241,10 +241,10 @@
       (dolist (message (funcall (symbol-function '%runtime-restore-messages)))
         (push message (client-conn-message-log conn))))
     (when (and (not *workspace-catalog-refresh-started-p*)
-               (cl-tmux/vcs:vcs-package-available-p))
+               (nerimux/vcs:vcs-package-available-p))
       (setf *workspace-catalog-refresh-started-p* t)
       (ignore-errors
-        (cl-tmux/vcs:refresh-workspace-organizations-async
+        (nerimux/vcs:refresh-workspace-organizations-async
          :on-complete
          (lambda (organizations)
            (dolist (client (remove-duplicates
@@ -253,7 +253,7 @@
                             :test #'eq))
              (%rebind-client-selection client organizations)
              (setf (client-conn-picker-items client)
-                   (cl-tmux/picker:build-global-picker-items organizations))
+                   (nerimux/picker:build-global-picker-items organizations))
              (%picker-clamp-index client
                                   (%client-picker-visible-items client)))
            (%mark-dirty))
@@ -261,7 +261,7 @@
          (lambda (condition)
            (declare (ignore condition))
            (%mark-dirty)))))
-    (cl-tmux/hooks:run-hooks cl-tmux/hooks:+hook-client-attached+)
+    (nerimux/hooks:run-hooks nerimux/hooks:+hook-client-attached+)
     (%mark-dirty)
     conn))
 
@@ -274,4 +274,4 @@
       (ignore-errors (send-frame (client-conn-stream conn) (msg-bye))))
     (ignore-errors (close-socket (client-conn-socket conn)))
     (setf *clients* (remove conn *clients*))
-    (cl-tmux/hooks:run-hooks cl-tmux/hooks:+hook-client-detached+)))
+    (nerimux/hooks:run-hooks nerimux/hooks:+hook-client-detached+)))

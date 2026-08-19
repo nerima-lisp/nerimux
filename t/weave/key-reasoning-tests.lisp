@@ -1,8 +1,8 @@
 ;;;; cl-weave specs for the cl-prolog-kit key-binding reasoning read-model.
 
-(in-package #:cl-tmux/weave-tests)
+(in-package #:nerimux/weave-tests)
 
-(describe "cl-tmux key-binding reasoning"
+(describe "nerimux key-binding reasoning"
 
   ;; Fixture: every `it' below runs with a private, freshly-projected rulebase
   ;; bound to *RULEBASE*.  around-each brackets the whole test, so the dynamic
@@ -24,22 +24,22 @@
 
   (describe "direct lookup"
     (it "resolves a known prefix binding to its command"
-      (expect (list *rulebase* cl-tmux/config:+table-prefix+ #\c)
+      (expect (list *rulebase* nerimux/config:+table-prefix+ #\c)
               :to-resolve-to :new-window))
 
     (it "reports an unbound key as unbound"
-      (expect (list *rulebase* cl-tmux/config:+table-prefix+ #\Z)
+      (expect (list *rulebase* nerimux/config:+table-prefix+ #\Z)
               :to-be-unbound))
 
     (it "proves a ground binding goal directly (custom :to-prove matcher)"
       (expect *rulebase*
-              :to-prove (list 'binding cl-tmux/config:+table-prefix+ #\c :new-window))))
+              :to-prove (list 'binding nerimux/config:+table-prefix+ #\c :new-window))))
 
   (describe "reverse lookup"
     (it "finds every table/key that runs a command"
       (expect *rulebase* :to-run-command :new-window)
       (expect (keys-running *rulebase* :new-window)
-              :to-contain-equal (cons cl-tmux/config:+table-prefix+ #\c)))
+              :to-contain-equal (cons nerimux/config:+table-prefix+ #\c)))
 
     (it "returns nothing for a command that is never bound"
       (expect (keys-running *rulebase* :this-command-does-not-exist)
@@ -64,15 +64,15 @@
                 (lambda (rows)
                   (some (lambda (row)
                           (equal (getf row :tables)
-                                 (list cl-tmux/config:+table-copy-mode+
-                                       cl-tmux/config:+table-copy-mode-vi+)))
+                                 (list nerimux/config:+table-copy-mode+
+                                       nerimux/config:+table-copy-mode-vi+)))
                         rows)))))
 
     (it "lists bindings that shadow a root binding"
       ;; Shape check: every entry is a (table . key) cons with a non-root table.
       (dolist (entry (shadowing-bindings *rulebase*))
         (expect entry :to-satisfy #'consp)
-        (expect (car entry) :not :to-equal cl-tmux/config:+table-root+)))
+        (expect (car entry) :not :to-equal nerimux/config:+table-root+)))
 
     (it "lists unique bindings via negation-as-failure, disjoint from shadowing-bindings"
       ;; unique-binding/2 is unique-binding(Table,Key) :- binding(Table,Key,_),
@@ -83,18 +83,18 @@
         (expect unique :to-satisfy #'consp)
         (dolist (entry unique)
           (expect entry :to-satisfy #'consp)
-          (expect (car entry) :not :to-equal cl-tmux/config:+table-root+)
+          (expect (car entry) :not :to-equal nerimux/config:+table-root+)
           (expect (member entry shadowed :test #'equal) :to-be-falsy)))))
 
   (describe "explanation"
     (it "explains a bound key as a readable string"
-      (let ((text (explain-binding cl-tmux/config:+table-prefix+ #\c *rulebase*)))
+      (let ((text (explain-binding nerimux/config:+table-prefix+ #\c *rulebase*)))
         (expect text :to-be-type-of 'string)
         (expect text :to-contain "NEW-WINDOW")))
 
     (it "requires at least one assertion (expect-has-assertions demo)"
       (expect-has-assertions)
-      (expect (explain-binding cl-tmux/config:+table-prefix+ #\Z *rulebase*)
+      (expect (explain-binding nerimux/config:+table-prefix+ #\Z *rulebase*)
               :to-contain "unbound")))
 
   ;; Property: every projected default binding must resolve back to exactly the
@@ -108,7 +108,7 @@
 ;; Raw-query block through cl-prolog-kit's own cl-weave bridge: each spec builds a
 ;; fresh rulebase and asserts a literal Prolog query against it.  This is the
 ;; two libraries meeting — cl-prolog-kit/weave:deftest-queries emitting cl-weave
-;; cases over a cl-tmux-derived rulebase.
+;; cases over a nerimux-derived rulebase.
 (deftest-queries "raw prolog key-binding queries" ((fresh-default-rulebase))
   ("prefix c runs new-window"
    (binding "prefix" #\c :new-window) :succeeds)
@@ -121,7 +121,7 @@
 
 ;;;; Second cold-path domain: command metadata.
 
-(describe "cl-tmux command-metadata reasoning"
+(describe "nerimux command-metadata reasoning"
   (it "projects the canonical command table into a rulebase"
     (let ((rb (current-command-rulebase)))
       (expect rb :to-prove '(command "bind-key"))

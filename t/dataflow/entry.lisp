@@ -4,8 +4,8 @@
 ;;;; (the top-level `describe' form runs at load time), so the runner just
 ;;;; walks the global registry, mirroring t/weave/entry.lisp.
 
-(in-package #:cl-tmux/dataflow-tests)
+(in-package #:nerimux/dataflow-tests)
 
 (defun run-dataflow-tests (&key (reporter :spec))
-  "Run the cl-tmux cl-dataflow-kit copy-mode lifecycle suite; return T on success."
+  "Run the nerimux cl-dataflow-kit copy-mode lifecycle suite; return T on success."
   (cl-weave:run-all :reporter reporter))

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Parser tests (src/terminal/parser.lisp).
 ;;;; ESC/CSI coverage.

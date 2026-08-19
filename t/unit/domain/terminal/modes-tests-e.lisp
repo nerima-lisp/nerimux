@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; modes tests — part E: direct-action-only coverage for decstr-action,
 ;;;; decaln-action, set-ansi-mode, and reset-ansi-mode.  These functions were
@@ -15,38 +15,38 @@
   (it "decstr-action-resets-modes-without-clearing-screen"
     (with-screen (s 10 5)
       (feed s "hello")
-      (setf (cl-tmux/terminal/types:screen-insert-mode s)    t
-            (cl-tmux/terminal/types:screen-autowrap s)       nil
-            (cl-tmux/terminal/types:screen-cursor-visible s) nil)
-      (cl-tmux/terminal/actions:set-cursor s 5 0)
-      (cl-tmux/terminal/actions:decstr-action s)
-      (expect (not (cl-tmux/terminal/types:screen-insert-mode s)))
-      (expect (cl-tmux/terminal/types:screen-autowrap s) :to-be-truthy)
-      (expect (cl-tmux/terminal/types:screen-cursor-visible s) :to-be-truthy)
+      (setf (nerimux/terminal/types:screen-insert-mode s)    t
+            (nerimux/terminal/types:screen-autowrap s)       nil
+            (nerimux/terminal/types:screen-cursor-visible s) nil)
+      (nerimux/terminal/actions:set-cursor s 5 0)
+      (nerimux/terminal/actions:decstr-action s)
+      (expect (not (nerimux/terminal/types:screen-insert-mode s)))
+      (expect (nerimux/terminal/types:screen-autowrap s) :to-be-truthy)
+      (expect (nerimux/terminal/types:screen-cursor-visible s) :to-be-truthy)
       (expect (string= "hello" (row-string s 0 :end 5)))
       (expect (= 5 (screen-cursor-x s)))))
 
   ;; decstr-action resets the SGR pen so a subsequent write uses default attributes.
   (it "decstr-action-resets-sgr-pen"
     (with-screen (s 10 5)
-      (setf (cl-tmux/terminal/types:screen-cur-attrs s) #x01
-            (cl-tmux/terminal/types:screen-cur-fg    s) 1)
-      (cl-tmux/terminal/actions:decstr-action s)
-      (expect (= 0 (cl-tmux/terminal/types:screen-cur-attrs s)))
-      (expect (= cl-tmux/terminal/types:+default-color+ (cl-tmux/terminal/types:screen-cur-fg s)))))
+      (setf (nerimux/terminal/types:screen-cur-attrs s) #x01
+            (nerimux/terminal/types:screen-cur-fg    s) 1)
+      (nerimux/terminal/actions:decstr-action s)
+      (expect (= 0 (nerimux/terminal/types:screen-cur-attrs s)))
+      (expect (= nerimux/terminal/types:+default-color+ (nerimux/terminal/types:screen-cur-fg s)))))
 
   ;; decstr-action clears application cursor keys, bracketed paste, and any
   ;; DECSC-saved cursor snapshot (so a later DECRC homes rather than restoring
   ;; stale state), per its docstring.
   (it "decstr-action-clears-app-cursor-keys-bracketed-paste-and-saved-cursor"
     (with-screen (s 10 5)
-      (setf (cl-tmux/terminal/types:screen-app-cursor-keys s) t
-            (cl-tmux/terminal/types:screen-bracketed-paste s) t)
-      (cl-tmux/terminal/actions:save-cursor s)
-      (cl-tmux/terminal/actions:decstr-action s)
-      (expect (cl-tmux/terminal/types:screen-app-cursor-keys s) :to-be-falsy)
-      (expect (cl-tmux/terminal/types:screen-bracketed-paste s) :to-be-falsy)
-      (expect (null (cl-tmux/terminal/types:screen-saved-cursor s))))))
+      (setf (nerimux/terminal/types:screen-app-cursor-keys s) t
+            (nerimux/terminal/types:screen-bracketed-paste s) t)
+      (nerimux/terminal/actions:save-cursor s)
+      (nerimux/terminal/actions:decstr-action s)
+      (expect (nerimux/terminal/types:screen-app-cursor-keys s) :to-be-falsy)
+      (expect (nerimux/terminal/types:screen-bracketed-paste s) :to-be-falsy)
+      (expect (null (nerimux/terminal/types:screen-saved-cursor s))))))
 
 ;;; ── SUITE: decaln-action direct calls ───────────────────────────────────────
 
@@ -55,7 +55,7 @@
   ;; decaln-action fills every cell of the grid with the character 'E'.
   (it "decaln-action-fills-every-cell-with-e"
     (with-screen (s 5 3)
-      (cl-tmux/terminal/actions:decaln-action s)
+      (nerimux/terminal/actions:decaln-action s)
       (dotimes (y 3)
         (dotimes (x 5)
           (expect (char= #\E (char-at s x y)))))))
@@ -63,23 +63,23 @@
   ;; decaln-action moves the cursor to (0,0) after filling the grid.
   (it "decaln-action-homes-the-cursor"
     (with-screen (s 10 5)
-      (cl-tmux/terminal/actions:set-cursor s 7 3)
-      (cl-tmux/terminal/actions:decaln-action s)
+      (nerimux/terminal/actions:set-cursor s 7 3)
+      (nerimux/terminal/actions:decaln-action s)
       (check-cursor s 0 0)))
 
   ;; decaln-action marks the screen dirty so the renderer repaints.
   (it "decaln-action-marks-screen-dirty"
     (with-screen (s 5 3)
       (screen-clear-dirty s)
-      (expect (cl-tmux/terminal/types:screen-dirty-p s) :to-be-falsy)
-      (cl-tmux/terminal/actions:decaln-action s)
-      (expect (cl-tmux/terminal/types:screen-dirty-p s))))
+      (expect (nerimux/terminal/types:screen-dirty-p s) :to-be-falsy)
+      (nerimux/terminal/actions:decaln-action s)
+      (expect (nerimux/terminal/types:screen-dirty-p s))))
 
   ;; decaln-action overwrites any pre-existing grid content with 'E'.
   (it "decaln-action-overwrites-existing-content"
     (with-screen (s 5 3)
       (feed s "hello")
-      (cl-tmux/terminal/actions:decaln-action s)
+      (nerimux/terminal/actions:decaln-action s)
       (expect (char= #\E (char-at s 0 0))))))
 
 ;;; ── SUITE: set-ansi-mode / reset-ansi-mode direct calls ─────────────────────
@@ -94,45 +94,45 @@
   ;; set-ansi-mode with param 4 (IRM) sets screen-insert-mode to T.
   (it "set-ansi-mode-4-sets-insert-mode"
     (with-screen (s 10 5)
-      (expect (cl-tmux/terminal/types:screen-insert-mode s) :to-be-falsy)
-      (cl-tmux/terminal/actions:set-ansi-mode s '(4))
-      (expect (cl-tmux/terminal/types:screen-insert-mode s) :to-be-truthy)))
+      (expect (nerimux/terminal/types:screen-insert-mode s) :to-be-falsy)
+      (nerimux/terminal/actions:set-ansi-mode s '(4))
+      (expect (nerimux/terminal/types:screen-insert-mode s) :to-be-truthy)))
 
   ;; reset-ansi-mode with param 4 (IRM) clears screen-insert-mode to NIL.
   (it "reset-ansi-mode-4-clears-insert-mode"
     (with-screen (s 10 5)
-      (setf (cl-tmux/terminal/types:screen-insert-mode s) t)
-      (cl-tmux/terminal/actions:reset-ansi-mode s '(4))
-      (expect (cl-tmux/terminal/types:screen-insert-mode s) :to-be-falsy)))
+      (setf (nerimux/terminal/types:screen-insert-mode s) t)
+      (nerimux/terminal/actions:reset-ansi-mode s '(4))
+      (expect (nerimux/terminal/types:screen-insert-mode s) :to-be-falsy)))
 
   ;; set-ansi-mode with param 20 (LNM) sets screen-newline-mode to T.
   (it "set-ansi-mode-20-sets-newline-mode"
     (with-screen (s 10 5)
-      (cl-tmux/terminal/actions:set-ansi-mode s '(20))
-      (expect (cl-tmux/terminal/types:screen-newline-mode s) :to-be-truthy)))
+      (nerimux/terminal/actions:set-ansi-mode s '(20))
+      (expect (nerimux/terminal/types:screen-newline-mode s) :to-be-truthy)))
 
   ;; reset-ansi-mode with param 20 (LNM) clears screen-newline-mode to NIL.
   (it "reset-ansi-mode-20-clears-newline-mode"
     (with-screen (s 10 5)
-      (setf (cl-tmux/terminal/types:screen-newline-mode s) t)
-      (cl-tmux/terminal/actions:reset-ansi-mode s '(20))
-      (expect (cl-tmux/terminal/types:screen-newline-mode s) :to-be-falsy)))
+      (setf (nerimux/terminal/types:screen-newline-mode s) t)
+      (nerimux/terminal/actions:reset-ansi-mode s '(20))
+      (expect (nerimux/terminal/types:screen-newline-mode s) :to-be-falsy)))
 
   ;; set-ansi-mode processes every param in the list, setting both flags at once.
   (it "set-ansi-mode-accepts-multiple-params-in-one-call"
     (with-screen (s 10 5)
-      (cl-tmux/terminal/actions:set-ansi-mode s '(4 20))
-      (expect (cl-tmux/terminal/types:screen-insert-mode s) :to-be-truthy)
-      (expect (cl-tmux/terminal/types:screen-newline-mode s) :to-be-truthy)))
+      (nerimux/terminal/actions:set-ansi-mode s '(4 20))
+      (expect (nerimux/terminal/types:screen-insert-mode s) :to-be-truthy)
+      (expect (nerimux/terminal/types:screen-newline-mode s) :to-be-truthy)))
 
   ;; set-ansi-mode and reset-ansi-mode with an unrecognized param number are no-ops
   ;; that do not signal an error.
   (it "ansi-mode-unknown-param-is-silently-ignored"
     (with-screen (s 10 5)
-      (finishes (cl-tmux/terminal/actions:set-ansi-mode s '(9999)))
-      (finishes (cl-tmux/terminal/actions:reset-ansi-mode s '(9999)))
-      (expect (cl-tmux/terminal/types:screen-insert-mode s) :to-be-falsy)
-      (expect (cl-tmux/terminal/types:screen-newline-mode s) :to-be-falsy))))
+      (finishes (nerimux/terminal/actions:set-ansi-mode s '(9999)))
+      (finishes (nerimux/terminal/actions:reset-ansi-mode s '(9999)))
+      (expect (nerimux/terminal/types:screen-insert-mode s) :to-be-falsy)
+      (expect (nerimux/terminal/types:screen-newline-mode s) :to-be-falsy))))
 
 ;;; ── SUITE: push-title-stack / pop-title-stack direct calls ──────────────────
 ;;;
@@ -145,47 +145,47 @@
   ;; push-title-stack conses the current title onto the (initially empty) stack.
   (it "push-title-stack-prepends-current-title"
     (with-screen (s 10 5)
-      (cl-tmux/terminal/actions:set-screen-title s "one")
-      (cl-tmux/terminal/actions:push-title-stack s)
-      (expect (equal '("one") (cl-tmux/terminal/types:screen-title-stack s)))))
+      (nerimux/terminal/actions:set-screen-title s "one")
+      (nerimux/terminal/actions:push-title-stack s)
+      (expect (equal '("one") (nerimux/terminal/types:screen-title-stack s)))))
 
   ;; Repeated push-title-stack calls build the stack newest-first.
   (it "push-title-stack-multiple-pushes-newest-first"
     (with-screen (s 10 5)
-      (cl-tmux/terminal/actions:set-screen-title s "one")
-      (cl-tmux/terminal/actions:push-title-stack s)
-      (cl-tmux/terminal/actions:set-screen-title s "two")
-      (cl-tmux/terminal/actions:push-title-stack s)
-      (expect (equal '("two" "one") (cl-tmux/terminal/types:screen-title-stack s)))))
+      (nerimux/terminal/actions:set-screen-title s "one")
+      (nerimux/terminal/actions:push-title-stack s)
+      (nerimux/terminal/actions:set-screen-title s "two")
+      (nerimux/terminal/actions:push-title-stack s)
+      (expect (equal '("two" "one") (nerimux/terminal/types:screen-title-stack s)))))
 
   ;; push-title-stack discards the oldest entry once the stack exceeds
   ;; +title-stack-max-depth+ entries (xterm limit).
   (it "push-title-stack-discards-oldest-past-max-depth"
     (with-screen (s 10 5)
-      (dotimes (i (1+ cl-tmux/terminal/types:+title-stack-max-depth+))
-        (cl-tmux/terminal/actions:set-screen-title s (format nil "t~D" i))
-        (cl-tmux/terminal/actions:push-title-stack s))
-      (expect (= cl-tmux/terminal/types:+title-stack-max-depth+
-                 (length (cl-tmux/terminal/types:screen-title-stack s))))))
+      (dotimes (i (1+ nerimux/terminal/types:+title-stack-max-depth+))
+        (nerimux/terminal/actions:set-screen-title s (format nil "t~D" i))
+        (nerimux/terminal/actions:push-title-stack s))
+      (expect (= nerimux/terminal/types:+title-stack-max-depth+
+                 (length (nerimux/terminal/types:screen-title-stack s))))))
 
   ;; pop-title-stack restores the most recently pushed title and removes it
   ;; from the stack.
   (it "pop-title-stack-restores-and-removes-top-entry"
     (with-screen (s 10 5)
-      (cl-tmux/terminal/actions:set-screen-title s "original")
-      (cl-tmux/terminal/actions:push-title-stack s)
-      (cl-tmux/terminal/actions:set-screen-title s "changed")
-      (cl-tmux/terminal/actions:pop-title-stack s)
-      (expect (string= "original" (cl-tmux/terminal/types:screen-title s)))
-      (expect (null (cl-tmux/terminal/types:screen-title-stack s)))))
+      (nerimux/terminal/actions:set-screen-title s "original")
+      (nerimux/terminal/actions:push-title-stack s)
+      (nerimux/terminal/actions:set-screen-title s "changed")
+      (nerimux/terminal/actions:pop-title-stack s)
+      (expect (string= "original" (nerimux/terminal/types:screen-title s)))
+      (expect (null (nerimux/terminal/types:screen-title-stack s)))))
 
   ;; pop-title-stack on an empty stack does not change the current title
   ;; and does not signal an error.
   (it "pop-title-stack-on-empty-stack-is-noop"
     (with-screen (s 10 5)
-      (cl-tmux/terminal/actions:set-screen-title s "kept")
-      (finishes (cl-tmux/terminal/actions:pop-title-stack s))
-      (expect (string= "kept" (cl-tmux/terminal/types:screen-title s))))))
+      (nerimux/terminal/actions:set-screen-title s "kept")
+      (finishes (nerimux/terminal/actions:pop-title-stack s))
+      (expect (string= "kept" (nerimux/terminal/types:screen-title s))))))
 
 ;;; ── SUITE: reset-osc-default-fg / reset-osc-default-bg direct calls ─────────
 ;;;
@@ -199,16 +199,16 @@
   ;; overwriting any value set by a prior OSC 10 sequence.
   (it "reset-osc-default-fg-restores-constant"
     (with-screen (s 10 5)
-      (setf (cl-tmux/terminal/types:screen-osc-default-fg s) #x123456)
-      (cl-tmux/terminal/actions:reset-osc-default-fg s)
-      (expect (= cl-tmux/terminal/types:+osc-default-fg+
-                 (cl-tmux/terminal/types:screen-osc-default-fg s)))))
+      (setf (nerimux/terminal/types:screen-osc-default-fg s) #x123456)
+      (nerimux/terminal/actions:reset-osc-default-fg s)
+      (expect (= nerimux/terminal/types:+osc-default-fg+
+                 (nerimux/terminal/types:screen-osc-default-fg s)))))
 
   ;; reset-osc-default-bg sets screen-osc-default-bg back to +osc-default-bg+,
   ;; overwriting any value set by a prior OSC 11 sequence.
   (it "reset-osc-default-bg-restores-constant"
     (with-screen (s 10 5)
-      (setf (cl-tmux/terminal/types:screen-osc-default-bg s) #x654321)
-      (cl-tmux/terminal/actions:reset-osc-default-bg s)
-      (expect (= cl-tmux/terminal/types:+osc-default-bg+
-                 (cl-tmux/terminal/types:screen-osc-default-bg s))))))
+      (setf (nerimux/terminal/types:screen-osc-default-bg s) #x654321)
+      (nerimux/terminal/actions:reset-osc-default-bg s)
+      (expect (= nerimux/terminal/types:+osc-default-bg+
+                 (nerimux/terminal/types:screen-osc-default-bg s))))))

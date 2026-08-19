@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Session state tests: pure session / window helpers.
 ;;;;
@@ -30,13 +30,13 @@
                ("/usr/bin/"  ""       "%shell-basename returns empty string for trailing-slash path")))
       (destructuring-bind (shell expected desc) entry
         (declare (ignore desc))
-        (let ((cl-tmux/config:*default-shell* shell))
-          (expect (string= expected (cl-tmux/model::%shell-basename)))))))
+        (let ((nerimux/config:*default-shell* shell))
+          (expect (string= expected (nerimux/model::%shell-basename)))))))
 
   ;; %shell-basename returns a string even for a trailing-slash path.
   (it "shell-basename-trailing-slash-is-string"
-    (let ((cl-tmux/config:*default-shell* "/usr/bin/"))
-      (expect (stringp (cl-tmux/model::%shell-basename)))))
+    (let ((nerimux/config:*default-shell* "/usr/bin/"))
+      (expect (stringp (nerimux/model::%shell-basename)))))
 
   ;;; ── session-insert-window ────────────────────────────────────────────────────
 
@@ -70,7 +70,7 @@
                             :panes (list (make-no-pty-pane 3 0 0 20 5))))
            (sess (make-session :id 1 :name "0" :windows (list w0 w1 w3))))
       (session-select-window sess w1)       ; kill the middle window (id=1)
-      (cl-tmux/commands:kill-window sess)
+      (nerimux/commands:kill-window sess)
       ;; No unambiguous MRU (only w1 was focused, and it is gone) -> previous-by-index:
       ;; greatest id < 1 among {0,3} is w0.
       (expect (eq w0 (session-active-window sess)))))
@@ -132,4 +132,4 @@
     (let* ((w0   (make-window :id 0 :name "a"))
            (w2   (make-window :id 2 :name "c"))
            (sess (make-session :id 1 :name "s" :windows (list w0 w2))))
-      (expect (= 1 (cl-tmux/model::%next-window-id sess 0))))))
+      (expect (= 1 (nerimux/model::%next-window-id sess 0))))))

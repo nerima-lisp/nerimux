@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; mouse/focus/keys sequences, lock-screen, justify, cursor-shape, overlay, inline-style — part III
 
@@ -10,10 +10,10 @@
     (let* ((screen (make-screen 10 4))
            (pane   (make-pane :id 1 :x 0 :y 0 :width 10 :height 4
                               :fd -1 :screen screen)))
-      (setf (cl-tmux/terminal/types:screen-mouse-mode     screen) mouse-mode
-            (cl-tmux/terminal/types:screen-mouse-sgr-mode screen) sgr-mode)
+      (setf (nerimux/terminal/types:screen-mouse-mode     screen) mouse-mode
+            (nerimux/terminal/types:screen-mouse-sgr-mode screen) sgr-mode)
       (with-output-to-string (s)
-        (cl-tmux/renderer::%render-mouse-sequences s pane)))))
+        (nerimux/renderer::%render-mouse-sequences s pane)))))
 
 (describe "renderer-suite"
 
@@ -21,10 +21,10 @@
 
   ;; enable/disable-mouse-reporting each write the correct set of DEC sequences.
   (it "mouse-reporting-toggle-table"
-    (dolist (c '((cl-tmux/renderer::enable-mouse-reporting
+    (dolist (c '((nerimux/renderer::enable-mouse-reporting
                   ("?1000h" "?1002h" "?1006h")
                   "enable-mouse-reporting")
-                 (cl-tmux/renderer::disable-mouse-reporting
+                 (nerimux/renderer::disable-mouse-reporting
                   ("?1006l" "?1002l" "?1000l")
                   "disable-mouse-reporting")))
       (destructuring-bind (fn expected-suffixes desc) c
@@ -39,10 +39,10 @@
 
   ;; extended-keys-level maps the option value to a modifyOtherKeys level or NIL.
   (it "extended-keys-level-mapping"
-    (expect (= 1 (cl-tmux/renderer::extended-keys-level "on")))
-    (expect (= 2 (cl-tmux/renderer::extended-keys-level "always")))
-    (expect (null (cl-tmux/renderer::extended-keys-level "off")))
-    (expect (null (cl-tmux/renderer::extended-keys-level nil))))
+    (expect (= 1 (nerimux/renderer::extended-keys-level "on")))
+    (expect (= 2 (nerimux/renderer::extended-keys-level "always")))
+    (expect (null (nerimux/renderer::extended-keys-level "off")))
+    (expect (null (nerimux/renderer::extended-keys-level nil))))
 
   ;; enable-extended-keys maps option value to a level and the matching CSI sequence.
   (it "enable-extended-keys-table"
@@ -53,7 +53,7 @@
         (declare (ignore desc))
         (let* ((level nil)
                (out (let ((*standard-output* (make-string-output-stream)))
-                      (setf level (cl-tmux/renderer::enable-extended-keys value))
+                      (setf level (nerimux/renderer::enable-extended-keys value))
                       (get-output-stream-string *standard-output*))))
           (expect (equal expected-level level))
           (if expected-suffix
@@ -63,7 +63,7 @@
   ;; disable-extended-keys writes CSI > 4 ; 0 m to reset the outer terminal.
   (it "disable-extended-keys-emits-reset"
     (let ((out (let ((*standard-output* (make-string-output-stream)))
-                 (cl-tmux/renderer::disable-extended-keys)
+                 (nerimux/renderer::disable-extended-keys)
                  (get-output-stream-string *standard-output*))))
       (expect (search (format nil "~C[>4;0m" #\Escape) out))))
 
@@ -71,8 +71,8 @@
 
   ;; enable/disable-focus-reporting emit ?1004h and ?1004l respectively.
   (it "focus-reporting-toggle-table"
-    (dolist (c '((cl-tmux/renderer::enable-focus-reporting  "?1004h" "enable")
-                 (cl-tmux/renderer::disable-focus-reporting "?1004l" "disable")))
+    (dolist (c '((nerimux/renderer::enable-focus-reporting  "?1004h" "enable")
+                 (nerimux/renderer::disable-focus-reporting "?1004l" "disable")))
       (destructuring-bind (fn suffix desc) c
         (declare (ignore desc))
         (let ((out (let ((*standard-output* (make-string-output-stream)))
@@ -85,14 +85,14 @@
   ;; render-lock-screen fills the terminal with a blue background and the 'locked' message.
   (it "render-lock-screen-fills-with-lock-message"
     (let ((out (with-output-to-string (s)
-                 (cl-tmux/renderer::render-lock-screen s 24 80))))
+                 (nerimux/renderer::render-lock-screen s 24 80))))
       (expect (plusp (length out)))
       (expect (search "locked" out))))
 
   ;; render-lock-screen emits the blue-background SGR sequence.
   (it "render-lock-screen-emits-blue-background"
     (let ((out (with-output-to-string (s)
-                 (cl-tmux/renderer::render-lock-screen s 24 80))))
+                 (nerimux/renderer::render-lock-screen s 24 80))))
       (expect (search (format nil "~C[44;97m" #\Escape) out))))
 
   ;; When session-locked-p is T, render-session-to-string emits the lock overlay.
@@ -111,14 +111,14 @@
   (it "status-pane-indicator-formats-pane-id"
     (let* ((screen (make-screen 10 5))
            (pane   (make-pane :id 99 :x 0 :y 0 :width 10 :height 5 :fd -1 :screen screen)))
-      (let ((out (cl-tmux/renderer::%status-pane-indicator pane)))
+      (let ((out (nerimux/renderer::%status-pane-indicator pane)))
         (expect (search "#99" out)))))
 
   ;;; ── %status-left-text with copy mode ─────────────────────────────────────────
 
   ;; %status-left-text with copy mode active no longer includes the old copy indicator.
   (it "status-left-text-copy-mode-has-no-indicator"
-    (let ((cl-tmux/prompt:*prompt* nil))
+    (let ((nerimux/prompt:*prompt* nil))
       (let* ((sess   (make-fake-session :nwindows 1))
              (win    (session-active-window sess))
              (ap     (session-active-pane  sess))
@@ -126,7 +126,7 @@
         ;; Enable copy mode with a non-zero offset.
         (setf (screen-copy-mode-p   screen) t
               (screen-copy-offset   screen) 2)
-        (let ((left (cl-tmux/renderer::%status-left-text sess win ap)))
+        (let ((left (nerimux/renderer::%status-left-text sess win ap)))
           (expect (null (search "COPY" left)))
           (expect (null (search "+2" left)))))))
 
@@ -159,9 +159,9 @@
       (let* ((screen (make-screen 10 4))
              (pane   (make-pane :id 1 :x 0 :y 0 :width 10 :height 4
                                 :fd -1 :screen screen)))
-        (setf (cl-tmux/terminal/types:screen-mouse-mode screen) 0)
+        (setf (nerimux/terminal/types:screen-mouse-mode screen) 0)
         (let ((out (with-output-to-string (s)
-                     (cl-tmux/renderer::%render-mouse-sequences s pane))))
+                     (nerimux/renderer::%render-mouse-sequences s pane))))
           (expect (search (format nil "~C[?1006h" #\Escape) out))
           (expect (search (format nil "~C[?1002h" #\Escape) out))))))
 
@@ -172,7 +172,7 @@
   (it "render-lock-screen-narrow-terminal-fits-message"
     (let* ((narrow-cols 12)
            (out (with-output-to-string (s)
-                  (cl-tmux/renderer::render-lock-screen s 5 narrow-cols))))
+                  (nerimux/renderer::render-lock-screen s 5 narrow-cols))))
       (expect (plusp (length out)))
       ;; The message is truncated to 12 chars; "Session lock" is the prefix.
       (expect (search "Session lock" out))))
@@ -180,7 +180,7 @@
   ;; render-lock-screen with terminal-rows=1 produces output without error.
   (it "render-lock-screen-single-row-terminal"
     (let ((out (with-output-to-string (s)
-                 (cl-tmux/renderer::render-lock-screen s 1 40))))
+                 (nerimux/renderer::render-lock-screen s 1 40))))
       (expect (plusp (length out)))))
 
   ;;; ── %render-panes-and-borders zoom suppression (coverage gap) ───────────────
@@ -195,10 +195,10 @@
            (win (tl-window (make-layout-split :h l0 l1) 24 81))
            (sess (make-session :id 1 :name "0" :windows (list win))))
       (session-select-window sess win)
-      (setf (cl-tmux/model:window-zoom-p win) t)
+      (setf (nerimux/model:window-zoom-p win) t)
       (let ((buf (make-string-output-stream)))
-        (cl-tmux/renderer::%render-panes-and-borders
-         buf sess win (cl-tmux/model:window-panes win) (cl-tmux/model:window-active win) 81)
+        (nerimux/renderer::%render-panes-and-borders
+         buf sess win (nerimux/model:window-panes win) (nerimux/model:window-active win) 81)
         (let ((out (get-output-stream-string buf)))
           (expect (null (find #\│ out)))))))
 
@@ -209,24 +209,24 @@
     (let* ((left  "left-text")
            (right "right")
            (cols  30)
-           (line  (cl-tmux/renderer::%justify-right left right cols)))
+           (line  (nerimux/renderer::%justify-right left right cols)))
       (expect (<= (length line) cols))
       (expect (char= #\t (char line (1- (length line)))))
       (expect (search left line))))
 
   ;; %justify-right truncates when cols is very small.
   (it "justify-right-short-cols-truncates"
-    (let ((line (cl-tmux/renderer::%justify-right "LLLL" "RRRR" 5)))
+    (let ((line (nerimux/renderer::%justify-right "LLLL" "RRRR" 5)))
       (expect (<= (length line) 5))))
 
   ;; %justify-centre produces output containing both left and right strings.
   (it "justify-centre-contains-both-strings"
-    (let ((line (cl-tmux/renderer::%justify-centre "LEFT" "RIGHT" 30)))
+    (let ((line (nerimux/renderer::%justify-centre "LEFT" "RIGHT" 30)))
       (expect (search "LEFT"  line))
       (expect (search "RIGHT" line))
       (expect (<= (length line) 30))))
 
   ;; %justify-centre truncates when cols is smaller than the combined content.
   (it "justify-centre-short-cols-truncates"
-    (let ((line (cl-tmux/renderer::%justify-centre "AAAA" "BBBB" 5)))
+    (let ((line (nerimux/renderer::%justify-centre "AAAA" "BBBB" 5)))
       (expect (<= (length line) 5)))))

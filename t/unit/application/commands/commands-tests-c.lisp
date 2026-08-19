@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; commands tests — part C: pipe-pane, virtual-row-string, timeout, clamp-cursor,
 ;;;; selection-bounds, word/paragraph navigation, scroll helpers, extract-row-chars.
@@ -7,10 +7,10 @@
   (with-fake-session (sess :nwindows 1 :npanes 1)
     (let* ((*overlay* nil)
            (pane (session-active-pane sess))
-           (result (cl-tmux::%cmd-pipe-pane-arg sess args)))
+           (result (nerimux::%cmd-pipe-pane-arg sess args)))
       (expect result :to-be-truthy)
       (funcall assertion pane)
-      (cl-tmux/commands:pipe-pane-close pane))))
+      (nerimux/commands:pipe-pane-close pane))))
 
 (describe "commands-suite"
 
@@ -19,24 +19,24 @@
   ;; pipe-pane-open returns a stream object when the command launches successfully.
   (it "pipe-pane-open-returns-stream"
     (let* ((pane   (%make-test-pane))
-           (result (cl-tmux/commands:pipe-pane-open pane "cat")))
+           (result (nerimux/commands:pipe-pane-open pane "cat")))
       (expect result :to-be-truthy)
       (assert-pipe-pane-open-output-to-command-state pane)
       ;; Clean up.
-      (cl-tmux/commands:pipe-pane-close pane)))
+      (nerimux/commands:pipe-pane-close pane)))
 
   ;; pipe-pane-open followed by pipe-pane-close clears pipe state.
   (it "pipe-pane-open-close-round-trip"
     (let ((pane (%make-test-pane)))
-      (cl-tmux/commands:pipe-pane-open pane "cat")
+      (nerimux/commands:pipe-pane-open pane "cat")
       (assert-pipe-pane-open-output-to-command-state pane)
-      (cl-tmux/commands:pipe-pane-close pane)
+      (nerimux/commands:pipe-pane-close pane)
       (assert-pipe-pane-closed-state pane)))
 
   ;; pipe-pane-close is a no-op when pane has no open pipe.
   (it "pipe-pane-close-noop-when-no-pipe"
     (let ((pane (%make-test-pane)))
-      (finishes (cl-tmux/commands:pipe-pane-close pane)
+      (finishes (nerimux/commands:pipe-pane-close pane)
                 "pipe-pane-close with no pipe must not signal")))
 
   ;; pipe-pane -t 2 <cmd> opens the pipe on pane 2 (the -t target), NOT the active
@@ -51,11 +51,11 @@
       (session-select-window sess win)
       (window-select-pane win pa)              ; pane 1 is active
       (with-loop-state
-        (cl-tmux::%run-command-line sess "pipe-pane -t 2 cat")
+        (nerimux::%run-command-line sess "pipe-pane -t 2 cat")
         (expect (pane-pipe-fd pb) :to-be-truthy)
         (expect (null (pane-pipe-fd pa)))
         ;; Clean up the forked cat process.
-        (cl-tmux/commands:pipe-pane-close pb))))
+        (nerimux/commands:pipe-pane-close pb))))
 
   ;; pipe-pane -I opens the reverse direction: command stdout is copied back to the pane.
   (it "cmd-pipe-pane-flag-i-enables-command-output-to-pane"
@@ -80,19 +80,19 @@
            (sess (make-session :id 1 :name "0" :windows (list win))))
       (session-select-window sess win)
       (window-select-pane win pa)                       ; pane 1 active
-      (cl-tmux/commands::copy-mode-enter (pane-screen pa))
-      (cl-tmux/commands::copy-mode-enter (pane-screen pb))
-      (let ((cl-tmux::*server-sessions* (list (cons "0" sess))))
+      (nerimux/commands::copy-mode-enter (pane-screen pa))
+      (nerimux/commands::copy-mode-enter (pane-screen pb))
+      (let ((nerimux::*server-sessions* (list (cons "0" sess))))
         (with-loop-state
-          (cl-tmux::%run-command-line sess "send-keys -X -t .%2 begin-selection")
-          (expect (cl-tmux/terminal/types:screen-copy-selecting (pane-screen pb)) :to-be-truthy)
-          (expect (cl-tmux/terminal/types:screen-copy-selecting (pane-screen pa)) :to-be-falsy)
-          (expect (eq pa (cl-tmux/model:window-active-pane win)))))))
+          (nerimux::%run-command-line sess "send-keys -X -t .%2 begin-selection")
+          (expect (nerimux/terminal/types:screen-copy-selecting (pane-screen pb)) :to-be-truthy)
+          (expect (nerimux/terminal/types:screen-copy-selecting (pane-screen pa)) :to-be-falsy)
+          (expect (eq pa (nerimux/model:window-active-pane win)))))))
 
   ;; pipe-pane-write is a no-op when pane has no open pipe.
   (it "pipe-pane-write-noop-when-no-pipe"
     (let ((pane (%make-test-pane)))
-      (finishes (cl-tmux/commands:pipe-pane-write pane #(65 66 67))
+      (finishes (nerimux/commands:pipe-pane-write pane #(65 66 67))
                 "pipe-pane-write with no pipe must not signal")))
 
   ;; pipe-pane-open returns NIL when the shell program cannot be launched.
@@ -102,8 +102,8 @@
   ;; non-existent binary so process-kit:spawn itself fails.
   (it "pipe-pane-open-invalid-command-returns-nil"
     (let* ((pane   (%make-test-pane))
-           (cl-tmux/config:*default-shell* "/no/such/shell-5f3a9b2e")
-           (result (cl-tmux/commands:pipe-pane-open pane "echo hi")))
+           (nerimux/config:*default-shell* "/no/such/shell-5f3a9b2e")
+           (result (nerimux/commands:pipe-pane-open pane "echo hi")))
       (expect (null result))))
 
   ;; pipe-pane-open returns NIL and leaves the pane clean when launch times out.
@@ -130,10 +130,10 @@
                   (lambda (command arguments &rest keys)
                     (sleep 2)                 ; > +pipe-pane-open-timeout+ (1s)
                     (apply original-spawn command arguments keys)))
-            (expect (null (cl-tmux/commands:pipe-pane-open pane "cat")))
+            (expect (null (nerimux/commands:pipe-pane-open pane "cat")))
             (assert-pipe-pane-closed-state pane))
         (setf (fdefinition 'process-kit:spawn) original-spawn)
-        (ignore-errors (cl-tmux/commands:pipe-pane-close pane)))))
+        (ignore-errors (nerimux/commands:pipe-pane-close pane)))))
 
   ;; pipe-pane-write with an open pipe sends bytes to the subprocess stdin.
   ;; This drives a REAL shell subprocess + filesystem (cat > tmpfile), which is
@@ -167,11 +167,11 @@
                    (pane    (%make-test-pane)))
                (unwind-protect
                     (progn
-                      (cl-tmux/commands:pipe-pane-open
+                      (nerimux/commands:pipe-pane-open
                        pane (format nil "cat > ~A" (uiop:native-namestring tmpfile)))
                       (when (pane-pipe-fd pane)            ; launch succeeded
-                        (cl-tmux/commands:pipe-pane-write pane #(65 66 67)) ; "ABC"
-                        (cl-tmux/commands:pipe-pane-close pane)
+                        (nerimux/commands:pipe-pane-write pane #(65 66 67)) ; "ABC"
+                        (nerimux/commands:pipe-pane-close pane)
                         (let ((contents ""))
                           (loop repeat 250                  ; ~1.25s per attempt
                                 until (and (probe-file tmpfile)
@@ -193,10 +193,10 @@
   (it "copy-mode-virtual-row-string-returns-row-content"
     (let ((s (make-screen 20 5)))
       (feed s "hello")
-      (cl-tmux/commands::copy-mode-enter s)
-      (let* ((vrow (+ (length (cl-tmux/terminal:screen-scrollback s))
-                      (- 0 (cl-tmux/terminal:screen-copy-offset s))))
-             (row-str (cl-tmux/commands::%copy-mode-virtual-row-string s vrow)))
+      (nerimux/commands::copy-mode-enter s)
+      (let* ((vrow (+ (length (nerimux/terminal:screen-scrollback s))
+                      (- 0 (nerimux/terminal:screen-copy-offset s))))
+             (row-str (nerimux/commands::%copy-mode-virtual-row-string s vrow)))
         (expect (stringp row-str))
         (expect (and (>= (length row-str) 5)
                      (string= "hello" (subseq row-str 0 5)))))))
@@ -204,36 +204,36 @@
   ;; %copy-mode-virtual-row-string always returns a string of length = screen-width.
   (it "copy-mode-virtual-row-string-length-equals-screen-width"
     (let ((s (make-screen 20 5)))
-      (cl-tmux/commands::copy-mode-enter s)
-      (let ((vrow (length (cl-tmux/terminal:screen-scrollback s))))
-        (expect (= 20 (length (cl-tmux/commands::%copy-mode-virtual-row-string s vrow)))))))
+      (nerimux/commands::copy-mode-enter s)
+      (let ((vrow (length (nerimux/terminal:screen-scrollback s))))
+        (expect (= 20 (length (nerimux/commands::%copy-mode-virtual-row-string s vrow)))))))
 
   ;; %copy-mode-total-rows returns scrollback length + screen height.
   (it "copy-mode-total-rows-counts-scrollback-plus-height"
     (let ((s (make-screen 20 5)))
       (feed-lines s "line-0" "line-1" "line-2" "line-3" "line-4" "line-5" "line-6")
-      (expect (= 7 (cl-tmux/commands::%copy-mode-total-rows s)))))
+      (expect (= 7 (nerimux/commands::%copy-mode-total-rows s)))))
 
   ;; %copy-mode-set-virtual-row moves the cursor to the requested virtual row.
   (it "copy-mode-set-virtual-row-updates-offset-and-cursor"
     (let ((s (make-screen 4 3)))
       (feed-lines s "AAA" "BBB" "CCC" "DDD" "EEE")
-      (cl-tmux/commands::copy-mode-enter s)
-      (cl-tmux/commands::%copy-mode-set-virtual-row s 0 1)
+      (nerimux/commands::copy-mode-enter s)
+      (nerimux/commands::%copy-mode-set-virtual-row s 0 1)
       (expect (= 2 (screen-copy-offset s)))
-      (expect (equal (cons 0 1) (cl-tmux/terminal/types:screen-copy-cursor s)))
+      (expect (equal (cons 0 1) (nerimux/terminal/types:screen-copy-cursor s)))
       (expect (screen-dirty-p s) :to-be-truthy)))
 
   ;; ── %run-with-timeout ────────────────────────────────────────────────────────
 
   ;; %run-with-timeout returns the result of the thunk when it completes within time.
   (it "run-with-timeout-returns-thunk-result"
-    (let ((result (cl-tmux/commands::%run-with-timeout (lambda () 42) 10)))
+    (let ((result (nerimux/commands::%run-with-timeout (lambda () 42) 10)))
       (expect (= 42 result))))
 
   ;; %run-with-timeout returns NIL when the thunk exceeds the timeout.
   (it "run-with-timeout-returns-nil-on-timeout"
-    (let ((result (cl-tmux/commands::%run-with-timeout
+    (let ((result (nerimux/commands::%run-with-timeout
                    (lambda () (sleep 60)) 1/1000)))
       (expect (null result))))
 
@@ -245,7 +245,7 @@
   ;; (SECS) -- calling the timeout value as a function.
   (it "run-with-timeout-accepts-a-computed-deadline"
     (let ((seconds (+ 5 5)))
-      (expect (= 42 (cl-tmux/commands::%run-with-timeout (lambda () 42) seconds)))))
+      (expect (= 42 (nerimux/commands::%run-with-timeout (lambda () 42) seconds)))))
 
   ;; The timeout the handler clause catches is CL-CONCURRENT-KIT:OPERATION-TIMED-OUT,
   ;; not SB-EXT:TIMEOUT.  This matters because SB-EXT:TIMEOUT is a
@@ -264,7 +264,7 @@
   ;; run-shell returns NIL when the command exceeds the given timeout.
   (it "run-shell-returns-nil-on-timeout"
     ;; Use a very short timeout (1ms) with a sleep command.
-    (let ((result (cl-tmux/commands:run-shell "sleep 60" :timeout 1/1000)))
+    (let ((result (nerimux/commands:run-shell "sleep 60" :timeout 1/1000)))
       (expect (null result))))
 
   ;; ── %copy-mode-clamp-cursor (direct unit tests) ──────────────────────────────
@@ -277,18 +277,18 @@
       (destructuring-bind (init-r init-c exp-r exp-c desc) c
         (declare (ignore desc))
         (let ((s (make-screen 20 5)))
-          (cl-tmux/commands::copy-mode-enter s)
-          (setf (cl-tmux/terminal/types:screen-copy-cursor s) (cons init-r init-c))
-          (cl-tmux/commands::%copy-mode-clamp-cursor s)
-          (expect (= exp-r (car (cl-tmux/terminal/types:screen-copy-cursor s))))
-          (expect (= exp-c (cdr (cl-tmux/terminal/types:screen-copy-cursor s))))))))
+          (nerimux/commands::copy-mode-enter s)
+          (setf (nerimux/terminal/types:screen-copy-cursor s) (cons init-r init-c))
+          (nerimux/commands::%copy-mode-clamp-cursor s)
+          (expect (= exp-r (car (nerimux/terminal/types:screen-copy-cursor s))))
+          (expect (= exp-c (cdr (nerimux/terminal/types:screen-copy-cursor s))))))))
 
   ;; %copy-mode-clamp-cursor is a no-op when the cursor is NIL.
   (it "copy-mode-clamp-cursor-noop-when-cursor-nil"
     (let ((s (make-screen 20 5)))
-      (cl-tmux/commands::copy-mode-enter s)
-      (setf (cl-tmux/terminal/types:screen-copy-cursor s) nil)
-      (finishes (cl-tmux/commands::%copy-mode-clamp-cursor s)
+      (nerimux/commands::copy-mode-enter s)
+      (setf (nerimux/terminal/types:screen-copy-cursor s) nil)
+      (finishes (nerimux/commands::%copy-mode-clamp-cursor s)
                 "%copy-mode-clamp-cursor with nil cursor must not signal")))
 
   ;; ── %selection-bounds (direct unit tests) ────────────────────────────────────
@@ -303,11 +303,11 @@
       (destructuring-bind (mr mc cr cc exp-sr exp-er exp-sc exp-ec desc) row
         (declare (ignore desc))
         (let ((s (make-screen 20 5)))
-          (cl-tmux/commands::copy-mode-enter s)
-          (setf (cl-tmux/terminal/types:screen-copy-mark   s) (cons mr mc)
-                (cl-tmux/terminal/types:screen-copy-cursor s) (cons cr cc))
+          (nerimux/commands::copy-mode-enter s)
+          (setf (nerimux/terminal/types:screen-copy-mark   s) (cons mr mc)
+                (nerimux/terminal/types:screen-copy-cursor s) (cons cr cc))
           (multiple-value-bind (start-row end-row start-col end-col)
-              (cl-tmux/commands::%selection-bounds s)
+              (nerimux/commands::%selection-bounds s)
             (expect (= exp-sr start-row))
             (expect (= exp-er end-row))
             (expect (= exp-sc start-col))

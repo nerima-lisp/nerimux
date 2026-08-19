@@ -1,9 +1,9 @@
-(in-package #:cl-tmux/config)
+(in-package #:nerimux/config)
 
 ;;; -- Config-file path resolution + top-level file loading ---------------------
 ;;;
-;;; %config-path-from / config-file-path resolve the cl-tmux config path (XDG
-;;; Base Directory spec, with a $CL_TMUX_CONF override).  %tmux-conf-paths lists
+;;; %config-path-from / config-file-path resolve the nerimux config path (XDG
+;;; Base Directory spec, with a $NERIMUX_CONF override).  %tmux-conf-paths lists
 ;;; the traditional tmux.conf fallback locations.  load-config-file is the
 ;;; top-level entry point that opens a path (or auto-detects one) and hands the
 ;;; stream to load-config-from-stream (config-preprocessor.lisp).
@@ -13,20 +13,20 @@
   (and env-string (plusp (length env-string))))
 
 (defun %config-path-from (override xdg home)
-  "Resolve the config-file path from environment values (OVERRIDE = $CL_TMUX_CONF,
+  "Resolve the config-file path from environment values (OVERRIDE = $NERIMUX_CONF,
    XDG = $XDG_CONFIG_HOME, each a string or NIL) and HOME (a directory pathname).
 
    Precedence (XDG Base Directory spec):
-     1. $CL_TMUX_CONF                              — explicit override
-     2. $XDG_CONFIG_HOME/cl-tmux/cl-tmux.conf
-     3. ~/.config/cl-tmux/cl-tmux.conf             — XDG default when unset
+     1. $NERIMUX_CONF                              — explicit override
+     2. $XDG_CONFIG_HOME/nerimux/nerimux.conf
+     3. ~/.config/nerimux/nerimux.conf             — XDG default when unset
    Empty strings are treated as unset.  Pure: no I/O, no environment access."
   (if (%env-set-p override)
       (pathname override)
       (let ((base (if (%env-set-p xdg)
                       xdg
                       (namestring (merge-pathnames ".config/" home)))))
-        (pathname (format nil "~A/cl-tmux/cl-tmux.conf"
+        (pathname (format nil "~A/nerimux/nerimux.conf"
                           (string-right-trim "/" base))))))
 
 (defun %tmux-conf-paths (home)
@@ -45,22 +45,22 @@
 (defvar *config-file-override* nil
   "Explicit config-file path from the startup -f flag (see the cl-cli app in
    main-startup-flags.lisp), a string or pathname.  Takes precedence over
-   $CL_TMUX_CONF and the XDG search, mirroring real tmux(1)'s -f file.")
+   $NERIMUX_CONF and the XDG search, mirroring real tmux(1)'s -f file.")
 
 (defun config-file-path ()
   "Path to the user config file: *config-file-override* (-f) first, then
-   $CL_TMUX_CONF, then the XDG Base Directory spec ($XDG_CONFIG_HOME, default
+   $NERIMUX_CONF, then the XDG Base Directory spec ($XDG_CONFIG_HOME, default
    ~/.config).  See %config-path-from."
   (if *config-file-override*
       (pathname *config-file-override*)
-      (%config-path-from (sb-ext:posix-getenv "CL_TMUX_CONF")
+      (%config-path-from (sb-ext:posix-getenv "NERIMUX_CONF")
                          (sb-ext:posix-getenv "XDG_CONFIG_HOME")
                          (user-homedir-pathname))))
 
 (defun load-config-file (&optional (path (config-file-path)))
   "Load and apply the config file at PATH if it exists (returns the count of
    directives applied), or NIL when no file is found.
-   PATH defaults to the XDG/cl-tmux path; pass NIL to auto-detect, which also
+   PATH defaults to the XDG/nerimux path; pass NIL to auto-detect, which also
    searches the standard .tmux.conf locations."
   (if path
       (with-open-file (in path :direction :input :if-does-not-exist nil)

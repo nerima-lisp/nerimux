@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; Arg-aware display, message, prompt, and pane-selection command handlers.
 
@@ -28,7 +28,7 @@
     (let* ((delay-ms   (%parse-flag-int flags #\d))
            (target-str (%flag-value flags #\t)))
       (with-target-context (tgt-session tgt-win tgt-pane session target-str)
-        (let* ((ctx       (cl-tmux/format:format-context-from-session tgt-session
+        (let* ((ctx       (nerimux/format:format-context-from-session tgt-session
                                                                      tgt-win
                                                                      tgt-pane))
                ;; -F fmt overrides the positional template.
@@ -38,14 +38,14 @@
                ;; message containing literal '#' / '#{' is shown as typed.
                (text      (if (%flag-present-p flags #\l)
                               raw
-                              (cl-tmux/format:expand-format raw ctx))))
+                              (nerimux/format:expand-format raw ctx))))
           (add-message-log text)
           (if delay-ms
               ;; Custom delay: temporarily override display-time for this message.
-              (let ((saved (cl-tmux/options:get-option "display-time" 750)))
-                (cl-tmux/options:set-option "display-time" delay-ms)
+              (let ((saved (nerimux/options:get-option "display-time" 750)))
+                (nerimux/options:set-option "display-time" delay-ms)
                 (show-transient-overlay text)
-                (cl-tmux/options:set-option "display-time" saved))
+                (nerimux/options:set-option "display-time" saved))
               (show-transient-overlay text)))))))
 
 (defun %cmd-show-messages-arg (session args)
@@ -104,9 +104,9 @@
              ;; string before running (tmux command-prompt -F).
              (when (%flag-present-p flags #\F)
                (setf cmd (or (ignore-errors
-                               (cl-tmux/format:expand-format
+                               (nerimux/format:expand-format
                                 cmd
-                                (cl-tmux/format:format-context-from-session
+                                (nerimux/format:format-context-from-session
                                  session
                                  (session-active-window session)
                                  (session-active-pane session))))
@@ -148,18 +148,18 @@
                   guard behind command-prompt's -i/-N/-e post-configuration."
                  `(when (and (%flag-present-p flags ,flag-char)
                              ,@(when extra-condition (list extra-condition))
-                             cl-tmux/prompt:*prompt*)
+                             nerimux/prompt:*prompt*)
                     ,@body)))
       ;; -i: run the template against the in-progress input on every edit.
       (when-prompt-flag (#\i has-template)
-        (setf (cl-tmux/prompt:prompt-on-change cl-tmux/prompt:*prompt*)
+        (setf (nerimux/prompt:prompt-on-change nerimux/prompt:*prompt*)
               #'run-template))
       ;; -N: the prompt accepts numeric key presses only.
       (when-prompt-flag (#\N)
-        (setf (cl-tmux/prompt:prompt-numeric-only cl-tmux/prompt:*prompt*) t))
+        (setf (nerimux/prompt:prompt-numeric-only nerimux/prompt:*prompt*) t))
       ;; -e: close the prompt when the client loses focus (?1004 focus-out).
       (when-prompt-flag (#\e)
-        (setf (cl-tmux/prompt:prompt-close-on-focus-out cl-tmux/prompt:*prompt*)
+        (setf (nerimux/prompt:prompt-close-on-focus-out nerimux/prompt:*prompt*)
               t)))))
 
 (defun %cmd-command-prompt-arg (session args)
@@ -177,11 +177,11 @@
    -N: the prompt accepts numeric key presses only.
    -F: the substituted command line is expanded as a format string before it
        runs.
-   -b: the prompt runs in the background without blocking — cl-tmux prompts
+   -b: the prompt runs in the background without blocking — nerimux prompts
        are ALWAYS non-blocking overlays, so this is the native behaviour.
    -e: the prompt closes automatically when the client loses focus (wired to
        the ?1004 focus-out report).
-   -l: like -1, the first key press is the answer; cl-tmux's -1 already
+   -l: like -1, the first key press is the answer; nerimux's -1 already
        submits the untranslated character, which is exactly -l's semantics.
    -i: incremental — the template runs on EVERY prompt edit with %1/%% bound to
        the current input (tmux PROMPT_INCREMENTAL, used for live-search
@@ -190,7 +190,7 @@
     (let* ((prompts-str (%flag-value flags #\p))
            (initial     (or (%flag-value flags #\I) ""))
            ;; -1, -k, and -l all request a one-keypress prompt (-k translates
-           ;; to a key name in tmux; -l is explicitly untranslated — cl-tmux
+           ;; to a key name in tmux; -l is explicitly untranslated — nerimux
            ;; submits the raw character for all three).
            (single-key  (and (or (%flag-present-p flags #\1)
                                  (%flag-present-p flags #\k)

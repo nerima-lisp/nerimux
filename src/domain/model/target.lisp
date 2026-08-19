@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Session/window/pane target resolution — the "-t session:window.pane" DSL.
 ;;;;

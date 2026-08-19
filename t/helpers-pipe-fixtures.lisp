@@ -1,11 +1,11 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; POSIX pipe fixtures and pipe-pane assertions.
 
 (defun write-octets-to-fd (fd octets)
   "Write OCTETS, a sequence of (unsigned-byte 8), to file descriptor FD.
    Returns the number of bytes written.  Goes through cl-tty-kit:fd-write-octets,
-   the same call production pty-write uses, now that cl-tmux has no cffi."
+   the same call production pty-write uses, now that nerimux has no cffi."
   (cl-tty-kit:fd-write-octets
    fd (coerce octets '(simple-array (unsigned-byte 8) (*)))))
 
@@ -43,26 +43,26 @@
 (defmacro assert-pipe-pane-open-output-to-command-state (pane)
   "Assert the state of PANE after opening a command that consumes pane output."
   `(progn
-     (expect (cl-tmux/model:pane-pipe-active-p ,pane) :to-be-truthy)
-     (expect (cl-tmux/model:pane-pipe-fd ,pane) :to-be-truthy)
-     (expect (null (cl-tmux/model:pane-pipe-output-stream ,pane)))
-     (expect (null (cl-tmux/model:pane-pipe-output-thread ,pane)))
-     (expect (cl-tmux/model:pane-pipe-process ,pane) :to-be-truthy)))
+     (expect (nerimux/model:pane-pipe-active-p ,pane) :to-be-truthy)
+     (expect (nerimux/model:pane-pipe-fd ,pane) :to-be-truthy)
+     (expect (null (nerimux/model:pane-pipe-output-stream ,pane)))
+     (expect (null (nerimux/model:pane-pipe-output-thread ,pane)))
+     (expect (nerimux/model:pane-pipe-process ,pane) :to-be-truthy)))
 
 (defmacro assert-pipe-pane-open-command-output-state (pane)
   "Assert the state of PANE after opening a command that writes back to pane."
   `(progn
-     (expect (cl-tmux/model:pane-pipe-active-p ,pane) :to-be-truthy)
-     (expect (null (cl-tmux/model:pane-pipe-fd ,pane)))
-     (expect (cl-tmux/model:pane-pipe-output-stream ,pane) :to-be-truthy)
-     (expect (cl-tmux/model:pane-pipe-output-thread ,pane) :to-be-truthy)
-     (expect (cl-tmux/model:pane-pipe-process ,pane) :to-be-truthy)))
+     (expect (nerimux/model:pane-pipe-active-p ,pane) :to-be-truthy)
+     (expect (null (nerimux/model:pane-pipe-fd ,pane)))
+     (expect (nerimux/model:pane-pipe-output-stream ,pane) :to-be-truthy)
+     (expect (nerimux/model:pane-pipe-output-thread ,pane) :to-be-truthy)
+     (expect (nerimux/model:pane-pipe-process ,pane) :to-be-truthy)))
 
 (defmacro assert-pipe-pane-closed-state (pane)
   "Assert that PANE has no pipe resources left."
   `(progn
-     (expect (null (cl-tmux/model:pane-pipe-active-p ,pane)))
-     (expect (null (cl-tmux/model:pane-pipe-fd ,pane)))
-     (expect (null (cl-tmux/model:pane-pipe-output-stream ,pane)))
-     (expect (null (cl-tmux/model:pane-pipe-output-thread ,pane)))
-     (expect (null (cl-tmux/model:pane-pipe-process ,pane)))))
+     (expect (null (nerimux/model:pane-pipe-active-p ,pane)))
+     (expect (null (nerimux/model:pane-pipe-fd ,pane)))
+     (expect (null (nerimux/model:pane-pipe-output-stream ,pane)))
+     (expect (null (nerimux/model:pane-pipe-output-thread ,pane)))
+     (expect (null (nerimux/model:pane-pipe-process ,pane)))))

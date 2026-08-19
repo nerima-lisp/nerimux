@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/actions)
+(in-package #:nerimux/terminal/actions)
 
 ;;;; Cursor movement.
 ;;;; Loads AFTER scroll.lisp so cursor-down/scroll can call scroll-up-one

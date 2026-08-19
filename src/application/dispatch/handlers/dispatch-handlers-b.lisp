@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Command handler rule table — part II.
 ;;;;  Break/join pane, pipe, options, paste-buffer, mark/layout.
@@ -25,10 +25,10 @@
 
 (defun %cycle-layout (session win direction)
   "Cycle the layout of WIN in DIRECTION (:next or :prev) through +named-layouts+."
-  (let* ((current (cl-tmux/model:window-layout-cycle-index win))
+  (let* ((current (nerimux/model:window-layout-cycle-index win))
          (n       (length +named-layouts+))
          (next    (mod (if (eq direction :next) (1+ current) (1- current)) n)))
-    (setf (cl-tmux/model:window-layout-cycle-index win) next)
+    (setf (nerimux/model:window-layout-cycle-index win) next)
     (%apply-named-layout-to-session session (aref +named-layouts+ next))))
 
 (define-command-handlers
@@ -80,13 +80,13 @@
   (:show-messages
    (show-overlay (%format-message-log-overlay)))
   (:show-hooks
-   (show-overlay (cl-tmux/hooks:describe-command-hooks)))
+   (show-overlay (nerimux/hooks:describe-command-hooks)))
   (:capture-pane
    (with-active-pane (ap session)
      (show-overlay (capture-pane ap))))
   (:clear-history
    (with-active-pane (ap session)
-     (cl-tmux/terminal/actions:clear-scrollback (pane-screen ap))))
+     (nerimux/terminal/actions:clear-scrollback (pane-screen ap))))
   (:choose-tree
    (show-built-overlay (stream)
      (let ((current-name (session-name session)))

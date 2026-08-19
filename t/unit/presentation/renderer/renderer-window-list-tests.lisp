@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; status window-list formatting and style expansion
 
@@ -13,7 +13,7 @@
                             "window-status-style" "")
       (let* ((sess (make-renderer-test-session 20 5 :content ""))
              (win  (session-active-window sess))
-             (out  (cl-tmux/renderer::%status-window-list-styled sess win)))
+             (out  (nerimux/renderer::%status-window-list-styled sess win)))
         (expect (search "1:1" out))
         (expect (search "*" out)))))
 
@@ -31,7 +31,7 @@
         (window-select-pane w0 p0)
         (window-select-pane w1 p1)
         (session-select-window sess w1)
-        (let ((out (cl-tmux/renderer::%status-window-list-styled sess w1)))
+        (let ((out (nerimux/renderer::%status-window-list-styled sess w1)))
           (expect (search "beta*" out))
           (expect (search "alpha" out))
           (expect (null (search "alpha*" out)))))))
@@ -43,7 +43,7 @@
                             "window-status-style" "")
       (let* ((sess (make-renderer-test-session 20 5 :content ""))
              (win  (session-active-window sess))
-             (out  (cl-tmux/renderer::%status-window-list-styled sess win)))
+             (out  (nerimux/renderer::%status-window-list-styled sess win)))
         (expect (search "1:1" out))
         (expect (search (format nil "~C[0m" #\Escape) out)))))
 
@@ -53,7 +53,7 @@
     (with-isolated-options ("window-status-current-style" "bg=red")
       (let* ((sess  (make-renderer-test-session 20 5 :content ""))
              (win   (session-active-window sess))
-             (style (cl-tmux/renderer::%window-status-style sess win t)))
+             (style (nerimux/renderer::%window-status-style sess win t)))
         (expect (search "bg=red" style)))))
 
   ;; %window-status-style returns the window-status-style option directly
@@ -62,7 +62,7 @@
     (with-isolated-options ("window-status-style" "fg=green")
       (let* ((sess  (make-renderer-test-session 20 5 :content ""))
              (win   (session-active-window sess))
-             (style (cl-tmux/renderer::%window-status-style sess win nil)))
+             (style (nerimux/renderer::%window-status-style sess win nil)))
         (expect (search "fg=green" style)))))
 
   ;; When both style options are empty, %status-window-list-styled emits plain
@@ -72,7 +72,7 @@
                             "window-status-style" "")
       (let* ((sess (make-renderer-test-session 20 5 :content ""))
              (win  (session-active-window sess))
-             (out  (cl-tmux/renderer::%status-window-list-styled sess win)))
+             (out  (nerimux/renderer::%status-window-list-styled sess win)))
         (expect (search "1:1" out))
         (expect (null (search (format nil "~C[" #\Escape) out))))))
 
@@ -84,7 +84,7 @@
                             "window-status-current-format" "#[fg=red]#{window_name}#[default]")
       (let* ((sess (make-renderer-test-session 20 5 :content ""))
              (win  (session-active-window sess))
-             (out  (cl-tmux/renderer::%status-window-list-styled sess win)))
+             (out  (nerimux/renderer::%status-window-list-styled sess win)))
         (expect (search (format nil "~C[31m" #\Escape) out))
         (expect (null (search "#[" out)))
         (expect (search "1" out))
@@ -98,7 +98,7 @@
                             "window-status-current-format" "#[fg=green]#{window_name}")
       (let* ((sess (make-renderer-test-session 20 5 :content ""))
              (win  (session-active-window sess))
-             (out  (cl-tmux/renderer::%status-window-list-styled sess win)))
+             (out  (nerimux/renderer::%status-window-list-styled sess win)))
         (expect (search (format nil "~C[32m" #\Escape) out))
         (expect (search (format nil "~C[0m" #\Escape) out)))))
 
@@ -110,6 +110,6 @@
                             "window-status-current-format" " #{window_index}:#{window_name} ")
       (let* ((sess (make-renderer-test-session 20 5 :content ""))
              (win  (session-active-window sess))
-             (out  (cl-tmux/renderer::%status-window-list-styled sess win)))
+             (out  (nerimux/renderer::%status-window-list-styled sess win)))
         (expect (search "1:1" out))
         (expect (null (search (format nil "~C[" #\Escape) out)))))))

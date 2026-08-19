@@ -1,10 +1,10 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Loader for the rename/select command family.
 ;;;; Keep the family split in source files without changing ASDF registration.
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (let* ((root (ignore-errors (asdf:system-source-directory :cl-tmux)))
+  (let* ((root (ignore-errors (asdf:system-source-directory :nerimux)))
          (src (or (and root (merge-pathnames #P"src/" root))
                   (and *load-pathname*
                        (host-kit:pathname-directory-pathname *load-pathname*))

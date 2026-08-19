@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Popup / menu overlay handlers split out from dispatch-handlers-b.lisp.
 
@@ -57,7 +57,7 @@
      (let* ((idx  (menu-selected-index *active-menu*))
             (cmd  (cdr (nth idx (menu-items *active-menu*))))
             ;; display-menu -O: keep the menu open after the selection runs.
-            (keep (cl-tmux/prompt:menu-keep-open *active-menu*)))
+            (keep (nerimux/prompt:menu-keep-open *active-menu*)))
        (unless keep
          (close-menu)
          (clear-overlay))

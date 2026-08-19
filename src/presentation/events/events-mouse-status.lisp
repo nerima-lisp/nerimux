@@ -1,6 +1,6 @@
 ;;; events-mouse-status.lisp --- Status bar mouse handling -*- Lisp -*-
 
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; ── Status bar column → window index mapping ─────────────────────────────────
 
@@ -10,22 +10,22 @@
    per-window format, separator, and inline style blocks."
   (labels ((window-entry-width (window)
              (let* ((active-p (eq window (session-active-window session)))
-                    (context  (cl-tmux/format:format-context-from-window session window))
-                    (fmt      (cl-tmux/options:get-option-for-context
+                    (context  (nerimux/format:format-context-from-window session window))
+                    (fmt      (nerimux/options:get-option-for-context
                                (if active-p "window-status-current-format"
                                    "window-status-format")
                                :window window))
-                    (label    (cl-tmux/format:expand-format fmt context))
-                    (style    (cl-tmux/renderer::%window-status-style session window active-p))
+                    (label    (nerimux/format:expand-format fmt context))
+                    (style    (nerimux/renderer::%window-status-style session window active-p))
                     (sgr-code (when (and style (plusp (length style)))
-                                (cl-tmux/renderer::%status-sgr-from-style style)))
-                    (expanded (cl-tmux/renderer::%status-expand-style-blocks
+                                (nerimux/renderer::%status-sgr-from-style style)))
+                    (expanded (nerimux/renderer::%status-expand-style-blocks
                                label
-                               (or sgr-code cl-tmux/renderer::+sgr-default-status+))))
-               (cl-tmux/renderer::%visible-length expanded))))
+                               (or sgr-code nerimux/renderer::+sgr-default-status+))))
+               (nerimux/renderer::%visible-length expanded))))
     (let ((current-col (+ 1 (length (session-name session))))
-          (separator-width (cl-tmux/renderer::%visible-length
-                            (cl-tmux/options:get-option "window-status-separator" " ")))
+          (separator-width (nerimux/renderer::%visible-length
+                            (nerimux/options:get-option "window-status-separator" " ")))
           (first-p t))
       (loop for window in (session-windows session)
             do (unless first-p

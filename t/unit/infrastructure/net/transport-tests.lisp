@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Frame transport tests (src/transport.lisp) — part I: round-trips.
 ;;;;
@@ -143,7 +143,7 @@
           (with-incoming-frame (type payload in)
             ((= type +msg-resize+)
              (multiple-value-bind (rows cols)
-                 (cl-tmux/protocol:decode-size payload)
+                 (nerimux/protocol:decode-size payload)
                (setf result (list :resize rows cols))))
             ((= type +msg-key+)   (setf result :key))
             (t                    (setf result :other)))
@@ -168,7 +168,7 @@
     (assert-round-tripped-frame-payload
      (msg-attach 15 60)
      (lambda (payload)
-       (multiple-value-bind (rows cols) (cl-tmux/protocol:decode-size payload)
+       (multiple-value-bind (rows cols) (nerimux/protocol:decode-size payload)
          (expect (= 15 rows))
          (expect (= 60 cols)))))
     ;; msg-key: payload bytes must be preserved verbatim
@@ -180,25 +180,25 @@
     (assert-round-tripped-frame-payload
      (msg-resize 50 200)
      (lambda (payload)
-       (multiple-value-bind (rows cols) (cl-tmux/protocol:decode-size payload)
+       (multiple-value-bind (rows cols) (nerimux/protocol:decode-size payload)
          (expect (= 50 rows))
          (expect (= 200 cols)))))
     ;; msg-frame: decode-text must recover the Unicode string
     (assert-round-tripped-frame-payload
      (msg-frame "こんにちは")
      (lambda (payload)
-       (expect (string= "こんにちは" (cl-tmux/protocol:decode-text payload)))))
+       (expect (string= "こんにちは" (nerimux/protocol:decode-text payload)))))
     ;; msg-reply: decode-text must recover the UTF-8 reply text
     (assert-round-tripped-frame-payload
      (msg-reply "output: 42")
      (lambda (payload)
-       (expect (string= "output: 42" (cl-tmux/protocol:decode-text payload)))))
+       (expect (string= "output: 42" (nerimux/protocol:decode-text payload)))))
     ;; msg-command: decode-command-payload must recover command, target, and args
     (assert-round-tripped-frame-payload
      (msg-command :new-window "$0" '("-d"))
      (lambda (payload)
        (multiple-value-bind (command target args)
-           (cl-tmux/protocol:decode-command-payload payload)
+           (nerimux/protocol:decode-command-payload payload)
          (expect (eq :new-window command))
          (expect (string= "$0" target))
          (expect (equal '("-d") args))))))
@@ -213,7 +213,7 @@
         (multiple-value-bind (type payload) (read-frame in)
           (expect (= +msg-command+ type))
           (multiple-value-bind (command target args)
-              (cl-tmux/protocol:decode-command-payload payload)
+              (nerimux/protocol:decode-command-payload payload)
             (expect (eq :new-session command))
             (expect (string= "$0" target))
             (expect (equal '("-d" "-s" "main") args)))))))
@@ -247,14 +247,14 @@
   ;; The +read-frame-timeout-seconds+ constant must be a positive integer so
   ;; sb-ext:with-timeout receives a valid duration.
   (it "read-frame-timeout-constant-is-positive-integer"
-    (expect (integerp cl-tmux/transport::+read-frame-timeout-seconds+))
-    (expect (plusp cl-tmux/transport::+read-frame-timeout-seconds+)))
+    (expect (integerp nerimux/transport::+read-frame-timeout-seconds+))
+    (expect (plusp nerimux/transport::+read-frame-timeout-seconds+)))
 
   ;; +max-frame-payload-bytes+ must be a large positive integer (≥ 1 MiB) so
   ;; that the security guard in read-frame accepts realistic frame sizes.
   (it "max-frame-payload-constant-is-large-positive-integer"
-    (expect (integerp cl-tmux/transport::+max-frame-payload-bytes+))
-    (expect (>= cl-tmux/transport::+max-frame-payload-bytes+ (* 1024 1024))))
+    (expect (integerp nerimux/transport::+max-frame-payload-bytes+))
+    (expect (>= nerimux/transport::+max-frame-payload-bytes+ (* 1024 1024))))
 
   ;;; ── %read-exact direct contract tests ───────────────────────────────────────
   ;;;
@@ -271,7 +271,7 @@
         (write-sequence #(10 20 30 40 50 60 70 80 90 100) out))
       (with-open-file (in path :element-type '(unsigned-byte 8))
         (let ((buffer (make-array 10 :element-type '(unsigned-byte 8))))
-          (let ((bytes-read (cl-tmux/transport::%read-exact buffer in 0 10)))
+          (let ((bytes-read (nerimux/transport::%read-exact buffer in 0 10)))
             (expect (= 10 bytes-read))
             (expect (equalp #(10 20 30 40 50 60 70 80 90 100) buffer)))))))
 
@@ -283,7 +283,7 @@
         (write-sequence #(1 2 3) out))
       (with-open-file (in path :element-type '(unsigned-byte 8))
         (let ((buffer (make-array 10 :element-type '(unsigned-byte 8) :initial-element 0)))
-          (let ((bytes-read (cl-tmux/transport::%read-exact buffer in 0 10)))
+          (let ((bytes-read (nerimux/transport::%read-exact buffer in 0 10)))
             (expect (< bytes-read 10))
             (expect (= 3 bytes-read)))))))
 
@@ -295,7 +295,7 @@
       (with-open-file (in path :element-type '(unsigned-byte 8))
         (let ((buffer (make-array 6 :element-type '(unsigned-byte 8) :initial-element 0)))
           ;; Read into the middle of the buffer (positions 3..6).
-          (cl-tmux/transport::%read-exact buffer in 3 6)
+          (nerimux/transport::%read-exact buffer in 3 6)
           (expect (= 0 (aref buffer 0)))
           (expect (= 0 (aref buffer 1)))
           (expect (= 0 (aref buffer 2)))

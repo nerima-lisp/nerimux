@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; csi tests — part C: csi-unknown-sequences, DECOM/origin-mode,
 ;;;; cup-row-direct, enqueue-* helpers, XTPUSHTITLE/XTPOPTITLE,
@@ -82,8 +82,8 @@
   (it "cup-row-non-decom-converts-1-based-to-0-based"
     (with-screen (s 20 10)
       ;; origin-mode NIL by default
-      (expect (= 0 (cl-tmux/terminal/csi::%cup-row s 1)))
-      (expect (= 4 (cl-tmux/terminal/csi::%cup-row s 5)))))
+      (expect (= 0 (nerimux/terminal/csi::%cup-row s 1)))
+      (expect (= 4 (nerimux/terminal/csi::%cup-row s 5)))))
 
   ;; %cup-row with DECOM set adds the scroll-region top to the 1-based row.
   (it "cup-row-decom-adds-scroll-top-offset"
@@ -92,9 +92,9 @@
       (feed s (esc "[3;8r"))     ; DECSTBM → top=2, bottom=7 (0-based)
       (feed s (esc "[?6h"))      ; DECOM on
       ;; Now %cup-row(1) should be scroll-top + 0 = 2
-      (expect (= 2 (cl-tmux/terminal/csi::%cup-row s 1)))
+      (expect (= 2 (nerimux/terminal/csi::%cup-row s 1)))
       ;; %cup-row(2) should be scroll-top + 1 = 3
-      (expect (= 3 (cl-tmux/terminal/csi::%cup-row s 2)))))
+      (expect (= 3 (nerimux/terminal/csi::%cup-row s 2)))))
 
   ;; %cup-row with DECOM clamps to scroll-region bottom when row exceeds it.
   (it "cup-row-decom-clamps-to-scroll-bottom"
@@ -102,7 +102,7 @@
       (feed s (esc "[3;6r"))     ; DECSTBM → top=2, bottom=5 (0-based)
       (feed s (esc "[?6h"))      ; DECOM on
       ;; Row 99 (large) relative to top=2: 2 + 98 = 100, clamped to bottom=5
-      (expect (= 5 (cl-tmux/terminal/csi::%cup-row s 99))))))
+      (expect (= 5 (nerimux/terminal/csi::%cup-row s 99))))))
 
 ;;; ── Coverage gap: enqueue-* helpers ─────────────────────────────────────────
 ;;;
@@ -113,23 +113,23 @@
 
   ;; enqueue-dsr/da1/da2-reply each push a string with the expected fixed signature.
   (it "enqueue-static-reply-signatures-table"
-    (dolist (row (list (list #'cl-tmux/terminal/csi::enqueue-dsr-reply "[0n"   "dsr → [0n")
-                       (list #'cl-tmux/terminal/csi::enqueue-da1-reply "?1;2c" "da1 → ?1;2c")
-                       (list #'cl-tmux/terminal/csi::enqueue-da2-reply ">1;"   "da2 → >1;")))
+    (dolist (row (list (list #'nerimux/terminal/csi::enqueue-dsr-reply "[0n"   "dsr → [0n")
+                       (list #'nerimux/terminal/csi::enqueue-da1-reply "?1;2c" "da1 → ?1;2c")
+                       (list #'nerimux/terminal/csi::enqueue-da2-reply ">1;"   "da2 → >1;")))
       (destructuring-bind (fn expected-sub desc) row
         (declare (ignore desc))
         (with-screen (s 20 5)
           (funcall fn s)
           (expect (some (lambda (r) (search expected-sub r))
-                    (cl-tmux/terminal/types:screen-response-queue s)))))))
+                    (nerimux/terminal/types:screen-response-queue s)))))))
 
   ;; enqueue-cpr-reply pushes ESC[row;colR reflecting the current cursor (1-based).
   (it "enqueue-cpr-reply-reflects-cursor"
     (with-screen (s 20 10)
       (feed s (esc "[3;5H"))     ; cursor → row 2, col 4 (0-based)
-      (cl-tmux/terminal/csi::enqueue-cpr-reply s)
+      (nerimux/terminal/csi::enqueue-cpr-reply s)
       (expect (some (lambda (r) (search "[3;5R" r))
-                (cl-tmux/terminal/types:screen-response-queue s))))))
+                (nerimux/terminal/types:screen-response-queue s))))))
 
 ;;; ── XTPUSHTITLE / XTPOPTITLE (CSI > Ps t / CSI < Ps t) ─────────────────────
 
@@ -138,35 +138,35 @@
   ;; CSI > t (XTPUSHTITLE) pushes the current title onto the title stack.
   (it "xtpushtitle-saves-current-title"
     (with-screen (s 20 5)
-      (setf (cl-tmux/terminal/types:screen-title s) "initial")
+      (setf (nerimux/terminal/types:screen-title s) "initial")
       (feed s (esc "[>t"))   ; push
-      (expect (equal '("initial") (cl-tmux/terminal/types:screen-title-stack s)))))
+      (expect (equal '("initial") (nerimux/terminal/types:screen-title-stack s)))))
 
   ;; CSI < t (XTPOPTITLE) pops and restores the most recently pushed title.
   (it "xtpoptitle-restores-saved-title"
     (with-screen (s 20 5)
-      (setf (cl-tmux/terminal/types:screen-title s) "original")
+      (setf (nerimux/terminal/types:screen-title s) "original")
       (feed s (esc "[>t"))          ; push "original"
-      (setf (cl-tmux/terminal/types:screen-title s) "changed")
+      (setf (nerimux/terminal/types:screen-title s) "changed")
       (feed s (esc "[<t"))          ; pop → restore "original"
-      (expect (string= "original" (cl-tmux/terminal/types:screen-title s)))
-      (expect (null (cl-tmux/terminal/types:screen-title-stack s)))))
+      (expect (string= "original" (nerimux/terminal/types:screen-title s)))
+      (expect (null (nerimux/terminal/types:screen-title-stack s)))))
 
   ;; CSI < t (XTPOPTITLE) on an empty stack is a no-op: title unchanged.
   (it "xtpoptitle-on-empty-stack-is-noop"
     (with-screen (s 20 5)
-      (setf (cl-tmux/terminal/types:screen-title s) "kept")
+      (setf (nerimux/terminal/types:screen-title s) "kept")
       (feed s (esc "[<t"))          ; pop on empty stack — no-op
-      (expect (string= "kept" (cl-tmux/terminal/types:screen-title s)))))
+      (expect (string= "kept" (nerimux/terminal/types:screen-title s)))))
 
   ;; XTPUSHTITLE discards the oldest entry when the stack exceeds 8 entries.
   (it "xtpushtitle-stack-bounded-at-8"
     (with-screen (s 20 5)
       ;; Push 9 times — stack cap is 8.
       (dotimes (i 9)
-        (setf (cl-tmux/terminal/types:screen-title s) (format nil "t~D" i))
+        (setf (nerimux/terminal/types:screen-title s) (format nil "t~D" i))
         (feed s (esc "[>t")))
-      (expect (<= (length (cl-tmux/terminal/types:screen-title-stack s)) 8)))))
+      (expect (<= (length (nerimux/terminal/types:screen-title-stack s)) 8)))))
 
 ;;; ── DEC Rectangle operations (DECERA / DECFRA / DECCRA) ─────────────────────
 
@@ -180,32 +180,32 @@
       ;; Fill entire screen with 'A'.
       (dotimes (y 5)
         (dotimes (x 10)
-          (setf (cl-tmux/terminal/types:screen-cell s x y)
-                (cl-tmux/terminal/types:make-cell :char #\A))))
+          (setf (nerimux/terminal/types:screen-cell s x y)
+                (nerimux/terminal/types:make-cell :char #\A))))
       ;; Erase rows 2-3 (1-based), columns 3-6 (1-based) → 0-based: rows 1-2, cols 2-5.
       (feed s (esc "[2;3;3;6$z"))
       ;; Cells inside the rectangle must be spaces.
       (loop for y from 1 to 2 do
         (loop for x from 2 to 5 do
-          (expect (char= #\Space (cl-tmux/terminal/types:cell-char
-                              (cl-tmux/terminal/types:screen-cell s x y))))))
+          (expect (char= #\Space (nerimux/terminal/types:cell-char
+                              (nerimux/terminal/types:screen-cell s x y))))))
       ;; Cells outside must still be 'A'.
-      (expect (char= #\A (cl-tmux/terminal/types:cell-char
-                      (cl-tmux/terminal/types:screen-cell s 0 0))))
-      (expect (char= #\A (cl-tmux/terminal/types:cell-char
-                      (cl-tmux/terminal/types:screen-cell s 9 4))))))
+      (expect (char= #\A (nerimux/terminal/types:cell-char
+                      (nerimux/terminal/types:screen-cell s 0 0))))
+      (expect (char= #\A (nerimux/terminal/types:cell-char
+                      (nerimux/terminal/types:screen-cell s 9 4))))))
 
   ;; DECERA with top > bottom or left > right does not modify the screen.
   (it "decera-degenerate-rect-is-noop"
     (with-screen (s 10 5)
       (dotimes (y 5)
         (dotimes (x 10)
-          (setf (cl-tmux/terminal/types:screen-cell s x y)
-                (cl-tmux/terminal/types:make-cell :char #\B))))
+          (setf (nerimux/terminal/types:screen-cell s x y)
+                (nerimux/terminal/types:make-cell :char #\B))))
       ;; top=3 > bottom=1 → degenerate, no erase.
       (feed s (esc "[3;1;1;5$z"))
-      (expect (char= #\B (cl-tmux/terminal/types:cell-char
-                      (cl-tmux/terminal/types:screen-cell s 0 0))))))
+      (expect (char= #\B (nerimux/terminal/types:cell-char
+                      (nerimux/terminal/types:screen-cell s 0 0))))))
 
   ;; ── DECFRA ───────────────────────────────────────────────────────────────────
 
@@ -217,19 +217,19 @@
       ;; 0-based: rows 0-2, cols 1-4.
       (loop for y from 0 to 2 do
         (loop for x from 1 to 4 do
-          (expect (char= #\* (cl-tmux/terminal/types:cell-char
-                          (cl-tmux/terminal/types:screen-cell s x y))))))
+          (expect (char= #\* (nerimux/terminal/types:cell-char
+                          (nerimux/terminal/types:screen-cell s x y))))))
       ;; Outside the rect: still default space.
-      (expect (char= #\Space (cl-tmux/terminal/types:cell-char
-                          (cl-tmux/terminal/types:screen-cell s 0 0))))))
+      (expect (char= #\Space (nerimux/terminal/types:cell-char
+                          (nerimux/terminal/types:screen-cell s 0 0))))))
 
   ;; DECFRA with char-code 0 defaults to space (guard against null character).
   (it "decfra-zero-char-code-uses-space"
     (with-screen (s 10 5)
       ;; char=0 → should fill with space, not null byte.
       (feed s (esc "[0;1;1;2;2$x"))
-      (expect (char= #\Space (cl-tmux/terminal/types:cell-char
-                          (cl-tmux/terminal/types:screen-cell s 0 0))))))
+      (expect (char= #\Space (nerimux/terminal/types:cell-char
+                          (nerimux/terminal/types:screen-cell s 0 0))))))
 
   ;; ── DECCRA ───────────────────────────────────────────────────────────────────
 
@@ -239,35 +239,35 @@
       ;; Write 'A' at rows 0-1 (0-based), cols 0-2 (0-based).
       (dotimes (y 2)
         (dotimes (x 3)
-          (setf (cl-tmux/terminal/types:screen-cell s x y)
-                (cl-tmux/terminal/types:make-cell :char #\A))))
+          (setf (nerimux/terminal/types:screen-cell s x y)
+                (nerimux/terminal/types:make-cell :char #\A))))
       ;; DECCRA: src top=1 left=1 bottom=2 right=3 page=0, tgt top=3 left=6 page=0.
       ;; 0-based src: rows 0-1, cols 0-2. Target 0-based: row 2, col 5.
       (feed s (esc "[1;1;2;3;0;3;6;0$v"))
       ;; Target cells (0-based rows 2-3, cols 5-7) must now be 'A'.
       (loop for y from 2 to 3 do
         (loop for x from 5 to 7 do
-          (expect (char= #\A (cl-tmux/terminal/types:cell-char
-                          (cl-tmux/terminal/types:screen-cell s x y))))))
+          (expect (char= #\A (nerimux/terminal/types:cell-char
+                          (nerimux/terminal/types:screen-cell s x y))))))
       ;; Source cells must be unchanged.
       (loop for y from 0 to 1 do
         (loop for x from 0 to 2 do
-          (expect (char= #\A (cl-tmux/terminal/types:cell-char
-                          (cl-tmux/terminal/types:screen-cell s x y))))))))
+          (expect (char= #\A (nerimux/terminal/types:cell-char
+                          (nerimux/terminal/types:screen-cell s x y))))))))
 
   ;; DECCRA handles overlapping src/tgt by buffering — avoids partial-copy corruption.
   (it "deccra-overlapping-regions-are-correct"
     (with-screen (s 20 5)
       ;; Write distinct chars in a row: 'A' 'B' 'C' 'D' 'E' at row 0, cols 0-4.
       (loop for x from 0 to 4 do
-        (setf (cl-tmux/terminal/types:screen-cell s x 0)
-              (cl-tmux/terminal/types:make-cell :char (code-char (+ (char-code #\A) x)))))
+        (setf (nerimux/terminal/types:screen-cell s x 0)
+              (nerimux/terminal/types:make-cell :char (code-char (+ (char-code #\A) x)))))
       ;; Copy src row=1 col=1 to row=1 col=3 (0-based: row 0, cols 0-2)
       ;; to target row=1 col=2 (1-based) — target overlaps source starting at col 1.
       ;; After: row 0 cols 1-3 = 'A' 'B' 'C'
       (feed s (esc "[1;1;1;3;0;1;2;0$v"))
-      (expect (char= #\A (cl-tmux/terminal/types:cell-char (cl-tmux/terminal/types:screen-cell s 1 0))))
-      (expect (char= #\B (cl-tmux/terminal/types:cell-char (cl-tmux/terminal/types:screen-cell s 2 0))))
-      (expect (char= #\C (cl-tmux/terminal/types:cell-char (cl-tmux/terminal/types:screen-cell s 3 0))))
+      (expect (char= #\A (nerimux/terminal/types:cell-char (nerimux/terminal/types:screen-cell s 1 0))))
+      (expect (char= #\B (nerimux/terminal/types:cell-char (nerimux/terminal/types:screen-cell s 2 0))))
+      (expect (char= #\C (nerimux/terminal/types:cell-char (nerimux/terminal/types:screen-cell s 3 0))))
       ;; Source col 0 (outside tgt) must still be A.
-      (expect (char= #\A (cl-tmux/terminal/types:cell-char (cl-tmux/terminal/types:screen-cell s 0 0)))))))
+      (expect (char= #\A (nerimux/terminal/types:cell-char (nerimux/terminal/types:screen-cell s 0 0)))))))

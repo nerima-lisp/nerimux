@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; copy-mode PageUp/PageDown, prefix-arrow, send-prefix, modifier+arrow, meta/alt bindings — part VI
 
@@ -10,15 +10,15 @@
   (it "copy-mode-pageup-scrolls-one-page"
     (with-fake-session (s)
       (let ((screen (active-screen s))
-            (state  (cl-tmux::make-input-state)))
-        (cl-tmux::dispatch-command s :copy-mode-enter nil)
+            (state  (nerimux::make-input-state)))
+        (nerimux::dispatch-command s :copy-mode-enter nil)
         (seed-scrollback screen 30)
         (expect (zerop (screen-copy-offset screen)))
         ;; ESC [ 5 ~  = 27 91 53 126
-        (cl-tmux::process-byte s 27  state)
-        (cl-tmux::process-byte s 91  state)
-        (cl-tmux::process-byte s 53  state)
-        (cl-tmux::process-byte s 126 state)
+        (nerimux::process-byte s 27  state)
+        (nerimux::process-byte s 91  state)
+        (nerimux::process-byte s 53  state)
+        (nerimux::process-byte s 126 state)
         (let ((h (screen-height screen)))
           (expect (= (min h 30) (screen-copy-offset screen)))))))
 
@@ -26,19 +26,19 @@
   (it "copy-mode-pagedown-scrolls-one-page"
     (with-fake-session (s)
       (let ((screen (active-screen s))
-            (state  (cl-tmux::make-input-state)))
-        (cl-tmux::dispatch-command s :copy-mode-enter nil)
+            (state  (nerimux::make-input-state)))
+        (nerimux::dispatch-command s :copy-mode-enter nil)
         (seed-scrollback screen 30)
         ;; Pre-scroll up by 2*screen-height (clamped to scrollback length = 30)
         (let* ((h     (screen-height screen))
                (start (min (* 2 h) 30)))
-          (cl-tmux/commands::copy-mode-scroll screen start)
+          (nerimux/commands::copy-mode-scroll screen start)
           (expect (= start (screen-copy-offset screen)))
           ;; ESC [ 6 ~  = 27 91 54 126
-          (cl-tmux::process-byte s 27  state)
-          (cl-tmux::process-byte s 91  state)
-          (cl-tmux::process-byte s 54  state)
-          (cl-tmux::process-byte s 126 state)
+          (nerimux::process-byte s 27  state)
+          (nerimux::process-byte s 91  state)
+          (nerimux::process-byte s 54  state)
+          (nerimux::process-byte s 126 state)
           ;; After PageDown the offset decreases by h (clamped to 0).
           (let ((expected (max 0 (- start h))))
             (expect (= expected (screen-copy-offset screen))))))))
@@ -58,11 +58,11 @@
       (final desc)
     (declare (ignore desc))
     (with-fake-session (s)
-      (let ((state (cl-tmux::make-input-state)))
-        (cl-tmux::process-byte s 2   state)
-        (cl-tmux::process-byte s 27  state)
-        (cl-tmux::process-byte s 91  state)
-        (expect (null (cl-tmux::process-byte s final state))))))
+      (let ((state (nerimux::make-input-state)))
+        (nerimux::process-byte s 2   state)
+        (nerimux::process-byte s 27  state)
+        (nerimux::process-byte s 91  state)
+        (expect (null (nerimux::process-byte s final state))))))
 
   ;;; ── C-b C-b send-prefix ──────────────────────────────────────────────────────
 
@@ -71,19 +71,19 @@
     (with-isolated-config
       (with-fake-session (s)
         (let* ((pane (window-active-pane (session-active-window s)))
-               (state (cl-tmux::make-input-state))
+               (state (nerimux::make-input-state))
                (writes nil)
-               (orig (fdefinition 'cl-tmux/pty:pty-write)))
+               (orig (fdefinition 'nerimux/pty:pty-write)))
           (setf (pane-fd pane) 9999)
           (unwind-protect
                (progn
-                 (setf (fdefinition 'cl-tmux/pty:pty-write)
+                 (setf (fdefinition 'nerimux/pty:pty-write)
                        (lambda (fd bytes)
                          (push (list fd (coerce bytes 'list)) writes)))
-                 (cl-tmux::process-byte s 2 state)  ; prefix
-                 (expect (null (cl-tmux::process-byte s 2 state)))
+                 (nerimux::process-byte s 2 state)  ; prefix
+                 (expect (null (nerimux::process-byte s 2 state)))
                  (expect (equal '((9999 (2))) (reverse writes))))
-            (setf (fdefinition 'cl-tmux/pty:pty-write) orig))))))
+            (setf (fdefinition 'nerimux/pty:pty-write) orig))))))
 
   ;;; ── Modifier+arrow key-name helpers ────────────────────────────────────────
 
@@ -97,7 +97,7 @@
       "arrow-final-name: ~*~*~A"
       (byte expected desc)
     (declare (ignore desc))
-    (expect (equal expected (cl-tmux::%arrow-final-name byte))))
+    (expect (equal expected (nerimux::%arrow-final-name byte))))
 
   ;; %modifier-arrow-key-name builds C-/M-/S- prefixed arrow names; NIL for non-arrow or no-modifier.
   (it-each ((53 65 "C-Up"    "5=Ctrl + A → C-Up")
@@ -113,7 +113,7 @@
       "modifier-arrow-key-name: ~*~*~*~A"
       (mod arrow expected desc)
     (declare (ignore desc))
-    (expect (equal expected (cl-tmux::%modifier-arrow-key-name mod arrow))))
+    (expect (equal expected (nerimux::%modifier-arrow-key-name mod arrow))))
 
   ;;; ── Modifier+arrow binding override (bind C-Up / bind -n M-Left) ────────────
 
@@ -125,10 +125,10 @@
       (key-name bytes desc)
     (declare (ignore desc))
     (with-isolated-config
-      (cl-tmux/config:apply-config-directive (list "bind" key-name "next-window"))
+      (nerimux/config:apply-config-directive (list "bind" key-name "next-window"))
       (with-fake-session (s :nwindows 2)
-        (let ((state (cl-tmux::make-input-state)))
-          (dolist (b bytes) (cl-tmux::process-byte s b state))
+        (let ((state (nerimux::make-input-state)))
+          (dolist (b bytes) (nerimux::process-byte s b state))
           (expect (eq (second (session-windows s)) (session-active-window s)))))))
 
   ;; Without a binding, C-b + modifier+arrow sequences leave the first window active.
@@ -139,8 +139,8 @@
     (declare (ignore desc))
     (with-isolated-config
       (with-fake-session (s :nwindows 2)
-        (let ((state (cl-tmux::make-input-state)))
-          (dolist (b bytes) (cl-tmux::process-byte s b state))
+        (let ((state (nerimux::make-input-state)))
+          (dolist (b bytes) (nerimux::process-byte s b state))
           (expect (eq (first (session-windows s)) (session-active-window s)))))))
 
   ;; Unbound C-b S-Up is consumed by the prefix table and must not leak to the pane.
@@ -148,19 +148,19 @@
     (with-isolated-config
       (with-fake-session (s)
         (let* ((pane (window-active-pane (session-active-window s)))
-               (state (cl-tmux::make-input-state))
+               (state (nerimux::make-input-state))
                (writes nil)
-               (orig (fdefinition 'cl-tmux/pty:pty-write)))
+               (orig (fdefinition 'nerimux/pty:pty-write)))
           (setf (pane-fd pane) 9999)
           (unwind-protect
                (progn
-                 (setf (fdefinition 'cl-tmux/pty:pty-write)
+                 (setf (fdefinition 'nerimux/pty:pty-write)
                        (lambda (fd bytes)
                          (push (list fd (coerce bytes 'list)) writes)))
                  (dolist (b '(2 27 91 49 59 50 65)) ; C-b, ESC [ 1 ; 2 A
-                   (cl-tmux::process-byte s b state))
+                   (nerimux::process-byte s b state))
                  (expect (null writes)))
-            (setf (fdefinition 'cl-tmux/pty:pty-write) orig))))))
+            (setf (fdefinition 'nerimux/pty:pty-write) orig))))))
 
   ;; Default C-b Right/Left are real prefix-table bindings and select neighbour panes.
   (it "default-prefix-arrow-selects-neighbour-pane"
@@ -170,14 +170,14 @@
                (left (first (window-panes win)))
                (right (second (window-panes win)))
                (s (make-session :id 1 :name "s" :windows (list win)))
-               (state (cl-tmux::make-input-state)))
+               (state (nerimux::make-input-state)))
           (session-select-window s win)
           (window-select-pane win left)
           (dolist (b '(2 27 91 67))
-            (cl-tmux::process-byte s b state))
+            (nerimux::process-byte s b state))
           (expect (eq right (window-active-pane win)))
           (dolist (b '(2 27 91 68))
-            (cl-tmux::process-byte s b state))
+            (nerimux::process-byte s b state))
           (expect (eq left (window-active-pane win)))))))
 
   ;; Default C-b C-Right resizes by one cell and keeps repeat mode for the next C-Right.
@@ -188,15 +188,15 @@
                (left (first (window-panes win)))
                (right (second (window-panes win)))
                (s (make-session :id 1 :name "s" :windows (list win)))
-               (state (cl-tmux::make-input-state)))
+               (state (nerimux::make-input-state)))
           (session-select-window s win)
           (window-select-pane win left)
           (dolist (b '(2 27 91 49 59 53 67))
-            (cl-tmux::process-byte s b state))
+            (nerimux::process-byte s b state))
           (expect (= 21 (pane-width left)))
           (expect (= 19 (pane-width right)))
           (dolist (b '(27 91 49 59 53 67))
-            (cl-tmux::process-byte s b state))
+            (nerimux::process-byte s b state))
           (expect (= 22 (pane-width left)))
           (expect (= 18 (pane-width right)))))))
 
@@ -208,11 +208,11 @@
                (left (first (window-panes win)))
                (right (second (window-panes win)))
                (s (make-session :id 1 :name "s" :windows (list win)))
-               (state (cl-tmux::make-input-state)))
+               (state (nerimux::make-input-state)))
           (session-select-window s win)
           (window-select-pane win left)
           (dolist (b '(2 27 91 49 59 51 67))
-            (cl-tmux::process-byte s b state))
+            (nerimux::process-byte s b state))
           (expect (= 25 (pane-width left)))
           (expect (= 15 (pane-width right)))))))
 
@@ -223,10 +223,10 @@
       (key-name bytes desc)
     (declare (ignore desc))
     (with-isolated-config
-      (cl-tmux/config:apply-config-directive (list "bind" "-n" key-name "next-window"))
+      (nerimux/config:apply-config-directive (list "bind" "-n" key-name "next-window"))
       (with-fake-session (s :nwindows 2)
-        (let ((state (cl-tmux::make-input-state)))
-          (dolist (b bytes) (cl-tmux::process-byte s b state))
+        (let ((state (nerimux::make-input-state)))
+          (dolist (b bytes) (nerimux::process-byte s b state))
           (expect (eq (second (session-windows s)) (session-active-window s)))))))
 
   ;;; ── Meta/Alt key-name helper and bind override (bind -n M-h / bind M-j) ─────
@@ -243,28 +243,28 @@
       "meta-key-name: ~*~*~A"
       (byte expected desc)
     (declare (ignore desc))
-    (expect (equal expected (cl-tmux::%meta-key-name byte))))
+    (expect (equal expected (nerimux::%meta-key-name byte))))
 
   ;; bind -n M-h next-window makes a bare Alt+h (ESC h) run next-window with no
   ;; prefix — the root-table meta path overrides forwarding to the pane.
   (it "root-m-h-binding-fires-without-prefix"
     (with-isolated-config
-      (cl-tmux/config:apply-config-directive '("bind" "-n" "M-h" "next-window"))
+      (nerimux/config:apply-config-directive '("bind" "-n" "M-h" "next-window"))
       (with-fake-session (s :nwindows 2)
-          (let ((state (cl-tmux::make-input-state)))
+          (let ((state (nerimux::make-input-state)))
             (dolist (b '(27 104))  ; ESC h  (no prefix)
-              (cl-tmux::process-byte s b state))
+              (nerimux::process-byte s b state))
             (expect (eq (second (session-windows s)) (session-active-window s)))))))
 
   ;; bind M-j next-window makes C-b then Alt+j (ESC j) run next-window — the
   ;; after-prefix meta path.
   (it "prefix-m-j-binding-fires"
     (with-isolated-config
-      (cl-tmux/config:apply-config-directive '("bind" "M-j" "next-window"))
+      (nerimux/config:apply-config-directive '("bind" "M-j" "next-window"))
       (with-fake-session (s :nwindows 2)
-          (let ((state (cl-tmux::make-input-state)))
+          (let ((state (nerimux::make-input-state)))
             (dolist (b '(2 27 106))  ; C-b ESC j
-              (cl-tmux::process-byte s b state))
+              (nerimux::process-byte s b state))
             (expect (eq (second (session-windows s)) (session-active-window s)))))))
 
   ;; With no -n M-x binding, a bare Alt+x is forwarded to the pane and must NOT
@@ -273,17 +273,17 @@
     (with-isolated-config
       (with-fake-session (s :nwindows 2)
           (let* ((pane (window-active-pane (session-active-window s)))
-                 (state (cl-tmux::make-input-state))
+                 (state (nerimux::make-input-state))
                  (writes nil)
-                 (orig (fdefinition 'cl-tmux/pty:pty-write)))
+                 (orig (fdefinition 'nerimux/pty:pty-write)))
             (setf (pane-fd pane) 9999)
             (unwind-protect
                  (progn
-                   (setf (fdefinition 'cl-tmux/pty:pty-write)
+                   (setf (fdefinition 'nerimux/pty:pty-write)
                          (lambda (fd bytes)
                            (push (list fd (coerce bytes 'list)) writes)))
             (dolist (b '(27 120))  ; ESC x  (no prefix, unbound)
-              (cl-tmux::process-byte s b state))
+              (nerimux::process-byte s b state))
             (expect (eq (first (session-windows s)) (session-active-window s)))
             (expect (equal '((9999 (27 120))) (reverse writes))))
-              (setf (fdefinition 'cl-tmux/pty:pty-write) orig)))))))
+              (setf (fdefinition 'nerimux/pty:pty-write) orig)))))))

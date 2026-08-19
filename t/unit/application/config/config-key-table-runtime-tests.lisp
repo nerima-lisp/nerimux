@@ -1,18 +1,18 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Runtime key-table state, numeric defaults, and default shell tests.
 
 ;;; ── Import the config symbols we need ────────────────────────────────────
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (import '(cl-tmux/config:lookup-key-binding
-            cl-tmux/config:describe-key-bindings
-            cl-tmux/config:+prefix-key-code+
-            cl-tmux/config:+max-scrollback-lines+
-            cl-tmux/config:+poll-timeout-us+
-            cl-tmux/config:+accept-timeout-us+
-            cl-tmux/config:+pty-buf-size+
-            cl-tmux/config:+pty-poll-timeout-us+)))
+  (import '(nerimux/config:lookup-key-binding
+            nerimux/config:describe-key-bindings
+            nerimux/config:+prefix-key-code+
+            nerimux/config:+max-scrollback-lines+
+            nerimux/config:+poll-timeout-us+
+            nerimux/config:+accept-timeout-us+
+            nerimux/config:+pty-buf-size+
+            nerimux/config:+pty-poll-timeout-us+)))
 
 (describe "config-suite"
 
@@ -26,12 +26,12 @@
 
   ;; *key-tables* is populated after load.
   (it "key-tables-initialized"
-    (expect (hash-table-p cl-tmux/config:*key-tables*)))
+    (expect (hash-table-p nerimux/config:*key-tables*)))
 
   ;; The standard key-tables are created by initialize-default-key-tables.
   (it "key-tables-required-tables-exist"
     (dolist (name '("prefix" "root" "copy-mode" "copy-mode-vi"))
-      (expect (not (null (gethash name cl-tmux/config:*key-tables*))))))
+      (expect (not (null (gethash name nerimux/config:*key-tables*))))))
 
   ;; key-table-bind stores a binding retrievable by key-table-lookup in both 'root' and 'prefix' tables.
   (it "key-table-bind-table"
@@ -40,10 +40,10 @@
       (destructuring-bind (table-name key desc) row
         (declare (ignore desc))
         (with-isolated-key-tables
-          (cl-tmux/config:key-table-bind table-name key :new-window)
-          (let ((entry (cl-tmux/config:key-table-lookup table-name key)))
+          (nerimux/config:key-table-bind table-name key :new-window)
+          (let ((entry (nerimux/config:key-table-lookup table-name key)))
             (expect (not (null entry)))
-            (expect (eq :new-window (cl-tmux/config:key-table-command entry))))))))
+            (expect (eq :new-window (nerimux/config:key-table-command entry))))))))
 
   ;; key-table-bind with :repeatable T marks the entry repeatable; without the flag
   ;; it defaults to not repeatable.  Each row: (key cmd rep expected description).
@@ -53,30 +53,30 @@
       (destructuring-bind (key cmd rep expected desc) row
         (declare (ignore desc))
         (with-isolated-key-tables
-          (cl-tmux/config:key-table-bind "prefix" key cmd :repeatable rep)
-          (let ((entry (cl-tmux/config:key-table-lookup "prefix" key)))
+          (nerimux/config:key-table-bind "prefix" key cmd :repeatable rep)
+          (let ((entry (nerimux/config:key-table-lookup "prefix" key)))
             (expect (not (null entry)))
-            (expect (eql expected (cl-tmux/config:key-table-repeatable-p entry))))))))
+            (expect (eql expected (nerimux/config:key-table-repeatable-p entry))))))))
 
   ;; key-table-lookup returns NIL for an absent key and for a non-existent table.
   (it "key-table-lookup-missing-returns-nil"
-    (let ((cl-tmux/config:*key-tables* (make-hash-table :test #'equal)))
-      (expect (null (cl-tmux/config:key-table-lookup "prefix"      #\z)))
-      (expect (null (cl-tmux/config:key-table-lookup "nonexistent" #\a)))))
+    (let ((nerimux/config:*key-tables* (make-hash-table :test #'equal)))
+      (expect (null (nerimux/config:key-table-lookup "prefix"      #\z)))
+      (expect (null (nerimux/config:key-table-lookup "nonexistent" #\a)))))
 
   ;;; ── key-table-repeatable-p nil-safe guard ─────────────────────────────────
 
   ;; key-table-repeatable-p returns NIL when passed NIL (nil-safe guard).
   (it "key-table-repeatable-p-nil-safe"
-    (expect (null (cl-tmux/config:key-table-repeatable-p nil))))
+    (expect (null (nerimux/config:key-table-repeatable-p nil))))
 
   ;; key-table-command is the car of the entry; key-table-repeatable-p is nil-safe.
   (it "key-table-command-nil-safe"
     (with-isolated-key-tables
       ;; Absent key returns NIL; nil-safe guard means no error.
-      (let ((absent (cl-tmux/config:key-table-lookup "prefix" #\@)))
+      (let ((absent (nerimux/config:key-table-lookup "prefix" #\@)))
         (expect (null absent))
-        (expect (null (cl-tmux/config:key-table-repeatable-p absent))))))
+        (expect (null (nerimux/config:key-table-repeatable-p absent))))))
 
   ;; Timeout and buffer-size constants have the expected values and are all positive.
   (it "numeric-constants"
@@ -94,15 +94,15 @@
   ;; ensure-key-table creates a fresh hash-table for a previously unknown name.
   (it "ensure-key-table-creates-new-table"
     (with-isolated-key-tables
-      (let ((tbl (cl-tmux/config:ensure-key-table "my-table")))
+      (let ((tbl (nerimux/config:ensure-key-table "my-table")))
         (expect (hash-table-p tbl))
-        (expect (eq tbl (gethash "my-table" cl-tmux/config:*key-tables*))))))
+        (expect (eq tbl (gethash "my-table" nerimux/config:*key-tables*))))))
 
   ;; ensure-key-table returns the same table on repeated calls.
   (it "ensure-key-table-returns-existing-table"
     (with-isolated-key-tables
-      (let* ((tbl1 (cl-tmux/config:ensure-key-table "my-table"))
-             (tbl2 (cl-tmux/config:ensure-key-table "my-table")))
+      (let* ((tbl1 (nerimux/config:ensure-key-table "my-table"))
+             (tbl2 (nerimux/config:ensure-key-table "my-table")))
         (expect (eq tbl1 tbl2)))))
 
   ;;; ── lookup-key-binding on digit keys ────────────────────────────────────
@@ -131,37 +131,37 @@
   ;; Calling initialize-default-key-tables twice does not duplicate bindings.
   (it "initialize-default-key-tables-idempotent"
     (with-isolated-key-tables
-      (cl-tmux/config::initialize-default-key-tables)
-      (let* ((tbl-after-first  (cl-tmux/config:ensure-key-table "prefix"))
+      (nerimux/config::initialize-default-key-tables)
+      (let* ((tbl-after-first  (nerimux/config:ensure-key-table "prefix"))
              (count-after-first (hash-table-count tbl-after-first)))
-        (cl-tmux/config::initialize-default-key-tables)
+        (nerimux/config::initialize-default-key-tables)
         (let ((count-after-second (hash-table-count tbl-after-first)))
           (expect (= count-after-first count-after-second))))
-      (expect (not (null (gethash "root"      cl-tmux/config:*key-tables*))))
-      (expect (not (null (gethash "copy-mode" cl-tmux/config:*key-tables*))))
-      (expect (not (null (gethash "copy-mode-vi" cl-tmux/config:*key-tables*))))))
+      (expect (not (null (gethash "root"      nerimux/config:*key-tables*))))
+      (expect (not (null (gethash "copy-mode" nerimux/config:*key-tables*))))
+      (expect (not (null (gethash "copy-mode-vi" nerimux/config:*key-tables*))))))
 
   ;;; ── Key-table name constants ──────────────────────────────────────────────
 
   ;; Standard key-table constants have their expected string values.
   (it "table-name-constants"
-    (check-table `((,cl-tmux/config:+table-prefix+       "prefix"       "+table-prefix+")
-                   (,cl-tmux/config:+table-root+         "root"         "+table-root+")
-                   (,cl-tmux/config:+table-copy-mode+    "copy-mode"    "+table-copy-mode+")
-                   (,cl-tmux/config:+table-copy-mode-vi+ "copy-mode-vi" "+table-copy-mode-vi+"))
+    (check-table `((,nerimux/config:+table-prefix+       "prefix"       "+table-prefix+")
+                   (,nerimux/config:+table-root+         "root"         "+table-root+")
+                   (,nerimux/config:+table-copy-mode+    "copy-mode"    "+table-copy-mode+")
+                   (,nerimux/config:+table-copy-mode-vi+ "copy-mode-vi" "+table-copy-mode-vi+"))
                 :test #'string=))
 
   ;;; ── *default-shell* and *status-height* initial values ───────────────────
 
   ;; *default-shell* is a non-empty string (set from $SHELL or /bin/sh).
   (it "default-shell-is-string"
-    (expect (stringp cl-tmux/config:*default-shell*))
-    (expect (plusp (length cl-tmux/config:*default-shell*))))
+    (expect (stringp nerimux/config:*default-shell*))
+    (expect (plusp (length nerimux/config:*default-shell*))))
 
   ;; *status-height* is a positive integer (default 1).
   (it "status-height-positive-integer"
-    (expect (integerp cl-tmux/config:*status-height*))
-    (expect (plusp cl-tmux/config:*status-height*)))
+    (expect (integerp nerimux/config:*status-height*))
+    (expect (plusp nerimux/config:*status-height*)))
 
   ;;; ── init-default-shell ────────────────────────────────────────────────────
 
@@ -170,13 +170,13 @@
   (it "init-default-shell-reads-shell-env-var"
     (with-isolated-config
       (with-temporary-posix-environment-variable ("SHELL" "/bin/my-test-shell")
-        (cl-tmux/config:init-default-shell)
-        (expect (string= "/bin/my-test-shell" cl-tmux/config:*default-shell*)))))
+        (nerimux/config:init-default-shell)
+        (expect (string= "/bin/my-test-shell" nerimux/config:*default-shell*)))))
 
   ;; init-default-shell leaves *default-shell* unchanged when $SHELL is unset.
   (it "init-default-shell-ignores-unset-shell-env-var"
     (with-isolated-config
       (with-temporary-posix-environment-variable ("SHELL" nil)
-        (let ((before cl-tmux/config:*default-shell*))
-          (cl-tmux/config:init-default-shell)
-          (expect (string= before cl-tmux/config:*default-shell*)))))))
+        (let ((before nerimux/config:*default-shell*))
+          (nerimux/config:init-default-shell)
+          (expect (string= before nerimux/config:*default-shell*)))))))

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; load-config-file, command-keyword, parse-bind-args, key-table edge cases — part III
 
@@ -18,9 +18,9 @@
 
   ;; %command-keyword must NOT intern an unknown command name into :keyword.
   (it "command-keyword-does-not-intern-unknown"
-    (let ((name "CL-TMUX-NONEXISTENT-COMMAND-DO-NOT-INTERN-ME"))
+    (let ((name "NERIMUX-NONEXISTENT-COMMAND-DO-NOT-INTERN-ME"))
       (expect (null (find-symbol name :keyword)))
-      (expect (null (cl-tmux/config::%command-keyword name)))
+      (expect (null (nerimux/config::%command-keyword name)))
       (expect (null (find-symbol name :keyword)))))
 
   ;; %command-keyword returns the command keyword for a recognized bindable name.
@@ -37,13 +37,13 @@
                     ("detach" :detach "detach should resolve to :detach")))
       (destructuring-bind (name expected desc) case
         (declare (ignore desc))
-        (expect (eq expected (cl-tmux/config::%command-keyword name))))))
+        (expect (eq expected (nerimux/config::%command-keyword name))))))
 
   ;; %command-keyword rejects shorthand tmux abbreviations so config sticks to
   ;; canonical command names.
   (it "command-keyword-rejects-standard-tmux-abbreviations"
     (dolist (name '("breakp" "killp" "next" "prev" "last" "displayp" "rotatew"))
-      (expect (null (cl-tmux/config::%command-keyword name)))))
+      (expect (null (nerimux/config::%command-keyword name)))))
 
   ;; bind rejects tmux short aliases and stores arg-only canonical names as
   ;; deferred token lists for key-press dispatch.
@@ -60,22 +60,22 @@
   (it "command-keyword-rejects-non-bindable-keyword"
     (let ((kw (intern "COPY-MODE-EXIT" :keyword)))
       (expect (eq :copy-mode-exit kw))
-      (expect (not (member :copy-mode-exit cl-tmux/config::*bindable-commands*)))
-      (expect (null (cl-tmux/config::%command-keyword "copy-mode-exit"))))
-    (let ((cl-tmux/config::*bindable-commands* '(:detach)))
-      (expect (null (cl-tmux/config::%command-keyword "new-window")))
-      (expect (eq :detach (cl-tmux/config::%command-keyword "detach")))))
+      (expect (not (member :copy-mode-exit nerimux/config::*bindable-commands*)))
+      (expect (null (nerimux/config::%command-keyword "copy-mode-exit"))))
+    (let ((nerimux/config::*bindable-commands* '(:detach)))
+      (expect (null (nerimux/config::%command-keyword "new-window")))
+      (expect (eq :detach (nerimux/config::%command-keyword "detach")))))
 
   ;;; %config-tokens (tokenizer)
 
   ;; %config-tokens splits a line into whitespace-separated tokens.
   (it "config-tokens-splits-on-whitespace"
     (expect (equal '("bind" "c" "new-window")
-                   (cl-tmux/config::%config-tokens "bind c new-window")))
+                   (nerimux/config::%config-tokens "bind c new-window")))
     (expect (equal '("set-shell" "/bin/bash")
-                   (cl-tmux/config::%config-tokens "  set-shell  /bin/bash  ")))
-    (expect (null (cl-tmux/config::%config-tokens "")))
-    (expect (null (cl-tmux/config::%config-tokens "   "))))
+                   (nerimux/config::%config-tokens "  set-shell  /bin/bash  ")))
+    (expect (null (nerimux/config::%config-tokens "")))
+    (expect (null (nerimux/config::%config-tokens "   "))))
 
   ;;; %parse-key-token
 
@@ -100,7 +100,7 @@
                        (list "C-Up"    "C-Up"         "C-<named-key> stays string")))
       (destructuring-bind (input expected desc) row
         (declare (ignore desc))
-        (expect (equal expected (cl-tmux/config::%parse-key-token input))))))
+        (expect (equal expected (nerimux/config::%parse-key-token input))))))
 
   ;; %parse-key-token re-orders two-or-more modifier prefixes into canonical
   ;; C-/M-/S- order, so the spelling order in a binding does not matter and matches
@@ -113,13 +113,13 @@
                        (list "S-M-C-x"  "C-M-S-x"  "S-M-C-x → C-M-S-x (3 modifiers)")))
       (destructuring-bind (input expected desc) row
         (declare (ignore desc))
-        (expect (equal expected (cl-tmux/config::%parse-key-token input))))))
+        (expect (equal expected (nerimux/config::%parse-key-token input))))))
 
   ;; bind C-a <cmd> binds the control character ^A (byte 1) so a real Ctrl-a
   ;; keypress (which the event loop reads as byte 1) resolves to the command.
   (it "bind-control-letter-fires-via-control-char"
     (with-isolated-config
-      (cl-tmux/config:apply-config-directive '("bind" "C-a" "next-window"))
+      (nerimux/config:apply-config-directive '("bind" "C-a" "next-window"))
       (expect (eq :next-window (lookup-key-binding (code-char 1))))))
 
   ;; bind C-Up <cmd> stores the command under the string key "C-Up" in the
@@ -127,33 +127,33 @@
   ;; ESC [ 1 ; 5 A wire sequence.  (Without this, modifier+arrow binds were dead.)
   (it "bind-modifier-arrow-stores-canonical-string-key"
     (with-isolated-config
-      (cl-tmux/config:apply-config-directive '("bind" "C-Up" "next-window"))
-      (let ((entry (cl-tmux/config:key-table-lookup "prefix" "C-Up")))
-        (expect (eq :next-window (cl-tmux/config:key-table-command entry))))))
+      (nerimux/config:apply-config-directive '("bind" "C-Up" "next-window"))
+      (let ((entry (nerimux/config:key-table-lookup "prefix" "C-Up")))
+        (expect (eq :next-window (nerimux/config:key-table-command entry))))))
 
   ;; bind -n M-Left <cmd> stores under string key "M-Left" in the ROOT table so
   ;; a bare (no-prefix) Alt+Left fires it.
   (it "bind-n-modifier-arrow-stores-in-root-table"
     (with-isolated-config
-      (cl-tmux/config:apply-config-directive '("bind" "-n" "M-Left" "next-window"))
-      (let ((entry (cl-tmux/config:key-table-lookup "root" "M-Left")))
-        (expect (eq :next-window (cl-tmux/config:key-table-command entry))))))
+      (nerimux/config:apply-config-directive '("bind" "-n" "M-Left" "next-window"))
+      (let ((entry (nerimux/config:key-table-lookup "root" "M-Left")))
+        (expect (eq :next-window (nerimux/config:key-table-command entry))))))
 
   ;; bind Up <cmd> stores under string key "Up" in the prefix table, matching
   ;; the name reconstructed from the ESC [ A wire sequence.
   (it "bind-plain-arrow-stores-canonical-string-key"
     (with-isolated-config
-      (cl-tmux/config:apply-config-directive '("bind" "Up" "next-window"))
-      (let ((entry (cl-tmux/config:key-table-lookup "prefix" "Up")))
-        (expect (eq :next-window (cl-tmux/config:key-table-command entry))))))
+      (nerimux/config:apply-config-directive '("bind" "Up" "next-window"))
+      (let ((entry (nerimux/config:key-table-lookup "prefix" "Up")))
+        (expect (eq :next-window (nerimux/config:key-table-command entry))))))
 
   ;; bind -n M-h <cmd> stores under string key "M-h" in the ROOT table so a bare
   ;; (no-prefix) Alt+h, which arrives as ESC h, fires it.
   (it "bind-n-meta-key-stores-in-root-table"
     (with-isolated-config
-      (cl-tmux/config:apply-config-directive '("bind" "-n" "M-h" "next-window"))
-      (let ((entry (cl-tmux/config:key-table-lookup "root" "M-h")))
-        (expect (eq :next-window (cl-tmux/config:key-table-command entry))))))
+      (nerimux/config:apply-config-directive '("bind" "-n" "M-h" "next-window"))
+      (let ((entry (nerimux/config:key-table-lookup "root" "M-h")))
+        (expect (eq :next-window (nerimux/config:key-table-command entry))))))
 
   ;;; status option: off / on / line-count parsing → *status-height*
 
@@ -168,19 +168,19 @@
       (destructuring-bind (value expected desc) case
         (declare (ignore desc))
         (with-isolated-config
-          (cl-tmux/config:apply-config-directive (list "set-option" "-g" "status" value))
-          (expect (= expected cl-tmux/config:*status-height*))))))
+          (nerimux/config:apply-config-directive (list "set-option" "-g" "status" value))
+          (expect (= expected nerimux/config:*status-height*))))))
 
   ;;; apply-config-line
 
   ;; apply-config-line applies a directive line and returns T.
   (it "apply-config-line-applies-valid-directives"
     (with-isolated-config
-      (expect (eq t (cl-tmux/config::apply-config-line "bind z new-window")))
+      (expect (eq t (nerimux/config::apply-config-line "bind z new-window")))
       (expect (eq :new-window (lookup-key-binding #\z)))))
 
   ;; apply-config-line returns NIL for blank lines and # comments.
   (it "apply-config-line-ignores-blank-and-comments"
-    (expect (null (cl-tmux/config::apply-config-line "")))
-    (expect (null (cl-tmux/config::apply-config-line "   ")))
-    (expect (null (cl-tmux/config::apply-config-line "# this is a comment")))))
+    (expect (null (nerimux/config::apply-config-line "")))
+    (expect (null (nerimux/config::apply-config-line "   ")))
+    (expect (null (nerimux/config::apply-config-line "# this is a comment")))))

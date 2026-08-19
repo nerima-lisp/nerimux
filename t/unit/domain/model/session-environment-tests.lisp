@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Session tests — environment overlay, process helpers, and child env merge.
 
@@ -8,13 +8,13 @@
 
   ;; *suppress-update-environment* is a special variable that can be rebound.
   (it "suppress-update-environment-is-variable"
-    (let ((cl-tmux/model:*suppress-update-environment* t))
-      (expect cl-tmux/model:*suppress-update-environment* :to-be-truthy))
-    (expect (null cl-tmux/model:*suppress-update-environment*)))
+    (let ((nerimux/model:*suppress-update-environment* t))
+      (expect nerimux/model:*suppress-update-environment* :to-be-truthy))
+    (expect (null nerimux/model:*suppress-update-environment*)))
 
   ;; +default-update-environment+ is a non-empty list of strings.
   (it "default-update-environment-is-list-of-strings"
-    (let ((val cl-tmux/model:+default-update-environment+))
+    (let ((val nerimux/model:+default-update-environment+))
       (expect (listp val))
       (expect (plusp (length val)))
       (dolist (item val)
@@ -22,10 +22,10 @@
 
   ;; *update-environment* is a special variable that can be dynamically rebound.
   (it "update-environment-dynamic-variable-rebindable"
-    (let ((orig cl-tmux/model:*update-environment*))
-      (let ((cl-tmux/model:*update-environment* (list "CUSTOM_VAR")))
-        (expect (equal (list "CUSTOM_VAR") cl-tmux/model:*update-environment*)))
-      (expect (equal orig cl-tmux/model:*update-environment*))))
+    (let ((orig nerimux/model:*update-environment*))
+      (let ((nerimux/model:*update-environment* (list "CUSTOM_VAR")))
+        (expect (equal (list "CUSTOM_VAR") nerimux/model:*update-environment*)))
+      (expect (equal orig nerimux/model:*update-environment*))))
 
   ;; get-update-environment-vars returns an alist of (name . value) pairs.
   (it "get-update-environment-vars-returns-alist"
@@ -38,7 +38,7 @@
 
   ;; get-update-environment-vars only queries variables listed in *update-environment*.
   (it "get-update-environment-vars-respects-star-update-environment"
-    (let ((*update-environment* (list "__CL_TMUX_NONEXISTENT_VAR_99999__")))
+    (let ((*update-environment* (list "__NERIMUX_NONEXISTENT_VAR_99999__")))
       (let ((result (get-update-environment-vars)))
         (expect (null result)))))
 
@@ -87,9 +87,9 @@
   ;; process fallback scenarios.
   ;; Each row: (env-name action expected-value expected-source description).
   (it "session-environment-value-table"
-    (dolist (row '(("CLTMUX_TEST_SESSION_ENV_A" :none  "from-process"  :process "absent overlay must inherit process value")
-                   ("CLTMUX_TEST_SESSION_ENV_B" :set   "from-overlay"  :session "overlay must shadow process value")
-                   ("CLTMUX_TEST_SESSION_ENV_C" :unset nil             :unset   "explicit unset must hide process value")))
+    (dolist (row '(("NERIMUX_TEST_SESSION_ENV_A" :none  "from-process"  :process "absent overlay must inherit process value")
+                   ("NERIMUX_TEST_SESSION_ENV_B" :set   "from-overlay"  :session "overlay must shadow process value")
+                   ("NERIMUX_TEST_SESSION_ENV_C" :unset nil             :unset   "explicit unset must hide process value")))
       (destructuring-bind (name-str action expected-val expected-src desc) row
         (declare (ignore desc))
         (with-session-and-env-var (sess name name-str "from-process")
@@ -118,9 +118,9 @@
     (let* ((sess (make-session :id 1 :name "s"))
            (env  (session-child-environment sess
                                             :term "xterm-256color"
-                                            :extra-env '(("CL_TMUX_TEST" . "1")))))
+                                            :extra-env '(("NERIMUX_TEST" . "1")))))
       (expect (member "TERM=xterm-256color" env :test #'string=) :to-be-truthy)
-      (expect (member "CL_TMUX_TEST=1" env :test #'string=) :to-be-truthy)))
+      (expect (member "NERIMUX_TEST=1" env :test #'string=) :to-be-truthy)))
 
   ;;; ── %environment-entry-name / %environment-entry-value ─────────────────────
 
@@ -133,73 +133,73 @@
                    ("NOEQUALS"   nil   nil   "no '=' yields NIL for both")))
       (destructuring-bind (entry expected-name expected-value desc) row
         (declare (ignore desc))
-        (expect (equal expected-name  (cl-tmux/model::%environment-entry-name  entry)))
-        (expect (equal expected-value (cl-tmux/model::%environment-entry-value entry))))))
+        (expect (equal expected-name  (nerimux/model::%environment-entry-name  entry)))
+        (expect (equal expected-value (nerimux/model::%environment-entry-value entry))))))
 
   ;; %environment-strings-to-table builds a hash-table from NAME=VALUE strings;
   ;; %environment-table-to-list converts it back to a sorted list of NAME=VALUE.
   (it "environment-strings-to-table-and-back"
     (let* ((entries '("B=2" "A=1" "C=3"))
-           (table   (cl-tmux/model::%environment-strings-to-table entries)))
+           (table   (nerimux/model::%environment-strings-to-table entries)))
       (expect (hash-table-p table))
       (expect (string= "1" (gethash "A" table)))
       (expect (string= "2" (gethash "B" table)))
       (expect (string= "3" (gethash "C" table)))
       (expect (equal '("A=1" "B=2" "C=3")
-                 (cl-tmux/model::%environment-table-to-list table)))))
+                 (nerimux/model::%environment-table-to-list table)))))
 
   ;; %environment-strings-to-table silently skips entries with no '=' separator.
   (it "environment-strings-to-table-skips-entries-without-equals"
-    (let ((table (cl-tmux/model::%environment-strings-to-table '("GOOD=1" "BADENTRY"))))
+    (let ((table (nerimux/model::%environment-strings-to-table '("GOOD=1" "BADENTRY"))))
       (expect (= 1 (hash-table-count table)))
       (expect (string= "1" (gethash "GOOD" table)))))
 
   ;; %assert-environment-variable-name does not signal for valid names.
   (it "assert-environment-variable-name-accepts-valid-names"
     (dolist (name '("HOME" "PATH" "MY_VAR_1"))
-      (finishes (cl-tmux/model::%assert-environment-variable-name name))))
+      (finishes (nerimux/model::%assert-environment-variable-name name))))
 
   ;; %assert-environment-variable-name signals an error for NIL, empty, non-string,
   ;; or names containing '='.
   (it "assert-environment-variable-name-rejects-invalid-names"
     (dolist (bad (list nil "" "HAS=EQUALS" 42))
-      (signals error (cl-tmux/model::%assert-environment-variable-name bad))))
+      (signals error (nerimux/model::%assert-environment-variable-name bad))))
 
   ;;; ── process-environment helpers ────────────────────────────────────────────
 
   ;; process-environment-value returns the value of a variable set in the real
   ;; process environment, and NIL for one that has never been set.
   (it "process-environment-value-reads-live-process-environment"
-    (with-process-env-var (name "CLTMUX_TEST_PROC_ENV_VAL" "hello")
-      (expect (string= "hello" (cl-tmux/model:process-environment-value "CLTMUX_TEST_PROC_ENV_VAL"))))
-    (expect (null (cl-tmux/model:process-environment-value "__CL_TMUX_DEFINITELY_UNSET_VAR__"))))
+    (with-process-env-var (name "NERIMUX_TEST_PROC_ENV_VAL" "hello")
+      (expect (string= "hello" (nerimux/model:process-environment-value "NERIMUX_TEST_PROC_ENV_VAL"))))
+    (expect (null (nerimux/model:process-environment-value "__NERIMUX_DEFINITELY_UNSET_VAR__"))))
 
   ;; process-environment-names returns a sorted list of names that includes a
   ;; variable known to be set in the current process environment.
   (it "process-environment-names-includes-known-set-variable"
-    (with-process-env-var (name "CLTMUX_TEST_PROC_ENV_NAMES" "x")
-      (let ((names (cl-tmux/model:process-environment-names)))
+    (with-process-env-var (name "NERIMUX_TEST_PROC_ENV_NAMES" "x")
+      (let ((names (nerimux/model:process-environment-names)))
         (expect (listp names))
-        (expect (member "CLTMUX_TEST_PROC_ENV_NAMES" names :test #'string=) :to-be-truthy)
+        (expect (member "NERIMUX_TEST_PROC_ENV_NAMES" names :test #'string=) :to-be-truthy)
         (expect (equal (sort (copy-list names) #'string<) names)))))
 
   ;; process-set-environment writes NAME=VALUE into the real process environment
   ;; (readable back via process-environment-value) and returns VALUE.
   (it "process-set-environment-writes-and-returns-value"
-    (with-process-env-var (name "CLTMUX_TEST_PROC_SET_ENV" nil)
-      (let ((result (cl-tmux/model:process-set-environment
-                     "CLTMUX_TEST_PROC_SET_ENV" "written-value")))
+    (with-process-env-var (name "NERIMUX_TEST_PROC_SET_ENV" nil)
+      (let ((result (nerimux/model:process-set-environment
+                     "NERIMUX_TEST_PROC_SET_ENV" "written-value")))
         (expect (string= "written-value" result))
         (expect (string= "written-value"
-                     (cl-tmux/model:process-environment-value "CLTMUX_TEST_PROC_SET_ENV"))))))
+                     (nerimux/model:process-environment-value "NERIMUX_TEST_PROC_SET_ENV"))))))
 
   ;; process-unset-environment removes a previously-set variable from the real
   ;; process environment and returns NAME.
   (it "process-unset-environment-removes-value-and-returns-name"
-    (with-process-env-var (name "CLTMUX_TEST_PROC_UNSET_ENV" "present")
-      (let ((result (cl-tmux/model:process-unset-environment "CLTMUX_TEST_PROC_UNSET_ENV")))
-        (expect (string= "CLTMUX_TEST_PROC_UNSET_ENV" result))
-        (expect (null (cl-tmux/model:process-environment-value "CLTMUX_TEST_PROC_UNSET_ENV"))))))
+    (with-process-env-var (name "NERIMUX_TEST_PROC_UNSET_ENV" "present")
+      (let ((result (nerimux/model:process-unset-environment "NERIMUX_TEST_PROC_UNSET_ENV")))
+        (expect (string= "NERIMUX_TEST_PROC_UNSET_ENV" result))
+        (expect (null (nerimux/model:process-environment-value "NERIMUX_TEST_PROC_UNSET_ENV"))))))
 
   ;;; ── %apply-session-overlay ─────────────────────────────────────────────────
 
@@ -212,7 +212,7 @@
             (gethash "REMOVE" table) "process-value")
       (session-set-environment sess "KEEP" "overlay-value")
       (session-unset-environment sess "REMOVE")
-      (cl-tmux/model::%apply-session-overlay sess table)
+      (nerimux/model::%apply-session-overlay sess table)
       (expect (string= "overlay-value" (gethash "KEEP" table)))
       (expect (null (gethash "REMOVE" table)))))
 
@@ -220,7 +220,7 @@
   (it "apply-session-overlay-nil-session-is-noop"
     (let ((table (make-hash-table :test #'equal)))
       (setf (gethash "UNTOUCHED" table) "value")
-      (finishes (cl-tmux/model::%apply-session-overlay nil table))
+      (finishes (nerimux/model::%apply-session-overlay nil table))
       (expect (string= "value" (gethash "UNTOUCHED" table)))))
 
   ;;; ── %apply-extra-env ───────────────────────────────────────────────────────
@@ -228,13 +228,13 @@
   ;; %apply-extra-env merges (NAME . VALUE) string conses into TABLE.
   (it "apply-extra-env-merges-valid-pairs"
     (let ((table (make-hash-table :test #'equal)))
-      (cl-tmux/model::%apply-extra-env '(("A" . "1") ("B" . "2")) table)
+      (nerimux/model::%apply-extra-env '(("A" . "1") ("B" . "2")) table)
       (expect (string= "1" (gethash "A" table)))
       (expect (string= "2" (gethash "B" table)))))
 
   ;; %apply-extra-env silently skips entries that are not (string . string) conses.
   (it "apply-extra-env-skips-malformed-pairs"
     (let ((table (make-hash-table :test #'equal)))
-      (cl-tmux/model::%apply-extra-env (list '("OK" . "yes") 42 '(1 . 2) '("BAD" . 7)) table)
+      (nerimux/model::%apply-extra-env (list '("OK" . "yes") 42 '(1 . 2) '("BAD" . 7)) table)
       (expect (= 1 (hash-table-count table)))
       (expect (string= "yes" (gethash "OK" table))))))

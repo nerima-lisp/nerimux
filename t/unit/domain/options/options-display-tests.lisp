@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 (describe "options-suite"
 
@@ -15,16 +15,16 @@
                      ("totally-unknown" nil nil "unregistered unset plain name is absent")))
         (destructuring-bind (name scope expected desc) row
           (declare (ignore desc))
-          (expect (eq expected (and (cl-tmux/options:option-present-for-scope-p name scope) t)))))
-      (setf (gethash "runtime-only-opt" cl-tmux/options:*global-options*) "x")
-      (expect (cl-tmux/options:option-present-for-scope-p "runtime-only-opt") :to-be-truthy)))
+          (expect (eq expected (and (nerimux/options:option-present-for-scope-p name scope) t)))))
+      (setf (gethash "runtime-only-opt" nerimux/options:*global-options*) "x")
+      (expect (nerimux/options:option-present-for-scope-p "runtime-only-opt") :to-be-truthy)))
 
   ;; option-present-for-scope-p consults the server registry/table when SCOPE
   ;; is :server.
   (it "option-present-for-scope-p-server-scope"
     (with-fresh-server-options
-      (expect (cl-tmux/options:option-present-for-scope-p "escape-time" :server) :to-be-truthy)
-      (expect (cl-tmux/options:option-present-for-scope-p "no-such-server-opt" :server) :to-be-falsy)))
+      (expect (nerimux/options:option-present-for-scope-p "escape-time" :server) :to-be-truthy)
+      (expect (nerimux/options:option-present-for-scope-p "no-such-server-opt" :server) :to-be-falsy)))
 
   ;;; option-present-for-display-p (options-scope.lisp)
 
@@ -33,59 +33,59 @@
   ;; treats @-names as present).
   (it "option-present-for-display-p-user-option-requires-presence"
     (with-fresh-global-options
-      (expect (cl-tmux/options:option-present-for-display-p "@unset-user-opt") :to-be-falsy)
-      (setf (gethash "@set-user-opt" cl-tmux/options:*global-options*) "v")
-      (expect (cl-tmux/options:option-present-for-display-p "@set-user-opt") :to-be-truthy)))
+      (expect (nerimux/options:option-present-for-display-p "@unset-user-opt") :to-be-falsy)
+      (setf (gethash "@set-user-opt" nerimux/options:*global-options*) "v")
+      (expect (nerimux/options:option-present-for-display-p "@set-user-opt") :to-be-truthy)))
 
   ;; option-present-for-display-p delegates to option-present-for-scope-p for
   ;; non-@ names.
   (it "option-present-for-display-p-delegates-for-plain-names"
     (with-fresh-global-options
-      (expect (cl-tmux/options:option-present-for-display-p "status") :to-be-truthy)
-      (expect (cl-tmux/options:option-present-for-display-p "totally-unknown") :to-be-falsy)))
+      (expect (nerimux/options:option-present-for-display-p "status") :to-be-truthy)
+      (expect (nerimux/options:option-present-for-display-p "totally-unknown") :to-be-falsy)))
 
   ;;; window-option-present-for-display-p (options-display.lisp)
 
   ;; A registered window-scoped option is always displayable, even with no
   ;; local override and GLOBAL-P/INHERITED-P both NIL.
   (it "window-option-present-for-display-p-registered-spec"
-    (let ((win (cl-tmux/model:make-window :id 1 :name "w")))
-      (expect (cl-tmux/options:window-option-present-for-display-p
+    (let ((win (nerimux/model:make-window :id 1 :name "w")))
+      (expect (nerimux/options:window-option-present-for-display-p
                "synchronize-panes" win)
               :to-be-truthy)))
 
   ;; An unregistered @ option becomes displayable once it has a window-local
   ;; override, without GLOBAL-P or INHERITED-P.
   (it "window-option-present-for-display-p-local-override"
-    (let ((win (cl-tmux/model:make-window :id 1 :name "w")))
-      (expect (cl-tmux/options:window-option-present-for-display-p "@foo" win) :to-be-falsy)
-      (cl-tmux/options:set-option-for-window "@foo" "bar" win)
-      (expect (cl-tmux/options:window-option-present-for-display-p "@foo" win) :to-be-truthy)))
+    (let ((win (nerimux/model:make-window :id 1 :name "w")))
+      (expect (nerimux/options:window-option-present-for-display-p "@foo" win) :to-be-falsy)
+      (nerimux/options:set-option-for-window "@foo" "bar" win)
+      (expect (nerimux/options:window-option-present-for-display-p "@foo" win) :to-be-truthy)))
 
   ;; With GLOBAL-P T, an unregistered @ option is displayable only when it
   ;; exists in *global-options*, regardless of any window-local state.
   (it "window-option-present-for-display-p-global-flag"
-    (let ((win (cl-tmux/model:make-window :id 1 :name "w"))
-          (cl-tmux/options:*global-options*
+    (let ((win (nerimux/model:make-window :id 1 :name "w"))
+          (nerimux/options:*global-options*
            (let ((ht (make-hash-table :test #'equal)))
              (setf (gethash "@global-only" ht) "v")
              ht)))
-      (expect (cl-tmux/options:window-option-present-for-display-p
+      (expect (nerimux/options:window-option-present-for-display-p
                "@global-only" win :global-p t)
               :to-be-truthy)
-      (expect (cl-tmux/options:window-option-present-for-display-p
+      (expect (nerimux/options:window-option-present-for-display-p
                "@not-global" win :global-p t)
               :to-be-falsy)))
 
   ;; With INHERITED-P T, an unregistered @ option is displayable when it exists
   ;; globally, even without any window-local override.
   (it "window-option-present-for-display-p-inherited-flag"
-    (let ((win (cl-tmux/model:make-window :id 1 :name "w"))
-          (cl-tmux/options:*global-options*
+    (let ((win (nerimux/model:make-window :id 1 :name "w"))
+          (nerimux/options:*global-options*
            (let ((ht (make-hash-table :test #'equal)))
              (setf (gethash "@inherited-opt" ht) "v")
              ht)))
-      (expect (cl-tmux/options:window-option-present-for-display-p
+      (expect (nerimux/options:window-option-present-for-display-p
                "@inherited-opt" win :inherited-p t)
               :to-be-truthy)))
 
@@ -108,7 +108,7 @@
                    ("status-format" "status-format[0"   nil "missing closing bracket")))
       (destructuring-bind (base name expected desc) row
         (declare (ignore desc))
-        (expect (equal expected (cl-tmux/options::%array-entry-index-for-base base name))))))
+        (expect (equal expected (nerimux/options::%array-entry-index-for-base base name))))))
 
   ;; %array-entry-base-name extracts BASE from a BASE[N] name, or returns NIL
   ;; for a name that is not an array entry.
@@ -120,7 +120,7 @@
                    ("status-format[x]"  nil             "non-digit index")))
       (destructuring-bind (name expected desc) row
         (declare (ignore desc))
-        (expect (equal expected (cl-tmux/options::%array-entry-base-name name))))))
+        (expect (equal expected (nerimux/options::%array-entry-base-name name))))))
 
   ;; %find-spec-by-array-prefix locates a spec via a sibling BASE[N] entry when
   ;; the base name has no direct registry entry — the fallback tier of
@@ -132,31 +132,31 @@
     (let ((table (make-hash-table :test #'equal)))
       (setf (gethash "my-array[0]" table) :spec-for-my-array)
       (expect (eq :spec-for-my-array
-                 (cl-tmux/options::%find-spec-by-array-prefix "my-array" table)))))
+                 (nerimux/options::%find-spec-by-array-prefix "my-array" table)))))
 
   ;; %find-spec-by-array-prefix returns NIL when no sibling BASE[N] entry exists.
   (it "find-spec-by-array-prefix-returns-nil-with-no-sibling-entry"
     (let ((table (make-hash-table :test #'equal)))
       (setf (gethash "other-name[0]" table) :unrelated-spec)
-      (expect (null (cl-tmux/options::%find-spec-by-array-prefix "my-array" table)))))
+      (expect (null (nerimux/options::%find-spec-by-array-prefix "my-array" table)))))
 
   ;; %array-option-p is true for a BASE name once at least one BASE[N] entry
   ;; exists in the runtime options table (e.g. after `set status-format[0] ...`);
   ;; false for an indexed entry itself and for a plain unrelated name.
   (it "array-option-p-recognises-array-base-once-an-entry-exists"
     (with-fresh-global-options
-      (expect (cl-tmux/options::%array-option-p "status-format" nil) :to-be-falsy)
-      (setf (gethash "status-format[0]" cl-tmux/options:*global-options*) "x")
-      (expect (cl-tmux/options::%array-option-p "status-format" nil) :to-be-truthy)
-      (expect (cl-tmux/options::%array-option-p "status-format[0]" nil) :to-be-falsy)
-      (expect (cl-tmux/options::%array-option-p "totally-unknown-base" nil) :to-be-falsy)))
+      (expect (nerimux/options::%array-option-p "status-format" nil) :to-be-falsy)
+      (setf (gethash "status-format[0]" nerimux/options:*global-options*) "x")
+      (expect (nerimux/options::%array-option-p "status-format" nil) :to-be-truthy)
+      (expect (nerimux/options::%array-option-p "status-format[0]" nil) :to-be-falsy)
+      (expect (nerimux/options::%array-option-p "totally-unknown-base" nil) :to-be-falsy)))
 
   ;; %array-option-pairs returns sorted (name . value) pairs for BASE[N] entries,
   ;; with a runtime value overriding the registered default at the same index.
   (it "array-option-pairs-collects-runtime-and-registry-entries"
     (with-fresh-global-options
-      (setf (gethash "status-format[0]" cl-tmux/options:*global-options*) "RUNTIME-0")
-      (let ((pairs (cl-tmux/options::%array-option-pairs "status-format" nil)))
+      (setf (gethash "status-format[0]" nerimux/options:*global-options*) "RUNTIME-0")
+      (let ((pairs (nerimux/options::%array-option-pairs "status-format" nil)))
         (expect (> (length pairs) 0))
         (let ((entry-0 (assoc "status-format[0]" pairs :test #'string=)))
           (expect (not (null entry-0)))
@@ -171,7 +171,7 @@
                        (list "abc" 0 0 nil "a zero-length span at any position is empty")))
       (destructuring-bind (string start end expected desc) row
         (declare (ignore desc))
-        (expect (eq expected (and (cl-tmux/options::%decimal-digits-p string start end) t))))))
+        (expect (eq expected (and (nerimux/options::%decimal-digits-p string start end) t))))))
 
   ;;; show-option/show-options value quoting (options-display.lisp)
   ;;;
@@ -191,7 +191,7 @@
                        (list "a\\b"  "\"a\\\\b\"")))
       (destructuring-bind (input expected &optional desc) row
         (declare (ignore desc))
-        (expect (string= expected (cl-tmux/options::%quote-option-string input))))))
+        (expect (string= expected (nerimux/options::%quote-option-string input))))))
 
   ;; %option-value-string formats T as "on", NIL as "off", strings as-is,
   ;; and any other value via princ-to-string.
@@ -202,17 +202,17 @@
                        (list 42    "42"  "integer -> decimal via princ")))
       (destructuring-bind (input expected desc) row
         (declare (ignore desc))
-        (expect (string= expected (cl-tmux/options::%option-value-string input))))))
+        (expect (string= expected (nerimux/options::%option-value-string input))))))
 
   ;; show-options end-to-end: a stored string value containing a space is quoted
   ;; in the rendered output.
   (it "show-options-quotes-values-with-spaces"
     (with-single-option ("status-left" "a b")
-      (let ((out (cl-tmux/options:show-options)))
+      (let ((out (nerimux/options:show-options)))
         (expect (search "status-left \"a b\"" out)))))
 
   ;; show-options renders an empty string option value as '' (tmux convention).
   (it "show-options-empty-string-value-renders-as-quote-pair"
     (with-single-option ("status-left" "")
-      (let ((out (cl-tmux/options:show-options)))
+      (let ((out (nerimux/options:show-options)))
         (expect (search "status-left ''" out))))))

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Session presence command dispatch tests.
 
@@ -10,7 +10,7 @@
   (it "dispatch-has-session-opens-prompt"
     (with-fake-session (s)
       (let ((*prompt* nil))
-        (cl-tmux::dispatch-command s :has-session nil)
+        (nerimux::dispatch-command s :has-session nil)
         (expect (prompt-active-p)))))
 
   ;; :has-session on-submit shows 'yes' when the session is registered.
@@ -18,8 +18,8 @@
     (with-fake-session (s)
       (let ((name (session-name s)))
         (let ((*prompt* nil) (*overlay* nil)
-              (cl-tmux::*server-sessions* (list (cons name s))))
-          (cl-tmux::dispatch-command s :has-session nil)
+              (nerimux::*server-sessions* (list (cons name s))))
+          (nerimux::dispatch-command s :has-session nil)
           (expect (prompt-active-p))
           (funcall (prompt-on-submit *prompt*) name)
           (assert-overlay-active "on-submit must open an overlay")
@@ -33,8 +33,8 @@
                        "has-session -t 0 extra"))
       (with-fake-session (s)
         (let ((*overlay* nil)
-              (cl-tmux::*server-sessions* (list (cons (session-name s) s))))
-          (expect (null (cl-tmux::%run-command-line s command)))
+              (nerimux::*server-sessions* (list (cons (session-name s) s))))
+          (expect (null (nerimux::%run-command-line s command)))
           (assert-overlay-active "~A must show an unsupported-argument overlay" command)
           (assert-overlay-contains "unsupported argument" (overlay-lines)
                                    command)

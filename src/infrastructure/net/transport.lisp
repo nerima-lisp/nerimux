@@ -1,11 +1,11 @@
-(in-package #:cl-tmux/transport)
+(in-package #:nerimux/transport)
 
 ;;;; Frame transport over a binary stream (client/server detach-attach).
 ;;;;
-;;;; This is the impure shell around the pure cl-tmux/protocol codec: it moves
+;;;; This is the impure shell around the pure nerimux/protocol codec: it moves
 ;;;; encoded frames across any binary stream — a socket made via
 ;;;; sb-bsd-sockets:socket-make-stream, or (in tests) a temp-file stream.
-;;;; The framing/parsing itself lives in cl-tmux/protocol; here we only do I/O.
+;;;; The framing/parsing itself lives in nerimux/protocol; here we only do I/O.
 
 (defconstant +read-frame-timeout-seconds+ 30
   "Maximum seconds to wait for a complete frame before aborting.
@@ -16,14 +16,14 @@
   "Maximum seconds to wait for write-sequence and finish-output to complete
    before aborting.  Mirrors +read-frame-timeout-seconds+ so send-frame is
    self-contained: it does not rely solely on the caller's stream having been
-   constructed with its own timeout (e.g. cl-tmux/net:socket-stream).")
+   constructed with its own timeout (e.g. nerimux/net:socket-stream).")
 
 (defconstant +max-frame-payload-bytes+ (* 64 1024 1024)
   "Maximum payload size (64 MiB) accepted by read-frame before rejecting.
    Prevents a malicious or buggy peer from triggering unbounded heap allocation.")
 
 (defun send-frame (stream frame)
-  "Write FRAME (an octet vector produced by the cl-tmux/protocol msg-* helpers)
+  "Write FRAME (an octet vector produced by the nerimux/protocol msg-* helpers)
    to binary STREAM and flush it, within +send-frame-timeout-seconds+.
    Signals SB-EXT:TIMEOUT when the peer is too slow to accept the write."
   (%validate-outgoing-frame frame)

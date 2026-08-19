@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; window tests — part C: find-window-by-name, list-windows-format,
 ;;;; auto-rename-from-osc, format-window, move/swap/rotate coverage.
@@ -13,7 +13,7 @@
                             :panes (list (make-no-pty-pane 2 0 0 80 24))))
            (sess (make-session :id 1 :name "s" :windows (list w0 w1))))
       (session-select-window sess w0)
-      (let ((listing (cl-tmux::%format-window-list sess)))
+      (let ((listing (nerimux::%format-window-list sess)))
         (expect (search "bash" listing))
         (expect (search "vim"  listing)))))
 
@@ -27,7 +27,7 @@
                              :panes (list p0)))
            (sess (make-session :id 1 :name "s" :windows (list w0))))
       (session-select-window sess w0)
-      (let ((listing (cl-tmux::%format-window-list sess)))
+      (let ((listing (nerimux::%format-window-list sess)))
         (expect (search "main"    listing))
         (expect (search "80x24"   listing))
         (expect (search "[active]" listing))
@@ -35,7 +35,7 @@
 
   ;; ── auto-rename-from-osc ─────────────────────────────────────────────────────
   ;;
-  ;; These tests call the production function cl-tmux::%maybe-rename-window-from-title
+  ;; These tests call the production function nerimux::%maybe-rename-window-from-title
   ;; directly, rather than duplicating the rename logic inline.  This ensures the
   ;; tests verify the real code path and provide genuine coverage confidence.
 
@@ -44,7 +44,7 @@
     (with-auto-rename-session (screen p0 w0 sess :win-name "original")
       (setf (window-automatic-rename-p w0) t)
       (setf (screen-title screen) "new-title")
-      (cl-tmux::%maybe-rename-window-from-title sess)
+      (nerimux::%maybe-rename-window-from-title sess)
       (expect (string= "new-title" (window-name w0)))))
 
   ;; When window-automatic-rename-p is NIL, window-name is NOT updated from OSC title.
@@ -52,7 +52,7 @@
     (with-auto-rename-session (screen p0 w0 sess :win-name "kept")
       (setf (window-automatic-rename-p w0) nil)
       (setf (screen-title screen) "ignored-title")
-      (cl-tmux::%maybe-rename-window-from-title sess)
+      (nerimux::%maybe-rename-window-from-title sess)
       (expect (string= "kept" (window-name w0)))))
 
   ;; ── window-remove-pane (no PTY) ──────────────────────────────────────────────
@@ -109,7 +109,7 @@
                              :panes (list p0) :active p0)))
       (let ((x0-before (pane-x p0))
             (y0-before (pane-y p0)))
-        (cl-tmux/model::ensure-window-fits win 24 80)
+        (nerimux/model::ensure-window-fits win 24 80)
         (expect (= x0-before (pane-x p0)))
         (expect (= y0-before (pane-y p0))))))
 
@@ -117,8 +117,8 @@
 
   ;; Freshly created window slots have expected defaults: zoom-p=nil, zoom-tree=nil, last-active=nil, automatic-rename-p=t.
   (it "window-slot-defaults-table"
-    (dolist (c '((cl-tmux/model:window-zoom-p      nil "window-zoom-p defaults nil")
-                 (cl-tmux/model:window-zoom-tree    nil "window-zoom-tree defaults nil")
+    (dolist (c '((nerimux/model:window-zoom-p      nil "window-zoom-p defaults nil")
+                 (nerimux/model:window-zoom-tree    nil "window-zoom-tree defaults nil")
                  (window-last-active                nil "window-last-active defaults nil")
                  (window-automatic-rename-p          t  "window-automatic-rename-p defaults t")))
       (destructuring-bind (accessor expected desc) c
@@ -181,7 +181,7 @@
                (:h 60  2/3  1 nil 39/60  "shrink :h from 2/3 ratio")))
       (destructuring-bind (orient avail cur-ratio delta grow-first expected desc) entry
         (declare (ignore desc))
-        (let ((result (cl-tmux/model::%new-split-ratio orient avail cur-ratio delta grow-first)))
+        (let ((result (nerimux/model::%new-split-ratio orient avail cur-ratio delta grow-first)))
           (expect (equal expected result))))))
 
   ;; ── window-rotate single-pane is noop ───────────────────────────────────────

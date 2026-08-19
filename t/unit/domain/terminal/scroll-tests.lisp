@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Scroll operation tests for scroll.lisp.
 ;;;; Suite: scroll-ops.
@@ -12,21 +12,21 @@
   (labels ((case-option (options key)
              (getf options key))
            (scrollback-length-form ()
-             '(length (cl-tmux/terminal/types:screen-scrollback s)))
+             '(length (nerimux/terminal/types:screen-scrollback s)))
            (expand-step (step)
              (destructuring-bind (kind &rest args) step
                (ecase kind
                  (:feed `(feed s ,@args))
-                 (:scroll-up '(cl-tmux/terminal/actions:scroll-up-one s))
-                 (:scroll-down '(cl-tmux/terminal/actions:scroll-down-one s))
+                 (:scroll-up '(nerimux/terminal/actions:scroll-up-one s))
+                 (:scroll-down '(nerimux/terminal/actions:scroll-down-one s))
                  (:seed-scrollback-to-cap
                   (let ((width (first args)))
-                    `(setf (cl-tmux/terminal/types:screen-scrollback s)
+                    `(setf (nerimux/terminal/types:screen-scrollback s)
                            (loop repeat cap
                                  collect (make-array
                                           ,width
                                           :initial-element
-                                          (cl-tmux/terminal/types:blank-cell)))))))))
+                                          (nerimux/terminal/types:blank-cell)))))))))
            (expand-assertion (assertion)
              (destructuring-bind (kind &rest args) assertion
                (ecase kind
@@ -35,10 +35,10 @@
                  (:scrollback-length<=cap
                   `(expect (<= ,(scrollback-length-form) cap)))
                  (:first-scrollback-char
-                  `(let ((row (first (cl-tmux/terminal/types:screen-scrollback s))))
+                  `(let ((row (first (nerimux/terminal/types:screen-scrollback s))))
                      (expect (char= ,(first args) (cell-char (aref row ,(second args)))))))
                  (:scrollback-empty
-                  `(expect (null (cl-tmux/terminal/types:screen-scrollback s))))
+                  `(expect (null (nerimux/terminal/types:screen-scrollback s))))
                  (:row-blank
                   `(expect (row-blank-p s ,(first args))))
                  (:cell
@@ -48,8 +48,8 @@
              (let ((forms (append (mapcar #'expand-step steps)
                                   (mapcar #'expand-assertion assertions))))
                (if cap-aware-p
-                   `((let ((cap (or (cl-tmux/options:get-option "history-limit")
-                                    cl-tmux/config:+max-scrollback-lines+)))
+                   `((let ((cap (or (nerimux/options:get-option "history-limit")
+                                    nerimux/config:+max-scrollback-lines+)))
                        (declare (ignorable cap))
                        (with-screen (s ,width ,height)
                          ,@forms)))

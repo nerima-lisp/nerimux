@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; per-window option resolution, alert-state window-tab styles, status-bar-line — part IV
 
@@ -20,15 +20,15 @@
   (it "status-window-list-per-window-format-override"
     (with-isolated-config
       (let* ((sess (make-fake-session :nwindows 2))
-             (windows (cl-tmux/model:session-windows sess))
+             (windows (nerimux/model:session-windows sess))
              (win2 (second windows))
              ;; make-fake-session selects the FIRST window, so win2 is inactive.
-             (idx2 (cl-tmux/model:window-id win2)))
+             (idx2 (nerimux/model:window-id win2)))
         ;; Distinctive literal so the expansion " W1X " is unmistakable in output.
-        (cl-tmux/options:set-option-for-window
+        (nerimux/options:set-option-for-window
          "window-status-format" " W#{window_index}X " win2)
-        (let ((out (cl-tmux/renderer::%status-window-list-styled
-                    sess (cl-tmux/model:session-active-window sess))))
+        (let ((out (nerimux/renderer::%status-window-list-styled
+                    sess (nerimux/model:session-active-window sess))))
           ;; Window 2 (inactive, index 1) must use its per-window override.
           (expect (search (format nil "W~DX" idx2) out))
           ;; Window 1 (active, index 0) must still use the default current-format,
@@ -46,17 +46,17 @@
     (let ((without
             (with-isolated-config
               (with-fake-session (sess :nwindows 2)
-                (cl-tmux/renderer::%status-window-list-styled
-                 sess (cl-tmux/model:session-active-window sess)))))
+                (nerimux/renderer::%status-window-list-styled
+                 sess (nerimux/model:session-active-window sess)))))
           ;; Capture WITH a window-local fg=red on window 2 (inactive).
           (with
             (with-isolated-config
               (with-fake-session (sess :nwindows 2)
-                (let ((win2 (second (cl-tmux/model:session-windows sess))))
-                  (cl-tmux/options:set-option-for-window
+                (let ((win2 (second (nerimux/model:session-windows sess))))
+                  (nerimux/options:set-option-for-window
                    "window-status-style" "fg=red" win2)
-                  (cl-tmux/renderer::%status-window-list-styled
-                   sess (cl-tmux/model:session-active-window sess)))))))
+                  (nerimux/renderer::%status-window-list-styled
+                   sess (nerimux/model:session-active-window sess)))))))
       ;; fg=red is SGR 31; the styled output must emit a CSI escape and "31".
       (expect (search (format nil "~C[" #\Escape) with))
       (expect (search "31" with))
@@ -69,11 +69,11 @@
   (it "status-window-list-no-override-is-global"
     (with-isolated-config
       ;; fg=green is SGR 32.  Set it GLOBALLY (no per-window override anywhere).
-      (cl-tmux/options:set-option "window-status-style" "fg=green")
-      (cl-tmux/options:set-option "window-status-current-style" "fg=green")
+      (nerimux/options:set-option "window-status-style" "fg=green")
+      (nerimux/options:set-option "window-status-current-style" "fg=green")
       (let* ((sess (make-fake-session :nwindows 2))
-             (out  (cl-tmux/renderer::%status-window-list-styled
-                    sess (cl-tmux/model:session-active-window sess))))
+             (out  (nerimux/renderer::%status-window-list-styled
+                    sess (nerimux/model:session-active-window sess))))
         (expect (search (format nil "~C[" #\Escape) out))
         (expect (search "32" out)))))
 
@@ -85,13 +85,13 @@
   (it "status-window-list-per-window-current-format-override"
     (with-isolated-config
       (let* ((sess (make-fake-session :nwindows 2))
-             (windows (cl-tmux/model:session-windows sess))
+             (windows (nerimux/model:session-windows sess))
              (win1 (first windows)))   ; make-fake-session selects the FIRST window
         ;; Distinctive literal so the expansion " C0Y " is unmistakable in output.
-        (cl-tmux/options:set-option-for-window
+        (nerimux/options:set-option-for-window
          "window-status-current-format" " C#{window_index}Y " win1)
-        (let ((out (cl-tmux/renderer::%status-window-list-styled
-                    sess (cl-tmux/model:session-active-window sess))))
+        (let ((out (nerimux/renderer::%status-window-list-styled
+                    sess (nerimux/model:session-active-window sess))))
           ;; Window 1 (active, index 0) must use its per-window current-format override.
           (expect (search "C0Y" out))
           ;; The per-window override on the active window must NOT bleed onto the
@@ -108,17 +108,17 @@
     (let ((without
             (with-isolated-config
               (with-fake-session (sess :nwindows 2)
-                (cl-tmux/renderer::%status-window-list-styled
-                 sess (cl-tmux/model:session-active-window sess)))))
+                (nerimux/renderer::%status-window-list-styled
+                 sess (nerimux/model:session-active-window sess)))))
           ;; Capture WITH a window-local fg=red on window 1 (active).
           (with
             (with-isolated-config
               (with-fake-session (sess :nwindows 2)
-                (let ((win1 (first (cl-tmux/model:session-windows sess))))
-                  (cl-tmux/options:set-option-for-window
+                (let ((win1 (first (nerimux/model:session-windows sess))))
+                  (nerimux/options:set-option-for-window
                    "window-status-current-style" "fg=red" win1)
-                  (cl-tmux/renderer::%status-window-list-styled
-                   sess (cl-tmux/model:session-active-window sess)))))))
+                  (nerimux/renderer::%status-window-list-styled
+                   sess (nerimux/model:session-active-window sess)))))))
       ;; fg=red is SGR 31; the styled output must emit a CSI escape and "31".
       (expect (search (format nil "~C[" #\Escape) with))
       (expect (search "31" with))
@@ -131,57 +131,57 @@
   ;; window-status-bell-style (fg=red → SGR 31), overriding the (empty) normal style.
   (it "status-window-list-bell-style-applied-to-window-with-pending-bell"
     (with-isolated-config
-      (cl-tmux/options:set-option "window-status-style" "")        ; normal: unstyled
-      (cl-tmux/options:set-option "window-status-bell-style" "fg=red")
+      (nerimux/options:set-option "window-status-style" "")        ; normal: unstyled
+      (nerimux/options:set-option "window-status-bell-style" "fg=red")
       (let* ((sess (make-fake-session :nwindows 2))
-             (win2 (second (cl-tmux/model:session-windows sess))))
+             (win2 (second (nerimux/model:session-windows sess))))
         ;; Mark the inactive window 2 as having an unseen bell.
-        (setf (cl-tmux/model:window-bell-flag win2) t)
-        (let ((out (cl-tmux/renderer::%status-window-list-styled
-                    sess (cl-tmux/model:session-active-window sess))))
+        (setf (nerimux/model:window-bell-flag win2) t)
+        (let ((out (nerimux/renderer::%status-window-list-styled
+                    sess (nerimux/model:session-active-window sess))))
           (expect (search "31" out))))))
 
   ;; A non-active window with its activity-flag set renders its tab with
   ;; window-status-activity-style (fg=blue → SGR 34).
   (it "status-window-list-activity-style-applied-to-window-with-activity"
     (with-isolated-config
-      (cl-tmux/options:set-option "window-status-style" "")
-      (cl-tmux/options:set-option "window-status-activity-style" "fg=blue")
+      (nerimux/options:set-option "window-status-style" "")
+      (nerimux/options:set-option "window-status-activity-style" "fg=blue")
       (let* ((sess (make-fake-session :nwindows 2))
-             (win2 (second (cl-tmux/model:session-windows sess))))
-        (setf (cl-tmux/model:window-activity-flag win2) t)
-        (let ((out (cl-tmux/renderer::%status-window-list-styled
-                    sess (cl-tmux/model:session-active-window sess))))
+             (win2 (second (nerimux/model:session-windows sess))))
+        (setf (nerimux/model:window-activity-flag win2) t)
+        (let ((out (nerimux/renderer::%status-window-list-styled
+                    sess (nerimux/model:session-active-window sess))))
           (expect (search "34" out))))))
 
   ;; The last (previously active) non-active window renders its tab with
   ;; window-status-last-style (fg=magenta → SGR 35) when set.
   (it "status-window-list-last-style-applied-to-last-window"
     (with-isolated-config
-      (cl-tmux/options:set-option "window-status-style" "")
-      (cl-tmux/options:set-option "window-status-last-style" "fg=magenta")
+      (nerimux/options:set-option "window-status-style" "")
+      (nerimux/options:set-option "window-status-last-style" "fg=magenta")
       (let* ((sess (make-fake-session :nwindows 2)))
         ;; make-fake-session selects window 1 active, leaving window 2 as the
         ;; last (second-highest last-active-time) window.
-        (expect (eq (second (cl-tmux/model:session-windows sess))
-                    (cl-tmux/model:session-last-window sess)))
-        (let ((out (cl-tmux/renderer::%status-window-list-styled
-                    sess (cl-tmux/model:session-active-window sess))))
+        (expect (eq (second (nerimux/model:session-windows sess))
+                    (nerimux/model:session-last-window sess)))
+        (let ((out (nerimux/renderer::%status-window-list-styled
+                    sess (nerimux/model:session-active-window sess))))
           (expect (search "35" out))))))
 
   ;; Alert-style precedence: a non-active window with BOTH an unseen bell and the
   ;; activity flag uses bell-style (fg=red, 31), not activity-style (fg=blue, 34).
   (it "status-window-list-bell-style-beats-activity-style"
     (with-isolated-config
-      (cl-tmux/options:set-option "window-status-style" "")
-      (cl-tmux/options:set-option "window-status-bell-style" "fg=red")
-      (cl-tmux/options:set-option "window-status-activity-style" "fg=blue")
+      (nerimux/options:set-option "window-status-style" "")
+      (nerimux/options:set-option "window-status-bell-style" "fg=red")
+      (nerimux/options:set-option "window-status-activity-style" "fg=blue")
       (let* ((sess (make-fake-session :nwindows 2))
-             (win2 (second (cl-tmux/model:session-windows sess))))
-        (setf (cl-tmux/model:window-activity-flag win2) t)
-        (setf (cl-tmux/model:window-bell-flag win2) t)
-        (let ((out (cl-tmux/renderer::%status-window-list-styled
-                    sess (cl-tmux/model:session-active-window sess))))
+             (win2 (second (nerimux/model:session-windows sess))))
+        (setf (nerimux/model:window-activity-flag win2) t)
+        (setf (nerimux/model:window-bell-flag win2) t)
+        (let ((out (nerimux/renderer::%status-window-list-styled
+                    sess (nerimux/model:session-active-window sess))))
           (expect (search "31" out))
           (expect (not (search "34" out)))))))
 
@@ -189,19 +189,19 @@
 
   ;; %justify-right never returns a line longer than the requested column width.
   (it "status-bar-line-fits-in-terminal-cols"
-    (let ((line (cl-tmux/renderer::%justify-right "left-text" "12:34" 20)))
+    (let ((line (nerimux/renderer::%justify-right "left-text" "12:34" 20)))
       (expect (<= (length line) 20))))
 
   ;; %justify-right's output contains both the left text and the right-justified time string.
   (it "status-bar-line-contains-left-and-time"
-    (let ((line (cl-tmux/renderer::%justify-right "mysession" "09:00" 40)))
+    (let ((line (nerimux/renderer::%justify-right "mysession" "09:00" 40)))
       (expect (search "mysession" line))
       (expect (search "09:00" line))))
 
   ;; %justify-right clamps its output to cols when the left text and time overflow a narrow terminal.
   (it "status-bar-line-truncates-when-too-long"
     ;; Terminal is only 5 cols wide; result must be clamped.
-    (let ((line (cl-tmux/renderer::%justify-right "very-long-left-text" "99:99" 5)))
+    (let ((line (nerimux/renderer::%justify-right "very-long-left-text" "99:99" 5)))
       (expect (= 5 (length line)))))
 
   ;;; ── %current-time-string ────────────────────────────────────────────────────
@@ -209,7 +209,7 @@
   ;; %current-time-string (the status-bar clock formatter, used by status-right)
   ;; returns a 5-char HH:MM string.
   (it "current-time-string-returns-hhmm"
-    (let ((t-str (cl-tmux/format::%current-time-string)))
+    (let ((t-str (nerimux/format::%current-time-string)))
       (expect (= 5 (length t-str)))
       (expect (char= #\: (char t-str 2)))
       (expect (every #'digit-char-p (remove #\: t-str)))))
@@ -218,11 +218,11 @@
 
   ;; %status-left-text returns session/window info when no prompt is active.
   (it "status-left-text-normal-mode"
-    (let ((cl-tmux/prompt:*prompt* nil))
+    (let ((nerimux/prompt:*prompt* nil))
       (let* ((s   (make-fake-session :nwindows 1))
              (win (session-active-window s))
              (ap  (session-active-pane  s))
-             (left (cl-tmux/renderer::%status-left-text s win ap)))
+             (left (nerimux/renderer::%status-left-text s win ap)))
         (expect (search "0" left))
         (expect (search "0" left)))))
 
@@ -233,19 +233,19 @@
     (let* ((left "hello")
            (right "world")
            (cols 40)
-           (result   (cl-tmux/renderer::%status-justify-line left right cols "left"))
-           (expected (cl-tmux/renderer::%justify-right left right cols)))
+           (result   (nerimux/renderer::%status-justify-line left right cols "left"))
+           (expected (nerimux/renderer::%justify-right left right cols)))
       (expect (string= expected result))))
 
   ;; %status-justify-line with justify=right places the right string at far right.
   (it "status-justify-line-right-places-content-at-far-right"
-    (let* ((result (cl-tmux/renderer::%status-justify-line "L" "R" 20 "right")))
+    (let* ((result (nerimux/renderer::%status-justify-line "L" "R" 20 "right")))
       (expect (<= (length result) 20))
       (expect (char= #\R (char result (1- (length result)))))))
 
   ;; %status-justify-line with justify=centre produces output containing both strings.
   (it "status-justify-line-centre-pads-symmetrically"
-    (let ((result (cl-tmux/renderer::%status-justify-line "AB" "XY" 20 "centre")))
+    (let ((result (nerimux/renderer::%status-justify-line "AB" "XY" 20 "centre")))
       (expect (search "AB" result))
       (expect (search "XY" result))
       (expect (<= (length result) 20))))
@@ -255,12 +255,12 @@
   ;; %status-format-or-default returns the expanded custom option when set.
   (it "status-format-or-default-uses-custom-option"
     (with-isolated-options ()
-      (cl-tmux/options:set-option "status-left" "custom-left")
+      (nerimux/options:set-option "status-left" "custom-left")
       (let* ((sess (make-renderer-test-session 40 10))
              (win  (session-active-window sess))
              (ap   (session-active-pane  sess))
-             (ctx  (cl-tmux/format:format-context-from-session sess win ap))
-             (result (cl-tmux/renderer::%status-format-or-default
+             (ctx  (nerimux/format:format-context-from-session sess win ap))
+             (result (nerimux/renderer::%status-format-or-default
                       "status-left" ctx (lambda () "fallback"))))
         (expect (string= "custom-left" result)))))
 
@@ -269,9 +269,9 @@
     (let* ((sess (make-renderer-test-session 40 10))
            (win  (session-active-window sess))
            (ap   (session-active-pane  sess))
-           (ctx  (cl-tmux/format:format-context-from-session sess win ap))
+           (ctx  (nerimux/format:format-context-from-session sess win ap))
            (called nil)
-           (result (cl-tmux/renderer::%status-format-or-default
+           (result (nerimux/renderer::%status-format-or-default
                     "status-left" ctx (lambda () (setf called t) "from-default"))))
       (expect called :to-be-truthy)
       (expect (string= "from-default" result)))))

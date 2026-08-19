@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/format)
+(in-package #:nerimux/format)
 
 ;;;; Context builder for expand-format.
 ;;;;
@@ -38,11 +38,11 @@
       (when (and session
                  (not (eq window session-active-window))
                  ;; Only mark as last if the window has actually been active before
-                 (> (cl-tmux/model:window-last-active-time window) 0)
-                 (eq window (cl-tmux/model:session-last-window session)))
+                 (> (nerimux/model:window-last-active-time window) 0)
+                 (eq window (nerimux/model:session-last-window session)))
         (write-char #\- s))
       ;; Z = zoomed
-      (when (cl-tmux/model:window-zoom-p window)
+      (when (nerimux/model:window-zoom-p window)
         (write-char #\Z s)))))
 
 ;;; ── Context plist helpers ───────────────────────────────────────────────────
@@ -56,8 +56,8 @@
    window rings BEL and cleared when the window is selected — so the status
    `!' persists until the window is viewed, matching tmux."
   (and window
-       (cl-tmux/options:get-option-for-context "monitor-bell" :window window)
-       (cl-tmux/model:window-bell-flag window)))
+       (nerimux/options:get-option-for-context "monitor-bell" :window window)
+       (nerimux/model:window-bell-flag window)))
 
 (defun %process-pid-string ()
   "Current process PID as a decimal string, or \"0\" when unavailable.
@@ -67,10 +67,10 @@
 
 (defun %server-session-count-string ()
   "Total sessions in *server-sessions* as a decimal string, minimum 1.
-   Accesses cl-tmux:*server-sessions* by name to avoid a circular package dependency."
+   Accesses nerimux:*server-sessions* by name to avoid a circular package dependency."
   (format nil "~D"
           (max 1 (ignore-errors
-                   (length (symbol-value (find-symbol "*SERVER-SESSIONS*" "CL-TMUX")))))))
+                   (length (symbol-value (find-symbol "*SERVER-SESSIONS*" "NERIMUX")))))))
 
 ;;; ── Context plist section builders ──────────────────────────────────────────
 ;;;
@@ -82,15 +82,15 @@
 (defun %session-group-peers (session)
   "The sessions in SESSION's group, from the runtime group registry (resolved
    by name so the format layer stays free of the umbrella package), or NIL."
-  (let* ((group (and session (cl-tmux/model:session-group session)))
-         (sym   (and group (find-symbol "*SESSION-GROUPS*" "CL-TMUX")))
+  (let* ((group (and session (nerimux/model:session-group session)))
+         (sym   (and group (find-symbol "*SESSION-GROUPS*" "NERIMUX")))
          (alist (and sym (boundp sym) (symbol-value sym))))
     (cdr (assoc group alist))))
 
 (defun %current-mouse-event-coordinate (key)
   "The :COL/:ROW coordinate of the in-flight mouse event (runtime special
    resolved by name), as a string — or \"\" outside a mouse dispatch."
-  (let* ((sym   (find-symbol "*CURRENT-MOUSE-EVENT*" "CL-TMUX"))
+  (let* ((sym   (find-symbol "*CURRENT-MOUSE-EVENT*" "NERIMUX"))
          (event (and sym (boundp sym) (symbol-value sym)))
          (value (and event (getf event key))))
     (if value (format nil "~D" value) "")))
@@ -99,39 +99,39 @@
   "Build the session-scoped slice of the format-context plist for SESSION.
    WINDOW-COUNT is the pre-computed number of windows in SESSION."
   (list :%session              session
-        :session-id            (if session (cl-tmux/model:session-id session) 0)
-        :session-name          (if session (cl-tmux/model:session-name session) "")
+        :session-id            (if session (nerimux/model:session-id session) 0)
+        :session-name          (if session (nerimux/model:session-name session) "")
         :session-windows       window-count
-        :session-attached      (if (and session (cl-tmux/model:session-clients session)) "1" "0")
+        :session-attached      (if (and session (nerimux/model:session-clients session)) "1" "0")
         :session-last-attached (if session
-                                   (format nil "~D" (cl-tmux/model:session-last-active session))
+                                   (format nil "~D" (nerimux/model:session-last-active session))
                                    "0")
-        :session-group         (if (and session (cl-tmux/model:session-group session))
-                                   (format nil "~A" (cl-tmux/model:session-group session)) "")
+        :session-group         (if (and session (nerimux/model:session-group session))
+                                   (format nil "~A" (nerimux/model:session-group session)) "")
         :session-created       (if session
-                                   (format nil "~D" (cl-tmux/model:session-created session))
+                                   (format nil "~D" (nerimux/model:session-created session))
                                    "")
         :session-activity      (if session
-                                   (format nil "~D" (cl-tmux/model:session-last-active session))
+                                   (format nil "~D" (nerimux/model:session-last-active session))
                                    "")
-        :session-grouped       (if (and session (cl-tmux/model:session-group session))
+        :session-grouped       (if (and session (nerimux/model:session-group session))
                                    "1" "0")
         :session-group-size    (let ((peers (%session-group-peers session)))
                                  (if peers (format nil "~D" (length peers)) ""))
         :session-group-list    (format nil "~{~A~^,~}"
-                                       (mapcar #'cl-tmux/model:session-name
+                                       (mapcar #'nerimux/model:session-name
                                                (%session-group-peers session)))
         :session-group-attached (let ((peers (%session-group-peers session)))
                                   (if peers
                                       (format nil "~D"
-                                              (count-if #'cl-tmux/model:session-clients
+                                              (count-if #'nerimux/model:session-clients
                                                         peers))
                                       ""))
         :mouse-x               (%current-mouse-event-coordinate :col)
         :mouse-y               (%current-mouse-event-coordinate :row)
         :session-count         (%server-session-count-string)
         :session-path          (ignore-errors (sb-posix:getcwd))
-        :client-session        (if session (cl-tmux/model:session-name session) "")))
+        :client-session        (if session (nerimux/model:session-name session) "")))
 
 (defun %window-context-plist (window session session-active-window session-windows
                               window-count window-panes window-flags window-raw-flags
@@ -141,38 +141,38 @@
    WINDOW-FLAGS, WINDOW-RAW-FLAGS, and WINDOW-LAYOUT are pre-computed by the
    caller so they need not be recomputed here."
   (list :window-index          (if window
-                                   (cl-tmux/model:session-window-index session window)
+                                   (nerimux/model:session-window-index session window)
                                    0)
-        :window-id             (if window (cl-tmux/model:window-id window) 0)
-        :window-name           (if window (cl-tmux/model:window-name window) "")
+        :window-id             (if window (nerimux/model:window-id window) 0)
+        :window-name           (if window (nerimux/model:window-name window) "")
         :window-count          window-count
         :window-active         (if (and window session-active-window
                                         (eq window session-active-window)) "1" "0")
         :window-flags          window-flags
         :window-raw-flags      window-raw-flags
-        :window-zoomed-flag    (if (and window (cl-tmux/model:window-zoom-p window)) "Z" " ")
+        :window-zoomed-flag    (if (and window (nerimux/model:window-zoom-p window)) "Z" " ")
         :window-panes          (length window-panes)
         :window-layout         window-layout
         :window-visible-layout window-layout
-        :window-width          (if window (cl-tmux/model:window-width  window) 0)
-        :window-height         (if window (cl-tmux/model:window-height window) 0)
+        :window-width          (if window (nerimux/model:window-width  window) 0)
+        :window-height         (if window (nerimux/model:window-height window) 0)
         :window-format         (if window "1" "0")
         :window-bell-flag      (if (%window-has-pending-bell-p window) "!" " ")
-        :window-activity-flag  (if (and window (cl-tmux/model:window-activity-flag window)) "#" " ")
-        :window-silence-flag   (if (and window (cl-tmux/model:window-silence-flag window)) "~" " ")
+        :window-activity-flag  (if (and window (nerimux/model:window-activity-flag window)) "#" " ")
+        :window-silence-flag   (if (and window (nerimux/model:window-silence-flag window)) "~" " ")
         :window-start-flag     (if (and window session-windows
                                         (eq window (first session-windows))) "1" "0")
         :window-end-flag       (if (and window session-windows
                                         (eq window (first (last session-windows)))) "1" "0")
         :window-last-flag      (if (and window session
-                                        (eq window (cl-tmux/model:session-last-window session)))
+                                        (eq window (nerimux/model:session-last-window session)))
                                    "1" "0")
         :window-marked-flag    (if (and window
-                                        (some #'cl-tmux/model:pane-marked window-panes))
+                                        (some #'nerimux/model:pane-marked window-panes))
                                    "1" "0")
         :window-activity       (if window
                                    (format nil "~D"
-                                           (cl-tmux/model:window-last-output-time window))
+                                           (nerimux/model:window-last-output-time window))
                                    "")
         ;; #{window_stack_index}: position in the session's MRU stack
         ;; (0 = current); windows never yet selected report empty.
@@ -180,7 +180,7 @@
                                                   (remove-if-not
                                                    (lambda (w)
                                                      (member w session-windows))
-                                                   (cl-tmux/model:session-window-stack
+                                                   (nerimux/model:session-window-stack
                                                     session))))
                                       (pos (and window stack
                                                 (position window stack))))
@@ -191,34 +191,34 @@
    PANE-TITLE, PANE-CURRENT-PATH, and PANE-SYNCHRONIZED are pre-computed by
    the caller so they need not be recomputed here."
   (list :%c-search-pane       pane
-        :pane-index           (if pane (cl-tmux/model:pane-id pane) 0)
-        :pane-id              (if pane (cl-tmux/model:pane-id pane) 0)
+        :pane-index           (if pane (nerimux/model:pane-id pane) 0)
+        :pane-id              (if pane (nerimux/model:pane-id pane) 0)
         :pane-title           pane-title
-        :pane-tty             (if pane (cl-tmux/model:pane-tty pane) "")
+        :pane-tty             (if pane (nerimux/model:pane-tty pane) "")
         :pane-current-path    pane-current-path
         :pane-current-command (%pane-current-command pane)
         :pane-format          (if pane "1" "0")
         :pane-active          (if (and pane window
-                                       (eq pane (cl-tmux/model:window-active-pane window)))
+                                       (eq pane (nerimux/model:window-active-pane window)))
                                   "1" "0")
         :pane-synchronized    pane-synchronized
-        :pane-marked          (if (and pane (cl-tmux/model:pane-marked pane)) "1" "0")
+        :pane-marked          (if (and pane (nerimux/model:pane-marked pane)) "1" "0")
         :pane-last            (if (and pane window
-                                       (eq pane (cl-tmux/model:window-last-active window)))
+                                       (eq pane (nerimux/model:window-last-active window)))
                                   "1" "0")
-        :pane-start-command   (if pane (cl-tmux/model:pane-start-command pane) "")
-        :pane-start-path      (if pane (cl-tmux/model:pane-start-path pane) "")
-        :pane-input-off       (if (and pane (cl-tmux/model:pane-input-disabled pane)) "1" "0")
-        :pane-dead            (if (and pane (<= (cl-tmux/model:pane-fd pane) 0)) "1" "0")
+        :pane-start-command   (if pane (nerimux/model:pane-start-command pane) "")
+        :pane-start-path      (if pane (nerimux/model:pane-start-path pane) "")
+        :pane-input-off       (if (and pane (nerimux/model:pane-input-disabled pane)) "1" "0")
+        :pane-dead            (if (and pane (<= (nerimux/model:pane-fd pane) 0)) "1" "0")
         ;; Death record (remain-on-exit): empty strings when the pane is alive
         ;; or the exit information is unknown, matching tmux's empty defaults.
-        :pane-dead-status     (let ((v (and pane (cl-tmux/model:pane-dead-status pane))))
+        :pane-dead-status     (let ((v (and pane (nerimux/model:pane-dead-status pane))))
                                 (if v (format nil "~D" v) ""))
-        :pane-dead-signal     (let ((v (and pane (cl-tmux/model:pane-dead-signal pane))))
+        :pane-dead-signal     (let ((v (and pane (nerimux/model:pane-dead-signal pane))))
                                 (if v (format nil "~D" v) ""))
-        :pane-dead-time       (let ((v (and pane (cl-tmux/model:pane-dead-time pane))))
+        :pane-dead-time       (let ((v (and pane (nerimux/model:pane-dead-time pane))))
                                 (if v (format nil "~D" v) ""))
-        :pane-pipe            (if (and pane (cl-tmux/model:pane-pipe-active-p pane)) "1" "0")))
+        :pane-pipe            (if (and pane (nerimux/model:pane-pipe-active-p pane)) "1" "0")))
 
 ;;; ── Context builder ─────────────────────────────────────────────────────────
 ;;;
@@ -241,30 +241,30 @@
    (session, window, pane-structural, pane-geometry, screen, client). The
    authoritative list of all #{...} variables is the set of keywords in the
    returned plist — read each section builder for its slice of the keys."
-  (let* ((session-windows       (and session (cl-tmux/model:session-windows session)))
-         (session-active-window (and session (cl-tmux/model:session-active-window session)))
+  (let* ((session-windows       (and session (nerimux/model:session-windows session)))
+         (session-active-window (and session (nerimux/model:session-active-window session)))
          (window-count          (length session-windows))
          (window-raw-flags      (%window-raw-flags window session-active-window session))
          (window-flags          (if (zerop (length window-raw-flags)) " " window-raw-flags))
-         (window-panes          (and window (cl-tmux/model:window-panes window)))
-         (window-layout         (or (and window (cl-tmux/model:layout->string window)) ""))
+         (window-panes          (and window (nerimux/model:window-panes window)))
+         (window-layout         (or (and window (nerimux/model:layout->string window)) ""))
          ;; pane-title: prefer explicit slot; fall back to OSC 0/2 screen-title.
          (pane-title            (cond
                                   ((null pane) "")
-                                  ((plusp (length (cl-tmux/model:pane-title pane)))
-                                   (cl-tmux/model:pane-title pane))
-                                  ((cl-tmux/model:pane-screen pane)
-                                   (cl-tmux/terminal:screen-title (cl-tmux/model:pane-screen pane)))
+                                  ((plusp (length (nerimux/model:pane-title pane)))
+                                   (nerimux/model:pane-title pane))
+                                  ((nerimux/model:pane-screen pane)
+                                   (nerimux/terminal:screen-title (nerimux/model:pane-screen pane)))
                                   (t "")))
          ;; pane-current-path: OSC 7 → OS proc query fallback.
-         (pane-current-path     (let* ((scr (and pane (cl-tmux/model:pane-screen pane)))
-                                       (osc-cwd (and scr (cl-tmux/terminal:screen-cwd scr))))
+         (pane-current-path     (let* ((scr (and pane (nerimux/model:pane-screen pane)))
+                                       (osc-cwd (and scr (nerimux/terminal:screen-cwd scr))))
                                   (or (and osc-cwd (plusp (length osc-cwd)) osc-cwd)
                                       (%pane-cwd-from-os pane))))
-         (pane-scr              (and pane (cl-tmux/model:pane-screen pane)))
-         (cursor-x              (if pane-scr (cl-tmux/terminal:screen-cursor-x pane-scr) 0))
-         (cursor-y              (if pane-scr (cl-tmux/terminal:screen-cursor-y pane-scr) 0))
-         (pane-synchronized     (if (cl-tmux/options:get-option-for-context
+         (pane-scr              (and pane (nerimux/model:pane-screen pane)))
+         (cursor-x              (if pane-scr (nerimux/terminal:screen-cursor-x pane-scr) 0))
+         (cursor-y              (if pane-scr (nerimux/terminal:screen-cursor-y pane-scr) 0))
+         (pane-synchronized     (if (nerimux/options:get-option-for-context
                                      "synchronize-panes" :window window) "1" "0"))
          (hostname              (machine-instance))
          (pid-str               (%process-pid-string)))
@@ -287,7 +287,7 @@
    body for the authoritative, complete list).  Any argument may be NIL."
   (format-context-from-session session window
                                (when window
-                                 (first (cl-tmux/model:window-panes window)))
+                                 (first (nerimux/model:window-panes window)))
                                :client-width  client-width
                                :client-height client-height
                                :client-tty    client-tty))

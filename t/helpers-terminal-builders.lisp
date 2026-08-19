@@ -1,6 +1,6 @@
-;;;; Terminal builder and inspection helpers for cl-tmux tests.
+;;;; Terminal builder and inspection helpers for nerimux tests.
 
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 (defmacro with-screen ((var w h) &body body)
   "Bind VAR to a fresh screen of width W and height H for BODY."
@@ -20,13 +20,13 @@
   (let ((screen (make-screen w h)))
     (unless (string= content "")
       (feed screen content))
-    (cl-tmux/commands::copy-mode-enter screen)
+    (nerimux/commands::copy-mode-enter screen)
     (when cursor
-      (setf (cl-tmux/terminal/types:screen-copy-cursor screen) cursor))
+      (setf (nerimux/terminal/types:screen-copy-cursor screen) cursor))
     (when mark
-      (setf (cl-tmux/terminal/types:screen-copy-mark screen) mark))
+      (setf (nerimux/terminal/types:screen-copy-mark screen) mark))
     (when selecting
-      (setf (cl-tmux/terminal/types:screen-copy-selecting screen) selecting))
+      (setf (nerimux/terminal/types:screen-copy-selecting screen) selecting))
     screen))
 
 (defmacro with-copy-mode-cursor ((screen-var row col &key (w 20) (h 5)) &body body)

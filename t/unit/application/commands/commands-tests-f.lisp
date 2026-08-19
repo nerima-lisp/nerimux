@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; rename-window, kill-window, run-shell, if-shell, selection-text, swap-pane, capture-pane — part III
 
@@ -36,12 +36,12 @@
   ;; rename-window sets the window name to the supplied string.
   (it "rename-window-sets-name"
     (let ((win (make-window :id 1 :name "old" :width 20 :height 5 :panes nil)))
-      (cl-tmux/commands:rename-window win "new")
+      (nerimux/commands:rename-window win "new")
       (expect (string= "new" (window-name win)))))
 
   ;; rename-window with NIL window does not signal an error.
   (it "rename-window-nil-window-is-noop"
-    (finishes (cl-tmux/commands:rename-window nil "irrelevant")))
+    (finishes (nerimux/commands:rename-window nil "irrelevant")))
 
   ;; rename-window with an empty or NIL name leaves the window name unchanged.
   (it "rename-window-invalid-name-is-noop-table"
@@ -50,7 +50,7 @@
       (destructuring-bind (new-name original desc) c
         (declare (ignore desc))
         (let ((win (make-window :id 1 :name original :width 20 :height 5 :panes nil)))
-          (cl-tmux/commands:rename-window win new-name)
+          (nerimux/commands:rename-window win new-name)
           (expect (string= original (window-name win)))))))
 
   ;;; ── kill-window (direct path) ────────────────────────────────────────────────
@@ -119,23 +119,23 @@
 
   ;; run-shell (background nil) returns a string containing the command's output.
   (it "run-shell-foreground-captures-stdout"
-    (let ((out (cl-tmux/commands:run-shell "echo hello")))
+    (let ((out (nerimux/commands:run-shell "echo hello")))
       (expect (stringp out))
       (expect (search "hello" out))))
 
   ;; run-shell :background T returns T immediately without waiting.
   (it "run-shell-background-returns-t"
-    (let ((result (cl-tmux/commands:run-shell "true" :background t)))
+    (let ((result (nerimux/commands:run-shell "true" :background t)))
       (expect (eq t result))))
 
   ;; run-shell with a no-op command returns an empty or whitespace-only string.
   (it "run-shell-foreground-empty-command-returns-string"
-    (let ((out (cl-tmux/commands:run-shell "true")))
+    (let ((out (nerimux/commands:run-shell "true")))
       (expect (stringp out))))
 
   ;; run-shell :combine-stderr T returns stdout and stderr in one output string.
   (it "run-shell-combine-stderr-captures-stderr"
-    (let ((out (cl-tmux/commands:run-shell "printf out; printf err >&2"
+    (let ((out (nerimux/commands:run-shell "printf out; printf err >&2"
                                            :combine-stderr t)))
       (expect (stringp out))
       (expect (search "out" out))
@@ -144,13 +144,13 @@
   ;; run-shell :start-directory runs the shell subprocess from that directory.
   (it "run-shell-start-directory-controls-working-directory"
     (let ((dir (merge-pathnames
-                (format nil "cl-tmux-run-shell-cwd-~D/" (random 1000000))
+                (format nil "nerimux-run-shell-cwd-~D/" (random 1000000))
                 (host-kit:temporary-directory))))
       (unwind-protect
            (let* ((created (ensure-directories-exist dir))
                   (expected (string-right-trim '(#\/)
                                                (namestring (truename created))))
-                  (out (cl-tmux/commands:run-shell
+                  (out (nerimux/commands:run-shell
                         "pwd"
                         :start-directory (namestring created)))
                   (actual (string-right-trim '(#\/ #\Newline #\Return #\Space #\Tab)
@@ -162,7 +162,7 @@
   ;; run-shell :delay waits before launching the shell subprocess.
   (it "run-shell-delay-waits-before-running-command"
     (let* ((start (get-internal-real-time))
-           (out (cl-tmux/commands:run-shell "printf delayed" :delay 1/20))
+           (out (nerimux/commands:run-shell "printf delayed" :delay 1/20))
            (elapsed (/ (- (get-internal-real-time) start)
                        internal-time-units-per-second)))
       (expect (stringp out))
@@ -180,7 +180,7 @@
   ;; %run-command-line run-shell -c runs the shell command from the supplied directory.
   (it "run-command-line-run-shell-c-controls-working-directory"
     (let ((dir (merge-pathnames
-                (format nil "cl-tmux-run-shell-dispatch-cwd-~D/" (random 1000000))
+                (format nil "nerimux-run-shell-dispatch-cwd-~D/" (random 1000000))
                 (host-kit:temporary-directory))))
       (unwind-protect
            (let* ((created (ensure-directories-exist dir))
@@ -205,9 +205,9 @@
 
   ;; if-shell calls then-fn on zero exit; else-fn on non-zero exit.
   (it "if-shell-dispatch-table"
-    (dolist (row (list (list (lambda (f) (cl-tmux/commands:if-shell "true" f))
+    (dolist (row (list (list (lambda (f) (nerimux/commands:if-shell "true" f))
                              "zero exit → then-fn called")
-                       (list (lambda (f) (cl-tmux/commands:if-shell "false"
+                       (list (lambda (f) (nerimux/commands:if-shell "false"
                                                                      (lambda () nil)
                                                                      :else-fn f))
                              "non-zero exit → else-fn called")))
@@ -222,12 +222,12 @@
     (dolist (row (list (list "false" (lambda () nil) "non-zero exit, no else-fn")
                        (list "true"  nil             "zero exit, nil then-fn")))
       (destructuring-bind (cmd then-fn desc) row
-        (finishes (cl-tmux/commands:if-shell cmd then-fn) "~A must not error" desc))))
+        (finishes (nerimux/commands:if-shell cmd then-fn) "~A must not error" desc))))
 
   ;; if-shell with a very short timeout calls ELSE-FN (timeout treated as non-zero exit).
   (it "if-shell-timeout-returns-calls-else-fn"
     (let ((else-called nil))
-      (cl-tmux/commands:if-shell "sleep 60"
+      (nerimux/commands:if-shell "sleep 60"
                                  (lambda () nil)
                                  :else-fn (lambda () (setf else-called t))
                                  :timeout 1/1000)
@@ -235,7 +235,7 @@
 
   ;;; ── %selection-text ──────────────────────────────────────────────────────────
   ;;;
-  ;;; %selection-text is a private helper in cl-tmux/commands that extracts the
+  ;;; %selection-text is a private helper in nerimux/commands that extracts the
   ;;; selected text from a copy-mode screen.  It returns NIL when no selection is
   ;;; active, a string for a single-row selection, and a newline-joined string for
   ;;; a multi-row selection.
@@ -243,14 +243,14 @@
   ;; %selection-text returns NIL when copy-selecting is NIL (no active selection).
   (it "selection-text-returns-nil-when-no-selection"
     (let ((s (copy-mode-screen :w 20 :h 5)))
-      (expect (null (cl-tmux/commands::%selection-text s)))))
+      (expect (null (nerimux/commands::%selection-text s)))))
 
   ;; %selection-text returns NIL when copy-selecting is T but mark is NIL.
   (it "selection-text-returns-nil-when-mark-nil"
     (let ((s (copy-mode-screen :w 20 :h 5
                                :selecting t
                                :cursor (cons 0 5))))
-      (expect (null (cl-tmux/commands::%selection-text s)))))
+      (expect (null (nerimux/commands::%selection-text s)))))
 
   ;; %selection-text returns the correct string for a single-row selection.
   (it "selection-text-single-row-returns-correct-text"
@@ -259,7 +259,7 @@
                                :mark (cons 0 0)
                                :cursor (cons 0 5)
                                :selecting t)))
-      (let ((text (cl-tmux/commands::%selection-text s)))
+      (let ((text (nerimux/commands::%selection-text s)))
         (expect (stringp text))
         (expect (string= "hello" text)))))
 
@@ -270,7 +270,7 @@
                                :mark (cons 0 0)
                                :cursor (cons 1 3)
                                :selecting t)))
-      (let ((text (cl-tmux/commands::%selection-text s)))
+      (let ((text (nerimux/commands::%selection-text s)))
         (expect (stringp text))
         (expect (find #\Newline text))
         ;; Row 0 contributes cols 0..2 = "abc"; row 1 contributes cols 0..2 = "def".
@@ -283,6 +283,6 @@
                                :mark (cons 0 5)
                                :cursor (cons 0 0)
                                :selecting t)))
-      (let ((text (cl-tmux/commands::%selection-text s)))
+      (let ((text (nerimux/commands::%selection-text s)))
         (expect (stringp text))
         (expect (string= "hello" text))))))

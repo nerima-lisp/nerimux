@@ -1,6 +1,6 @@
 ;;; Startup socket discovery and server auto-start helpers.
 
-(in-package :cl-tmux)
+(in-package :nerimux)
 
 (defconstant +server-socket-poll-interval-seconds+ 0.1
   "Seconds between socket-existence probes while waiting for a server to start.")
@@ -14,8 +14,8 @@
    it unlinks them and starts a fresh server instead of failing to attach."
   (and (probe-file socket-path)
        (not (handler-case
-                (let ((sock (cl-tmux/net:connect-to socket-path)))
-                  (cl-tmux/net:close-socket sock)
+                (let ((sock (nerimux/net:connect-to socket-path)))
+                  (nerimux/net:close-socket sock)
                   t)
               (error () nil)))))
 
@@ -67,10 +67,10 @@
              socket-path))))
 
 (defun %socket-file-session-name (path)
-  "Extract the cl-tmux session/server name from a socket PATH, or NIL."
+  "Extract the nerimux session/server name from a socket PATH, or NIL."
   (when path
     (let* ((name (pathname-name path))
-           (prefix "cl-tmux-"))
+           (prefix "nerimux-"))
       (when (and name
                  (>= (length name) (length prefix))
                  (string= prefix name :end2 (length prefix)))
@@ -78,7 +78,7 @@
 
 (defun %running-server-name (&optional preferred-name)
   "Return the best known running server socket name, preferring PREFERRED-NAME.
-   Falls back to the default \"0\" socket, then to the first cl-tmux socket in
+   Falls back to the default \"0\" socket, then to the first nerimux socket in
    TMPDIR.  This supports CLI command forwarding even when the first server was
    launched with `new-session -s NAME` or `attach NAME`."
   (cond
@@ -87,6 +87,6 @@
     ((probe-file (socket-path "0")) "0")
     (t
      (let ((pattern (merge-pathnames
-                     "cl-tmux-*.sock"
+                     "nerimux-*.sock"
                      (parse-namestring (format nil "~A/" (%socket-directory))))))
        (%socket-file-session-name (first (ignore-errors (directory pattern))))))))

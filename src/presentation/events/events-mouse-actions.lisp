@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; Built-in mouse actions mutate application state after key bindings decline
 ;;; the event.  Classification and protocol forwarding stay outside this file.
@@ -18,7 +18,7 @@
      (let* ((now (%now-ms))
             (count (%mouse-click-count *last-mouse-click*
                                        now row col
-                                       (or (cl-tmux/options:get-option "double-click-time")
+                                       (or (nerimux/options:get-option "double-click-time")
                                            500))))
        (%mouse-handle-left-press active-window col row now count
                                  border-split border-orient)))
@@ -83,7 +83,7 @@
     (let ((target-pane (pane-at-position active-window col row)))
       (when target-pane
         (%select-pane-with-focus active-window target-pane)
-        (let ((text (cl-tmux/buffer:get-paste-buffer 0)))
+        (let ((text (nerimux/buffer:get-paste-buffer 0)))
           (when text
             (%paste-to-pane target-pane text)))))))
 

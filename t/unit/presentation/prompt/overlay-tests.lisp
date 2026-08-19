@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Overlay, popup, and menu state tests (src/overlay.lisp).
 ;;;;

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/types)
+(in-package #:nerimux/terminal/types)
 
 ;;;; Screen metadata helpers.
 ;;;;

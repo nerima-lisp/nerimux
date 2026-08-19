@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Dispatch session listing and option command tests
 
@@ -8,7 +8,7 @@
   (it "named-command-break-pane-is-recognized"
     (with-fake-two-pane-session (s)
       (let ((*overlay* nil))
-        (cl-tmux::%dispatch-named-command s "break-pane")
+        (nerimux::%dispatch-named-command s "break-pane")
         (expect (null *overlay*))
         (expect (= 2 (length (session-windows s)))))))
 
@@ -16,7 +16,7 @@
   (it "named-command-unknown-shows-error-overlay"
     (with-fake-session (s)
       (let ((*overlay* nil))
-        (cl-tmux::%dispatch-named-command s "no-such-command-xyz")
+        (nerimux::%dispatch-named-command s "no-such-command-xyz")
         (assert-overlay-contains "unknown command" *overlay*
                                  "an unknown command name must show the unknown-command overlay"))))
 
@@ -30,52 +30,52 @@
       (destructuring-bind (npanes layout desc) row
         (declare (ignore desc))
         (with-fake-session (s :nwindows 1 :npanes npanes)
-          (cl-tmux::%run-command-line s (format nil "select-layout ~A" layout))
+          (nerimux::%run-command-line s (format nil "select-layout ~A" layout))
           (expect (= npanes
-                 (length (cl-tmux/model:window-panes
-                          (cl-tmux/model:session-active-window s)))))))))
+                 (length (nerimux/model:window-panes
+                          (nerimux/model:session-active-window s)))))))))
 
   ;; %run-command-line select-layout with non-canonical names is a no-op.
   (it "run-command-line-select-layout-noncanonical-names-are-noop"
     (dolist (layout '("bogus-layout" "even-h" "even-v" "main-h" "main-v"))
       (with-fake-two-pane-session (s)
-        (expect (null (cl-tmux::%run-command-line s (format nil "select-layout ~A" layout)))))))
+        (expect (null (nerimux::%run-command-line s (format nil "select-layout ~A" layout)))))))
 
   ;;; ── set-option -u (unset) ────────────────────────────────────────────────────
 
   ;; %run-command-line 'set-option -u <name>' removes the option from *global-options*.
   (it "run-command-line-set-option-unset"
-    (let ((cl-tmux/options:*global-options*
+    (let ((nerimux/options:*global-options*
            (let ((h (make-hash-table :test #'equal)))
              (setf (gethash "status-left" h) "my-value")
              h)))
       (with-fake-session (s)
-        (cl-tmux::%run-command-line s "set-option -u status-left")
-        (expect (not (gethash "status-left" cl-tmux/options:*global-options*))))))
+        (nerimux::%run-command-line s "set-option -u status-left")
+        (expect (not (gethash "status-left" nerimux/options:*global-options*))))))
 
   ;; set-window-option -u <opt> (= set-window-option -u) removes the WINDOW-local override, leaving the
   ;; global value intact (scope-aware -u, was always unsetting global).
   (it "set-option-w-unset-clears-window-local-not-global"
-    (let ((cl-tmux/options:*global-options* (make-hash-table :test #'equal)))
+    (let ((nerimux/options:*global-options* (make-hash-table :test #'equal)))
       (with-fake-session (s :nwindows 1)
-        (let ((win (cl-tmux/model:session-active-window s)))
-          (cl-tmux/options:set-option "mode-keys" "emacs")             ; global
-          (cl-tmux/options:set-option-for-window "mode-keys" "vi" win) ; window-local
-          (cl-tmux::%run-command-line s "set-window-option -u mode-keys")
+        (let ((win (nerimux/model:session-active-window s)))
+          (nerimux/options:set-option "mode-keys" "emacs")             ; global
+          (nerimux/options:set-option-for-window "mode-keys" "vi" win) ; window-local
+          (nerimux::%run-command-line s "set-window-option -u mode-keys")
           (expect (not (nth-value 1 (gethash "mode-keys"
-                                         (cl-tmux/model:window-local-options win)))))
-          (expect (equal "emacs" (cl-tmux/options:get-option "mode-keys")))))))
+                                         (nerimux/model:window-local-options win)))))
+          (expect (equal "emacs" (nerimux/options:get-option "mode-keys")))))))
 
   ;; set-option -aw <opt> X appends to the WINDOW-local value (scope-aware -a, was always
   ;; appending to the global store).
   (it "set-option-a-w-appends-to-window-local-value"
-    (let ((cl-tmux/options:*global-options* (make-hash-table :test #'equal)))
+    (let ((nerimux/options:*global-options* (make-hash-table :test #'equal)))
       (with-fake-session (s :nwindows 1)
-        (let ((win (cl-tmux/model:session-active-window s)))
-          (cl-tmux/options:set-option-for-window "@x" "ab" win)
-          (cl-tmux::%run-command-line s "set-option -aw @x cd")
-          (expect (equal "abcd" (cl-tmux/options:get-option-for-window "@x" win)))
-          (expect (not (nth-value 1 (gethash "@x" cl-tmux/options:*global-options*))))))))
+        (let ((win (nerimux/model:session-active-window s)))
+          (nerimux/options:set-option-for-window "@x" "ab" win)
+          (nerimux::%run-command-line s "set-option -aw @x cd")
+          (expect (equal "abcd" (nerimux/options:get-option-for-window "@x" win)))
+          (expect (not (nth-value 1 (gethash "@x" nerimux/options:*global-options*))))))))
 
   ;;; ── list-clients arg command ─────────────────────────────────────────────────
 
@@ -83,9 +83,9 @@
   (it "run-command-line-list-clients-format-uses-client-records"
     (with-fake-session (s :nwindows 1 :npanes 1)
       (with-session-and-window-names (s "alpha")
-        (let ((cl-tmux::*clients*
-                (list (cl-tmux::%make-client-conn :rows 50 :cols 200)
-                      (cl-tmux::%make-client-conn :rows 24 :cols 80))))
+        (let ((nerimux::*clients*
+                (list (nerimux::%make-client-conn :rows 50 :cols 200)
+                      (nerimux::%make-client-conn :rows 24 :cols 80))))
           (with-run-command-line-overlay
               (s "list-clients -F '#{client_name}:#{client_width}x#{client_height}:#{client_session}'")
             (assert-overlay-contains-all
@@ -97,8 +97,8 @@
   (it "run-command-line-list-clients-default-format-uses-session-name"
     (with-fake-session (s :nwindows 1 :npanes 1)
       (with-session-and-window-names (s "alpha")
-        (let ((cl-tmux::*clients*
-                (list (cl-tmux::%make-client-conn :rows 50 :cols 200))))
+        (let ((nerimux::*clients*
+                (list (nerimux::%make-client-conn :rows 50 :cols 200))))
           (with-run-command-line-overlay
               (s "list-clients")
             (assert-overlay-contains "client-0: alpha [200x50]" *overlay*
@@ -108,9 +108,9 @@
   (it "run-command-line-list-clients-local-fallback"
     (with-fake-session (s :nwindows 1 :npanes 1)
       (with-session-and-window-names (s "alpha")
-        (let ((cl-tmux::*clients* nil)
-              (cl-tmux::*term-cols* 132)
-              (cl-tmux::*term-rows* 43))
+        (let ((nerimux::*clients* nil)
+              (nerimux::*term-cols* 132)
+              (nerimux::*term-rows* 43))
           (with-run-command-line-overlay
               (s "list-clients -F '#{client_name}:#{client_width}x#{client_height}:#{client_session}'")
             (assert-overlay-contains "local:132x43:alpha" *overlay*
@@ -122,7 +122,7 @@
       (let ((s2 (make-fake-session :nwindows 1 :npanes 1)))
         (with-session-and-window-names (s1 "alpha")
           (with-session-and-window-names (s2 "beta")
-            (let ((cl-tmux::*clients* nil))
+            (let ((nerimux::*clients* nil))
               (with-registered-sessions (("alpha" s1) ("beta" s2))
                 (with-run-command-line-overlay
                     (s1 "list-clients -t beta -F '#{client_session}:#{client_name}'")
@@ -133,9 +133,9 @@
   (it "run-command-line-list-clients-filter-matches-expanded-rows"
     (with-fake-session (s :nwindows 1 :npanes 1)
       (with-session-and-window-names (s "alpha")
-        (let ((cl-tmux::*clients*
-                (list (cl-tmux::%make-client-conn :rows 50 :cols 200)
-                      (cl-tmux::%make-client-conn :rows 24 :cols 80))))
+        (let ((nerimux::*clients*
+                (list (nerimux::%make-client-conn :rows 50 :cols 200)
+                      (nerimux::%make-client-conn :rows 24 :cols 80))))
           (with-run-command-line-overlay
               (s "list-clients -f client-1 -F '#{client_name}:#{client_width}'")
             (assert-overlay-not-contains "client-0:200" *overlay*
@@ -164,7 +164,7 @@
   ;; %non-empty-overlay-lines splits text and removes empty rows.
   (it "non-empty-overlay-lines-drop-blank-rows"
     (expect (equal '("alpha" "beta")
-               (cl-tmux::%non-empty-overlay-lines (format nil "alpha~%~%beta~%")))))
+               (nerimux::%non-empty-overlay-lines (format nil "alpha~%~%beta~%")))))
 
   ;;; ── list-panes arg command ───────────────────────────────────────────────────
 
@@ -302,7 +302,7 @@
   (it "run-command-line-list-commands-reject-unsupported-arguments"
     (with-fake-session (s :nwindows 2 :npanes 2)
       (with-session-and-window-names (s "alpha" "home" "work")
-        (let ((cl-tmux::*clients* nil)
+        (let ((nerimux::*clients* nil)
               (cases '(("list-sessions extra" "command list-sessions: too many arguments (need at most 0)" " windows")
                        ("list-sessions -Z" "command list-sessions: unknown flag -Z" " windows")
                        ("list-sessions -F" "command list-sessions: -F expects an argument" " windows")
@@ -324,14 +324,14 @@
                        ("list-panes --foo" "command list-panes: invalid flag --" " (active)")
                        ("list-panes -- extra" "command list-panes: too many arguments (need at most 0)" " (active)"))))
           (with-command-line-rejection-cases (line message row-token cases)
-            (cl-tmux::%run-command-line s line)
+            (nerimux::%run-command-line s line)
             (assert-overlay-rejects-before-row *overlay* message row-token line))))))
 
   ;; list-* arg commands treat a standalone -- as an option terminator.
   (it "run-command-line-list-commands-accept-option-terminator"
     (with-fake-session (s :nwindows 2 :npanes 2)
       (with-session-and-window-names (s "alpha" "home" "work")
-        (let ((cl-tmux::*clients* nil)
+        (let ((nerimux::*clients* nil)
               (cases '(("list-sessions --" "0:")
                        ("list-clients --" "local")
                        ("list-windows --" "home")
@@ -346,7 +346,7 @@
   (it "run-command-line-list-commands-consume-option-terminator-as-format-value"
     (with-fake-session (s :nwindows 2 :npanes 2)
       (with-session-and-window-names (s "alpha" "home" "work")
-        (let ((cl-tmux::*clients* nil)
+        (let ((nerimux::*clients* nil)
               (cases '("list-sessions -F --"
                        "list-clients -F --"
                        "list-windows -F --"
@@ -359,6 +359,6 @@
   ;; %filtered-overlay-lines-string returns only matching rows, in order.
   (it "filtered-overlay-lines-string-keeps-matching-rows-in-order"
     (expect (string= (format nil "work~%workbench")
-                 (cl-tmux::%filtered-overlay-lines-string
+                 (nerimux::%filtered-overlay-lines-string
                   '("home" "work" "workbench")
                   "work")))))

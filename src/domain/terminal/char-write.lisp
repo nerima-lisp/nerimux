@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/actions)
+(in-package #:nerimux/terminal/actions)
 
 ;;;; Character writing: combining marks, DEC special graphics remapping, and
 ;;;; wide/normal cell placement at the cursor.

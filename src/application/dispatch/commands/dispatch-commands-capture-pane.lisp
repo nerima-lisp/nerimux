@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; -- Capture-pane command ----------------------------------------------------
 
@@ -52,7 +52,7 @@
       ;; -p: stdout equivalent; show the content in an overlay.
       (show-overlay content)
       ;; Default: save to a paste buffer (silent), like tmux. -b names it.
-      (cl-tmux/buffer:add-paste-buffer content buffer-name)))
+      (nerimux/buffer:add-paste-buffer content buffer-name)))
 
 (defun %cmd-capture-pane-arg (session args)
   "capture-pane [-p] [-S start] [-E end] [-b buffer] [-JeN] [-t target]: capture
@@ -100,7 +100,7 @@
         (when (and (%flag-present-p flags #\a)
                    (not (%flag-present-p flags #\q))
                    pane
-                   (null (cl-tmux/terminal:screen-alt-cells (pane-screen pane))))
+                   (null (nerimux/terminal:screen-alt-cells (pane-screen pane))))
           (show-overlay "capture-pane: no alternate screen")
           (return-from %cmd-capture-pane-arg nil))
         (let ((content (and pane (capture-pane pane
@@ -117,7 +117,7 @@
                 (setf content
                       (%capture-pane-slice-range
                        content
-                       (cl-tmux/terminal/types:screen-height (pane-screen pane))
+                       (nerimux/terminal/types:screen-height (pane-screen pane))
                        start end))))
             (%capture-pane-deliver-content content print-p
                                            (getf options :buffer-name))))))))

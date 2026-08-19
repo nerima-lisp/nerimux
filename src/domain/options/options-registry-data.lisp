@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/options)
+(in-package #:nerimux/options)
 
 ;;;; Registered tmux option specs (name/type/default triples).
 ;;;;
@@ -119,7 +119,7 @@
   ;; messages draw over the status area; multi-line pagers stay top-anchored.
   ("message-line"             :integer 0)
   ;; Milliseconds within which consecutive keys are assumed to be a paste and
-  ;; root-table key bindings are skipped (tmux default 1).  cl-tmux relies on
+  ;; root-table key bindings are skipped (tmux default 1).  nerimux relies on
   ;; bracketed paste (DECSET 2004, supported) for paste detection; registered
   ;; for set/show-options fidelity.
   ("assume-paste-time"        :integer 1)
@@ -186,7 +186,7 @@
   ;; Window sizing
   ("default-size"             :string  "80x24") ; default WxH for new sessions
   ;; Multi-client sizing policy: smallest / largest / latest / manual.
-  ;; cl-tmux broadcasts ONE shared frame to all clients, so "smallest" (every
+  ;; nerimux broadcasts ONE shared frame to all clients, so "smallest" (every
   ;; client can display it) is the safe default — diverging from tmux's "latest"
   ;; default, which in a shared-frame model could overflow smaller terminals.
   ("window-size"              :string  "smallest")
@@ -239,6 +239,6 @@
   ;; Honoured in %forward-octets-synchronized (events-loop-timers.lisp).
   ("backspace"            :string  "C-?")
   ;; Editor used for edit-buffer-style commands.  tmux resolves $EDITOR at
-  ;; runtime with vi as the fallback; cl-tmux has no buffer-editing subsystem
+  ;; runtime with vi as the fallback; nerimux has no buffer-editing subsystem
   ;; yet, so this is registered for set/show-options fidelity only.
   ("editor"               :string  "vi"))

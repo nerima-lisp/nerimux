@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/parser)
+(in-package #:nerimux/terminal/parser)
 
 ;;;; OSC 52 clipboard helpers.
 
@@ -7,7 +7,7 @@
 
 (defvar *osc52-handler* nil
   "A function of one argument (text string) called when OSC 52 clipboard data
-   is received.  Install cl-tmux/buffer:add-paste-buffer here at startup.")
+   is received.  Install nerimux/buffer:add-paste-buffer here at startup.")
 
 (defparameter +base64-alphabet+
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"

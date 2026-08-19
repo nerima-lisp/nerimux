@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/commands)
+(in-package #:nerimux/commands)
 
 ;;; Named scroll-extent sentinels — used by copy-mode-top and copy-mode-bottom.
 (defconstant +scroll-to-oldest+ most-positive-fixnum
@@ -216,7 +216,7 @@
 
 (defun copy-mode-scroll-to-mouse (screen)
   "send-keys -X scroll-to-mouse: scroll the copy-mode viewport toward the mouse
-   drag position.  cl-tmux performs mouse-drag scrolling in the event layer, so
+   drag position.  nerimux performs mouse-drag scrolling in the event layer, so
    this scriptable form is accepted and refreshes the viewport."
   (when (screen-copy-mode-p screen)
     (setf (screen-dirty-p screen) t)))

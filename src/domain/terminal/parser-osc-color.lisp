@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/parser)
+(in-package #:nerimux/terminal/parser)
 
 ;;;; OSC color and palette helpers.
 
@@ -11,10 +11,10 @@
 (defun %parse-hash-color (hex)
   "Parse a #RGB or #RRGGBB hex string (without the leading #) to 0xRRGGBB, or NIL."
   (case (length hex)
-    (6 (cl-tmux::%parse-integer-or-nil hex :radix 16))
-    (3 (let ((r (cl-tmux::%parse-integer-or-nil (subseq hex 0 1) :radix 16))
-             (g (cl-tmux::%parse-integer-or-nil (subseq hex 1 2) :radix 16))
-             (b (cl-tmux::%parse-integer-or-nil (subseq hex 2 3) :radix 16)))
+    (6 (nerimux::%parse-integer-or-nil hex :radix 16))
+    (3 (let ((r (nerimux::%parse-integer-or-nil (subseq hex 0 1) :radix 16))
+             (g (nerimux::%parse-integer-or-nil (subseq hex 1 2) :radix 16))
+             (b (nerimux::%parse-integer-or-nil (subseq hex 2 3) :radix 16)))
          (when (and r g b)
            (logior (ash (%scale-hex-channel r) 16)
                    (ash (%scale-hex-channel g) 8)
@@ -47,7 +47,7 @@
              (mapcar (lambda (s)
                        (and (> (length s) 0)
                             (<= (length s) 4)
-                            (cl-tmux::%parse-integer-or-nil s :radix 16)))
+                            (nerimux::%parse-integer-or-nil s :radix 16)))
                      parts)))
         (when (every #'integerp channels)
           (destructuring-bind (r g b) channels
@@ -144,7 +144,7 @@
   (let ((fields (%osc-split-fields body)))
     (loop for (index-spec spec) on fields by #'cddr
           while spec
-          for index = (cl-tmux::%parse-integer-or-nil index-spec :junk-allowed t)
+          for index = (nerimux::%parse-integer-or-nil index-spec :junk-allowed t)
           when index
             do (if (string= spec "?")
                    (let ((rgb (%palette-effective-rgb screen index)))
@@ -161,6 +161,6 @@
             (and (= (length fields) 1) (string= (first fields) "")))
         (%palette-override-clear-all screen)
         (dolist (index-spec fields)
-          (let ((index (cl-tmux::%parse-integer-or-nil index-spec :junk-allowed t)))
+          (let ((index (nerimux::%parse-integer-or-nil index-spec :junk-allowed t)))
             (when index
               (%palette-override-clear screen index)))))))

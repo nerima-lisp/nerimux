@@ -1,10 +1,10 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; server-access ACL commands.
 
 ;;; ── server-access ──────────────────────────────────────────────────────────
 ;;; tmux's server-access maintains an access-control list for the (multi-user)
-;;; server socket.  cl-tmux is single-user and does not share its server over a
+;;; server socket.  nerimux is single-user and does not share its server over a
 ;;; socket, so the list gates nothing — but modelling it faithfully lets a
 ;;; `.tmux.conf` `server-access` directive load and round-trip, and lets the
 ;;; behaviour be verified (add/delete/modify/list) like any other command.

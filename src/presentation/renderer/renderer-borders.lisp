@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/renderer)
+(in-package #:nerimux/renderer)
 
 ;;;; Split-tree separator and pane border rendering.
 
@@ -66,11 +66,11 @@
    Delegates to %dispatch-pane-border-chars with the current option value.
    Unknown values — including number/padded — fall back to single-line glyphs."
   (%dispatch-pane-border-chars
-   (cl-tmux/options:get-option "pane-border-lines" "single")))
+   (nerimux/options:get-option "pane-border-lines" "single")))
 
 (defun %border-indicators-value ()
   "The pane-border-indicators option value (off / colour / arrows / both)."
-  (cl-tmux/options:get-option "pane-border-indicators" "colour"))
+  (nerimux/options:get-option "pane-border-indicators" "colour"))
 
 (defun %border-indicators-colour-p ()
   "T when the active pane's border is coloured: pane-border-indicators
@@ -91,7 +91,7 @@
 
 (defun %pane-border-number-lines-p ()
   "T when pane-border-lines is \"number\" (pane numbers drawn into borders)."
-  (string-equal (cl-tmux/options:get-option "pane-border-lines" "single")
+  (string-equal (nerimux/options:get-option "pane-border-lines" "single")
                 "number"))
 
 (defun %render-h-separator (stream node active-pane terminal-cols)
@@ -107,8 +107,8 @@
                               (subtree-contains-p b active-pane))
                           (%border-indicators-colour-p)))
          (style      (if activep
-                         (cl-tmux/options:get-option "pane-active-border-style" "fg=green")
-                         (cl-tmux/options:get-option "pane-border-style" "default"))))
+                         (nerimux/options:get-option "pane-active-border-style" "fg=green")
+                         (nerimux/options:get-option "pane-border-style" "default"))))
     (when (< border-col terminal-cols)
       (%apply-border-style stream style)
       (let ((v-char (%pane-border-chars))
@@ -175,11 +175,11 @@
   "Render the pane-border-status title for PANE when pane-border-status is
    \"top\" or \"bottom\".  Expands pane-border-format as a format string.
    Does nothing when pane-border-status is \"off\" (the default)."
-  (let ((status (cl-tmux/options:get-option "pane-border-status" "off")))
+  (let ((status (nerimux/options:get-option "pane-border-status" "off")))
     (unless (member status '("off" "") :test #'string=)
-      (let* ((fmt  (cl-tmux/options:get-option "pane-border-format" " #{pane_index} "))
-             (ctx  (cl-tmux/format:format-context-from-session session win pane))
-             (text (cl-tmux/format:expand-format-safe
+      (let* ((fmt  (nerimux/options:get-option "pane-border-format" " #{pane_index} "))
+             (ctx  (nerimux/format:format-context-from-session session win pane))
+             (text (nerimux/format:expand-format-safe
                     fmt ctx (format nil " ~D " (pane-id pane))))
              ;; Truncate to pane width
              (maxw (pane-width pane))

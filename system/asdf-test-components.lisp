@@ -1,6 +1,6 @@
 (in-package #:cl-user)
 
-(defparameter *cl-tmux-test-components*
+(defparameter *nerimux-test-components*
   '((:module "t"
      :serial t
      :components

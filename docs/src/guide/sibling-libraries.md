@@ -1,16 +1,16 @@
 # Dogfooded sibling libraries
 
-cl-tmux is the organization's L4 application package: nothing depends on it, so
+nerimux is the organization's L4 application package: nothing depends on it, so
 it is where `nerima-lisp` libraries get exercised against a real workload. Each
-one below was adopted where it is a genuine fit for something cl-tmux already
+one below was adopted where it is a genuine fit for something nerimux already
 did by hand — not bolted on beside it.
 
 ## Cold-path reasoning with cl-prolog-kit
 
 `src/reasoning/` is a declarative read-model built on
 [cl-prolog-kit](https://github.com/nerima-lisp/cl-prolog-kit), a dependency-free Common
-Lisp Prolog engine that is a **core dependency** of cl-tmux (compiled into the
-binary). It projects cl-tmux's declarative tables into Prolog rulebases and
+Lisp Prolog engine that is a **core dependency** of nerimux (compiled into the
+binary). It projects nerimux's declarative tables into Prolog rulebases and
 answers relational questions the flat tables cannot express directly.
 
 It is used strictly on **cold paths** — introspection, validation, diagnostics
@@ -19,18 +19,18 @@ It is used strictly on **cold paths** — introspection, validation, diagnostics
 Two domains ship today, key bindings and the canonical command table:
 
 ```lisp
-(let ((rb (cl-tmux/reasoning:current-key-rulebase)))
-  (cl-tmux/reasoning:key-command rb "prefix" #\c)   ; => :NEW-WINDOW, T
-  (cl-tmux/reasoning:keys-running rb :new-window)   ; => (("prefix" . #\c))
-  (cl-tmux/reasoning:binding-conflicts rb))         ; keys bound differently across tables
+(let ((rb (nerimux/reasoning:current-key-rulebase)))
+  (nerimux/reasoning:key-command rb "prefix" #\c)   ; => :NEW-WINDOW, T
+  (nerimux/reasoning:keys-running rb :new-window)   ; => (("prefix" . #\c))
+  (nerimux/reasoning:binding-conflicts rb))         ; keys bound differently across tables
 
-(let ((rb (cl-tmux/reasoning:current-command-rulebase)))
-  (cl-tmux/reasoning:command-accepts-flag-p rb "bind-key" "T") ; => T
-  (cl-tmux/reasoning:commands-with-flag rb "t")               ; commands taking -t target
-  (cl-tmux/reasoning:scriptable-commands rb))                 ; commands taking no arguments
+(let ((rb (nerimux/reasoning:current-command-rulebase)))
+  (nerimux/reasoning:command-accepts-flag-p rb "bind-key" "T") ; => T
+  (nerimux/reasoning:commands-with-flag rb "t")               ; commands taking -t target
+  (nerimux/reasoning:scriptable-commands rb))                 ; commands taking no arguments
 ```
 
-Its regression suite (`cl-tmux/weave`) uses
+Its regression suite (`nerimux/weave`) uses
 [cl-weave](https://github.com/nerima-lisp/cl-weave) — custom matchers,
 `around-each` fixtures, a property test, and cl-prolog-kit's own `deftest-queries`
 bridge — and runs as the `weave` flake check.
@@ -38,12 +38,12 @@ bridge — and runs as the `weave` flake check.
 ## The other eleven
 
 - [cl-cli](https://github.com/nerima-lisp/cl-cli) parses the top-level
-  `cl-tmux [flags] [command [flags]]` global flags
+  `nerimux [flags] [command [flags]]` global flags
   (`main-startup-flags.lisp`, `*cli-app*`), replacing the old ad hoc
   `-L`/`-S`-only scanner with real tmux(1) flag parity — flags may now appear
   in any order before the command word.
 - [cl-boundary-kit](https://github.com/nerima-lisp/cl-boundary-kit) supplies
-  the process boundary (`cl-tmux/config:*process-boundary*`) that `run-shell` /
+  the process boundary (`nerimux/config:*process-boundary*`) that `run-shell` /
   `if-shell` and config-time shell directives run through, so tests can swap in
   a fake process without shelling out for real.
 - [cl-dataflow-kit](https://github.com/nerima-lisp/cl-dataflow-kit) models the
@@ -54,8 +54,8 @@ bridge — and runs as the `weave` flake check.
   pane spawn, byte-transparent master-fd read/write, raw mode, and
   terminal-size queries all delegate to it (`src/infrastructure/pty/`). It also
   contributes `rgb-to-256` for `-2` (force-256-colour) true-colour
-  downsampling in `renderer-format.lisp`, cl-tmux's first outer-terminal
-  colour-capability negotiation. cl-tmux keeps its own `select(2)`
+  downsampling in `renderer-format.lisp`, nerimux's first outer-terminal
+  colour-capability negotiation. nerimux keeps its own `select(2)`
   fd-multiplexing loop, SIGHUP `pty-close`, and `set-pty-size` ioctl on top.
 - [cl-parser-kit](https://github.com/nerima-lisp/cl-parser-kit) is the
   tokenizer framework behind `commands-tokenizer.lisp`'s shell-style argument
@@ -90,7 +90,7 @@ bridge — and runs as the `weave` flake check.
   child-exit wait. See the retirement note below for the two API differences
   that matter when reading pre-migration code.
 - [cl-regex-kit](https://github.com/nerima-lisp/cl-regex-kit) replaced
-  `cl-ppcre` behind every regular expression cl-tmux exposes: the `#{m/r:…}`
+  `cl-ppcre` behind every regular expression nerimux exposes: the `#{m/r:…}`
   match and `#{s/…/…/}` substitute format modifiers, copy-mode search and its
   match highlighting, and `list-commands -F` placeholder expansion. Its
   `escape` also subsumed a hand-rolled metacharacter escaper in
@@ -108,8 +108,8 @@ bridge — and runs as the `weave` flake check.
 
 ## External dependencies
 
-**There are none.** cl-tmux was the last `nerima-lisp` repository with any, and
-as of 2026-08-02 every name in `cl-tmux.asd`'s `:depends-on` is an org sibling.
+**There are none.** nerimux was the last `nerima-lisp` repository with any, and
+as of 2026-08-02 every name in `nerimux.asd`'s `:depends-on` is an org sibling.
 
 The list was four at the start of the 2026-08-01 sweep. Each removal replaced an
 external library with an org sibling rather than with hand-written code, which is
@@ -138,7 +138,7 @@ behaviour-preserving**, and the difference is worth stating plainly:
 - **No backreferences and no lookaround in patterns.** cl-regex-kit is
   RE2/Rust-style by design. `([a-z]+)_\1` and `(?=…)`/`(?<=…)` are rejected with
   a `regex-syntax-error` rather than mis-compiled.
-- **This moves cl-tmux closer to real tmux, not further away.** Upstream
+- **This moves nerimux closer to real tmux, not further away.** Upstream
   compiles `#{m/r:…}` and `#{s/…/…/}` patterns with `regcomp()` +
   `REG_EXTENDED` (`format.c`, `regsub.c`) — POSIX ERE, which has no
   backreferences and no lookaround either. Under glibc a pattern-side `\1` may
@@ -166,7 +166,7 @@ cl-process-kit (`select-fds` / `wait-for-input`), cl-tty-kit
 (`set-terminal-size`, `fd-read-octets`, `fd-write-octets`) and `sb-posix`
 (`kill`). Three things improved rather than merely moving:
 
-- **A live bug was fixed.** cl-tmux called variadic `ioctl(TIOCSWINSZ)` through
+- **A live bug was fixed.** nerimux called variadic `ioctl(TIOCSWINSZ)` through
   a *fixed* CFFI prototype. On the arm64 ABI a variadic argument is passed on
   the stack while a fixed prototype passes it in a register, so the call failed
   with `EFAULT` — `set-pty-size` was a silent no-op on Apple Silicon, and child
@@ -174,7 +174,7 @@ cl-process-kit (`select-fds` / `wait-for-input`), cl-tty-kit
   `sb-unix:unix-ioctl`, which marshals the pointer correctly.
 - **`EINTR` is retried** against a deadline fixed up front, so a `SIGWINCH` or
   `SIGCHLD` landing mid-`select` no longer reads as a spurious "nothing ready".
-- **`fd >= FD_SETSIZE` is rejected** with `fd-set-overflow`. cl-tmux's own
+- **`fd >= FD_SETSIZE` is rejected** with `fd-set-overflow`. nerimux's own
   `fd-set!` wrote past the end of the 128-byte bitmap with no bounds check.
 
 `babel` covered UTF-8 string↔octet conversion, now
@@ -193,7 +193,7 @@ for `split-string` and the pathname helpers.
 Two behaviors are worth knowing:
 
 - **Lone surrogates.** babel silently encoded them CESU-8 style; cl-codec-kit
-  signals (`surrogate-code-point`). cl-tmux's own UTF-8 decoder could produce
+  signals (`surrogate-code-point`). nerimux's own UTF-8 decoder could produce
   one — the bytes `ED A0 80` from a child process reassemble to U+D800 — and
   `char-code-limit` does not exclude the surrogate block, so it reached a
   screen cell and then the frame encoder. `safe-code-char` substitutes U+FFFD
@@ -207,5 +207,5 @@ Two behaviors are worth knowing:
 
 The replacement character is passed **explicitly** at that one lenient call
 site. cl-codec-kit's own default is `#\SUB` (U+001A), a C0 control character;
-babel's UTF-8 decoder hardcoded U+FFFD. cl-tmux wants U+FFFD — it is what babel
+babel's UTF-8 decoder hardcoded U+FFFD. nerimux wants U+FFFD — it is what babel
 did, and it is what `safe-code-char` already substitutes everywhere else.

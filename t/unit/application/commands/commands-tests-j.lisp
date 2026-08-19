@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; commands tests — part J: join-pane helpers, resize-pane directions,
 ;;;; copy-mode word/bottom noop, search helpers, scroll helpers,
@@ -15,7 +15,7 @@
                                   :panes (list (%make-test-pane :id 1))))
            (sess     (make-session :id 1 :name "0" :windows (list src-win dst-win))))
       (session-select-window sess src-win)
-      (cl-tmux/commands::%join-pane-kill-empty-src sess src-win)
+      (nerimux/commands::%join-pane-kill-empty-src sess src-win)
       (expect (member src-win (session-windows sess)) :to-be-falsy)
       ;; Active window switches to the remaining window.
       (expect (eq dst-win (session-active-window sess)))))
@@ -26,7 +26,7 @@
            (src-win  (make-window :id 1 :name "src" :width 20 :height 5 :panes (list pane)))
            (sess     (make-session :id 1 :name "0" :windows (list src-win))))
       (session-select-window sess src-win)
-      (cl-tmux/commands::%join-pane-kill-empty-src sess src-win)
+      (nerimux/commands::%join-pane-kill-empty-src sess src-win)
       ;; Window must still be in the session.
       (expect (member src-win (session-windows sess)))))
 
@@ -40,7 +40,7 @@
                                   :tree (make-layout-leaf dst-pane)
                                   :panes (list dst-pane))))
       (window-select-pane dst-win dst-pane)
-      (let ((result (cl-tmux/commands::%join-pane-insert-into-dst src-pane dst-win :h)))
+      (let ((result (nerimux/commands::%join-pane-insert-into-dst src-pane dst-win :h)))
         (expect (eq src-pane result)))))
 
   ;; %join-pane-insert-into-dst returns NIL when dst-window has no active pane.
@@ -51,7 +51,7 @@
     (let* ((src-pane (%make-test-pane :id 10))
            (dst-win  (make-window :id 2 :name "dst" :width 20 :height 5
                                   :tree nil :panes nil)))
-      (expect (null (cl-tmux/commands::%join-pane-insert-into-dst src-pane dst-win :h)))))
+      (expect (null (nerimux/commands::%join-pane-insert-into-dst src-pane dst-win :h)))))
 
   ;;; ── resize-pane: up direction ────────────────────────────────────────────────
 
@@ -74,10 +74,10 @@
   (it "copy-mode-search-backward-saves-term"
     (let ((s (make-screen 30 5)))
       (feed s "foo bar foo")
-      (cl-tmux/commands::copy-mode-enter s)
-      (setf (cl-tmux/terminal/types:screen-copy-cursor s) (cons 0 11))
-      (cl-tmux/commands::copy-mode-search-backward s "foo")
-      (expect (string= "foo" (cl-tmux/terminal/types:screen-copy-search-term s)))))
+      (nerimux/commands::copy-mode-enter s)
+      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 11))
+      (nerimux/commands::copy-mode-search-backward s "foo")
+      (expect (string= "foo" (nerimux/terminal/types:screen-copy-search-term s)))))
 
   ;;; ── copy-mode-search-prev: positive case ─────────────────────────────────────
 
@@ -88,15 +88,15 @@
       (feed s "abc")
       (feed s (format nil "~C~C" #\Return #\Linefeed))
       (feed s "abc def")
-      (cl-tmux/commands::copy-mode-enter s)
+      (nerimux/commands::copy-mode-enter s)
       ;; Save term via forward search first
-      (setf (cl-tmux/terminal/types:screen-copy-cursor s) (cons 0 0))
-      (cl-tmux/commands::copy-mode-search-forward s "abc")
+      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 0))
+      (nerimux/commands::copy-mode-search-forward s "abc")
       ;; Cursor should be on row 1 col 0 (second "abc")
-      (expect (= 1 (car (cl-tmux/terminal/types:screen-copy-cursor s))))
+      (expect (= 1 (car (nerimux/terminal/types:screen-copy-cursor s))))
       ;; Now search-prev should go back to row 0
-      (cl-tmux/commands::copy-mode-search-prev s)
-      (expect (= 0 (car (cl-tmux/terminal/types:screen-copy-cursor s))))))
+      (nerimux/commands::copy-mode-search-prev s)
+      (expect (= 0 (car (nerimux/terminal/types:screen-copy-cursor s))))))
 
   ;; n/N are relative to the LAST search heading, not hardcoded (audit #19): after a
   ;; backward search (?), n continues BACKWARD and N reverses to forward.
@@ -108,79 +108,79 @@
       (feed s "abc")
       (feed s (format nil "~C~C" #\Return #\Linefeed))
       (feed s "abc")
-      (cl-tmux/commands::copy-mode-enter s)
+      (nerimux/commands::copy-mode-enter s)
       ;; Backward search from row 2 finds the previous "abc" on row 1.
-      (setf (cl-tmux/terminal/types:screen-copy-cursor s) (cons 2 0))
-      (cl-tmux/commands::copy-mode-search-backward s "abc")
-      (expect (= 1 (car (cl-tmux/terminal/types:screen-copy-cursor s))))
-      (expect (eq :backward (cl-tmux/terminal/types:screen-copy-search-direction s)))
+      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 2 0))
+      (nerimux/commands::copy-mode-search-backward s "abc")
+      (expect (= 1 (car (nerimux/terminal/types:screen-copy-cursor s))))
+      (expect (eq :backward (nerimux/terminal/types:screen-copy-search-direction s)))
       ;; n repeats in the SAME (backward) direction → row 0.
-      (cl-tmux/commands::copy-mode-search-next s)
-      (expect (= 0 (car (cl-tmux/terminal/types:screen-copy-cursor s))))
-      (expect (eq :backward (cl-tmux/terminal/types:screen-copy-search-direction s)))
+      (nerimux/commands::copy-mode-search-next s)
+      (expect (= 0 (car (nerimux/terminal/types:screen-copy-cursor s))))
+      (expect (eq :backward (nerimux/terminal/types:screen-copy-search-direction s)))
       ;; N reverses to forward → returns to row 1.
-      (cl-tmux/commands::copy-mode-search-prev s)
-      (expect (= 1 (car (cl-tmux/terminal/types:screen-copy-cursor s))))))
+      (nerimux/commands::copy-mode-search-prev s)
+      (expect (= 1 (car (nerimux/terminal/types:screen-copy-cursor s))))))
 
   ;;; ── %scroll-up-one-line direct tests ─────────────────────────────────────────
 
   ;; %scroll-up-one-line decrements row when cursor is not at top of viewport.
   (it "scroll-up-one-line-moves-cursor-up-within-viewport"
     (let ((s (make-screen 20 5)))
-      (cl-tmux/commands::copy-mode-enter s)
+      (nerimux/commands::copy-mode-enter s)
       ;; Place cursor at row 3 (well within viewport, no scrollback needed)
-      (setf (cl-tmux/terminal/types:screen-copy-cursor s) (cons 3 2))
-      (cl-tmux/commands::%scroll-up-one-line s 3 2 0)
-      (expect (equal (cons 2 2) (cl-tmux/terminal/types:screen-copy-cursor s)))))
+      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 3 2))
+      (nerimux/commands::%scroll-up-one-line s 3 2 0)
+      (expect (equal (cons 2 2) (nerimux/terminal/types:screen-copy-cursor s)))))
 
   ;; %scroll-up-one-line scrolls the viewport when cursor is at row 0 and scrollback exists.
   (it "scroll-up-one-line-scrolls-viewport-at-top-edge"
     (let ((s (%screen-with-scrollback 5)))
       ;; Place cursor at row 0 so the viewport needs to scroll
-      (setf (cl-tmux/terminal/types:screen-copy-cursor s) (cons 0 2))
+      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 2))
       (let ((before-offset (screen-copy-offset s)))
-        (cl-tmux/commands::%scroll-up-one-line s 0 2 5)
+        (nerimux/commands::%scroll-up-one-line s 0 2 5)
         (expect (= (1+ before-offset) (screen-copy-offset s)))
-        (expect (= 0 (car (cl-tmux/terminal/types:screen-copy-cursor s)))))))
+        (expect (= 0 (car (nerimux/terminal/types:screen-copy-cursor s)))))))
 
   ;; %scroll-up-one-line is a no-op when cursor is at row 0 and offset equals max.
   (it "scroll-up-one-line-noop-at-oldest-scrollback"
     (let ((s (%screen-with-scrollback 3)))
-      (setf (cl-tmux/terminal/types:screen-copy-offset s) 3)
-      (setf (cl-tmux/terminal/types:screen-copy-cursor s) (cons 0 2))
-      (cl-tmux/commands::%scroll-up-one-line s 0 2 3)
+      (setf (nerimux/terminal/types:screen-copy-offset s) 3)
+      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 2))
+      (nerimux/commands::%scroll-up-one-line s 0 2 3)
       (expect (= 3 (screen-copy-offset s)))
-      (expect (= 0 (car (cl-tmux/terminal/types:screen-copy-cursor s))))))
+      (expect (= 0 (car (nerimux/terminal/types:screen-copy-cursor s))))))
 
   ;;; ── %scroll-down-one-line direct tests ───────────────────────────────────────
 
   ;; %scroll-down-one-line increments row when cursor is not at viewport bottom.
   (it "scroll-down-one-line-moves-cursor-down-within-viewport"
     (let ((s (make-screen 20 5)))
-      (cl-tmux/commands::copy-mode-enter s)
+      (nerimux/commands::copy-mode-enter s)
       ;; Place cursor at row 1 (within viewport)
-      (setf (cl-tmux/terminal/types:screen-copy-cursor s) (cons 1 2))
-      (cl-tmux/commands::%scroll-down-one-line s 1 2 5)
-      (expect (equal (cons 2 2) (cl-tmux/terminal/types:screen-copy-cursor s)))))
+      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 1 2))
+      (nerimux/commands::%scroll-down-one-line s 1 2 5)
+      (expect (equal (cons 2 2) (nerimux/terminal/types:screen-copy-cursor s)))))
 
   ;; %scroll-down-one-line scrolls the viewport when cursor is at bottom and offset > 0.
   (it "scroll-down-one-line-scrolls-viewport-at-bottom-edge"
     (let ((s (%screen-with-scrollback 10)))
       ;; Set offset > 0 so we can scroll forward
-      (setf (cl-tmux/terminal/types:screen-copy-offset s) 5)
-      (setf (cl-tmux/terminal/types:screen-copy-cursor s) (cons 4 2))
-      (cl-tmux/commands::%scroll-down-one-line s 4 2 5)
+      (setf (nerimux/terminal/types:screen-copy-offset s) 5)
+      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 4 2))
+      (nerimux/commands::%scroll-down-one-line s 4 2 5)
       (expect (= 4 (screen-copy-offset s)))
-      (expect (= 4 (car (cl-tmux/terminal/types:screen-copy-cursor s))))))
+      (expect (= 4 (car (nerimux/terminal/types:screen-copy-cursor s))))))
 
   ;; %scroll-down-one-line is a no-op when cursor is at the bottom and offset is 0.
   (it "scroll-down-one-line-noop-at-live-view-bottom"
     (let ((s (make-screen 20 5)))
-      (cl-tmux/commands::copy-mode-enter s)
-      (setf (cl-tmux/terminal/types:screen-copy-cursor s) (cons 4 2))
-      (cl-tmux/commands::%scroll-down-one-line s 4 2 5)
+      (nerimux/commands::copy-mode-enter s)
+      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 4 2))
+      (nerimux/commands::%scroll-down-one-line s 4 2 5)
       (expect (= 0 (screen-copy-offset s)))
-      (expect (= 4 (car (cl-tmux/terminal/types:screen-copy-cursor s))))))
+      (expect (= 4 (car (nerimux/terminal/types:screen-copy-cursor s))))))
 
   ;;; ── %extract-row-chars direct tests ──────────────────────────────────────────
 
@@ -188,7 +188,7 @@
   (it "extract-row-chars-returns-substring-of-row"
     (let ((s (make-screen 20 5)))
       (feed s "hello world")
-      (let ((result (cl-tmux/commands::%extract-row-chars s 0 0 5)))
+      (let ((result (nerimux/commands::%extract-row-chars s 0 0 5)))
         (expect (stringp result))
         (expect (string= "hello" result)))))
 
@@ -196,7 +196,7 @@
   (it "extract-row-chars-empty-range-returns-empty-string"
     (let ((s (make-screen 20 5)))
       (feed s "hello")
-      (let ((result (cl-tmux/commands::%extract-row-chars s 0 3 3)))
+      (let ((result (nerimux/commands::%extract-row-chars s 0 3 3)))
         (expect (string= "" result)))))
 
   ;;; ── %copy-mode-word-at-cursor direct tests ──────────────────────────────────
@@ -206,7 +206,7 @@
     (let* ((chars (coerce "foo bar baz" 'vector))
            (max-col (1- (length chars))))
       (multiple-value-bind (start end)
-          (cl-tmux/commands::%copy-mode-word-bounds chars 5 max-col #'cl-tmux/commands::%word-separator-p)
+          (nerimux/commands::%copy-mode-word-bounds chars 5 max-col #'nerimux/commands::%word-separator-p)
         (expect (= 4 start))
         (expect (= 6 end)))))
 
@@ -215,47 +215,47 @@
     (let* ((chars (coerce "foo bar baz" 'vector))
            (max-col (1- (length chars))))
       (multiple-value-bind (start end)
-          (cl-tmux/commands::%copy-mode-word-bounds chars 3 max-col #'cl-tmux/commands::%word-separator-p)
+          (nerimux/commands::%copy-mode-word-bounds chars 3 max-col #'nerimux/commands::%word-separator-p)
         (expect (= 3 start))
         (expect (= 3 end)))))
 
   ;; %copy-mode-word-at-cursor expands to the full word under the cursor.
   (it "copy-mode-word-at-cursor-returns-surrounding-word"
     (let ((s (copy-mode-screen :content "foo bar baz")))
-      (setf (cl-tmux/terminal/types:screen-copy-cursor s) (cons 0 5))
-      (expect (string= "bar" (cl-tmux/commands::%copy-mode-word-at-cursor s)))))
+      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 5))
+      (expect (string= "bar" (nerimux/commands::%copy-mode-word-at-cursor s)))))
 
   ;; %copy-mode-word-at-cursor returns a single separator cell when cursor lands on one.
   (it "copy-mode-word-at-cursor-returns-single-separator-cell"
     (let ((s (copy-mode-screen :content "foo bar baz")))
-      (setf (cl-tmux/terminal/types:screen-copy-cursor s) (cons 0 3))
-      (expect (string= " " (cl-tmux/commands::%copy-mode-word-at-cursor s)))))
+      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 3))
+      (expect (string= " " (nerimux/commands::%copy-mode-word-at-cursor s)))))
 
   ;; %copy-mode-word-at-cursor returns NIL when copy mode is inactive.
   (it "copy-mode-word-at-cursor-noop-outside-copy-mode"
     (let ((s (make-screen 20 5)))
       (feed s "foo bar baz")
-      (expect (null (cl-tmux/commands::%copy-mode-word-at-cursor s)))))
+      (expect (null (nerimux/commands::%copy-mode-word-at-cursor s)))))
 
   ;;; ── %copy-row-range-to-paste-buffer direct tests ─────────────────────────────
 
   ;; %copy-row-range-to-paste-buffer pushes right-trimmed text to paste buffers.
   (it "copy-row-range-to-paste-buffer-adds-trimmed-text"
-    (let ((cl-tmux/buffer:*paste-buffers* nil))
+    (let ((nerimux/buffer:*paste-buffers* nil))
       (let ((s (make-screen 20 5)))
         (feed s "hello")
-        (cl-tmux/commands::%copy-row-range-to-paste-buffer s 0 0 10)
-        (expect (= 1 (length cl-tmux/buffer:*paste-buffers*)))
-        (let ((got (cl-tmux/buffer:get-paste-buffer 0)))
+        (nerimux/commands::%copy-row-range-to-paste-buffer s 0 0 10)
+        (expect (= 1 (length nerimux/buffer:*paste-buffers*)))
+        (let ((got (nerimux/buffer:get-paste-buffer 0)))
           (expect (string= "hello" got))))))
 
   ;; %copy-row-range-to-paste-buffer does nothing when the trimmed result is empty.
   (it "copy-row-range-to-paste-buffer-noop-when-all-spaces"
-    (let ((cl-tmux/buffer:*paste-buffers* nil))
+    (let ((nerimux/buffer:*paste-buffers* nil))
       (let ((s (make-screen 20 5)))
         ;; Row 0 is blank (all spaces) — the trimmed result will be empty.
-        (cl-tmux/commands::%copy-row-range-to-paste-buffer s 0 0 10)
-        (expect (null cl-tmux/buffer:*paste-buffers*)))))
+        (nerimux/commands::%copy-row-range-to-paste-buffer s 0 0 10)
+        (expect (null nerimux/buffer:*paste-buffers*)))))
 
   ;;; ── %copy-mode-row-chars direct tests ────────────────────────────────────────
 
@@ -263,8 +263,8 @@
   (it "copy-mode-row-chars-returns-character-vector"
     (let ((s (make-screen 20 5)))
       (feed s "hello")
-      (cl-tmux/commands::copy-mode-enter s)
-      (let ((chars (cl-tmux/commands::%copy-mode-row-chars s 0)))
+      (nerimux/commands::copy-mode-enter s)
+      (let ((chars (nerimux/commands::%copy-mode-row-chars s 0)))
         (expect (vectorp chars))
         (expect (= 20 (length chars)))
         (expect (char= #\h (aref chars 0))))))
@@ -276,8 +276,8 @@
   (it "screen-row-string-returns-full-row-as-string"
     (let ((s (make-screen 20 5)))
       (feed s "hello")
-      (let ((trimmed (cl-tmux/commands::%screen-row-string s 0))
-            (full    (cl-tmux/commands::%screen-row-string s 0 nil)))
+      (let ((trimmed (nerimux/commands::%screen-row-string s 0))
+            (full    (nerimux/commands::%screen-row-string s 0 nil)))
         (expect (stringp trimmed))
         (expect (string= "hello" trimmed))
         (expect (= 20 (length full)))
@@ -286,9 +286,9 @@
   ;; %scrollback-row-string returns a string built from a cell vector.
   (it "scrollback-row-string-converts-cell-vector"
     (let* ((cells (make-array 5 :initial-element
-                               (cl-tmux/terminal/types:make-cell
+                               (nerimux/terminal/types:make-cell
                                 :char #\A :fg 7 :bg 0 :attrs 0 :width 1)))
-           (result (cl-tmux/commands::%scrollback-row-string cells)))
+           (result (nerimux/commands::%scrollback-row-string cells)))
       (expect (stringp result))
       (expect (= 5 (length result)))
       (expect (every (lambda (c) (char= #\A c)) (coerce result 'list)))))
@@ -299,8 +299,8 @@
   (it "rename-session-does-not-run-hooks"
     (with-isolated-hooks
       (let ((hook-called nil))
-        (cl-tmux/hooks:add-hook cl-tmux/hooks:+hook-after-rename-window+
+        (nerimux/hooks:add-hook nerimux/hooks:+hook-after-rename-window+
                                 (lambda (&rest _) (declare (ignore _)) (setf hook-called t)))
         (let ((sess (make-session :id 1 :name "old" :windows nil)))
-          (cl-tmux/commands:rename-session sess "new"))
+          (nerimux/commands:rename-session sess "new"))
         (expect hook-called :to-be-falsy)))))

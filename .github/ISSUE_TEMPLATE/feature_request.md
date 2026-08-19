@@ -1,6 +1,6 @@
 ---
 name: Feature request / parity gap
-about: A tmux feature that cl-tmux is missing or implements incompletely
+about: A tmux feature that nerimux is missing or implements incompletely
 labels: enhancement
 ---
 
@@ -9,7 +9,7 @@ labels: enhancement
 <!-- Command, flag, format variable, escape sequence, or behavior — with the
      man-page section or upstream reference if you have it. -->
 
-## What cl-tmux currently does
+## What nerimux currently does
 
 <!-- Error message, silent no-op, or partial behavior. -->
 

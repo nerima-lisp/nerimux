@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Dispatch session tests: flag parsers and target/new-session command cases.
 
@@ -9,28 +9,28 @@
   ;; %resolve-layout-name maps canonical layout names to layout keywords.
   (it "resolve-layout-name-returns-correct-keywords"
     (check-table
-     (list (list (cl-tmux::%resolve-layout-name "even-horizontal")
+     (list (list (nerimux::%resolve-layout-name "even-horizontal")
                  :even-horizontal
                  "canonical even-horizontal")
-           (list (cl-tmux::%resolve-layout-name "even-vertical")
+           (list (nerimux::%resolve-layout-name "even-vertical")
                  :even-vertical
                  "canonical even-vertical")
-           (list (cl-tmux::%resolve-layout-name "main-horizontal")
+           (list (nerimux::%resolve-layout-name "main-horizontal")
                  :main-horizontal
                  "canonical main-horizontal")
-           (list (cl-tmux::%resolve-layout-name "main-vertical")
+           (list (nerimux::%resolve-layout-name "main-vertical")
                  :main-vertical
                  "canonical main-vertical")
-           (list (cl-tmux::%resolve-layout-name "tiled")
+           (list (nerimux::%resolve-layout-name "tiled")
                  :tiled
                  "canonical tiled"))
      :test #'eq)
     (dolist (name '("even-h" "even-v" "main-h" "main-v" "bogus"))
-      (expect (null (cl-tmux::%resolve-layout-name name)))))
+      (expect (null (nerimux::%resolve-layout-name name)))))
 
   ;; define-layout-name-table is a defined macro.
   (it "define-layout-name-table-macro-is-defined"
-    (expect (macro-function 'cl-tmux::define-layout-name-table)))
+    (expect (macro-function 'nerimux::define-layout-name-table)))
 
   ;;; ── %parse-flag-token helper ──────────────────────────────────────────────
 
@@ -45,7 +45,7 @@
       (destructuring-bind (token value-flags rest expected-char expected-val expected-rest desc) row
         (declare (ignore desc))
         (multiple-value-bind (entries new-rest)
-            (cl-tmux::%parse-flag-token token value-flags rest)
+            (nerimux::%parse-flag-token token value-flags rest)
           (expect (equal expected-char (car (first entries))))
           (expect (equal expected-val  (cdr (first entries))))
           (expect (equal expected-rest new-rest))))))
@@ -53,7 +53,7 @@
   ;; %parse-flag-token splits a cluster of boolean flags: -ga → -g -a.
   (it "parse-flag-token-clusters-boolean-flags"
     (multiple-value-bind (entries new-rest)
-        (cl-tmux::%parse-flag-token "-ga" "" '("foo"))
+        (nerimux::%parse-flag-token "-ga" "" '("foo"))
       (expect (equal '(#\g #\a) (mapcar #'car entries)))
       (expect (every (lambda (e) (eq t (cdr e))) entries))
       (expect (equal '("foo") new-rest))))
@@ -62,7 +62,7 @@
   ;; -gp50 with p a value-flag → -g and (p . "50").
   (it "parse-flag-token-cluster-stops-at-value-flag"
     (multiple-value-bind (entries new-rest)
-        (cl-tmux::%parse-flag-token "-gp50" "p" '("foo"))
+        (nerimux::%parse-flag-token "-gp50" "p" '("foo"))
       (expect (equal '(#\g #\p) (mapcar #'car entries)))
       (expect (eq t   (cdr (first entries))))
       (expect (equal "50" (cdr (second entries))))
@@ -71,7 +71,7 @@
   ;; %parse-command-flags expands a clustered -ga into separate -g and -a entries.
   (it "parse-command-flags-clustered-ga"
     (multiple-value-bind (flags positionals)
-        (cl-tmux::%parse-command-flags '("-ga" "name" "val") "")
+        (nerimux::%parse-command-flags '("-ga" "name" "val") "")
       (expect (and (assoc #\g flags) (assoc #\a flags)))
       (expect (equal '("name" "val") positionals))))
 
@@ -85,7 +85,7 @@
                  (((#\t . t))              #\t nil "boolean T flag → NIL")))
       (destructuring-bind (flags char expected desc) c
         (declare (ignore desc))
-        (expect (equal expected (cl-tmux::%parse-flag-int flags char))))))
+        (expect (equal expected (nerimux::%parse-flag-int flags char))))))
 
   ;;; ── shared target resolvers ─────────────────────────────────────────────────
 
@@ -97,10 +97,10 @@
              (pane1 (find-if-not (lambda (pane) (eq pane pane0))
                                  (window-panes win)))
              (pane1-id (format nil "~A" (pane-id pane1))))
-        (expect (eq pane1 (cl-tmux::%resolve-pane-in-window win pane1-id)))
-        (expect (eq pane1 (cl-tmux::%resolve-pane-in-window win (format nil "%~A" pane1-id))))
-        (expect (eq pane0 (cl-tmux::%resolve-pane-in-window win "not-a-pane")))
-        (expect (eq pane0 (cl-tmux::%resolve-pane-in-window win nil))))))
+        (expect (eq pane1 (nerimux::%resolve-pane-in-window win pane1-id)))
+        (expect (eq pane1 (nerimux::%resolve-pane-in-window win (format nil "%~A" pane1-id))))
+        (expect (eq pane0 (nerimux::%resolve-pane-in-window win "not-a-pane")))
+        (expect (eq pane0 (nerimux::%resolve-pane-in-window win nil))))))
 
   ;; %resolve-window-target resolves window ids, shorthand names, and returns NIL for garbage.
   (it "resolve-window-target-resolves-id-and-name"
@@ -110,10 +110,10 @@
              (w1-id (format nil "~A" (window-id w1)))
              (w1-name "shell"))
         (setf (window-name w1) w1-name)
-        (expect (eq w1 (cl-tmux::%resolve-window-target s w1-id)))
-        (expect (eq w1 (cl-tmux::%resolve-window-target s w1-name)))
-        (expect (eq w1 (cl-tmux::%resolve-window-target s ":+")))
-        (expect (null (cl-tmux::%resolve-window-target s "no-such-window"))))))
+        (expect (eq w1 (nerimux::%resolve-window-target s w1-id)))
+        (expect (eq w1 (nerimux::%resolve-window-target s w1-name)))
+        (expect (eq w1 (nerimux::%resolve-window-target s ":+")))
+        (expect (null (nerimux::%resolve-window-target s "no-such-window"))))))
 
   ;;; ── rename-session via command line updates *server-sessions* ───────────────
 
@@ -121,11 +121,11 @@
   (it "run-command-line-rename-session-updates-registry"
     (with-fake-session (s)
       (let ((orig (session-name s)))
-        (let ((cl-tmux::*server-sessions* (list (cons orig s))))
-          (cl-tmux::%run-command-line s "rename-session newsessname")
+        (let ((nerimux::*server-sessions* (list (cons orig s))))
+          (nerimux::%run-command-line s "rename-session newsessname")
           (expect (string= "newsessname" (session-name s)))
-          (expect (null (assoc orig cl-tmux::*server-sessions* :test #'equal)))
-          (expect (assoc "newsessname" cl-tmux::*server-sessions* :test #'equal))))))
+          (expect (null (assoc orig nerimux::*server-sessions* :test #'equal)))
+          (expect (assoc "newsessname" nerimux::*server-sessions* :test #'equal))))))
 
   ;;; ── new-window -a / -t flags ─────────────────────────────────────────────────
 
@@ -133,34 +133,34 @@
   (it "run-command-line-new-window-after-current"
     (with-fake-session (s :nwindows 2)
       (when (pty-available-p)
-        (let* ((active-id (cl-tmux/model:window-id
-                           (cl-tmux/model:session-active-window s)))
-               (before-count (length (cl-tmux/model:session-windows s))))
-          (cl-tmux::%run-command-line s "new-window -a")
-          (stop-cl-tmux-threads)
-          (expect (> (length (cl-tmux/model:session-windows s)) before-count))
+        (let* ((active-id (nerimux/model:window-id
+                           (nerimux/model:session-active-window s)))
+               (before-count (length (nerimux/model:session-windows s))))
+          (nerimux::%run-command-line s "new-window -a")
+          (stop-nerimux-threads)
+          (expect (> (length (nerimux/model:session-windows s)) before-count))
           ;; The new window should have a higher id than active-id.
-          (let ((new-win (cl-tmux/model:session-active-window s)))
-            (expect (> (cl-tmux/model:window-id new-win) active-id)))))))
+          (let ((new-win (nerimux/model:session-active-window s)))
+            (expect (> (nerimux/model:window-id new-win) active-id)))))))
 
   ;; new-window -t N inserts at specific index N.
   (it "run-command-line-new-window-at-index"
     (with-fake-session (s :nwindows 1)
       (when (pty-available-p)
-        (cl-tmux::%run-command-line s "new-window -t 5")
-        (stop-cl-tmux-threads)
+        (nerimux::%run-command-line s "new-window -t 5")
+        (stop-nerimux-threads)
         ;; The new window should have id >= 5.
-        (let ((new-win (cl-tmux/model:session-active-window s)))
-          (expect (>= (cl-tmux/model:window-id new-win) 5))))))
+        (let ((new-win (nerimux/model:session-active-window s)))
+          (expect (>= (nerimux/model:window-id new-win) 5))))))
 
   ;; new-window -d does not switch focus to the new window.
   (it "run-command-line-new-window-detach"
     (with-fake-session (s :nwindows 1)
       (when (pty-available-p)
-        (let ((prev-win (cl-tmux/model:session-active-window s)))
-          (cl-tmux::%run-command-line s "new-window -d")
-          (stop-cl-tmux-threads)
-          (expect (eq prev-win (cl-tmux/model:session-active-window s)))))))
+        (let ((prev-win (nerimux/model:session-active-window s)))
+          (nerimux::%run-command-line s "new-window -d")
+          (stop-nerimux-threads)
+          (expect (eq prev-win (nerimux/model:session-active-window s)))))))
 
   ;;; ── split-window -c start-dir ────────────────────────────────────────────────
 
@@ -168,12 +168,12 @@
   (it "run-command-line-split-window-c-accepts-dir"
     (with-fake-session (s :nwindows 1 :npanes 1)
       (when (pty-available-p)
-        (let* ((win    (cl-tmux/model:session-active-window s))
-               (before (length (cl-tmux/model:window-panes win))))
+        (let* ((win    (nerimux/model:session-active-window s))
+               (before (length (nerimux/model:window-panes win))))
           ;; /tmp is always present; the new shell should chdir there.
-          (cl-tmux::%run-command-line s "split-window -c /tmp")
-          (stop-cl-tmux-threads)
-          (expect (> (length (cl-tmux/model:window-panes win)) before))))))
+          (nerimux::%run-command-line s "split-window -c /tmp")
+          (stop-nerimux-threads)
+          (expect (> (length (nerimux/model:window-panes win)) before))))))
 
   ;;; ── copy-mode -e ─────────────────────────────────────────────────────────────
   ;;;
@@ -186,10 +186,10 @@
   (it "cmd-copy-mode-arg-e-flag-enters-copy-mode"
     (let* ((s      (make-fake-session :nwindows 1 :npanes 1))
            (screen (active-screen s)))
-      (expect (cl-tmux/terminal/types:screen-copy-mode-p screen) :to-be-falsy)
-      (finishes (cl-tmux::%cmd-copy-mode-arg s '("-e"))
+      (expect (nerimux/terminal/types:screen-copy-mode-p screen) :to-be-falsy)
+      (finishes (nerimux::%cmd-copy-mode-arg s '("-e"))
                 "copy-mode -e must not signal an error")
-      (expect (cl-tmux/terminal/types:screen-copy-mode-p screen) :to-be-truthy)))
+      (expect (nerimux/terminal/types:screen-copy-mode-p screen) :to-be-truthy)))
 
   ;;; ── display-message -t ───────────────────────────────────────────────────────
   ;;;
@@ -201,7 +201,7 @@
   (it "cmd-display-message-t-target-produces-overlay"
     (with-fake-session (s :nwindows 1 :npanes 1)
       (let ((*overlay* nil))
-        (finishes (cl-tmux::%cmd-display-message s '("-t" "0" "hello"))
+        (finishes (nerimux::%cmd-display-message s '("-t" "0" "hello"))
                   "display-message -t must not signal an error")
         (assert-overlay-active
             "display-message -t must open a transient overlay"))))
@@ -218,11 +218,11 @@
         ;; unambiguous evidence that -t resolved it (the fallback session is "0").
         (setf (session-name target) "target-sess")
         (let ((*overlay* nil)
-              (cl-tmux::*server-sessions*
+              (nerimux::*server-sessions*
                 (list (cons (session-name current) current)
                       (cons (session-name target)  target))))
           ;; Dispatch FROM `current` but target `target-sess`.
-          (cl-tmux::%cmd-display-message
+          (nerimux::%cmd-display-message
            current '("-t" "target-sess" "#{session_name}"))
           (assert-overlay-active
               "display-message -t must open a transient overlay")
@@ -250,7 +250,7 @@
   ;; This is the fork-free guard for new-session -x/-y dimension parsing.
   (it "new-session-x-y-flags-are-value-flags"
     (multiple-value-bind (flags positionals)
-        (cl-tmux::%parse-command-flags '("-x" "100" "-y" "40" "rest") "sncxyteF")
+        (nerimux::%parse-command-flags '("-x" "100" "-y" "40" "rest") "sncxyteF")
       (expect (string= "100" (alist-value #\x flags)))
       (expect (string= "40" (alist-value #\y flags)))
       ;; The trailing non-flag token must remain a positional; the consumed
@@ -272,8 +272,8 @@
       (dolist (args '(("-X")
                       ("-D")
                       ("-f" "flags")))
-        (let ((cl-tmux::*overlay* nil))
-          (expect (null (cl-tmux::%cmd-new-session-arg s args)))
+        (let ((nerimux::*overlay* nil))
+          (expect (null (nerimux::%cmd-new-session-arg s args)))
           (assert-overlay-contains "new-session: unsupported argument"
-                                   cl-tmux::*overlay*
+                                   nerimux::*overlay*
                                    args))))))

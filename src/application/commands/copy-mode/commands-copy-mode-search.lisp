@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/commands)
+(in-package #:nerimux/commands)
 
 ;;; ── Copy-mode search subsystem ──────────────────────────────────────────────
 ;;;
@@ -90,7 +90,7 @@
 
 (defun %wrap-search-p ()
   "T when copy-mode search should wrap around the buffer ends."
-  (cl-tmux/options:get-option "wrap-search" t))
+  (nerimux/options:get-option "wrap-search" t))
 
 (defun %copy-mode-wrap-start (forwardp screen)
   "The (vrow col) a wrapped search restarts from: the top-left corner when
@@ -233,7 +233,7 @@
    Saves the current cursor/offset as the restore point; on-cancel restores it."
   (setf *copy-mode-isearch-origin*
         (cons (screen-copy-cursor screen) (screen-copy-offset screen)))
-  (cl-tmux/prompt:prompt-start
+  (nerimux/prompt:prompt-start
    (if (eq direction :forward) "search-forward" "search-backward") ""
    (lambda (term)
      (setf *copy-mode-isearch-origin* nil)

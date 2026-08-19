@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/config)
+(in-package #:nerimux/config)
 
 ;;; ── Config file parsing + directive processing ───────────────────────────
 ;;;
@@ -178,7 +178,7 @@
 ;;; parsing utilities it depends on are defined.
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (let ((root (or (ignore-errors (asdf:system-source-directory :cl-tmux))
+  (let ((root (or (ignore-errors (asdf:system-source-directory :nerimux))
                   *load-pathname*
                   *compile-file-pathname*)))
     (load (merge-pathnames #P"src/application/config/config-commands.lisp" root))))

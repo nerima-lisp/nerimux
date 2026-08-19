@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 (defparameter *dispatch-command-specs-core-pane-entries*
   '((:kill-pane '%cmd-kill-pane ("kill-pane"))

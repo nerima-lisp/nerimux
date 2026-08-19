@@ -1,6 +1,6 @@
-;;;; Test package for cl-tmux.
+;;;; Test package for nerimux.
 
-(defpackage #:cl-tmux/test
+(defpackage #:nerimux/test
   ;; The test framework is cl-weave, used natively throughout: every file
   ;; registers its own top-level (describe "name" (it "case" ...) ...) block.
   (:use #:cl)
@@ -16,7 +16,7 @@
                 #:it-property #:it-fuzz #:gen-integer #:gen-list #:gen-boolean #:gen-string
                 #:gen-vector #:gen-member #:gen-one-of
                 #:defmatcher)
-  (:import-from #:cl-tmux/terminal
+  (:import-from #:nerimux/terminal
                 #:make-screen
                 #:screen-resize
                 #:screen-process-bytes
@@ -32,7 +32,7 @@
                 #:cell-bg
                 #:cell-attrs
                 #:cell-width)
-  (:import-from #:cl-tmux/terminal/types
+  (:import-from #:nerimux/terminal/types
                 #:screen-copy-mode-p
                 #:screen-copy-offset
                 #:screen-scrollback
@@ -49,7 +49,7 @@
                 #:screen-dirty-p
                 #:char-width
                 #:screen-p)
-  (:import-from #:cl-tmux/model
+  (:import-from #:nerimux/model
                 #:create-initial-session
                 #:session-windows
                 #:session-active-window
@@ -139,17 +139,17 @@
                 #:session-insert-window
                 ;; Pane liveness check
                 #:pane-live-p)
-  (:import-from #:cl-tmux
+  (:import-from #:nerimux
                 ;; Session groups
                 #:*session-groups*
                 #:server-new-session-in-group
                 ;; Runtime state (needed by tests)
                 #:*server-sessions*)
-  (:import-from #:cl-tmux/renderer
+  (:import-from #:nerimux/renderer
                 #:render-session-to-string
                 #:render-session
                 #:clear-display)
-  (:import-from #:cl-tmux/protocol
+  (:import-from #:nerimux/protocol
                 #:+msg-attach+ #:+msg-key+ #:+msg-resize+
                 #:+msg-detach+ #:+msg-frame+ #:+msg-bye+ #:+msg-command+ #:+msg-reply+
                 #:+header-size+
@@ -159,13 +159,13 @@
                 #:encode-command-payload #:decode-command-payload
                 #:u16-octets-pair
                 #:decode-size #:decode-text #:to-octets)
-  (:import-from #:cl-tmux/transport
+  (:import-from #:nerimux/transport
                 #:send-frame #:read-frame #:with-incoming-frame)
-  (:import-from #:cl-tmux/net
+  (:import-from #:nerimux/net
                 #:make-listener #:accept-connection #:connect-to
                 #:socket-stream #:socket-fd #:close-socket
                 #:unix-socket-available-p)
-  (:import-from #:cl-tmux/config
+  (:import-from #:nerimux/config
                 #:*status-height*
                 #:+max-scrollback-lines+
                 #:lookup-key-binding
@@ -175,7 +175,7 @@
                 #:key-table-command
                 #:apply-config-directive
                 #:*key-tables*)
-  (:import-from #:cl-tmux/commands
+  (:import-from #:nerimux/commands
                 #:kill-pane
                 #:kill-window
                 #:rename-window
@@ -190,7 +190,7 @@
                 #:pipe-pane-open
                 #:pipe-pane-close
                 #:pipe-pane-write)
-  (:import-from #:cl-tmux/prompt
+  (:import-from #:nerimux/prompt
                 #:prompt #:make-prompt #:prompt-p
                 #:*prompt*
                 #:prompt-active-p
@@ -242,11 +242,11 @@
                 #:prompt-kill-to-end
                 #:prompt-kill-to-start
                 #:prompt-kill-word-back)
-  (:import-from #:cl-tmux/pty
+  (:import-from #:nerimux/pty
                 #:forkpty-with-shell
                 #:pty-write
                 #:pty-read-blocking
                 #:pty-close
                 #:select-fds)
   (:export #:run-tests
-           #:cl-tmux-suite))
+           #:nerimux-suite))

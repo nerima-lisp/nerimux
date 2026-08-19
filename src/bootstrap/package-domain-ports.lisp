@@ -1,12 +1,12 @@
 ;;; Domain abstraction packages.
 
-(defpackage #:cl-tmux/ports
+(defpackage #:nerimux/ports
   (:use #:cl)
   (:documentation
    "DOMAIN layer: the PTY port, one half of the dependency inversion that keeps the
     model free of the operating system.  Holds the *spawn-pty* / *write-pty* /
-    *resize-pty* / *close-pty* function cells that cl-tmux/model calls, and that the
-    INFRASTRUCTURE package cl-tmux/pty fills in via install-pty-port at server or
+    *resize-pty* / *close-pty* function cells that nerimux/model calls, and that the
+    INFRASTRUCTURE package nerimux/pty fills in via install-pty-port at server or
     test setup time.")
   (:export
    #:*spawn-pty*
@@ -31,7 +31,7 @@
    #:vcs-create-worktree
    #:vcs-delete-worktree))
 
-(defpackage #:cl-tmux/repository
+(defpackage #:nerimux/repository
   (:use #:cl)
   (:documentation
    "DOMAIN layer: the session-persistence protocol, the other half of the dependency

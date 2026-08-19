@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/commands)
+(in-package #:nerimux/commands)
 
 ;;;; run-shell / if-shell subprocess execution.
 ;;;;
@@ -10,7 +10,7 @@
 ;;;; control path and the subprocess itself; background callers return
 ;;;; immediately but the worker still gives the subprocess a bounded lifetime.
 ;;;;
-;;;; Subprocesses run through cl-tmux/config:*process-boundary*
+;;;; Subprocesses run through nerimux/config:*process-boundary*
 ;;;; (cl-boundary-kit), portable across all ASDF-supported implementations and
 ;;;; swappable for a fake boundary in tests.
 ;;;;
@@ -43,12 +43,12 @@
      ,timeout))
 
 (defun %run-shell-program (shell command &key output error-output timeout directory)
-  "Run COMMAND through SHELL via cl-tmux/config:*process-boundary*, with an
+  "Run COMMAND through SHELL via nerimux/config:*process-boundary*, with an
    explicit subprocess TIMEOUT and DIRECTORY.  Returns (values stdout-string
    stderr-string exit-code), matching uiop:run-program's prior calling
    convention so run-shell / if-shell need no further changes."
   (let ((result (cl-boundary-kit:process-boundary-run
-                 cl-tmux/config:*process-boundary* shell
+                 nerimux/config:*process-boundary* shell
                  :arguments (list "-c" command)
                  :output output
                  :error-output error-output

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; commands tests — part M: swap-pane, capture-pane, shift-line-wrapped,
 ;;;; copy-mode-scroll-up/down, resize-pane, split-window.
@@ -148,14 +148,14 @@
                  (#x1ff8000 nil "38;2;255;128;0" "fg true-colour")))
       (destructuring-bind (color bg-p expected desc) c
         (declare (ignore desc))
-        (expect (string= expected (cl-tmux/commands::%capture-color-sgr color bg-p))))))
+        (expect (string= expected (nerimux/commands::%capture-color-sgr color bg-p))))))
 
   ;; %capture-cell-sgr emits reset + attrs + fg + bg.
   (it "capture-cell-sgr-includes-attrs-and-colours"
     (expect (string= (format nil "~C[0;31;40m" #\Escape)
-                      (cl-tmux/commands::%capture-cell-sgr 1 0 0)))
+                      (nerimux/commands::%capture-cell-sgr 1 0 0)))
     (expect (string= (format nil "~C[0;1;31;40m" #\Escape)
-                      (cl-tmux/commands::%capture-cell-sgr 1 0 1))))
+                      (nerimux/commands::%capture-cell-sgr 1 0 1))))
 
   ;; capture-pane :escapes t keeps SGR colour sequences; plain capture does not.
   (it "capture-pane-escapes-preserves-colour"
@@ -178,9 +178,9 @@
            (pane   (make-pane :id 1 :x 0 :y 0 :width 20 :height 5
                               :fd -1 :pid -1 :screen screen))
            (sb-row (make-array 20 :initial-element
-                               (cl-tmux/terminal/types:make-cell
+                               (nerimux/terminal/types:make-cell
                                 :char #\X :fg 7 :bg 0 :attrs 0 :width 1))))
-      (setf (cl-tmux/terminal/types:screen-scrollback screen) (list sb-row))
+      (setf (nerimux/terminal/types:screen-scrollback screen) (list sb-row))
       (feed screen "visible")
       (let ((result (capture-pane pane)))
         (expect (search "visible" result) :to-be-truthy)
@@ -192,9 +192,9 @@
            (pane   (make-pane :id 1 :x 0 :y 0 :width 20 :height 5
                               :fd -1 :pid -1 :screen screen))
            (sb-row (make-array 20 :initial-element
-                               (cl-tmux/terminal/types:make-cell
+                               (nerimux/terminal/types:make-cell
                                 :char #\Q :fg 7 :bg 0 :attrs 0 :width 1))))
-      (setf (cl-tmux/terminal/types:screen-scrollback screen) (list sb-row))
+      (setf (nerimux/terminal/types:screen-scrollback screen) (list sb-row))
       (feed screen "visible")
       (let ((result (capture-pane pane :include-scrollback t)))
         (expect (search "QQ" result) :to-be-truthy)
@@ -212,9 +212,9 @@
            (pane   (make-pane :id 1 :x 0 :y 0 :width 20 :height 5
                               :fd -1 :pid -1 :screen screen))
            (sb-row (make-array 20 :initial-element
-                               (cl-tmux/terminal/types:make-cell
+                               (nerimux/terminal/types:make-cell
                                 :char #\Q :fg 1 :bg 0 :attrs 0 :width 1))))
-      (setf (cl-tmux/terminal/types:screen-scrollback screen) (list sb-row))
+      (setf (nerimux/terminal/types:screen-scrollback screen) (list sb-row))
       (feed screen "visible")
       (let ((result (capture-pane pane :include-scrollback t :escapes t)))
         (expect (search "QQ" result) :to-be-truthy)
@@ -302,19 +302,19 @@
   ;; region moves to Y-1, mirroring the content shift.
   (it "shift-line-wrapped-up-moves-flags"
     (let ((s (make-screen 5 4)))
-      (cl-tmux/terminal/types:%mark-line-wrapped s 2)        ; row 2 wraps
-      (cl-tmux/terminal/types:%shift-line-wrapped-up s 0 3)  ; scroll region rows 0..3
-      (expect (cl-tmux/terminal/types:%line-wrapped-p s 1) :to-be-truthy)
-      (expect (cl-tmux/terminal/types:%line-wrapped-p s 2) :to-be-falsy)))
+      (nerimux/terminal/types:%mark-line-wrapped s 2)        ; row 2 wraps
+      (nerimux/terminal/types:%shift-line-wrapped-up s 0 3)  ; scroll region rows 0..3
+      (expect (nerimux/terminal/types:%line-wrapped-p s 1) :to-be-truthy)
+      (expect (nerimux/terminal/types:%line-wrapped-p s 2) :to-be-falsy)))
 
   ;; Erasing a row clears its wrap flag (erase-region), so a rewritten short line
   ;; does not over-join under -J.
   (it "line-wrapped-flag-cleared-on-erase"
     (let ((s (make-screen 5 3)))
-      (cl-tmux/terminal/types:%mark-line-wrapped s 0)
-      (expect (cl-tmux/terminal/types:%line-wrapped-p s 0) :to-be-truthy)
-      (cl-tmux/terminal/actions:erase-region s 0 0 4 0)      ; erase row 0
-      (expect (cl-tmux/terminal/types:%line-wrapped-p s 0) :to-be-falsy)))
+      (nerimux/terminal/types:%mark-line-wrapped s 0)
+      (expect (nerimux/terminal/types:%line-wrapped-p s 0) :to-be-truthy)
+      (nerimux/terminal/actions:erase-region s 0 0 4 0)      ; erase row 0
+      (expect (nerimux/terminal/types:%line-wrapped-p s 0) :to-be-falsy)))
 
   ;; A fully blank row trims to an empty captured line (just the newline) by default,
   ;; but stays full-width under -J.

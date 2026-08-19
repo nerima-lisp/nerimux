@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Dispatch client and session control tests.
 
@@ -61,8 +61,8 @@
                    (input (if registeredp name "nosuchsession"))
                    (registry (when registeredp (list (cons name s)))))
               (let ((*prompt* nil) (*overlay* nil)
-                    (cl-tmux::*server-sessions* registry))
-                (cl-tmux::dispatch-command s :attach-session nil)
+                    (nerimux::*server-sessions* registry))
+                (nerimux::dispatch-command s :attach-session nil)
                 (expect (prompt-active-p))
                 (funcall (prompt-on-submit *prompt*) input)
                 (assert-overlay-active ":attach-session ~A must show overlay" desc)
@@ -76,16 +76,16 @@
       (with-empty-registry
         (let ((s0 (make-fake-session :nwindows 1))
               (s1 (make-fake-session :nwindows 1)))
-          (setf (cl-tmux::session-name s0) "0"
-                (cl-tmux::session-name s1) "work"
-                (cl-tmux::session-last-active s0) 10
-                (cl-tmux::session-last-active s1) 0
-                cl-tmux::*server-sessions* (list (cons "0" s0)
+          (setf (nerimux::session-name s0) "0"
+                (nerimux::session-name s1) "work"
+                (nerimux::session-last-active s0) 10
+                (nerimux::session-last-active s1) 0
+                nerimux::*server-sessions* (list (cons "0" s0)
                                                  (cons "work" s1)))
-          (setf cl-tmux::*dirty* nil)
-          (expect (eq s1 (cl-tmux::%run-command-line s0 "attach-session -t work")))
-          (expect (eq s1 (cl-tmux::server-current-session)))
-          (expect cl-tmux::*dirty* :to-be-truthy)))))
+          (setf nerimux::*dirty* nil)
+          (expect (eq s1 (nerimux::%run-command-line s0 "attach-session -t work")))
+          (expect (eq s1 (nerimux::server-current-session)))
+          (expect nerimux::*dirty* :to-be-truthy)))))
 
   ;; attach-session -c sets the target session's working directory and switches.
   (it "run-command-line-attach-session-accepts-working-dir"
@@ -93,16 +93,16 @@
       (with-empty-registry
         (let ((s0 (make-fake-session :nwindows 1))
               (s1 (make-fake-session :nwindows 1)))
-          (setf (cl-tmux::session-name s0) "0"
-                (cl-tmux::session-name s1) "work"
-                (cl-tmux::session-last-active s0) 10
-                (cl-tmux::session-last-active s1) 0
-                cl-tmux::*server-sessions* (list (cons "0" s0)
+          (setf (nerimux::session-name s0) "0"
+                (nerimux::session-name s1) "work"
+                (nerimux::session-last-active s0) 10
+                (nerimux::session-last-active s1) 0
+                nerimux::*server-sessions* (list (cons "0" s0)
                                                  (cons "work" s1))
-                cl-tmux::*overlay* nil)
-          (cl-tmux::%run-command-line s0 "attach-session -c /tmp -t work")
-          (expect (string= "/tmp" (cl-tmux::session-start-directory s1)))
-          (expect (eq s1 (cl-tmux::server-current-session)))))))
+                nerimux::*overlay* nil)
+          (nerimux::%run-command-line s0 "attach-session -c /tmp -t work")
+          (expect (string= "/tmp" (nerimux::session-start-directory s1)))
+          (expect (eq s1 (nerimux::server-current-session)))))))
 
   ;; attach-session inside a running client rejects client-creation arguments.
   (it "run-command-line-attach-session-rejects-client-creation-args"
@@ -112,32 +112,32 @@
           (with-empty-registry
             (let ((s0 (make-fake-session :nwindows 1))
                   (s1 (make-fake-session :nwindows 1)))
-              (setf (cl-tmux::session-name s0) "0"
-                    (cl-tmux::session-name s1) "work"
-                    (cl-tmux::session-last-active s0) 10
-                    (cl-tmux::session-last-active s1) 0
-                    cl-tmux::*server-sessions* (list (cons "0" s0)
+              (setf (nerimux::session-name s0) "0"
+                    (nerimux::session-name s1) "work"
+                    (nerimux::session-last-active s0) 10
+                    (nerimux::session-last-active s1) 0
+                    nerimux::*server-sessions* (list (cons "0" s0)
                                                      (cons "work" s1))
-                    cl-tmux::*dirty* nil
-                    cl-tmux::*overlay* nil)
+                    nerimux::*dirty* nil
+                    nerimux::*overlay* nil)
               (assert-command-args-rejected-without-redraw
-                  (cl-tmux::%run-command-line s0 line)
+                  (nerimux::%run-command-line s0 line)
                   line
                 :context desc)
-              (expect (eq s0 (cl-tmux::server-current-session)))))))))
+              (expect (eq s0 (nerimux::server-current-session)))))))))
 
   ;; :clear-prompt-history empties *prompt-history*.
   (it "dispatch-clear-prompt-history-empties-history"
     (with-fake-session (s)
-      (let ((cl-tmux::*prompt-history* (history-kit:make-history)))
-        (history-kit:history-add cl-tmux::*prompt-history* "prev-cmd")
-        (cl-tmux::dispatch-command s :clear-prompt-history nil)
-        (expect (history-kit:history-empty-p cl-tmux::*prompt-history*)))))
+      (let ((nerimux::*prompt-history* (history-kit:make-history)))
+        (history-kit:history-add nerimux::*prompt-history* "prev-cmd")
+        (nerimux::dispatch-command s :clear-prompt-history nil)
+        (expect (history-kit:history-empty-p nerimux::*prompt-history*)))))
 
   ;; :detach-all-clients sets *running* to NIL and returns :detach.
   (it "dispatch-detach-all-clients-stops-running"
     (with-fake-session (s)
-      (expect (eq :detach (cl-tmux::dispatch-command s :detach-all-clients nil)))
+      (expect (eq :detach (nerimux::dispatch-command s :detach-all-clients nil)))
       ;; After return the global *running* has been set to nil by the handler.
       ;; with-loop-state restores it, so just verify the return value above.
       ))
@@ -145,22 +145,22 @@
   ;; detach without arguments detaches the active client.
   (it "run-command-line-detach-without-args-returns-detach"
     (with-fake-session (s)
-      (setf cl-tmux::*running* t)
-      (expect (eq :detach (cl-tmux::%run-command-line s "detach")))
-      (expect cl-tmux::*running* :to-be-truthy)))
+      (setf nerimux::*running* t)
+      (expect (eq :detach (nerimux::%run-command-line s "detach")))
+      (expect nerimux::*running* :to-be-truthy)))
 
   ;; detach rejects unsupported client targeting and single-client flags.
   (it "run-command-line-detach-rejects-unsupported-arguments"
     (with-fake-session (s)
       (dolist (args *detach-unsupported-argument-cases*)
-        (setf cl-tmux::*running* t
-              cl-tmux::*dirty* nil
-              cl-tmux::*overlay* nil)
+        (setf nerimux::*running* t
+              nerimux::*dirty* nil
+              nerimux::*overlay* nil)
         (assert-command-args-rejected-without-redraw
-            (cl-tmux::%cmd-detach-arg s args)
+            (nerimux::%cmd-detach-arg s args)
             args
           :context "detach")
-        (expect cl-tmux::*running* :to-be-truthy))))
+        (expect nerimux::*running* :to-be-truthy))))
 
   ;; :move-pane opens a prompt for the destination window index.
   (it "dispatch-move-pane-opens-prompt"
@@ -170,42 +170,42 @@
   ;; :refresh-client marks *dirty* to force an immediate redraw.
   (it "dispatch-refresh-client-marks-dirty"
     (with-fake-session (s)
-      (let ((cl-tmux::*dirty* nil))
-        (cl-tmux::dispatch-command s :refresh-client nil)
-        (expect cl-tmux::*dirty* :to-be-truthy))))
+      (let ((nerimux::*dirty* nil))
+        (nerimux::dispatch-command s :refresh-client nil)
+        (expect nerimux::*dirty* :to-be-truthy))))
 
   ;; refresh-client accepts only the local redraw and client-state flags.
   (it "run-command-line-refresh-client-accepts-local-flags"
     (with-fake-session (s)
       (dolist (args *refresh-client-accepted-argument-cases*)
-        (setf cl-tmux::*dirty* nil
-              cl-tmux::*overlay* nil)
-        (expect (cl-tmux::%cmd-refresh-client-arg s args) :to-be-truthy)
-        (expect cl-tmux::*dirty* :to-be-truthy)
-        (expect (null cl-tmux::*overlay*)))))
+        (setf nerimux::*dirty* nil
+              nerimux::*overlay* nil)
+        (expect (nerimux::%cmd-refresh-client-arg s args) :to-be-truthy)
+        (expect nerimux::*dirty* :to-be-truthy)
+        (expect (null nerimux::*overlay*)))))
 
   ;; refresh-client rejects unsupported forms and unknown flags.
   (it "run-command-line-refresh-client-rejects-unsupported-arguments"
     (with-fake-session (s)
       (dolist (args *refresh-client-rejected-argument-cases*)
-        (setf cl-tmux::*dirty* nil
-              cl-tmux::*overlay* nil)
+        (setf nerimux::*dirty* nil
+              nerimux::*overlay* nil)
         (assert-command-args-rejected-without-redraw
-            (cl-tmux::%cmd-refresh-client-arg s args)
+            (nerimux::%cmd-refresh-client-arg s args)
             args
           :context "refresh-client"))))
 
   ;; lock-client rejects unsupported target-client arguments.
   (it "run-command-line-lock-client-rejects-target-client"
     (with-fake-session (s)
-      (let ((cl-tmux::*dirty* nil)
-            (cl-tmux::*overlay* nil))
-        (setf (cl-tmux::session-locked-p s) nil)
+      (let ((nerimux::*dirty* nil)
+            (nerimux::*overlay* nil))
+        (setf (nerimux::session-locked-p s) nil)
         (assert-command-args-rejected-without-redraw
-            (cl-tmux::%run-command-line s "lock-client -t client-0")
+            (nerimux::%run-command-line s "lock-client -t client-0")
             "lock-client -t client-0"
           :context "lock-client -t")
-        (expect (cl-tmux::session-locked-p s) :to-be-falsy))))
+        (expect (nerimux::session-locked-p s) :to-be-falsy))))
 
   ;; lock-client and lock-session both lock the active session when no -t is given.
   ;; Each row: (command description).
@@ -215,26 +215,26 @@
       (destructuring-bind (cmd desc) row
         (declare (ignore desc))
         (with-fake-session (s)
-          (let ((cl-tmux::*overlay* nil))
-            (setf (cl-tmux::session-locked-p s) nil)
-            (cl-tmux::%run-command-line s cmd)
-            (expect (cl-tmux::session-locked-p s) :to-be-truthy))))))
+          (let ((nerimux::*overlay* nil))
+            (setf (nerimux::session-locked-p s) nil)
+            (nerimux::%run-command-line s cmd)
+            (expect (nerimux::session-locked-p s) :to-be-truthy))))))
 
   ;; lock-session -t locks the named target session.
   (it "run-command-line-lock-session-target-locks-target-session"
     (with-empty-registry
       (let ((s0 (make-fake-session :nwindows 1))
             (s1 (make-fake-session :nwindows 1)))
-        (setf (cl-tmux::session-name s0) "0"
-              (cl-tmux::session-name s1) "work"
-              cl-tmux::*server-sessions* (list (cons "0" s0)
+        (setf (nerimux::session-name s0) "0"
+              (nerimux::session-name s1) "work"
+              nerimux::*server-sessions* (list (cons "0" s0)
                                                (cons "work" s1)))
-        (let ((cl-tmux::*overlay* nil))
-          (setf (cl-tmux::session-locked-p s0) nil
-                (cl-tmux::session-locked-p s1) nil)
-          (expect (cl-tmux::%run-command-line s0 "lock-session -t work") :to-be-truthy)
-          (expect (cl-tmux::session-locked-p s0) :to-be-falsy)
-          (expect (cl-tmux::session-locked-p s1) :to-be-truthy)))))
+        (let ((nerimux::*overlay* nil))
+          (setf (nerimux::session-locked-p s0) nil
+                (nerimux::session-locked-p s1) nil)
+          (expect (nerimux::%run-command-line s0 "lock-session -t work") :to-be-truthy)
+          (expect (nerimux::session-locked-p s0) :to-be-falsy)
+          (expect (nerimux::session-locked-p s1) :to-be-truthy)))))
 
   ;; lock-session rejects unknown flags and positional tokens before locking anything.
   (it "run-command-line-lock-session-rejects-unsupported-arguments"
@@ -242,17 +242,17 @@
       (with-empty-registry
         (let ((s0 (make-fake-session :nwindows 1))
               (s1 (make-fake-session :nwindows 1)))
-          (setf (cl-tmux::session-name s0) "0"
-                (cl-tmux::session-name s1) "work"
-                cl-tmux::*server-sessions* (list (cons "0" s0)
+          (setf (nerimux::session-name s0) "0"
+                (nerimux::session-name s1) "work"
+                nerimux::*server-sessions* (list (cons "0" s0)
                                                  (cons "work" s1)))
-          (let ((cl-tmux::*dirty* nil)
-                (cl-tmux::*overlay* nil))
-            (setf (cl-tmux::session-locked-p s0) nil
-                  (cl-tmux::session-locked-p s1) nil)
+          (let ((nerimux::*dirty* nil)
+                (nerimux::*overlay* nil))
+            (setf (nerimux::session-locked-p s0) nil
+                  (nerimux::session-locked-p s1) nil)
             (assert-command-args-rejected-without-redraw
-                (cl-tmux::%run-command-line s0 command)
+                (nerimux::%run-command-line s0 command)
                 command
               :context "lock-session")
-            (expect (cl-tmux::session-locked-p s0) :to-be-falsy)
-            (expect (cl-tmux::session-locked-p s1) :to-be-falsy)))))))
+            (expect (nerimux::session-locked-p s0) :to-be-falsy)
+            (expect (nerimux::session-locked-p s1) :to-be-falsy)))))))

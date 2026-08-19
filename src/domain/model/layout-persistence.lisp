@@ -1,11 +1,11 @@
-(in-package #:cl-tmux/model)
+(in-package #:nerimux/model)
 
 ;;; -- Layout persistence (layout string serialization) --------------------------
 ;;;
 ;;; Encode the layout tree in tmux's WxH,X,Y format.
 ;;; Full tmux format: checksum,WxH,X,Y[node1,node2]  or  checksum,WxH,X,Y,pane-id
 ;;;
-;;; For cl-tmux we use a simplified subset:
+;;; For nerimux we use a simplified subset:
 ;;;   Leaf:  "WxH,X,Y,pane-id"
 ;;;   H-split: "WxH,X,Y{first,second}"
 ;;;   V-split: "WxH,X,Y[first,second]"

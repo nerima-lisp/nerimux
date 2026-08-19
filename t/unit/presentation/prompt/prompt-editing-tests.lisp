@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Prompt editing, cursor, kill/delete, and change-notification tests.
 ;;;; Shared prompt fixtures live in prompt-tests.lisp and are loaded first.

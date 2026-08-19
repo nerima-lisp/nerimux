@@ -3,7 +3,7 @@
 ;;; This file owns the shared macro used by startup-mode parsers plus the
 ;;; attach-session flag parser generated from it.
 
-(in-package :cl-tmux)
+(in-package :nerimux)
 
 ;;; ── Flag-parser macro ────────────────────────────────────────────────────────
 ;;;
@@ -75,13 +75,13 @@
 
 ;;; ── Global CLI flags (cl-cli) ────────────────────────────────────────────────
 ;;;
-;;; `cl-tmux [flags] [command [flags]]` mirrors real tmux(1) (verified against
+;;; `nerimux [flags] [command [flags]]` mirrors real tmux(1) (verified against
 ;;; `man 1 tmux`, tmux 3.7b: usage `tmux [-2CDhlNuVv] [-c shell-command]
 ;;; [-f file] [-L socket-name] [-S socket-path] [-T features] [command
 ;;; [flags]]`).  Global flags may appear in ANY order before the command word.
 ;;;
 ;;; This replaces the old hand-rolled -L/-S-only argv scanner with a real
-;;; option parser, fixing a real bug: previously `cl-tmux -L sock -C` failed
+;;; option parser, fixing a real bug: previously `nerimux -L sock -C` failed
 ;;; with a usage error because -L wasn't a *startup-modes* name and -C only
 ;;; worked as argv's first token.
 ;;;
@@ -95,7 +95,7 @@
 
 (defparameter *cli-app*
   (cl-cli:make-app
-   :name "cl-tmux"
+   :name "nerimux"
    :summary "A tmux-compatible terminal multiplexer."
    ;; -h/-V dispatch through run-usage/run-version below, not cl-cli's own
    ;; help/version machinery, to keep their exact existing output.
@@ -119,7 +119,7 @@
          (cl-cli:make-option :name "version" :short #\V :kind :flag :key :print-version)
          (cl-cli:make-option :name "help"    :short #\h :kind :flag :key :print-help))
    :positionals (list (cl-cli:make-positional :key :mode-args :rest-p t)))
-  "The root cl-cli app for cl-tmux's global startup flags.  See main()
+  "The root cl-cli app for nerimux's global startup flags.  See main()
    (main-startup.lisp), which also defines %parse-global-cli-argv /
    %apply-global-cli-invocation / %dispatch-global-cli-flag-actions — placed
    there rather than here because they call run-version / run-usage /

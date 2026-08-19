@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/vcs)
+(in-package #:nerimux/vcs)
 
 (defun vcs-package-available-p ()
   (not (null (find-package :vcs-kit))))
@@ -87,11 +87,11 @@
     (multiple-value-setq (host name)
       (%organization-and-name specification))
     (values
-     (cl-tmux/model:make-organization
-      :id (cl-tmux/model:organization-key host name)
+     (nerimux/model:make-organization
+      :id (nerimux/model:organization-key host name)
       :host host
       :name name)
-     (cl-tmux/model:make-repository
+     (nerimux/model:make-repository
       :specification specification
       :local-path path
       :backend (or backend :git)))))
@@ -107,23 +107,23 @@
 (defun %catalog-worktrees (organizations)
   (loop for organization in organizations
         append (loop for repository in
-                         (cl-tmux/model:organization-repositories organization)
+                         (nerimux/model:organization-repositories organization)
                      append (copy-list
-                             (cl-tmux/model:repository-worktrees repository)))))
+                             (nerimux/model:repository-worktrees repository)))))
 
 (defun %worktree-association-match-p (id path worktree)
   (or (and (stringp id)
            (plusp (length id))
-           (string= id (cl-tmux/model:worktree-id worktree)))
+           (string= id (nerimux/model:worktree-id worktree)))
       (and (stringp path)
            (plusp (length path))
-           (string= path (cl-tmux/model:worktree-path worktree)))))
+           (string= path (nerimux/model:worktree-path worktree)))))
 
 (defun %remember-pane-associations (organizations)
   (loop for worktree in (%catalog-worktrees organizations)
-        append (loop for pane in (cl-tmux/model:worktree-panes worktree)
-                     collect (list (cl-tmux/model:worktree-id worktree)
-                                   (cl-tmux/model:worktree-path worktree)
+        append (loop for pane in (nerimux/model:worktree-panes worktree)
+                     collect (list (nerimux/model:worktree-id worktree)
+                                   (nerimux/model:worktree-path worktree)
                                    pane))))
 
 (defun %preserve-pane-associations (previous current)
@@ -135,8 +135,8 @@
                            (%worktree-association-match-p id path candidate))
                          worktrees)))
           (if worktree
-              (cl-tmux/model:worktree-add-pane worktree pane)
-              (setf (cl-tmux/model:pane-worktree pane) nil))))))
+              (nerimux/model:worktree-add-pane worktree pane)
+              (setf (nerimux/model:pane-worktree pane) nil))))))
   current)
 
 (defun set-workspace-organizations (organizations)
@@ -154,7 +154,7 @@
         (set-workspace-organizations organizations)
         (dolist (repository
                   (loop for organization in organizations
-                        append (cl-tmux/model:organization-repositories
+                        append (nerimux/model:organization-repositories
                                 organization)))
           (refresh-repository-status repository))
         (when on-complete
@@ -191,18 +191,18 @@
                            (%vcs-call "GHQ-LIST-REPOSITORIES")))
           (multiple-value-bind (candidate repository)
               (%repository-from-entry entry)
-            (let* ((key (cl-tmux/model:organization-id candidate))
+            (let* ((key (nerimux/model:organization-id candidate))
                    (organization
                      (or (gethash key organizations)
                          (setf (gethash key organizations) candidate))))
-              (cl-tmux/model:organization-add-repository
+              (nerimux/model:organization-add-repository
                organization repository)
               (list-repository-worktrees repository))))
         (let ((result
                 (sort (loop for organization being the hash-values of organizations
                             collect organization)
                       #'string<
-                      :key #'cl-tmux/model:organization-id)))
+                      :key #'nerimux/model:organization-id)))
           (when on-complete
             (funcall on-complete result))
           result))
@@ -226,29 +226,29 @@
 
 (defun list-repository-worktrees (repository)
   "Refresh REPOSITORY's worktree list from vcs-list-worktrees."
-  (let* ((previous (copy-list (cl-tmux/model:repository-worktrees repository)))
+  (let* ((previous (copy-list (nerimux/model:repository-worktrees repository)))
          (backend-repository
-           (%make-vcs-repository (cl-tmux/model:repository-path repository)))
+           (%make-vcs-repository (nerimux/model:repository-path repository)))
          (raw-worktrees
            (%vcs-call "VCS-LIST-WORKTREES" backend-repository)))
-    (setf (cl-tmux/model:repository-missing-p repository)
-          (%path-missing-p (cl-tmux/model:repository-path repository)))
+    (setf (nerimux/model:repository-missing-p repository)
+          (%path-missing-p (nerimux/model:repository-path repository)))
     (dolist (old-worktree previous)
-      (dolist (pane (cl-tmux/model:worktree-panes old-worktree))
-        (setf (cl-tmux/model:pane-worktree pane) nil)))
-    (setf (cl-tmux/model:repository-worktrees repository) nil
-          (cl-tmux/model:repository-main-worktree repository) nil)
+      (dolist (pane (nerimux/model:worktree-panes old-worktree))
+        (setf (nerimux/model:pane-worktree pane) nil)))
+    (setf (nerimux/model:repository-worktrees repository) nil
+          (nerimux/model:repository-main-worktree repository) nil)
     (dolist (raw raw-worktrees)
       (let* ((path (%adapter-string
                     (%raw-worktree-value
                      raw '("VCS-WORKTREE-PATH" "WORKTREE-PATH"))))
              (old-worktree (find path previous
-                                  :key #'cl-tmux/model:worktree-path
+                                  :key #'nerimux/model:worktree-path
                                   :test #'string=))
              (worktree
-               (cl-tmux/model:make-worktree
+               (nerimux/model:make-worktree
                 :id (and old-worktree
-                         (cl-tmux/model:worktree-id old-worktree))
+                         (nerimux/model:worktree-id old-worktree))
                 :repository repository
                 :path path
                 :branch (%raw-worktree-value
@@ -256,18 +256,18 @@
                 :head (%raw-worktree-value
                        raw '("VCS-WORKTREE-HEAD" "WORKTREE-HEAD"))
                 :status (and old-worktree
-                             (cl-tmux/model:worktree-status old-worktree))
+                             (nerimux/model:worktree-status old-worktree))
                 :panes (and old-worktree
-                            (cl-tmux/model:worktree-panes old-worktree))
+                            (nerimux/model:worktree-panes old-worktree))
                 :dirty-p (and old-worktree
-                              (cl-tmux/model:worktree-dirty-p old-worktree))
+                              (nerimux/model:worktree-dirty-p old-worktree))
                 :conflict-p (and old-worktree
-                                 (cl-tmux/model:worktree-conflict-p old-worktree))
+                                 (nerimux/model:worktree-conflict-p old-worktree))
                 :ahead (if old-worktree
-                           (cl-tmux/model:worktree-ahead old-worktree)
+                           (nerimux/model:worktree-ahead old-worktree)
                            0)
                 :behind (if old-worktree
-                            (cl-tmux/model:worktree-behind old-worktree)
+                            (nerimux/model:worktree-behind old-worktree)
                             0)
                 :bare-p (%adapter-boolean
                          (%raw-worktree-value
@@ -288,15 +288,15 @@
                             "VCS-WORKTREE-MISSING")))
                     (%path-missing-p path))
                 :tags (and old-worktree
-                           (cl-tmux/model:worktree-tags old-worktree))
+                           (nerimux/model:worktree-tags old-worktree))
                 :notes (and old-worktree
-                            (cl-tmux/model:worktree-notes old-worktree))
+                            (nerimux/model:worktree-notes old-worktree))
                 :recent-activity (and old-worktree
-                                      (cl-tmux/model:worktree-recent-activity
+                                      (nerimux/model:worktree-recent-activity
                                        old-worktree)))))
-        (dolist (pane (cl-tmux/model:worktree-panes worktree))
-          (setf (cl-tmux/model:pane-worktree pane) worktree))
-        (cl-tmux/model:repository-add-worktree repository worktree)))
+        (dolist (pane (nerimux/model:worktree-panes worktree))
+          (setf (nerimux/model:pane-worktree pane) worktree))
+        (nerimux/model:repository-add-worktree repository worktree)))
     repository))
 
 (defun %status-entry-conflict-p (entry)
@@ -311,27 +311,27 @@
 
 (defun worktree-status (worktree)
   "Refresh WORKTREE status from vcs-status-structured."
-  (let* ((repository (cl-tmux/model:worktree-repository worktree))
-         (worktree-path (cl-tmux/model:worktree-path worktree))
+  (let* ((repository (nerimux/model:worktree-repository worktree))
+         (worktree-path (nerimux/model:worktree-path worktree))
          (directory (if (plusp (length worktree-path))
                         worktree-path
                         (and repository
-                             (cl-tmux/model:repository-path repository))))
+                             (nerimux/model:repository-path repository))))
          (missing-p (and (stringp directory)
                          (plusp (length directory))
                          (null (ignore-errors (probe-file directory))))))
     (if missing-p
         (progn
-          (setf (cl-tmux/model:worktree-missing-p worktree) t
-                (cl-tmux/model:worktree-status worktree) nil
-                (cl-tmux/model:worktree-dirty-p worktree) nil
-                (cl-tmux/model:worktree-conflict-p worktree) nil
-                (cl-tmux/model:worktree-ahead worktree) 0
-                (cl-tmux/model:worktree-behind worktree) 0)
+          (setf (nerimux/model:worktree-missing-p worktree) t
+                (nerimux/model:worktree-status worktree) nil
+                (nerimux/model:worktree-dirty-p worktree) nil
+                (nerimux/model:worktree-conflict-p worktree) nil
+                (nerimux/model:worktree-ahead worktree) 0
+                (nerimux/model:worktree-behind worktree) 0)
          (when repository
-            (setf (cl-tmux/model:repository-missing-p repository)
-                  (%path-missing-p (cl-tmux/model:repository-path repository)))
-            (cl-tmux/model:repository-recompute-status repository))
+            (setf (nerimux/model:repository-missing-p repository)
+                  (%path-missing-p (nerimux/model:repository-path repository)))
+            (nerimux/model:repository-recompute-status repository))
           worktree)
         (let* ((backend-repository (%make-vcs-repository directory))
                (snapshot (%vcs-call "VCS-STATUS-STRUCTURED" backend-repository))
@@ -347,28 +347,28 @@
                (behind (%optional-vcs-value
                         snapshot '("VCS-STATUS-SNAPSHOT-BEHIND"
                                    "VCS-STATUS-BEHIND"))))
-          (setf (cl-tmux/model:worktree-missing-p worktree) nil
-                (cl-tmux/model:worktree-status worktree) snapshot
-                (cl-tmux/model:worktree-head worktree)
+          (setf (nerimux/model:worktree-missing-p worktree) nil
+                (nerimux/model:worktree-status worktree) snapshot
+                (nerimux/model:worktree-head worktree)
                 (if branch-head
                     branch-head
-                    (cl-tmux/model:worktree-head worktree))
-                (cl-tmux/model:worktree-dirty-p worktree) (not (null entries))
-                (cl-tmux/model:worktree-conflict-p worktree)
+                    (nerimux/model:worktree-head worktree))
+                (nerimux/model:worktree-dirty-p worktree) (not (null entries))
+                (nerimux/model:worktree-conflict-p worktree)
                 (not (null (some #'%status-entry-conflict-p entries)))
-                (cl-tmux/model:worktree-ahead worktree) (%adapter-integer ahead)
-                (cl-tmux/model:worktree-behind worktree) (%adapter-integer behind))
+                (nerimux/model:worktree-ahead worktree) (%adapter-integer ahead)
+                (nerimux/model:worktree-behind worktree) (%adapter-integer behind))
           (when repository
-            (setf (cl-tmux/model:repository-missing-p repository)
-                  (%path-missing-p (cl-tmux/model:repository-path repository)))
-            (cl-tmux/model:repository-recompute-status repository))
+            (setf (nerimux/model:repository-missing-p repository)
+                  (%path-missing-p (nerimux/model:repository-path repository)))
+            (nerimux/model:repository-recompute-status repository))
           worktree))))
 
 (defun refresh-repository-status (repository)
   "Refresh all statuses for REPOSITORY synchronously."
-  (dolist (worktree (cl-tmux/model:repository-worktrees repository))
+  (dolist (worktree (nerimux/model:repository-worktrees repository))
     (worktree-status worktree))
-  (cl-tmux/model:repository-recompute-status repository)
+  (nerimux/model:repository-recompute-status repository)
   repository)
 
 (defun scan-repositories-async (&key query on-complete on-error)
@@ -378,7 +378,7 @@
      (scan-repositories :query query
                         :on-complete on-complete
                         :on-error on-error))
-   :name "cl-tmux-vcs-scan"))
+   :name "nerimux-vcs-scan"))
 
 (defun refresh-repositories-async
     (repositories &key on-repository on-complete on-error
@@ -418,8 +418,8 @@
                                    nil)
                                  (error condition))))
                       (complete-one)))
-                  :name (format nil "cl-tmux-vcs-status-~A"
-                                (cl-tmux/model:repository-id current)))
+                  :name (format nil "nerimux-vcs-status-~A"
+                                (nerimux/model:repository-id current)))
                  threads))))))))
 
 (defun refresh-workspace-status-async
@@ -428,7 +428,7 @@
   "Refresh all catalog repositories concurrently without blocking the UI."
   (refresh-repositories-async
    (loop for organization in organizations
-         append (cl-tmux/model:organization-repositories organization))
+         append (nerimux/model:organization-repositories organization))
    :on-repository on-repository
    :on-complete on-complete
    :on-error on-error
@@ -450,7 +450,7 @@
 (defun %resolve-worktree-path (repository branch path path-template)
   (or (and path (%adapter-string path))
       (let* ((repository-path
-               (pathname (cl-tmux/model:repository-path repository)))
+               (pathname (nerimux/model:repository-path repository)))
              (directory (pathname-directory repository-path))
              (parent
                (make-pathname :directory (and directory (butlast directory))
@@ -481,7 +481,7 @@ Otherwise BRANCH is treated as an existing commit or branch."
          (worktree-path
            (%resolve-worktree-path repository branch-name path path-template))
          (backend-repository
-           (%make-vcs-repository (cl-tmux/model:repository-path repository)))
+           (%make-vcs-repository (nerimux/model:repository-path repository)))
          (arguments
            (if new-branch-p
                (append (list "add")
@@ -493,28 +493,28 @@ Otherwise BRANCH is treated as an existing commit or branch."
     (apply #'%vcs-call "VCS-WORKTREE" backend-repository arguments)
     (list-repository-worktrees repository)
     (refresh-repository-status repository)
-    (or (cl-tmux/model:repository-worktree-by-path repository worktree-path)
+    (or (nerimux/model:repository-worktree-by-path repository worktree-path)
         (error "VCS created a worktree but it was not returned by list-worktrees: ~A"
                worktree-path))))
 
 (defun delete-worktree (worktree &key force)
   "Remove WORKTREE after protecting the repository's primary checkout."
-  (let* ((repository (and worktree (cl-tmux/model:worktree-repository worktree)))
+  (let* ((repository (and worktree (nerimux/model:worktree-repository worktree)))
          (main-worktree
-           (and repository (cl-tmux/model:repository-main-worktree repository))))
+           (and repository (nerimux/model:repository-main-worktree repository))))
     (unless (and worktree repository)
       (error "A repository worktree is required to delete a worktree."))
     (when (or (eq worktree main-worktree)
               (and main-worktree
-                   (string= (cl-tmux/model:worktree-path worktree)
-                            (cl-tmux/model:worktree-path main-worktree))))
+                   (string= (nerimux/model:worktree-path worktree)
+                            (nerimux/model:worktree-path main-worktree))))
       (error "The repository's primary worktree cannot be deleted."))
     (let ((backend-repository
-            (%make-vcs-repository (cl-tmux/model:repository-path repository)))
+            (%make-vcs-repository (nerimux/model:repository-path repository)))
           (arguments
             (append (list "remove")
                     (when force (list "--force"))
-                    (list (cl-tmux/model:worktree-path worktree)))))
+                    (list (nerimux/model:worktree-path worktree)))))
       (apply #'%vcs-call "VCS-WORKTREE" backend-repository arguments)
       (list-repository-worktrees repository)
       (refresh-repository-status repository)
@@ -539,7 +539,7 @@ Otherwise BRANCH is treated as an existing commit or branch."
                   on-complete on-error)
   "Create a worktree on a worker thread and invoke one callback."
   (%run-vcs-operation-async
-   "cl-tmux-vcs-worktree-create"
+   "nerimux-vcs-worktree-create"
    (lambda ()
      (create-worktree repository
                       :branch branch
@@ -553,16 +553,16 @@ Otherwise BRANCH is treated as an existing commit or branch."
 (defun delete-worktree-async (worktree &key force on-complete on-error)
   "Delete a worktree on a worker thread and invoke one callback."
   (%run-vcs-operation-async
-   "cl-tmux-vcs-worktree-delete"
+   "nerimux-vcs-worktree-delete"
    (lambda () (delete-worktree worktree :force force))
    on-complete
    on-error))
 
 (defun install-vcs-port ()
-  "Install this adapter into cl-tmux/ports."
-  (setf cl-tmux/ports:*vcs-list-repositories* #'scan-repositories
-        cl-tmux/ports:*vcs-list-worktrees* #'list-repository-worktrees
-        cl-tmux/ports:*vcs-status* #'worktree-status
-        cl-tmux/ports:*vcs-scan-async* #'scan-repositories-async
-        cl-tmux/ports:*vcs-create-worktree* #'create-worktree
-        cl-tmux/ports:*vcs-delete-worktree* #'delete-worktree))
+  "Install this adapter into nerimux/ports."
+  (setf nerimux/ports:*vcs-list-repositories* #'scan-repositories
+        nerimux/ports:*vcs-list-worktrees* #'list-repository-worktrees
+        nerimux/ports:*vcs-status* #'worktree-status
+        nerimux/ports:*vcs-scan-async* #'scan-repositories-async
+        nerimux/ports:*vcs-create-worktree* #'create-worktree
+        nerimux/ports:*vcs-delete-worktree* #'delete-worktree))

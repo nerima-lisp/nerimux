@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; Shared command-line input parsing for %cmd-* handlers.
 

@@ -11,7 +11,7 @@ labels: bug
 
 ## What tmux does
 
-<!-- cl-tmux targets behavioral parity with tmux. What does real tmux do in
+<!-- nerimux targets behavioral parity with tmux. What does real tmux do in
      the same situation? (man-page reference or a transcript is ideal.) -->
 
 ## How to reproduce
@@ -23,6 +23,6 @@ labels: bug
 ## Environment
 
 - OS / architecture:
-- How you built cl-tmux (nix build / dev shell):
+- How you built nerimux (nix build / dev shell):
 - Outer terminal ($TERM):
 - Config file involved? (attach the minimal snippet that reproduces it)

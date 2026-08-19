@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/csi)
+(in-package #:nerimux/terminal/csi)
 
 ;;;; CSI dispatch macro.
 ;;;;

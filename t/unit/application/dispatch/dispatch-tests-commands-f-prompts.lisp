@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Dispatch tests - part F0: display-message, clock-mode, capture-pane,
 ;;;; send-keys, choose-tree, and option prompts.
@@ -10,13 +10,13 @@
   ;; :display-message on-submit calls add-message-log, appending the message.
   (it "dispatch-display-message-logs-to-message-log"
     (let ((*prompt* nil) (*overlay* nil)
-          (cl-tmux::*message-log* nil))
+          (nerimux::*message-log* nil))
       (with-dispatch-prompt (s :display-message :label "display-message"
                                :context ":display-message must open a prompt")
         ;; Submit a non-empty message.
         (funcall (prompt-on-submit *prompt*) "test-log-entry")
-        (expect (null cl-tmux::*message-log*) :to-be-falsy)
-        (let ((last-msg (cdr (first cl-tmux::*message-log*))))
+        (expect (null nerimux::*message-log*) :to-be-falsy)
+        (let ((last-msg (cdr (first nerimux::*message-log*))))
           (expect (string= "test-log-entry" last-msg))))))
 
   ;; - :clock-mode dispatch -----------------------------------------------------
@@ -24,13 +24,13 @@
   ;; :clock-mode sets *clock-mode-pane-id* to the active pane's id.
   (it "dispatch-clock-mode-toggles-pane-id"
     (with-fake-session (s)
-      (let ((cl-tmux::*clock-mode-pane-id* nil))
-        (cl-tmux::dispatch-command s :clock-mode nil)
+      (let ((nerimux::*clock-mode-pane-id* nil))
+        (nerimux::dispatch-command s :clock-mode nil)
         (let ((ap (session-active-pane s)))
-          (expect (eql (pane-id ap) cl-tmux::*clock-mode-pane-id*))
+          (expect (eql (pane-id ap) nerimux::*clock-mode-pane-id*))
           ;; Toggle off
-          (cl-tmux::dispatch-command s :clock-mode nil)
-          (expect (null cl-tmux::*clock-mode-pane-id*))))))
+          (nerimux::dispatch-command s :clock-mode nil)
+          (expect (null nerimux::*clock-mode-pane-id*))))))
 
   ;; - :capture-pane dispatch ---------------------------------------------------
 
@@ -42,7 +42,7 @@
         (let ((ap (session-active-pane s)))
           (when ap
             (feed (pane-screen ap) "CAPTEST")))
-        (cl-tmux::dispatch-command s :capture-pane nil)
+        (nerimux::dispatch-command s :capture-pane nil)
         (assert-overlay-contains "CAPTEST" *overlay*
                                  ":capture-pane"))))
 
@@ -76,8 +76,8 @@
              (reg (list (cons (session-name s1) s1)
                         (cons (session-name s2) s2))))
         (let ((*overlay* nil)
-              (cl-tmux::*server-sessions* reg))
-          (cl-tmux::dispatch-command s1 :choose-tree nil)
+              (nerimux::*server-sessions* reg))
+          (nerimux::dispatch-command s1 :choose-tree nil)
           (assert-overlay-contains (session-name s1) *overlay*
                                    ":choose-tree with server sessions")
           (assert-overlay-contains (session-name s2) *overlay*

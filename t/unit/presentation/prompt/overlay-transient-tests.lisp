@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Transient overlay and popup/menu lifecycle tests (src/overlay.lisp).
 

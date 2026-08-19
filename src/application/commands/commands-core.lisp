@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/commands)
+(in-package #:nerimux/commands)
 
 ;;; High-level tmux commands that operate on the session/window/pane model.
 ;;; Each exported function is the CL analogue of a tmux command-line command.
@@ -76,8 +76,8 @@
 (defun %maybe-renumber-windows (session)
   "If the 'renumber-windows' option is set, renumber all windows in SESSION
    starting from the 'base-index' option value, preserving their current order."
-  (when (cl-tmux/options:get-option "renumber-windows")
-    (let ((base (or (cl-tmux/options:get-option "base-index") 0)))
+  (when (nerimux/options:get-option "renumber-windows")
+    (let ((base (or (nerimux/options:get-option "base-index") 0)))
       (loop for win in (session-windows session)
             for i from base
             do (setf (window-id win) i)))))

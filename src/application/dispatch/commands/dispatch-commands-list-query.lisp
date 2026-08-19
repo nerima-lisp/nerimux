@@ -1,8 +1,8 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; -- List command read-model queries -----------------------------------------
 
-(declaim (special cl-tmux::*clients*))
+(declaim (special nerimux::*clients*))
 
 (defun %list-clients-records ()
   "Return (NAME ROWS COLS) records for attached clients, or a local fallback."
@@ -23,7 +23,7 @@
   "Return (SESSION . WINDOW) targets for every window in TARGET-SESSION."
   (mapcar (lambda (win)
             (cons target-session win))
-          (cl-tmux/model:session-windows-in-index-order target-session)))
+          (nerimux/model:session-windows-in-index-order target-session)))
 
 (defun %list-pane-targets (session target-str all-p session-p)
   "Return the target windows for list-panes based on flags and target input."
@@ -51,9 +51,9 @@
 (defun %format-list-window-entry (session win fmt)
   "Format one list-windows row using either FMT or the default tmux-style text."
   (if fmt
-      (cl-tmux/format:expand-format
+      (nerimux/format:expand-format
        fmt
-       (cl-tmux/format:format-context-from-window session win))
+       (nerimux/format:format-context-from-window session win))
       (format nil "~A: ~A (~Dx~D) [~D pane~:P]~A"
               (window-id win) (window-name win)
               (window-width win) (window-height win)
@@ -65,9 +65,9 @@
 (defun %format-list-pane-entry (session win pane fmt)
   "Format one list-panes row using either FMT or the default tmux-style text."
   (if fmt
-      (cl-tmux/format:expand-format
+      (nerimux/format:expand-format
        fmt
-       (cl-tmux/format:format-context-from-session session win pane))
+       (nerimux/format:format-context-from-session session win pane))
       (format nil "~D: [~Dx~D] [~D,~D] pane ~D~A"
               (pane-id pane)
               (pane-width pane) (pane-height pane)
@@ -81,9 +81,9 @@
   "Format one list-clients row using either FMT or the default tmux-style text."
   (destructuring-bind (name rows cols) record
     (if fmt
-        (cl-tmux/format:expand-format
+        (nerimux/format:expand-format
          fmt
-         (cl-tmux/format:format-context-from-session
+         (nerimux/format:format-context-from-session
           session
           (and session (session-active-window session))
           (and session (session-active-pane session))
@@ -98,9 +98,9 @@
 
 (defun %format-list-session-entry (target-session fmt)
   "Format one list-sessions row using FMT."
-  (cl-tmux/format:expand-format
+  (nerimux/format:expand-format
    fmt
-   (cl-tmux/format:format-context-from-session
+   (nerimux/format:format-context-from-session
     target-session
     (session-active-window target-session)
     nil)))
@@ -134,7 +134,7 @@
     (if sessions
         (values
          (loop for sess in sessions
-               append (loop for win in (cl-tmux/model:session-windows-in-index-order sess)
+               append (loop for win in (nerimux/model:session-windows-in-index-order sess)
                             collect (%format-list-window-entry sess win fmt)))
          t)
         (values nil nil))))

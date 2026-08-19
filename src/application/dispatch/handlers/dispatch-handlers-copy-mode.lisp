@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Copy-mode standard dispatch table.
 ;;;;
@@ -67,8 +67,8 @@
   (:copy-mode-copy-selection-no-clear     copy-mode-copy-selection-no-clear)
   (:copy-mode-append-selection            copy-mode-append-selection)
   (:copy-mode-append-selection-and-cancel copy-mode-append-selection-and-cancel)
-  (:copy-mode-search-backward-word        cl-tmux/commands::copy-mode-search-backward-word)
-  (:copy-mode-search-forward-word         cl-tmux/commands::copy-mode-search-forward-word)
+  (:copy-mode-search-backward-word        nerimux/commands::copy-mode-search-backward-word)
+  (:copy-mode-search-forward-word         nerimux/commands::copy-mode-search-forward-word)
   (:copy-mode-search-next                 copy-mode-search-next)
   (:copy-mode-search-prev                 copy-mode-search-prev)
   (:copy-mode-search-forward-incremental  copy-mode-search-forward-incremental)

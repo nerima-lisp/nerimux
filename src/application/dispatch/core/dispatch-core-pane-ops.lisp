@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Declarative command dispatch - pane, layout, and window-list helpers.
 
@@ -24,12 +24,12 @@
   "Apply LAYOUT-NAME to SESSION's active window and reassign geometry."
   (let ((win (session-active-window session)))
     (when win
-      (cl-tmux/model:apply-named-layout
+      (nerimux/model:apply-named-layout
        win layout-name
-       (or (cl-tmux/options:get-option "main-pane-width") 80)
-       (or (cl-tmux/options:get-option "main-pane-height") 24)
-       (or (cl-tmux/options:get-option "other-pane-width") 0)
-       (or (cl-tmux/options:get-option "other-pane-height") 0))
+       (or (nerimux/options:get-option "main-pane-width") 80)
+       (or (nerimux/options:get-option "main-pane-height") 24)
+       (or (nerimux/options:get-option "other-pane-width") 0)
+       (or (nerimux/options:get-option "other-pane-height") 0))
       (%assign-window-tree win (window-width win) (window-height win)))))
 
 (defun %copy-mode-call (session fn)

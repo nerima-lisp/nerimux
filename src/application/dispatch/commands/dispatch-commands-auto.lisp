@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 (declaim (special *client-flags*))
 
@@ -9,7 +9,7 @@
   "T when STRING matches PATTERN either as a substring or a regex."
   (and string
        (if regex-p
-           (cl-tmux/format::%regex-match-p pattern string ignore-case)
+           (nerimux/format::%regex-match-p pattern string ignore-case)
            (search pattern string :test (if ignore-case #'char-equal #'char=)))))
 
 (defun %window-matches-pattern-p (window pattern &key (search-name-p t)
@@ -24,26 +24,26 @@
                                      :regex-p regex-p :ignore-case ignore-case))
       (some (lambda (pane)
               (or (and search-title-p
-                       (let ((title (cl-tmux/model:pane-title pane))
-                             (screen (cl-tmux/model:pane-screen pane)))
+                       (let ((title (nerimux/model:pane-title pane))
+                             (screen (nerimux/model:pane-screen pane)))
                          (or (%window-string-matches-p pattern title
                                                        :regex-p regex-p
                                                        :ignore-case ignore-case)
                              (%window-string-matches-p
                               pattern
-                              (and screen (cl-tmux/terminal:screen-title screen))
+                              (and screen (nerimux/terminal:screen-title screen))
                               :regex-p regex-p
                               :ignore-case ignore-case))))
                   (and search-content-p
                        (some (lambda (line)
-                               (cl-tmux/format::%content-search-match-p
+                               (nerimux/format::%content-search-match-p
                                 pattern line regex-p ignore-case))
-                             (cl-tmux/format::%pane-visible-lines pane)))))
-            (cl-tmux/model:window-panes window))))
+                             (nerimux/format::%pane-visible-lines pane)))))
+            (nerimux/model:window-panes window))))
 
 (defun %window-has-live-panes-p (window)
   "T when WINDOW contains at least one live pane."
-  (some #'cl-tmux/model:pane-live-p (cl-tmux/model:window-panes window)))
+  (some #'nerimux/model:pane-live-p (nerimux/model:window-panes window)))
 
 (defun %cmd-find-window-arg (session args)
   "find-window [-N] match-string: find the window whose name
@@ -89,9 +89,9 @@
 (defun %window-has-alert-p (win)
   "T when WIN has a pending alert — activity (monitor-activity) or silence
    (monitor-silence).  These are the windows next-window/previous-window -a jumps
-   between (cl-tmux tracks activity + silence at the window level)."
-  (and win (or (cl-tmux/model:window-activity-flag win)
-               (cl-tmux/model:window-silence-flag win))))
+   between (nerimux tracks activity + silence at the window level)."
+  (and win (or (nerimux/model:window-activity-flag win)
+               (nerimux/model:window-silence-flag win))))
 
 (defun %cycle-to-alert-window (session cycler)
   "Select the next/prev window (via CYCLER) that has an alert, scanning from the
@@ -158,11 +158,11 @@
 
 (defun %cmd-refresh-client-arg (session args)
   "refresh-client [-S] [-C size] [-f flags]: refresh / redraw the client.
-   -S       redraw the status line only; cl-tmux redraws the whole frame.
+   -S       redraw the status line only; nerimux redraws the whole frame.
    -C WxH   set the client size, then relayout the active window.
    -f flags set the single client's flag list.  A '!' prefix removes a flag.
    Target-client, panning, subscription, clipboard, and adjustment forms are
-   intentionally unsupported because cl-tmux has no corresponding client state."
+   intentionally unsupported because nerimux has no corresponding client state."
   (with-command-input (flags positionals args "Cf"
                              :allowed-flags '(#\C #\S #\f)
                              :max-positionals 0
@@ -228,7 +228,7 @@
      -R  run EVENT's hooks immediately (after setting, if a command is also given).
      -a  append the command to EVENT's hook list (preserving prior hooks); without
          -a, set-hook REPLACES the event's hook, matching tmux.
-     -g  accepted (cl-tmux keeps a flat, server-wide command-hook table).
+     -g  accepted (nerimux keeps a flat, server-wide command-hook table).
    Without -u, the tokens after EVENT are joined into one command line and stored
    as a raw string, expanded at hook-fire time via %run-command-line."
   (with-command-flags+pos (flags positionals args "")
@@ -241,7 +241,7 @@
 
 (defun %delegate-config-directive (directive args)
   "Dispatch DIRECTIVE with ARGS through the config directive interpreter."
-  (cl-tmux/config:apply-config-directive (cons directive args)))
+  (nerimux/config:apply-config-directive (cons directive args)))
 
 (defmacro define-config-directive-command (name directive docstring)
   "Define NAME as a (session args) command that ignores SESSION and delegates

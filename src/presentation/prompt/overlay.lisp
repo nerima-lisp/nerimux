@@ -1,9 +1,9 @@
-(in-package #:cl-tmux/prompt)
+(in-package #:nerimux/prompt)
 
 ;;;; Overlay, popup, and menu state.
 ;;;;
 ;;;; This file holds the three overlay concerns that were originally bundled in
-;;;; prompt.lisp.  They share the cl-tmux/prompt package and are driven by
+;;;; prompt.lisp.  They share the nerimux/prompt package and are driven by
 ;;;; dispatch.lisp / rendered by renderer.lisp.  Splitting them here keeps
 ;;;; prompt.lisp focused solely on single-line editing.
 

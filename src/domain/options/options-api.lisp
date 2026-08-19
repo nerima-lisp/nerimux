@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/options)
+(in-package #:nerimux/options)
 
 ;;;; Option accessor API: type coercions, get/set functions, scoped overrides.
 ;;;;
@@ -39,7 +39,7 @@
    ;; option presence via get-option before calling set-option.
    (cond
      ((stringp value)
-      (or (cl-tmux::%parse-integer-or-nil value :junk-allowed t) 0))
+      (or (nerimux::%parse-integer-or-nil value :junk-allowed t) 0))
      ((numberp value)
       (truncate value))
      (t 0)))
@@ -116,7 +116,7 @@
 ;;; ── Option scope classification (mirrors tmux options_scope_from_name) ─────
 ;;;
 ;;; tmux tags each option with a scope; without an explicit -g/-s/-w/-p flag,
-;;; set-option infers the target store from that scope.  cl-tmux models SESSION
+;;; set-option infers the target store from that scope.  nerimux models SESSION
 ;;; and SERVER options via the global / server stores, so the only inference
 ;;; that changes routing is WINDOW scope.
 
@@ -158,7 +158,7 @@
 (defun option-scope-from-name (name)
   "Return the inferred scope keyword for option NAME when set-option is given no
    explicit scope flag: :window for a window-scoped option, else :session
-   (which cl-tmux stores in the global table).  Mirrors tmux
+   (which nerimux stores in the global table).  Mirrors tmux
    options_scope_from_name (server/pane scopes are flag-driven here)."
   (if (gethash name *window-scoped-option-names*) :window :session))
 
@@ -213,7 +213,7 @@
 ;;; These functions implement the tmux fallback chain:
 ;;;   pane-local  → window-local → global → registered default
 ;;;
-;;; The cl-tmux/model package is referenced by qualified name to avoid a
+;;; The nerimux/model package is referenced by qualified name to avoid a
 ;;; circular dependency (model depends on config which depends on options).
 
 (defun %resolve-option-in-scope-chain (name pane-options window-options)
@@ -238,8 +238,8 @@
    get-option-for-window and get-option-for-pane delegate here."
   (%resolve-option-in-scope-chain
    name
-   (when pane   (cl-tmux/model:pane-local-options   pane))
-   (when window (cl-tmux/model:window-local-options window))))
+   (when pane   (nerimux/model:pane-local-options   pane))
+   (when window (nerimux/model:window-local-options window))))
 
 (defun get-option-for-window (name window)
   "Look up NAME in WINDOW's local options, falling back to *global-options*,
@@ -266,7 +266,7 @@
 (defun set-option-for-window (name value window)
   "Coerce VALUE and store under NAME in WINDOW's local-options hash.
    Returns the coerced value."
-  (%set-local-option name value (cl-tmux/model:window-local-options window)))
+  (%set-local-option name value (nerimux/model:window-local-options window)))
 
 (defun get-option-for-pane (name pane)
   "Look up NAME in PANE's local options, falling back to *global-options*,
@@ -280,4 +280,4 @@
 (defun set-option-for-pane (name value pane)
   "Coerce VALUE and store under NAME in PANE's local-options hash.
    Returns the coerced value."
-  (%set-local-option name value (cl-tmux/model:pane-local-options pane)))
+  (%set-local-option name value (nerimux/model:pane-local-options pane)))

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/commands)
+(in-package #:nerimux/commands)
 
 ;;;; send-keys key-name translation and send-keys-to-pane.
 ;;;;
@@ -49,7 +49,7 @@
       (modified
        (cl-codec-kit:string-to-octets modified :encoding :utf-8))
       ;; C-<char>: control byte.  C-a..C-z → 1..26, C-@ → 0, C-[ → 27, ...
-      ;; +ctrl-mask+ = #x1f (exported from cl-tmux/config).
+      ;; +ctrl-mask+ = #x1f (exported from nerimux/config).
       ((and (= (length name) 3) (string= (subseq name 0 2) "C-"))
        (make-array 1 :element-type '(unsigned-byte 8)
                      :initial-element (logand (char-code (char-upcase (char name 2)))

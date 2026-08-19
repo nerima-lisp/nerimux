@@ -1,6 +1,6 @@
-;;;; Session and window naming helpers for cl-tmux tests.
+;;;; Session and window naming helpers for nerimux tests.
 
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 (defmacro with-session-name ((session-var name) &body body)
   "Assign NAME to SESSION-VAR and continue with BODY."
@@ -27,7 +27,7 @@
 
 (defmacro with-registered-sessions ((&rest session-bindings) &body body)
   "Bind *SERVER-SESSIONS* from SESSION-BINDINGS data."
-  `(let ((cl-tmux::*server-sessions*
+  `(let ((nerimux::*server-sessions*
           (list ,@(loop for (session-name session-var) in session-bindings
                         collect `(cons ,session-name ,session-var)))))
      ,@body))

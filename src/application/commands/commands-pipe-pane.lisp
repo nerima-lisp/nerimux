@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/commands)
+(in-package #:nerimux/commands)
 
 ;;; ── pipe-pane ───────────────────────────────────────────────────────────────
 ;;;
@@ -75,7 +75,7 @@
                                :output-stream output-stream
                                :output-thread output-thread
                                :process proc)))
-      (let* ((shell (or cl-tmux/config:*default-shell* "/bin/sh"))
+      (let* ((shell (or nerimux/config:*default-shell* "/bin/sh"))
              (new-proc
                ;; :search t is required, not optional.  process-kit:spawn defaults
                ;; :search to NIL and passes that straight to run-program, so a
@@ -142,7 +142,7 @@
   (ignore-errors (%terminate-pipe-process process))
   (when output-thread
     (ignore-errors
-      (cl-tmux::%join-thread-with-timeout output-thread
+      (nerimux::%join-thread-with-timeout output-thread
                                           +pipe-pane-close-timeout+)))
   (%pipe-pane-reset pane))
 

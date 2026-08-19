@@ -1,6 +1,6 @@
-(in-package #:cl-tmux/renderer)
+(in-package #:nerimux/renderer)
 
-;;;; Terminal protocol control helpers for the cl-tmux renderer.
+;;;; Terminal protocol control helpers for the nerimux renderer.
 ;;;;
 ;;;; This file owns the outer-terminal side effects that are not part of the
 ;;;; frame compositing pipeline itself: clear-display and the reporting toggles

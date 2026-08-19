@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/terminal/actions)
+(in-package #:nerimux/terminal/actions)
 
 ;;;; Terminal modes — G0..G3 charset designation and invocation (ESC ( / ESC ) / SO / SI).
 

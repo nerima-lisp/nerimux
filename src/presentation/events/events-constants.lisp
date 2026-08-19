@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; VT100 / mouse / CSI byte constants used by the keystroke and event pipeline.
 ;;;;

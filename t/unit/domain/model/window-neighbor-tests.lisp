@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 (describe "model-suite"
 
@@ -15,7 +15,7 @@
                          (list p1 :left  p0 "p1 :left -> p0")))
         (destructuring-bind (pane dir expected desc) row
           (declare (ignore desc))
-          (expect (eq expected (cl-tmux/model::pane-neighbor win pane dir)))))))
+          (expect (eq expected (nerimux/model::pane-neighbor win pane dir)))))))
 
   ;; A single pane has no neighbor in any direction.
   (it "pane-neighbor-nil-for-single-pane"
@@ -25,7 +25,7 @@
                              :tree (make-layout-leaf p0))))
       (window-select-pane win p0)
       (dolist (dir '(:right :left :up :down))
-        (expect (null (cl-tmux/model::pane-neighbor win p0 dir))))))
+        (expect (null (nerimux/model::pane-neighbor win p0 dir))))))
 
   ;; In a v-split: top pane's :down neighbor is bottom pane, bottom's :up is top pane.
   (it "pane-neighbor-v-split-table"
@@ -34,20 +34,20 @@
                          (list p1 :up   p0 "p1 :up -> p0")))
         (destructuring-bind (pane dir expected desc) row
           (declare (ignore desc))
-          (expect (eq expected (cl-tmux/model::pane-neighbor win pane dir)))))))
+          (expect (eq expected (nerimux/model::pane-neighbor win pane dir)))))))
 
   ;; A pane in an h-split has no up or down neighbor.
   (it "pane-neighbor-nil-outside-split-axis"
     (multiple-value-bind (win p0 p1) (make-two-pane-h-window)
       (declare (ignore p1))
-      (expect (null (cl-tmux/model::pane-neighbor win p0 :up)))
-      (expect (null (cl-tmux/model::pane-neighbor win p0 :down)))))
+      (expect (null (nerimux/model::pane-neighbor win p0 :up)))
+      (expect (null (nerimux/model::pane-neighbor win p0 :down)))))
 
   ;; Zoomed windows behave like single-pane windows for neighbor lookup.
   (it "pane-neighbor-nil-when-window-zoomed"
     (multiple-value-bind (win p0 p1) (make-two-pane-h-window)
       (declare (ignore p1))
       (window-select-pane win p0)
-      (cl-tmux/model:window-zoom-toggle win)
+      (nerimux/model:window-zoom-toggle win)
       (dolist (dir '(:right :left :up :down))
-        (expect (null (cl-tmux/model::pane-neighbor win p0 dir)))))))
+        (expect (null (nerimux/model::pane-neighbor win p0 dir)))))))

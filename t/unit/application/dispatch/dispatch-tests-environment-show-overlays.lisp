@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Dispatch show-environment and overlay tests.
 
@@ -12,7 +12,7 @@
                    (""   nil        "-~A"                       "show-environment missing")))
       (destructuring-bind (flags set-value expected-fmt msg) row
         (with-fake-session (s)
-          (let ((name "CLTMUX_TEST_SHOWENV_UNIFIED"))
+          (let ((name "NERIMUX_TEST_SHOWENV_UNIFIED"))
             (if set-value
                 (session-set-environment s name set-value)
                 (session-unset-environment s name))
@@ -27,8 +27,8 @@
   ;; show-environment without NAME displays the environment list.
   (it "cmd-show-environment-listing-shows-header-and-entries"
     (with-fake-session (s)
-      (let ((name-a "CLTMUX_TEST_SHOWENV_LIST_A")
-            (name-b "CLTMUX_TEST_SHOWENV_LIST_B"))
+      (let ((name-a "NERIMUX_TEST_SHOWENV_LIST_A")
+            (name-b "NERIMUX_TEST_SHOWENV_LIST_B"))
         (session-set-environment s name-a "one")
         (session-set-environment s name-b "two")
         (with-run-command-line-overlay (s "show-environment")
@@ -42,7 +42,7 @@
   ;; show-environment -g NAME displays the process environment value.
   (it "cmd-show-environment-g-shows-process-value"
     (with-fake-session (s)
-      (let ((name "CLTMUX_TEST_SHOWENV_G")
+      (let ((name "NERIMUX_TEST_SHOWENV_G")
             (value "visible"))
         (with-temporary-posix-environment-variable (name value)
           (with-run-command-line-overlay (s (format nil "show-environment -g ~A" name))
@@ -53,7 +53,7 @@
   ;; show-environment -t target NAME displays the target session value.
   (it "cmd-show-environment-t-target-session-displays-value"
     (with-fake-session (s)
-      (let ((name "CLTMUX_TEST_SHOWENV_T"))
+      (let ((name "NERIMUX_TEST_SHOWENV_T"))
         (let ((target (make-fake-session :nwindows 1 :npanes 1)))
           (with-session-and-window-names (s "alpha")
             (with-session-and-window-names (target "beta")
@@ -67,9 +67,9 @@
   ;; show-environment -g -t target NAME is rejected when both scopes are given.
   (it "cmd-show-environment-g-and-t-are-mutually-exclusive"
     (with-fake-session (s)
-      (let ((name "CLTMUX_TEST_SHOWENV_GT"))
+      (let ((name "NERIMUX_TEST_SHOWENV_GT"))
         (let ((*overlay* nil))
-          (cl-tmux::%run-command-line s (format nil "show-environment -g -t ignored ~A" name))
+          (nerimux::%run-command-line s (format nil "show-environment -g -t ignored ~A" name))
           (assert-overlay-contains "mutually exclusive"
                                    *overlay*
                                    "show-environment -g -t")))))
@@ -77,12 +77,12 @@
   ;; show-environment rejects unknown flags and extra NAME arguments before showing values.
   (it "cmd-show-environment-unsupported-arguments-are-rejected-before-reading"
     (with-fake-session (s)
-      (let ((name "CLTMUX_TEST_SHOWENV_UNSUPPORTED"))
+      (let ((name "NERIMUX_TEST_SHOWENV_UNSUPPORTED"))
         (session-set-environment s name "hidden")
         (dolist (args (list (list "-Z" name)
                             (list name "extra")))
           (let ((*overlay* nil))
-            (cl-tmux::%cmd-show-environment-arg s args)
+            (nerimux::%cmd-show-environment-arg s args)
             (assert-overlay-contains "unsupported argument"
                                      *overlay*
                                      "show-environment unsupported")
@@ -92,15 +92,15 @@
   (it "dispatch-show-hooks-shows-overlay"
     (with-fake-session (s)
       (let ((*overlay* nil))
-        (cl-tmux::dispatch-command s :show-hooks nil)
+        (nerimux::dispatch-command s :show-hooks nil)
         (assert-overlay-active ":show-hooks must open an overlay"))))
 
   ;; :show-prompt-history with empty history opens an overlay saying '(no prompt history)'.
   (it "dispatch-show-prompt-history-empty-shows-overlay"
     (with-fake-session (s)
       (let ((*overlay* nil)
-            (cl-tmux::*prompt-history* (history-kit:make-history)))
-        (cl-tmux::dispatch-command s :show-prompt-history nil)
+            (nerimux::*prompt-history* (history-kit:make-history)))
+        (nerimux::dispatch-command s :show-prompt-history nil)
         (assert-overlay-active ":show-prompt-history must open an overlay")
         (assert-overlay-contains "no prompt history" *overlay*
                                  "overlay must say 'no prompt history' when empty"))))
@@ -110,10 +110,10 @@
     (with-fake-session (s)
       (let* ((history (history-kit:make-history))
              (*overlay* nil)
-             (cl-tmux::*prompt-history* history))
+             (nerimux::*prompt-history* history))
         (history-kit:history-add history "list-windows")
         (history-kit:history-add history "next-window")
-        (cl-tmux::dispatch-command s :show-prompt-history nil)
+        (nerimux::dispatch-command s :show-prompt-history nil)
         (assert-overlay-active ":show-prompt-history must open an overlay")
         (assert-overlay-contains "list-windows" *overlay*
                                  "overlay must contain 'list-windows'")
@@ -124,7 +124,7 @@
   (it "dispatch-show-server-options-shows-overlay"
     (with-fake-session (s)
       (let ((*overlay* nil))
-        (cl-tmux::dispatch-command s :show-server-options nil)
+        (nerimux::dispatch-command s :show-server-options nil)
         (expect (and *overlay* (plusp (length *overlay*))))
         (expect (search "server options" *overlay*)))))
 
@@ -133,5 +133,5 @@
     (with-fake-session (s)
       ;; SIGTSTP is sent to the current process; we cannot easily test it was
       ;; actually delivered, but we verify dispatch does not signal a CL error.
-      (finishes (cl-tmux::dispatch-command s :suspend-client nil)
+      (finishes (nerimux::dispatch-command s :suspend-client nil)
                 ":suspend-client must not signal a Lisp error"))))

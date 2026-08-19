@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Configuration defaults, initialization, and parsing tests split from
 ;;;; config-tests.lisp so the base file can stay focused on direct binding
@@ -7,14 +7,14 @@
 ;;; ── Import the config symbols we need ────────────────────────────────────
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (import '(cl-tmux/config:lookup-key-binding
-             cl-tmux/config:describe-key-bindings
-             cl-tmux/config:+prefix-key-code+
-            cl-tmux/config:+table-prefix+
-            cl-tmux/config:+table-root+
-            cl-tmux/config:+table-copy-mode+
-            cl-tmux/config:+table-copy-mode-vi+
-            cl-tmux/config:*prefix-key-code*)))
+  (import '(nerimux/config:lookup-key-binding
+             nerimux/config:describe-key-bindings
+             nerimux/config:+prefix-key-code+
+            nerimux/config:+table-prefix+
+            nerimux/config:+table-root+
+            nerimux/config:+table-copy-mode+
+            nerimux/config:+table-copy-mode-vi+
+            nerimux/config:*prefix-key-code*)))
 
 (describe "config-suite"
 
@@ -30,7 +30,7 @@
             (:not-a-copy-mode-command  nil))
       "copy-mode-count-command-p ~S → ~A"
       (command expected)
-    (expect (eq expected (cl-tmux/config:copy-mode-count-command-p command))))
+    (expect (eq expected (nerimux/config:copy-mode-count-command-p command))))
 
   ;;; ── Default prefix bindings and list-keys output ──────────────────────────
 
@@ -68,27 +68,27 @@
 
   ;; key-table-command returns the car of a key-table entry (the command keyword).
   (it "key-table-command-extracts-car"
-    (let ((cl-tmux/config:*key-tables* (make-hash-table :test #'equal)))
-      (cl-tmux/config:key-table-bind "prefix" #\c :new-window)
-      (let ((entry (cl-tmux/config:key-table-lookup "prefix" #\c)))
+    (let ((nerimux/config:*key-tables* (make-hash-table :test #'equal)))
+      (nerimux/config:key-table-bind "prefix" #\c :new-window)
+      (let ((entry (nerimux/config:key-table-lookup "prefix" #\c)))
         (expect (not (null entry)))
-        (expect (eq :new-window (cl-tmux/config:key-table-command entry))))))
+        (expect (eq :new-window (nerimux/config:key-table-command entry))))))
 
   ;; The copy-mode key-tables are created by initialize-default-key-tables.
   (it "key-tables-copy-mode-table-exists"
-    (expect (not (null (gethash "copy-mode" cl-tmux/config:*key-tables*))))
-    (expect (not (null (gethash "copy-mode-vi" cl-tmux/config:*key-tables*)))))
+    (expect (not (null (gethash "copy-mode" nerimux/config:*key-tables*))))
+    (expect (not (null (gethash "copy-mode-vi" nerimux/config:*key-tables*)))))
 
   ;; The registry default for mode-keys is emacs, matching tmux (vi is autodetected
   ;; from $VISUAL/$EDITOR at startup, not the static default).
   (it "mode-keys-default-is-emacs"
     (with-isolated-config
-      (expect (string= "emacs" (cl-tmux/options:get-option "mode-keys")))
-      (expect (string= "emacs" (cl-tmux/options:get-option "status-keys")))))
+      (expect (string= "emacs" (nerimux/options:get-option "mode-keys")))
+      (expect (string= "emacs" (nerimux/options:get-option "status-keys")))))
 
   ;; *prefix-key-code* defaults to the value of +prefix-key-code+.
   (it "prefix-key-code-dynamic-var-defaults-to-constant"
-    (expect (= +prefix-key-code+ cl-tmux/config:*prefix-key-code*)))
+    (expect (= +prefix-key-code+ nerimux/config:*prefix-key-code*)))
 
   ;;; ── %parse-prefix-key ────────────────────────────────────────────────────────
 
@@ -100,7 +100,7 @@
                  ("UnknownKey" nil "unknown key name → NIL")))
       (destructuring-bind (input expected desc) c
         (declare (ignore desc))
-        (expect (equal expected (cl-tmux/config::%parse-prefix-key input))))))
+        (expect (equal expected (nerimux/config::%parse-prefix-key input))))))
 
   ;; %parse-prefix-key also accepts caret control notation, C-Space/C-@ (NUL), and
   ;; control symbols, while None/Any and named keys (M-/F-keys) parse to NIL so the
@@ -116,14 +116,14 @@
                  ("F1"      nil "F1 → NIL (not single-byte matchable)")))
       (destructuring-bind (input expected desc) c
         (declare (ignore desc))
-        (expect (equal expected (cl-tmux/config::%parse-prefix-key input))))))
+        (expect (equal expected (nerimux/config::%parse-prefix-key input))))))
 
   ;; `set-option -g prefix2 None` disables the secondary prefix (NIL); `set-option -g prefix None`
   ;; resets the primary prefix to the default +prefix-key-code+.
   (it "bind-prefix-key-none-disables"
-    (let ((cl-tmux/config:*prefix-key-code*  1)
-          (cl-tmux/config:*prefix2-key-code* 7))
-      (cl-tmux/config::%bind-prefix-key "None" 'cl-tmux/config::*prefix2-key-code*)
-      (expect (null cl-tmux/config:*prefix2-key-code*))
-      (cl-tmux/config::%bind-prefix-key "None" 'cl-tmux/config::*prefix-key-code*)
-      (expect (= cl-tmux/config:+prefix-key-code+ cl-tmux/config:*prefix-key-code*)))))
+    (let ((nerimux/config:*prefix-key-code*  1)
+          (nerimux/config:*prefix2-key-code* 7))
+      (nerimux/config::%bind-prefix-key "None" 'nerimux/config::*prefix2-key-code*)
+      (expect (null nerimux/config:*prefix2-key-code*))
+      (nerimux/config::%bind-prefix-key "None" 'nerimux/config::*prefix-key-code*)
+      (expect (= nerimux/config:+prefix-key-code+ nerimux/config:*prefix-key-code*)))))

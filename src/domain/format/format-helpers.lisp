@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/format)
+(in-package #:nerimux/format)
 
 ;;; -- Pure data helpers + format shorthand/arithmetic tables -----------------
 ;;;
@@ -26,7 +26,7 @@
         ;; (e.g. WORD-SEPARATORS from word_separators, or @MY-VAR from @my-var).
         ;; Lowercasing it gives the option-registry key directly.
         (let* ((opt-name (string-downcase (symbol-name key)))
-               (opt-val  (cl-tmux/options:get-option opt-name nil)))
+               (opt-val  (nerimux/options:get-option opt-name nil)))
           (cond
             (opt-val (princ-to-string opt-val))
             (t (or (sb-ext:posix-getenv

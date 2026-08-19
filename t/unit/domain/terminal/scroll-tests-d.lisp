@@ -1,11 +1,11 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; scroll tests — part D: clear-scrollback, BCE background via %erase-cell,
 ;;;; and *scroll-on-clear-function* edge-cases.
 
 ;;; ── SUITE: clear-scrollback ──────────────────────────────────────────────────
 ;;;
-;;; clear-scrollback is exported from cl-tmux/terminal/actions but was previously
+;;; clear-scrollback is exported from nerimux/terminal/actions but was previously
 ;;; only called indirectly (via the clear-history command integration path).
 ;;; These tests verify it directly.
 
@@ -16,26 +16,26 @@
     (with-screen (s 5 3)
       ;; Build up scrollback by scrolling
       (feed-lines s "L0" "L1" "L2" "L3")
-      (expect (plusp (length (cl-tmux/terminal/types:screen-scrollback s))))
-      (cl-tmux/terminal/actions:clear-scrollback s)
-      (expect (null (cl-tmux/terminal/types:screen-scrollback s)))))
+      (expect (plusp (length (nerimux/terminal/types:screen-scrollback s))))
+      (nerimux/terminal/actions:clear-scrollback s)
+      (expect (null (nerimux/terminal/types:screen-scrollback s)))))
 
   ;; clear-scrollback on a screen with no scrollback is a no-op (no error, stays NIL).
   (it "clear-scrollback-noop-on-empty-scrollback"
     (with-screen (s 5 3)
-      (expect (null (cl-tmux/terminal/types:screen-scrollback s)))
-      (finishes (cl-tmux/terminal/actions:clear-scrollback s))
-      (expect (null (cl-tmux/terminal/types:screen-scrollback s)))))
+      (expect (null (nerimux/terminal/types:screen-scrollback s)))
+      (finishes (nerimux/terminal/actions:clear-scrollback s))
+      (expect (null (nerimux/terminal/types:screen-scrollback s)))))
 
   ;; clear-scrollback does not modify the visible grid cells.
   (it "clear-scrollback-leaves-visible-grid-intact"
     (with-screen (s 5 3)
       (feed s "hello")                           ; write on the visible grid
       (feed-lines s "" "L1" "L2" "L3")           ; build some scrollback
-      (cl-tmux/terminal/actions:clear-scrollback s)
+      (nerimux/terminal/actions:clear-scrollback s)
       ;; After clear-scrollback, row 0 visible content is from post-scroll state
       ;; — the key assertion is that the visible grid is NOT blanked.
-      (expect (null (cl-tmux/terminal/types:screen-scrollback s)))
+      (expect (null (nerimux/terminal/types:screen-scrollback s)))
       ;; Visible grid must still have non-blank content somewhere
       (let ((any-non-blank nil))
         (dotimes (y 3)
@@ -55,27 +55,27 @@
   ;; A scroll-on-clear function that returns NIL is treated as OFF: ED 2 does not push
   ;; content to scrollback.
   (it "scroll-on-clear-function-returning-nil-does-not-push"
-    (let ((cl-tmux/terminal/actions::*scroll-on-clear-function* (lambda () nil)))
+    (let ((nerimux/terminal/actions::*scroll-on-clear-function* (lambda () nil)))
       (with-screen (s 5 3)
         (feed s "AAAAA")
         (feed s (esc "[2J"))
-        (expect (null (cl-tmux/terminal/types:screen-scrollback s))))))
+        (expect (null (nerimux/terminal/types:screen-scrollback s))))))
 
   ;; A scroll-on-clear function that returns non-NIL causes ED 2 to push visible rows.
   (it "scroll-on-clear-function-returning-non-nil-pushes-content"
-    (let ((cl-tmux/terminal/actions::*scroll-on-clear-function* (lambda () t)))
+    (let ((nerimux/terminal/actions::*scroll-on-clear-function* (lambda () t)))
       (with-screen (s 5 3)
         (feed s "AAAAA")
         (feed s (esc "[2J"))
-        (expect (plusp (length (cl-tmux/terminal/types:screen-scrollback s)))))))
+        (expect (plusp (length (nerimux/terminal/types:screen-scrollback s)))))))
 
   ;; *scroll-on-clear-function* = NIL (no policy) means scroll-on-clear is OFF.
   (it "scroll-on-clear-nil-function-does-not-push"
-    (let ((cl-tmux/terminal/actions::*scroll-on-clear-function* nil))
+    (let ((nerimux/terminal/actions::*scroll-on-clear-function* nil))
       (with-screen (s 5 3)
         (feed s "BBBBB")
         (feed s (esc "[2J"))
-        (expect (null (cl-tmux/terminal/types:screen-scrollback s)))))))
+        (expect (null (nerimux/terminal/types:screen-scrollback s)))))))
 
 ;;; ── SUITE: decstbm additional edge cases ─────────────────────────────────────
 ;;;
@@ -88,29 +88,29 @@
   ;; to the second call's values (no residual from the first call).
   (it "decstbm-repeated-call-updates-region"
     (with-screen (s 10 10)
-      (cl-tmux/terminal/actions:decstbm s 0 4)   ; first call: rows 0-4
-      (expect (= 0 (cl-tmux/terminal/types:screen-scroll-top    s)))
-      (expect (= 4 (cl-tmux/terminal/types:screen-scroll-bottom s)))
-      (cl-tmux/terminal/actions:decstbm s 2 8)   ; second call: rows 2-8
-      (expect (= 2 (cl-tmux/terminal/types:screen-scroll-top    s)))
-      (expect (= 8 (cl-tmux/terminal/types:screen-scroll-bottom s)))))
+      (nerimux/terminal/actions:decstbm s 0 4)   ; first call: rows 0-4
+      (expect (= 0 (nerimux/terminal/types:screen-scroll-top    s)))
+      (expect (= 4 (nerimux/terminal/types:screen-scroll-bottom s)))
+      (nerimux/terminal/actions:decstbm s 2 8)   ; second call: rows 2-8
+      (expect (= 2 (nerimux/terminal/types:screen-scroll-top    s)))
+      (expect (= 8 (nerimux/terminal/types:screen-scroll-bottom s)))))
 
   ;; decstbm with top=0, bottom=0 is rejected (top == bottom, not top < bottom).
   ;; The existing scroll region must remain unchanged.
   (it "decstbm-single-row-region-accepted"
     (with-screen (s 5 5)
-      (let ((orig-top    (cl-tmux/terminal/types:screen-scroll-top    s))
-            (orig-bottom (cl-tmux/terminal/types:screen-scroll-bottom s)))
-        (cl-tmux/terminal/actions:decstbm s 0 0)   ; top == bottom: invalid
-        (expect (= orig-top    (cl-tmux/terminal/types:screen-scroll-top    s)))
-        (expect (= orig-bottom (cl-tmux/terminal/types:screen-scroll-bottom s))))))
+      (let ((orig-top    (nerimux/terminal/types:screen-scroll-top    s))
+            (orig-bottom (nerimux/terminal/types:screen-scroll-bottom s)))
+        (nerimux/terminal/actions:decstbm s 0 0)   ; top == bottom: invalid
+        (expect (= orig-top    (nerimux/terminal/types:screen-scroll-top    s)))
+        (expect (= orig-bottom (nerimux/terminal/types:screen-scroll-bottom s))))))
 
   ;; decstbm with top=0, bottom=1 is the smallest valid region (two rows).
   (it "decstbm-minimum-valid-region-top-0-bottom-1"
     (with-screen (s 5 5)
-      (cl-tmux/terminal/actions:decstbm s 0 1)
-      (expect (= 0 (cl-tmux/terminal/types:screen-scroll-top    s)))
-      (expect (= 1 (cl-tmux/terminal/types:screen-scroll-bottom s))))))
+      (nerimux/terminal/actions:decstbm s 0 1)
+      (expect (= 0 (nerimux/terminal/types:screen-scroll-top    s)))
+      (expect (= 1 (nerimux/terminal/types:screen-scroll-bottom s))))))
 
 ;;; ── SUITE: scroll dirty-p edge cases ─────────────────────────────────────────
 ;;;
@@ -122,19 +122,19 @@
   ;; scroll-up-one marks the screen dirty even when scrolling a sub-region.
   (it "scroll-up-marks-dirty-with-restricted-region"
     (with-screen (s 5 5)
-      (cl-tmux/terminal/actions:decstbm s 1 3)   ; rows 1-3 only
+      (nerimux/terminal/actions:decstbm s 1 3)   ; rows 1-3 only
       (screen-clear-dirty s)
-      (expect (cl-tmux/terminal/types:screen-dirty-p s) :to-be-falsy)
-      (cl-tmux/terminal/actions:scroll-up-one s)
-      (expect (cl-tmux/terminal/types:screen-dirty-p s))))
+      (expect (nerimux/terminal/types:screen-dirty-p s) :to-be-falsy)
+      (nerimux/terminal/actions:scroll-up-one s)
+      (expect (nerimux/terminal/types:screen-dirty-p s))))
 
   ;; scroll-down-one marks the screen dirty even when scrolling a sub-region.
   (it "scroll-down-marks-dirty-with-restricted-region"
     (with-screen (s 5 5)
-      (cl-tmux/terminal/actions:decstbm s 1 3)
+      (nerimux/terminal/actions:decstbm s 1 3)
       (screen-clear-dirty s)
-      (cl-tmux/terminal/actions:scroll-down-one s)
-      (expect (cl-tmux/terminal/types:screen-dirty-p s)))))
+      (nerimux/terminal/actions:scroll-down-one s)
+      (expect (nerimux/terminal/types:screen-dirty-p s)))))
 
 ;;; ── SUITE: scroll-up-one with pre-filled content ────────────────────────────
 ;;;
@@ -146,7 +146,7 @@
   (it "scroll-up-one-displaces-content-upward"
     (with-screen (s 5 3)
       (feed-lines s "ROW0" "ROW1" "ROW2")
-      (cl-tmux/terminal/actions:scroll-up-one s)
+      (nerimux/terminal/actions:scroll-up-one s)
       ;; Row 0 was displaced to scrollback; old row 1 is now row 0.
       (check-row s 0 "ROW1")
       ;; Old row 2 is now row 1.
@@ -158,7 +158,7 @@
   (it "scroll-down-one-displaces-content-downward"
     (with-screen (s 5 3)
       (feed-lines s "ROW0" "ROW1" "ROW2")
-      (cl-tmux/terminal/actions:scroll-down-one s)
+      (nerimux/terminal/actions:scroll-down-one s)
       ;; Row 0 must be blank (newly inserted at top).
       (expect (row-blank-p s 0))
       ;; Old row 0 is now at row 1.
@@ -180,10 +180,10 @@
     (with-screen (s 5 4)
       (feed-lines s "ROW0" "ROW1" "ROW2" "ROW3")
       ;; Scroll row 0 into history, then row 1, then row 2.
-      (cl-tmux/terminal/actions:scroll-up-one s)   ; pushes ROW0
-      (cl-tmux/terminal/actions:scroll-up-one s)   ; pushes ROW1 (now at top)
-      (cl-tmux/terminal/actions:scroll-up-one s)   ; pushes ROW2 (now at top)
-      (let ((scrollback (cl-tmux/terminal/types:screen-scrollback s)))
+      (nerimux/terminal/actions:scroll-up-one s)   ; pushes ROW0
+      (nerimux/terminal/actions:scroll-up-one s)   ; pushes ROW1 (now at top)
+      (nerimux/terminal/actions:scroll-up-one s)   ; pushes ROW2 (now at top)
+      (let ((scrollback (nerimux/terminal/types:screen-scrollback s)))
         (expect (= 3 (length scrollback)))
         ;; newest-first: index 0 = last pushed = ROW2
         (let ((newest-char (cell-char (aref (first scrollback) 0))))
@@ -193,7 +193,7 @@
   (it "history-cap-enforced-after-scroll-up-one"
     (with-screen (s 5 3)
       (let ((cap 3)
-            (cl-tmux/terminal/actions:*history-limit-function* (lambda () 3)))
+            (nerimux/terminal/actions:*history-limit-function* (lambda () 3)))
         (dotimes (_ (* cap 3))
-          (cl-tmux/terminal/actions:scroll-up-one s))
-        (expect (<= (length (cl-tmux/terminal/types:screen-scrollback s)) cap))))))
+          (nerimux/terminal/actions:scroll-up-one s))
+        (expect (<= (length (nerimux/terminal/types:screen-scrollback s)) cap))))))

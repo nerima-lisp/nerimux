@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; Shared prompt and menu helpers used by dispatch-handlers*.lisp.
 ;;;;
@@ -76,7 +76,7 @@
 
 (defun %send-byte-to-pane (pane byte)
   "Write BYTE to PANE when the pane still has a live PTY."
-  (when (and pane (cl-tmux/model:pane-live-p pane))
+  (when (and pane (nerimux/model:pane-live-p pane))
     (pty-write (pane-fd pane) (%byte-vector byte))
     t))
 
@@ -132,7 +132,7 @@
                          collect (cons (format nil "~A~A (~D window~:P)"
                                                (if (eq sess current-session) "*" " ")
                                                name
-                                               (length (cl-tmux/model:session-windows sess)))
+                                               (length (nerimux/model:session-windows sess)))
                                        (list :switch-client name)))))
     (%show-jk-menu "choose-session (j/k, Enter)" items)))
 
@@ -161,7 +161,7 @@
          (with-output-to-string (stream)
            (dolist (w matches)
              (format stream "~A: ~A~A~%"
-                     (cl-tmux/model:window-id w)
+                     (nerimux/model:window-id w)
                      (window-name w)
                      (if (eq w (session-active-window session))
                          " [active]" ""))))
@@ -172,12 +172,12 @@
   (with-active-window (win session)
     (let ((panes (window-panes win)))
       (when panes
-        (let* ((panes-ms (or (cl-tmux/options:get-option "display-panes-time") 1000))
-               (saved-ms (cl-tmux/options:get-option "display-time" 750)))
-          (cl-tmux/options:set-option "display-time" panes-ms)
+        (let* ((panes-ms (or (nerimux/options:get-option "display-panes-time") 1000))
+               (saved-ms (nerimux/options:get-option "display-time" 750)))
+          (nerimux/options:set-option "display-time" panes-ms)
           (show-transient-overlay "")
-          (setf cl-tmux/prompt:*display-panes-active* t)
-          (cl-tmux/options:set-option "display-time" saved-ms)
+          (setf nerimux/prompt:*display-panes-active* t)
+          (nerimux/options:set-option "display-time" saved-ms)
           (setf *dirty* t))))))
 
 (defun %show-window-options (win)
@@ -185,7 +185,7 @@
   (show-overlay
    (with-output-to-string (stream)
      (format stream "# window options~%")
-     (write-string (cl-tmux/options:show-window-options win) stream))))
+     (write-string (nerimux/options:show-window-options win) stream))))
 
 (defun %kill-current-pane-confirm (session)
   "Confirm and kill the active pane in SESSION."

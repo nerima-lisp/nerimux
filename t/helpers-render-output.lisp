@@ -1,6 +1,6 @@
-;;;; Renderer output helpers for cl-tmux tests.
+;;;; Renderer output helpers for nerimux tests.
 
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;; ── Custom matcher: SGR escape-sequence assertions ──────────────────────────
 ;;;
@@ -19,7 +19,7 @@
 (defun render-pane-output (session pane)
   "Render PANE to a string using the production renderer."
   (with-output-to-string (s)
-    (cl-tmux/renderer::render-pane s session pane)))
+    (nerimux/renderer::render-pane s session pane)))
 
 (defmacro with-copy-mode-render-fixture ((session-var pane-var screen-var w h
                                           &key (content "")
@@ -69,35 +69,35 @@
   "Render the status bar for SESS to a string using the production renderer."
   (with-output-to-string (s)
     (if status-row-supplied-p
-        (cl-tmux/renderer::render-status-bar s sess rows cols :status-row status-row)
-        (cl-tmux/renderer::render-status-bar s sess rows cols))))
+        (nerimux/renderer::render-status-bar s sess rows cols :status-row status-row)
+        (nerimux/renderer::render-status-bar s sess rows cols))))
 
 (defun render-overlay-output (width height)
   "Render the current overlay to a string using the production renderer."
   (with-output-to-string (buf)
-    (cl-tmux/renderer::render-overlay buf width height)))
+    (nerimux/renderer::render-overlay buf width height)))
 
 (defun render-popup-output (popup rows cols)
   "Render POPUP to a string using the production renderer."
   (with-output-to-string (s)
-    (cl-tmux/renderer::render-popup s popup rows cols)))
+    (nerimux/renderer::render-popup s popup rows cols)))
 
 (defun render-menu-output (menu rows cols)
   "Render MENU to a string using the production renderer."
   (with-output-to-string (s)
-    (cl-tmux/renderer::render-menu s menu rows cols)))
+    (nerimux/renderer::render-menu s menu rows cols)))
 
 (defun render-tree-borders-output (tree active-pane width)
   "Render TREE borders for ACTIVE-PANE to a string using the production renderer."
   (with-output-to-string (s)
-    (cl-tmux/renderer::render-tree-borders s tree active-pane width)))
+    (nerimux/renderer::render-tree-borders s tree active-pane width)))
 
 (defmacro check-status-segment-clamp-cases (cases)
   "Assert %clamp-status-segment rows shaped (TEXT MAX EXPECTED DESC)."
   `(check-table
     (mapcar (lambda (row)
               (destructuring-bind (text max expected desc) row
-                (list (cl-tmux/renderer::%clamp-status-segment text max)
+                (list (nerimux/renderer::%clamp-status-segment text max)
                       expected
                       desc)))
             ,cases)
@@ -108,7 +108,7 @@
   `(check-table
     (mapcar (lambda (row)
               (destructuring-bind (input max expected desc) row
-                (list (cl-tmux/renderer::%visible-truncate input max)
+                (list (nerimux/renderer::%visible-truncate input max)
                       expected
                       desc)))
             ,cases)
@@ -119,7 +119,7 @@
   `(let ((base-sgr ,base-sgr))
      (check-table
       (mapcar (lambda (body)
-                (list (cl-tmux/renderer::%status-style-block-sgr body base-sgr)
+                (list (nerimux/renderer::%status-style-block-sgr body base-sgr)
                       (format nil "~C[0;~Am" #\Escape base-sgr)
                       (format nil "~S must reset to base SGR" body)))
               ,bodies)
@@ -130,7 +130,7 @@
   `(let ((base-sgr ,base-sgr))
      (check-table
       (mapcar (lambda (input)
-                (list (cl-tmux/renderer::%status-expand-style-blocks input base-sgr)
+                (list (nerimux/renderer::%status-expand-style-blocks input base-sgr)
                       input
                       (format nil "~S has no inline style block" input)))
               ,inputs)

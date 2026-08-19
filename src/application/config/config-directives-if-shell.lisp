@@ -1,10 +1,10 @@
-(in-package #:cl-tmux/config)
+(in-package #:nerimux/config)
 
 ;;; if-shell config-time conditional handling.
 
 (defun %if-shell-format-true-p (condition)
   "Return tmux -F truthiness for an if-shell CONDITION."
-  (let ((result (ignore-errors (cl-tmux/format:expand-format condition nil))))
+  (let ((result (ignore-errors (nerimux/format:expand-format condition nil))))
     (and result (not (member result '("" "0") :test #'string=)))))
 
 (defun %take-brace-or-command (tokens)

@@ -1,12 +1,12 @@
 ;;; Application command and public facade packages.
 
-(defpackage #:cl-tmux/commands
+(defpackage #:nerimux/commands
   (:use #:cl
-        #:cl-tmux/config
-        #:cl-tmux/pty
-        #:cl-tmux/terminal
-        #:cl-tmux/model
-        #:cl-tmux/hooks)
+        #:nerimux/config
+        #:nerimux/pty
+        #:nerimux/terminal
+        #:nerimux/model
+        #:nerimux/hooks)
   ;; cl-concurrent-kit's WITH-TIMEOUT / OPERATION-TIMED-OUT in commands-shell.lisp
   ;; and commands-pipe-pane.lisp stay qualified, next to the TIMEOUT-SECONDS
   ;; parameter they bound.  Under bordeaux-threads they HAD to: the condition was
@@ -20,7 +20,7 @@
     whole of copy mode (motion, selection, search, jump, yank and its pipe variants),
     capture-pane, pipe-pane, send-keys, and run-shell/if-shell.  Each is a plain
     function taking model objects; nothing here parses argv or knows a client
-    exists — that is the dispatch layer in the cl-tmux package.")
+    exists — that is the dispatch layer in the nerimux package.")
   (:export
    #:kill-pane
    #:close-pane-pty
@@ -123,19 +123,19 @@
    #:send-keys-to-pane
    #:tokenize-command-string))
 
-(defpackage #:cl-tmux
+(defpackage #:nerimux
   (:use #:cl
-        #:cl-tmux/config
-        #:cl-tmux/pty
-        #:cl-tmux/terminal
-        #:cl-tmux/model
-        #:cl-tmux/renderer
-        #:cl-tmux/input
-        #:cl-tmux/commands
-        #:cl-tmux/prompt
-        #:cl-tmux/protocol
-        #:cl-tmux/transport
-        #:cl-tmux/net)
+        #:nerimux/config
+        #:nerimux/pty
+        #:nerimux/terminal
+        #:nerimux/model
+        #:nerimux/renderer
+        #:nerimux/input
+        #:nerimux/commands
+        #:nerimux/prompt
+        #:nerimux/protocol
+        #:nerimux/transport
+        #:nerimux/net)
   ;; The reader/timer thread machinery in runtime*.lisp and the control-mode output
   ;; lock.  runtime.lisp calls sb-thread:join-thread directly for its :TIMEOUT
   ;; argument, so no join/alive-p name is imported here.
@@ -151,10 +151,10 @@
     Four things live here because each one needs the whole stack below it and none of
     them can be reached from the domain: the binary entry point and startup flag
     handling; the server and client halves of detach-attach, with the session
-    registry that implements cl-tmux/repository and the per-pane reader and status
+    registry that implements nerimux/repository and the per-pane reader and status
     timer threads; the event loop that turns keystrokes and mouse reports into
     commands; and the command dispatcher that resolves -t targets and argv into calls
-    on cl-tmux/commands.  Nothing depends on this package — it is the top of the
+    on nerimux/commands.  Nothing depends on this package — it is the top of the
     graph, which is why it may see everything.")
   (:export
    #:main

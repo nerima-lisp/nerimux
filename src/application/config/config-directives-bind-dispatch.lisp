@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/config)
+(in-package #:nerimux/config)
 
 ;;;; bind/unbind directive dispatch.
 
@@ -28,7 +28,7 @@
          (setf all-p     t
                remaining (rest remaining)))
         ((string= (first remaining) "-q")
-         ;; -q: quiet — suppress "no such key" errors.  cl-tmux's unbind is
+         ;; -q: quiet — suppress "no such key" errors.  nerimux's unbind is
          ;; already silent on a missing key, so -q is accepted and skipped.
          (setf remaining (rest remaining)))
         ((string= (first remaining) "-T")

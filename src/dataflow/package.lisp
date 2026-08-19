@@ -18,10 +18,10 @@
 ;;;; is active, not a nested lifecycle state -- modeling it as a fourth state
 ;;;; here would misrepresent the real transition graph, so it is left out.
 
-(defpackage #:cl-tmux/dataflow
+(defpackage #:nerimux/dataflow
   (:use #:cl)
   (:documentation
-   "A cl-dataflow-kit read-model over cl-tmux's copy-mode lifecycle: a declarative
+   "A cl-dataflow-kit read-model over nerimux's copy-mode lifecycle: a declarative
     state machine plus DOT/Mermaid export and a pure screen -> state reader.")
   (:export
    #:copy-mode-lifecycle-machine

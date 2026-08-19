@@ -4,7 +4,7 @@
 ;;; active.  It stays separate from mouse dispatch so the input state machine is
 ;;; easier to scan and the mouse file keeps a single responsibility.
 
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; ── Overlay pager escape-sequence handler ────────────────────────────────────
 

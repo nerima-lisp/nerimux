@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; parser tests - OSC 7 and percent decoding.
 
@@ -8,7 +8,7 @@
 
   ;; %osc7-path extracts the path from a file:// URL, with or without a host.
   (it "osc7-path-extraction"
-    (flet ((p (s) (cl-tmux/terminal/parser::%osc7-path s)))
+    (flet ((p (s) (nerimux/terminal/parser::%osc7-path s)))
       (dolist (c '(("file://host/home/u" "/home/u"   "with host")
                    ("file:///home/u"     "/home/u"   "empty host")
                    ("file://host"        "/"         "host but no path -> /")
@@ -24,12 +24,12 @@
         (cl-codec-kit:string-to-octets
           (format nil "~C]7;file://myhost/home/user/project~C" #\Escape (code-char 7))
           :encoding :utf-8))
-      (expect (string= "/home/user/project" (cl-tmux/terminal/types:screen-cwd s)))))
+      (expect (string= "/home/user/project" (nerimux/terminal/types:screen-cwd s)))))
 
   ;; %percent-decode handles %20 spaces, UTF-8 multibyte, no-% passthrough, and an
   ;; incomplete trailing % (left literal).
   (it "percent-decode-cases"
-    (flet ((d (s) (cl-tmux/terminal/parser::%percent-decode s)))
+    (flet ((d (s) (nerimux/terminal/parser::%percent-decode s)))
       (dolist (c '(("a%20b"     "a b" "%20 -> space")
                    ("abc"       "abc" "no % -> unchanged")
                    ("%2F"       "/"   "%2F -> /")
@@ -45,12 +45,12 @@
     (dolist (c '(("file://host/My%20Docs"              "/My Docs")
                  ("file:///Library/Application%20Support" "/Library/Application Support")))
       (destructuring-bind (url expected) c
-        (expect (string= expected (cl-tmux/terminal/parser::%osc7-path url))))))
+        (expect (string= expected (nerimux/terminal/parser::%osc7-path url))))))
 
   ;; screen-cwd is empty on a fresh screen (no OSC 7 reported yet).
   (it "screen-cwd-defaults-empty"
     (with-screen (s 20 5)
-      (expect (string= "" (cl-tmux/terminal/types:screen-cwd s)))))
+      (expect (string= "" (nerimux/terminal/types:screen-cwd s)))))
 
   ;;; ── Coverage gap: define-osc-rules macro ─────────────────────────────────────
   ;;;
@@ -59,4 +59,4 @@
 
   ;; define-osc-rules is a defined macro in the parser package.
   (it "define-osc-rules-macro-is-defined"
-    (expect (macro-function 'cl-tmux/terminal/parser::define-osc-rules))))
+    (expect (macro-function 'nerimux/terminal/parser::define-osc-rules))))

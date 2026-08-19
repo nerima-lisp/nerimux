@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;; -- select-pane %cmd-* handlers --------------------------------------------
 ;;;
@@ -13,7 +13,7 @@
     (setf (pane-title pane) title)
     (let ((screen (pane-screen pane)))
       (when screen
-        (cl-tmux/terminal/actions:set-screen-title screen title)))))
+        (nerimux/terminal/actions:set-screen-title screen title)))))
 
 (defun %select-pane-mark (window pane)
   "Mark PANE as the server-wide marked pane (select-pane -m).  Delegates to the
@@ -120,4 +120,4 @@
          (%select-pane-configure-target win target-pane flags)))
       ;; after-select-pane fires once after the command (run-hooks now fires both
       ;; the add-hook and the .tmux.conf set-hook registries).
-      (cl-tmux/hooks:run-hooks cl-tmux/hooks:+hook-after-select-pane+ session))))
+      (nerimux/hooks:run-hooks nerimux/hooks:+hook-after-select-pane+ session))))

@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Pane tests - predicates and hit-testing.
 
@@ -80,7 +80,7 @@
   (it "pane-border-status-reservation-too-short-does-not-reserve"
     (dolist (status '("top" "bottom"))
       (multiple-value-bind (y-offset content-height)
-          (cl-tmux/model::%pane-border-status-reservation status 1)
+          (nerimux/model::%pane-border-status-reservation status 1)
         (expect (= 0 y-offset))
         (expect (= 1 content-height)))))
 
@@ -88,7 +88,7 @@
   ;; first row: y-offset 1, content-height (height - 1).
   (it "pane-border-status-reservation-top-normal"
     (multiple-value-bind (y-offset content-height)
-        (cl-tmux/model::%pane-border-status-reservation "top" 10)
+        (nerimux/model::%pane-border-status-reservation "top" 10)
       (expect (= 1 y-offset))
       (expect (= 9 content-height))))
 
@@ -96,6 +96,6 @@
   ;; of height — the off path must never reserve a row.
   (it "pane-border-status-reservation-off-returns-full-height"
     (multiple-value-bind (y-offset content-height)
-        (cl-tmux/model::%pane-border-status-reservation "off" 24)
+        (nerimux/model::%pane-border-status-reservation "off" 24)
       (expect (= 0 y-offset))
       (expect (= 24 content-height)))))

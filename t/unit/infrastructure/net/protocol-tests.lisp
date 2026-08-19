@@ -1,4 +1,4 @@
-(in-package #:cl-tmux/test)
+(in-package #:nerimux/test)
 
 ;;;; Client/server wire-protocol codec tests (src/protocol.lisp).
 ;;;;
@@ -7,9 +7,9 @@
 ;;;; partial buffers (incomplete header / payload) and several frames packed
 ;;;; back-to-back in one buffer.
 ;;;;
-;;;; All protocol helpers referenced here are exported from cl-tmux/protocol
-;;;; so tests use single-colon qualified names (cl-tmux/protocol:name) rather
-;;;; than double-colon internal access (cl-tmux/protocol::name).  If a helper
+;;;; All protocol helpers referenced here are exported from nerimux/protocol
+;;;; so tests use single-colon qualified names (nerimux/protocol:name) rather
+;;;; than double-colon internal access (nerimux/protocol::name).  If a helper
 ;;;; is renamed or unexported, the compile-time package check will catch it.
 
 (describe "protocol-suite"
@@ -23,7 +23,7 @@
             (65535 #(255 255)))
       "u16-octets-big-endian ~A"
       (n expected)
-    (expect (equalp expected (cl-tmux/protocol:u16-octets n))))
+    (expect (equalp expected (nerimux/protocol:u16-octets n))))
 
   ;; u32-octets encodes a 32-bit value as four big-endian bytes.
   (it-each ((0          #(0 0 0 0))
@@ -32,12 +32,12 @@
             (#xFFFFFFFF #(255 255 255 255)))
       "u32-octets-big-endian ~A"
       (n expected)
-    (expect (equalp expected (cl-tmux/protocol:u32-octets n))))
+    (expect (equalp expected (nerimux/protocol:u32-octets n))))
 
   ;; u16-octets-pair concatenates two u16 values as 4 big-endian bytes.
   (it "u16-octets-pair-concatenates-two-u16s"
-    (expect (equalp #(0 24 0 80) (cl-tmux/protocol:u16-octets-pair 24 80)))
-    (expect (equalp #(0 0 0 0)   (cl-tmux/protocol:u16-octets-pair 0 0))))
+    (expect (equalp #(0 24 0 80) (nerimux/protocol:u16-octets-pair 24 80)))
+    (expect (equalp #(0 0 0 0)   (nerimux/protocol:u16-octets-pair 0 0))))
 
   ;; read-u16 reads two bytes at START as a big-endian u16.
   (it-each ((0 0  "offset 0 → 0")
@@ -48,7 +48,7 @@
     (declare (ignore desc))
     (let ((buffer (make-array 6 :element-type '(unsigned-byte 8)
                                 :initial-contents '(0 0 0 24 0 80))))
-      (expect (= expected (cl-tmux/protocol:read-u16 buffer offset)))))
+      (expect (= expected (nerimux/protocol:read-u16 buffer offset)))))
 
   ;;; ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -202,7 +202,7 @@
       (let ((frame (encode-frame +msg-frame+ payload)))
         (expect (= (+ +header-size+ n) (length frame)))
         ;; Length field stored big-endian at offset 1.
-        (expect (= n (cl-tmux/protocol:read-u32 frame 1)))
+        (expect (= n (nerimux/protocol:read-u32 frame 1)))
         (multiple-value-bind (type decoded next) (decode-frame frame)
           (expect (= +msg-frame+ type))
           (expect (= n (length decoded)))
@@ -249,31 +249,31 @@
   (it-each ((0) (1) (255) (256) (65535))
       "u16-encode-decode-symmetric ~A"
       (n)
-    (expect (= n (cl-tmux/protocol:read-u16 (cl-tmux/protocol:u16-octets n) 0))))
+    (expect (= n (nerimux/protocol:read-u16 (nerimux/protocol:u16-octets n) 0))))
 
   (it-each ((0) (1) (65536) (#xFFFFFF) (#xFFFFFFFF))
       "u32-encode-decode-symmetric ~A"
       (n)
-    (expect (= n (cl-tmux/protocol:read-u32 (cl-tmux/protocol:u32-octets n) 0))))
+    (expect (= n (nerimux/protocol:read-u32 (nerimux/protocol:u32-octets n) 0))))
 
   ;; Property test: u16-octets/read-u16 and u32-octets/read-u32 are symmetric
   ;; across their FULL value range, generalizing the hand-picked boundary
   ;; values above (0/1/255/256/65535/…) to every representable value.
   (it-property "u16-octets/read-u16 round-trip across the full 16-bit range"
       ((n (gen-integer :min 0 :max 65535)))
-    (expect (= n (cl-tmux/protocol:read-u16 (cl-tmux/protocol:u16-octets n) 0))))
+    (expect (= n (nerimux/protocol:read-u16 (nerimux/protocol:u16-octets n) 0))))
 
   (it-property "u32-octets/read-u32 round-trip across the full 32-bit range"
       ((n (gen-integer :min 0 :max #xFFFFFFFF)))
-    (expect (= n (cl-tmux/protocol:read-u32 (cl-tmux/protocol:u32-octets n) 0))))
+    (expect (= n (nerimux/protocol:read-u32 (nerimux/protocol:u32-octets n) 0))))
 
   ;; u16-octets always yields 2 bytes and u32-octets always yields 4 bytes,
   ;; regardless of the value encoded.
   (it "u16-u32-encoders-produce-correct-byte-widths"
-    (dolist (c (list (list 2 (cl-tmux/protocol:u16-octets 0)          "u16(0) = 2 bytes")
-                     (list 2 (cl-tmux/protocol:u16-octets 65535)      "u16(max) = 2 bytes")
-                     (list 4 (cl-tmux/protocol:u32-octets 0)          "u32(0) = 4 bytes")
-                     (list 4 (cl-tmux/protocol:u32-octets #xFFFFFFFF) "u32(max) = 4 bytes")))
+    (dolist (c (list (list 2 (nerimux/protocol:u16-octets 0)          "u16(0) = 2 bytes")
+                     (list 2 (nerimux/protocol:u16-octets 65535)      "u16(max) = 2 bytes")
+                     (list 4 (nerimux/protocol:u32-octets 0)          "u32(0) = 4 bytes")
+                     (list 4 (nerimux/protocol:u32-octets #xFFFFFFFF) "u32(max) = 4 bytes")))
       (destructuring-bind (expected-len result desc) c
         (declare (ignore desc))
         (expect (= expected-len (length result))))))

@@ -1,9 +1,9 @@
-(in-package #:cl-tmux/ports)
+(in-package #:nerimux/ports)
 
 ;;;; PTY Port — domain-side abstraction for PTY operations.
 ;;;;
-;;;; Domain code (cl-tmux/model) calls spawn-pty/write-pty/resize-pty/close-pty.
-;;;; Infrastructure (cl-tmux/pty) installs concrete implementations via
+;;;; Domain code (nerimux/model) calls spawn-pty/write-pty/resize-pty/close-pty.
+;;;; Infrastructure (nerimux/pty) installs concrete implementations via
 ;;;; install-pty-port at server or test setup time.
 ;;;;
 ;;;; Dependency Inversion Principle:
@@ -12,25 +12,25 @@
 
 ;;; ── Port variables ───────────────────────────────────────────────────────────
 ;;;
-;;; Each var holds a function installed by install-pty-port (cl-tmux/pty).
+;;; Each var holds a function installed by install-pty-port (nerimux/pty).
 ;;; Initial value NIL; domain functions guard with (> (pane-fd pane) 0) so
 ;;; these are only called when a real PTY fd exists.
 
 (defvar *spawn-pty* nil
   "Function (rows cols &key start-dir default-command environment) → (values fd pid tty).
-   Installed by cl-tmux/pty:install-pty-port.")
+   Installed by nerimux/pty:install-pty-port.")
 
 (defvar *write-pty* nil
   "Function (fd bytes) → nil.
-   Installed by cl-tmux/pty:install-pty-port.")
+   Installed by nerimux/pty:install-pty-port.")
 
 (defvar *resize-pty* nil
   "Function (fd rows cols) → nil.
-   Installed by cl-tmux/pty:install-pty-port.")
+   Installed by nerimux/pty:install-pty-port.")
 
 (defvar *close-pty* nil
   "Function (fd pid) → nil.
-   Installed by cl-tmux/pty:install-pty-port.")
+   Installed by nerimux/pty:install-pty-port.")
 
 ;;; ── Port functions ───────────────────────────────────────────────────────────
 ;;;

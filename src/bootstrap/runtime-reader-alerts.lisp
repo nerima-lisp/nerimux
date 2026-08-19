@@ -1,4 +1,4 @@
-(in-package #:cl-tmux)
+(in-package #:nerimux)
 
 ;;;; PTY reader alert helpers.
 ;;;;
@@ -24,18 +24,18 @@
    #{pane_dead_signal} / #{pane_dead_time} (a full session context is
    intentionally not built on the reader thread)."
   (list :pane-dead        "1"
-        :pane-dead-status (%num-or-empty (cl-tmux/model:pane-dead-status pane))
-        :pane-dead-signal (%num-or-empty (cl-tmux/model:pane-dead-signal pane))
-        :pane-dead-time   (%num-or-empty (cl-tmux/model:pane-dead-time pane))))
+        :pane-dead-status (%num-or-empty (nerimux/model:pane-dead-status pane))
+        :pane-dead-signal (%num-or-empty (nerimux/model:pane-dead-signal pane))
+        :pane-dead-time   (%num-or-empty (nerimux/model:pane-dead-time pane))))
 
 (defun %expand-remain-on-exit-format (pane)
   "Expand remain-on-exit-format for PANE, or NIL when the option is empty or
    expansion fails."
   (let ((fmt (ignore-errors
-               (cl-tmux/options:get-option-for-context "remain-on-exit-format"
+               (nerimux/options:get-option-for-context "remain-on-exit-format"
                                                        :pane pane))))
     (when (and fmt (plusp (length fmt)))
-      (ignore-errors (cl-tmux/format:expand-format
+      (ignore-errors (nerimux/format:expand-format
                       fmt (%pane-death-context pane))))))
 
 (defun %remain-on-exit-banner-text (pane)
@@ -61,7 +61,7 @@
     (when screen
       (let ((banner-bytes (cl-codec-kit:string-to-octets (%remain-on-exit-banner pane)
                                                   :encoding :utf-8)))
-        (cl-tmux/terminal/emulator:screen-process-bytes screen banner-bytes)))))
+        (nerimux/terminal/emulator:screen-process-bytes screen banner-bytes)))))
 
 ;;; -- Alert-action dispatch table -------------------------------------------
 ;;;
@@ -100,13 +100,13 @@
    Used to honour activity-action/silence-action's current-vs-other distinction."
   (and win
        (some (lambda (entry)
-               (eq win (cl-tmux/model:session-active-window (cdr entry))))
+               (eq win (nerimux/model:session-active-window (cdr entry))))
              *server-sessions*)))
 
 (defun %visual-alert-message-p (option-name)
   "True when OPTION-NAME (visual-bell / visual-activity / visual-silence — tmux
    off/on/both enums) requests the transient message overlay: on or both."
-  (let ((value (cl-tmux/options:get-option option-name)))
+  (let ((value (nerimux/options:get-option option-name)))
     (and (stringp value)
          (member value '("on" "both") :test #'string-equal)
          t)))
@@ -116,12 +116,12 @@
   (show-transient-overlay
    (format nil "~A in window ~A (~A)"
            label
-           (cl-tmux/model:window-id win)
-           (cl-tmux/model:window-name win))))
+           (nerimux/model:window-id win)
+           (nerimux/model:window-name win))))
 
 (defun %fire-window-alert (hook option-name label win)
   "Run HOOK for WIN and show LABEL when OPTION-NAME asks for a visual overlay."
-  (cl-tmux/hooks:run-hooks hook win)
+  (nerimux/hooks:run-hooks hook win)
   (when (%visual-alert-message-p option-name)
     (%show-window-alert-overlay label win)))
 
@@ -133,13 +133,13 @@
    Extracted from reader-reading-state so the alert-activity firing is
    unit-testable without a live PTY."
   (when (and win
-             (cl-tmux/options:get-option-for-context "monitor-activity" :window win)
-             (not (cl-tmux/model:window-activity-flag win))
+             (nerimux/options:get-option-for-context "monitor-activity" :window win)
+             (not (nerimux/model:window-activity-flag win))
              (%alert-action-fires-p
-              (or (cl-tmux/options:get-option "activity-action") "other")
+              (or (nerimux/options:get-option "activity-action") "other")
               (%window-is-current-p win)))
-    (setf (cl-tmux/model:window-activity-flag win) t)
-    (%fire-window-alert cl-tmux/hooks:+hook-alert-activity+
+    (setf (nerimux/model:window-activity-flag win) t)
+    (%fire-window-alert nerimux/hooks:+hook-alert-activity+
                         "visual-activity"
                         "Activity"
                         win)))
@@ -152,19 +152,19 @@
    the alert only applies to a window that is not currently viewed; the audible
    relay for the viewed window is handled by the renderer.  The flag-transition
    guard keeps the hook/overlay firing once per alert, not once per PTY chunk."
-  (let ((screen (and pane (cl-tmux/model:pane-screen pane))))
+  (let ((screen (and pane (nerimux/model:pane-screen pane))))
     (when (and win screen
-               (cl-tmux/terminal:screen-bell-pending screen)
-               (cl-tmux/options:get-option-for-context "monitor-bell" :window win)
-               (not (cl-tmux/model:window-bell-flag win))
+               (nerimux/terminal:screen-bell-pending screen)
+               (nerimux/options:get-option-for-context "monitor-bell" :window win)
+               (not (nerimux/model:window-bell-flag win))
                (not (%window-is-current-p win)))
-      (setf (cl-tmux/model:window-bell-flag win) t)
+      (setf (nerimux/model:window-bell-flag win) t)
       ;; bell-action gates the alert itself (hook + visual message) for this
       ;; non-current window: any/other fire, none/current do not.
       (when (%alert-action-fires-p
-             (or (cl-tmux/options:get-option "bell-action") "any")
+             (or (nerimux/options:get-option "bell-action") "any")
              nil)
-        (%fire-window-alert cl-tmux/hooks:+hook-alert-bell+
+        (%fire-window-alert nerimux/hooks:+hook-alert-bell+
                             "visual-bell"
                             "Bell"
                             win)))))
@@ -177,9 +177,9 @@
    on I/O dispatch."
   (when win
     ;; Always update last-output-time (used by monitor-silence timer).
-    (setf (cl-tmux/model:window-last-output-time win) (get-universal-time))
+    (setf (nerimux/model:window-last-output-time win) (get-universal-time))
     ;; Clear silence flag: new output resets the silence state.
-    (setf (cl-tmux/model:window-silence-flag win) nil)
+    (setf (nerimux/model:window-silence-flag win) nil)
     ;; Activity flag + alert-activity hook + visual overlay.
     (%mark-window-activity win)
     ;; Sticky bell flag + alert-bell hook + visual-bell overlay.
