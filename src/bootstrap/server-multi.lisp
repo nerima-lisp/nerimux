@@ -34,7 +34,7 @@
   fd
   stdin-target
   (message-log nil)
-  ;; T when the client attached read-only (attach-session -r): its keys/mouse are
+  ;; T when the client attached read-only (-r/--read-only): its keys/mouse are
   ;; processed with *client-read-only* bound so pane input/paste/mouse are dropped.
   (read-only-p nil)
   (rows 24 :type fixnum)
@@ -58,6 +58,11 @@
   (picker-index 0 :type fixnum)
   (attention-items nil :type list)
   (attention-index 0 :type fixnum)
+  ;; Set to the REPOSITORY-ID of the repository a dry-run prune preview was
+  ;; just shown for; a confirm (dry-run nil) prune must match it, so
+  ;; wt-prune-confirm --confirm cannot skip straight past the preview a user
+  ;; is meant to review first. Cleared once a confirmed prune completes.
+  (pending-prune-preview-repository-id nil)
   (frame nil))
 
 (defvar *clients* nil

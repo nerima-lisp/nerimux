@@ -149,7 +149,7 @@
          :pathname "domain/model"
          :serial t
          :components
-         ((:file "target-tests") ; parse-session/window/pane/target, find-by-target, resolve-target - part I
+         ((:file "target-tests") ; parse-session/window/pane/target, find-by-target - part I
           (:file "target-tests-b"))) ; %sigil-id, %name-prefix-p, edge cases, table-driven parse-target, multi-digit ids - part II
         (:module "domain/buffer"
          :serial t

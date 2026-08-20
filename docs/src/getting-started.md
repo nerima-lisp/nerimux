@@ -30,7 +30,20 @@ local worktree path. `attach` and `server` are the only commands; anything
 else — including `nerimux` with no arguments — prints the usage summary and
 exits non-zero. Socket selection works like tmux: `-L <name>` picks a named socket in the
 per-user directory (created `0700` under `$TMUX_TMPDIR`, falling back to the
-system temp dir), and `-S <path>` uses an explicit path.
+system temp dir), and `-S <path>` uses an explicit path. `-r`/`--read-only`
+is a global flag like `-L`/`-S` — pass it anywhere in the flag run, e.g.
+`nerimux attach -r`, to attach without forwarding key, paste, or mouse input
+to panes.
+
+If `attach` has to auto-start the server and something goes wrong, the
+spawned server's stdout/stderr are captured to a per-session-name log file
+rather than discarded, so a crash leaves a forensic trail. The path is
+`nerimux/<name>.log` under a state-home directory resolved as `$XDG_STATE_HOME`
+(falling back to `~/.local/state`), or under `$NERIMUX_RUNTIME_STATE` when
+that's set — the same state-home resolution the runtime-state snapshot file
+uses, so the two files always land in the same directory but never collide.
+The log directory is created `0700`. See `%runtime-log-path` and
+`%runtime-state-home` in `src/bootstrap/runtime-lifecycle.lisp`.
 
 ## Default key bindings
 

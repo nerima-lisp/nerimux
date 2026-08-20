@@ -170,4 +170,26 @@
                     (nerimux::main))))))
       (expect (eql 1 exit-code))
       (expect (search "nerimux:" errout) :to-be-truthy)
-      (expect (search "boom -x 80" errout) :to-be-truthy))))
+      (expect (search "boom -x 80" errout) :to-be-truthy)))
+
+  ;;; ── -r / --read-only sets *client-read-only* ────────────────────────────
+  ;;
+  ;; %apply-global-cli-invocation sets a bootstrap-layer global
+  ;; (*client-read-only*) as a side effect of the parsed flag, the same shape
+  ;; -2 already uses for *color-downsample-fn* -- though no existing test
+  ;; drives -2 through %parse-global-cli-argv/%apply-global-cli-invocation to
+  ;; mirror; renderer-format-tests.lisp only exercises *color-downsample-fn*'s
+  ;; consumer side with a manually-bound value.  *client-read-only* is bound
+  ;; with LET here (not SETF) so the global does not leak into other tests.
+
+  (it "read-only-flag-sets-client-read-only"
+    (let ((nerimux::*client-read-only* nil))
+      (let ((invocation (nerimux::%parse-global-cli-argv (list "-r" "attach"))))
+        (nerimux::%apply-global-cli-invocation invocation)
+        (expect (eq t nerimux::*client-read-only*)))))
+
+  (it "no-read-only-flag-leaves-client-read-only-nil"
+    (let ((nerimux::*client-read-only* nil))
+      (let ((invocation (nerimux::%parse-global-cli-argv (list "attach"))))
+        (nerimux::%apply-global-cli-invocation invocation)
+        (expect (null nerimux::*client-read-only*))))))

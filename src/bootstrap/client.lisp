@@ -107,12 +107,10 @@
              (when detach-others
                (send-frame stream (msg-command :detach-other-clients nil nil)))
              ;; Carry the read-only bit to the server in the attach frame's
-             ;; flags byte, where it is still enforced per-connection.  Nothing
-             ;; sets *client-read-only* any more -- attach-session -r was its
-             ;; only writer and went with the tmux CLI surface -- so this always
-             ;; sends NIL today.  Left intact because the server-side
-             ;; enforcement is the wire contract a future read-only attach
-             ;; would use, not dead local code.
+             ;; flags byte, where it is still enforced per-connection.
+             ;; *client-read-only* is set by the global -r/--read-only flag
+             ;; (%apply-global-cli-invocation, main-startup.lisp) before this
+             ;; runs; it defaults to NIL for a normal attach.
              (send-frame stream (msg-attach *term-rows* *term-cols* *client-read-only*))
              (%send-client-attach-target stream target)
              (loop

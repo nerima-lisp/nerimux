@@ -3,7 +3,7 @@
 ;;;; Tests for src/target.lisp — session/window/pane target resolution.
 ;;;;
 ;;;; Tests: target-suite — %parse-target, find-session-by-target,
-;;;; find-window-by-target, find-pane-by-target, resolve-target.
+;;;; find-window-by-target, find-pane-by-target.
 
 (describe "target-suite"
 
@@ -167,91 +167,4 @@
            (win (make-window :id 1 :name "w" :width 80 :height 24
                              :panes (list p1))))
       (expect (null (nerimux::find-pane-by-target win "%99")))
-      (expect (null (nerimux::find-pane-by-target win "5")))))
-
-  ;;; ── resolve-target ───────────────────────────────────────────────────────────
-
-  ;; resolve-target with NIL target returns the current-* defaults.
-  (it "resolve-target-nil-returns-current-defaults"
-    (multiple-value-bind (sess win p1) (make-single-pane-session)
-      (multiple-value-bind (rs rw rp)
-          (nerimux::resolve-target nil nil
-                                   :current-session sess
-                                   :current-window  win
-                                   :current-pane    p1)
-        (expect (eq sess rs))
-        (expect (eq win  rw))
-        (expect (eq p1   rp)))))
-
-  ;; resolve-target resolves a named session from the registry.
-  (it "resolve-target-session-by-name"
-    (multiple-value-bind (sess win p1)
-        (make-single-pane-session :session-name "mysess")
-      (let ((registry (list (cons "mysess" sess))))
-        (multiple-value-bind (rs rw rp)
-            (nerimux::resolve-target registry "mysess")
-          (expect (eq sess rs))
-          (expect (eq win  rw))
-          (expect (eq p1   rp))))))
-
-  ;; resolve-target resolves 'sess:win' to the named session and window.
-  (it "resolve-target-session-colon-window"
-    ;; Two-window session — needs manual construction.
-    (let* ((p1   (make-no-pty-pane 1 0 0 80 24))
-           (w1   (make-window :id 1 :name "editor" :width 80 :height 24
-                              :panes (list p1)))
-           (w2   (make-window :id 2 :name "shell" :width 80 :height 24
-                              :panes (list (make-no-pty-pane 2 0 0 80 24))))
-           (sess (make-session :id 1 :name "work" :windows (list w1 w2))))
-      (window-select-pane w1 p1)
-      (session-select-window sess w1)
-      (let ((registry (list (cons "work" sess))))
-        (multiple-value-bind (rs rw _rp)
-            (nerimux::resolve-target registry "work:shell")
-          (declare (ignore _rp))
-          (expect (eq sess rs))
-          (expect (eq w2   rw))))))
-
-  ;; resolve-target resolves 'sess:win.pane' fully.
-  (it "resolve-target-full-path"
-    ;; Two-pane window — needs manual construction.
-    (let* ((p1   (make-no-pty-pane 1  0 0 40 24))
-           (p2   (make-no-pty-pane 2 41 0 40 24))
-           (win  (make-window :id 1 :name "w" :width 81 :height 24
-                              :panes (list p1 p2)))
-           (sess (make-session :id 1 :name "s" :windows (list win))))
-      (window-select-pane win p1)
-      (session-select-window sess win)
-      (let ((registry (list (cons "s" sess))))
-        (multiple-value-bind (_rs _rw rp)
-            (nerimux::resolve-target registry "s:w.%2")
-          (declare (ignore _rs _rw))
-          (expect (eq p2 rp))))))
-
-  ;; resolve-target with a BARE %N resolves that pane in the current window —
-  ;; tmux's position-independent pane id, not a session fallback.
-  (it "resolve-target-bare-pane-sigil-resolves-pane"
-    ;; Two-pane window — needs manual construction.
-    (let* ((p1   (make-no-pty-pane 1  0 0 40 24))
-           (p2   (make-no-pty-pane 2 41 0 40 24))
-           (win  (make-window :id 1 :name "w" :width 81 :height 24
-                              :panes (list p1 p2)))
-           (sess (make-session :id 1 :name "s" :windows (list win))))
-      (window-select-pane win p1)
-      (session-select-window sess win)
-      (multiple-value-bind (_rs _rw rp)
-          (nerimux::resolve-target nil "%2"
-                                   :current-session sess :current-window win)
-        (declare (ignore _rs _rw))
-        (expect (eq p2 rp)))))
-
-  ;; resolve-target falls back to current-session when target session is unknown.
-  (it "resolve-target-unknown-session-falls-back-to-current"
-    (multiple-value-bind (sess _win _p1) (make-single-pane-session)
-      (declare (ignore _win _p1))
-      (multiple-value-bind (rs _rw _rp)
-          (nerimux::resolve-target nil "nonexistent"
-                                   :current-session sess)
-        (declare (ignore _rw _rp))
-        ;; When the named session is not found, current-session is used.
-        (expect (eq sess rs))))))
+      (expect (null (nerimux::find-pane-by-target win "5"))))))

@@ -19,7 +19,9 @@
 ;;;
 ;;; Flags with real, additional effects: -L/-S (socket), -f (config file, see
 ;;; config-paths.lisp), -2 (256-colour downsampling, see renderer-format.lisp
-;;; *color-downsample-fn*), -V (version), -h (usage).  -C (control mode) was
+;;; *color-downsample-fn*), -r (read-only attach, see runtime.lisp
+;;; *client-read-only* and server-multi-dispatch.lisp's per-connection
+;;; enforcement), -V (version), -h (usage).  -C (control mode) was
 ;;; removed with the tmux compatibility surface and is now an unknown flag.
 ;;; Flags accepted for tmux(1) compatibility with no further behaviour wired
 ;;; up: -D, -N, -T, -c, -u, -v (real tmux's own -l is likewise documented as
@@ -38,6 +40,7 @@
          (cl-cli:make-option :name "socket-path"    :short #\S :kind :value)
          (cl-cli:make-option :name "file"           :short #\f :kind :value)
          (cl-cli:make-option :name "force-256"      :short #\2 :kind :flag)
+         (cl-cli:make-option :name "read-only"      :short #\r :kind :flag)
          (cl-cli:make-option :name "no-daemonize"   :short #\D :kind :flag)
          (cl-cli:make-option :name "no-start-server" :short #\N :kind :flag)
          (cl-cli:make-option :name "login-shell"    :short #\l :kind :flag)

@@ -20,19 +20,25 @@ this.
 
 ## No access control beyond the socket boundary
 
-Earlier versions offered `server-access` (a read-write/read-only ACL command)
-and `attach-session -r` (a read-only attach flag). Both are gone from the
-current CLI — see [Compatibility: Removed](compatibility.md#removed) for the
-detail. Every client that reaches the socket therefore has full read-write
-capability equivalent to the socket owner.
+Earlier versions offered `server-access`, a read-write/read-only ACL command
+that governed *other* clients' access. That command is still gone — see
+[Compatibility: Removed](compatibility.md#removed) — and nothing replaces
+it: any client that reaches the socket gets full read-write capability by
+default, with no per-user or per-connection access control the server
+itself imposes.
 
-Be precise about *why*: the server does still contain per-connection read-only
-enforcement — `client-conn-read-only-p` gates pane input in
-`src/bootstrap/server-multi-dispatch.lisp`, driven by a flag in the attach
-frame, and it is still covered by tests. What is gone is any way for a client
-to *request* it, since `attach-session -r` was the only writer. So the
-mechanism is intact and unreachable, and in practice the directory permissions
-above are the whole boundary.
+`attach-session -r`, tmux's read-only attach flag, is also gone as a
+subcommand, but the capability it exposed came back through a different
+door. A global `-r`/`--read-only` flag now sets `*client-read-only*`
+(`%apply-global-cli-invocation` in `src/bootstrap/main-startup.lisp`), and
+the server enforces it per connection — `client-conn-read-only-p` still
+gates key/paste/mouse forwarding to panes in
+`src/bootstrap/server-multi-dispatch.lisp`, the same mechanism this page
+used to describe as intact-but-unreachable. It is reachable again, but only
+as something a client opts into for itself (`nerimux attach -r`); it is not
+an access control the socket owner can impose on *other* clients. So it
+does not change the previous paragraph's conclusion — the socket's own
+permissions remain the whole boundary against a different user.
 
 ## Escape-sequence input from panes is untrusted
 

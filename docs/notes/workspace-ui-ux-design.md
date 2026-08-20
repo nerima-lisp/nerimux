@@ -12,17 +12,31 @@
 - **Global picker（第5章、`C-p`）** は `feat: add workspace runtime and picker`
   (commit `8351773`) として実装され、main に反映済みである。`client-conn-view`
   （`:overview`/`:detail`/`:attention`）と `cl-tui-kit` ベースの
-  `src/presentation/renderer/renderer-tui-kit.lisp` を使う。
+  `src/presentation/renderer/renderer-tui-kit.lisp` を使う。この経路の上で、
+  第8章が要求するworktree操作のうちcreate/delete/status表示（`n`/`X`キー、
+  `wt-create`/`wt-delete`コマンド）に加えて、**lock/unlock（第8.4節、`L`/`U`
+  キー、`wt-lock`/`wt-unlock`コマンド）とdry-run-firstなprune（第8.6節、
+  `:wt-prune` → `:wt-prune-confirm`）も実装済み**である
+  （`src/infrastructure/vcs/vcs.lisp`の`lock-worktree`/`unlock-worktree`/
+  `prune-worktrees`と、`src/bootstrap/server-multi-dispatch.lisp`の
+  `%client-lock-worktree`/`%client-unlock-worktree`/`%client-prune-worktrees`）。
+  未統合として残るのは第4章の全画面overviewモードのみである。
 - **Workspace overview（第4章、全画面）** は `workspace-overview` branch
-  (commit `97ebf05`) として別実装されたが、`render-session-to-string` を
-  session 単位の `workspace-mode-p` 分岐で上書きする設計であり、main の
-  client 単位の view 方式と同じ入口を奪い合う。ドメインモデルも
-  `nerimux/workspace` として独自に重複している。そのため main への統合は
-  保留した（`EXECUTION.md` の「2026-08-18 追加反映」セクションを参照）。branch
-  と worktree は削除せず保持している。
+  (commit `97ebf05`) として別実装されていた。当時の設計は
+  `render-session-to-string` を session 単位の `workspace-mode-p` 分岐で
+  上書きするもので、main の client 単位の view 方式と同じ入口を奪い合い、
+  ドメインモデルも `nerimux/workspace` として独自に重複していた。そのため
+  main への統合は保留した（`EXECUTION.md` の「2026-08-18 追加反映」
+  セクションを参照）。**当時の記述は「branchとworktreeは削除せず保持している」
+  だったが、現在の tree にはこの branch も worktree も存在しない**
+  （`git branch -a` にも `git log --all` にもコミット `97ebf05` /
+  `workspace-overview` は見当たらない）。保留の判断根拠は記録として残すが、
+  実装そのものは失われており、再統合するなら第4章の記述から書き直す前提になる。
 
-この文書は、両実装が最終的にどちらの契約に従うべきかの参照として残す。実装済みか
-どうかは本文中の記述ではなく、上記の現状注記と `EXECUTION.md` を優先する。
+この文書は、第4章の全画面overviewが最終的にどちらの契約に従うべきかの参照として
+残す。第5章の picker 経路については、lock/unlock/pruneまで実装済みであることを
+含め、実装済みかどうかは本文中の記述ではなく、上記の現状注記と `EXECUTION.md` を
+優先する。
 
 ---
 

@@ -77,9 +77,18 @@ reachable from a live client:
   (lines 79–91) for the exact surviving surface: `server`, `attach`, `-V`,
   `--version`, `-h`, `--help`.
   - Consequence worth stating: `attach-session -r` was the only way to
-    attach read-only from the command line, so that capability is gone. The
-    wire protocol still carries the read-only attach flag and the server
-    still honours it per connection, but nothing sets it any more.
+    attach read-only from the command line, and it went with this removed
+    surface. For a period the wire protocol still carried the read-only
+    attach flag and the server still honoured it per connection, but nothing
+    set it, so the capability was unreachable. That gap has since closed
+    through a different door: a global `-r`/`--read-only` flag (parsed
+    alongside `-L`/`-S`, not a subcommand) now sets `*client-read-only*` —
+    see `%apply-global-cli-invocation` in `src/bootstrap/main-startup.lisp`
+    — and the same per-connection enforcement
+    (`client-conn-read-only-p` in `src/bootstrap/server-multi-dispatch.lisp`)
+    that used to sit unreachable now gates it. `nerimux attach -r` (or
+    `--read-only`) attaches without forwarding key, paste, or mouse input to
+    panes.
 - **The entire tmux command table is gone.** `src/application/dispatch/`
   (66 files) — every `%cmd-*` handler, the command dispatch tables,
   `dispatch-command`, `%run-command-tokens`, the prefix-key dispatcher — was
@@ -178,10 +187,22 @@ deleted dispatch/events layers:
   events.
 
 Configs that only use the "still effective" options above behave as
-before. Configs that rely on `bind-key`, a custom prefix, `set-option
-mouse`, or `set-hook` will load without error and then silently do nothing
-for those lines — there is no warning at parse time, because the directive
-itself is syntactically valid.
+before. Configs that use `bind`/`unbind`/`unbind-all`, `set-hook`, or
+`set-option prefix`/`prefix2`/`mouse` load without error and still do
+nothing for those lines, but no longer silently: `apply-config-directive`
+(`config-loader.lisp`) and the `prefix`/`prefix2`/`mouse` side-effect
+handlers (`config-option-side-effects.lisp`) now call
+`%warn-inert-config-directive` (`config.lisp`) for exactly those names,
+which writes a line such as
+`nerimux: config directive 'bind' has no effect (workspace-only build)` (or
+`config option 'prefix' ...`) to `*error-output*` when the config file
+loads. The observable result is otherwise unchanged — no condition is
+signalled, and callers still treat the directive as handled.
+
+Configs that use `bind-key`/`unbind-key` or the `set` alias remain
+completely silent: those spellings were never recognized (see the "one
+trap before the split" note above), so they never reach the branch that
+warns — they are dropped the same way an unrecognized directive always was.
 
 ## Intentionally different
 

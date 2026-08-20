@@ -208,3 +208,32 @@
              (expect (not (member pane (nerimux/model:worktree-panes surviving-worktree)
                                   :test #'eq))))
         (nerimux/vcs:set-workspace-organizations previous)))))
+
+;; Regression guard for the review finding that PRUNE-WORKTREES's :DRY-RUN
+;; keyword had no default, so (prune-worktrees repository) with no keyword
+;; silently performed a LIVE destructive prune despite the docstring calling
+;; dry-run "the caller's default". This mocks %VCS-CALL directly (as the
+;; "async vcs scan errors" suite above does) rather than requiring vcs-kit,
+;; and inspects the exact arguments the VCS-WORKTREE call receives.
+(describe "prune-worktrees default dry-run"
+  (it "defaults to a dry run when :dry-run is omitted entirely"
+    (let ((original (fdefinition 'nerimux/vcs::%vcs-call))
+          (captured-arguments nil))
+      (unwind-protect
+           (let ((repository
+                   (nerimux/model:make-repository
+                    :specification "workspace-owner/project"
+                    :local-path "/tmp/nerimux-prune-default-dry-run-test")))
+             (setf (fdefinition 'nerimux/vcs::%vcs-call)
+                   (lambda (name &rest arguments)
+                     (cond
+                       ((string= name "VCS-WORKTREE")
+                        (setf captured-arguments arguments)
+                        "")
+                       ((string= name "VCS-LIST-WORKTREES") nil)
+                       (t :fake-backend-repository))))
+             ;; No :dry-run keyword at all -- this is the exact call shape the
+             ;; review flagged as unsafe.
+             (nerimux/vcs:prune-worktrees repository)
+             (expect (member "--dry-run" captured-arguments :test #'equal)))
+        (setf (fdefinition 'nerimux/vcs::%vcs-call) original)))))

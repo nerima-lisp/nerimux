@@ -37,9 +37,12 @@ if-shell 'test -f ~/.tmux.local' 'source-file ~/.tmux.local'
 are `set-option`, `set-window-option` and `set-session-option`; the `set` alias
 is not among them, and an unrecognized verb is dropped silently rather than
 reported. The same applies to key bindings: the parser takes `bind`, `unbind`
-and `unbind-all`, not `bind-key`/`unbind-key`. (Both spellings tokenize
-without error, and neither is a directive the config layer acts on any more,
-so both are silently no-ops — see below.)
+and `unbind-all`, not `bind-key`/`unbind-key`. Both spellings tokenize
+without error, and neither is a directive the config layer acts on — but they
+are no longer equally quiet about it: `bind`/`unbind`/`unbind-all` are
+*recognized* as inert and now warn to `*error-output*` when the config loads
+(see below), while `bind-key`/`unbind-key` were never recognized at all and
+stay fully silent, the same way `set` does.
 
 Directives that reach a handler: `set-option` in all scopes with
 `-a`/`-g`/`-o`/`-w`/`-s`, `if-shell`, `run-shell`, `source-file`,
@@ -70,7 +73,11 @@ downstream still consumes what they set.
   process boundary; nothing about shelling out changed.
 
 **Parsed but inert** — these are accepted, validated, and stored, but nothing
-reads the result:
+reads the result. Loading a config that uses one of them now also writes a
+one-line warning to `*error-output*` (`%warn-inert-config-directive` in
+`config.lisp`, e.g. `nerimux: config directive 'bind' has no effect
+(workspace-only build)`); that warning is new, the no-op behavior it
+describes is not:
 
 - `bind` / `unbind` / `unbind-all` — the key-table store these wrote into has
   been **deleted**, along with the bind-directive handlers. Such a line now
