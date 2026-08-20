@@ -146,7 +146,7 @@ nerimux/
 │   ├── infrastructure/     # adapters: PTY, sockets, raw-mode stdin input, VCS
 │   ├── presentation/       # renderer, prompt/overlay
 │   │   ├── prompt/         #   command-prompt overlay rendering
-│   │   └── renderer/       #   ANSI compositor + cl-tui-kit widget layer — see
+│   │   └── renderer/       #   pane compositor + workspace views + cl-tui-kit — see
 │   │                       #   below, it is one render path, not two
 │   └── dataflow/           # cl-dataflow-kit cold-path read-model — OPTIONAL system
 └── t/
@@ -156,23 +156,32 @@ nerimux/
     └── e2e/                # binary-level smoke test
 ```
 
-The workspace UI's renderer is not a self-contained renderer of its own. Every
-client-facing frame is built in two passes: `render-session-to-string`
-(`renderer-compose.lisp`) — reading the status-bar options, laying out panes,
-and emitting an ANSI escape-coded frame — and then `renderer-tui-kit.lisp`'s
-`render-session-to-tui-string` replays that ANSI frame into a `cl-tui-kit`
-surface to layer widgets (the picker modal, the workspace tree) on top.
-`render-workspace-overview-to-tui-string` and
-`render-workspace-attention-to-tui-string` follow the same two-pass shape,
-wrapping `render-workspace-overview-to-string` /
-`render-workspace-attention-to-string`. Almost everything else in
-`presentation/renderer/` — pane and border rendering, status-bar composition,
-style/SGR emission, ANSI primitives — is that first, ANSI-producing pass, and
-is exercised on every client frame; it is not workspace-UI-specific code
-sitting unused next to a separate implementation. `renderer-tui-kit.lisp` is
-the file that is specific to the `cl-tui-kit` surface/widget wrapping;
+Every client-facing frame is built in two passes: an ANSI-producing pass, then
+`renderer-tui-kit.lisp` replaying that frame into a `cl-tui-kit` surface to
+layer widgets (the picker modal, the workspace tree) on top.
+
+There are **two independent first passes**, and the split is deliberate:
+
+- **The pane view** — `render-session-to-string` (`renderer-compose.lisp`),
+  reading status-bar options, laying out panes and emitting escape codes. This
+  is the VT100 machinery: pane and border rendering, status-bar composition,
+  style/SGR emission, copy-mode overlays. Fifteen files, exercised on every
+  frame that shows terminal content.
+- **The workspace views** — `render-workspace-overview-to-string` and
+  `render-workspace-attention-to-string` (`renderer-workspace.lisp`), drawing
+  the organization → repository → worktree tree and the attention list.
+
+The workspace views depend on `renderer-format.lisp` (generic ANSI primitives)
+and nothing else in the pane renderer. They used to live inside
+`renderer-compose.lisp`, which made the workspace UI appear to require the whole
+VT100 stack; moving them out in 2026-08 made the real dependency visible, and the
+ASDF load order now states it — `renderer-workspace` loads immediately after
+`renderer-format`, ahead of the entire pane chain.
+
 `renderer.lisp` is an intentionally empty load-order stub (see its own header
-comment).
+comment). `renderer-compose-protocols.lisp` holds one function, `clear-display`,
+called by the client at raw-mode setup; it is not part of either render pass,
+which is why no render entry point reaches it.
 
 The cold-path read-model under `src/dataflow/` is described in
 [Dogfooded sibling libraries](../guide/sibling-libraries.md).

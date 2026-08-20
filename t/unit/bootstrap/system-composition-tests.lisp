@@ -48,4 +48,41 @@
     (expect (find-package "NERIMUX"))
     (expect (find-package "NERIMUX/TERMINAL"))
     (expect (null (find-package "CL-PROLOG-KIT")))
-    (expect (null (find-package "CL-DATAFLOW-KIT")))))
+    (expect (null (find-package "CL-DATAFLOW-KIT"))))
+
+  ;;; -- renderer load order -----------------------------------------------------
+  ;;;
+  ;;; Be precise about what this proves.  It asserts the DECLARED component
+  ;;; order in nerimux.asd, nothing stronger.  The workspace views
+  ;;; (renderer-workspace.lisp) depend on renderer-format.lisp and on none of
+  ;;; the pane compositor; loading them ahead of that chain is how the .asd
+  ;;; states it, and this catches someone quietly reordering it back -- the
+  ;;; likely regression, since "move the file next to renderer-compose" looks
+  ;;; tidy.
+  ;;;
+  ;;; It does NOT prove the two paths are independent, and must not be cited as
+  ;;; if it did.  They share one package and one system, so nothing stops
+  ;;; workspace code calling a pane-compositor function; SBCL would emit a
+  ;;; style-warning for the forward reference and this build does not treat
+  ;;; style-warnings as fatal.  Proving independence needs the file-level
+  ;;; closure computed from the render entry points, which is a review-time
+  ;;; analysis rather than something a unit test can hold.
+
+  (it "renderer-workspace-loads-before-the-pane-compositor"
+    ;; The module path is ("src" "presentation/renderer"): nerimux.asd nests every
+    ;; module under a single "src" module, so the one-element path returns NIL.
+    (let* ((module (asdf:find-component (asdf:find-system "nerimux")
+                                        '("src" "presentation/renderer")))
+           (names  (mapcar #'asdf:component-name
+                           (asdf:component-children module)))
+           (format-pos    (position "renderer-format"    names :test #'string=))
+           (workspace-pos (position "renderer-workspace" names :test #'string=))
+           (compose-pos   (position "renderer-compose"   names :test #'string=)))
+      ;; Vacuity guard: a typo'd module path returns NIL children, and every
+      ;; position below would then be NIL rather than wrong.
+      (expect (plusp (length names)))
+      (expect format-pos)
+      (expect workspace-pos)
+      (expect compose-pos)
+      (expect (< format-pos workspace-pos))
+      (expect (< workspace-pos compose-pos)))))

@@ -184,6 +184,12 @@
 
 ;;; ── Attribute reset ─────────────────────────────────────────────────────────
 
+(defun %emit-sgr (stream code)
+  "Emit an ANSI SGR escape sequence (ESC[CODEm) to STREAM.
+   CODE may be an integer or a string (e.g. \"44;96\" for compound SGR parameters).
+   A no-op when CODE is NIL — allows callers to pass optional style codes directly."
+  (when code (format stream "~C[~Am" +esc+ code)))
+
 (defun reset-attrs (stream)
   "Emit SGR reset sequence ESC[0m to STREAM, clearing all attributes and colours."
   (write-string (cl-tty-kit:ansi-reset-style) stream))

@@ -255,7 +255,10 @@
      (:module "presentation/renderer"
       :serial t
       :components
-      ((:file "renderer-format")     ; ANSI primitives
+      ((:file "renderer-format")     ; ANSI primitives (shared by both paths below)
+       ;; The workspace views depend on renderer-format and nothing else in this
+       ;; module; loading them here, ahead of the pane compositor, states that.
+       (:file "renderer-workspace")  ; workspace tree + attention views (plain ANSI)
        (:file "renderer-style-data") ; declarative style/SGR/border-charset dispatch tables
        (:file "renderer-style")     ; style-string parsing + SGR emission logic
        (:file "renderer-pane-selection") ; selection bounds helpers
@@ -271,7 +274,7 @@
        (:file "renderer-compose-protocols") ; terminal protocol toggles
        (:file "renderer-compose-overlay")   ; overlay rendering + mouse mode sequences
        (:file "renderer-compose-effects")   ; bell / cursor / queue drain effects
-       (:file "renderer-compose")        ; session frame compositing + entry points
+       (:file "renderer-compose")        ; PANE frame compositing + entry points
        (:file "renderer-tui-kit")        ; headless cl-tui-kit surface/backend adapter
        (:file "renderer")))         ; documentation stub (intentionally empty)
      (:module "infrastructure/input"
