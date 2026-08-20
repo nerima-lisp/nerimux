@@ -9,7 +9,6 @@
     docs/src/reference/compatibility.md.")
   (:export
    #:*default-shell*
-   #:*status-height*
    #:+pty-buf-size+
    #:+max-scrollback-lines+
    #:+poll-timeout-us+

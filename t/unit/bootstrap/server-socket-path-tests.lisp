@@ -99,4 +99,43 @@
             (nerimux::*socket-name-override* nil))
         (signals error
           (nerimux::%ensure-server-running "test-session")
-          "must signal when the socket never appears after launch-and-poll")))))
+          "must signal when the socket never appears after launch-and-poll"))))
+
+  ;;; -- option-reader port installation ----------------------------------------
+
+  ;; run-server must install the three option-reader ports the terminal layer
+  ;; consults.  They were installed only on the deleted standalone startup path,
+  ;; so on the surviving entry point `history-limit', `alternate-screen' and
+  ;; `scroll-on-clear' were inert -- and inert SILENTLY, because every unset
+  ;; fallback succeeds: the history limit quietly used a fixed constant, and
+  ;; (or (null fn) ...) made alternate-screen unconditionally allowed.  Nothing
+  ;; errored, so nothing caught it.
+  ;;
+  ;; Asserting functionp alone would not be enough -- a callback wired to the
+  ;; wrong option would still be a function.  Each is called and checked against
+  ;; the live option value it is supposed to read.
+  (it "run-server-installs-the-option-reader-ports"
+    (let ((nerimux/terminal:*history-limit-function* nil)
+          (nerimux/terminal:*alternate-screen-enabled-function* nil)
+          (nerimux/terminal:*scroll-on-clear-function* nil))
+      (nerimux::%install-option-callbacks)
+      (expect (functionp nerimux/terminal:*history-limit-function*))
+      (expect (functionp nerimux/terminal:*alternate-screen-enabled-function*))
+      (expect (functionp nerimux/terminal:*scroll-on-clear-function*))
+      (expect (eql (nerimux/options:get-option "history-limit")
+                   (funcall nerimux/terminal:*history-limit-function*)))
+      (expect (eql (nerimux/options:get-option "alternate-screen")
+                   (funcall nerimux/terminal:*alternate-screen-enabled-function*)))
+      (expect (eql (nerimux/options:get-option "scroll-on-clear")
+                   (funcall nerimux/terminal:*scroll-on-clear-function*)))))
+
+  ;; The port must track the option, not capture its value at install time.
+  (it "installed-history-limit-port-follows-the-live-option"
+    (let ((nerimux/terminal:*history-limit-function* nil)
+          (original (nerimux/options:get-option "history-limit")))
+      (nerimux::%install-option-callbacks)
+      (unwind-protect
+           (progn
+             (nerimux/options:set-option "history-limit" 4321)
+             (expect (eql 4321 (funcall nerimux/terminal:*history-limit-function*))))
+        (nerimux/options:set-option "history-limit" original)))))

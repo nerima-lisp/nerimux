@@ -48,17 +48,21 @@
   (orient-case direction :h (window-width window) :v (window-height window)))
 
 (defun %status-top-offset ()
-  "Rows reserved at the TOP of the window for a top-positioned status bar:
-   nerimux/config:*status-height* when the status is on AND status-position is
-   \"top\", else 0.  Panes are laid out starting at this y so a top status bar
-   never overlaps them (and a bottom bar leaves the top flush at y=0).  Reads the
-   live status-height/option globals; safe because config loads before this file
-   and the option symbol exists from package.lisp."
-  (if (and (plusp nerimux/config:*status-height*)
-           (string-equal (or (nerimux/options:get-option "status-position") "bottom")
-                         "top"))
-      nerimux/config:*status-height*
-      0))
+  "Rows reserved at the TOP of the window for a top-positioned status bar: the
+   status row count when status-position is \"top\", else 0.  Panes are laid out
+   starting at this y so a top status bar never overlaps them (and a bottom bar
+   leaves the top flush at y=0).
+
+   Both the count and the position come from the option table, which is domain
+   state.  This used to read nerimux/config:*status-height* -- an application
+   variable holding a cached copy that could disagree with what the renderer
+   actually painted."
+  (let ((lines (nerimux/options:status-line-count)))
+    (if (and (plusp lines)
+             (string-equal (or (nerimux/options:get-option "status-position") "bottom")
+                           "top"))
+        lines
+        0)))
 
 (defun %assign-window-tree (window w h &optional (top-offset 0))
   "Assign WINDOW's split tree into a W x H area, offset DOWN by TOP-OFFSET rows.

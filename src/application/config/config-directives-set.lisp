@@ -36,15 +36,16 @@
      ("set-shell" 1 (path)
        (setf *default-shell* path)
        t)
-     ;; Clamped to +MAX-STATUS-LINES+ for parity with the `status` option
-     ;; (config-option-side-effects.lisp:98).  Without the cap, `set-status-height
-     ;; 50` on a 24-row terminal makes (- *term-rows* *status-height*) negative,
-     ;; and the four call sites that compute a pane height that way have no floor
-     ;; of their own.
+     ;; Writes the `status' option, NOT a separate height variable.  It used to
+     ;; set nerimux/config:*status-height* directly while leaving `status'
+     ;; untouched -- a second write path the renderer never saw, so after
+     ;; `set-status-height 3' the layout reserved three rows and the bar painted
+     ;; one.  nerimux/options:status-line-count clamps to +MAX-STATUS-LINES+ on
+     ;; read, so the cap does not need repeating here.
      ("set-status-height" 1 (n)
        (let ((height (nerimux::%parse-integer-or-nil n :junk-allowed t)))
          (when (and height (plusp height))
-           (setf *status-height* (min height +max-status-lines+))
+           (nerimux/options:set-option "status" height)
            t)))
      ,@(mapcar #'%set-directive-config-rule +set-directive-commands+)
      ;; NOTE: source-file is handled entirely by %apply-source-file-directive

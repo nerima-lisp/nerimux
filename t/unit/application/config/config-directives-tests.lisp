@@ -13,7 +13,6 @@
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (import '(nerimux/config:*default-shell*
-            nerimux/config:*status-height*
             nerimux/config:apply-config-directive
             nerimux/config:load-config-from-string
             nerimux/config:load-config-from-stream
@@ -73,7 +72,17 @@
 
   ;;; set-shell / set-status-height directives
 
-  ;; set-shell sets *default-shell*; set-status-height sets *status-height*.
+  ;; set-shell sets *default-shell*; set-status-height sets the `status' option,
+  ;; the single source of truth nerimux/options:status-line-count reads.
+  ;;
+  ;; The status-line-count assertion below is a regression guard, not a
+  ;; restatement.  set-status-height used to write a separate cached variable
+  ;; (nerimux/config:*status-height*) and leave the `status' option alone, while
+  ;; the renderer decided how many rows to PAINT from the option.  The pane
+  ;; layout reserved the cached number.  So `set-status-height 2' reserved two
+  ;; rows and painted one, leaving a blank reserved row that nothing drew into.
+  ;; Asserting the count against the surviving source of truth is what would
+  ;; have caught that.
   (it "set-shell-and-status-height-directives"
     (with-isolated-config
       (assert-config-directive-applied '("set-shell" "/usr/bin/zsh")
@@ -81,7 +90,7 @@
       (expect (string= "/usr/bin/zsh" *default-shell*))
       (assert-config-directive-applied '("set-status-height" "2")
                                        "set-status-height directive")
-      (expect (= 2 *status-height*))))
+      (expect (= 2 (nerimux/options:status-line-count)))))
 
   ;;; bind/unbind/set: arity and validity table
 
@@ -103,10 +112,10 @@
   ;; Non-integer or non-positive set-status-height values return NIL and do not signal.
   (it "set-status-height-noninteger-is-tolerated"
     (with-isolated-config
-      (let ((before *status-height*))
+      (let ((before (nerimux/options:status-line-count)))
         (assert-config-directive-safe-nil '("set-status-height" "abc")
                                           "set-status-height with a non-integer value")
-        (expect (eql before *status-height*))
+        (expect (eql before (nerimux/options:status-line-count)))
         (assert-config-directive-safe-nil '("set-status-height" "0")
                                           "set-status-height with a non-positive value (0)")
-        (expect (eql before *status-height*))))))
+        (expect (eql before (nerimux/options:status-line-count)))))))

@@ -193,7 +193,7 @@
                                   :name "0"
                                   :last-active (get-universal-time)))
          ;; Reserve one row at the bottom for the status bar.
-         (pane-rows (- rows *status-height*))
+         (pane-rows (- rows (nerimux/options:status-line-count)))
          ;; Respect base-index for the first window id.
          (base-index  (or (nerimux/options:get-option "base-index") 0)))
     (session-new-window session (%shell-basename) pane-rows cols base-index start-dir)

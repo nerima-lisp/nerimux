@@ -12,7 +12,7 @@
    the status area — the bottom rows by default, the top rows when
    status-position is top — with message-line (0..4) selecting the line within
    a multi-line status bar (clamped to the status height)."
-  (let* ((height (max 1 nerimux/config:*status-height*))
+  (let* ((height (max 1 (nerimux/options:status-line-count)))
          (raw    (nerimux/options:get-option "message-line" 0))
          (line   (if (integerp raw) (min (max raw 0) (1- height)) 0))
          (top-p  (string-equal

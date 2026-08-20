@@ -281,3 +281,54 @@
   "Coerce VALUE and store under NAME in PANE's local-options hash.
    Returns the coerced value."
   (%set-local-option name value (nerimux/model:pane-local-options pane)))
+
+;;; ── Status-bar row count ──────────────────────────────────────────────────
+;;;
+;;; How many rows the status bar occupies is derived from the `status' option,
+;;; here, once.  It used to be computed in two places that could disagree:
+;;; renderer-statusbar.lisp parsed the option live to decide how many rows to
+;;; PAINT, while nerimux/config:*status-height* held a cached copy that the pane
+;;; layout used to decide how many rows to RESERVE.
+;;;
+;;; They did disagree.  `set-status-height N' wrote the cache without touching
+;;; the option, so after it the layout reserved N rows and the renderer painted
+;;; one -- N-1 reserved rows that nothing ever drew into.  Deriving both from the
+;;; option removes the second source of truth rather than trying to keep two in
+;;; step.
+;;;
+;;; This lives in the domain, next to the option registry that owns "status",
+;;; because the pane layout (domain) needs it as much as the renderer does --
+;;; and a domain reaching up into application for it was the layering violation
+;;; that made the split look acceptable in the first place.
+
+(defconstant +max-status-lines+ 5
+  "tmux caps the status bar at five rows; a larger `status' value clamps here.")
+
+(defparameter +status-off-values+ '("off" "false" "0")
+  "String `status' values that hide the bar entirely.")
+
+(defun %clamp-status-lines (n)
+  "Clamp a status row count into tmux's 0..5 range."
+  (max 0 (min n +max-status-lines+)))
+
+(defun %status-lines-from-string (value)
+  "Row count for a string `status' value."
+  (if (member value +status-off-values+ :test #'equal)
+      0
+      (let ((n (and (stringp value)
+                    (ignore-errors (parse-integer value :junk-allowed t)))))
+        (cond ((null n)  1)
+              ((plusp n) (%clamp-status-lines n))
+              (t         0)))))
+
+(defun status-line-count ()
+  "Rows the status bar occupies, 0..5, derived from the `status' option.
+
+   off/false/0/NIL -> 0; a positive integer N -> min(N, 5); any other truthy
+   value (on/t) -> 1.  This is the single source of truth: the renderer paints
+   this many rows and the pane layout reserves this many."
+  (let ((value (get-option "status" t)))
+    (cond ((null value)      0)
+          ((integerp value)  (%clamp-status-lines value))
+          ((stringp value)   (%status-lines-from-string value))
+          (t                 1))))

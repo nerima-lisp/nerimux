@@ -64,16 +64,6 @@
        (nerimux/options:set-server-option "escape-time" 10)
        (when (%nonempty-string-p value)
          (nerimux/options:set-server-option "escape-time" value))))
-  ;; status: off/false/0 hides the bar; numeric line count (capped at 5) or on/true → 1.
-  ("status"
-   (if unset-p
-       (setf *status-height* 1)
-       (let* ((off-p (member value '("off" "false" "0") :test #'equal))
-              (n     (nerimux::%parse-integer-or-nil value :junk-allowed t)))
-         (setf *status-height*
-               (cond (off-p 0)
-                     ((and n (> n 0)) (min n +max-status-lines+))
-                     (t 1))))))
   ;; update-environment: propagate the space-separated variable list into the model.
   ("update-environment"
    (if unset-p

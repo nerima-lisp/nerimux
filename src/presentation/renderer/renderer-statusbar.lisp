@@ -226,40 +226,10 @@
          (line     (%compose-aligned-line expanded sgr-code terminal-cols)))
     (%render-status-line stream row sgr-code line)))
 
-(defun status-line-count ()
-  "Number of status rows requested by the `status` option, 0..5.
-   off/false/0/nil → 0; an explicit positive integer N → min(N,5) (tmux caps at
-   5); any other truthy value (on/t) → 1.  This is the renderer's source of truth
-   for how many status rows to draw; the pane layout reserves the matching count
-   via nerimux/config:*status-height* (kept in sync by the `status` side-effect)."
-  (let ((v (nerimux/options:get-option "status" t)))
-    (%status-line-count-from-value v)))
-
-(defparameter +status-line-false-values+
-  '("off" "false" "0")
-  "String values that disable the status bar entirely.")
-
-(defun %clamp-status-line-count (n)
-  "Clamp a status-line count to tmux's 0..5 range."
-  (max 0 (min n 5)))
-
-(defun %status-line-count-from-string (v)
-  "Map a raw STATUS string value to the number of rows to render."
-  (if (member v +status-line-false-values+ :test #'equal)
-      0
-      (let ((n (nerimux::%parse-integer-or-nil v :junk-allowed t)))
-        (cond
-          ((null n) 1)
-          ((plusp n) (%clamp-status-line-count n))
-          (t 0)))))
-
-(defun %status-line-count-from-value (v)
-  "Map a raw STATUS option value to the number of rows to render."
-  (cond
-    ((null v) 0)
-    ((integerp v) (%clamp-status-line-count v))
-    ((stringp v) (%status-line-count-from-string v))
-    (t 1)))                   ; T or any other truthy value
+       ;; status-line-count and its parser moved to nerimux/options (domain).
+;;; The row count is derived from the `status' option in exactly one place now;
+;;; this file used to hold a second copy that the pane layout did not consult.
+;;; See src/domain/options/options-api.lisp.
 
 (defun render-status-region (stream session terminal-rows terminal-cols lines position)
   "Render a LINES-row status region.  The main bar (status-left, the window

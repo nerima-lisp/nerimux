@@ -34,17 +34,17 @@
         (expect (= expected value))
         (expect (plusp value)))))
 
-  ;;; ── *default-shell* and *status-height* initial values ───────────────────
+  ;;; ── *default-shell* and status-line-count initial values ──────────────────
 
   ;; *default-shell* is a non-empty string (set from $SHELL or /bin/sh).
   (it "default-shell-is-string"
     (expect (stringp nerimux/config:*default-shell*))
     (expect (plusp (length nerimux/config:*default-shell*))))
 
-  ;; *status-height* is a positive integer (default 1).
-  (it "status-height-positive-integer"
-    (expect (integerp nerimux/config:*status-height*))
-    (expect (plusp nerimux/config:*status-height*)))
+  ;; nerimux/options:status-line-count is a positive integer (default 1).
+  (it "status-line-count-positive-integer"
+    (expect (integerp (nerimux/options:status-line-count)))
+    (expect (plusp (nerimux/options:status-line-count))))
 
   ;;; ── init-default-shell ────────────────────────────────────────────────────
 

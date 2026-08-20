@@ -16,12 +16,6 @@
     (when (and shell (plusp (length shell)))
       (setf *default-shell* shell))))
 
-(defparameter *status-height* 1
-  "Number of rows reserved for the status bar at the bottom.")
-
-(defconstant +max-status-lines+ 5
-  "tmux's maximum status-line count; `set-option -g status N` clamps N to this cap.")
-
 (defconstant +pty-buf-size+ 4096
   "Byte buffer size for PTY reads.")
 

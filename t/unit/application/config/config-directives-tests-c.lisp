@@ -31,7 +31,7 @@
     (expect (null (nerimux/config::%config-tokens "")))
     (expect (null (nerimux/config::%config-tokens "   "))))
 
-  ;;; status option: off / on / line-count parsing → *status-height*
+  ;;; status option: off / on / line-count parsing → nerimux/options:status-line-count
 
   ;; `set-option -g status` maps string values to the expected status height.
   (it "set-status-directive-table"
@@ -45,7 +45,7 @@
         (declare (ignore desc))
         (with-isolated-config
           (nerimux/config:apply-config-directive (list "set-option" "-g" "status" value))
-          (expect (= expected nerimux/config:*status-height*))))))
+          (expect (= expected (nerimux/options:status-line-count)))))))
 
   ;;; apply-config-line
 

@@ -76,7 +76,9 @@
   "Relayout SESSION's active window for ROWS and COLS, if any."
   (let ((active-window (session-active-window session)))
     (when active-window
-      (window-relayout active-window (- rows *status-height*) cols))))
+      (window-relayout active-window
+                       (- rows (nerimux/options:status-line-count))
+                       cols))))
 
 ;;; ── Message-type dispatch macro ──────────────────────────────────────────────
 ;;;
@@ -111,12 +113,44 @@
                      `(,condition ,@body)))
                  rules))))
 
+(defun %install-option-callbacks ()
+  "Install the option-reader ports the terminal layer consults.
+
+   Each of these is a zero-argument callback the domain calls to read an option
+   WITHOUT depending on the options package directly.  When one is not installed
+   the domain falls back -- and every fallback succeeds silently, which is why
+   this being missing produced no error and no warning:
+
+     *history-limit-function*             unset -> trimming uses a fixed 1000,
+                                          so `history-limit' (default 2000) had
+                                          no effect on what was actually trimmed,
+                                          even though #{history_limit} reads the
+                                          option directly and displayed the new
+                                          value.
+     *alternate-screen-enabled-function*  unset -> (or (null fn) ...) is always
+                                          true, so `alternate-screen' could never
+                                          turn the alt screen off.
+     *scroll-on-clear-function*           unset -> same shape.
+
+   These lived in the deleted main.lisp and were only ever called on the
+   standalone / control-mode startup path; run-server never called them, so on
+   the surviving entry point these three options were inert."
+  (setf nerimux/terminal:*history-limit-function*
+        (lambda () (nerimux/options:get-option "history-limit"))
+        nerimux/terminal:*alternate-screen-enabled-function*
+        (lambda () (nerimux/options:get-option "alternate-screen"))
+        nerimux/terminal:*scroll-on-clear-function*
+        (lambda () (nerimux/options:get-option "scroll-on-clear"))))
+
 (defun run-server (name)
   "Run a headless server owning a session, serving clients attaching to
    (socket-path NAME).  The session persists across detaches until its last
    window is killed."
   (require :sb-posix)
   (install-pty-port)              ; wire the PTY adapter into the domain port
+  (%install-option-callbacks)     ; wire the option-reader ports (see above)
+  ;; $SHELL first, so a default-shell line in the config file still wins.
+  (init-default-shell)
   (ignore-errors (load-config-file))
   (setf *running*          t
         *dirty*            t

@@ -6,19 +6,15 @@
 
   ;; ── set-option -g status off side-effect ────────────────────────────────────────────
 
-  ;; 'set-option -g status off' → *status-height* 0; 'on' → 1.
+  ;; 'set-option -g status off' → status-line-count 0; 'on' → 1.
   (it "apply-set-directive-status-table"
-    (dolist (c '(("off" 0 "'set-option -g status off' sets *status-height* to 0")
-                 ("on"  1 "'set-option -g status on' sets *status-height* to 1")))
+    (dolist (c '(("off" 0 "'set-option -g status off' → status-line-count 0")
+                 ("on"  1 "'set-option -g status on' → status-line-count 1")))
       (destructuring-bind (value expected desc) c
         (declare (ignore desc))
-        (let ((orig nerimux/config:*status-height*))
-          (unwind-protect
-              (progn
-                (setf nerimux/config:*status-height* 0)
-                (nerimux/config:apply-config-directive (list "set-option" "-g" "status" value))
-                (expect (= expected nerimux/config:*status-height*)))
-            (setf nerimux/config:*status-height* orig))))))
+        (with-isolated-config
+          (nerimux/config:apply-config-directive (list "set-option" "-g" "status" value))
+          (expect (= expected (nerimux/options:status-line-count)))))))
 
   ;; bind-n-split-window-with-c-flag and bind-key-semicolon-sequence-stored-as-sequence
   ;; were removed: both asserted key-table effects (key-table-lookup / -command),
@@ -68,15 +64,14 @@ bind r source-file /dev/null"))
       (nerimux/config:load-config-from-string "set-option -s escape-time 0")
       (expect (eql 0 (nerimux/options:get-server-option "escape-time")))))
 
-  ;; 'set-option -u status' in a config file removes the option and restores the runtime
-  ;; status height to its default.
+  ;; 'set-option -u status' in a config file removes the option and restores the
+  ;; status-line-count to its default (1).
   (it "load-config-set-u-restores-status-side-effects"
     (with-isolated-config
-      (setf nerimux/config:*status-height* 4)
       (nerimux/config:load-config-from-string
        "set-option -g status off
 set-option -u status")
-      (expect (= 1 nerimux/config:*status-height*))
+      (expect (= 1 (nerimux/options:status-line-count)))
       (expect (null (nth-value 1 (gethash "status" nerimux/options:*global-options*))))
       (expect (string= "on" (nerimux/options:get-option "status")))))
 

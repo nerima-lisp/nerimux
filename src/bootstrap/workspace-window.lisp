@@ -18,7 +18,7 @@
    NAME defaults to the shell basename.  START-DIR is the new pane's working
    directory.  START-READER-P is NIL during snapshot restore, where the caller
    starts the reader thread itself once the pane is fully rebuilt."
-  (let* ((rows     (- *term-rows* *status-height*))
+  (let* ((rows     (- *term-rows* (nerimux/options:status-line-count)))
          (cols     *term-cols*)
          (win-name (or name (nerimux/model::%shell-basename)))
          (base     (or (nerimux/options:get-option "base-index") 0))

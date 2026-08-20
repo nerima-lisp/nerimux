@@ -20,7 +20,7 @@
         ;; Exactly one pane.
         (expect (= 1 (length panes)))
         (let ((pane (first panes)))
-          ;; Pane geometry: full width; height shrunk by *status-height* (= 1).
+          ;; Pane geometry: full width; height shrunk by status-line-count (= 1).
           (expect (= 80 (pane-width  pane)))
           (expect (= 23 (pane-height pane)))
           ;; window-active-pane must return the same pane.

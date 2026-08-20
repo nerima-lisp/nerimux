@@ -166,7 +166,6 @@
                 #:socket-stream #:socket-fd #:close-socket
                 #:unix-socket-available-p)
   (:import-from #:nerimux/config
-                #:*status-height*
                 #:+max-scrollback-lines+
                 #:apply-config-directive)
   (:import-from #:nerimux/commands

@@ -97,8 +97,8 @@
       (destructuring-bind (height line position expected desc) row
         (declare (ignore desc))
         (with-isolated-config
-          (let ((nerimux/config:*status-height* height)
-                (nerimux/prompt:*overlay* "hello"))
+          (let ((nerimux/prompt:*overlay* "hello"))
+            (nerimux/options:set-option "status" height)
             (nerimux/options:set-option "message-line" line)
             (nerimux/options:set-option "status-position" position)
             (let ((out (with-output-to-string (buf)

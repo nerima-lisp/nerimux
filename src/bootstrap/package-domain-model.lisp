@@ -280,6 +280,10 @@
            #:get-server-option #:set-server-option
            #:get-option-for-window #:set-option-for-window
            #:get-option-for-pane   #:set-option-for-pane
+          ;; Status-bar row count: the single source of truth for how many rows
+          ;; the bar occupies, used by BOTH the renderer (paint) and the pane
+          ;; layout (reserve).  See options-api.lisp for why it lives here.
+          #:status-line-count     #:+max-status-lines+
            #:get-option-for-context
            #:option-present-for-scope-p
            #:option-present-for-display-p

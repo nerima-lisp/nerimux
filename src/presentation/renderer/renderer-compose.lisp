@@ -165,7 +165,7 @@
          ;; reserves the matching count via nerimux/config:*status-height*, kept
          ;; in sync by the `status` option's side-effect — so the bar and the
          ;; pane area stay in lockstep in normal use.
-         (status-lines (status-line-count))
+         (status-lines (nerimux/options:status-line-count))
          (status-on   (> status-lines 0))
          (status-pos  (nerimux/options:get-option "status-position" "bottom")))
     (cursor-invisible buffer)

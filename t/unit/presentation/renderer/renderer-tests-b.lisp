@@ -52,15 +52,14 @@
                  ("bottom" 0 "bottom → pane at y=0")))
       (destructuring-bind (pos expected-y desc) c
         (declare (ignore desc))
-        (with-isolated-options ("status-position" pos)
-          (let ((nerimux/config:*status-height* 1))
-            (let* ((p0  (make-pane :id 1 :x 0 :y 0 :width 20 :height 5
-                                   :fd -1 :pid -1 :screen (make-screen 20 5)))
-                   (win (make-window :id 1 :name "w" :width 20 :height 6
-                                     :tree (make-layout-leaf p0) :panes (list p0))))
-              (nerimux/model:window-relayout win 5 20)
-              (expect (= expected-y (pane-y p0)))
-              (expect (= 5 (pane-height p0)))))))))
+        (with-isolated-options ("status-position" pos "status" "on")
+          (let* ((p0  (make-pane :id 1 :x 0 :y 0 :width 20 :height 5
+                                 :fd -1 :pid -1 :screen (make-screen 20 5)))
+                 (win (make-window :id 1 :name "w" :width 20 :height 6
+                                   :tree (make-layout-leaf p0) :panes (list p0))))
+            (nerimux/model:window-relayout win 5 20)
+            (expect (= expected-y (pane-y p0)))
+            (expect (= 5 (pane-height p0))))))))
 
   ;;; ── status on/off ────────────────────────────────────────────────────────────
 
@@ -112,7 +111,7 @@
   ;; status-line-count maps the `status` option to a row count (0..5, tmux cap).
   (it "status-line-count-parses-option"
     (flet ((n (v) (with-isolated-options ("status" v)
-                    (nerimux/renderer::status-line-count))))
+                    (nerimux/options:status-line-count))))
       (expect (= 0 (n nil)))
       (expect (= 0 (n "off")))
       (expect (= 0 (n "0")))
