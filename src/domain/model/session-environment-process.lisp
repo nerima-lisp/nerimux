@@ -23,7 +23,7 @@
 (defun process-environment-value (name)
   "Return NAME's value from the live process environment, or NIL when unset."
   (%assert-environment-variable-name name)
-  (ignore-errors (sb-ext:posix-getenv name)))
+  (nerimux/ports:environment-value name))
 
 (defun %environment-entry-name (entry)
   "Return the NAME component of a NAME=VALUE environment ENTRY string, or NIL.
@@ -36,7 +36,7 @@
 (defun process-environment-names ()
   "Return sorted names from the live process environment."
   (let (names)
-    (dolist (entry (ignore-errors (sb-ext:posix-environ)))
+    (dolist (entry (nerimux/ports:environment-entries))
       (let ((name (%environment-entry-name entry)))
         (when name
           (pushnew name names :test #'string=))))
@@ -46,7 +46,7 @@
   "Return an alist of (name . value) for each variable in the update-environment
    option that is set in the current process environment.  Unset vars are omitted."
   (loop for name in *update-environment*
-        for value = (ignore-errors (sb-ext:posix-getenv name))
+        for value = (nerimux/ports:environment-value name)
         when value collect (cons name value)))
 
 ;;; ── %with-posix-env-op — shared skeleton for set/unset ──────────────────────

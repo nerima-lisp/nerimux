@@ -83,7 +83,7 @@
                :fd fd :pid pid :tty (or slave-path "")
                :start-command (or command "")
                :start-path (or start-dir
-                               (ignore-errors (sb-posix:getcwd))
+                               (nerimux/ports:working-directory)
                                "")
                :screen (make-screen cols rows))))
 
@@ -116,7 +116,7 @@
             (pane-tty pane) (or slave-path "")
             (pane-start-command pane) (or default-command "")
             (pane-start-path pane) (or start-dir
-                                       (ignore-errors (sb-posix:getcwd))
+                                       (nerimux/ports:working-directory)
                                        "")
             ;; The pane is alive again — clear the death record so
             ;; #{pane_dead_status} and friends read empty.

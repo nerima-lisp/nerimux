@@ -11,6 +11,11 @@
   (:export
    ;; POSIX symbol lookup, used by domain and application alike.
    #:find-posix-function
+   ;; Process environment / cwd, named here so domain code does not scatter raw
+   ;; SB-EXT calls.  Wrappers, not port variables -- see posix-port.lisp.
+   #:environment-value
+   #:environment-entries
+   #:working-directory
    #:*spawn-pty*
    #:*write-pty*
    #:*resize-pty*

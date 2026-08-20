@@ -29,7 +29,7 @@
                (opt-val  (nerimux/options:get-option opt-name nil)))
           (cond
             (opt-val (princ-to-string opt-val))
-            (t (or (sb-ext:posix-getenv
+            (t (or (nerimux/ports:environment-value
                     (substitute #\_ #\- (symbol-name key)))
                    "")))))))
 

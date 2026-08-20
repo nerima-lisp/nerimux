@@ -198,7 +198,7 @@
         :client-height        client-height
         :client-tty           client-tty
         :client-name          client-tty
-        :client-termname      (or (ignore-errors (sb-ext:posix-getenv "TERM")) "")
+        :client-termname      (or (nerimux/ports:environment-value "TERM") "")
         :client-pid           pid-str
         ;; #{client_prefix} is always "0".  It read *PREFIX-ACTIVE* out of the
         ;; NERIMUX package by find-symbol, and that symbol has never existed in
@@ -216,7 +216,7 @@
         :host                 hostname
         :host-short           (%short-hostname hostname)
         :time                 (%current-time-string)
-        :term-program         (or (ignore-errors (sb-ext:posix-getenv "TERM_PROGRAM")) "")
-        :colorterm            (or (ignore-errors (sb-ext:posix-getenv "COLORTERM")) "")
+        :term-program         (or (nerimux/ports:environment-value "TERM_PROGRAM") "")
+        :colorterm            (or (nerimux/ports:environment-value "COLORTERM") "")
         :history-limit        (format nil "~D"
                                       (or (nerimux/options:get-option "history-limit") 2000))))

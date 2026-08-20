@@ -117,7 +117,8 @@
         (:module "domain/ports"
          :serial t
          :components
-         ((:file "vcs-port-tests")))
+         ((:file "vcs-port-tests")
+          (:file "posix-port-tests")))
         (:module "infrastructure/vcs"
          :serial t
          :components

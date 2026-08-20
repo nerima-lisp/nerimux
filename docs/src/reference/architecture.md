@@ -81,9 +81,25 @@ A `bind` line now matches no handler at all and is silently dropped.
 
 The layering rule is:
 
-- `domain` has no I/O — it defines the session/window/pane model and the port
-  *variables* (`nerimux/ports:*spawn-pty*`, `*write-pty*`, …) that
-  infrastructure binds to a real implementation.
+- `domain` defines the session/window/pane model and, in `domain/ports/`, the
+  capabilities it needs from outside itself. Anything with more than one real
+  implementation is a port *variable* (`nerimux/ports:*spawn-pty*`,
+  `*write-pty*`, …) that infrastructure binds at startup — spawning a PTY and
+  talking to git are the cases that matter, and their fakes are genuinely
+  exercised by tests.
+
+  This used to read "`domain` has no I/O", which was not true and is still not:
+  reading this process's own environment and working directory
+  (`nerimux/ports:environment-value`, `environment-entries`,
+  `working-directory`) happens in `domain/ports/posix-port.lisp` as plain
+  wrappers, not bound variables. That is deliberate. Those have exactly one
+  implementation and always will — the tests that cover them stub by setting a
+  real environment variable, never by installing a fake — so a port variable
+  would be an abstraction with nothing on the other side, and an unbound one
+  would reproduce a failure this codebase has hit repeatedly: a port nobody
+  installs, whose fallback succeeds silently. The wrappers earn their place by
+  naming the dependency in one file instead of scattering raw `sb-ext:` calls
+  through `domain/model/` and `domain/format/`.
 - `application` holds use cases over the domain model: what is left in
   `commands/` (copy mode, the command-line tokenizer, pipe-pane, and pane PTY
   teardown), and `.tmux.conf` directive parsing in `config/`.

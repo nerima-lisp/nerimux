@@ -47,7 +47,7 @@
    SESSION may be NIL for bootstrap or pure geometry helpers — step 3 is skipped.
    The result is suitable for passing as :environment to sb-ext:run-program."
   ;; Step 1: base from current process.
-  (let ((table (%environment-strings-to-table (sb-ext:posix-environ))))
+  (let ((table (%environment-strings-to-table (nerimux/ports:environment-entries))))
     ;; Step 2: update-environment propagation (new-session -E suppresses this).
     (unless *suppress-update-environment*
       (dolist (pair (get-update-environment-vars))

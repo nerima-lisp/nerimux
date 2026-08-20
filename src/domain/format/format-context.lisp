@@ -130,7 +130,7 @@
         :mouse-x               (%current-mouse-event-coordinate :col)
         :mouse-y               (%current-mouse-event-coordinate :row)
         :session-count         (%server-session-count-string)
-        :session-path          (ignore-errors (sb-posix:getcwd))
+        :session-path          (nerimux/ports:working-directory)
         :client-session        (if session (nerimux/model:session-name session) "")))
 
 (defun %window-context-plist (window session session-active-window session-windows
