@@ -64,13 +64,17 @@
   ;; pipe-pane-open returns NIL when the shell program cannot be launched.
   ;; pipe-pane-open runs the command via `sh -c`, so a bogus *command* still
   ;; launches successfully (sh exists, then fails internally — matching tmux).
-  ;; To exercise the launch-failure → NIL path, point *default-shell* at a
-  ;; non-existent binary so process-kit:spawn itself fails.
+  ;; To exercise the launch-failure → NIL path, point the `default-shell'
+  ;; option at a non-existent binary so process-kit:spawn itself fails.
+  ;; Wrapped in with-isolated-config: set-option mutates *global-options* in
+  ;; place (it is not a dynamic binding), so without isolation the bogus
+  ;; shell would still be in effect for every test that runs afterward.
   (it "pipe-pane-open-invalid-command-returns-nil"
-    (let* ((pane   (%make-test-pane))
-           (nerimux/config:*default-shell* "/no/such/shell-5f3a9b2e")
-           (result (nerimux/commands:pipe-pane-open pane "echo hi")))
-      (expect (null result))))
+    (with-isolated-config
+      (nerimux/options:set-option "default-shell" "/no/such/shell-5f3a9b2e")
+      (let* ((pane   (%make-test-pane))
+             (result (nerimux/commands:pipe-pane-open pane "echo hi")))
+        (expect (null result)))))
 
   ;; pipe-pane-open returns NIL and leaves the pane clean when launch times out.
   ;;

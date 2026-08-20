@@ -101,7 +101,11 @@
 
 (defun e2e (binary)
   (format t "~&[e2e] driving ~A~%" binary)
-  (setf nerimux/config:*default-shell* binary)
+  ;; The shell to spawn lives in the `default-shell' option; the *default-shell*
+  ;; variable this used to set is gone.  This file is not part of the
+  ;; nerimux/test ASDF system, so a stale reference here compiles fine until the
+  ;; e2e suite is invoked on its own.
+  (nerimux/options:set-option "default-shell" binary)
   (multiple-value-bind (fd pid) (forkpty-with-shell 24 80)
     (unwind-protect
          (let ((marker "E2E_PROOF_4242")

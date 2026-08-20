@@ -9,6 +9,8 @@
     INFRASTRUCTURE package nerimux/pty fills in via install-pty-port at server or
     test setup time.")
   (:export
+   ;; POSIX symbol lookup, used by domain and application alike.
+   #:find-posix-function
    #:*spawn-pty*
    #:*write-pty*
    #:*resize-pty*

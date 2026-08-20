@@ -176,8 +176,11 @@
   session)
 
 (defun %shell-basename ()
-  "Return the basename component of *default-shell*, or \"window\" as fallback."
-  (let* ((shell (or *default-shell* "window"))
+  "Basename of the configured shell, or \"window\" as fallback.
+
+   Reads the `default-shell' option directly.  It used to read a cached copy in
+   nerimux/config, which is application state -- a domain file reaching upward."
+  (let* ((shell (or (nerimux/options:get-option "default-shell") "window"))
          (slash-pos (position #\/ shell :from-end t)))
     (if slash-pos
         (subseq shell (1+ slash-pos))

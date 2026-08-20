@@ -2,19 +2,20 @@
 
 ;;; ── Shell default ─────────────────────────────────────────────────────────
 ;;;
-;;; *default-shell* starts as "/bin/sh".  The ORCHESTRATE layer (main.lisp)
-;;; calls init-default-shell at startup to read $SHELL from the environment.
-;;; This keeps the DATA-layer defparameter free of I/O side-effects.
-
-(defparameter *default-shell* "/bin/sh"
-  "Shell binary launched for new panes.")
+;;; The shell to launch lives in the `default-shell' option and nowhere else.
+;;; There used to be a *default-shell* variable beside it that every writer
+;;; updated and every reader read, leaving the option itself inert -- so
+;;; `set-shell' could change the real shell while show-options still reported
+;;; the old one.  init-default-shell now writes the option like any other
+;;; configuration source; run-server calls it before loading the config file,
+;;; so a default-shell line still wins over $SHELL.
 
 (defun init-default-shell ()
-  "Set *DEFAULT-SHELL* from $SHELL if that variable is set and non-empty.
-   Call this once at program startup (in main.lisp) before spawning any panes."
+  "Set the `default-shell' option from $SHELL when that variable is non-empty.
+   Called once from run-server, before the config file is loaded."
   (let ((shell (sb-ext:posix-getenv "SHELL")))
     (when (and shell (plusp (length shell)))
-      (setf *default-shell* shell))))
+      (nerimux/options:set-option "default-shell" shell))))
 
 (defconstant +pty-buf-size+ 4096
   "Byte buffer size for PTY reads.")

@@ -52,12 +52,6 @@
        ,@(mapcar #'%expand-option-side-effect-rule rules))))
 
 (define-option-side-effect-handlers
-  ;; default-shell: update the shell used for new panes immediately.
-  ("default-shell"
-   (if unset-p
-       (setf *default-shell* "/bin/sh")
-       (when (%nonempty-string-p value)
-         (setf *default-shell* value))))
   ;; escape-time: sync into server-options so every set form takes effect.
   ("escape-time"
    (if unset-p

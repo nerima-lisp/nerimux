@@ -18,6 +18,63 @@
 ;;;; still passes.  These two checks are the only thing standing between that
 ;;;; edit and a silently re-bloated binary.
 
+;;; ── Layering guard helpers ───────────────────────────────────────────────────
+
+(defparameter *layer-rank*
+  '(("nerimux/model" . 0) ("nerimux/terminal" . 0) ("nerimux/terminal/actions" . 0)
+    ("nerimux/terminal/parser" . 0) ("nerimux/options" . 0) ("nerimux/buffer" . 0)
+    ("nerimux/hooks" . 0) ("nerimux/format" . 0) ("nerimux/ports" . 0)
+    ("nerimux/repository" . 0) ("nerimux/persistence" . 0)
+    ("nerimux/config" . 1) ("nerimux/commands" . 1) ("nerimux/picker" . 1)
+    ("nerimux/pty" . 2) ("nerimux/net" . 2) ("nerimux/protocol" . 2)
+    ("nerimux/transport" . 2) ("nerimux/vcs" . 2)
+    ("nerimux/renderer" . 3) ("nerimux/prompt" . 3) ("nerimux/input" . 3)
+    ("nerimux" . 4))
+  "Package name -> layer index, lowest first.  Encodes the layer order stated in
+   docs/src/reference/architecture.md: domain -> application -> infrastructure ->
+   presentation -> bootstrap.")
+
+(defun %strip-lisp-comments (text)
+  "TEXT with `;' comments blanked, so a package name mentioned in prose is not
+   read as a declared dependency.  This matters: the very comment explaining why
+   a :use clause was removed names the package it removed."
+  (with-output-to-string (out)
+    (dolist (line (uiop:split-string text :separator (list #\Newline)))
+      (let ((semi (position #\; line)))
+        (write-line (if semi (subseq line 0 semi) line) out)))))
+
+(defun %package-declared-dependencies (text)
+  "Parse TEXT (the contents of a package*.lisp file) into a list of
+   (PACKAGE-NAME . DEPENDENCY-NAMES), reading only the clauses BEFORE (:export --
+   i.e. :use and :import-from, the places a dependency is declared."
+  (let ((clean (%strip-lisp-comments text))
+        (result '())
+        (start 0))
+    (loop
+      (let ((hit (search "(defpackage #:" clean :start2 start)))
+        (unless hit (return))
+        (let* ((name-start (+ hit (length "(defpackage #:")))
+               (name-end   (position-if (lambda (c) (member c '(#\Space #\Newline #\) #\Tab)))
+                                        clean :start name-start))
+               (name       (subseq clean name-start name-end))
+               (next       (or (search "(defpackage #:" clean :start2 name-end)
+                               (length clean)))
+               (body       (subseq clean name-end next))
+               (head-end   (or (search "(:export" body) (length body)))
+               (head       (subseq body 0 head-end))
+               (deps       '())
+               (from       0))
+          (loop
+            (let ((d (search "#:" head :start2 from)))
+              (unless d (return))
+              (let ((e (position-if (lambda (c) (member c '(#\Space #\Newline #\) #\Tab)))
+                                    head :start (+ d 2))))
+                (push (subseq head (+ d 2) e) deps)
+                (setf from (or e (length head))))))
+          (push (cons name (nreverse deps)) result)
+          (setf start name-end))))
+    (nreverse result)))
+
 (describe "system-composition-suite"
 
   ;;; -- declared dependencies ---------------------------------------------------
@@ -85,4 +142,36 @@
       (expect workspace-pos)
       (expect compose-pos)
       (expect (< format-pos workspace-pos))
-      (expect (< workspace-pos compose-pos)))))
+      (expect (< workspace-pos compose-pos))))
+
+  ;;; -- layering -----------------------------------------------------------
+  ;;;
+  ;;; Nothing enforced the layer order, and three violations had accumulated
+  ;;; unnoticed: nerimux/model :use'd nerimux/config, which made every
+  ;;; domain->application reference UNQUALIFIED and therefore invisible to a
+  ;;; search for "nerimux/config:".  They surfaced only when someone read the
+  ;;; defpackage forms directly.
+  ;;;
+  ;;; Be precise about the reach.  This reads DECLARATIONS, not the call graph:
+  ;;; it catches a package declaring an upward :use or :import-from, which is
+  ;;; what re-opens the invisible-reference hole.  It does NOT catch one
+  ;;; qualified upward reference inside a function body -- that stays a
+  ;;; review-time check, and is at least greppable.
+  (it "no-package-declares-an-upward-layer-dependency"
+    (let ((violations '())
+          (edges 0))
+      (dolist (file (directory
+                     (merge-pathnames #P"src/bootstrap/package*.lisp"
+                                      (asdf:system-source-directory :nerimux))))
+        (dolist (entry (%package-declared-dependencies (%file-text file)))
+          (let ((mine (cdr (assoc (car entry) *layer-rank* :test #'string=))))
+            (when mine
+              (dolist (dep (cdr entry))
+                (let ((theirs (cdr (assoc dep *layer-rank* :test #'string=))))
+                  (when theirs
+                    (incf edges)
+                    (when (> theirs mine)
+                      (push (list (car entry) "->" dep) violations)))))))))
+      ;; Vacuity guard: a parser that matched nothing reports no violations.
+      (expect (> edges 10))
+      (expect (null violations)))))

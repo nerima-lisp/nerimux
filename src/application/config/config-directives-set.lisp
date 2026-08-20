@@ -34,7 +34,7 @@
   "Define fixed-arity config directives from canonical directive facts."
   `(define-config-directives
      ("set-shell" 1 (path)
-       (setf *default-shell* path)
+       (nerimux/options:set-option "default-shell" path)
        t)
      ;; Writes the `status' option, NOT a separate height variable.  It used to
      ;; set nerimux/config:*status-height* directly while leaving `status'

@@ -39,6 +39,14 @@
 ;;; fall back to the compile-time constant.  Injecting the cap as a callback
 ;;; rather than probing nerimux/options at call time keeps this file pure
 ;;; (no runtime package discovery) and testable in isolation.
+(defconstant +max-scrollback-lines+ 1000
+  "Scrollback cap used when *HISTORY-LIMIT-FUNCTION* is not installed.
+
+   This is the terminal model's own default, so it lives here rather than in the
+   config package: a domain file reaching up into application for its fallback
+   constant was a layering inversion, and the fallback is a property of the
+   scrollback buffer, not of the config file.")
+
 (defvar *history-limit-function* nil
   "A zero-argument function returning the current history-limit integer, or NIL.
    Install (lambda () (nerimux/options:get-option \"history-limit\")) at startup.")
@@ -47,7 +55,7 @@
 (defun %effective-history-limit ()
   "Return the history-limit in effect: callback result if available, else +max-scrollback-lines+."
   (or (and *history-limit-function* (funcall *history-limit-function*))
-      nerimux/config:+max-scrollback-lines+))
+      +max-scrollback-lines+))
 
 (defun trim-scroll-history (screen)
   "Cap the scrollback buffer of SCREEN to the current history-limit.

@@ -30,12 +30,22 @@
                ("/usr/bin/"  ""       "%shell-basename returns empty string for trailing-slash path")))
       (destructuring-bind (shell expected desc) entry
         (declare (ignore desc))
-        (let ((nerimux/config:*default-shell* shell))
+        (with-isolated-config
+          ;; NOT set-option: "default-shell" is registered :string, and its
+          ;; coercion is (format nil "~A" value), which turns the NIL case in
+          ;; this table into the *string* "NIL" instead of leaving the option
+          ;; unset/nil.  That would make the nil row assert against "NIL"
+          ;; rather than exercising %shell-basename's (or ... "window")
+          ;; fallback, which is the row's whole point.  Poking the isolated
+          ;; hash table directly stores SHELL verbatim, matching how the old
+          ;; dynamic *default-shell* binding held raw values with no coercion.
+          (setf (gethash "default-shell" nerimux/options:*global-options*) shell)
           (expect (string= expected (nerimux/model::%shell-basename)))))))
 
   ;; %shell-basename returns a string even for a trailing-slash path.
   (it "shell-basename-trailing-slash-is-string"
-    (let ((nerimux/config:*default-shell* "/usr/bin/"))
+    (with-isolated-config
+      (nerimux/options:set-option "default-shell" "/usr/bin/")
       (expect (stringp (nerimux/model::%shell-basename)))))
 
   ;;; ── session-insert-window ────────────────────────────────────────────────────

@@ -49,7 +49,7 @@
                                   (mapcar #'expand-assertion assertions))))
                (if cap-aware-p
                    `((let ((cap (or (nerimux/options:get-option "history-limit")
-                                    nerimux/config:+max-scrollback-lines+)))
+                                    nerimux/terminal:+max-scrollback-lines+)))
                        (declare (ignorable cap))
                        (with-screen (s ,width ,height)
                          ,@forms)))

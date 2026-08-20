@@ -257,7 +257,8 @@
   ;; %target-program-and-args with a NIL/empty DEFAULT-COMMAND returns the
   ;; configured default shell directly, with no extra args.
   (it "target-program-and-args-nil-command-uses-default-shell"
-    (let ((nerimux/config:*default-shell* "/bin/zsh"))
+    (with-isolated-config
+      (nerimux/options:set-option "default-shell" "/bin/zsh")
       (multiple-value-bind (program args search-p)
           (nerimux/pty::%target-program-and-args nil)
         (expect (string= "/bin/zsh" program))
@@ -267,7 +268,8 @@
   ;; %target-program-and-args requests a PATH search (SEARCH-P = T) when the
   ;; configured default shell is not an absolute path.
   (it "target-program-and-args-relative-shell-requests-path-search"
-    (let ((nerimux/config:*default-shell* "zsh"))
+    (with-isolated-config
+      (nerimux/options:set-option "default-shell" "zsh")
       (multiple-value-bind (program args search-p)
           (nerimux/pty::%target-program-and-args "")
         (declare (ignore args))

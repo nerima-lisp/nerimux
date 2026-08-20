@@ -8,9 +8,7 @@
     key handling, so bind/unbind now parse and do nothing.  See
     docs/src/reference/compatibility.md.")
   (:export
-   #:*default-shell*
    #:+pty-buf-size+
-   #:+max-scrollback-lines+
    #:+poll-timeout-us+
    #:+accept-timeout-us+
    #:+pty-poll-timeout-us+
@@ -30,13 +28,8 @@
    #:*process-boundary*
    ;; %if condition evaluator hook (set by top-level package)
    #:*config-condition-evaluator*
-   ;; Mouse-reporting callback hook (set by orchestrate/events-loop layer)
-   ;; Dynamic prefix key (primary and secondary)
-   ;; ORCHESTRATE-layer shell initializer
-   #:init-default-shell
-   ;; Lazy SB-POSIX symbol lookup (shared with nerimux/model's process
-   ;; environment helpers, which used to carry their own identical copy)
-   #:find-posix-function))
+   ;; Reads $SHELL into the `default-shell' option; called once from run-server.
+   #:init-default-shell))
 
 ;; No :import-from for the sibling kits: every descriptor-level operator in
 ;; src/infrastructure/pty/ is written qualified (cl-tty-kit:, process-kit:,

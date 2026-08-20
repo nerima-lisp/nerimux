@@ -12,8 +12,7 @@
 ;;; Import the config-directives symbols we need
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (import '(nerimux/config:*default-shell*
-            nerimux/config:apply-config-directive
+  (import '(nerimux/config:apply-config-directive
             nerimux/config:load-config-from-string
             nerimux/config:load-config-from-stream
             nerimux/config:config-file-path
@@ -87,7 +86,12 @@
     (with-isolated-config
       (assert-config-directive-applied '("set-shell" "/usr/bin/zsh")
                                        "set-shell directive")
-      (expect (string= "/usr/bin/zsh" *default-shell*))
+      ;; set-shell writes the `default-shell' option, which is what the PTY
+      ;; layer and %shell-basename read.  It used to write a cached special that
+      ;; left the option itself stale, so show-options could report one shell
+      ;; while a different one was spawned.
+      (expect (string= "/usr/bin/zsh"
+                       (nerimux/options:get-option "default-shell")))
       (assert-config-directive-applied '("set-status-height" "2")
                                        "set-status-height directive")
       (expect (= 2 (nerimux/options:status-line-count)))))

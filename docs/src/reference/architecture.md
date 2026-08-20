@@ -95,6 +95,20 @@ The layering rule is:
   event loops, and the per-client dispatch that ties the layers below
   together. Nothing below it may depend on it.
 
+That rule is enforced, as far as a test can enforce it. `no-package-declares-an-upward-layer-dependency`
+(`t/unit/bootstrap/system-composition-tests.lisp`) reads every `defpackage` form
+and fails if one declares an upward `:use` or `:import-from`. It reads
+declarations, not the call graph — so it catches a package re-opening the hole,
+not a single qualified upward reference inside a function body.
+
+That distinction is the reason it exists. `nerimux/model` used to `:use`
+`nerimux/config`, which made every domain→application reference *unqualified* and
+so invisible to a search for `nerimux/config:`. Three had accumulated
+(`*status-height*`, `*default-shell*`, `find-posix-function`) and none showed up
+until somebody read the package forms. With the clause gone, such a reference has
+to be written qualified — visible to grep, and a compile error if the package does
+not export it.
+
 Terminal code separates data (`types`) from logic (`actions`, `csi`, `sgr`, the
 CPS parser) one level further down.
 

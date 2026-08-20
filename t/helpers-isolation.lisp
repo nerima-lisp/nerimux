@@ -11,13 +11,11 @@
 (defmacro with-isolated-config (&body body)
   "Run BODY with the mutable config specials dynamically rebound to copies,
    so directives applied in a test never leak into other suites.
-   Isolates: default-shell,
-             global-options (copy), server-options (copy).
-   Status-bar row count is derived from the `status' option
-   (nerimux/options:status-line-count) rather than a cached special, so
-   isolating global-options already isolates it -- no separate binding needed."
-  `(let ((nerimux/config:*default-shell* nerimux/config:*default-shell*)
-         (nerimux/options:*global-options*
+   Isolates: global-options (copy), server-options (copy).
+   Both the status-bar row count and the default shell are derived from options
+   (`status' and `default-shell'), not from cached specials, so isolating
+   global-options isolates them too -- no separate bindings needed."
+  `(let ((nerimux/options:*global-options*
           (let ((h (make-hash-table :test #'equal)))
             (maphash (lambda (k v) (setf (gethash k h) v))
                      nerimux/options:*global-options*)

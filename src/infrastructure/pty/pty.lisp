@@ -83,10 +83,11 @@
    (SEARCH-P) unless it is already given as an absolute path."
   (if (%string-non-empty-p default-command)
       (values "/bin/sh" (list "-c" default-command) nil)
-      (values nerimux/config:*default-shell* nil
-              (not (and (stringp nerimux/config:*default-shell*)
-                        (plusp (length nerimux/config:*default-shell*))
-                        (char= (char nerimux/config:*default-shell* 0) #\/))))))
+      (let ((shell (nerimux/options:get-option "default-shell")))
+        (values shell nil
+                (not (and (stringp shell)
+                          (plusp (length shell))
+                          (char= (char shell 0) #\/)))))))
 
 (defun %remember-pty-process (master-fd pty)
   "Record the cl-tty-kit PTY struct so pty-close can reap it and so the struct

@@ -94,7 +94,8 @@
      (:module "domain/ports"
       :serial t
       :components
-      ((:file "pty-port")
+      ((:file "posix-port")
+       (:file "pty-port")
        (:file "vcs-port")))   ; port abstractions (load before infrastructure adapters)
      (:module "infrastructure/pty"
       :serial t

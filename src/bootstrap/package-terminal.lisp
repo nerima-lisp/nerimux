@@ -58,6 +58,7 @@
    #:trim-scroll-history
    #:clear-scrollback
    #:trim-below-cursor
+   #:+max-scrollback-lines+
    #:*history-limit-function*
    #:*alternate-screen-enabled-function*
    #:*scroll-on-clear-function*
@@ -321,6 +322,7 @@
    ;; Copy-mode rectangle-select flag
    #:screen-copy-rect-select-p
    ;; Scroll history limit callback (injected at startup)
+   #:+max-scrollback-lines+
    #:*history-limit-function*
    #:*alternate-screen-enabled-function*
    #:*scroll-on-clear-function*))

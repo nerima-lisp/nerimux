@@ -1,8 +1,15 @@
 ;;; Domain model and domain service packages.
 
 (defpackage #:nerimux/model
+  ;; NOT #:nerimux/config.  That package is the APPLICATION layer and this is
+  ;; DOMAIN, the bottom of the stack -- the dependency would point upward.  It
+  ;; used to be here, which made such references unqualified and therefore
+  ;; invisible: three symbols had accumulated (*status-height*, *default-shell*,
+  ;; find-posix-function) and none showed up in a search for "nerimux/config:".
+  ;; With the clause gone, a future reach across that boundary has to be written
+  ;; qualified, and a package that does not export it fails to compile.
   (:use #:cl
-        #:nerimux/config #:nerimux/ports #:nerimux/terminal)
+        #:nerimux/ports #:nerimux/terminal)
   (:import-from #:cl-concurrent-kit #:make-lock #:with-lock-held)
   (:documentation
    "DOMAIN layer: the aggregate every other package is ultimately about — session

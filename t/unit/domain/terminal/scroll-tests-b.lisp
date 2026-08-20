@@ -200,7 +200,7 @@
   ;; *history-limit-function* = NIL causes trim-scroll-history to use +max-scrollback-lines+.
   (it "history-limit-fn-nil-falls-back-to-constant"
     (with-screen (s 5 3)
-      (let ((cap nerimux/config:+max-scrollback-lines+))
+      (let ((cap nerimux/terminal:+max-scrollback-lines+))
         ;; Pre-populate scrollback at the cap
         (setf (nerimux/terminal/types:screen-scrollback s)
               (loop repeat cap

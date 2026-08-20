@@ -76,13 +76,13 @@
                                :output-stream output-stream
                                :output-thread output-thread
                                :process proc)))
-      (let* ((shell (or nerimux/config:*default-shell* "/bin/sh"))
+      (let* ((shell (or (nerimux/options:get-option "default-shell") "/bin/sh"))
              (new-proc
                ;; :search t is required, not optional.  process-kit:spawn defaults
                ;; :search to NIL and passes that straight to run-program, so a
                ;; bare shell name never resolves on PATH.  Unlike the two
                ;; /bin/sh literals elsewhere in this repo, SHELL here comes from
-               ;; *default-shell*, which init-default-shell fills from $SHELL and
+               ;; the `default-shell' option, which init-default-shell fills from
                ;; the `set-shell` directive accepts unvalidated.  Same reasoning
                ;; as format-context-os-probe.lisp:38-40.
                ;;
