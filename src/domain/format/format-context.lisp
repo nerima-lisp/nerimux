@@ -88,12 +88,20 @@
     (cdr (assoc group alist))))
 
 (defun %current-mouse-event-coordinate (key)
-  "The :COL/:ROW coordinate of the in-flight mouse event (runtime special
-   resolved by name), as a string — or \"\" outside a mouse dispatch."
-  (let* ((sym   (find-symbol "*CURRENT-MOUSE-EVENT*" "NERIMUX"))
-         (event (and sym (boundp sym) (symbol-value sym)))
-         (value (and event (getf event key))))
-    (if value (format nil "~D" value) "")))
+  "Always \"\": there is no mouse dispatch to be inside of.
+
+   This used to resolve *CURRENT-MOUSE-EVENT* out of the NERIMUX package with
+   find-symbol.  That symbol has never existed anywhere in this tree, so
+   find-symbol returned NIL, (and NIL ...) short-circuited, and the function
+   answered \"\" every time -- correct output reached by a mechanism that could
+   not work, which is worse than a constant because it reads as live wiring.
+
+   The mouse pipeline (presentation/events/) went with the tmux keystroke
+   dispatch, so there is no event to report and there will not be one.  Written
+   as a constant for the same reason #{client_prefix} and #{client_flags} are,
+   and pinned by a test, so making it dynamic again has to come with wiring."
+  (declare (ignore key))
+  "")
 
 (defun %session-context-plist (session window-count)
   "Build the session-scoped slice of the format-context plist for SESSION.

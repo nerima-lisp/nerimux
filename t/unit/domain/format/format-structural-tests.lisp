@@ -14,8 +14,9 @@
 ;;; Two variables rotted exactly that way and were found only by a hand audit:
 ;;; *PREFIX-ACTIVE*, which had never been defined anywhere in this tree, and
 ;;; *CLIENT-FLAGS*, whose only writer (`refresh-client -f') went with the tmux
-;;; command table.  Both are now plain constants.  A third, *CURRENT-MOUSE-EVENT*,
-;;; is knowingly dead and is listed as the exception below.
+;;; command table.  A third, *CURRENT-MOUSE-EVENT*, never existed at all and fed
+;;; #{mouse_x}/#{mouse_y}.  All three are now plain constants, so the scan below
+;;; carries no exception list -- see the note on it for why that matters.
 ;;;
 ;;; The helpers rescan the format sources on every run rather than checking a
 ;;; hardcoded list, so a NEW find-symbol site is covered without editing this
@@ -182,11 +183,11 @@
         (nerimux/commands:copy-mode-enter (nerimux/model:pane-screen pane))
         (expect (string= "copy-mode" (expand "#{client_key_table}"))))))
 
-  ;; #{mouse_x}/#{mouse_y} resolve NERIMUX::*CURRENT-MOUSE-EVENT* by name (so the
-  ;; format layer stays free of any umbrella package) rather than depending on it
-  ;; directly.  That special was only ever bound by the mouse-dispatch pipeline in
-  ;; presentation/events, which has been removed with no replacement, so it is now
-  ;; permanently unbound in production and both variables always expand to "".
+  ;; #{mouse_x}/#{mouse_y} are constants, not lookups.  They used to resolve
+  ;; NERIMUX::*CURRENT-MOUSE-EVENT* by name -- a symbol that never existed
+  ;; anywhere in this tree -- so they answered "" through a mechanism that could
+  ;; not have worked even before the mouse-dispatch pipeline was deleted.  The
+  ;; answer is unchanged; what changed is that the code now says so.
   (it "format-context-mouse-coordinates-empty-outside-dispatch"
     (with-format-context (sess win pane ctx) ()
       (declare (ignore sess win pane))
@@ -210,15 +211,18 @@
   ;; Every NERIMUX symbol the format layer resolves by name must still exist.
   ;; See the header comment for why this is scanned rather than listed, and for
   ;; the two variables that rotted before this guard existed.
+  ;; No allow-list.  There used to be one, holding *CURRENT-MOUSE-EVENT*, and it
+  ;; is gone because the last unresolvable target is gone: %current-mouse-event-
+  ;; coordinate is now a constant rather than a lookup that could never succeed.
+  ;; An exception list in a guard like this is self-defeating -- it makes the
+  ;; guard green while preserving exactly the condition the guard exists to find.
   (it "format-layer-find-symbol-targets-all-resolve"
-    (let ((known-dead '("*CURRENT-MOUSE-EVENT*"))
-          (unresolved '())
+    (let ((unresolved '())
           (checked 0))
       (dolist (file (%format-source-files))
         (dolist (name (%nerimux-find-symbol-targets (%file-text file)))
           (incf checked)
-          (unless (or (member name known-dead :test #'string=)
-                      (find-symbol name "NERIMUX"))
+          (unless (find-symbol name "NERIMUX")
             (push (list (file-namestring file) name) unresolved))))
       ;; Non-vacuity: if the scan matched nothing, the loop above asserts nothing.
       (expect (plusp checked))
