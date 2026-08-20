@@ -2,7 +2,7 @@
 
 ;;;; target tests — part B: %sigil-id, %name-prefix-p, edge cases for
 ;;;; find-session/window/pane-by-target, resolve-target window-only / multi-session,
-;;;; %non-empty, parse-target table-driven, pane-by-numeric-index,
+;;;; parse-target table-driven, pane-by-numeric-index,
 ;;;; multi-digit ids, resolve-target empty string.
 
 (describe "target-suite"
@@ -107,33 +107,6 @@
           (nerimux::resolve-target registry "two")
         (declare (ignore _rw _rp))
         (expect (eq s2 rs)))))
-
-  ;;; ── %non-empty pure helper ───────────────────────────────────────────────────
-
-  ;; %non-empty returns the string for non-empty input; NIL for empty string or NIL input.
-  (it "non-empty-table"
-    (dolist (row '(("hello" "hello" "%non-empty of \"hello\" must return itself")
-                   (""      nil     "%non-empty of empty string must return NIL")
-                   (nil     nil     "%non-empty of NIL input must return NIL")))
-      (destructuring-bind (input expected desc) row
-        (declare (ignore desc))
-        (expect (equal expected (nerimux::%non-empty input))))))
-
-  ;;; ── %parse-integer-or-nil pure helper ────────────────────────────────────────
-
-  ;; %parse-integer-or-nil parses numeric strings, supports parse-integer keywords, and returns NIL for invalid input.
-  (it "parse-integer-or-nil-table"
-    (dolist (row '(("0"    0   nil                         "zero parses")
-                   ("42"   42  nil                         "multi-digit parses")
-                   ("-7"   -7  nil                         "signed integers parse")
-                   ("1f"   31  (:radix 16)                "hexadecimal parsing works")
-                   ("123x" 123 (:end 3)                   "substring parsing works")
-                   ("abc"  nil nil                        "alphabetic input returns NIL")
-                   (""     nil nil                        "empty string returns NIL")
-                   (nil    nil nil                        "NIL input returns NIL")))
-      (destructuring-bind (input expected args desc) row
-        (declare (ignore desc))
-        (expect (eql expected (apply #'nerimux::%parse-integer-or-nil input args))))))
 
   ;;; ── resolve-target with pane specified as numeric index ─────────────────────
 

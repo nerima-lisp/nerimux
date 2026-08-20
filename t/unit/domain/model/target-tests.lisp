@@ -7,27 +7,6 @@
 
 (describe "target-suite"
 
-  ;;; ── %parse-integer-or-nil direct tests ──────────────────────────────────────
-  ;;;
-  ;;; %parse-integer-or-nil is a private helper; the success path is covered
-  ;;; implicitly by the numeric-index lookup paths in find-window-by-target /
-  ;;; find-pane-by-target.  This test covers the failure paths directly.
-
-  ;; %parse-integer-or-nil must return NIL when STRING does not represent an integer.
-  (it "parse-integer-or-nil-returns-nil-for-non-integer-string"
-    (dolist (bad '("" "abc" "1.5" "12abc" " "))
-      (expect (null (nerimux::%parse-integer-or-nil bad)))))
-
-  ;; %parse-integer-or-nil must return NIL when given NIL (not a string).
-  (it "parse-integer-or-nil-returns-nil-for-nil-input"
-    (expect (null (nerimux::%parse-integer-or-nil nil))))
-
-  ;; %parse-integer-or-nil must return the integer value when the string is valid.
-  (it "parse-integer-or-nil-parses-valid-integer"
-    (dolist (pair '(("0" 0) ("42" 42) ("-3" -3)))
-      (destructuring-bind (str expected) pair
-        (expect (= expected (nerimux::%parse-integer-or-nil str))))))
-
   ;;; ── %parse-session-component direct tests ───────────────────────────────────
   ;;;
   ;;; %parse-session-component has non-trivial logic for the colon/dot cases.

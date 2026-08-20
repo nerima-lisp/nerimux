@@ -1,3 +1,20 @@
+(defpackage #:nerimux/text
+  (:use #:cl)
+  (:documentation
+   "FOUNDATION: string-to-value coercions with no nerimux dependency of any kind.
+    Deliberately the first module ASDF loads after the package declarations, so
+    every later layer may call it and it can call none of them.
+
+    It exists because these two functions previously lived in the top-level
+    NERIMUX package, and five packages across three layers reached up into it as
+    NERIMUX::%PARSE-INTEGER-OR-NIL -- a double-colon reference, which bypasses
+    both the export list and the DEFPACKAGE form, so no declaration recorded the
+    dependency and the layering test could not see it.  Three of those callers
+    were also compiled before the file that defined it.")
+  (:export
+   #:parse-integer-or-nil
+   #:non-empty-string))
+
 (defpackage #:nerimux/config
   (:use #:cl)
   (:documentation
@@ -28,6 +45,12 @@
    #:*process-boundary*
    ;; %if condition evaluator hook (set by top-level package)
    #:*config-condition-evaluator*
+   ;; Session lookup hook, same shape and for the same reason: the live session
+   ;; registry belongs to the BOOTSTRAP layer, and set-environment -t needs to
+   ;; resolve a target name against it.  Calling nerimux::server-find-session
+   ;; directly would be this APPLICATION package depending on the layer above it.
+   ;; Installed by run-server; see %install-composition-root-hooks.
+   #:*session-lookup*
    ;; Reads $SHELL into the `default-shell' option; called once from run-server.
    #:init-default-shell))
 

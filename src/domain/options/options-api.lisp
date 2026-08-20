@@ -39,7 +39,7 @@
    ;; option presence via get-option before calling set-option.
    (cond
      ((stringp value)
-      (or (nerimux::%parse-integer-or-nil value :junk-allowed t) 0))
+      (or (nerimux/text:parse-integer-or-nil value :junk-allowed t) 0))
      ((numberp value)
       (truncate value))
      (t 0)))

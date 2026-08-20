@@ -43,7 +43,7 @@
      ;; one.  nerimux/options:status-line-count clamps to +MAX-STATUS-LINES+ on
      ;; read, so the cap does not need repeating here.
      ("set-status-height" 1 (n)
-       (let ((height (nerimux::%parse-integer-or-nil n :junk-allowed t)))
+       (let ((height (nerimux/text:parse-integer-or-nil n :junk-allowed t)))
          (when (and height (plusp height))
            (nerimux/options:set-option "status" height)
            t)))

@@ -57,7 +57,7 @@
 (defun %find-session-by-id-notation (name)
   "Return the session referenced by $N notation in NAME, or NIL."
   (when (char= (char name 0) #\$)
-    (let ((id (%parse-integer-or-nil (subseq name 1))))
+    (let ((id (nerimux/text:parse-integer-or-nil (subseq name 1))))
       (when id
         (find id (mapcar #'cdr *server-sessions*) :key #'session-id)))))
 

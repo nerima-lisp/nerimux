@@ -17,9 +17,23 @@
                (when rest (setf rest (cdr rest)))))))
       (values remaining remove-p global-p target-p target-name))))
 
+(defvar *session-lookup* nil
+  "Function of one argument (a target name) returning a session, or NIL.
+
+   The live session registry belongs to the BOOTSTRAP layer, so resolving a
+   target name here used to be written NERIMUX::SERVER-FIND-SESSION -- this
+   APPLICATION package reaching up into the layer above it, through a
+   double-colon reference that no DEFPACKAGE recorded.  Same shape as
+   *config-condition-evaluator*, and installed at the same point.
+
+   NIL means unresolvable rather than an error, matching what the old call
+   returned for an unknown name.")
+
 (defun %apply-set-environment-to-session (target-name remove-p var-name var-value)
   "Apply a `set-environment -t TARGET-NAME` directive to a session overlay."
-  (let ((session (and target-name (nerimux::server-find-session target-name))))
+  (let ((session (and target-name
+                      *session-lookup*
+                      (funcall *session-lookup* target-name))))
     (when (and session var-name)
       (if remove-p
           (nerimux/model:session-unset-environment session var-name)

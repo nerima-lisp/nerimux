@@ -143,8 +143,8 @@
   (ignore-errors (%terminate-pipe-process process))
   (when output-thread
     (ignore-errors
-      (nerimux::%join-thread-with-timeout output-thread
-                                          +pipe-pane-close-timeout+)))
+      (cl-concurrent-kit:join-thread output-thread
+                                     :timeout +pipe-pane-close-timeout+)))
   (%pipe-pane-reset pane))
 
 (defun pipe-pane-close (pane)

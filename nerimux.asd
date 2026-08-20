@@ -74,6 +74,13 @@
        :pathname "bootstrap"
        :serial t
        :components ((:file "package")))  ; loads package-* fragments; defines all packages
+     ;; Foundation: depends on nothing, so it loads before every layer that calls
+     ;; it.  Placement is load-bearing -- domain/terminal, domain/format and
+     ;; application/config all call parse-integer-or-nil, and all three used to be
+     ;; compiled before the file that defined it.
+     (:module "domain/text"
+      :serial t
+      :components ((:file "text-parse")))
      (:module "application/config"
       :serial t
       :components

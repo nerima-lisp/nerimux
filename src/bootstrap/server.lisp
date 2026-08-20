@@ -113,13 +113,19 @@
                      `(,condition ,@body)))
                  rules))))
 
-(defun %install-option-callbacks ()
-  "Install the option-reader ports the terminal layer consults.
+(defun %install-composition-root-hooks ()
+  "Install every callback a lower layer needs from this, the composition root.
 
-   Each of these is a zero-argument callback the domain calls to read an option
-   WITHOUT depending on the options package directly.  When one is not installed
-   the domain falls back -- and every fallback succeeds silently, which is why
-   this being missing produced no error and no warning:
+   Two kinds live here.  The option readers let the terminal layer read an option
+   WITHOUT depending on the options package, and *session-lookup* lets the config
+   layer resolve a target name against the live session registry WITHOUT
+   depending on this bootstrap package.  Both are the same dependency inversion,
+   and both are installed in one function so there is a single place to forget
+   rather than several.
+
+   Each of these is a callback the domain or application calls.  When one is not
+   installed the caller falls back -- and every fallback succeeds silently, which
+   is why this being missing produced no error and no warning:
 
      *history-limit-function*             unset -> trimming uses a fixed 1000,
                                           so `history-limit' (default 2000) had
@@ -132,15 +138,21 @@
                                           turn the alt screen off.
      *scroll-on-clear-function*           unset -> same shape.
 
-   These lived in the deleted main.lisp and were only ever called on the
-   standalone / control-mode startup path; run-server never called them, so on
-   the surviving entry point these three options were inert."
+     nerimux/config:*session-lookup*      unset -> set-environment -t resolves
+                                          nothing, exactly as an unknown target
+                                          name would.
+
+   The three option readers lived in the deleted main.lisp and were only ever
+   called on the standalone / control-mode startup path; run-server never called
+   them, so on the surviving entry point these three options were inert."
   (setf nerimux/terminal:*history-limit-function*
         (lambda () (nerimux/options:get-option "history-limit"))
         nerimux/terminal:*alternate-screen-enabled-function*
         (lambda () (nerimux/options:get-option "alternate-screen"))
         nerimux/terminal:*scroll-on-clear-function*
-        (lambda () (nerimux/options:get-option "scroll-on-clear"))))
+        (lambda () (nerimux/options:get-option "scroll-on-clear"))
+        nerimux/config:*session-lookup*
+        #'server-find-session))
 
 (defun run-server (name)
   "Run a headless server owning a session, serving clients attaching to
@@ -148,7 +160,7 @@
    window is killed."
   (require :sb-posix)
   (install-pty-port)              ; wire the PTY adapter into the domain port
-  (%install-option-callbacks)     ; wire the option-reader ports (see above)
+  (%install-composition-root-hooks) ; wire every lower-layer callback (see above)
   ;; $SHELL first, so a default-shell line in the config file still wins.
   (init-default-shell)
   (ignore-errors (load-config-file))

@@ -64,9 +64,9 @@
                         :start2 0 :end2 prefix-len)
                (char= (char name (1- name-len)) #\])
                (%decimal-digits-p name prefix-len (1- name-len)))
-      (nerimux::%parse-integer-or-nil name
-                                      :start prefix-len
-                                      :end (1- name-len)))))
+      (nerimux/text:parse-integer-or-nil name
+                                         :start prefix-len
+                                         :end (1- name-len)))))
 
 (defun %array-entry-base-name (name)
   "Return BASE when NAME is BASE[N], otherwise NIL."

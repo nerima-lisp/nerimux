@@ -114,6 +114,10 @@
           (:file "repository-tests")
           (:file "worktree-tests")
           (:file "attention-tests")))
+        (:module "domain/text"
+         :serial t
+         :components
+         ((:file "text-parse-tests"))) ; parse-integer-or-nil / non-empty-string; moved out of target-suite with the functions
         (:module "domain/ports"
          :serial t
          :components

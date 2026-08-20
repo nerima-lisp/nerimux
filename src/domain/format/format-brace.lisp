@@ -14,7 +14,7 @@
    Missing, empty, or non-timestamp values expand to the empty string."
   (let* ((looked-up (%lookup context (%variable-to-keyword rest)))
          (ts        (and (stringp looked-up) (plusp (length looked-up))
-                         (nerimux::%parse-integer-or-nil looked-up :junk-allowed t))))
+                         (nerimux/text:parse-integer-or-nil looked-up :junk-allowed t))))
     (when (and ts (plusp ts))
       (write-string (%strftime-format-at "" ts) out))))
 
@@ -34,7 +34,7 @@
 (defun %expand-charcode-modifier (rest context out)
   "#{a:N} — character whose code is N (bare literal or nested #{...} operand)."
   (let* ((n-str (if (search "#{" rest) (expand-format rest context) rest))
-         (code  (nerimux::%parse-integer-or-nil n-str :junk-allowed t))
+         (code  (nerimux/text:parse-integer-or-nil n-str :junk-allowed t))
          ;; The surrogate block is excluded for the same reason SAFE-CODE-CHAR
          ;; excludes it: CHAR-CODE-LIMIT admits D800-DFFF, but a lone surrogate
          ;; cannot be UTF-8 encoded, and an expanded format string reaches

@@ -111,19 +111,61 @@ The layering rule is:
   event loops, and the per-client dispatch that ties the layers below
   together. Nothing below it may depend on it.
 
-That rule is enforced, as far as a test can enforce it. `no-package-declares-an-upward-layer-dependency`
-(`t/unit/bootstrap/system-composition-tests.lisp`) reads every `defpackage` form
-and fails if one declares an upward `:use` or `:import-from`. It reads
-declarations, not the call graph — so it catches a package re-opening the hole,
-not a single qualified upward reference inside a function body.
+Below `domain` sits one thing that is not a layer so much as a floor:
+`nerimux/text` (`src/domain/text/`), string-to-value coercions with no nerimux
+dependency at all. ASDF loads it first and anything may call it.
 
-That distinction is the reason it exists. `nerimux/model` used to `:use`
+That rule is enforced by two tests in
+`t/unit/bootstrap/system-composition-tests.lisp`, which exist because each
+catches what the other cannot.
+
+`no-package-declares-an-upward-layer-dependency` reads every `defpackage` form
+and fails if one declares an upward `:use` or `:import-from`. It catches a
+package re-opening the hole wholesale. `nerimux/model` used to `:use`
 `nerimux/config`, which made every domain→application reference *unqualified* and
 so invisible to a search for `nerimux/config:`. Three had accumulated
 (`*status-height*`, `*default-shell*`, `find-posix-function`) and none showed up
-until somebody read the package forms. With the clause gone, such a reference has
-to be written qualified — visible to grep, and a compile error if the package does
-not export it.
+until somebody read the package forms.
+
+But a declaration-based check has a blind spot it cannot close by construction: a
+reference written `nerimux::%some-helper` appears in no `defpackage` form, so
+nothing declares it. Double-colon also bypasses the export list. The first test
+was green while four such dependencies existed — `%parse-integer-or-nil` (in
+fourteen places, from three layers, three of them compiled *before* the file that
+defined it), `%join-thread-with-timeout`, `server-find-session`, and
+`*clock-mode-pane-id*`.
+
+So the second test, `no-source-file-references-a-higher-layer-package`, scans
+source text rather than declarations: it strips comments, strings and character
+literals, then maps every `pkg:sym` and `pkg::sym` reference to the referenced
+package's layer and fails on any that points upward. Direction is what it judges;
+using `::` to reach *downward* is an export-hygiene question, not a layering one,
+and it does not fail on that.
+
+It also fails when a `nerimux/…` package carries no layer marker in its
+`defpackage` docstring at all. That case is currently empty, and it is kept
+deliberately: a package nothing classifies is a package silently exempt from the
+whole check, which is the same shape of hole as the one above. Failing closed on
+it costs nothing today and prevents the next unmarked package from escaping.
+
+The first run of this test found three violations nobody had reported —
+`nerimux/version:version-string`, reached from `domain/terminal/csi-replies.lisp`,
+`domain/format/format-context-screen.lisp` and
+`application/config/config-directives-set.lisp`. The package had labelled itself
+BOOTSTRAP while depending on nothing, loading first, and returning a constant. It
+is now FOUNDATION. The label was wrong, not the callers — worth remembering when
+this test next goes red, because "the reference is illegal" and "the layer
+assignment is wrong" produce the identical failure.
+
+The four violations were resolved three different ways, which is the useful part:
+`parse-integer-or-nil` moved down to the new foundation package;
+`%join-thread-with-timeout` was replaced at its one application-layer call site
+by the `cl-concurrent-kit:join-thread` it already wrapped; `server-find-session`
+became the injected `nerimux/config:*session-lookup*` hook; and
+`*clock-mode-pane-id*` was deleted along with the feature, because nothing in
+`src/` ever assigned it. Moving code down, calling the underlying library,
+inverting the dependency, deleting the feature — pick by which one the case
+actually is, rather than reaching for a port every time.
 
 Terminal code separates data (`types`) from logic (`actions`, `csi`, `sgr`, the
 CPS parser) one level further down.

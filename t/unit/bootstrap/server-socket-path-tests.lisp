@@ -118,7 +118,7 @@
     (let ((nerimux/terminal:*history-limit-function* nil)
           (nerimux/terminal:*alternate-screen-enabled-function* nil)
           (nerimux/terminal:*scroll-on-clear-function* nil))
-      (nerimux::%install-option-callbacks)
+      (nerimux::%install-composition-root-hooks)
       (expect (functionp nerimux/terminal:*history-limit-function*))
       (expect (functionp nerimux/terminal:*alternate-screen-enabled-function*))
       (expect (functionp nerimux/terminal:*scroll-on-clear-function*))
@@ -133,9 +133,30 @@
   (it "installed-history-limit-port-follows-the-live-option"
     (let ((nerimux/terminal:*history-limit-function* nil)
           (original (nerimux/options:get-option "history-limit")))
-      (nerimux::%install-option-callbacks)
+      (nerimux::%install-composition-root-hooks)
       (unwind-protect
            (progn
              (nerimux/options:set-option "history-limit" 4321)
              (expect (eql 4321 (funcall nerimux/terminal:*history-limit-function*))))
-        (nerimux/options:set-option "history-limit" original)))))
+        (nerimux/options:set-option "history-limit" original))))
+
+  ;; The config layer resolves `set-environment -t TARGET' through this hook
+  ;; rather than calling NERIMUX::SERVER-FIND-SESSION, which would be the
+  ;; APPLICATION layer reaching up into BOOTSTRAP.  The hook defaults to NIL and
+  ;; every unresolved lookup answers NIL, so an uninstalled hook would look
+  ;; exactly like an unknown target name -- silent, which is the failure mode the
+  ;; three option ports above already demonstrated.  Hence this assertion lives
+  ;; here, against the composition root, and not only in the config tests: the
+  ;; config test helper binds the hook itself and therefore cannot prove that
+  ;; run-server does.
+  ;;
+  ;; Checking FUNCTIONP alone would pass for a hook wired to the wrong function,
+  ;; so the installed hook is called against a registry holding a known session.
+  (it "run-server-installs-the-session-lookup-hook"
+    (let ((nerimux/config:*session-lookup* nil))
+      (nerimux::%install-composition-root-hooks)
+      (expect (functionp nerimux/config:*session-lookup*))
+      (let* ((session (make-fake-session :nwindows 1 :npanes 1))
+             (nerimux::*server-sessions* (list (cons "hook-probe" session))))
+        (expect (eq session (funcall nerimux/config:*session-lookup* "hook-probe")))
+        (expect (null (funcall nerimux/config:*session-lookup* "no-such-session")))))))
