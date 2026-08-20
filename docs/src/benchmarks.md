@@ -27,34 +27,46 @@ figures cover nerimux's own derivations only:
 | 2026-07-26 | `nix flake check` after the migration — 5 checks, with `default`, `weave`, `dataflow` and `formatting` rebuilt and `docs` cached | 78 s |
 
 Both runs build the test derivations from scratch; only the dependency closure
-is shared. The `docs` derivation is a `mkdocs build` of eight pages and is
+is shared. The `docs` derivation is a `mkdocs build` of the pages listed in
+`docs/mkdocs.yml`'s nav and is
 noise at this scale.
 
 Suite sizes at that second measurement: `default` 4277 cases (4276 passed, 1
-skipped), `weave` 26, `dataflow` 17. **All three rows above are stale.** The
-workspace-only conversion deleted the tmux command table and keystroke pipeline
-along with their tests, so `default` is 3335 cases and `weave` is 18 today
-(measured on this branch); `dataflow` is unchanged at 17. The wall-clock rows
-have not been re-measured against the smaller tree — they describe a 2026-07-26
-configuration with roughly a third more test code, and should not be quoted as
-current.
+skipped), `weave` 26, `dataflow` 17. **Every row above is stale, and the shape of
+the table has changed underneath them.** The workspace-only conversion deleted
+the tmux command table, the keystroke pipeline and the config key-table store
+along with their tests, and the `weave` check no longer exists at all — the
+`nerimux/reasoning` system it covered was retired with the key-table store it
+projected. `nix flake check` now runs four derivations, not five. `dataflow` is
+unchanged at 17; the `default` count has moved with every deletion pass, so read
+it from `nix build .#checks.<system>.default` rather than from here. The
+wall-clock rows have not been re-measured against the smaller tree — they
+describe a 2026-07-26 configuration with substantially more test code, and should
+not be quoted as current.
 
 ## Shipped core image size
 
 The workspace-only conversion removed 95 source files (the tmux command table,
-the keystroke pipeline, control mode, the standalone entry point). Both sides
-measured on the same host (aarch64-darwin) with the same flake lock, via
-`nix build .#nerimux` and `stat` on `lib/nerimux/nerimux.core`:
+the keystroke pipeline, control mode, the standalone entry point). The obvious
+question is how much that took off the shipped `nerimux.core`.
 
-| Tree | `nerimux.core` |
-|---|---|
-| `63647c9`, before the conversion | 18,352,592 bytes |
-| after the conversion | 17,552,576 bytes |
+**It is not currently answerable to the precision this page once claimed.**
+`nix build .#nerimux --rebuild` makes Nix's own determinism check fire: building
+the *same, unchanged* source twice does not reproduce a byte-identical
+`nerimux.core`. The build ends in
+`save-lisp-and-die ... :compression t`, and the compressed size of an SBCL core
+is sensitive to heap layout — symbol and hash-table ordering, gensym counters —
+not only to how much source went in.
 
-800,016 bytes smaller. The build uses `save-lisp-and-die ... :compression t` on
-both sides, so the two figures are comparable. This is image size only — no
-runtime latency claim is made here, and none of the removed code was on a hot
-path.
+Observed spread between builds of identical source was on the order of 10^5
+bytes, which is the same magnitude as the deltas that were being attributed to
+code removal. A single `stat` per side therefore cannot support a figure like
+"800,016 bytes smaller", and that claim has been withdrawn rather than restated
+with a different number.
+
+To make this measurable: take several `--rebuild` samples per side, establish
+the noise floor, and quote a figure only if the difference clears it. Until then
+this page records no core-size delta for the workspace-only conversion.
 
 ### Result
 
@@ -92,6 +104,28 @@ For a single suite:
 ```bash
 time nix build .#checks.$(nix eval --raw --impure --expr builtins.currentSystem).default
 ```
+
+## The one enforced budget, and how it is measured
+
+`renderer-suite/tui-kit > keeps the mandatory overview scale within the initial
+and scroll budgets` is the only performance figure this repository *enforces*.
+It renders the mandatory workspace scale (1000 organizations, 1000 repositories,
+5000 worktrees, 5000 panes) and requires both the initial frame and a
+fully-scrolled frame under **100 ms**.
+
+How that figure is produced matters, and was wrong for a long time. It used to
+be a single `get-internal-real-time` sample per frame with no warm-up. On a
+shared machine that measures machine availability as much as render cost: the
+same binary on the same tree measured **67–75 ms idle and 102–112 ms under
+load**, so the check inverted depending on what else was running. It failed
+repeatedly against changes that could not have affected rendering.
+
+`benchmark-workspace-overview` now discards a warm-up render of each frame and
+reports the **median of five measured runs**. The 100 ms requirement is
+unchanged — only the estimator is. This removes single-sample noise; it does not
+make the check immune to a saturated machine, and nothing can. If it goes red,
+check `uptime` first: on a 16-core machine a 1-minute load average above about
+10 puts the render over budget on its own.
 
 ## Not yet measured
 

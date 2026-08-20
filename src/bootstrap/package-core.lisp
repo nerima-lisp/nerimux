@@ -1,19 +1,13 @@
 (defpackage #:nerimux/config
   (:use #:cl)
   (:documentation
-   "APPLICATION layer: everything that turns a .tmux.conf into runtime state.  Two
-    concerns share the package because the config file is the only writer of the
-    second: directive loading (tokenizer, %if/%elif preprocessor, source-file
-    recursion, set-option routing) and the key-table store that maps a key in a
-    named table to the command string it runs.")
+   "APPLICATION layer: everything that turns a .tmux.conf into runtime state --
+    directive loading (tokenizer, %if/%elif preprocessor, source-file recursion,
+    set-option routing).  The key-table store that used to share this package went
+    with the keystroke pipeline: nothing read it once the workspace UI took over
+    key handling, so bind/unbind now parse and do nothing.  See
+    docs/src/reference/compatibility.md.")
   (:export
-   #:+prefix-key-code+
-   #:+ctrl-mask+
-   ;; Standard key-table name constants
-   #:+table-prefix+
-   #:+table-root+
-   #:+table-copy-mode+
-   #:+table-copy-mode-vi+
    #:*default-shell*
    #:*status-height*
    #:+pty-buf-size+
@@ -21,24 +15,6 @@
    #:+poll-timeout-us+
    #:+accept-timeout-us+
    #:+pty-poll-timeout-us+
-   #:define-initial-key-bindings
-   #:lookup-key-binding
-   #:describe-key-bindings
-   #:describe-key-bindings-for-table
-   #:describe-key-bindings-for-key
-   ;; Key-table system
-   #:*key-tables*
-   #:ensure-key-table
-   #:key-table-bind
-   #:describe-key-binding-notes
-   #:key-display-string
-   #:key-table-unbind
-   #:key-table-lookup
-   #:key-table-command
-   #:key-table-repeatable-p
-   #:key-table-note
-   #:copy-mode-count-command-p
-   #:initialize-default-key-tables
    #:load-config-file
    #:load-config-from-stream
    #:load-config-from-string
@@ -49,18 +25,14 @@
    ;; -f startup-flag override (set by the cl-cli global-option parser in
    ;; main-startup-flags.lisp), consulted first by config-file-path.
    #:*config-file-override*
-   ;; cl-boundary-kit process boundary shared by config-time shell directives
-   ;; and run-shell/if-shell (commands-shell.lisp); see
+   ;; cl-boundary-kit process boundary used by the config-time shell
+   ;; directives, including run-shell/if-shell; see
    ;; config-directives-runtime-services.lisp.
    #:*process-boundary*
    ;; %if condition evaluator hook (set by top-level package)
    #:*config-condition-evaluator*
    ;; Mouse-reporting callback hook (set by orchestrate/events-loop layer)
-   #:*mouse-reporting-hook*
    ;; Dynamic prefix key (primary and secondary)
-   #:*prefix-key-code*
-   #:*prefix2-key-code*
-   #:%parse-prefix-key
    ;; ORCHESTRATE-layer shell initializer
    #:init-default-shell
    ;; Lazy SB-POSIX symbol lookup (shared with nerimux/model's process

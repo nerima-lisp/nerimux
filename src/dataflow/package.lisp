@@ -16,10 +16,12 @@
 ;;;; -cancel-selection/-yank (commands-copy-mode*.lisp) remain the imperative
 ;;;; source of truth; this module only mirrors their documented transitions.
 ;;;;
-;;;; Scope note: rectangle-select (copy-mode-rectangle-on/off) is an
-;;;; orthogonal flag on SCREEN, settable independently of whether a selection
-;;;; is active, not a nested lifecycle state -- modeling it as a fourth state
-;;;; here would misrepresent the real transition graph, so it is left out.
+;;;; Scope note: rectangle-select was an orthogonal flag on SCREEN, settable
+;;;; independently of whether a selection was active, not a nested lifecycle
+;;;; state -- modelling it as a fourth state here would have misrepresented the
+;;;; real transition graph, so it was left out.  The commands that set it
+;;;; (copy-mode-rectangle-on/off, copy-mode-toggle-rectangle) have since been
+;;;; deleted: only the tmux key tables ever reached them.
 
 (defpackage #:nerimux/dataflow
   (:use #:cl)

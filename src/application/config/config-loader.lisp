@@ -47,9 +47,17 @@
 (defun apply-config-directive (tokens)
   "Apply one parsed config directive (list of string TOKENS) to live state.
    Returns T when applied, NIL for an unknown/invalid directive.
-   Handles NAME=value variable assignments (incl. %hidden), bind/unbind,
-   set-hook, set[-g|-a|-s|-u|...], set-environment [-u|-r], if-shell,
-   run-shell [-b|-C], source-file, and the fixed-arity directive table."
+   Handles NAME=value variable assignments (incl. %hidden),
+   set[-g|-a|-s|-u|...], set-environment [-u|-r], if-shell, run-shell [-b|-C],
+   source-file, and the fixed-arity directive table.  set-hook is no longer
+   handled: the directive still parses (falling through to
+   %APPLY-CONFIG-DIRECTIVE-INNER, which returns NIL for it) but has no effect,
+   matching the documented \"parses, has no effect\" contract for bind/unbind
+   below.
+   bind/unbind are deliberately absent: the key-table store they wrote into was
+   deleted once nothing read it, so such a line matches no arm below and falls
+   through to %APPLY-CONFIG-DIRECTIVE-INNER, which returns NIL.  That is the
+   documented \"parses, has no effect\" contract, not an oversight."
   (when tokens
     (let ((cmd  (first tokens))
           (args (rest tokens)))
@@ -58,10 +66,8 @@
         ((string= cmd "set-environment")
          (%apply-set-environment-directive "set-environment" args))
         (t
-         (or (%apply-key-directive cmd args)
-             (%apply-if-shell-directive cmd args)
+         (or (%apply-if-shell-directive cmd args)
              (%apply-set-directive cmd args)
-             (%apply-set-hook-directive cmd args)
              (%apply-run-shell-directive cmd args)
              (%apply-source-file-directive cmd args)
              (%apply-config-directive-inner tokens)))))))

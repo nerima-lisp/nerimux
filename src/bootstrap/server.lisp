@@ -29,10 +29,6 @@
 (defvar *runtime-state-save-function* nil
   "Function called with the session while the server is shutting down.")
 
-(defvar *client-flags* nil
-  "The single client's flag list (refresh-client -f, #{client_flags}):
-   a list of flag-name strings, e.g. (\"no-output\" \"read-only\").")
-
 (defvar *socket-path-override* nil
   "Full socket path from the global -S flag (tmux -S); when set, socket-path
    returns it verbatim for every server name.")
@@ -75,14 +71,6 @@
       (format nil "~A/nerimux-~A.sock"
               (%socket-directory)
               (or *socket-name-override* name))))
-
-(defun apply-client-size (session payload)
-  "Apply a client size PAYLOAD (rows,cols) to SESSION and relayout.
-   Updates *term-rows*/*term-cols* and relayouts the active window.
-   Does NOT mutate the dirty flag — that is the caller's responsibility."
-  (multiple-value-bind (rows cols) (decode-size payload)
-    (setf *term-rows* rows *term-cols* cols)
-    (%relayout-active-window session rows cols)))
 
 (defun %relayout-active-window (session rows cols)
   "Relayout SESSION's active window for ROWS and COLS, if any."

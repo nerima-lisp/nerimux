@@ -5,8 +5,7 @@
 ;;; define-config-directives call (the fixed-arity directive table) and the full
 ;;; set-option flag handling machinery: %set-directive-p, %strip-set-flags,
 ;;; %coerce-set-value, %route-set-value, %apply-set-directive.
-;;; Option runtime side effects and set-hook live in
-;;; config-option-side-effects.lisp.
+;;; Option runtime side effects live in config-option-side-effects.lisp.
 
 (declaim (special nerimux/options:*global-options*
                   nerimux/options:*server-options*))
@@ -48,8 +47,6 @@
            (setf *status-height* (min height +max-status-lines+))
            t)))
      ,@(mapcar #'%set-directive-config-rule +set-directive-commands+)
-     ;; NOTE: set-hook is handled entirely by %apply-set-hook-directive (stores raw
-     ;; command strings for format expansion at fire time); no entry needed here.
      ;; NOTE: source-file is handled entirely by %apply-source-file-directive
      ;; (wired into apply-config-directive before this table) to support -q/-n/-v
      ;; flags, glob patterns, and multiple paths.

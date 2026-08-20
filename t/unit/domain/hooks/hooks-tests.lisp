@@ -19,20 +19,6 @@
 
 (describe "hooks-suite"
 
-  ;;; ── scoped-hook-entry-p ──────────────────────────────────────────────────────
-
-  ;; scoped-hook-entry-p: T for a cons whose head is one of +scoped-hook-kinds+
-  ;; (:scoped-session / :scoped-window / :scoped-pane), NIL for anything else.
-  (it-each (((:scoped-session . x) t)
-            ((:scoped-window . x)  t)
-            ((:scoped-pane . x)    t)
-            ((:global . x)         nil)
-            (:scoped-session       nil)   ; a bare keyword is not a scoped ENTRY
-            (nil                   nil))
-      "scoped-hook-entry-p ~S → ~A"
-      (entry expected)
-    (expect (eq expected (and (nerimux/hooks:scoped-hook-entry-p entry) t))))
-
   ;;; ── Hook event constant values ───────────────────────────────────────────────
 
   ;; Hook event constants defined via define-hook-events have the expected string values.
@@ -41,10 +27,7 @@
      `(("after-new-window"    ,nerimux/hooks:+hook-after-new-window+)
        ("after-new-pane"      ,nerimux/hooks:+hook-after-new-pane+)
        ("pane-exited"         ,nerimux/hooks:+hook-pane-exited+)
-       ("after-rename-window" ,nerimux/hooks:+hook-after-rename-window+)
        ("session-created"     ,nerimux/hooks:+hook-session-created+)
-       ("after-kill-pane"     ,nerimux/hooks:+hook-after-kill-pane+)
-       ("after-kill-window"   ,nerimux/hooks:+hook-after-kill-window+)
        ("after-split-window"  ,nerimux/hooks:+hook-after-split-window+)
        ("client-attached"     ,nerimux/hooks:+hook-client-attached+)
        ("client-detached"     ,nerimux/hooks:+hook-client-detached+)
@@ -204,7 +187,7 @@
     (dolist (row (list (list nerimux/hooks:+hook-session-created+
                              (lambda () (error "deliberate hook error"))
                              "generic ERROR")
-                       (list nerimux/hooks:+hook-after-kill-pane+
+                       (list nerimux/hooks:+hook-after-select-pane+
                              (lambda () (error 'simple-error :format-control "hook boom"))
                              "SIMPLE-ERROR subclass")))
       (destructuring-bind (hook error-fn desc) row
@@ -243,29 +226,29 @@
   (it "clear-hooks-removes-all"
     (with-isolated-hooks
       (let ((called nil))
-        (nerimux/hooks:add-hook nerimux/hooks:+hook-after-kill-pane+
+        (nerimux/hooks:add-hook nerimux/hooks:+hook-after-select-pane+
                                  (lambda () (setf called :first)))
-        (nerimux/hooks:add-hook nerimux/hooks:+hook-after-kill-pane+
+        (nerimux/hooks:add-hook nerimux/hooks:+hook-after-select-pane+
                                  (lambda () (setf called :second)))
         ;; Sanity: hooks present before clearing
         (let ((before (nerimux/hooks:list-hooks)))
-          (expect (= 2 (alist-value nerimux/hooks:+hook-after-kill-pane+ before
+          (expect (= 2 (alist-value nerimux/hooks:+hook-after-select-pane+ before
                                 :test #'string=))))
         ;; Clear
-        (nerimux/hooks:clear-hooks nerimux/hooks:+hook-after-kill-pane+)
+        (nerimux/hooks:clear-hooks nerimux/hooks:+hook-after-select-pane+)
         ;; run-hooks must be a no-op: called stays NIL
         (setf called nil)
-        (nerimux/hooks:run-hooks nerimux/hooks:+hook-after-kill-pane+)
+        (nerimux/hooks:run-hooks nerimux/hooks:+hook-after-select-pane+)
         (expect (null called))
         ;; list-hooks must no longer include the entry
         (let ((after (nerimux/hooks:list-hooks)))
-          (expect (null (assoc nerimux/hooks:+hook-after-kill-pane+ after :test #'string=)))))))
+          (expect (null (assoc nerimux/hooks:+hook-after-select-pane+ after :test #'string=)))))))
 
   ;; clear-hooks on an event with no registered hooks is a safe no-op.
   (it "clear-hooks-unregistered-event-is-noop"
     (with-isolated-hooks
       (finishes (nerimux/hooks:clear-hooks "totally-unknown-event"))
-      (finishes (nerimux/hooks:clear-hooks nerimux/hooks:+hook-after-kill-pane+))))
+      (finishes (nerimux/hooks:clear-hooks nerimux/hooks:+hook-after-select-pane+))))
 
   ;;; ── list-hooks ───────────────────────────────────────────────────────────────
 
@@ -346,12 +329,12 @@
   (it "list-hooks-after-all-callbacks-removed-shows-zero"
     (with-isolated-hooks
       (let ((cb (lambda () nil)))
-        (nerimux/hooks:add-hook nerimux/hooks:+hook-after-rename-window+ cb)
-        (nerimux/hooks:remove-hook nerimux/hooks:+hook-after-rename-window+ cb)
+        (nerimux/hooks:add-hook nerimux/hooks:+hook-window-renamed+ cb)
+        (nerimux/hooks:remove-hook nerimux/hooks:+hook-window-renamed+ cb)
         ;; The event key remains in the registry with an empty list.
         ;; list-hooks reports count 0 for it (not absent, because gethash returns nil-list).
         ;; Either outcome (absent or count-0) is acceptable; what matters is run-hooks is safe.
-        (finishes (nerimux/hooks:run-hooks nerimux/hooks:+hook-after-rename-window+)))))
+        (finishes (nerimux/hooks:run-hooks nerimux/hooks:+hook-window-renamed+)))))
 
   ;;; hook-event-constants-table-driven, hook-client-attached-constant,
   ;;; hook-client-detached-constant, and hook-alert-bell-constant were removed:

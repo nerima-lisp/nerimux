@@ -3,8 +3,8 @@
 ;;; Runtime services shared by config-time shell directives.
 
 (defvar *process-boundary* (cl-boundary-kit:make-process-boundary)
-  "The cl-boundary-kit process boundary run-shell/if-shell (commands-shell.lisp)
-   and config-time shell directives (this file) shell out through.  Real
+  "The cl-boundary-kit process boundary the config-time shell directives in
+   this file -- run-shell, if-shell and friends -- shell out through.  Real
    subprocess execution by default; tests rebind it to
    cl-boundary-kit:make-test-process-boundary / make-recording-process-boundary
    for deterministic run-shell/if-shell specs that never touch a real shell.")

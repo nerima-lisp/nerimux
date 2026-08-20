@@ -8,9 +8,10 @@
   (it "define-config-directives-macro-is-defined"
     (expect (macro-function 'nerimux/config::define-config-directives)))
 
-  ;; define-key-directive-handlers is a defined macro.
-  (it "define-key-directive-handlers-macro-is-defined"
-    (expect (macro-function 'nerimux/config::define-key-directive-handlers)))
+  ;; define-key-directive-handlers-macro-is-defined was removed:
+  ;; config-directives-bind-dispatch.lisp, which defined
+  ;; DEFINE-KEY-DIRECTIVE-HANDLERS, was deleted whole with the key-table
+  ;; config subsystem.
 
   ;; %env-set-p returns T for non-empty strings and NIL for nil or empty strings.
   (it "env-set-p-correctly-classifies-strings"
@@ -60,76 +61,13 @@
           (expect (string= expected (nth idx tokens)))))))
 
   ;;; bind/unbind directives with flags
-
-  ;; bind -n binds in the root key-table (no prefix required).
-  (it "bind-key-no-prefix-n-flag"
-    (with-isolated-key-tables
-      (apply-config-directive '("bind" "-n" "C" "new-window"))
-      (let ((entry (nerimux/config:key-table-lookup "root" #\C)))
-        (expect (not (null entry)))
-        (expect (eq :new-window (nerimux/config:key-table-command entry))))))
-
-  ;; bind -r marks the binding as repeatable.
-  (it "bind-key-repeatable-r-flag"
-    (with-isolated-key-tables
-      (apply-config-directive '("bind" "-r" "H" "resize-left"))
-      (let ((entry (nerimux/config:key-table-lookup "prefix" #\H)))
-        (expect (not (null entry)))
-        (expect (nerimux/config:key-table-repeatable-p entry)))))
-
-  ;; bind -T table-name binds in the named key-table.
-  (it "bind-key-custom-table-T-flag"
-    (with-isolated-key-tables
-      (apply-config-directive '("bind" "-T" "copy-mode" "q" "copy-mode-enter"))
-      (let ((entry (nerimux/config:key-table-lookup "copy-mode" #\q)))
-        (expect (not (null entry)))
-        (expect (eq :copy-mode-enter (nerimux/config:key-table-command entry))))))
-
-  ;; Simple bind (no flags) also updates the prefix key-table.
-  (it "bind-key-simple-also-updates-key-table"
-    (with-isolated-key-tables
-      (apply-config-directive '("bind" "z" "new-window"))
-      (let ((entry (nerimux/config:key-table-lookup "prefix" #\z)))
-        (expect (not (null entry)))
-        (expect (eq :new-window (nerimux/config:key-table-command entry))))))
-
-  ;;; unbind with -n flag
-
-  ;; unbind -n removes a binding from the root table.
-  (it "unbind-with-n-flag-removes-root-binding"
-    (with-isolated-key-tables
-      (apply-config-directive '("bind" "-n" "X" "new-window"))
-      (let ((entry (nerimux/config:key-table-lookup "root" #\X)))
-        (expect (not (null entry))))
-      (assert-config-directive-applied '("unbind" "-n" "X")
-                                       "unbind -n X")
-      (expect (null (nerimux/config:key-table-lookup "root" #\X)))))
-
-  ;; Config parsing accepts only canonical bind/unbind directive names.
-  (it "key-directive-aliases-are-rejected"
-    (with-isolated-key-tables
-      (let ((key #\@))
-        (assert-config-directive-rejected `("bind-key" ,(string key) "new-window")
-                                          "bind-key alias")
-        (expect (null (lookup-key-binding key)))
-        (assert-config-directive-applied `("bind" ,(string key) "new-window")
-                                         "canonical bind")
-        (expect (eq :new-window (lookup-key-binding key)))
-        (assert-config-directive-rejected `("unbind-key" ,(string key))
-                                          "unbind-key alias")
-        (expect (eq :new-window (lookup-key-binding key))))))
-
-  ;;; unbind with -T flag
-
-  ;; unbind -T copy-mode removes a binding from the named table.
-  (it "unbind-with-T-flag-removes-named-table-binding"
-    (with-isolated-key-tables
-      (apply-config-directive '("bind" "-T" "copy-mode" "q" "copy-mode-enter"))
-      (let ((entry (nerimux/config:key-table-lookup "copy-mode" #\q)))
-        (expect (not (null entry))))
-      (assert-config-directive-applied '("unbind" "-T" "copy-mode" "q")
-                                       "unbind -T copy-mode q")
-      (expect (null (nerimux/config:key-table-lookup "copy-mode" #\q)))))
+  ;;;
+  ;;; bind-key-no-prefix-n-flag, bind-key-repeatable-r-flag,
+  ;;; bind-key-custom-table-T-flag, bind-key-simple-also-updates-key-table,
+  ;;; unbind-with-n-flag-removes-root-binding, key-directive-aliases-are-rejected,
+  ;;; and unbind-with-T-flag-removes-named-table-binding were removed: all
+  ;;; asserted key-table effects (key-table-lookup / -command / -repeatable-p,
+  ;;; lookup-key-binding), gone with the key-table config subsystem.
 
   ;;; %whitespace-p
   ;;; NOTE: these directive-store cases are now covered by the table-driven helper below.
@@ -141,51 +79,18 @@
     (expect (nerimux/config::%whitespace-p #\a) :to-be-falsy)
     (expect (nerimux/config::%whitespace-p #\Newline) :to-be-falsy))
 
-  ;;; %parse-bind-key-args edge cases
-
-  ;; %parse-bind-key-args with empty args list returns NIL.
-  (it "parse-bind-key-args-empty-returns-nil"
-    (expect (null (nerimux/config::%parse-bind-key-args '()))))
-
-  ;; %parse-bind-key-args with -T and no table name returns NIL.
-  (it "parse-bind-key-args-T-flag-missing-table-returns-nil"
-    (expect (null (nerimux/config::%parse-bind-key-args '("-T")))))
-
-  ;; %parse-bind-key-args with an unknown command returns NIL.
-  (it "parse-bind-key-args-unknown-command-returns-nil"
-    (expect (null (nerimux/config::%parse-bind-key-args '("z" "unknown-bogus-command")))))
-
-  ;; %parse-bind-key-args with -n -r binds in root table with repeatable.
-  (it "parse-bind-key-args-n-and-r-flags-combined"
-    (multiple-value-bind (table key kw repeatable)
-        (nerimux/config::%parse-bind-key-args '("-n" "-r" "z" "new-window"))
-      (expect (string= "root" table))
-      (expect (char= #\z key))
-      (expect (eq :new-window kw))
-      (expect repeatable :to-be-truthy)))
-
-  ;;; %parse-unbind-key-args edge cases
-
-  ;; %parse-unbind-key-args with empty args returns (values nil nil).
-  (it "parse-unbind-key-args-empty-returns-nil-nil"
-    (multiple-value-bind (table key)
-        (nerimux/config::%parse-unbind-key-args '())
-      (expect (null table))
-      (expect (null key))))
-
-  ;; %parse-unbind-key-args with extra trailing arg returns (values nil nil).
-  (it "parse-unbind-key-args-extra-arg-returns-nil-nil"
-    (multiple-value-bind (table key)
-        (nerimux/config::%parse-unbind-key-args '("z" "extra"))
-      (expect (null table))
-      (expect (null key))))
-
-  ;; %parse-unbind-key-args with -T and no table name returns (values nil nil).
-  (it "parse-unbind-key-args-T-flag-missing-table-returns-nil"
-    (multiple-value-bind (table key)
-        (nerimux/config::%parse-unbind-key-args '("-T"))
-      (expect (null table))
-      (expect (null key))))
+  ;;; %parse-bind-key-args / %parse-unbind-key-args edge cases
+  ;;;
+  ;;; parse-bind-key-args-empty-returns-nil,
+  ;;; parse-bind-key-args-T-flag-missing-table-returns-nil,
+  ;;; parse-bind-key-args-unknown-command-returns-nil,
+  ;;; parse-bind-key-args-n-and-r-flags-combined,
+  ;;; parse-unbind-key-args-empty-returns-nil-nil,
+  ;;; parse-unbind-key-args-extra-arg-returns-nil-nil, and
+  ;;; parse-unbind-key-args-T-flag-missing-table-returns-nil were removed:
+  ;;; config-directives-bind-parse.lisp, which defined %PARSE-BIND-KEY-ARGS
+  ;;; and %PARSE-UNBIND-KEY-ARGS, was deleted whole with the key-table config
+  ;;; subsystem.
 
   ;;; Backslash-escape edge case: backslash at end of string
 
@@ -203,12 +108,8 @@
         (expect (= 0 applied)))))
 
   ;;; bind -r -n combined (order-independent flags)
-
-  ;; bind -r -n binds in root table and marks repeatable (flag order insensitive).
-  (it "bind-key-r-then-n-flag"
-    (with-isolated-key-tables
-      (apply-config-directive '("bind" "-r" "-n" "G" "new-window"))
-      (let ((entry (nerimux/config:key-table-lookup "root" #\G)))
-        (expect (not (null entry)))
-        (expect (eq :new-window (nerimux/config:key-table-command entry)))
-        (expect (nerimux/config:key-table-repeatable-p entry))))))
+  ;;;
+  ;;; bind-key-r-then-n-flag was removed: it asserted key-table effects
+  ;;; (key-table-lookup / -command / -repeatable-p), gone with the key-table
+  ;;; config subsystem.
+  )

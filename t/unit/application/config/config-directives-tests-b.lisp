@@ -5,37 +5,6 @@
 
 (describe "config-directives-suite"
 
-  ;;; ── %parse-bind-key-args with valid complete args ─────────────────────────
-
-  ;; %parse-bind-key-args with valid key+command returns all four values.
-  (it "parse-bind-key-args-returns-all-values"
-    (multiple-value-bind (table key kw repeatable)
-        (nerimux/config::%parse-bind-key-args '("z" "new-window"))
-      (check-table (list (list table "prefix"    "table defaults to prefix")
-                         (list key   #\z         "key must be #\\z")
-                         (list kw    :new-window "command must be :new-window"))
-                   :test #'equal)
-      (expect (null repeatable))))
-
-  ;; %parse-bind-key-args with -T uses the given table name.
-  (it "parse-bind-key-args-T-flag-specifies-table"
-    (multiple-value-bind (table key kw ignored-rep)
-        (nerimux/config::%parse-bind-key-args '("-T" "copy-mode" "q" "copy-mode-enter"))
-      (declare (ignore ignored-rep))
-      (check-table (list (list table "copy-mode"      "table must be copy-mode")
-                         (list key   #\q              "key must be #\\q")
-                         (list kw    :copy-mode-enter "command must be :copy-mode-enter"))
-                   :test #'equal)))
-
-  ;; %parse-bind-key-args with -r sets repeatable to T.
-  (it "parse-bind-key-args-r-flag-sets-repeatable"
-    (multiple-value-bind (table ignored-key kw repeatable)
-        (nerimux/config::%parse-bind-key-args '("-r" "H" "resize-left"))
-      (declare (ignore ignored-key))
-      (expect (string= "prefix" table))
-      (expect (eq :resize-left kw))
-      (expect repeatable :to-be-truthy)))
-
   ;;; ── %tokenize-backslash-escape direct tests ──────────────────────────────
 
   ;; %tokenize-backslash-escape at the very end of input does not signal.
@@ -56,7 +25,6 @@
       (expect (= 1 (length tokens)))))
 
   ;;; ── %tokenize-single-quoted direct test ──────────────────────────────────
-
 
   ;;; ── Table-driven tokenizer tests ─────────────────────────────────────────
   ;;;

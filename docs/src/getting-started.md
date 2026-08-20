@@ -73,12 +73,11 @@ nerimux-coverage ./coverage-report    # sb-cover report via cl-weave
 
 ## Testing
 
-`nix flake check` runs five derivations in parallel:
+`nix flake check` runs four derivations in parallel:
 
 | Check | What it covers |
 |---|---|
 | `default` | the full unit + integration suite (`nerimux/test`) |
-| `weave` | the cl-prolog-kit reasoning read-model (`nerimux/weave`) |
 | `dataflow` | the copy-mode lifecycle read-model (`nerimux/dataflow`) |
 | `formatting` | treefmt / nixfmt over every tracked Nix file |
 | `docs` | this site, built with `mkdocs --strict` |
@@ -94,7 +93,7 @@ session/socket/PTY state.
 To run a single suite by hand:
 
 ```bash
-NERIMUX_TEST_SYSTEM=nerimux/weave sbcl --script run-tests.lisp
+NERIMUX_TEST_SYSTEM=nerimux/dataflow sbcl --script run-tests.lisp
 ```
 
 There is also an end-to-end smoke test that drives the real binary inside a

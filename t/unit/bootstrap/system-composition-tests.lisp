@@ -2,11 +2,16 @@
 
 ;;;; ASDF system-composition tests.
 ;;;;
-;;;; src/reasoning/ and src/dataflow/ are cold-path read-models with no call
-;;;; site anywhere in src/ outside their own directories.  They were moved out
-;;;; of core `nerimux' into the optional `nerimux/reasoning' and
-;;;; `nerimux/dataflow-model' systems so that cl-prolog-kit and cl-dataflow-kit
-;;;; stop riding along in the shipped binary's dependency closure.
+;;;; src/dataflow/ is a cold-path read-model with no call site anywhere in src/
+;;;; outside its own directory.  It was moved out of core `nerimux' into the
+;;;; optional `nerimux/dataflow-model' system so that cl-dataflow-kit stops
+;;;; riding along in the shipped binary's dependency closure.
+;;;;
+;;;; Its counterpart, `nerimux/reasoning' (cl-prolog-kit, over src/reasoning/),
+;;;; has since been deleted outright -- it projected the config key-table store,
+;;;; and that store went when nothing was left to read it.  The cl-prolog-kit
+;;;; assertions below therefore now guard something stronger than a layering
+;;;; rule: that kit should not reappear in the closure at all.
 ;;;;
 ;;;; Nothing else in the suite would notice that regressing: re-adding either
 ;;;; kit to core :depends-on compiles clean, loads clean, and every other test

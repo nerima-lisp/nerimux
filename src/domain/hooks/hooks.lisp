@@ -6,10 +6,7 @@
 ;;;   "after-new-window"    — after a new window is created
 ;;;   "after-new-pane"      — after a pane is split
 ;;;   "pane-exited"         — when a pane's process exits
-;;;   "after-rename-window" — after rename-window is called
 ;;;   "session-created"     — when the session starts
-;;;   "after-kill-pane"     — after a pane is killed
-;;;   "after-kill-window"   — after a window is killed
 ;;;   "client-attached"     — when a client attaches to the server
 ;;;   "client-detached"     — when a client detaches from the server
 ;;;   "alert-bell"          — when a BEL character is received in a pane
@@ -35,10 +32,7 @@ Uses the safe SBCL idiom to avoid string-constant redefinition errors."
   (+hook-after-new-window+       "after-new-window"       "Fired after a new window is created")
   (+hook-after-new-pane+         "after-new-pane"         "Fired after a pane is split")
   (+hook-pane-exited+            "pane-exited"            "Fired when a pane's process exits")
-  (+hook-after-rename-window+    "after-rename-window"    "Fired after rename-window is called")
   (+hook-session-created+        "session-created"        "Fired when a session is first created")
-  (+hook-after-kill-pane+        "after-kill-pane"        "Fired after a pane is killed")
-  (+hook-after-kill-window+      "after-kill-window"      "Fired after a window is killed")
   (+hook-after-split-window+     "after-split-window"     "Fired after a window is split")
   (+hook-client-attached+        "client-attached"
    "Fired when a client attaches to the server")
@@ -96,12 +90,7 @@ Uses the safe SBCL idiom to avoid string-constant redefinition errors."
    Errors signalled by individual hooks are always suppressed so that a broken
    hook never prevents the rest from running."
   (dolist (cb (gethash event-name *hook-registry*))
-    (ignore-errors (apply cb args)))
-  ;; Also fire .tmux.conf set-hook command hooks for this event, against the
-  ;; session derived from the hook TARGET (the first arg — a session/window/pane).
-  ;; This unifies the two hook registries so every event supports `set-hook`, not
-  ;; just the ones whose firing point happened to call run-command-hooks directly.
-  (ignore-errors (run-command-hooks-via-runner event-name (first args))))
+    (ignore-errors (apply cb args))))
 
 (defun clear-hooks (event-name)
   "Remove all hooks registered for EVENT-NAME."
@@ -116,106 +105,3 @@ Uses the safe SBCL idiom to avoid string-constant redefinition errors."
                (push (cons name (length hooks)) result))
              *hook-registry*)
     result))
-
-;;; ── Command hooks (the user-facing `set-hook` directive) ──────────────────
-;;;
-;;; Distinct from the lisp-function hooks above: *command-hooks* maps an event
-;;; name to a list of tmux command KEYWORDS to dispatch when the event fires.
-;;; It is populated by the `set-hook <event> <command>` config directive.  The
-;;; actual dispatch (run-command-hooks) lives in the nerimux package because it
-;;; needs DISPATCH-COMMAND and a session; this layer only stores the bindings.
-
-(defvar *command-hooks* (make-hash-table :test #'equal)
-  "Maps event-name (string) to an ordered list of raw command-line strings
-   to dispatch when the corresponding hook fires.  Populated by the
-   set-hook config directive and the set-hook runtime command.
-   String hooks support #{format} variable expansion at fire time.")
-
-(defparameter +scoped-hook-kinds+ '(:scoped-session :scoped-window :scoped-pane)
-  "The scope tags a stored hook entry may carry (tmux per-target hooks):
-   set-hook -t SESSION, set-hook -w -t WINDOW, set-hook -p -t PANE.")
-
-(defun %make-hook-entry (command scope-value scope-kind)
-  "The stored form of a hook COMMAND: the raw command when global, or a
-   (SCOPE-KIND SCOPE-VALUE COMMAND) record when SCOPE-VALUE scopes it —
-   a session name (:scoped-session) or a window/pane id (:scoped-window /
-   :scoped-pane)."
-  (if scope-value
-      (list scope-kind scope-value command)
-      command))
-
-(defun scoped-hook-entry-p (entry)
-  "True when ENTRY is a scoped hook record (session, window, or pane scope)."
-  (and (consp entry) (member (first entry) +scoped-hook-kinds+)))
-
-(defun set-command-hook (event-name command
-                         &optional scope-value (scope-kind :scoped-session))
-  "Set EVENT-NAME's command-hook list to the single COMMAND, REPLACING any hooks
-   already registered for that event.  This matches tmux's `set-hook` (without
-   -a), which overwrites the hook rather than accumulating.  Use
-   append-command-hook for the `-a` form that preserves prior hooks.
-   SCOPE-VALUE with SCOPE-KIND (set-hook -t / -w -t / -p -t) scopes the hook to
-   that session name or window/pane id."
-  (setf (gethash event-name *command-hooks*)
-        (list (%make-hook-entry command scope-value scope-kind))))
-
-(defun append-command-hook (event-name command
-                            &optional scope-value (scope-kind :scoped-session))
-  "Append COMMAND (a raw command-line string) to EVENT-NAME's dispatch list,
-   preserving declaration order across calls.  This is tmux's `set-hook -a`.
-   SCOPE-VALUE with SCOPE-KIND (set-hook -t / -w -t / -p -t) scopes the hook to
-   that session name or window/pane id."
-  (setf (gethash event-name *command-hooks*)
-        (append (gethash event-name *command-hooks*)
-                (list (%make-hook-entry command scope-value scope-kind)))))
-
-(defun command-hooks (event-name)
-  "Return the ordered list of commands registered for EVENT-NAME."
-  (gethash event-name *command-hooks*))
-
-(defun clear-command-hooks (event-name)
-  "Remove all command hooks registered for EVENT-NAME."
-  (remhash event-name *command-hooks*))
-
-(defun list-command-hooks ()
-  "Return an alist of (event-name . command-list) for all registered command hooks.
-   Callers that need a sorted copy must sort the result themselves."
-  (let (result)
-    (maphash (lambda (name commands) (push (cons name commands) result)) *command-hooks*)
-    result))
-
-(defun %format-command-hook-entry (out entry)
-  "Write a single command-hook alist ENTRY to stream OUT as '  <event> -> <cmd>, ...'."
-  (destructuring-bind (event . cmds) entry
-    (format out "~%  ~A -> ~{~(~A~)~^, ~}" event cmds)))
-
-(defun describe-command-hooks ()
-  "Return a newline-separated, event-sorted listing of registered command hooks.
-   Each line has the form '<event> -> <command>, ...'.
-   Returns the string 'no command hooks set' when the registry is empty."
-  (let ((entries (sort (copy-list (list-command-hooks)) #'string< :key #'car)))
-    (if (null entries)
-        "no command hooks set"
-        (with-output-to-string (out)
-          (write-string "command hooks:" out)
-          (dolist (entry entries)
-            (%format-command-hook-entry out entry))))))
-
-;;; The command-hook RUNNER breaks a package layering cycle: kill-pane and
-;;; kill-window live in nerimux/commands, which cannot reference the nerimux
-;;; package's run-command-hooks (that one needed dispatch-command, which no
-;;; longer exists -- nothing installs a runner today, so command hooks never
-;;; fire).  The nerimux
-;;; package installs its run-command-hooks here at load; lower layers fire
-;;; command hooks indirectly through the runner.
-
-(defvar *command-hook-runner* nil
-  "A function (event-name session) that dispatches the command hooks for an
-   event, installed by the nerimux package at load.  NIL means no command-hook
-   dispatch yet (e.g. before the top-level package has finished loading).")
-
-(defun run-command-hooks-via-runner (event-name session)
-  "Fire the command hooks for EVENT-NAME on SESSION through *command-hook-runner*.
-   A no-op when no runner is installed, so lower layers may call it freely."
-  (when *command-hook-runner*
-    (funcall *command-hook-runner* event-name session)))

@@ -23,6 +23,13 @@
       inputs.paredit-cli.url = "github:nerima-lisp/paredit-cli/v1.4.0";
     };
 
+    # Transitive only: cl-dataflow-kit depends on cl-prolog-kit, and siblings are
+    # consumed as source, so the source has to be on the registry even though
+    # nothing in nerimux.asd names it. It WAS direct until nerimux/reasoning was
+    # retired on 2026-08-20; removing it then looked safe because nerimux.asd no
+    # longer mentions it, and `nix flake check` caught that immediately with
+    # `Component "cl-prolog-kit" not found, required by #<SYSTEM "cl-dataflow-kit">`.
+    # Check the siblings' own .asd files, not just nerimux.asd, before removing.
     cl-prolog-kit = {
       url = "github:nerima-lisp/cl-prolog-kit/v1.5.0";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -460,10 +467,10 @@
         # /dev/ptmx is unavailable, so a sandboxed run stays meaningful.
         default = mkTestCheck system "nerimux-tests" "nerimux/test";
 
-        # The cl-prolog-kit-backed reasoning read-model (src/reasoning/).
-        weave = mkTestCheck system "nerimux-weave-tests" "nerimux/weave";
-
         # The cl-dataflow-kit-backed copy-mode lifecycle read-model (src/dataflow/).
+        # Its former sibling, `weave` (the cl-prolog-kit reasoning read-model over
+        # src/reasoning/), was removed with that system: it projected the config
+        # key-table store, which no longer exists.
         dataflow = mkTestCheck system "nerimux-dataflow-tests" "nerimux/dataflow";
 
         # Fails `nix flake check` when any tracked file is unformatted,

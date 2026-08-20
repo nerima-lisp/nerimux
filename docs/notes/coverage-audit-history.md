@@ -153,11 +153,12 @@ prefix arrow-key bindings lived in the keystroke pipeline
 (`src/presentation/events/`), also deleted. `select-pane -L/-R/-U/-D` as a
 typed or bound tmux command no longer resolves. `pane-neighbor` itself
 (`src/domain/model/window-neighbor.lisp`) is not dead code, though: it is
-still called from `src/bootstrap/server-multi-dispatch.lisp:796` and
-`src/application/commands/commands.lisp:58-59` as part of the new workspace
-input pipeline, so directional pane navigation likely still works through
-whatever key path those call sites wire up — verifying that live path was
-out of scope for this sweep.
+still called from `src/bootstrap/server-multi-dispatch.lisp:796` as part of
+the workspace input pipeline, so directional pane navigation likely still works
+through whatever key path that call site wires up — verifying that live path was
+out of scope for this sweep. (This note originally also cited
+`src/application/commands/commands.lisp:58-59`; that file has since been deleted
+outright, leaving server-multi-dispatch as the sole caller.)
 
 ---
 

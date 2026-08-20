@@ -5,46 +5,31 @@
 (describe "config-directives-suite"
 
   ;;; ── %if / %else / %endif preprocessor ───────────────────────────────────
-
-  ;; %if with a truthy condition applies the then-block and skips the else-block.
-  (it "if-else-endif-truthy-condition"
-    (with-isolated-config
-      ;; *config-condition-evaluator* is NIL by default → all conditions truthy.
-      (let ((applied (load-config-from-string
-                      (format nil "%if 1~%bind z new-window~%%else~%bind z detach~%%endif~%"))))
-        (expect (= 1 applied))
-        (expect (eq :new-window (lookup-key-binding #\z))))))
-
-  ;; %if with a falsy condition skips the then-block and applies the else-block.
-  (it "if-else-endif-falsy-condition"
-    (with-isolated-config
-      ;; Set evaluator to return '0' (falsy) for any condition.
-      (let ((nerimux/config:*config-condition-evaluator*
-              (lambda (s) (declare (ignore s)) "0")))
-        (let ((applied (load-config-from-string
-                        (format nil "%if 0~%bind z new-window~%%else~%bind z detach~%%endif~%"))))
-          (expect (= 1 applied))
-          (expect (eq :detach (lookup-key-binding #\z)))))))
+  ;;;
+  ;;; if-else-endif-truthy-condition and if-else-endif-falsy-condition were
+  ;;; removed: both observed %if/%else branch selection only via
+  ;;; lookup-key-binding, which no longer exists now that the key-table
+  ;;; config subsystem is gone.
 
   ;; %if without %else applies the block when truthy, applies nothing when falsy.
   (it "if-endif-no-else"
     (with-isolated-config
       ;; Truthy (default evaluator NIL → all truthy)
       (let ((applied (load-config-from-string
-                      (format nil "%if 1~%bind z new-window~%%endif~%"))))
+                      (format nil "%if 1~%set-option -g status on~%%endif~%"))))
         (expect (= 1 applied)))
       ;; Falsy
       (let ((nerimux/config:*config-condition-evaluator*
               (lambda (s) (declare (ignore s)) "0")))
         (let ((applied (load-config-from-string
-                        (format nil "%if 0~%bind w detach~%%endif~%"))))
+                        (format nil "%if 0~%set-option -g status off~%%endif~%"))))
           (expect (= 0 applied))))))
 
   ;; Lines outside %if blocks are always applied regardless of evaluator.
   (it "if-block-outside-applies-normally"
     (with-isolated-config
       (let ((applied (load-config-from-string
-                      (format nil "bind z new-window~%%if 1~%bind n next-window~%%endif~%bind p prev-window~%"))))
+                      (format nil "set-option -g status on~%%if 1~%set-option -g escape-time 10~%%endif~%set-option -g escape-time 20~%"))))
         (expect (= 3 applied)))))
 
   ;; Nested %if blocks work: inner block is skipped when outer is falsy.
@@ -53,12 +38,12 @@
       (let ((nerimux/config:*config-condition-evaluator*
               (lambda (s) (declare (ignore s)) "0")))
         (let ((applied (load-config-from-string
-                        (format nil "%if 0~%%if 1~%bind z new-window~%%endif~%%endif~%"))))
+                        (format nil "%if 0~%%if 1~%set-option -g status on~%%endif~%%endif~%"))))
           (expect (= 0 applied)))))
     ;; All truthy
     (with-isolated-config
       (let ((applied (load-config-from-string
-                      (format nil "%if 1~%%if 1~%bind z new-window~%%endif~%%endif~%"))))
+                      (format nil "%if 1~%%if 1~%set-option -g status on~%%endif~%%endif~%"))))
         (expect (= 1 applied)))))
 
   ;; %if condition string is passed verbatim to *config-condition-evaluator*.
@@ -67,7 +52,7 @@
       (let ((received nil))
         (let ((nerimux/config:*config-condition-evaluator*
                 (lambda (s) (setf received s) "1")))
-          (load-config-from-string (format nil "%if some-condition~%bind z new-window~%%endif~%"))
+          (load-config-from-string (format nil "%if some-condition~%set-option -g status on~%%endif~%"))
           (expect (string= "some-condition" received))))))
 
   ;;; ── %tmux-conf-paths ─────────────────────────────────────────────────────
@@ -126,42 +111,13 @@
                                           "set-environment -g -t target -u")
         (expect (string= "x" (sb-ext:posix-getenv name))))))
 
-  ;;; ── %apply-option-side-effects: prefix branch ────────────────────────────
-  ;;;
-  ;;; Tests that "set-option -g prefix C-a" updates *prefix-key-code* and registers
-  ;;; the new key in the prefix table (the prefix2 branch has no separate
-  ;;; integration path into tests, so we cover the scalar + key-table path here).
-
-  ;; 'set-option -g prefix C-a' updates *prefix-key-code* to 1 and binds the new key.
-  (it "apply-set-directive-prefix-side-effect"
-    (with-isolated-key-tables
-      (let ((nerimux/config:*prefix-key-code* nerimux/config:+prefix-key-code+))
-        (apply-config-directive '("set-option" "-g" "prefix" "C-a"))
-        (expect (= 1 nerimux/config:*prefix-key-code*))
-        (let ((entry (nerimux/config:key-table-lookup "prefix" (code-char 1))))
-          (expect (not (null entry)))
-          (expect (eq :send-prefix (nerimux/config:key-table-command entry)))))))
-
-  ;;; ── unbind-all directive ─────────────────────────────────────────────────────
-
-  ;; 'unbind-all' removes all bindings from the prefix key-table.
-  (it "apply-config-directive-unbind-all-clears-prefix-table"
-    (with-isolated-key-tables
-      ;; Verify there's at least one binding first (e.g. C-c = :new-window).
-      (let ((before (nerimux/config:key-table-lookup "prefix" #\c)))
-        (expect (not (null before))))
-      ;; Now clear it.
-      (nerimux/config:apply-config-directive '("unbind-all"))
-      ;; All bindings in prefix table should be gone.
-      (expect (null (nerimux/config:key-table-lookup "prefix" #\c)))))
-
-  ;; 'unbind-all -T root' removes all bindings from the root key-table.
-  (it "apply-config-directive-unbind-all-T-clears-named-table"
-    (with-isolated-key-tables
-      ;; Bind something in root.
-      (nerimux/config:key-table-bind "root" #\x :new-window)
-      (nerimux/config:apply-config-directive '("unbind-all" "-T" "root"))
-      (expect (null (nerimux/config:key-table-lookup "root" #\x)))))
+  ;;; apply-set-directive-prefix-side-effect,
+  ;;; apply-config-directive-unbind-all-clears-prefix-table, and
+  ;;; apply-config-directive-unbind-all-T-clears-named-table were removed:
+  ;;; all three asserted key-table effects (key-table-lookup/-command/-bind)
+  ;;; of the prefix/unbind-all directives, which are gone with the key-table
+  ;;; config subsystem.  `set-option -g prefix ...` and `unbind-all` still
+  ;;; parse without error; they just have no effect now.
 
   ;;; ── %update-config-cond-stack unit tests ─────────────────────────────────
   ;;;
@@ -282,10 +238,7 @@
              (expect (null (sb-ext:posix-getenv "NERIMUX_CFG_ALIAS_PROBE"))))
         (nerimux/model:process-unset-environment "NERIMUX_CFG_ALIAS_PROBE"))))
 
-  ;; The standard tmux cmd_table short aliases are not accepted as nerimux command
-  ;; names.
-  (it "tmux-standard-short-aliases-stay-unresolved"
-    (dolist (alias '("confirm" "kills" "next" "prev" "nextl" "prevl"
-                     "pipe" "pipep" "refresh" "rename" "rotatew" "selectl"
-                     "showenv" "showmsgs" "unlinkw" "newp"))
-      (expect (null (nerimux/config::%known-command-name-p alias))))))
+  ;; tmux-standard-short-aliases-stay-unresolved was removed: it asserted
+  ;; %known-command-name-p rejects tmux short aliases, and
+  ;; %known-command-name-p was deleted with the key-table config subsystem.
+  )

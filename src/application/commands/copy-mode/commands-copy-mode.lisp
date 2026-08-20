@@ -1,11 +1,5 @@
 (in-package #:nerimux/commands)
 
-;;; Named scroll-extent sentinels — used by copy-mode-top and copy-mode-bottom.
-(defconstant +scroll-to-oldest+ most-positive-fixnum
-  "Sentinel delta that clamps to the maximum scrollback offset (oldest content).")
-(defconstant +scroll-to-newest+ (- most-positive-fixnum)
-  "Sentinel delta that clamps to offset 0 (live view / newest content).")
-
 ;;; ── Copy mode ──────────────────────────────────────────────────────────────
 ;;;
 ;;; copy_mode(enter, Screen) :- set(copy-mode-p, true), set(copy-offset, 0).
@@ -88,138 +82,16 @@
                  (zerop (screen-copy-offset screen)))
         (copy-mode-exit screen)))))
 
-;;; ── send-keys -X *-and-cancel / selection-mode / scroll-to-mouse ─────────────
-;;;
-;;; These are real tmux window-copy commands (window-copy.c) that scroll/move and
-;;; then exit copy mode when the live bottom (offset 0) is reached.
-
-(defun %copy-mode-with-cancel-at-bottom (screen action &optional extra-guard)
-  "Run ACTION (a thunk of no arguments) while SCREEN is in copy mode, then exit
-   copy mode once the viewport has reached the live bottom (scroll-offset 0).
-   EXTRA-GUARD, when supplied, is a thunk of no arguments called AFTER ACTION
-   runs whose result is ANDed into the exit decision — used by callers that
-   must also confirm ACTION left some other state (e.g. the cursor) unchanged.
-   This is the shared skeleton behind the tmux send-keys -X *-and-cancel family
-   (window-copy.c): perform a scroll/move, then auto-exit at the live bottom."
-  (when (screen-copy-mode-p screen)
-    (funcall action)
-    (when (and (zerop (screen-copy-offset screen))
-               (or (null extra-guard) (funcall extra-guard)))
-      (copy-mode-exit screen))))
-
-(defmacro define-copy-mode-cancel-commands (&rest rules)
-  "Generate one copy-mode scroll-then-maybe-exit defun per rule.
-   Each RULE is (function-name docstring scroll-expression).
-   The generated function delegates to %COPY-MODE-WITH-CANCEL-AT-BOTTOM,
-   running SCROLL-EXPRESSION as the action thunk."
-  `(progn
-     ,@(mapcar (lambda (rule)
-                 (destructuring-bind (name docstring scroll-expr) rule
-                   `(defun ,name (screen)
-                      ,docstring
-                      (%copy-mode-with-cancel-at-bottom
-                       screen (lambda () ,scroll-expr)))))
-               rules)))
-
-(define-copy-mode-cancel-commands
-  (copy-mode-scroll-down-and-cancel
-   "send-keys -X scroll-down-and-cancel: scroll the viewport down one line, then
-    exit copy mode when the live bottom (scroll-offset 0) is reached."
-   (copy-mode-scroll screen -1))
-  (copy-mode-page-down-and-cancel
-   "send-keys -X page-down-and-cancel: scroll one full page down, then exit copy
-    mode when the live bottom is reached."
-   (copy-mode-scroll screen (- (screen-height screen))))
-  (copy-mode-half-page-down-and-cancel
-   "send-keys -X halfpage-down-and-cancel: scroll half a page down, then exit
-    copy mode when the live bottom is reached."
-   (copy-mode-half-page-down screen)))
-
-(defun %copy-mode-cursor-absolute (screen)
-  "The copy cursor's absolute row index (stream position): history base +
-   scrollback length - scroll offset + viewport cursor row."
-  (+ (screen-history-trimmed screen)
-     (- (length (screen-scrollback screen)) (screen-copy-offset screen))
-     (car (screen-copy-cursor screen))))
-
-(defun %copy-mode-jump-to-absolute (screen absolute)
-  "Scroll/position copy mode so ABSOLUTE (a stream row index) is the cursor
-   row: rows still in the visible region keep offset 0; history rows scroll
-   the viewport so the target is the top row."
-  (let* ((sb-len (length (screen-scrollback screen)))
-         (rel    (- absolute (screen-history-trimmed screen) sb-len)))
-    (if (>= rel 0)
-        (setf (screen-copy-offset screen) 0
-              (screen-copy-cursor screen)
-              (cons (min rel (1- (screen-height screen))) 0))
-        (setf (screen-copy-offset screen) (min (- rel) sb-len)
-              (screen-copy-cursor screen) (cons 0 0)))
-    (setf (screen-dirty-p screen) t)))
-
-(defun %nearest-prompt-mark (screen here direction)
-  "Nearest OSC 133 prompt mark (from SCREEN-PROMPT-MARKS) relative to HERE in
-   DIRECTION (:before or :after the copy cursor), or NIL when none exists."
-  (let ((better-p (ecase direction
-                     (:before (lambda (m best) (and (< m here) (or (null best) (> m best)))))
-                     (:after  (lambda (m best) (and (> m here) (or (null best) (< m best))))))))
-    (reduce (lambda (best m) (if (funcall better-p m best) m best))
-            (screen-prompt-marks screen) :initial-value nil)))
-
-(defun copy-mode-previous-prompt (screen)
-  "send-keys -X previous-prompt: jump to the nearest OSC 133 prompt mark above
-   the copy cursor (shell-integration prompt jumping)."
-  (when (screen-copy-mode-p screen)
-    (let* ((here (%copy-mode-cursor-absolute screen))
-           (mark (%nearest-prompt-mark screen here :before)))
-      (when mark (%copy-mode-jump-to-absolute screen mark)))))
-
-(defun copy-mode-next-prompt (screen)
-  "send-keys -X next-prompt: jump to the nearest OSC 133 prompt mark below
-   the copy cursor."
-  (when (screen-copy-mode-p screen)
-    (let* ((here (%copy-mode-cursor-absolute screen))
-           (mark (%nearest-prompt-mark screen here :after)))
-      (when mark (%copy-mode-jump-to-absolute screen mark)))))
-
-(defmacro define-copy-mode-toggle (name accessor docstring)
-  "Define NAME as a send-keys -X toggle command: flips boolean ACCESSOR on
-   SCREEN when copy-mode is active, and marks the screen dirty.  Every
-   toggle command shares this exact guard/flip/dirty shape."
-  `(defun ,name (screen)
-     ,docstring
-     (when (screen-copy-mode-p screen)
-       (setf (,accessor screen) (not (,accessor screen))
-             (screen-dirty-p screen) t))))
-
-(define-copy-mode-toggle copy-mode-toggle-position screen-copy-hide-position
-  "send-keys -X toggle-position: toggle the position-indicator overlay
-   visibility for this copy-mode session (the -H hide flag flipped).")
-
-(defun copy-mode-stop-selection (screen)
-  "send-keys -X stop-selection: stop EXTENDING the selection but keep the mark
-   in place, unlike clear-selection which drops it (tmux stop-selection).  In
-   this model further motion no longer extends because the selecting flag is
-   cleared; the mark survives for a later begin-selection/other-end."
-  (when (and (screen-copy-mode-p screen) (screen-copy-selecting screen))
-    (setf (screen-copy-selecting screen) nil
-          (screen-dirty-p screen) t)))
-
-(defun copy-mode-selection-mode (screen mode)
-  "send-keys -X selection-mode <char|word|line>: set the selection granularity.
-   line begins a line selection, word selects the current word, anything else
-   (the default char) begins a character selection."
-  (when (screen-copy-mode-p screen)
-    (cond
-      ((string-equal mode "line") (copy-mode-begin-line-selection screen))
-      ((string-equal mode "word") (copy-mode-select-word screen))
-      (t                          (copy-mode-begin-selection screen)))))
-
-(defun copy-mode-scroll-to-mouse (screen)
-  "send-keys -X scroll-to-mouse: scroll the copy-mode viewport toward the mouse
-   drag position.  nerimux performs mouse-drag scrolling in the event layer, so
-   this scriptable form is accepted and refreshes the viewport."
-  (when (screen-copy-mode-p screen)
-    (setf (screen-dirty-p screen) t)))
+;;; The *-and-cancel family (%copy-mode-with-cancel-at-bottom,
+;;; define-copy-mode-cancel-commands + copy-mode-scroll-down-and-cancel /
+;;; -page-down-and-cancel, copy-mode-cursor-down-and-cancel in
+;;; commands-copy-mode-cursor.lisp), previous/next-prompt (+ their
+;;; %copy-mode-cursor-absolute / %copy-mode-jump-to-absolute /
+;;; %nearest-prompt-mark support), toggle-position (+ the
+;;; define-copy-mode-toggle macro, once copy-mode-toggle-rectangle in
+;;; commands-copy-mode-clip.lisp was also gone), stop-selection, and
+;;; scroll-to-mouse were removed: none is reachable from
+;;; %handle-client-copy-key-payload or any other live call site.
 
 (defun copy-mode-begin-selection (screen)
   "Begin a text selection at the current copy-mode cursor position."
@@ -231,49 +103,9 @@
             (screen-copy-selecting   screen) t
             (screen-dirty-p          screen) t))))
 
-(defun copy-mode-set-mark (screen)
-  "Set the copy-mode mark at the current cursor position without starting a selection.
-   Implements tmux's `set-mark` send-keys -X command: the mark can later be
-   jumped to with `jump-to-mark` without having gone through begin-selection.
-   No-op when copy mode is inactive or there is no cursor."
-  (when (and (screen-copy-mode-p screen) (screen-copy-cursor screen))
-    (setf (screen-copy-mark        screen) (screen-copy-cursor screen)
-          (screen-copy-mark-offset screen) (screen-copy-offset screen)
-          (screen-dirty-p          screen) t)))
-
-(defun copy-mode-other-end (screen)
-  "Swap the two ends of the active selection (tmux copy-mode `other-end`, vi `o`).
-   The moving end (cursor) and the anchored end (mark) exchange places so the
-   user can extend the selection from the opposite side.  No-op (returns NIL)
-   when copy mode is inactive, no selection is in progress, or either end is
-   unset.  Marks the screen dirty when a swap occurs."
-  (when (and (screen-copy-mode-p screen)
-             (screen-copy-selecting screen)
-             (screen-copy-mark   screen)
-             (screen-copy-cursor screen))
-    ;; After swapping, the new mark is the old cursor; it was at the current offset.
-    (rotatef (screen-copy-cursor screen) (screen-copy-mark screen))
-    (setf (screen-copy-mark-offset screen) (screen-copy-offset screen)
-          (screen-dirty-p          screen) t)))
-
-(defun copy-mode-jump-to-mark (screen)
-  "Move the copy-mode cursor to the selection mark without swapping (tmux
-   `jump-to-mark`).  When a selection is active, teleports the cursor to the
-   anchor position so the user can re-examine the start of a selection.  No-op
-   when copy mode is inactive or no mark has been set."
-  (when (and (screen-copy-mode-p screen)
-             (screen-copy-mark screen))
-    (let ((mark        (screen-copy-mark screen))
-          (mark-offset (screen-copy-mark-offset screen))
-          (cur-offset  (screen-copy-offset screen)))
-      ;; If the mark was set at a different viewport offset, adjust the cursor
-      ;; row to account for the difference so it points to the same virtual row.
-      (let* ((row-delta (- mark-offset cur-offset))
-             (raw-row   (+ (car mark) row-delta))
-             (h         (screen-height screen))
-             (clamped   (max 0 (min (1- h) raw-row))))
-        (setf (screen-copy-cursor screen) (cons clamped (cdr mark))
-              (screen-dirty-p     screen) t)))))
+;;; copy-mode-set-mark, copy-mode-other-end, and copy-mode-jump-to-mark were
+;;; removed: unreachable from %handle-client-copy-key-payload or any other
+;;; live call site.
 
 (defun %reset-selection-fields (screen)
   "Clear all selection state fields on SCREEN (selecting, mark, line/rect flags) and
@@ -285,16 +117,12 @@
         (screen-copy-rect-select-p    screen) nil
         (screen-dirty-p               screen) t))
 
-(defun copy-mode-clear-selection (screen)
-  "Clear the active selection without leaving copy mode (tmux `clear-selection`,
-   the default copy-mode-vi Escape binding).  Drops the mark and the in-progress
-   selection / line / rectangle flags, but — unlike copy-mode-cancel-selection,
-   which is the full exit-path reset — KEEPS the cursor and scroll position so the
-   user stays put in copy mode.  No-op unless copy mode is active with a selection
-   or mark; marks the screen dirty when it clears."
-  (when (and (screen-copy-mode-p screen)
-             (or (screen-copy-selecting screen) (screen-copy-mark screen)))
-    (%reset-selection-fields screen)))
+;;; copy-mode-clear-selection (tmux clear-selection) was removed: its only two
+;;; callers, copy-mode-copy-selection-no-cancel and the :clear finish branch of
+;;; define-copy-pipe-commands (commands-copy-mode-clip.lisp), were themselves
+;;; dead and were deleted first; re-grepped for zero remaining callers before
+;;; removing this one, per the caution that it looked dead on an earlier pass
+;;; but was in fact still called at that time.
 
 (defun copy-mode-cancel-selection (screen)
   "Cancel any active copy-mode selection."

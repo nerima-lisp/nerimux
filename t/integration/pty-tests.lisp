@@ -110,31 +110,9 @@
         (expect (eq kind :signaled))
         (expect (= code 9)))))
 
-  ;; kill-pane on the last pane kills the window; session has 0 windows.
-  (it "cmd-kill-pane-closes-fd"
-    (unless (pty-available-p)
-      (skip "no PTY available (sandboxed environment)"))
-    ;; with-session handles cleanup of all pane PTYs via unwind-protect.
-    (with-session (session 24 80)
-      (let ((win (session-active-window session)))
-        (declare (ignore win))
-        ;; kill-pane on the sole pane must not signal an error.
-        (finishes (kill-pane session))
-        ;; Killing the only pane removes the window; no windows remain.
-        (expect (null (session-windows session))))))
-
-  ;; After splitting vertically and killing one pane, exactly one pane remains.
-  (it "split-and-kill-returns-to-single"
-    (unless (pty-available-p)
-      (skip "no PTY available (sandboxed environment)"))
-    (with-session (session 24 80)
-      (let ((win (session-active-window session)))
-        ;; Split → 2 panes.
-        (window-split session win :h)
-        (expect (= 2 (length (window-panes win))))
-        ;; Kill the active (second) pane → 1 pane should remain.
-        (kill-pane session)
-        (expect (= 1 (length (window-panes (session-active-window session))))))))
+  ;;; cmd-kill-pane-closes-fd and split-and-kill-returns-to-single were removed:
+  ;;; kill-pane (commands-core.lisp) was deleted along with the other
+  ;;; pane/window op helpers.
 
   ;;;; ── Un-gated sandbox-safe unit tests ──────────────────────────────────────
   ;;;; These run real assertions without /dev/ptmx, a tty, or a socket.

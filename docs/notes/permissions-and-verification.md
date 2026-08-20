@@ -13,6 +13,9 @@
 > `*known-command-names*` (`src/application/config/config-commands.lisp`),
 > which validates `bind-key` targets and does not implement anything.
 >
+> (That file has since been deleted with the rest of the key-table subsystem;
+> the note is kept as the historical record of the audit.)
+>
 > What is still true today: `attach-session -r`'s wire flag
 > (`+attach-flag-read-only+` in `src/infrastructure/net/protocol.lisp`) and
 > the server's per-connection enforcement (`client-conn-read-only-p` in

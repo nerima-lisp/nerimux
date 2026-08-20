@@ -1,6 +1,6 @@
 (in-package #:nerimux/test)
 
-;;;; Commands tests — part XIV: copy-mode-begin-selection multi-row, yank, other-end.
+;;;; Commands tests — part XIV: copy-mode-begin-selection multi-row, yank, cancel-selection.
 
 (describe "commands-suite"
 
@@ -93,41 +93,4 @@
       (nerimux/commands::copy-mode-cancel-selection s)
       (expect (null (nerimux/terminal/types:screen-copy-mark s)))
       (expect (null (nerimux/terminal/types:screen-copy-cursor s)))
-      (expect (nerimux/terminal/types:screen-copy-selecting s) :to-be-falsy)))
-
-  ;;; ── copy-mode-other-end ──────────────────────────────────────────────────────
-
-  ;; copy-mode-other-end exchanges the cursor and mark ends of the selection.
-  (it "copy-mode-other-end-swaps-cursor-and-mark"
-    (let ((s (copy-mode-screen)))
-      (setf (nerimux/terminal/types:screen-copy-selecting s) t
-            (nerimux/terminal/types:screen-copy-mark      s) (cons 0 2)
-            (nerimux/terminal/types:screen-copy-cursor    s) (cons 0 5))
-      (nerimux/commands::copy-mode-other-end s)
-      (expect (equal (cons 0 2) (nerimux/terminal/types:screen-copy-cursor s)))
-      (expect (equal (cons 0 5) (nerimux/terminal/types:screen-copy-mark s)))
-      (expect (nerimux/terminal/types:screen-dirty-p s) :to-be-truthy)))
-
-  ;; copy-mode-other-end is a harmless no-op when no selection is active.
-  (it "copy-mode-other-end-no-op-when-not-selecting"
-    (let ((s (copy-mode-screen)))
-      ;; No selection: selecting NIL, mark/cursor stay as set by copy-mode-enter.
-      (setf (nerimux/terminal/types:screen-copy-selecting s) nil
-            (nerimux/terminal/types:screen-copy-mark      s) nil
-            (nerimux/terminal/types:screen-copy-cursor    s) (cons 0 3))
-      (finishes (nerimux/commands::copy-mode-other-end s))
-      (expect (null (nerimux/terminal/types:screen-copy-mark s)))
-      (expect (equal (cons 0 3) (nerimux/terminal/types:screen-copy-cursor s)))))
-
-  ;; copy-mode-other-end does not swap (and stays clean) when mark is NIL even
-  ;; though selecting is T — guards against a half-initialised selection.
-  (it "copy-mode-other-end-no-op-when-mark-nil"
-    (let ((s (copy-mode-screen)))
-      (setf (nerimux/terminal/types:screen-copy-selecting s) t
-            (nerimux/terminal/types:screen-copy-mark      s) nil
-            (nerimux/terminal/types:screen-copy-cursor    s) (cons 0 4)
-            (nerimux/terminal/types:screen-dirty-p        s) nil)
-      (finishes (nerimux/commands::copy-mode-other-end s))
-      (expect (equal (cons 0 4) (nerimux/terminal/types:screen-copy-cursor s)))
-      (expect (null (nerimux/terminal/types:screen-copy-mark s)))
-      (expect (nerimux/terminal/types:screen-dirty-p s) :to-be-falsy))))
+      (expect (nerimux/terminal/types:screen-copy-selecting s) :to-be-falsy))))

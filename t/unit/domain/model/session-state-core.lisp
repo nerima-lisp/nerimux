@@ -58,23 +58,6 @@
       (session-insert-window sess w1)
       (expect (eq w0 (session-active-window sess)))))
 
-  ;; After killing the active window with no MRU history (timestamps tie at 0), tmux
-  ;; session_detach selects the PREVIOUS window by index — the greatest id strictly
-  ;; less than the killed id (here w0, id 0 < killed id 1).
-  (it "kill-window-selects-previous-by-index"
-    (let* ((w0 (make-window :id 0 :name "a" :width 20 :height 5
-                            :panes (list (make-no-pty-pane 1 0 0 20 5))))
-           (w1 (make-window :id 1 :name "b" :width 20 :height 5
-                            :panes (list (make-no-pty-pane 2 0 0 20 5))))
-           (w3 (make-window :id 3 :name "d" :width 20 :height 5
-                            :panes (list (make-no-pty-pane 3 0 0 20 5))))
-           (sess (make-session :id 1 :name "0" :windows (list w0 w1 w3))))
-      (session-select-window sess w1)       ; kill the middle window (id=1)
-      (nerimux/commands:kill-window sess)
-      ;; No unambiguous MRU (only w1 was focused, and it is gone) -> previous-by-index:
-      ;; greatest id < 1 among {0,3} is w0.
-      (expect (eq w0 (session-active-window sess)))))
-
   ;;; ── session-touch ────────────────────────────────────────────────────────────
 
   ;; session-touch sets session-last-active to a recent universal time and returns the session.

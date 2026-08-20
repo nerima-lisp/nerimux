@@ -5,122 +5,37 @@
         #:nerimux/config
         #:nerimux/pty
         #:nerimux/terminal
-        #:nerimux/model
-        #:nerimux/hooks)
-  ;; cl-concurrent-kit's WITH-TIMEOUT / OPERATION-TIMED-OUT in commands-shell.lisp
-  ;; and commands-pipe-pane.lisp stay qualified, next to the TIMEOUT-SECONDS
+        #:nerimux/model)
+  ;; cl-concurrent-kit's WITH-TIMEOUT / OPERATION-TIMED-OUT in
+  ;; commands-pipe-pane.lisp stay qualified, next to the TIMEOUT-SECONDS
   ;; parameter they bound.  Under bordeaux-threads they HAD to: the condition was
-  ;; named TIMEOUT, which collided with the ordinary parameter name in both files.
+  ;; named TIMEOUT, which collided with the ordinary parameter name.
   ;; OPERATION-TIMED-OUT no longer collides, so this is now a readability choice
   ;; rather than a forced one.
-  (:import-from #:cl-concurrent-kit #:with-lock-held)
   (:documentation
-   "APPLICATION layer: the tmux commands themselves, as operations on the domain
-    model.  Pane and window lifecycle (kill, resize, swap, break, join, respawn), the
-    whole of copy mode (motion, selection, search, jump, yank and its pipe variants),
-    capture-pane, pipe-pane, send-keys, and run-shell/if-shell.  Each is a plain
-    function taking model objects; nothing here parses argv or knows a client
-    exists — that is the dispatch layer in the nerimux package.")
+   "APPLICATION layer: operations on the domain model, as plain functions taking
+    model objects.  What is left after the tmux command table was removed: copy
+    mode, the command-line tokenizer, pipe-pane, and close-pane-pty.  The pane and
+    window lifecycle commands this package was built around (kill, resize, swap,
+    break, join, respawn) went with the dispatcher that called them, or are dead
+    code awaiting a further pass.  Nothing here parses argv or knows a client
+    exists.")
   (:export
-   #:kill-pane
    #:close-pane-pty
-   #:kill-window
-   #:resize-pane
-   #:rename-window
-   #:select-window-by-number
    #:copy-mode-enter
    #:copy-mode-exit
-   #:copy-mode-copy-selection-no-cancel
-   #:copy-mode-copy-selection-no-clear
-   #:copy-mode-pipe-no-cancel #:copy-mode-pipe-no-clear #:copy-mode-pipe-and-cancel
-   #:copy-mode-copy-pipe-no-clear #:copy-mode-copy-pipe-line
-   #:copy-mode-copy-pipe-line-and-cancel
-   #:copy-mode-rectangle-on #:copy-mode-rectangle-off
-   #:copy-mode-cursor-centre-vertical #:copy-mode-cursor-centre-horizontal
    #:copy-mode-scroll
    #:copy-mode-move-cursor
-   #:copy-mode-set-cursor
    #:copy-mode-begin-selection
    #:copy-mode-cancel-selection
-   #:copy-mode-other-end
-   #:copy-mode-jump-to-mark
-   #:copy-mode-clear-selection
-   #:copy-mode-select-word
    #:copy-mode-yank
-   #:copy-mode-word-forward
-   #:copy-mode-word-backward
-   #:copy-mode-word-end
-   #:copy-mode-space-forward
-   #:copy-mode-space-backward
-   #:copy-mode-space-end
-   #:copy-mode-line-start
-   #:copy-mode-back-to-indentation
-   #:copy-mode-line-end
-   #:copy-mode-top
-   #:copy-mode-bottom
-   #:copy-mode-high
-   #:copy-mode-middle
-   #:copy-mode-low
-   #:copy-mode-page-up
-   #:copy-mode-page-down
-   #:copy-mode-half-page-up
-   #:copy-mode-half-page-down
-   #:copy-mode-scroll-up-line
-   #:copy-mode-scroll-down-line
-   #:copy-mode-scroll-middle
-   #:copy-mode-scroll-down-and-cancel
-   #:copy-mode-page-down-and-cancel
-   #:copy-mode-cursor-down-and-cancel
-   #:copy-mode-selection-mode
-   #:copy-mode-scroll-to-mouse
-   #:copy-mode-previous-paragraph
-   #:copy-mode-next-paragraph
-   #:copy-mode-begin-line-selection
-   #:copy-mode-goto-line
-   #:copy-mode-copy-end-of-line
-   #:copy-mode-copy-end-of-line-and-cancel
-   #:copy-mode-copy-line
-   #:copy-mode-copy-line-and-cancel
-   #:copy-mode-jump-forward
-   #:copy-mode-jump-backward
-   #:copy-mode-jump-to
-   #:copy-mode-jump-to-backward
-   #:copy-mode-jump-again
-   #:copy-mode-jump-reverse
-   #:*copy-mode-last-jump*
    #:copy-mode-search-forward
    #:copy-mode-search-backward
    #:copy-mode-search-next
    #:copy-mode-search-prev
-   #:copy-mode-search-forward-incremental
-   #:copy-mode-search-backward-incremental
-   #:copy-mode-next-matching-bracket
-   #:copy-mode-previous-matching-bracket
-   #:copy-mode-toggle-rectangle
-   #:copy-mode-set-mark
-   #:copy-mode-stop-selection
-   #:copy-mode-toggle-position
-   #:copy-mode-previous-prompt
-   #:copy-mode-next-prompt
-   #:copy-mode-half-page-down-and-cancel
-   #:copy-mode-copy-pipe-end-of-line-no-cancel
-   #:copy-mode-append-selection
-   #:copy-mode-append-selection-and-cancel
-   #:copy-mode-copy-pipe
-   #:copy-mode-copy-pipe-no-cancel
-   #:copy-mode-copy-pipe-end-of-line
-   #:rename-session
-   #:run-shell
-   #:if-shell
-   #:swap-pane
-   #:swap-two-panes
-   #:capture-pane
-   #:break-pane
-   #:join-pane
    #:pipe-pane-open
    #:pipe-pane-close
    #:pipe-pane-write
-   #:send-keys-to-pane
    #:tokenize-command-string))
 
 (defpackage #:nerimux

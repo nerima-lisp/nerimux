@@ -38,16 +38,6 @@
          ,@(when overlay `((*overlay* nil))))
      ,@body))
 
-(defmacro with-server-size-state ((&key (rows 24) (cols 80)) &body body)
-  "Run BODY with the server's terminal-size and event-loop specials isolated:
-   *term-rows*/*term-cols* seeded to ROWS/COLS, *dirty* cleared, and *running*
-   set.  Extracted so tests exercising +msg-resize+/+msg-attach+/apply-client-size
-   share one fixture instead of repeating the same four-binding LET."
-  `(let ((nerimux::*term-rows* ,rows)
-         (nerimux::*term-cols* ,cols)
-         (nerimux::*dirty*    nil)
-         (nerimux::*running*  t))
-     ,@body))
 
 (defmacro with-command-rejection-state ((sess command-form overlay-message
                                               description)

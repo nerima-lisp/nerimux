@@ -202,6 +202,25 @@
       (expect (search "runtime-recovery,orphan-pane" output))
       (expect (search ">! runtime orphan-pane" output))))
 
+  ;; The estimator's own contract, at a scale small enough that this test is not
+  ;; itself load-sensitive: SAMPLES is honoured and the reported figure is a
+  ;; median over that many measured runs, taken after a discarded warm-up.
+  (it "benchmark-workspace-overview-medians-over-the-requested-sample-count"
+    (let ((result (nerimux/renderer:benchmark-workspace-overview
+                   :organization-count 2
+                   :repository-count 2
+                   :worktree-count 4
+                   :pane-count 4
+                   :samples 3)))
+      (expect (= 3 (getf result :sample-count)))
+      (expect (integerp (getf result :initial-frame-ms)))
+      (expect (integerp (getf result :scroll-frame-ms)))
+      (expect (getf result :initial-frame-nonempty-p))
+      (expect (getf result :scroll-frame-nonempty-p))))
+
+  ;; The budget itself is unchanged at 100ms.  What changed is how the figure
+  ;; reaching it is produced -- see benchmark-workspace-overview's docstring for
+  ;; why a single unwarmed sample made this check report machine load.
   (it "keeps the mandatory overview scale within the initial and scroll budgets"
     (let ((result
             (nerimux/renderer:benchmark-workspace-overview

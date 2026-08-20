@@ -84,17 +84,6 @@
            ;; Live grid row.
            (cell-char (screen-cell screen col (- vrow sb-n))))))))
 
-(defun %extract-row-chars (screen row from-col to-col)
-  "Return a string of characters from SCREEN at viewport ROW.
-   ROW is a viewport row (0-based, same units as screen-copy-cursor when the
-   copy offset is 0).  The viewport and virtual-row readers share the same
-   extraction core; only the row lookup differs."
-  (%extract-row-chars-from-reader
-   from-col
-   to-col
-   (lambda (col)
-     (cell-char (screen-display-cell screen col row)))))
-
 (defun %selection-text (screen)
   "Compute the text selected by copy-mode in SCREEN.
    Returns a string, or NIL when no valid selection exists.

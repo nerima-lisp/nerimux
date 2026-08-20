@@ -1,6 +1,5 @@
 ;;;; Package for the cl-weave suite over the cl-dataflow-kit copy-mode lifecycle
-;;;; read-model (src/dataflow/), mirroring t/weave/package.lisp for the
-;;;; cl-prolog-kit reasoning read-model.
+;;;; read-model (src/dataflow/).
 
 (defpackage #:nerimux/dataflow-tests
   (:use #:cl #:cl-weave)

@@ -4,71 +4,6 @@
 
 (describe "commands-suite"
 
-  ;; copy-mode-high/middle/low move the cursor to viewport row 0 / mid / height-1
-  ;; without changing the scroll offset.
-  (it "copy-mode-high-middle-low-set-viewport-row"
-    (let ((s (copy-mode-screen)))
-      (setf (nerimux/terminal/types:screen-copy-offset s) 7
-            (nerimux/terminal/types:screen-copy-cursor s) (cons 0 3))
-      (nerimux/commands::copy-mode-low s)
-      (expect (= (1- (screen-height s)) (car (nerimux/terminal/types:screen-copy-cursor s))))
-      (nerimux/commands::copy-mode-high s)
-      (expect (= 0 (car (nerimux/terminal/types:screen-copy-cursor s))))
-      (nerimux/commands::copy-mode-middle s)
-      (expect (= (floor (screen-height s) 2)
-                 (car (nerimux/terminal/types:screen-copy-cursor s))))
-      (expect (= 7 (nerimux/terminal/types:screen-copy-offset s)))
-      (expect (= 3 (cdr (nerimux/terminal/types:screen-copy-cursor s))))))
-
-  ;;; ── WORD motion: copy-mode-space-{forward,backward,end} (vi W/B/E) ───────────
-
-  ;; WORD motion (W/B/E) treats punctuation as part of the WORD — only whitespace
-  ;; separates — unlike w/b/e which honour word-separators (here '-').
-  (it "copy-mode-space-motion-is-whitespace-delimited"
-    (let ((s (copy-mode-screen :content "foo-bar baz")))
-      ;; forward: w stops at 'bar' (col 4, '-' is a separator); W skips to 'baz' (8).
-      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 0))
-      (nerimux/commands::copy-mode-word-forward s)
-      (expect (= 4 (cdr (nerimux/terminal/types:screen-copy-cursor s))))
-      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 0))
-      (nerimux/commands::copy-mode-space-forward s)
-      (expect (= 8 (cdr (nerimux/terminal/types:screen-copy-cursor s))))
-      ;; backward from 'baz' (8): b → 'bar' (4); B → start of 'foo-bar' WORD (0).
-      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 8))
-      (nerimux/commands::copy-mode-word-backward s)
-      (expect (= 4 (cdr (nerimux/terminal/types:screen-copy-cursor s))))
-      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 8))
-      (nerimux/commands::copy-mode-space-backward s)
-      (expect (= 0 (cdr (nerimux/terminal/types:screen-copy-cursor s))))))
-
-  ;; copy-mode-space-end (vi E) moves to the last char of the current/next WORD.
-  (it "copy-mode-space-end-lands-on-word-final-char"
-    (let ((s (copy-mode-screen :content "foo-bar baz")))
-      ;; From col 0, E → last char of 'foo-bar' (col 6, the 'r').
-      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 0))
-      (nerimux/commands::copy-mode-space-end s)
-      (expect (= 6 (cdr (nerimux/terminal/types:screen-copy-cursor s))))))
-
-  ;;; ── back-to-indentation (vi ^): first non-blank vs line-start (vi 0) ─────────
-
-  ;; copy-mode-back-to-indentation (vi ^) moves to the first non-blank column —
-  ;; unlike copy-mode-line-start (vi 0), which always goes to column 0.
-  (it "copy-mode-back-to-indentation-stops-at-first-non-blank"
-    (let ((s (copy-mode-screen :content "   foo")))
-      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 5))
-      (nerimux/commands::copy-mode-back-to-indentation s)
-      (expect (= 3 (cdr (nerimux/terminal/types:screen-copy-cursor s))))
-      ;; line-start still goes to column 0 — the two are distinct.
-      (nerimux/commands::copy-mode-line-start s)
-      (expect (= 0 (cdr (nerimux/terminal/types:screen-copy-cursor s))))))
-
-  ;; On an all-blank row, ^ falls back to column 0.
-  (it "copy-mode-back-to-indentation-blank-line-goes-to-zero"
-    (let ((s (copy-mode-screen)))             ; default content is blank
-      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 4))
-      (nerimux/commands::copy-mode-back-to-indentation s)
-      (expect (= 0 (cdr (nerimux/terminal/types:screen-copy-cursor s))))))
-
   ;;; ── copy-mode-move-cursor ────────────────────────────────────────────────────
 
   ;; Each direction moves the cursor by 1 step and marks the screen dirty.
@@ -141,31 +76,4 @@
       (nerimux/commands::copy-mode-move-cursor s :left)
       (expect (equal (cons 2 5) (nerimux/terminal/types:screen-copy-cursor s)))))
 
-  ;;; ── send-keys -X *-and-cancel (window-copy.c parity) ─────────────────────────
-
-  ;; scroll-down-and-cancel scrolls down one line and exits copy mode when the live
-  ;; bottom (scroll-offset 0) is reached.
-  (it "copy-mode-scroll-down-and-cancel-exits-at-bottom"
-    (let ((s (copy-mode-screen)))
-      (seed-scrollback s 5)
-      (setf (nerimux/terminal/types:screen-copy-offset s) 1)
-      (nerimux/commands::copy-mode-scroll-down-and-cancel s)
-      (expect (nerimux/terminal/types:screen-copy-mode-p s) :to-be-falsy)))
-
-  ;; scroll-down-and-cancel stays in copy mode while still scrolled back, moving the
-  ;; viewport one line newer.
-  (it "copy-mode-scroll-down-and-cancel-stays-when-scrolled-back"
-    (let ((s (copy-mode-screen)))
-      (seed-scrollback s 5)
-      (setf (nerimux/terminal/types:screen-copy-offset s) 3)
-      (nerimux/commands::copy-mode-scroll-down-and-cancel s)
-      (expect (nerimux/terminal/types:screen-copy-mode-p s) :to-be-truthy)
-      (expect (= 2 (nerimux/terminal/types:screen-copy-offset s)))))
-
-  ;; page-down-and-cancel scrolls a full page down and exits at the live bottom.
-  (it "copy-mode-page-down-and-cancel-exits-at-bottom"
-    (let ((s (copy-mode-screen)))
-      (seed-scrollback s 2)
-      (setf (nerimux/terminal/types:screen-copy-offset s) 1)
-      (nerimux/commands::copy-mode-page-down-and-cancel s)
-      (expect (nerimux/terminal/types:screen-copy-mode-p s) :to-be-falsy))))
+  )

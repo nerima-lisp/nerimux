@@ -163,18 +163,14 @@
         (:module "domain/hooks"
          :serial t
          :components
-         ((:file "hooks-tests") ; hook-event-constants, hook-registry, add/run/remove/clear/list-hooks - part I
-          (:file "hooks-tests-b"))) ; command hooks (set-hook), set-hook -u, list-command-hooks, runtime set-hook, show-hooks - part II
+         ((:file "hooks-tests"))) ; hook-event-constants, hook-registry, add/run/remove/clear/list-hooks
         (:module "application/config"
          :serial t
          :components
-         ((:file "config-tests")
-          (:file "config-key-description-tests")
-          (:file "config-key-table-runtime-tests")
+         ((:file "config-key-table-runtime-tests")
           (:file "config-directives-tests") ; directive parsing - part I (suite, bindable commands, basic apply/set directives)
           (:file "config-load-tests") ; directive parsing - load strings/streams/files and config paths
           (:file "config-bind-directive-tests") ; directive parsing - bind/unbind, notes, brace blocks, sequences
-          (:file "config-key-token-tests") ; directive parsing - key tokens, command names, listing labels
           (:file "config-directives-tests-c") ; directive parsing - part III (load-config-file, command-keyword, parse-bind-args, key-table edge cases)
           (:file "config-directives-tests-b") ; directive parsing - part II (%parse-bind-args, tokenizer, set aliases, server flag, terminal option routing)
           (:file "config-source-run-tests") ; directive parsing - source-file, run-shell, path expansion
@@ -182,7 +178,6 @@
           (:file "config-source-file-tests") ; directive parsing - source-file flags, glob expansion, missing diagnostics
           (:file "config-preprocessor-environment-tests") ; directive parsing - preprocessor, environment, key-table side effects
           (:file "config-directives-tests-d") ; directive parsing - part IV (set-g-status-off, bind-key-n, load-config, %elif, line-continuation, comments, styles)
-          (:file "config-directives-real-world-tests") ; directive parsing - real-world config fixture
           (:file "config-directives-tests-e"))) ; directive parsing - part V (macro registry, env-set-p, key-table edge cases, remaining bind/set directives)
         (:module "presentation/renderer"
          :serial t
@@ -212,26 +207,21 @@
          :serial t
          :components
          ((:file "commands-tests") ; resize-pane, scroll, select/rename - part I
-          (:file "commands-pane-lifecycle-tests") ; kill-pane, join-pane insert, swap-two-panes
+          (:file "commands-pane-lifecycle-tests") ; close-pane-pty: fd/pid order, error swallowing
           (:file "commands-tests-e") ; copy-mode WORD-motion and cursor movement - part II
-          (:file "commands-copy-selection-tests") ; copy-mode selection state commands
-          (:file "commands-tests-f") ; rename-window, kill-window, run/if-shell, selection-text, swap-pane - part III
-          (:file "commands-tests-m") ; swap-pane (cont), capture-pane, shift-line-wrapped, copy-mode scroll, resize-pane, split-window - part XIII
+          (:file "commands-tests-f") ; rename-window, kill-window, linear selection-text - part III
+          (:file "commands-tests-m") ; shift-line-wrapped, line-wrapped flag on erase - part XIII
           (:file "commands-tests-n") ; copy-mode-begin-selection multi-row, yank, other-end - part XIV
-          (:file "commands-tests-b") ; copy-mode line-start/end, high/middle/low, scroll noop guards, word motions, top/bottom - part IV
           (:file "commands-tests-k") ; begin-line-selection, copy-end-of-line (D), copy-line (Y), search-forward/backward, wrap-search - part XI
-          (:file "commands-send-keys-tests") ; send-keys and key-name translation
-          (:file "commands-tests-g") ; tokenize, kill-window-mru, copy-mode find, join-pane - part V
-          (:file "commands-tests-h") ; copy-mode-exit, break-pane, clear-history, rotate - part VI
+          (:file "commands-tests-g") ; tokenize-command-string, message-log append/cap/order - part V
+          (:file "commands-tests-h") ; copy-mode exit and half-page scroll, clear-history, rotate - part VI
           (:file "commands-window-navigation-tests") ; find-window and next/previous/last-window command behavior
           (:file "commands-tests-c") ; pipe-pane, virtual-row, timeout, scroll helpers, word/paragraph nav - part VII
           (:file "commands-tests-o") ; selection-bounds scrollback, word/paragraph nav, scroll-middle - part XV
-          (:file "commands-tests-j") ; join-pane helpers, resize-pane up, noop guards, search, scroll, extract-chars, row-string - part X
-          (:file "commands-tests-d") ; rename/select hooks, server-access, customize-mode, begin-line-selection multi-row - part VIII
-          (:file "commands-tests-l") ; copy-mode copy-line/copy-end-of-line, with-shell-timeout, kill hooks, toggle-rect, append-sel, copy-pipe, renumber-windows - part XII
-          (:file "commands-tests-i") ; rectangle-sel, run-copy-cmd, set-cursor, send-keys-l - part IX
-          (:file "commands-copy-navigation-tests") ; jump-to-char, goto-line, search-incr, bracket navigation
-          (:file "commands-tests-p"))) ; copy-selection-no-cancel/no-clear, pipe family, copy-pipe-no-clear/line/-and-cancel, rectangle-on/off, cursor-down-and-cancel, scroll-to-mouse, copy-*-and-cancel, last-jump - part XVII
+          (:file "commands-tests-j") ; resize up, copy-mode search/scroll/word-bounds, row extraction - part X
+          (:file "commands-tests-l") ; copy-mode exit resets rect-select, yank-rectangle fixed columns - part XII
+          (:file "commands-tests-i") ; rectangle selection-text, run-copy-command, copy-mode set-cursor - part IX
+          (:file "commands-copy-navigation-tests"))) ; copy-mode search next/prev/forward/backward guards
         (:module "presentation/prompt"
          :serial t
          :components

@@ -39,17 +39,17 @@ of what an attached client can and cannot do. What remains:
   bottom (`g`/`G`), begin selection and yank (`space`, `y`), and forward/
   backward search (`/`, `?`, then `n`/`N` to repeat) — the fixed key set the
   workspace UI's copy-mode handler binds directly, not through `send-keys
-  -X`, which no longer has a caller. Rectangle selection, prompt jumping, and
-  incremental (type-ahead) search still exist as functions in
-  `application/commands/copy-mode/` but have no key bound to them here.
+  -X`, which no longer has a caller. The word/line/paragraph motions, bracket
+  matching and jump-to-character commands that only the tmux key tables reached
+  were deleted along with those tables.
 - **Format strings** — the `#{...}` modifier engine that renders the status
   bar and pane titles.
 - **Options** — options across server/session/window/pane scopes, applied
   live from `.tmux.conf`. Internal hook events still fire around pane and
   client lifecycle (attach, detach, output, exit, new window), but the
-  `set-hook` *directive* no longer reaches them: the runner it dispatched
-  through was installed by the deleted command layer, so a `set-hook` line
-  parses and stores without effect. See
+  `set-hook` *directive* was removed: firing a stored hook meant running a tmux
+  command name, and no command dispatcher exists any more. A `set-hook` line
+  parses and is ignored. See
   [Compatibility](reference/compatibility.md).
 - **Client/server** — detach/attach over a per-user Unix socket (`-L`/`-S`,
   `$TMUX_TMPDIR`), rendering a separate frame per attached client from one
@@ -68,7 +68,7 @@ of what an attached client can and cannot do. What remains:
 - **cl-process-kit** — timeout-guarded subprocess run, and `select(2)` over
   raw fds.
 - **cl-concurrent-kit** — one reader thread per PTY pane, plus the locks and
-  the preemptive `with-timeout` that bound `run-shell` and `pipe-pane`.
+  the preemptive `with-timeout` that bounds `pipe-pane`.
 - **cl-regex-kit** — regexes (format `s///` and `m/r:` matching).
 - **cl-codec-kit** — UTF-8 string↔octet conversion for protocol frames, PTY
   output and OSC payloads.
@@ -84,13 +84,16 @@ of what an attached client can and cannot do. What remains:
   per-client frames (workspace overview, detail, picker).
 - **cl-vcs-kit** — ghq organization/repository/worktree discovery.
 
-Two further siblings are dogfooded in-tree but are **not** in the shipped
-binary's dependency closure — they back the optional `nerimux/reasoning` and
-`nerimux/dataflow-model` systems, which nothing at runtime calls:
+One further sibling is dogfooded in-tree but is **not** in the shipped binary's
+dependency closure — it backs the optional `nerimux/dataflow-model` system, which
+nothing at runtime calls:
 
-- **cl-prolog-kit** — cold-path relational reasoning over key bindings and the
-  command table.
 - **cl-dataflow-kit** — the copy-mode lifecycle state machine.
+
+A second, **cl-prolog-kit**, backed a `nerimux/reasoning` system that projected
+the config key-table store into Prolog facts. That store was deleted once nothing
+read it, leaving nothing to project, so the system and its suite were retired.
+See [Dogfooded sibling libraries](guide/sibling-libraries.md).
 
 **nerimux has no external dependencies.** Every name above except SBCL is a
 `nerima-lisp` sibling. Four external libraries were retired to get here:

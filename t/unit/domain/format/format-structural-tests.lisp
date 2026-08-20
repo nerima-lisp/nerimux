@@ -2,6 +2,57 @@
 
 (in-package #:nerimux/test)
 
+;;; ── find-symbol target audit ────────────────────────────────────────────────
+;;;
+;;; src/domain/format/ reaches runtime state in the NERIMUX package BY NAME,
+;;; through find-symbol, so the format layer carries no dependency on the
+;;; umbrella package.  The indirection is deliberate and fine.  Its sharp edge
+;;; is not: when the target is deleted, find-symbol returns NIL instead of
+;;; signalling, (symbol-value nil) is legal CL and yields NIL, and the format
+;;; variable it fed silently renders empty.  No compiler warning, no red test.
+;;;
+;;; Two variables rotted exactly that way and were found only by a hand audit:
+;;; *PREFIX-ACTIVE*, which had never been defined anywhere in this tree, and
+;;; *CLIENT-FLAGS*, whose only writer (`refresh-client -f') went with the tmux
+;;; command table.  Both are now plain constants.  A third, *CURRENT-MOUSE-EVENT*,
+;;; is knowingly dead and is listed as the exception below.
+;;;
+;;; The helpers rescan the format sources on every run rather than checking a
+;;; hardcoded list, so a NEW find-symbol site is covered without editing this
+;;; file.  Text scanning, not reading: the reader would need every package in
+;;; those files to exist at test time.  It can therefore MISS a site (a computed
+;;; name, or unusual spacing) but never reports a false one.
+
+(defun %format-source-files ()
+  "Every .lisp under src/domain/format/, located via the ASDF system root."
+  (directory (merge-pathnames
+              #P"src/domain/format/*.lisp"
+              (asdf:system-source-directory :nerimux))))
+
+(defun %file-text (path)
+  (with-open-file (in path :external-format :utf-8)
+    (let ((buffer (make-string (file-length in))))
+      (subseq buffer 0 (read-sequence buffer in)))))
+
+(defun %nerimux-find-symbol-targets (text)
+  "Every NAME occurring as (find-symbol \"NAME\" \"NERIMUX\") in TEXT."
+  (let ((needle "(find-symbol \"")
+        (targets '())
+        (from 0))
+    (loop
+      (let ((hit (search needle text :start2 from)))
+        (unless hit (return))
+        (let* ((name-start (+ hit (length needle)))
+               (name-end   (position #\" text :start name-start)))
+          (unless name-end (return))
+          (let* ((pkg-open (position #\" text :start (1+ name-end)))
+                 (pkg-end  (and pkg-open (position #\" text :start (1+ pkg-open)))))
+            (when (and pkg-end
+                       (string= "NERIMUX" (subseq text (1+ pkg-open) pkg-end)))
+              (push (subseq text name-start name-end) targets)))
+          (setf from (1+ name-end)))))
+    (nreverse targets)))
+
 (describe "format-suite"
 
   ;;; These are pure functions of the session/window/pane structs, wired into
@@ -140,4 +191,35 @@
     (with-format-context (sess win pane ctx) ()
       (declare (ignore sess win pane))
       (expect (string= "" (nerimux/format:expand-format "#{mouse_x}" ctx)))
-      (expect (string= "" (nerimux/format:expand-format "#{mouse_y}" ctx))))))
+      (expect (string= "" (nerimux/format:expand-format "#{mouse_y}" ctx)))))
+
+  ;; #{client_prefix} and #{client_flags} are plain constants in
+  ;; format-context-screen.lisp, not lookups.  Both used to resolve a NERIMUX
+  ;; special by name: *PREFIX-ACTIVE*, which never existed anywhere in this tree,
+  ;; and *CLIENT-FLAGS*, which was only ever written by `refresh-client -f' and
+  ;; went with the tmux command table.  Each silently produced the empty answer
+  ;; while looking like live wiring -- the same shape as #{mouse_x} above, but
+  ;; without that one's explanatory comment or test.  This pins the values so a
+  ;; future attempt to make either dynamic has to come with a test.
+  (it "format-context-client-prefix-and-flags-are-constant"
+    (with-format-context (sess win pane ctx) ()
+      (declare (ignore sess win pane))
+      (expect (string= "0" (nerimux/format:expand-format "#{client_prefix}" ctx)))
+      (expect (string= "" (nerimux/format:expand-format "#{client_flags}" ctx)))))
+
+  ;; Every NERIMUX symbol the format layer resolves by name must still exist.
+  ;; See the header comment for why this is scanned rather than listed, and for
+  ;; the two variables that rotted before this guard existed.
+  (it "format-layer-find-symbol-targets-all-resolve"
+    (let ((known-dead '("*CURRENT-MOUSE-EVENT*"))
+          (unresolved '())
+          (checked 0))
+      (dolist (file (%format-source-files))
+        (dolist (name (%nerimux-find-symbol-targets (%file-text file)))
+          (incf checked)
+          (unless (or (member name known-dead :test #'string=)
+                      (find-symbol name "NERIMUX"))
+            (push (list (file-namestring file) name) unresolved))))
+      ;; Non-vacuity: if the scan matched nothing, the loop above asserts nothing.
+      (expect (plusp checked))
+      (expect (null unresolved)))))

@@ -133,12 +133,6 @@
 
 ;;; ── Frame broadcast ─────────────────────────────────────────────────────────
 
-(defun %render-frame (session)
-  "Pure: render SESSION at the current *term-rows* x *term-cols* and return the
-   encoded +msg-frame+ byte vector.  No I/O side effects — the only inputs are
-   the session model and the two dynamic vars."
-  (msg-frame (render-session-to-string session *term-rows* *term-cols*)))
-
 (defun %render-client-frame (session conn)
   "Render SESSION for CONN's geometry and cache the encoded frame on CONN.
    Session layout remains governed by the effective shared size; this boundary
@@ -198,14 +192,6 @@
   "Cache and send FRAME to one client connection."
   (setf (client-conn-frame conn) frame)
   (send-frame (client-conn-stream conn) frame))
-
-(defun %send-broadcast-frame (frame)
-  "Effect boundary: send the pre-rendered FRAME to every attached client.
-   A client whose send raises an error is silently dropped so one dead peer
-   cannot wedge the broadcast loop."
-  (dolist (conn (copy-list *clients*))
-    (with-loop-safe-error (nil :on-error (%drop-client conn))
-      (%send-client-frame conn frame))))
 
 (defun %broadcast-frame (session)
   "When *dirty* and at least one client is attached, render one frame per

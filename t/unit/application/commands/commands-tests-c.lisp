@@ -190,48 +190,23 @@
       (expect (equal (cons 0 1) (nerimux/terminal/types:screen-copy-cursor s)))
       (expect (screen-dirty-p s) :to-be-truthy)))
 
-  ;; ── %run-with-timeout ────────────────────────────────────────────────────────
+  ;; ── cl-concurrent-kit:with-timeout condition type ────────────────────────────
 
-  ;; %run-with-timeout returns the result of the thunk when it completes within time.
-  (it "run-with-timeout-returns-thunk-result"
-    (let ((result (nerimux/commands::%run-with-timeout (lambda () 42) 10)))
-      (expect (= 42 result))))
-
-  ;; %run-with-timeout returns NIL when the thunk exceeds the timeout.
-  (it "run-with-timeout-returns-nil-on-timeout"
-    (let ((result (nerimux/commands::%run-with-timeout
-                   (lambda () (sleep 60)) 1/1000)))
-      (expect (null result))))
-
-  ;; The deadline may be an arbitrary FORM, not just a literal.  This pins the
-  ;; bordeaux-threads -> cl-concurrent-kit syntax change: bt:with-timeout took
-  ;; its deadline wrapped in a list, (bt:with-timeout (SECS) ...), while
-  ;; cl-concurrent-kit's is a bare form like SB-EXT:WITH-TIMEOUT's,
-  ;; (with-timeout SECS ...).  Carrying the old parens over would expand to
-  ;; (SECS) -- calling the timeout value as a function.
-  (it "run-with-timeout-accepts-a-computed-deadline"
-    (let ((seconds (+ 5 5)))
-      (expect (= 42 (nerimux/commands::%run-with-timeout (lambda () 42) seconds)))))
-
-  ;; The timeout the handler clause catches is CL-CONCURRENT-KIT:OPERATION-TIMED-OUT,
-  ;; not SB-EXT:TIMEOUT.  This matters because SB-EXT:TIMEOUT is a
-  ;; SERIOUS-CONDITION that is deliberately NOT an ERROR, so a handler written
-  ;; for ERROR would not catch it and the timeout would escape %run-with-timeout
-  ;; instead of returning NIL.  Asserted on the primitive so a future refactor of
-  ;; %run-with-timeout's own handler cannot mask it.
+  ;; The condition CL-CONCURRENT-KIT:WITH-TIMEOUT signals on expiry is
+  ;; CL-CONCURRENT-KIT:OPERATION-TIMED-OUT, not SB-EXT:TIMEOUT.  This matters
+  ;; because SB-EXT:TIMEOUT is a SERIOUS-CONDITION that is deliberately NOT an
+  ;; ERROR, so a handler written for ERROR would not catch it and the timeout
+  ;; would escape uncaught.  pipe-pane-open's %with-timeout-cleanup (in
+  ;; commands-pipe-pane.lisp) relies on exactly this: its handler clause is
+  ;; (OR CL-CONCURRENT-KIT:OPERATION-TIMED-OUT ERROR).  Asserted on the
+  ;; primitive so a future cl-concurrent-kit upgrade changing the condition
+  ;; hierarchy is caught here rather than surfacing as a silent timeout leak
+  ;; in pipe-pane-open.
   (it "with-timeout-signals-operation-timed-out-not-sb-ext-timeout"
     (expect (typep (handler-case
                        (cl-concurrent-kit:with-timeout 1/1000 (sleep 60))
                      (cl-concurrent-kit:operation-timed-out (c) c))
                    'error)))
-
-  ;; ── run-shell timeout ────────────────────────────────────────────────────────
-
-  ;; run-shell returns NIL when the command exceeds the given timeout.
-  (it "run-shell-returns-nil-on-timeout"
-    ;; Use a very short timeout (1ms) with a sleep command.
-    (let ((result (nerimux/commands:run-shell "sleep 60" :timeout 1/1000)))
-      (expect (null result))))
 
   ;; ── %copy-mode-clamp-cursor (direct unit tests) ──────────────────────────────
 

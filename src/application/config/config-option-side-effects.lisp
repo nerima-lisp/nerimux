@@ -1,14 +1,17 @@
 (in-package #:nerimux/config)
 
-;;; -- Option runtime side effects + set-hook directive -------------------------
+;;; -- Option runtime side effects -----------------------------------------------
 ;;;
 ;;; %apply-set-directive (in config-directives-set.lisp) writes option values
 ;;; into the options tables, then calls apply-option-side-effects so that
-;;; options which touch non-option runtime state (the prefix key table, the
-;;; default shell, the status-bar height, mouse reporting, ...) take effect
-;;; immediately.  %apply-set-hook-directive is the unrelated set-hook command
-;;; handler; it lives here because it shares no code with the fixed-arity
-;;; set-option table in config-directives-set.lisp.
+;;; options which touch non-option runtime state (the default shell, the
+;;; status-bar height, escape-time, update-environment) take effect immediately.
+;;; The prefix-key and mouse-reporting arms went with the key-table store, and
+;;; the set-hook directive handler that used to live here went with the
+;;; command-hooks registry (nerimux/hooks:*command-hooks*, unwireable — no
+;;; command dispatcher has existed since the tmux command table was deleted):
+;;; both drove machinery that no longer exists, so those options now store and
+;;; stop.
 
 (declaim (special nerimux/model:*update-environment*
                   nerimux/model:+default-update-environment+))
@@ -18,23 +21,6 @@
 (defun %nonempty-string-p (x)
   "T when X is a non-empty string."
   (and (stringp x) (plusp (length x))))
-
-(defun %bind-prefix-key (value key-code-var)
-  "Parse VALUE as a prefix key; when valid, store the byte in KEY-CODE-VAR (a special-var symbol)
-   and arm that key in the prefix table.
-   VALUE \"None\" explicitly DISABLES the prefix (tmux KEYC_NONE): *prefix2-key-code*
-   becomes NIL, *prefix-key-code* resets to the default +prefix-key-code+.
-   A NIL parse of any other (unmatchable) name silently no-ops, leaving the prior
-   prefix unchanged."
-  (cond
-    ((string-equal value "None")
-     (setf (symbol-value key-code-var)
-           (if (eq key-code-var '*prefix2-key-code*) nil +prefix-key-code+)))
-    (t
-     (let ((byte (%parse-prefix-key value)))
-       (when byte
-         (setf (symbol-value key-code-var) byte)
-         (key-table-bind +table-prefix+ (code-char byte) :send-prefix))))))
 
 ;;; ── Declarative option-side-effect dispatch ──────────────────────────────────
 ;;;
@@ -66,15 +52,6 @@
        ,@(mapcar #'%expand-option-side-effect-rule rules))))
 
 (define-option-side-effect-handlers
-  ;; prefix / prefix2: parse and arm the key in the prefix table.
-  ("prefix"
-   (if unset-p
-       (setf *prefix-key-code* +prefix-key-code+)
-       (%bind-prefix-key value '*prefix-key-code*)))
-  ("prefix2"
-   (if unset-p
-       (setf *prefix2-key-code* nil)
-       (%bind-prefix-key value '*prefix2-key-code*)))
   ;; default-shell: update the shell used for new panes immediately.
   ("default-shell"
    (if unset-p
@@ -97,12 +74,6 @@
                (cond (off-p 0)
                      ((and n (> n 0)) (min n +max-status-lines+))
                      (t 1))))))
-  ;; mouse: delegate to *mouse-reporting-hook* so config and renderer stay decoupled.
-  ("mouse"
-   (when *mouse-reporting-hook*
-     (let ((on-p (and (not unset-p)
-                      (member value '("on" "true" "1") :test #'equal))))
-       (ignore-errors (funcall *mouse-reporting-hook* (and on-p t))))))
   ;; update-environment: propagate the space-separated variable list into the model.
   ("update-environment"
    (if unset-p
@@ -112,72 +83,3 @@
          (setf nerimux/model:*update-environment*
                (remove-if (lambda (s) (zerop (length s)))
                           (host-kit:split-string value :separator '(#\Space))))))))
-
-;;; ── set-hook directive ────────────────────────────────────────────────────────
-
-(defun %apply-set-hook-directive (cmd args)
-  "Handle 'set-hook [-a] [-r] [-u] event [command]' directives.
-   -r or -u flag removes/unsets all hooks for the event; without them, registers
-   the command, REPLACING any existing hook for the event (tmux semantics).  -a
-   appends instead, preserving prior hooks.  The command is stored as a raw
-   string (not converted to keyword)
-   so that format variables and arguments (e.g. 'display-message #{session_name}')
-   are expanded at hook-fire time via %run-command-line.
-   Returns T when handled, NIL otherwise."
-  (when (string= cmd "set-hook")
-    ;; Consume ALL leading -X flags (not just -r/-u): -g/-R are accepted and
-    ;; skipped so `set-hook -g <event> <cmd>` registers EVENT, not "-g".
-    ;; -t names the target the hook is scoped to (tmux per-target hooks): a
-    ;; session name by default, a window id with -w, a pane id with -p.  The
-    ;; scoped hook fires only when the firing target matches.  -w/-p WITHOUT
-    ;; -t have no object context at config-load time and register globally.
-    (let* ((remove-p nil)
-           (append-p nil)
-           (window-p nil)
-           (pane-p   nil)
-           (target   nil)
-           (rest     (%consuming-flags (args tok rest)
-                       ((member tok '("-r" "-u") :test #'string=)
-                        (setf remove-p t))
-                       ((string= tok "-a")
-                        (setf append-p t))
-                       ((string= tok "-w")
-                        (setf window-p t))
-                       ((string= tok "-p")
-                        (setf pane-p t))
-                       ;; -t takes a target argument: capture it.
-                       ((string= tok "-t")
-                        (setf target (first rest)
-                              rest (rest rest)))))
-           (event    (first rest))
-           ;; The command may be a single quoted token or split across tokens;
-           ;; join all remaining tokens as a single command line string.
-           (cmd-str  (%join-config-tokens (rest rest)))
-           (scope-kind (cond (pane-p   :scoped-pane)
-                             (window-p :scoped-window)
-                             (t        :scoped-session)))
-           (scope-value (cond
-                          ((null target) nil)
-                          ((eq scope-kind :scoped-session) target)
-                          (t (%parse-hook-object-id target)))))
-      (when event
-        (if remove-p
-            (progn (nerimux/hooks:clear-command-hooks event) t)
-            (when cmd-str
-              ;; Store the raw command string for execution at hook-fire time.
-              ;; Without -a, set-hook REPLACES the event's hook (tmux semantics);
-              ;; with -a it appends, preserving any prior hooks.
-              (if append-p
-                  (nerimux/hooks:append-command-hook event cmd-str
-                                                     scope-value scope-kind)
-                  (nerimux/hooks:set-command-hook event cmd-str
-                                                  scope-value scope-kind))
-              t))))))
-
-(defun %parse-hook-object-id (target)
-  "Parse a set-hook -w/-p -t TARGET into the window/pane id integer, tolerating
-   the tmux id sigils (@2, %3) and a leading ':'.  NIL when unparsable (the
-   hook then registers globally, the tolerant config behaviour)."
-  (let ((trimmed (string-left-trim "@%:" target)))
-    (when (plusp (length trimmed))
-      (parse-integer trimmed :junk-allowed t))))

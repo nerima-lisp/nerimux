@@ -4,36 +4,6 @@
 
 (describe "model-suite"
 
-  ;;; ── swap-pane exchanges rects ────────────────────────────────────────────────
-
-  ;; swap-pane exchanges the x/y/width/height between two panes.
-  (it "swap-pane-exchanges-rects"
-    (let* ((p0  (make-no-pty-pane 1  0 0 20 5))
-           (p1  (make-no-pty-pane 2 21 0 20 5))
-           (win (make-window :id 1 :name "w" :width 41 :height 5
-                             :tree (make-layout-split :h
-                                      (make-layout-leaf p0) (make-layout-leaf p1)
-                                      1/2)
-                             :panes (list p0 p1))))
-      (window-select-pane win p0)
-      (let ((x0-before (pane-x p0))
-            (x1-before (pane-x p1)))
-        (swap-pane win :right)
-        (expect (= x1-before (pane-x p0)))
-        (expect (= x0-before (pane-x p1))))))
-
-  ;;; ── capture-pane returns text ────────────────────────────────────────────────
-
-  ;; capture-pane returns a string containing the content fed to the pane's screen.
-  (it "capture-pane-returns-text"
-    (let* ((screen (make-screen 20 5))
-           (pane   (make-pane :id 1 :x 0 :y 0 :width 20 :height 5
-                              :fd -1 :pid -1 :screen screen)))
-      (feed screen "HELLO")
-      (let ((result (capture-pane pane)))
-        (expect (stringp result))
-        (expect (not (null (search "HELLO" result)))))))
-
   ;;; ── last-pane cycles ─────────────────────────────────────────────────────────
 
   ;; window-select-pane updates window-last-active; switching back via :last-pane

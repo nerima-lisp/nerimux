@@ -1,6 +1,6 @@
 (in-package #:nerimux/test)
 
-;;;; apply-client-size, define-message-dispatch-fn macro engine, and runtime registry tests
+;;;; define-message-dispatch-fn macro engine and runtime registry tests
 
 ;;; %handle-client-message (the single-client wrapper, define-msg-dispatch) and
 ;;; the CPS keystroke walker it dispatched into were deleted with the
@@ -86,26 +86,8 @@
     (expect (eq :fallback-arm
                 (nerimux::%test-only-message-dispatch-fn :unrecognised nil))))
 
-  ;;; -- apply-client-size relayout path ----------------------------------------
-
-  ;; apply-client-size calls window-relayout on the session's active window.
-  (it "apply-client-size-resizes-active-window"
-    (with-fake-session (s)
-      (with-server-size-state ()
-        (let ((win (session-active-window s)))
-          (multiple-value-bind (_t payload) (decode-frame (msg-resize 36 120))
-            (declare (ignore _t))
-            (nerimux::apply-client-size s payload))
-          (expect (= 36 nerimux::*term-rows*))
-          (expect (= 120 nerimux::*term-cols*))
-          (expect (= 120 (window-width win)))))))
-
-  ;; apply-client-size is safe when the session has no active window.
-  (it "apply-client-size-resizes-active-window-with-no-window"
-    (let ((s (make-session :id 1 :name "empty" :windows nil)))
-      (with-server-size-state ()
-        (multiple-value-bind (_type payload) (decode-frame (msg-resize 20 60))
-          (declare (ignore _type))
-          (finishes (nerimux::apply-client-size s payload))
-          (expect (= 20 nerimux::*term-rows*))
-          (expect (= 60 nerimux::*term-cols*)))))))
+  ;; The two apply-client-size tests that used to close this block were removed
+  ;; with the function: it had no production caller left (the multi-client path
+  ;; resizes through %apply-effective-size in server-multi.lisp), so these tests
+  ;; were the only thing keeping it alive.
+  )

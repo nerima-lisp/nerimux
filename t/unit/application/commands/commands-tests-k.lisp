@@ -1,7 +1,7 @@
 (in-package #:nerimux/test)
 
-;;;; commands tests — part K: copy-mode-begin-line-selection, copy-end-of-line (D),
-;;;; copy-line (Y), search-forward/backward, wrap-search, search-across-scrollback.
+;;;; commands tests — part K: copy-mode search-forward/backward, wrap-search,
+;;;; search-across-scrollback.
 
 (defmacro define-copy-mode-search-cases (&body cases)
   `(progn
@@ -31,71 +31,6 @@
                      body)))))
 
 (describe "commands-suite"
-
-  ;; ── copy-mode-begin-line-selection ──────────────────────────────────────────
-
-  ;; copy-mode-begin-line-selection sets line-selection-p and activates the selection.
-  (it "copy-mode-begin-line-selection-sets-line-selection-p"
-    (let ((s (make-screen 20 5)))
-      (nerimux/commands::copy-mode-enter s)
-      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 2 5))
-      (nerimux/commands::copy-mode-begin-line-selection s)
-      (expect (nerimux/terminal/types:screen-copy-line-selection-p s) :to-be-truthy)
-      (expect (nerimux/terminal/types:screen-copy-selecting s) :to-be-truthy)
-      (expect (= 0 (cdr (nerimux/terminal/types:screen-copy-mark s))))
-      (expect (= 19 (cdr (nerimux/terminal/types:screen-copy-cursor s))))))
-
-  ;; copy-mode-begin-line-selection is a no-op when not in copy mode.
-  (it "copy-mode-begin-line-selection-noop-outside-copy-mode"
-    (let ((nerimux/buffer:*paste-buffers* nil))
-      (let ((s (make-screen 20 5)))
-        (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 2 5))
-        ;; Do NOT enter copy mode.
-        (nerimux/commands::copy-mode-begin-line-selection s)
-        (expect (nerimux/terminal/types:screen-copy-line-selection-p s) :to-be-falsy)
-        (expect (nerimux/terminal/types:screen-copy-selecting s) :to-be-falsy))))
-
-  ;; ── copy-mode-copy-end-of-line (D) ──────────────────────────────────────────
-
-  ;; copy-mode-copy-end-of-line copies text from cursor to end of row and exits.
-  (it "copy-mode-copy-end-of-line-yanks-from-cursor"
-    (let ((nerimux/buffer:*paste-buffers* nil))
-      (let ((s (make-screen 20 5)))
-        (feed s "hello world")
-        (nerimux/commands::copy-mode-enter s)
-        (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 6))
-        (nerimux/commands::copy-mode-copy-end-of-line s)
-        (expect (screen-copy-mode-p s) :to-be-truthy)
-        (let ((yanked (nerimux/buffer:get-paste-buffer 0)))
-          (expect (and yanked (string= "world" yanked)))))))
-
-
-  ;; ── copy-mode-copy-line (Y) ──────────────────────────────────────────────────
-
-  ;; copy-mode-copy-line copies the full current row content and exits.
-  (it "copy-mode-copy-line-yanks-full-row"
-    (let ((nerimux/buffer:*paste-buffers* nil))
-      (let ((s (make-screen 20 5)))
-        (feed s "hello")
-        (nerimux/commands::copy-mode-enter s)
-        (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 10))
-        (nerimux/commands::copy-mode-copy-line s)
-        (expect (screen-copy-mode-p s) :to-be-truthy)
-        (let ((yanked (nerimux/buffer:get-paste-buffer 0)))
-          (expect (and yanked (search "hello" yanked)))))))
-
-  ;; copy-mode-copy-end-of-line and copy-mode-copy-line leave paste-buffers empty outside copy mode.
-  (it-each ((nerimux/commands::copy-mode-copy-end-of-line "copy-end-of-line")
-            (nerimux/commands::copy-mode-copy-line        "copy-line"))
-      "copy-mode-copy-yank-noop-outside-copy-mode: ~*~A"
-      (fn desc)
-    (declare (ignore desc))
-    (let ((nerimux/buffer:*paste-buffers* nil))
-      (let ((s (make-screen 20 5)))
-        (feed s "hello world")
-        (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 0))
-        (funcall fn s)
-        (expect (null nerimux/buffer:*paste-buffers*)))))
 
   ;; ── copy-mode-search-forward / search-backward ──────────────────────────────
 
@@ -149,21 +84,7 @@
      :fixture (feed s "a (b) c")
      :cursor (cons 0 0)
      :action (nerimux/commands::copy-mode-search-forward s "(")
-     :expectations ((:cursor-col 2 "literal '(' must be found at col 2")))
-    (copy-mode-search-forward-word-searches-literal-word
-     "copy-mode-search-forward-word searches for the literal word under the cursor."
-     :fixture (feed s "xx a.b aXb a.b")
-     :cursor (cons 0 3)
-     :action (nerimux/commands::copy-mode-search-forward-word s)
-     :expectations ((:cursor-col 11 "forward word search must land on the next literal match")
-                    (:search-term "a\\.b" "forward word search must save the escaped literal term")))
-    (copy-mode-search-backward-word-searches-literal-word
-     "copy-mode-search-backward-word searches for the literal word under the cursor."
-     :fixture (feed s "xx a.b aXb a.b")
-     :cursor (cons 0 12)
-     :action (nerimux/commands::copy-mode-search-backward-word s)
-     :expectations ((:cursor-col 11 "backward word search must land on the nearest literal match")
-                    (:search-term "a\\.b" "backward word search must save the escaped literal term"))))
+     :expectations ((:cursor-col 2 "literal '(' must be found at col 2"))))
 
   ;; ── wrap-search: search wraps around the buffer ends (default on) ────────────
 

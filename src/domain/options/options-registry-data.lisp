@@ -5,8 +5,8 @@
 ;;;; This is pure DATA fed to the define-tmux-options / define-server-options
 ;;;; macros defined in options.lisp; it is loaded immediately after that file so
 ;;;; the macros are already available.  Keeping the tables in their own file
-;;;; mirrors this project's convention for large data blocks (see
-;;;; commands-keys-data.lisp) and keeps options.lisp itself as pure macro/logic.
+;;;; follows this project's convention for large data blocks and keeps
+;;;; options.lisp itself as pure macro/logic.
 
 ;;; ── Oversized option defaults ────────────────────────────────────────────────
 ;;;

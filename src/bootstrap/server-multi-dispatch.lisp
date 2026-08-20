@@ -1662,44 +1662,6 @@ display label back into a target string."
 
 ;;; ── Per-client message dispatch ─────────────────────────────────────────────
 
-(defun %client-command-token-name (value)
-  (cond ((stringp value) (string-downcase value))
-        ((symbolp value) (string-downcase (symbol-name value)))))
-
-(defun %client-direction-flag (value)
-  (let ((name (%client-command-token-name value)))
-    (and name
-         (cdr (assoc name
-                     '(("left" . "-L")
-                       ("right" . "-R")
-                       ("up" . "-U")
-                       ("down" . "-D"))
-                     :test #'string=)))))
-
-(defun %client-directional-args (args)
-  (let ((flag (%client-direction-flag (first args))))
-    (if flag
-        (cons flag (rest args))
-        args)))
-
-(defun %client-split-args (args)
-  (let ((first (%client-command-token-name (first args))))
-    (cond
-      ((null first) (list "-v"))
-      ((member first '("-h" "-v") :test #'string=) args)
-      ((member first '("horizontal" "h") :test #'string=)
-       (cons "-h" (rest args)))
-      ((member first '("vertical" "v") :test #'string=)
-       (cons "-v" (rest args)))
-      (t (cons "-v" args)))))
-
-(defun %client-restart-args (args)
-  (if (some (lambda (arg)
-              (and (stringp arg) (string= arg "-k")))
-            args)
-      args
-      (cons "-k" args)))
-
 ;;; define-multi-msg-dispatch builds %handle-multi-client-message from a
 ;;; declarative rule table, delegating to define-message-dispatch-fn (server.lisp)
 ;;; so both event loops share the same COND-expansion engine.  TYPE, PAYLOAD,

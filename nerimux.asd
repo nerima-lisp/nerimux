@@ -77,15 +77,12 @@
      (:module "application/config"
       :serial t
       :components
-      ((:file "config-key-table-store") ; key-table storage primitives (bind/unbind/lookup)
-       (:file "config")
+      ((:file "config")
        (:file "config-tokenizer")    ; config tokenizer + key/command parse tables
          (:file "config-directives-macro")   ; generic directive-dispatch macro infra + posix/tilde/flag helpers
-         (:file "config-directives-bind-sequences") ; brace/semicolon splitting for bind payloads
-         (:file "config-directives-bind-parse") ; bind-key argument parsing + command resolution
-         (:file "config-directives-bind-dispatch") ; bind/unbind directive dispatch
+         (:file "config-directives-bind-sequences") ; semicolon splitting for directive payloads
          (:file "config-directives-set")     ; fixed-arity table + set-option flag handling/routing
-       (:file "config-option-side-effects") ; option runtime side effects + set-hook directive
+       (:file "config-option-side-effects") ; option runtime side effects
        (:file "config-directives-runtime-services") ; shared shell execution services
        (:file "config-directives-environment") ; set-environment handler
        (:file "config-directives-if-shell") ; if-shell handler
@@ -229,11 +226,13 @@
       :serial t
       :components
       ((:file "prompt")
-       (:file "overlay")))              ; overlay, popup, menu state (used by dispatch/events/renderer)
-     ;; commands context: general pane/window ops + the cohesive copy-mode
-     ;; cluster (its own sub-area). commands-core loads first, then copy-mode,
-     ;; then commands/commands-keys-data/commands-tokenizer/commands-keys/
-     ;; commands-shell (split back to root via :pathname).
+       (:file "overlay")))              ; overlay, popup, menu state (read by renderer-compose-overlay and the visual-bell transient)
+     ;; commands context: what is left of the pane/window operations, plus the
+     ;; copy-mode cluster.  commands-core loads first, then copy-mode, then the
+     ;; two survivors split back to root via :pathname.  The tmux command
+     ;; implementations this directory was built for (commands.lisp,
+     ;; commands-shell, commands-keys, commands-keys-data, commands-capture-pane)
+     ;; went with the command table that called them.
      (:module "application/commands"
       :serial t
       :components
@@ -244,27 +243,15 @@
       ((:file "commands-copy-mode")      ; copy-mode core: enter/exit, scroll, prompts, selection state
        (:file "commands-copy-mode-cursor") ; cursor movement and viewport edge scrolling
        (:file "commands-copy-mode-selection") ; selection bounds and text extraction helpers
-       (:file "commands-copy-mode-word") ; word/WORD motion helpers shared by navigation/search
-       (:file "commands-copy-mode-nav-line") ; line-start/end, cursor-jump macros, scroll wrappers
-       (:file "commands-copy-mode-nav-select") ; begin-line-selection
-       (:file "commands-copy-mode-nav-paragraph") ; paragraph boundaries
-       (:file "commands-copy-mode-nav-jump") ; jump-to-char and goto-line commands
-       (:file "commands-copy-mode-nav-copy") ; copy-end-of-line, copy-line helpers
        (:file "commands-copy-mode-clip") ; rectangle selection text, yank, copy-pipe, append-selection
-       (:file "commands-copy-mode-virtual") ; virtual-row helpers shared by search/brackets
-       (:file "commands-copy-mode-brackets") ; bracket matching commands
+       (:file "commands-copy-mode-virtual") ; virtual-row helpers shared by search and selection
        (:file "commands-copy-mode-search"))) ; search-forward/backward, search-next/prev
      (:module "application-commands-2"
       :pathname "application/commands"
       :serial t
       :components
-      ((:file "commands")               ; shared command execution helpers
-       (:file "commands-capture-pane")  ; capture-pane snapshot/rendering
-       (:file "commands-pipe-pane")     ; pipe-pane process I/O lifecycle
-       (:file "commands-keys-data")      ; send-keys key-name data tables
-       (:file "commands-tokenizer")      ; shell-style command-string tokeniser
-       (:file "commands-keys")           ; send-keys key-name translation logic
-       (:file "commands-shell")))        ; run-shell / if-shell subprocess execution
+       ((:file "commands-pipe-pane")     ; pipe-pane process I/O lifecycle
+        (:file "commands-tokenizer")))   ; shell-style command-string tokeniser
      (:module "presentation/renderer"
       :serial t
       :components
@@ -351,41 +338,22 @@
   :perform (test-op (op c)
              (funcall (find-symbol "RUN-TESTS" (find-package "NERIMUX/TEST")))))
 
-;; The two cold-path read-models below are OPTIONAL systems, not part of core
-;; `nerimux'.  Neither has a single call site anywhere in src/ outside its own
-;; directory, so carrying them in core bought nothing at runtime while forcing
-;; cl-prolog-kit and cl-dataflow-kit into the shipped binary's dependency
-;; closure.  They stay in-tree because nerimux is the org's L4 testbed and these
-;; are how cl-prolog-kit and cl-dataflow-kit get dogfooded; they are simply no
-;; longer loaded by `(asdf:load-system "nerimux")'.
+;; The cold-path read-model below is an OPTIONAL system, not part of core
+;; `nerimux'.  It has no call site anywhere in src/ outside its own directory, so
+;; carrying it in core bought nothing at runtime while forcing cl-dataflow-kit
+;; into the shipped binary's dependency closure.  It stays in-tree because
+;; nerimux is the org's L4 testbed and this is how cl-dataflow-kit gets
+;; dogfooded; it is simply not loaded by `(asdf:load-system "nerimux")'.
 ;;
-;; Naming: the source systems could not reuse "nerimux/dataflow" — that name was
+;; Its sibling, nerimux/reasoning (cl-prolog-kit), was RETIRED: it existed only
+;; to project nerimux/config's key-table store into Prolog facts, and that store
+;; was deleted once nothing read it.  With no facts left to project there was
+;; nothing to narrow it to, so the system and its cl-weave suite went together.
+;;
+;; Naming: the source system could not reuse "nerimux/dataflow" — that name is
 ;; already taken by the cl-weave TEST system below, and renaming it would break
 ;; the documented NERIMUX_TEST_SYSTEM values in README.md and run-tests.lisp.
 ;; Hence nerimux/dataflow-model (source) alongside nerimux/dataflow (test).
-
-(defsystem "nerimux/reasoning"
-  :description "Prolog-backed cold-path reasoning read-model (keys, commands)."
-  :author "takeokunn <bararararatty@gmail.com>"
-  :maintainer "takeokunn <bararararatty@gmail.com>"
-  :license "MIT"
-  :version "0.2.0"
-  :homepage "https://github.com/nerima-lisp/nerimux"
-  :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
-  :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  ;; Depends on "nerimux" for nerimux/config's key-table store, which is what
-  ;; this read-model projects.  The second domain it used to carry —
-  ;; command-rulebase, reaching *COMMAND-USAGE-TABLE* out of the NERIMUX package
-  ;; by find-symbol — went with the tmux command table: with the table deleted
-  ;; that lookup returned NIL and the rulebase built itself over zero facts
-  ;; instead of failing, so it was removed rather than left reasoning silently
-  ;; over nothing.  See the retirement note in guide/sibling-libraries.md.
-  :depends-on ("nerimux" "cl-prolog-kit")
-  :pathname "src/reasoning"
-  :serial t
-  :components ((:file "package")
-               (:file "key-rulebase")
-               (:file "key-tables")))
 
 (defsystem "nerimux/dataflow-model"
   :description "cl-dataflow-kit copy-mode lifecycle read-model."
@@ -402,34 +370,8 @@
   :components ((:file "package")
                (:file "copy-mode-lifecycle")))
 
-;; cl-weave regression suite for the reasoning read-model.  It exercises the
-;; reasoning API through custom cl-weave matchers and reuses cl-prolog-kit's own
-;; cl-weave bridge (`cl-prolog-kit/weave:deftest-queries') for raw Prolog queries.
-;; Run with: (asdf:test-system :nerimux/weave)
-(defsystem "nerimux/weave"
-  :description "cl-weave suite for the nerimux Prolog reasoning read-model."
-  :author "takeokunn <bararararatty@gmail.com>"
-  :maintainer "takeokunn <bararararatty@gmail.com>"
-  :license "MIT"
-  :version "0.2.0"
-  :homepage "https://github.com/nerima-lisp/nerimux"
-  :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
-  :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  :depends-on ("nerimux" "nerimux/reasoning" "cl-weave" "cl-prolog-kit" "cl-prolog-kit/weave")
-  :pathname "t/weave"
-  :serial t
-  :components ((:file "package")
-               (:file "support")
-               (:file "matchers")
-               (:file "key-reasoning-tests")
-               (:file "entry"))
-  :perform (test-op (op c)
-             (declare (ignore op c))
-             (unless (funcall (find-symbol "RUN-WEAVE-TESTS" (find-package "NERIMUX/WEAVE-TESTS")))
-               (error "nerimux cl-weave suite failed."))))
-
 ;; cl-weave regression suite for the cl-dataflow-kit copy-mode lifecycle
-;; read-model (src/dataflow/), mirroring nerimux/weave above.
+;; read-model (src/dataflow/).
 ;; Run with: (asdf:test-system :nerimux/dataflow)
 (defsystem "nerimux/dataflow"
   :description "cl-weave suite for the nerimux cl-dataflow-kit copy-mode lifecycle read-model."

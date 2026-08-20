@@ -227,10 +227,7 @@
    #:+hook-after-new-window+
    #:+hook-after-new-pane+
    #:+hook-pane-exited+
-   #:+hook-after-rename-window+
    #:+hook-session-created+
-   #:+hook-after-kill-pane+
-   #:+hook-after-kill-window+
    #:+hook-after-split-window+
    #:+hook-client-attached+
    #:+hook-client-detached+
@@ -257,17 +254,7 @@
    #:remove-hook
    #:run-hooks
    #:clear-hooks
-   #:list-hooks
-   #:*command-hooks*
-   #:set-command-hook
-   #:scoped-hook-entry-p
-   #:append-command-hook
-   #:command-hooks
-   #:clear-command-hooks
-   #:list-command-hooks
-   #:describe-command-hooks
-   #:*command-hook-runner*
-   #:run-command-hooks-via-runner))
+   #:list-hooks))
 
 (defpackage #:nerimux/options
   (:use #:cl)

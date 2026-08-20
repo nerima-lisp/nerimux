@@ -47,17 +47,19 @@
                                   "1" "0")))
 
 (defun %synthesized-client-key-table (pane-scr)
-  "The name of the client's current key table (tmux client_key_table),
-   synthesized: prefix > copy-mode > custom *key-table* > root."
-  (flet ((runtime-value (name)
-           (let ((sym (find-symbol name "NERIMUX")))
-             (and sym (boundp sym) (symbol-value sym)))))
-    (cond
-      ((runtime-value "*PREFIX-ACTIVE*") "prefix")
-      ((and pane-scr (nerimux/terminal:screen-copy-mode-p pane-scr)) "copy-mode")
-      ((let ((table (runtime-value "*KEY-TABLE*")))
-         (and (stringp table) (string/= table "root") table)))
-      (t "root"))))
+  "The name of the client's current key table (tmux client_key_table): either
+   \"copy-mode\" or \"root\".
+
+   tmux synthesizes this as prefix > copy-mode > custom key table > root.  The
+   first and third arms are gone.  Both resolved a NERIMUX special by name --
+   *PREFIX-ACTIVE* and *KEY-TABLE* -- and neither symbol has ever been defined
+   anywhere in this tree, so find-symbol returned NIL and both arms were
+   permanently unreachable while reading like live guards.  There are no
+   user-definable key tables any more, and the workspace UI's prefix (C-q) is
+   per-client state on the connection rather than a server-wide special."
+  (if (and pane-scr (nerimux/terminal:screen-copy-mode-p pane-scr))
+      "copy-mode"
+      "root"))
 
 (defmacro %if-copy-mode (pane-scr value-form)
   "Evaluate VALUE-FORM when PANE-SCR exists and is in copy mode; otherwise \"\".
@@ -89,11 +91,9 @@
                      (nerimux/terminal:screen-cell pane-scr cursor-x cursor-y)))
             "")
         :pane-in-mode         (%copy-mode-flag pane-scr)
-        ;; tmux #{client_key_table}: synthesized from the live key state —
-        ;; "prefix" while awaiting the command key, "copy-mode" while the
-        ;; active pane is in copy mode, else the custom *key-table* or "root".
-        ;; Runtime specials live in NERIMUX; resolved by name so the format
-        ;; layer keeps no dependency on the umbrella package.
+        ;; tmux #{client_key_table}: "copy-mode" while the active pane is in
+        ;; copy mode, else "root".  See the function for why the "prefix" and
+        ;; custom-key-table arms are gone.
         :client-key-table     (%synthesized-client-key-table pane-scr)
         :pane-mode            (%if-copy-mode pane-scr "copy-mode")
         :scroll-position
@@ -178,10 +178,14 @@
   "Build the client/server/host/environment slice of the format-context plist.
    CLIENT-WIDTH, CLIENT-HEIGHT, and CLIENT-TTY describe the attached client;
    HOSTNAME and PID-STR are pre-computed by the caller."
-  (list :client-flags
-        (let* ((sym (find-symbol "*CLIENT-FLAGS*" "NERIMUX"))
-               (val (and sym (boundp sym) (symbol-value sym))))
-          (format nil "~{~A~^,~}" (sort (copy-list val) #'string<)))
+  (list ;; #{client_flags} is always "".  It read *CLIENT-FLAGS* out of the
+        ;; NERIMUX package by find-symbol; that variable was only ever written
+        ;; by `refresh-client -f', which went with the tmux command table, so
+        ;; it sat bound to NIL forever and this rendered the empty string while
+        ;; looking like a live lookup.  The variable is now deleted and the
+        ;; constant stated outright -- same output, no booby trap.  Compare
+        ;; :client-prefix below, which had the identical shape.
+        :client-flags ""
         :client-readonly
         (let* ((sym (find-symbol "*CLIENT-READ-ONLY*" "NERIMUX"))
                (val (and sym (boundp sym) (symbol-value sym))))
@@ -196,9 +200,15 @@
         :client-name          client-tty
         :client-termname      (or (ignore-errors (sb-ext:posix-getenv "TERM")) "")
         :client-pid           pid-str
-        :client-prefix        (if (ignore-errors
-                                    (symbol-value (find-symbol "*PREFIX-ACTIVE*" "NERIMUX")))
-                                  "1" "0")
+        ;; #{client_prefix} is always "0".  It read *PREFIX-ACTIVE* out of the
+        ;; NERIMUX package by find-symbol, and that symbol has never existed in
+        ;; this tree -- find-symbol returns NIL, (symbol-value nil) is legal CL
+        ;; and yields NIL, so this silently rendered "0" while looking like a
+        ;; live lookup.  With the tmux prefix key gone the symbol can never
+        ;; appear, so the constant is stated outright rather than left as a
+        ;; lookup that cannot resolve.  The workspace UI's own prefix (C-q) is
+        ;; per-client state on the connection, not a server-wide special.
+        :client-prefix        "0"
         :client-last-session  ""
         :server-pid           pid-str
         :version              (nerimux/version:version-string)

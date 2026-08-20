@@ -72,9 +72,10 @@ prefix-key or key-table fallthrough from `:normal` mode any more — that
 pipeline (`application/dispatch/`, `presentation/events/`) was removed with
 the standalone multiplexer, and `%handle-multi-key-message`
 (`src/bootstrap/server-multi-dispatch.lisp`) says so directly at the point
-where the fallthrough used to be. A `.tmux.conf` `bind-key` directive still
-parses into the key-table store in `application/config/`, but nothing reads
-that store at dispatch time any more.
+where the fallthrough used to be. The key-table store a `.tmux.conf` `bind`
+directive used to write into is gone too: nothing had read it since the
+dispatch layer went, so it was deleted rather than kept as write-only state.
+A `bind` line now matches no handler at all and is silently dropped.
 
 ## Layering
 
@@ -83,9 +84,9 @@ The layering rule is:
 - `domain` has no I/O — it defines the session/window/pane model and the port
   *variables* (`nerimux/ports:*spawn-pty*`, `*write-pty*`, …) that
   infrastructure binds to a real implementation.
-- `application` holds use cases over the domain model: the session/window/pane
-  operations in `commands/` (kill, split, capture, respawn, copy-mode), and
-  `.tmux.conf` directive parsing in `config/`.
+- `application` holds use cases over the domain model: what is left in
+  `commands/` (copy mode, the command-line tokenizer, pipe-pane, and pane PTY
+  teardown), and `.tmux.conf` directive parsing in `config/`.
 - `infrastructure` provides the real PTY/socket/VCS adapters and binds the
   domain's port variables to them.
 - `presentation` turns model state into escape codes and, for the workspace
@@ -118,8 +119,8 @@ REPL) is gone too.
 ```
 nerimux/
 ├── flake.nix               # Nix build + checks (pure Lisp, no C compilation)
-├── nerimux.asd             # ASDF systems: nerimux, /test, /weave, /dataflow,
-│                           #   plus optional /reasoning and /dataflow-model
+├── nerimux.asd             # ASDF systems: nerimux, /test, /dataflow,
+│                           #   plus optional /dataflow-model
 ├── run-tests.lisp          # single Lisp-level test entry point
 ├── src/
 │   ├── bootstrap/          # packages, entry point (`attach`/`server`), the
@@ -135,11 +136,11 @@ nerimux/
 │   │   ├── repository/     #   session-store protocol (implemented in bootstrap)
 │   │   └── ports/          #   port variables (PTY, VCS interfaces)
 │   ├── application/        # use cases over the domain model
-│   │   ├── commands/       #   session/window/pane operations (kill, split,
-│   │   │   └── copy-mode/  #     capture, respawn, …) and vi-style copy-mode
+│   │   ├── commands/       #   copy-mode, the command-line tokenizer and
+│   │   │   └── copy-mode/  #     pipe-pane — what outlived the command table
 │   │   ├── config/         #   tmux.conf directive parsing: options, hooks,
-│   │   │                   #   bind-key/key-table storage (see note above —
-│   │   │                   #   nothing dispatches through the key tables now)
+│   │   │                   #   source-file, run/if-shell (bind/unbind parse
+│   │   │                   #   and are discarded — see note above)
 │   │   └── picker/         #   global picker item model (build/filter across
 │   │                       #   the workspace catalog)
 │   ├── infrastructure/     # adapters: PTY, sockets, raw-mode stdin input, VCS
@@ -147,12 +148,10 @@ nerimux/
 │   │   ├── prompt/         #   command-prompt overlay rendering
 │   │   └── renderer/       #   ANSI compositor + cl-tui-kit widget layer — see
 │   │                       #   below, it is one render path, not two
-│   ├── reasoning/          # cl-prolog-kit cold-path read-models — OPTIONAL system
 │   └── dataflow/           # cl-dataflow-kit cold-path read-model — OPTIONAL system
 └── t/
     ├── unit/               # feature-focused spec files
     ├── integration/        # PTY/socket/runtime integration specs
-    ├── weave/              # cl-weave suite for the reasoning read-model
     ├── dataflow/           # cl-weave suite for the copy-mode lifecycle read-model
     └── e2e/                # binary-level smoke test
 ```
@@ -175,12 +174,12 @@ the file that is specific to the `cl-tui-kit` surface/widget wrapping;
 `renderer.lisp` is an intentionally empty load-order stub (see its own header
 comment).
 
-The cold-path read-models under `src/reasoning/` and `src/dataflow/` are
-described in [Dogfooded sibling libraries](../guide/sibling-libraries.md).
+The cold-path read-model under `src/dataflow/` is described in
+[Dogfooded sibling libraries](../guide/sibling-libraries.md).
 
-They are **not part of the core `nerimux` system**. Neither has a call site
-anywhere in `src/` outside its own directory, so loading them into the shipped
-binary bought nothing at runtime while pulling `cl-prolog-kit` and
-`cl-dataflow-kit` into its dependency closure. They now live in the optional
-systems `nerimux/reasoning` and `nerimux/dataflow-model`, which their existing
-test suites (`nerimux/weave` and `nerimux/dataflow`) depend on explicitly.
+It is **not part of the core `nerimux` system**. It has no call site anywhere in
+`src/` outside its own directory, so loading it into the shipped binary bought
+nothing at runtime while pulling `cl-dataflow-kit` into its dependency closure.
+It lives in the optional system `nerimux/dataflow-model`, which its existing test
+suite (`nerimux/dataflow`) depends on explicitly. The parallel `nerimux/reasoning`
+system was retired when the key-table store it projected was deleted.

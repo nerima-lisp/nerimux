@@ -81,29 +81,6 @@
                (second-win (find 1 wins :key #'window-id)))
           (expect second-win :to-be-truthy)))))
 
-  ;; After killing a middle window, the remaining window ids do not change.
-  (it "window-id-stable-after-kill"
-    (unless (pty-available-p)
-      (skip "no PTY available (sandboxed environment)"))
-    (with-session (session 24 80)
-      ;; Build three windows: ids 0, 1, 2.
-      (session-new-window session "b" 23 80)
-      (session-new-window session "c" 23 80)
-      (expect (= 3 (length (session-windows session))))
-      (let* ((wins (session-windows session))
-             (w0 (find 0 wins :key #'window-id))
-             (w1 (find 1 wins :key #'window-id))
-             (w2 (find 2 wins :key #'window-id)))
-        (expect w0 :to-be-truthy)
-        (expect w2 :to-be-truthy)
-        ;; Kill the middle window (id=1).
-        (nerimux/commands:kill-window session w1)
-        (let ((remaining (session-windows session)))
-          (expect (= 2 (length remaining)))
-          (expect (find 0 remaining :key #'window-id) :to-be-truthy)
-          (expect (find 2 remaining :key #'window-id) :to-be-truthy)
-          (expect (null (find 1 remaining :key #'window-id)))))))
-
   ;; ── create-initial-session ID counter ───────────────────────────────────────
 
   ;; create-initial-session increments *session-id-counter* and assigns the new id

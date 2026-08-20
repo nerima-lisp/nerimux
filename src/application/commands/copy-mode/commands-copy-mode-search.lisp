@@ -7,8 +7,6 @@
 ;;; copy_mode_search_backward(Screen, Term) :- scan rows from cursor upward.
 ;;; copy_mode_search_next(Screen)           :- repeat last search forward.
 ;;; copy_mode_search_prev(Screen)           :- repeat last search backward.
-;;; copy_mode_search_forward_incremental    :- C-s live-update search.
-;;; copy_mode_search_backward_incremental   :- C-r live-update search.
 ;;;
 ;;; Virtual row numbering (0 = oldest scrollback row, increasing toward live grid):
 ;;;   0 .. sb-count-1  : scrollback (oldest→newest)
@@ -16,17 +14,6 @@
 ;;;
 ;;; Mapping from (copy-offset, viewport-row) to virtual row:
 ;;;   vrow = sb-count + viewport-row - copy-offset
-
-;;; ── Incremental-search origin store ─────────────────────────────────────────
-;;;
-;;; When incremental search starts, the current cursor+offset are saved so they
-;;; can be restored on cancel (C-g / ESC) or used as the search anchor on each
-;;; on-change call.  A plain special is safe here: the event loop is single-threaded
-;;; and incremental search is always entered and exited on the main thread.
-
-(defvar *copy-mode-isearch-origin* nil
-  "Saved (cons (cons row col) offset) when incremental search is active.
-   NIL when no incremental search is in progress.")
 
 ;;; ── Matcher factory ──────────────────────────────────────────────────────────
 
@@ -174,96 +161,10 @@
              :forward)
          nil)))))
 
-(defun %copy-mode-search-word (screen direction)
-  "Search for the literal word under the cursor in DIRECTION."
-  (let ((term (%copy-mode-word-at-cursor screen)))
-    (when term
-      (ecase direction
-        (:forward
-         (copy-mode-search-forward screen (cl-regex-kit:escape term)))
-        (:backward
-         (copy-mode-search-backward screen (cl-regex-kit:escape term)))))))
-
-(defun copy-mode-search-forward-word (screen)
-  "Search forward for the word under the copy-mode cursor, treating it literally."
-  (%copy-mode-search-word screen :forward))
-
-(defun copy-mode-search-backward-word (screen)
-  "Search backward for the word under the copy-mode cursor, treating it literally."
-  (%copy-mode-search-word screen :backward))
-
-;;; ── Incremental search (C-s / C-r) ──────────────────────────────────────────
-;;;
-;;; Incremental search prompts the user for a search string while simultaneously
-;;; moving the cursor to the first match after every keystroke.  On cancel (ESC /
-;;; C-g) the cursor is restored to where it was before the search started.
-;;; On submit (Enter) the match stays and the term is saved for n/N repeats.
-;;;
-;;; The prompt is opened by the dispatch-handlers entry; the on-change closure
-;;; anchors each search at the saved origin, so deletion of characters returns the
-;;; cursor to the previous (shorter) match rather than advancing past it.
-
-(defun %copy-mode-isearch-from-origin (screen term direction)
-  "Jump from the saved isearch origin to the nearest match for TERM.
-   DIRECTION is :forward or :backward.  When TERM is empty the cursor is
-   restored to the origin (\"nothing typed yet\" state)."
-  (when (screen-copy-mode-p screen)
-    (let ((origin *copy-mode-isearch-origin*))
-      (cond
-        ((null origin)
-         ;; Origin not saved yet — save now and search from current position.
-         (setf *copy-mode-isearch-origin*
-               (cons (screen-copy-cursor screen) (screen-copy-offset screen)))
-         (%copy-mode-isearch-from-origin screen term direction))
-        ((zerop (length term))
-         ;; Empty string: restore cursor to where search started.
-         (setf (screen-copy-cursor screen) (car origin)
-               (screen-copy-offset screen) (cdr origin)
-               (screen-dirty-p screen) t))
-        (t
-         ;; Non-empty: temporarily restore origin then search from there.
-         (setf (screen-copy-cursor screen) (car origin)
-               (screen-copy-offset screen) (cdr origin))
-         (if (eq direction :forward)
-             (copy-mode-search-forward  screen term)
-             (copy-mode-search-backward screen term)))))))
-
-(defun %copy-mode-isearch-start (screen direction)
-  "Launch an incremental search prompt in DIRECTION (:forward or :backward).
-   Saves the current cursor/offset as the restore point; on-cancel restores it."
-  (setf *copy-mode-isearch-origin*
-        (cons (screen-copy-cursor screen) (screen-copy-offset screen)))
-  (nerimux/prompt:prompt-start
-   (if (eq direction :forward) "search-forward" "search-backward") ""
-   (lambda (term)
-     (setf *copy-mode-isearch-origin* nil)
-     (when (and term (plusp (length term)))
-       (setf (screen-copy-search-term screen) term
-             ;; Record the heading so n/N repeat relative to this isearch.
-             (screen-copy-search-direction screen) direction)))
-   :on-change
-   (lambda (text)
-     (%copy-mode-isearch-from-origin screen text direction)
-     (setf (screen-dirty-p screen) t))
-   :on-cancel
-   (lambda ()
-     (let ((origin *copy-mode-isearch-origin*))
-       (setf *copy-mode-isearch-origin* nil)
-       (when (and origin (screen-copy-mode-p screen))
-         (setf (screen-copy-cursor screen) (car origin)
-               (screen-copy-offset screen) (cdr origin)
-               (screen-dirty-p screen) t))))))
-
-(defun copy-mode-search-forward-incremental (screen)
-  "Start a forward incremental search prompt (C-s in copy-mode).
-   Each keystroke moves the cursor to the nearest forward match.
-   ESC/C-g cancels and restores the original position."
-  (when (screen-copy-mode-p screen)
-    (%copy-mode-isearch-start screen :forward)))
-
-(defun copy-mode-search-backward-incremental (screen)
-  "Start a backward incremental search prompt (C-r in copy-mode).
-   Each keystroke moves the cursor to the nearest backward match.
-   ESC/C-g cancels and restores the original position."
-  (when (screen-copy-mode-p screen)
-    (%copy-mode-isearch-start screen :backward)))
+;;; Incremental search (C-s / C-r) was removed: copy-mode-search-forward-
+;;; incremental, copy-mode-search-backward-incremental, %copy-mode-isearch-
+;;; start, %copy-mode-isearch-from-origin, and *copy-mode-isearch-origin*
+;;; formed a closed island — grep across src/ found no caller of the two
+;;; incremental entry points outside this file's own definitions and the
+;;; package export list. The live search kernel (copy-mode-search-forward/
+;;; backward/next/prev above) does not use this machinery.

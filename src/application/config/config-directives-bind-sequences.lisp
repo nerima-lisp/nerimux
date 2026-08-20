@@ -1,6 +1,11 @@
 (in-package #:nerimux/config)
 
-;;;; bind directive command-sequence helpers.
+;;;; Directive command-sequence helpers.
+;;;;
+;;;; Named for `bind', which is where the ";" sequence form came from; the
+;;;; surviving consumer is if-shell and the config loader.  %strip-brace-block
+;;;; went with the bind directive itself -- nothing else unwrapped a `{ ... }`
+;;;; token list.
 
 ;;; ── Semicolon-sequence splitter ──────────────────────────────────────────
 ;;;
@@ -8,18 +13,6 @@
 ;;; command separator: bind r source-file ~/.tmux.conf \; display "Reloaded!"
 ;;; %split-on-semicolons splits a flat token list on ";" tokens,
 ;;; removing empty segments, yielding a list of per-command token lists.
-
-(defun %strip-brace-block (tokens)
-  "When TOKENS form a `{ ... }` block — first token \"{\" and last token \"}\" —
-   return the inner tokens; otherwise return TOKENS unchanged.  This lets the
-   tmux 3.x brace form `bind r { cmd1 ; cmd2 }` reuse %split-on-semicolons
-   exactly like the older `bind r cmd1 \\; cmd2` form.  An empty block `{ }`
-   yields NIL (no commands)."
-  (if (and (cdr tokens)
-           (string= (first tokens) "{")
-           (string= (first (last tokens)) "}"))
-      (butlast (rest tokens))
-      tokens))
 
 (defun %split-on-semicolons (tokens)
   "Split TOKENS on \";\" tokens, returning a list of per-command token lists.

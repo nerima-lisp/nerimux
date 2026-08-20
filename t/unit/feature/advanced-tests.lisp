@@ -1,7 +1,7 @@
 (in-package #:nerimux/test)
 
 ;;;; Tests for Sprint 3 advanced features:
-;;;;  break-pane, synchronize-panes, layout persistence,
+;;;;  synchronize-panes, layout persistence,
 ;;;;  lock-session, pipe-pane, session groups, choose-session.
 
 ;;; ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -42,34 +42,6 @@
      ,@body))
 
 (describe "advanced-suite"
-
-  ;;; ── break-pane: creates a new window ─────────────────────────────────────────
-
-  ;; break-pane removes the active pane from its window and attaches it to a
-  ;; brand-new window; the session ends with 2 windows.
-  (it "break-pane-creates-new-window"
-    (multiple-value-bind (sess win p0 p1) (%two-pane-session)
-      (declare (ignore p1))
-      ;; Break the active pane (p0) out.
-      (let ((new-win (nerimux/commands:break-pane sess)))
-        (expect new-win :to-be-truthy)
-        (expect (= 2 (length (session-windows sess))))
-        ;; The new window contains only the broken-out pane.
-        (expect (equal (list p0) (window-panes new-win)))
-        ;; The original window lost that pane.
-        (expect (= 1 (length (window-panes win)))))))
-
-  ;; break-pane returns NIL and does nothing when the window has only one pane.
-  (it "break-pane-noop-on-sole-pane"
-    (let* ((p0   (make-no-pty-pane 1 0 0 80 24))
-           (win  (make-window :id 1 :name "w" :width 80 :height 24
-                              :panes (list p0)
-                              :tree (make-layout-leaf p0)))
-           (sess (make-session :id 1 :name "0" :windows (list win))))
-      (window-select-pane win p0)
-      (session-select-window sess win)
-      (expect (null (nerimux/commands:break-pane sess)))
-      (expect (= 1 (length (session-windows sess))))))
 
   ;;; ── synchronize-panes: sends keystrokes to all panes ─────────────────────────
 
@@ -193,18 +165,6 @@
         (session-insert-window s1 new-win)
         (expect (member new-win (session-windows s2)))
         (expect (member win (session-windows s2))))))
-
-  ;; kill-window in one grouped session removes the window from all peers, and a
-  ;; peer whose active window vanished falls back to a surviving window.
-  (it "session-group-kill-window-propagates-to-peers"
-    (with-grouped-sessions (s1 s2 win)
-      (let ((new-win (%make-group-test-window 2)))
-        (session-insert-window s1 new-win)
-        ;; Peer views the window that is about to be killed.
-        (setf (nerimux/model:session-active s2) new-win)
-        (nerimux/commands:kill-window s1 new-win)
-        (expect (null (member new-win (session-windows s2))))
-        (expect (eq win (session-active-window s2))))))
 
   ;; session-windows-changed on a session without a group is a no-op.
   (it "session-group-sync-ignores-ungrouped-sessions"

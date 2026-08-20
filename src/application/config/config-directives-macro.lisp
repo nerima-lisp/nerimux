@@ -1,20 +1,6 @@
 (in-package #:nerimux/config)
 
 ;;; ── Runtime sb-posix helpers ─────────────────────────────────────────────────
-;;; ── Renderer mouse-reporting hook ────────────────────────────────────────────
-;;;
-;;; %apply-option-side-effects must call the renderer to enable/disable mouse
-;;; reporting when the 'mouse' option changes, but the config layer cannot carry
-;;; a compile-time dependency on nerimux/renderer (circular).  A registered
-;;; callback (consistent with *command-hook-runner*) is the solution: the
-;;; renderer/orchestrate layer sets this at startup; config calls it without
-;;; knowing who owns the terminal.
-
-(defvar *mouse-reporting-hook* nil
-  "When non-NIL, a function (enable-p) called whenever the 'mouse' option changes.
-   ENABLE-P is T to enable mouse reporting, NIL to disable it.  Set by the
-   orchestrate layer (events-loop or main.lisp) to nerimux/renderer:enable/disable.")
-
 ;;; ── Environment-variable helper ─────────────────────────────────────────────
 ;;;
 ;;; set-environment directives need to mutate the process environment.
@@ -113,10 +99,10 @@
 
    The macro intentionally accepts one name per rule. Config parsing is
    canonical-only; shorthand aliases must be rejected at the parser boundary.
-   The outer APPLY-CONFIG-DIRECTIVE function wraps this inner dispatcher and
-   handles 'bind' with variable-arity flags separately."
+   The outer APPLY-CONFIG-DIRECTIVE function wraps this inner dispatcher with
+   the variable-arity handlers (set-option, if-shell, run-shell, source-file)."
   `(defun %apply-config-directive-inner (tokens)
-     "Apply one non-bind config directive (list of string TOKENS) to live state.
+     "Apply one fixed-arity config directive (list of string TOKENS) to live state.
       Returns T when applied, NIL for an unknown/invalid directive."
      (when tokens
        (let ((cmd (first tokens)) (args (rest tokens)))

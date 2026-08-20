@@ -181,6 +181,143 @@
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:create-worktree-async) create)))))
 
+  (it "overview-worktree-delete-dispatches-and-restores-overview"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org"
+                :host "github.com"
+                :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo"
+                :organization organization
+                :specification "github.com/team/repo"))
+             (worktree
+               (nerimux/model:make-worktree
+                :id "feature"
+                :repository repository
+                :path "/tmp/feature"
+                :branch "feature/doomed"))
+             (conn (%make-test-conn))
+             (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
+             (delete-fn (fdefinition 'nerimux/vcs:delete-worktree-async))
+             (call nil))
+        (unwind-protect
+             (progn
+               (nerimux/model:organization-add-repository organization repository)
+               (nerimux/model:repository-add-worktree repository worktree)
+               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                     (lambda () t)
+                     (fdefinition 'nerimux/vcs:delete-worktree-async)
+                     (lambda (received-worktree &key force on-complete on-error)
+                       (declare (ignore on-complete on-error))
+                       (setf call (list received-worktree force))
+                       t))
+               (setf (nerimux::client-conn-view conn) :overview)
+               (nerimux::%set-client-selected-tree-object conn worktree)
+               ;; `X` on a selected worktree pre-fills the command line ...
+               (nerimux::%handle-multi-key-message s conn #(88))
+               (expect (eq :command (nerimux::client-conn-mode conn)))
+               (expect (string= "wt-delete --confirm"
+                                (nerimux::client-conn-command-buffer conn)))
+               ;; ... and submitting it must actually reach the VCS layer.
+               (nerimux::%handle-multi-key-message s conn #(13))
+               (expect (equal (list worktree nil) call))
+               (expect (eq :normal (nerimux::client-conn-mode conn)))
+               (expect (eq :overview (nerimux::client-conn-view conn)))
+               (expect (string= "" (nerimux::client-conn-command-buffer conn))))
+          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
+                (fdefinition 'nerimux/vcs:delete-worktree-async) delete-fn)))))
+
+  ;; %client-delete-worktree's own guard (distinct from the `X`-key guard in
+  ;; %client-start-worktree-delete): a `:` command submitted without
+  ;; --confirm must not reach the VCS layer, even with a worktree selected.
+  (it "overview-worktree-delete-without-confirm-is-rejected"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org"
+                :host "github.com"
+                :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo"
+                :organization organization
+                :specification "github.com/team/repo"))
+             (worktree
+               (nerimux/model:make-worktree
+                :id "feature"
+                :repository repository
+                :path "/tmp/feature"
+                :branch "feature/no-confirm"))
+             (conn (%make-test-conn))
+             (nerimux::*clients* (list conn))
+             (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
+             (delete-fn (fdefinition 'nerimux/vcs:delete-worktree-async))
+             (call nil))
+        (unwind-protect
+             (progn
+               (nerimux/model:organization-add-repository organization repository)
+               (nerimux/model:repository-add-worktree repository worktree)
+               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                     (lambda () t)
+                     (fdefinition 'nerimux/vcs:delete-worktree-async)
+                     (lambda (received-worktree &key force on-complete on-error)
+                       (declare (ignore force on-complete on-error))
+                       (setf call received-worktree)
+                       t))
+               (setf (nerimux::client-conn-view conn) :overview)
+               (nerimux::%set-client-selected-tree-object conn worktree)
+               (nerimux::%handle-multi-key-message s conn #(58))
+               (nerimux::%handle-multi-key-message
+                s conn
+                (cl-codec-kit:string-to-octets "wt-delete" :encoding :utf-8))
+               (nerimux::%handle-multi-key-message s conn #(13))
+               (expect (null call))
+               (expect (string= "worktree delete requires --confirm"
+                                (first (nerimux::client-conn-message-log conn))))
+               (expect (eq :normal (nerimux::client-conn-mode conn))))
+          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
+                (fdefinition 'nerimux/vcs:delete-worktree-async) delete-fn)))))
+
+  ;; The other %client-delete-worktree guard: --confirm with no worktree
+  ;; selected must not reach the VCS layer either.
+  (it "overview-worktree-delete-without-selection-is-rejected"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (nerimux::*clients* (list conn))
+             (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
+             (delete-fn (fdefinition 'nerimux/vcs:delete-worktree-async))
+             (call nil))
+        (unwind-protect
+             (progn
+               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                     (lambda () t)
+                     (fdefinition 'nerimux/vcs:delete-worktree-async)
+                     (lambda (received-worktree &key force on-complete on-error)
+                       (declare (ignore force on-complete on-error))
+                       (setf call received-worktree)
+                       t))
+               (setf (nerimux::client-conn-view conn) :overview)
+               (nerimux::%handle-multi-key-message s conn #(58))
+               (nerimux::%handle-multi-key-message
+                s conn
+                (cl-codec-kit:string-to-octets
+                 "wt-delete --confirm"
+                 :encoding :utf-8))
+               (nerimux::%handle-multi-key-message s conn #(13))
+               ;; (null call) alone does not discriminate: an unrecognised or
+               ;; misspelled command would leave it NIL too.  The message-log
+               ;; assertion below is what pins this to the no-selection guard
+               ;; rather than to the command never having been reached.
+               (expect (null call))
+               (expect (string= "worktree delete requires a worktree"
+                                (first (nerimux::client-conn-message-log conn))))
+               (expect (eq :normal (nerimux::client-conn-mode conn))))
+          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
+                (fdefinition 'nerimux/vcs:delete-worktree-async) delete-fn)))))
+
   (it "multi-picker-regex-toggle-is-client-local"
     (with-fake-session (s)
       (let* ((organization

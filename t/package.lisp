@@ -168,25 +168,11 @@
   (:import-from #:nerimux/config
                 #:*status-height*
                 #:+max-scrollback-lines+
-                #:lookup-key-binding
-                #:define-initial-key-bindings
-                #:key-table-bind
-                #:key-table-unbind
-                #:key-table-command
-                #:apply-config-directive
-                #:*key-tables*)
+                #:apply-config-directive)
   (:import-from #:nerimux/commands
-                #:kill-pane
-                #:kill-window
-                #:rename-window
-                #:resize-pane
-                #:select-window-by-number
-                #:swap-pane
-                #:swap-two-panes
-                #:capture-pane
-                ;; Advanced pane commands
-                #:break-pane
-                #:join-pane
+                ;; pane PTY teardown: reader-thread EOF and server shutdown
+                #:close-pane-pty
+                ;; pipe-pane: pane output tee'd to an external process
                 #:pipe-pane-open
                 #:pipe-pane-close
                 #:pipe-pane-write)

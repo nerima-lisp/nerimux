@@ -31,11 +31,14 @@ reachable from a live client:
   `Esc`/`q` to exit, `hjkl` and the arrows to move, `g`/`G` to jump to top and
   bottom, `Space` to begin a selection, `y` to yank, `/` and `?` to search with
   `n`/`N` to repeat. Selection is linear.
-  Rectangle selection, word/line/paragraph motions, prompt jumping, incremental
-  search and the paste-buffer commands still exist as functions under
-  `src/application/commands/copy-mode/`, but nothing binds a key to them now
-  that the tmux key tables are gone — they are present and unreachable, in the
-  same sense as the inert config directives below.
+  Word, line and paragraph motions, bracket matching, jump-to-character and
+  goto-line have been **deleted**: they were reachable only through the tmux key
+  tables, and went with them. What remains under
+  `src/application/commands/copy-mode/` is the kernel the `cond` above actually
+  calls, plus the shell-pipe-on-yank helpers behind the `copy-command` option,
+  which `copy-mode-yank` still calls. The rectangle-selection *toggle* is gone,
+  so the extraction helper that reads that flag is unreachable; `append-selection`
+  and the tmux `copy-pipe` command family were deleted outright.
 - **Client/server socket model.** Per-user socket directories under
   `$TMUX_TMPDIR`/`$TMPDIR`/`/tmp`, `-L`/`-S` overrides, mode `0700`
   directories, stale-socket recovery, and detach/attach with the session
@@ -104,7 +107,7 @@ reachable from a live client:
 `.tmux.conf`-style config files are still parsed. `load-config-file` is
 still called during server startup (`src/bootstrap/server.lisp:132`,
 `(ignore-errors (load-config-file))`), and the parser/tokenizer/directive
-layer under `src/application/config/` (21 files) is otherwise intact: brace
+layer under `src/application/config/` is otherwise intact: brace
 blocks, `\;` sequences, `-a`/`-g`/`-o`/`-w`/`-s` option scopes, `if-shell`,
 `run-shell`, `source-file`, `set-environment`, `%if`/`%elif`/`%else`/`%endif`,
 `%hidden`, and tmux 3.2 `NAME=value` assignments all still tokenize and
@@ -129,9 +132,12 @@ outside the config layer, verified by tracing each variable to its reader:
 
 - `default-shell` → `*default-shell*`, read by pane spawning in
   `src/infrastructure/pty/pty.lisp:86-89`.
-- `status` (bar visibility/height) → `*status-height*`, read by
-  `src/presentation/renderer/renderer-statusbar.lisp` and
-  `renderer-compose.lisp`.
+- `status` (bar visibility/height) → `*status-height*`, read when sizing the
+  pane area: `src/bootstrap/workspace-window.lisp`, `src/bootstrap/server.lisp`,
+  `src/domain/model/window-tree.lisp`, `src/domain/model/session.lisp`, and
+  `src/presentation/renderer/renderer-compose-overlay.lisp`. (The
+  status-bar renderers themselves query the `status` option directly rather
+  than reading this variable.)
 - `escape-time` → written into the server-options table
   (`nerimux/options:set-server-option`), which is read wherever server
   options are queried.
@@ -141,29 +147,35 @@ outside the config layer, verified by tracing each variable to its reader:
 nothing reads that state any more because their only consumer lived in the
 deleted dispatch/events layers:
 
-- **`bind`/`unbind`.** Still populate `*key-tables*`
-  (`src/application/config/config-key-table-store.lisp`), but the only
-  reader of `key-table-lookup` left in the tree is the `list-keys`-style
-  formatter in `config-listing.lisp`, and nothing calls that formatter from
-  a live entry point — the keystroke pipeline that used to consult a
-  key-table on every keypress no longer exists. A `bind-key` line in
-  `.tmux.conf` now has no observable effect.
-- **`set-option prefix`/`prefix2`.** Same story: `%bind-prefix-key` in
-  `src/application/config/config-option-side-effects.lisp` writes
-  `*prefix-key-code*`/`*prefix2-key-code*` and arms a key-table entry, but
-  those variables have no reader outside the config package itself.
-- **`set-option mouse`.** Routed through `*mouse-reporting-hook*`
-  (declared in `config-directives-macro.lisp`), which is `nil` and never
-  assigned anywhere in the tree — the side effect is a guaranteed no-op.
-- **`set-hook`.** Directives are stored in `*command-hooks*`
-  (`src/domain/hooks/hooks.lisp:128-178`), but firing them requires
-  `*command-hook-runner*` (line 210), which the file's own comment says is
-  "installed by the nerimux package at load" — and it never is; nothing in
-  the tree assigns it. `run-command-hooks-via-runner` (line 215) is
-  therefore always a no-op. A `set-hook after-new-window '...'` line parses,
-  is stored, and never fires. This is distinct from the internal
-  `alert-bell`/`alert-activity` Lisp-callback hooks described above, which
-  are unaffected and still fire.
+- **`bind`/`unbind`.** The key-table store these wrote into is **gone** — the
+  whole subsystem (`config-key-table-store.lisp`, `config-listing.lisp`,
+  `config-directives-bind-parse.lisp`, `config-directives-bind-dispatch.lisp`,
+  `config-copy-mode-defaults.lisp`, `config-prefix-defaults.lisp`,
+  `config-commands.lisp`) was deleted once it was established that nothing on a
+  live path ever read it. A `bind` or `unbind` line now finds no handler in
+  `apply-config-directive` (`config-loader.lisp`) and falls through to
+  `%apply-config-directive-inner`, which returns `NIL` for an unrecognised
+  command. **The observable result is unchanged** — the line parses, is
+  ignored, and raises nothing — but it is now ignored honestly rather than by
+  writing into a table with no readers.
+- **`set-option prefix`/`prefix2`.** `%bind-prefix-key` went with the key-table
+  store. `set-option` itself is generic (it dispatches on arity and flags, not
+  on option name), so the line still parses and still records the value among
+  the global options; nothing consults it.
+- **`set-option mouse`.** Same: the `mouse` entry was removed from
+  `define-option-side-effect-handlers`. It previously routed through
+  `*mouse-reporting-hook*`, which was `nil` and never assigned, so the side
+  effect was already a guaranteed no-op before removal.
+- **`set-hook`.** The whole command-hook registry it wrote into has been
+  **deleted**, along with its directive handler. It was not merely unwired but
+  **unwireable**: firing a stored hook meant running a tmux command name, and no
+  command dispatcher exists any more. A `set-hook after-new-window '...'` line
+  now matches no handler and is silently dropped — the same observable outcome
+  as before, without the storage that never fired.
+  This is distinct from the internal `alert-bell`/`alert-activity`
+  Lisp-callback hooks described above, which are a **separate registry**
+  (`*hook-registry*`, `run-hooks`) and still fire on real pane and client
+  events.
 
 Configs that only use the "still effective" options above behave as
 before. Configs that rely on `bind-key`, a custom prefix, `set-option

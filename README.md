@@ -35,9 +35,9 @@ assignments, brace blocks and `source-file` — from `$NERIMUX_CONF`, then
 `~/.config/nerimux/nerimux.conf`, then your existing tmux config. `run-shell`,
 `if-shell`, `set-environment` and the `set-option` values that drive the
 status bar, pane borders, `default-shell` and status height still take
-effect. `bind`/`unbind` and `set-hook` directives are still parsed and
-validated, but have no runtime effect now that the tmux keystroke and
-hook-dispatch pipelines are gone.
+effect. `bind`/`unbind` and `set-hook` lines still parse without error but do
+nothing: the key-table store and the command-hook registry they wrote into were
+both removed once nothing read them.
 
 ## Install
 
@@ -79,8 +79,8 @@ nix fmt              # format Nix sources (treefmt)
 Tests live in `t/` and run under
 [cl-weave](https://github.com/nerima-lisp/cl-weave), the org's test framework.
 `sbcl --script run-tests.lisp` is the entry point CI and the flake both use;
-set `NERIMUX_TEST_SYSTEM` to pick one of `nerimux/test` (default),
-`nerimux/weave` or `nerimux/dataflow`.
+set `NERIMUX_TEST_SYSTEM` to pick either `nerimux/test` (default) or
+`nerimux/dataflow`.
 
 nerimux is the org's L4 application package and its testbed: it runs on twelve
 sibling libraries — [cl-cli](https://github.com/nerima-lisp/cl-cli),
@@ -95,10 +95,9 @@ sibling libraries — [cl-cli](https://github.com/nerima-lisp/cl-cli),
 [cl-host-kit](https://github.com/nerima-lisp/cl-host-kit),
 [cl-tui-kit](https://github.com/nerima-lisp/cl-tui-kit) and
 [cl-vcs-kit](https://github.com/nerima-lisp/cl-vcs-kit).
-[cl-prolog-kit](https://github.com/nerima-lisp/cl-prolog-kit) and
-[cl-dataflow-kit](https://github.com/nerima-lisp/cl-dataflow-kit) are dogfooded
-too, but back the optional `nerimux/reasoning` and `nerimux/dataflow-model`
-systems rather than the shipped binary.
+[cl-dataflow-kit](https://github.com/nerima-lisp/cl-dataflow-kit) is dogfooded
+too, but backs the optional `nerimux/dataflow-model` system rather than the
+shipped binary.
 It has **no external dependencies**: it was the last repository in
 the org with any, and the final two (`bordeaux-threads`, `cl-ppcre`) were
 replaced by siblings on 2026-08-02. See

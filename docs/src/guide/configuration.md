@@ -37,14 +37,19 @@ if-shell 'test -f ~/.tmux.local' 'source-file ~/.tmux.local'
 are `set-option`, `set-window-option` and `set-session-option`; the `set` alias
 is not among them, and an unrecognized verb is dropped silently rather than
 reported. The same applies to key bindings: the parser takes `bind`, `unbind`
-and `unbind-all`, not `bind-key`/`unbind-key`. (Key bindings parse but no
-longer do anything either — see below.)
+and `unbind-all`, not `bind-key`/`unbind-key`. (Both spellings tokenize
+without error, and neither is a directive the config layer acts on any more,
+so both are silently no-ops — see below.)
 
-Recognized directives: `bind`/`unbind`/`unbind-all` (with brace blocks and
-`\;` sequences), `set-option` in all scopes with `-a`/`-g`/`-o`/`-w`/`-s`,
-`if-shell`, `run-shell`, `source-file`, `set-environment`, `set-hook` (with
-`-w`/`-p` object scoping), `%if`/`%elif`/`%else`/`%endif`, `%hidden`, tmux 3.2
-variable assignments, line continuations, and tmux quoting/escape rules.
+Directives that reach a handler: `set-option` in all scopes with
+`-a`/`-g`/`-o`/`-w`/`-s`, `if-shell`, `run-shell`, `source-file`,
+`set-environment`, `%if`/`%elif`/`%else`/`%endif`, `%hidden`, tmux 3.2 variable
+assignments, line continuations, and tmux quoting/escape rules.
+
+`bind`/`unbind`/`unbind-all` and `set-hook` no longer reach a handler at all —
+their handlers and the stores behind them were deleted. They still tokenize
+(including brace blocks and `\;` sequences) and are then dropped without error;
+see below.
 
 ## What actually takes effect
 
@@ -67,18 +72,23 @@ downstream still consumes what they set.
 **Parsed but inert** — these are accepted, validated, and stored, but nothing
 reads the result:
 
-- `bind-key` / `unbind-key` — populate the key-table store (`*key-tables*`)
-  exactly as before. Nothing dispatches through that store anymore, because
-  the keystroke pipeline that used to look bindings up is gone. A `bind-key`
-  line no longer makes a key do anything.
-- `prefix` / `prefix2` — set the prefix key-code variables, but nothing reads
-  those variables to detect a prefix keystroke anymore.
-- `mouse` — the option's runtime side effect still calls
-  `*mouse-reporting-hook*` if one is installed, but nothing ever installs it,
-  so setting `mouse` has no observable effect.
-- `set-hook` — stores hook commands via the command-hook registry, but the
-  registry only fires through `*command-hook-runner*`, which is declared and
-  exported and never assigned. Hooks are recorded, never run.
+- `bind` / `unbind` / `unbind-all` — the key-table store these wrote into has
+  been **deleted**, along with the bind-directive handlers. Such a line now
+  matches no handler and falls through to the unrecognized-command path, which
+  returns without doing anything. It still parses and still raises nothing; it
+  simply no longer writes into a table nobody read.
+- `prefix` / `prefix2` — the side-effect handler that armed a key-table entry
+  went with the store. `set-option` remains generic, so the line still parses
+  and the value is still recorded among the global options; nothing consults it.
+- `mouse` — likewise removed from the option side-effect handlers. It had routed
+  through `*mouse-reporting-hook*`, which was never assigned, so it was already
+  a guaranteed no-op.
+- `set-hook` — the command-hook registry it wrote into has been removed, along
+  with the directive handler. Firing a stored hook would have meant running a
+  tmux command name, and no command dispatcher exists any more, so the feature
+  was unwireable rather than merely unwired. The line still parses and is
+  ignored. (The unrelated internal Lisp-callback hooks that drive bell/activity
+  alerts are a separate registry and still fire.)
 
 This split is a direct consequence of deleting the tmux command table and
 keystroke pipeline this session, not a bug in the parser. If a future change

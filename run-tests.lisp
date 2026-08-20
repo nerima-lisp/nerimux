@@ -8,10 +8,9 @@
 ;;;; the same one.
 ;;;;
 ;;;; Which suite runs is chosen by NERIMUX_TEST_SYSTEM, defaulting to the main
-;;;; suite. The three registered suites are:
+;;;; suite. The two registered suites are:
 ;;;;
 ;;;;   nerimux/test      the full unit + integration suite (checks.default)
-;;;;   nerimux/weave     the cl-prolog-kit reasoning read-model (checks.weave)
 ;;;;   nerimux/dataflow  the copy-mode lifecycle read-model (checks.dataflow)
 ;;;;
 ;;;; Every one of them defines its own ASDF :perform (test-op ...) that signals

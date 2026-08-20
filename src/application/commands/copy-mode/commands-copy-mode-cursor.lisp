@@ -74,21 +74,6 @@
       (%copy-mode-ensure-selection-mark screen)
       (setf (screen-dirty-p screen) t))))
 
-(defun copy-mode-cursor-down-and-cancel (screen)
-  "send-keys -X cursor-down-and-cancel: move the cursor down; exit copy mode when
-   the cursor is already at the bottom of the history (it cannot move and the
-   viewport is at the live bottom)."
-  (let ((before     (copy-tree (screen-copy-cursor screen)))
-        (before-off (screen-copy-offset screen)))
-    (%copy-mode-with-cancel-at-bottom
-     screen
-     (lambda () (copy-mode-move-cursor screen :down))
-     (lambda () (and (equal before (screen-copy-cursor screen))
-                      (zerop before-off))))))
-
-(defun copy-mode-set-cursor (screen row col)
-  "Set the copy-mode cursor to ROW, COL, clamping both to the screen bounds.
-   No-op when copy mode is not active."
-  (when (screen-copy-mode-p screen)
-    (setf (screen-copy-cursor screen) (%clamp-row-col screen row col)
-          (screen-dirty-p screen) t)))
+;;; copy-mode-cursor-down-and-cancel was removed: unreachable from
+;;; %handle-client-copy-key-payload or any other live call site (grep across
+;;; src/ found only this file's definition and the package export).

@@ -1,6 +1,6 @@
 (in-package #:nerimux/test)
 
-;;;; rectangle-sel-text, run-copy-command, set-cursor, and send-keys-l
+;;;; rectangle-sel-text, run-copy-command, and set-cursor
 
 (describe "commands-suite"
 
@@ -83,95 +83,4 @@
       (finishes (nerimux/commands::%run-copy-command "hello")
                 "%run-copy-command must not signal when the copy-command fails")))
 
-  ;;; ── %resolve-copy-pipe-cmd (direct unit tests) ──────────────────────────────
-
-  ;; %resolve-copy-pipe-cmd uses explicit CMD when non-empty, falls back to the
-  ;; copy-command option when CMD is empty.
-  ;; Each row: (cmd expected description).
-  (it "resolve-copy-pipe-cmd-explicit-and-fallback-table"
-    (let ((nerimux/options:*global-options*
-           (let ((h (make-hash-table :test #'equal)))
-             (setf (gethash "copy-command" h) "fallback")
-             h)))
-      (dolist (row '(("printf hi" "printf hi" "explicit command must win over the option")
-                     (""          "fallback"  "empty CMD must use the global copy-command option")))
-        (destructuring-bind (cmd expected desc) row
-          (declare (ignore desc))
-          (expect (string= expected (nerimux/commands::%resolve-copy-pipe-cmd cmd)))))))
-
-  ;; %resolve-copy-pipe-cmd returns NIL when neither CMD nor the global option is usable.
-  (it "resolve-copy-pipe-cmd-returns-nil-when-unavailable"
-    (with-fresh-global-options
-      (expect (null (nerimux/commands::%resolve-copy-pipe-cmd nil)))
-      (expect (null (nerimux/commands::%resolve-copy-pipe-cmd "")))))
-
-  ;;; ── copy-mode-set-cursor (direct unit tests in commands group) ───────────────
-  ;;;
-  ;;; copy-mode-set-cursor is exported from nerimux/commands and tested in
-  ;;; events-tests.lisp (via keystroke dispatch), but that test lives outside the
-  ;;; commands audit scope.  Direct tests here make the commands group self-contained.
-
-  ;; copy-mode-set-cursor sets the cursor to the given row and column.
-  (it "copy-mode-set-cursor-positions-cursor"
-    (let ((s (make-screen 20 5)))
-      (nerimux/commands::copy-mode-enter s)
-      (nerimux/commands:copy-mode-set-cursor s 2 7)
-      (expect (equal (cons 2 7) (nerimux/terminal/types:screen-copy-cursor s)))))
-
-  ;; copy-mode-set-cursor clamps both row and column to [0, bound-1].
-  (it "copy-mode-set-cursor-clamps-table"
-    (dolist (row (list (list 99  0  4 #'car "row 99 → height-1=4")
-                       (list -1  0  0 #'car "row -1 → 0")
-                       (list  0 99 19 #'cdr "col 99 → width-1=19")
-                       (list  0 -1  0 #'cdr "col -1 → 0")))
-      (destructuring-bind (r c expected accessor desc) row
-        (declare (ignore desc))
-        (let ((s (make-screen 20 5)))
-          (nerimux/commands::copy-mode-enter s)
-          (nerimux/commands:copy-mode-set-cursor s r c)
-          (expect (= expected (funcall accessor (nerimux/terminal/types:screen-copy-cursor s))))))))
-
-  ;; copy-mode-set-cursor is a no-op when not in copy mode.
-  (it "copy-mode-set-cursor-noop-outside-copy-mode"
-    (let ((s (make-screen 20 5)))
-      ;; Do NOT enter copy mode.
-      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 1 1))
-      (nerimux/commands:copy-mode-set-cursor s 3 7)
-      (expect (equal (cons 1 1) (nerimux/terminal/types:screen-copy-cursor s)))))
-
-  ;;; ── send-keys -l (literal) vs translated ────────────────────────────────────
-  ;;;
-  ;;; send-keys-to-pane (pane string &key literal) is the production entry point,
-  ;;; but it needs a pane with a real PTY (fd > -1) to observe output; fake panes
-  ;;; have fd -1, where pty-write is a harmless no-op.  We therefore test the
-  ;;; byte-production logic that distinguishes the two modes:
-  ;;;   - non-literal: %translate-send-keys maps the key name "Enter" → CR (13).
-  ;;;   - literal (-l): the string is emitted as raw UTF-8 bytes, so "Enter"
-  ;;;     stays the 5 bytes E-n-t-e-r with no key-name interpretation.
-
-  ;; Without -l, %translate-send-keys maps the key name "Enter" to a single CR byte (13).
-  (it "send-keys-translated-enter-produces-cr"
-    (let ((bytes (nerimux/commands::%translate-send-keys "Enter")))
-      (expect (= 1 (length bytes)))
-      (expect (= 13 (aref bytes 0)))))
-
-  ;; With -l, the string "Enter" is written as raw UTF-8 bytes — five literal
-  ;; characters E-n-t-e-r — NOT translated to a CR.  This is the byte payload
-  ;; send-keys-to-pane writes when :literal is true.
-  (it "send-keys-literal-enter-stays-five-bytes"
-    (let ((literal-bytes (cl-codec-kit:string-to-octets "Enter")))
-      (expect (= 5 (length literal-bytes)))
-      (expect (equalp #(69 110 116 101 114) literal-bytes))
-      ;; The literal payload must differ from the translated (single-CR) payload.
-      (expect (not (equalp literal-bytes
-                            (nerimux/commands::%translate-send-keys "Enter"))))))
-
-  ;; With -l, a multi-byte UTF-8 string is emitted as its raw UTF-8 octets:
-  ;; "café" is 4 characters but encodes to 5 bytes (é = 2 bytes), so literal
-  ;; mode preserves the multi-byte encoding rather than counting characters.
-  (it "send-keys-literal-multibyte-utf8-preserves-bytes"
-    (let ((literal-bytes (cl-codec-kit:string-to-octets "café" :encoding :utf-8)))
-      (expect (= 5 (length literal-bytes)))
-      (expect (> (length literal-bytes) (length "café")))
-      ;; The é (U+00E9) encodes to the two-byte sequence C3 A9; assert the tail.
-      (expect (equalp #(195 169) (subseq literal-bytes 3))))))
+  )

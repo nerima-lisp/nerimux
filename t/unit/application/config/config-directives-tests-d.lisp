@@ -1,6 +1,6 @@
 (in-package #:nerimux/test)
 
-;;;; set-g-status-off, bind-n, load-config patterns, bare-arg-cmds, %elif, line-continuation, comments, styles — part IV
+;;;; set-g-status-off, load-config patterns, bare-arg-cmds, %elif, line-continuation, comments, styles — part IV
 
 (describe "config-directives-suite"
 
@@ -20,41 +20,9 @@
                 (expect (= expected nerimux/config:*status-height*)))
             (setf nerimux/config:*status-height* orig))))))
 
-  ;; ── bind -n with argument-bearing command ────────────────────────────────────
-
-  ;; 'bind -n C-\ split-window -c /tmp' binds the control character ^\ (byte 28)
-  ;; and stores the full command token list.  C-<key> tokens now resolve to the
-  ;; control CHARACTER the event loop sees (the old string-key form could never
-  ;; fire), so the binding is looked up by (code-char 28), not the string "C-\".
-  (it "bind-n-split-window-with-c-flag"
-    (with-isolated-key-tables
-      (nerimux/config:apply-config-directive
-       '("bind" "-n" "C-\\" "split-window" "-c" "/tmp"))
-      ;; C-\ → (logand (char-code #\\) #x1f) = 28 (FS).  The binding is keyed by
-      ;; that control character so it matches the byte a real Ctrl-\ keypress sends.
-      (let ((entry (nerimux/config:key-table-lookup "root" (code-char 28))))
-        (expect (not (null entry)))
-        (let ((cmd (nerimux/config:key-table-command entry)))
-          (expect (consp cmd))
-          (expect (string= "split-window" (first cmd)))
-          (expect (member "-c" cmd :test #'string=))
-          (expect (member "/tmp" cmd :test #'string=))))))
-
-  ;; ── Semicolon-separated multi-command bindings ───────────────────────────────
-
-  ;; 'bind r source-file x \; display y' stores a :sequence command list.
-  (it "bind-key-semicolon-sequence-stored-as-sequence"
-    (with-isolated-key-tables
-      (nerimux/config:apply-config-directive
-       '("bind" "r" "source-file" "/tmp/x" ";" "display-message" "Reloaded"))
-      (let ((entry (nerimux/config:key-table-lookup "prefix" #\r)))
-        (expect (not (null entry)))
-        (let ((cmd (nerimux/config:key-table-command entry)))
-          (expect (consp cmd))
-          (expect (eq :sequence (car cmd)))
-          (expect (= 2 (length (cdr cmd))))
-          (expect (string= "source-file" (first (first (cdr cmd)))))
-          (expect (string= "display-message" (first (second (cdr cmd)))))))))
+  ;; bind-n-split-window-with-c-flag and bind-key-semicolon-sequence-stored-as-sequence
+  ;; were removed: both asserted key-table effects (key-table-lookup / -command),
+  ;; gone with the key-table config subsystem.
 
   ;; ── Common .tmux.conf patterns ───────────────────────────────────────────────
 
@@ -79,22 +47,20 @@ bind % split-window -h -c #{pane_current_path}
 bind c new-window -c #{pane_current_path}
 unbind-all
 bind r source-file /dev/null"))
-        (expect (zerop (multiple-value-bind (result)
-                           (ignore-errors (nerimux/config:load-config-from-string common-config))
-                         (declare (ignore result))
-                         0))))))
+        ;; The previous assertion here was
+        ;;   (expect (zerop (multiple-value-bind (result) (ignore-errors ...)
+        ;;                    (declare (ignore result)) 0)))
+        ;; which reduces to (zerop 0) -- always true, with ignore-errors
+        ;; swallowing any signal. It could not fail, whatever the loader did.
+        ;; The nine set-option/set-window-option lines above apply; the eight
+        ;; bind/unbind-all lines no longer reach a handler and apply nothing.
+        ;; Asserting that count both pins the "parsed but inert" contract and
+        ;; fails loudly if loading ever signals.
+        (expect (= 9 (nerimux/config:load-config-from-string common-config))))))
 
-  ;; bind -T copy-mode-vi v send-keys -X begin-selection stores in the
-  ;; copy-mode-vi table.  The multi-token command is stored as a deferred token
-  ;; list; key-press dispatch sends -X begin-selection to the pane's copy mode.
-  (it "load-config-bind-T-copy-mode-vi-stores-correctly"
-    (with-isolated-config
-      (nerimux/config:load-config-from-string
-       "bind -T copy-mode-vi v send-keys -X begin-selection")
-      (let ((entry (nerimux/config:key-table-lookup "copy-mode-vi" #\v)))
-        (expect (not (null entry)))
-        (let ((cmd (nerimux/config:key-table-command entry)))
-          (expect (equal '("send-keys" "-X" "begin-selection") cmd))))))
+  ;; load-config-bind-T-copy-mode-vi-stores-correctly was removed: it asserted
+  ;; a key-table effect (key-table-lookup / -command), gone with the
+  ;; key-table config subsystem.
 
   ;; 'set-option -s escape-time 0' stores in server options.
   (it "load-config-set-g-escape-time-stores-as-server-option"
@@ -121,16 +87,9 @@ set-option -u status")
   ;; token) goes through %command-keyword, and the named-buffer family uses
   ;; canonical command names only.
 
-  ;; Named-buffer shorthand spellings (deleteb/loadb/pasteb/saveb/showb) are
-  ;; rejected because nerimux accepts canonical command names only.
-  (it "config-bind-rejects-named-buffer-shorthand-single-tokens"
-    (dolist (abbrev '("deleteb" "loadb" "pasteb" "saveb" "showb"))
-      (with-isolated-config
-        (expect (= 0 (nerimux/config:load-config-from-string
-                      (format nil "bind X ~A" abbrev))))
-        (expect (null (lookup-key-binding #\X)))))
-    (with-isolated-config
-      (expect (= 0 (nerimux/config:load-config-from-string "bind X setb")))))
+  ;; config-bind-rejects-named-buffer-shorthand-single-tokens was removed: it
+  ;; asserted a key-table effect (lookup-key-binding), gone with the
+  ;; key-table config subsystem.
 
   ;; Rejected shorthand spellings do not weaken typo rejection: an unknown
   ;; single-token command is still refused.
@@ -138,21 +97,9 @@ set-option -u status")
     (with-isolated-config
       (expect (= 0 (nerimux/config:load-config-from-string "bind X totally-bogus-cmd")))))
 
-  ;; A realistic .tmux.conf written with canonical command names loads:
-  ;; set-option/set-window-option/bind all apply, and command bodies are normalized for dispatch.
-  (it "load-realistic-tmux-conf-with-canonical-commands"
-    (with-isolated-config
-      (let ((applied (nerimux/config:load-config-from-string
-                      "set-option -g status on
-set-window-option -g mode-keys vi
-bind c new-window
-bind | split-window -h
-bind -T copy-mode-vi v send-keys -X begin-selection")))
-        (expect (= 5 applied))
-        (expect (string= "on" (nerimux/options:get-option "status")))
-        (expect (eq :new-window (lookup-key-binding #\c)))
-        (expect (equal '("split-window" "-h") (lookup-key-binding #\|)))
-        (expect (not (null (nerimux/config:key-table-lookup "copy-mode-vi" #\v)))))))
+  ;; load-realistic-tmux-conf-with-canonical-commands was removed: it asserted
+  ;; key-table effects (lookup-key-binding / key-table-lookup), gone with the
+  ;; key-table config subsystem.
 
   ;; ── %elif chains (4-state cond stack) ────────────────────────────────────────
   ;;
@@ -162,17 +109,21 @@ bind -T copy-mode-vi v send-keys -X begin-selection")))
 
   ;; The %if/%elif/%else state machine picks exactly the first matching branch.
   (it "config-if-elif-else-state-machine-table"
-    (dolist (c '(("%if 1~%bind a new-window~%%elif 1~%bind b new-window~%%endif~%"
+    ;; The payload directive must be one that still APPLIES; `bind` no longer
+    ;; does, so it would count 0 in every branch and the table could not tell a
+    ;; taken branch from a skipped one.  set-option is used purely as a
+    ;; countable payload -- the subject under test is the branch state machine.
+    (dolist (c '(("%if 1~%set-option -g status on~%%elif 1~%set-option -g status off~%%endif~%"
                   1 "if=1 elif=1: only if-branch")
-                 ("%if 0~%bind a new-window~%%elif 1~%bind b new-window~%%endif~%"
+                 ("%if 0~%set-option -g status on~%%elif 1~%set-option -g status off~%%endif~%"
                   1 "if=0 elif=1: elif-branch applies")
-                 ("%if 0~%bind a x~%%elif 0~%bind b x~%%else~%bind c new-window~%%endif~%"
+                 ("%if 0~%set-option -g status on~%%elif 0~%set-option -g status off~%%else~%set-option -g escape-time 10~%%endif~%"
                   1 "if=0 elif=0: else-branch applies")
-                 ("%if 0~%bind a x~%%elif 0~%bind b x~%%elif 1~%bind c new-window~%%else~%bind d x~%%endif~%"
+                 ("%if 0~%set-option -g status on~%%elif 0~%set-option -g status off~%%elif 1~%set-option -g escape-time 10~%%else~%set-option -g escape-time 20~%%endif~%"
                   1 "elif chain: first true elif wins")
-                 ("%if 1~%bind a new-window~%%elif 1~%bind b x~%%else~%bind c x~%%endif~%"
+                 ("%if 1~%set-option -g status on~%%elif 1~%set-option -g status off~%%else~%set-option -g escape-time 10~%%endif~%"
                   1 "if=1 with elif+else: only if-branch")
-                 ("%if 0~%%if 1~%bind a new-window~%%elif 1~%bind b new-window~%%endif~%%endif~%"
+                 ("%if 0~%%if 1~%set-option -g status on~%%elif 1~%set-option -g status off~%%endif~%%endif~%"
                   0 "nested if in dead outer branch stays dead")))
       (destructuring-bind (config-str expected desc) c
         (declare (ignore desc))
@@ -196,13 +147,13 @@ bind -T copy-mode-vi v send-keys -X begin-selection")))
   (it "config-line-continuation-joins-directive"
     (with-isolated-config
       (expect (= 1 (nerimux/config:load-config-from-string
-                    (format nil "bind a \\~%new-window"))))))
+                    (format nil "set-option -g \\~%status on"))))))
 
   ;; Without a trailing backslash, two lines remain two separate directives.
   (it "config-no-continuation-two-lines-two-directives"
     (with-isolated-config
       (expect (= 2 (nerimux/config:load-config-from-string
-                    (format nil "bind a new-window~%bind b next-window"))))))
+                    (format nil "set-option -g status on~%set-option -g escape-time 10"))))))
 
   ;; %glob-pattern-p is true for * ? [ metacharacters; NIL for plain paths.
   (it "glob-pattern-p-detects-metacharacters"
@@ -243,17 +194,9 @@ bind -T copy-mode-vi v send-keys -X begin-selection")))
       (nerimux/config:load-config-from-string "set-option -g status-left \"#{session_name}\"")
       (expect (string= "#{session_name}" (nerimux/options:get-option "status-left")))))
 
-  ;; An inline # comment on an inner line of a multi-line brace block does not
-  ;; truncate the block — both commands still bind.
-  (it "config-brace-block-inner-comment-preserved"
-    (with-isolated-config
-      (load-config-from-string
-       (format nil "bind r {~%new-window  # make a window~%next-window~%}"))
-      (let* ((entry (nerimux/config:key-table-lookup "prefix" #\r))
-             (cmd   (nerimux/config:key-table-command entry)))
-        (expect (consp cmd))
-        (expect (eq :sequence (first cmd)))
-        (expect (= 2 (length (rest cmd)))))))
+  ;; config-brace-block-inner-comment-preserved was removed: it asserted a
+  ;; key-table effect (key-table-lookup / -command), gone with the key-table
+  ;; config subsystem.
 
   ;; ── Mid-token '#' is a literal, not a comment ────────────────────────────────
   ;;

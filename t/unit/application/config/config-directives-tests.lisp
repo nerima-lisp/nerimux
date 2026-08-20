@@ -1,56 +1,29 @@
 (in-package #:nerimux/test)
 
-;;;; config directive suite, bindable commands, basic apply/set directives — part I
+;;;; config directive suite, basic apply/set directives — part I
+;;;;
+;;;; *bindable-commands*, apply-directive-bind-returns-t,
+;;;; apply-directive-unknown-returns-nil, and
+;;;; set-mouse-invokes-mouse-reporting-hook were removed: all asserted
+;;;; key-table effects (lookup-key-binding / ensure-key-table) or, for the
+;;;; mouse hook, an effect the directive no longer produces now that the
+;;;; key-table config subsystem is gone.
 
 ;;; Import the config-directives symbols we need
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (import '(nerimux/config:lookup-key-binding
-            nerimux/config:*default-shell*
+  (import '(nerimux/config:*default-shell*
             nerimux/config:*status-height*
-            nerimux/config:key-table-bind
             nerimux/config:apply-config-directive
             nerimux/config:load-config-from-string
             nerimux/config:load-config-from-stream
             nerimux/config:config-file-path
             nerimux/config:load-config-file)))
 
-;;; NOTE: with-isolated-key-tables and with-temp-config-file are defined in
-;;; t/helpers-overlay-assertions.lisp so all test suites can reuse them.
+;;; NOTE: with-temp-config-file is defined in t/helpers-isolation.lisp so all
+;;; test suites can reuse it.
 
 (describe "config-directives-suite"
-
-  ;;; *bindable-commands* invariant
-
-  ;; *bindable-commands* must exclude copy-mode-internal commands.
-  (it "bindable-commands-excludes-copy-mode-internals"
-    (expect (null (intersection '(:copy-mode-exit :copy-mode-up :copy-mode-down)
-                                nerimux/config::*bindable-commands*)))
-    (dolist (cmd '(:copy-mode-exit :copy-mode-up :copy-mode-down))
-      (expect (not (member cmd nerimux/config::*bindable-commands*))))
-    (expect (member :new-window nerimux/config::*bindable-commands*)))
-
-  ;;; apply-config-directive
-
-  ;; apply-config-directive for a valid bind returns T and binds the char.
-  (it "apply-directive-bind-returns-t"
-    (with-isolated-config
-      (assert-config-directive-applied '("bind" "z" "new-window")
-                                       "valid bind directive")
-      (expect (eq :new-window (lookup-key-binding #\z)))))
-
-  ;; apply-config-directive for an unknown command returns NIL and changes nothing.
-  (it "apply-directive-unknown-returns-nil"
-    (with-isolated-config
-      (let* ((tbl (nerimux/config:ensure-key-table "prefix"))
-             (count-before (hash-table-count tbl))
-             (shell-before    *default-shell*)
-             (height-before   *status-height*))
-        (assert-config-directive-rejected '("bogus" "x")
-                                          "an unknown command")
-        (expect (= count-before (hash-table-count tbl)))
-        (expect (equal shell-before *default-shell*))
-        (expect (eql height-before *status-height*)))))
 
   ;;; set [-g|-a|...] name value  — flag handling (the canonical .tmux.conf form)
 
@@ -86,29 +59,17 @@
                                          "status" "off"
                                          :context "plain set")))
 
-  ;;; set mouse — *mouse-reporting-hook* side effect
+  ;;; set mouse
 
-  ;; 'set-option -g mouse on'/'off' invokes *mouse-reporting-hook* with T/NIL so the
-  ;; renderer layer can enable/disable mouse reporting without config depending
-  ;; on it directly.
-  (it "set-mouse-invokes-mouse-reporting-hook"
+  ;; 'set-option -g mouse on' still parses and applies without signalling, even
+  ;; though nothing consumes the value: the option's side-effect handler, and the
+  ;; renderer callback it used to fire, were both removed.  This pins the
+  ;; documented "parses, has no effect" contract.
+  (it "set-mouse-applies-without-signalling"
     (with-isolated-config
-      (let ((calls nil))
-        (let ((nerimux/config:*mouse-reporting-hook*
-                (lambda (on-p) (push on-p calls))))
-          (assert-config-directive-applied '("set-option" "-g" "mouse" "on")
-                                           "set-option -g mouse on")
-          (assert-config-directive-applied '("set-option" "-g" "mouse" "off")
-                                           "set-option -g mouse off")
-          (expect (equal '(nil t) calls))))))
-
-  ;; 'set-option -g mouse on' is safe when *mouse-reporting-hook* is unset (NIL).
-  (it "set-mouse-with-no-hook-does-not-signal"
-    (with-isolated-config
-      (let ((nerimux/config:*mouse-reporting-hook* nil))
-        (finishes
-          (assert-config-directive-applied '("set-option" "-g" "mouse" "on")
-                                           "set-option -g mouse on with no hook")))))
+      (finishes
+        (assert-config-directive-applied '("set-option" "-g" "mouse" "on")
+                                         "set-option -g mouse on"))))
 
   ;;; set-shell / set-status-height directives
 
@@ -127,9 +88,6 @@
   ;; Every malformed or unknown directive returns NIL without mutating state.
   (it "invalid-directive-cases-return-nil"
     (with-isolated-config
-      ;; NOTE: ("bind" "z" "new-window" "x") is no longer here — a bind with extra
-      ;; tokens is now a valid arg-taking binding (key → command line), covered by
-      ;; bind-key-to-command-line-stores-token-list.
       (dolist (tokens '(("bind")
                         ("bind" "z" "bogus-command")
                         ("unbind")

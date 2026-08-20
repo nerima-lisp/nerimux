@@ -5,59 +5,44 @@ it is where `nerima-lisp` libraries get exercised against a real workload. Each
 one below was adopted where it is a genuine fit for something nerimux already
 did by hand — not bolted on beside it.
 
-## Cold-path reasoning with cl-prolog-kit
+## Retired: cold-path reasoning with cl-prolog-kit
 
-`src/reasoning/` is a declarative read-model built on
-[cl-prolog-kit](https://github.com/nerima-lisp/cl-prolog-kit), a dependency-free Common
-Lisp Prolog engine. It projects nerimux's declarative tables into Prolog rulebases
-and answers relational questions the flat tables cannot express directly.
+`src/reasoning/` was a declarative read-model built on
+[cl-prolog-kit](https://github.com/nerima-lisp/cl-prolog-kit), a dependency-free
+Common Lisp Prolog engine. It shipped as the optional `nerimux/reasoning` system
+with its own cl-weave suite (`nerimux/weave`) and flake check. **Both are gone.**
 
-It ships as the **optional** `nerimux/reasoning` system and is **not** compiled
-into the binary. Nothing in `src/` outside `src/reasoning/` calls it, so loading
-it into core pulled cl-prolog-kit into the shipped dependency closure for no
-runtime benefit. Load it explicitly to use the API below.
+It projected nerimux's declarative tables into Prolog rulebases so relational
+questions could be asked of them — which keys run a command, which bindings
+conflict across tables. That was a real fit while those tables existed. It no
+longer has anything to project, and the two domains it carried died for
+instructively different reasons.
 
-It is used strictly on a **cold path** — introspection over the key-table
-store — never anything nerimux runs on its imperative runtime path.
-
-One domain ships today: key bindings. Because the system is optional, load it
-before using the API:
-
-```lisp
-(asdf:load-system "nerimux/reasoning")
-
-(let ((rb (nerimux/reasoning:current-key-rulebase)))
-  (nerimux/reasoning:key-command rb "prefix" #\c)   ; => :NEW-WINDOW, T
-  (nerimux/reasoning:keys-running rb :new-window)   ; => (("prefix" . #\c))
-  (nerimux/reasoning:binding-conflicts rb))         ; keys bound differently across tables
-```
-
-Its regression suite (`nerimux/weave`) uses
-[cl-weave](https://github.com/nerima-lisp/cl-weave) — custom matchers,
-`around-each` fixtures, a property test, and cl-prolog-kit's own `deftest-queries`
-bridge — and runs as the `weave` flake check (`nix flake check`; see the
-`weave` derivation in `flake.nix`).
-
-### Retired: the command-rulebase domain
-
-Until this session's workspace-only conversion, a second domain shipped
-alongside key bindings: `command-rulebase.lisp` projected the tmux command
-table (accepted flags, target-taking commands, no-argument "scriptable"
-commands) into its own Prolog rulebase, behind `current-command-rulebase`,
+**The command domain died silently.** `command-rulebase.lisp` projected the tmux
+command table into a rulebase behind `current-command-rulebase`,
 `command-accepts-flag-p`, `commands-with-flag`, `flags-of-command`,
-`scriptable-commands`, `command-usage-facts`, and `build-command-rulebase`.
+`scriptable-commands`, `command-usage-facts` and `build-command-rulebase`.
+Deleting the table it projected (`src/application/dispatch/`) did not break it
+outright — the projection reached the table's data through `find-symbol`, an
+edge no compiler tracks, so the lookup returned `NIL` and the rulebase built
+itself over zero facts. Every query would have gone on returning empty answers
+forever. The regression suite is what caught it, because it asserted concrete
+facts rather than mere non-emptiness.
 
-Deleting the tmux command table it projected (`src/application/dispatch/`)
-did not break that domain outright — it broke it silently. The projection
-reached the table's data by `find-symbol`, an edge no compiler tracks, so
-with the table gone the lookup returned `NIL` and the "rulebase" it built was
-just the static rules over zero facts: every query would have kept returning
-empty answers instead of failing to load. The `nerimux/weave` regression
-suite is what caught it. `command-rulebase.lisp` and the exports above were
-then removed outright, rather than left to reason silently over nothing; only
-the key-binding domain survives. This was a deliberate deletion, not an
-oversight — do not reintroduce those exports unless the command table they
-projected comes back with them.
+**The key domain died loudly**, and that is the better failure. `key-rulebase.lisp`
+and `key-tables.lisp` referenced `nerimux/config:*key-tables*`, `+table-root+` and
+the `key-table-*` accessors with ordinary package-qualified references. When the
+key-table store was deleted — nothing on a live path had read it since the
+keystroke pipeline went — the system stopped loading at once, with
+`no symbol named "KEY-DISPLAY-STRING" in "NERIMUX/CONFIG"`. A hard compile error
+is strictly better than a silent empty rulebase, and the contrast is the whole
+lesson: `find-symbol` buys loose coupling by discarding the compiler's ability to
+tell you the thing is gone.
+
+With no facts left to project there was nothing to narrow the system to, so
+`nerimux/reasoning`, `t/weave/`, both `defsystem` forms and the `weave` flake
+check were removed together. This was deliberate. Do not reintroduce them unless
+something declarative comes back that is worth reasoning over relationally.
 
 ## The other siblings
 
@@ -67,9 +52,10 @@ projected comes back with them.
   `-L`/`-S`-only scanner with real tmux(1) flag parity — flags may now appear
   in any order before the command word.
 - [cl-boundary-kit](https://github.com/nerima-lisp/cl-boundary-kit) supplies
-  the process boundary (`nerimux/config:*process-boundary*`) that `run-shell` /
-  `if-shell` and config-time shell directives run through, so tests can swap in
-  a fake process without shelling out for real.
+  the process boundary (`nerimux/config:*process-boundary*`) that the
+  `run-shell` / `if-shell` config directives — and the other config-time shell
+  directives — run through, so tests can swap in a fake process without shelling
+  out for real.  There is no non-directive form of those two any more.
 - [cl-dataflow-kit](https://github.com/nerima-lisp/cl-dataflow-kit) models the
   copy-mode lifecycle as an inspectable state machine (`src/dataflow/`), the
   cl-dataflow-kit counterpart to `src/reasoning/` above — same cold-path-only rule,
@@ -115,8 +101,10 @@ projected comes back with them.
   `bordeaux-threads` as the threading vocabulary: the per-pane PTY reader
   threads and the config-time background `run-shell`, the screen mutex, the
   `wait-for` channel's condition variable, and the
-  preemptive `with-timeout` that bounds `run-shell`, `pipe-pane` and the PTY
-  child-exit wait. See the retirement note below for the two API differences
+  preemptive `with-timeout` that bounds `pipe-pane` and the PTY child-exit
+  wait.  It no longer bounds `run-shell`: that wrapper lived in the deleted
+  commands-shell.lisp, and the surviving config directive bounds itself through
+  cl-boundary-kit's own `:timeout` instead. See the retirement note below for the two API differences
   that matter when reading pre-migration code.
 - [cl-regex-kit](https://github.com/nerima-lisp/cl-regex-kit) replaced
   `cl-ppcre` behind every regular expression nerimux exposes: the `#{m/r:…}`

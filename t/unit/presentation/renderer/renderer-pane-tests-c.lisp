@@ -305,23 +305,6 @@
             (expect (search "48;5;172" out))
             (expect (null (search "48;5;99" out))))))))
 
-  ;; copy-mode-mark-style recolours the marked cell only, and the marked endpoint still flips to reverse-video.
-  (it "copy-mode-mark-style-applies-mark-endpoint-style"
-    (with-isolated-config
-      (with-isolated-options ("copy-mode-position-style" "default"
-                              "copy-mode-position-format" ""
-                              "copy-mode-mark-style" "fg=colour88,bg=colour172")
-        (with-copy-mode-selection-fixture (sess pane screen 8 4
-                                              :content "ABCDEFGHIJKLMNOP"
-                                              :cursor-row 1
-                                              :cursor-col 3
-                                              :selecting-p nil)
-          (nerimux/commands::copy-mode-set-mark screen)
-          (let ((out (render-pane-output sess pane)))
-            (expect (= 1 (%count-substring "38;5;88" out)))
-            (expect (= 1 (%count-substring "48;5;172" out)))
-            (expect (%reverse-video-p out)))))))
-
   ;; First row of a multi-row selection: cols >= sel-start-c are highlighted.
   (it "in-sel-branch-first-row"
     (with-copy-mode-selection-fixture (sess pane screen 8 4

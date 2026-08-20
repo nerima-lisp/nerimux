@@ -2,7 +2,7 @@
 ;;;;
 ;;;; The suite registers as a side effect of loading copy-mode-lifecycle-tests
 ;;;; (the top-level `describe' form runs at load time), so the runner just
-;;;; walks the global registry, mirroring t/weave/entry.lisp.
+;;;; walks the global registry.
 
 (in-package #:nerimux/dataflow-tests)
 

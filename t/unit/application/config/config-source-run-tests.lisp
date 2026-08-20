@@ -5,14 +5,10 @@
 (describe "config-directives-suite"
 
   ;;; ── source-file directive ──────────────────────────────────────────────────
-
-  ;; source-file applies a config file from disk, returning T.
-  (it "source-file-directive-loads-temp-file"
-    (with-isolated-config
-      (with-temp-config-file (p "bind z next-window")
-        (assert-config-directive-applied (list "source-file" (namestring p))
-                                         "source-file temp file")
-        (expect (eq :next-window (lookup-key-binding #\z))))))
+  ;;;
+  ;;; source-file-directive-loads-temp-file was removed: it asserted a
+  ;;; key-table effect (lookup-key-binding), gone with the key-table config
+  ;;; subsystem.
 
   ;; The config loader accepts only the canonical source-file command name.
   (it "source-file-short-alias-is-rejected"
