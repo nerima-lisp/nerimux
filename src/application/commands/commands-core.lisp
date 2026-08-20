@@ -6,4 +6,4 @@
 ;;; directly by the runtime reader and the server on pane exit.
 
 (defun close-pane-pty (target)
-  (ignore-errors (pty-close (pane-fd target) (pane-pid target))))
+  (ignore-errors (nerimux/ports:close-pty (pane-fd target) (pane-pid target))))

@@ -36,7 +36,8 @@
               for count = (read-sequence buffer output-stream)
               while (plusp count) do
                 (ignore-errors
-                  (pty-write (pane-fd pane) (subseq buffer 0 count)))))
+                  (nerimux/ports:write-pty (pane-fd pane)
+                                           (subseq buffer 0 count)))))
         ((or end-of-file error) () nil))
     (ignore-errors (close output-stream))))
 

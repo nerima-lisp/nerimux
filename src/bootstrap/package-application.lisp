@@ -3,9 +3,14 @@
 (defpackage #:nerimux/commands
   (:use #:cl
         #:nerimux/config
-        #:nerimux/pty
         #:nerimux/terminal
         #:nerimux/model)
+  ;; NOT #:nerimux/pty.  That is infrastructure, and this is application: the
+  ;; two PTY operations left here (close on pane exit, write for pipe-pane) go
+  ;; through nerimux/ports instead, the same indirection domain/model/pane-spawn
+  ;; already uses for the symmetric spawn side.  The ports are bound to exactly
+  ;; these functions by nerimux/pty:install-pty-port, so this is the same call
+  ;; with one hop -- what changes is that the dependency now points downward.
   ;; cl-concurrent-kit's WITH-TIMEOUT / OPERATION-TIMED-OUT in
   ;; commands-pipe-pane.lisp stay qualified, next to the TIMEOUT-SECONDS
   ;; parameter they bound.  Under bordeaux-threads they HAD to: the condition was
