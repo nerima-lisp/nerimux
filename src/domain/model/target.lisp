@@ -1,11 +1,14 @@
 (in-package #:nerimux)
 
-;;;; Session/window/pane target resolution — the "-t session:window.pane" DSL.
+;;;; Session/window/pane target parsing and lookup — the "-t session:window.pane"
+;;;; DSL's data and matching layers. The tmux-style single public entry point
+;;;; that used to compose these (resolve-target/resolve-target-context) was
+;;;; deleted once nothing called it; find-pane-by-target itself still has a
+;;;; live caller.
 ;;;;
 ;;;; Architecture (data / logic separation):
 ;;;;   DATA  — parse-target splits a string into its three components
 ;;;;   LOGIC — find-*-by-target matches each component against the registry
-;;;;   ENTRY — resolve-target is the single public entry point
 ;;;;
 ;;;; Target grammar:
 ;;;;   [SESSION][:WINDOW][.PANE]
@@ -149,31 +152,3 @@
           (idx   (nerimux/text:parse-integer-or-nil target-str)))
      (when (and idx (>= idx 0) (< idx (length panes)))
        (nth idx panes)))))
-
-;;; ── Public: resolve-target ───────────────────────────────────────────────────
-
-(defun resolve-target (server target-string &key current-session current-window current-pane)
-  "Parse TARGET-STRING and resolve it to (values session window pane).
-   SERVER is the *server-sessions* alist used for session lookup.
-   CURRENT-SESSION / CURRENT-WINDOW / CURRENT-PANE are the defaults when
-   a component is absent from TARGET-STRING or cannot be resolved."
-  (multiple-value-bind (sess-str win-str pane-str)
-      (%parse-target target-string)
-    (let* ((session (or (when sess-str (find-session-by-target server sess-str))
-                        current-session))
-           (window  (or (when win-str (find-window-by-target session win-str))
-                        (when (null win-str) current-window)
-                        (session-active-window session)))
-           (pane    (or (when pane-str (find-pane-by-target window pane-str))
-                        (when (null pane-str) current-pane)
-                        (when window (window-active-pane window)))))
-      (values session window pane))))
-
-(defun resolve-target-context (server session target-string)
-  "Resolve TARGET-STRING against SERVER using SESSION as the default context.
-   Returns (values session window pane), falling back to the current
-   session/window/pane when TARGET-STRING is absent or partially resolves."
-  (resolve-target server target-string
-                  :current-session session
-                  :current-window  (session-active-window session)
-                  :current-pane    (session-active-pane session)))

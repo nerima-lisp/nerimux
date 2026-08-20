@@ -111,7 +111,13 @@
    #:create-worktree
    #:delete-worktree
    #:create-worktree-async
-   #:delete-worktree-async))
+   #:delete-worktree-async
+   #:lock-worktree
+   #:unlock-worktree
+   #:prune-worktrees
+   #:lock-worktree-async
+   #:unlock-worktree-async
+   #:prune-worktrees-async))
 
 (defpackage #:nerimux/persistence
   (:use #:cl)

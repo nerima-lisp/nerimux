@@ -1,9 +1,8 @@
 (in-package #:nerimux/test)
 
 ;;;; target tests — part B: %sigil-id, %name-prefix-p, edge cases for
-;;;; find-session/window/pane-by-target, resolve-target window-only / multi-session,
-;;;; parse-target table-driven, pane-by-numeric-index,
-;;;; multi-digit ids, resolve-target empty string.
+;;;; find-session/window/pane-by-target, and multi-digit-id parsing for the
+;;;; same.
 
 (describe "target-suite"
 
@@ -68,63 +67,6 @@
                              :panes (list p1))))
       (expect (null (nerimux::find-pane-by-target win "10")))))
 
-  ;;; ── resolve-target: window-only target ───────────────────────────────────────
-
-  ;; resolve-target with ':win' resolves to the named window in current session.
-  (it "resolve-target-colon-window-only"
-    (let* ((p1   (make-no-pty-pane 1 0 0 80 24))
-           (w1   (make-window :id 1 :name "alpha" :width 80 :height 24
-                              :panes (list p1)))
-           (w2   (make-window :id 2 :name "beta" :width 80 :height 24
-                              :panes (list (make-no-pty-pane 2 0 0 80 24))))
-           (sess (make-session :id 1 :name "s" :windows (list w1 w2))))
-      (window-select-pane w1 p1)
-      (session-select-window sess w1)
-      (let ((registry (list (cons "s" sess))))
-        (multiple-value-bind (_rs rw _rp)
-            (nerimux::resolve-target registry ":beta"
-                                     :current-session sess
-                                     :current-window  w1)
-          (declare (ignore _rs _rp))
-          (expect (eq w2 rw))))))
-
-  ;;; ── resolve-target: multiple sessions in registry ────────────────────────────
-
-  ;; resolve-target selects the correct session from a multi-entry registry.
-  (it "resolve-target-multiple-sessions-selects-correct-one"
-    (let* ((p1a  (make-no-pty-pane 1 0 0 80 24))
-           (w1   (make-window :id 1 :name "w" :width 80 :height 24 :panes (list p1a)))
-           (s1   (make-session :id 1 :name "one" :windows (list w1)))
-           (p2a  (make-no-pty-pane 2 0 0 80 24))
-           (w2   (make-window :id 2 :name "w" :width 80 :height 24 :panes (list p2a)))
-           (s2   (make-session :id 2 :name "two" :windows (list w2)))
-           (registry (list (cons "one" s1) (cons "two" s2))))
-      (window-select-pane w1 p1a)
-      (window-select-pane w2 p2a)
-      (session-select-window s1 w1)
-      (session-select-window s2 w2)
-      (multiple-value-bind (rs _rw _rp)
-          (nerimux::resolve-target registry "two")
-        (declare (ignore _rw _rp))
-        (expect (eq s2 rs)))))
-
-  ;;; ── resolve-target with pane specified as numeric index ─────────────────────
-
-  ;; resolve-target resolves a pane by its 0-based numeric index.
-  (it "resolve-target-pane-by-numeric-index"
-    (let* ((p1   (make-no-pty-pane 1  0 0 40 24))
-           (p2   (make-no-pty-pane 2 41 0 40 24))
-           (win  (make-window :id 1 :name "w" :width 81 :height 24
-                              :panes (list p1 p2)))
-           (sess (make-session :id 1 :name "s" :windows (list win))))
-      (window-select-pane win p1)
-      (session-select-window sess win)
-      (let ((registry (list (cons "s" sess))))
-        (multiple-value-bind (_rs _rw rp)
-            (nerimux::resolve-target registry "s:w.1")
-          (declare (ignore _rs _rw))
-          (expect (eq p2 rp))))))
-
   ;;; ── find-session-by-target: id higher than 9 ────────────────────────────────
 
   ;; find-session-by-target parses $N with multi-digit N correctly.
@@ -148,62 +90,4 @@
     (let* ((p1  (make-no-pty-pane 15 0 0 80 24))
            (win (make-window :id 1 :name "w" :width 80 :height 24
                              :panes (list p1))))
-      (expect (eq p1 (nerimux::find-pane-by-target win "%15")))))
-
-  ;;; ── resolve-target: empty string is same as NIL ─────────────────────────────
-
-  ;; resolve-target with an empty string behaves identically to NIL target.
-  (it "resolve-target-empty-string-uses-current-defaults"
-    (multiple-value-bind (sess win p1) (make-single-pane-session)
-      (multiple-value-bind (rs rw rp)
-          (nerimux::resolve-target nil ""
-                                   :current-session sess
-                                   :current-window  win
-                                   :current-pane    p1)
-        (expect (eq sess rs))
-        (expect (eq win  rw))
-        (expect (eq p1   rp)))))
-
-  ;;; ── resolve-target-context ───────────────────────────────────────────────────
-  ;;;
-  ;;; resolve-target-context is the public entry point dispatch-core.lisp uses for
-  ;;; -t flag resolution; it derives current-session/window/pane defaults from
-  ;;; SESSION rather than requiring callers to pass them explicitly.
-
-  ;; resolve-target-context with a NIL target-string resolves to SESSION's own
-  ;; active window and active pane, derived internally rather than passed in.
-  (it "resolve-target-context-nil-target-defaults-to-session-active-objects"
-    (multiple-value-bind (sess win pane) (make-single-pane-session)
-      (multiple-value-bind (rs rw rp)
-          (nerimux::resolve-target-context nil sess nil)
-        (expect (eq sess rs))
-        (expect (eq win  rw))
-        (expect (eq pane rp)))))
-
-  ;; resolve-target-context resolves a bare window-name target against SESSION,
-  ;; without requiring the caller to pass current-window/current-pane explicitly.
-  (it "resolve-target-context-resolves-window-within-session"
-    (let* ((p1   (make-no-pty-pane 1 0 0 80 24))
-           (w1   (make-window :id 1 :name "editor" :width 80 :height 24
-                              :panes (list p1)))
-           (w2   (make-window :id 2 :name "shell" :width 80 :height 24
-                              :panes (list (make-no-pty-pane 2 0 0 80 24))))
-           (sess (make-session :id 1 :name "work" :windows (list w1 w2))))
-      (window-select-pane w1 p1)
-      (session-select-window sess w1)
-      (multiple-value-bind (rs rw _rp)
-          (nerimux::resolve-target-context (list (cons "work" sess)) sess ":shell")
-        (declare (ignore _rp))
-        (expect (eq sess rs))
-        (expect (eq w2   rw)))))
-
-  ;; resolve-target-context still resolves relative to SESSION even when SERVER
-  ;; does not contain SESSION under any registry key (e.g. a not-yet-registered
-  ;; session), since the target-string does not name a session component.
-  (it "resolve-target-context-falls-back-when-server-omits-session"
-    (multiple-value-bind (sess win pane) (make-single-pane-session)
-      (multiple-value-bind (rs rw rp)
-          (nerimux::resolve-target-context nil sess "0")
-        (expect (eq sess rs))
-        (expect (eq win  rw))
-        (expect (eq pane rp))))))
+      (expect (eq p1 (nerimux::find-pane-by-target win "%15"))))))

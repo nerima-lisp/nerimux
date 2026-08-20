@@ -815,6 +815,18 @@ display label back into a target string."
       (%client-notify conn "select a worktree to delete"))
   t)
 
+(defun %client-start-worktree-lock (conn)
+  (if (%client-operation-worktree conn)
+      (%client-enter-command-mode conn "wt-lock --confirm")
+      (%client-notify conn "select a worktree to lock"))
+  t)
+
+(defun %client-start-worktree-unlock (conn)
+  (if (%client-operation-worktree conn)
+      (%client-enter-command-mode conn "wt-unlock --confirm")
+      (%client-notify conn "select a worktree to unlock"))
+  t)
+
 (defun %focus-selected-client-worktree (session conn)
   (unless (client-conn-selected-worktree conn)
     (%select-client-tree-worktree conn nil))
@@ -874,6 +886,10 @@ display label back into a target string."
        (%client-start-worktree-create conn))
       ((and (eq view :overview) (%client-key-p payload #\X))
        (%client-start-worktree-delete conn))
+      ((and (eq view :overview) (%client-key-p payload #\L))
+       (%client-start-worktree-lock conn))
+      ((and (eq view :overview) (%client-key-p payload #\U))
+       (%client-start-worktree-unlock conn))
       ((%client-key-p payload #\d)
        (%set-client-view conn :detail)
        t)
@@ -1486,6 +1502,150 @@ display label back into a target string."
                 (format nil "worktree delete failed: ~A" condition))))
            t)))))
 
+(defun %client-lock-worktree (conn target args)
+  (if (not (%client-boolean-option-p args '("--confirm" "confirm")))
+      (progn
+        (%client-notify conn "worktree lock requires --confirm")
+        t)
+      (let ((worktree (%client-operation-worktree conn target))
+            (reason (%client-option-value args '("--reason" "reason"))))
+        (cond
+          ((not worktree)
+           (%client-notify conn "worktree lock requires a worktree")
+           t)
+          ((not (nerimux/vcs:vcs-package-available-p))
+           (%client-notify conn "VCS adapter unavailable")
+           t)
+          (t
+           (%client-notify
+            conn
+            (format nil "locking worktree ~A"
+                    (nerimux/model:worktree-path worktree)))
+           (handler-case
+               (nerimux/vcs:lock-worktree-async
+                worktree
+                :reason reason
+                :on-complete
+                (lambda (ignored)
+                  (declare (ignore ignored))
+                  (%refresh-client-picker conn)
+                  (%client-notify conn "worktree locked")
+                  (%mark-dirty))
+                :on-error
+                (lambda (condition)
+                  (%client-notify
+                   conn
+                   (format nil "worktree lock failed: ~A" condition))))
+             (error (condition)
+               (%client-notify
+                conn
+                (format nil "worktree lock failed: ~A" condition))))
+           t)))))
+
+(defun %client-unlock-worktree (conn target args)
+  (if (not (%client-boolean-option-p args '("--confirm" "confirm")))
+      (progn
+        (%client-notify conn "worktree unlock requires --confirm")
+        t)
+      (let ((worktree (%client-operation-worktree conn target)))
+        (cond
+          ((not worktree)
+           (%client-notify conn "worktree unlock requires a worktree")
+           t)
+          ((not (nerimux/vcs:vcs-package-available-p))
+           (%client-notify conn "VCS adapter unavailable")
+           t)
+          (t
+           (%client-notify
+            conn
+            (format nil "unlocking worktree ~A"
+                    (nerimux/model:worktree-path worktree)))
+           (handler-case
+               (nerimux/vcs:unlock-worktree-async
+                worktree
+                :on-complete
+                (lambda (ignored)
+                  (declare (ignore ignored))
+                  (%refresh-client-picker conn)
+                  (%client-notify conn "worktree unlocked")
+                  (%mark-dirty))
+                :on-error
+                (lambda (condition)
+                  (%client-notify
+                   conn
+                   (format nil "worktree unlock failed: ~A" condition))))
+             (error (condition)
+               (%client-notify
+                conn
+                (format nil "worktree unlock failed: ~A" condition))))
+           t)))))
+
+(defun %client-prune-worktrees (conn target args &key dry-run)
+  "Preview or perform a git worktree prune for the target repository.
+
+DRY-RUN must default true at every call site; a caller passes DRY-RUN NIL
+only after the user has confirmed a previewed prune, and even then this
+function still requires both an explicit --confirm option AND that a dry-run
+preview was already shown to CONN for this same repository (tracked via
+CLIENT-CONN-PENDING-PRUNE-PREVIEW-REPOSITORY-ID) — so a prune can never be
+reached by a single accidental keystroke, a scripted --confirm with no
+preview, or a preview of a different repository."
+  (if (and (not dry-run)
+           (not (%client-boolean-option-p args '("--confirm" "confirm"))))
+      (progn
+        (%client-notify conn "worktree prune requires --confirm")
+        t)
+      (let ((repository (%client-selected-repository conn target))
+            (verbose (%client-boolean-option-p args '("--verbose" "verbose"))))
+        (cond
+          ((not repository)
+           (%client-notify conn "worktree prune requires a repository")
+           t)
+          ((and (not dry-run)
+                (not (equal (client-conn-pending-prune-preview-repository-id
+                             conn)
+                            (nerimux/model:repository-id repository))))
+           (%client-notify
+            conn
+            "worktree prune requires a preview first: run wt-prune, then wt-prune-confirm --confirm")
+           t)
+          ((not (nerimux/vcs:vcs-package-available-p))
+           (%client-notify conn "VCS adapter unavailable")
+           t)
+          (t
+           (%client-notify
+            conn
+            (if dry-run "previewing worktree prune" "pruning worktrees"))
+           (handler-case
+               (nerimux/vcs:prune-worktrees-async
+                repository
+                :dry-run dry-run
+                :verbose verbose
+                :on-complete
+                (lambda (output)
+                  (setf (client-conn-pending-prune-preview-repository-id conn)
+                        (and dry-run (nerimux/model:repository-id repository)))
+                  (%refresh-client-picker conn)
+                  (%client-notify
+                   conn
+                   (if dry-run
+                       (format nil "worktree prune preview: ~A"
+                               (if (and (stringp output) (plusp (length output)))
+                                   output
+                                   "nothing to prune"))
+                       "worktrees pruned"))
+                  (%mark-dirty))
+                :on-error
+                (lambda (condition)
+                  (%client-notify
+                   conn
+                   (format nil "worktree prune failed: ~A" condition))))
+             (error (condition)
+               (%client-notify
+                conn
+                (format nil "worktree prune failed: ~A" condition))))
+           t)))))
+
 (defun %handle-client-ui-command (session conn cmd target args)
   "Apply a client-local UI command, returning true when CMD is recognized."
   (cond
@@ -1547,6 +1707,15 @@ display label back into a target string."
      (%client-create-worktree conn target args))
     ((member cmd '(:worktree-delete :delete-worktree :wt-delete) :test #'eq)
      (%client-delete-worktree conn target args))
+    ((member cmd '(:worktree-lock :lock-worktree :wt-lock) :test #'eq)
+     (%client-lock-worktree conn target args))
+    ((member cmd '(:worktree-unlock :unlock-worktree :wt-unlock) :test #'eq)
+     (%client-unlock-worktree conn target args))
+    ((member cmd '(:worktree-prune-preview :wt-prune :wt-prune-dry-run)
+             :test #'eq)
+     (%client-prune-worktrees conn target args :dry-run t))
+    ((member cmd '(:worktree-prune-confirm :wt-prune-confirm) :test #'eq)
+     (%client-prune-worktrees conn target args :dry-run nil))
     ((eq cmd :mode)
      (let ((mode (%client-ui-mode-value (or target (first args)))))
        (when mode

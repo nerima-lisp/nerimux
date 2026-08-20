@@ -25,12 +25,60 @@
   (append (when *socket-path-override* (list "-S" *socket-path-override*))
           (when *socket-name-override* (list "-L" *socket-name-override*))))
 
-(defun %launch-server-and-poll-when-live (socket-path exe args)
+(defun %secure-log-directory (log-path)
+  "Best-effort chmod LOG-PATH's parent directory to 0700 once it exists, so a
+   server crash log holding SBCL backtraces (absolute paths, possibly
+   pane/environment-derived data) is not left world/group-readable under
+   whatever the process umask happens to be (CWE-732).
+
+   Mirrors %socket-directory's sb-posix:chmod pattern in server.lisp exactly,
+   including its dependency mechanism: sb-posix is not an ASDF dependency of
+   this system (see nerimux/ports:find-posix-function's docstring), so it may
+   not be loaded here.  %ensure-server-running -- this function's caller --
+   runs in the ATTACHING/parent process spawning a new server child, not
+   inside run-server itself, so run-server's own (require :sb-posix) cannot
+   be assumed to have already executed in this process.  Hence the same
+   (require :sb-posix) immediately before use that server.lisp performs.
+
+   Chmod is defense in depth for the log's contents, not a precondition for
+   logging or for starting the server, so any failure (missing sb-posix,
+   permission error, race) is ignored exactly as %socket-directory ignores
+   its own creation/chmod failures."
+  (require :sb-posix)
+  (ignore-errors
+    (sb-posix:chmod (directory-namestring log-path) #o700)))
+
+(defun %launch-server-and-poll-when-live (socket-path exe args log-path)
+  "Spawn EXE/ARGS non-blocking, redirecting its stdout and stderr to LOG-PATH
+   so a crash or runtime error in the auto-started headless server leaves a
+   forensic trail instead of vanishing into /dev/null.  LOG-PATH's parent
+   directory is created first since it lives under a per-server-name state
+   directory that may not exist yet, and is chmod'd 0700 (%secure-log-directory)
+   before the child can write into it.
+
+   Crash-forensic logging is a purely diagnostic feature and must not become a
+   hard dependency for starting a server: previously :output nil :error nil
+   needed no directory at all, so a read-only or permission-denied
+   XDG_STATE_HOME/NERIMUX_RUNTIME_STATE (common in containers/CI) would now
+   fail server auto-start outright.  Creating/securing LOG-PATH's directory
+   and the log-redirected run-program attempt are therefore wrapped together;
+   any signal there falls back to an un-redirected launch instead of
+   propagating and blocking startup -- the same diagnostics-must-not-break-
+   the-primary-operation shape %save-runtime-state/%restore-runtime-state
+   already use in runtime-lifecycle.lisp, degrading to a report (here: no
+   log) rather than propagating."
   (let ((launched
-          (ignore-errors
-            (sb-ext:run-program exe args
-                                :wait nil
-                                :output nil :error nil))))
+          (handler-case
+              (progn
+                (ensure-directories-exist log-path)
+                (%secure-log-directory log-path)
+                (sb-ext:run-program exe args
+                                    :wait nil
+                                    :output log-path :if-output-exists :append
+                                    :error :output))
+            (condition ()
+             (ignore-errors
+               (sb-ext:run-program exe args :wait nil :output nil :error nil))))))
     ;; Poll only when we actually attempted a launch.  This avoids the
     ;; unconditional 3-second dead-time when run-program silently failed.
     (when launched
@@ -50,18 +98,22 @@
    spawned server crashed, never started, or is simply slow — rather than
    returning silently as if it had succeeded (main's top-level handler-case
    turns this into a clean one-line message and exit 1, the same as any
-   other startup error)."
+   other startup error).
+   The spawned server's stdout/stderr are redirected to %runtime-log-path's
+   per-session-name log file so a crash leaves a forensic trail instead of
+   being discarded."
   (let* ((socket-path (socket-path session-name))
          (exe         (first sb-ext:*posix-argv*))
          (args        (append (%global-socket-flag-args)
-                              (list "server" session-name))))
+                              (list "server" session-name)))
+         (log-path    (%runtime-log-path session-name)))
     (when (%stale-socket-p socket-path)
       (ignore-errors (delete-file socket-path)))
     (unless (probe-file socket-path)
       ;; Guard: run-program may fail in test environments or when the
       ;; binary is not yet on PATH.  Only poll if the spawn succeeded.
       ;; :wait nil means non-blocking, so run-program returns after starting the child.
-      (%launch-server-and-poll-when-live socket-path exe args))
+      (%launch-server-and-poll-when-live socket-path exe args log-path))
     (unless (probe-file socket-path)
       (error "server failed to start (timed out waiting for socket at ~A)"
              socket-path))))

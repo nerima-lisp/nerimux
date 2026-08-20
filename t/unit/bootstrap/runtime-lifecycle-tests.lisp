@@ -7,11 +7,50 @@
       (expect (string= "origin_main_worktree"
                        (nerimux::%runtime-safe-server-name
                         nerimux::*runtime-server-name*))))
+    ;; NERIMUX_RUNTIME_STATE names a DIRECTORY, not a literal file -- it is
+    ;; shared with %runtime-log-path (see the fix below), so it can no longer
+    ;; be returned verbatim as a complete path or both functions would
+    ;; resolve to the identical file.  It gets the same
+    ;; nerimux/<name>.runtime.lisp suffix the XDG branch applies.
     (with-temporary-posix-environment-variable
-        ("NERIMUX_RUNTIME_STATE" "/tmp/nerimux-runtime-test.sexp")
-      (expect
-       (string= "/tmp/nerimux-runtime-test.sexp"
-                (namestring (nerimux::%runtime-state-path))))))
+        ("NERIMUX_RUNTIME_STATE" "/tmp/nerimux-runtime-test-dir")
+      (let ((nerimux::*runtime-server-name* "default"))
+        (expect
+         (string= "/tmp/nerimux-runtime-test-dir/nerimux/default.runtime.lisp"
+                  (namestring (nerimux::%runtime-state-path)))))))
+
+  (it "resolves the log path under the NERIMUX_RUNTIME_STATE override the same way the state path does, as a distinct file"
+    ;; Was a correctness bug: both functions used to return the override
+    ;; verbatim, so setting NERIMUX_RUNTIME_STATE made the session-state
+    ;; snapshot and the raw server log resolve to the SAME path -- writing
+    ;; one would clobber/interleave with the other, corrupting whichever
+    ;; %runtime-restore-* later read back as Lisp data.  Fixed by treating
+    ;; the override as a state-home directory, like the XDG branch, so the
+    ;; two functions' distinct filename suffixes keep them apart.
+    (with-temporary-posix-environment-variable
+        ("NERIMUX_RUNTIME_STATE" "/tmp/nerimux-log-test-dir")
+      (let ((nerimux::*runtime-server-name* "myserver"))
+        (let ((state-path (namestring (nerimux::%runtime-state-path)))
+              (log-path (namestring (nerimux::%runtime-log-path "myserver"))))
+          (expect
+           (string= "/tmp/nerimux-log-test-dir/nerimux/myserver.runtime.lisp"
+                    state-path))
+          (expect
+           (string= "/tmp/nerimux-log-test-dir/nerimux/myserver.log"
+                    log-path))
+          (expect (string/= state-path log-path))))))
+
+  (it "resolves the log path under XDG_STATE_HOME to the same directory as the state path, differing only in suffix"
+    (with-temporary-posix-environment-variable ("NERIMUX_RUNTIME_STATE" nil)
+      (with-temporary-posix-environment-variable
+          ("XDG_STATE_HOME" "/tmp/nerimux-log-xdg-test")
+        (let ((nerimux::*runtime-server-name* "myserver"))
+          (expect
+           (string= "/tmp/nerimux-log-xdg-test/nerimux/myserver.runtime.lisp"
+                    (namestring (nerimux::%runtime-state-path))))
+          (expect
+           (string= "/tmp/nerimux-log-xdg-test/nerimux/myserver.log"
+                    (namestring (nerimux::%runtime-log-path "myserver"))))))))
 
   (it "matches current panes and reports orphaned and lost state"
     (let* ((current-pane (make-pane :id 7 :title "editor"))

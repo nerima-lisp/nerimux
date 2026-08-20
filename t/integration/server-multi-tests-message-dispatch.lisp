@@ -318,6 +318,393 @@
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:delete-worktree-async) delete-fn)))))
 
+  ;; `L`/`U` on a selected worktree pre-fill the lock/unlock command lines,
+  ;; mirroring `X`'s "wt-delete --confirm" prefill exactly (both already
+  ;; include --confirm since no further required argument exists).
+  (it "overview-worktree-lock-unlock-open-explicit-command-prompts"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org"
+                :host "github.com"
+                :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo"
+                :organization organization
+                :specification "github.com/team/repo"))
+             (worktree
+               (nerimux/model:make-worktree
+                :id "feature"
+                :repository repository
+                :path "/tmp/feature"
+                :branch "feature/ux"))
+             (conn (%make-test-conn)))
+        (nerimux/model:organization-add-repository organization repository)
+        (nerimux/model:repository-add-worktree repository worktree)
+        (setf (nerimux::client-conn-view conn) :overview)
+        (nerimux::%set-client-selected-tree-object conn worktree)
+        (nerimux::%handle-multi-key-message s conn #(76))
+        (expect (eq :command (nerimux::client-conn-mode conn)))
+        (expect (string= "wt-lock --confirm"
+                         (nerimux::client-conn-command-buffer conn)))
+        (nerimux::%handle-multi-key-message s conn #(27))
+        (nerimux::%set-client-selected-tree-object conn worktree)
+        (nerimux::%handle-multi-key-message s conn #(85))
+        (expect (eq :command (nerimux::client-conn-mode conn)))
+        (expect (string= "wt-unlock --confirm"
+                         (nerimux::client-conn-command-buffer conn))))))
+
+  (it "overview-worktree-lock-dispatches-and-restores-overview"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org"
+                :host "github.com"
+                :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo"
+                :organization organization
+                :specification "github.com/team/repo"))
+             (worktree
+               (nerimux/model:make-worktree
+                :id "feature"
+                :repository repository
+                :path "/tmp/feature"
+                :branch "feature/lockme"))
+             (conn (%make-test-conn))
+             (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
+             (lock-fn (fdefinition 'nerimux/vcs:lock-worktree-async))
+             (call nil))
+        (unwind-protect
+             (progn
+               (nerimux/model:organization-add-repository organization repository)
+               (nerimux/model:repository-add-worktree repository worktree)
+               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                     (lambda () t)
+                     (fdefinition 'nerimux/vcs:lock-worktree-async)
+                     (lambda (received-worktree &key reason on-complete on-error)
+                       (declare (ignore on-error))
+                       (setf call (list received-worktree reason))
+                       (funcall on-complete t)
+                       t))
+               (setf (nerimux::client-conn-view conn) :overview)
+               (nerimux::%set-client-selected-tree-object conn worktree)
+               (nerimux::%handle-multi-key-message s conn #(76))
+               (expect (string= "wt-lock --confirm"
+                                (nerimux::client-conn-command-buffer conn)))
+               (nerimux::%handle-multi-key-message s conn #(13))
+               (expect (equal (list worktree nil) call))
+               (expect (eq :normal (nerimux::client-conn-mode conn)))
+               (expect (eq :overview (nerimux::client-conn-view conn)))
+               (expect (string= "" (nerimux::client-conn-command-buffer conn))))
+          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
+                (fdefinition 'nerimux/vcs:lock-worktree-async) lock-fn)))))
+
+  (it "overview-worktree-unlock-dispatches-and-restores-overview"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org"
+                :host "github.com"
+                :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo"
+                :organization organization
+                :specification "github.com/team/repo"))
+             (worktree
+               (nerimux/model:make-worktree
+                :id "feature"
+                :repository repository
+                :path "/tmp/feature"
+                :branch "feature/unlockme"))
+             (conn (%make-test-conn))
+             (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
+             (unlock-fn (fdefinition 'nerimux/vcs:unlock-worktree-async))
+             (call nil))
+        (unwind-protect
+             (progn
+               (nerimux/model:organization-add-repository organization repository)
+               (nerimux/model:repository-add-worktree repository worktree)
+               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                     (lambda () t)
+                     (fdefinition 'nerimux/vcs:unlock-worktree-async)
+                     (lambda (received-worktree &key on-complete on-error)
+                       (declare (ignore on-error))
+                       (setf call received-worktree)
+                       (funcall on-complete t)
+                       t))
+               (setf (nerimux::client-conn-view conn) :overview)
+               (nerimux::%set-client-selected-tree-object conn worktree)
+               (nerimux::%handle-multi-key-message s conn #(85))
+               (expect (string= "wt-unlock --confirm"
+                                (nerimux::client-conn-command-buffer conn)))
+               (nerimux::%handle-multi-key-message s conn #(13))
+               (expect (eq worktree call))
+               (expect (eq :normal (nerimux::client-conn-mode conn)))
+               (expect (eq :overview (nerimux::client-conn-view conn)))
+               (expect (string= "" (nerimux::client-conn-command-buffer conn))))
+          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
+                (fdefinition 'nerimux/vcs:unlock-worktree-async) unlock-fn)))))
+
+  ;; A dry-run preview must reach the VCS layer with :dry-run t and must not
+  ;; remove anything from the repository's worktree list: the mock below only
+  ;; mutates on a real (non-dry-run) call, so an unexpected mutation here
+  ;; would mean dry-run stopped being dry.
+  (it "overview-worktree-prune-preview-does-not-mutate"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org"
+                :host "github.com"
+                :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo"
+                :organization organization
+                :specification "github.com/team/repo"))
+             (worktree
+               (nerimux/model:make-worktree
+                :id "stale"
+                :repository repository
+                :path "/tmp/stale"
+                :branch "feature/stale"))
+             (conn (%make-test-conn))
+             (nerimux::*clients* (list conn))
+             (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
+             (prune-fn (fdefinition 'nerimux/vcs:prune-worktrees-async))
+             (call nil))
+        (unwind-protect
+             (progn
+               (nerimux/model:organization-add-repository organization repository)
+               (nerimux/model:repository-add-worktree repository worktree)
+               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                     (lambda () t)
+                     (fdefinition 'nerimux/vcs:prune-worktrees-async)
+                     (lambda (received-repository
+                              &key dry-run verbose on-complete on-error)
+                       (declare (ignore verbose on-error))
+                       (setf call (list received-repository dry-run))
+                       (unless dry-run
+                         (setf (nerimux/model:repository-worktrees
+                                received-repository)
+                               nil))
+                       (funcall on-complete "Would remove /tmp/stale")
+                       t))
+               (setf (nerimux::client-conn-view conn) :overview)
+               (nerimux::%set-client-selected-tree-object conn repository)
+               (nerimux::%handle-multi-key-message s conn #(58))
+               (nerimux::%handle-multi-key-message
+                s conn
+                (cl-codec-kit:string-to-octets "wt-prune" :encoding :utf-8))
+               (nerimux::%handle-multi-key-message s conn #(13))
+               (expect (equal (list repository t) call))
+               (expect (equal (list worktree)
+                              (nerimux/model:repository-worktrees repository)))
+               (expect (string= "worktree prune preview: Would remove /tmp/stale"
+                                (first (nerimux::client-conn-message-log conn))))
+               (expect (eq :normal (nerimux::client-conn-mode conn))))
+          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
+                (fdefinition 'nerimux/vcs:prune-worktrees-async) prune-fn)))))
+
+  ;; A confirmed prune must reach the VCS layer with :dry-run nil and, unlike
+  ;; the preview, is expected to mutate the repository's worktree list. The
+  ;; confirm now also requires a preview to have run first for this same
+  ;; repository (CLIENT-CONN-PENDING-PRUNE-PREVIEW-REPOSITORY-ID), so this
+  ;; drives wt-prune before wt-prune-confirm --confirm to match the legitimate
+  ;; flow; see overview-worktree-prune-confirm-without-preview-is-rejected
+  ;; below for the case where that preview step is skipped.
+  (it "overview-worktree-prune-confirm-mutates"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org"
+                :host "github.com"
+                :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo"
+                :organization organization
+                :specification "github.com/team/repo"))
+             (worktree
+               (nerimux/model:make-worktree
+                :id "stale"
+                :repository repository
+                :path "/tmp/stale"
+                :branch "feature/stale"))
+             (conn (%make-test-conn))
+             (nerimux::*clients* (list conn))
+             (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
+             (prune-fn (fdefinition 'nerimux/vcs:prune-worktrees-async))
+             (call nil))
+        (unwind-protect
+             (progn
+               (nerimux/model:organization-add-repository organization repository)
+               (nerimux/model:repository-add-worktree repository worktree)
+               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                     (lambda () t)
+                     (fdefinition 'nerimux/vcs:prune-worktrees-async)
+                     (lambda (received-repository
+                              &key dry-run verbose on-complete on-error)
+                       (declare (ignore verbose on-error))
+                       (setf call (list received-repository dry-run))
+                       (unless dry-run
+                         (setf (nerimux/model:repository-worktrees
+                                received-repository)
+                               nil))
+                       (funcall on-complete "")
+                       t))
+               (setf (nerimux::client-conn-view conn) :overview)
+               (nerimux::%set-client-selected-tree-object conn repository)
+               (nerimux::%handle-multi-key-message s conn #(58))
+               (nerimux::%handle-multi-key-message
+                s conn
+                (cl-codec-kit:string-to-octets "wt-prune" :encoding :utf-8))
+               (nerimux::%handle-multi-key-message s conn #(13))
+               (expect (equal (list repository t) call))
+               (nerimux::%handle-multi-key-message s conn #(58))
+               (nerimux::%handle-multi-key-message
+                s conn
+                (cl-codec-kit:string-to-octets
+                 "wt-prune-confirm --confirm" :encoding :utf-8))
+               (nerimux::%handle-multi-key-message s conn #(13))
+               (expect (equal (list repository nil) call))
+               (expect (null (nerimux/model:repository-worktrees repository)))
+               (expect (string= "worktrees pruned"
+                                (first (nerimux::client-conn-message-log conn))))
+               (expect (eq :normal (nerimux::client-conn-mode conn))))
+          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
+                (fdefinition 'nerimux/vcs:prune-worktrees-async) prune-fn)))))
+
+  ;; wt-prune-confirm without --confirm must not reach the VCS layer, even
+  ;; though the preview path (wt-prune) never requires it. Per the test
+  ;; review finding, this now also carries a worktree in the fixture and
+  ;; asserts it survives untouched, so a rejected confirm is verified against
+  ;; actual repository state rather than only against the mock not firing.
+  (it "overview-worktree-prune-confirm-without-confirm-is-rejected"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org"
+                :host "github.com"
+                :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo"
+                :organization organization
+                :specification "github.com/team/repo"))
+             (worktree
+               (nerimux/model:make-worktree
+                :id "stale"
+                :repository repository
+                :path "/tmp/stale"
+                :branch "feature/stale"))
+             (conn (%make-test-conn))
+             (nerimux::*clients* (list conn))
+             (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
+             (prune-fn (fdefinition 'nerimux/vcs:prune-worktrees-async))
+             (call nil))
+        (unwind-protect
+             (progn
+               (nerimux/model:organization-add-repository organization repository)
+               (nerimux/model:repository-add-worktree repository worktree)
+               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                     (lambda () t)
+                     (fdefinition 'nerimux/vcs:prune-worktrees-async)
+                     (lambda (received-repository
+                              &key dry-run verbose on-complete on-error)
+                       (declare (ignore verbose on-error))
+                       (setf call (list received-repository dry-run))
+                       (funcall on-complete "")
+                       t))
+               (setf (nerimux::client-conn-view conn) :overview)
+               (nerimux::%set-client-selected-tree-object conn repository)
+               (nerimux::%handle-multi-key-message s conn #(58))
+               (nerimux::%handle-multi-key-message
+                s conn
+                (cl-codec-kit:string-to-octets
+                 "wt-prune-confirm" :encoding :utf-8))
+               (nerimux::%handle-multi-key-message s conn #(13))
+               (expect (null call))
+               (expect (string= "worktree prune requires --confirm"
+                                (first (nerimux::client-conn-message-log conn))))
+               (expect (equal (list worktree)
+                              (nerimux/model:repository-worktrees repository)))
+               (expect (eq :normal (nerimux::client-conn-mode conn))))
+          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
+                (fdefinition 'nerimux/vcs:prune-worktrees-async) prune-fn)))))
+
+  ;; Regression guard for the design-review finding that %CLIENT-PRUNE-WORKTREES
+  ;; gated the destructive path only on a textual --confirm token, with no
+  ;; record of whether a dry-run preview had actually been shown first. A
+  ;; client (or a scripted one) typing wt-prune-confirm --confirm directly,
+  ;; skipping wt-prune entirely, must be rejected and must not mutate
+  ;; anything -- this would have PASSED straight through to the VCS layer
+  ;; against the pre-fix code, since --confirm alone used to be sufficient.
+  (it "overview-worktree-prune-confirm-without-preview-is-rejected"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org"
+                :host "github.com"
+                :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo"
+                :organization organization
+                :specification "github.com/team/repo"))
+             (worktree
+               (nerimux/model:make-worktree
+                :id "stale"
+                :repository repository
+                :path "/tmp/stale"
+                :branch "feature/stale"))
+             (conn (%make-test-conn))
+             (nerimux::*clients* (list conn))
+             (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
+             (prune-fn (fdefinition 'nerimux/vcs:prune-worktrees-async))
+             (call nil))
+        (unwind-protect
+             (progn
+               (nerimux/model:organization-add-repository organization repository)
+               (nerimux/model:repository-add-worktree repository worktree)
+               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                     (lambda () t)
+                     (fdefinition 'nerimux/vcs:prune-worktrees-async)
+                     (lambda (received-repository
+                              &key dry-run verbose on-complete on-error)
+                       (declare (ignore verbose on-error))
+                       (setf call (list received-repository dry-run))
+                       (unless dry-run
+                         (setf (nerimux/model:repository-worktrees
+                                received-repository)
+                               nil))
+                       (funcall on-complete "")
+                       t))
+               (setf (nerimux::client-conn-view conn) :overview)
+               (nerimux::%set-client-selected-tree-object conn repository)
+               ;; No preceding wt-prune here -- straight to wt-prune-confirm
+               ;; --confirm, which is exactly the skip-preview path the
+               ;; design review flagged as unsafe.
+               (nerimux::%handle-multi-key-message s conn #(58))
+               (nerimux::%handle-multi-key-message
+                s conn
+                (cl-codec-kit:string-to-octets
+                 "wt-prune-confirm --confirm" :encoding :utf-8))
+               (nerimux::%handle-multi-key-message s conn #(13))
+               (expect (null call))
+               (expect
+                (string=
+                 "worktree prune requires a preview first: run wt-prune, then wt-prune-confirm --confirm"
+                 (first (nerimux::client-conn-message-log conn))))
+               (expect (equal (list worktree)
+                              (nerimux/model:repository-worktrees repository)))
+               (expect (eq :normal (nerimux::client-conn-mode conn))))
+          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
+                (fdefinition 'nerimux/vcs:prune-worktrees-async) prune-fn)))))
+
   (it "multi-picker-regex-toggle-is-client-local"
     (with-fake-session (s)
       (let* ((organization

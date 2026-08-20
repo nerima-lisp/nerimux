@@ -88,10 +88,13 @@ These are the features needed to make nerimux useful as a daily driver. Implemen
 **Since removed.** The dispatch-routing half of this entry is gone:
 `dispatch-core.lisp` and every `dispatch-commands*.lisp` under
 `src/application/dispatch/` were deleted with the rest of the tmux command
-table. `resolve-target` itself still exists in `src/domain/model/target.lisp`,
-but it has no remaining call site outside that file (`grep -rn resolve-target
-src/` today only finds the definition and its package export) — `-t` target
-resolution is unreachable from any entry point. See
+table. `resolve-target` and `resolve-target-context` have since been deleted
+too — they had no remaining call site outside their own definitions and
+their `t/unit/domain/model/target-tests*.lisp` coverage, and workspace-only
+nerimux has no `-t` DSL left to route through. `%parse-target`,
+`find-session-by-target`, `find-window-by-target`, and `find-pane-by-target`
+remain live: `find-pane-by-target` still has a direct caller in
+`src/bootstrap/server-multi-dispatch.lisp`. See
 `docs/src/reference/compatibility.md#removed`.
 
 ---

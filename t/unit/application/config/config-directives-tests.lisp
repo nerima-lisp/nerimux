@@ -59,10 +59,13 @@
 
   ;;; set mouse
 
-  ;; 'set-option -g mouse on' still parses and applies without signalling, even
-  ;; though nothing consumes the value: the option's side-effect handler, and the
-  ;; renderer callback it used to fire, were both removed.  This pins the
-  ;; documented "parses, has no effect" contract.
+  ;; 'set-option -g mouse on' still parses and applies without signalling a
+  ;; condition, even though nothing consumes the value: the option's
+  ;; side-effect handler, and the renderer callback it used to fire, were both
+  ;; removed. It does now warn to *error-output* (see
+  ;; inert-option-names-warn-but-still-apply below) -- "has no effect" still
+  ;; holds, "no warning" no longer does. This pins the documented "parses, has
+  ;; no effect" contract.
   (it "set-mouse-applies-without-signalling"
     (with-isolated-config
       (finishes
@@ -122,4 +125,52 @@
         (expect (eql before (nerimux/options:status-line-count)))
         (assert-config-directive-safe-nil '("set-status-height" "0")
                                           "set-status-height with a non-positive value (0)")
-        (expect (eql before (nerimux/options:status-line-count)))))))
+        (expect (eql before (nerimux/options:status-line-count))))))
+
+  ;;; inert-but-recognized directives/options warn to *error-output*
+  ;;
+  ;; bind/unbind/unbind-all/set-hook still parse and return NIL exactly as
+  ;; before (see invalid-directive-cases-return-nil above, which pins the
+  ;; return value); this pins the additional *ERROR-OUTPUT* signal so a user
+  ;; reusing an old config sees why the line did nothing, instead of silence.
+
+  (it "inert-directive-verbs-warn-and-still-return-nil"
+    (with-isolated-config
+      (dolist (tokens '(("bind" "C-a" "split-window")
+                        ("unbind" "C-a")
+                        ("unbind-all")
+                        ("set-hook" "after-new-session" "some-command")))
+        (let (result errout)
+          (setf errout
+                (with-output-to-string (*error-output*)
+                  (setf result (apply-config-directive tokens))))
+          (expect (null result))
+          (expect (search "directive" errout))
+          (expect (search (first tokens) errout))))))
+
+  ;; set-option -g prefix/prefix2/mouse still store (return T, same as before
+  ;; the "set-mouse-applies-without-signalling" test above pins for mouse) but
+  ;; now also warn, naming the option.
+  (it "inert-option-names-warn-but-still-apply"
+    (with-isolated-config
+      (dolist (name+value '(("prefix" . "C-a") ("prefix2" . "C-b") ("mouse" . "on")))
+        (let (result errout)
+          (setf errout
+                (with-output-to-string (*error-output*)
+                  (setf result (apply-config-directive
+                               (list "set-option" "-g" (car name+value) (cdr name+value))))))
+          (expect (eq t result))
+          (expect (search "option" errout))
+          (expect (search (car name+value) errout))))))
+
+  ;; A still-effective option (default-shell) must NOT trigger the inert-option
+  ;; warning: the warning is scoped to prefix/prefix2/mouse only.
+  (it "effective-option-does-not-warn"
+    (with-isolated-config
+      (let (result errout)
+        (setf errout
+              (with-output-to-string (*error-output*)
+                (setf result (apply-config-directive
+                             (list "set-option" "default-shell" "/bin/zsh")))))
+        (expect (eq t result))
+        (expect (zerop (length errout)))))))

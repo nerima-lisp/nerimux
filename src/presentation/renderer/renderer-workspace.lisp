@@ -492,7 +492,7 @@
       (reset-attrs stream)
       (cell (1- rows) 0 cols
             (format nil
-                    "overview[~A] | j/k select Enter open/create | n new | X delete | :wt-create ... | :wt-delete ... | ~A d | C-p"
+                    "overview[~A] | j/k select Enter open/create | n new | X delete | L lock | U unlock | :wt-create ... | :wt-delete ... | :wt-prune | ~A d | C-p"
                     (string-downcase (princ-to-string mode))
                     (%workspace-prefix-label prefix-code)))
       (reset-attrs stream)

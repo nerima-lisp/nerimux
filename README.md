@@ -27,8 +27,10 @@ nerimux attach /path/to/worktree       # open a local worktree
 `attach` auto-starts the headless runtime and connects a thin client. Use
 `C-q d` to detach and `C-p` to open the global picker. A selector containing a
 slash is resolved as an organization/repository selector or a local worktree
-path. `attach` and `server` are the only commands; anything else — including
-`nerimux` with no arguments — prints the usage summary and exits non-zero.
+path. Pass `-r`/`--read-only` to attach without forwarding key, paste, or
+mouse input to panes. `attach` and `server` are the only commands; anything
+else — including `nerimux` with no arguments — prints the usage summary and
+exits non-zero.
 
 nerimux still parses a real `.tmux.conf` — `%if`, `%hidden`, variable
 assignments, brace blocks and `source-file` — from `$NERIMUX_CONF`, then
@@ -37,7 +39,8 @@ assignments, brace blocks and `source-file` — from `$NERIMUX_CONF`, then
 status bar, pane borders, `default-shell` and status height still take
 effect. `bind`/`unbind` and `set-hook` lines still parse without error but do
 nothing: the key-table store and the command-hook registry they wrote into were
-both removed once nothing read them.
+both removed once nothing read them. nerimux now warns to stderr when it sees
+one, rather than staying silent as it used to.
 
 ## Install
 

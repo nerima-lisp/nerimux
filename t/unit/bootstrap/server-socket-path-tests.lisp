@@ -101,6 +101,98 @@
           (nerimux::%ensure-server-running "test-session")
           "must signal when the socket never appears after launch-and-poll"))))
 
+  ;;; -- launch-server-and-poll: diagnostics must not block startup --------------
+
+  ;; %launch-server-and-poll-when-live redirects the spawned server's
+  ;; stdout/stderr to a per-server-name log file for crash forensics, but that
+  ;; is a purely diagnostic feature: it must not become a hard dependency for
+  ;; starting a server.  When LOG-PATH's parent directory cannot be created
+  ;; (e.g. a read-only or permission-denied XDG_STATE_HOME/
+  ;; NERIMUX_RUNTIME_STATE -- common in containers/CI), the function must fall
+  ;; back to an un-redirected run-program call rather than propagating and
+  ;; blocking server auto-start, where previously :output nil :error nil
+  ;; needed no directory at all.
+  ;;
+  ;; The unwritable-directory condition is forced with a real filesystem
+  ;; hazard -- a plain file sitting where ENSURE-DIRECTORIES-EXIST needs to
+  ;; create a directory -- rather than stubbing ENSURE-DIRECTORIES-EXIST
+  ;; itself, since COMMON-LISP is a locked package.  SB-EXT:RUN-PROGRAM is
+  ;; stubbed to capture the fallback call's arguments without spawning a real
+  ;; process; SB-EXT is also locked, hence WITHOUT-PACKAGE-LOCKS, the same
+  ;; idiom main-entry-tests.lisp already uses to stub SB-EXT:EXIT.
+  (it "launch-server-falls-back-to-unredirected-run-program-when-log-directory-is-unwritable"
+    (let* ((blocker (format nil "~A/nerimux-log-blocker-~D"
+                            (string-right-trim "/" (or (sb-ext:posix-getenv "TMPDIR") "/tmp"))
+                            (random 1000000)))
+           (log-path (merge-pathnames "sub/blocked.log" (format nil "~A/" blocker)))
+           (calls nil))
+      (unwind-protect
+           (progn
+             (with-open-file (s blocker :direction :output :if-does-not-exist :create)
+               (declare (ignore s)))
+             (sb-ext:without-package-locks
+               (let ((orig (fdefinition 'sb-ext:run-program)))
+                 (setf (fdefinition 'sb-ext:run-program)
+                       (lambda (&rest args) (push args calls) nil))
+                 (unwind-protect
+                      (nerimux::%launch-server-and-poll-when-live
+                       "/nonexistent-dir-xyz/never.sock" "nerimux" nil log-path)
+                   (setf (fdefinition 'sb-ext:run-program) orig))))
+             (expect (= 1 (length calls)))
+             (destructuring-bind (exe-arg args-arg &rest keys) (first calls)
+               (declare (ignore args-arg))
+               (expect (string= "nerimux" exe-arg))
+               (expect (eq nil (getf keys :wait :absent)))
+               (expect (eq nil (getf keys :output :absent)))
+               (expect (eq nil (getf keys :error :absent)))))
+        (ignore-errors (delete-file blocker)))))
+
+  ;; %secure-log-directory chmods the log's parent directory to 0700 so a
+  ;; server crash log (which can hold SBCL backtraces: absolute paths,
+  ;; possibly pane/environment-derived data) is not left world/group-readable
+  ;; under whatever the process umask happens to be (CWE-732).  Mirrors
+  ;; %socket-directory's sb-posix:chmod pattern in server.lisp.  Checked
+  ;; against the real filesystem mode bits rather than stubbing
+  ;; sb-posix:chmod, since the mode bits are the actual security property at
+  ;; stake.
+  (it "secure-log-directory-chmods-the-log-parent-directory-to-0700"
+    (let* ((dir (format nil "~A/nerimux-log-secure-test-~D"
+                        (string-right-trim "/" (or (sb-ext:posix-getenv "TMPDIR") "/tmp"))
+                        (random 1000000)))
+           (log-path (merge-pathnames "probe.log" (format nil "~A/" dir))))
+      (unwind-protect
+           (progn
+             (ensure-directories-exist log-path)
+             (nerimux::%secure-log-directory log-path)
+             (expect (= #o700
+                        (logand (sb-posix:stat-mode (sb-posix:stat dir)) #o777))))
+        (ignore-errors (sb-posix:rmdir dir)))))
+
+  ;; End-to-end: %launch-server-and-poll-when-live itself must call
+  ;; %secure-log-directory on its happy path (not only when called directly),
+  ;; so the chmod actually happens for every real invocation, not just when
+  ;; exercised in isolation.  sb-ext:run-program is stubbed to avoid spawning
+  ;; a real process; the stub returns nil so the socket-polling loop is
+  ;; skipped.
+  (it "launch-server-secures-the-log-directory-on-the-happy-path"
+    (let* ((dir (format nil "~A/nerimux-log-happy-test-~D"
+                        (string-right-trim "/" (or (sb-ext:posix-getenv "TMPDIR") "/tmp"))
+                        (random 1000000)))
+           (log-path (merge-pathnames "server.log" (format nil "~A/" dir))))
+      (unwind-protect
+           (progn
+             (sb-ext:without-package-locks
+               (let ((orig (fdefinition 'sb-ext:run-program)))
+                 (setf (fdefinition 'sb-ext:run-program)
+                       (lambda (&rest args) (declare (ignore args)) nil))
+                 (unwind-protect
+                      (nerimux::%launch-server-and-poll-when-live
+                       "/nonexistent-dir-xyz/never.sock" "nerimux" nil log-path)
+                   (setf (fdefinition 'sb-ext:run-program) orig))))
+             (expect (= #o700
+                        (logand (sb-posix:stat-mode (sb-posix:stat dir)) #o777))))
+        (ignore-errors (sb-posix:rmdir dir)))))
+
   ;;; -- option-reader port installation ----------------------------------------
 
   ;; run-server must install the three option-reader ports the terminal layer

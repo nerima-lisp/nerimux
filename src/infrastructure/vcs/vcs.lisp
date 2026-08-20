@@ -520,6 +520,55 @@ Otherwise BRANCH is treated as an existing commit or branch."
       (refresh-repository-status repository)
       t)))
 
+(defun lock-worktree (worktree &key reason)
+  "Lock WORKTREE so prune and delete operations skip it until unlocked."
+  (let ((repository (and worktree (nerimux/model:worktree-repository worktree))))
+    (unless (and worktree repository)
+      (error "A repository worktree is required to lock a worktree."))
+    (let ((backend-repository
+            (%make-vcs-repository (nerimux/model:repository-path repository)))
+          (arguments
+            (append (list "lock")
+                    (when (and reason (plusp (length (%adapter-string reason))))
+                      (list "--reason" (%adapter-string reason)))
+                    (list (nerimux/model:worktree-path worktree)))))
+      (apply #'%vcs-call "VCS-WORKTREE" backend-repository arguments)
+      (list-repository-worktrees repository)
+      (refresh-repository-status repository)
+      t)))
+
+(defun unlock-worktree (worktree)
+  "Unlock WORKTREE, restoring it to prune and delete eligibility."
+  (let ((repository (and worktree (nerimux/model:worktree-repository worktree))))
+    (unless (and worktree repository)
+      (error "A repository worktree is required to unlock a worktree."))
+    (let ((backend-repository
+            (%make-vcs-repository (nerimux/model:repository-path repository)))
+          (arguments (list "unlock" (nerimux/model:worktree-path worktree))))
+      (apply #'%vcs-call "VCS-WORKTREE" backend-repository arguments)
+      (list-repository-worktrees repository)
+      (refresh-repository-status repository)
+      t)))
+
+(defun prune-worktrees (repository &key (dry-run t) verbose)
+  "Prune REPOSITORY's stale worktree administrative files.
+
+When DRY-RUN is true (the default), git worktree prune --dry-run reports
+what would be removed without mutating anything; callers must only pass a
+false DRY-RUN once a user has explicitly confirmed the operation."
+  (unless repository
+    (error "A repository is required to prune worktrees."))
+  (let* ((backend-repository
+           (%make-vcs-repository (nerimux/model:repository-path repository)))
+         (arguments
+           (append (list "prune")
+                   (when dry-run (list "--dry-run"))
+                   (when verbose (list "--verbose"))))
+         (result (apply #'%vcs-call "VCS-WORKTREE" backend-repository arguments)))
+    (list-repository-worktrees repository)
+    (refresh-repository-status repository)
+    result))
+
 (defun %run-vcs-operation-async (name thunk on-complete on-error)
   (cl-concurrent-kit:make-thread
    (lambda ()
@@ -555,6 +604,34 @@ Otherwise BRANCH is treated as an existing commit or branch."
   (%run-vcs-operation-async
    "nerimux-vcs-worktree-delete"
    (lambda () (delete-worktree worktree :force force))
+   on-complete
+   on-error))
+
+(defun lock-worktree-async (worktree &key reason on-complete on-error)
+  "Lock a worktree on a worker thread and invoke one callback."
+  (%run-vcs-operation-async
+   "nerimux-vcs-worktree-lock"
+   (lambda () (lock-worktree worktree :reason reason))
+   on-complete
+   on-error))
+
+(defun unlock-worktree-async (worktree &key on-complete on-error)
+  "Unlock a worktree on a worker thread and invoke one callback."
+  (%run-vcs-operation-async
+   "nerimux-vcs-worktree-unlock"
+   (lambda () (unlock-worktree worktree))
+   on-complete
+   on-error))
+
+(defun prune-worktrees-async
+    (repository &key (dry-run t) verbose on-complete on-error)
+  "Prune a repository's worktrees on a worker thread and invoke one callback.
+
+DRY-RUN defaults true, matching PRUNE-WORKTREES, so an omitted keyword here
+stays non-destructive instead of silently forwarding a false DRY-RUN."
+  (%run-vcs-operation-async
+   "nerimux-vcs-worktree-prune"
+   (lambda () (prune-worktrees repository :dry-run dry-run :verbose verbose))
    on-complete
    on-error))
 

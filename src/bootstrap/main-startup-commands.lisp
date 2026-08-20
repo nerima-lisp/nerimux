@@ -41,11 +41,12 @@
 
 (defun %usage-string ()
   "One-page usage summary for -h/--help and bad-flag errors."
-  (format nil "usage: nerimux [-L socket-name] [-S socket-path] [command]~%~
+  (format nil "usage: nerimux [-L socket-name] [-S socket-path] [-r] [command]~%~
                ~%~
                Commands:~%~
                ~2Tattach [selector]~26Topen the workspace UI (auto-starts a server)~%~
                ~2Tserver [name]~26Trun a headless server owning session NAME~%~
+               ~2T-r | --read-only~26Tattach read-only (no input forwarded to panes)~%~
                ~2T-V | --version~26Tprint the version and exit~%~
                ~2T-h | --help~26Tprint this summary and exit~%~
                ~%~

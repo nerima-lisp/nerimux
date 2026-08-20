@@ -44,6 +44,15 @@
                           :test #'string=)))
         t))))
 
+(defparameter *inert-config-directive-verbs*
+  '("bind" "unbind" "unbind-all" "set-hook")
+  "Directive verbs that still parse successfully but whose subsystem was
+   deleted when nerimux narrowed to a workspace-only multiplexer: the
+   key-table store (bind/unbind/unbind-all) and the command-hook registry
+   (set-hook).  None of these match any arm reached from APPLY-CONFIG-DIRECTIVE's
+   T branch, so they always fall through to NIL; used to fire
+   %WARN-INERT-CONFIG-DIRECTIVE without altering that fallthrough.")
+
 (defun apply-config-directive (tokens)
   "Apply one parsed config directive (list of string TOKENS) to live state.
    Returns T when applied, NIL for an unknown/invalid directive.
@@ -57,7 +66,11 @@
    bind/unbind are deliberately absent: the key-table store they wrote into was
    deleted once nothing read it, so such a line matches no arm below and falls
    through to %APPLY-CONFIG-DIRECTIVE-INNER, which returns NIL.  That is the
-   documented \"parses, has no effect\" contract, not an oversight."
+   documented \"parses, has no effect\" contract, not an oversight.
+   For cmd in *INERT-CONFIG-DIRECTIVE-VERBS*, a one-line warning is written to
+   *ERROR-OUTPUT* (see %WARN-INERT-CONFIG-DIRECTIVE) so a user reusing an old
+   config gets signal instead of silence; the NIL return value from the
+   fallthrough below is otherwise unchanged."
   (when tokens
     (let ((cmd  (first tokens))
           (args (rest tokens)))
@@ -66,11 +79,15 @@
         ((string= cmd "set-environment")
          (%apply-set-environment-directive "set-environment" args))
         (t
-         (or (%apply-if-shell-directive cmd args)
-             (%apply-set-directive cmd args)
-             (%apply-run-shell-directive cmd args)
-             (%apply-source-file-directive cmd args)
-             (%apply-config-directive-inner tokens)))))))
+         (let ((result (or (%apply-if-shell-directive cmd args)
+                            (%apply-set-directive cmd args)
+                            (%apply-run-shell-directive cmd args)
+                            (%apply-source-file-directive cmd args)
+                            (%apply-config-directive-inner tokens))))
+           (when (and (not result)
+                      (member cmd *inert-config-directive-verbs* :test #'string=))
+             (%warn-inert-config-directive "directive" cmd))
+           result))))))
 
 (defun %at-comment-start-p (line i len)
   "Return T when position I in LINE is a '#' that begins a comment.

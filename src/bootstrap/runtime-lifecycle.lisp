@@ -19,23 +19,49 @@
              'string)))
       (if (plusp (length result)) result "default"))))
 
-(defun %runtime-state-path ()
+(defun %runtime-state-home ()
+  "The state-home DIRECTORY shared by %runtime-state-path and
+   %runtime-log-path: $NERIMUX_RUNTIME_STATE when set, else $XDG_STATE_HOME,
+   else ~/.local/state/.
+
+   NERIMUX_RUNTIME_STATE names a directory, not a literal file.  It used to be
+   returned verbatim as the complete path from both callers, which meant a
+   user who set it got the session-state snapshot and the raw server
+   stdout/stderr log resolving to the IDENTICAL path -- writing one would
+   clobber/interleave with the other, corrupting whichever %runtime-restore-*
+   read back as Lisp data.  Routing the override through this shared helper,
+   the same role STATE-HOME plays in the XDG branch below, keeps both callers
+   applying their own nerimux/<name>.runtime.lisp / nerimux/<name>.log suffix
+   on top of it, so the two files stay distinct."
   (let ((override (sb-ext:posix-getenv "NERIMUX_RUNTIME_STATE")))
     (if (and override (plusp (length override)))
-        (pathname override)
-        (let* ((xdg (sb-ext:posix-getenv "XDG_STATE_HOME"))
-               (state-home
-                 (if (and xdg (plusp (length xdg)))
-                     xdg
-                     (namestring
-                      (merge-pathnames
-                       ".local/state/"
-                       (user-homedir-pathname))))))
-          (merge-pathnames
-           (format nil "nerimux/~A.runtime.lisp"
-                   (%runtime-safe-server-name *runtime-server-name*))
-           (pathname (format nil "~A/"
-                             (string-right-trim "/" state-home))))))))
+        override
+        (let ((xdg (sb-ext:posix-getenv "XDG_STATE_HOME")))
+          (if (and xdg (plusp (length xdg)))
+              xdg
+              (namestring
+               (merge-pathnames
+                ".local/state/"
+                (user-homedir-pathname))))))))
+
+(defun %runtime-state-path ()
+  (merge-pathnames
+   (format nil "nerimux/~A.runtime.lisp"
+           (%runtime-safe-server-name *runtime-server-name*))
+   (pathname (format nil "~A/"
+                     (string-right-trim "/" (%runtime-state-home))))))
+
+(defun %runtime-log-path (name)
+  "Resolve the persistent log file path for the auto-started headless server
+   running as NAME, following %runtime-state-path's override/XDG resolution
+   shape but keyed off an explicit NAME argument instead of the
+   *runtime-server-name* special (which is not guaranteed bound in the
+   launching/parent process)."
+  (merge-pathnames
+   (format nil "nerimux/~A.log"
+           (%runtime-safe-server-name name))
+   (pathname (format nil "~A/"
+                     (string-right-trim "/" (%runtime-state-home))))))
 
 (defun %runtime-safe-value (value)
   (cond
