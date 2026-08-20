@@ -179,14 +179,6 @@
                      (string/= (nerimux/options:get-option "pane-border-status" "off") "off"))
             (dolist (pane panes)
               (%render-pane-border-status buffer pane session window)))
-          ;; display-panes (C-b q): big per-pane numbers while the display-panes overlay
-          ;; is active, coloured by display-panes-(active-)colour.  Drawn after borders so
-          ;; the numbers overlay the pane content, before the top overlay layer.
-          (when (and nerimux/prompt:*display-panes-active* (overlay-active-p) window panes)
-            (dolist (pane panes)
-              (%draw-pane-number-to-screen buffer (pane-x pane) (pane-y pane)
-                                           (pane-width pane) (pane-height pane)
-                                           (pane-id pane) (eq pane active-pane))))
           ;; copy-mode search-match highlighting on the active pane (it is the one that
           ;; can be in copy mode), overdrawn after panes/borders.
           (when (and active-pane (pane-screen active-pane)

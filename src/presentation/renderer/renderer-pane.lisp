@@ -6,10 +6,6 @@
 ;;;; (loaded first in the same package) and the layout/model structures from
 ;;;; nerimux/model.
 
-;;; Forward-declare the nerimux special variable defined in runtime.lisp so
-;;; SBCL does not warn about an unknown special during compilation of this file.
-(declaim (special nerimux::*clock-mode-pane-id*))
-
 ;;; ── Per-row cell rendering ───────────────────────────────────────────────────
 
 (defstruct (sgr-register (:conc-name sgr-reg-))
@@ -251,8 +247,7 @@
   (screen-clear-dirty screen))
 
 (defun render-pane (stream session pane &key (viewport 0))
-  "Draw the pane's screen into the real terminal at the pane's (x, y) offset.
-   When *clock-mode-pane-id* matches (pane-id pane), draw a clock overlay."
+  "Draw the pane's screen into the real terminal at the pane's (x, y) offset."
   (let* ((screen      (pane-screen  pane))
          (pane-width  (pane-width  pane))
          (pane-height (pane-height pane))
@@ -276,7 +271,4 @@
       ;; Copy-mode overlay is rendered as a right-aligned slice so it does not
       ;; repaint the whole pane row.
       (%render-copy-mode-position-overlay stream session pane
-                                          content-origin-x origin-y content-width)
-      ;; Clock-mode overlay: draw a digital clock if this pane is the clock pane.
-      (when (eql nerimux::*clock-mode-pane-id* (pane-id pane))
-        (draw-clock-to-screen stream content-origin-x origin-y content-width pane-height)))))
+                                          content-origin-x origin-y content-width))))

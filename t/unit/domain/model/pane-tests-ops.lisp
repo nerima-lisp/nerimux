@@ -28,18 +28,6 @@
         (when last (window-select-pane win last)))
       (expect (eq p0 (window-active-pane win)))))
 
-  ;;; ── display-panes overlay active ─────────────────────────────────────────────
-
-  ;; show-display-panes-overlay activates the overlay (overlay-active-p returns T)
-  ;; and sets *display-panes-active*, the same effect the deleted :display-panes
-  ;; dispatch case used to drive through show-transient-overlay.
-  (it "display-panes-overlay-active"
-    (let ((*overlay* nil)
-          (*display-panes-active* nil))
-      (show-display-panes-overlay "")
-      (assert-overlay-active "show-display-panes-overlay must activate the overlay")
-      (expect *display-panes-active* :to-be-truthy)))
-
   ;;; ── respawn-pane resets fd/pid ───────────────────────────────────────────────
 
   ;; respawn-pane closes the old PTY and assigns a fresh fd/pid to the pane.

@@ -1,7 +1,7 @@
 (in-package #:nerimux/test)
 
 ;;;; renderer-pane tests — part C: %apply-border-style branch coverage,
-;;;; draw-clock, render-pane-clock-mode, draw-pane-number, in-sel-branch.
+;;;; in-sel-branch.
 
 (describe "renderer-suite"
 
@@ -60,38 +60,6 @@
   (it "apply-border-style-unknown-falls-back-to-reset"
     (let ((out (%border-style-output "bold")))
       (expect (search (format nil "~C[0m" #\Escape) out))))
-
-  ;;; -- draw-clock-to-screen branch ---------------------------------------------
-
-  ;; draw-clock-to-screen produces output containing block characters for a
-  ;; pane that is wide and tall enough.
-  (it "draw-clock-to-screen-emits-digits"
-    (let ((out (with-output-to-string (s)
-                 (nerimux/renderer::draw-clock-to-screen s 0 0 20 6))))
-      (expect (plusp (length out)))
-      (expect (find #\█ out))))
-
-  ;; draw-clock-to-screen produces no output when the pane is too narrow (< 13 cols).
-  (it "draw-clock-to-screen-too-small-emits-nothing"
-    (let ((out (with-output-to-string (s)
-                 (nerimux/renderer::draw-clock-to-screen s 0 0 5 3))))
-      (expect (string= "" out))))
-
-  ;; When *clock-mode-pane-id* matches the pane id, render-pane draws the clock overlay.
-  (it "render-pane-clock-mode-overlay"
-    (with-copy-mode-render-fixture (sess pane screen 20 6)
-      (declare (ignore screen))
-      (let ((nerimux::*clock-mode-pane-id* (pane-id pane)))
-        (let ((out (render-pane-output sess pane)))
-          (expect (find #\█ out))))))
-
-  ;; When *clock-mode-pane-id* does not match the pane id, the clock overlay is suppressed.
-  (it "render-pane-no-clock-when-id-mismatch"
-    (with-copy-mode-render-fixture (sess pane screen 20 6)
-      (declare (ignore screen))
-      (let ((nerimux::*clock-mode-pane-id* 99))
-        (let ((out (render-pane-output sess pane)))
-          (expect (null (find #\█ out)))))))
 
   ;; When copy mode is active, render-pane draws the copy-mode position banner.
   (it "render-pane-copy-mode-position-overlay"
@@ -194,58 +162,6 @@
       (let ((out (render-pane-output sess pane)))
         (expect (= 1 (%count-substring (format nil "~C[32m" #\Escape) out)))
         (expect (= 1 (%count-substring (format nil "~C[31m" #\Escape) out))))))
-
-  ;;; -- clock-mode-style (12/24h) and clock-mode-colour -------------------------
-
-  ;; clock-mode-style 24 (the default) leaves the hour unchanged.
-  (it "clock-display-hour-24-hour-default"
-    (with-isolated-options ()
-      (expect (= 13 (nerimux/renderer::%clock-display-hour 13)))
-      (expect (= 0  (nerimux/renderer::%clock-display-hour 0)))))
-
-  ;; clock-mode-style 12 converts to a 12-hour clock (0→12, 13→1, 12→12, 23→11).
-  (it "clock-display-hour-12-hour"
-    (with-isolated-options ("clock-mode-style" 12)
-      (expect (= 12 (nerimux/renderer::%clock-display-hour 0)))
-      (expect (= 1  (nerimux/renderer::%clock-display-hour 13)))
-      (expect (= 12 (nerimux/renderer::%clock-display-hour 12)))
-      (expect (= 11 (nerimux/renderer::%clock-display-hour 23)))))
-
-  ;; clock-mode-colour maps to its foreground SGR code; an unknown name falls back
-  ;; to bright cyan (96).
-  (it "clock-face-sgr-from-colour-option"
-    (dolist (c '(("red"          "31" "red -> 31")
-                 ("green"        "32" "green -> 32")
-                 ("bogus-colour" "96" "unknown -> 96 fallback")))
-      (destructuring-bind (colour expected desc) c
-        (declare (ignore desc))
-        (with-isolated-options ("clock-mode-colour" colour)
-          (expect (string= expected (nerimux/renderer::%clock-face-sgr)))))))
-
-  ;;; -- display-panes per-pane big numbers (C-b q) ------------------------------
-
-  ;; %draw-pane-number-to-screen emits block-element digits for a pane number.
-  (it "draw-pane-number-emits-big-digits"
-    (let ((out (with-output-to-string (s)
-                 (nerimux/renderer::%draw-pane-number-to-screen s 0 0 20 6 7 nil))))
-      (expect (find #\█ out))))
-
-  ;; %draw-pane-number-to-screen colours the active pane with display-panes-active-
-  ;; colour and others with display-panes-colour.
-  (it "draw-pane-number-active-vs-inactive-colour"
-    (with-isolated-options ("display-panes-colour" "green"
-                            "display-panes-active-colour" "red")
-      (let ((inactive (with-output-to-string (s)
-                        (nerimux/renderer::%draw-pane-number-to-screen s 0 0 20 6 1 nil)))
-            (active   (with-output-to-string (s)
-                        (nerimux/renderer::%draw-pane-number-to-screen s 0 0 20 6 1 t))))
-        (expect (search (format nil "~C[32m" #\Escape) inactive))
-        (expect (search (format nil "~C[31m" #\Escape) active)))))
-
-  ;; %draw-pane-number-to-screen renders nothing in a pane smaller than 3x3.
-  (it "draw-pane-number-too-small-emits-nothing"
-    (expect (string= "" (with-output-to-string (s)
-                      (nerimux/renderer::%draw-pane-number-to-screen s 0 0 2 2 1 nil)))))
 
   ;;; -- in-sel branch coverage via render-pane ----------------------------------
 

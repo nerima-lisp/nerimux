@@ -1,6 +1,6 @@
 (in-package #:nerimux/test)
 
-;;;; renderer-pane tests — part B: %clock-digit-rows, %render-v-separator,
+;;;; renderer-pane tests — part B: %render-v-separator,
 ;;;; render-tree-borders with :v split, layout-subtree-rect single-leaf,
 ;;;; subtree-contains-p nil-pane corner case, additional in-sel/pane/border coverage.
 
@@ -16,19 +16,6 @@
       (nerimux/renderer::%render-pane-border-status s pane session win))))
 
 (describe "renderer-suite"
-
-  ;;; -- %clock-digit-rows -------------------------------------------------------
-
-  ;; %clock-digit-rows returns 3 non-empty strings for representative digits.
-  (it "clock-digit-rows-table"
-    (dolist (digit '(0 9))
-      (let ((rows (nerimux/renderer::%clock-digit-rows digit)))
-        (expect (= 3 (length rows)))
-        (expect (every (lambda (r) (and (stringp r) (plusp (length r)))) rows)))))
-
-  ;; *clock-digits* has entries for all 10 digits (0..9).
-  (it "clock-digit-rows-all-digits-present"
-    (expect (= 10 (length nerimux/renderer::*clock-digits*))))
 
   ;;; -- %render-v-separator branch coverage ------------------------------------
 
@@ -342,26 +329,6 @@
                          (nerimux/renderer:parse-style-string "bg=green")))
              (frame     (nerimux/renderer:render-session-to-string s 24 81)))
         (expect frame :not :to-contain-sgr match-sgr))))
-
-  ;;; -- +min-clock-width+ constant -----------------------------------------------
-
-  ;; +min-clock-width+ equals 13 — the documented minimum column count for the clock.
-  (it "min-clock-width-constant-is-13"
-    (expect (= 13 nerimux/renderer::+min-clock-width+)))
-
-  ;; draw-clock-to-screen renders when the pane is exactly +min-clock-width+ wide.
-  (it "draw-clock-at-min-width-renders"
-    (let ((out (with-output-to-string (s)
-                 (nerimux/renderer::draw-clock-to-screen
-                  s 0 0 nerimux/renderer::+min-clock-width+ 3))))
-      (expect (plusp (length out)))))
-
-  ;; draw-clock-to-screen emits nothing when pane width is +min-clock-width+ - 1.
-  (it "draw-clock-below-min-width-suppressed"
-    (let ((out (with-output-to-string (s)
-                 (nerimux/renderer::draw-clock-to-screen
-                  s 0 0 (1- nerimux/renderer::+min-clock-width+) 3))))
-      (expect (string= "" out))))
 
   ;;; -- %dispatch-pane-border-chars table ----------------------------------------
 

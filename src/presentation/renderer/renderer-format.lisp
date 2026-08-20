@@ -193,3 +193,9 @@
 (defun reset-attrs (stream)
   "Emit SGR reset sequence ESC[0m to STREAM, clearing all attributes and colours."
   (write-string (cl-tty-kit:ansi-reset-style) stream))
+
+;;; ── Layout helpers ──────────────────────────────────────────────────────────
+
+(defun %center-coord (total size)
+  "Return the column/row offset to center SIZE within TOTAL (clamped to 0)."
+  (max 0 (floor (- total size) 2)))

@@ -74,7 +74,6 @@
          (nerimux/prompt:*overlay* nil)
          (nerimux/prompt:*overlay-scroll-offset* 0)
          (nerimux/prompt:*overlay-shown-at* 0)
-         (nerimux/prompt:*display-panes-active* nil)
          (nerimux/prompt:*active-menu* nil)
          (nerimux/prompt:*active-popup* nil))
      (with-global-running t

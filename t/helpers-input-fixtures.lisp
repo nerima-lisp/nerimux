@@ -8,14 +8,13 @@
   `(let ((*prompt* nil) (nerimux::*dirty* nil)) ,@body))
 
 (defmacro with-clean-overlay (&body body)
-  "Dynamically bind the four overlay specials (*overlay*, *overlay-scroll-offset*,
-   *overlay-shown-at*, *display-panes-active*) to their inactive defaults so
-   overlay state never leaks between tests.  Mirrors with-clean-prompt for the
-   sibling overlay/popup/menu test file."
+  "Dynamically bind the three overlay specials (*overlay*, *overlay-scroll-offset*,
+   *overlay-shown-at*) to their inactive defaults so overlay state never leaks
+   between tests.  Mirrors with-clean-prompt for the sibling overlay/popup/menu
+   test file."
   `(let ((*overlay* nil)
          (*overlay-scroll-offset* 0)
-         (*overlay-shown-at* 0)
-         (*display-panes-active* nil))
+         (*overlay-shown-at* 0))
      ,@body))
 
 (defmacro with-empty-registry (&body body)

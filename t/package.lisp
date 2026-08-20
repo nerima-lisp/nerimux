@@ -193,11 +193,9 @@
                 #:*overlay-scroll-offset*
                 #:*overlay-shown-at*
                 #:overlay-shown-at
-                #:*display-panes-active*
                 #:overlay-active-p
                 #:show-overlay
                 #:show-transient-overlay
-                #:show-display-panes-overlay
                 #:clear-overlay
                 #:overlay-lines
                 #:overlay-scroll

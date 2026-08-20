@@ -17,22 +17,15 @@
       (show-transient-overlay "msg" :timestamp 77)
       (expect (= 77 (overlay-shown-at)))))
 
-  ;; overlay-shown-at returns the timestamp set by show-display-panes-overlay.
-  (it "overlay-shown-at-updated-by-show-display-panes-overlay"
-    (with-clean-overlay
-      (show-display-panes-overlay "nums" :timestamp 55)
-      (expect (= 55 (overlay-shown-at)))))
-
   ;;; -- show-transient-overlay --------------------------------------------------
 
   ;; show-transient-overlay activates an overlay and records the supplied timestamp
-  ;; accessible via overlay-shown-at; *display-panes-active* remains NIL.
+  ;; accessible via overlay-shown-at.
   (it "show-transient-overlay-activates-and-stamps-timestamp"
     (with-clean-overlay
       (show-transient-overlay "transient msg" :timestamp 42)
       (assert-overlay-active "show-transient-overlay must activate the overlay")
-      (expect (= 42 (overlay-shown-at)))
-      (expect (null *display-panes-active*))))
+      (expect (= 42 (overlay-shown-at)))))
 
   ;; show-transient-overlay resets *overlay-scroll-offset* to 0.
   (it "show-transient-overlay-resets-scroll-offset"
@@ -48,43 +41,6 @@
       (let ((before (get-universal-time)))
         (show-transient-overlay "auto-ts")
         (expect (>= (overlay-shown-at) before)))))
-
-  ;;; -- show-display-panes-overlay ----------------------------------------------
-
-  ;; show-display-panes-overlay activates an overlay, sets *display-panes-active* T,
-  ;; and records the supplied timestamp accessible via overlay-shown-at.
-  (it "show-display-panes-overlay-activates-and-sets-display-panes"
-    (with-clean-overlay
-      (show-display-panes-overlay "pane-nums" :timestamp 99)
-      (assert-overlay-active "show-display-panes-overlay must activate the overlay")
-      (expect (eq t *display-panes-active*))
-      (expect (= 99 (overlay-shown-at)))))
-
-  ;; show-overlay (the non-transient variant) always sets *display-panes-active* to NIL,
-  ;; even when display-panes was previously active.
-  (it "show-overlay-clears-display-panes"
-    (with-clean-overlay
-      (show-display-panes-overlay "pane-nums" :timestamp 1)
-      (expect (eq t *display-panes-active*))
-      (show-overlay "plain overlay")
-      (expect (null *display-panes-active*))))
-
-  ;; clear-overlay resets *display-panes-active* to NIL.
-  (it "clear-overlay-clears-display-panes"
-    (with-clean-overlay
-      (show-display-panes-overlay "nums" :timestamp 1)
-      (expect (eq t *display-panes-active*))
-      (clear-overlay)
-      (expect (null *display-panes-active*))))
-
-  ;; show-transient-overlay (display-panes=NIL) after show-display-panes-overlay
-  ;; clears *display-panes-active*.
-  (it "show-transient-overlay-replaces-display-panes-overlay"
-    (with-clean-overlay
-      (show-display-panes-overlay "nums" :timestamp 1)
-      (expect (eq t *display-panes-active*))
-      (show-transient-overlay "msg" :timestamp 2)
-      (expect (null *display-panes-active*))))
 
   ;;; -- show-popup / close-popup / popup-active-p lifecycle --------------------
 

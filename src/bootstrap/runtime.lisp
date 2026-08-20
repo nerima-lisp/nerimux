@@ -135,11 +135,6 @@
    it already fits."
   (if (> (length list) limit) (subseq list 0 limit) list))
 
-;;; -- Clock mode --------------------------------------------------------------
-
-(defvar *clock-mode-pane-id* nil
-  "When non-NIL, the pane-id of the pane displaying a digital clock overlay.")
-
 ;;; NOTE: popup, menu structs, *active-popup*, *active-menu* live in
 ;;; src/prompt.lisp (nerimux/prompt package) so the renderer can see them.
 

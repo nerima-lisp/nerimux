@@ -89,11 +89,6 @@
 
   ;; ── Global variable coverage ──────────────────────────────────────────────────
 
-  ;; *clock-mode-pane-id* is defined and initially NIL.
-  (it "clock-mode-pane-id-var-is-boundp"
-    (expect (boundp 'nerimux::*clock-mode-pane-id*))
-    (expect (null nerimux::*clock-mode-pane-id*)))
-
   ;; *server-sessions* is defined and is a list (possibly nil).
   (it "server-sessions-var-is-boundp"
     (expect (boundp 'nerimux::*server-sessions*))

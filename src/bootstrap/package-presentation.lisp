@@ -24,9 +24,8 @@
    #:prompt-kill-to-end #:prompt-kill-to-start #:prompt-kill-word-back
    #:prompt-history-prev #:prompt-history-next
    #:prompt-delete-char
-   #:*overlay* #:*overlay-scroll-offset* #:*display-panes-active*
+   #:*overlay* #:*overlay-scroll-offset*
    #:overlay-active-p #:overlay-shown-at #:show-overlay #:show-transient-overlay
-   #:show-display-panes-overlay
    #:clear-overlay #:overlay-lines
    #:overlay-scroll #:*overlay-shown-at*
    #:+default-popup-width+ #:+default-popup-height+

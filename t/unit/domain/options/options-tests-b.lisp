@@ -342,14 +342,12 @@
 
   ;;; ── Style-option classification + style-aware append ─────────────────────────
 
-  ;; style-option-p recognises *-style options but excludes clock-mode-style (a
-  ;; 12/24-hour choice that merely shares the suffix).
+  ;; style-option-p recognises *-style options via the shared suffix.
   (it "style-option-p-classification"
     (expect (nerimux/options:style-option-p "status-style") :to-be-truthy)
     (expect (nerimux/options:style-option-p "window-status-current-style") :to-be-truthy)
     (expect (nerimux/options:style-option-p "pane-active-border-style") :to-be-truthy)
     (expect (nerimux/options:style-option-p "mode-style") :to-be-truthy)
-    (expect (nerimux/options:style-option-p "clock-mode-style") :to-be-falsy)
     (expect (nerimux/options:style-option-p "status-left") :to-be-falsy)
     (expect (nerimux/options:style-option-p "status") :to-be-falsy)
     (expect (nerimux/options:style-option-p "-style") :to-be-falsy))

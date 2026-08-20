@@ -3,7 +3,7 @@
 ;;;; Pane and border rendering tests.
 ;;;;
 ;;;; Covers: render-pane, layout-subtree-rect, subtree-contains-p,
-;;;;         render-tree-borders, %apply-border-style, draw-clock-to-screen
+;;;;         render-tree-borders, %apply-border-style
 ;;;;         from src/renderer-pane.lisp.
 ;;;;
 ;;;; renderer-suite is declared in renderer-format-tests.lisp (loaded first).

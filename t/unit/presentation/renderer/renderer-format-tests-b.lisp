@@ -241,7 +241,7 @@
         (expect (char= #\━ h))
         (expect (char= #\┃ v)))))
 
-  ;;; ── %center-coord (box/clock centring) ───────────────────────────────────────
+  ;;; ── %center-coord (box centring) ─────────────────────────────────────────────
 
   ;; %center-coord returns floor((total-size)/2), clamped to 0 when size >= total.
   (it-each ((80 20 30 "80 wide, size 20 -> offset 30")

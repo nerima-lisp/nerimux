@@ -166,15 +166,13 @@
   "True when NAME is a tmux STYLE option (value is a comma-separated style
    string such as \"fg=red,bg=black,bold\").  tmux marks these OPTIONS_TABLE_IS_STYLE
    and `set -a` appends to them with a ',' separator, unlike plain string options
-   which concatenate directly.  Every style option's name ends in \"-style\" EXCEPT
-   clock-mode-style — a 12/24-hour choice that merely shares the suffix."
+   which concatenate directly.  Every style option's name ends in \"-style\"."
   (and (stringp name)
        (let* ((suffix "-style") (suffix-len (length suffix)) (name-len (length name)))
          ;; name-len > suffix-len (strict): a style option must have a non-empty
          ;; prefix before the \"-style\" suffix.
          (and (> name-len suffix-len)
-              (string= name suffix :start1 (- name-len suffix-len))
-              (string/= name "clock-mode-style")))))
+              (string= name suffix :start1 (- name-len suffix-len))))))
 
 (defun append-option-value (name old value)
   "Compute the new value for `set -a NAME` given the option's current OLD value and

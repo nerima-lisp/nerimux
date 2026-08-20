@@ -127,10 +127,7 @@
   ("update-environment"       :string
    "DISPLAY SSH_ASKPASS SSH_AUTH_SOCK SSH_CONNECTION WINDOWID XAUTHORITY")
   ;; Display options
-  ("display-time"             :integer 750)    ; ms to show messages / pane numbers
-  ("display-panes-time"       :integer 1000)   ; ms to show pane numbers (display-panes)
-  ("display-panes-colour"     :string  "blue")
-  ("display-panes-active-colour" :string "red")
+  ("display-time"             :integer 750)    ; ms to show messages
   ;; Resize and timing
   ("repeat-time"              :integer 500)    ; ms window for repeatable bindings
   ;; ms window for the FIRST repeat; 0 = use repeat-time (tmux 3.5+)
@@ -163,9 +160,6 @@
   ;; Pane border status line (top / bottom / off)
   ("pane-border-status"       :string  "off")
   ("pane-border-format"       :string  " #{pane_index} ")
-  ;; Clock display
-  ("clock-mode-colour"        :string  "blue")
-  ("clock-mode-style"         :integer 24)      ; 12 or 24 hour
   ;; Copy mode search
   ("wrap-search"              :boolean t)        ; wrap search in copy-mode
   ("copy-mode-line-numbers"   :string  "off")

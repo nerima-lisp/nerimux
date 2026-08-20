@@ -22,13 +22,6 @@
   "Universal-time when the most recent transient overlay was shown.
    Set by show-transient-overlay for display-time auto-dismiss.")
 
-(defvar *display-panes-active* nil
-  "T while display-panes (C-b q) is showing per-pane numbers.  Set by the
-   :display-panes handler AFTER it opens its (timing) transient overlay; cleared by
-   any other overlay (show-overlay / show-transient-overlay) and by clear-overlay,
-   so it is T only for the display-panes overlay.  The renderer draws the big
-   per-pane numbers while it is T and the overlay is still active.")
-
 (defun overlay-active-p ()
   "True when an overlay is currently displayed."
   (and *overlay* t))
@@ -42,15 +35,14 @@
 
 (defun %set-overlay (text)
   "Internal helper: install TEXT as the active overlay and reset the scroll
-   offset.  Callers are responsible for setting *overlay-shown-at* and
-   *display-panes-active* to whatever the variant requires."
+   offset.  Callers are responsible for setting *overlay-shown-at* as the
+   variant requires."
   (setf *overlay* text
         *overlay-scroll-offset* 0))
 
 (defun show-overlay (text)
   "Display TEXT as an overlay; navigated with j/k, dismissed with q or Esc."
-  (%set-overlay text)
-  (setf *display-panes-active* nil))
+  (%set-overlay text))
 
 (defun show-transient-overlay (text &key (timestamp (get-universal-time)))
   "Display TEXT as a transient overlay that auto-dismisses after display-time ms.
@@ -58,22 +50,12 @@
    TIMESTAMP defaults to (get-universal-time); supply an explicit value in tests
    so assertions can verify the recorded value deterministically."
   (%set-overlay text)
-  (setf *overlay-shown-at* timestamp
-        *display-panes-active* nil))
-
-(defun show-display-panes-overlay (text &key (timestamp (get-universal-time)))
-  "Like SHOW-TRANSIENT-OVERLAY but activates *DISPLAY-PANES-ACTIVE* so the
-   renderer draws per-pane index numbers over the session frame.
-   TIMESTAMP defaults to (get-universal-time); supply an explicit value in tests."
-  (%set-overlay text)
-  (setf *overlay-shown-at* timestamp
-        *display-panes-active* t))
+  (setf *overlay-shown-at* timestamp))
 
 (defun clear-overlay ()
   "Dismiss the active overlay and reset the scroll offset."
   (setf *overlay* nil
-        *overlay-scroll-offset* 0
-        *display-panes-active* nil))
+        *overlay-scroll-offset* 0))
 
 (defun overlay-lines ()
   "The active overlay split into a list of lines, or NIL when inactive."

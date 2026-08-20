@@ -108,7 +108,6 @@
    #:add-prompt-history
    #:save-prompt-history
    #:load-prompt-history
-   #:*clock-mode-pane-id*
    #:stop-reader-threads
    #:start-status-timer
    #:*runtime-restore-report*

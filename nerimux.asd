@@ -263,7 +263,6 @@
        (:file "renderer-style-data") ; declarative style/SGR/border-charset dispatch tables
        (:file "renderer-style")     ; style-string parsing + SGR emission logic
        (:file "renderer-pane-selection") ; selection bounds helpers
-       (:file "renderer-pane-clock")     ; big digits + display-panes clock overlay
        (:file "renderer-statusbar-layout"); status bar layout helpers (needed by renderer-pane-copy-mode-overlay below)
        (:file "renderer-pane-search")    ; pane content search match ranges
        (:file "renderer-pane-copy-mode-overlay")      ; copy-mode position-banner overlay rendering
