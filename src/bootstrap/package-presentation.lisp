@@ -63,13 +63,6 @@
    #:render-workspace-attention-to-tui-string
    #:benchmark-workspace-overview
    #:clear-display
-   #:enable-mouse-reporting
-   #:disable-mouse-reporting
-   #:extended-keys-level
-   #:enable-extended-keys
-   #:disable-extended-keys
-   #:enable-focus-reporting
-   #:disable-focus-reporting
    #:parse-style-string
    #:style-to-sgr
    #:%popup-border-charset

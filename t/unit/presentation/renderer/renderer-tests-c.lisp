@@ -17,68 +17,11 @@
 
 (describe "renderer-suite"
 
-  ;;; ── enable-mouse-reporting / disable-mouse-reporting ─────────────────────────
-
-  ;; enable/disable-mouse-reporting each write the correct set of DEC sequences.
-  (it "mouse-reporting-toggle-table"
-    (dolist (c '((nerimux/renderer::enable-mouse-reporting
-                  ("?1000h" "?1002h" "?1006h")
-                  "enable-mouse-reporting")
-                 (nerimux/renderer::disable-mouse-reporting
-                  ("?1006l" "?1002l" "?1000l")
-                  "disable-mouse-reporting")))
-      (destructuring-bind (fn expected-suffixes desc) c
-        (declare (ignore desc))
-        (let ((out (let ((*standard-output* (make-string-output-stream)))
-                     (funcall fn)
-                     (get-output-stream-string *standard-output*))))
-          (dolist (suffix expected-suffixes)
-            (expect (search (format nil "~C[~A" #\Escape suffix) out)))))))
-
-  ;;; ── enable/disable-extended-keys (CSI u / modifyOtherKeys) ───────────────────
-
-  ;; extended-keys-level maps the option value to a modifyOtherKeys level or NIL.
-  (it "extended-keys-level-mapping"
-    (expect (= 1 (nerimux/renderer::extended-keys-level "on")))
-    (expect (= 2 (nerimux/renderer::extended-keys-level "always")))
-    (expect (null (nerimux/renderer::extended-keys-level "off")))
-    (expect (null (nerimux/renderer::extended-keys-level nil))))
-
-  ;; enable-extended-keys maps option value to a level and the matching CSI sequence.
-  (it "enable-extended-keys-table"
-    (dolist (c '(("on"     1   ">4;1m" "on → level 1 + CSI >4;1m")
-                 ("always" 2   ">4;2m" "always → level 2 + CSI >4;2m")
-                 ("off"    nil nil     "off → nil + no output")))
-      (destructuring-bind (value expected-level expected-suffix desc) c
-        (declare (ignore desc))
-        (let* ((level nil)
-               (out (let ((*standard-output* (make-string-output-stream)))
-                      (setf level (nerimux/renderer::enable-extended-keys value))
-                      (get-output-stream-string *standard-output*))))
-          (expect (equal expected-level level))
-          (if expected-suffix
-              (expect (search (format nil "~C[~A" #\Escape expected-suffix) out))
-              (expect (string= "" out)))))))
-
-  ;; disable-extended-keys writes CSI > 4 ; 0 m to reset the outer terminal.
-  (it "disable-extended-keys-emits-reset"
-    (let ((out (let ((*standard-output* (make-string-output-stream)))
-                 (nerimux/renderer::disable-extended-keys)
-                 (get-output-stream-string *standard-output*))))
-      (expect (search (format nil "~C[>4;0m" #\Escape) out))))
-
-  ;;; ── enable/disable-focus-reporting (?1004) ───────────────────────────────────
-
-  ;; enable/disable-focus-reporting emit ?1004h and ?1004l respectively.
-  (it "focus-reporting-toggle-table"
-    (dolist (c '((nerimux/renderer::enable-focus-reporting  "?1004h" "enable")
-                 (nerimux/renderer::disable-focus-reporting "?1004l" "disable")))
-      (destructuring-bind (fn suffix desc) c
-        (declare (ignore desc))
-        (let ((out (let ((*standard-output* (make-string-output-stream)))
-                     (funcall fn)
-                     (get-output-stream-string *standard-output*))))
-          (expect (search (format nil "~C[~A" #\Escape suffix) out))))))
+  ;; The five protocol-toggle tests that used to open this block
+  ;; (mouse-reporting, extended-keys x3, focus-reporting) went with the
+  ;; functions they covered: each emitted a sequence for a caller that no longer
+  ;; exists, and these tests were the only thing keeping them alive.  See
+  ;; src/presentation/renderer/renderer-compose-protocols.lisp.
 
   ;;; ── render-lock-screen ───────────────────────────────────────────────────────
 

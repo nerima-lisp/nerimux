@@ -376,6 +376,14 @@ handling was not re-routed: `grep -n mouse src/bootstrap/server-multi-dispatch.l
 finds nothing. None of mouse pane selection, border resize, wheel scroll, text
 selection, or status-bar click is reachable today.
 
+The first bullet's other citation went the same way on 2026-08-20:
+`renderer-compose-protocols.lisp` no longer implements any reporting toggle. Its
+`enable-mouse-reporting`/`disable-mouse-reporting` pair was exported and
+unit-tested but called from no production code once the `mouse` option's
+side-effect handler went with the config key-table store, so both were deleted
+along with the extended-keys and focus-reporting toggles beside them. That file
+now holds one function, `clear-display`.
+
 ### Scripting and hooks
 - **hooks system**: implemented in `src/domain/hooks/hooks.lisp`, `src/application/dispatch/dispatch-core.lisp`, and the dispatch handler files; hook names are stored in the runtime and executed as command strings.
 - **run-shell**: implemented in `src/application/commands/commands-keys.lisp` and `src/application/config/config-directives-runtime.lisp`; it runs a shell command and captures the result for command execution.
