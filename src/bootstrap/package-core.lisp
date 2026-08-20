@@ -97,7 +97,6 @@
     system remains loadable when the optional sibling is not pinned.")
   (:export
    #:vcs-package-available-p
-   #:install-vcs-port
    #:scan-repositories
    #:list-repository-worktrees
    #:worktree-status

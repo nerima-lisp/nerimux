@@ -14,7 +14,7 @@
 
 (defun %vcs-function (name)
   (or (%vcs-symbol name)
-      (error "cl-vcs-kit function ~A is unavailable. Load cl-vcs-kit before installing the VCS port."
+      (error "cl-vcs-kit function ~A is unavailable. Load cl-vcs-kit before scanning the workspace."
              name)))
 
 (defun %vcs-call (name &rest arguments)
@@ -558,11 +558,3 @@ Otherwise BRANCH is treated as an existing commit or branch."
    on-complete
    on-error))
 
-(defun install-vcs-port ()
-  "Install this adapter into nerimux/ports."
-  (setf nerimux/ports:*vcs-list-repositories* #'scan-repositories
-        nerimux/ports:*vcs-list-worktrees* #'list-repository-worktrees
-        nerimux/ports:*vcs-status* #'worktree-status
-        nerimux/ports:*vcs-scan-async* #'scan-repositories-async
-        nerimux/ports:*vcs-create-worktree* #'create-worktree
-        nerimux/ports:*vcs-delete-worktree* #'delete-worktree))

@@ -102,8 +102,7 @@
       :serial t
       :components
       ((:file "posix-port")
-       (:file "pty-port")
-       (:file "vcs-port")))   ; port abstractions (load before infrastructure adapters)
+       (:file "pty-port")))   ; port abstractions (load before infrastructure adapters)
      (:module "infrastructure/pty"
       :serial t
       :components
@@ -199,10 +198,6 @@
        (:file "format-context-os-probe") ; OS probes (pgrep/ps/lsof/proc) for pane_current_command/pane_current_path
        (:file "format-context-screen") ; pane-geometry/screen/client section builders (mechanical getter tables)
        (:file "format-context")))  ; context builder: model objects → expand-format plist
-     (:module "domain/repository"
-      :serial t
-      :components
-      ((:file "session-repository"))) ; Repository pattern: session store protocol + *session-repo* var
      (:module "application/picker"
       :serial t
       :components

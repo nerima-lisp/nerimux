@@ -122,3 +122,89 @@
                    do (sleep 0.01))
              (expect condition-seen))
         (setf (fdefinition 'nerimux/vcs::%vcs-call) original)))))
+
+;;; %preserve-pane-associations runs on EVERY catalog refresh, via
+;;; set-workspace-organizations.  A refresh replaces the whole organization tree
+;;; with freshly-scanned structs, so a pane already attached to a worktree would
+;;; lose its binding unless the association is re-established by matching the old
+;;; worktree's id/path against the new tree.
+;;;
+;;; The first of these cases used to live in t/unit/domain/ports/vcs-port-tests.lisp,
+;;; misfiled under the VCS *port* — an abstraction that was never installed and
+;;; had no production callers, and which was deleted.  The case moved here because
+;;; it never tested the port: it tests live nerimux/vcs infrastructure.  The
+;;; no-match case is new; that branch was never covered.
+
+(describe "workspace catalog pane preservation"
+
+  ;; A refresh that produces an equivalent worktree (same path, new head) must
+  ;; re-bind the pane to the NEW struct — matching by id/path, not by identity.
+  (it "re-binds a pane to the refreshed worktree with the same path"
+    (let* ((previous (nerimux/vcs:workspace-organizations))
+           (pane (nerimux/model:make-pane :id 31 :title "editor"))
+           (old-organization (nerimux/model:make-organization
+                              :host "vcs-host" :name "workspace-owner"))
+           (old-repository (nerimux/model:make-repository
+                            :specification "workspace-owner/project"
+                            :local-path "work/project"))
+           (old-worktree (nerimux/model:make-worktree
+                          :path "work/project/wt" :branch "feature/ui"
+                          :head "old-head"))
+           (new-organization (nerimux/model:make-organization
+                              :host "vcs-host" :name "workspace-owner"))
+           (new-repository (nerimux/model:make-repository
+                            :specification "workspace-owner/project"
+                            :local-path "work/project"))
+           (new-worktree (nerimux/model:make-worktree
+                          :path "work/project/wt" :branch "feature/ui"
+                          :head "new-head")))
+      (unwind-protect
+           (progn
+             (nerimux/model:organization-add-repository old-organization old-repository)
+             (nerimux/model:repository-add-worktree old-repository old-worktree)
+             (nerimux/model:worktree-add-pane old-worktree pane)
+             (nerimux/model:organization-add-repository new-organization new-repository)
+             (nerimux/model:repository-add-worktree new-repository new-worktree)
+             (nerimux/vcs:set-workspace-organizations (list old-organization))
+             (nerimux/vcs:set-workspace-organizations (list new-organization))
+             (expect (eq new-worktree (nerimux/model:pane-worktree pane)))
+             (expect (member pane (nerimux/model:worktree-panes new-worktree)
+                             :test #'eq)))
+        (nerimux/vcs:set-workspace-organizations previous))))
+
+  ;; The other branch: when the worktree a pane was attached to is gone from the
+  ;; refreshed catalog, the pane's back-pointer must be CLEARED rather than left
+  ;; dangling at a struct no longer reachable from the catalog.
+  (it "clears the pane's worktree when the worktree vanishes from the catalog"
+    (let* ((previous (nerimux/vcs:workspace-organizations))
+           (pane (nerimux/model:make-pane :id 32 :title "shell"))
+           (old-organization (nerimux/model:make-organization
+                              :host "vcs-host" :name "workspace-owner"))
+           (old-repository (nerimux/model:make-repository
+                            :specification "workspace-owner/project"
+                            :local-path "work/project"))
+           (old-worktree (nerimux/model:make-worktree
+                          :path "work/project/removed" :branch "feature/gone"
+                          :head "old-head"))
+           (new-organization (nerimux/model:make-organization
+                              :host "vcs-host" :name "workspace-owner"))
+           (new-repository (nerimux/model:make-repository
+                            :specification "workspace-owner/project"
+                            :local-path "work/project"))
+           (surviving-worktree (nerimux/model:make-worktree
+                                :path "work/project/other" :branch "main"
+                                :head "new-head")))
+      (unwind-protect
+           (progn
+             (nerimux/model:organization-add-repository old-organization old-repository)
+             (nerimux/model:repository-add-worktree old-repository old-worktree)
+             (nerimux/model:worktree-add-pane old-worktree pane)
+             (nerimux/model:organization-add-repository new-organization new-repository)
+             (nerimux/model:repository-add-worktree new-repository surviving-worktree)
+             (nerimux/vcs:set-workspace-organizations (list old-organization))
+             (expect (eq old-worktree (nerimux/model:pane-worktree pane)))
+             (nerimux/vcs:set-workspace-organizations (list new-organization))
+             (expect (null (nerimux/model:pane-worktree pane)))
+             (expect (not (member pane (nerimux/model:worktree-panes surviving-worktree)
+                                  :test #'eq))))
+        (nerimux/vcs:set-workspace-organizations previous)))))

@@ -12,34 +12,6 @@
 ;;;; Sessions in the same group see the same windows; switching a window in one
 ;;;; automatically switches all others in the group.
 
-;;; ── In-memory session store (concrete repository) ────────────────────────────
-;;;
-;;; Implements the nerimux/repository protocol by delegating to the global
-;;; *server-sessions* alist already maintained by server-* functions.
-
-(defstruct in-memory-session-store
-  "Concrete Repository implementation backed by *server-sessions*.")
-
-(defmethod nerimux/repository:repo-find-session
-    ((store in-memory-session-store) name)
-  (server-find-session name))
-
-(defmethod nerimux/repository:repo-add-session
-    ((store in-memory-session-store) session)
-  (server-add-session session))
-
-(defmethod nerimux/repository:repo-remove-session
-    ((store in-memory-session-store) name)
-  (server-remove-session name))
-
-(defmethod nerimux/repository:repo-all-sessions
-    ((store in-memory-session-store))
-  (server-all-sessions))
-
-(defmethod nerimux/repository:repo-current-session
-    ((store in-memory-session-store))
-  (server-current-session))
-
 ;;; ── Session registry ──────────────────────────────────────────────────────────
 
 (defun server-add-session (session)

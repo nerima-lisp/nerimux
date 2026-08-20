@@ -21,9 +21,9 @@
 
 ;;; ── Process environment and working directory ────────────────────────────────
 ;;;
-;;; Thin wrappers, deliberately NOT port variables.  The pty and vcs ports are
-;;; variables because they have two implementations each -- a real adapter and a
-;;; test fake -- and the fake is genuinely exercised.  "Read my own process's
+;;; Thin wrappers, deliberately NOT port variables.  The pty port is a variable
+;;; because it has two implementations -- a real adapter and a test fake -- and
+;;; the fake is genuinely exercised.  "Read my own process's
 ;;; environment" has exactly one implementation and always will: the tests that
 ;;; cover these paths stub by mutating the REAL environment
 ;;; (t/helpers-overlay-assertions.lisp's with-temporary-posix-environment-variable),

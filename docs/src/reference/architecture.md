@@ -82,24 +82,27 @@ A `bind` line now matches no handler at all and is silently dropped.
 The layering rule is:
 
 - `domain` defines the session/window/pane model and, in `domain/ports/`, the
-  capabilities it needs from outside itself. Anything with more than one real
-  implementation is a port *variable* (`nerimux/ports:*spawn-pty*`,
-  `*write-pty*`, …) that infrastructure binds at startup — spawning a PTY and
-  talking to git are the cases that matter, and their fakes are genuinely
-  exercised by tests.
+  capabilities it needs from outside itself. It is not I/O-free, and the
+  distinction it draws is between two kinds of outside capability.
 
-  This used to read "`domain` has no I/O", which was not true and is still not:
-  reading this process's own environment and working directory
-  (`nerimux/ports:environment-value`, `environment-entries`,
-  `working-directory`) happens in `domain/ports/posix-port.lisp` as plain
-  wrappers, not bound variables. That is deliberate. Those have exactly one
-  implementation and always will — the tests that cover them stub by setting a
-  real environment variable, never by installing a fake — so a port variable
-  would be an abstraction with nothing on the other side, and an unbound one
-  would reproduce a failure this codebase has hit repeatedly: a port nobody
-  installs, whose fallback succeeds silently. The wrappers earn their place by
-  naming the dependency in one file instead of scattering raw `sb-ext:` calls
-  through `domain/model/` and `domain/format/`.
+  A capability with a second implementation that tests genuinely exercise is a
+  port **variable**: `nerimux/ports:*spawn-pty*`, `*write-pty*` and friends,
+  bound at server startup by `install-pty-port` (`src/bootstrap/server.lisp`)
+  and bound to a fake by the PTY tests.
+
+  A capability with exactly one implementation is a plain **wrapper**:
+  `environment-value`, `environment-entries`, `working-directory` in
+  `posix-port.lisp`. Their tests stub by setting a real environment variable,
+  never by installing a fake, so a port variable would have nothing on the other
+  side — and an unbound one would reproduce this codebase's most repeated
+  failure, a port nobody installs whose fallback succeeds silently. The wrappers
+  still earn their place by naming the dependency in one file instead of
+  scattering raw `sb-ext:` calls through `domain/model/` and `domain/format/`.
+
+  Git is neither: it does not go through `domain` at all. `bootstrap` calls the
+  `nerimux/vcs` infrastructure package directly (`workspace-organizations`,
+  `refresh-workspace-organizations-async`, …), which is legal because bootstrap
+  sits above every layer.
 - `application` holds use cases over the domain model: what is left in
   `commands/` (copy mode, the command-line tokenizer, pipe-pane, and pane PTY
   teardown), and `.tmux.conf` directive parsing in `config/`.
@@ -121,51 +124,38 @@ catches what the other cannot.
 
 `no-package-declares-an-upward-layer-dependency` reads every `defpackage` form
 and fails if one declares an upward `:use` or `:import-from`. It catches a
-package re-opening the hole wholesale. `nerimux/model` used to `:use`
-`nerimux/config`, which made every domain→application reference *unqualified* and
-so invisible to a search for `nerimux/config:`. Three had accumulated
-(`*status-height*`, `*default-shell*`, `find-posix-function`) and none showed up
-until somebody read the package forms.
+package re-opening the hole wholesale — a `:use` clause makes every reference
+through it *unqualified*, and therefore invisible to a search for the package
+name.
 
-But a declaration-based check has a blind spot it cannot close by construction: a
-reference written `nerimux::%some-helper` appears in no `defpackage` form, so
-nothing declares it. Double-colon also bypasses the export list. The first test
-was green while four such dependencies existed — `%parse-integer-or-nil` (in
-fourteen places, from three layers, three of them compiled *before* the file that
-defined it), `%join-thread-with-timeout`, `server-find-session`, and
-`*clock-mode-pane-id*`.
-
-So the second test, `no-source-file-references-a-higher-layer-package`, scans
-source text rather than declarations: it strips comments, strings and character
-literals, then maps every `pkg:sym` and `pkg::sym` reference to the referenced
-package's layer and fails on any that points upward. Direction is what it judges;
-using `::` to reach *downward* is an export-hygiene question, not a layering one,
-and it does not fail on that.
+That check has a blind spot it cannot close by construction: a reference written
+`nerimux::%some-helper` appears in no `defpackage` form, so nothing declares it,
+and `::` bypasses the export list too. So the second test,
+`no-source-file-references-a-higher-layer-package`, scans source text instead: it
+strips comments, strings and character literals, maps every `pkg:sym` and
+`pkg::sym` reference to the referenced package's layer, and fails on any that
+points upward. Direction is what it judges — using `::` to reach *downward* is an
+export-hygiene question, not a layering one.
 
 It also fails when a `nerimux/…` package carries no layer marker in its
-`defpackage` docstring at all. That case is currently empty, and it is kept
-deliberately: a package nothing classifies is a package silently exempt from the
-whole check, which is the same shape of hole as the one above. Failing closed on
-it costs nothing today and prevents the next unmarked package from escaping.
+`defpackage` docstring. That case is currently empty and kept deliberately: a
+package nothing classifies is a package silently exempt from the check, the same
+shape of hole as the one above. Neither test carries an allow-list, for the same
+reason — an exception list makes a guard green while preserving exactly the
+condition it exists to find.
 
-The first run of this test found three violations nobody had reported —
-`nerimux/version:version-string`, reached from `domain/terminal/csi-replies.lisp`,
-`domain/format/format-context-screen.lisp` and
-`application/config/config-directives-set.lisp`. The package had labelled itself
-BOOTSTRAP while depending on nothing, loading first, and returning a constant. It
-is now FOUNDATION. The label was wrong, not the callers — worth remembering when
-this test next goes red, because "the reference is illegal" and "the layer
-assignment is wrong" produce the identical failure.
+Two things are worth knowing before either test is next read as red:
 
-The four violations were resolved three different ways, which is the useful part:
-`parse-integer-or-nil` moved down to the new foundation package;
-`%join-thread-with-timeout` was replaced at its one application-layer call site
-by the `cl-concurrent-kit:join-thread` it already wrapped; `server-find-session`
-became the injected `nerimux/config:*session-lookup*` hook; and
-`*clock-mode-pane-id*` was deleted along with the feature, because nothing in
-`src/` ever assigned it. Moving code down, calling the underlying library,
-inverting the dependency, deleting the feature — pick by which one the case
-actually is, rather than reaching for a port every time.
+- **An upward reference and a wrong layer label produce the identical failure.**
+  The first run of the source scan reported three violations against
+  `nerimux/version`, which had labelled itself BOOTSTRAP while depending on
+  nothing, loading first, and returning a constant. The callers were fine; the
+  label was wrong. Check the label first.
+- **A violation does not imply a missing port.** The four found this way were
+  fixed four different ways: moving the code down to the foundation package,
+  calling the library the wrapper already delegated to, inverting the dependency
+  into an injected hook, and deleting the feature outright because nothing
+  assigned its flag. Pick by which the case actually is.
 
 Terminal code separates data (`types`) from logic (`actions`, `csi`, `sgr`, the
 CPS parser) one level further down.
@@ -205,8 +195,7 @@ nerimux/
 │   │   ├── hooks/          #   hook registry + firing
 │   │   ├── buffer/         #   paste buffers
 │   │   ├── persistence/    #   runtime-snapshot struct (detach/attach state)
-│   │   ├── repository/     #   session-store protocol (implemented in bootstrap)
-│   │   └── ports/          #   port variables (PTY, VCS interfaces)
+│   │   └── ports/          #   the PTY port variables, plus the posix wrappers
 │   ├── application/        # use cases over the domain model
 │   │   ├── commands/       #   copy-mode, the command-line tokenizer and
 │   │   │   └── copy-mode/  #     pipe-pane — what outlived the command table

@@ -72,8 +72,8 @@
     Four things live here because each one needs the whole stack below it and none of
     them can be reached from the domain: the binary entry point and startup flag
     handling; the server and client halves of detach-attach, with the session
-    registry that implements nerimux/repository and the per-pane reader and status
-    timer threads; the event loop that turns keystrokes and mouse reports into
+    registry and the per-pane reader and status timer threads; the event loop
+    that turns keystrokes and mouse reports into
     commands; and the command dispatcher that resolves -t targets and argv into calls
     on nerimux/commands.  Nothing depends on this package — it is the top of the
     graph, which is why it may see everything.")
@@ -87,7 +87,6 @@
    #:server-remove-session
    #:server-all-sessions
    #:server-current-session
-   #:in-memory-session-store
    #:*session-groups*
    #:*group-id-counter*
    #:server-new-session-in-group
