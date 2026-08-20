@@ -262,30 +262,6 @@
             (expect result :to-be-falsy)
             (assert-overlay-active "recent overlay must remain active"))))))
 
-  ;; %check-lock-after-time locks the session when idle time exceeds lock-after-time.
-  (it "check-lock-after-time-locks-session-on-inactivity"
-    (with-isolated-state
-      (let* ((sess  (make-fake-session :nwindows 1))
-             (dirty nil))
-        (nerimux/options:set-option "lock-after-time" 1)
-        (setf nerimux::*last-activity-time* (- (get-universal-time) 60))
-        (setf (nerimux/model:session-locked-p sess) nil)
-        (nerimux::%check-lock-after-time sess (lambda () (setf dirty t)))
-        (expect (nerimux/model:session-locked-p sess) :to-be-truthy)
-        (expect dirty :to-be-truthy))))
-
-  ;; %check-lock-after-time is a no-op when lock-after-time is 0 (disabled).
-  (it "check-lock-after-time-noop-when-zero"
-    (with-isolated-state
-      (let* ((sess  (make-fake-session :nwindows 1))
-             (dirty nil))
-        (nerimux/options:set-option "lock-after-time" 0)
-        (setf nerimux::*last-activity-time* (- (get-universal-time) 60))
-        (setf (nerimux/model:session-locked-p sess) nil)
-        (nerimux::%check-lock-after-time sess (lambda () (setf dirty t)))
-        (expect (nerimux/model:session-locked-p sess) :to-be-falsy)
-        (expect dirty :to-be-falsy))))
-
   ;; %effective-prompt-history-limit returns the prompt-history-limit option when set.
   (it "effective-prompt-history-limit-returns-option-value"
     (with-isolated-options ("prompt-history-limit" 42)

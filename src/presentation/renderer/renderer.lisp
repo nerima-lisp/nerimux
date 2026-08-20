@@ -14,7 +14,7 @@
 ;;;;   renderer-pane.lisp     — Pane and split-tree border rendering
 ;;;;   renderer-overlay.lisp  — Popup and menu box-drawing
 ;;;;   renderer-statusbar.lisp — Status bar composition (pure, no session knowledge)
-;;;;   renderer-compose.lisp  — Session frame compositing, lock-screen, mouse,
+;;;;   renderer-compose.lisp  — Session frame compositing, mouse sequences,
 ;;;;                            render-session-to-string / render-session entry points
 ;;;;
 ;;;; This file is intentionally empty: it exists only for ASDF load-order

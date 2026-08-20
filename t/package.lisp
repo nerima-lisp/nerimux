@@ -119,7 +119,6 @@
                 ;; Window options
                 #:window-local-options
                 ;; New session slots
-                #:session-locked-p
                 #:session-group
                 #:session-clients
                 ;; Window layout-cycle-index slot

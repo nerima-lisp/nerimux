@@ -296,7 +296,7 @@
        (:file "runtime-history")      ; message log + prompt history
        (:file "runtime-reader-alerts") ; remain-on-exit banner + alert-action helpers
        (:file "runtime-reader")       ; PTY reader CPS state machine
-       (:file "runtime-timer")))      ; status interval timer, lock-after-time, monitor-silence
+       (:file "runtime-timer")))      ; status interval timer, monitor-silence
      ;; dispatch context, subdivided into cohesive sub-areas. Load order is
      ;; byte-identical to the old flat module; handlers split early (support)
      ;; / late (rest) via the :pathname trick (dispatch-handlers-2).

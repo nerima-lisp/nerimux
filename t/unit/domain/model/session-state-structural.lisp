@@ -46,15 +46,6 @@
     (let ((sess (make-session :id 1 :name "s" :windows nil)))
       (expect (null (session-active-pane sess)))))
 
-  ;;; ── session-locked-p slot ────────────────────────────────────────────────────
-
-  ;; session-locked-p defaults to NIL and can be set to T.
-  (it "session-locked-p-slot"
-    (let ((sess (make-session :id 1 :name "s")))
-      (expect (null (session-locked-p sess)))
-      (setf (session-locked-p sess) t)
-      (expect (session-locked-p sess) :to-be-truthy)))
-
   ;;; ── session-group slot ───────────────────────────────────────────────────────
 
   ;; session-group defaults to NIL and can be set to a non-NIL value.
@@ -112,7 +103,6 @@
       (dolist (row (list (list (session-windows sess)       "session-windows must default to NIL")
                          (list (session-active-window sess) "active window must be NIL (no windows)")
                          (list (session-clients sess)       "session-clients must default to NIL")
-                         (list (session-locked-p sess)      "session-locked-p must default to NIL")
                          (list (session-group sess)         "session-group must default to NIL")))
         (destructuring-bind (val desc) row
           (declare (ignore desc))

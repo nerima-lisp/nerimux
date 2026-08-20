@@ -3,9 +3,9 @@
 ;;;; PANE-frame compositing for the nerimux renderer.
 ;;;;
 ;;;; This file owns the full-frame pipeline for the terminal-pane view:
-;;;; lock-screen overlay, pane/border rendering, overlay dispatch, mouse
-;;;; sequences, bell emission, cursor restoration, and the render-session /
-;;;; render-session-to-string entry points.
+;;;; pane/border rendering, overlay dispatch, mouse sequences, bell emission,
+;;;; cursor restoration, and the render-session / render-session-to-string
+;;;; entry points.
 ;;;;
 ;;;; The workspace tree and attention views used to live here too.  They are the
 ;;;; other UI, they share none of the VT100 cell machinery below, and they now
@@ -19,27 +19,6 @@
 ;;;;             → renderer-pane → renderer-overlay → renderer-statusbar
 ;;;;             → renderer-compose-protocols → renderer-compose-overlay
 ;;;;             → renderer-compose-effects → renderer-compose
-
-;;; ── Lock-screen overlay ─────────────────────────────────────────────────────
-
-(defun render-lock-screen (stream terminal-rows terminal-cols)
-  "Render a full-screen lock overlay.  Fills the screen with a solid colour
-   and centres a 'Session locked' message."
-  (reset-attrs stream)
-  (%emit-sgr stream +sgr-default-status+)
-  ;; Fill all rows with spaces.
-  (let ((blank-row (make-string terminal-cols :initial-element #\Space)))
-    (loop for row below (1- terminal-rows)
-          do (move-to stream row 0)
-             (write-string blank-row stream)))
-  ;; Centre the lock message.
-  (let* ((msg     "Session locked — press any key to unlock")
-         (mlen    (min (length msg) terminal-cols))
-         (mid-row (floor terminal-rows 2))
-         (mid-col (%center-coord terminal-cols mlen)))
-    (move-to stream mid-row mid-col)
-    (write-string (subseq msg 0 mlen) stream))
-  (reset-attrs stream))
 
 (defun %render-panes-and-borders (buffer session window panes active-pane terminal-cols
                                   &key (viewport 0))
@@ -169,47 +148,44 @@
          (status-on   (> status-lines 0))
          (status-pos  (nerimux/options:get-option "status-position" "bottom")))
     (cursor-invisible buffer)
-    (if (session-locked-p session)
-        (render-lock-screen buffer terminal-rows terminal-cols)
-        (progn
-          (%render-panes-and-borders buffer session window panes active-pane terminal-cols
-                                     :viewport viewport)
-          ;; pane-border-status title lines (drawn after borders so they overwrite border cells)
-          (when (and window panes
-                     (string/= (nerimux/options:get-option "pane-border-status" "off") "off"))
-            (dolist (pane panes)
-              (%render-pane-border-status buffer pane session window)))
-          ;; copy-mode search-match highlighting on the active pane (it is the one that
-          ;; can be in copy mode), overdrawn after panes/borders.
-          (when (and active-pane (pane-screen active-pane)
-                     (screen-copy-mode-p (pane-screen active-pane)))
-            (%render-copy-search-matches buffer active-pane))
-          (%render-overlay-layer buffer active-pane terminal-rows terminal-cols)
-          (when status-on
-            (render-status-region buffer session terminal-rows terminal-cols
-                                  status-lines status-pos))
-          (when (eq mode :picker)
-            (%render-client-picker buffer terminal-rows terminal-cols
-                                   (or picker-items '()) picker-query
-                                   picker-index :regex-p picker-regex-p))
-          (when (eq mode :command)
-            (%render-client-command-line buffer terminal-rows terminal-cols
-                                         command-buffer))
-          (%render-mouse-sequences buffer active-pane)
-          ;; allow-passthrough: emit any DCS-passthrough sequences (images, nested tmux).
-          (when panes (%render-passthrough buffer panes))
-          (when panes (%render-clipboard buffer panes))
-          (%render-bell-and-cursor buffer active-pane)
-          ;; Relay bells from background windows (bell-action 'any'/'other').
-          (%render-background-bells buffer session window)
-          ;; set-titles: emit OSC 0 to set the outer terminal window title.
-          (when (nerimux/options:get-option "set-titles")
-            (let* ((title-fmt (nerimux/options:get-option "set-titles-string" "#W"))
-                   (win        (session-active-window session))
-                   (pane       (session-active-pane session))
-                   (ctx        (nerimux/format:format-context-from-session session win pane))
-                   (title      (nerimux/format:expand-format title-fmt ctx)))
-              (format buffer "~C]0;~A~C" +esc+ title (code-char 7))))))
+    (%render-panes-and-borders buffer session window panes active-pane terminal-cols
+                               :viewport viewport)
+    ;; pane-border-status title lines (drawn after borders so they overwrite border cells)
+    (when (and window panes
+               (string/= (nerimux/options:get-option "pane-border-status" "off") "off"))
+      (dolist (pane panes)
+        (%render-pane-border-status buffer pane session window)))
+    ;; copy-mode search-match highlighting on the active pane (it is the one that
+    ;; can be in copy mode), overdrawn after panes/borders.
+    (when (and active-pane (pane-screen active-pane)
+               (screen-copy-mode-p (pane-screen active-pane)))
+      (%render-copy-search-matches buffer active-pane))
+    (%render-overlay-layer buffer active-pane terminal-rows terminal-cols)
+    (when status-on
+      (render-status-region buffer session terminal-rows terminal-cols
+                            status-lines status-pos))
+    (when (eq mode :picker)
+      (%render-client-picker buffer terminal-rows terminal-cols
+                             (or picker-items '()) picker-query
+                             picker-index :regex-p picker-regex-p))
+    (when (eq mode :command)
+      (%render-client-command-line buffer terminal-rows terminal-cols
+                                   command-buffer))
+    (%render-mouse-sequences buffer active-pane)
+    ;; allow-passthrough: emit any DCS-passthrough sequences (images, nested tmux).
+    (when panes (%render-passthrough buffer panes))
+    (when panes (%render-clipboard buffer panes))
+    (%render-bell-and-cursor buffer active-pane)
+    ;; Relay bells from background windows (bell-action 'any'/'other').
+    (%render-background-bells buffer session window)
+    ;; set-titles: emit OSC 0 to set the outer terminal window title.
+    (when (nerimux/options:get-option "set-titles")
+      (let* ((title-fmt (nerimux/options:get-option "set-titles-string" "#W"))
+             (win        (session-active-window session))
+             (pane       (session-active-pane session))
+             (ctx        (nerimux/format:format-context-from-session session win pane))
+             (title      (nerimux/format:expand-format title-fmt ctx)))
+        (format buffer "~C]0;~A~C" +esc+ title (code-char 7))))
     (get-output-stream-string buffer)))
 
 (defun render-session (session terminal-rows terminal-cols)

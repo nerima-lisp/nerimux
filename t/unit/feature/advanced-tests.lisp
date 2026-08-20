@@ -2,7 +2,7 @@
 
 ;;;; Tests for Sprint 3 advanced features:
 ;;;;  synchronize-panes, layout persistence,
-;;;;  lock-session, pipe-pane, session groups, choose-session.
+;;;;  pipe-pane, session groups, choose-session.
 
 ;;; ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -92,25 +92,6 @@
         (expect (and csum (= 4 (length csum))))
         (expect (every (lambda (ch) (or (digit-char-p ch) (find ch "ABCDEFabcdef")))
                        (or csum ""))))))
-
-  ;;; ── lock-session / unlock ────────────────────────────────────────────────────
-
-  ;; When session-locked-p is T, render-session-to-string returns a lock screen
-  ;; string (contains the lock message) rather than normal content.
-  (it "lock-session-renders-lockscreen"
-    (multiple-value-bind (sess win p0 p1) (%two-pane-session)
-      (declare (ignore win p0 p1))
-      (setf (session-locked-p sess) t)
-      (let ((output (nerimux/renderer:render-session-to-string sess 24 80)))
-        (expect (search "locked" output)))
-      (setf (session-locked-p sess) nil)))
-
-  ;; session struct has session-locked-p slot, defaulting to NIL.
-  (it "lock-session-struct-slot"
-    (let ((sess (make-session :id 1 :name "test")))
-      (expect (session-locked-p sess) :to-be-falsy)
-      (setf (session-locked-p sess) t)
-      (expect (session-locked-p sess))))
 
   ;;; ── pipe-pane tee output ─────────────────────────────────────────────────────
 

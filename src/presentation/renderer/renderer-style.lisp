@@ -42,7 +42,7 @@
 
 ;;; ── Named SGR constants ──────────────────────────────────────────────────────
 ;;;
-;;; +sgr-default-status+ : default status-bar and lock-screen style (blue bg / bright white)
+;;; +sgr-default-status+ : default status-bar style (blue bg / bright white)
 
 (defconstant +sgr-default-status+
     (if (boundp '+sgr-default-status+)

@@ -1,7 +1,7 @@
 (in-package #:nerimux)
 
-;;;; Status interval timer: poll loop, lock-after-time, monitor-silence,
-;;;;  overlay auto-dismiss, and start-status-timer.
+;;;; Status interval timer: poll loop, monitor-silence, overlay auto-dismiss,
+;;;;  and start-status-timer.
 
 ;;; -- Status interval timer --------------------------------------------------
 
@@ -27,23 +27,6 @@
       (when (and (plusp shown-at) (>= elapsed display-secs))
         (nerimux/prompt:clear-overlay)
         t))))
-
-;;; *last-activity-time*: updated by process-byte on each keystroke; used by
-;;; lock-after-time to measure idle time.  Initialised to the startup time so
-;;; lock-after-time does not fire immediately on an idle session start.
-(defvar *last-activity-time* 0
-  "Universal-time of the most recent keypress.  Stamped in process-byte.")
-
-(defun %check-lock-after-time (session dirty-fn)
-  "Lock SESSION when lock-after-time seconds of keyboard idle have elapsed.
-   lock-after-time = 0 (default) disables the auto-lock.  A no-op when the
-   session is already locked."
-  (let ((lock-secs (nerimux/options:get-option "lock-after-time")))
-    (when (and (integerp lock-secs) (> lock-secs 0)
-               (not (nerimux/model:session-locked-p session)))
-      (when (>= (- (get-universal-time) *last-activity-time*) lock-secs)
-        (setf (nerimux/model:session-locked-p session) t)
-        (funcall dirty-fn)))))
 
 (defun %fire-silence-alert (win dirty-fn)
   "Set the silence flag, fire the alert-silence hook, and show a visual overlay
@@ -101,31 +84,22 @@
         (progn (funcall dirty-fn) 0)
         elapsed)))
 
-(defmacro %with-running-timer-check (condition &body body)
-  "Run BODY when *running* and CONDITION are true, ignoring failures."
-  `(when (and *running* ,condition)
-     (ignore-errors ,@body)))
-
-(defun %timer-tick-lock (session dirty-fn)
-  "Check lock-after-time inactivity for SESSION; no-op when SESSION is NIL."
-  (when session
-    (%with-running-timer-check session
-      (%check-lock-after-time session dirty-fn))))
-
 (defun %timer-tick-silence (server-sessions-fn dirty-fn)
-  "Check monitor-silence thresholds; no-op when SERVER-SESSIONS-FN is NIL."
-  (when server-sessions-fn
-    (%with-running-timer-check server-sessions-fn
+  "Check monitor-silence thresholds; no-op when SERVER-SESSIONS-FN is NIL.
+
+   Errors are swallowed because this runs on a background timer thread with no
+   one to report to; a failing silence check must not take the thread down."
+  (when (and *running* server-sessions-fn)
+    (ignore-errors
       (%check-monitor-silence (funcall server-sessions-fn) dirty-fn))))
 
-(defun start-status-timer (dirty-fn &key session server-sessions-fn)
+(defun start-status-timer (dirty-fn &key server-sessions-fn)
   "Start a background thread that drives periodic session maintenance:
    - STATUS-INTERVAL: calls DIRTY-FN every N seconds to refresh the status bar.
    - DISPLAY-TIME: auto-dismisses transient overlays after configured ms.
-   - LOCK-AFTER-TIME: locks SESSION after N seconds of keyboard inactivity.
    - MONITOR-SILENCE: sets window-silence-flag after N seconds of PTY silence.
-   SESSION and SERVER-SESSIONS-FN are optional; lock/silence checks are skipped
-   when absent.  Returns the thread object."
+   SERVER-SESSIONS-FN is optional; the silence check is skipped when absent.
+   Returns the thread object."
   (make-thread
    (lambda ()
      (let ((elapsed 0))
@@ -134,6 +108,5 @@
                 (incf elapsed +status-timer-poll-seconds+)
                 (%timer-tick-overlay dirty-fn)
                 (setf elapsed (%timer-tick-status-interval elapsed dirty-fn))
-                (%timer-tick-lock session dirty-fn)
                 (%timer-tick-silence server-sessions-fn dirty-fn))))
    :name "nerimux-status-timer"))

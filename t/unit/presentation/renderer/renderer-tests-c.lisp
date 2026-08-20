@@ -1,6 +1,6 @@
 (in-package #:nerimux/test)
 
-;;;; mouse/focus/keys sequences, lock-screen, justify, cursor-shape, overlay, inline-style — part III
+;;;; mouse/focus/keys sequences, justify, cursor-shape, overlay, inline-style — part III
 
 (defun %mouse-seq-output (mouse-mode sgr-mode)
   "Run %render-mouse-sequences with a synthetic pane whose screen has MOUSE-MODE
@@ -22,31 +22,6 @@
   ;; functions they covered: each emitted a sequence for a caller that no longer
   ;; exists, and these tests were the only thing keeping them alive.  See
   ;; src/presentation/renderer/renderer-compose-protocols.lisp.
-
-  ;;; ── render-lock-screen ───────────────────────────────────────────────────────
-
-  ;; render-lock-screen fills the terminal with a blue background and the 'locked' message.
-  (it "render-lock-screen-fills-with-lock-message"
-    (let ((out (with-output-to-string (s)
-                 (nerimux/renderer::render-lock-screen s 24 80))))
-      (expect (plusp (length out)))
-      (expect (search "locked" out))))
-
-  ;; render-lock-screen emits the blue-background SGR sequence.
-  (it "render-lock-screen-emits-blue-background"
-    (let ((out (with-output-to-string (s)
-                 (nerimux/renderer::render-lock-screen s 24 80))))
-      (expect (search (format nil "~C[44;97m" #\Escape) out))))
-
-  ;; When session-locked-p is T, render-session-to-string emits the lock overlay.
-  (it "render-session-locked-shows-lock-overlay"
-    (let* ((sess (make-renderer-test-session 40 10)))
-      (setf (session-locked-p sess) t)
-      (unwind-protect
-           (let ((out (render-session-to-string sess 11 40)))
-             (expect (search "locked" out)))
-        ;; Restore so other tests are not affected.
-        (setf (session-locked-p sess) nil))))
 
   ;;; ── %status-pane-indicator with non-nil pane ─────────────────────────────────
 
@@ -107,24 +82,6 @@
                      (nerimux/renderer::%render-mouse-sequences s pane))))
           (expect (search (format nil "~C[?1006h" #\Escape) out))
           (expect (search (format nil "~C[?1002h" #\Escape) out))))))
-
-  ;;; ── render-lock-screen edge cases (coverage gap) ────────────────────────────
-
-  ;; render-lock-screen clamps the message to terminal-cols when the terminal
-  ;; is narrower than the message.
-  (it "render-lock-screen-narrow-terminal-fits-message"
-    (let* ((narrow-cols 12)
-           (out (with-output-to-string (s)
-                  (nerimux/renderer::render-lock-screen s 5 narrow-cols))))
-      (expect (plusp (length out)))
-      ;; The message is truncated to 12 chars; "Session lock" is the prefix.
-      (expect (search "Session lock" out))))
-
-  ;; render-lock-screen with terminal-rows=1 produces output without error.
-  (it "render-lock-screen-single-row-terminal"
-    (let ((out (with-output-to-string (s)
-                 (nerimux/renderer::render-lock-screen s 1 40))))
-      (expect (plusp (length out)))))
 
   ;;; ── %render-panes-and-borders zoom suppression (coverage gap) ───────────────
 
