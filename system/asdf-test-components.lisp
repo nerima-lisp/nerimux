@@ -124,7 +124,8 @@
          :serial t
          :components
          ((:file "vcs-tests")
-          (:file "vcs-fetch-dedup-tests"))) ; R7.1: one fetch in flight per target
+          (:file "vcs-fetch-dedup-tests") ; R7.1: one fetch in flight per target
+          (:file "vcs-worktree-path-tests"))) ; R7.2: timestamp-sha path, -2/-3 on collision
         (:module "application/picker"
          :serial t
          :components
