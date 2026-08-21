@@ -26,8 +26,8 @@
 
 (defun %stale-socket-p (socket-path)
   "True when SOCKET-PATH exists but no server accepts connections on it.
-   tmux treats such leftover socket files (e.g. after a crash) as stale:
-   it unlinks them and starts a fresh server instead of failing to attach."
+   A leftover socket file like this (e.g. after a crash) should not block
+   attaching: it is unlinked and a fresh server started instead of failing."
   (and (probe-file socket-path)
        (not (handler-case
                 (let ((sock (nerimux/net:connect-to socket-path)))
@@ -98,8 +98,8 @@
 
 (defun %ensure-server-running (session-name)
   "Start a background server for SESSION-NAME if no live socket exists.
-   A stale socket file (present but refusing connections) is unlinked first,
-   matching tmux's crash-recovery behaviour.
+   A stale socket file (present but refusing connections) is unlinked
+   first rather than treated as a live server (see %stale-socket-p).
    Uses sb-ext:run-program with *posix-argv* to spawn a separate process.
    Only enters the polling loop when run-program succeeded.
    Polls every +server-socket-poll-interval-seconds+ for up to

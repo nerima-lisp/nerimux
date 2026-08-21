@@ -2,7 +2,7 @@
 
 ;;;; Fixed SGR constants for the nerimux renderer.
 ;;;;
-;;;; R2.4 deleted the tmux style-string parser (parse-style-string,
+;;;; R2.4 deleted the style-string parser (parse-style-string,
 ;;;; %split-style-tokens, %classify-color-name, %color-name-to-sgr-number,
 ;;;; %color-name-to-cell-color, %window-style-default-colors,
 ;;;; %border-color-sgr, style-to-sgr, %status-sgr-from-style,

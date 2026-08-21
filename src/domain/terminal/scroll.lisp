@@ -91,8 +91,8 @@
   "Scroll the scroll region up one line; the displaced top row is pushed onto
    the scrollback buffer ONLY when the scroll region starts at the top of the
    screen (scroll-top = 0) and we are on the primary screen (not alt-screen).
-   This matches real tmux: partial-region scrolling and alt-screen scrolling
-   never add to the scrollback history.
+   This is the correct scrollback rule: partial-region scrolling and
+   alt-screen scrolling never add to the scrollback history.
 
    Scrollback cap note: the cap is enforced by trim-scroll-history which
    splices off the tail cons of the list, keeping the operation O(limit).
@@ -100,7 +100,7 @@
   (let* ((top    (screen-scroll-top    screen))
          (bottom (screen-scroll-bottom screen)))
     ;; Only the primary screen with a full-top scroll region contributes to
-    ;; the scrollback history (mirrors tmux grid_scroll_history_up logic).
+    ;; the scrollback history (see this function's docstring for why).
     (when (and (zerop top) (null (screen-alt-cells screen)))
       (%push-row-to-scrollback screen top))
     ;; Copy row+1 → row (shift content upward within the scroll region).
@@ -122,7 +122,8 @@
 
 (defun clear-scrollback (screen)
   "Clear SCREEN's scrollback history; the visible grid is left intact.
-   Backs the clear-history command (tmux: C-b : clear-history)."
+   Backs the clear-history command: drops the accumulated scrollback while
+   leaving the visible grid untouched."
   (incf (screen-history-trimmed screen) (length (screen-scrollback screen)))
   (setf (screen-scrollback screen) nil
         (screen-scrollback-wrapped screen) nil
@@ -133,8 +134,8 @@
 (defun trim-below-cursor (screen)
   "resize-pane -T: drop the rows below the cursor and pull rows out of the
    scrollback to refill the screen from the top — the surviving content shifts
-   down so the cursor row becomes the bottom row (tmux's 'trims all lines below
-   the cursor position and moves lines out of the history to replace them').
+   down so the cursor row becomes the bottom row, trimming all lines below the
+   cursor position and pulling replacement lines out of the history.
    No-op when the cursor is already on the bottom row or on the alt screen
    (which has no history)."
   (unless (screen-alt-cells screen)

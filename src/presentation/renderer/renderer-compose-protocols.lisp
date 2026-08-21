@@ -11,7 +11,7 @@
 ;;;; -- were removed on 2026-08-20.  Each emitted a sequence to the outer
 ;;;; terminal on behalf of a caller that no longer exists: the `mouse' option's
 ;;;; side-effect handler went with the config key-table store, and the
-;;;; extended-keys and focus paths went with the tmux keystroke pipeline.  They
+;;;; extended-keys and focus paths went with the prefix-key keystroke pipeline.  They
 ;;;; were exported and unit-tested but called from no production code, so the
 ;;;; tests were the only thing keeping them alive.  Reintroduce them next to a
 ;;;; caller, not on their own.

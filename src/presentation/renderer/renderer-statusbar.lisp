@@ -6,7 +6,7 @@
 ;;;; render-status-bar entry point.  It has no knowledge of session-frame
 ;;;; compositing; that lives in renderer-compose.lisp.
 ;;;;
-;;;; R6.5 replaced the tmux-shaped status bar (session name, whole-session
+;;;; R6.5 replaced the previous status bar (session name, whole-session
 ;;;; window list, clock) with the workspace-scoped contract: attention mark +
 ;;;; repository + worktree + state token on the left, the CURRENT worktree's
 ;;;; window/pane tabs in the middle (not every window in the session — a

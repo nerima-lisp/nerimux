@@ -92,10 +92,11 @@ dropped connection's entry be reclaimed instead of leaking.")
              ((eq (client-conn-mode conn) :command)
               (%handle-client-command-key-payload session conn payload))
              ;; A key the workspace UI does not bind is dropped in :normal mode.
-             ;; It used to fall through to the tmux keystroke pipeline (prefix key
-             ;; + key tables) -- that fallthrough was the only thing making tmux
-             ;; prefix bindings reachable from an attached client.  Typing into a
-             ;; pane is what :input mode is for; a stdin-target still gets fed.
+             ;; It used to fall through to the prefix-key keystroke pipeline
+             ;; (prefix key + key tables) -- that fallthrough was the only
+             ;; thing making prefix bindings reachable from an attached
+             ;; client.  Typing into a pane is what :input mode is for; a
+             ;; stdin-target still gets fed.
              ((eq (client-conn-mode conn) :normal)
               (or (%handle-client-normal-key-payload session conn payload)
                   (%feed-client-stdin-target conn payload)))
@@ -1957,8 +1958,8 @@ preview, or a preview of a different repository."
       ((%handle-client-ui-command session conn cmd target args) nil)
       ;; Anything the workspace UI does not recognize is rejected.  This used to
       ;; fall through to %dispatch-forwarded-command, which ran the name against
-      ;; the tmux command table server-side -- that fallthrough was the only
-      ;; thing making the tmux command surface reachable from the `:` prompt.
+      ;; a server-side command table -- that fallthrough was the only thing
+      ;; making the forwarded-command surface reachable from the `:` prompt.
       (cmd
        (%client-notify conn (format nil "unknown command: ~(~A~)" cmd))
        (%mark-dirty)

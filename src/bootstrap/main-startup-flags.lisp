@@ -1,7 +1,7 @@
 ;;; Global CLI flag definitions.
 ;;;
 ;;; The define-flag-parser macro and the %parse-attach-flags/%parse-new-session-flags
-;;; parsers it generated were removed with the tmux startup modes that used them;
+;;; parsers it generated were removed with the startup modes that used them;
 ;;; attach and server take no flags of their own.  kill (R8.1) is the one
 ;;; exception — its --force is parsed by run-kill itself
 ;;; (main-startup-commands.lisp), not by *cli-app* below, per the next

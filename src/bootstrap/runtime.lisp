@@ -27,7 +27,8 @@
   "Alist mapping session-name (string) to session object for the running server.")
 (defvar *server-marked-pane* nil
   "The single server-wide marked pane (set by mark-pane / select-pane -m).
-   NIL when no pane is marked.  Mirrors tmux's global marked-pane singleton.")
+   NIL when no pane is marked.  A single global slot rather than per-session
+   state, since mark-pane addresses one pane across the whole server.")
 (defun %mark-dirty ()
   "Set the shared redraw flag."
   (setf *dirty* t))

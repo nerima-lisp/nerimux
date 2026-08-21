@@ -45,7 +45,7 @@
 
 ;;; ── Orientation-aware pane extent ──────────────────────────────────────────
 ;;;
-;;; The :v/:h naming is tmux-style:
+;;; The :v/:h naming matches layout.lisp's split-tree orientation keywords:
 ;;;   :v split stacks children vertically → extent measured in ROWS (height)
 ;;;   :h split places children side-by-side → extent measured in COLS (width)
 ;;;

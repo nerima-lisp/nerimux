@@ -42,10 +42,10 @@
 
 (defconstant +default-color+ 256
   "Sentinel colour value meaning \"the terminal default\" (SGR 39 fg / SGR 49 bg).
-   Mirrors tmux's grid_cell fg/bg == 8 (COLOUR_DEFAULT), but placed at 256 — just
-   above the 0-255 palette and without the +true-color-flag+ bit — so it is
-   distinct from palette index 7 (white) and 0 (black).  Cells carrying this value
-   are the only ones window-style / window-active-style may recolour.")
+   Placed at 256 — just above the 0-255 palette and without the
+   +true-color-flag+ bit — so it is distinct from palette index 7 (white)
+   and 0 (black).  Cells carrying this value are the only ones
+   window-style / window-active-style may recolour.")
 
 (defconstant +unicode-replacement-char+ #xFFFD
   "Unicode code point U+FFFD REPLACEMENT CHARACTER.

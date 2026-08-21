@@ -28,8 +28,8 @@
 
 ;;; ── Terminal colour-capability downsampling (cl-tty-kit) ────────────────────
 ;;;
-;;; Real tmux's -2 flag ("force 256-colour") exists because not every outer
-;;; terminal understands 24-bit SGR (38;2;R;G;B).  nerimux always emitted
+;;; A -2 flag ("force 256-colour") exists because not every outer terminal
+;;; understands 24-bit SGR (38;2;R;G;B).  nerimux always emitted
 ;;; true-colour unconditionally; *color-downsample-fn*, set from -2 by
 ;;; %apply-global-cli-invocation (main-startup-flags.lisp), routes true-colour
 ;;; cell values through cl-tty-kit:rgb-to-256 before classification so -2

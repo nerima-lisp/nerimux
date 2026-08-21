@@ -4,7 +4,7 @@
 ;;;; multi-argument commands such as send-keys (and, in future,
 ;;;; display-message / if-shell).
 ;;;;
-;;;; tmux command arguments are split shell-style: whitespace separates arguments,
+;;;; Command arguments are split shell-style: whitespace separates arguments,
 ;;;; '...' is a literal span, "..." allows backslash escapes, and a bare \\ escapes
 ;;;; the next character.  Adjacent spans join into one argument (foo"bar baz" →
 ;;;; foobar baz).
@@ -48,7 +48,7 @@
     (if (< index length) (1+ index) index))) ; skip closing quote when present
 
 (defun %argument-token-matcher (source index)
-  "cl-parser-kit token-rule matcher for one tmux-style argument: a maximal run
+  "cl-parser-kit token-rule matcher for one shell-style argument: a maximal run
    of plain characters, \\-escaped characters, and '...'/\"...\" spans, joined
    with no separator (foo\"bar baz\" → one token \"foobar baz\").  Stops before
    whitespace or the end of SOURCE.  Returns (values ok consumed-length text

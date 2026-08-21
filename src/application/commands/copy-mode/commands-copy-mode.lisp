@@ -117,7 +117,7 @@
         (screen-copy-rect-select-p    screen) nil
         (screen-dirty-p               screen) t))
 
-;;; copy-mode-clear-selection (tmux clear-selection) was removed: its only two
+;;; copy-mode-clear-selection (the clear-selection copy-mode command) was removed: its only two
 ;;; callers, copy-mode-copy-selection-no-cancel and the :clear finish branch of
 ;;; define-copy-pipe-commands (commands-copy-mode-clip.lisp), were themselves
 ;;; dead and were deleted first; re-grepped for zero remaining callers before

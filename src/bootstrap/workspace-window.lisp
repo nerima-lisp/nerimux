@@ -2,9 +2,10 @@
 
 ;;;; Window creation for the workspace UI.
 ;;;;
-;;;; One entry point: open a window for a worktree. The parameters a tmux
-;;;; `new-window` carried -- at-index, after-current, before-current, detach --
-;;;; went with the command table that was the only way to supply them.
+;;;; One entry point: open a window for a worktree. The parameters a
+;;;; `new-window` command once carried -- at-index, after-current,
+;;;; before-current, detach -- went with the command table that was the
+;;;; only way to supply them.
 
 ;;; +status-line-rows+ (the status line is one row at the bottom, always --
 ;;; requirements 1.4) is defined in server.lisp, which loads before this file

@@ -25,16 +25,16 @@
 
 (defun %socket-tmp-base ()
   "The socket base directory: $TMPDIR, else /tmp (§1.4 — no -L/-S override,
-   and no tmux-derived temp-dir env var: R1.17 removed the CLI flags that
-   could reach an override, and R2.7 drops that env var alongside them)."
+   and no legacy temp-dir env var override: R1.17 removed the CLI flags
+   that could reach one, and R2.7 dropped the env var alongside them)."
   (let ((tmpdir (sb-ext:posix-getenv "TMPDIR")))
     (string-right-trim
      "/"
      (if (and tmpdir (plusp (length tmpdir))) tmpdir "/tmp"))))
 
 (defun %socket-directory ()
-  "Per-UID socket directory <base>/nerimux-<uid> (tmux's /tmp/tmux-UID/),
-   created mode 0700 when possible.  Returns the directory string without a
+  "Per-UID socket directory <base>/nerimux-<uid>, created mode 0700 when
+   possible.  Returns the directory string without a
    trailing slash.  Creation/chmod failures are ignored — socket binding will
    surface a real permission problem with a better error."
   (require :sb-posix)

@@ -85,8 +85,9 @@
    ((setf (screen-autowrap screen) nil)))
 
   ;; Mode 1004 — focus event reporting (?1004h / ?1004l)
-  ;; vim, neovim, and tmux-in-tmux enable this to learn when they gain/lose the
-  ;; terminal's focus; the report bytes are sent by focus-event-report below.
+  ;; vim, neovim, and a nested terminal multiplexer enable this to learn when
+  ;; they gain/lose the terminal's focus; the report bytes are sent by
+  ;; focus-event-report below.
   (1004
    ;; Set (?1004h): enable focus event reporting
    ((setf (screen-focus-events screen) t))
@@ -95,7 +96,8 @@
 
   ;; Mode 1049 — alternate screen (?1049h enters, ?1049l exits)
   ;; Equivalent to ?1047h + ?1048h (DECSC): saves full cursor state (SGR attrs,
-  ;; charset, origin-mode) in addition to the grid swap, matching tmux and xterm.
+  ;; charset, origin-mode) in addition to the grid swap -- the same combined
+  ;; save+swap that alt-screen-using apps expect.
   (1049
    ;; Set: save full cursor state (DECSC) + grid, replace with a fresh blank grid.
    ((enter-alt-screen screen :save-cursor-p t))

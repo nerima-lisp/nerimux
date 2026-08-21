@@ -8,12 +8,15 @@
 
 ;;; ESC P introduces a DCS; collect bytes until ESC \ (ST).
 ;;;
-;;; The tmux passthrough sequence is \ePtmux;<payload>\e\\ where every ESC in
-;;; the inner <payload> is DOUBLED (\e\e).  When the payload begins with the
-;;; bytes "tmux;", we accumulate the rest, un-double the ESCs, and push the
-;;; inner sequence onto the screen's passthrough-queue for the renderer to emit
-;;; to the OUTER terminal (tmux-in-tmux, iTerm2/kitty inline images).  Any other
-;;; DCS (e.g. Sixel) is consumed and discarded as before.
+;;; A DCS passthrough sequence is \eP tmux;<payload> \e\\ where every ESC in
+;;; the inner <payload> is DOUBLED (\e\e); "tmux;" is the literal ASCII tag on
+;;; the wire marking a DCS payload as passthrough rather than raw DCS data.
+;;; When the payload begins with those bytes, we accumulate the rest, un-double
+;;; the ESCs, and push the inner sequence onto the screen's passthrough-queue
+;;; for the renderer to emit to the OUTER terminal -- this is how a nested
+;;; multiplexer or an image protocol (iTerm2/kitty inline images) reaches past
+;;; an attached client to the real terminal.  Any other DCS (e.g. Sixel) is
+;;; consumed and discarded as before.
 ;;;
 ;;; make-dcs-st-k is the bridge state waiting for the backslash of ESC \ after
 ;;; an ESC byte seen inside a DCS payload.  This is symmetric with make-osc-st-k.
@@ -72,7 +75,7 @@
    (true-colour) and colors=256 — letting apps that probe via XTGETTCAP enable
    true-colour output."
   (cond
-    ((string= capname "Tc")     :boolean)   ; tmux/xterm true-colour flag
+    ((string= capname "Tc")     :boolean)   ; tmux/xterm's Tc capability name -- the flag many apps probe for true-colour support
     ((string= capname "RGB")    :boolean)   ; direct-colour flag
     ((string= capname "colors") "256")
     (t nil)))
@@ -129,7 +132,7 @@
 
 (defun %finish-dcs (screen buffer)
   "Process a completed DCS payload in BUFFER (ESCs already un-doubled).
-   - tmux passthrough (\"tmux;<inner>\") → push <inner> onto the passthrough-queue.
+   - DCS passthrough (\"tmux;<inner>\")  → push <inner> onto the passthrough-queue.
    - XTGETTCAP (\"+q<hexcaps>\")         → enqueue capability replies (Tc/RGB/colors).
    - DECRQSS (\"$q<setting>\")           → enqueue a status-string reply (SGR/region/cursor).
    - anything else (e.g. Sixel)          → discard."
@@ -179,7 +182,7 @@
       (if (= byte #x1B)
           ;; Possible ESC \ ST or doubled ESC — hand off to the bridge state.
           (make-dcs-st-k buf)
-          ;; Accumulate payload byte (so the tmux; prefix + inner can be parsed).
+          ;; Accumulate payload byte (so the passthrough tag + inner can be parsed).
           (progn (%dcs-accumulate buf byte)
                  (make-dcs-k buf))))))
 

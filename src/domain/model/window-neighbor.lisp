@@ -17,10 +17,11 @@
 
 (defconstant +neighbor-edge-tolerance+ 2
   "Maximum pixel/cell distance between two pane edges for them to be considered
-   'touching' (adjacent neighbors).  The value 2 accounts for the 1-cell separator
-   column/row that tmux places between panes: the gap between touching edges is
-   exactly 1 (separator occupies a cell between them), so a tolerance of 2 accepts
-   both 0 (direct adjacency) and 1 (one separator cell gap).")
+   'touching' (adjacent neighbors).  The value 2 accounts for the 1-cell
+   separator column/row nerimux places between panes: the gap between
+   touching edges is exactly 1 (separator occupies a cell between them), so
+   a tolerance of 2 accepts both 0 (direct adjacency) and 1 (one separator
+   cell gap).")
 
 (defun %ranges-overlap-p (start1 len1 start2 len2)
   "T when [START1, START1+LEN1) and [START2, START2+LEN2) share at least one integer."

@@ -16,17 +16,17 @@
   (last-active 0   :type integer)   ; universal-time of last access; updated on touch
   (created (get-universal-time) :type integer) ; universal-time at construction (#{session_created})
   (window-stack nil :type list)     ; windows in MRU order, current first (#{window_stack_index})
-  ;; Per-session winlink index overrides: window -> index in THIS session.
-  ;; tmux winlinks let one window carry different indexes in different
-  ;; sessions; the override applies only where link-window placed it at a
-  ;; non-default slot (absent = the window's own id).
+  ;; Per-session window index overrides: window -> index in THIS session.
+  ;; One window can carry different indexes in different sessions; the
+  ;; override applies only where link-window placed it at a non-default
+  ;; slot (absent = the window's own id).
   (window-index-map (make-hash-table :test #'eq) :type hash-table)
   (clients     nil :type list)      ; list of connected client descriptors
   ;; NIL or string: session working dir (new-session/attach-session -c)
   (start-directory nil)
   (environment (make-hash-table :test #'equal))
   (environment-unsets nil :type list)
-  ;; Names marked hidden via set-environment -h (tmux ENVIRON_HIDDEN):
+  ;; Names marked hidden via set-environment -h:
   ;; excluded from plain show-environment and from child-process environments.
   (environment-hidden nil :type list))
 
@@ -73,15 +73,14 @@
 
 (defun %next-window-id (session &optional (base-index 0))
   "Return the smallest integer >= BASE-INDEX not already used by any window in SESSION.
-   BASE-INDEX defaults to 0 (tmux default)."
+   BASE-INDEX defaults to 0."
   (let ((used (mapcar #'window-id (session-windows session))))
     (loop for i from base-index
           unless (member i used) return i)))
 
 (defun session-window-index (session window)
-  "WINDOW's index within SESSION (tmux winlink index): the per-session
-   override when link-window placed it at a different slot here, else the
-   window's own id."
+  "WINDOW's index within SESSION: the per-session override when
+   link-window placed it at a different slot here, else the window's own id."
   (or (and session
            (gethash window (session-window-index-map session)))
       (window-id window)))
@@ -95,8 +94,8 @@
   index)
 
 (defun session-windows-in-index-order (session)
-  "SESSION's windows sorted by their per-session winlink index — the order
-   tmux displays winlinks (status bar, list-windows).  Identical to the plain
+  "SESSION's windows sorted by their per-session window index — the order
+   used for listing windows (status bar, list-windows).  Identical to the plain
    list when no window carries an index override."
   (sort (copy-list (session-windows session)) #'<
         :key (lambda (w) (session-window-index session w))))

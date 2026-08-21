@@ -7,7 +7,7 @@
 
 ;;; ── SGR-aware length / truncation (inline #[attr] support) ───────────────────
 ;;;
-;;; tmux status strings may embed CSI SGR sequences — both from window-status
+;;; Status strings may embed CSI SGR sequences — both from window-status
 ;;; styling and from inline #[fg=…] blocks (expanded below).  Those sequences are
 ;;; zero-width on screen, so gap math and width clamping must count VISIBLE cells,
 ;;; not raw characters.  For escape-free strings these reduce exactly to
@@ -76,7 +76,7 @@
   "SGR escape string for one inline #[BODY] status block: always resets to
    BASE-SGR (reset + base attrs), regardless of BODY.
    Previously an empty / \"default\" / \"none\" BODY reset to BASE-SGR while
-   any other BODY was parsed as a tmux style string (e.g. \"fg=green,bold\")
+   any other BODY was parsed as a style string (e.g. \"fg=green,bold\")
    via %status-sgr-from-style, which R2.4 deleted along with the rest of the
    style-string parser.  A non-default/none/empty BODY can only occur in
    live data now (a window/session name that happens to contain literal
@@ -88,7 +88,7 @@
   (format nil "~C[0;~Am" +esc+ base-sgr))
 
 (defun %status-expand-style-blocks (str base-sgr)
-  "Replace tmux inline #[…] style blocks in STR with CSI SGR escape sequences.
+  "Replace inline #[…] style blocks in STR with CSI SGR escape sequences.
    #[fg=green,bold] → ESC[1;32m ; #[default] → reset to BASE-SGR.  Returns STR
    unchanged when it contains no #[ block, so default/format paths are untouched."
   (if (search "#[" str)
@@ -135,8 +135,8 @@
 
 ;;; ── #[align=…] regions + status-format[0] template path ─────────────────────
 ;;;
-;;; tmux's status line is a single format whose #[align=left|centre|right] blocks
-;;; divide it into three regions positioned within the terminal width.  nerimux
+;;; A status line format can be a single string whose #[align=left|centre|right]
+;;; blocks divide it into three regions positioned within the terminal width.  nerimux
 ;;; normally renders the bar procedurally (status-left + window-list + status-
 ;;; right); when status-format[0] is SET it instead expands that template and
 ;;; composes the regions here.  The procedural default path is unchanged.

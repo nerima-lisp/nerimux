@@ -52,7 +52,8 @@
   (alt-cells nil)                           ; saved normal-screen cell grid, or nil
   (alt-cursor-x 0 :type fixnum)            ; cursor column saved on alt-screen entry
   (alt-cursor-y 0 :type fixnum)            ; cursor row saved on alt-screen entry
-  ;; DECSC/DECRC saved state, or NIL when nothing saved.  Mirrors tmux input_save_state:
+  ;; DECSC/DECRC saved state, or NIL when nothing saved.  Full field list
+  ;; (see save-cursor):
   ;; (cursor-x cursor-y fg bg attrs attrs2 ul-color g0-charset g1-charset
   ;;  active-g charset origin-mode)
   (saved-cursor nil :type list)
@@ -85,7 +86,7 @@
   ;; copy mode.  Set by `copy-mode -e`; cleared on copy-mode entry/exit.
   (copy-exit-on-bottom nil :type boolean)
   ;; copy-mode entered by mouse: suppress gutter line numbers while copy mode
-  ;; was opened via wheel/click, matching tmux's mouse-enter behavior.
+  ;; was opened via wheel/click rather than a key press.
   (copy-mode-entered-by-mouse-p nil :type boolean)
   ;; Last printed character — used by CSI REP (repeat preceding char, final byte 'b').
   ;; NIL until the first character has been written to the screen.
@@ -165,9 +166,10 @@
   ;; this and writes the bytes to the master fd.  A list is used as a simple
   ;; FIFO: new entries are pushed to the front (nreverse to drain in order).
   (response-queue nil :type list)
-  ;; Passthrough buffer: a list of strings the pane emitted via the tmux DCS
+  ;; Passthrough buffer: a list of strings the pane emitted via the DCS
   ;; passthrough sequence (\ePtmux;...\e\\) for the OUTER terminal (not the PTY).
-  ;; Used for tmux-in-tmux and image protocols (iTerm2 \e]1337, kitty graphics).
+  ;; Used for nested-multiplexer forwarding and image protocols (iTerm2 \e]1337,
+  ;; kitty graphics).
   ;; The renderer drains this and writes to the outer terminal when the
   ;; allow-passthrough option is enabled.  FIFO: push front, nreverse to drain.
   (passthrough-queue nil :type list)
@@ -204,8 +206,7 @@
   ;; OSC 4 / OSC 104 custom palette overrides.  NIL means "no overrides — use the
   ;; built-in xterm 256-colour palette".  Otherwise a lazily-allocated simple-vector
   ;; of 256 entries; each entry is an 0xRRGGBB integer override or NIL (use built-in).
-  ;; Mirrors tmux's per-pane colour_palette override array (input_osc_4 /
-  ;; colour_palette_set); OSC 104 clears entries back to NIL.
+  ;; OSC 4 sets one entry at a time; OSC 104 clears entries back to NIL.
   (palette-overrides nil :type (or null simple-vector))
   ;; Per-row line-wrap flags (a lazily-created hash-table row→T, or NIL): a row is
   ;; marked when an autowrap actually carries its line onto the next row, so

@@ -6,11 +6,13 @@
 ;;; pane; every internal node splits its rectangle into two children along one
 ;;; axis at a fractional ratio.  This lets a split halve ONLY the active pane's
 ;;; rectangle and supports arbitrary nested/mixed layouts (a pane split top/
-;;; bottom, one half then split left/right, …), matching real tmux.
+;;; bottom, one half then split left/right, …).
 ;;;
-;;; Orientations use tmux's -v/-h naming so the keywords are not inverted:
-;;;   :v  — top/bottom split  (children stacked vertically;  tmux split-window -v / C-b ")
-;;;   :h  — left/right split   (children side by side;        tmux split-window -h / C-b %)
+;;; Orientations use -v/-h naming so the keywords are not inverted:
+;;;   :v  — top/bottom split  (children stacked vertically; the divider runs
+;;;         horizontally)
+;;;   :h  — left/right split  (children side by side; the divider runs
+;;;         vertically)
 
 (defconstant +pane-min-width+  2
   "Smallest interior width (columns) a pane may occupy.")

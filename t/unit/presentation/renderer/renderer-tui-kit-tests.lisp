@@ -41,6 +41,14 @@
       (expect (search "hello" output))
       (expect (search (string (code-char 27)) output))))
 
+  ;; R6.3 collapse-by-default: the tree's default state shows only
+  ;; organization rows (see renderer-workspace-tree-tests.lisp for the direct
+  ;; unit coverage of that contract), so this widget-level smoke test must
+  ;; pass EXPANDED-NODE-IDS with the organization and repository rows marked
+  ;; expanded to see the worktree's branch label at all -- otherwise this
+  ;; would silently stop testing the tree widget's worktree rendering the
+  ;; moment collapse-by-default shipped, while still nominally passing on
+  ;; the header text alone.
   (it "renders the workspace hierarchy through the tree widget"
     (let* ((worktree
              (nerimux/model:make-worktree
@@ -59,15 +67,19 @@
               :host "github.com"
               :name "team"
               :repositories (list repository)))
-           (output
-             (nerimux/renderer:render-workspace-overview-to-tui-string
-              (list organization)
-              12
-              100
-              :selected-tree-object worktree)))
-      (expect (search "org" output))
-      (expect (search "repo" output))
-      (expect (search "feature/tree" output))))
+           (expanded (make-hash-table :test #'equal)))
+      (setf (gethash (list :organization "github.com/team") expanded) t)
+      (setf (gethash (list :repository "repo-tree") expanded) t)
+      (let ((output
+              (nerimux/renderer:render-workspace-overview-to-tui-string
+               (list organization)
+               12
+               100
+               :selected-tree-object worktree
+               :expanded-node-ids expanded)))
+        (expect (search "org" output))
+        (expect (search "repo" output))
+        (expect (search "feature/tree" output)))))
 
   (it "renders the picker through input, list, form, and modal widgets"
     (let* ((worktree

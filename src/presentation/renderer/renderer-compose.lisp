@@ -181,7 +181,7 @@
     (when (eq mode :command)
       (%render-client-command-line buffer terminal-rows terminal-cols
                                    command-buffer))
-    ;; allow-passthrough: emit any DCS-passthrough sequences (images, nested tmux).
+    ;; allow-passthrough: emit any DCS-passthrough sequences (images, a nested multiplexer).
     (when panes (%render-passthrough buffer panes))
     (when panes (%render-clipboard buffer panes))
     (%render-bell-and-cursor buffer active-pane)

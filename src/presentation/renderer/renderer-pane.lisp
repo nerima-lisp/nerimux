@@ -132,7 +132,8 @@
   "Substitute the pane's window-style default colours DEF-FG / DEF-BG only for
    cells whose colour is the terminal-default sentinel (+default-color+).  Cells
    carrying an explicit palette index (including 7=white / 0=black) or true-colour
-   are left untouched, matching tmux's COLOUR_DEFAULT-gated window-style recolour."
+   are left untouched -- only cells still carrying the terminal-default sentinel
+   are eligible for window-style recolour."
   (let ((raw-fg (cell-fg cell))
         (raw-bg (cell-bg cell)))
     (values (if (and def-fg (= raw-fg nerimux/terminal/types:+default-color+)) def-fg raw-fg)

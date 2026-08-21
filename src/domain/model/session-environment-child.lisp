@@ -9,13 +9,12 @@
 (defvar *suppress-update-environment* nil
   "When non-NIL, session-child-environment SKIPS applying the update-environment
    variables (merge step 2).  Bound to T around new-session -E so the created
-   session — including its initial pane — does not pick up update-environment,
-   matching tmux's `new-session -E`.")
+   session — including its initial pane — does not pick up update-environment.")
 
 (defun %apply-session-overlay (session table)
   "Merge SESSION's environment overlay into TABLE (mutates TABLE in place).
    Applies the set table first, then removes explicitly unset names and any
-   hidden names (tmux: hidden variables are not passed to new processes).
+   hidden names (hidden variables are not passed to new processes).
    When SESSION is NIL this is a no-op (bootstrap / geometry-only callers)."
   (when session
     (maphash (lambda (name value)

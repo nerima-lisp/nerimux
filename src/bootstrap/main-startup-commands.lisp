@@ -1,15 +1,15 @@
 ;;; Startup command handlers.
 ;;;
 ;;; The entry surface is `attach`, `server`, `kill`, and the version/usage
-;;; flags (1.6).  Every other startup mode belonged to the tmux compatibility
-;;; layer: the command-forwarding modes (new-session, has-session,
-;;; kill-server, list-*, show-*, display-message, source-file) sent a command
-;;; name over the socket to the server's tmux command table, and
-;;; attach-session existed for its flag parsing.  They were removed with that
-;;; layer; main-startup.lisp rejects an unrecognized word rather than
-;;; forwarding it.  `kill` (R8.1) is new, not revived: it talks to the
-;;; server over the same +msg-command+ channel worktree commands already
-;;; use (server-multi-dispatch.lisp), not the removed tmux command table.
+;;; flags (1.6).  Every other startup mode belonged to the removed
+;;; command-forwarding layer: modes such as new-session, has-session,
+;;; kill-server, list-*, show-*, display-message, and source-file sent a
+;;; command name over the socket to a server-side command table, and
+;;; attach-session existed only for their flag parsing.  They were removed
+;;; along with that table; main-startup.lisp rejects an unrecognized word
+;;; rather than forwarding it.  `kill` (R8.1) is new, not revived: it talks
+;;; to the server over the same +msg-command+ channel worktree commands
+;;; already use (server-multi-dispatch.lisp), not that removed table.
 ;;;
 ;;; main-startup.lisp keeps argv parsing and dispatch.
 
@@ -37,7 +37,7 @@
       (%attach-session name)))
 
 (defun run-version (raw-args)
-  "Print the nerimux version to stdout and exit 0 (the tmux -V behaviour)."
+  "Print the nerimux version to stdout and exit 0."
   (declare (ignore raw-args))
   (format t "nerimux ~A~%" (nerimux/version:version-string))
   (sb-ext:exit :code 0))
@@ -120,8 +120,8 @@
         ;; kill (R8.1) is :raw-args-p so run-kill sees --force itself; it is
         ;; kill's own argument (1.6), not parsed by *cli-app*'s global flags.
         (%startup-mode "kill" run-kill :raw-args-p t)
-        ;; -V: print the version and exit (tmux -V). --version/-h/--help are
-        ;; nerimux conveniences; tmux only prints usage on a bad flag.
+        ;; -V: print the version and exit. --version/-h/--help are
+        ;; nerimux's own conventions for the same flags.
         (%startup-mode "-V" run-version :raw-args-p t)
         (%startup-mode "--version" run-version :raw-args-p t)
         (%startup-mode "-h" run-usage :raw-args-p t)

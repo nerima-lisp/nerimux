@@ -1,6 +1,6 @@
 (in-package #:nerimux/renderer)
 
-;;;; This file held the tmux style-string parser's declarative dispatch
+;;;; This file held the style-string parser's declarative dispatch
 ;;;; tables (style tokens, SGR attribute codes, colour names).  R2.4 deleted
 ;;;; the parser: every style this renderer applies is now a fixed SGR
 ;;;; constant declared next to the code that emits it (renderer-style.lisp,

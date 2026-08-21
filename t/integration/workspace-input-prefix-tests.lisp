@@ -32,9 +32,9 @@
         ;; than silently doing nothing or crashing -- proving j/k are wired,
         ;; not merely absent.
         (nerimux::%handle-multi-key-message s conn #(107)) ; k
-        (expect (string= "no pane up" (first (nerimux::client-conn-message-log conn))))
+        (expect (string= "no pane UP" (first (nerimux::client-conn-message-log conn))))
         (nerimux::%handle-multi-key-message s conn #(106)) ; j
-        (expect (string= "no pane down" (first (nerimux::client-conn-message-log conn))))
+        (expect (string= "no pane DOWN" (first (nerimux::client-conn-message-log conn))))
         (expect (eq left (nerimux::client-conn-focus conn)) "k/j did not move focus"))))
 
   ;; R4.1: an arrow-escape sequence sent the way a real client actually sends

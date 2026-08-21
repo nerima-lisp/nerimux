@@ -77,10 +77,11 @@
 
    This used to have two other branches.  A recognized-looking command word was
    forwarded to a running server as a command client, and a bare `nerimux` with
-   no arguments started the standalone in-process multiplexer.  Both belonged to
-   the tmux compatibility surface: the forwarding branch is what actually made
-   `nerimux list-sessions` work, independently of the *startup-modes* table, so
-   removing the table entries alone would not have removed the capability.
+   no arguments started the standalone in-process multiplexer.  Both belonged
+   to the removed command-forwarding surface: the forwarding branch is what
+   actually made `nerimux list-sessions` work, independently of the
+   *startup-modes* table, so removing the table entries alone would not have
+   removed the capability.
    The entry surface is now `attach`, `server`, and `kill` (1.6, R8.1), and
    anything else — including no argument at all — is rejected rather than
    guessed at."

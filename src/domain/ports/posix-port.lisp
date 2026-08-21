@@ -15,7 +15,7 @@
 
 ;;; I/O tuning for the descriptor-level loops.
 ;;;
-;;; These were defined in nerimux/config, next to the .tmux.conf loader, which
+;;; These were defined in nerimux/config, next to the config-file loader, which
 ;;; made a PTY reader thread and a select loop depend upward on the application
 ;;; layer for three numbers no config file could ever change. They are properties
 ;;; of the read/select boundary, so they live at that boundary now.
