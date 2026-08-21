@@ -3,8 +3,8 @@
 ;;;; Session-frame side effects for the nerimux renderer.
 ;;;;
 ;;;; This file owns the post-layout output effects: bell emission, cursor
-;;;; restoration, background bell relay, and draining passthrough / clipboard
-;;;; queues into the final frame stream.
+;;;; restoration, and draining passthrough / clipboard queues into the final
+;;;; frame stream.
 
 ;;; ── Full-session render effects ─────────────────────────────────────────────
 
@@ -30,11 +30,8 @@
 
 (defun %render-bell-and-cursor (buffer active-pane)
   "Emit a pending BEL from ACTIVE-PANE (if any) and restore cursor visibility.
-   bell-action 'none' swallows all BELs; 'other' skips the active pane (handled
-   by %render-background-bells instead); 'any'/'current' relay the active pane bell.
-   The alert-bell hook for the CURRENT window fires here — the consume gives
-   once-per-bell semantics; non-current windows fire from the reader-thread
-   alert path on the sticky-flag transition instead."
+   bell-action 'none' swallows all BELs; 'other' skips the active pane;
+   'any'/'current' relay the active pane bell."
   (when active-pane
     (let* ((bell-pending (screen-consume-bell (pane-screen active-pane)))
            (bell-action  (or (nerimux/options:get-option "bell-action") "any"))
@@ -42,34 +39,12 @@
            (relay-bell   (and bell-pending
                               (not (member bell-action '("none" "other") :test #'string=)))))
       (when relay-bell
-        (%emit-bell buffer visual-bell)
-        ;; tmux notifies alert-bell for the current window when bell-action
-        ;; applies to it (any/current) — the same condition as the relay.
-        (nerimux/hooks:run-hooks nerimux/hooks:+hook-alert-bell+
-                                 (pane-window active-pane)))))
+        (%emit-bell buffer visual-bell))))
   (when (or (null active-pane)
             (screen-cursor-visible (pane-screen active-pane)))
     (cursor-visible buffer)
     (when active-pane
       (set-cursor-shape buffer (screen-cursor-shape (pane-screen active-pane))))))
-
-(defun %render-background-bells (buffer session active-window)
-  "Drain and relay BEL characters from all non-active windows.
-   bell-action 'any': relay bells from every non-active window pane.
-   bell-action 'other': same (non-active is by definition 'other').
-   bell-action 'current'/'none': no relay from background windows."
-  (let* ((bell-action  (or (nerimux/options:get-option "bell-action") "any"))
-         (visual-bell  (nerimux/options:get-option "visual-bell"))
-         (relay-p      (member bell-action '("any" "other") :test #'string=)))
-    ;; Always consume pending bells (a bell suppressed by bell-action must not
-    ;; ring later when its window becomes active); relay only when permitted.
-    (dolist (win (session-windows session))
-      (unless (eq win active-window)
-        (dolist (pane (window-panes win))
-          (when (and (pane-screen pane)
-                     (screen-consume-bell (pane-screen pane))
-                     relay-p)
-            (%emit-bell buffer visual-bell)))))))
 
 (defun %drain-screen-queue (buffer panes queue-reader queue-writer option default allowed)
   "Drain queue contents for each pane into BUFFER when OPTION permits emission.

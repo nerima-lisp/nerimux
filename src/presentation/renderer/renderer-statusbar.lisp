@@ -7,7 +7,7 @@
 ;;;; session-frame compositing; that lives in renderer-compose.lisp.
 ;;;;
 ;;;; Load order (declared in nerimux.asd): renderer-format → renderer-style
-;;;;             → renderer-statusbar-layout → renderer-pane → renderer-overlay
+;;;;             → renderer-statusbar-layout → renderer-pane
 ;;;;             → renderer-statusbar → renderer-compose
 
 ;;; ── Alert-priority style table ─────────────────────────────────────────────
@@ -39,12 +39,6 @@
   "Pane-number string for the status bar, or empty string when ACTIVE-PANE is NIL."
   (if active-pane (format nil " #~D" (pane-id active-pane)) ""))
 
-(defun %window-has-bell-p (window)
-  "T when WINDOW's sticky bell flag is set and monitor-bell is on for it.
-   Mirrors the #{window_bell_flag} computation in format-context.lisp."
-  (and (nerimux/options:get-option-for-context "monitor-bell" :window window)
-       (window-bell-flag window)))
-
 (defun %window-option (window name)
   "Read NAME from WINDOW's option context."
   (nerimux/options:get-option-for-context name :window window))
@@ -52,18 +46,14 @@
 (defun %window-status-style (session window active-p)
   "Resolve the status-bar style string for WINDOW's tab.
    Active window → window-status-current-style.  For a non-active window, the
-   highest-priority non-empty alert style wins: bell > activity > last
-   (previously active) > the normal window-status-style.  Every option is read
-   per-window via get-option-for-context, so alert styles can be set per-window."
+   last (previously active) window's style wins over the normal
+   window-status-style.  Both options are read per-window via
+   get-option-for-context, so either can be set per-window."
   (if active-p
       (%window-option window "window-status-current-style")
-      (let ((bell-style     (%window-option window "window-status-bell-style"))
-            (activity-style (%window-option window "window-status-activity-style"))
-            (last-style     (%window-option window "window-status-last-style"))
-            (normal-style   (%window-option window "window-status-style")))
+      (let ((last-style   (%window-option window "window-status-last-style"))
+            (normal-style (%window-option window "window-status-style")))
         (define-window-alert-priority-table normal-style
-          ((%window-has-bell-p window)              bell-style)
-          ((window-activity-flag window)            activity-style)
           ((eq window (session-last-window session)) last-style)))))
 
 (defun %render-window-tab (session window active-window window-stream)
@@ -75,7 +65,7 @@
          (fmt      (nerimux/options:get-option-for-context
                     (if active-p "window-status-current-format" "window-status-format")
                     :window window))
-         ;; Style honors alert state (bell/activity/last) for non-active windows.
+         ;; Style honors the last-active window for non-active windows.
          (style    (%window-status-style session window active-p))
          (label    (nerimux/format:expand-format fmt context)))
     ;; Apply the per-window style, then expand any inline #[attr] blocks
@@ -98,14 +88,12 @@
 (defun %status-window-list-styled (session active-window)
   "Window-tab string with current-style applied to the active window entry.
    Uses window-status-format, window-status-current-format, window-status-separator,
-   window-status-current-style, window-status-style, and the alert-state styles
-   (window-status-{bell,activity,last}-style).
+   window-status-current-style, window-status-style, and window-status-last-style.
    The format/style options are resolved PER WINDOW via get-option-for-context
    (pane→window→global→default), so e.g. `set-window-option -t :2
    window-status-current-style fg=red` styles only that window's tab.  A
-   non-active window with a pending bell, unseen activity, or that is the last
-   (previously active) window picks up the corresponding alert style
-   (bell > activity > last > normal).
+   non-active window that is the last (previously active) window picks up
+   window-status-last-style instead of the normal window-status-style.
    window-status-separator stays global — it sits between windows and has no
    single owning window."
   (let ((separator (nerimux/options:get-option "window-status-separator" " ")))
@@ -117,14 +105,12 @@
           (%render-window-tab session window active-window window-stream))))))
 
 (defun %status-left-text (session active-window active-pane)
-  "Left portion of the status bar: prompt text or session/window/pane info.
+  "Left portion of the status bar: session/window/pane info.
    Uses %status-window-list-styled so per-window style options take effect."
-  (if (prompt-active-p)
-      (prompt-text)
-      (format nil " ~A~A~A"
-              (session-name session)
-              (%status-window-list-styled session active-window)
-              (%status-pane-indicator active-pane))))
+  (format nil " ~A~A~A"
+          (session-name session)
+          (%status-window-list-styled session active-window)
+          (%status-pane-indicator active-pane)))
 
 (defun %render-status-line (stream status-row sgr-code line)
   "Emit a fully-composed status LINE at STATUS-ROW, wrapped in SGR-CODE, then reset."
@@ -142,16 +128,14 @@
 
 (defun %status-bar-default-segments (session context sgr-code)
   "Return the fallback status-bar segments and justification mode.
-   The left segment includes either prompt text or the session/window/pane
-   summary; the right segment uses status-right or the default clock string."
+   The left segment is the session/window/pane summary; the right segment
+   uses status-right or the default clock string."
   (let* ((active-window (session-active-window session))
          (active-pane   (session-active-pane session))
          (left-raw      (%status-expand-style-blocks
-                         (if (prompt-active-p)
-                             (prompt-text)
-                             (%status-format-or-default
-                              "status-left" context
-                              (lambda () (%status-left-text session active-window active-pane))))
+                         (%status-format-or-default
+                          "status-left" context
+                          (lambda () (%status-left-text session active-window active-pane)))
                          sgr-code))
          (right-raw   (%status-expand-style-blocks
                        (%status-format-or-default
@@ -195,10 +179,10 @@
                        :client-height (max 0 (- terminal-rows 1))))
          (sgr-code    (%status-sgr-from-style (%effective-status-style)))
          (status-fmt0 (nerimux/options:get-option "status-format[0]" "")))
-    ;; status-format[0] template path: when SET (and no prompt is active) the bar
-    ;; is rendered from that single format, with #[align=…] regions positioned by
+    ;; status-format[0] template path: when SET the bar is rendered from that
+    ;; single format, with #[align=…] regions positioned by
     ;; %compose-aligned-line and #{W:…}/#{…} expanded.  Procedural path follows.
-    (if (and (stringp status-fmt0) (plusp (length status-fmt0)) (not (prompt-active-p)))
+    (if (and (stringp status-fmt0) (plusp (length status-fmt0)))
         (%render-status-bar-format0 stream status-row sgr-code status-fmt0 context terminal-cols)
         (%render-status-bar-default stream session status-row sgr-code context terminal-cols))))
 

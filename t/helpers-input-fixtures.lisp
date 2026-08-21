@@ -2,21 +2,6 @@
 
 ;;;; Prompt, overlay, input, and format-context fixtures.
 
-(defmacro with-clean-prompt (&body body)
-  "Dynamically bind *prompt* to NIL and nerimux::*dirty* to NIL so prompt
-   state never leaks between tests and dirty flags start clean."
-  `(let ((*prompt* nil) (nerimux::*dirty* nil)) ,@body))
-
-(defmacro with-clean-overlay (&body body)
-  "Dynamically bind the three overlay specials (*overlay*, *overlay-scroll-offset*,
-   *overlay-shown-at*) to their inactive defaults so overlay state never leaks
-   between tests.  Mirrors with-clean-prompt for the sibling overlay/popup/menu
-   test file."
-  `(let ((*overlay* nil)
-         (*overlay-scroll-offset* 0)
-         (*overlay-shown-at* 0))
-     ,@body))
-
 (defmacro with-empty-registry (&body body)
   "Bind *server-sessions* to NIL for the duration of BODY.
    Thin wrapper over `with-registered-sessions` for the empty-registry case."

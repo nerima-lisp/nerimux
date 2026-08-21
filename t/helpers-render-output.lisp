@@ -77,16 +77,6 @@
   (with-output-to-string (buf)
     (nerimux/renderer::render-overlay buf width height)))
 
-(defun render-popup-output (popup rows cols)
-  "Render POPUP to a string using the production renderer."
-  (with-output-to-string (s)
-    (nerimux/renderer::render-popup s popup rows cols)))
-
-(defun render-menu-output (menu rows cols)
-  "Render MENU to a string using the production renderer."
-  (with-output-to-string (s)
-    (nerimux/renderer::render-menu s menu rows cols)))
-
 (defun render-tree-borders-output (tree active-pane width)
   "Render TREE borders for ACTIVE-PANE to a string using the production renderer."
   (with-output-to-string (s)

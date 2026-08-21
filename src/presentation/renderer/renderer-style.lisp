@@ -4,8 +4,8 @@
 ;;;;
 ;;;; This file extends the style-string parsing in renderer.lisp with the
 ;;;; logic that consumes the declarative dispatch tables defined in
-;;;; renderer-style-data.lisp (style tokens, SGR codes, colour names, border
-;;;; charsets): parse-style-string, style-to-sgr, %classify-color-name,
+;;;; renderer-style-data.lisp (style tokens, SGR codes, colour names):
+;;;; parse-style-string, style-to-sgr, %classify-color-name,
 ;;;; %color-name-to-cell-color, %window-style-default-colors.  It also
 ;;;; provides %border-color-sgr as a single-source-of-truth accessor that
 ;;;; renderer-pane.lisp uses instead of its own duplicated cond.
@@ -25,20 +25,6 @@
   (let ((entry (assoc (string-downcase color-name) *%color-name-table* :test #'string=)))
     (when entry
       (parse-integer (cdr entry)))))
-
-(defun %border-charset-for (option-name)
-  "Return box-drawing characters for the *-border-lines option OPTION-NAME as
-   (values TOP-LEFT TOP-RIGHT BOTTOM-LEFT BOTTOM-RIGHT HORIZONTAL VERTICAL):
-   single (default), rounded, double, heavy, simple (ASCII +/-|), padded/none
-   (blank); an unknown value falls back to single.  Shared by the popup and menu
-   box renderers."
-  (%dispatch-border-charset (nerimux/options:get-option option-name "single")))
-
-(defun %popup-border-charset ()
-  "Return box-drawing characters for the popup-border-lines option.
-   Delegates to %BORDER-CHARSET-FOR with \"popup-border-lines\"."
-  (%border-charset-for "popup-border-lines"))
-
 
 ;;; ── Named SGR constants ──────────────────────────────────────────────────────
 ;;;

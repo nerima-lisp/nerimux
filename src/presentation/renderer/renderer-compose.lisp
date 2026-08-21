@@ -16,7 +16,7 @@
 ;;;; this file).
 ;;;;
 ;;;; Load order (declared in nerimux.asd): renderer-format → renderer-style
-;;;;             → renderer-pane → renderer-overlay → renderer-statusbar
+;;;;             → renderer-pane → renderer-statusbar
 ;;;;             → renderer-compose-protocols → renderer-compose-overlay
 ;;;;             → renderer-compose-effects → renderer-compose
 
@@ -171,13 +171,10 @@
     (when (eq mode :command)
       (%render-client-command-line buffer terminal-rows terminal-cols
                                    command-buffer))
-    (%render-mouse-sequences buffer active-pane)
     ;; allow-passthrough: emit any DCS-passthrough sequences (images, nested tmux).
     (when panes (%render-passthrough buffer panes))
     (when panes (%render-clipboard buffer panes))
     (%render-bell-and-cursor buffer active-pane)
-    ;; Relay bells from background windows (bell-action 'any'/'other').
-    (%render-background-bells buffer session window)
     ;; set-titles: emit OSC 0 to set the outer terminal window title.
     (when (nerimux/options:get-option "set-titles")
       (let* ((title-fmt (nerimux/options:get-option "set-titles-string" "#W"))
