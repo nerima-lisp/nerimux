@@ -1,9 +1,18 @@
 (in-package #:nerimux/test)
 
-;;;; Unit tests for pty.lisp: argument-assembly helpers.
-;;;; These cover %spawn-directory and %string-non-empty-p without spawning a
-;;;; real PTY process.  (The child-environment assignment logic now lives in
-;;;; session-child-environment; see session-environment-tests.lisp.)
+;;;; Unit tests for pty.lisp: argument-assembly helpers, and sandbox-safe
+;;;; guard/round-trip behaviour that needs no real PTY.
+;;;;
+;;;; R9.2 of docs/notes/workspace-requirements.md split this file: every case
+;;;; that actually spawned a real PTY (directly via forkpty-with-shell, or
+;;;; through WITH-PTY-SHELL) moved to t/pty/pty-unit-tests.lisp, in the new
+;;;; nerimux/pty-test ASDF system, which `nix flake check` does not run.  The
+;;;; cases below assert on pure arguments/constants, an fboundp reachability
+;;;; check, or a pipe-fd round-trip (with-pipe-fds) -- none of which need
+;;;; /dev/ptmx -- so they stayed here.
+;;;;
+;;;; (The child-environment assignment logic now lives in
+;;;; session-environment-tests.lisp.)
 
 (describe "pty-unit-suite"
 
@@ -58,61 +67,6 @@
   (it "set-pty-size-is-fbound"
     (expect (fboundp 'nerimux/pty:set-pty-size)))
 
-  ;;; ── forkpty-with-shell end-to-end (real PTY) ─────────────────────────────────
-
-  ;; forkpty-with-shell spawns a real child shell and returns a non-negative
-  ;; master fd and a positive pid.
-  (it "forkpty-with-shell-returns-sane-fd-and-pid"
-    (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
-    (with-pty-shell (fd pid)
-      (expect (>= fd 0))
-      (expect (plusp pid))))
-
-  ;; forkpty-with-shell returns an empty string for slave-path (SBCL exposes no
-  ;; portable slave path), not NIL.
-  (it "forkpty-with-shell-slave-path-is-a-string"
-    (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
-    (multiple-value-bind (fd pid slave-path) (forkpty-with-shell 24 80)
-      (unwind-protect
-           (expect (string= "" slave-path))
-        (pty-close fd pid))))
-
-  ;; set-pty-size applies ROWS and COLS to the right winsize fields on a real
-  ;; spawned PTY master fd.
-  ;;
-  ;; READ-BACK IS THE POINT.  The previous version of this test only asserted
-  ;; that the call did not signal, which cannot catch a rows/cols transposition:
-  ;; set-terminal-size accepts 100x30 exactly as happily as 30x100, so an
-  ;; inverted adapter passed silently.  The only other round-trip guard lives in
-  ;; t/integration/pty-tests.lisp, and the whole integration suite is skipped
-  ;; when no /dev/ptmx is available — i.e. on CI — so this was the transposition
-  ;; regression's only chance of being caught in `nix develop` and it did not
-  ;; take it.  30x100 is deliberately NON-SQUARE (and neither dimension matches
-  ;; with-pty-shell's 24x80 spawn size), so a swap fails both assertions.
-  ;; cl-tty-kit:terminal-size returns (values COLUMNS ROWS) — columns first.
-  (it "set-pty-size-round-trips-non-square-size-on-real-pty"
-    (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
-    (with-pty-shell (fd pid)
-      (finishes (nerimux/pty:set-pty-size fd 30 100)
-                "set-pty-size must not signal on a live PTY master fd")
-      (multiple-value-bind (cols rows) (cl-tty-kit:terminal-size fd)
-        (expect (eql 100 cols))
-        (expect (eql 30 rows)))))
-
-  ;;; ── set-pty-size rejects degenerate dimensions ───────────────────────────────
-
-  ;; cl-tty-kit:set-terminal-size demands POSITIVE dimensions and signals before
-  ;; the ioctl; the cffi path it replaced passed a 0x0 winsize through and ignored
-  ;; the -1 return.  Pinned here because NERIMUX/MODEL:PANE-REPOSITION's
-  ;; (plusp width) / (plusp content-height) guard exists solely to keep a
-  ;; degenerate layout away from this behaviour — if the kit ever went back to
-  ;; tolerating 0, that guard would become dead code rather than stay load-bearing.
-  (it "set-pty-size-signals-on-a-zero-dimension"
-    (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
-    (with-pty-shell (fd pid)
-      (signals error (nerimux/pty:set-pty-size fd 0 80))
-      (signals error (nerimux/pty:set-pty-size fd 24 0))))
-
   ;;; ── select-fds: the dead-pane fd sentinel ───────────────────────────────────
 
   ;; pane-fd -1 is nerimux's documented "no PTY / dead pane" sentinel, and the
@@ -142,19 +96,11 @@
   (it "pty-child-exit-status-unknown-fd-returns-nil"
     (expect (null (nerimux/pty:pty-child-exit-status 999999))))
 
-  ;; pty-child-exit-status bounds its wait: a still-running child (never told
-  ;; to exit) with a tiny override timeout returns NIL rather than blocking
-  ;; forever on sb-ext:process-wait.
-  (it "pty-child-exit-status-times-out-on-a-live-child"
-    (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
-    (with-pty-shell (fd pid)
-      (expect (null (nerimux/pty:pty-child-exit-status fd 0.05)))))
-
   ;; The two properties pty-child-exit-status's bounded wait rests on, pinned
-  ;; WITHOUT a PTY so they still hold on CI, where the live-child test above and
-  ;; every other real-PTY test in this file skip.  A hung child there means the
-  ;; reader thread never returns from EOF handling, so the deadline is the only
-  ;; thing keeping the server alive.
+  ;; WITHOUT a PTY so they still hold on CI, where the live-child test in
+  ;; t/pty/pty-unit-tests.lisp and every other real-PTY test skip.  A hung
+  ;; child there means the reader thread never returns from EOF handling, so
+  ;; the deadline is the only thing keeping the server alive.
   ;;
   ;;  1. THE DEADLINE IS A BARE FORM.  cl-concurrent-kit's WITH-TIMEOUT is shaped
   ;;     like SB-EXT:WITH-TIMEOUT — (with-timeout SECS ...) — not like
@@ -185,20 +131,6 @@
                         (cl-concurrent-kit:with-timeout seconds (sleep 60))
                       (cl-concurrent-kit:operation-timed-out () nil)
                       (error () :wrong-clause))))))
-
-  ;; pty-child-exit-status reports :exited with the real exit code once the
-  ;; child has actually terminated.
-  (it "pty-child-exit-status-reports-exited-code"
-    (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
-    (multiple-value-bind (fd pid)
-        (nerimux/pty:forkpty-with-shell 24 80 :default-command "exit 7")
-      (unwind-protect
-           (progn
-             (sleep 0.3)
-             (multiple-value-bind (code kind) (nerimux/pty:pty-child-exit-status fd)
-               (expect (= 7 code))
-               (expect (eq :exited kind))))
-        (nerimux/pty:pty-close fd pid))))
 
   ;;; ── pty-write / pty-read-blocking (real pipe) ────────────────────────────────
 

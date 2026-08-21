@@ -19,22 +19,12 @@
 
 (describe "server-suite"
 
-  ;;; -- run-server session-registry initialization ------------------------------
-
-  ;; The session-registry setup that run-server performs: reset to NIL then add the initial session.
-  (it "run-server-session-registry-initialization"
-    (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
-    (with-empty-registry
-      (let ((nerimux/model::*session-id-counter* 0))
-        (setf nerimux::*server-sessions* nil)
-        (let ((session (create-initial-session 24 80)))
-          (nerimux::server-add-session session)
-          (expect (= 1 (length nerimux::*server-sessions*)))
-          (expect (nerimux::server-find-session (session-name session)) :to-be-truthy)
-          (dolist (pane (all-panes session))
-            (ignore-errors (pty-close (pane-fd pane) (pane-pid pane))))))))
-
   ;;; -- define-message-dispatch-fn macro ---------------------------------------
+  ;;;
+  ;;; run-server-session-registry-initialization (the session-registry setup
+  ;;; that run-server performs, spawning a real PTY-backed session via
+  ;;; create-initial-session) moved to t/pty/server-client-cps-pty-tests.lisp
+  ;;; (R9.2).  The two macro-engine cases below spawn nothing.
   ;;;
   ;;; Exercises nerimux::%test-only-message-dispatch-fn, generated above by
   ;;; define-message-dispatch-fn -- the shared COND-expansion engine that also

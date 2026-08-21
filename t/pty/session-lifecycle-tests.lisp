@@ -1,8 +1,14 @@
-(in-package #:nerimux/test)
+(in-package #:nerimux/pty-test)
 
 ;;;; Session lifecycle tests: PTY-backed session / window creation flows.
 ;;;;
-;;;; These tests require PTY allocation and skip themselves when unavailable.
+;;;; Moved wholesale from t/unit/domain/model/session-lifecycle-tests.lisp
+;;;; (R9.2): every case here uses WITH-SESSION, i.e. spawns a real PTY-backed
+;;;; shell via create-initial-session, so the whole file belongs in
+;;;; nerimux/pty-test rather than nerimux/test.  The pty-available-p guards
+;;;; are left in place: a real PTY is still not guaranteed inside
+;;;; nix run .#test-pty's own sandbox, so this suite must still be able to
+;;;; skip cleanly there.
 
 (describe "model-suite"
 

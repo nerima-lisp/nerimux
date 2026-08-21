@@ -17,7 +17,6 @@
       (:file "helpers-overlay-assertions")
       (:file "helpers-session-naming")
       (:file "helpers-pane-fixtures")
-      (:file "helpers-pty-runtime")
       (:file "helpers-network-listener")
       (:file "helpers-net-protocol")
       (:file "helpers-process-fixtures")
@@ -99,7 +98,6 @@
           (:file "pane-tests-accessors") ; pane defaults, accessors, feed dirty/empty
           (:file "pane-tests-predicates") ; hit-testing, live, pipe, border-status
           (:file "window-tests-relayout")
-          (:file "window-tests-pane-ops")
           (:file "window-tests-split-math")
           (:file "window-tests-tree-ops")
           (:file "window-neighbor-tests") ; pane-neighbor directional lookup
@@ -108,7 +106,6 @@
           (:file "window-tests-c") ; find-window-by-name, list-windows-format, auto-rename-from-osc - part III
           (:file "session-state-core")
           (:file "session-state-structural")
-          (:file "session-lifecycle-tests")
           (:file "session-window-tests") ; start-directory, all-panes ordering, window flags
           (:file "session-environment-tests") ; environment overlay, process helpers, child env merge
           (:file "organization-tests")
@@ -193,7 +190,6 @@
          :components
          ((:file "server-registry-tests")
           (:file "server-window-link-tests")
-          (:file "server-command-tests")
           (:file "server-session-listing-tests")
           (:file "server-socket-path-tests") ; socket paths and stale sockets
           (:file "server-client-cps-tests") ; client key CPS, runtime registry, resize edge cases

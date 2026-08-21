@@ -183,11 +183,8 @@
       (expect (null (pane-window p0)))
       (expect (eq win (pane-window p1)))))
 
-  ;; window-split wires pane-window on the new pane to the parent window.
-  (it "window-split-sets-pane-window-back-pointer"
-    (unless (pty-available-p)
-      (skip "no PTY available (sandboxed environment)"))
-    (with-session (session 24 80)
-      (let* ((win   (session-active-window session))
-             (p-new (window-split session win :h)))
-        (expect (eq win (pane-window p-new)))))))
+  ;; window-split-sets-pane-window-back-pointer (real PTY spawn via
+  ;; WITH-SESSION) moved to t/pty/window-tests-c-pty.lisp (R9.2).  The set
+  ;; path it verified is covered there; the clear-path tests above it need no
+  ;; real PTY.
+  )

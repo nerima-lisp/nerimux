@@ -1,121 +1,19 @@
 (in-package #:nerimux/test)
 
-;;;; PTY integration tests.  These spawn a real shell over a pseudo-terminal
-;;;; and exercise the spawn/write/read/select pipeline end to end.
+;;;; Sandbox-safe PTY-adjacent tests: argument assembly, pipe-fd round-trips,
+;;;; and no-op/guard behaviour that needs no real PTY.
 ;;;;
-;;;; PTY allocation needs /dev/ptmx, which sandboxed Nix builds do not provide.
-;;;; When allocation fails we (skip) rather than fail, so the same suite runs
-;;;; both in `nix develop` (real PTY) and `nix flake check` (sandboxed).
-;;;;
-;;;; pty-available-p is imported from nerimux/pty; no local shadow needed.
-
-(defun drain-pty (fd &key (deadline-seconds 3.0) (stop-marker nil) (quiet-windows 1))
-  "Read from FD until STOP-MARKER appears in the decoded output, DEADLINE-SECONDS
-   elapses, or QUIET-WINDOWS consecutive empty 200ms select polls occur (meaning
-   the shell has truly gone idle).  Returns the accumulated string.
-
-   quiet-windows > 1 is useful before testing idleness: it certifies actual shell
-   stability rather than just elapsed time, eliminating a race where the shell sends
-   a late output burst right after drain returns."
-  (let ((acc  (make-array 0 :element-type '(unsigned-byte 8) :adjustable t
-                            :fill-pointer 0))
-        (end  (+ (get-internal-real-time)
-                 (* deadline-seconds internal-time-units-per-second)))
-        (quiet-count 0))
-    (loop
-      (when (> (get-internal-real-time) end) (return))
-      (if (select-fds (list fd) 200000)          ; 200 ms poll
-          (let ((chunk (pty-read-blocking fd 4096)))
-            (setf quiet-count 0)
-            (when chunk
-              (loop for b across chunk
-                    do (vector-push-extend b acc))))
-          (progn
-            (incf quiet-count)
-            (when (>= quiet-count quiet-windows) (return))))
-      (let ((text (map 'string #'code-char acc)))
-        (when (and stop-marker (search stop-marker text))
-          (return-from drain-pty text))))
-    (map 'string #'code-char acc)))
+;;;; R9.2 of docs/notes/workspace-requirements.md split this file: every case
+;;;; that actually spawned a real PTY (via WITH-PTY-SHELL, WITH-PTY-AVAILABLE,
+;;;; or WITH-SESSION) moved to t/pty/pty-integration-tests.lisp, in the new
+;;;; nerimux/pty-test ASDF system, which `nix flake check` does not run.  The
+;;;; cases below never call pty-available-p or forkpty-with-shell -- they
+;;;; either assert on pure constants/arguments, or exercise pty-write /
+;;;; pty-read-blocking / select-fds through an ordinary pipe (with-pipe-fds),
+;;;; which needs no /dev/ptmx -- so they stayed here and keep running under
+;;;; `nix flake check`'s sandboxed nerimux/test.
 
 (describe "pty-suite"
-
-  (it "shell-echoes-command-output"
-    (unless (pty-available-p)
-      (skip "no PTY available (sandboxed environment)"))
-    (with-pty-shell (fd pid)
-      (let ((marker "NERIMUX_MARKER_42"))
-        ;; Give the shell a moment to start, then send a command.
-        (sleep 0.2)
-        (pty-write fd (format nil "echo ~A~%" marker))
-        (let ((out (drain-pty fd :stop-marker marker)))
-          (expect (search marker out))))))
-
-  (it "pty-write-accepts-octet-vector"
-    (unless (pty-available-p)
-      (skip "no PTY available (sandboxed environment)"))
-    (with-pty-shell (fd pid)
-      (let ((bytes (map '(simple-array (unsigned-byte 8) (*))
-                        #'char-code
-                        (format nil "printf DONE_OCTETS~%"))))
-        (sleep 0.2)
-        (pty-write fd bytes)
-        (let ((out (drain-pty fd :stop-marker "DONE_OCTETS")))
-          (expect (search "DONE_OCTETS" out))))))
-
-  (it "select-times-out-when-idle"
-    (unless (pty-available-p)
-      (skip "no PTY available (sandboxed environment)"))
-    (with-pty-shell (fd pid)
-      ;; Drain until two consecutive quiet 200ms windows: certifies the shell has
-      ;; truly settled before we test that no further output arrives.
-      (drain-pty fd :deadline-seconds 2.0 :quiet-windows 2)
-      (let ((ready (select-fds (list fd) 100000)))  ; 100 ms, no input sent
-        (expect (null ready)))))
-
-  ;; Exercises the real resize path: spawned PTY per pane + ioctl(TIOCSWINSZ) +
-  ;; screen-resize, across a split and a subsequent terminal resize.
-  (it "split-then-relayout-keeps-panes-fitting"
-    (unless (pty-available-p)
-      (skip "no PTY available (sandboxed environment)"))
-    (with-session (session 24 80)
-      (let ((win (session-active-window session)))
-        ;; Split vertically → two panes side by side.
-        (window-split session win :h)
-        (expect (= 2 (length (window-panes win))))
-        ;; Now resize the terminal larger and relayout.
-        (window-relayout win 40 120)
-        (let ((ps (window-panes win)))
-          ;; All panes fit within the new geometry, no overlap.
-          (dolist (p ps)
-            (expect (<= (+ (pane-x p) (pane-width p))  120))
-            (expect (<= (+ (pane-y p) (pane-height p)) 40))
-            (expect (plusp (pane-width  p)))
-            (expect (plusp (pane-height p))))
-          (destructuring-bind (a b) ps
-            ;; divider column separates the two panes after relayout
-            (expect (< (+ (pane-x a) (pane-width a)) (pane-x b))))))))
-
-  ;; pty-child-exit-status reports KIND = :signaled when the child dies from a
-  ;; signal (vs :exited for a normal exit code).  SIGKILL (9) cannot be trapped,
-  ;; so the spawned shell is guaranteed to terminate by signal; reaping it via
-  ;; pty-child-exit-status must yield (values 9 :signaled).
-  (it "pty-child-exit-status-reports-signaled-kind"
-    (unless (pty-available-p)
-      (skip "no PTY available (sandboxed environment)"))
-    (with-pty-shell (fd pid)
-      (sleep 0.2)
-      (sb-posix:kill pid 9)              ; SIGKILL — untrappable
-      (multiple-value-bind (code kind) (nerimux/pty:pty-child-exit-status fd)
-        (expect (eq kind :signaled))
-        (expect (= code 9)))))
-
-  ;;; cmd-kill-pane-closes-fd and split-and-kill-returns-to-single were removed:
-  ;;; kill-pane (commands-core.lisp) was deleted along with the other
-  ;;; pane/window op helpers.
-
-  ;;;; ── Un-gated sandbox-safe unit tests ──────────────────────────────────────
-  ;;;; These run real assertions without /dev/ptmx, a tty, or a socket.
 
   ;; pty-close must never kill(-1)/kill(0): a non-positive pid and a negative
   ;; master fd are both no-ops, so the call simply finishes without signalling.
@@ -140,36 +38,12 @@
     (expect (>= nerimux/pty::+max-sane-rows+ 24))
     (expect (>= nerimux/pty::+max-sane-cols+ 80)))
 
-  ;;; ── set-pty-size argument order ──────────────────────────────────────────────
-  ;;;
-  ;;; nerimux's set-pty-size is (MASTER-FD ROWS COLS); cl-tty-kit's
-  ;;; set-terminal-size is (COLUMNS ROWS &optional FD). The adapter must both
-  ;;; transpose rows/cols AND move the fd. A round-trip on a DELIBERATELY
-  ;;; NON-SQUARE size is the only thing that catches an inversion — 24x24 would
-  ;;; pass either way. Both dimensions are asserted, so a swap fails loudly.
-  ;;;
-  ;;; This also covers the arm64 bug this migration fixed: the previous cffi
-  ;;; ioctl call used a fixed prototype for a variadic syscall, so on Apple
-  ;;; Silicon it returned -1 and the pty kept its old size. Under that code this
-  ;;; test reads back the spawn size (8x20), not 40x123, and fails.
-
-  ;; set-pty-size applies rows and columns to the correct fields, not transposed.
-  (it "set-pty-size-applies-non-square-size-without-transposition"
-    (with-pty-available
-      (multiple-value-bind (master pid) (forkpty-with-shell 8 20)
-        (unwind-protect
-             (progn
-               ;; rows=40, cols=123 — distinct, and neither matches the spawn size.
-               (nerimux/pty:set-pty-size master 40 123)
-               ;; cl-tty-kit:terminal-size returns (values COLUMNS ROWS).
-               (multiple-value-bind (cols rows) (cl-tty-kit:terminal-size master)
-                 (expect (eql 123 cols))
-                 (expect (eql 40 rows))))
-          (nerimux/pty:pty-close master pid)))))
-
-  ;; nerimux/pty:terminal-size transposes cl-tty-kit's (COLUMNS ROWS) back into
-  ;; nerimux's (ROWS COLS) contract. Guarded by the sanity bounds, so an
-  ;; unavailable size falls back to 24x80 rather than reporting a transposed one.
+  ;; terminal-size delegates to cl-tty-kit:terminal-size (which returns COLUMNS
+  ;; first) and SWAPS to nerimux's (values ROWS COLS) contract.  This guards the
+  ;; transpose: when a real TTY reports a non-square size, ROWS must be the row
+  ;; count and COLS the column count — not swapped.  On the standard-ish 24x80
+  ;; terminal, and on the sandbox fallback (also 24x80), rows<=cols; more
+  ;; importantly rows must equal cl-tty-kit's ROWS value, cols its COLUMNS value.
   (it "terminal-size-returns-rows-first"
     (multiple-value-bind (rows cols) (nerimux/pty:terminal-size)
       (expect (integerp rows))
@@ -290,47 +164,4 @@
             ;; No TTY / out-of-range: nerimux falls back to 24x80 (rows x cols).
             (progn
               (expect (= rows nerimux/pty:+default-term-rows+))
-              (expect (= cols nerimux/pty:+default-term-cols+)))))))
-
-  ;;; ── New coverage: spawn helpers and microsecond constants ──────────────────
-
-  ;; %string-non-empty-p accepts only strings with positive length.
-  (it "string-non-empty-p-rejects-empty-and-non-strings"
-    (expect (nerimux/pty::%string-non-empty-p "x") :to-be-truthy)
-    (expect (nerimux/pty::%string-non-empty-p "") :to-be-falsy)
-    (expect (nerimux/pty::%string-non-empty-p nil) :to-be-falsy)
-    (expect (nerimux/pty::%string-non-empty-p 42) :to-be-falsy))
-
-  ;; +microseconds-per-second+ is 1000000.
-  (it "microseconds-per-second-is-one-million"
-    (expect (= 1000000 nerimux/pty::+microseconds-per-second+)))
-
-  ;;; ── %timeout-us-to-seconds ───────────────────────────────────────────────────
-  ;;;
-  ;;; Replaces the old %setup-timeval tests. nerimux no longer decomposes a
-  ;;; struct timeval by hand — process-kit does that — so what is worth pinning
-  ;;; here is only the unit conversion at the boundary, and in particular that
-  ;;; it stays EXACT. A float would drift the deadline process-kit subtracts
-  ;;; from across EINTR retries.
-
-  ;; 1500000 us is 3/2 second exactly, not 1.5f0.
-  (it "timeout-us-to-seconds-converts-exactly"
-    (let ((seconds (nerimux/pty::%timeout-us-to-seconds 1500000)))
-      (expect (= 3/2 seconds))
-      (expect (rationalp seconds))
-      (expect (not (floatp seconds)))))
-
-  ;; 0 us stays 0 — process-kit spells a non-blocking poll that way too.
-  (it "timeout-us-to-seconds-zero-is-a-poll"
-    (expect (eql 0 (nerimux/pty::%timeout-us-to-seconds 0))))
-
-  ;; 50000 us (50 ms, the +poll-timeout-us+ value) is 1/20 second.
-  (it "timeout-us-to-seconds-sub-second-timeout"
-    (expect (= 1/20 (nerimux/pty::%timeout-us-to-seconds 50000))))
-
-  ;; A negative timeout is nerimux's "block indefinitely"; process-kit spells
-  ;; that NIL, so the conversion must produce NIL and not a negative number
-  ;; (which process-kit's FD-WAIT-TIMEOUT type would reject outright).
-  (it "timeout-us-to-seconds-negative-means-block-forever"
-    (expect (null (nerimux/pty::%timeout-us-to-seconds -1)))
-    (expect (null (nerimux/pty::%timeout-us-to-seconds -100)))))
+              (expect (= cols nerimux/pty:+default-term-cols+))))))))

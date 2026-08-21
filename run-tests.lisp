@@ -11,6 +11,8 @@
 ;;;; registered suite:
 ;;;;
 ;;;;   nerimux/test      the full unit + integration suite (checks.default)
+;;;;   nerimux/pty-test  the real-PTY suite; needs /dev/ptmx, so it is an app
+;;;;                     (nix run .#test-pty) and deliberately not a check
 ;;;;
 ;;;; It defines its own ASDF :perform (test-op ...) that signals
 ;;;; an error on failure, so dispatching through ASDF:TEST-SYSTEM keeps the

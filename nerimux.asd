@@ -271,3 +271,42 @@
   :perform (test-op (op c)
              (funcall (find-symbol "RUN-TESTS" (find-package "NERIMUX/TEST")))))
 
+
+;; The real-PTY suite, split out of nerimux/test by R9.2.
+;;
+;; `nix flake check` builds in a sandbox with no /dev/ptmx, so every case that
+;; forks a shell under a pseudo-terminal used to guard itself with a skip and
+;; report a pass for work it never did. Moving them here makes the main suite's
+;; green mean one thing and this suite's green mean another, instead of one
+;; number covering both.
+;;
+;; Run with: nix run .#test-pty   (or (asdf:test-system "nerimux/pty-test"))
+(defsystem "nerimux/pty-test"
+  :description "Real-PTY suite for nerimux: every case that forks a shell under a pseudo-terminal."
+  :author "takeokunn <bararararatty@gmail.com>"
+  :maintainer "takeokunn <bararararatty@gmail.com>"
+  :license "MIT"
+  :version "0.2.0"
+  :homepage "https://github.com/nerima-lisp/nerimux"
+  :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
+  :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
+  :depends-on ("nerimux" "cl-weave")
+  :pathname "t/pty"
+  :serial t
+  :components ((:file "package")
+               (:file "helpers")
+               (:file "pty-unit-tests")
+               (:file "pty-integration-tests")
+               (:file "pane-tests-geometry-pty")
+               (:file "pane-tests-ops-pty")
+               (:file "window-tests-c-pty")
+               (:file "window-tests-pane-ops")
+               (:file "window-tests-split-math-pty")
+               (:file "session-lifecycle-tests")
+               (:file "server-command-tests")
+               (:file "server-client-cps-pty-tests")
+               (:file "server-multi-command-client-pty-tests")
+               (:file "entry"))
+  :perform (test-op (op c)
+             (declare (ignore op c))
+             (funcall (find-symbol "RUN-PTY-TESTS" (find-package "NERIMUX/PTY-TEST")))))

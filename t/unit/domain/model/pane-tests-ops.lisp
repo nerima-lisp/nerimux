@@ -28,19 +28,6 @@
         (when last (window-select-pane win last)))
       (expect (eq p0 (window-active-pane win)))))
 
-  ;;; ── respawn-pane resets fd/pid ───────────────────────────────────────────────
-
-  ;; respawn-pane closes the old PTY and assigns a fresh fd/pid to the pane.
-  ;; Uses pty-available-p to skip when PTY spawning is not available.
-  (it "respawn-pane-updates-fd-and-pid"
-    (unless (pty-available-p)
-      (skip "PTY not available"))
-    (with-session (session 20 20)
-      (let* ((pane (session-active-pane session))
-             (old-pid (pane-pid pane)))
-        (respawn-pane session pane)
-        ;; The new pid must differ (a new child process was spawned).
-        ;; The fd may or may not be the same number (OS fd recycling), but
-        ;; it must be non-negative (a valid open fd).
-        (expect (not (= old-pid (pane-pid pane))))
-        (expect (>= (pane-fd pane) 0))))))
+  ;; respawn-pane-updates-fd-and-pid (real PTY spawn via WITH-SESSION) moved
+  ;; to t/pty/pane-tests-ops-pty.lisp (R9.2).
+  )

@@ -1,6 +1,9 @@
-(in-package #:nerimux/test)
+(in-package #:nerimux/pty-test)
 
 ;;;; Window-level tests: pane selection and resize behavior.
+;;;;
+;;;; Moved wholesale from t/unit/domain/model/window-tests-pane-ops.lisp
+;;;; (R9.2): its one case spawns a real PTY-backed session via WITH-SESSION.
 
 (describe "model-suite"
 

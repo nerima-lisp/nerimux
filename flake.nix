@@ -475,6 +475,24 @@
               exec sbcl --script run-tests.lisp
             '';
           };
+
+          testPty = pkgs.writeShellApplication {
+            name = "nerimux-test-pty";
+            runtimeInputs = [
+              sbcl
+              pkgs.coreutils
+            ];
+            text = ''
+              export NERIMUX_SIBLING_REGISTRY="${siblingRegistry}"
+              export NERIMUX_TEST_SYSTEM="nerimux/pty-test"
+              work="$(mktemp -d)"
+              trap 'rm -rf "$work"' EXIT
+              cp -r ${self} "$work/src-tree"
+              chmod -R u+w "$work/src-tree"
+              cd "$work/src-tree"
+              exec sbcl --script run-tests.lisp
+            '';
+          };
         in
         {
           # `nix run .` starts the multiplexer, which is what the README
@@ -494,6 +512,20 @@
             meta = {
               description = "Run nerimux's test suite (NERIMUX_TEST_SYSTEM selects which one)";
               mainProgram = "nerimux-test";
+            };
+          };
+
+          # The real-PTY suite. Deliberately an app and NOT a check: it needs
+          # /dev/ptmx, which the sandbox a check builds in does not have. Running
+          # it there would report a pass for cases that skipped, which is the
+          # false green splitting the suite exists to prevent. Run it on a real
+          # machine, by hand or from a job with a PTY available.
+          test-pty = {
+            type = "app";
+            program = "${testPty}/bin/nerimux-test-pty";
+            meta = {
+              description = "Run nerimux's real-PTY suite (needs /dev/ptmx)";
+              mainProgram = "nerimux-test-pty";
             };
           };
         }

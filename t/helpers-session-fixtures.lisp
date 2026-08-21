@@ -15,13 +15,10 @@
      (with-loop-state
        ,@body)))
 
-(defmacro with-session ((var rows cols) &body body)
-  "Bind VAR to a fresh session of ROWS x COLS, run BODY, then close all PTYs."
-  `(let ((,var (create-initial-session ,rows ,cols)))
-     (unwind-protect
-          (progn ,@body)
-       (dolist (p (all-panes ,var))
-         (ignore-errors (pty-close (pane-fd p) (pane-pid p)))))))
+;;; WITH-SESSION (real PTY-backed session, via create-initial-session) moved
+;;; to t/pty/helpers.lisp: R9.2's case-by-case audit found every one of its
+;;; callers spawned a real PTY, so all of them moved into the nerimux/pty-test
+;;; system, and this macro had no remaining caller here.
 
 (defun make-fake-window (id name &key (npanes 1))
   "A window with NPANES fake panes (fd -1) and a matching tree; the first pane is active.

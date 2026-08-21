@@ -1,6 +1,9 @@
-(in-package #:nerimux/test)
+(in-package #:nerimux/pty-test)
 
 ;;;; Server command helpers.
+;;;;
+;;;; Moved wholesale from t/unit/bootstrap/server-command-tests.lisp (R9.2):
+;;;; its one case spawns a real PTY-backed session via WITH-SESSION.
 
 (describe "server-suite"
 
