@@ -123,7 +123,8 @@
         (:module "infrastructure/vcs"
          :serial t
          :components
-         ((:file "vcs-tests")))
+         ((:file "vcs-tests")
+          (:file "vcs-fetch-dedup-tests"))) ; R7.1: one fetch in flight per target
         (:module "application/picker"
          :serial t
          :components
@@ -154,6 +155,13 @@
          (:file "renderer-pane-selection-tests") ; direct unit tests for %compute-selection-bounds
          (:file "renderer-compose-effects-tests") ; direct unit tests for %render-passthrough/%render-clipboard drain gating
          (:file "renderer-pane-search-tests") ; direct unit tests for %render-copy-search-matches's current-vs-plain match style branch
+      (:file "renderer-workspace-status-tokens-tests") ; R6.1: tokens combine; CLEAN vs UNKNOWN
+      (:file "renderer-workspace-clip-tests") ; R6.9: clipping measures cells, not characters
+      (:file "renderer-workspace-tree-tests") ; R6.3: five levels, collapsed by default
+      (:file "renderer-workspace-command-completion-tests") ; R6.12
+      (:file "renderer-statusbar-workspace-tests") ; R6.5/R6.7: three blocks, truncation order
+      (:file "renderer-copy-mode-position-tests") ; R6.8
+      (:file "renderer-tui-kit-min-size-tests") ; R6.10
          (:file "renderer-tui-kit-tests"))) ; headless cl-tui-kit surface/backend adapter
  ; wait-for command channel state and argument validation
         (:module "application/commands"
@@ -194,6 +202,8 @@
           (:file "server-socket-path-tests") ; socket paths and stale sockets
           (:file "server-client-cps-tests") ; client key CPS, runtime registry, resize edge cases
           (:file "runtime-lifecycle-tests")
+      (:file "server-kill-request-tests") ; R8.1/R8.3
+      (:file "workspace-window-naming-tests") ; R5.8
           (:file "system-composition-tests"))) ; layering guard; core declares no optional kit
         (:module "infrastructure/pty"
          :serial t
@@ -235,4 +245,7 @@
          (:file "client-tests-frame-dispatch")
          (:file "client-tests-startup-modes")
          (:file "client-tests-command-client")
+         (:file "workspace-input-prefix-tests") ; R4: driven from client bytes
+         (:file "workspace-panes-acceptance-tests") ; R5 acceptance sequence
+         (:file "confirm-view-quit-tests") ; R8.2
          (:file "client-receive-tests")))))))

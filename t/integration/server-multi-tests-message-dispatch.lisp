@@ -741,7 +741,21 @@
         (expect (null (nerimux::client-conn-picker-regex-p conn)))
         (expect (null (nerimux::%client-picker-visible-items conn))))))
 
-  (it "multi-picker-key-input-filters-navigates-and-selects-worktree"
+  ;; R4/§6 regression note: this used to also drive #(27 91 65)/#(27 91 66)
+  ;; (a 3-byte arrow escape in one call) to prove picker index navigation.
+  ;; That is the exact §2.1 bug shape: client.lisp sends one stdin byte per
+  ;; msg-key frame, so a real arrow key arrives as ESC, then `[`, then a
+  ;; letter, as three SEPARATE %handle-multi-key-message calls. The first
+  ;; byte alone already matches %handle-client-picker-key-payload's ESC
+  ;; branch, which closes the picker and arms a 2-byte ESC-swallow (R4.3);
+  ;; the following `[`/letter are discarded by that swallow before any mode
+  ;; dispatch runs. %handle-client-picker-key-payload's equalp
+  ;; #(27 91 65)/#(27 91 66)/#(27 91 67)/#(27 91 68) branches are therefore
+  ;; unreachable from any real client, and the picker currently has no other
+  ;; keystroke binding to move its selection (see the report to team-lead).
+  ;; This test now covers only what is actually reachable: filtering by
+  ;; typed query text and selecting the sole remaining match.
+  (it "multi-picker-key-input-filters-by-query-and-selects-worktree"
     (with-fake-session (s)
       (let* ((organization
                (nerimux/model:make-organization
@@ -770,17 +784,50 @@
               (nerimux/picker:build-global-picker-items
                (list organization))
               (nerimux::client-conn-picker-index conn) 0)
-        (nerimux::%handle-multi-key-message s conn #(27 91 66))
-        (expect (= 1 (nerimux::client-conn-picker-index conn)))
-        (nerimux::%handle-multi-key-message s conn #(27 91 65))
-        (expect (= 0 (nerimux::client-conn-picker-index conn)))
-        (nerimux::%handle-multi-key-message
-         s conn (cl-codec-kit:string-to-octets "feature" :encoding :utf-8))
+        ;; Typed one byte per message, matching client.lisp's real framing.
+        (loop for character across "feature"
+              do (nerimux::%handle-multi-key-message
+                  s conn (vector (char-code character))))
         (expect (string= "feature" (nerimux::client-conn-picker-query conn)))
         (expect (= 1 (length (nerimux::%client-picker-visible-items conn))))
         (nerimux::%handle-multi-key-message s conn #(13))
         (expect (eq :normal (nerimux::client-conn-mode conn)))
         (expect (eq pane (nerimux::client-conn-focus conn))))))
+
+  ;; Direct proof of the finding above: an arrow-escape sequence sent the way
+  ;; a real client actually sends it -- one byte per message -- never moves
+  ;; the picker's selection index, because the second and third bytes are
+  ;; swallowed before %move-client-picker-index is ever reached.
+  (it "picker-arrow-key-bytes-one-at-a-time-do-not-move-the-index"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org" :host "github.com" :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo" :organization organization
+                :specification "github.com/team/repo"))
+             (worktree-a
+               (nerimux/model:make-worktree
+                :id "a" :repository repository :path "/tmp/a" :branch "a"))
+             (worktree-b
+               (nerimux/model:make-worktree
+                :id "b" :repository repository :path "/tmp/b" :branch "b"))
+             (conn (%make-test-conn)))
+        (nerimux/model:organization-add-repository organization repository)
+        (nerimux/model:repository-add-worktree repository worktree-a)
+        (nerimux/model:repository-add-worktree repository worktree-b)
+        (setf (nerimux::client-conn-mode conn) :picker
+              (nerimux::client-conn-picker-items conn)
+              (nerimux/picker:build-global-picker-items (list organization))
+              (nerimux::client-conn-picker-index conn) 0)
+        (expect (< 1 (length (nerimux::%client-picker-visible-items conn))))
+        (nerimux::%handle-multi-key-message s conn #(27)) ; ESC: closes the picker
+        (expect (eq :normal (nerimux::client-conn-mode conn)))
+        (nerimux::%handle-multi-key-message s conn #(91)) ; [: swallowed
+        (nerimux::%handle-multi-key-message s conn #(66)) ; B: swallowed
+        (expect (eq :normal (nerimux::client-conn-mode conn))
+                "still normal: neither swallowed byte reopened the picker or acted"))))
 
   (it "multi-picker-selects-a-worktree-pane-in-an-inactive-window"
     (with-fake-session (s :nwindows 2)
@@ -956,7 +1003,14 @@
          (cl-codec-kit:string-to-octets "needle" :encoding :utf-8))
         (nerimux::%handle-multi-key-message s conn #(105))
         (expect (eq :input (nerimux::client-conn-mode conn)))
+        ;; R4.2: :input mode has no keyboard exit of its own -- ESC is
+        ;; forwarded to the pane like any other byte instead of kicking the
+        ;; client back to :normal (the §2.1 bug this redesign fixes).
         (nerimux::%handle-multi-key-message s conn #(27))
+        (expect (eq :input (nerimux::client-conn-mode conn)))
+        ;; R4.4: the C-q prefix (C-q C-q) is the only way out of :input.
+        (nerimux::%handle-multi-key-message s conn #(17)) ; C-q
+        (nerimux::%handle-multi-key-message s conn #(17)) ; C-q again -> :normal
         (expect (eq :normal (nerimux::client-conn-mode conn)))
         (nerimux::%handle-multi-key-message s conn #(99))
         (expect (eq :copy (nerimux::client-conn-mode conn)))
