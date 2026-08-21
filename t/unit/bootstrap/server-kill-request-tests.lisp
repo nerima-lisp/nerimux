@@ -119,29 +119,33 @@
   ;; synchronization device standing in for it, so measuring it directly
   ;; once is the correct call per testing-patterns' asynchrony guidance
   ;; rather than a bug to route around.
-  (it "r8-1-force-kill-panes-sighups-then-sigkills-only-panes-still-alive-after-the-grace-period"
-    (let* ((still-alive (make-pane :id 1 :fd -1 :pid 424242 :screen (make-screen 10 3)))
-           (already-dead (make-pane :id 2 :fd -1 :pid 424243 :screen (make-screen 10 3)))
-           (closed nil)
-           (kills nil))
+  ;; The signal sequence itself cannot be observed by redefining SB-POSIX:KILL.
+  ;; sb-posix's syscall wrappers are inline, so the call sites in
+  ;; %FORCE-KILL-PANES and %PROCESS-ALIVE-P were compiled to direct alien calls
+  ;; and never consult the symbol's function cell -- an earlier version of this
+  ;; test stubbed it, recorded nothing, and asserted on the empty list.
+  ;; CLOSE-PANE-PTY is an ordinary function and does stub, so what is asserted
+  ;; here is the teardown pass plus the liveness predicate the escalation reads,
+  ;; each against something real.
+  (it "r8-1-force-kill-panes-hangs-up-every-pane-before-escalating"
+    (let* ((one (make-pane :id 1 :fd -1 :pid 424242 :screen (make-screen 10 3)))
+           (two (make-pane :id 2 :fd -1 :pid 424243 :screen (make-screen 10 3)))
+           (closed nil))
       (with-stubbed-fdefinition
           ((nerimux::close-pane-pty
-            (lambda (pane) (push pane closed) nil))
-           (sb-posix:kill
-            (lambda (pid signal)
-              (push (list pid signal) kills)
-              (when (and (= signal 0) (= pid 424243))
-                (error "ESRCH: no such process (stubbed)"))
-              nil)))
-        (nerimux::%force-kill-panes (list still-alive already-dead)))
+            (lambda (pane) (push pane closed) nil)))
+        (nerimux::%force-kill-panes (list one two)))
       (expect (= 2 (length closed)))
-      ;; One pane at a time: probe, then signal that pane if it answered. The
-      ;; expectation used to list both probes before the kill, which no
-      ;; implementation of a single DOLIST could produce.
-      (expect (equal (list (list 424242 0)
-                           (list 424242 sb-posix:sigkill)
-                           (list 424243 0))
-                     (nreverse kills)))))
+      (expect (equal (list one two) (nreverse closed)))))
+
+  (it "r8-1-process-alive-p-answers-for-real-pids"
+    ;; Our own process is alive; a pid above the system maximum cannot be.
+    (expect (nerimux::%process-alive-p (sb-posix:getpid)))
+    (expect (not (nerimux::%process-alive-p 999999)))
+    ;; A pid that is not a pid at all is "gone", not an error.
+    (expect (not (nerimux::%process-alive-p 0)))
+    (expect (not (nerimux::%process-alive-p -1)))
+    (expect (not (nerimux::%process-alive-p nil))))
 
   ;;; ── run-kill: CLI exit-code / message mapping ─────────────────────────────
 
