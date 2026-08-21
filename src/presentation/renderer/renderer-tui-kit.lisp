@@ -248,12 +248,11 @@
                (attention-mark (worktree-attention-p node))
                (value (worktree-branch node)
                       (value (worktree-path node) (worktree-id node)))
-               (cond
-                 ((worktree-missing-p node) "MISSING")
-                 ((worktree-bare-p node) "BARE")
-                 ((worktree-locked-p node) "LOCKED")
-                 ((worktree-prunable-p node) "PRUNABLE")
-                 (t "ready"))))
+               ;; R6.1: every applicable status token, not just the first
+               ;; match of a single-choice cond -- see %worktree-status-tokens
+               ;; in renderer-workspace.lisp (loads before this file) for the
+               ;; CLEAN/UNKNOWN distinction this delegates to.
+               (%worktree-status-label node)))
       (t (princ-to-string node)))))
 
 (defun %workspace-tree-visible-entries (organizations offset limit)
@@ -457,11 +456,44 @@
                      (cl-tui-kit/core:make-style))
                     stream))))
 
+;;; ── Terminal-too-small guard (R6.10) ────────────────────────────────────────
+;;;
+;;; Placed in %RENDER-ANSI-FRAME-WITH-TUI-KIT rather than in either public
+;;; entry point separately: RENDER-SESSION-TO-TUI-STRING (pane view) and
+;;; RENDER-WORKSPACE-OVERVIEW-TO-TUI-STRING (workspace overview) both funnel
+;;; through this one function, so putting the guard here covers both without
+;;; duplicating it. ROWS/COLS are read fresh on every call (the server passes
+;;; the client's current size each frame, not stored state), so recovery on
+;;; resize falls out of that per-frame re-evaluation rather than needing any
+;;; dedicated "was too small" flag.
+
+(defconstant +min-terminal-cols+ 40)
+(defconstant +min-terminal-rows+ 10)
+
+(defun %terminal-too-small-p (rows cols)
+  (or (< rows +min-terminal-rows+) (< cols +min-terminal-cols+)))
+
+(defun %render-terminal-too-small-surface (rows cols)
+  "A ROWS x COLS surface containing only the centred too-small warning."
+  (let* ((rows (max 1 rows))
+         (cols (max 1 cols))
+         (surface (cl-tui-kit/core:make-surface cols rows))
+         (message (format nil "terminal too small (need ~Dx~D)"
+                          +min-terminal-cols+ +min-terminal-rows+))
+         (text (%display-clip message cols))
+         (row (floor rows 2))
+         (col (%center-coord cols (%display-width text))))
+    (cl-tui-kit/core:surface-draw-text surface col row text :max-width cols)
+    surface))
+
 (defun %render-ansi-frame-with-tui-kit
     (frame rows cols &key (viewport 0) widget-renderer)
-  (let ((surface (%surface-from-ansi-frame
-                  frame rows cols :viewport viewport)))
-    (when widget-renderer
+  (let* ((too-small-p (%terminal-too-small-p rows cols))
+         (surface (if too-small-p
+                      (%render-terminal-too-small-surface rows cols)
+                      (%surface-from-ansi-frame frame rows cols
+                                                :viewport viewport))))
+    (when (and widget-renderer (not too-small-p))
       (funcall widget-renderer surface))
     (%surface-to-ansi-frame surface)))
 
@@ -471,26 +503,38 @@
                                        (picker-index 0) (picker-regex-p nil)
                                        (command-buffer ""))
   "Render a client frame through cl-tui-kit's headless surface/widget path."
-  (let ((widget-renderer
-          (when (eq mode :picker)
-            (lambda (surface)
-              (%render-picker-widget
-               surface terminal-rows terminal-cols picker-items picker-query
-               picker-index picker-regex-p)))))
-    (%render-ansi-frame-with-tui-kit
-     (render-session-to-string
-      session terminal-rows terminal-cols
-      :focus-pane focus-pane
-      :viewport viewport
-      :mode (if (eq mode :picker) :normal mode)
-      :picker-items picker-items
-      :picker-query picker-query
-      :picker-index picker-index
-      :picker-regex-p picker-regex-p
-      :command-buffer command-buffer)
-     terminal-rows terminal-cols
-     :viewport 0
-     :widget-renderer widget-renderer)))
+  (let* ((widget-renderer
+           (when (eq mode :picker)
+             (lambda (surface)
+               (%render-picker-widget
+                surface terminal-rows terminal-cols picker-items picker-query
+                picker-index picker-regex-p))))
+         ;; R6.11: the OSC-0 title RENDER-SESSION-TO-STRING embeds in its
+         ;; frame text does not survive %RENDER-ANSI-FRAME-WITH-TUI-KIT's
+         ;; ansi-frame/tui-kit round-trip (its frame-grid parser skips OSC
+         ;; sequences without retaining them, then the surface is redrawn
+         ;; from the parsed grid) -- re-derive the same pane here and
+         ;; re-emit after the round-trip, at the boundary a client actually
+         ;; receives.
+         (active-pane (%session-title-pane session focus-pane))
+         (worktree (and active-pane (pane-worktree active-pane))))
+    (concatenate
+     'string
+     (%render-ansi-frame-with-tui-kit
+      (render-session-to-string
+       session terminal-rows terminal-cols
+       :focus-pane focus-pane
+       :viewport viewport
+       :mode (if (eq mode :picker) :normal mode)
+       :picker-items picker-items
+       :picker-query picker-query
+       :picker-index picker-index
+       :picker-regex-p picker-regex-p
+       :command-buffer command-buffer)
+      terminal-rows terminal-cols
+      :viewport 0
+      :widget-renderer widget-renderer)
+     (%client-title-osc (and worktree (worktree-repository worktree)) worktree))))
 
 (defun render-workspace-overview-to-tui-string
     (organizations terminal-rows terminal-cols &key focus-pane
@@ -501,22 +545,31 @@
                                                (mode :normal)
                                                (prefix-code #x11))
   "Render the workspace overview through cl-tui-kit's headless backend."
-  (%render-ansi-frame-with-tui-kit
-   (render-workspace-overview-to-string
-    organizations terminal-rows terminal-cols
-    :focus-pane focus-pane
-    :selected-tree-object selected-tree-object
-    :selected-worktree selected-worktree
-    :tree-scroll tree-scroll
-    :messages messages
-    :mode mode
-    :prefix-code prefix-code
-    :render-tree-p nil)
-   terminal-rows terminal-cols
-   :viewport 0
-   :widget-renderer
-   (lambda (surface)
-     (%render-workspace-tree-widget
-      surface organizations terminal-rows terminal-cols
-      selected-tree-object tree-scroll))))
+  ;; R6.11: same round-trip-discards-OSC situation as
+  ;; render-session-to-tui-string above -- re-derive the title selection at
+  ;; this boundary and re-emit after the round-trip.
+  (multiple-value-bind (title-repository title-worktree)
+      (%workspace-title-selection focus-pane selected-tree-object
+                                  selected-worktree)
+    (concatenate
+     'string
+     (%render-ansi-frame-with-tui-kit
+      (render-workspace-overview-to-string
+       organizations terminal-rows terminal-cols
+       :focus-pane focus-pane
+       :selected-tree-object selected-tree-object
+       :selected-worktree selected-worktree
+       :tree-scroll tree-scroll
+       :messages messages
+       :mode mode
+       :prefix-code prefix-code
+       :render-tree-p nil)
+      terminal-rows terminal-cols
+      :viewport 0
+      :widget-renderer
+      (lambda (surface)
+        (%render-workspace-tree-widget
+         surface organizations terminal-rows terminal-cols
+         selected-tree-object tree-scroll)))
+     (%client-title-osc title-repository title-worktree))))
 

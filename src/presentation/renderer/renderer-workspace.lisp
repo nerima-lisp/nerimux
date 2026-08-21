@@ -30,6 +30,112 @@
       (format nil "C-~A" (code-char (+ (char-code #\a) (1- code))))
       (format nil "key/~D" code)))
 
+;;; ── Worktree status tokens (R6.1) ──────────────────────────────────────────
+;;;
+;;; Shared by the tree label here and by %WORKSPACE-TREE-WIDGET-LABEL in
+;;; renderer-tui-kit.lisp (which loads after this file), so both draw the
+;;; same token set instead of two conds drifting apart.
+;;;
+;;; WORKTREE-STATUS (the NERIMUX/MODEL slot reader -- not to be confused with
+;;; the same-named refresh function in NERIMUX/VCS, which sets it) is NIL
+;;; until the first successful VCS-STATUS-STRUCTURED call and is reset to NIL
+;;; whenever the worktree's path goes missing (vcs.lisp:319). That makes it
+;;; the one slot that distinguishes "never fetched" / "known missing" from
+;;; "fetched and clean": DIRTY-P, CONFLICT-P, AHEAD and BEHIND all default to
+;;; false/0, the same values a genuinely clean worktree has, so none of them
+;;; alone can tell UNKNOWN apart from CLEAN. MISSING-P / BARE-P / LOCKED-P /
+;;; PRUNABLE-P come from `git worktree list --porcelain`, a different source
+;;; from status, so they are reported regardless of whether status has ever
+;;; been fetched.
+(defun %worktree-status-tokens (worktree)
+  "Return WORKTREE's state as a list of token strings, per the design
+   document's status-token contract (docs/notes/workspace-ui-ux-design.md
+   §6.1/§6.2): MISSING / BARE / LOCKED / PRUNABLE / DIRTY / CONFLICT /
+   AHEAD n / BEHIND n, in that order, all that apply. AHEAD/BEHIND keep
+   their counts rather than collapsing to a boolean. No applicable token and
+   a fetched status yields (\"CLEAN\"); a status never fetched yields
+   (\"UNKNOWN\") appended after any structural tokens, instead of assuming
+   CLEAN."
+  (let ((structural
+          (append
+           (when (worktree-missing-p worktree) (list "MISSING"))
+           (when (worktree-bare-p worktree) (list "BARE"))
+           (when (worktree-locked-p worktree) (list "LOCKED"))
+           (when (worktree-prunable-p worktree) (list "PRUNABLE")))))
+    (if (worktree-status worktree)
+        (let ((health
+                (append
+                 (when (worktree-dirty-p worktree) (list "DIRTY"))
+                 (when (worktree-conflict-p worktree) (list "CONFLICT"))
+                 (when (plusp (worktree-ahead worktree))
+                   (list (format nil "AHEAD ~D" (worktree-ahead worktree))))
+                 (when (plusp (worktree-behind worktree))
+                   (list (format nil "BEHIND ~D" (worktree-behind worktree)))))))
+          (or (append structural health) (list "CLEAN")))
+        (append structural (list "UNKNOWN")))))
+
+(defun %worktree-status-label (worktree)
+  "WORKTREE's status tokens (%WORKTREE-STATUS-TOKENS) joined for display."
+  (format nil "~{~A~^ ~}" (%worktree-status-tokens worktree)))
+
+;;; ── Client-terminal title (R6.11) ───────────────────────────────────────────
+;;;
+;;; "nerimux: <repository> — <worktree>", "-" standing in for either half
+;;; when nothing is selected/attached. Shared by both views (pane-frame
+;;; title emission lives in renderer-compose.lisp; the workspace-overview
+;;; call site is below) so the label fallbacks -- specification/local-path/id
+;;; for a repository, branch/path/id for a worktree -- read identically to
+;;; the tree labels elsewhere in this file, without being the same LABELS
+;;; closures (those close over STREAM and are not reachable from outside
+;;; RENDER-WORKSPACE-OVERVIEW-TO-STRING).
+
+(defun %repository-title-text (repository)
+  (or (and repository
+           (or (and (plusp (length (repository-specification repository)))
+                    (repository-specification repository))
+               (and (plusp (length (repository-local-path repository)))
+                    (repository-local-path repository))
+               (repository-id repository)))
+      "-"))
+
+(defun %worktree-title-text (worktree)
+  (or (and worktree
+           (or (and (worktree-branch worktree)
+                    (plusp (length (worktree-branch worktree)))
+                    (worktree-branch worktree))
+               (and (plusp (length (worktree-path worktree)))
+                    (worktree-path worktree))
+               (worktree-id worktree)))
+      "-"))
+
+(defun %client-title-osc (repository worktree)
+  "OSC 0 escape setting the outer client terminal's title."
+  (format nil "~C]0;nerimux: ~A ~A ~A~C"
+          +esc+ (%repository-title-text repository) (code-char #x2014)
+          (%worktree-title-text worktree) (code-char 7)))
+
+(defun %workspace-title-selection (focus-pane selected-tree-object selected-worktree)
+  "Resolve the (VALUES REPOSITORY WORKTREE) a workspace-overview frame's
+   title should show, mirroring the SELECTED-OBJECT resolution inside
+   RENDER-WORKSPACE-OVERVIEW-TO-STRING -- duplicated rather than shared
+   because that resolution lives inside that function's own LET* and closes
+   over locals (SELECTED-REPOSITORY, SELECTED-WORKTREE) not visible outside
+   it; RENDER-WORKSPACE-OVERVIEW-TO-TUI-STRING needs the same answer at
+   its own call boundary, after the ansi-frame/tui-kit round-trip that
+   discards any title OSC embedded in the frame text (see
+   %RENDER-ANSI-FRAME-WITH-TUI-KIT's OSC-skipping frame-grid parser)."
+  (let* ((selected-object
+           (or selected-tree-object
+               selected-worktree
+               (and focus-pane (pane-worktree focus-pane))))
+         (worktree (and (typep selected-object 'worktree) selected-object))
+         (repository
+           (cond
+             ((typep selected-object 'repository) selected-object)
+             (worktree (worktree-repository worktree))
+             (t nil))))
+    (values repository worktree)))
+
 (defun render-workspace-overview-to-string
     (organizations terminal-rows terminal-cols &key focus-pane
                                             selected-tree-object
@@ -83,21 +189,19 @@
                (loop for organization in organizations
                      sum (organization-active-worktree-count organization)))))
     (labels
-        ((clip (value width)
-           (let ((text (if (stringp value) value (princ-to-string value))))
-             (if (<= (length text) width)
-                 text
-                 (if (<= width 3)
-                     (subseq text 0 width)
-                     (concatenate 'string (subseq text 0 (- width 3)) "...")))))
-         (cell (row col width value)
+        ((cell (row col width value)
            (when (plusp width)
              (move-to stream row col)
-             (let ((text (clip value width)))
+             ;; %display-clip already pads its own truncation branch to
+             ;; exactly WIDTH columns; the pad below only fires for text
+             ;; shorter than WIDTH, measured by display width (not
+             ;; (length text)) so a fullwidth character does not leave the
+             ;; row one column short (R6.9).
+             (let* ((text (%display-clip value width))
+                    (pad (- width (%display-width text))))
                (write-string text stream)
-               (when (< (length text) width)
-                 (write-string (make-string (- width (length text))
-                                            :initial-element #\Space)
+               (when (plusp pad)
+                 (write-string (make-string pad :initial-element #\Space)
                                stream)))))
          (reason-text (reasons)
            (if reasons
@@ -107,12 +211,7 @@
                                reasons))
                "-"))
          (worktree-state (worktree)
-           (cond
-             ((worktree-missing-p worktree) "MISSING")
-             ((worktree-bare-p worktree) "BARE")
-             ((worktree-locked-p worktree) "LOCKED")
-             ((worktree-prunable-p worktree) "PRUNABLE")
-             (t "ready")))
+           (%worktree-status-label worktree))
          (organization-label (organization)
            (let ((host (organization-host organization))
                  (name (organization-name organization)))
@@ -340,4 +439,13 @@
                     (string-downcase (princ-to-string mode))
                     (%workspace-prefix-label prefix-code)))
       (reset-attrs stream)
+      ;; R6.11: embedded here for a caller of the plain-ANSI entry point
+      ;; directly, but a client only ever sees this through
+      ;; RENDER-WORKSPACE-OVERVIEW-TO-TUI-STRING (renderer-tui-kit.lisp),
+      ;; whose ansi-frame/tui-kit round-trip parses this OSC sequence and
+      ;; then discards it when redrawing from the parsed grid -- that
+      ;; function re-emits the same title after the round-trip so it
+      ;; actually reaches the outer terminal.
+      (write-string (%client-title-osc selected-repository selected-worktree)
+                    stream)
       (get-output-stream-string stream))))

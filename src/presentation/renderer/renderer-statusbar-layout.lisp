@@ -34,20 +34,28 @@
         (if (< j len) (1+ j) len)))))
 
 (defun %visible-length (str)
-  "Number of visible cells in STR, skipping CSI SGR escape sequences.
-   Equals (LENGTH STR) for strings with no escape sequences."
+  "Display-column width of STR, skipping CSI SGR escape sequences and
+   counting each remaining character by NERIMUX/TERMINAL/TYPES:CHAR-WIDTH
+   (0/1/2 — R6.9) rather than by character count, so a fullwidth window or
+   session name (CJK, kana, hangul) does not desync status-bar column math
+   the way (LENGTH STR) would.  Equals (LENGTH STR) for escape-free ASCII."
   (let ((n 0) (i 0) (len (length str)))
     (loop while (< i len)
           for esc-end = (%sgr-sequence-end str i)
           do (if esc-end
                  (setf i esc-end)
-                 (progn (incf n) (incf i))))
+                 (progn (incf n (nerimux/terminal/types:char-width (char str i)))
+                        (incf i))))
     n))
 
 (defun %visible-truncate (str n)
-  "Prefix of STR holding at most N visible cells; CSI escape sequences are copied
-   through without counting toward N.  Equals (SUBSEQ STR 0 (MIN N (LENGTH STR)))
-   for escape-free strings."
+  "Prefix of STR holding at most N display columns; CSI escape sequences are
+   copied through without counting toward N, and a fullwidth character that
+   would straddle the N-column boundary is dropped whole rather than split
+   (R6.9) — the caller's own gap math (e.g. %JUSTIFY-RIGHT, %STATUS-PAD-TO)
+   already fills the resulting short column with spaces, so this does not
+   pad itself.  Equals (SUBSEQ STR 0 (MIN N (LENGTH STR))) for escape-free
+   ASCII."
   (if (>= n (%visible-length str))
       str
       (with-output-to-string (out)
@@ -57,9 +65,12 @@
                 do (if esc-end
                        (progn (write-string str out :start i :end esc-end)
                               (setf i esc-end))
-                       (progn (write-char (char str i) out)
-                              (incf seen)
-                              (incf i))))))))
+                       (let ((w (nerimux/terminal/types:char-width (char str i))))
+                         (if (<= (+ seen w) n)
+                             (progn (write-char (char str i) out)
+                                    (incf seen w)
+                                    (incf i))
+                             (setf i len)))))))))
 
 (defun %status-style-block-sgr (body base-sgr)
   "SGR escape string for one inline #[BODY] status block: always resets to

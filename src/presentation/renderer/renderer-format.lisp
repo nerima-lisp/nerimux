@@ -199,3 +199,72 @@
 (defun %center-coord (total size)
   "Return the column/row offset to center SIZE within TOTAL (clamped to 0)."
   (max 0 (floor (- total size) 2)))
+
+;;; ── Display-width text clipping (R6.9) ────────────────────────────────────
+;;;
+;;; The emulator side treats a full-width character (CJK, kana, hangul, most
+;;; emoji) as two terminal cells -- %place-wide-char and CHAR-WIDTH in
+;;; src/domain/terminal/. Column math here used to count (LENGTH TEXT)
+;;; instead, so a path or branch name containing Japanese desynced by one
+;;; cell per wide character. These two functions are the one place plain
+;;; (non-SGR) text gets measured and truncated by display width; every clip
+;;; site outside the status bar's own SGR-aware layer (renderer-statusbar-
+;;; layout.lisp, which has a parallel fix) routes through them instead of
+;;; repeating the column math locally.
+;;;
+;;; CHAR-WIDTH lives in NERIMUX/TERMINAL/TYPES and is not re-exported by the
+;;; NERIMUX/TERMINAL facade package that NERIMUX/RENDERER otherwise :USEs
+;;; (package-terminal.lisp's :export list omits it) -- referenced here fully
+;;; qualified rather than through the facade. This is a downward reference
+;;; (DOMAIN -> DOMAIN, both PRESENTATION's dependency direction), so it does
+;;; not trip the layering guard, but it does bypass the facade's stated
+;;; purpose of keeping callers off individual sub-packages.
+
+(defun %display-width (text)
+  "Sum of NERIMUX/TERMINAL/TYPES:CHAR-WIDTH across TEXT's characters: the
+   number of terminal columns TEXT occupies, as opposed to (LENGTH TEXT)."
+  (loop for ch across text sum (nerimux/terminal/types:char-width ch)))
+
+(defun %display-clip (value width)
+  "Clip VALUE (coerced to a string) to fit within WIDTH display columns,
+   measured by CHAR-WIDTH rather than (LENGTH TEXT). A character that would
+   straddle the WIDTH boundary is dropped whole, never split, and the
+   resulting short column is padded with spaces so a fixed-width caller's
+   layout does not shift. WIDTH >= 4 keeps a 3-column \"...\" suffix (as the
+   pre-R6.9 length-based clip did); a narrower WIDTH truncates without one.
+   The returned string's display width always equals WIDTH once VALUE
+   exceeds it."
+  (let* ((text (if (stringp value) value (princ-to-string value)))
+         (width (max 0 width)))
+    (if (<= (%display-width text) width)
+        text
+        (let* ((ellipsis-p (>= width 4))
+               (budget (if ellipsis-p (- width 3) width))
+               (taken 0)
+               (end 0))
+          (loop for index from 0 below (length text)
+                for w = (nerimux/terminal/types:char-width (char text index))
+                while (<= (+ taken w) budget)
+                do (incf taken w) (setf end (1+ index)))
+          (concatenate 'string
+                       (subseq text 0 end)
+                       (make-string (- budget taken) :initial-element #\Space)
+                       (if ellipsis-p "..." ""))))))
+
+(defun %display-clip-tail (text width)
+  "Return the trailing slice of TEXT whose display width fits within WIDTH,
+   trimming from the front rather than the back -- the shape a live-edited
+   command buffer needs so the cursor position (always at the end) stays
+   visible, as opposed to %DISPLAY-CLIP's fixed-label truncation. Never
+   splits a wide character; WIDTH or more columns of TEXT come back
+   unchanged."
+  (let ((width (max 0 width))
+        (length (length text)))
+    (if (<= (%display-width text) width)
+        text
+        (let ((taken 0) (start length))
+          (loop for index from (1- length) downto 0
+                for w = (nerimux/terminal/types:char-width (char text index))
+                while (<= (+ taken w) width)
+                do (incf taken w) (setf start index))
+          (subseq text start)))))

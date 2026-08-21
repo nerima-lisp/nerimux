@@ -20,6 +20,18 @@
 ;;;;             → renderer-compose-protocols → renderer-compose-overlay
 ;;;;             → renderer-compose-effects → renderer-compose
 
+(defun %session-title-pane (session focus-pane)
+  "The pane RENDER-SESSION-TO-STRING's own ACTIVE-PANE binding resolves to,
+   duplicated as a top-level function so RENDER-SESSION-TO-TUI-STRING
+   (renderer-tui-kit.lisp, loads after this file) can derive the same pane
+   at its own call boundary for the R6.11 title -- see the comment on
+   render-session-to-string's title block below for why that second call is
+   the one that actually reaches the client."
+  (let* ((window (session-active-window session))
+         (panes (when window (window-panes window))))
+    (or (and focus-pane (find focus-pane panes :test #'eq))
+        (session-active-pane session))))
+
 (defun %render-panes-and-borders (buffer session window panes active-pane terminal-cols
                                   &key (viewport 0))
   "Render all panes and split-tree borders for WINDOW into BUFFER.
@@ -56,12 +68,16 @@
       (%emit-sgr stream 7)
       (when attention
         (%emit-sgr stream 33)))
-  (let ((width (min inner-width (length text))))
-    (write-string text stream :start 0 :end width)
-    (when (< width inner-width)
-      (write-string (make-string (- inner-width width)
-                                 :initial-element #\Space)
-                    stream)))
+  ;; %display-clip measures by CHAR-WIDTH, not (length text), and pads its
+  ;; own truncation branch to exactly INNER-WIDTH columns — see R6.9's
+  ;; comment on %display-clip in renderer-format.lisp for why a picker
+  ;; result naming a Japanese branch needs this instead of (min inner-width
+  ;; (length text)).
+  (let* ((clipped (%display-clip text inner-width))
+         (pad (- inner-width (%display-width clipped))))
+    (write-string clipped stream)
+    (when (plusp pad)
+      (write-string (make-string pad :initial-element #\Space) stream)))
   (reset-attrs stream)
   (write-char #\| stream))
 
@@ -112,9 +128,13 @@
              (plusp terminal-rows)
              (plusp terminal-cols))
     (let* ((text (concatenate 'string ":" command-buffer))
-           (start (max 0 (- (length text) terminal-cols)))
-           (visible (subseq text start))
-           (width (length visible)))
+           ;; %display-clip-tail keeps the tail (where the cursor always
+           ;; sits) visible by trimming from the front, measured by display
+           ;; width rather than (length text) -- R6.9; a `:wt-delete
+           ;; <branch>` command line naming a Japanese branch must not
+           ;; scroll a wide character in half.
+           (visible (%display-clip-tail text terminal-cols))
+           (width (%display-width visible)))
       (move-to stream (1- terminal-rows) 0)
       (write-string visible stream)
       (when (< width terminal-cols)
@@ -137,9 +157,7 @@
   (let* ((buffer      (make-string-output-stream))
          (window      (session-active-window session))
          (panes       (when window (window-panes window)))
-         (active-pane (or (and focus-pane
-                               (find focus-pane panes :test #'eq))
-                          (session-active-pane session))))
+         (active-pane (%session-title-pane session focus-pane)))
     (cursor-invisible buffer)
     (%render-panes-and-borders buffer session window panes active-pane terminal-cols
                                :viewport viewport)
@@ -169,18 +187,22 @@
     (%render-bell-and-cursor buffer active-pane)
     (%discard-background-bells session window)
     ;; set-titles: emit OSC 0 to set the outer terminal window title.
-    ;; set-titles defaulted to off (domain/options, deleted R2.2) — a change
-    ;; from that default, made unconditional per R2.2: R6.11 changes the
-    ;; CONTENT of the title later; this only removes the dead on/off branch,
-    ;; since nothing could ever have flipped it on with no config to write
-    ;; through.  set-titles-string's content is unchanged for now
-    ;; ("#S:#I:#W" = session name : window index : window name).
-    (let* ((win   (session-active-window session))
-           (title (format nil "~A:~D:~A"
-                          (session-name session)
-                          (if win (window-id win) 0)
-                          (if win (window-name win) ""))))
-      (format buffer "~C]0;~A~C" +esc+ title (code-char 7)))
+    ;; set-titles defaulted to off (domain/options, deleted R2.2); made
+    ;; unconditional by R2.2, content fixed to "nerimux: <repository> —
+    ;; <worktree>" by R6.11 (previously "#S:#I:#W" = session name : window
+    ;; index : window name).  Embedded here for a caller of the plain-ANSI
+    ;; entry point directly, but a client only ever sees this through
+    ;; RENDER-SESSION-TO-TUI-STRING (renderer-tui-kit.lisp), whose
+    ;; ansi-frame/tui-kit round-trip parses OSC sequences out of this frame
+    ;; text and then discards them when redrawing from the parsed grid
+    ;; (%frame-grid-skip-osc in renderer-tui-kit.lisp does not retain what
+    ;; it skips) -- that function re-emits the same title after the
+    ;; round-trip so it actually reaches the outer terminal.
+    (let ((worktree (and active-pane (pane-worktree active-pane))))
+      (write-string
+       (%client-title-osc (and worktree (worktree-repository worktree))
+                          worktree)
+       buffer))
     (get-output-stream-string buffer)))
 
 (defun render-session (session terminal-rows terminal-cols)
