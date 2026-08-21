@@ -15,13 +15,6 @@
   "True when PATH contains a shell glob metacharacter."
   (find-if (lambda (c) (member c '(#\* #\? #\[) :test #'char=)) path))
 
-(defun %source-file-report-missing (path)
-  "Report tmux-style source-file diagnostics for missing paths."
-  (ignore-errors
-    (let ((fn (find-symbol "ADD-MESSAGE-LOG" "NERIMUX")))
-      (when (and fn (fboundp fn))
-        (funcall fn (format nil "No such file or directory: ~A" path))))))
-
 (defun %parse-source-file-flags (args)
   "Parse the leading -Fnqv flags and -t target of source-file."
   (let ((parse-only nil) (quiet nil) (verbose nil) (format-p nil) (rest args))
@@ -59,24 +52,20 @@
        raw)))
 
 (defun %source-file-glob-matches (expanded quiet)
-  "Expand EXPANDED to matching files and report unmatched globs unless QUIET."
-  (let ((matches (%glob-expand expanded)))
-    (when (and (%glob-pattern-p expanded) (null matches) (not quiet))
-      (%source-file-report-missing expanded))
-    matches))
+  "Expand EXPANDED to matching files."
+  (declare (ignore quiet))
+  (%glob-expand expanded))
 
 (defun %load-or-parse-source-file (file parse-only quiet)
   "Apply one matched source-file FILE."
+  (declare (ignore quiet))
   (if (probe-file file)
       (progn
         (if parse-only
             (%parse-config-file-only file)
             (ignore-errors (load-config-file file)))
         t)
-      (progn
-        (unless quiet
-          (%source-file-report-missing file))
-        nil)))
+      nil))
 
 (defun source-files (args)
   "Implement source-file [-Fnqv] [-t target-pane] path..."

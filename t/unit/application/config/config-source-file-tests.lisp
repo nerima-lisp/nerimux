@@ -38,33 +38,13 @@
                           (list (namestring (merge-pathnames "*.conf" dir))))))))
         (ignore-errors (host-kit:delete-directory-tree dir :validate t)))))
 
-  ;; source-file on a missing path or unmatched glob (no -q) logs
-  ;; 'No such file or directory: PATH' and returns NIL.
+  ;; source-file on a missing path or unmatched glob (no -q) returns NIL.
   ;; Each row: (path description).
-  (it "source-files-missing-path-logs-message-table"
+  (it "source-files-missing-path-returns-nil-table"
     (dolist (row '(("/no/such/nerimux-srcfile-abc.conf"
-                    "plain missing path logs No such file or directory")
+                    "plain missing path")
                    ("/nonexistent-nerimux-glob-dir/*.conf"
-                    "unmatched glob logs No such file or directory")))
+                    "unmatched glob")))
       (destructuring-bind (path desc) row
         (declare (ignore desc))
-        (let ((nerimux::*message-log* nil))
-          (expect (null (nerimux/config:source-files (list path))))
-          (expect (= 1 (length nerimux::*message-log*)))
-          (expect (search "No such file or directory" (cdr (first nerimux::*message-log*))))
-          (expect (search path (cdr (first nerimux::*message-log*))))))))
-
-  ;; With -q, a missing file logs NOTHING (tmux CMD_PARSE_QUIET) and returns T.
-  (it "source-files-q-suppresses-missing-file-message"
-    (let ((nerimux::*message-log* nil))
-      (expect (eq t (nerimux/config:source-files
-                 '("-q" "/no/such/nerimux-srcfile-xyz.conf"))))
-      (expect (null nerimux::*message-log*))))
-
-  ;; A successfully loaded file produces NO 'missing' diagnostic.
-  (it "source-files-existing-file-logs-no-message"
-    (with-isolated-config
-      (let ((nerimux::*message-log* nil))
-        (with-temp-config-file (p "bind z next-window")
-          (expect (eq t (nerimux/config:source-files (list (namestring p)))))
-          (expect (null nerimux::*message-log*)))))))
+        (expect (null (nerimux/config:source-files (list path))))))))

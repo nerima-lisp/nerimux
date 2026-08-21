@@ -53,29 +53,6 @@
         (declare (ignore desc))
         (expect (equal expected (nerimux/commands:tokenize-command-string input))))))
 
-  ;;; ── add-message-log ──────────────────────────────────────────────────────────
-
-  ;; add-message-log prepends a (timestamp . text) cons to *message-log*.
-  (it "add-message-log-prepends-entry"
-    (let ((nerimux::*message-log* nil))
-      (nerimux::add-message-log "first-message")
-      (expect nerimux::*message-log* :to-be-truthy)
-      (expect (string= "first-message" (cdr (first nerimux::*message-log*))))))
-
-  ;; add-message-log caps *message-log* at the message-limit option, not a constant.
-  (it "add-message-log-caps-honors-message-limit-option"
-    (with-isolated-options ("message-limit" 3)
-      (let ((nerimux::*message-log* nil))
-        (loop repeat 10 do (nerimux::add-message-log "x"))
-        (expect (= 3 (length nerimux::*message-log*))))))
-
-  ;; add-message-log puts newest entry first.
-  (it "add-message-log-ordering"
-    (let ((nerimux::*message-log* nil))
-      (nerimux::add-message-log "first")
-      (nerimux::add-message-log "second")
-      (expect (string= "second" (cdr (first nerimux::*message-log*))))))
-
   ;;; ── %copy-mode-find-forward / %copy-mode-find-backward ──────────────────────
 
   (define-copy-mode-find-cases

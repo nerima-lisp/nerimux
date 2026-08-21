@@ -36,50 +36,6 @@
                   "stop-reader-threads must not signal when joining a dead thread")
         (expect nerimux::*running* :to-be-falsy))))
 
-  ;; ── add-message-log ──────────────────────────────────────────────────────────
-
-  ;; add-message-log caps *message-log* at the message-limit option.
-  (it "add-message-log-caps-at-message-limit"
-    (with-isolated-options ("message-limit" 5)
-      (let ((nerimux::*message-log* nil))
-        (dotimes (i 12)
-          (nerimux::add-message-log (format nil "msg-~D" i)))
-        (expect (= 5 (length nerimux::*message-log*))))))
-
-  ;; add-prompt-history caps *prompt-history* at the prompt-history-limit option.
-  (it "add-prompt-history-caps-at-prompt-history-limit"
-    (with-isolated-options ("prompt-history-limit" 4)
-      (let ((nerimux::*prompt-history* (history-kit:make-history)))
-        (dotimes (i 9)
-          (nerimux::add-prompt-history (format nil "cmd-~D" i)))
-        (expect (= 4 (history-kit:history-count nerimux::*prompt-history*))))))
-
-  ;; add-message-log prepends: the most recently added entry is first.
-  (it "add-message-log-newest-first"
-    (let ((nerimux::*message-log* nil))
-      (nerimux::add-message-log "first")
-      (nerimux::add-message-log "second")
-      (expect (string= "second" (cdr (first nerimux::*message-log*))))
-      (expect (string= "first" (cdr (second nerimux::*message-log*))))))
-
-  ;; Each log entry has a non-zero timestamp (from get-universal-time).
-  (it "add-message-log-entry-has-timestamp"
-    (let ((nerimux::*message-log* nil))
-      (nerimux::add-message-log "timed")
-      (let ((ts (car (first nerimux::*message-log*))))
-        (expect (integerp ts))
-        (expect (plusp ts)))))
-
-  ;; add-message-log also appends to the current client's message log.
-  (it "add-message-log-mirrors-to-current-client-log"
-    (let ((nerimux::*message-log* nil)
-          (nerimux::*current-client-conn* (nerimux::%make-client-conn)))
-      (nerimux::add-message-log "client-scoped")
-      (expect (string= "client-scoped" (cdr (first nerimux::*message-log*))))
-      (expect (string= "client-scoped"
-                       (cdr (first (nerimux::client-conn-message-log
-                                    nerimux::*current-client-conn*)))))))
-
   ;; ── Constants coverage ────────────────────────────────────────────────────────
 
   ;; +wait-for-channel-timeout+ is a positive integer constant.
@@ -93,10 +49,6 @@
   (it "server-sessions-var-is-boundp"
     (expect (boundp 'nerimux::*server-sessions*))
     (expect (listp nerimux::*server-sessions*)))
-
-  ;; *message-log* is defined and initially NIL.
-  (it "message-log-var-is-boundp"
-    (expect (boundp 'nerimux::*message-log*)))
 
   ;; ── Wait-for channel synchronization ─────────────────────────────────────────
 

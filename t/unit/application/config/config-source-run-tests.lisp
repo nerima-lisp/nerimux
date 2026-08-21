@@ -18,15 +18,11 @@
                                           "source alias")
         (expect (not (string= "SOURCEALIAS" (nerimux/options:get-option "status-left")))))))
 
-  ;; source-file on a nonexistent file returns NIL and logs tmux's diagnostic.
-  (it "source-file-missing-returns-nil-and-logs"
+  ;; source-file on a nonexistent file returns NIL.
+  (it "source-file-missing-returns-nil"
     (with-isolated-config
-      (let ((nerimux::*message-log* nil))
-        (expect (null (apply-config-directive
-                       '("source-file" "/nonexistent-nerimux-config-abc.conf"))))
-        (expect (= 1 (length nerimux::*message-log*)))
-        (expect (search "No such file or directory"
-                        (cdr (first nerimux::*message-log*)))))))
+      (expect (null (apply-config-directive
+                     '("source-file" "/nonexistent-nerimux-config-abc.conf"))))))
 
   ;; source-file -n parses the file but executes NOTHING (tmux CMD_PARSE_PARSEONLY).
   ;; Asserts via an OPTION the file would set (a key like z has a DEFAULT binding, so
