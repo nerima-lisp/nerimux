@@ -71,7 +71,7 @@ dropped connection's entry be reclaimed instead of leaking.")
   (if (%client-esc-swallow-consume conn)
       nil
       (multiple-value-bind (prefix-handled prefix-result)
-          (%handle-workspace-prefix-key conn payload)
+          (%handle-workspace-prefix-key session conn payload)
         (if prefix-handled
             prefix-result
             (cond
@@ -107,29 +107,228 @@ dropped connection's entry be reclaimed instead of leaking.")
       (%mark-dirty))
     nil))
 
-(defun %handle-workspace-prefix-key (conn payload)
-  "Handle the client-local prefix and `d` detach binding.
+(defun %handle-workspace-prefix-key (session conn payload)
+  "Handle the client-local prefix (C-q, R4.4) and the key it introduces.
 
-The prefix is consumed before the stdin-target path, so C-q d always detaches
-the terminal connection while leaving the resident panes and runtime intact.
-Any non-`d` byte after the prefix is passed through to the normal key pipeline.
-"
+The prefix is consumed before the stdin-target path.  Once struck, the next
+byte is resolved against 1.5's binding table by %workspace-prefix-dispatch;
+a byte the table does not recognize is discarded there instead of falling
+through to the normal key pipeline — the old 'unbound means pass through'
+behavior (:96-107 pre-R4.4) is gone."
   (let ((single-byte (and (arrayp payload)
                           (= (length payload) 1)
                           (aref payload 0))))
     (cond
       ((client-conn-ui-prefix-p conn)
        (setf (client-conn-ui-prefix-p conn) nil)
-       (if (and (integerp single-byte)
-                (= single-byte (char-code #\d)))
-           (values t :drop)
-           (values nil nil)))
+       (values t (%workspace-prefix-dispatch session conn single-byte)))
       ((and (integerp single-byte)
             (= single-byte (client-conn-workspace-prefix-code conn)))
        (setf (client-conn-ui-prefix-p conn) t)
        (values t nil))
       (t
        (values nil nil)))))
+
+;;; ── C-q prefix action table (R4.4, 1.5) ─────────────────────────────────────
+;;;
+;;; Each action below takes SESSION/CONN and returns NIL (keep serving) or
+;;; :drop (detach, for `d`).  %workspace-prefix-dispatch is the single place
+;;; that maps a struck byte to an action; a byte not listed here is dropped.
+
+(defconstant +max-panes-per-window+ 4
+  "Hard cap on panes within one window (§1.4, R5.2).  A split requested while
+   a window is already at the cap opens a new window for the same worktree
+   instead of subdividing an existing pane further.")
+
+(defun %workspace-prefix-context (session conn)
+  "Return (values PANE WINDOW WORKTREE) for CONN's current focus, or all NIL
+   when nothing is focused.  The shared starting point for every prefix
+   action below."
+  (let* ((pane (%resolve-client-focus-pane session nil conn))
+         (window (and pane (pane-window pane)))
+         (worktree (and pane (pane-worktree pane))))
+    (values pane window worktree)))
+
+(defun %workspace-prefix-unzoom (window)
+  "R5.6: split, focus move, window switch, and pane close all disturb a
+   zoomed layout, so each un-zooms WINDOW first when it is zoomed, rather
+   than acting on (or silently failing against) the collapsed zoom tree."
+  (when (and window (window-zoom-p window))
+    (window-zoom-toggle window)))
+
+(defun %workspace-prefix-split (session conn orient)
+  "C-q - / C-q | : split the focused pane's window along ORIENT (R5.1/R5.3).
+   At the per-window pane cap, opens a new window in the same worktree
+   instead (R5.2) via the existing %open-client-worktree-pane path."
+  (multiple-value-bind (pane window worktree)
+      (%workspace-prefix-context session conn)
+    (cond
+      ((or (null pane) (null window))
+       (%client-notify conn "no focused pane"))
+      (t
+       ;; Un-zoom BEFORE reading window-panes: while zoomed, window-panes
+       ;; reflects only the single collapsed leaf (window-refresh-panes runs
+       ;; against the zoom's 1-leaf tree, not the real one), so the pane-cap
+       ;; check below would undercount a window that is actually already at
+       ;; +max-panes-per-window+.
+       (%workspace-prefix-unzoom window)
+       (cond
+         ((>= (length (window-panes window)) +max-panes-per-window+)
+          (%open-client-worktree-pane session conn worktree))
+         (t
+          (let ((new-pane (window-split session window orient
+                                        :start-dir (and worktree
+                                                        (worktree-path worktree)))))
+            (if new-pane
+                (progn
+                  (when worktree (worktree-add-pane worktree new-pane))
+                  (start-reader-thread new-pane)
+                  (window-select-pane window new-pane)
+                  (%set-client-focus conn new-pane)
+                  (%mark-dirty))
+                ;; %split-fit-p already refused the split (too small); R5.1
+                ;; asks only for a message and otherwise doing nothing.
+                (%client-notify conn "pane too small to split")))))))
+    nil))
+
+(defun %workspace-refocus-after-window-close (session conn worktree)
+  "R5.4 fallback focus once a window closes because its last pane closed:
+   another window of the same WORKTREE (most recently active first), else
+   overview."
+  (let* ((candidates (and worktree (worktree-panes worktree)))
+         (best-pane
+           (and candidates
+                (first (sort (copy-list candidates) #'>
+                             :key (lambda (p) (window-last-active-time
+                                               (pane-window p))))))))
+    (if best-pane
+        (let* ((window (pane-window best-pane))
+               (active (window-active-pane window)))
+          (session-select-window session window)
+          (%set-client-focus conn active))
+        (%set-client-view conn :overview))))
+
+(defun %workspace-prefix-close-pane (session conn)
+  "C-q x : close the focused pane (R5.4).  Kills its PTY, drops it from its
+   worktree and window, and — when that empties the window — closes the
+   window too and refocuses per %workspace-refocus-after-window-close."
+  (multiple-value-bind (pane window worktree)
+      (%workspace-prefix-context session conn)
+    (cond
+      ((or (null pane) (null window))
+       (%client-notify conn "no focused pane"))
+      (t
+       (%workspace-prefix-unzoom window)
+       (close-pane-pty pane)
+       (when worktree
+         (setf (worktree-panes worktree) (delete pane (worktree-panes worktree)))
+         (setf (pane-worktree pane) nil))
+       (let ((sibling (window-remove-pane window pane)))
+         (if sibling
+             (progn
+               (window-select-pane window sibling)
+               (session-select-window session window)
+               (%set-client-focus conn sibling))
+             (progn
+               (session-remove-window session window)
+               (%workspace-refocus-after-window-close session conn worktree))))))
+    (%mark-dirty)
+    nil))
+
+(defun %workspace-prefix-toggle-zoom (session conn)
+  "C-q z : toggle zoom on the focused pane's window."
+  (multiple-value-bind (pane window) (%workspace-prefix-context session conn)
+    (declare (ignore pane))
+    (if window
+        (progn (window-zoom-toggle window) (%mark-dirty))
+        (%client-notify conn "no focused pane")))
+  nil)
+
+(defun %workspace-prefix-move-focus (session conn direction)
+  "C-q h/j/k/l : move focus to the neighbouring pane in DIRECTION,
+   un-zooming first per R5.6."
+  (multiple-value-bind (pane window) (%workspace-prefix-context session conn)
+    (cond
+      ((or (null pane) (null window))
+       (%client-notify conn "no focused pane"))
+      (t
+       (%workspace-prefix-unzoom window)
+       (let ((neighbor (pane-neighbor window pane direction)))
+         (if neighbor
+             (progn
+               (window-select-pane window neighbor)
+               (%set-client-focus conn neighbor)
+               (%mark-dirty))
+             (%client-notify conn (format nil "no pane ~A" direction)))))))
+  nil)
+
+(defun %workspace-prefix-cycle-window (session conn delta)
+  "C-q n / C-q p : cycle DELTA steps through the current worktree's windows
+   (wrapping), un-zooming the departing window first per R5.6."
+  (multiple-value-bind (pane window worktree)
+      (%workspace-prefix-context session conn)
+    (declare (ignore pane))
+    (cond
+      ((or (null window) (null worktree))
+       (%client-notify conn "no worktree selected"))
+      (t
+       (let* ((windows (%worktree-windows worktree))
+              (count (length windows))
+              (index (position window windows :test #'eq)))
+         (if (or (null index) (<= count 1))
+             (%client-notify conn "no other window")
+             (let* ((next-window (nth (mod (+ index delta) count) windows)))
+               (%workspace-prefix-unzoom window)
+               (session-select-window session next-window)
+               (%set-client-focus conn (window-active-pane next-window))
+               (%mark-dirty)))))))
+  nil)
+
+(defun %workspace-prefix-fetch-repository (conn)
+  "C-q F (R7.1, not yet implemented): fetch the selected repository."
+  (%client-notify conn "fetch (repository) is not implemented yet")
+  nil)
+
+(defun %workspace-prefix-fetch-organization (conn)
+  "C-q C-f (R7.1, not yet implemented): fetch the selected organization."
+  (%client-notify conn "fetch (organization) is not implemented yet")
+  nil)
+
+(defun %workspace-prefix-quit-server (conn)
+  "C-q Q (R8.2, not yet implemented): quit the server via the confirmation
+   view."
+  (%client-notify conn "server quit is not implemented yet")
+  nil)
+
+(defun %workspace-prefix-dispatch (session conn byte)
+  "Resolve BYTE — the key struck right after C-q — against 1.5's table and
+   run its action.  Returns the loop disposition (NIL to keep serving,
+   :drop for `d`).  A BYTE with no binding here is discarded: the prefix
+   already consumed it and nothing else happens (R4.4)."
+  (when (integerp byte)
+    (cond
+      ((= byte (char-code #\-)) (%workspace-prefix-split session conn :v))
+      ((= byte (char-code #\|)) (%workspace-prefix-split session conn :h))
+      ((= byte (char-code #\x)) (%workspace-prefix-close-pane session conn))
+      ((= byte (char-code #\z)) (%workspace-prefix-toggle-zoom session conn))
+      ((= byte (char-code #\h)) (%workspace-prefix-move-focus session conn :left))
+      ((= byte (char-code #\j)) (%workspace-prefix-move-focus session conn :down))
+      ((= byte (char-code #\k)) (%workspace-prefix-move-focus session conn :up))
+      ((= byte (char-code #\l)) (%workspace-prefix-move-focus session conn :right))
+      ((= byte (char-code #\n)) (%workspace-prefix-cycle-window session conn 1))
+      ((= byte (char-code #\p)) (%workspace-prefix-cycle-window session conn -1))
+      ((= byte (char-code #\F)) (%workspace-prefix-fetch-repository conn))
+      ((= byte #x06) (%workspace-prefix-fetch-organization conn)) ; C-f
+      ((= byte (char-code #\d)) :drop)
+      ((= byte (char-code #\Q)) (%workspace-prefix-quit-server conn))
+      ((= byte (client-conn-workspace-prefix-code conn))
+       ;; C-q C-q: back to :normal — the only prefix action with no pane or
+       ;; worktree precondition, so it is handled inline rather than via a
+       ;; one-line %workspace-prefix-* wrapper.
+       (%transition-client-ui-mode conn :enter-normal)
+       (%mark-dirty)
+       nil)
+      (t nil))))
 
 (defparameter +client-ui-modes+ '(:normal :input :copy :command :picker))
 
@@ -409,15 +608,9 @@ Any non-`d` byte after the prefix is passed through to the normal key pipeline.
     (and items
          (nth (client-conn-picker-index conn) items))))
 
-(defun %worktree-window-name (worktree)
-  (or (and (worktree-branch worktree)
-           (plusp (length (worktree-branch worktree)))
-           (worktree-branch worktree))
-      (and (worktree-path worktree)
-           (plusp (length (worktree-path worktree)))
-           (worktree-path worktree))
-      (worktree-id worktree)
-      "worktree"))
+;;; %worktree-window-name and %worktree-windows live in workspace-window.lisp
+;;; (which loads before this file), next to the other worktree-window
+;;; creation logic they serve.
 
 (defun %client-worktree-pane (session worktree)
   (and worktree
@@ -450,16 +643,30 @@ Any non-`d` byte after the prefix is passed through to the normal key pipeline.
                              :name (%worktree-window-name worktree)
                              :start-dir path))
                     (pane (window-active-pane window)))
-               (if pane
-                   (progn
-                     (worktree-add-pane worktree pane)
-                     (%set-client-selected-worktree conn worktree)
-                     (%set-client-focus conn pane)
-                     (%mark-dirty)
-                     t)
-                   (progn
-                     (%client-notify conn "worktree pane unavailable")
-                     nil))))
+               (cond
+                 ((null pane)
+                  (%client-notify conn "worktree pane unavailable")
+                  nil)
+                 ((not (pane-live-p pane))
+                  ;; R5.7: a pane that came back without a live PTY is a
+                  ;; startup failure — record it as durable pane state
+                  ;; (pane-mark-startup-failure) instead of only a
+                  ;; one-shot notification, so it survives as the `!`
+                  ;; overview mark (3.4) rather than vanishing once the
+                  ;; message log scrolls.
+                  (pane-mark-startup-failure pane)
+                  (worktree-add-pane worktree pane)
+                  (%set-client-selected-worktree conn worktree)
+                  (%set-client-focus conn pane)
+                  (%client-notify conn "worktree pane failed to start")
+                  (%mark-dirty)
+                  t)
+                 (t
+                  (worktree-add-pane worktree pane)
+                  (%set-client-selected-worktree conn worktree)
+                  (%set-client-focus conn pane)
+                  (%mark-dirty)
+                  t))))
          (error (condition)
            (%client-notify
             conn
@@ -629,16 +836,20 @@ Any non-`d` byte after the prefix is passed through to the normal key pipeline.
 
 (defun %client-select-pane-direction (session conn direction)
   (let* ((pane (%resolve-client-focus-pane session nil conn))
-         (window (and pane (nerimux/model:pane-window pane)))
-         (neighbor (and window (pane-neighbor window pane direction))))
-    (if neighbor
-        (progn
-          (%set-client-focus conn neighbor)
-          (%mark-dirty)
-          t)
-        (progn
-          (%client-notify conn (format nil "no pane ~A" direction))
-          t))))
+         (window (and pane (nerimux/model:pane-window pane))))
+    ;; R5.6: a zoomed window has no neighbours (pane-neighbor returns NIL by
+    ;; design), so un-zoom before looking one up rather than reporting "no
+    ;; pane <direction>" for a move that would otherwise have succeeded.
+    (%workspace-prefix-unzoom window)
+    (let ((neighbor (and window (pane-neighbor window pane direction))))
+      (if neighbor
+          (progn
+            (%set-client-focus conn neighbor)
+            (%mark-dirty)
+            t)
+          (progn
+            (%client-notify conn (format nil "no pane ~A" direction))
+            t)))))
 
 (defun %client-start-worktree-create (conn)
   (if (%client-selected-repository conn)

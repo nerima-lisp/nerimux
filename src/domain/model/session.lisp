@@ -129,6 +129,22 @@
     (session-select-window session win)
     win))
 
+;;; ── Window removal ──────────────────────────────────────────────────────────
+
+(defun session-remove-window (session window)
+  "Remove WINDOW from SESSION: drop it from the window list, the MRU stack,
+   and the winlink index-override table.  Clears SESSION's active window when
+   it was WINDOW — callers (R5.4: closing a window's last pane) reassign
+   focus themselves; this only stops SESSION from pointing at a window that
+   no longer exists.  Returns the updated window list."
+  (setf (session-windows session) (delete window (session-windows session))
+        (session-window-stack session)
+        (delete window (session-window-stack session)))
+  (remhash window (session-window-index-map session))
+  (when (eq (session-active session) window)
+    (setf (session-active session) nil))
+  (session-windows session))
+
 ;;; ── Global state & initialisation ─────────────────────────────────────────
 
 (defun session-touch (session)
