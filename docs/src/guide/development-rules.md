@@ -5,6 +5,24 @@ The organization-wide contribution guide lives in
 This page records only the rules specific to nerimux — the ones that are easy
 to trip over and that no general guide would mention.
 
+## Three failures the suite cannot report
+
+A test suite reports on tests that ran. It says nothing when it could not load —
+and the three ways this tree stops loading all look like silence rather than a
+red test:
+
+- a file that no longer reads (a deleted line took a parent form's closing paren
+  with it);
+- a manifest entry with no file behind it (ASDF aborts, and *every* test
+  disappears at once), or a file with no manifest entry (it is simply never
+  loaded, and its tests quietly stop running);
+- a `PKG:SYM` reference to a symbol `PKG` does not export, which is a *read-time*
+  error, so the file is unreadable rather than merely broken.
+
+`scripts/checks/` covers all three without ASDF and without a compile. Run them
+before you trust a green, and especially before you trust a green after a
+deletion. See that directory's README for what each one does and does not cover.
+
 ## The flake only sees git-tracked files
 
 `nix build` and `nix flake check` copy the *git tree*, not the working

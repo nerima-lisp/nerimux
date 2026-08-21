@@ -434,8 +434,10 @@
       # check` evaluates each attribute as its own derivation, in parallel, with
       # build caching. Add a check here rather than a job in ci.yml.
       checks = forAllSystems (system: {
-        # The full unit + integration suite. PTY tests self-skip when
-        # /dev/ptmx is unavailable, so a sandboxed run stays meaningful.
+        # The full unit + integration suite. It spawns no pseudo-terminal: the
+        # cases that do live in nerimux/pty-test and run as `nix run .#test-pty`,
+        # because a sandbox has no /dev/ptmx and they would otherwise skip and be
+        # counted as passes (R9.2).
         default = mkTestCheck system "nerimux-tests" "nerimux/test";
 
         # Fails `nix flake check` when any tracked file is unformatted,
