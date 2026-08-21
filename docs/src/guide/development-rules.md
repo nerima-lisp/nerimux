@@ -5,6 +5,41 @@ The organization-wide contribution guide lives in
 This page records only the rules specific to nerimux — the ones that are easy
 to trip over and that no general guide would mention.
 
+## When the suite will not start at all
+
+On some machines `nix run .#test` prints `Running test system nerimux/test` and
+then stops — no output, no error, no CPU, indefinitely. It is not the suite, and
+it is not ASDF. The garbage collector deadlocks.
+
+Reproduce it with no ASDF and no project code:
+
+```lisp
+;; sbcl --script this-file
+(let ((junk (make-array 1000)))
+  (dotimes (i 1000) (setf (aref junk (mod i 1000)) (make-array 10000)))
+  junk)
+(sb-ext:gc :full t)          ; never returns
+(format t "~&GC-OK~%")
+```
+
+Check whether the SBCL you are on is affected:
+
+```bash
+sbcl --noinform --non-interactive \
+     --eval '(format t "~S~%" (remove-if-not (lambda (f) (search "GC" (string f))) *features*))'
+```
+
+A build reporting `(:MARK-REGION-GC)` is using the parallel mark-region
+collector. That is where this was seen. `--dynamic-space-size` does not avoid it
+— GC fires on bytes consed, not on the heap filling — and there is no
+environment variable that turns the parallel collector off.
+
+There is no workaround inside this repository, and nothing here is worth
+changing in response to it: the same commit passes on a build with the
+generational collector. The static checks in `scripts/checks/` exist partly to
+give some verification when this happens, but they are not a substitute for the
+suite and do not claim to be.
+
 ## Three failures the suite cannot report
 
 A test suite reports on tests that ran. It says nothing when it could not load —
