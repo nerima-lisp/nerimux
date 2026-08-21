@@ -249,4 +249,5 @@
          (:file "workspace-input-prefix-tests") ; R4: driven from client bytes
          (:file "workspace-panes-acceptance-tests") ; R5 acceptance sequence
          (:file "confirm-view-quit-tests") ; R8.2
+         (:file "attach-selector-resolution-tests") ; R7.6
          (:file "client-receive-tests")))))))

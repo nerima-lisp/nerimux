@@ -548,6 +548,33 @@ callback mirror %WORKSPACE-PREFIX-FETCH-REPOSITORY, one level up
                   (nerimux/model:worktree-path worktree)))
                (%workspace-worktrees organizations))))
 
+(defun %workspace-find-repository-for-attach (token organizations)
+  "The repository TOKEN names, by specification, local path, or id (R7.6).
+
+   `nerimux attach github.com/org/repo` is a repository selector, and until this
+   existed the attach path matched only against worktrees — so a repository
+   spec resolved to nothing and reported \"attach target not found\" for
+   something the workspace was holding."
+  (when (and (stringp token) (plusp (length token)))
+    (loop for organization in organizations
+          thereis
+          (find-if (lambda (repository)
+                     (some (lambda (field)
+                             (and (stringp field) (string= field token)))
+                           (list (nerimux/model:repository-specification
+                                  repository)
+                                 (nerimux/model:repository-local-path repository)
+                                 (nerimux/model:repository-id repository))))
+                   (nerimux/model:organization-repositories organization)))))
+
+(defun %open-client-picker-filtered (conn query)
+  "Open the picker with QUERY already typed (R7.6)."
+  (%open-client-picker conn)
+  (setf (client-conn-picker-query conn) (or query ""))
+  (%refresh-client-picker conn)
+  (%mark-dirty)
+  conn)
+
 (defun %worktree-selection-token (worktree)
   (and worktree
        (or (nerimux/model:worktree-id worktree)
@@ -597,27 +624,49 @@ callback mirror %WORKSPACE-PREFIX-FETCH-REPOSITORY, one level up
     (%worktree-selection-token worktree)))
 
 (defun %client-attach-selection (conn organizations)
+  "Resolve what this client attached to, and say so when it is not one thing.
+
+   A selector with a slash can name a repository (github.com/org/repo) or a
+   local path, and both can be present at once. Picking one silently would send
+   the user somewhere they did not ask for, so an ambiguous selector opens the
+   picker with the selector already typed, filtered to what it matched (R7.6).
+   Selection by cwd, and by whatever was selected last, is unchanged: neither is
+   a selector the user typed, so neither can be ambiguous in this sense."
   (let* ((explicit (client-conn-attach-target conn))
+         (explicitp (and (stringp explicit) (plusp (length explicit))))
          (cwd (client-conn-attach-cwd conn))
          (previous (or (%client-selection-token conn)
                        *last-selected-worktree-token*))
-         (worktree (or (and (stringp explicit)
-                            (plusp (length explicit))
-                            (%workspace-find-worktree-for-attach
-                             explicit organizations))
-                       (and (stringp cwd)
-                            (plusp (length cwd))
-                            (%workspace-find-worktree-for-attach cwd organizations))
-                       (and previous
-                            (%workspace-find-worktree previous organizations)))))
-    (when worktree
-      (%set-client-selected-worktree conn worktree))
-    (when (and (stringp explicit)
-               (plusp (length explicit))
-               organizations
-               (null worktree))
-      (%client-notify conn (format nil "attach target not found: ~A" explicit)))
-    worktree))
+         (explicit-worktree
+           (and explicitp
+                (%workspace-find-worktree-for-attach explicit organizations)))
+         (explicit-repository
+           (and explicitp
+                (%workspace-find-repository-for-attach explicit organizations))))
+    (cond
+      ;; Both readings hit: let the user say which, rather than guessing.
+      ((and explicit-worktree explicit-repository)
+       (%open-client-picker-filtered conn explicit)
+       nil)
+      (t
+       (let ((worktree
+               (or explicit-worktree
+                   (and (stringp cwd)
+                        (plusp (length cwd))
+                        (%workspace-find-worktree-for-attach cwd organizations))
+                   (and previous
+                        (%workspace-find-worktree previous organizations)))))
+         (cond
+           (worktree
+            (%set-client-selected-worktree conn worktree))
+           ;; A repository and no worktree in it: select the repository so the
+           ;; overview opens there, rather than reporting it as not found.
+           (explicit-repository
+            (%set-client-selected-tree-object conn explicit-repository))
+           ((and explicitp organizations)
+            (%client-notify conn
+                            (format nil "attach target not found: ~A" explicit))))
+         worktree)))))
 
 (defun %rebind-client-selection (conn organizations)
   (or (%client-attach-selection conn organizations)
