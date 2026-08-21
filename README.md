@@ -30,15 +30,9 @@ slash is resolved as an organization/repository selector or a local worktree
 path. `attach` and `server` are the only commands; anything else — including
 `nerimux` with no arguments — prints the usage summary and exits non-zero.
 
-nerimux still parses a real `.tmux.conf` — `%if`, `%hidden`, variable
-assignments, brace blocks and `source-file` — from `$NERIMUX_CONF`, then
-`~/.config/nerimux/nerimux.conf`, then your existing tmux config. `run-shell`,
-`if-shell`, `set-environment` and the `set-option` values that drive the
-status bar, pane borders, `default-shell` and status height still take
-effect. `bind`/`unbind` and `set-hook` lines still parse without error but do
-nothing: the key-table store and the command-hook registry they wrote into were
-both removed once nothing read them. nerimux now warns to stderr when it sees
-one, rather than staying silent as it used to.
+nerimux reads no configuration file and has no runtime-configurable options.
+Every value the workspace UI depends on — shell, `$TERM`, scrollback length,
+split ratios, pane limits, and the rest — is a compiled-in constant.
 
 ## Install
 
@@ -61,12 +55,10 @@ so a build either reproduces exactly or fails loudly. From a checkout,
 
 - [Getting started](https://nerima-lisp.github.io/nerimux/getting-started/) —
   install, usage, default key bindings, running the suite
-- [Configuration](https://nerima-lisp.github.io/nerimux/guide/configuration/) —
-  `.tmux.conf` syntax and path resolution
-- [Compatibility](https://nerima-lisp.github.io/nerimux/reference/compatibility/) —
-  what is implemented, what is deliberately different, where the risk is
 - [Architecture](https://nerima-lisp.github.io/nerimux/reference/architecture/) —
   event flow, layering, source layout
+- [Security model](https://nerima-lisp.github.io/nerimux/reference/security-model/) —
+  the socket directory as the trust boundary
 
 ## Development
 

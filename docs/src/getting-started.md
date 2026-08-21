@@ -50,18 +50,16 @@ panes.
 |---|---|
 | `C-q d` | Detach while keeping the runtime session resident |
 | `C-p` | Open the global picker |
-| `o` / `d` / `a` | Overview / detail / attention view |
-| `j` / `k` / arrows | Move the selection |
-| `Enter` | Focus the selected worktree, pane, or attention item |
+| `o` / `d` | Overview / detail view |
+| `j` / `k` / `h` / `l` | Move the selection |
+| `Enter` | Focus the selected worktree or pane |
 | `r` | Refresh the workspace catalog and VCS state |
 | `i` / `c` / `:` | Input / copy / command mode |
 | `Esc` | Close or cancel the active modal or mode |
 
 The tmux keystroke pipeline (prefix bindings, `bind`/`unbind`) and the tmux
-command surface are gone, as is the event-hook registry; see
-[Compatibility](reference/compatibility.md)
-for what changed. nerimux still parses `.tmux.conf` syntax at startup — see
-[Configuration](guide/configuration.md) for what a config file can do today.
+command surface are gone. nerimux reads no configuration file; every key
+binding and layout value above is a compiled-in constant.
 
 ## Development
 
@@ -92,11 +90,10 @@ nerimux-coverage ./coverage-report    # sb-cover report via cl-weave
 
 The main suite (`find t -name '*.lisp' | wc -l` for today's file count) runs on
 [cl-weave](https://github.com/nerima-lisp/cl-weave) and covers the VT100
-emulator, layout geometry, command dispatch, format engine, options,
-copy mode, the client/server protocol, and live PTY integration against a real
-shell. PTY tests self-skip where `/dev/ptmx` is unavailable, so sandboxed runs
-stay meaningful. The runner is deliberately sequential — tests share global
-session/socket/PTY state.
+emulator, layout geometry, copy mode, the client/server protocol, and live
+PTY integration against a real shell. PTY tests self-skip where `/dev/ptmx`
+is unavailable, so sandboxed runs stay meaningful. The runner is deliberately
+sequential — tests share global session/socket/PTY state.
 
 There is also an end-to-end smoke test that drives the real binary inside a
 PTY. It is deliberately kept out of the ASDF test system:

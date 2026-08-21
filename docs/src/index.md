@@ -9,9 +9,8 @@ itself carries no session state. There is no standalone in-process mode —
 `nerimux attach` and `nerimux server` are the only ways in. Every verified
 behavior is pinned by a regression suite that runs hermetically through Nix.
 
-Start at [Getting started](getting-started.md), or read the
-[compatibility statement](reference/compatibility.md) for the precise account
-of what is implemented and what is deliberately different.
+Start at [Getting started](getting-started.md) for install, usage, and
+default key bindings.
 
 ## Workspace UI
 
@@ -24,12 +23,11 @@ of what is implemented and what is deliberately different.
 - **Thin-client sessions** — `C-q d` detaches one client while the runtime and
   pane processes remain resident for later attach.
 
-## Compatibility and feature highlights
+## Feature highlights
 
 nerimux's tmux-compatible command table, key-table/prefix-key dispatch, and
-control mode (`-C`) were removed when the UI became workspace-only; see
-[Compatibility](reference/compatibility.md) for the precise, current account
-of what an attached client can and cannot do. What remains:
+control mode (`-C`) are gone; the workspace UI is the only entry point. What
+it provides:
 
 - **Terminal emulation** — VT100/ANSI with 16/256/true color, alternate
   screen, scroll regions, origin mode, G0–G3 charsets with line-drawing
@@ -42,23 +40,13 @@ of what an attached client can and cannot do. What remains:
   -X`, which no longer has a caller. The word/line/paragraph motions, bracket
   matching and jump-to-character commands that only the tmux key tables reached
   were deleted along with those tables.
-- **Format strings** — the `#{...}` modifier engine that renders the status
-  bar and pane titles.
-- **Options** — options across server/session/window/pane scopes, applied
-  live from `.tmux.conf`. Internal hook events still fire around pane and
-  client lifecycle (attach, detach, output, exit, new window), but the
-  `set-hook` *directive* was removed: firing a stored hook meant running a tmux
-  command name, and no command dispatcher exists any more. A `set-hook` line
-  parses and is ignored. See
-  [Compatibility](reference/compatibility.md).
-- **Client/server** — detach/attach over a per-user Unix socket (`-L`/`-S`,
-  `$TMUX_TMPDIR`), rendering a separate frame per attached client from one
-  shared pane layout.
-- **Configuration** — real `.tmux.conf` syntax: `%if`/`%elif`/`%else`,
-  `%hidden`, variable assignments, `source-file`, brace blocks, and tmux
-  quoting rules apply options and hooks. `bind-key` directives still parse
-  but have no runtime effect — there is no key-table dispatch left to read
-  them. See [Configuration](guide/configuration.md).
+- **Client/server** — detach/attach over a per-user Unix socket under
+  `$TMPDIR` (falling back to `/tmp`), rendering a separate frame per attached
+  client from one shared pane layout.
+
+nerimux has no configuration file and no runtime-configurable options: every
+value the workspace UI depends on — shell, `$TERM`, scrollback length, split
+ratios, pane limits — is a compiled-in constant.
 
 ## What it is built on
 

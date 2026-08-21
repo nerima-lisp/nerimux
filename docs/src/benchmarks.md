@@ -35,14 +35,16 @@ Suite sizes at that second measurement: `default` 4277 cases (4276 passed, 1
 skipped), `weave` 26, `dataflow` 17. **Every row above is stale, and the shape of
 the table has changed underneath them.** The workspace-only conversion deleted
 the tmux command table, the keystroke pipeline and the config key-table store
-along with their tests, and the `weave` check no longer exists at all — the
+along with their tests; the `weave` check no longer exists — the
 `nerimux/reasoning` system it covered was retired with the key-table store it
-projected. `nix flake check` now runs four derivations, not five. `dataflow` is
-unchanged at 17; the `default` count has moved with every deletion pass, so read
-it from `nix build .#checks.<system>.default` rather than from here. The
-wall-clock rows have not been re-measured against the smaller tree — they
-describe a 2026-07-26 configuration with substantially more test code, and should
-not be quoted as current.
+projected — and `dataflow` no longer exists either, now that the optional
+dataflow system it built has been removed. `nix flake check` now runs three
+derivations (`default`, `formatting`, `docs`), not five. The `default` count
+has moved with every deletion pass, so read it from
+`nix build .#checks.<system>.default` rather than from here. The wall-clock
+rows have not been re-measured against the smaller tree — they describe a
+2026-07-26 configuration with substantially more test code, and should not be
+quoted as current.
 
 ## Shipped core image size
 
@@ -105,27 +107,34 @@ For a single suite:
 time nix build .#checks.$(nix eval --raw --impure --expr builtins.currentSystem).default
 ```
 
-## The one enforced budget, and how it is measured
+## Workspace-overview render cost (measured, not enforced)
 
-`renderer-suite/tui-kit > keeps the mandatory overview scale within the initial
-and scroll budgets` is the only performance figure this repository *enforces*.
-It renders the mandatory workspace scale (1000 organizations, 1000 repositories,
-5000 worktrees, 5000 panes) and requires both the initial frame and a
-fully-scrolled frame under **100 ms**.
+`benchmark-workspace-overview` (`t/helpers-renderer-benchmark.lisp`) measures
+frame cost at the mandatory workspace scale (1000 organizations, 1000
+repositories, 5000 worktrees, 5000 panes): both the initial frame and a
+fully-scrolled frame.
 
-How that figure is produced matters, and was wrong for a long time. It used to
-be a single `get-internal-real-time` sample per frame with no warm-up. On a
-shared machine that measures machine availability as much as render cost: the
-same binary on the same tree measured **67–75 ms idle and 102–112 ms under
-load**, so the check inverted depending on what else was running. It failed
-repeatedly against changes that could not have affected rendering.
+This used to back a test asserting a **100 ms** budget on that figure. The
+assertion is gone. It used to be a single `get-internal-real-time` sample per
+frame with no warm-up — on a shared machine that measures machine
+availability as much as render cost: the same binary on the same tree
+measured **67–75 ms idle and 102–112 ms under load**, so the check inverted
+depending on what else was running, and failed repeatedly against changes
+that could not have affected rendering. The measurement itself is still
+useful when someone is deliberately looking at render cost, so it was kept —
+moved out of the product package and off any regression gate. Nothing calls
+it and no test checks its output.
 
-`benchmark-workspace-overview` now discards a warm-up render of each frame and
-reports the **median of five measured runs**. The 100 ms requirement is
-unchanged — only the estimator is. This removes single-sample noise; it does not
-make the check immune to a saturated machine, and nothing can. If it goes red,
-check `uptime` first: on a 16-core machine a 1-minute load average above about
-10 puts the render over budget on its own.
+Run it by hand from a REPL with the test system loaded:
+
+```lisp
+(nerimux/test::benchmark-workspace-overview)
+(nerimux/test::benchmark-workspace-overview :organization-count 100 :samples 9)
+```
+
+It discards a warm-up render of each frame and reports the median of five
+measured runs by default, which removes single-sample noise without making
+the number immune to a saturated machine.
 
 ## Not yet measured
 
