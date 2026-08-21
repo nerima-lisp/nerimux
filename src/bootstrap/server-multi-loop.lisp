@@ -2,23 +2,10 @@
 
 ;;; ── Event-loop iteration ────────────────────────────────────────────────────
 
-(defun %exit-when-empty-and-option-enabled-p (items option-name)
-  "True when ITEMS is empty and OPTION-NAME is enabled."
-  (and (null items)
-       (nerimux/options:get-option option-name)))
-
-(defun %exit-after-last-detach-p ()
-  "True when no clients remain attached AND the exit-unattached option is on — the
-   server should terminate (tmux exit-unattached).  Checked only after a real
-   client drop, so a freshly-started server with no clients yet never exits."
-  (%exit-when-empty-and-option-enabled-p *clients* "exit-unattached"))
-
-(defun %exit-when-empty-p ()
-  "True when no sessions remain AND exit-empty is on (default) — the server should
-   terminate once its last session is destroyed (tmux exit-empty).  The server
-   starts with an initial session, so this only becomes true after a session is
-   killed during the loop, never at startup."
-  (%exit-when-empty-and-option-enabled-p *server-sessions* "exit-empty"))
+;;; The server does not exit on its own.  Detaching the last client leaves the
+;;; runtime and every pane running, and an empty session is not a reason to shut
+;;; down either (R8.3 — both were options; neither is now).  The only ways out
+;;; are an explicit kill and the confirm-view quit, both of which clear *RUNNING*.
 
 (defun %accept-pending-connection (listener listener-fd ready)
   "When LISTENER-FD is in READY, accept and register the new connection.
@@ -38,14 +25,12 @@
 
 (defun %apply-client-disposition (disposition conn)
   "Act on DISPOSITION (the result of dispatching CONN's message): drop CONN on
-   :drop (and exit if that was the last attached client with exit-unattached
-   set).  Returns :quit when the caller's loop must stop, else NIL."
+   :drop.  Returns :quit when the caller's loop must stop, else NIL.
+   Dropping the last client is not a reason to stop — panes keep running while
+   nobody is attached (R8.3)."
   (case disposition
     (:quit :quit)
-    (:drop
-     (%drop-client conn :bye t)
-     ;; exit-unattached: terminate once the last client has detached.
-     (when (%exit-after-last-detach-p) :quit))))
+    (:drop (%drop-client conn :bye t) nil)))
 
 (defun %dispatch-ready-clients (session ready)
   "Read + dispatch one message from every client whose fd is in READY.
@@ -77,9 +62,6 @@
   (unwind-protect
        (loop while *running* do
          (when (eq :quit (%multi-serve-iteration listener session))
-           (setf *running* nil))
-         ;; exit-empty: terminate once the last session has been destroyed.
-         (when (%exit-when-empty-p)
            (setf *running* nil)))
     (dolist (conn (copy-list *clients*))
       (%drop-client conn :bye t))))

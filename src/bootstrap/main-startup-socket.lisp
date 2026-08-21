@@ -8,6 +8,22 @@
 (defconstant +server-socket-poll-max-iterations+ 30
   "Maximum number of socket-existence probes (30 x 0.1 s = 3 s total wait).")
 
+(defconstant +server-log-rotate-bytes+ (* 1024 1024)
+  "Server log rotation threshold (§1.4 / R2.8): a log at or above this size is
+   replaced with a fresh file at startup instead of appended to.")
+
+(defun %server-log-if-output-exists-action (log-path)
+  "The SB-EXT:RUN-PROGRAM :if-output-exists action for LOG-PATH: :supersede
+   (start a fresh file) when the existing log is at least
+   +server-log-rotate-bytes+, else :append."
+  (if (and (probe-file log-path)
+           (>= (or (ignore-errors
+                     (with-open-file (s log-path) (file-length s)))
+                   0)
+               +server-log-rotate-bytes+))
+      :supersede
+      :append))
+
 (defun %stale-socket-p (socket-path)
   "True when SOCKET-PATH exists but no server accepts connections on it.
    tmux treats such leftover socket files (e.g. after a crash) as stale:
@@ -66,7 +82,9 @@
                 (%secure-log-directory log-path)
                 (sb-ext:run-program exe args
                                     :wait nil
-                                    :output log-path :if-output-exists :append
+                                    :output log-path
+                                    :if-output-exists
+                                    (%server-log-if-output-exists-action log-path)
                                     :error :output))
             (condition ()
              (ignore-errors
