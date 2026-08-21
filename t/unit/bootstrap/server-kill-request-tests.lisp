@@ -134,13 +134,14 @@
                 (error "ESRCH: no such process (stubbed)"))
               nil)))
         (nerimux::%force-kill-panes (list still-alive already-dead)))
-      (expect (= 2 (length closed))
-              )
+      (expect (= 2 (length closed)))
+      ;; One pane at a time: probe, then signal that pane if it answered. The
+      ;; expectation used to list both probes before the kill, which no
+      ;; implementation of a single DOLIST could produce.
       (expect (equal (list (list 424242 0)
-                           (list 424243 0)
-                           (list 424242 sb-posix:sigkill))
-                     (nreverse kills))
-              )))
+                           (list 424242 sb-posix:sigkill)
+                           (list 424243 0))
+                     (nreverse kills)))))
 
   ;;; ── run-kill: CLI exit-code / message mapping ─────────────────────────────
 
