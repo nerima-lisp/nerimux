@@ -46,10 +46,13 @@
       (expect (not (search "WORKSPACES" frame)))))
 
   ;; Both dimensions short at once: still just the warning, not two.
+  ;; 39x5 is short in both dimensions and still wide enough to print the
+  ;; warning. At 20 columns the message itself is clipped, so searching for it
+  ;; tests the clipper rather than the guard.
   (it "shows the too-small warning exactly once when both dimensions are short"
     (let* ((frame
              (nerimux/renderer:render-workspace-overview-to-tui-string
-              nil 5 20))
+              nil 5 39))
            (first-hit (search "terminal too small" frame)))
       (expect first-hit)
       (expect (not (search "terminal too small"

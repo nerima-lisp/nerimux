@@ -32,12 +32,15 @@
       (expect (search "line-1" scrolled-visible))
       (expect (not (search "line-0" scrolled-visible)))))
 
+  ;; 40x10 is the minimum the frame renderer will draw content at (R6.10);
+  ;; below it every frame is the too-small warning, so a smaller size here
+  ;; would test the guard instead of the backend round-trip.
   (it "presents a complete frame through a fresh ANSI backend"
     (let ((output
             (nerimux/renderer::%render-ansi-frame-with-tui-kit
              "hello"
-             2
-             8)))
+             10
+             40)))
       (expect (search "hello" output))
       (expect (search (string (code-char 27)) output))))
 
