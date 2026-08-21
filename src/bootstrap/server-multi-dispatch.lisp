@@ -26,6 +26,32 @@
        (error ,(if condition-var (list condition-var) '())
          ,on-error))))
 
+(defvar *client-esc-swallow-counts* (make-hash-table :test #'eq :weakness :key)
+  "CONN -> count of upcoming key bytes to discard unconditionally.
+
+Set by ESC in a text-input UI mode (:picker / :command, R4.3): the client
+forwards stdin one byte at a time, so an arrow key still arrives as the
+3-byte escape sequence ESC [ A/B/C/D, split across three separate key
+messages. R4.1 dropped byte-sequence matching entirely, so without this the
+trailing 2 bytes of that sequence would land on whatever key handler runs
+next (typically the search/command buffer) as literal `[` and a letter.
+Keyed by CONN rather than a client-conn slot because client-conn is defined
+in server-multi.lisp, outside this file's scope; :weakness :key lets a
+dropped connection's entry be reclaimed instead of leaking.")
+
+(defun %client-esc-swallow-start (conn &optional (n 2))
+  (setf (gethash conn *client-esc-swallow-counts*) n))
+
+(defun %client-esc-swallow-consume (conn)
+  "If CONN has a pending swallow count, decrement it and return T (the byte
+   this call was invoked for must be discarded). Returns NIL otherwise."
+  (let ((remaining (gethash conn *client-esc-swallow-counts*)))
+    (when (and remaining (plusp remaining))
+      (if (<= remaining 1)
+          (remhash conn *client-esc-swallow-counts*)
+          (setf (gethash conn *client-esc-swallow-counts*) (1- remaining)))
+      t)))
+
 (defun %handle-multi-attach-or-resize (session conn type payload)
   "Update CONN's geometry from PAYLOAD, refresh client ordering for
    window-size latest, and reapply the effective shared size."
@@ -39,34 +65,38 @@
   nil)
 
 (defun %handle-multi-key-message (session conn payload)
-  "Feed PAYLOAD through the stdin-target fast path or the shared key pipeline."
-  (multiple-value-bind (prefix-handled prefix-result)
-      (%handle-workspace-prefix-key conn payload)
-    (if prefix-handled
-        prefix-result
-        (cond
-          ((and (eq (client-conn-mode conn) :normal)
-                (%client-byte-p payload 16))
-           (%open-client-picker conn))
-          ((eq (client-conn-mode conn) :picker)
-           (%handle-client-picker-key-payload session conn payload))
-          ((eq (client-conn-mode conn) :input)
-           (%handle-client-input-key-payload session conn payload))
-          ((eq (client-conn-mode conn) :copy)
-           (%handle-client-copy-key-payload session conn payload))
-          ((eq (client-conn-mode conn) :command)
-           (%handle-client-command-key-payload session conn payload))
-          ;; A key the workspace UI does not bind is dropped in :normal mode.
-          ;; It used to fall through to process-client-keys, the tmux keystroke
-          ;; pipeline (prefix key + key tables) -- that fallthrough was the only
-          ;; thing making tmux prefix bindings reachable from an attached
-          ;; client.  Typing into a pane is what :input mode is for; a
-          ;; split-window -I stdin-target still gets fed directly.
-          ((eq (client-conn-mode conn) :normal)
-           (or (%handle-client-normal-key-payload session conn payload)
-               (%feed-client-stdin-target conn payload)))
-          (t
-           (%feed-client-stdin-target conn payload))))))
+  "Feed PAYLOAD through the stdin-target fast path or the shared key pipeline.
+   A byte consumed by CONN's pending ESC-swallow (R4.3) never reaches any of
+   this: it is discarded before the prefix key and mode dispatch even see it."
+  (if (%client-esc-swallow-consume conn)
+      nil
+      (multiple-value-bind (prefix-handled prefix-result)
+          (%handle-workspace-prefix-key conn payload)
+        (if prefix-handled
+            prefix-result
+            (cond
+              ((and (eq (client-conn-mode conn) :normal)
+                    (%client-byte-p payload 16))
+               (%open-client-picker conn))
+              ((eq (client-conn-mode conn) :picker)
+               (%handle-client-picker-key-payload session conn payload))
+              ((eq (client-conn-mode conn) :input)
+               (%handle-client-input-key-payload session conn payload))
+              ((eq (client-conn-mode conn) :copy)
+               (%handle-client-copy-key-payload session conn payload))
+              ((eq (client-conn-mode conn) :command)
+               (%handle-client-command-key-payload session conn payload))
+              ;; A key the workspace UI does not bind is dropped in :normal mode.
+              ;; It used to fall through to process-client-keys, the tmux keystroke
+              ;; pipeline (prefix key + key tables) -- that fallthrough was the only
+              ;; thing making tmux prefix bindings reachable from an attached
+              ;; client.  Typing into a pane is what :input mode is for; a
+              ;; split-window -I stdin-target still gets fed directly.
+              ((eq (client-conn-mode conn) :normal)
+               (or (%handle-client-normal-key-payload session conn payload)
+                   (%feed-client-stdin-target conn payload)))
+              (t
+               (%feed-client-stdin-target conn payload)))))))
 
 (defun %feed-client-stdin-target (conn payload)
   "Feed PAYLOAD to CONN's split-window -I stdin target, if it has one.
@@ -533,6 +563,11 @@ Any non-`d` byte after the prefix is passed through to the normal key pipeline.
          (equalp payload #(10)))
      (%select-client-picker-item session conn))
     ((equalp payload #(27))
+     ;; R4.3: the client forwards one byte at a time, so an arrow key still
+     ;; arrives as ESC [ A/B/C/D across 3 separate key messages. Swallow the
+     ;; 2 bytes that would otherwise follow so they cannot land in whatever
+     ;; mode this ESC leaves the connection in.
+     (%client-esc-swallow-start conn)
      (%close-client-picker conn)
      t)
     ((equalp payload #(18))
@@ -563,9 +598,6 @@ Any non-`d` byte after the prefix is passed through to the normal key pipeline.
 
 (defun %client-key-p (payload character)
   (%client-byte-p payload (char-code character)))
-
-(defun %client-key-sequence-p (payload sequence)
-  (equalp payload sequence))
 
 (defun %client-payload-text (payload)
   (cond
@@ -656,25 +688,21 @@ Any non-`d` byte after the prefix is passed through to the normal key pipeline.
 (defun %handle-client-normal-key-payload (session conn payload)
   (let ((view (client-conn-view conn)))
     (cond
-      ((or (%client-key-sequence-p payload #(27 91 65))
-           (%client-key-p payload #\k))
+      ((%client-key-p payload #\k)
        (case view
          (:overview (%select-client-tree-relative conn -1) t)
          (:detail (%client-select-pane-direction session conn :up))
          (otherwise nil)))
-      ((or (%client-key-sequence-p payload #(27 91 66))
-           (%client-key-p payload #\j))
+      ((%client-key-p payload #\j)
        (case view
          (:overview (%select-client-tree-relative conn 1) t)
          (:detail (%client-select-pane-direction session conn :down))
          (otherwise nil)))
-      ((or (%client-key-sequence-p payload #(27 91 67))
-           (%client-key-p payload #\l))
+      ((%client-key-p payload #\l)
        (if (eq view :detail)
            (%client-select-pane-direction session conn :right)
            nil))
-      ((or (%client-key-sequence-p payload #(27 91 68))
-           (%client-key-p payload #\h))
+      ((%client-key-p payload #\h)
        (if (eq view :detail)
            (%client-select-pane-direction session conn :left)
            nil))
@@ -710,73 +738,64 @@ Any non-`d` byte after the prefix is passed through to the normal key pipeline.
       (t nil))))
 
 (defun %handle-client-input-key-payload (session conn payload)
-  (if (%client-byte-p payload 27)
-      (progn
-        (%transition-client-ui-mode conn :enter-normal)
-        (%mark-dirty)
-        t)
-      (let ((pane (or (client-conn-stdin-target conn)
-                      (%resolve-client-focus-pane session nil conn))))
-        (cond
-          ((null pane)
-           (%client-notify conn "no focused pane"))
-          ((pane-live-p pane)
-           (handler-case
-               (nerimux/pty:pty-write (pane-fd pane) payload)
-             (error (condition)
-               (%client-notify
-                conn
-                (format nil "input failed: ~A" condition)))))
-          ((pane-screen pane)
-           (pane-feed pane payload))
-          (t
-           (%client-notify conn "focused pane is unavailable")))
-        (%mark-dirty)
-        t)))
+  "Every byte, ESC included, is forwarded to the focused pane: :input mode has
+   no keyboard exit of its own (that returns with the C-q prefix, R4.4)."
+  (let ((pane (or (client-conn-stdin-target conn)
+                  (%resolve-client-focus-pane session nil conn))))
+    (cond
+      ((null pane)
+       (%client-notify conn "no focused pane"))
+      ((pane-live-p pane)
+       (handler-case
+           (nerimux/pty:pty-write (pane-fd pane) payload)
+         (error (condition)
+           (%client-notify
+            conn
+            (format nil "input failed: ~A" condition)))))
+      ((pane-screen pane)
+       (pane-feed pane payload))
+      (t
+       (%client-notify conn "focused pane is unavailable")))
+    (%mark-dirty)
+    t))
 
 (defun %handle-client-copy-key-payload (session conn payload)
-  (cond
-    ((%client-byte-p payload 27)
-     (%client-exit-copy-mode session conn))
-    (t
-     (let* ((pane (%resolve-client-focus-pane session nil conn))
-            (screen (and pane (pane-screen pane))))
-       (cond
-         ((null screen)
-          (%client-notify conn "no focused pane")
-          (%transition-client-ui-mode conn :enter-normal))
-         ((or (%client-key-sequence-p payload #(27 91 65))
-              (%client-key-p payload #\k))
-          (copy-mode-move-cursor screen :up))
-         ((or (%client-key-sequence-p payload #(27 91 66))
-              (%client-key-p payload #\j))
-          (copy-mode-move-cursor screen :down))
-         ((or (%client-key-sequence-p payload #(27 91 68))
-              (%client-key-p payload #\h))
-          (copy-mode-move-cursor screen :left))
-         ((or (%client-key-sequence-p payload #(27 91 67))
-              (%client-key-p payload #\l))
-          (copy-mode-move-cursor screen :right))
-         ((%client-key-p payload #\g)
-          (copy-mode-scroll screen most-positive-fixnum))
-         ((%client-key-p payload #\G)
-          (copy-mode-scroll screen (- most-positive-fixnum)))
-         ((%client-key-p payload #\Space)
-          (copy-mode-begin-selection screen))
-         ((%client-key-p payload #\y)
-          (copy-mode-yank screen))
-         ((%client-key-p payload #\n)
-          (copy-mode-search-next screen))
-         ((%client-key-p payload #\N)
-          (copy-mode-search-prev screen))
-         ((%client-key-p payload #\/)
-          (%client-enter-command-mode conn "search-forward "))
-         ((%client-key-p payload #\?)
-          (%client-enter-command-mode conn "search-backward "))
-         ((%client-key-p payload #\q)
-          (%client-exit-copy-mode session conn)))
-       (%mark-dirty)
-       t))))
+  "Copy-mode exit is bound to q only; ESC is a plain, unbound byte here (it no
+   longer doubles as an exit key -- see R4.2)."
+  (let* ((pane (%resolve-client-focus-pane session nil conn))
+         (screen (and pane (pane-screen pane))))
+    (cond
+      ((null screen)
+       (%client-notify conn "no focused pane")
+       (%transition-client-ui-mode conn :enter-normal))
+      ((%client-key-p payload #\k)
+       (copy-mode-move-cursor screen :up))
+      ((%client-key-p payload #\j)
+       (copy-mode-move-cursor screen :down))
+      ((%client-key-p payload #\h)
+       (copy-mode-move-cursor screen :left))
+      ((%client-key-p payload #\l)
+       (copy-mode-move-cursor screen :right))
+      ((%client-key-p payload #\g)
+       (copy-mode-scroll screen most-positive-fixnum))
+      ((%client-key-p payload #\G)
+       (copy-mode-scroll screen (- most-positive-fixnum)))
+      ((%client-key-p payload #\Space)
+       (copy-mode-begin-selection screen))
+      ((%client-key-p payload #\y)
+       (copy-mode-yank screen))
+      ((%client-key-p payload #\n)
+       (copy-mode-search-next screen))
+      ((%client-key-p payload #\N)
+       (copy-mode-search-prev screen))
+      ((%client-key-p payload #\/)
+       (%client-enter-command-mode conn "search-forward "))
+      ((%client-key-p payload #\?)
+       (%client-enter-command-mode conn "search-backward "))
+      ((%client-key-p payload #\q)
+       (%client-exit-copy-mode session conn)))
+    (%mark-dirty)
+    t))
 
 (defun %client-command-buffer-delete-character (conn)
   (let ((buffer (client-conn-command-buffer conn)))
@@ -881,6 +900,8 @@ Any non-`d` byte after the prefix is passed through to the normal key pipeline.
 (defun %handle-client-command-key-payload (session conn payload)
   (cond
     ((%client-byte-p payload 27)
+     ;; R4.3: see the matching comment in %handle-client-picker-key-payload.
+     (%client-esc-swallow-start conn)
      (setf (client-conn-command-buffer conn) "")
      (%client-restore-command-view conn)
      (%transition-client-ui-mode conn :enter-normal)
