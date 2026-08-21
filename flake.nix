@@ -299,7 +299,11 @@
             cp -r ${self} ./src-tree
             chmod -R u+w ./src-tree
             cd ./src-tree
-            sbcl --script run-tests.lisp
+            # The default 1 GB dynamic space is not enough to load this system: ASDF
+            # stalls resolving it rather than signalling heap exhaustion. Measured on
+            # darwin/arm64 -- 1024 and 2048 MiB hang, 4096 and above resolve in
+            # milliseconds. Nothing here is skipped or relaxed by raising it.
+            sbcl --dynamic-space-size 4096 --script run-tests.lisp
             touch "$out"
           '';
     in
@@ -474,7 +478,7 @@
               cp -r ${self} "$work/src-tree"
               chmod -R u+w "$work/src-tree"
               cd "$work/src-tree"
-              exec sbcl --script run-tests.lisp
+              exec sbcl --dynamic-space-size 4096 --script run-tests.lisp
             '';
           };
 
@@ -492,7 +496,7 @@
               cp -r ${self} "$work/src-tree"
               chmod -R u+w "$work/src-tree"
               cd "$work/src-tree"
-              exec sbcl --script run-tests.lisp
+              exec sbcl --dynamic-space-size 4096 --script run-tests.lisp
             '';
           };
         in
@@ -571,7 +575,7 @@
               export -f nerimux-coverage
 
               echo "nerimux dev shell"
-              echo "  run tests:       sbcl --script run-tests.lisp"
+              echo "  run tests:       sbcl --dynamic-space-size 4096 --script run-tests.lisp"
               echo "  load in a REPL:  nerimux-sbcl --eval '(asdf:load-system \"nerimux\")'"
               echo "  coverage report: nerimux-coverage [output-dir]"
             '';
