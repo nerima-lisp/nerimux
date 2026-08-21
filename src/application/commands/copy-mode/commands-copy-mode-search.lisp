@@ -73,11 +73,10 @@
           when best return (values vrow best)
           finally (return (values nil nil)))))
 
-;;; ── Wrap-search option ───────────────────────────────────────────────────────
-
-(defun %wrap-search-p ()
-  "T when copy-mode search should wrap around the buffer ends."
-  (nerimux/options:get-option "wrap-search" t))
+;;; ── Wrap-around search ───────────────────────────────────────────────────────
+;;;
+;;; Search always wraps around the buffer ends (§1.4 of
+;;; docs/notes/workspace-requirements.md: "検索は折り返す").
 
 (defun %copy-mode-wrap-start (forwardp screen)
   "The (vrow col) a wrapped search restarts from: the top-left corner when
@@ -88,25 +87,25 @@
 
 (defun %search-with-wrap (finder screen term start-vrow start-col wrap-start-fn found-k)
   "Continuation-passing search engine shared by every copy-mode search.
-   Run FINDER at (START-VROW, START-COL); on a miss, and only when wrap-search is
-   on, retry once from the position (funcall WRAP-START-FN) returns.  Invoke the
-   success continuation FOUND-K with the hit's (vrow col) on the first match and
-   return T; return NIL on a total miss.  The caller supplies FOUND-K, so this
-   engine never touches screen cursor state itself."
+   Run FINDER at (START-VROW, START-COL); on a miss, retry once from the
+   position (funcall WRAP-START-FN) returns.  Invoke the success continuation
+   FOUND-K with the hit's (vrow col) on the first match and return T; return
+   NIL on a total miss.  The caller supplies FOUND-K, so this engine never
+   touches screen cursor state itself."
   (flet ((attempt (vrow col)
            (multiple-value-bind (found-vrow found-col)
                (funcall finder screen term vrow col)
              (and found-vrow (progn (funcall found-k found-vrow found-col) t)))))
     (or (attempt start-vrow start-col)
-        (and (%wrap-search-p)
-             (multiple-value-bind (wrap-vrow wrap-col) (funcall wrap-start-fn)
-               (attempt wrap-vrow wrap-col))))))
+        (multiple-value-bind (wrap-vrow wrap-col) (funcall wrap-start-fn)
+          (attempt wrap-vrow wrap-col)))))
 
 ;;; ── Public search commands ───────────────────────────────────────────────────
 
 (defun %copy-mode-search-direction (screen term direction &optional (save-direction-p t))
   "Shared search engine for copy-mode-search-{forward,backward}.
-   DIRECTION is :forward or :backward.  Saves TERM; wraps when wrap-search is on.
+   DIRECTION is :forward or :backward.  Saves TERM; always wraps around the
+   buffer ends.
    Forward starts one past the cursor col; backward starts at the cursor col.
    When SAVE-DIRECTION-P (the default for / and ?), records DIRECTION as the
    last-search direction; n/N pass NIL so a repeat does not overwrite the
@@ -127,12 +126,12 @@
 
 (defun copy-mode-search-forward (screen term)
   "Search forward from the current cursor for TERM through the full scrollback + live grid.
-   Saves TERM for n/N repeats.  Wraps to top when wrap-search is on."
+   Saves TERM for n/N repeats.  Always wraps to top of the buffer."
   (%copy-mode-search-direction screen term :forward))
 
 (defun copy-mode-search-backward (screen term)
   "Search backward from the current cursor for TERM through the full scrollback + live grid.
-   Saves TERM for n/N repeats.  Wraps to bottom when wrap-search is on."
+   Saves TERM for n/N repeats.  Always wraps to bottom of the buffer."
   (%copy-mode-search-direction screen term :backward))
 
 (defun copy-mode-search-next (screen)
