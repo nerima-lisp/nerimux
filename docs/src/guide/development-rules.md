@@ -17,13 +17,17 @@ sysctl vm.swapusage        # used ≈ total means the swap file is full too
 ps -eo %cpu,command -r | head -5
 ```
 
-Under real memory exhaustion every process with a garbage collector stalls in
-the kernel's VM subsystem rather than failing: zero CPU, unkillable by
-`sb-ext:with-timeout` (the block is below Lisp), and load average climbing while
-nothing runs. It reproduces with no ASDF and no code from this repository —
-allocating a few megabytes and calling `(sb-ext:gc :full t)` is enough — so the
-absence of a stack pointing at the tests is not evidence that the tests are
-innocent, and its presence is not evidence that they are guilty.
+Memory exhaustion is one cause, and the cheap one to rule out. It is not the
+only one: the same symptom has been seen on macOS/arm64 with the machine idle
+and gigabytes free. In that form it stops before any code in this repository is
+read — looking up the first sibling system is enough — every available SBCL
+version reproduces it, and the stopping point moves between runs. The cause is
+not known. What matters here is that none of it is evidence about the tests.
+
+If you retry, run `sbcl --script run-tests.lisp` from a fixed directory rather
+than `nix run .#test`, which copies the tree to a new temporary directory each
+time. ASDF's output paths follow the source path, so a retry through the app
+recompiles from nothing while a retry from a fixed directory resumes.
 
 Two measurement traps make this hard to see. `ps` reports `%cpu` as a lifetime
 average, so a process that ran for a moment and then stopped forever reads as
