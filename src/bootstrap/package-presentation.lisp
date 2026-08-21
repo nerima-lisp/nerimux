@@ -17,6 +17,11 @@
    #:render-session-to-tui-string
    #:render-workspace-overview-to-string
    #:render-workspace-overview-to-tui-string
+   ;; Full-screen confirmation / failure view (R6.4). The dispatcher builds the
+   ;; struct and reads the y/n answer; this package only draws it.
+   #:confirm-view #:make-confirm-view #:confirm-view-p
+   #:confirm-view-operation #:confirm-view-fields #:confirm-view-prompt-p
+   #:render-confirm-view-to-tui-string
    #:clear-display
    #:parse-style-string
    #:style-to-sgr

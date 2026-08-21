@@ -68,35 +68,39 @@ dropped connection's entry be reclaimed instead of leaking.")
   "Feed PAYLOAD through the stdin-target fast path or the shared key pipeline.
    A byte consumed by CONN's pending ESC-swallow (R4.3) never reaches any of
    this: it is discarded before the prefix key and mode dispatch even see it."
-  (if (%client-esc-swallow-consume conn)
-      nil
-      (multiple-value-bind (prefix-handled prefix-result)
-          (%handle-workspace-prefix-key session conn payload)
-        (if prefix-handled
-            prefix-result
-            (cond
-              ((and (eq (client-conn-mode conn) :normal)
-                    (%client-byte-p payload 16))
-               (%open-client-picker conn))
-              ((eq (client-conn-mode conn) :picker)
-               (%handle-client-picker-key-payload session conn payload))
-              ((eq (client-conn-mode conn) :input)
-               (%handle-client-input-key-payload session conn payload))
-              ((eq (client-conn-mode conn) :copy)
-               (%handle-client-copy-key-payload session conn payload))
-              ((eq (client-conn-mode conn) :command)
-               (%handle-client-command-key-payload session conn payload))
-              ;; A key the workspace UI does not bind is dropped in :normal mode.
-              ;; It used to fall through to process-client-keys, the tmux keystroke
-              ;; pipeline (prefix key + key tables) -- that fallthrough was the only
-              ;; thing making tmux prefix bindings reachable from an attached
-              ;; client.  Typing into a pane is what :input mode is for; a
-              ;; split-window -I stdin-target still gets fed directly.
-              ((eq (client-conn-mode conn) :normal)
-               (or (%handle-client-normal-key-payload session conn payload)
-                   (%feed-client-stdin-target conn payload)))
-              (t
-               (%feed-client-stdin-target conn payload)))))))
+  (cond
+    ;; Swallowed by a pending ESC sequence (R4.3): never reaches any dispatch.
+    ((%client-esc-swallow-consume conn) nil)
+    ;; A confirmation owns every key while it is up (R6.4).
+    ((client-conn-confirm-view conn)
+     (nth-value 1 (%handle-confirm-key session conn payload)))
+    (t
+     (multiple-value-bind (prefix-handled prefix-result)
+         (%handle-workspace-prefix-key session conn payload)
+       (if prefix-handled
+           prefix-result
+           (cond
+             ((and (eq (client-conn-mode conn) :normal)
+                   (%client-byte-p payload 16))
+              (%open-client-picker conn))
+             ((eq (client-conn-mode conn) :picker)
+              (%handle-client-picker-key-payload session conn payload))
+             ((eq (client-conn-mode conn) :input)
+              (%handle-client-input-key-payload session conn payload))
+             ((eq (client-conn-mode conn) :copy)
+              (%handle-client-copy-key-payload session conn payload))
+             ((eq (client-conn-mode conn) :command)
+              (%handle-client-command-key-payload session conn payload))
+             ;; A key the workspace UI does not bind is dropped in :normal mode.
+             ;; It used to fall through to the tmux keystroke pipeline (prefix key
+             ;; + key tables) -- that fallthrough was the only thing making tmux
+             ;; prefix bindings reachable from an attached client.  Typing into a
+             ;; pane is what :input mode is for; a stdin-target still gets fed.
+             ((eq (client-conn-mode conn) :normal)
+              (or (%handle-client-normal-key-payload session conn payload)
+                  (%feed-client-stdin-target conn payload)))
+             (t
+              (%feed-client-stdin-target conn payload))))))))
 
 (defun %feed-client-stdin-target (conn payload)
   "Feed PAYLOAD to CONN's split-window -I stdin target, if it has one.
@@ -285,20 +289,126 @@ behavior (:96-107 pre-R4.4) is gone."
   nil)
 
 (defun %workspace-prefix-fetch-repository (conn)
-  "C-q F (R7.1, not yet implemented): fetch the selected repository."
-  (%client-notify conn "fetch (repository) is not implemented yet")
+  "C-q F (R7.1): fetch the selected repository, then refresh status.
+
+A fetch already running for this repository is not started twice; the
+caller that finds one in flight is told so and the in-flight fetch's own
+completion is what eventually refreshes the picker (nerimux/vcs's
+FETCH-REPOSITORY-ASYNC)."
+  (let ((repository (%client-selected-repository conn)))
+    (cond
+      ((not repository)
+       (%client-notify conn "fetch requires a selected repository"))
+      ((not (nerimux/vcs:vcs-package-available-p))
+       (%client-notify conn "VCS adapter unavailable"))
+      (t
+       (%client-notify conn "fetching...")
+       (handler-case
+           (nerimux/vcs:fetch-repository-async
+            repository
+            :on-complete
+            (lambda (result)
+              (if result
+                  (progn
+                    (%refresh-client-picker conn)
+                    (%client-notify conn "fetch complete"))
+                  (%client-notify conn "fetch already in progress")))
+            :on-error
+            (lambda (condition)
+              (%client-notify conn (format nil "fetch failed: ~A" condition))))
+         (error (condition)
+           (%client-notify conn (format nil "fetch failed: ~A" condition)))))))
   nil)
 
 (defun %workspace-prefix-fetch-organization (conn)
-  "C-q C-f (R7.1, not yet implemented): fetch the selected organization."
-  (%client-notify conn "fetch (organization) is not implemented yet")
+  "C-q C-f (R7.1): fetch every repository in the selected organization
+concurrently, then refresh status. Duplicate suppression and the completion
+callback mirror %WORKSPACE-PREFIX-FETCH-REPOSITORY, one level up
+(nerimux/vcs:FETCH-ORGANIZATION-ASYNC)."
+  (let ((organization (%client-selected-organization conn)))
+    (cond
+      ((not organization)
+       (%client-notify conn "fetch requires a selected organization"))
+      ((not (nerimux/vcs:vcs-package-available-p))
+       (%client-notify conn "VCS adapter unavailable"))
+      (t
+       (%client-notify conn "fetching organization...")
+       (handler-case
+           (nerimux/vcs:fetch-organization-async
+            organization
+            :on-complete
+            (lambda (repositories)
+              (if repositories
+                  (progn
+                    (%refresh-client-picker conn)
+                    (%client-notify conn "fetch complete"))
+                  (%client-notify conn "fetch already in progress")))
+            :on-error
+            (lambda (repository condition)
+              (%client-notify
+               conn
+               (format nil "fetch failed for ~A: ~A"
+                       (nerimux/model:repository-id repository) condition))))
+         (error (condition)
+           (%client-notify conn (format nil "fetch failed: ~A" condition)))))))
   nil)
 
-(defun %workspace-prefix-quit-server (conn)
-  "C-q Q (R8.2, not yet implemented): quit the server via the confirmation
-   view."
-  (%client-notify conn "server quit is not implemented yet")
+(defun %open-confirm-view (conn operation fields action)
+  "Put a y/n confirmation in front of CONN and remember what to run on y.
+   OPERATION titles the box; FIELDS is the ordered (LABEL . VALUE) body."
+  (setf (client-conn-confirm-view conn)
+        (nerimux/renderer:make-confirm-view :operation operation
+                                            :fields fields
+                                            :prompt-p t)
+        (client-conn-confirm-action conn) action)
+  (%mark-dirty)
   nil)
+
+(defun %close-confirm-view (conn)
+  "Take the confirmation down and forget its pending action."
+  (setf (client-conn-confirm-view conn) nil
+        (client-conn-confirm-action conn) nil)
+  (%mark-dirty))
+
+(defun %handle-confirm-key (session conn payload)
+  "Answer the confirmation CONN is looking at.  Returns two values: whether the
+   key was consumed here, and the loop disposition.
+
+   Only y and n are consumed.  Every other key is swallowed too — a
+   confirmation that let j scroll the tree underneath it would be asking about
+   one thing while the user changed another."
+  (declare (ignore session))
+  (let ((action (client-conn-confirm-action conn)))
+    (cond
+      ((%client-key-p payload #\y)
+       (%close-confirm-view conn)
+       (values t (and action (funcall action))))
+      ((%client-key-p payload #\n)
+       (%close-confirm-view conn)
+       (%client-notify conn "cancelled")
+       (values t nil))
+      (t (values t nil)))))
+
+(defun %workspace-prefix-quit-server (session conn)
+  "C-q Q (R8.2): ask before stopping the server, showing how many panes are
+   still running so the count is in front of the user at the moment they answer
+   — not discovered afterwards."
+  (let* ((live  (%session-live-panes session))
+         (count (length live)))
+    (%open-confirm-view
+     conn
+     "SERVER QUIT"
+     (list (cons "session" (session-name session))
+           (cons "panes" (format nil "~D open" count))
+           (cons "effect" (if (plusp count)
+                              "every pane is signalled and the server exits"
+                              "the server exits")))
+     (lambda ()
+       ;; The confirm view already showed the live-pane count, so answering y IS
+       ;; the force decision; %server-kill-request's refusal branch exists for
+       ;; `nerimux kill` without --force, which has no screen to show it on.
+       (%server-kill-request session t)
+       :quit))))
 
 (defun %workspace-prefix-dispatch (session conn byte)
   "Resolve BYTE — the key struck right after C-q — against 1.5's table and
@@ -320,7 +430,7 @@ behavior (:96-107 pre-R4.4) is gone."
       ((= byte (char-code #\F)) (%workspace-prefix-fetch-repository conn))
       ((= byte #x06) (%workspace-prefix-fetch-organization conn)) ; C-f
       ((= byte (char-code #\d)) :drop)
-      ((= byte (char-code #\Q)) (%workspace-prefix-quit-server conn))
+      ((= byte (char-code #\Q)) (%workspace-prefix-quit-server session conn))
       ((= byte (client-conn-workspace-prefix-code conn))
        ;; C-q C-q: back to :normal — the only prefix action with no pane or
        ;; worktree precondition, so it is handled inline rather than via a
@@ -1372,6 +1482,24 @@ behavior (:96-107 pre-R4.4) is gone."
                (nerimux/model:organization-repositories object)))
          (and (= (length repositories) 1)
               (first repositories)))))))
+
+(defun %client-selected-organization (conn &optional target)
+  "Resolve the organization C-q C-f should fetch: the selected organization
+itself, or the organization owning the selected repository or worktree.
+Mirrors %CLIENT-SELECTED-REPOSITORY's object-resolution chain, one level up
+the tree (R7.1)."
+  (let ((object
+          (or (%workspace-find-tree-object target)
+              (%client-tree-object conn)
+              (%workspace-find-tree-object (%client-selection-token conn))
+              (and (client-conn-focus conn)
+                   (nerimux/model:pane-worktree (client-conn-focus conn))))))
+    (typecase object
+      (nerimux/model:organization object)
+      (nerimux/model:repository (nerimux/model:repository-organization object))
+      (nerimux/model:worktree
+       (let ((repository (nerimux/model:worktree-repository object)))
+         (and repository (nerimux/model:repository-organization repository)))))))
 
 (defun %client-operation-worktree (conn &optional target)
   (or (%workspace-find-worktree target)

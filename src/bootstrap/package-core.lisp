@@ -79,7 +79,11 @@
    #:prune-worktrees
    #:lock-worktree-async
    #:unlock-worktree-async
-   #:prune-worktrees-async))
+   #:prune-worktrees-async
+   ;; Explicit fetch (R7.1). AHEAD/BEHIND read the local remote-tracking ref, so
+   ;; they only move when someone fetches; these are how that is asked for.
+   #:fetch-repository-async
+   #:fetch-organization-async))
 
 (defpackage #:nerimux/picker
   (:use #:cl)

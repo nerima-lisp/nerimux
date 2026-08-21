@@ -58,6 +58,15 @@
   ;; wt-prune-confirm --confirm cannot skip straight past the preview a user
   ;; is meant to review first. Cleared once a confirmed prune completes.
   (pending-prune-preview-repository-id nil)
+  ;; The full-screen confirmation (R6.4) this client is currently looking at, or
+  ;; NIL. Per client, not per server: two attached clients can be mid-answer on
+  ;; different questions, and a confirmation one of them never saw must not
+  ;; capture the other's keystrokes.
+  (confirm-view nil)
+  ;; What to run when the user answers y to CONFIRM-VIEW. A closure of no
+  ;; arguments; NIL when no confirmation is up. Kept beside the view rather than
+  ;; encoded in it so the renderer keeps taking plain data.
+  (confirm-action nil)
   (frame nil))
 
 (defvar *clients* nil
@@ -66,6 +75,102 @@
 
 (defvar *workspace-catalog-refresh-started-p* nil
   "Whether the initial asynchronous ghq/worktree catalog refresh was started.")
+
+;;; ── Workspace tree UI state (R6.2/R6.3) ─────────────────────────────────────
+;;;
+;;; Global, not per-CLIENT-CONN: R6.3 requires collapse state, and R6.2 the
+;;; refreshing/stale markers, to survive detach/attach for as long as the
+;;; server is alive, and %ADD-CLIENT below builds a brand-new CLIENT-CONN on
+;;; every attach -- anything stored on that struct would silently reset on
+;;; reconnect, which is exactly the requirement this state must not violate.
+;;; None of it is persisted to disk (R6.3: "永続化はしない").
+;;;
+;;; Ownership split: this file defines and mutates the tables; the render
+;;; call in %RENDER-CLIENT-FRAME below reads them into the R6 renderer
+;;; entry points (nerimux/renderer:render-workspace-overview-to-tui-string).
+;;; The mutators are for server-multi-dispatch.lisp's key handlers to call
+;;; (Enter on an org/repo row, a VCS fetch/refresh starting and settling, a
+;;; pane gaining focus within a worktree) -- see the R6 report for exactly
+;;; which handler calls which function.
+
+(defvar *workspace-expanded-node-ids* (make-hash-table :test #'equal)
+  "Set of expanded organization/repository tree-node keys (R6.3), keyed the
+   same way as NERIMUX/RENDERER:%WORKSPACE-TREE-NODE-KEY returns (a
+   (:ORGANIZATION ID) or (:REPOSITORY ID) list). Presence (any non-NIL
+   value) means expanded; absence means collapsed, the tree's default state.
+   Worktree/window/pane rows are never keys here -- only these two levels
+   toggle independently (R6.3).")
+
+(defun %toggle-workspace-node-expanded (kind id)
+  "Flip the KIND (:ORGANIZATION or :REPOSITORY) / ID row's collapse state
+   (R6.3's Enter-toggles-collapse behaviour)."
+  (let ((key (list kind id)))
+    (if (gethash key *workspace-expanded-node-ids*)
+        (remhash key *workspace-expanded-node-ids*)
+        (setf (gethash key *workspace-expanded-node-ids*) t))))
+
+(defvar *workspace-refreshing-ids* (make-hash-table :test #'equal)
+  "Set of organization/repository/worktree tree-node keys a VCS operation is
+   currently refreshing (R6.2). Populate with %MARK-WORKSPACE-REFRESHING /
+   %CLEAR-WORKSPACE-REFRESHING around the async call that refreshes it.")
+
+(defvar *workspace-stale-ids* (make-hash-table :test #'equal)
+  "Set of organization/repository/worktree tree-node keys whose last refresh
+   failed (R6.2): the value shown is the previous successful one, tagged
+   stale instead of presented as current.")
+
+(defun %mark-workspace-refreshing (kind id)
+  "Record that the KIND/ID node's data is being refreshed (R6.2), and clear
+   any stale mark on it -- a fresh attempt in flight supersedes the last
+   failure until this one, too, settles."
+  (let ((key (list kind id)))
+    (setf (gethash key *workspace-refreshing-ids*) t)
+    (remhash key *workspace-stale-ids*)))
+
+(defun %clear-workspace-refreshing (kind id &key stale-p)
+  "Settle a refresh started with %MARK-WORKSPACE-REFRESHING: always clears
+   the refreshing mark; sets the stale mark when STALE-P (the refresh
+   failed), else clears it (the refresh succeeded)."
+  (let ((key (list kind id)))
+    (remhash key *workspace-refreshing-ids*)
+    (if stale-p
+        (setf (gethash key *workspace-stale-ids*) t)
+        (remhash key *workspace-stale-ids*))))
+
+(defvar *workspace-worktree-last-pane* (make-hash-table :test #'equal)
+  "WORKTREE-ID -> the pane a client was last focused on within that worktree
+   (R6.3: worktree-row Enter returns there, or opens a new pane when there
+   is none). Global for the same detach/attach-survival reason as
+   *WORKSPACE-EXPANDED-NODE-IDS* above.")
+
+(defun %remember-worktree-pane (worktree pane)
+  "Record PANE as the one to return to next time Enter lands on WORKTREE's
+   tree row (R6.3). Call this on every focus change within a worktree, not
+   only from the worktree-row Enter handler itself -- the requirement is to
+   remember the last-focused pane, not just the last one opened via Enter."
+  (when (and worktree pane)
+    (setf (gethash (worktree-id worktree) *workspace-worktree-last-pane*) pane)))
+
+(defun %worktree-remembered-pane (worktree)
+  "The pane %REMEMBER-WORKTREE-PANE last recorded for WORKTREE, or NIL when
+   there is none or it has since closed. Self-healing: a pane no longer
+   among WORKTREE's own panes is treated as gone and its stale entry is
+   dropped here, so a caller never has to remember to clear this table when
+   it closes a pane."
+  (when worktree
+    (let ((pane (gethash (worktree-id worktree) *workspace-worktree-last-pane*)))
+      (cond
+        ((null pane) nil)
+        ((member pane (worktree-panes worktree) :test #'eq) pane)
+        (t (remhash (worktree-id worktree) *workspace-worktree-last-pane*)
+           nil)))))
+
+(defvar *workspace-catalog-loaded-p* nil
+  "T once the initial async ghq/worktree catalog refresh's on-complete
+   callback (in %ADD-CLIENT below) has run at least once. Distinguishes
+   \"still scanning\" from \"scanned and genuinely found zero repositories\"
+   for R6.2's scanning-p -- a plain (null organizations) check cannot tell
+   those two apart.")
 
 ;;; with-loop-safe-error is defined in server-multi-dispatch.lisp (which loads
 ;;; first) so it is available at compile time to every user, including here.
@@ -123,6 +228,14 @@
   (let ((frame
           (msg-frame
            (cond
+             ;; A confirmation owns the whole frame while it is up (R6.4): the
+             ;; question has to be the only thing on screen, or a y/n answer can
+             ;; be given to something the user was not reading.
+             ((client-conn-confirm-view conn)
+              (render-confirm-view-to-tui-string
+               (client-conn-confirm-view conn)
+               (client-conn-rows conn)
+               (client-conn-cols conn)))
              ((and (eq (client-conn-view conn) :overview)
                    (not (eq (client-conn-mode conn) :picker)))
               (render-workspace-overview-to-tui-string
@@ -136,7 +249,20 @@
                :tree-scroll (client-conn-tree-scroll conn)
                :messages (client-conn-message-log conn)
                :mode (client-conn-mode conn)
-               :prefix-code (client-conn-workspace-prefix-code conn)))
+               :prefix-code (client-conn-workspace-prefix-code conn)
+               ;; R6.2/R6.3/R6.12: server-lifetime tree state, defined above
+               ;; in this file, and the client's own in-flight `:` buffer.
+               :expanded-node-ids *workspace-expanded-node-ids*
+               :refreshing-ids *workspace-refreshing-ids*
+               :stale-ids *workspace-stale-ids*
+               ;; NIL (not scanning) when no refresh was ever kicked off at
+               ;; all -- e.g. the VCS adapter is unavailable (%ADD-CLIENT's
+               ;; (nerimux/vcs:vcs-package-available-p) guard) -- so that
+               ;; case shows the ordinary empty tree/header/footer rather
+               ;; than getting stuck on "scanning..." forever.
+               :scanning-p (and *workspace-catalog-refresh-started-p*
+                                (not *workspace-catalog-loaded-p*))
+               :command-buffer (client-conn-command-buffer conn)))
              (t
               (render-session-to-tui-string
                session
@@ -190,10 +316,17 @@
     (when (and (not *workspace-catalog-refresh-started-p*)
                (nerimux/vcs:vcs-package-available-p))
       (setf *workspace-catalog-refresh-started-p* t)
-      (ignore-errors
-        (nerimux/vcs:refresh-workspace-organizations-async
+      ;; handler-case rather than ignore-errors: a synchronous failure
+      ;; kicking the async refresh off (e.g. thread creation) must still
+      ;; flip *workspace-catalog-loaded-p*, or R6.2's scanning-p is stuck
+      ;; true forever with no on-error callback ever going to run.
+      (handler-case
+          (nerimux/vcs:refresh-workspace-organizations-async
          :on-complete
          (lambda (organizations)
+           ;; R6.2: flips scanning-p false for every client from here on,
+           ;; regardless of whether ORGANIZATIONS turned out empty.
+           (setf *workspace-catalog-loaded-p* t)
            (dolist (client (remove-duplicates
                             (remove-if-not #'%client-live-p
                                            (copy-list *clients*))
@@ -207,7 +340,16 @@
          :on-error
          (lambda (condition)
            (declare (ignore condition))
-           (%mark-dirty)))))
+           ;; R6.2: a failed initial scan must still stop showing
+           ;; "scanning..." -- otherwise a client attached before the error
+           ;; is stuck on the placeholder forever, with no way to retry from
+           ;; here (retry is `r`/refresh once the ordinary tree is showing).
+           (setf *workspace-catalog-loaded-p* t)
+           (%mark-dirty)))
+        (error (condition)
+          (declare (ignore condition))
+          (setf *workspace-catalog-loaded-p* t)
+          (%mark-dirty))))
     (%mark-dirty)
     conn))
 

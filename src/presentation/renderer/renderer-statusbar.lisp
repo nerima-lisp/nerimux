@@ -6,17 +6,15 @@
 ;;;; render-status-bar entry point.  It has no knowledge of session-frame
 ;;;; compositing; that lives in renderer-compose.lisp.
 ;;;;
-;;;; R2.2/R2.3 fixed every status-bar option at its registered default (none
-;;;; of them could ever have been overridden without a config file, which
-;;;; R2.1 removed) and replaced format-template expansion with direct string
-;;;; composition — see the R2 renderer report for the full mapping.  In
-;;;; particular: window-status-current-style is always "reverse" (SGR "7"),
-;;;; window-status-style (inactive) is always "" (no SGR), the
-;;;; window-status-activity-style/bell-style alert priority table is gone
-;;;; with the rest of the alert machinery (R1.10), and window-status-format
-;;;; / window-status-current-format are always " #{window_index}:#{window_name} "
-;;;; / " #{window_index}:#{window_name}* " — composed directly below instead
-;;;; of expanded from that template string.
+;;;; R6.5 replaced the tmux-shaped status bar (session name, whole-session
+;;;; window list, clock) with the workspace-scoped contract: attention mark +
+;;;; repository + worktree + state token on the left, the CURRENT worktree's
+;;;; window/pane tabs in the middle (not every window in the session — a
+;;;; worktree's own windows, %WORKTREE-TREE-WINDOWS, renderer-workspace.lisp),
+;;;; and the latest client notification on the right.  No clock (§1.4/R6.5).
+;;;; The old per-option R2.2/R2.3 "fixed at its registered default" comments
+;;;; this file used to carry no longer apply to any of the content below —
+;;;; there is no more session/window-list template to have fixed.
 ;;;;
 ;;;; Load order (declared in nerimux.asd): renderer-format → renderer-style
 ;;;;             → renderer-statusbar-layout → renderer-pane
@@ -34,64 +32,103 @@
 (defconstant +status-line-rows+ 1
   "Rows reserved at the bottom of the terminal for the status line.")
 
-;;; ── Status bar data formatters (pure) ─────────────────────────────────────
+;;; ── Left block: attention + repository + worktree + state token ───────────
 
-(defun %current-time-string ()
-  "Return HH:MM string from the system clock.
-   status-right's fixed value is \"#{time}\"; this is the direct-composition
-   replacement for the domain/format expansion of that template (R2.3).
-   domain/format is deleted (R2.3), so this is reimplemented locally rather
-   than called across a package that no longer exists."
-  (multiple-value-bind (sec min hour) (get-decoded-time)
-    (declare (ignore sec))
-    (format nil "~2,'0D:~2,'0D" hour min)))
+(defun %status-left-fields (focus-pane)
+  "(VALUES ATTENTION REPOSITORY-TEXT WORKTREE-TEXT STATE-TEXT) for the status
+   line's left block (R6.5). Each of REPOSITORY-TEXT/WORKTREE-TEXT/STATE-TEXT
+   is %WORKSPACE-EM-DASH when FOCUS-PANE (or its worktree/repository) is
+   absent — design doc §2/§3.3: an unselected value must show as such, never
+   silently carry the previous frame's text forward."
+  (let* ((worktree (and focus-pane (pane-worktree focus-pane)))
+         (repository (and worktree (worktree-repository worktree))))
+    (values (if (and worktree (worktree-attention-p worktree)) "!" " ")
+            (if repository (%repository-title-text repository) (%workspace-em-dash))
+            (if worktree (%worktree-title-text worktree) (%workspace-em-dash))
+            (if worktree (%worktree-status-label worktree) (%workspace-em-dash)))))
 
-(defun %status-pane-indicator (active-pane)
-  "Pane-number string for the status bar, or empty string when ACTIVE-PANE is NIL."
-  (if active-pane (format nil " #~D" (pane-id active-pane)) ""))
+(defun %status-left-text (focus-pane &key include-repository-p)
+  "The left block's text. INCLUDE-REPOSITORY-P T includes the repository
+   field; NIL omits it — the first thing %COMPOSE-WORKSPACE-STATUS-LINE
+   drops when the line does not fit (R6.5: notification, then tabs, then
+   repository name; branch and state token are never dropped)."
+  (multiple-value-bind (attention repository worktree state)
+      (%status-left-fields focus-pane)
+    (if include-repository-p
+        (format nil "~A ~A ~A ~A" attention repository worktree state)
+        (format nil "~A ~A ~A" attention worktree state))))
 
-(defconstant +sgr-window-tab-active+ "7"
-  "SGR for the active window's status-bar tab: window-status-current-style's
-   fixed value \"reverse\" (SGR 7, reverse video).")
+;;; ── Middle block: the current worktree's window/pane tabs (R6.5/R6.7) ─────
 
-(defun %render-window-tab (window active-window window-stream)
-  "Write WINDOW's status-bar tab label to WINDOW-STREAM: \" I:NAME \" for a
-   non-active window, \" I:NAME* \" (reverse video) for the active one — the
-   fixed content of window-status-format / window-status-current-format,
-   composed directly instead of expanded from those templates (R2.3).
-   window-status-style (inactive) is always \"\" (no SGR, R2.2): only the
-   active window's tab carries a style."
-  (let* ((active-p (eq window active-window))
-         (label    (if active-p
-                       (format nil " ~D:~A* " (window-id window) (window-name window))
-                       (format nil " ~D:~A "  (window-id window) (window-name window)))))
-    (if active-p
-        (progn
-          (%emit-sgr window-stream +sgr-window-tab-active+)
-          (write-string label window-stream)
-          (reset-attrs window-stream))
-        (write-string label window-stream))))
+(defun %status-pane-tab-token (pane focus-pane)
+  "PANE's status-bar tab token, including its own leading separator: a space
+   normally, or `!` in its place when PANE has unread output (R6.7) — the
+   marker doubles as the separator, matching the format the requirements
+   give ([w1: 1 2*!3]: pane 3's `!` sits where the usual space would, with no
+   extra glue needed between it and the previous pane's tab)."
+  (format nil "~:[ ~;!~]~D~:[~;*~]"
+          (pane-unread-output-p pane)
+          (pane-id pane)
+          (eq pane focus-pane)))
 
-(defconstant +window-status-separator+ " "
-  "Text between window tabs in the status bar: window-status-separator's
-   fixed value (a single space, its registered default).")
+(defun %status-window-tab (window focus-pane)
+  (format nil "[w~D:~{~A~}]"
+          (window-id window)
+          (mapcar (lambda (pane) (%status-pane-tab-token pane focus-pane))
+                  (window-panes window))))
 
-(defun %status-window-list-styled (session active-window)
-  "Window-tab string with current-style applied to the active window entry."
-  (with-output-to-string (window-stream)
-    (let ((first-p t))
-      (dolist (window (nerimux/model:session-windows-in-index-order session))
-        (unless first-p (write-string +window-status-separator+ window-stream))
-        (setf first-p nil)
-        (%render-window-tab window active-window window-stream)))))
+(defun %status-window-pane-tabs (focus-pane)
+  "The middle block: FOCUS-PANE's worktree's window/pane tabs
+   ([w1: 1 2*][w2: 1], R6.5), or NIL when there is no worktree or it has no
+   open windows — the caller shows %WORKSPACE-EM-DASH for NIL."
+  (let* ((worktree (and focus-pane (pane-worktree focus-pane)))
+         (windows (and worktree (%worktree-tree-windows worktree))))
+    (when windows
+      (format nil "~{~A~}"
+              (mapcar (lambda (window) (%status-window-tab window focus-pane))
+                      windows)))))
 
-(defun %status-left-text (session active-window active-pane)
-  "Left portion of the status bar: session/window/pane info.
-   Uses %status-window-list-styled so the active window's tab is styled."
-  (format nil " ~A~A~A"
-          (session-name session)
-          (%status-window-list-styled session active-window)
-          (%status-pane-indicator active-pane)))
+(defun %status-middle-text (focus-pane)
+  (or (%status-window-pane-tabs focus-pane) (%workspace-em-dash)))
+
+;;; ── Right block: latest notification (R6.5) ────────────────────────────────
+
+(defun %status-right-text (messages)
+  "The right block: the single most recent notification, or an em-dash when
+   there is none yet. MESSAGES is CLIENT-CONN-MESSAGE-LOG (most-recent-first,
+   %CLIENT-NOTIFY conses onto its front) — the 64-entry cap stays on the
+   conn's log (R6.5: \"display only, not retention, changes\"); this only
+   ever reads the first entry."
+  (if messages (first messages) (%workspace-em-dash)))
+
+;;; ── Composition with width-driven degradation (R6.5) ───────────────────────
+
+(defun %compose-workspace-status-line (focus-pane messages cols)
+  "Assemble the R6.5 status line, dropping blocks right-to-left when COLS is
+   too narrow: the notification first, then the window/pane tabs, then the
+   repository name — branch and state token are never dropped (design doc
+   §11). A final %VISIBLE-TRUNCATE is the safety net below the terminal's
+   40-column floor (R6.10 already refuses anything narrower)."
+  (let ((middle (%status-middle-text focus-pane))
+        (right (%status-right-text messages)))
+    (labels ((assemble (include-repository-p include-middle-p include-right-p)
+               (format nil "~{~A~^  ~}"
+                       (remove nil
+                               (list (%status-left-text
+                                      focus-pane
+                                      :include-repository-p include-repository-p)
+                                     (and include-middle-p middle)
+                                     (and include-right-p right))))))
+      (let ((full (assemble t t t)))
+        (if (<= (%visible-length full) cols)
+            full
+            (let ((no-notification (assemble t t nil)))
+              (if (<= (%visible-length no-notification) cols)
+                  no-notification
+                  (let ((no-tabs (assemble t nil nil)))
+                    (if (<= (%visible-length no-tabs) cols)
+                        no-tabs
+                        (%visible-truncate (assemble nil nil nil) cols))))))))))
 
 (defun %render-status-line (stream status-row sgr-code line)
   "Emit a fully-composed status LINE at STATUS-ROW, wrapped in SGR-CODE, then reset."
@@ -100,46 +137,19 @@
   (write-string line stream)
   (reset-attrs stream))
 
-(defun %status-bar-default-segments (session sgr-code)
-  "Return (values LEFT RIGHT): the left segment is the session/window/pane
-   summary, the right segment the clock — status-left / status-right's
-   fixed values, composed directly (R2.3) rather than expanded from their
-   registered templates \"[#{session_name}]\" / \"#{time}\", which — with no
-   config able to override either option away from its own default — were
-   never actually rendered even before R2: the original
-   %status-format-or-default only expanded a registered template when the
-   live option value had diverged from that same default, which with no
-   config could never happen, so it always fell back to exactly the
-   procedural composition kept here."
-  (let* ((active-window (session-active-window session))
-         (active-pane   (session-active-pane session))
-         (left-raw      (%status-expand-style-blocks
-                         (%status-left-text session active-window active-pane)
-                         sgr-code))
-         (right-raw     (%status-expand-style-blocks
-                         (%current-time-string)
-                         sgr-code))
-         (style-sgr   (%status-segment-style-sgr sgr-code))
-         (left        (%apply-segment-style
-                       (%clamp-status-segment left-raw 40)
-                       style-sgr sgr-code))
-         (right       (%apply-segment-style
-                       (%clamp-status-segment right-raw 40)
-                       style-sgr sgr-code)))
-    (values left right)))
-
 (defun render-status-bar (stream session terminal-rows terminal-cols
-                          &key (status-row (- terminal-rows +status-line-rows+)))
-  "Draw the status bar at STATUS-ROW.  STATUS-ROW defaults to the bottom
-   row (TERMINAL-ROWS minus +status-line-rows+) — status-position's fixed
-   value is \"bottom\" (§1.4), which is always this same row, so the caller
-   never needs to pass a top-row override any more (R2.2).  SGR-CODE is
-   +sgr-default-status+: status-style's fixed value is \"\" (R2.2), which
-   parse-style-string/style-to-sgr always resolved to that same constant
-   before R2.4 deleted the parser.  Justification (status-justify) is
-   always \"left\" (its registered default; R2.2)."
-  (let ((sgr-code +sgr-default-status+))
-    (multiple-value-bind (left right)
-        (%status-bar-default-segments session sgr-code)
-      (%render-status-line stream status-row sgr-code
-                           (%status-justify-line left right terminal-cols "left")))))
+                          &key (status-row (- terminal-rows +status-line-rows+))
+                            (focus-pane (session-active-pane session))
+                            (messages nil))
+  "Draw the R6.5 status line at STATUS-ROW (defaults to the bottom row,
+   §1.4/R2.2).
+   FOCUS-PANE/MESSAGES default from SESSION / empty for a caller that has not
+   been updated to pass the attached client's own focus pane and
+   notification log (renderer-compose.lisp's render-session-to-string call
+   site does not yet — see the R6 report for the small additive change that
+   closes the gap); SESSION-ACTIVE-PANE is the correct answer whenever a
+   client's focus tracks the session's active pane, which is the common
+   case, so this degrades gracefully rather than going blank."
+  (%render-status-line stream status-row +sgr-default-status+
+                       (%compose-workspace-status-line focus-pane messages
+                                                       terminal-cols)))

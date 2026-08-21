@@ -14,10 +14,37 @@ you get a confusing "file not found" failure.
 
 ## Tests must not leak global state
 
-Tests that bind keys, set options, or install hooks must wrap themselves in the
-isolation helpers (`with-isolated-config`, `with-isolated-hooks`, …) from
-`t/helpers-*.lisp`. Otherwise they clobber the default bindings for every test
-that runs after them.
+Tests that mutate a special variable the runtime reads — the session registry,
+the dirty flag, the running flag — must wrap themselves in the isolation helpers
+in `t/helpers-*.lisp`. Otherwise they clobber that state for every test after
+them.
+
+There used to be more of these helpers than there are now: the ones that
+isolated the option store, the config directives, and the hook registry went
+with the machinery they isolated. There is no configuration to leak anymore.
+
+## CI gates Linux; macOS is checked by hand
+
+`.github/workflows/ci.yml` runs `nix flake check` on `ubuntu-latest`, and that
+is the gate a pull request has to pass. The flake defines the same checks for
+`aarch64-darwin`, but nothing runs them automatically — a development machine
+cannot cross-build the Linux side without a remote builder, so `nix flake check`
+on a Mac only ever exercises the Darwin attributes.
+
+The practical rule: run `nix flake check` locally before pushing, and say which
+platform you ran it on when you report a green. A green on one is not a green on
+the other.
+
+## The real-PTY suite is a separate system
+
+`nerimux/test` spawns no pseudo-terminal. Every case that forks a shell under a
+PTY lives in `nerimux/pty-test` and runs through `nix run .#test-pty`.
+
+It is an app, not a check, on purpose. A check builds in a sandbox with no
+`/dev/ptmx`, so those cases would hit their skip guard and be counted as passes —
+one number covering both "the logic is right" and "the PTY integration works",
+with only the first ever true. Adding it to `checks` would restore exactly the
+false green the split removed.
 
 ## The suite runs sequentially by design
 
