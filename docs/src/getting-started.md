@@ -52,10 +52,18 @@ panes.
 | `C-p` | Open the global picker |
 | `o` / `d` | Overview / detail view |
 | `j` / `k` / `h` / `l` | Move the selection |
-| `Enter` | Focus the selected worktree or pane |
+| `Enter` | Expand or collapse an organization or repository; focus a worktree, window, or pane |
 | `r` | Refresh the workspace catalog and VCS state |
 | `i` / `c` / `:` | Input / copy / command mode |
 | `Esc` | Close or cancel the active modal or mode |
+
+The tree opens showing organizations only; `Enter` opens one level at a time.
+`Enter` on a worktree returns to the pane you last had there, or starts one if
+you never opened it.
+
+Inside the picker, every printable key is a character of the search query, so
+the selection moves with **`C-p`** and **`C-n`** rather than `j` and `k`.
+`C-r` toggles regex matching, `Enter` selects, `Esc` closes.
 
 The tmux keystroke pipeline (prefix bindings, `bind`/`unbind`) and the tmux
 command surface are gone. nerimux reads no configuration file; every key

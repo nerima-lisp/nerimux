@@ -891,14 +891,16 @@ callback mirror %WORKSPACE-PREFIX-FETCH-REPOSITORY, one level up
      t)
     ((equalp payload #(18))
      (%set-client-picker-regex conn nil nil))
-    ((equalp payload #(27 91 65))
+    ;; C-p / C-n move the selection. Not j and k: every other key here is a
+    ;; character of the search query, so a letter cannot also be a movement.
+    ;; This replaces four ESC [ A/B/C/D branches that were unreachable — the
+    ;; client sends one byte at a time, so the ESC closed the picker and R4.3
+    ;; swallowed the two bytes that would have identified the arrow. That left
+    ;; the picker with no way to move the selection at all.
+    ((equalp payload #(16))
      (%move-client-picker-index conn -1))
-    ((equalp payload #(27 91 66))
+    ((equalp payload #(14))
      (%move-client-picker-index conn 1))
-    ((equalp payload #(27 91 67))
-     (%move-client-picker-index conn 1))
-    ((equalp payload #(27 91 68))
-     (%move-client-picker-index conn -1))
     ((or (equalp payload #(8))
          (equalp payload #(127)))
      (%delete-client-picker-query-character conn))

@@ -741,20 +741,15 @@
         (expect (null (nerimux::client-conn-picker-regex-p conn)))
         (expect (null (nerimux::%client-picker-visible-items conn))))))
 
-  ;; R4/§6 regression note: this used to also drive #(27 91 65)/#(27 91 66)
-  ;; (a 3-byte arrow escape in one call) to prove picker index navigation.
-  ;; That is the exact §2.1 bug shape: client.lisp sends one stdin byte per
-  ;; msg-key frame, so a real arrow key arrives as ESC, then `[`, then a
-  ;; letter, as three SEPARATE %handle-multi-key-message calls. The first
-  ;; byte alone already matches %handle-client-picker-key-payload's ESC
-  ;; branch, which closes the picker and arms a 2-byte ESC-swallow (R4.3);
-  ;; the following `[`/letter are discarded by that swallow before any mode
-  ;; dispatch runs. %handle-client-picker-key-payload's equalp
-  ;; #(27 91 65)/#(27 91 66)/#(27 91 67)/#(27 91 68) branches are therefore
-  ;; unreachable from any real client, and the picker currently has no other
-  ;; keystroke binding to move its selection (see the report to team-lead).
-  ;; This test now covers only what is actually reachable: filtering by
-  ;; typed query text and selecting the sole remaining match.
+  ;; R4/§6 regression note: this used to drive #(27 91 65)/#(27 91 66) — a
+  ;; 3-byte arrow escape in one call — to prove picker index navigation. That
+  ;; is the exact §2.1 bug shape: client.lisp sends one stdin byte per msg-key
+  ;; frame, so a real arrow arrives as ESC, then `[`, then a letter, as three
+  ;; SEPARATE calls. The ESC alone already matches the picker's ESC branch,
+  ;; which closes the picker and arms R4.3's 2-byte swallow, so the `[` and the
+  ;; letter never reach any dispatch. Those four branches were unreachable from
+  ;; any real client and are now deleted; C-p/C-n move the selection instead
+  ;; (covered by multi-picker-c-p-c-n-move-the-selection below).
   (it "multi-picker-key-input-filters-by-query-and-selects-worktree"
     (with-fake-session (s)
       (let* ((organization
@@ -828,6 +823,42 @@
         (nerimux::%handle-multi-key-message s conn #(66)) ; B: swallowed
         (expect (eq :normal (nerimux::client-conn-mode conn))
                 "still normal: neither swallowed byte reopened the picker or acted"))))
+
+  ;; The replacement for those arrow branches. C-p/C-n are used rather than j/k
+  ;; because every other key in the picker is a character of the search query --
+  ;; a letter that also moved the cursor could not be typed.
+  (it "multi-picker-c-p-c-n-move-the-selection"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org" :host "github.com" :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo" :organization organization
+                :specification "github.com/team/repo"))
+             (worktree-a
+               (nerimux/model:make-worktree
+                :id "a" :repository repository :path "/tmp/a" :branch "a"))
+             (worktree-b
+               (nerimux/model:make-worktree
+                :id "b" :repository repository :path "/tmp/b" :branch "b"))
+             (conn (%make-test-conn)))
+        (nerimux/model:organization-add-repository organization repository)
+        (nerimux/model:repository-add-worktree repository worktree-a)
+        (nerimux/model:repository-add-worktree repository worktree-b)
+        (setf (nerimux::client-conn-mode conn) :picker
+              (nerimux::client-conn-picker-items conn)
+              (nerimux/picker:build-global-picker-items (list organization))
+              (nerimux::client-conn-picker-index conn) 0)
+        (expect (< 1 (length (nerimux::%client-picker-visible-items conn))))
+        (nerimux::%handle-multi-key-message s conn #(14)) ; C-n
+        (expect (= 1 (nerimux::client-conn-picker-index conn)))
+        (expect (eq :picker (nerimux::client-conn-mode conn))
+                "C-n moved the selection without leaving the picker")
+        (nerimux::%handle-multi-key-message s conn #(16)) ; C-p
+        (expect (= 0 (nerimux::client-conn-picker-index conn)))
+        (expect (string= "" (nerimux::client-conn-picker-query conn))
+                "neither key was appended to the search query"))))
 
   (it "multi-picker-selects-a-worktree-pane-in-an-inactive-window"
     (with-fake-session (s :nwindows 2)
