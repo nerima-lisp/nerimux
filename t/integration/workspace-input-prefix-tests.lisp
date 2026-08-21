@@ -21,6 +21,10 @@
              (win (first (nerimux/model:session-windows s)))
              (left (first (nerimux/model:window-panes win)))
              (right (second (nerimux/model:window-panes win))))
+        ;; make-fake-window gives every pane the same rectangle, so a direction
+        ;; lookup finds no neighbour until they are actually placed apart.
+        (setf (nerimux/model:pane-x left) 0 (nerimux/model:pane-width left) 10
+              (nerimux/model:pane-x right) 10 (nerimux/model:pane-width right) 10)
         (setf (nerimux::client-conn-view conn) :detail)
         (nerimux::%set-client-focus conn left)
         (nerimux::%handle-multi-key-message s conn #(108)) ; l
@@ -75,7 +79,7 @@
                      (lambda (fd bytes) (push (list fd bytes) writes)))
                (nerimux::%handle-multi-key-message sess conn #(27)))
           (setf (fdefinition 'nerimux::pty-write) orig))
-        (expect (equal (list (list 9999 #(27))) writes))
+        (expect (equalp (list (list 9999 #(27))) writes))
         (expect (eq :input (nerimux::client-conn-mode conn))))))
 
   ;; R4.2: copy-mode exit is q only; ESC is a plain unbound byte inside
@@ -107,6 +111,10 @@
              (win (first (nerimux/model:session-windows s)))
              (left (first (nerimux/model:window-panes win)))
              (right (second (nerimux/model:window-panes win))))
+        ;; make-fake-window gives every pane the same rectangle, so a direction
+        ;; lookup finds no neighbour until they are actually placed apart.
+        (setf (nerimux/model:pane-x left) 0 (nerimux/model:pane-width left) 10
+              (nerimux/model:pane-x right) 10 (nerimux/model:pane-width right) 10)
         (setf (nerimux::client-conn-view conn) :detail)
         (nerimux::%set-client-focus conn left)
         (nerimux::%handle-multi-key-message s conn #(58)) ; :
