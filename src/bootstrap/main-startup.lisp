@@ -81,8 +81,9 @@
    the tmux compatibility surface: the forwarding branch is what actually made
    `nerimux list-sessions` work, independently of the *startup-modes* table, so
    removing the table entries alone would not have removed the capability.
-   The entry surface is now `attach` and `server`, and anything else — including
-   no argument at all — is rejected rather than guessed at."
+   The entry surface is now `attach`, `server`, and `kill` (1.6, R8.1), and
+   anything else — including no argument at all — is rejected rather than
+   guessed at."
   (declare (ignore rest))
   (declare (ignorable mode))
   (write-string (%usage-string) *error-output*)

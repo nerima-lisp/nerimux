@@ -111,3 +111,66 @@
                  (when (eq :exit (%receive-if-ready stream server-socket-fd ready))
                    (return))))))
       (close-socket socket))))
+
+;;; ── nerimux kill (R8.1) ──────────────────────────────────────────────────
+;;;
+;;; A one-shot control connection: connect, send one +msg-command+, read back
+;;; the +msg-reply+ the server's `:kill` command handler sends (that handler
+;;; lives in server-multi-dispatch.lisp, out of this file's scope -- see the
+;;; interface reported alongside this change), then disconnect.  It never
+;;; sends +msg-attach+, so it is not RUN-CLIENT above -- but the server
+;;; registers any accepted connection as a full client (%add-client,
+;;; server-multi.lisp) before it ever reads a frame, so this connection is
+;;; briefly a *clients* member and can receive an ordinary +msg-frame+
+;;; broadcast (server-multi.lisp's %broadcast-frame, which runs once per
+;;; event-loop iteration ahead of message dispatch) before its reply
+;;; arrives.  %read-kill-reply discards those instead of mistaking one for
+;;; "no reply".
+
+(defun %read-kill-reply (stream)
+  "Read frames from STREAM until a +msg-reply+ arrives or the connection
+   ends, discarding any interleaved +msg-frame+ broadcast in between (see
+   the section comment above).  Returns (values :reply TEXT) or
+   (values :eof NIL).  Bounded by read-frame's own +read-frame-timeout-
+   seconds+ per call, so a server that never replies does not hang this
+   forever."
+  (loop
+    (multiple-value-bind (type payload) (read-frame stream)
+      (cond
+        ((null type) (return (values :eof nil)))
+        ((= type +msg-bye+) (return (values :eof nil)))
+        ((= type +msg-reply+) (return (values :reply (decode-text payload))))
+        (t nil)))))
+
+(defun %parse-kill-reply-status (text)
+  "Classify a kill command's +msg-reply+ TEXT: the server-side contract
+   (server-multi-dispatch.lisp, out of scope here) is that the first line is
+   literally \"OK\" or \"DENIED\".  Anything else -- an empty reply, a typo,
+   a future reply shape this client does not know about -- is read as
+   :denied so an unrecognized reply fails closed rather than reporting a
+   kill succeeded when it is not certain."
+  (let* ((newline    (position #\Newline text))
+         (first-line (if newline (subseq text 0 newline) text)))
+    (if (string= first-line "OK") :ok :denied)))
+
+(defun send-kill-request (name force-p)
+  "Connect to (socket-path NAME), send a `:kill` command (R8.1), and return
+   (values STATUS TEXT).  STATUS is :ok (the server accepted the kill and is
+   shutting down), :denied (live panes refused it; TEXT lists them, one per
+   line, from the server's reply), or :eof (the connection ended with no
+   reply).  FORCE-P asks the server to SIGHUP then SIGKILL every live pane
+   instead of refusing.
+   Connection failure (no server running at NAME) is not caught here: it
+   propagates as an ERROR, handled the same way main() already handles any
+   other startup error (main-startup.lisp)."
+  (let ((socket (connect-to (socket-path name))))
+    (unwind-protect
+         (let ((stream (socket-stream socket)))
+           (send-frame stream
+                       (msg-command :kill nil
+                                    (when force-p (list "--force"))))
+           (multiple-value-bind (disposition text) (%read-kill-reply stream)
+             (if (eq disposition :reply)
+                 (values (%parse-kill-reply-status text) text)
+                 (values :eof nil))))
+      (close-socket socket))))

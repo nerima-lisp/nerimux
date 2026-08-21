@@ -1,12 +1,15 @@
 ;;; Startup command handlers.
 ;;;
-;;; The entry surface is `attach`, `server`, and the version/usage flags.
-;;; Every other startup mode belonged to the tmux compatibility layer: the
-;;; command-forwarding modes (new-session, has-session, kill-server, list-*,
-;;; show-*, display-message, source-file) sent a command name over the socket to
-;;; the server's tmux command table, and attach-session existed for its flag
-;;; parsing.  They were removed with that layer; main-startup.lisp rejects an
-;;; unrecognized word rather than forwarding it.
+;;; The entry surface is `attach`, `server`, `kill`, and the version/usage
+;;; flags (1.6).  Every other startup mode belonged to the tmux compatibility
+;;; layer: the command-forwarding modes (new-session, has-session,
+;;; kill-server, list-*, show-*, display-message, source-file) sent a command
+;;; name over the socket to the server's tmux command table, and
+;;; attach-session existed for its flag parsing.  They were removed with that
+;;; layer; main-startup.lisp rejects an unrecognized word rather than
+;;; forwarding it.  `kill` (R8.1) is new, not revived: it talks to the
+;;; server over the same +msg-command+ channel worktree commands already
+;;; use (server-multi-dispatch.lisp), not the removed tmux command table.
 ;;;
 ;;; main-startup.lisp keeps argv parsing and dispatch.
 
@@ -39,6 +42,40 @@
   (format t "nerimux ~A~%" (nerimux/version:version-string))
   (sb-ext:exit :code 0))
 
+;;; ── nerimux kill (R8.1) ──────────────────────────────────────────────────
+
+(defun %kill-force-p (rest)
+  "True when REST -- kill's own argv tail, e.g. (\"--force\") -- asks for
+   --force.  kill is a :raw-args-p startup mode (see *startup-modes* below)
+   specifically so this flag is parsed here rather than by *cli-app*: 1.6/
+   R1.17 fix the global flags at -V/-h only, and --force is kill's own
+   argument, not a global one."
+  (and (member "--force" rest :test #'string=) t))
+
+(defun run-kill (rest)
+  "CLI entry point for `nerimux kill [--force]` (R8.1): ask the server at
+   the fixed session name (\"0\" -- R1.5 fixes the session to one) to shut
+   down over its socket (send-kill-request, client.lisp).  A plain
+   `nerimux kill` is refused, printing the still-open panes and exiting 1,
+   when any pane is alive; --force tells the server to SIGHUP then SIGKILL
+   them first.
+   No server running at all is not handled here: send-kill-request's
+   connection failure propagates as an ERROR, caught by main()'s top-level
+   handler-case the same way every other startup error is."
+  (multiple-value-bind (status text)
+      (send-kill-request "0" (%kill-force-p rest))
+    (case status
+      (:ok (sb-ext:exit :code 0))
+      (:denied
+       (format *error-output*
+               "~&nerimux: kill refused, panes still open:~%~A~%~
+                nerimux: retry with --force to close them~%"
+               text)
+       (sb-ext:exit :code 1))
+      (t
+       (format *error-output* "~&nerimux: kill: no reply from server~%")
+       (sb-ext:exit :code 1)))))
+
 (defun %usage-string ()
   "One-page usage summary for -h/--help and bad-flag errors."
   (format nil "usage: nerimux [command]~%~
@@ -46,6 +83,7 @@
                Commands:~%~
                ~2Tattach [selector]~26Topen the workspace UI (auto-starts a server)~%~
                ~2Tserver [name]~26Trun a headless server owning session NAME~%~
+               ~2Tkill [--force]~26Tstop the running server (refuses if panes are open)~%~
                ~2T-V | --version~26Tprint the version and exit~%~
                ~2T-h | --help~26Tprint this summary and exit~%~
                ~%~
@@ -79,6 +117,9 @@
 (defparameter *startup-modes*
   (list (%startup-mode "server" run-server)
         (%startup-mode "attach" run-attach-simple)
+        ;; kill (R8.1) is :raw-args-p so run-kill sees --force itself; it is
+        ;; kill's own argument (1.6), not parsed by *cli-app*'s global flags.
+        (%startup-mode "kill" run-kill :raw-args-p t)
         ;; -V: print the version and exit (tmux -V). --version/-h/--help are
         ;; nerimux conveniences; tmux only prints usage on a bad flag.
         (%startup-mode "-V" run-version :raw-args-p t)
