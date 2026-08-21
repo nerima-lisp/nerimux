@@ -121,6 +121,8 @@
    #:screen-bell-pending
    ;; Copy-mode search term (/ ? n N)
    #:screen-copy-search-term
+   #:screen-copy-search-index
+   #:screen-copy-search-total
    #:screen-copy-search-direction
    ;; Copy-mode line-selection flag (V)
    #:screen-copy-line-selection-p

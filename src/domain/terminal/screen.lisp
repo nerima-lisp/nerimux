@@ -188,6 +188,13 @@
   ;; repeats in that direction and N reverses it.  NIL until the first search;
   ;; the n/N commands treat NIL as :forward.
   (copy-search-direction nil :type (or null keyword))
+  ;; Which match the cursor is on, and how many there are (R6.8's "2/7").
+  ;; Recomputed only when a search actually moves -- the count is a full scan of
+  ;; the virtual buffer, and the position overlay is drawn every frame, so
+  ;; deriving it at render time would scan the whole scrollback per frame.
+  ;; NIL / 0 until the first search, and reset when copy mode exits.
+  (copy-search-index nil :type (or null fixnum))
+  (copy-search-total 0 :type fixnum)
   ;; Copy-mode line-selection flag: T when V (line-select) mode is active
   (copy-line-selection-p nil :type boolean)
   ;; Copy-mode rectangle-select flag: T when 'r' toggles rectangle mode

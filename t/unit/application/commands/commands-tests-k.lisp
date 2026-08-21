@@ -170,4 +170,51 @@
       (nerimux/commands::copy-mode-search-backward s "target")
       ;; target is in vrow 1 (newest scrollback); set_vrow → offset=1, row=0.
       (expect (= 1 (nerimux/terminal/types:screen-copy-offset s)))
-      (expect (= 0 (cdr (nerimux/terminal/types:screen-copy-cursor s)))))))
+      (expect (= 0 (cdr (nerimux/terminal/types:screen-copy-cursor s))))))
+
+  ;; R6.8's "2/7": which match the cursor is on, out of how many exist in the
+  ;; whole virtual buffer -- not just the visible viewport.
+  (it "copy-mode-search-records-which-match-of-how-many"
+    (let* ((s (make-screen 20 3))
+           (sb0 (%make-text-row 20 "hit third"))
+           (sb1 (%make-text-row 20 "hit second"))
+           (sb2 (%make-text-row 20 "hit first")))
+      ;; Scrollback is newest-first, so vrow order is sb2, sb1, sb0, then grid.
+      (setf (nerimux/terminal/types:screen-scrollback s) (list sb0 sb1 sb2))
+      (nerimux/commands::copy-mode-enter s)
+      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 0)
+            (nerimux/terminal/types:screen-copy-offset s) 3)
+      (nerimux/commands::copy-mode-search-forward s "hit")
+      (expect (= 3 (nerimux/terminal/types:screen-copy-search-total s))
+              "counted every match in the scrollback, not just the viewport")
+      (expect (nerimux/terminal/types:screen-copy-search-index s))
+      (expect (<= 1 (nerimux/terminal/types:screen-copy-search-index s) 3)
+              "the ordinal is 1-based and within the total")))
+
+  ;; A term with no match must not leave the previous search's census standing.
+  (it "copy-mode-search-clears-the-census-when-nothing-matches"
+    (let* ((s (make-screen 20 3))
+           (sb0 (%make-text-row 20 "hit")))
+      (setf (nerimux/terminal/types:screen-scrollback s) (list sb0))
+      (nerimux/commands::copy-mode-enter s)
+      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 0))
+      (nerimux/commands::copy-mode-search-forward s "hit")
+      (expect (plusp (nerimux/terminal/types:screen-copy-search-total s)))
+      (nerimux/commands::copy-mode-search-forward s "absent-from-this-buffer")
+      (expect (null (nerimux/terminal/types:screen-copy-search-index s)))
+      (expect (= 0 (nerimux/terminal/types:screen-copy-search-total s)))))
+
+  ;; Leaving copy mode drops the census: the buffer keeps taking live output, so
+  ;; the numbers would describe something that no longer exists.
+  (it "copy-mode-exit-clears-the-census-but-keeps-the-term"
+    (let* ((s (make-screen 20 3))
+           (sb0 (%make-text-row 20 "hit")))
+      (setf (nerimux/terminal/types:screen-scrollback s) (list sb0))
+      (nerimux/commands::copy-mode-enter s)
+      (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 0))
+      (nerimux/commands::copy-mode-search-forward s "hit")
+      (nerimux/commands::copy-mode-exit s)
+      (expect (null (nerimux/terminal/types:screen-copy-search-index s)))
+      (expect (= 0 (nerimux/terminal/types:screen-copy-search-total s)))
+      (expect (string= "hit" (nerimux/terminal/types:screen-copy-search-term s))
+              "the term survives so n can repeat it on re-entry"))))

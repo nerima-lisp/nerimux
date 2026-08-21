@@ -100,6 +100,43 @@
         (multiple-value-bind (wrap-vrow wrap-col) (funcall wrap-start-fn)
           (attempt wrap-vrow wrap-col)))))
 
+;;; ── Match census (R6.8's "2/7") ─────────────────────────────────────────────
+
+(defun %copy-mode-all-matches (screen term)
+  "Every match for TERM in the virtual buffer, as (VROW . COL) in buffer order.
+
+   Uses %COPY-MODE-MAKE-MATCHER, so this census and the n/N cursor agree on what
+   counts as a match. A separate matcher here would produce a total that
+   disagrees with the positions the user can actually reach."
+  (let ((match (%copy-mode-make-matcher term))
+        (total (%copy-mode-total-rows screen))
+        (found '()))
+    (dotimes (vrow total (nreverse found))
+      (let ((row-str (%copy-mode-virtual-row-string screen vrow)))
+        (loop with from = 0
+              for pos = (and (<= from (length row-str))
+                             (funcall match row-str from))
+              while pos
+              do (push (cons vrow pos) found)
+                 ;; Advance past the match start, not past its end: the matcher
+                 ;; reports only where a match begins, and a zero-width regex
+                 ;; would otherwise loop here forever.
+                 (setf from (1+ pos)))))))
+
+(defun %copy-mode-record-search-position (screen term vrow col)
+  "Record which match of TERM the cursor now sits on, and how many exist."
+  (let* ((matches (%copy-mode-all-matches screen term))
+         (index   (position-if (lambda (m)
+                                 (and (= (car m) vrow) (= (cdr m) col)))
+                               matches)))
+    (setf (screen-copy-search-total screen) (length matches)
+          (screen-copy-search-index screen) (and index (1+ index)))))
+
+(defun %copy-mode-clear-search-position (screen)
+  "Forget the match census (leaving copy mode, or a search that found nothing)."
+  (setf (screen-copy-search-index screen) nil
+        (screen-copy-search-total screen) 0))
+
 ;;; ── Public search commands ───────────────────────────────────────────────────
 
 (defun %copy-mode-search-direction (screen term direction &optional (save-direction-p t))
@@ -119,10 +156,16 @@
            (forwardp   (eq direction :forward))
            (finder     (if forwardp #'%copy-mode-find-forward #'%copy-mode-find-backward))
            (start-col  (if forwardp (1+ (cdr cursor)) (cdr cursor))))
-      (%search-with-wrap finder screen term start-vrow start-col
-                         (lambda () (%copy-mode-wrap-start forwardp screen))
-                         (lambda (found-vrow found-col)
-                           (%copy-mode-set-virtual-row screen found-vrow found-col))))))
+      (or (%search-with-wrap
+           finder screen term start-vrow start-col
+           (lambda () (%copy-mode-wrap-start forwardp screen))
+           (lambda (found-vrow found-col)
+             (%copy-mode-set-virtual-row screen found-vrow found-col)
+             (%copy-mode-record-search-position screen term found-vrow found-col)))
+          ;; A term with no match anywhere: report no ordinal rather than
+          ;; leaving the previous search's numbers on screen next to the new
+          ;; term, which would read as "match 2 of 7" for something with none.
+          (progn (%copy-mode-clear-search-position screen) nil)))))
 
 (defun copy-mode-search-forward (screen term)
   "Search forward from the current cursor for TERM through the full scrollback + live grid.

@@ -2,25 +2,14 @@
 
 ;;;; Direct unit tests for %COPY-MODE-POSITION-OVERLAY-TEXT /
 ;;;; %RENDER-COPY-MODE-POSITION-OVERLAY (renderer-pane-copy-mode-overlay.lisp),
-;;;; the R6.8 copy-mode position display: a fixed "[POS/LIMIT]" string,
-;;;; with " /TERM" appended while a search is active.
+;;;; the R6.8 copy-mode position display: "[POS/LIMIT]", with " /TERM" while a
+;;;; search is active and " INDEX/TOTAL" naming which match the cursor is on.
 ;;;;
-;;;; NOTE on a deliberate gap between the requirement text and the
-;;;; implementation, confirmed by reading renderer-pane-copy-mode-overlay.lisp
-;;;; itself (lines 14-22): docs/notes/workspace-requirements.md §R6.8 gives
-;;;; "[12/3400] /pattern 2/7" as the target -- with a "current match/total
-;;;; matches" ordinal ("2/7"). The implementation's own docstring says that
-;;;; ordinal is deliberately NOT produced: nothing in this codebase currently
-;;;; counts matches across the whole scrollback (the search highlighter,
-;;;; %ALL-MATCH-RANGES in renderer-pane-search.lisp, only scans the visible
-;;;; viewport once per frame to paint highlights, with no persistent index),
-;;;; and the implementer judged that adding one is new domain-level tracking
-;;;; out of scope for what was otherwise a template -> string-composition
-;;;; swap. Per this agent's brief ("期待文字列は必ず実装から取れ"), the
-;;;; expectations below match the ACTUAL "[POS/LIMIT]" / "[POS/LIMIT] /TERM"
-;;;; output, not the requirement's literal "2/7"-suffixed example. Flagged to
-;;;; the team lead in the R6/R7 test report as a spec/implementation gap, not
-;;;; silently reconciled here.
+;;;; The ordinal is stored on the screen by the search, not derived at render
+;;;; time: counting matches scans the whole virtual buffer, and this overlay is
+;;;; drawn every frame. So the two halves are tested in two places -- the
+;;;; census itself in the copy-mode search tests, and here only that a recorded
+;;;; census reaches the string.
 
 (describe "renderer-suite/copy-mode-position-text"
 
@@ -84,4 +73,29 @@
       (setf (screen-copy-offset (pane-screen pane)) 5)
       (setf (screen-scrollback (pane-screen pane)) (make-list 100))
       (nerimux/renderer::%render-copy-mode-position-overlay stream pane 0 0 40)
-      (expect (search "[5/100]" (get-output-stream-string stream))))))
+      (expect (search "[5/100]" (get-output-stream-string stream)))))
+
+  ;; R6.8's full form: "[12/3400] /pattern 2/7".
+  (it "appends the match ordinal recorded by the search"
+    (let* ((pane (make-test-pane 40 10 :id 1))
+           (screen (pane-screen pane)))
+      (setf (screen-copy-offset screen) 12
+            (screen-scrollback screen) (make-list 3400)
+            (nerimux/terminal/types:screen-copy-search-term screen) "pattern"
+            (nerimux/terminal/types:screen-copy-search-index screen) 2
+            (nerimux/terminal/types:screen-copy-search-total screen) 7)
+      (expect (string= "[12/3400] /pattern 2/7"
+                       (nerimux/renderer::%copy-mode-position-overlay-text pane)))))
+
+  ;; A term whose search found nothing must not wear the previous search's
+  ;; numbers -- "2/7" beside a term with no matches states something false.
+  (it "omits the ordinal when no search has landed"
+    (let* ((pane (make-test-pane 40 10 :id 1))
+           (screen (pane-screen pane)))
+      (setf (screen-copy-offset screen) 12
+            (screen-scrollback screen) (make-list 3400)
+            (nerimux/terminal/types:screen-copy-search-term screen) "pattern"
+            (nerimux/terminal/types:screen-copy-search-index screen) nil
+            (nerimux/terminal/types:screen-copy-search-total screen) 0)
+      (expect (string= "[12/3400] /pattern"
+                       (nerimux/renderer::%copy-mode-position-overlay-text pane))))))

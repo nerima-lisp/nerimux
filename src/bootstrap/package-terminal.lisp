@@ -311,6 +311,8 @@
    #:screen-drain-queue
    ;; Copy-mode search term
    #:screen-copy-search-term
+   #:screen-copy-search-index
+   #:screen-copy-search-total
    #:screen-copy-search-direction
    ;; Copy-mode line-selection flag
    #:screen-copy-line-selection-p

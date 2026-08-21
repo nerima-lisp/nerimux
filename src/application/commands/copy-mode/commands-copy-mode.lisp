@@ -48,7 +48,13 @@
         (screen-copy-line-selection-p screen) nil
         (screen-copy-rect-select-p  screen) nil
         (screen-copy-exit-on-bottom screen) nil
-        (screen-copy-mode-entered-by-mouse-p screen) nil))
+        (screen-copy-mode-entered-by-mouse-p screen) nil
+        ;; The match census belongs to the search that produced it (R6.8). The
+        ;; term itself is deliberately kept, so re-entering copy mode can repeat
+        ;; the last search with n -- but its ordinal describes a buffer that has
+        ;; been taking live output ever since, so it does not survive.
+        (screen-copy-search-index   screen) nil
+        (screen-copy-search-total   screen) 0))
 
 (defun %clamp-row-col (screen row col)
   "Return (cons clamped-row clamped-col) with row in [0, height-1] and col in [0, width-1]."
