@@ -205,6 +205,16 @@
       ((and stale-ids (gethash key stale-ids)) " stale")
       (t ""))))
 
+(defun workspace-tree-objects (organizations expanded-node-ids)
+  "The objects the tree currently shows, in display order (R6.3).
+
+   Key navigation and rendering must agree on this list or they cannot agree on
+   anything: the selection is an index into the visible rows, so a caller that
+   enumerates rows the frame does not draw moves the cursor onto rows nobody can
+   see. Both sides read it from %WORKSPACE-FLAT-TREE-ENTRIES for that reason —
+   the collapse rule lives in one function, not two."
+  (mapcar #'third (%workspace-flat-tree-entries organizations expanded-node-ids)))
+
 (defun %workspace-flat-tree-entries
     (organizations expanded-node-ids &key refreshing-ids stale-ids)
   "Flatten ORGANIZATIONS into the org -> repository -> worktree -> window ->

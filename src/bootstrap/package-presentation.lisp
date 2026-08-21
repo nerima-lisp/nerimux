@@ -17,6 +17,9 @@
    #:render-session-to-tui-string
    #:render-workspace-overview-to-string
    #:render-workspace-overview-to-tui-string
+   ;; The visible tree rows, in display order (R6.3). Key dispatch selects by
+   ;; index into these, so it must read the same list the frame is drawn from.
+   #:workspace-tree-objects
    ;; Full-screen confirmation / failure view (R6.4). The dispatcher builds the
    ;; struct and reads the y/n answer; this package only draws it.
    #:confirm-view #:make-confirm-view #:confirm-view-p

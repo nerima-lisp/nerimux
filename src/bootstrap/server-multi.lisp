@@ -101,6 +101,14 @@
    Worktree/window/pane rows are never keys here -- only these two levels
    toggle independently (R6.3).")
 
+(defun %workspace-expanded-nodes ()
+  "The expanded-row set, for callers that load before its DEFVAR.
+
+   server-multi-dispatch.lisp is compiled before this file, so naming the
+   variable there would compile as an undeclared free reference. A function is
+   only a forward reference, which resolves at call time."
+  *workspace-expanded-node-ids*)
+
 (defun %toggle-workspace-node-expanded (kind id)
   "Flip the KIND (:ORGANIZATION or :REPOSITORY) / ID row's collapse state
    (R6.3's Enter-toggles-collapse behaviour)."

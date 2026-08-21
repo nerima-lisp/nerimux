@@ -500,15 +500,16 @@ callback mirror %WORKSPACE-PREFIX-FETCH-REPOSITORY, one level up
 
 (defun %workspace-tree-objects
     (&optional (organizations (nerimux/vcs:workspace-organizations)))
-  (loop for organization in organizations
-        append
-        (cons organization
-              (loop for repository in
-                        (nerimux/model:organization-repositories organization)
-                    append
-                    (cons repository
-                          (copy-list
-                           (nerimux/model:repository-worktrees repository)))))))
+  "The tree rows a client can currently select, in display order.
+
+   Delegates to the renderer rather than walking the model itself. It used to
+   flatten organization -> repository -> worktree unconditionally, which was
+   correct only while the tree was always fully expanded: once R6.3 made rows
+   collapse and added the window and pane levels, this enumeration and the drawn
+   frame described different lists, and j/k walked the cursor onto rows the
+   frame was not showing."
+  (nerimux/renderer:workspace-tree-objects organizations
+                                           (%workspace-expanded-nodes)))
 
 (defun %workspace-worktree-matches-token-p (worktree token)
   (or (eq worktree token)
@@ -987,25 +988,58 @@ callback mirror %WORKSPACE-PREFIX-FETCH-REPOSITORY, one level up
   t)
 
 (defun %focus-selected-client-worktree (session conn)
-  (unless (client-conn-selected-worktree conn)
-    (%select-client-tree-worktree conn nil))
-  (let* ((object (%client-tree-object conn))
-         (worktree (client-conn-selected-worktree conn))
-         (pane (%client-worktree-pane session worktree)))
+  "Enter on the selected tree row (R6.3).
+
+   What Enter means depends on the level, and the two upper levels mean
+   something the tree had no way to express before: organization and repository
+   rows toggle open and closed, so a workspace of a thousand repositories opens
+   showing organizations rather than everything at once. Enter on those used to
+   start a worktree-create prompt — which made the create flow reachable but
+   left expansion with no key at all."
+  (let ((object (%client-tree-object conn)))
     (cond
-      (pane
-       (%set-client-focus conn pane)
+      ((typep object 'nerimux/model:organization)
+       (%toggle-workspace-node-expanded
+        :organization (nerimux/model:organization-id object))
        (%mark-dirty)
        t)
-      (worktree
-       (or (%open-client-worktree-pane session conn worktree) t))
       ((typep object 'nerimux/model:repository)
-       (%client-start-worktree-create conn))
-      ((typep object 'nerimux/model:organization)
-       (%client-start-worktree-create conn))
+       (%toggle-workspace-node-expanded
+        :repository (nerimux/model:repository-id object))
+       (%mark-dirty)
+       t)
+      ((typep object 'nerimux/model:pane)
+       (%set-client-focus conn object)
+       (%set-client-view conn :detail)
+       (%mark-dirty)
+       t)
+      ((typep object 'nerimux/model:window)
+       (let ((pane (nerimux/model:window-active-pane object)))
+         (when pane
+           (%set-client-focus conn pane)
+           (%set-client-view conn :detail)))
+       (%mark-dirty)
+       t)
       (t
-       (%client-notify conn "no worktree selected")
-       t))))
+       (unless (client-conn-selected-worktree conn)
+         (%select-client-tree-worktree conn nil))
+       (let* ((worktree (client-conn-selected-worktree conn))
+              ;; The pane last focused in this worktree, so Enter returns to
+              ;; where the user was rather than to whichever pane happens to be
+              ;; first (R6.3).
+              (pane (or (%worktree-remembered-pane worktree)
+                        (%client-worktree-pane session worktree))))
+         (cond
+           ((and pane (nerimux/model:pane-live-p pane))
+            (%set-client-focus conn pane)
+            (%remember-worktree-pane worktree pane)
+            (%mark-dirty)
+            t)
+           (worktree
+            (or (%open-client-worktree-pane session conn worktree) t))
+           (t
+            (%client-notify conn "no worktree selected")
+            t)))))))
 
 (defun %handle-client-normal-key-payload (session conn payload)
   (let ((view (client-conn-view conn)))
@@ -1801,9 +1835,32 @@ preview, or a preview of a different repository."
                 (format nil "worktree prune failed: ~A" condition))))
            t)))))
 
+(defun %handle-client-kill-command (session conn args)
+  "Serve `nerimux kill` (R8.1): answer with OK or DENIED, then drop the client.
+
+   The reply is not optional. send-kill-request blocks on a +msg-reply+, so a
+   handler that only acted and returned would leave the CLI waiting on a server
+   that considers the exchange finished. Returning :QUIT here is what stops the
+   serve loop -- and it only reaches the loop because
+   %handle-multi-command-message forwards this value rather than discarding it."
+  (multiple-value-bind (status descriptions)
+      (%server-kill-request session (%client-kill-force-p args))
+    (send-frame (client-conn-stream conn)
+                (msg-reply (if (eq status :denied)
+                               (format nil "DENIED~{~%~A~}" descriptions)
+                               "OK")))
+    (%drop-client conn)
+    (if (eq status :ok) :quit t)))
+
+(defun %client-kill-force-p (args)
+  "True when a kill command carried --force."
+  (and args (member "--force" args :test #'string=) t))
+
 (defun %handle-client-ui-command (session conn cmd target args)
   "Apply a client-local UI command, returning true when CMD is recognized."
   (cond
+    ((eq cmd :kill)
+     (%handle-client-kill-command session conn args))
     ((eq cmd :attach-target)
      (%client-attach-target conn args))
     ((member cmd '(:overview :workspace-overview :home) :test #'eq)
@@ -1954,17 +2011,23 @@ preview, or a preview of a different repository."
 (defun %handle-multi-command-message (session conn payload)
   "Run a forwarded client-local UI command, returning the loop disposition."
   (multiple-value-bind (cmd target args) (decode-command-payload payload)
-    (cond
-      ((%handle-client-ui-command session conn cmd target args) nil)
-      ;; Anything the workspace UI does not recognize is rejected.  This used to
-      ;; fall through to %dispatch-forwarded-command, which ran the name against
-      ;; a server-side command table -- that fallthrough was the only thing
-      ;; making the forwarded-command surface reachable from the `:` prompt.
-      (cmd
-       (%client-notify conn (format nil "unknown command: ~(~A~)" cmd))
-       (%mark-dirty)
-       nil)
-      (t (%mark-dirty) nil))))
+    (let ((result (%handle-client-ui-command session conn cmd target args)))
+      (cond
+        ;; The handler's own value decides the disposition. This used to be
+        ;; discarded to NIL unconditionally, which made :QUIT unreachable from
+        ;; any forwarded command however the handler was written -- the key path
+        ;; already forwarded its handler's value, which is why C-q d worked and
+        ;; nothing on this path could ever stop the server.
+        (result (if (eq result :quit) :quit nil))
+        ;; Anything the workspace UI does not recognize is rejected.  This used
+        ;; to fall through to %dispatch-forwarded-command, which ran the name
+        ;; against a server-side command table -- that fallthrough was the only
+        ;; thing making the forwarded-command surface reachable from `:`.
+        (cmd
+         (%client-notify conn (format nil "unknown command: ~(~A~)" cmd))
+         (%mark-dirty)
+         nil)
+        (t (%mark-dirty) nil)))))
 
 ;;; ── Per-client message dispatch ─────────────────────────────────────────────
 
