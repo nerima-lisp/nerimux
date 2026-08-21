@@ -5,40 +5,34 @@ The organization-wide contribution guide lives in
 This page records only the rules specific to nerimux — the ones that are easy
 to trip over and that no general guide would mention.
 
-## When the suite will not start at all
+## When the suite starts and then stops dead
 
-On some machines `nix run .#test` prints `Running test system nerimux/test` and
-then stops — no output, no error, no CPU, indefinitely. It is not the suite, and
-it is not ASDF. The garbage collector deadlocks.
-
-Reproduce it with no ASDF and no project code:
-
-```lisp
-;; sbcl --script this-file
-(let ((junk (make-array 1000)))
-  (dotimes (i 1000) (setf (aref junk (mod i 1000)) (make-array 10000)))
-  junk)
-(sb-ext:gc :full t)          ; never returns
-(format t "~&GC-OK~%")
-```
-
-Check whether the SBCL you are on is affected:
+`nix run .#test` printing `Running test system nerimux/test` and then producing
+nothing — no output, no error, no CPU — is almost never the suite. Check the
+machine before you check the code:
 
 ```bash
-sbcl --noinform --non-interactive \
-     --eval '(format t "~S~%" (remove-if-not (lambda (f) (search "GC" (string f))) *features*))'
+vm_stat | head -4          # "Pages free" in the low thousands means no free RAM
+sysctl vm.swapusage        # used ≈ total means the swap file is full too
+ps -eo %cpu,command -r | head -5
 ```
 
-A build reporting `(:MARK-REGION-GC)` is using the parallel mark-region
-collector. That is where this was seen. `--dynamic-space-size` does not avoid it
-— GC fires on bytes consed, not on the heap filling — and there is no
-environment variable that turns the parallel collector off.
+Under real memory exhaustion every process with a garbage collector stalls in
+the kernel's VM subsystem rather than failing: zero CPU, unkillable by
+`sb-ext:with-timeout` (the block is below Lisp), and load average climbing while
+nothing runs. It reproduces with no ASDF and no code from this repository —
+allocating a few megabytes and calling `(sb-ext:gc :full t)` is enough — so the
+absence of a stack pointing at the tests is not evidence that the tests are
+innocent, and its presence is not evidence that they are guilty.
 
-There is no workaround inside this repository, and nothing here is worth
-changing in response to it: the same commit passes on a build with the
-generational collector. The static checks in `scripts/checks/` exist partly to
-give some verification when this happens, but they are not a substitute for the
-suite and do not claim to be.
+Two measurement traps make this hard to see. `ps` reports `%cpu` as a lifetime
+average, so a process that ran for a moment and then stopped forever reads as
+`0.0` and looks idle rather than stuck — the cumulative `time` column is what
+settles it. And `sample` cannot walk SBCL's Lisp stack, so the main thread shows
+as a single unresolvable frame no matter where it is.
+
+The static checks in `scripts/checks/` are what remains available when this
+happens. They are not a substitute for the suite and do not claim to be.
 
 ## Three failures the suite cannot report
 
