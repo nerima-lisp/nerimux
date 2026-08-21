@@ -11,6 +11,9 @@
       (:file "helpers-render-output")
       (:file "helpers-events-cps")
       (:file "helpers-key-bindings")
+      ;; Named for overlays, but the contents are POSIX-env and config-directive
+      ;; assertion macros used by 36 call sites across config, bootstrap and the
+      ;; other helper files. The name is the only thing about it that is stale.
       (:file "helpers-overlay-assertions")
       (:file "helpers-session-naming")
       (:file "helpers-pane-fixtures")
@@ -18,13 +21,12 @@
       (:file "helpers-network-listener")
       (:file "helpers-net-protocol")
       (:file "helpers-options")
-      (:file "helpers-prompt-history")
       (:file "helpers-process-fixtures")
       (:file "helpers-screen-assertions")
       (:file "helpers-loop-fixtures")
-      (:file "helpers-mouse-fixtures")
       (:file "helpers-layout-fixtures")
       (:file "helpers-renderer-fixtures")
+      (:file "helpers-renderer-benchmark")
       (:file "helpers-session-fixtures")
       (:file "helpers-input-fixtures")
       (:file "helpers-pipe-fixtures")
@@ -126,10 +128,6 @@
          :serial t
          :components
          ((:file "vcs-tests")))
-        (:module "domain/persistence"
-         :serial t
-         :components
-         ((:file "runtime-state-tests")))
         (:module "application/picker"
          :serial t
          :components
@@ -164,10 +162,6 @@
           (:file "options-display-tests") ; scope/display presence, array names, value display quoting
           (:file "options-tests-b") ; define-option-accessor, type-coercions, scoped overrides, show-options - part II
           (:file "options-tests-c"))) ; type-coercion dispatch, option-table macro, spec accessors, server options, show-option sorting - part III
-        (:module "domain/hooks"
-         :serial t
-         :components
-         ((:file "hooks-tests"))) ; hook-event-constants, hook-registry, add/run/remove/clear/list-hooks
         (:module "application/config"
          :serial t
          :components
@@ -194,7 +188,6 @@
           (:file "renderer-tests") ; renderer - part I (status-bar, render-session, clear-display, status-indicators, window-list)
           (:file "renderer-window-list-tests") ; renderer status window-list styles and format expansion
           (:file "renderer-tests-d") ; renderer - part IV (per-window options, alert-tab-styles, status-bar-line)
-          (:file "renderer-overlay-cursor-tests") ; renderer overlay, cursor visibility, message placement
           (:file "renderer-tests-b") ; renderer - part II (status-bar, status-position, BEL rendering, status-left-expanded)
           (:file "renderer-tests-f") ; renderer - part VI (parse-style-string, style-to-sgr, status-length, window-status-format, render-popup/menu)
           (:file "renderer-tests-c") ; renderer - part III (mouse/focus/keys, lock-screen, justify, cursor-shape, zoom-suppression)
@@ -203,7 +196,6 @@
          (:file "renderer-statusbar-layout-tests") ; direct unit tests for the previously-untested statusbar-layout helpers
          (:file "renderer-pane-selection-tests") ; direct unit tests for %compute-selection-bounds
          (:file "renderer-compose-effects-tests") ; direct unit tests for %render-passthrough/%render-clipboard drain gating
-         (:file "renderer-overlay-layer-tests") ; direct unit tests for %render-overlay-layer's popup>menu>overlay>cursor priority dispatch
          (:file "renderer-pane-search-tests") ; direct unit tests for %render-copy-search-matches's current-vs-plain match style branch
          (:file "renderer-tui-kit-tests"))) ; headless cl-tui-kit surface/backend adapter
  ; wait-for command channel state and argument validation
@@ -226,15 +218,6 @@
           (:file "commands-tests-l") ; copy-mode exit resets rect-select, yank-rectangle fixed columns - part XII
           (:file "commands-tests-i") ; rectangle selection-text, run-copy-command, copy-mode set-cursor - part IX
           (:file "commands-copy-navigation-tests"))) ; copy-mode search next/prev/forward/backward guards
-        (:module "presentation/prompt"
-         :serial t
-         :components
-         ((:file "overlay-tests")
-          (:file "overlay-popup-menu-tests")
-          (:file "overlay-transient-tests")
-          (:file "prompt-tests")
-          (:file "prompt-editing-tests")
-          (:file "prompt-tests-wiring")))
         (:module "application/config-2"
          :pathname "application/config"
          :serial t
@@ -256,12 +239,11 @@
          ((:file "server-registry-tests")
           (:file "server-window-link-tests")
           (:file "server-command-tests")
-          (:file "server-session-listing-tests") ; list-sessions, rename-session, switch-client, session groups
-          (:file "server-session-message-tests") ; session groups, dispatch, attach/resize edge cases
+          (:file "server-session-listing-tests")
           (:file "server-socket-path-tests") ; socket paths and stale sockets
           (:file "server-client-cps-tests") ; client key CPS, runtime registry, resize edge cases
           (:file "runtime-lifecycle-tests")
-          (:file "system-composition-tests"))) ; core excludes the optional reasoning/dataflow kits
+          (:file "system-composition-tests"))) ; layering guard; core declares no optional kit
         (:module "infrastructure/pty"
          :serial t
          :components
@@ -279,10 +261,8 @@
          ((:file "runtime-tests") ; globals, pane-reader-loop, EOF/remain-on-exit, alert actions
           (:file "runtime-reader-cps-tests") ; reader CPS state machine contracts
           (:file "runtime-channel-helper-tests") ; cap-list and channel plist helpers
-          (:file "runtime-prompt-history-io-tests")
-          (:file "runtime-message-log-core-tests")
-          (:file "runtime-tests-c") ; stop-reader-threads, add-message-log, add-prompt-history, wait-for-channel - part III
-          (:file "runtime-tests-b") ; add-message-log table-driven, add-prompt-history, wait-for-channel - part II
+          (:file "runtime-tests-c") ; stop-reader-threads, wait-for-channel - part III
+          (:file "runtime-tests-b") ; wait-for-channel - part II
           (:file "main-tests")
           (:file "main-entry-tests")))
         (:module "feature"

@@ -7,14 +7,14 @@
    the prior global value afterward.
 
    Why not (let ((nerimux::*running* value)) ...)?  A LET establishes a
-   thread-LOCAL dynamic binding visible only in the current thread.  Reader and
-   status-timer threads spawned inside BODY do NOT inherit the parent's dynamic
+   thread-LOCAL dynamic binding visible only in the current thread.  Reader
+   threads spawned inside BODY do NOT inherit the parent's dynamic
    bindings; they observe the GLOBAL value of *running*.  A LET binding is
    therefore invisible to them: they never see the stop signal, loop forever,
    outlive join-thread's timeout, and leak into later suites as background work.
    Mutating the global with SETF is what those threads actually observe, so any
-   test that spawns a reader/timer thread must drive *running* through this
-   macro rather than a LET."
+   test that spawns a reader thread must drive *running* through this macro
+   rather than a LET."
   (let ((saved (gensym "SAVED-RUNNING")))
     `(let ((,saved nerimux::*running*))
        (setf nerimux::*running* ,value)
@@ -22,8 +22,8 @@
          (setf nerimux::*running* ,saved)))))
 
 (defun stop-nerimux-threads ()
-  "Stop and join every PTY-reader / status-timer / background-shell thread that
-   a test may have spawned, so none leaks into a later test.
+  "Stop and join every PTY-reader / background-shell thread a test may have
+   spawned, so none leaks into a later test.
 
    Dispatching :split-*, :new-window, :new-session or :respawn-pane spawns a real
    pane and calls START-READER-THREAD; that reader loops while the GLOBAL
@@ -32,7 +32,7 @@
    are matched by name, so no global registry is required.
 
    IMPORTANT: after signaling *running*=NIL we SLEEP before restoring it.
-   Reader/timer loops only observe *running* between poll cycles (readers poll
+   Reader loops only observe *running* between poll cycles (readers poll
    every +pty-poll-timeout-us+ ~= 50 ms).  Without the pause, *running* could
    flip back to T while a reader is still mid-poll and it would never stop.
    Sleeping ~3 poll cycles gives every reader a chance to observe the stop and
@@ -43,7 +43,6 @@
              (let ((name (cl-concurrent-kit:thread-name th)))
                (and (stringp name)
                     (or (search "pty-reader" name)
-                        (search "nerimux-status-timer" name)
                         (search "shell-bg" name)))))
            ;; cl-concurrent-kit deliberately wraps no thread-enumeration call --
            ;; it is a debugging facility, not a concurrency primitive -- so this
@@ -65,17 +64,10 @@
    binding would be invisible to them and they would leak into later tests.
    STOP-NERIMUX-THREADS joins them before returning.
 
-   Also isolates prompt/overlay/menu/popup state so that UI state created by
-   one test does not leak into subsequent event-loop tests."
+   Prompt/overlay/menu/popup state used to be isolated here too, as was the
+   read-only attach flag; both went with the deletions in R1."
   `(let ((nerimux::*dirty* nil)
-         (nerimux::*server-marked-pane* nil)
-         (nerimux::*client-read-only* nil)
-         (nerimux/prompt:*prompt* nil)
-         (nerimux/prompt:*overlay* nil)
-         (nerimux/prompt:*overlay-scroll-offset* 0)
-         (nerimux/prompt:*overlay-shown-at* 0)
-         (nerimux/prompt:*active-menu* nil)
-         (nerimux/prompt:*active-popup* nil))
+         (nerimux::*server-marked-pane* nil))
      (with-global-running t
        (unwind-protect (progn ,@body)
          (stop-nerimux-threads)))))

@@ -46,15 +46,6 @@
     (let ((sess (make-session :id 1 :name "s" :windows nil)))
       (expect (null (session-active-pane sess)))))
 
-  ;;; ── session-group slot ───────────────────────────────────────────────────────
-
-  ;; session-group defaults to NIL and can be set to a non-NIL value.
-  (it "session-group-slot"
-    (let ((sess (make-session :id 1 :name "s")))
-      (expect (null (session-group sess)))
-      (setf (session-group sess) "mygroup")
-      (expect (string= "mygroup" (session-group sess)))))
-
   ;;; ── session-last-active slot ────────────────────────────────────────────────
 
   ;; session-last-active defaults to 0 for a freshly created session.
@@ -102,8 +93,7 @@
       (expect (string= "test" (session-name sess)))
       (dolist (row (list (list (session-windows sess)       "session-windows must default to NIL")
                          (list (session-active-window sess) "active window must be NIL (no windows)")
-                         (list (session-clients sess)       "session-clients must default to NIL")
-                         (list (session-group sess)         "session-group must default to NIL")))
+                         (list (session-clients sess)       "session-clients must default to NIL")))
         (destructuring-bind (val desc) row
           (declare (ignore desc))
           (expect (null val)))))))

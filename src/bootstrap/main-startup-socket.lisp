@@ -19,12 +19,6 @@
                   t)
               (error () nil)))))
 
-(defun %global-socket-flag-args ()
-  "The global -L/-S flags to re-inject into a spawned server child's argv so it
-   binds the same socket the parent resolved."
-  (append (when *socket-path-override* (list "-S" *socket-path-override*))
-          (when *socket-name-override* (list "-L" *socket-name-override*))))
-
 (defun %secure-log-directory (log-path)
   "Best-effort chmod LOG-PATH's parent directory to 0700 once it exists, so a
    server crash log holding SBCL backtraces (absolute paths, possibly
@@ -63,10 +57,8 @@
    fail server auto-start outright.  Creating/securing LOG-PATH's directory
    and the log-redirected run-program attempt are therefore wrapped together;
    any signal there falls back to an un-redirected launch instead of
-   propagating and blocking startup -- the same diagnostics-must-not-break-
-   the-primary-operation shape %save-runtime-state/%restore-runtime-state
-   already use in runtime-lifecycle.lisp, degrading to a report (here: no
-   log) rather than propagating."
+   propagating and blocking startup -- diagnostics must not break the
+   primary operation, so this degrades to no log rather than propagating."
   (let ((launched
           (handler-case
               (progn
@@ -104,8 +96,7 @@
    being discarded."
   (let* ((socket-path (socket-path session-name))
          (exe         (first sb-ext:*posix-argv*))
-         (args        (append (%global-socket-flag-args)
-                              (list "server" session-name)))
+         (args        (list "server" session-name))
          (log-path    (%runtime-log-path session-name)))
     (when (%stale-socket-p socket-path)
       (ignore-errors (delete-file socket-path)))

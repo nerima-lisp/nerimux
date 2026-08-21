@@ -22,8 +22,6 @@
   ;; non-default slot (absent = the window's own id).
   (window-index-map (make-hash-table :test #'eq) :type hash-table)
   (clients     nil :type list)      ; list of connected client descriptors
-  ;; NIL or group-id (string/integer); sessions in same group share windows
-  (group       nil)
   ;; NIL or string: session working dir (new-session/attach-session -c)
   (start-directory nil)
   (environment (make-hash-table :test #'equal))
@@ -41,18 +39,13 @@
   "Make WINDOW the active window of SESSION.
    Updates WINDOW's last-active-time as a side effect so that session-last-window
    returns the correct recency order.  Callers that need a pure focus assignment
-   without the timestamp side effect should set (session-active session) directly.
-   Clears the activity flag so #{window_activity_flag} resets on focus."
+   without the timestamp side effect should set (session-active session) directly."
   (setf (session-active session) window)
   (when window
     ;; MRU stack for #{window_stack_index}: current window moves to the front.
     (setf (session-window-stack session)
           (cons window (delete window (session-window-stack session))))
-    (setf (window-last-active-time window) (get-universal-time))
-    ;; Clear activity, silence, and bell flags when the window gains focus.
-    (setf (window-activity-flag window) nil
-          (window-silence-flag  window) nil
-          (window-bell-flag     window) nil)))
+    (setf (window-last-active-time window) (get-universal-time))))
 
 (defun session-active-pane (session)
   "Return the active pane of SESSION's active window, or NIL when there is no window."
@@ -83,18 +76,6 @@
     (loop for i from base-index
           unless (member i used) return i)))
 
-;;; Session-group window sharing (tmux session groups share ONE window set):
-;;; structural changes to a session's window list must be mirrored to every
-;;; other session in its group.  The registry that knows group membership lives
-;;; in the bootstrap layer, so the fan-out is injected as a policy callback
-;;; (same pattern as *history-limit-function* in the terminal layer).
-
-(defvar *session-windows-sync-function* nil
-  "When non-NIL, a function of one argument (SESSION) called after a structural
-   change to SESSION's window list, so grouped sessions can mirror the new
-   membership.  Installed by the bootstrap session registry; NIL in unit tests
-   that construct sessions directly.")
-
 (defun session-window-index (session window)
   "WINDOW's index within SESSION (tmux winlink index): the per-session
    override when link-window placed it at a different slot here, else the
@@ -118,34 +99,13 @@
   (sort (copy-list (session-windows session)) #'<
         :key (lambda (w) (session-window-index session w))))
 
-(defun %prune-window-index-map (session)
-  "Drop winlink index overrides for windows no longer in SESSION, so a later
-   re-link starts from default addressing."
-  (let ((map (session-window-index-map session)))
-    (when (plusp (hash-table-count map))
-      (maphash (lambda (window index)
-                 (declare (ignore index))
-                 (unless (member window (session-windows session))
-                   (remhash window map)))
-               map))))
-
-(defun session-windows-changed (session)
-  "Notify the group-sync policy (when installed) that SESSION's window list
-   changed structurally.  Call after every setf of SESSION-WINDOWS that adds,
-   removes, or reorders windows.  Also prunes stale winlink index overrides."
-  (when session
-    (%prune-window-index-map session)
-    (when *session-windows-sync-function*
-      (funcall *session-windows-sync-function* session)))
-  (session-windows session))
-
 (defun session-insert-window (session window)
   "Insert WINDOW into SESSION's window list, keeping the list sorted by window-id.
    Does NOT update the active window — callers manage focus separately.
    Returns the updated window list (pure list management)."
   (setf (session-windows session)
         (sort (cons window (session-windows session)) #'< :key #'window-id))
-  (session-windows-changed session))
+  (session-windows session))
 
 (defun session-new-window (session name rows cols &optional (base-index 0)
                                                             start-dir)
@@ -221,7 +181,7 @@
              (before  (subseq without 0 dst))
              (after   (subseq without dst)))
         (setf (session-windows session) (append before (list window) after)))))
-  (session-windows-changed session))
+  (session-windows session))
 
 (defun session-swap-windows (session index-a index-b)
   "Exchange the windows at INDEX-A and INDEX-B in SESSION's window list.
@@ -234,7 +194,7 @@
       (let ((new-wins (copy-list wins)))
         (rotatef (nth index-a new-wins) (nth index-b new-wins))
         (setf (session-windows session) new-wins))))
-  (session-windows-changed session))
+  (session-windows session))
 
 (defun session-last-window (session)
   "Return the window with the second-highest last-active-time (i.e. the

@@ -106,8 +106,8 @@
         (declare (ignore desc))
         (with-fresh-global-options
           (if expected
-              (expect (nerimux/options:set-option "mouse" str) :to-be-truthy)
-              (expect (nerimux/options:set-option "mouse" str) :to-be-falsy))))))
+              (expect (nerimux/options:set-option "monitor-activity" str) :to-be-truthy)
+              (expect (nerimux/options:set-option "monitor-activity" str) :to-be-falsy))))))
 
   ;; The `status` option is a CHOICE/number (off|on|2..5), NOT a boolean: a line
   ;; count is stored UNCHANGED so the renderer's status-line-count sees it.  The old

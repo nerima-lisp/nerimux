@@ -25,20 +25,6 @@
     (window-select-pane win (or active (first (window-panes win))))
     win))
 
-;;; ── Multi-pane window fixtures ──────────────────────────────────────────────
-;;;
-;;; %three-pane-window is shared by apply-named-layout tests (main-horizontal,
-;;; main-vertical, other-pane-* overrides) in layout-tests-c.lisp.
-;;; Defined here so any future test file can use it without cross-file coupling.
-
-(defun %three-pane-window (width height)
-  "Build a window of WIDTH x HEIGHT containing three no-PTY panes with no preset tree.
-   Used by apply-named-layout tests that set up and check main/other pane sizes."
-  (make-window :id 1 :name "w" :width width :height height
-               :panes (list (make-no-pty-pane 1 0 0 width height)
-                            (make-no-pty-pane 2 0 0 width height)
-                            (make-no-pty-pane 3 0 0 width height))))
-
 ;;; ── %closest-to-center fixture macro ─────────────────────────────────────────
 ;;;
 ;;; Three %closest-to-center tests in layout-geometry-tests-b.lisp each build
@@ -75,32 +61,6 @@
           (,p1-var (make-pane :id 2 :fd -1 :pid -1 :width 1 :height 1
                                :screen (make-screen 1 1))))
      ,@body))
-
-;;; ── Blank-window fixture macro ──────────────────────────────────────────────
-;;;
-;;; apply-named-layout tests work on windows whose initial pane geometry is
-;;; irrelevant — the layout algorithm assigns final positions.  The pattern:
-;;;   (let* ((p0 (make-no-pty-pane 1 0 0 1 1))
-;;;          ...
-;;;          (win (make-window :id 1 :name "w" :width W :height H
-;;;                            :panes (list p0 ...) :tree (make-layout-leaf p0))))
-;;;     body)
-;;; repeats ~11 times with only the window dimensions and pane count changing.
-
-(defmacro with-blank-window ((win-var &rest pane-vars) (&key (width 80) (height 24))
-                             &body body)
-  "Bind WIN-VAR to a window of WIDTH x HEIGHT containing one no-pty pane per
-   symbol in PANE-VARS (IDs 1..N, all initially 1×1 at (0,0)).  The window tree
-   is a single leaf on the first pane — suitable for testing layout algorithms
-   that assign final geometry.  No session is created; no loop-state is entered."
-  (let ((bindings (loop for var in pane-vars
-                        for id from 1
-                        collect `(,var (make-no-pty-pane ,id 0 0 1 1)))))
-    `(let* (,@bindings
-            (,win-var (make-window :id 1 :name "w" :width ,width :height ,height
-                                   :panes (list ,@pane-vars)
-                                   :tree  (make-layout-leaf ,(first pane-vars)))))
-       ,@body)))
 
 ;;; ── Shared 2-pane fixture macros ─────────────────────────────────────────────
 ;;;
@@ -174,58 +134,6 @@
                                           1/2))))
      (window-select-pane ,win-var ,p0-var)
      ,@body))
-
-(defmacro with-two-pane-h-session ((sess-var win-var p0-var p1-var
-                                    &key (mouse t))
-                                   &body body)
-  "Bind SESS-VAR WIN-VAR P0-VAR P1-VAR to a 2-pane horizontal split session:
-   p0 (x=0 w=40) | p1 (x=41 w=40), window 81x24, first pane active.
-   Runs BODY inside WITH-LOOP-STATE for event-loop isolation."
-  `(let* ((,p0-var  (make-no-pty-pane 1  0 0 40 24))
-          (,p1-var  (make-no-pty-pane 2 41 0 40 24))
-          (,win-var (make-window :id 1 :name "w" :width 81 :height 24
-                                 :panes (list ,p0-var ,p1-var)
-                                 :tree (make-layout-split :h
-                                          (make-layout-leaf ,p0-var)
-                                          (make-layout-leaf ,p1-var)
-                                          1/2)))
-          (,sess-var (make-session :id 1 :name "0" :windows (list ,win-var))))
-     (window-select-pane ,win-var ,p0-var)
-     (session-select-window ,sess-var ,win-var)
-     (with-mouse-option (,mouse)
-       (with-loop-state ,@body))))
-
-;;; ── Two-pane layout session fixture ──────────────────────────────────────────
-;;;
-;;; Layout tests in the dispatch suite (apply-named-layout-even-horizontal,
-;;; apply-named-layout-even-vertical, apply-named-layout-tiled, and
-;;; run-command-line-select-layout-*) share the same manual build pattern:
-;;; make-no-pty-pane × 2 + make-window + make-session + window-select-pane +
-;;; session-select-window.  with-two-pane-layout-session encodes that pattern
-;;; once and eliminates the repeated boilerplate.
-
-(defmacro with-two-pane-layout-session ((sess-var win-var p0-var p1-var
-                                         &key (win-width 81) (win-height 24))
-                                        &body body)
-  "Bind SESS-VAR WIN-VAR P0-VAR P1-VAR to a 2-pane horizontal split session
-   ready for layout-assign tests.  WIN-WIDTH × WIN-HEIGHT default to 81 × 24.
-   p0 occupies the left half, p1 the right half, with p0 active.
-   Runs BODY inside WITH-LOOP-STATE for event-loop isolation."
-  (let ((half-width (gensym "HALF-W")))
-    `(let* ((,half-width (floor (- ,win-width 1) 2))
-            (,p0-var  (make-no-pty-pane 1  0 0 ,half-width ,win-height))
-            (,p1-var  (make-no-pty-pane 2 (1+ ,half-width) 0 ,half-width ,win-height))
-            (,win-var (make-window :id 1 :name "w"
-                                   :width ,win-width :height ,win-height
-                                   :panes (list ,p0-var ,p1-var)
-                                   :tree (make-layout-split :h
-                                            (make-layout-leaf ,p0-var)
-                                            (make-layout-leaf ,p1-var)
-                                            1/2)))
-            (,sess-var (make-session :id 1 :name "0" :windows (list ,win-var))))
-       (window-select-pane ,win-var ,p0-var)
-       (session-select-window ,sess-var ,win-var)
-       (with-loop-state ,@body))))
 
 (defmacro with-two-pane-v-session ((sess-var win-var p0-var p1-var) &body body)
   "Bind SESS-VAR WIN-VAR P0-VAR P1-VAR to a 2-pane vertical split session:

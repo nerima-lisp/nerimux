@@ -63,7 +63,7 @@
     (with-fresh-global-options
       (let ((result (nerimux/options:set-option "history-limit" "1234")))
         (expect (= 1234 result)))
-      (let ((result (nerimux/options:set-option "mouse" "on")))
+      (let ((result (nerimux/options:set-option "monitor-activity" "on")))
         (expect (eq t result)))
       (let ((result (nerimux/options:set-option "status-left" "text")))
         (expect (string= "text" result)))))
@@ -132,8 +132,8 @@
   ;; set-option-for-pane stores the value in the pane's local-options hash.
   (it "set-option-for-pane-stores-in-local-hash"
     (let ((p (nerimux/model:make-pane :id 1)))
-      (nerimux/options:set-option-for-pane "mouse" t p)
-      (expect (eq t (gethash "mouse" (nerimux/model:pane-local-options p))))))
+      (nerimux/options:set-option-for-pane "synchronize-panes" t p)
+      (expect (eq t (gethash "synchronize-panes" (nerimux/model:pane-local-options p))))))
 
   ;; get-option-for-pane returns the pane-local value when present,
   ;; even when the global option has a different value.
@@ -141,10 +141,10 @@
     (let ((p (nerimux/model:make-pane :id 1))
           (nerimux/options:*global-options*
            (let ((ht (make-hash-table :test #'equal)))
-             (setf (gethash "mouse" ht) nil)
+             (setf (gethash "synchronize-panes" ht) nil)
              ht)))
-      (nerimux/options:set-option-for-pane "mouse" t p)
-      (expect (eq t (nerimux/options:get-option-for-pane "mouse" p)))))
+      (nerimux/options:set-option-for-pane "synchronize-panes" t p)
+      (expect (eq t (nerimux/options:get-option-for-pane "synchronize-panes" p)))))
 
   ;; get-option-for-pane returns the global value when no local override is set.
   (it "get-option-for-pane-falls-back-to-global"
@@ -160,24 +160,24 @@
   (it "get-option-for-pane-falls-back-to-spec-default"
     (let ((p (nerimux/model:make-pane :id 1))
           (nerimux/options:*global-options* (make-hash-table :test #'equal)))
-      ;; mouse defaults to NIL in the spec table
-      (expect (null (nerimux/options:get-option-for-pane "mouse" p)))))
+      ;; synchronize-panes defaults to NIL in the spec table
+      (expect (null (nerimux/options:get-option-for-pane "synchronize-panes" p)))))
 
   ;; Two windows have independent local-options hashes.
   (it "window-local-options-isolated-between-windows"
     (let ((win-a (nerimux/model:make-window :id 1 :name "a"))
           (win-b (nerimux/model:make-window :id 2 :name "b")))
-      (nerimux/options:set-option-for-window "mouse" t win-a)
-      (expect (eq t   (nerimux/options:get-option-for-window "mouse" win-a)))
-      (expect (null (gethash "mouse" (nerimux/model:window-local-options win-b))))))
+      (nerimux/options:set-option-for-window "synchronize-panes" t win-a)
+      (expect (eq t   (nerimux/options:get-option-for-window "synchronize-panes" win-a)))
+      (expect (null (gethash "synchronize-panes" (nerimux/model:window-local-options win-b))))))
 
   ;; Two panes have independent local-options hashes.
   (it "pane-local-options-isolated-between-panes"
     (let ((p1 (nerimux/model:make-pane :id 1))
           (p2 (nerimux/model:make-pane :id 2)))
-      (nerimux/options:set-option-for-pane "mouse" t p1)
-      (expect (eq t   (nerimux/options:get-option-for-pane "mouse" p1)))
-      (expect (null (gethash "mouse" (nerimux/model:pane-local-options p2))))))
+      (nerimux/options:set-option-for-pane "synchronize-panes" t p1)
+      (expect (eq t   (nerimux/options:get-option-for-pane "synchronize-panes" p1)))
+      (expect (null (gethash "synchronize-panes" (nerimux/model:pane-local-options p2))))))
 
   ;;; ── Scoped accessors: boolean coercion + fallback chain (newly wired) ────
 

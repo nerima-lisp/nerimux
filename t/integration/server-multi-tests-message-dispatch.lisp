@@ -932,46 +932,6 @@
           (expect (eq before-view (nerimux::client-conn-view conn)))
           (expect nerimux::*running* :to-be-truthy)))))
 
-  ;; A +msg-attach+ frame whose flags byte sets +attach-flag-read-only+ marks the
-  ;; connection read-only; a plain (no-flag) attach leaves it NIL.
-  (it "multi-attach-readonly-flag-sets-conn-slot"
-    (with-fake-session (s)
-      (let* ((conn   (%make-test-conn))
-             (nerimux::*clients* (list conn))
-             (ro-payload (nerimux/protocol::to-octets
-                          (concatenate 'list
-                                       (nerimux/protocol::u16-octets-pair 30 100)
-                                       (list nerimux/protocol:+attach-flag-read-only+)))))
-        (nerimux::%handle-multi-client-message nerimux::+msg-attach+ ro-payload s conn)
-        (expect (nerimux::client-conn-read-only-p conn) :to-be-truthy)
-        ;; A subsequent plain attach (no flags byte) clears it again.
-        (nerimux::%handle-multi-client-message
-         nerimux::+msg-attach+ (nerimux/protocol::u16-octets-pair 30 100) s conn)
-        (expect (nerimux::client-conn-read-only-p conn) :to-be-falsy))))
-
-  ;; When a connection is read-only, a printable key dispatched through
-  ;; %handle-multi-client-message must NOT reach the active pane (no pty-write).
-  (it "multi-readonly-conn-suppresses-pane-input"
-    (with-fake-session (s)
-      (with-isolated-config
-        (let* ((conn (%make-test-conn))
-               (nerimux::*clients* (list conn))
-               (writes nil))
-          (setf (nerimux::client-conn-read-only-p conn) t)
-          ;; Capture any pty-write the key would otherwise forward to the pane.
-          (flet ((rec (fd bytes) (declare (ignore fd)) (push bytes writes)))
-            (let ((orig (fdefinition 'nerimux::pty-write)))
-              (unwind-protect
-                   (progn
-                     (setf (fdefinition 'nerimux::pty-write) #'rec)
-                     (nerimux::%handle-multi-client-message
-                      nerimux::+msg-key+
-                      (make-array 1 :element-type '(unsigned-byte 8)
-                                    :initial-contents (list (char-code #\a)))
-                      s conn))
-                (setf (fdefinition 'nerimux::pty-write) orig))))
-          (expect (null writes))))))
-
   ;; An explicit +msg-detach+ message yields :drop.
   (it "multi-handle-detach-message-drops-client"
     (with-fake-session (s)
@@ -983,13 +943,6 @@
     (with-fake-session (s)
       (expect (eq :drop (nerimux::%handle-multi-client-message nil #() s (%make-test-conn))))
       (expect (eq :drop (nerimux::%handle-multi-client-message 99 #() s (%make-test-conn))))))
-
-  ;; A detach-other-clients command message yields :detach-others.
-  (it "multi-handle-detach-other-clients-command"
-    (with-fake-session (s)
-      (let ((payload (nerimux/protocol::encode-command-payload :detach-other-clients)))
-        (expect (eq :detach-others (nerimux::%handle-multi-client-message
-                                    nerimux::+msg-command+ payload s (%make-test-conn)))))))
 
   (it "multi-client-ui-keymaps-drive-input-copy-search-and-command"
     (with-fake-session (s)

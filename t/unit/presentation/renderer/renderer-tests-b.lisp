@@ -1,6 +1,6 @@
 (in-package #:nerimux/test)
 
-;;;; status-bar format, position, on/off, multi-line, BEL, parse-style, render-popup/menu — part II
+;;;; status-bar format, position, on/off, multi-line, BEL, parse-style — part II
 
 (describe "renderer-suite"
 

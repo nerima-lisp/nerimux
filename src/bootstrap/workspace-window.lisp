@@ -25,5 +25,4 @@
          (win      (session-new-window session win-name rows cols base start-dir)))
     (when start-reader-p
       (start-reader-thread (window-active-pane win)))
-    (nerimux/hooks:run-hooks nerimux/hooks:+hook-after-new-window+ win)
     win))

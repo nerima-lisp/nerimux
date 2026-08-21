@@ -175,6 +175,7 @@
     (when panes (%render-passthrough buffer panes))
     (when panes (%render-clipboard buffer panes))
     (%render-bell-and-cursor buffer active-pane)
+    (%discard-background-bells session window)
     ;; set-titles: emit OSC 0 to set the outer terminal window title.
     (when (nerimux/options:get-option "set-titles")
       (let* ((title-fmt (nerimux/options:get-option "set-titles-string" "#W"))

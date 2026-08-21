@@ -3,9 +3,8 @@
 ;;;; PTY reader thread — CPS state machine.
 ;;;;
 ;;;; This file contains the per-pane I/O thread and state machine.  The
-;;;; remain-on-exit and alert-action helpers live in runtime-reader-alerts.lisp.
-;;;; It is loaded after runtime.lisp (shared state, channel sync, prompt
-;;;; history) and before runtime-timer.lisp.
+;;;; remain-on-exit helpers live in runtime-reader-alerts.lisp.  It is loaded
+;;;; after runtime.lisp (shared state, channel sync).
 ;;;;
 ;;;; Threading model recap:
 ;;;;   * One reader thread per pane: blocking read(PTY fd) -> pane-feed ->
@@ -37,21 +36,15 @@
     (if (null bytes)
         #'reader-eof-state
         (progn
-          (when (pane-pipe-fd pane)
-            (pipe-pane-write pane bytes))
           (pane-feed pane bytes)
           (nerimux/model:pane-mark-output pane bytes)
           (when (find 7 bytes)
             (nerimux/model:pane-mark-bell pane))
-          (nerimux/hooks:run-hooks nerimux/hooks:+hook-pane-output+ pane bytes)
-          (%update-window-on-pane-output (nerimux/model:pane-window pane) pane)
           (%mark-dirty)
           #'reader-idle-state))))
 
 (defconstant +remain-on-exit-poll-seconds+ 0.1
-  "Sleep granularity (seconds) for the remain-on-exit parking spin loop.
-   Derived from +status-timer-poll-seconds+ for consistency: both loops yield
-   the CPU at the same cadence.")
+  "Sleep granularity (seconds) for the remain-on-exit parking spin loop.")
 
 (defun reader-remain-on-exit-state (pane)
   "CPS spin state: park the reader thread while *running* is true.
@@ -65,11 +58,10 @@
     #'reader-remain-on-exit-state))
 
 (defun reader-eof-state (pane)
-  "Fire the pane-exited hook and determine the next CPS state.
+  "Determine the next CPS state after the pane's PTY reaches EOF.
    When 'remain-on-exit' is set, write a notice to the pane screen and
    transition to reader-remain-on-exit-state so the pane stays visible.
    Otherwise return NIL to stop the reader loop immediately."
-  (nerimux/hooks:run-hooks nerimux/hooks:+hook-pane-exited+ pane)
   ;; The child has exited and the master fd is now at EOF.  Mark the pane DEAD:
   ;; close the master fd (nothing else closes it on the remain-on-exit path — a
   ;; leak) and reset pane-fd/pane-pid to -1.  #{pane_dead} keys on (<= pane-fd 0)
@@ -102,9 +94,6 @@
     (when remain-on-exit
       ;; Write the remain-on-exit-format banner (reverse-video) to the pane screen.
       (%write-remain-on-exit-banner pane)
-      ;; tmux fires pane-died (in addition to the unconditional pane-exited above)
-      ;; only on the remain-on-exit branch, where the dead pane stays visible.
-      (nerimux/hooks:run-hooks nerimux/hooks:+hook-pane-died+ pane)
       (%mark-dirty)
       ;; Return the parking state: the driver loop calls it on each tick.
       #'reader-remain-on-exit-state)))

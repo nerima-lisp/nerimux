@@ -66,8 +66,7 @@
 ;;; %decrqm-flag-code encodes a boolean flag as the DECRQM wire integer (1 =
 ;;; set, 2 = reset).  define-decrqm-mode-table is a Prolog-style fact table
 ;;; that generates %decrqm-mode-state from a declarative (mode accessor) list,
-;;; with special sentinels for mouse-mode comparisons, the alt-screen predicate,
-;;; and fixed values.
+;;; with special sentinels for the alt-screen predicate and fixed values.
 
 (defun %decrqm-flag-code (x)
   "Encode a flag for a DECRQM reply: T → 1 (set, wire code), NIL → 2 (reset).
@@ -78,7 +77,6 @@
   "Generate %DECRQM-MODE-STATE from a declarative (mode-number accessor-fn) table.
    SPECS forms:
      (mode-num accessor-fn)         — call (accessor-fn screen) and encode as flag
-     (mode-num :mouse-mode N)       — flag code for (= (screen-mouse-mode screen) N)
      (mode-num :alt-screen)         — flag code for (and (screen-alt-cells screen) t)
      (mode-num :fixed code)         — always return CODE (for modes not tracked dynamically)"
   `(defun %decrqm-mode-state (screen mode)
@@ -91,9 +89,6 @@
                      (cond
                        ;; Keyword sentinel specs must be checked BEFORE the plain-symbol
                        ;; accessor branch, because keywords satisfy (symbolp ...) too.
-                       ((and (= (length rest) 2) (eq (first rest) :mouse-mode))
-                        `(,mode-number
-                          (%decrqm-flag-code (= (screen-mouse-mode screen) ,(second rest)))))
                        ((and (= (length rest) 1) (eq (first rest) :alt-screen))
                         `(,mode-number (%decrqm-flag-code (and (screen-alt-cells screen) t))))
                        ((and (= (length rest) 2) (eq (first rest) :fixed))
@@ -112,11 +107,7 @@
   (6    screen-origin-mode)           ; DECOM — origin mode
   (7    screen-autowrap)              ; DECAWM — auto-wrap
   (25   screen-cursor-visible)        ; DECTCEM — cursor visibility
-  (1000 :mouse-mode 1)                ; X10 / normal mouse
-  (1002 :mouse-mode 2)                ; button-event mouse
-  (1003 :mouse-mode 3)                ; any-event mouse
   (1004 screen-focus-events)          ; focus event reporting
-  (1006 screen-mouse-sgr-mode)        ; SGR mouse encoding
   (47   :alt-screen)                  ; alternate screen (old form)
   (1047 :alt-screen)                  ; alternate screen (new form)
   (1049 :alt-screen)                  ; alternate screen + save cursor

@@ -66,15 +66,6 @@
            (setf received (decode-text payload))))
         (expect (string= "日本語テスト" received)))))
 
-  ;;; ── detach-others flag wiring ────────────────────────────────────────────────
-
-  ;; msg-command :detach-other-clients produces a frame whose payload round-trips
-  ;; cleanly — this is the frame run-client sends when :detach-others is T.
-  (it "client-detach-others-message-encoding"
-    (let* ((frame   (msg-command :detach-other-clients nil nil))
-           (decoded (multiple-value-list (decode-frame frame))))
-      (expect (= +msg-command+ (first decoded)))))
-
   ;;; ── msg-attach encoding ──────────────────────────────────────────────────────
   ;;;
   ;;; run-client sends a msg-attach frame as its first message after connecting.
@@ -106,7 +97,7 @@
                  (list (msg-resize 30 100)                  +msg-resize+)
                  (list (msg-attach 24 80)                   +msg-attach+)
                  (list (msg-frame "text")                   +msg-frame+)
-                 (list (msg-command :detach-other-clients nil nil) +msg-command+))))
+                 (list (msg-command "test-command" nil nil) +msg-command+))))
       (dolist (c cases)
         (destructuring-bind (frame expected-type) c
           (multiple-value-bind (got-type _payload) (decode-frame frame)

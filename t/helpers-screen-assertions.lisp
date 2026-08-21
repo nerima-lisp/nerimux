@@ -31,21 +31,8 @@
      (expect (= ,bg (nerimux/terminal/types:screen-cur-bg ,screen)))
      (expect (= ,attrs (nerimux/terminal/types:screen-cur-attrs ,screen)))))
 
-(defmacro with-command-test-state ((sess &key overlay) &body body)
+(defmacro with-command-test-state ((sess) &body body)
   "Run BODY with a single-session server state and a clean dirty flag."
   `(let ((nerimux::*server-sessions* (list (cons "0" ,sess)))
-         (nerimux::*dirty* nil)
-         ,@(when overlay `((*overlay* nil))))
+         (nerimux::*dirty* nil))
      ,@body))
-
-
-(defmacro with-command-rejection-state ((sess command-form overlay-message
-                                              description)
-                                        &body body)
-  "Assert that COMMAND-FORM is rejected and reports OVERLAY-MESSAGE."
-  (declare (ignore description))
-  `(with-command-test-state (,sess :overlay t)
-     (expect (null ,command-form))
-     (expect (search ,overlay-message *overlay*))
-     ,@body
-     (expect nerimux::*dirty* :to-be-falsy)))

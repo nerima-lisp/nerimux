@@ -119,28 +119,6 @@
    #:unlock-worktree-async
    #:prune-worktrees-async))
 
-(defpackage #:nerimux/persistence
-  (:use #:cl)
-  (:documentation
-   "DOMAIN layer: versioned, data-only runtime snapshots.  Serialization is
-    deliberately reader-safe so restoring sessions, clients, worktrees, tags,
-    and notes never evaluates persisted input.")
-  (:export
-   #:+runtime-snapshot-version+
-   #:runtime-snapshot #:runtime-snapshot-p
-   #:make-runtime-snapshot
-   #:runtime-snapshot-version
-   #:runtime-snapshot-sessions
-   #:runtime-snapshot-clients
-   #:runtime-snapshot-worktrees
-   #:runtime-snapshot-tags
-   #:runtime-snapshot-notes
-   #:runtime-snapshot->plist
-   #:serialize-runtime-snapshot
-   #:deserialize-runtime-snapshot
-   #:save-runtime-snapshot
-   #:load-runtime-snapshot))
-
 (defpackage #:nerimux/picker
   (:use #:cl)
   (:documentation
@@ -175,14 +153,12 @@
    #:+header-size+
    ;; Frame layout constants
    #:+payload-length-offset+
-   #:+attach-flag-read-only+
-   #:+attach-flags-offset+
    #:+cols-offset-in-size-payload+
    ;; Frame codec
    #:encode-frame #:decode-frame
    ;; Typed message constructors
    #:msg-attach #:msg-key #:msg-resize #:msg-detach #:msg-frame #:msg-bye
-   #:msg-command #:msg-reply #:decode-attach-flags
+   #:msg-command #:msg-reply
    ;; Command message codec (protocol-command.lisp, same package)
    #:+field-delimiter+
    #:encode-command-payload #:decode-command-payload #:target-field-p

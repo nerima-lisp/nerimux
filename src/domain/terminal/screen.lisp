@@ -118,10 +118,6 @@
   ;; OSC 7 current working directory (file://host/path reported by the shell);
   ;; surfaces as #{pane_current_path}.  Empty until the shell reports it.
   (cwd "" :type string)
-  ;; Mouse reporting mode: 0=off, 1=basic-1000, 2=button-1002, 3=all-motion-1003
-  (mouse-mode 0 :type (unsigned-byte 8))
-  ;; SGR extended mouse encoding: T when ?1006h is set
-  (mouse-sgr-mode nil :type boolean)
   ;; Auto-wrap mode: T = wrap at right margin (?7h default), NIL = no wrap (?7l)
   (autowrap t :type boolean)
   ;; Deferred (pending) wrap, a.k.a. the VT100 "last column flag": set after a

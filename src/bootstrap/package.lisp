@@ -32,6 +32,4 @@
                     nerimux::client-conn-message-log
                     (setf nerimux::client-conn-message-log)
                     nerimux/model:window-tree
-                    (setf nerimux/model:window-tree)
-                    nerimux/model:window-last-layout-tree
-                    (setf nerimux/model:window-last-layout-tree)))
+                    (setf nerimux/model:window-tree)))

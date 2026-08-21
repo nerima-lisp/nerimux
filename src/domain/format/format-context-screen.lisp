@@ -138,22 +138,6 @@
         :scroll-region-lower  (if pane-scr
                                   (format nil "~D" (nerimux/terminal:screen-scroll-bottom pane-scr))
                                   "")
-        ;; Mouse reporting flags (screen-mouse-mode: 0 off, 1/2/3 = ?1000/?1002/?1003).
-        :mouse-any-flag       (if (and pane-scr
-                                       (plusp (nerimux/terminal:screen-mouse-mode pane-scr)))
-                                  "1" "0")
-        :mouse-standard-flag  (if (and pane-scr
-                                       (= 1 (nerimux/terminal:screen-mouse-mode pane-scr)))
-                                  "1" "0")
-        :mouse-button-flag    (if (and pane-scr
-                                       (= 2 (nerimux/terminal:screen-mouse-mode pane-scr)))
-                                  "1" "0")
-        :mouse-all-flag       (if (and pane-scr
-                                       (= 3 (nerimux/terminal:screen-mouse-mode pane-scr)))
-                                  "1" "0")
-        :mouse-sgr-flag       (if (and pane-scr
-                                       (nerimux/terminal:screen-mouse-sgr-mode pane-scr))
-                                  "1" "0")
         ;; Copy-mode search / selection details.
         :pane-search-string   (or (and pane-scr
                                        (nerimux/terminal:screen-copy-search-term pane-scr))

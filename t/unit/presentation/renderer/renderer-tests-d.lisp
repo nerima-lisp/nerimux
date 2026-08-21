@@ -125,34 +125,13 @@
       ;; Robust proof of per-window resolution: with vs without must differ.
       (expect (not (string= with without)))))
 
-  ;;; ── Alert-state window-tab styles (bell / activity / last) ───────────────────
-
-  ;; A non-active window with its sticky bell flag set renders its tab with
-  ;; window-status-bell-style (fg=red → SGR 31), overriding the (empty) normal style.
-  (it "status-window-list-bell-style-applied-to-window-with-pending-bell"
-    (with-isolated-config
-      (nerimux/options:set-option "window-status-style" "")        ; normal: unstyled
-      (nerimux/options:set-option "window-status-bell-style" "fg=red")
-      (let* ((sess (make-fake-session :nwindows 2))
-             (win2 (second (nerimux/model:session-windows sess))))
-        ;; Mark the inactive window 2 as having an unseen bell.
-        (setf (nerimux/model:window-bell-flag win2) t)
-        (let ((out (nerimux/renderer::%status-window-list-styled
-                    sess (nerimux/model:session-active-window sess))))
-          (expect (search "31" out))))))
-
-  ;; A non-active window with its activity-flag set renders its tab with
-  ;; window-status-activity-style (fg=blue → SGR 34).
-  (it "status-window-list-activity-style-applied-to-window-with-activity"
-    (with-isolated-config
-      (nerimux/options:set-option "window-status-style" "")
-      (nerimux/options:set-option "window-status-activity-style" "fg=blue")
-      (let* ((sess (make-fake-session :nwindows 2))
-             (win2 (second (nerimux/model:session-windows sess))))
-        (setf (nerimux/model:window-activity-flag win2) t)
-        (let ((out (nerimux/renderer::%status-window-list-styled
-                    sess (nerimux/model:session-active-window sess))))
-          (expect (search "34" out))))))
+  ;;; ── Alert-state window-tab styles (last) ─────────────────────────────────────
+  ;;;
+  ;;; The bell-style and activity-style precedence tests that used to open this
+  ;;; block are gone with window-bell-flag / window-activity-flag themselves:
+  ;;; %status-window-list-styled no longer reads either flag, only
+  ;;; window-status-last-style via session-last-window.  See
+  ;;; src/presentation/renderer/renderer-statusbar.lisp:%window-status-style.
 
   ;; The last (previously active) non-active window renders its tab with
   ;; window-status-last-style (fg=magenta → SGR 35) when set.
@@ -168,22 +147,6 @@
         (let ((out (nerimux/renderer::%status-window-list-styled
                     sess (nerimux/model:session-active-window sess))))
           (expect (search "35" out))))))
-
-  ;; Alert-style precedence: a non-active window with BOTH an unseen bell and the
-  ;; activity flag uses bell-style (fg=red, 31), not activity-style (fg=blue, 34).
-  (it "status-window-list-bell-style-beats-activity-style"
-    (with-isolated-config
-      (nerimux/options:set-option "window-status-style" "")
-      (nerimux/options:set-option "window-status-bell-style" "fg=red")
-      (nerimux/options:set-option "window-status-activity-style" "fg=blue")
-      (let* ((sess (make-fake-session :nwindows 2))
-             (win2 (second (nerimux/model:session-windows sess))))
-        (setf (nerimux/model:window-activity-flag win2) t)
-        (setf (nerimux/model:window-bell-flag win2) t)
-        (let ((out (nerimux/renderer::%status-window-list-styled
-                    sess (nerimux/model:session-active-window sess))))
-          (expect (search "31" out))
-          (expect (not (search "34" out)))))))
 
   ;;; ── %justify-right (pure) ───────────────────────────────────────────────────
 
@@ -216,15 +179,14 @@
 
   ;;; ── %status-left-text ────────────────────────────────────────────────────────
 
-  ;; %status-left-text returns session/window info when no prompt is active.
+  ;; %status-left-text returns session/window info.
   (it "status-left-text-normal-mode"
-    (let ((nerimux/prompt:*prompt* nil))
-      (let* ((s   (make-fake-session :nwindows 1))
-             (win (session-active-window s))
-             (ap  (session-active-pane  s))
-             (left (nerimux/renderer::%status-left-text s win ap)))
-        (expect (search "0" left))
-        (expect (search "0" left)))))
+    (let* ((s   (make-fake-session :nwindows 1))
+           (win (session-active-window s))
+           (ap  (session-active-pane  s))
+           (left (nerimux/renderer::%status-left-text s win ap)))
+      (expect (search "0" left))
+      (expect (search "0" left))))
 
   ;;; ── %status-justify-line ─────────────────────────────────────────────────────
 

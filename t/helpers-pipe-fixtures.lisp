@@ -1,6 +1,6 @@
 (in-package #:nerimux/test)
 
-;;;; POSIX pipe fixtures and pipe-pane assertions.
+;;;; POSIX pipe fixtures.
 
 (defun write-octets-to-fd (fd octets)
   "Write OCTETS, a sequence of (unsigned-byte 8), to file descriptor FD.
@@ -39,30 +39,3 @@
             (locally ,@body)
          (ignore-errors (sb-posix:close ,read-fd))
          (ignore-errors (sb-posix:close ,write-fd))))))
-
-(defmacro assert-pipe-pane-open-output-to-command-state (pane)
-  "Assert the state of PANE after opening a command that consumes pane output."
-  `(progn
-     (expect (nerimux/model:pane-pipe-active-p ,pane) :to-be-truthy)
-     (expect (nerimux/model:pane-pipe-fd ,pane) :to-be-truthy)
-     (expect (null (nerimux/model:pane-pipe-output-stream ,pane)))
-     (expect (null (nerimux/model:pane-pipe-output-thread ,pane)))
-     (expect (nerimux/model:pane-pipe-process ,pane) :to-be-truthy)))
-
-(defmacro assert-pipe-pane-open-command-output-state (pane)
-  "Assert the state of PANE after opening a command that writes back to pane."
-  `(progn
-     (expect (nerimux/model:pane-pipe-active-p ,pane) :to-be-truthy)
-     (expect (null (nerimux/model:pane-pipe-fd ,pane)))
-     (expect (nerimux/model:pane-pipe-output-stream ,pane) :to-be-truthy)
-     (expect (nerimux/model:pane-pipe-output-thread ,pane) :to-be-truthy)
-     (expect (nerimux/model:pane-pipe-process ,pane) :to-be-truthy)))
-
-(defmacro assert-pipe-pane-closed-state (pane)
-  "Assert that PANE has no pipe resources left."
-  `(progn
-     (expect (null (nerimux/model:pane-pipe-active-p ,pane)))
-     (expect (null (nerimux/model:pane-pipe-fd ,pane)))
-     (expect (null (nerimux/model:pane-pipe-output-stream ,pane)))
-     (expect (null (nerimux/model:pane-pipe-output-thread ,pane)))
-     (expect (null (nerimux/model:pane-pipe-process ,pane)))))

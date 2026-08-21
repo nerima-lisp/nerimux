@@ -2,7 +2,7 @@
 
 ;;;; renderer tests — part E: %clamp-status-segment, set-cursor-shape in rendered output,
 ;;;; render-session nil-window, render-panes-borders nil-window, status-justify-line,
-;;;; render-overlay scroll, %status-bar-line gap, inline style blocks, SGR-aware width,
+;;;; %status-bar-line gap, inline style blocks, SGR-aware width,
 ;;;; background-window bell relay.
 
 (describe "renderer-suite"
@@ -59,20 +59,6 @@
     (let ((result (nerimux/renderer::%status-justify-line left right cols justify)))
       (expect (<= (length result) cols))
       (expect (search left result))))
-
-  ;;; ── render-overlay with scroll offset ───────────────────────────────────────
-
-  ;; render-overlay renders overlay lines starting from *overlay-scroll-offset*.
-  (it "render-overlay-scroll-renders-lines-from-offset"
-    (let ((*overlay* nil)
-          (*overlay-scroll-offset* 0))
-      (show-overlay (format nil "line-A~%line-B~%line-C"))
-      (unwind-protect
-           (let ((buf (make-string-output-stream)))
-             (nerimux/renderer::render-overlay buf 30 10)
-             (let ((out (get-output-stream-string buf)))
-               (expect (search "line-A" out))))
-        (clear-overlay))))
 
   ;;; ── %justify-right gap calculation ──────────────────────────────────────────
 
@@ -213,26 +199,6 @@
           ;; bell-action must not ring later when its window becomes active.
           (expect (null (nerimux/terminal/types:screen-bell-pending
                          (nerimux/model:pane-screen pane2))))))))
-
-  ;; A BEL in the ACTIVE window fires the alert-bell hook with the window when
-  ;; bell-action applies to the current window (any/current); other/none do not.
-  (it-each (("any" t) ("current" t) ("other" nil) ("none" nil))
-      "render-session-current-window-bell-fires-alert-bell-hook: ~A"
-      (bell-action expect-fired)
-    (with-isolated-options ("bell-action" bell-action "status" "off")
-      (with-isolated-hooks
-        (let* ((sess     (make-fake-session :nwindows 1))
-               (win      (nerimux/model:session-active-window sess))
-               (pane     (nerimux/model:window-active-pane win))
-               (hook-win nil))
-          (setf (nerimux/terminal/types:screen-bell-pending
-                 (nerimux/model:pane-screen pane)) t)
-          (nerimux/hooks:add-hook "alert-bell"
-                                  (lambda (&rest args) (setf hook-win (first args))))
-          (nerimux/renderer::render-session-to-string sess 5 20)
-          (if expect-fired
-              (expect (eq win hook-win))
-              (expect (null hook-win)))))))
 
   ;; visual-bell off/both relay the audible BEL; on is visual-only.
   (it "emit-bell-visual-bell-tri-state-table"

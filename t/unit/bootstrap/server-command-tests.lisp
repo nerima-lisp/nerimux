@@ -17,15 +17,4 @@
           (expect sess :to-be-truthy)
           (expect (= 1 (length nerimux::*server-sessions*)))
           (let ((found (nerimux::server-find-session "testsess")))
-            (expect (eq sess found)))))))
-
-  ;; After killing a session it is removed from the server registry.
-  (it "kill-session-command"
-    (with-empty-registry
-      (let ((s1 (make-session :id 1 :name "alive"  :windows nil))
-            (s2 (make-session :id 2 :name "doomed" :windows nil)))
-        (nerimux::server-add-session s1)
-        (nerimux::server-add-session s2)
-        (nerimux::server-remove-session "doomed")
-        (expect (= 1 (length (nerimux::server-all-sessions))))
-        (expect (null (nerimux::server-find-session "doomed")))))))
+            (expect (eq sess found))))))))

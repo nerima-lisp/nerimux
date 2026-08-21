@@ -65,7 +65,6 @@
   ("escape-time"              :integer 10)
   ("base-index"               :integer 0)
   ("pane-base-index"          :integer 0)
-  ("mouse"                    :boolean nil)
   ("default-command"          :string  "")
   ("default-shell"            :string  "/bin/sh")
   ("exit-unattached"          :boolean nil)
@@ -132,7 +131,6 @@
   ("repeat-time"              :integer 500)    ; ms window for repeatable bindings
   ;; ms window for the FIRST repeat; 0 = use repeat-time (tmux 3.5+)
   ("initial-repeat-time"      :integer 0)
-  ("double-click-time"        :integer 500)    ; ms window for double/triple mouse clicks
   ;; Terminal settings
   ("default-terminal"         :string  "screen")
   ("terminal-overrides"       :string  "")

@@ -50,15 +50,6 @@
 ;;; These helpers extract sub-computations from format-context-from-session to
 ;;; keep that function readable.  Each is a focused unit covering one domain.
 
-(defun %window-has-pending-bell-p (window)
-  "True when WINDOW has monitor-bell on and its sticky bell flag is set.
-   The flag (tmux WINLINK_BELL) is set by the PTY reader when a non-current
-   window rings BEL and cleared when the window is selected — so the status
-   `!' persists until the window is viewed, matching tmux."
-  (and window
-       (nerimux/options:get-option-for-context "monitor-bell" :window window)
-       (nerimux/model:window-bell-flag window)))
-
 (defun %process-pid-string ()
   "Current process PID as a decimal string, or \"0\" when unavailable.
    Used for both #{client_pid} and #{server_pid} in the single-process model."
@@ -78,14 +69,6 @@
 ;;; plist. format-context-from-session appends the six slices together (three
 ;;; model-facing builders here; the more mechanical pane-geometry / screen /
 ;;; client getter-table builders live in format-context-screen.lisp).
-
-(defun %session-group-peers (session)
-  "The sessions in SESSION's group, from the runtime group registry (resolved
-   by name so the format layer stays free of the umbrella package), or NIL."
-  (let* ((group (and session (nerimux/model:session-group session)))
-         (sym   (and group (find-symbol "*SESSION-GROUPS*" "NERIMUX")))
-         (alist (and sym (boundp sym) (symbol-value sym))))
-    (cdr (assoc group alist))))
 
 (defun %current-mouse-event-coordinate (key)
   "Always \"\": there is no mouse dispatch to be inside of.
@@ -114,27 +97,12 @@
         :session-last-attached (if session
                                    (format nil "~D" (nerimux/model:session-last-active session))
                                    "0")
-        :session-group         (if (and session (nerimux/model:session-group session))
-                                   (format nil "~A" (nerimux/model:session-group session)) "")
         :session-created       (if session
                                    (format nil "~D" (nerimux/model:session-created session))
                                    "")
         :session-activity      (if session
                                    (format nil "~D" (nerimux/model:session-last-active session))
                                    "")
-        :session-grouped       (if (and session (nerimux/model:session-group session))
-                                   "1" "0")
-        :session-group-size    (let ((peers (%session-group-peers session)))
-                                 (if peers (format nil "~D" (length peers)) ""))
-        :session-group-list    (format nil "~{~A~^,~}"
-                                       (mapcar #'nerimux/model:session-name
-                                               (%session-group-peers session)))
-        :session-group-attached (let ((peers (%session-group-peers session)))
-                                  (if peers
-                                      (format nil "~D"
-                                              (count-if #'nerimux/model:session-clients
-                                                        peers))
-                                      ""))
         :mouse-x               (%current-mouse-event-coordinate :col)
         :mouse-y               (%current-mouse-event-coordinate :row)
         :session-count         (%server-session-count-string)
@@ -165,9 +133,6 @@
         :window-width          (if window (nerimux/model:window-width  window) 0)
         :window-height         (if window (nerimux/model:window-height window) 0)
         :window-format         (if window "1" "0")
-        :window-bell-flag      (if (%window-has-pending-bell-p window) "!" " ")
-        :window-activity-flag  (if (and window (nerimux/model:window-activity-flag window)) "#" " ")
-        :window-silence-flag   (if (and window (nerimux/model:window-silence-flag window)) "~" " ")
         :window-start-flag     (if (and window session-windows
                                         (eq window (first session-windows))) "1" "0")
         :window-end-flag       (if (and window session-windows
@@ -178,10 +143,6 @@
         :window-marked-flag    (if (and window
                                         (some #'nerimux/model:pane-marked window-panes))
                                    "1" "0")
-        :window-activity       (if window
-                                   (format nil "~D"
-                                           (nerimux/model:window-last-output-time window))
-                                   "")
         ;; #{window_stack_index}: position in the session's MRU stack
         ;; (0 = current); windows never yet selected report empty.
         :window-stack-index    (let* ((stack (and session
@@ -225,8 +186,7 @@
         :pane-dead-signal     (let ((v (and pane (nerimux/model:pane-dead-signal pane))))
                                 (if v (format nil "~D" v) ""))
         :pane-dead-time       (let ((v (and pane (nerimux/model:pane-dead-time pane))))
-                                (if v (format nil "~D" v) ""))
-        :pane-pipe            (if (and pane (nerimux/model:pane-pipe-active-p pane)) "1" "0")))
+                                (if v (format nil "~D" v) ""))))
 
 ;;; ── Context builder ─────────────────────────────────────────────────────────
 ;;;

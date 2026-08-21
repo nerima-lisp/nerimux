@@ -53,8 +53,6 @@
   (picker-query "" :type string)
   (picker-regex-p nil :type boolean)
   (picker-index 0 :type fixnum)
-  (attention-items nil :type list)
-  (attention-index 0 :type fixnum)
   ;; Set to the REPOSITORY-ID of the repository a dry-run prune preview was
   ;; just shown for; a confirm (dry-run nil) prune must match it, so
   ;; wt-prune-confirm --confirm cannot skip straight past the preview a user

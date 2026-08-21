@@ -140,8 +140,6 @@
    ;; OSC 7 current working directory
    #:screen-cwd
    ;; Mouse reporting mode
-   #:screen-mouse-mode
-   #:screen-mouse-sgr-mode
    ;; Auto-wrap mode (?7h / ?7l)
    #:screen-autowrap
    #:screen-pending-wrap

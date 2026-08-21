@@ -19,36 +19,13 @@
 
 (describe "server-suite"
 
-  ;;; -- %sync-active-window unit tests -----------------------------------------
-
-  ;; %sync-active-window sets new-session's active window to match existing-session.
-  (it "sync-active-window-mirrors-existing-selection"
-    (let* ((w1 (make-fake-window 1 "w1"))
-           (w2 (make-fake-window 2 "w2"))
-           (existing (make-session :id 1 :name "existing"
-                                   :windows (list w1 w2)))
-           (new-sess (make-session :id 2 :name "new"
-                                   :windows (list w1 w2))))
-      (session-select-window existing w2)
-      (nerimux::%sync-active-window new-sess existing)
-      (expect (eq w2 (session-active-window new-sess)))))
-
-  ;; %sync-active-window is a no-op when existing-session has no active window.
-  (it "sync-active-window-nil-existing-window-is-safe"
-    (let* ((new-sess (make-session :id 2 :name "new" :windows nil))
-           (existing (make-session :id 1 :name "existing" :windows nil)))
-      (finishes (nerimux::%sync-active-window new-sess existing))
-      (expect (null (session-active-window new-sess)))))
-
   ;;; -- run-server session-registry initialization ------------------------------
 
   ;; The session-registry setup that run-server performs: reset to NIL then add the initial session.
   (it "run-server-session-registry-initialization"
     (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
     (with-empty-registry
-      (let ((nerimux::*session-groups* nil)
-            (nerimux::*group-id-counter* 0)
-            (nerimux/model::*session-id-counter* 0))
+      (let ((nerimux/model::*session-id-counter* 0))
         (setf nerimux::*server-sessions* nil)
         (let ((session (create-initial-session 24 80)))
           (nerimux::server-add-session session)
@@ -56,16 +33,6 @@
           (expect (nerimux::server-find-session (session-name session)) :to-be-truthy)
           (dolist (pane (all-panes session))
             (ignore-errors (pty-close (pane-fd pane) (pane-pid pane))))))))
-
-  ;; server-remove-session removes the session from *server-sessions*, leaving it empty.
-  (it "run-server-registry-teardown-on-remove"
-    (with-empty-registry
-      (let ((sess (make-session :id 1 :name "teardown-test" :windows nil)))
-        (nerimux::server-add-session sess)
-        (expect (= 1 (length nerimux::*server-sessions*)))
-        (nerimux::server-remove-session "teardown-test")
-        (expect (null nerimux::*server-sessions*))
-        (expect (null (nerimux::server-find-session "teardown-test"))))))
 
   ;;; -- define-message-dispatch-fn macro ---------------------------------------
   ;;;

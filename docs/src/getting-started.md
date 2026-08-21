@@ -28,12 +28,7 @@ nerimux attach /path/to/worktree       # open a local worktree
 containing a slash is resolved as an organization/repository selector or a
 local worktree path. `attach` and `server` are the only commands; anything
 else — including `nerimux` with no arguments — prints the usage summary and
-exits non-zero. Socket selection works like tmux: `-L <name>` picks a named socket in the
-per-user directory (created `0700` under `$TMUX_TMPDIR`, falling back to the
-system temp dir), and `-S <path>` uses an explicit path. `-r`/`--read-only`
-is a global flag like `-L`/`-S` — pass it anywhere in the flag run, e.g.
-`nerimux attach -r`, to attach without forwarding key, paste, or mouse input
-to panes.
+exits non-zero. `-V`/`-h` are the only global flags.
 
 If `attach` has to auto-start the server and something goes wrong, the
 spawned server's stdout/stderr are captured to a per-session-name log file
@@ -62,8 +57,9 @@ panes.
 | `i` / `c` / `:` | Input / copy / command mode |
 | `Esc` | Close or cancel the active modal or mode |
 
-The tmux keystroke pipeline (prefix bindings, `bind`/`unbind`, hooks) and the
-tmux command surface are gone; see [Compatibility](reference/compatibility.md)
+The tmux keystroke pipeline (prefix bindings, `bind`/`unbind`) and the tmux
+command surface are gone, as is the event-hook registry; see
+[Compatibility](reference/compatibility.md)
 for what changed. nerimux still parses `.tmux.conf` syntax at startup — see
 [Configuration](guide/configuration.md) for what a config file can do today.
 
@@ -86,28 +82,21 @@ nerimux-coverage ./coverage-report    # sb-cover report via cl-weave
 
 ## Testing
 
-`nix flake check` runs four derivations in parallel:
+`nix flake check` runs three derivations in parallel:
 
 | Check | What it covers |
 |---|---|
 | `default` | the full unit + integration suite (`nerimux/test`) |
-| `dataflow` | the copy-mode lifecycle read-model (`nerimux/dataflow`) |
 | `formatting` | treefmt / nixfmt over every tracked Nix file |
 | `docs` | this site, built with `mkdocs --strict` |
 
 The main suite (`find t -name '*.lisp' | wc -l` for today's file count) runs on
 [cl-weave](https://github.com/nerima-lisp/cl-weave) and covers the VT100
-emulator, layout geometry, command dispatch, format engine, options/hooks,
+emulator, layout geometry, command dispatch, format engine, options,
 copy mode, the client/server protocol, and live PTY integration against a real
 shell. PTY tests self-skip where `/dev/ptmx` is unavailable, so sandboxed runs
 stay meaningful. The runner is deliberately sequential — tests share global
 session/socket/PTY state.
-
-To run a single suite by hand:
-
-```bash
-NERIMUX_TEST_SYSTEM=nerimux/dataflow sbcl --script run-tests.lisp
-```
 
 There is also an end-to-end smoke test that drives the real binary inside a
 PTY. It is deliberately kept out of the ASDF test system:

@@ -1,6 +1,6 @@
 (in-package #:nerimux/test)
 
-;;;; add-message-log table-driven, add-prompt-history, wait-for-channel — part II
+;;;; wait-for-channel, reader EOF and the remain-on-exit banner — part II
 
 (describe "runtime-suite"
 
@@ -32,14 +32,6 @@
       ;; return (it uses a bounded condition-wait).  We cannot shrink the timeout
       ;; in this test, so just verify the function is callable and returns a boolean.
       (expect (fboundp 'nerimux::wait-for-channel))))
-
-  ;;; ── Status interval timer ────────────────────────────────────────────────────
-
-  ;; *status-timer* is defined as an internal variable (not exported).
-  (it "status-timer-var-is-boundp"
-    ;; *status-timer* is intentionally not exported — it is read/set only in
-    ;; main.lisp and server.lisp.  We still verify it exists as a defvar.
-    (expect (boundp 'nerimux::*status-timer*)))
 
   ;;; ── remain-on-exit dead-pane marking ─────────────────────────────────────────
   ;;;
@@ -107,15 +99,6 @@
   (it "remain-on-exit-poll-seconds-is-positive"
     (expect (plusp nerimux::+remain-on-exit-poll-seconds+))
     (expect (realp nerimux::+remain-on-exit-poll-seconds+)))
-
-  ;; +default-display-time-ms+ is a positive integer constant.
-  (it "default-display-time-ms-is-positive"
-    (expect (plusp nerimux::+default-display-time-ms+))
-    (expect (integerp nerimux::+default-display-time-ms+)))
-
-  ;; +ms-per-second+ is 1000.0.
-  (it "ms-per-second-constant-is-correct"
-    (expect (= 1000.0 nerimux::+ms-per-second+)))
 
   ;;; ── Pane death record (remain-on-exit #{pane_dead_status} family) ────────────
 

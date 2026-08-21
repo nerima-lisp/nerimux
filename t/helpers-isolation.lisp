@@ -2,12 +2,6 @@
 
 (in-package #:nerimux/test)
 
-(defmacro with-isolated-hooks (&body body)
-  "Run BODY with a fresh *hook-registry* table so lisp-function hooks don't
-   leak between tests."
-  `(let ((nerimux/hooks:*hook-registry* (make-hash-table :test #'equal)))
-     ,@body))
-
 (defmacro with-isolated-config (&body body)
   "Run BODY with the mutable config specials dynamically rebound to copies,
    so directives applied in a test never leak into other suites.

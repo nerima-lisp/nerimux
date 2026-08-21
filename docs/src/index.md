@@ -76,22 +76,12 @@ of what an attached client can and cannot do. What remains:
 - **cl-cli** — startup argv/flag parsing.
 - **cl-boundary-kit** — the process boundary behind `run-shell`/`if-shell`.
 - **cl-parser-kit** — the command-line tokenizer.
-- **cl-history-kit** — command-prompt history storage in
-  `src/presentation/prompt/` and `bootstrap/runtime-history.lisp`; the
-  workspace UI's `:` command line does not currently call it, so this is
-  shipped but presently unreached from an attached client.
 - **cl-tui-kit** — headless surface rendering, layout and widgets for the
   per-client frames (workspace overview, detail, picker).
 - **cl-vcs-kit** — ghq organization/repository/worktree discovery.
 
-One further sibling is dogfooded in-tree but is **not** in the shipped binary's
-dependency closure — it backs the optional `nerimux/dataflow-model` system, which
-nothing at runtime calls:
-
-- **cl-dataflow-kit** — the copy-mode lifecycle state machine.
-
-A second, **cl-prolog-kit**, backed a `nerimux/reasoning` system that projected
-the config key-table store into Prolog facts. That store was deleted once nothing
+**cl-prolog-kit** backed a `nerimux/reasoning` system that projected the
+config key-table store into Prolog facts. That store was deleted once nothing
 read it, leaving nothing to project, so the system and its suite were retired.
 See [Dogfooded sibling libraries](guide/sibling-libraries.md).
 

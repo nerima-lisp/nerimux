@@ -137,19 +137,6 @@
         (let ((result (nerimux/model::%new-split-ratio orient avail cur-ratio delta grow-first)))
           (expect (equal expected result))))))
 
-  ;; ── window-rotate single-pane is noop ───────────────────────────────────────
-
-  ;; window-rotate on a single-pane window changes nothing.
-  (it "window-rotate-single-pane-noop"
-    (let* ((p0  (make-no-pty-pane 1 0 0 80 24))
-           (win (make-window :id 1 :name "w" :width 80 :height 24
-                             :panes (list p0)
-                             :tree (make-layout-leaf p0))))
-      (window-rotate win :up)
-      (expect (equal (list p0) (window-panes win)))
-      (window-rotate win :down)
-      (expect (equal (list p0) (window-panes win)))))
-
   ;; ── window-id and window-name accessors ─────────────────────────────────────
 
   ;; window-id returns the id passed to make-window.

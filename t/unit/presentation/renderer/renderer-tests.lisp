@@ -5,7 +5,7 @@
 ;;; ── Test fixtures ───────────────────────────────────────────────────────────
 ;;;
 ;;; make-renderer-test-session is defined in t/helpers-renderer-fixtures.lisp
-;;; and shared across renderer-tests.lisp, renderer-pane-tests.lisp, and prompt-tests.lisp.
+;;; and shared across renderer-tests.lisp and renderer-pane-tests.lisp.
 
 (defun make-split-session (w h orient)
   "A 1-window session split into two panes (fd -1, no PTY).
@@ -86,17 +86,6 @@
                     out "")))
         (expect (search "[" vis)))))
 
-  ;; With *prompt* explicitly inactive, the status bar shows the normal status
-  ;; (window 1) and never the prompt text — pinning the active/inactive exclusion.
-  (it "status-bar-no-prompt-when-inactive"
-    (with-minimal-status-bar-options
-      (let ((nerimux/prompt:*prompt* nil))
-        (let* ((sess (make-renderer-test-session 40 10 :content ""))
-               (out  (render-status-bar-output sess 10 40)))
-          ;; window-status-current-format renders active window as " 1:1* "
-          (expect (search "1:1" out))
-          (expect (null (search "rename-window:" out)))))))
-
   ;; The status bar does not show a COPY/offset indicator when a pane is in copy mode.
   (it "render-status-bar-copy-mode-has-no-indicator"
     (with-minimal-status-bar-options
@@ -140,21 +129,6 @@
         ;; the HH:MM time string (right portion) is truncated off the visible content.
         ;; We verify this by checking the content is shorter than the full line would be.
         (expect (< (length content) 20)))))
-
-  ;; An active *prompt* replaces the whole left status segment with its
-  ;; "LABEL: BUFFER" text — the prompt text appears and the normal
-  ;; window-list (1:1*) is absent.
-  (it "render-status-bar-active-prompt-replaces-left-segment"
-    (let ((nerimux/prompt:*prompt* nil))
-      (nerimux/prompt:prompt-start "rename-window" "abc" nil)
-      (unwind-protect
-           (let* ((sess (make-renderer-test-session 60 10 :content ""))
-                  (out  (render-status-bar-output sess 10 60)))
-             ;; prompt-text formats as "LABEL: BUFFER".
-             (expect (search "rename-window: abc" out))
-             ;; When prompt is active, the window list (1:1*) is suppressed.
-             (expect (null (search "1:1*" out))))
-        (nerimux/prompt:prompt-clear))))
 
   ;;; ── render-session-to-string (full frame) ───────────────────────────────────
 

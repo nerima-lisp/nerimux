@@ -1,19 +1,6 @@
 (in-package #:nerimux/test)
 
-;;;; mouse/focus/keys sequences, justify, cursor-shape, overlay, inline-style — part III
-
-(defun %mouse-seq-output (mouse-mode sgr-mode)
-  "Run %render-mouse-sequences with a synthetic pane whose screen has MOUSE-MODE
-   and SGR-MODE set.  The global 'mouse' option is isolated to NIL so only the
-   pane-level branch fires.  Returns the emitted string."
-  (with-isolated-options ("mouse" nil)
-    (let* ((screen (make-screen 10 4))
-           (pane   (make-pane :id 1 :x 0 :y 0 :width 10 :height 4
-                              :fd -1 :screen screen)))
-      (setf (nerimux/terminal/types:screen-mouse-mode     screen) mouse-mode
-            (nerimux/terminal/types:screen-mouse-sgr-mode screen) sgr-mode)
-      (with-output-to-string (s)
-        (nerimux/renderer::%render-mouse-sequences s pane)))))
+;;;; focus/keys sequences, justify, cursor-shape, inline-style — part III
 
 (describe "renderer-suite"
 
@@ -36,52 +23,16 @@
 
   ;; %status-left-text with copy mode active no longer includes the old copy indicator.
   (it "status-left-text-copy-mode-has-no-indicator"
-    (let ((nerimux/prompt:*prompt* nil))
-      (let* ((sess   (make-fake-session :nwindows 1))
-             (win    (session-active-window sess))
-             (ap     (session-active-pane  sess))
-             (screen (pane-screen ap)))
-        ;; Enable copy mode with a non-zero offset.
-        (setf (screen-copy-mode-p   screen) t
-              (screen-copy-offset   screen) 2)
-        (let ((left (nerimux/renderer::%status-left-text sess win ap)))
-          (expect (null (search "COPY" left)))
-          (expect (null (search "+2" left)))))))
-
-  ;;; ── %render-mouse-sequences (internal — three-way dispatch) ──────────────────
-  ;;;
-  ;;; These tests exercise %render-mouse-sequences directly to cover all three
-  ;;; branches of the mouse-mode case: X10 (1 → ?1000h), button-event (2 → ?1002h),
-  ;;; and any-event (other → ?1003h).
-
-  ;; %render-mouse-sequences emits the correct DEC sequence per mouse-mode and sgr-mode.
-  (it "render-mouse-sequences-mode-table"
-    (dolist (c '((1 nil "?1000h" "mouse-mode 1 (X10) → ?1000h")
-                 (2 nil "?1002h" "mouse-mode 2 (button-event) → ?1002h")
-                 (3 nil "?1003h" "mouse-mode 3 (any-event) → ?1003h")
-                 (1 t   "?1006h" "sgr-mode T → ?1006h")))
-      (destructuring-bind (mode sgr expected desc) c
-        (declare (ignore desc))
-        (let ((out (%mouse-seq-output mode sgr)))
-          (expect (search (format nil "~C[~A" #\Escape expected) out))))))
-
-  ;; %render-mouse-sequences with mouse-mode 0 emits no sequences.
-  (it "render-mouse-sequences-zero-mode-emits-nothing"
-    (let ((out (%mouse-seq-output 0 nil)))
-      (expect (= 0 (length out)))))
-
-  ;; When the 'mouse' option is globally enabled, %render-mouse-sequences emits the
-  ;; global sequences (?1006h + ?1002h) regardless of pane mouse-mode.
-  (it "render-mouse-sequences-session-global-overrides-pane"
-    (with-isolated-options ("mouse" t)
-      (let* ((screen (make-screen 10 4))
-             (pane   (make-pane :id 1 :x 0 :y 0 :width 10 :height 4
-                                :fd -1 :screen screen)))
-        (setf (nerimux/terminal/types:screen-mouse-mode screen) 0)
-        (let ((out (with-output-to-string (s)
-                     (nerimux/renderer::%render-mouse-sequences s pane))))
-          (expect (search (format nil "~C[?1006h" #\Escape) out))
-          (expect (search (format nil "~C[?1002h" #\Escape) out))))))
+    (let* ((sess   (make-fake-session :nwindows 1))
+           (win    (session-active-window sess))
+           (ap     (session-active-pane  sess))
+           (screen (pane-screen ap)))
+      ;; Enable copy mode with a non-zero offset.
+      (setf (screen-copy-mode-p   screen) t
+            (screen-copy-offset   screen) 2)
+      (let ((left (nerimux/renderer::%status-left-text sess win ap)))
+        (expect (null (search "COPY" left)))
+        (expect (null (search "+2" left))))))
 
   ;;; ── %render-panes-and-borders zoom suppression (coverage gap) ───────────────
 

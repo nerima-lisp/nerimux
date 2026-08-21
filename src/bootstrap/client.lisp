@@ -86,13 +86,11 @@
                            (list (or target "")
                                  (%client-working-directory)))))
 
-(defun run-client (name &key detach-others target)
+(defun run-client (name &key target)
   "Attach to the server at (socket-path NAME): forward stdin + resizes, render
    the frames the server returns, and exit on detach / server close.
-   When DETACH-OTHERS is T, send a detach-others command before attaching so
-   the server disconnects any currently attached clients.  TARGET is an
-   optional explicit organization/repository/worktree selector; the current
-   working directory is sent for cwd-based attach selection."
+   TARGET is an optional explicit organization/repository/worktree selector;
+   the current working directory is sent for cwd-based attach selection."
   (require :sb-posix)
   (let ((socket (connect-to (socket-path name))))
     (unwind-protect
@@ -103,15 +101,7 @@
            (install-sigwinch-handler)
            (with-raw-mode
              (clear-display)
-             ;; -d flag: ask the server to detach any existing clients first.
-             (when detach-others
-               (send-frame stream (msg-command :detach-other-clients nil nil)))
-             ;; Carry the read-only bit to the server in the attach frame's
-             ;; flags byte, where it is still enforced per-connection.
-             ;; *client-read-only* is set by the global -r/--read-only flag
-             ;; (%apply-global-cli-invocation, main-startup.lisp) before this
-             ;; runs; it defaults to NIL for a normal attach.
-             (send-frame stream (msg-attach *term-rows* *term-cols* *client-read-only*))
+             (send-frame stream (msg-attach *term-rows* *term-cols*))
              (%send-client-attach-target stream target)
              (loop
                (%maybe-send-resize stream)

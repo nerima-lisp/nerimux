@@ -106,25 +106,3 @@
   "Read-only alist mapping color name strings to integer SGR base code strings (foreground codes).
 Never rebound at runtime — use DEFVAR so image restarts do not reset the binding.")
 
-;;; ── Border-charset declarative dispatch table ───────────────────────────────
-
-(defmacro define-border-charset-table (&rest rules)
-  "Build %DISPATCH-BORDER-CHARSET from a declarative (style tl tr bl br h v) fact table.
-   Any unknown style falls back to single (┌┐└┘─│)."
-  `(defun %dispatch-border-charset (style)
-     "Return (values TL TR BL BR H V) box-drawing chars for the given border STYLE string."
-     (cond
-       ,@(mapcar (lambda (rule)
-                   (destructuring-bind (style-str tl tr bl br h v) rule
-                     `((string= style ,style-str)
-                       (values ,tl ,tr ,bl ,br ,h ,v))))
-                 rules)
-       (t (values #\┌ #\┐ #\└ #\┘ #\─ #\│)))))
-
-(define-border-charset-table
-  ("rounded" #\╭ #\╮ #\╰ #\╯ #\─ #\│)
-  ("double"  #\╔ #\╗ #\╚ #\╝ #\═ #\║)
-  ("heavy"   #\┏ #\┓ #\┗ #\┛ #\━ #\┃)
-  ("simple"  #\+ #\+ #\+ #\+ #\- #\|)
-  ("padded"  #\Space #\Space #\Space #\Space #\Space #\Space)
-  ("none"    #\Space #\Space #\Space #\Space #\Space #\Space))

@@ -17,22 +17,6 @@
       (setf (nerimux/model::session-start-directory sess) "/home/user")
       (expect (string= "/home/user" (nerimux/model::session-start-directory sess)))))
 
-  ;;; ── session-select-window clears activity/silence flags ─────────────────────
-
-  ;; session-select-window clears the window-activity-flag when selecting a window.
-  (it "session-select-window-clears-activity-flag"
-    (let* ((w0   (make-window :id 0 :name "a" :activity-flag t))
-           (sess (make-session :id 1 :name "s" :windows (list w0))))
-      (session-select-window sess w0)
-      (expect (nerimux/model::window-activity-flag w0) :to-be-falsy)))
-
-  ;; session-select-window clears the window-silence-flag when selecting a window.
-  (it "session-select-window-clears-silence-flag"
-    (let* ((w0   (make-window :id 0 :name "a" :silence-flag t))
-           (sess (make-session :id 1 :name "s" :windows (list w0))))
-      (session-select-window sess w0)
-      (expect (nerimux/model::window-silence-flag w0) :to-be-falsy)))
-
   ;;; ── all-panes ordering ───────────────────────────────────────────────────────
 
   ;; all-panes returns panes in window-list order (first window's panes first).

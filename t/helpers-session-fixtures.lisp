@@ -2,26 +2,6 @@
 
 ;;;; Session and buffer fixtures.
 
-(defmacro with-two-window-status-session ((sess win0 win1
-                                           &key (rows 6) (cols 80)
-                                           (mouse t)
-                                           (current-format "A")
-                                           (format "B")
-                                           (separator "|"))
-                                          &body body)
-  "Run BODY with a 2-window status-bar session tailored for click-hit tests."
-  `(with-isolated-options ("mouse" ,mouse
-                           "window-status-current-format" ,current-format
-                           "window-status-format" ,format
-                           "window-status-separator" ,separator)
-     (multiple-value-bind (,sess ,win0 _p0 ,win1 _p1)
-         (make-two-window-session ,cols (1- ,rows))
-       (declare (ignore _p0 _p1))
-       (session-select-window ,sess ,win0)
-       (with-loop-state
-         (let ((nerimux::*term-rows* ,rows)
-               (nerimux::*term-cols* ,cols))
-           ,@body)))))
 
 (defmacro with-empty-session ((var) &body body)
   "Bind VAR to a windowless session suitable for empty-state guard tests.
@@ -112,20 +92,6 @@
   `(with-isolated-config
      (let ((,var (make-fake-session ,@make-args)))
        ,@body)))
-
-(defmacro with-isolated-mouse-session ((var &key (nwindows 1) (npanes 1)
-                                            (rows 25) (cols 40)
-                                            (mouse t))
-                                       &body body)
-  "Run BODY with isolated config, mouse enabled, and a fake session.
-   NWINDOWS/NPANES control the session shape; ROWS/COLS default to the geometry
-   used by the mouse dispatch tests."
-  `(with-isolated-config
-     (with-mouse-option (,mouse)
-       (with-fake-session (,var :nwindows ,nwindows :npanes ,npanes)
-         (let ((nerimux::*term-rows* ,rows)
-               (nerimux::*term-cols* ,cols))
-           ,@body)))))
 
 (defmacro with-minimal-session ((pane-var win-var sess-var
                                  &key (width 20) (height 5)) &body body)

@@ -80,25 +80,6 @@
            (expect (= 24 rows))
            (expect (= 80 cols)))))))
 
-  ;; msg-attach with readonly-p sets the trailing flags byte; decode-attach-flags
-  ;; recovers +attach-flag-read-only+ while decode-size still recovers rows,cols.
-  (it "attach-readonly-flag-roundtrip"
-    (multiple-value-bind (type payload) (decode-frame (msg-attach 24 80 t))
-      (expect (= +msg-attach+ type))
-      (multiple-value-bind (rows cols) (decode-size payload)
-        (expect (= 24 rows))
-        (expect (= 80 cols)))
-      (expect (logtest (decode-attach-flags payload) +attach-flag-read-only+))))
-
-  ;; A 2-arg msg-attach omits the flags byte; decode-attach-flags returns 0 so
-  ;; read-only defaults off when the frame omits CLIENT_READONLY.
-  (it "attach-no-flag-decodes-zero"
-    (multiple-value-bind (type payload) (decode-frame (msg-attach 24 80))
-      (declare (ignore type))
-      (expect (= 4 (length payload)))
-      (expect (= 0 (decode-attach-flags payload)))
-      (expect (not (logtest (decode-attach-flags payload) +attach-flag-read-only+)))))
-
   ;; msg-resize round-trips rows,cols including large values.
   (it "resize-roundtrip"
     (let ((frame (msg-resize 300 1000)))

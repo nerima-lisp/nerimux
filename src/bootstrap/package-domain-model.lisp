@@ -28,12 +28,7 @@
    #:pane-fd
    #:pane-pid
    #:pane-feed
-   #:pane-pipe-fd
-   #:pane-pipe-active-p
    #:pane-live-p
-   #:pane-pipe-output-stream
-   #:pane-pipe-output-thread
-   #:pane-pipe-process
    #:pane-window
    #:pane-worktree
    #:pane-marked
@@ -44,8 +39,6 @@
    #:pane-dead-status
    #:pane-dead-signal
    #:pane-dead-time
-   #:pane-tags
-   #:pane-note
    #:pane-unread-output-p
    #:pane-bell-p
    #:pane-process-exited-p
@@ -106,14 +99,8 @@
    #:window-last-active-time
    #:window-local-options
    #:window-automatic-rename-p
-   #:window-activity-flag
-   #:window-bell-flag
-   #:window-last-output-time
-   #:window-silence-flag
    #:*pane-extra-env*
    #:window-layout-cycle-index
-   #:window-last-layout-tree
-   #:window-rotate
    #:make-session
    #:*session-id-counter*
    #:session-id
@@ -124,8 +111,6 @@
    #:session-select-window
    #:session-insert-window
    #:session-new-window
-   #:*session-windows-sync-function*
-   #:session-windows-changed
    #:session-active-pane
    #:session-last-active
    #:session-created
@@ -135,11 +120,9 @@
    #:session-window-index-map
    #:session-windows-in-index-order
    #:session-clients
-   #:session-group
    #:session-start-directory
    #:session-touch
    #:pane-at-position
-   #:apply-named-layout
    #:session-move-window
    #:session-swap-windows
    #:session-last-window
@@ -167,7 +150,6 @@
    #:organization-id #:organization-host #:organization-name
    #:organization-repositories #:organization-active-worktree-count
    #:organization-attention-count #:organization-missing-p
-   #:organization-tags #:organization-notes #:organization-recent-activity
    #:organization-key #:organization-repository-count
    #:organization-add-repository #:organization-recompute-counts
    #:repository #:repository-p #:make-repository
@@ -176,7 +158,6 @@
    #:repository-backend #:repository-worktrees #:repository-main-worktree
    #:repository-dirty-p #:repository-conflict-p
    #:repository-ahead #:repository-behind #:repository-missing-p
-   #:repository-tags #:repository-notes #:repository-recent-activity
    #:repository-key #:repository-add-worktree
    #:repository-worktree-by-path #:repository-recompute-status
    #:worktree #:worktree-p #:make-worktree
@@ -185,7 +166,6 @@
    #:worktree-panes #:worktree-dirty-p #:worktree-conflict-p
    #:worktree-ahead #:worktree-behind #:worktree-bare-p
    #:worktree-locked-p #:worktree-prunable-p #:worktree-missing-p
-   #:worktree-tags #:worktree-notes #:worktree-recent-activity
    #:worktree-key #:worktree-attention-p #:worktree-attention-reasons
    #:organization-attention-worktrees
    #:worktree-add-pane))
@@ -219,48 +199,6 @@
            #:initialize-osc52-handler
            #:list-paste-buffers #:list-paste-buffers-with-names
            #:delete-paste-buffer #:delete-buffer-by-name #:clear-paste-buffers))
-
-(defpackage #:nerimux/hooks
-  (:use #:cl)
-  (:documentation
-   "DOMAIN layer: the event-hook registry, the seam through which configuration
-    reacts to things the domain does.  Carries two kinds: the named lifecycle and
-    alert hooks tmux defines (after-new-window, pane-exited, alert-bell, ...) and
-    per-command hooks attached to a command name and scope.  Stores and orders the
-    handlers; running them is delegated to an injected runner so the domain never
-    calls into the command dispatcher directly.")
-  (:export
-   #:+hook-after-new-window+
-   #:+hook-after-new-pane+
-   #:+hook-pane-exited+
-   #:+hook-session-created+
-   #:+hook-after-split-window+
-   #:+hook-client-attached+
-   #:+hook-client-detached+
-   #:+hook-alert-bell+
-   #:+hook-alert-activity+
-   #:+hook-alert-silence+
-   #:+hook-pane-focus-in+
-   #:+hook-pane-focus-out+
-   #:+hook-after-select-pane+
-   #:+hook-after-select-window+
-   #:+hook-session-window-changed+
-   #:+hook-window-pane-changed+
-   #:+hook-window-renamed+
-   #:+hook-session-renamed+
-   #:+hook-after-resize-pane+
-   #:+hook-client-resized+
-   #:+hook-window-linked+
-   #:+hook-window-unlinked+
-   #:+hook-session-closed+
-   #:+hook-pane-output+
-   #:+hook-pane-died+
-   #:*hook-registry*
-   #:add-hook
-   #:remove-hook
-   #:run-hooks
-   #:clear-hooks
-   #:list-hooks))
 
 (defpackage #:nerimux/options
   (:use #:cl)

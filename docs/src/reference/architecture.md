@@ -104,7 +104,7 @@ The layering rule is:
   `refresh-workspace-organizations-async`, …), which is legal because bootstrap
   sits above every layer.
 - `application` holds use cases over the domain model: what is left in
-  `commands/` (copy mode, the command-line tokenizer, pipe-pane, and pane PTY
+  `commands/` (copy mode, the command-line tokenizer, and pane PTY
   teardown), and `.tmux.conf` directive parsing in `config/`.
 - `infrastructure` provides the real PTY/socket/VCS adapters and binds the
   domain's port variables to them.
@@ -181,8 +181,7 @@ REPL) is gone too.
 ```
 nerimux/
 ├── flake.nix               # Nix build + checks (pure Lisp, no C compilation)
-├── nerimux.asd             # ASDF systems: nerimux, /test, /dataflow,
-│                           #   plus optional /dataflow-model
+├── nerimux.asd             # ASDF systems: nerimux, /test
 ├── run-tests.lisp          # single Lisp-level test entry point
 ├── src/
 │   ├── bootstrap/          # packages, entry point (`attach`/`server`), the
@@ -192,28 +191,23 @@ nerimux/
 │   │   ├── model/          #   session → window → pane tree, layouts
 │   │   ├── format/         #   #{...} format-string engine
 │   │   ├── options/        #   option registry + scopes
-│   │   ├── hooks/          #   hook registry + firing
 │   │   ├── buffer/         #   paste buffers
-│   │   ├── persistence/    #   runtime-snapshot struct (detach/attach state)
 │   │   └── ports/          #   the PTY port variables, plus the posix wrappers
 │   ├── application/        # use cases over the domain model
-│   │   ├── commands/       #   copy-mode, the command-line tokenizer and
-│   │   │   └── copy-mode/  #     pipe-pane — what outlived the command table
+│   │   ├── commands/       #   copy-mode and the command-line tokenizer —
+│   │   │   └── copy-mode/  #     what outlived the command table
 │   │   ├── config/         #   tmux.conf directive parsing: options, hooks,
 │   │   │                   #   source-file, run/if-shell (bind/unbind parse
 │   │   │                   #   and are discarded — see note above)
 │   │   └── picker/         #   global picker item model (build/filter across
 │   │                       #   the workspace catalog)
 │   ├── infrastructure/     # adapters: PTY, sockets, raw-mode stdin input, VCS
-│   ├── presentation/       # renderer, prompt/overlay
-│   │   ├── prompt/         #   command-prompt overlay rendering
-│   │   └── renderer/       #   pane compositor + workspace views + cl-tui-kit — see
-│   │                       #   below, it is one render path, not two
-│   └── dataflow/           # cl-dataflow-kit cold-path read-model — OPTIONAL system
+│   └── presentation/       # renderer
+│       └── renderer/       #   pane compositor + workspace views + cl-tui-kit — see
+│                           #   below, it is one render path, not two
 └── t/
     ├── unit/               # feature-focused spec files
     ├── integration/        # PTY/socket/runtime integration specs
-    ├── dataflow/           # cl-weave suite for the copy-mode lifecycle read-model
     └── e2e/                # binary-level smoke test
 ```
 
@@ -243,13 +237,3 @@ ASDF load order now states it — `renderer-workspace` loads immediately after
 comment). `renderer-compose-protocols.lisp` holds one function, `clear-display`,
 called by the client at raw-mode setup; it is not part of either render pass,
 which is why no render entry point reaches it.
-
-The cold-path read-model under `src/dataflow/` is described in
-[Dogfooded sibling libraries](../guide/sibling-libraries.md).
-
-It is **not part of the core `nerimux` system**. It has no call site anywhere in
-`src/` outside its own directory, so loading it into the shipped binary bought
-nothing at runtime while pulling `cl-dataflow-kit` into its dependency closure.
-It lives in the optional system `nerimux/dataflow-model`, which its existing test
-suite (`nerimux/dataflow`) depends on explicitly. The parallel `nerimux/reasoning`
-system was retired when the key-table store it projected was deleted.

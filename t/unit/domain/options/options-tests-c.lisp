@@ -140,7 +140,6 @@
   ;; Key global options return the expected default values from *option-registry*.
   (it-each (("status-position"   "bottom")
             ("base-index"        0)
-            ("mouse"             nil)
             ("synchronize-panes" nil)
             ("status-interval"   15)
             ("history-limit"     2000)

@@ -152,21 +152,6 @@
           (expect (= 1 (count #\A out)))
           (expect (= 1 (count #\I out)))))))
 
-  ;; #{pane_pipe} is '1' when the pane is being piped (pipe-pane active), else '0'.
-  (it "format-pane-pipe-reflects-pipe-state"
-    (with-isolated-config
-      (let* ((sess (make-fake-session :nwindows 1))
-             (win  (nerimux/model:session-active-window sess))
-             (pane (nerimux/model:window-active-pane win)))
-        (expect (string= "0" (nerimux/format:expand-format
-                              "#{pane_pipe}"
-                              (nerimux/format:format-context-from-session sess win pane))))
-        (setf (nerimux/model:pane-pipe-output-stream pane) (make-string-output-stream))
-        (expect (string= "1" (nerimux/format:expand-format
-                              "#{pane_pipe}"
-                              (nerimux/format:format-context-from-session sess win pane))))
-        (setf (nerimux/model:pane-pipe-output-stream pane) nil))))
-
   ;; format-context-from-session :window-index equals the window's numeric id.
   ;; With make-fake-session (base-index=0), ids are 0, 1; :window-index follows.
   (it "format-context-window-index-matches-window-id"

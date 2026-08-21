@@ -11,7 +11,7 @@
     nil)
 
 (defsystem "nerimux"
-  :description "A tmux-compatible terminal multiplexer in Common Lisp"
+  :description "A git-worktree workspace multiplexer in Common Lisp"
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
@@ -59,7 +59,6 @@
                :cl-parser-kit    ; commands-tokenizer combinator rewrite
                :cl-tty-kit       ; PTY spawn/raw-mode/fd-io, ioctl window size, colour downsampling
                :cl-process-kit   ; timeout-guarded subprocess run, and select(2) over raw fds
-               :cl-history-kit   ; command-prompt history store + recall navigation (runtime-history)
                :cl-codec-kit     ; string<->octet UTF-8 codec (protocol, PTY, OSC payloads)
                :cl-host-kit      ; pathname/string host ops (split-string, directory helpers)
                :cl-tui-kit/ansi  ; headless surface/backend rendering for per-client frames
@@ -168,16 +167,11 @@
        (:file "window-tree")        ; tree mutation + relayout/remove helpers
        (:file "window-operations")  ; window resize/rotate/zoom (uses window + layout helpers)
        (:file "window-neighbor") ; directional pane navigation (uses window-panes)
-       (:file "window-layout")   ; named layouts (apply-named-layout, uses window accessors)
        (:file "session")             ; session lifecycle: struct + windows + touch + all-panes
        (:file "session-environment-process")   ; update-env defaults + process env helpers
        (:file "session-environment-overlay")    ; session overlay tables and env access
        (:file "session-environment-child")      ; child env snapshot assembly
        (:file "pane-spawn")))                   ; PTY-backed pane factory + respawn
-     (:module "domain/persistence"
-      :serial t
-      :components
-      ((:file "runtime-state")))                ; versioned reader-safe runtime snapshot
      (:module "infrastructure/vcs"
       :serial t
       :components
@@ -221,15 +215,6 @@
       :serial t
       :components
       ((:file "buffer")))   ; paste-buffer ring (uses options for buffer-limit)
-     (:module "domain/hooks"
-      :serial t
-      :components
-      ((:file "hooks")))    ; user-defined hook registry
-     (:module "presentation/prompt"
-      :serial t
-      :components
-      ((:file "prompt")
-       (:file "overlay")))              ; overlay, popup, menu state (read by renderer-compose-overlay and the visual-bell transient)
      ;; commands context: what is left of the pane/window operations, plus the
      ;; copy-mode cluster.  commands-core loads first, then copy-mode, then the
      ;; two survivors split back to root via :pathname.  The tmux command
@@ -253,8 +238,7 @@
       :pathname "application/commands"
       :serial t
       :components
-       ((:file "commands-pipe-pane")     ; pipe-pane process I/O lifecycle
-        (:file "commands-tokenizer")))   ; shell-style command-string tokeniser
+       ((:file "commands-tokenizer")))   ; shell-style command-string tokeniser
      (:module "presentation/renderer"
       :serial t
       :components
@@ -271,10 +255,9 @@
        (:file "renderer-pane-copy-mode-line-number")  ; copy-mode line-number gutter rendering
        (:file "renderer-pane")           ; pane cell rendering (selection, copy-mode highlights)
        (:file "renderer-borders")        ; split-tree separators + pane border rendering
-       (:file "renderer-overlay")        ; popup and menu box-drawing
        (:file "renderer-statusbar")      ; status bar composition
        (:file "renderer-compose-protocols") ; terminal protocol toggles
-       (:file "renderer-compose-overlay")   ; overlay rendering + mouse mode sequences
+       (:file "renderer-compose-overlay")   ; cursor placement for the active pane
        (:file "renderer-compose-effects")   ; bell / cursor / queue drain effects
        (:file "renderer-compose")        ; PANE frame compositing + entry points
        (:file "renderer-tui-kit")        ; headless cl-tui-kit surface/backend adapter
@@ -288,28 +271,19 @@
       :serial t
       :components
       ((:file "runtime")              ; shared state + channel sync + SIGWINCH
-       (:file "runtime-history")      ; message log + prompt history
-       (:file "runtime-reader-alerts") ; remain-on-exit banner + alert-action helpers
-       (:file "runtime-reader")       ; PTY reader CPS state machine
-       (:file "runtime-timer")))      ; status interval timer, monitor-silence
-     ;; dispatch context, subdivided into cohesive sub-areas. Load order is
-     ;; byte-identical to the old flat module; handlers split early (support)
-     ;; / late (rest) via the :pathname trick (dispatch-handlers-2).
- ; copy-mode table, format helpers, new-session, named-command table (loads dispatch-command-specs* fragments)
- ; shared prompt/menu helpers for dispatch handlers
- ; *arg-command-table* + %run-command-tokens + %run-command-line
- ; paste-buffer command handler helpers
+       (:file "runtime-reader-alerts") ; remain-on-exit banner helpers
+       (:file "runtime-reader")))     ; PTY reader CPS state machine
      (:module "bootstrap-server"
       :pathname "bootstrap"
       :serial t
       :components
-      ((:file "session-registry")  ; session registry + group management
+      ((:file "session-registry")  ; lookup for the one session the server owns
        (:file "server")
        (:file "workspace-window") ; workspace window creation
        (:file "server-multi-dispatch") ; multi-client attach/resize/key/command handlers
        (:file "server-multi")  ; multi-client client registry + dispatch helpers
        (:file "server-multi-loop") ; multi-client select-multiplexed serve loop
-       (:file "runtime-lifecycle") ; atomic runtime snapshot restore/save hooks
+       (:file "runtime-lifecycle") ; per-server state directory and log path
        (:file "client")
        (:file "main-startup-flags") ; global cl-cli flag definitions
        (:file "main-startup-socket") ; socket discovery + server auto-start helpers
@@ -343,57 +317,3 @@
   :perform (test-op (op c)
              (funcall (find-symbol "RUN-TESTS" (find-package "NERIMUX/TEST")))))
 
-;; The cold-path read-model below is an OPTIONAL system, not part of core
-;; `nerimux'.  It has no call site anywhere in src/ outside its own directory, so
-;; carrying it in core bought nothing at runtime while forcing cl-dataflow-kit
-;; into the shipped binary's dependency closure.  It stays in-tree because
-;; nerimux is the org's L4 testbed and this is how cl-dataflow-kit gets
-;; dogfooded; it is simply not loaded by `(asdf:load-system "nerimux")'.
-;;
-;; Its sibling, nerimux/reasoning (cl-prolog-kit), was RETIRED: it existed only
-;; to project nerimux/config's key-table store into Prolog facts, and that store
-;; was deleted once nothing read it.  With no facts left to project there was
-;; nothing to narrow it to, so the system and its cl-weave suite went together.
-;;
-;; Naming: the source system could not reuse "nerimux/dataflow" — that name is
-;; already taken by the cl-weave TEST system below, and renaming it would break
-;; the documented NERIMUX_TEST_SYSTEM values in README.md and run-tests.lisp.
-;; Hence nerimux/dataflow-model (source) alongside nerimux/dataflow (test).
-
-(defsystem "nerimux/dataflow-model"
-  :description "cl-dataflow-kit copy-mode lifecycle read-model."
-  :author "takeokunn <bararararatty@gmail.com>"
-  :maintainer "takeokunn <bararararatty@gmail.com>"
-  :license "MIT"
-  :version "0.2.0"
-  :homepage "https://github.com/nerima-lisp/nerimux"
-  :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
-  :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  :depends-on ("nerimux" "cl-dataflow-kit")
-  :pathname "src/dataflow"
-  :serial t
-  :components ((:file "package")
-               (:file "copy-mode-lifecycle")))
-
-;; cl-weave regression suite for the cl-dataflow-kit copy-mode lifecycle
-;; read-model (src/dataflow/).
-;; Run with: (asdf:test-system :nerimux/dataflow)
-(defsystem "nerimux/dataflow"
-  :description "cl-weave suite for the nerimux cl-dataflow-kit copy-mode lifecycle read-model."
-  :author "takeokunn <bararararatty@gmail.com>"
-  :maintainer "takeokunn <bararararatty@gmail.com>"
-  :license "MIT"
-  :version "0.2.0"
-  :homepage "https://github.com/nerima-lisp/nerimux"
-  :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
-  :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  :depends-on ("nerimux" "nerimux/dataflow-model" "cl-weave" "cl-dataflow-kit")
-  :pathname "t/dataflow"
-  :serial t
-  :components ((:file "package")
-               (:file "copy-mode-lifecycle-tests")
-               (:file "entry"))
-  :perform (test-op (op c)
-             (declare (ignore op c))
-             (unless (funcall (find-symbol "RUN-DATAFLOW-TESTS" (find-package "NERIMUX/DATAFLOW-TESTS")))
-               (error "nerimux cl-dataflow-kit suite failed."))))

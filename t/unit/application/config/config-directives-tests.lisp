@@ -57,21 +57,6 @@
                                          "status" "off"
                                          :context "plain set")))
 
-  ;;; set mouse
-
-  ;; 'set-option -g mouse on' still parses and applies without signalling a
-  ;; condition, even though nothing consumes the value: the option's
-  ;; side-effect handler, and the renderer callback it used to fire, were both
-  ;; removed. It does now warn to *error-output* (see
-  ;; inert-option-names-warn-but-still-apply below) -- "has no effect" still
-  ;; holds, "no warning" no longer does. This pins the documented "parses, has
-  ;; no effect" contract.
-  (it "set-mouse-applies-without-signalling"
-    (with-isolated-config
-      (finishes
-        (assert-config-directive-applied '("set-option" "-g" "mouse" "on")
-                                         "set-option -g mouse on"))))
-
   ;;; set-shell / set-status-height directives
 
   ;; set-shell sets *default-shell*; set-status-height sets the `status' option,
@@ -148,12 +133,12 @@
           (expect (search "directive" errout))
           (expect (search (first tokens) errout))))))
 
-  ;; set-option -g prefix/prefix2/mouse still store (return T, same as before
-  ;; the "set-mouse-applies-without-signalling" test above pins for mouse) but
-  ;; now also warn, naming the option.
+  ;; set-option -g prefix/prefix2 still store (return T) but now also warn,
+  ;; naming the option. mouse was on this list until it stopped being an option
+  ;; at all; there is nothing left to warn about.
   (it "inert-option-names-warn-but-still-apply"
     (with-isolated-config
-      (dolist (name+value '(("prefix" . "C-a") ("prefix2" . "C-b") ("mouse" . "on")))
+      (dolist (name+value '(("prefix" . "C-a") ("prefix2" . "C-b")))
         (let (result errout)
           (setf errout
                 (with-output-to-string (*error-output*)
@@ -164,7 +149,7 @@
           (expect (search (car name+value) errout))))))
 
   ;; A still-effective option (default-shell) must NOT trigger the inert-option
-  ;; warning: the warning is scoped to prefix/prefix2/mouse only.
+  ;; warning: the warning is scoped to prefix/prefix2 only.
   (it "effective-option-does-not-warn"
     (with-isolated-config
       (let (result errout)

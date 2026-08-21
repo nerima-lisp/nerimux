@@ -80,23 +80,6 @@
                       "#{pane_bottom}" "#{pane_active}"))
         (expect (string= "0" (nerimux/format:expand-format spec ctx))))))
 
-  ;; #{window_bell_flag} shows ! only when monitor-bell is on (default); monitor-bell
-  ;; off suppresses the bell alert even with the sticky window bell flag set.
-  (it "window-bell-flag-respects-monitor-bell"
-    (with-fresh-options
-      (let* ((sess (make-fake-session :nwindows 1 :npanes 1))
-             (win  (first (nerimux/model:session-windows sess)))
-             (pane (first (nerimux/model:window-panes win))))
-        (setf (nerimux/model:window-bell-flag win) t)
-        (nerimux/options:set-option "monitor-bell" t)
-        (expect (string= "!" (nerimux/format:expand-format
-                              "#{window_bell_flag}"
-                              (nerimux/format:format-context-from-session sess win pane))))
-        (nerimux/options:set-option "monitor-bell" nil)
-        (expect (not (string= "!" (nerimux/format:expand-format
-                                   "#{window_bell_flag}"
-                                   (nerimux/format:format-context-from-session sess win pane))))))))
-
   ;; #{pane_active} is 1 for the window's active pane, 0 otherwise — and drives
   ;; the #{?pane_active,t,f} conditional, the common real-world usage.
   (it "format-context-pane-active-distinguishes-active-pane"
@@ -167,7 +150,6 @@
                        ("#{scroll_region_upper}" "0"  "scroll region top")
                        ("#{scroll_region_lower}" ,(format nil "~D" (1- h))
                                                       "scroll region bottom")
-                       ("#{mouse_any_flag}"      "0"  "mouse reporting off")
                        ("#{rectangle_toggle}"    "0"  "rect select off")
                        ("#{client_key_table}"    "root" "root key table at rest")
                        ("#{window_marked_flag}"  "0"  "no marked pane")

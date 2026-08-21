@@ -20,23 +20,6 @@
   (last-active-time 0 :type integer)  ; universal-time when this window was last focused
   (automatic-rename-p t :type boolean) ; when T, OSC 0/2 title updates window-name
   (layout-cycle-index 0 :type fixnum) ; index into the layouts cycle for C-b Space
-  ;; select-layout -o: the layout tree in effect before the last layout change.
-  (last-layout-tree nil)
-  ;; Activity tracking for monitor-activity / #{window_activity_flag}:
-  ;; set T when a non-active window receives PTY output and monitor-activity is on.
-  ;; Cleared when the window is selected.
-  (activity-flag nil :type boolean)
-  ;; Bell tracking for monitor-bell / #{window_bell_flag} (tmux WINLINK_BELL):
-  ;; set T when a non-current window's pane rings BEL and monitor-bell is on.
-  ;; Sticky until the window is selected (unlike the transient per-screen
-  ;; bell-pending flag, which only drives the audible relay).
-  (bell-flag nil :type boolean)
-  ;; Silence tracking for monitor-silence: universal-time of last PTY output.
-  ;; Updated by the reader thread; checked by the timer to detect long silences.
-  (last-output-time 0 :type integer)
-  ;; #{window_silence_flag}: set T when monitor-silence threshold is exceeded.
-  ;; Cleared when the window is selected or receives new output.
-  (silence-flag nil :type boolean)
   (lock (make-lock :name "window") :read-only t))
 
 (defun window-refresh-panes (window)

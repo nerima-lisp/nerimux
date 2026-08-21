@@ -21,12 +21,24 @@
     (t (error "Unsupported visual-bell value: ~S" visual-bell))))
 
 (defun %emit-bell (buffer visual-bell)
-  "Write the audible BEL character to BUFFER for canonical audible values.
-   The visual message overlay and the alert-bell hook are handled by the
-   reader-thread alert path (%mark-window-bell), decoupled from this relay
-   decision."
+  "Write the audible BEL character to BUFFER for canonical audible values."
   (when (%visual-bell-audible-p visual-bell)
     (write-char (code-char 7) buffer)))
+
+(defun %discard-background-bells (session active-window)
+  "Consume, without relaying, every pending BEL in a window other than
+   ACTIVE-WINDOW.
+
+   Relaying these was the background-bell alert, and it went with the rest of
+   the alert machinery. Consuming them did not: a pending bell is sticky, so
+   dropping the drain along with the relay would make a bell raised while a
+   window sat in the background ring later, at the moment the user switched to
+   it. A bell the user was not present for is not owed to them on arrival."
+  (dolist (win (session-windows session))
+    (unless (eq win active-window)
+      (dolist (pane (window-panes win))
+        (when (pane-screen pane)
+          (screen-consume-bell (pane-screen pane)))))))
 
 (defun %render-bell-and-cursor (buffer active-pane)
   "Emit a pending BEL from ACTIVE-PANE (if any) and restore cursor visibility.

@@ -122,13 +122,20 @@
       (expect (some (lambda (r) (search (format nil "~C[?7;2$y" #\Escape) r))
                     (nerimux/terminal/types:screen-response-queue s)))))
 
-  ;; DECRQM ?1006 reports the SGR mouse-encoding state, set after ?1006h.
-  (it "decrqm-reports-sgr-mouse-mode-1006"
+  ;; Mouse-reporting DEC private modes (1000/1002/1003/1006) carry no state
+  ;; anymore, but a real client may still send them — the terminal must accept
+  ;; the set/reset sequences without erroring, and DECRQM must fall back to the
+  ;; same "not recognised" (Pm=0) reply an arbitrary unknown mode gets, rather
+  ;; than crash on the mode number.
+  (it "mouse-reporting-modes-accepted-and-decrqm-reports-unrecognised"
     (with-screen (s 20 5)
-      (feed s (esc "[?1006h"))
-      (feed s (esc "[?1006$p"))
-      (expect (some (lambda (r) (search (format nil "~C[?1006;1$y" #\Escape) r))
-                    (nerimux/terminal/types:screen-response-queue s)))))
+      (dolist (mode '(1000 1002 1003 1006))
+        (finishes (feed s (esc "[?~Dh" mode)))
+        (finishes (feed s (esc "[?~Dl" mode)))
+        (setf (nerimux/terminal/types:screen-response-queue s) nil)
+        (feed s (esc "[?~D$p" mode))
+        (expect (some (lambda (r) (search (format nil "~C[?~D;0$y" #\Escape mode) r))
+                      (nerimux/terminal/types:screen-response-queue s))))))
 
   ;; ANSI-mode DECRQM (CSI 4 $ p, no ? marker) reports IRM: reset by default, set
   ;; after CSI 4 h.  Reply has NO ? marker (ESC [ 4 ; Pm $ y).

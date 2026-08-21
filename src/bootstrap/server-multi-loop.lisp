@@ -39,18 +39,13 @@
 (defun %apply-client-disposition (disposition conn)
   "Act on DISPOSITION (the result of dispatching CONN's message): drop CONN on
    :drop (and exit if that was the last attached client with exit-unattached
-   set), drop every OTHER client on :detach-others.  Returns :quit when the
-   caller's loop must stop, else NIL."
+   set).  Returns :quit when the caller's loop must stop, else NIL."
   (case disposition
     (:quit :quit)
     (:drop
      (%drop-client conn :bye t)
      ;; exit-unattached: terminate once the last client has detached.
-     (when (%exit-after-last-detach-p) :quit))
-    (:detach-others
-     (dolist (other (copy-list *clients*))
-       (unless (eq other conn) (%drop-client other :bye t)))
-     nil)))
+     (when (%exit-after-last-detach-p) :quit))))
 
 (defun %dispatch-ready-clients (session ready)
   "Read + dispatch one message from every client whose fd is in READY.
@@ -86,7 +81,5 @@
          ;; exit-empty: terminate once the last session has been destroyed.
          (when (%exit-when-empty-p)
            (setf *running* nil)))
-    (when *runtime-state-save-function*
-      (funcall *runtime-state-save-function* session))
     (dolist (conn (copy-list *clients*))
       (%drop-client conn :bye t))))

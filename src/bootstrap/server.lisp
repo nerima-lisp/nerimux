@@ -10,8 +10,8 @@
 ;;;; the server only exits when the last window is killed (:quit) or *running*
 ;;;; is cleared.
 ;;;;
-;;;; Session registry management (server-add/find/remove/all/current-session and
-;;;; session groups) lives in session-registry.lisp.
+;;;; Session registry management (server-add-session, server-find-session)
+;;;; lives in session-registry.lisp.
 ;;;;
 ;;;; with-incoming-frame is defined in nerimux/transport so both server and
 ;;;; client can use it without creating a circular dependency.
@@ -22,12 +22,6 @@
 
 (defvar *runtime-server-name* "default"
   "Name used to select the server's persistent runtime snapshot.")
-
-(defvar *runtime-state-restore-function* nil
-  "Function called with the initial session before reader threads start.")
-
-(defvar *runtime-state-save-function* nil
-  "Function called with the session while the server is shutting down.")
 
 (defvar *socket-path-override* nil
   "Full socket path from the global -S flag (tmux -S); when set, socket-path
@@ -168,20 +162,15 @@
         *dirty*            t
         *resize-pending*   nil
         *server-sessions*  nil
-        *session-groups*   nil
-        *group-id-counter* 0
         *runtime-server-name* name)
   (let* ((session (create-initial-session *term-rows* *term-cols*))
          (path    (socket-path name)))
     (setf *bound-socket-path* path)
     (server-add-session session)
-    (when *runtime-state-restore-function*
-      (funcall *runtime-state-restore-function* session))
     (ignore-errors (delete-file path))
     (let ((listener (make-listener path)))
       (dolist (pane (all-panes session))
         (start-reader-thread pane))
-      (setf *status-timer* (start-status-timer #'%mark-dirty))
       (install-sigwinch-handler)
       (unwind-protect
    ;; Multi-client event loop: a single select(2) over the listener fd +

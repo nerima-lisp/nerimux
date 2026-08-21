@@ -12,12 +12,12 @@
 
 (in-package :nerimux)
 
-(defun %attach-session (name detach-others-p &key target)
+(defun %attach-session (name &key target)
   "Ensure NAME's server is running, then attach the client."
   (%ensure-server-running name)
   (if target
-      (run-client name :detach-others detach-others-p :target target)
-      (run-client name :detach-others detach-others-p)))
+      (run-client name :target target)
+      (run-client name)))
 
 (defun %workspace-attach-target-p (name)
   (and (stringp name)
@@ -30,8 +30,8 @@
    slash-qualified selector attaches to the default workspace server and is
    resolved by the server against the current catalog."
   (if (%workspace-attach-target-p name)
-      (%attach-session "0" nil :target name)
-      (%attach-session name nil)))
+      (%attach-session "0" :target name)
+      (%attach-session name)))
 
 (defun run-version (raw-args)
   "Print the nerimux version to stdout and exit 0 (the tmux -V behaviour)."
@@ -41,12 +41,11 @@
 
 (defun %usage-string ()
   "One-page usage summary for -h/--help and bad-flag errors."
-  (format nil "usage: nerimux [-L socket-name] [-S socket-path] [-r] [command]~%~
+  (format nil "usage: nerimux [command]~%~
                ~%~
                Commands:~%~
                ~2Tattach [selector]~26Topen the workspace UI (auto-starts a server)~%~
                ~2Tserver [name]~26Trun a headless server owning session NAME~%~
-               ~2T-r | --read-only~26Tattach read-only (no input forwarded to panes)~%~
                ~2T-V | --version~26Tprint the version and exit~%~
                ~2T-h | --help~26Tprint this summary and exit~%~
                ~%~

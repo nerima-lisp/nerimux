@@ -254,8 +254,6 @@
    ;; OSC 7 current working directory
    #:screen-cwd
    ;; Mouse reporting mode
-   #:screen-mouse-mode
-   #:screen-mouse-sgr-mode
    ;; Lock (for renderer <-> reader-thread synchronisation)
    #:screen-lock
    ;; Resize the grid in place

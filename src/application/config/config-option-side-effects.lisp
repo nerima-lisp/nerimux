@@ -6,12 +6,10 @@
 ;;; into the options tables, then calls apply-option-side-effects so that
 ;;; options which touch non-option runtime state (the default shell, the
 ;;; status-bar height, escape-time, update-environment) take effect immediately.
-;;; The prefix-key and mouse-reporting behavior went with the key-table
-;;; store, and the set-hook directive handler that used to live here went
-;;; with the command-hooks registry (nerimux/hooks:*command-hooks*,
-;;; unwireable — no command dispatcher has existed since the tmux command
-;;; table was deleted): both drove machinery that no longer exists, so
-;;; prefix/prefix2/mouse now only store and warn (%WARN-INERT-CONFIG-DIRECTIVE,
+;;; The prefix-key behavior went with the key-table store, and the set-hook
+;;; directive handler that used to live here went with the command-hooks
+;;; registry (both deleted): both drove machinery that no longer exists, so
+;;; prefix/prefix2 now only store and warn (%WARN-INERT-CONFIG-DIRECTIVE,
 ;;; defined in config.lisp) instead of taking effect.
 
 (declaim (special nerimux/model:*update-environment*
@@ -53,11 +51,11 @@
        ,@(mapcar #'%expand-option-side-effect-rule rules))))
 
 (define-option-side-effect-handlers
-  ;; prefix/prefix2/mouse: the key-table store and mouse-reporting machinery
-  ;; they used to configure were deleted with the tmux keystroke subsystem.
-  ;; The option still stores like any other (see the file header), but a
-  ;; user reusing an old config should get signal instead of silence.
-  (:any-of ("prefix" "prefix2" "mouse")
+  ;; prefix/prefix2: the key-table store they used to configure was deleted
+  ;; with the tmux keystroke subsystem. The option still stores like any
+  ;; other (see the file header), but a user reusing an old config should
+  ;; get signal instead of silence.
+  (:any-of ("prefix" "prefix2")
    (%warn-inert-config-directive "option" name))
   ;; escape-time: sync into server-options so every set form takes effect.
   ("escape-time"

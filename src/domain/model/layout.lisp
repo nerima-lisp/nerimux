@@ -176,12 +176,11 @@
                    (+ first-extent 1 second-extent) ; same-axis split: stack + 1-cell separator
                    (max first-extent second-extent))))
 
-;;; ── Named layouts (tree builder only) ───────────────────────────────────────
+;;; ── %build-flat-tree ─────────────────────────────────────────────────────────
 ;;;
-;;; %build-flat-tree is a pure tree-construction helper that only needs
-;;; layout types (make-layout-leaf, make-layout-split), so it belongs here.
-;;; apply-named-layout uses WINDOW struct accessors so it lives in window-core.lisp
-;;; (which loads after layout.lisp, avoiding a forward reference).
+;;; A pure tree-construction helper that only needs layout types
+;;; (make-layout-leaf, make-layout-split), so it belongs here rather than in a
+;;; file that pulls in WINDOW struct accessors.
 
 (defun %build-flat-tree (panes orientation)
   "Build a right-leaning binary split chain from PANES using ORIENTATION.

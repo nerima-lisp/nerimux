@@ -14,7 +14,7 @@
   ;; quiet — asserted here rather than only at the dispatch level, because the
   ;; regression that matters is a stray frame reaching a real client.
   (it "command-client-unknown-command-notifies-and-sends-no-reply"
-    (with-isolated-hooks
+    (progn
       (with-fake-session (s)
         (with-test-listener (listener path (%test-socket-path "reply") :backlog 4)
           (let* ((client      (nerimux/net:connect-to path))
@@ -39,8 +39,8 @@
                                (list (nerimux/net:socket-fd client)) 200000))))))))))
 
   ;; A client that connects and sends a +msg-command+ frame directly (the
-  ;; surviving wire-level path client.lisp itself uses for :attach-target and
-  ;; :detach-other-clients) decodes on the server side as a command keyword
+  ;; surviving wire-level path client.lisp itself uses for :attach-target)
+  ;; decodes on the server side as a command keyword
   ;; plus its argument list.  This used to be driven through the now-deleted
   ;; run-command-client CLI helper; the socket-level encode/decode contract it
   ;; exercised survives independently of that helper, so the frame is built
@@ -104,7 +104,7 @@
   ;; Two clients attached to the server both receive a broadcast frame — the core
   ;; multi-client property (one render fanned out to all).
   (it "multi-broadcast-reaches-all-clients"
-    (with-isolated-hooks
+    (progn
       (with-fake-session (s)
         (with-test-listener (listener path (%test-socket-path "mtest") :backlog 4)
           (let* ((client1 (nerimux/net:connect-to path))
@@ -127,10 +127,10 @@
                     (multiple-value-bind (type payload)
                         (nerimux::read-frame (nerimux/net:socket-stream client))
                       (declare (ignore payload))
-                      (expect (eql nerimux::+msg-frame+ type)))))))))))))
+                      (expect (eql nerimux::+msg-frame+ type))))))))))))
 
   (it "multi-broadcast-renders-private-client-surfaces"
-    (with-isolated-hooks
+    (progn
       (with-fake-session (s :npanes 2)
         (let* ((window (session-active-window s))
                (panes (window-panes window))
@@ -191,7 +191,7 @@
                   (ignore-errors (nerimux/net:close-socket socket))))))))))
 
   (it "multi-socket-c-q-d-detaches-with-session-resident"
-    (with-isolated-hooks
+    (progn
       (with-fake-session (s)
         (let* ((window (session-active-window s))
                (pane (window-active-pane window))
@@ -312,4 +312,4 @@
                     (when (and conn (member conn nerimux::*clients*))
                       (nerimux::%drop-client conn))
                     (dolist (socket (remove nil (list client server)))
-                      (ignore-errors (nerimux/net:close-socket socket))))))))))))
+                      (ignore-errors (nerimux/net:close-socket socket)))))))))))))

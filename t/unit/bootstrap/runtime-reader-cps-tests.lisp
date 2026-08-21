@@ -18,8 +18,7 @@
                    nerimux::reader-eof-state
                    nerimux::%run-reader-states
                    nerimux::start-reader-thread
-                   nerimux::install-sigwinch-handler
-                   nerimux::start-status-timer))
+                   nerimux::install-sigwinch-handler))
       (expect (fboundp sym))))
 
   ;; %run-reader-states exits immediately when *running* is NIL, even
