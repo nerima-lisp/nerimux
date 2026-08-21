@@ -1,7 +1,7 @@
 (in-package #:nerimux/renderer)
 
-;;;; Workspace-view rendering: the organization -> repository -> worktree tree
-;;;; and the attention list, drawn as plain ANSI into a string.
+;;;; Workspace-view rendering: the organization -> repository -> worktree tree,
+;;;; drawn as plain ANSI into a string.
 ;;;;
 ;;;; This is the FIRST of the two passes behind the workspace UI.  The second,
 ;;;; in renderer-tui-kit.lisp, replays this frame into a cl-tui-kit surface and
@@ -10,12 +10,17 @@
 ;;;; :render-tree-p NIL.  That is deliberate plumbing between the two passes,
 ;;;; not a redundant duplicate.
 ;;;;
-;;;; These four functions used to live in renderer-compose.lisp, the pane-frame
+;;;; These functions used to live in renderer-compose.lisp, the pane-frame
 ;;;; compositor.  They were the workspace views' ONLY reason to reach into that
-;;;; file, and through it into the 17-file VT100 / border / status-bar /
-;;;; copy-mode machinery that renders terminal panes.  Split out, the workspace
-;;;; render path depends on exactly renderer-format.lisp (generic ANSI
-;;;; primitives) and renderer-tui-kit.lisp, and on none of the pane renderer.
+;;;; file and its VT100 / border / status-bar / copy-mode machinery for
+;;;; terminal panes.  Split out, the workspace render path depends on exactly
+;;;; renderer-format.lisp (generic ANSI primitives) and renderer-tui-kit.lisp,
+;;;; and on none of the pane renderer.  The aggregate attention view that used
+;;;; to live here (render-workspace-attention-to-string) is gone -- workspace
+;;;; contraction phase 3, R1.7 -- but the attention MODEL it read from
+;;;; (worktree-attention-p / worktree-attention-reasons /
+;;;; organization-attention-count / organization-attention-worktrees) is
+;;;; still live: it drives the `!` marks in the tree below.
 ;;;;
 ;;;; Load order (declared in nerimux.asd): renderer-format -> renderer-workspace,
 ;;;; ahead of the pane-compositor chain, so the load order states that dependency.
@@ -24,146 +29,6 @@
   (if (and (integerp code) (<= 1 code) (<= code 26))
       (format nil "C-~A" (code-char (+ (char-code #\a) (1- code))))
       (format nil "key/~D" code)))
-
-(defun %workspace-attention-events (organizations messages
-                                    &optional (recovery-items nil))
-  (let ((events nil))
-    (labels ((repository-label (repository)
-               (or (and (plusp (length (repository-id repository)))
-                        (repository-id repository))
-                   (repository-specification repository)
-                   (repository-path repository)))
-             (worktree-label (worktree)
-               (or (and (worktree-branch worktree)
-                        (plusp (length (princ-to-string
-                                        (worktree-branch worktree))))
-                        (princ-to-string (worktree-branch worktree)))
-                   (worktree-path worktree)
-                   (worktree-id worktree)))
-             (add-event (label reasons object kind)
-               (when reasons
-                 (push (list :object object
-                             :label label
-                             :reasons reasons
-                             :kind kind)
-                       events))))
-      (dolist (organization organizations)
-        (dolist (repository (organization-repositories organization))
-          (dolist (worktree (repository-worktrees repository))
-            (add-event
-             (format nil "~A / ~A / ~A"
-                     (organization-id organization)
-                     (repository-label repository)
-                     (worktree-label worktree))
-             (worktree-attention-reasons worktree)
-             worktree
-             :worktree)
-            (dolist (pane (reverse (worktree-panes worktree)))
-              (add-event
-               (format nil "  pane/~D ~A"
-                       (pane-id pane)
-                       (or (and (plusp (length (pane-title pane)))
-                                (pane-title pane))
-                           (and (plusp (length (pane-start-command pane)))
-                                (pane-start-command pane))
-                           "shell"))
-               (pane-attention-reasons pane)
-               pane
-               :pane)))
-          (add-event
-           (format nil "~A / ~A"
-                   (organization-id organization)
-                   (repository-label repository))
-           (remove nil
-                   (list (and (repository-dirty-p repository) :dirty)
-                         (and (repository-conflict-p repository) :conflict)
-                         (and (plusp (repository-ahead repository)) :ahead)
-                         (and (plusp (repository-behind repository)) :behind)
-                         (and (repository-missing-p repository) :missing)))
-           repository
-           :repository)))
-      (dolist (recovery-item (reverse recovery-items))
-        (add-event (getf recovery-item :label)
-                   (getf recovery-item :reasons)
-                   recovery-item
-                   :runtime-recovery))
-      (dolist (message (reverse messages))
-        (add-event "notification" '(:notification) message :message))
-      (nreverse events))))
-
-(defun render-workspace-attention-to-string
-    (organizations terminal-rows terminal-cols &key focus-pane
-                                                   (selected-object nil)
-                                                   (messages nil)
-                                                   (recovery-items nil)
-                                                   (mode :normal)
-                                                   (prefix-code #x11))
-  "Render the aggregate attention view for the attached workspace catalog."
-  (let* ((rows (max 1 terminal-rows))
-         (cols (max 1 terminal-cols))
-         (stream (make-string-output-stream))
-         (events (%workspace-attention-events organizations
-                                               messages
-                                               recovery-items)))
-    (labels ((clip (value width)
-               (let ((text (if (stringp value)
-                               value
-                               (princ-to-string value))))
-                 (if (<= (length text) width)
-                     text
-                     (if (<= width 3)
-                         (subseq text 0 width)
-                         (concatenate 'string
-                                      (subseq text 0 (- width 3))
-                                      "...")))))
-             (cell (row col width value)
-               (when (plusp width)
-                 (move-to stream row col)
-                 (let ((text (clip value width)))
-                   (write-string text stream)
-                   (when (< (length text) width)
-                     (write-string (make-string (- width (length text))
-                                                :initial-element #\Space)
-                                  stream)))))
-             (reason-text (reasons)
-               (if reasons
-                   (format nil "~{~A~^,~}"
-                           (mapcar (lambda (reason)
-                                     (string-downcase (symbol-name reason)))
-                                   reasons))
-                   "-")))
-      (cursor-invisible stream)
-      (dotimes (row rows)
-        (cell row 0 cols ""))
-      (%emit-sgr stream 1)
-      (cell 0 0 cols
-            (format nil "ATTENTION  ~D item~:P~@[  focus pane/~D~]"
-                    (length events)
-                    (and focus-pane (pane-id focus-pane))))
-      (reset-attrs stream)
-      (if events
-          (loop for event in events
-                for label = (getf event :label)
-                for reasons = (getf event :reasons)
-                for object = (getf event :object)
-                for row from 2 below (max 2 (1- rows))
-                do (cell row 0 cols
-                         (format nil "~:[ ~;>~]~:[ ~;!~] ~A  [~A]"
-                                 (eq object selected-object)
-                                 (or (typep object 'pane)
-                                     (eq (getf event :kind)
-                                         :runtime-recovery))
-                                 label
-                                 (reason-text reasons))))
-          (cell 2 0 cols "No attention items"))
-      (reset-attrs stream)
-      (cell (1- rows) 0 cols
-            (format nil
-                    "attention | mode: ~A | j/k select Enter open | prefix: ~A d detach | C-p picker | refresh: command workspace-refresh"
-                    (string-downcase (princ-to-string mode))
-                    (%workspace-prefix-label prefix-code)))
-      (reset-attrs stream)
-      (get-output-stream-string stream))))
 
 (defun render-workspace-overview-to-string
     (organizations terminal-rows terminal-cols &key focus-pane
@@ -429,18 +294,9 @@
                          (format nil "attention: ~A"
                                  (reason-text
                                   (worktree-attention-reasons selected-worktree)))
-                         (when (worktree-tags selected-worktree)
-                           (format nil "tags: ~{~A~^,~}"
-                                   (worktree-tags selected-worktree)))
-                         (when (plusp (length (worktree-notes selected-worktree)))
-                           (format nil "note: ~A"
-                                   (worktree-notes selected-worktree)))
                          (when focus-pane
                            (format nil "output: ~A"
-                                   (pane-last-output focus-pane)))
-                         (when (and focus-pane
-                                    (plusp (length (pane-note focus-pane))))
-                            (format nil "note: ~A" (pane-note focus-pane)))))
+                                   (pane-last-output focus-pane)))))
                        (selected-repository
                         (list
                          (format nil "repository: ~A"
@@ -452,13 +308,7 @@
                          (format nil "worktrees: ~D"
                                  (length (repository-worktrees selected-repository)))
                          (format nil "attention: ~:[no~;yes~]"
-                                 (repository-attention-p selected-repository))
-                         (when (repository-tags selected-repository)
-                           (format nil "tags: ~{~A~^,~}"
-                                   (repository-tags selected-repository)))
-                         (when (plusp (length (repository-notes selected-repository)))
-                           (format nil "note: ~A"
-                                    (repository-notes selected-repository)))))
+                                 (repository-attention-p selected-repository))))
                        (selected-organization
                         (list
                          (format nil "organization: ~A"
@@ -471,13 +321,7 @@
                                  (length
                                   (organization-repositories selected-organization)))
                          (format nil "attention: ~D"
-                                 (organization-attention-count selected-organization))
-                         (when (organization-tags selected-organization)
-                           (format nil "tags: ~{~A~^,~}"
-                                   (organization-tags selected-organization)))
-                         (when (plusp (length (organization-notes selected-organization)))
-                           (format nil "note: ~A"
-                                    (organization-notes selected-organization)))))
+                                 (organization-attention-count selected-organization))))
                        (t (list "No worktree selected"))))))
               (loop for line in (remove nil preview-lines)
                     for row from (1+ body-start) below body-end

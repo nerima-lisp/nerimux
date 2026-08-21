@@ -45,30 +45,6 @@
               (expect (pane-live-p pane) :to-be-truthy)
               (expect (pane-live-p pane) :to-be-falsy))))))
 
-  ;;; ── pane-pipe-active-p direct unit tests ─────────────────────────────────────
-
-  ;; pane-pipe-active-p returns truthy when any pipe slot is non-NIL, NIL otherwise.
-  ;; :nil sentinel means pass NIL directly. :none means no slot is set.
-  ;; Each row: (setup expected description).
-  (it "pane-pipe-active-p-table"
-    (dolist (row '((:none      nil "pane with no pipe resources must not be active")
-                   (:pipe-fd   t   "pipe-fd set => pipe must be active")
-                   (:pipe-out  t   "pipe-output-stream set => pipe must be active")
-                   (:pipe-proc t   "pipe-process set => pipe must be active")
-                   (:nil       nil "pane-pipe-active-p NIL must return NIL")))
-      (destructuring-bind (setup expected desc) row
-        (declare (ignore desc))
-        (let ((pane (unless (eq setup :nil) (make-no-pty-pane 1 0 0 80 24))))
-          (ecase setup
-            (:none      nil)
-            (:pipe-fd   (setf (pane-pipe-fd             pane) :fake-fd))
-            (:pipe-out  (setf (pane-pipe-output-stream  pane) :fake-stream))
-            (:pipe-proc (setf (pane-pipe-process        pane) :fake-process))
-            (:nil       nil))
-          (if expected
-              (expect (pane-pipe-active-p pane) :to-be-truthy)
-              (expect (pane-pipe-active-p pane) :to-be-falsy))))))
-
   ;;; ── %pane-border-status-reservation direct tests ─────────────────────────────
   ;;;
   ;;; The path where height = 1 means the pane is "too short" — even when

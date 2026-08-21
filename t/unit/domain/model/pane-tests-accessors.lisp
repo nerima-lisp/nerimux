@@ -6,13 +6,9 @@
 
   ;;; ── Pane slot defaults ───────────────────────────────────────────────────────
 
-  ;; pipe state, pane-window, and pane-marked all default to NIL for a fresh pane.
+  ;; pane-window and pane-marked both default to NIL for a fresh pane.
   (it "pane-nil-slot-defaults"
     (let ((pane (make-no-pty-pane 1 0 0 20 5)))
-      (expect (null (pane-pipe-fd pane)))
-      (expect (null (pane-pipe-output-stream pane)))
-      (expect (null (pane-pipe-output-thread pane)))
-      (expect (null (pane-pipe-process pane)))
       (expect (null (pane-window  pane)))
       (expect (null (pane-marked  pane)))))
 

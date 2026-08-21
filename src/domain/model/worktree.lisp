@@ -4,7 +4,7 @@
             (:constructor %make-worktree
                 (&key id repository path branch head status panes dirty-p
                       conflict-p ahead behind bare-p locked-p prunable-p
-                      missing-p tags notes recent-activity)))
+                      missing-p)))
   (id "" :type string)
   (repository nil)
   (path "" :type string)
@@ -19,10 +19,7 @@
   (bare-p nil :type boolean)
   (locked-p nil :type boolean)
   (prunable-p nil :type boolean)
-  (missing-p nil :type boolean)
-  (tags nil :type list)
-  (notes "" :type string)
-  (recent-activity nil :type list))
+  (missing-p nil :type boolean))
 
 (defun worktree-key (path branch head)
   (format nil "~A|~A|~A"
@@ -32,7 +29,7 @@
 
 (defun make-worktree (&key id repository path branch head status panes dirty-p
                          conflict-p (ahead 0) (behind 0) bare-p locked-p
-                         prunable-p missing-p tags (notes "") recent-activity)
+                         prunable-p missing-p)
   (let ((path-string (%model-string path)))
     (%make-worktree
      :id (or id (worktree-key path-string branch head))
@@ -49,10 +46,7 @@
      :bare-p (not (null bare-p))
      :locked-p (not (null locked-p))
      :prunable-p (not (null prunable-p))
-     :missing-p (not (null missing-p))
-     :tags (copy-list tags)
-     :notes (%model-string notes)
-     :recent-activity (copy-list recent-activity))))
+     :missing-p (not (null missing-p)))))
 
 (defun worktree-attention-reasons (worktree)
   (when worktree

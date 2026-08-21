@@ -34,9 +34,6 @@
   fd
   stdin-target
   (message-log nil)
-  ;; T when the client attached read-only (-r/--read-only): its keys/mouse are
-  ;; processed with *client-read-only* bound so pane input/paste/mouse are dropped.
-  (read-only-p nil)
   (rows 24 :type fixnum)
   (cols 80 :type fixnum)
   (focus nil)
@@ -142,25 +139,9 @@
   "Render SESSION for CONN's geometry and cache the encoded frame on CONN.
    Session layout remains governed by the effective shared size; this boundary
    only controls the client-facing surface dimensions."
-  (when (eq (client-conn-view conn) :attention)
-    (%refresh-client-attention conn))
   (let ((frame
           (msg-frame
            (cond
-             ((and (eq (client-conn-view conn) :attention)
-                   (not (eq (client-conn-mode conn) :picker)))
-              (render-workspace-attention-to-tui-string
-               (nerimux/vcs:workspace-organizations)
-               (client-conn-rows conn)
-               (client-conn-cols conn)
-               :focus-pane (client-conn-focus conn)
-               :selected-object
-               (nth (client-conn-attention-index conn)
-                    (client-conn-attention-items conn))
-               :messages (client-conn-message-log conn)
-               :recovery-items *runtime-recovery-items*
-               :mode (client-conn-mode conn)
-               :prefix-code (client-conn-workspace-prefix-code conn)))
              ((and (eq (client-conn-view conn) :overview)
                    (not (eq (client-conn-mode conn) :picker)))
               (render-workspace-overview-to-tui-string
@@ -214,7 +195,7 @@
 ;;; ── Connection lifecycle ────────────────────────────────────────────────────
 
 (defun %add-client (socket)
-  "Register SOCKET as a new client: build its CLIENT-CONN, fire the client-attached hook, and mark
+  "Register SOCKET as a new client: build its CLIENT-CONN and mark
    the screen dirty so the new client gets an immediate paint.  Returns the conn."
   (let ((conn (%make-client-conn :socket socket
                                  :stream (socket-stream socket)
@@ -225,9 +206,6 @@
                                  :view   :overview
                                  :viewport 0)))
     (push conn *clients*)
-    (when (fboundp '%runtime-restore-messages)
-      (dolist (message (funcall (symbol-function '%runtime-restore-messages)))
-        (push message (client-conn-message-log conn))))
     (when (and (not *workspace-catalog-refresh-started-p*)
                (nerimux/vcs:vcs-package-available-p))
       (setf *workspace-catalog-refresh-started-p* t)
@@ -249,17 +227,15 @@
          (lambda (condition)
            (declare (ignore condition))
            (%mark-dirty)))))
-    (nerimux/hooks:run-hooks nerimux/hooks:+hook-client-attached+)
     (%mark-dirty)
     conn))
 
 (defun %drop-client (conn &key bye)
-  "Remove CONN: optionally send a bye frame, close its socket, fire the
-   client-detached hook, and unregister it.  Safe to call more than once."
+  "Remove CONN: optionally send a bye frame, close its socket, and
+   unregister it.  Safe to call more than once."
   (when (member conn *clients*)
     (setf (client-conn-ui-prefix-p conn) nil)
     (when bye
       (ignore-errors (send-frame (client-conn-stream conn) (msg-bye))))
     (ignore-errors (close-socket (client-conn-socket conn)))
-    (setf *clients* (remove conn *clients*))
-    (nerimux/hooks:run-hooks nerimux/hooks:+hook-client-detached+)))
+    (setf *clients* (remove conn *clients*))))

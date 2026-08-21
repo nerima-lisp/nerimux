@@ -14,10 +14,6 @@
   ;; ── PTY file descriptors ──────────────────────────────────────────────────
   (fd       -1  :type fixnum)         ; master PTY file descriptor
   (pid      -1  :type fixnum)         ; child process PID
-  (pipe-fd  nil)                      ; NIL or stream for pipe-pane output tee
-  (pipe-output-stream nil)            ; NIL or stream for command stdout -> pane
-  (pipe-output-thread nil)            ; NIL or copier thread for command stdout
-  (pipe-process nil)                  ; NIL or process-kit:process-handle for pipe-pane
   ;; ── Terminal emulator ─────────────────────────────────────────────────────
   (screen   nil)
   ;; ── Window back-pointer and state ─────────────────────────────────────────
@@ -35,8 +31,6 @@
   (dead-status nil)                   ; NIL or exit code of the dead child
   (dead-signal nil)                   ; NIL or terminating signal number
   (dead-time   nil)                   ; NIL or universal-time when the pane died
-  (tags nil :type list)
-  (note "" :type string)
   (unread-output-p nil :type boolean)
   (bell-p nil :type boolean)
   (process-exited-p nil :type boolean)
@@ -135,14 +129,6 @@
 
 (defun pane-attention-p (pane)
   (not (null (pane-attention-reasons pane))))
-
-(defun pane-pipe-active-p (pane)
-  "Return T when PANE has any pipe-pane direction active."
-  (and pane
-       (or (pane-pipe-fd pane)
-           (pane-pipe-output-stream pane)
-           (pane-pipe-output-thread pane)
-           (pane-pipe-process pane))))
 
 (defun pane-live-p (pane)
   "Return T when PANE still has a live PTY master fd."

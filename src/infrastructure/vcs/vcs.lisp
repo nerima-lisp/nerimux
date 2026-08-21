@@ -286,14 +286,7 @@
                       raw '("VCS-WORKTREE-MISSING-P"
                             "WORKTREE-MISSING-P"
                             "VCS-WORKTREE-MISSING")))
-                    (%path-missing-p path))
-                :tags (and old-worktree
-                           (nerimux/model:worktree-tags old-worktree))
-                :notes (and old-worktree
-                            (nerimux/model:worktree-notes old-worktree))
-                :recent-activity (and old-worktree
-                                      (nerimux/model:worktree-recent-activity
-                                       old-worktree)))))
+                    (%path-missing-p path)))))
         (dolist (pane (nerimux/model:worktree-panes worktree))
           (setf (nerimux/model:pane-worktree pane) worktree))
         (nerimux/model:repository-add-worktree repository worktree)))
