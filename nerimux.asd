@@ -225,7 +225,6 @@
       :serial t
       :components
       ((:file "runtime")              ; shared state + channel sync + SIGWINCH
-       (:file "runtime-reader-alerts") ; remain-on-exit banner helpers
        (:file "runtime-reader")))     ; PTY reader CPS state machine
      (:module "bootstrap-server"
       :pathname "bootstrap"

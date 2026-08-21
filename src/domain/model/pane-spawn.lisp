@@ -18,7 +18,10 @@
 ;;; (TERM only; COLORTERM was never sent); now they are fixed, so there is
 ;;; nothing left to read from nerimux/options.
 
-(defconstant +pane-term+ "screen-256color"
+(defconstant +pane-term+
+    (if (boundp (quote +pane-term+))
+        (symbol-value (quote +pane-term+))
+        "screen-256color")
   "TERM given to every pane's child process (§1.4: names the emulator's
    truecolor-capable screen entry; sgr.lisp:134-181 implements the 38/48/58;2
    sequences this advertises).")

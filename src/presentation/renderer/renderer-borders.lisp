@@ -33,7 +33,10 @@
    style other than double/heavy/simple/padded.")
 (defconstant +pane-border-horizontal+ #\─
   "Horizontal pane-border glyph; see +pane-border-vertical+.")
-(defconstant +sgr-active-border+ "32"
+(defconstant +sgr-active-border+
+    (if (boundp (quote +sgr-active-border+))
+        (symbol-value (quote +sgr-active-border+))
+        "32")
   "SGR for the active pane's border: pane-active-border-style's fixed value
    \"fg=green\" (foreground green, SGR 32).")
 

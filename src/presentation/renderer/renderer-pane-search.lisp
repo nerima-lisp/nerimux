@@ -42,9 +42,15 @@
 ;;; always resolved those two strings to, so the strings themselves are gone
 ;;; (R2.4) and only the resolved codes remain.
 
-(defconstant +sgr-copy-mode-match+ "42"
+(defconstant +sgr-copy-mode-match+
+    (if (boundp (quote +sgr-copy-mode-match+))
+        (symbol-value (quote +sgr-copy-mode-match+))
+        "42")
   "SGR for a copy-mode search match: bg=green.")
-(defconstant +sgr-copy-mode-current-match+ "45"
+(defconstant +sgr-copy-mode-current-match+
+    (if (boundp (quote +sgr-copy-mode-current-match+))
+        (symbol-value (quote +sgr-copy-mode-current-match+))
+        "45")
   "SGR for the copy-mode search match under the cursor: bg=magenta.")
 
 (defun %render-row-search-matches (buffer row row-str term w
