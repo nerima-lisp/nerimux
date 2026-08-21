@@ -39,7 +39,7 @@
               (nerimux/model:organization-attention-worktrees organization)))
         (expect (= 1 (length worktrees)))
         (expect (eq attention (first worktrees)))
-        (expect (= 1 (nerimux/model:organization-attention-count organization)))))))
+        (expect (= 1 (nerimux/model:organization-attention-count organization))))))
 
   (it "tracks pane output, lifecycle failures, and focus clearing"
     (let ((pane (nerimux/model:make-pane :id 7 :title "editor")))
@@ -61,4 +61,4 @@
       (expect (integerp (nerimux/model:pane-last-focused-time pane)))
       (nerimux/model:pane-mark-startup-failure pane)
       (expect (member :startup-failed
-                      (nerimux/model:pane-attention-reasons pane)))))
+                      (nerimux/model:pane-attention-reasons pane))))))
