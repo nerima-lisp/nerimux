@@ -19,9 +19,8 @@
 
 (defparameter *layer-rank*
   '(("nerimux/model" . 0) ("nerimux/terminal" . 0) ("nerimux/terminal/actions" . 0)
-    ("nerimux/terminal/parser" . 0) ("nerimux/options" . 0) ("nerimux/buffer" . 0)
-    ("nerimux/format" . 0) ("nerimux/ports" . 0)
-    ("nerimux/config" . 1) ("nerimux/commands" . 1) ("nerimux/picker" . 1)
+    ("nerimux/terminal/parser" . 0) ("nerimux/ports" . 0)
+    ("nerimux/commands" . 1) ("nerimux/picker" . 1)
     ("nerimux/pty" . 2) ("nerimux/net" . 2) ("nerimux/protocol" . 2)
     ("nerimux/transport" . 2) ("nerimux/vcs" . 2)
     ("nerimux/renderer" . 3) ("nerimux/input" . 3)

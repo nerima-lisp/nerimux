@@ -62,13 +62,19 @@
                               (incf i))))))))
 
 (defun %status-style-block-sgr (body base-sgr)
-  "SGR escape string for one inline #[BODY] status block.
-   An empty / \"default\" / \"none\" BODY resets to BASE-SGR (reset + base attrs);
-   any other BODY is parsed as a tmux style string (e.g. \"fg=green,bold\")."
-  (let ((b (string-trim " " body)))
-    (if (member b '("" "default" "none") :test #'string-equal)
-        (format nil "~C[0;~Am" +esc+ base-sgr)
-        (format nil "~C[~Am" +esc+ (%status-sgr-from-style b)))))
+  "SGR escape string for one inline #[BODY] status block: always resets to
+   BASE-SGR (reset + base attrs), regardless of BODY.
+   Previously an empty / \"default\" / \"none\" BODY reset to BASE-SGR while
+   any other BODY was parsed as a tmux style string (e.g. \"fg=green,bold\")
+   via %status-sgr-from-style, which R2.4 deleted along with the rest of the
+   style-string parser.  A non-default/none/empty BODY can only occur in
+   live data now (a window/session name that happens to contain literal
+   \"#[...]\" text — status-left/-right/window-status-format are fixed
+   templates that never embed one themselves, R2.3), so there is no longer a
+   config-authored style for a non-trivial BODY to mean anything; BODY is
+   accepted but ignored."
+  (declare (ignore body))
+  (format nil "~C[0;~Am" +esc+ base-sgr))
 
 (defun %status-expand-style-blocks (str base-sgr)
   "Replace tmux inline #[…] style blocks in STR with CSI SGR escape sequences.
@@ -92,15 +98,13 @@
                        (progn (write-char (char str i) out) (incf i))))))
       str))
 
-(defun %status-format-or-default (opt-name context default-fn)
-  "Return the expanded format string for OPT-NAME when it differs from its registered default;
-   otherwise call DEFAULT-FN.  CONTEXT is the format-expansion plist."
-  (let* ((spec    (gethash opt-name nerimux/options:*option-registry*))
-         (default (when spec (nerimux/options:option-spec-default spec)))
-         (current (nerimux/options:get-option opt-name nil)))
-    (if (and current (not (equal current default)))
-        (nerimux/format:expand-format current context)
-        (funcall default-fn))))
+;;; %status-format-or-default used to call DEFAULT-FN only when the
+;;; status-left/status-right option's live value differed from its
+;;; registered default (i.e. a config had overridden it).  With
+;;; domain/options deleted (R2.2) there is no longer a live value to
+;;; compare — it always equalled the registered default, so this always
+;;; called DEFAULT-FN — so the two call sites (renderer-statusbar.lisp) now
+;;; call their DEFAULT-FN directly and this indirection is gone.
 
 (defun %status-segment-limit (max-length)
   "Return a sane visible-length limit for status segment truncation.
@@ -166,14 +170,14 @@
       (%justify-centre left right-str cols)
       (%justify-right  left right-str cols)))
 
-(defun %status-segment-style-sgr (option-name base-sgr)
-  "SGR parameter string for a status-segment style OPTION-NAME (status-left-style /
-   status-right-style), falling back to BASE-SGR (the status-style) when the option
-   is unset or \"default\"."
-  (let ((s (nerimux/options:get-option option-name "")))
-    (if (member s '("" "default") :test #'string-equal)
-        base-sgr
-        (%status-sgr-from-style s))))
+(defun %status-segment-style-sgr (base-sgr)
+  "SGR parameter string for a status-bar segment: BASE-SGR (the status-bar
+   style), unconditionally.
+   status-left-style / status-right-style (domain/options, deleted R2.2)
+   both defaulted to \"\", which always fell back to BASE-SGR with no config
+   able to set either to something else — the per-segment override branch
+   is gone, not hardcoded to a dead value."
+  base-sgr)
 
 (defun %apply-segment-style (text seg-sgr base-sgr)
   "Wrap a status-bar segment TEXT in its SEG-SGR style, reverting to BASE-SGR after

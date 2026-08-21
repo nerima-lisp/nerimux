@@ -1,7 +1,7 @@
 (in-package #:nerimux/test)
 
 ;;;; scroll tests — part D: clear-scrollback, BCE background via %erase-cell,
-;;;; and *scroll-on-clear-function* edge-cases.
+;;;; and scroll-on-clear (ED 2 → scrollback) edge-cases.
 
 ;;; ── SUITE: clear-scrollback ──────────────────────────────────────────────────
 ;;;
@@ -43,39 +43,24 @@
             (setf any-non-blank t)))
         (expect any-non-blank :to-be-truthy)))))
 
-;;; ── SUITE: scroll-on-clear-function edge cases ───────────────────────────────
+;;; ── SUITE: scroll-on-clear-edge-cases ─────────────────────────────────────────
 ;;;
-;;; Coverage gaps: the *scroll-on-clear-function* nil path was tested in
-;;; scroll-tests.lisp as "scroll-on-clear-off-discards-content", but the edge
-;;; cases of function returning nil vs. function returning non-nil need a
-;;; dedicated table-driven treatment.
+;;; scroll-on-clear used to be a callback the bootstrap layer installed from
+;;; the option value; the ON/OFF split lived in whether that callback
+;;; returned non-nil or nil.  With the option gone, ED 2 always pushes the
+;;; visible screen to scrollback (erase.lisp mode 2), so only the ON case
+;;; survives as a reachable state — the OFF-path tests are deleted, not
+;;; rewritten.
 
 (describe "terminal-suite/scroll-on-clear-edge-cases"
 
-  ;; A scroll-on-clear function that returns NIL is treated as OFF: ED 2 does not push
-  ;; content to scrollback.
-  (it "scroll-on-clear-function-returning-nil-does-not-push"
-    (let ((nerimux/terminal/actions::*scroll-on-clear-function* (lambda () nil)))
-      (with-screen (s 5 3)
-        (feed s "AAAAA")
-        (feed s (esc "[2J"))
-        (expect (null (nerimux/terminal/types:screen-scrollback s))))))
-
-  ;; A scroll-on-clear function that returns non-NIL causes ED 2 to push visible rows.
-  (it "scroll-on-clear-function-returning-non-nil-pushes-content"
-    (let ((nerimux/terminal/actions::*scroll-on-clear-function* (lambda () t)))
-      (with-screen (s 5 3)
-        (feed s "AAAAA")
-        (feed s (esc "[2J"))
-        (expect (plusp (length (nerimux/terminal/types:screen-scrollback s)))))))
-
-  ;; *scroll-on-clear-function* = NIL (no policy) means scroll-on-clear is OFF.
-  (it "scroll-on-clear-nil-function-does-not-push"
-    (let ((nerimux/terminal/actions::*scroll-on-clear-function* nil))
-      (with-screen (s 5 3)
-        (feed s "BBBBB")
-        (feed s (esc "[2J"))
-        (expect (null (nerimux/terminal/types:screen-scrollback s)))))))
+  ;; ED 2 (ESC[2J) unconditionally pushes the visible rows to scrollback before
+  ;; erasing.
+  (it "ed2-always-pushes-content-to-scrollback"
+    (with-screen (s 5 3)
+      (feed s "AAAAA")
+      (feed s (esc "[2J"))
+      (expect (plusp (length (nerimux/terminal/types:screen-scrollback s)))))))
 
 ;;; ── SUITE: decstbm additional edge cases ─────────────────────────────────────
 ;;;
@@ -189,11 +174,21 @@
         (let ((newest-char (cell-char (aref (first scrollback) 0))))
           (expect (char= #\R newest-char))))))
 
-  ;; scroll-up-one with a small custom cap never lets scrollback grow beyond it.
+  ;; scroll-up-one never lets scrollback grow beyond +max-scrollback-lines+.
+  ;; Seeding the scrollback (and its parallel wrap-flag list, so
+  ;; trim-scroll-history's lockstep truncation stays consistent) to just
+  ;; under the real 10,000 cap directly, then driving only 3 real
+  ;; scroll-up-one calls across the boundary, exercises the cap through the
+  ;; actual push→trim path without looping scroll-up-one thousands of times.
   (it "history-cap-enforced-after-scroll-up-one"
     (with-screen (s 5 3)
-      (let ((cap 3)
-            (nerimux/terminal/actions:*history-limit-function* (lambda () 3)))
-        (dotimes (_ (* cap 3))
+      (let ((cap nerimux/terminal:+max-scrollback-lines+))
+        (setf (nerimux/terminal/types:screen-scrollback s)
+              (loop repeat (1- cap)
+                    collect (make-array 5 :initial-element
+                                          (nerimux/terminal/types:blank-cell)))
+              (nerimux/terminal/types:screen-scrollback-wrapped s)
+              (loop repeat (1- cap) collect nil))
+        (dotimes (_ 3)
           (nerimux/terminal/actions:scroll-up-one s))
         (expect (<= (length (nerimux/terminal/types:screen-scrollback s)) cap))))))

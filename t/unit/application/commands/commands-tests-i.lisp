@@ -1,6 +1,6 @@
 (in-package #:nerimux/test)
 
-;;;; rectangle-sel-text, run-copy-command, and set-cursor
+;;;; rectangle-sel-text and set-cursor
 
 (describe "commands-suite"
 
@@ -53,34 +53,8 @@
         (expect (search "BC" text))
         (expect (find #\Newline text)))))
 
-  ;;; ── %run-copy-command (direct unit tests) ────────────────────────────────────
-  ;;;
-  ;;; %run-copy-command is exercised only transitively through copy-mode-yank when
-  ;;; the 'copy-command' option is set.  These direct tests cover the no-op branch
-  ;;; (empty option / empty text) and the error-handling contract.
-
-  ;; %run-copy-command is a no-op for NIL and for an empty string.
-  (it "run-copy-command-noop-when-nil-or-empty"
-    (finishes (nerimux/commands::%run-copy-command nil)
-              "%run-copy-command with nil text must not signal")
-    (finishes (nerimux/commands::%run-copy-command "")
-              "%run-copy-command with empty text must not signal"))
-
-  ;; %run-copy-command is a no-op when the 'copy-command' option is not set.
-  (it "run-copy-command-noop-when-option-unset"
-    ;; Fresh option table: 'copy-command' is absent.
-    (with-fresh-global-options
-      (finishes (nerimux/commands::%run-copy-command "some text")
-                "%run-copy-command with no copy-command option must not signal")))
-
-  ;; %run-copy-command swallows errors from a malformed copy-command.
-  (it "run-copy-command-does-not-crash-on-bad-command"
-    ;; Set copy-command to a command that will fail (exit non-zero or not found).
-    (let ((nerimux/options:*global-options*
-           (let ((h (make-hash-table :test #'equal)))
-             (setf (gethash "copy-command" h) "false")
-             h)))
-      (finishes (nerimux/commands::%run-copy-command "hello")
-                "%run-copy-command must not signal when the copy-command fails")))
+  ;; %run-copy-command and the 'copy-command' option are gone (R3.2 of
+  ;; docs/notes/workspace-requirements.md): yank speaks OSC 52 only, so there
+  ;; is no external command to shell out to and nothing left to test here.
 
   )

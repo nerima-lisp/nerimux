@@ -17,35 +17,29 @@
 
   ;;; ── %shell-basename — table-driven ──────────────────────────────────────────
   ;;;
-  ;;; Four edge cases exercised in one table.  The individual per-case tests were
-  ;;; consolidated here to eliminate structural duplication.
+  ;;; %shell-basename is the basename of %default-shell's result, and
+  ;;; %default-shell reads $SHELL directly (or falls back to /bin/sh — §1.4 /
+  ;;; R2.5: the shell is no longer configurable).  Three edge cases exercised
+  ;;; in one table, stubbing the real process environment
+  ;;; (t/helpers-overlay-assertions.lisp's
+  ;;; with-temporary-posix-environment-variable) rather than an option table.
 
-  ;; Table-driven: %shell-basename returns correct result for diverse shell paths.
+  ;; Table-driven: %shell-basename returns correct result for diverse $SHELL values.
   (it "shell-basename-table"
-    ;; Each entry: (default-shell expected description)
+    ;; Each entry: ($SHELL value, or NIL to unset; expected; description)
     (dolist (entry
-             '(("/bin/bash"  "bash"   "%shell-basename strips /bin/ prefix")
-               ("zsh"        "zsh"    "%shell-basename returns bare name when no slash")
-               (nil          "window" "%shell-basename returns \"window\" when shell is NIL")
-               ("/usr/bin/"  ""       "%shell-basename returns empty string for trailing-slash path")))
+             '(("/bin/bash"  "bash" "%shell-basename strips /bin/ prefix")
+               ("zsh"        "zsh"  "%shell-basename returns bare name when no slash")
+               (nil          "sh"   "%shell-basename falls back to /bin/sh's basename when $SHELL is unset")
+               ("/usr/bin/"  ""     "%shell-basename returns empty string for trailing-slash path")))
       (destructuring-bind (shell expected desc) entry
         (declare (ignore desc))
-        (with-isolated-config
-          ;; NOT set-option: "default-shell" is registered :string, and its
-          ;; coercion is (format nil "~A" value), which turns the NIL case in
-          ;; this table into the *string* "NIL" instead of leaving the option
-          ;; unset/nil.  That would make the nil row assert against "NIL"
-          ;; rather than exercising %shell-basename's (or ... "window")
-          ;; fallback, which is the row's whole point.  Poking the isolated
-          ;; hash table directly stores SHELL verbatim, matching how the old
-          ;; dynamic *default-shell* binding held raw values with no coercion.
-          (setf (gethash "default-shell" nerimux/options:*global-options*) shell)
+        (with-temporary-posix-environment-variable ("SHELL" shell)
           (expect (string= expected (nerimux/model::%shell-basename)))))))
 
   ;; %shell-basename returns a string even for a trailing-slash path.
   (it "shell-basename-trailing-slash-is-string"
-    (with-isolated-config
-      (nerimux/options:set-option "default-shell" "/usr/bin/")
+    (with-temporary-posix-environment-variable ("SHELL" "/usr/bin/")
       (expect (stringp (nerimux/model::%shell-basename)))))
 
   ;;; ── session-insert-window ────────────────────────────────────────────────────

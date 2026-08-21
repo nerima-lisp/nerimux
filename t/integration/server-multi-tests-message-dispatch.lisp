@@ -865,21 +865,22 @@
   ;; had nothing to translate for, and this test was the only thing still
   ;; calling it.
 
-  ;; A resize moves the client to the front of *clients* so window-size "latest"
-  ;; tracks the just-resized client.
-  (it "multi-resize-marks-client-latest"
-    (with-fresh-options
-      (nerimux/options:set-option "window-size" "latest")
-      (with-fake-session (s)
-        (let* ((a (%make-test-conn :rows 24 :cols 80))
-               (b (%make-test-conn :rows 30 :cols 100))
-               (nerimux::*clients* (list a b))   ; a is front initially
-               (payload (nerimux/protocol::u16-octets-pair 50 150)))
-          (nerimux::%handle-multi-client-message nerimux::+msg-resize+ payload s b)
-          (expect (eq b (first nerimux::*clients*)))
-          (multiple-value-bind (rows cols) (nerimux::%effective-client-size)
-            (check-table (list (list rows 50 "latest tracks the just-resized client's new rows")
-                               (list cols 150 "latest tracks the just-resized client's new cols"))))))))
+  ;; A resize updates the resized client's own geometry and immediately
+  ;; re-applies the effective shared size, which §1.4 / R8.4 fix to the
+  ;; smallest attached client — not the just-resized one.  window-size
+  ;; "latest" (and "largest"/"manual") went away with domain/options (R2.2).
+  (it "multi-resize-updates-geometry-and-reapplies-smallest-size"
+    (with-fake-session (s)
+      (let* ((a (%make-test-conn :rows 24 :cols 80))
+             (b (%make-test-conn :rows 30 :cols 100))
+             (nerimux::*clients* (list a b))
+             (payload (nerimux/protocol::u16-octets-pair 50 150)))
+        (nerimux::%handle-multi-client-message nerimux::+msg-resize+ payload s b)
+        (expect (= 50 (nerimux::client-conn-rows b)))
+        (expect (= 150 (nerimux::client-conn-cols b)))
+        (multiple-value-bind (rows cols) (nerimux::%effective-client-size)
+          (check-table (list (list rows 24 "effective rows = smallest attached client (a), not the resized one")
+                             (list cols 80 "effective cols = smallest attached client (a), not the resized one")))))))
 
   ;; The client-local C-q prefix (%handle-workspace-prefix-key) followed by
   ;; `d` still detaches: :drop on the second key, session survives.  This used
@@ -890,21 +891,20 @@
   ;; ever was.
   (it "multi-handle-key-detach-drops-client"
     (with-fake-session (s)
-      (with-isolated-config
-        (let* ((conn   (%make-test-conn))
-               (prefix (make-array 1 :element-type '(unsigned-byte 8)
-                                      :initial-contents
-                                      (list (nerimux::client-conn-workspace-prefix-code conn))))
-               (d-key  (make-array 1 :element-type '(unsigned-byte 8)
-                                      :initial-contents (list (char-code #\d)))))
-          ;; The prefix byte alone is absorbed: no disposition yet, but the
-          ;; client is now armed for the following `d`.
-          (expect (null (nerimux::%handle-multi-client-message
-                         nerimux::+msg-key+ prefix s conn)))
-          (expect (nerimux::client-conn-ui-prefix-p conn))
-          (expect (eq :drop (nerimux::%handle-multi-client-message
-                             nerimux::+msg-key+ d-key s conn)))
-          (expect nerimux::*running* :to-be-truthy)))))
+      (let* ((conn   (%make-test-conn))
+             (prefix (make-array 1 :element-type '(unsigned-byte 8)
+                                    :initial-contents
+                                    (list (nerimux::client-conn-workspace-prefix-code conn))))
+             (d-key  (make-array 1 :element-type '(unsigned-byte 8)
+                                    :initial-contents (list (char-code #\d)))))
+        ;; The prefix byte alone is absorbed: no disposition yet, but the
+        ;; client is now armed for the following `d`.
+        (expect (null (nerimux::%handle-multi-client-message
+                       nerimux::+msg-key+ prefix s conn)))
+        (expect (nerimux::client-conn-ui-prefix-p conn))
+        (expect (eq :drop (nerimux::%handle-multi-client-message
+                           nerimux::+msg-key+ d-key s conn)))
+        (expect nerimux::*running* :to-be-truthy))))
 
   ;; A key the workspace UI does not bind (:normal mode, no stdin-target set)
   ;; is a no-op: NIL disposition, CONN's mode/view unchanged, and -- unlike the
@@ -912,25 +912,24 @@
   ;; straight into the active pane's pty -- nothing is written to the pane.
   (it "multi-handle-unbound-normal-key-is-noop"
     (with-fake-session (s)
-      (with-isolated-config
-        (let* ((conn (%make-test-conn))
-               (before-mode (nerimux::client-conn-mode conn))
-               (before-view (nerimux::client-conn-view conn))
-               (key (make-array 1 :element-type '(unsigned-byte 8)
-                                   :initial-contents (list (char-code #\z))))
-               (writes nil))
-          (flet ((rec (fd bytes) (declare (ignore fd)) (push bytes writes)))
-            (let ((orig (fdefinition 'nerimux::pty-write)))
-              (unwind-protect
-                   (progn
-                     (setf (fdefinition 'nerimux::pty-write) #'rec)
-                     (expect (null (nerimux::%handle-multi-client-message
-                                    nerimux::+msg-key+ key s conn))))
-                (setf (fdefinition 'nerimux::pty-write) orig))))
-          (expect (null writes))
-          (expect (eq before-mode (nerimux::client-conn-mode conn)))
-          (expect (eq before-view (nerimux::client-conn-view conn)))
-          (expect nerimux::*running* :to-be-truthy)))))
+      (let* ((conn (%make-test-conn))
+             (before-mode (nerimux::client-conn-mode conn))
+             (before-view (nerimux::client-conn-view conn))
+             (key (make-array 1 :element-type '(unsigned-byte 8)
+                                 :initial-contents (list (char-code #\z))))
+             (writes nil))
+        (flet ((rec (fd bytes) (declare (ignore fd)) (push bytes writes)))
+          (let ((orig (fdefinition 'nerimux::pty-write)))
+            (unwind-protect
+                 (progn
+                   (setf (fdefinition 'nerimux::pty-write) #'rec)
+                   (expect (null (nerimux::%handle-multi-client-message
+                                  nerimux::+msg-key+ key s conn))))
+              (setf (fdefinition 'nerimux::pty-write) orig))))
+        (expect (null writes))
+        (expect (eq before-mode (nerimux::client-conn-mode conn)))
+        (expect (eq before-view (nerimux::client-conn-view conn)))
+        (expect nerimux::*running* :to-be-truthy))))
 
   ;; An explicit +msg-detach+ message yields :drop.
   (it "multi-handle-detach-message-drops-client"

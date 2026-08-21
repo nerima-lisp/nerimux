@@ -76,18 +76,21 @@
   (when (%string-non-empty-p start-dir)
     (ignore-errors (truename start-dir))))
 
+(defun %default-shell ()
+  "Shell to spawn for a pane's child process: $SHELL, or \"/bin/sh\" when unset
+   (§1.4 — the shell is no longer configurable, so this is the whole rule)."
+  (let ((shell (sb-ext:posix-getenv "SHELL")))
+    (if (%string-non-empty-p shell) shell "/bin/sh")))
+
 (defun %target-program-and-args (default-command)
   "Return (values PROGRAM ARGS SEARCH-P) for SB-EXT:RUN-PROGRAM.
    When DEFAULT-COMMAND is a non-empty string, run it via /bin/sh -c.
-   Otherwise run the configured default shell directly, searching PATH for it
-   (SEARCH-P) unless it is already given as an absolute path."
+   Otherwise run %DEFAULT-SHELL directly, searching PATH for it (SEARCH-P)
+   unless it is already given as an absolute path."
   (if (%string-non-empty-p default-command)
       (values "/bin/sh" (list "-c" default-command) nil)
-      (let ((shell (nerimux/options:get-option "default-shell")))
-        (values shell nil
-                (not (and (stringp shell)
-                          (plusp (length shell))
-                          (char= (char shell 0) #\/)))))))
+      (let ((shell (%default-shell)))
+        (values shell nil (not (char= (char shell 0) #\/))))))
 
 (defun %remember-pty-process (master-fd pty)
   "Record the cl-tty-kit PTY struct so pty-close can reap it and so the struct

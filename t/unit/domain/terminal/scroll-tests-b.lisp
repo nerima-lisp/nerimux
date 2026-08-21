@@ -24,19 +24,32 @@
       (nerimux/terminal/actions::%clear-row s 0)
       (expect (row-blank-p s 0))))
 
-  ;; trim-scroll-history removes entries beyond the effective history-limit.
+  ;; trim-scroll-history removes entries beyond +max-scrollback-lines+.
+  ;; Pre-populating the scrollback directly with cons cells (rather than
+  ;; feeding cap+3 real lines through the emulator) keeps this cheap even
+  ;; though the real cap is now 10,000 (§1.4) — allocation is the only cost,
+  ;; and trim-scroll-history is called exactly once.
   (it "trim-scroll-history-caps-at-limit"
     (with-screen (s 5 3)
-      (let ((cap 5))
-        ;; Pre-populate scrollback beyond the cap
+      (let ((cap nerimux/terminal:+max-scrollback-lines+))
         (setf (nerimux/terminal/types:screen-scrollback s)
               (loop repeat (+ cap 3)
                     collect (make-array 5 :initial-element
                                           (nerimux/terminal/types:blank-cell))))
-        ;; Install a temporary limit function
-        (let ((nerimux/terminal/actions:*history-limit-function* (lambda () cap)))
-          (nerimux/terminal/actions:trim-scroll-history s))
+        (nerimux/terminal/actions:trim-scroll-history s)
         (expect (<= (length (nerimux/terminal/types:screen-scrollback s)) cap))))))
+
+;;; ── SUITE: scrollback-cap-constant ────────────────────────────────────────────
+;;;
+;;; §1.4 fixes scrollback at 10,000 rows.  This used to be reachable only
+;;; indirectly (install the option, read it back through the port); now it is
+;;; a plain DEFCONSTANT with no injection point, so the regression guard is a
+;;; direct equality check against the value the requirements doc fixes.
+
+(describe "terminal-suite/scrollback-cap-constant"
+
+  (it "max-scrollback-lines-is-10000"
+    (expect (= 10000 nerimux/terminal:+max-scrollback-lines+))))
 
 ;;; ── SUITE: direct-action-erase ───────────────────────────────────────────────
 ;;;
@@ -189,35 +202,3 @@
         (funcall fn s)
         (expect (nerimux/terminal/types:screen-dirty-p s))))))
 
-;;; ── SUITE: history-limit-function nil path ────────────────────────────────────
-;;;
-;;; When *history-limit-function* is NIL, trim-scroll-history falls back to
-;;; +max-scrollback-lines+.  %effective-history-limit must return a positive
-;;; integer in this case.
-
-(describe "terminal-suite/history-limit-fn-nil"
-
-  ;; *history-limit-function* = NIL causes trim-scroll-history to use +max-scrollback-lines+.
-  (it "history-limit-fn-nil-falls-back-to-constant"
-    (with-screen (s 5 3)
-      (let ((cap nerimux/terminal:+max-scrollback-lines+))
-        ;; Pre-populate scrollback at the cap
-        (setf (nerimux/terminal/types:screen-scrollback s)
-              (loop repeat cap
-                    collect (make-array 5 :initial-element
-                                          (nerimux/terminal/types:blank-cell))))
-        ;; With *history-limit-fn* bound to NIL, push one more row
-        (let ((nerimux/terminal/actions:*history-limit-function* nil))
-          (nerimux/terminal/actions:scroll-up-one s))
-        ;; Scrollback must not exceed the constant cap
-        (expect (<= (length (nerimux/terminal/types:screen-scrollback s)) cap)))))
-
-  ;; When *history-limit-function* returns a value, it overrides +max-scrollback-lines+.
-  (it "history-limit-fn-callback-overrides-constant"
-    (with-screen (s 5 3)
-      (let* ((custom-cap 3)
-             (nerimux/terminal/actions:*history-limit-function* (lambda () custom-cap)))
-        ;; Scroll enough to exceed the custom cap
-        (dotimes (_ (+ custom-cap 5))
-          (nerimux/terminal/actions:scroll-up-one s))
-        (expect (<= (length (nerimux/terminal/types:screen-scrollback s)) custom-cap))))))

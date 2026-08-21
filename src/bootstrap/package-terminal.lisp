@@ -59,9 +59,6 @@
    #:clear-scrollback
    #:trim-below-cursor
    #:+max-scrollback-lines+
-   #:*history-limit-function*
-   #:*alternate-screen-enabled-function*
-   #:*scroll-on-clear-function*
    ;; Focus event reporting (?1004)
    #:focus-event-report
    ;; Erase
@@ -319,8 +316,5 @@
    #:screen-copy-line-selection-p
    ;; Copy-mode rectangle-select flag
    #:screen-copy-rect-select-p
-   ;; Scroll history limit callback (injected at startup)
-   #:+max-scrollback-lines+
-   #:*history-limit-function*
-   #:*alternate-screen-enabled-function*
-   #:*scroll-on-clear-function*))
+   ;; Scrollback cap (fixed; see requirements 1.4)
+   #:+max-scrollback-lines+))

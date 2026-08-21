@@ -9,18 +9,6 @@
   `(let ((,var (make-session :id 1 :name "0" :windows nil)))
      ,@body))
 
-(defmacro with-empty-buffers (&body body)
-  "Run BODY with an empty paste buffer ring.
-   Isolates buffer state so tests cannot contaminate each other."
-  `(let ((old-buffers nerimux/buffer:*paste-buffers*)
-         (old-index nerimux/buffer:*buffer-auto-index*))
-     (unwind-protect
-          (progn
-            (nerimux/buffer:clear-paste-buffers)
-            ,@body)
-       (setf nerimux/buffer:*paste-buffers* old-buffers
-             nerimux/buffer:*buffer-auto-index* old-index))))
-
 (defmacro with-minimal-loop-session ((pane-var win-var sess-var &rest keys) &body body)
   "Combine with-minimal-session + with-loop-state for dispatch tests."
   `(with-minimal-session (,pane-var ,win-var ,sess-var ,@keys)
@@ -82,16 +70,6 @@
    select-pane command tests and similar command dispatch checks."
   `(with-fake-session (,var :nwindows 1 :npanes 2)
      ,@body))
-
-(defmacro with-option-session ((var &rest make-args) &body body)
-  "Bind VAR to a fresh fake session and run BODY inside WITH-ISOLATED-CONFIG.
-   Use this when the test exercises option/config mutations (set-option, prefix,
-   key-table rewrites) that must not leak between tests.  Unlike WITH-FAKE-SESSION
-   this does NOT wrap in WITH-LOOP-STATE; add it explicitly when needed:
-     (with-option-session (s) (with-loop-state ...))"
-  `(with-isolated-config
-     (let ((,var (make-fake-session ,@make-args)))
-       ,@body)))
 
 (defmacro with-minimal-session ((pane-var win-var sess-var
                                  &key (width 20) (height 5)) &body body)

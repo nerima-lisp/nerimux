@@ -13,6 +13,27 @@
 ;;;; depend downward on this package instead, which is the direction the layering
 ;;;; rule allows.
 
+;;; I/O tuning for the descriptor-level loops.
+;;;
+;;; These were defined in nerimux/config, next to the .tmux.conf loader, which
+;;; made a PTY reader thread and a select loop depend upward on the application
+;;; layer for three numbers no config file could ever change. They are properties
+;;; of the read/select boundary, so they live at that boundary now.
+;;;
+;;; A fourth, +accept-timeout-us+, went with the move: it had no caller left once
+;;; the accept loop became part of the select-multiplexed iteration.
+
+(defconstant +pty-buf-size+ 4096
+  "Byte buffer size for PTY reads.")
+
+(defconstant +poll-timeout-us+ 50000
+  "Select timeout in microseconds for stdin/socket polling (50 ms, so roughly a
+   20 fps ceiling on how fast a keystroke can be noticed).")
+
+(defconstant +pty-poll-timeout-us+ 50000
+  "Select timeout in microseconds for per-pane PTY reader threads (50 ms).
+   Bounded so the reader loop observes *RUNNING* even when the shell is silent.")
+
 (defun find-posix-function (name)
   "The SB-POSIX function named NAME, or NIL when SB-POSIX is absent or does not
    export it.  NAME is a string, e.g. \"SETENV\"."

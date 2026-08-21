@@ -14,6 +14,10 @@
 ;;;; verifies the process exits cleanly.
 
 (require :asdf)
+;; Loaded before the form that names SB-POSIX:SETENV, so the package exists by
+;; the time the reader reaches it.  --script reads and evaluates one form at a
+;; time, which is what makes an in-file REQUIRE enough here.
+(require :sb-posix)
 (push (truename ".") asdf:*central-registry*)
 (asdf:load-system :nerimux)
 (use-package :nerimux/pty)
@@ -32,10 +36,10 @@
 (defconstant +e2e-detach-settle-seconds+  0.5
   "Seconds to let nerimux process the detach key before cleaning up the PTY.")
 
-(defconstant +e2e-poll-timeout-us+ nerimux/config:+poll-timeout-us+
+(defconstant +e2e-poll-timeout-us+ nerimux/ports:+poll-timeout-us+
   "Select timeout in microseconds when polling the PTY for output.")
 
-(defconstant +e2e-read-buf-size+   nerimux/config:+pty-buf-size+
+(defconstant +e2e-read-buf-size+   nerimux/ports:+pty-buf-size+
   "PTY read buffer size in bytes.")
 
 (defconstant +e2e-search-window-bytes+ (* 64 1024)
@@ -101,11 +105,14 @@
 
 (defun e2e (binary)
   (format t "~&[e2e] driving ~A~%" binary)
-  ;; The shell to spawn lives in the `default-shell' option; the *default-shell*
-  ;; variable this used to set is gone.  This file is not part of the
-  ;; nerimux/test ASDF system, so a stale reference here compiles fine until the
-  ;; e2e suite is invoked on its own.
-  (nerimux/options:set-option "default-shell" binary)
+  ;; Point the pane's shell at the binary under test. There is no longer an
+  ;; option to set: %default-shell reads $SHELL and falls back to /bin/sh, so the
+  ;; environment is the only lever, which is also what a user has.
+  ;;
+  ;; This file is not in the nerimux/test ASDF system — it is run by hand against
+  ;; a built binary (see docs/src/getting-started.md) — so nothing but an actual
+  ;; e2e run will catch a stale reference here.
+  (sb-posix:setenv "SHELL" binary 1)
   (multiple-value-bind (fd pid) (forkpty-with-shell 24 80)
     (unwind-protect
          (let ((marker "E2E_PROOF_4242")

@@ -58,12 +58,14 @@
 ;;;   %attach-full-screen-pane  — window data setup (PTY pane → tree leaf)
 ;;;   session-new-window        — session attachment (window → session list)
 
+(defconstant +pane-base-index+ 1
+  "First pane id in a window (§1.4: window / pane numbering starts at 1).")
+
 (defun %attach-full-screen-pane (window rows cols &key start-dir)
   "Fork a shell and install it as WINDOW's sole full-screen leaf pane.
    START-DIR: when non-NIL, the shell starts in that directory.
-   The initial pane id respects the pane-base-index option."
-  (let* ((pane-base-index (or (nerimux/options:get-option "pane-base-index") 0))
-         (pane (%fork-pane nil pane-base-index 0 0 cols rows :start-dir start-dir)))
+   The initial pane gets +PANE-BASE-INDEX+."
+  (let* ((pane (%fork-pane nil +pane-base-index+ 0 0 cols rows :start-dir start-dir)))
     (setf (window-panes  window) (list pane)
           (window-active window) pane
           (window-tree   window) (make-layout-leaf pane)
@@ -134,31 +136,39 @@
   (setf (session-last-active session) (get-universal-time))
   session)
 
-(defun %shell-basename ()
-  "Basename of the configured shell, or \"window\" as fallback.
+(defun %default-shell ()
+  "Shell to spawn for a pane's child process: $SHELL, or \"/bin/sh\" when unset
+   (§1.4 — the shell is no longer configurable, so this is the whole rule)."
+  (or (nerimux/ports:environment-value "SHELL") "/bin/sh"))
 
-   Reads the `default-shell' option directly.  It used to read a cached copy in
-   nerimux/config, which is application state -- a domain file reaching upward."
-  (let* ((shell (or (nerimux/options:get-option "default-shell") "window"))
+(defun %shell-basename ()
+  "Basename of the shell %DEFAULT-SHELL resolves to, used as the initial
+   window name."
+  (let* ((shell (%default-shell))
          (slash-pos (position #\/ shell :from-end t)))
     (if slash-pos
         (subseq shell (1+ slash-pos))
         shell)))
 
+(defconstant +status-line-rows+ 1
+  "Rows the status bar occupies (§1.4: status line is fixed to one row at the
+   bottom). Replaces the old configurable 0..5 range from the `status' option.")
+
+(defconstant +base-index+ 1
+  "First window id in a session (§1.4: window / pane numbering starts at 1).")
+
 (defun create-initial-session (rows cols &key start-dir)
   "Bootstrap: one session, one window, one full-screen pane.
-   The first window index respects the 'base-index' option (default 0).
+   The first window gets +BASE-INDEX+.
    START-DIR: when non-NIL, the initial shell starts in that directory.
-   PANE-ROWS subtracts *STATUS-HEIGHT* from ROWS to leave one row for the
+   PANE-ROWS subtracts +STATUS-LINE-ROWS+ from ROWS to leave one row for the
    status bar at the bottom of the outer terminal."
   (let* ((session   (make-session :id (incf *session-id-counter*)
                                   :name "0"
                                   :last-active (get-universal-time)))
          ;; Reserve one row at the bottom for the status bar.
-         (pane-rows (- rows (nerimux/options:status-line-count)))
-         ;; Respect base-index for the first window id.
-         (base-index  (or (nerimux/options:get-option "base-index") 0)))
-    (session-new-window session (%shell-basename) pane-rows cols base-index start-dir)
+         (pane-rows (- rows +status-line-rows+)))
+    (session-new-window session (%shell-basename) pane-rows cols +base-index+ start-dir)
     session))
 
 (defun all-panes (session)

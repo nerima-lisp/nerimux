@@ -1,6 +1,10 @@
 (in-package #:nerimux/test)
 
 ;;;; render-status-bar, render-session, clear-display, and status-pane indicators
+;;;;
+;;;; status-format[0] (domain/options + domain/format, deleted R2.2/R2.3) is
+;;;; gone: the status bar is now always composed procedurally (left/window-
+;;;; list/right), never expanded from a template — see renderer-statusbar.lisp.
 
 ;;; ── Test fixtures ───────────────────────────────────────────────────────────
 ;;;
@@ -38,13 +42,12 @@
 
   ;; render-status-bar shows the session name and the active window's index:name.
   (it "render-status-bar-shows-names"
-    (with-minimal-status-bar-options
-      (let* ((sess (make-renderer-test-session 40 10 :content ""))
-             (out  (render-status-bar-output sess 10 40)))
-        (expect (search "0" out))
-        ;; The active window is formatted using window-status-current-format:
-        ;; " #{window_index}:#{window_name}* " → " 1:1* " for window named "1" at index 1.
-        (expect (search "1:1" out)))))
+    (let* ((sess (make-renderer-test-session 40 10 :content ""))
+           (out  (render-status-bar-output sess 10 40)))
+      (expect (search "0" out))
+      ;; The active window is formatted as " I:NAME* " → " 1:1* " for window
+      ;; named "1" at index 1.
+      (expect (search "1:1" out))))
 
   ;; %compose-aligned-line places #[align=right] content flush-right and
   ;; #[align=centre] content centred, filling to the requested width.
@@ -60,43 +63,16 @@
         (expect (= 10 (nerimux/renderer::%visible-length
                        (compose "L#[align=centre]C#[align=right]R")))))))
 
-  ;; When status-format[0] is set, the bar renders from that template with
-  ;; #[align=right] honoured, instead of the procedural left/window-list/right path.
-  (it "render-status-bar-uses-status-format0-template"
-    (with-isolated-options ("status-format[0]" "LEFThere#[align=right]RIGHThere")
-      (let* ((sess (make-renderer-test-session 40 10 :content ""))
-             (out  (render-status-bar-output sess 10 40))
-             ;; Strip ALL CSI sequences (the leading cursor-move ESC[10;1H and any SGR).
-             (vis  (cl-regex-kit:replace-all
-                    (cl-regex-kit:compile-regex
-                     (format nil "~C\\[[0-9;?]*[A-Za-z]" #\Escape))
-                    out ""))
-             (rpos (search "RIGHThere" vis)))
-        (expect (eql 0 (search "LEFThere" vis)))
-        (expect (and rpos (= (+ rpos (length "RIGHThere")) 40))))))
-
-  ;; status-format[0] expands #{W:...}, so the window list appears in the template.
-  (it "render-status-bar-status-format0-expands-W-window-list"
-    (with-isolated-options ("status-format[0]" "#{W:[#{window_index}]}")
-      (let* ((sess (make-renderer-test-session 40 10 :content ""))
-             (out  (render-status-bar-output sess 10 40))
-             (vis  (cl-regex-kit:replace-all
-                    (cl-regex-kit:compile-regex
-                     (format nil "~C\\[[0-9;?]*[A-Za-z]" #\Escape))
-                    out "")))
-        (expect (search "[" vis)))))
-
   ;; The status bar does not show a COPY/offset indicator when a pane is in copy mode.
   (it "render-status-bar-copy-mode-has-no-indicator"
-    (with-minimal-status-bar-options
-      (let* ((sess   (make-renderer-test-session 60 10 :content ""))
-             (ap     (session-active-pane sess))
-             (screen (pane-screen ap)))
-        (setf (screen-copy-mode-p screen) t
-              (screen-copy-offset screen) 3)
-        (let ((out (render-status-bar-output sess 10 60)))
-          (expect (null (search "COPY" out)))
-          (expect (null (search "+3" out)))))))
+    (let* ((sess   (make-renderer-test-session 60 10 :content ""))
+           (ap     (session-active-pane sess))
+           (screen (pane-screen ap)))
+      (setf (screen-copy-mode-p screen) t
+            (screen-copy-offset screen) 3)
+      (let ((out (render-status-bar-output sess 10 60)))
+        (expect (null (search "COPY" out)))
+        (expect (null (search "+3" out))))))
 
   ;; The status bar never shows a COPY indicator for a pane that is not in copy mode.
   (it "render-status-bar-no-copy-indicator-live"
@@ -110,40 +86,37 @@
     ;; The bar is: move-to, ESC[44;97m, <status content>, ESC[0m.  The visible
     ;; status content sits between the colour SGR and the trailing reset, and the
     ;; renderer guarantees it is no longer than the terminal width.
-    (with-minimal-status-bar-options
-      (let* ((width  8)
-             (sess   (make-renderer-test-session width 10 :content ""))
-             (out    (render-status-bar-output sess 10 width))
-             (color  (format nil "~C[44;97m" #\Escape))
-             (reset  (format nil "~C[0m" #\Escape))
-             (start  (+ (search color out) (length color)))
-             (end    (search reset out :start2 start))
-             (content (subseq out start end)))
-        ;; Measure VISIBLE cells: the default window-status-current-style is
-        ;; "reverse", so the active window is wrapped in a zero-width ESC[7m…
-        ;; highlight.  The renderer now fills the full terminal width with visible
-        ;; glyphs and preserves that SGR, so the raw length may exceed WIDTH while
-        ;; the on-screen width does not.
-        (expect (<= (nerimux/renderer::%visible-length content) width))
-        ;; The full line (left text + gap + time) is longer than the terminal, so
-        ;; the HH:MM time string (right portion) is truncated off the visible content.
-        ;; We verify this by checking the content is shorter than the full line would be.
-        (expect (< (length content) 20)))))
+    (let* ((width  8)
+           (sess   (make-renderer-test-session width 10 :content ""))
+           (out    (render-status-bar-output sess 10 width))
+           (color  (format nil "~C[44;97m" #\Escape))
+           (reset  (format nil "~C[0m" #\Escape))
+           (start  (+ (search color out) (length color)))
+           (end    (search reset out :start2 start))
+           (content (subseq out start end)))
+      ;; Measure VISIBLE cells: the active window's tab is wrapped in a
+      ;; zero-width ESC[7m… reverse-video highlight (window-status-current-
+      ;; style's fixed value).  The renderer fills the full terminal width
+      ;; with visible glyphs and preserves that SGR, so the raw length may
+      ;; exceed WIDTH while the on-screen width does not.
+      (expect (<= (nerimux/renderer::%visible-length content) width))
+      ;; The full line (left text + gap + time) is longer than the terminal, so
+      ;; the HH:MM time string (right portion) is truncated off the visible content.
+      ;; We verify this by checking the content is shorter than the full line would be.
+      (expect (< (length content) 20))))
 
   ;;; ── render-session-to-string (full frame) ───────────────────────────────────
 
   ;; render-session-to-string emits pane content plus cursor-hide/show sequences and the status bar.
   (it "render-session-to-string-full-frame"
-    (with-minimal-status-bar-options
-      (let* ((sess (make-renderer-test-session 20 5 :content "hi"))
-             (out  (render-session-to-string sess 6 20)))
-        (expect (find #\h out))
-        (expect (find #\i out))
-        (expect (search (format nil "~C[?25l" #\Escape) out))
-        (expect (search (format nil "~C[?25h" #\Escape) out))
-        ;; The active window is formatted with window-status-current-format
-        ;; default: " #{window_index}:#{window_name}* " → " 1:1* "
-        (expect (search "1:1" out)))))
+    (let* ((sess (make-renderer-test-session 20 5 :content "hi"))
+           (out  (render-session-to-string sess 6 20)))
+      (expect (find #\h out))
+      (expect (find #\i out))
+      (expect (search (format nil "~C[?25l" #\Escape) out))
+      (expect (search (format nil "~C[?25h" #\Escape) out))
+      ;; The active window is formatted as " I:NAME* " → " 1:1* ".
+      (expect (search "1:1" out))))
 
   ;; A side-by-side split renders a vertical separator, highlights the active pane's border, and shows both panes' content.
   (it "render-session-vertical-split-emits-separators"

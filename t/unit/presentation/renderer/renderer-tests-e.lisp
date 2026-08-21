@@ -4,6 +4,16 @@
 ;;;; render-session nil-window, render-panes-borders nil-window, status-justify-line,
 ;;;; %status-bar-line gap, inline style blocks, SGR-aware width,
 ;;;; background-window bell relay.
+;;;;
+;;;; §1.1 retired the alert machinery outright: bell-action and visual-bell
+;;;; (domain/options, deleted R2.2) are gone, so %emit-bell always writes an
+;;;; audible BEL and %discard-background-bells always swallows a background
+;;;; window's pending bell without relaying it — see
+;;;; renderer-compose-effects.lisp.  %status-style-block-sgr (R2.4) no longer
+;;;; parses its BODY argument at all: every #[…] block resets to BASE-SGR
+;;;; regardless of content, since there is no config-authored style for a
+;;;; non-trivial BODY to mean anything any more — see
+;;;; renderer-statusbar-layout.lisp.
 
 (describe "renderer-suite"
 
@@ -75,16 +85,16 @@
     (let ((line (nerimux/renderer::%justify-right "" "" 10)))
       (expect (<= (length line) 10))))
 
-  ;;; ── render-session-to-string status on/off interaction ──────────────────────
+  ;;; ── render-session-to-string status content ─────────────────────────────────
 
-  ;; With status=T and default options, the frame includes the HH:MM time pattern.
-  (it "render-session-status-on-default-includes-time"
-    (with-isolated-options ("status" t "status-left" nil)
-      (let* ((sess (make-renderer-test-session 40 5))
-             (out  (render-session-to-string sess 6 40)))
-        ;; The default right status is HH:MM — 5 chars with a colon at position 2.
-        ;; We just check a colon is present in a 5-char time substring.
-        (expect (find #\: out)))))
+  ;; The frame always includes the HH:MM time pattern — status-right's fixed
+  ;; value is "#{time}", composed directly (R2.3).
+  (it "render-session-status-includes-time"
+    (let* ((sess (make-renderer-test-session 40 5))
+           (out  (render-session-to-string sess 6 40)))
+      ;; The default right status is HH:MM — 5 chars with a colon at position 2.
+      ;; We just check a colon is present in a 5-char time substring.
+      (expect (find #\: out))))
 
   ;;; ── inline #[attr] style blocks + SGR-aware width (renderer-statusbar) ────────
   ;;;
@@ -125,10 +135,12 @@
       (expect (search "AB" out))
       (expect (char= esc (char out 0)))))
 
-  ;; %status-style-block-sgr turns fg=green into the SGR colour code 32.
-  (it "status-style-block-fg-becomes-sgr"
+  ;; %status-style-block-sgr no longer parses BODY at all: an attribute-bearing
+  ;; body like "fg=green" resets to BASE-SGR exactly like "default"/"none"/"" do.
+  (it "status-style-block-body-ignored-always-resets-to-base"
     (let ((out (nerimux/renderer::%status-style-block-sgr "fg=green" "44;97")))
-      (expect (search (format nil "~C[32m" #\Escape) out))))
+      (expect (string= (format nil "~C[0;44;97m" #\Escape) out))
+      (expect (not (search (format nil "~C[32m" #\Escape) out)))))
 
   ;; %status-style-block-sgr default/none/empty resets to the base status SGR.
   (it "status-style-block-default-resets-to-base"
@@ -138,14 +150,16 @@
   (it "status-expand-style-blocks-no-block-unchanged"
     (check-status-expand-unchanged-cases "44;97" '("plain text" " 0 1:1* ")))
 
-  ;; %status-expand-style-blocks turns #[fg=green]X#[default] into SGR around X.
+  ;; %status-expand-style-blocks turns every #[…] block into the same reset-to-
+  ;; base SGR, regardless of the block's body — #[fg=green] no longer differs
+  ;; from #[default].
   (it "status-expand-style-blocks-converts-blocks"
-    (let* ((esc #\Escape)
-           (out (nerimux/renderer::%status-expand-style-blocks
-                 "#[fg=green]X#[default]Y" "44;97")))
+    (let* ((esc      #\Escape)
+           (out      (nerimux/renderer::%status-expand-style-blocks
+                      "#[fg=green]X#[default]Y" "44;97"))
+           (expected (format nil "~C[0;44;97mX~C[0;44;97mY" esc esc)))
       (expect (null (search "#[" out)))
-      (expect (search (format nil "~C[32mX" esc) out))
-      (expect (search (format nil "~C[0;44;97mY" esc) out))))
+      (expect (string= expected out))))
 
   ;; %clamp-status-segment measures visible cells; SGR escapes don't count and survive.
   (it "clamp-status-segment-counts-visible-not-sgr"
@@ -163,56 +177,29 @@
       (expect (= 20 (nerimux/renderer::%visible-length line)))
       (expect (search "RR" line))))
 
-  ;; render-status-bar expands status-left #[fg=green]…#[default] into real SGR,
-  ;; and no literal #[ block reaches the output.
-  (it "render-status-bar-inline-style-block-becomes-sgr"
-    (with-isolated-options ("status-left"  "#[fg=green]G#[default]"
-                            "status-right" nil
-                            "status-style" "")
-      (let* ((sess (make-renderer-test-session 40 6))
-             (out  (render-status-bar-output sess 10 40)))
-        (expect (search (format nil "~C[32m" #\Escape) out))
-        (expect (null (search "#[" out)))
-        (expect (find #\G out)))))
+  ;;; ── Background-window bell relay ─────────────────────────────────────────────
+  ;;;
+  ;;; bell-action (domain/options, deleted R2.2) always resolved to "any" with
+  ;;; no config able to set "none"/"other" (suppress relay): §1.1 retires the
+  ;;; alert machinery outright, so a background window's pending bell is now
+  ;;; always swallowed by %discard-background-bells before the frame is built
+  ;;; — see renderer-compose-effects.lisp.
 
-  ;;; ── Background-window bell relay (gap #23) ────────────────────────────────
+  ;; A pending bell in a non-active window never reaches the rendered frame,
+  ;; but is still consumed so it does not ring later when that window becomes active.
+  (it "render-session-background-bell-always-swallowed"
+    (let* ((sess  (make-fake-session :nwindows 2))
+           (win2  (second (nerimux/model:session-windows sess)))
+           (pane2 (first (nerimux/model:window-panes win2))))
+      (setf (nerimux/terminal/types:screen-bell-pending
+             (nerimux/model:pane-screen pane2)) t)
+      (let ((out (nerimux/renderer::render-session-to-string sess 5 20)))
+        (expect (null (find (code-char 7) out)))
+        (expect (null (nerimux/terminal/types:screen-bell-pending
+                       (nerimux/model:pane-screen pane2)))))))
 
-  ;; bell-action controls whether BEL in a non-active window reaches the rendered frame.
-  (it-each (("any"     t   "bell-action 'any': background BEL must appear")
-            ("other"   t   "bell-action 'other': background BEL must appear")
-            ("current" nil "bell-action 'current': background BEL must be swallowed")
-            ("none"    nil "bell-action 'none': all BELs must be swallowed"))
-      "render-session-background-bell-action: ~*~*~A"
-      (bell-action expected-bell-p desc)
-    (declare (ignore desc))
-    (with-isolated-options ("bell-action" bell-action "visual-bell" "off" "status" "off")
-      (let* ((sess  (make-fake-session :nwindows 2))
-             (win2  (second (nerimux/model:session-windows sess)))
-             (pane2 (first (nerimux/model:window-panes win2))))
-        (setf (nerimux/terminal/types:screen-bell-pending
-               (nerimux/model:pane-screen pane2)) t)
-        (let ((out (nerimux/renderer::render-session-to-string sess 5 20)))
-          (if expected-bell-p
-              (expect (find (code-char 7) out))
-              (expect (null (find (code-char 7) out))))
-          ;; The pending bell is consumed either way - a bell swallowed by
-          ;; bell-action must not ring later when its window becomes active.
-          (expect (null (nerimux/terminal/types:screen-bell-pending
-                         (nerimux/model:pane-screen pane2))))))))
-
-  ;; visual-bell off/both relay the audible BEL; on is visual-only.
-  (it "emit-bell-visual-bell-tri-state-table"
-    (dolist (row '(("off" t) ("both" t) ("on" nil)))
-      (destructuring-bind (visual expect-bel-p) row
-        (let ((out (with-output-to-string (s)
-                     (nerimux/renderer::%emit-bell s visual))))
-          (if expect-bel-p
-              (expect (find (code-char 7) out))
-              (expect (null (find (code-char 7) out))))))))
-
-  ;; %emit-bell rejects non-canonical visual-bell values instead of treating them as off.
-  (it "emit-bell-rejects-non-canonical-visual-bell"
-    (dolist (visual '(nil "" "disabled"))
-      (signals error
-        (with-output-to-string (s)
-          (nerimux/renderer::%emit-bell s visual))))))
+  ;; %emit-bell always writes the audible BEL — visual-bell's suppression
+  ;; branch is gone with the rest of the alert machinery (§1.1).
+  (it "emit-bell-always-audible"
+    (let ((out (with-output-to-string (s) (nerimux/renderer::%emit-bell s))))
+      (expect (find (code-char 7) out)))))

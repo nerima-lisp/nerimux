@@ -118,15 +118,20 @@
       ;; Scrollback must remain empty — the alt screen has no history.
       (expect (null (nerimux/terminal/types:screen-scrollback s)))))
 
-  ;; scroll-screen-to-history enforces the history limit after pushing all rows.
+  ;; scroll-screen-to-history enforces +max-scrollback-lines+ after pushing all
+  ;; rows.  Seeding the scrollback to just under the real 10,000 cap directly
+  ;; (cheap cons cells) and pushing only 10 real rows keeps this fast while
+  ;; still driving the push through the boundary at the real constant.
   (it "scroll-screen-to-history-respects-history-cap"
     (with-screen (s 5 10)
-      ;; Pre-fill 10 rows with content.
-      (dotimes (_ 10) (feed s "AAAAA"))
-      ;; Install a small cap so the push will trim.
-      (let ((nerimux/terminal/actions:*history-limit-function* (lambda () 5)))
-        (nerimux/terminal/actions:scroll-screen-to-history s))
-      (expect (<= (length (nerimux/terminal/types:screen-scrollback s)) 5)))))
+      (let ((cap nerimux/terminal:+max-scrollback-lines+))
+        (setf (nerimux/terminal/types:screen-scrollback s)
+              (loop repeat (- cap 3)
+                    collect (make-array 5 :initial-element
+                                          (nerimux/terminal/types:blank-cell))))
+        (dotimes (_ 10) (feed s "AAAAA"))
+        (nerimux/terminal/actions:scroll-screen-to-history s)
+        (expect (<= (length (nerimux/terminal/types:screen-scrollback s)) cap))))))
 
 ;;; ── SUITE: DEC Rectangle operations (DECERA / DECFRA / DECCRA) ───────────────
 ;;;

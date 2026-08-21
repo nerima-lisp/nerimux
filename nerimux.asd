@@ -74,29 +74,11 @@
        :serial t
        :components ((:file "package")))  ; loads package-* fragments; defines all packages
      ;; Foundation: depends on nothing, so it loads before every layer that calls
-     ;; it.  Placement is load-bearing -- domain/terminal, domain/format and
-     ;; application/config all call parse-integer-or-nil, and all three used to be
-     ;; compiled before the file that defined it.
+     ;; it.  Placement is load-bearing -- domain/terminal calls
+     ;; parse-integer-or-nil and used to be compiled before the file defining it.
      (:module "domain/text"
       :serial t
       :components ((:file "text-parse")))
-     (:module "application/config"
-      :serial t
-      :components
-      ((:file "config")
-       (:file "config-tokenizer")    ; config tokenizer + key/command parse tables
-         (:file "config-directives-macro")   ; generic directive-dispatch macro infra + posix/tilde/flag helpers
-         (:file "config-directives-bind-sequences") ; semicolon splitting for directive payloads
-         (:file "config-directives-set")     ; fixed-arity table + set-option flag handling/routing
-       (:file "config-option-side-effects") ; option runtime side effects
-       (:file "config-directives-runtime-services") ; shared shell execution services
-       (:file "config-directives-environment") ; set-environment handler
-       (:file "config-directives-if-shell") ; if-shell handler
-       (:file "config-directives-run-shell") ; run-shell handler
-       (:file "config-directives-source-file") ; source-file handler
-       (:file "config-loader")        ; directive dispatch + comment stripping + apply-config-line
-       (:file "config-preprocessor")  ; %if/%elif/%else/%endif state machine + brace/continuation joining
-       (:file "config-paths")))       ; config-file path resolution + load-config-file
      (:module "domain/ports"
       :serial t
       :components
@@ -176,22 +158,6 @@
       :serial t
       :components
       ((:file "vcs")))             ; optional cl-vcs-kit adapter
-     (:module "domain/format"
-      :serial t
-      :components
-      ((:file "format-helpers")    ; tmux-style format: pure data helpers + shorthand/arithmetic tables
-       (:file "format-strftime")   ; strftime support (#{t:format}): %strftime-letter-p + formatting engine
-       (:file "format-modifiers")  ; value-modifiers (#{b:}/#{d:}/#{=N:}/#{pN:}/#{s///:}/#{q:}/#{E:})
-       (:file "format-search")     ; glob/regex matching + pane content search (#{m:}/#{m/r:}/#{C:})
-       (:file "format-operators")  ; comparison and logical operators (#{==:}/#{!=:}/#{||:}/#{&&:})
-       (:file "format-iteration")  ; W:/S:/P: window/session/pane iteration expanders
-       (:file "format-shell-command") ; bounded shell-command port for #(command) expansion
-       (:file "format-delimiters") ; delimiter scanning plus #[...] and #(command) ports
-       (:file "format-brace")      ; core #{...} modifier/operator expansion
-       (:file "format-engine")     ; CPS processor and expand-format public entry points
-       (:file "format-context-os-probe") ; OS probes (pgrep/ps/lsof/proc) for pane_current_command/pane_current_path
-       (:file "format-context-screen") ; pane-geometry/screen/client section builders (mechanical getter tables)
-       (:file "format-context")))  ; context builder: model objects → expand-format plist
      (:module "application/picker"
       :serial t
       :components
@@ -203,18 +169,6 @@
       :serial t
       :components
       ((:file "target")))   ; session/window/pane target resolution (-t flag)
-     (:module "domain/options"
-      :serial t
-      :components
-      ((:file "options")             ; global option registry: hash-tables + define-option-table macros
-       (:file "options-registry-data") ; define-tmux-options/define-server-options DATA tables
-       (:file "options-scope")  ; scope dispatch + array-name parsing + spec lookup + presence predicates
-       (:file "options-api")    ; type coercions, define-option-accessor, public get/set API, scoped overrides
-       (:file "options-display"))) ; option display/rendering helpers (show-options, show-option-values)
-     (:module "domain/buffer"
-      :serial t
-      :components
-      ((:file "buffer")))   ; paste-buffer ring (uses options for buffer-limit)
      ;; commands context: what is left of the pane/window operations, plus the
      ;; copy-mode cluster.  commands-core loads first, then copy-mode, then the
      ;; two survivors split back to root via :pathname.  The tmux command

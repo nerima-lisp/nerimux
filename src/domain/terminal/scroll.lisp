@@ -34,35 +34,18 @@
 
 ;;; ── Scrollback trimming ────────────────────────────────────────────────────
 
-;;; The history-limit callback is set at startup by the higher-level layer
-;;; (buffer.lisp / main.lisp) once the options package is loaded.  NIL means
-;;; fall back to the compile-time constant.  Injecting the cap as a callback
-;;; rather than probing nerimux/options at call time keeps this file pure
-;;; (no runtime package discovery) and testable in isolation.
-(defconstant +max-scrollback-lines+ 1000
-  "Scrollback cap used when *HISTORY-LIMIT-FUNCTION* is not installed.
+(defconstant +max-scrollback-lines+ 10000
+  "Scrollback cap, in rows (§1.4).
 
-   This is the terminal model's own default, so it lives here rather than in the
-   config package: a domain file reaching up into application for its fallback
-   constant was a layering inversion, and the fallback is a property of the
-   scrollback buffer, not of the config file.")
-
-(defvar *history-limit-function* nil
-  "A zero-argument function returning the current history-limit integer, or NIL.
-   Install (lambda () (nerimux/options:get-option \"history-limit\")) at startup.")
-
-(declaim (inline %effective-history-limit))
-(defun %effective-history-limit ()
-  "Return the history-limit in effect: callback result if available, else +max-scrollback-lines+."
-  (or (and *history-limit-function* (funcall *history-limit-function*))
-      +max-scrollback-lines+))
+   This used to be a 1000-row fallback behind *HISTORY-LIMIT-FUNCTION*, a
+   callback the bootstrap layer installed so the terminal model never reached up
+   into the options package. With the option gone there is one number and no
+   injection point, so the callback and its fallback collapse into this.")
 
 (defun trim-scroll-history (screen)
-  "Cap the scrollback buffer of SCREEN to the current history-limit.
-   The limit is obtained from *history-limit-function* (injected at startup)
-   rather than discovered via find-package at call time.
-   Called after every scroll-up to honour runtime configuration changes."
-  (let* ((cap (%effective-history-limit))
+  "Cap the scrollback buffer of SCREEN to +MAX-SCROLLBACK-LINES+.
+   Called after every scroll-up."
+  (let* ((cap +max-scrollback-lines+)
          (len (length (screen-scrollback screen))))
     (when (> len cap)
       (let ((tail (nthcdr (1- cap) (screen-scrollback screen))))
@@ -77,19 +60,11 @@
             (delete-if (lambda (m) (< m (screen-history-trimmed screen)))
                        (screen-prompt-marks screen))))))
 
-;;; scroll-on-clear: when the whole screen is cleared (ED 2 / the `clear` command),
-;;; tmux (option on by default) first scrolls the visible content into history so it
-;;; remains in the scrollback.  Mirrors the *history-limit-function* injection so the
-;;; terminal layer stays free of any options dependency.
-(defvar *scroll-on-clear-function* nil
-  "A zero-argument function returning whether the `scroll-on-clear` option is on,
-   or NIL.  Install (lambda () (nerimux/options:get-option \"scroll-on-clear\")) at
-   startup.  When NIL (unset) scroll-on-clear is treated as OFF, so the clear-erase
-   behaviour is unchanged until a policy is installed.")
-
-(defun %scroll-on-clear-p ()
-  "True when a scroll-on-clear policy is installed and reports the option enabled."
-  (and *scroll-on-clear-function* (funcall *scroll-on-clear-function*)))
+;;; Clearing the whole screen (ED 2, or the `clear` command) first scrolls the
+;;; visible content into history, so what was on screen stays reachable in the
+;;; scrollback. This was the `scroll-on-clear` option, reached through a callback
+;;; the bootstrap layer installed; it is now unconditional, so both the option
+;;; and the injection point are gone and ERASE-DISPLAY simply always scrolls.
 
 (defun %push-row-to-scrollback (screen row)
   "Copy ROW of SCREEN into a new vector and prepend it to the scrollback list.

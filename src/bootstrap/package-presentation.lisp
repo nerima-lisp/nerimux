@@ -32,7 +32,7 @@
 ;; is no longer a dependency.)
 (defpackage #:nerimux/input
   (:use #:cl
-        #:nerimux/config #:nerimux/pty)
+        #:nerimux/ports #:nerimux/pty)
   (:documentation
    "INFRASTRUCTURE layer: keyboard input, read from fd 0 rather than from a Lisp
     stream.  A multiplexer has to see each keystroke the moment it arrives and has to

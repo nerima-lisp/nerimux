@@ -2,7 +2,6 @@
 
 (defpackage #:nerimux/commands
   (:use #:cl
-        #:nerimux/config
         #:nerimux/terminal
         #:nerimux/model)
   ;; NOT #:nerimux/pty.  That is infrastructure, and this is application: the one
@@ -35,7 +34,7 @@
 
 (defpackage #:nerimux
   (:use #:cl
-        #:nerimux/config
+        #:nerimux/ports
         #:nerimux/pty
         #:nerimux/terminal
         #:nerimux/model

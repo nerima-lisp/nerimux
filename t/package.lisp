@@ -150,8 +150,6 @@
                 #:make-listener #:accept-connection #:connect-to
                 #:socket-stream #:socket-fd #:close-socket
                 #:unix-socket-available-p)
-  (:import-from #:nerimux/config
-                #:apply-config-directive)
   (:import-from #:nerimux/commands
                 ;; pane PTY teardown: reader-thread EOF and server shutdown
                 #:close-pane-pty)

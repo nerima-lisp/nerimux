@@ -2,8 +2,17 @@
 
 ;;;; Escape-code format primitive tests.
 ;;;;
-;;;; Covers: ANSI escape-code helpers in src/renderer-format.lisp:
-;;;;   +esc+, move-to, define-cell-attr-renderer, cursor-invisible/visible, reset-attrs
+;;;; Covers: ANSI escape-code helpers in src/presentation/renderer/renderer-format.lisp:
+;;;;   +esc+, move-to, define-cell-attr-renderer, cursor-invisible/visible, reset-attrs,
+;;;;   set-cursor-shape, %emit-fg/%emit-bg, *color-downsample-fn*.
+;;;;
+;;;; R2.4 deleted the tmux style-string parser (parse-style-string,
+;;;; %split-style-tokens, %dispatch-style-token, %emit-style-attrs,
+;;;; %border-color-sgr, %color-name-to-sgr-number, %status-sgr-from-style,
+;;;; %effective-status-style) along with the option system it existed to
+;;;; read — see renderer-style.lisp and renderer-style-data.lisp.  Every
+;;;; style this renderer emits is now a fixed SGR constant, so there is no
+;;;; longer a runtime string to parse or classify.
 
 (describe "renderer-suite"
 
@@ -104,115 +113,6 @@
         (let ((out (cell-attrs-string fg bg 0)))
           (expect (search expected out))))))
 
-  ;; ── %split-style-tokens ─────────────────────────────────────────────────────
-
-  ;; %split-style-tokens splits on commas; single-token and empty-string edge cases.
-  (it-each (("bold"                  ("bold"))
-            ("fg=red,bold,underline" ("fg=red" "bold" "underline"))
-            (""                      ("")))
-      "%split-style-tokens ~S → ~S"
-      (input expected)
-    (expect (equal expected (nerimux/renderer::%split-style-tokens input))))
-
-  ;; ── %dispatch-style-token ───────────────────────────────────────────────────
-
-  ;; %dispatch-style-token sets the correct plist key for bold, reverse, and underline.
-  (it-each (("bold"      :bold)
-            ("reverse"   :reverse)
-            ("underline" :underline))
-      "%dispatch-style-token ~S sets ~S"
-      (token key)
-    (let ((cell (list nil)))
-      (expect (nerimux/renderer::%dispatch-style-token token cell) :to-be-truthy)
-      (expect (getf (car cell) key) :to-be-truthy)))
-
-  ;; %dispatch-style-token 'nobold' sets :bold NIL in result-cell.
-  (it "dispatch-style-token-nobold"
-    (let ((cell (list (list :bold t))))
-      (nerimux/renderer::%dispatch-style-token "nobold" cell)
-      (expect (null (getf (car cell) :bold)))))
-
-  ;; %dispatch-style-token returns NIL for an unknown token.
-  (it "dispatch-style-token-unknown-returns-nil"
-    (let ((cell (list nil)))
-      (expect (null (nerimux/renderer::%dispatch-style-token "completely-unknown" cell)))))
-
-  ;; ── %emit-style-attrs ───────────────────────────────────────────────────────
-
-  ;; %emit-style-attrs with :bold T pushes "1" onto parts.
-  (it "emit-style-attrs-bold"
-    (let ((parts (nerimux/renderer::%emit-style-attrs '(:bold t) nil)))
-      (expect (member "1" parts :test #'string=))))
-
-  ;; %emit-style-attrs pushes codes for all set attributes.
-  (it "emit-style-attrs-reverse-and-underline"
-    (let ((parts (nerimux/renderer::%emit-style-attrs '(:reverse t :underline t) nil)))
-      (expect (member "7" parts :test #'string=))
-      (expect (member "4" parts :test #'string=))))
-
-  ;; %emit-style-attrs with an empty style plist returns the unchanged parts.
-  (it "emit-style-attrs-empty-style-returns-nil-parts"
-    (let ((parts (nerimux/renderer::%emit-style-attrs nil nil)))
-      (expect (null parts))))
-
-  ;; ── %border-color-sgr ───────────────────────────────────────────────────────
-
-  ;; %border-color-sgr maps known colour names to SGR codes; nil for unknown; case-insensitive.
-  (it-each (("green"     32)
-            ("red"       31)
-            ("Blue"      34)
-            ("notacolor" nil))
-      "%border-color-sgr ~S → ~A"
-      (color expected)
-    (expect (equal expected (nerimux/renderer::%border-color-sgr color))))
-
-  ;; ── %color-name-to-sgr-number ───────────────────────────────────────────────
-
-  ;; %color-name-to-sgr-number maps named colours, colour-N, default, and unknown correctly
-  ;; for both fg (is-bg NIL) and bg (is-bg T).
-  (it-each (("red"       nil "31")
-            ("red"       t   "41")
-            ("colour4"   nil "38;5;4")
-            ("colour4"   t   "48;5;4")
-            ("default"   nil "39")
-            ("default"   t   "49")
-            ("notacolor" nil "39")
-            ("notacolor" t   "49"))
-      "%color-name-to-sgr-number ~S bg=~A → ~A"
-      (color is-bg expected)
-    (expect (string= expected
-                     (nerimux/renderer::%color-name-to-sgr-number color is-bg))))
-
-  ;; ── %status-sgr-from-style ───────────────────────────────────────────────────
-
-  ;; %status-sgr-from-style returns the default blue-on-white SGR for nil and empty string.
-  (it-each ((nil)
-            (""))
-      "%status-sgr-from-style ~S → default blue-on-white"
-      (arg)
-    (expect (string= "44;97" (nerimux/renderer::%status-sgr-from-style arg))))
-
-  ;; %status-sgr-from-style with 'bold' includes SGR code 1.
-  (it "status-sgr-from-style-bold"
-    (let ((sgr (nerimux/renderer::%status-sgr-from-style "bold")))
-      (expect (search "1" sgr))))
-
-  ;; ── %effective-status-style ─────────────────────────────────────────────────
-
-  ;; %effective-status-style is empty when status-style is not set.
-  (it "effective-status-style-empty-when-nothing-set"
-    (with-isolated-config
-      (expect (string= "" (nerimux/renderer::%effective-status-style)))))
-
-  ;; %effective-status-style returns the status-style option value directly.
-  (it "effective-status-style-returns-status-style"
-    (with-isolated-config
-      (nerimux/options:set-option "status-style" "fg=white,bg=blue,bold")
-      (let ((eff (nerimux/renderer::%effective-status-style)))
-        (expect (search "bold" eff))
-        (expect (search "fg=white" eff))
-        (expect (search "bg=blue" eff)))))
-
   ;; ── set-cursor-shape ─────────────────────────────────────────────────────────
 
   ;; set-cursor-shape emits the DECSCUSR sequence ESC[N q for each shape number.
@@ -238,8 +138,6 @@
       "emit fg ~A bg ~A → ~A"
       (fg bg expected)
     (expect (search expected (cell-attrs-string fg bg 0))))
-
-  ;; ── render-cell-attrs all attributes table ───────────────────────────────────
 
   ;; ── %rgb-int-to-256 / %maybe-downsample-color / *color-downsample-fn* ───────
   ;;

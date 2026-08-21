@@ -127,38 +127,46 @@
 
 (describe "terminal-suite/trim-scroll-history-suite"
 
-  ;; trim-scroll-history truncates the scrollback list when it exceeds the cap.
+  ;; trim-scroll-history truncates the scrollback list when it exceeds the
+  ;; real +max-scrollback-lines+ cap.  Overshooting by a fixed margin and
+  ;; checking exact equality (rather than <=) pins the boundary precisely —
+  ;; distinct from the <= check in scroll-tests-b.lisp's direct-call test.
   (it "trim-scroll-history-caps-at-effective-limit"
     (with-screen (s 5 3)
-      ;; Install 5 dummy rows
-      (setf (nerimux/terminal/types:screen-scrollback s)
-            (loop repeat 5 collect (make-array 5 :initial-element
-                                                 (nerimux/terminal/types:blank-cell))))
-      ;; Override the limit function to return 3
-      (let ((nerimux/terminal/actions:*history-limit-function* (lambda () 3)))
-        (nerimux/terminal/actions:trim-scroll-history s))
-      (expect (<= (length (nerimux/terminal/types:screen-scrollback s)) 3))))
+      (let ((cap nerimux/terminal:+max-scrollback-lines+))
+        (setf (nerimux/terminal/types:screen-scrollback s)
+              (loop repeat (+ cap 50)
+                    collect (make-array 5 :initial-element
+                                         (nerimux/terminal/types:blank-cell))))
+        (nerimux/terminal/actions:trim-scroll-history s)
+        (expect (= cap (length (nerimux/terminal/types:screen-scrollback s)))))))
 
-  ;; trim-scroll-history does nothing when scrollback is within the limit.
+  ;; trim-scroll-history does nothing when scrollback is well within the cap.
   (it "trim-scroll-history-noop-when-within-limit"
     (with-screen (s 5 3)
       (setf (nerimux/terminal/types:screen-scrollback s)
             (loop repeat 2 collect (make-array 5 :initial-element
                                                  (nerimux/terminal/types:blank-cell))))
-      (let ((nerimux/terminal/actions:*history-limit-function* (lambda () 100)))
-        (nerimux/terminal/actions:trim-scroll-history s))
+      (nerimux/terminal/actions:trim-scroll-history s)
       (expect (= 2 (length (nerimux/terminal/types:screen-scrollback s))))))
 
-  ;; Scrolling a full screen through many lines caps scrollback at the default limit.
+  ;; Feeding real lines through the emulator triggers automatic trimming once
+  ;; the real cap is reached.  Seeding scrollback to just under
+  ;; +max-scrollback-lines+ directly and feeding only 5 real lines keeps this
+  ;; fast while still driving the cap through the feed → scroll-up-one →
+  ;; trim-scroll-history path (see scroll-tests-b.lisp for the direct-call
+  ;; boundary test).
   (it "scroll-enforces-history-cap-during-feed"
     (with-screen (s 5 3)
-      ;; Feed enough lines to cause many scrolls (default cap is +max-scrollback-lines+)
-      ;; We use a small cap via *history-limit-function* to keep the test fast
-      (let ((nerimux/terminal/actions:*history-limit-function* (lambda () 5)))
-        (loop for i below 20
+      (let ((cap nerimux/terminal:+max-scrollback-lines+))
+        (setf (nerimux/terminal/types:screen-scrollback s)
+              (loop repeat (1- cap)
+                    collect (make-array 5 :initial-element
+                                         (nerimux/terminal/types:blank-cell))))
+        (loop for i below 5
               do (feed s (format nil "L~D" i))
-              do (feed s (format nil "~C~C" #\Return #\Linefeed))))
-      (expect (<= (length (nerimux/terminal/types:screen-scrollback s)) 5)))))
+              do (feed s (format nil "~C~C" #\Return #\Linefeed)))
+        (expect (<= (length (nerimux/terminal/types:screen-scrollback s)) cap))))))
 
 ;;; ── SUITE: decstbm (set scroll region) ──────────────────────────────────────
 

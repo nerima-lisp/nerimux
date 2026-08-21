@@ -139,31 +139,23 @@
          (panes       (when window (window-panes window)))
          (active-pane (or (and focus-pane
                                (find focus-pane panes :test #'eq))
-                          (session-active-pane session)))
-         ;; Status row count from the `status` option (0..5).  The pane layout
-         ;; reserves the matching count via nerimux/config:*status-height*, kept
-         ;; in sync by the `status` option's side-effect — so the bar and the
-         ;; pane area stay in lockstep in normal use.
-         (status-lines (nerimux/options:status-line-count))
-         (status-on   (> status-lines 0))
-         (status-pos  (nerimux/options:get-option "status-position" "bottom")))
+                          (session-active-pane session))))
     (cursor-invisible buffer)
     (%render-panes-and-borders buffer session window panes active-pane terminal-cols
                                :viewport viewport)
-    ;; pane-border-status title lines (drawn after borders so they overwrite border cells)
-    (when (and window panes
-               (string/= (nerimux/options:get-option "pane-border-status" "off") "off"))
-      (dolist (pane panes)
-        (%render-pane-border-status buffer pane session window)))
+    ;; pane-border-status (border title lines) is deleted outright — R6.6.
     ;; copy-mode search-match highlighting on the active pane (it is the one that
     ;; can be in copy mode), overdrawn after panes/borders.
     (when (and active-pane (pane-screen active-pane)
                (screen-copy-mode-p (pane-screen active-pane)))
       (%render-copy-search-matches buffer active-pane))
     (%render-overlay-layer buffer active-pane terminal-rows terminal-cols)
-    (when status-on
-      (render-status-region buffer session terminal-rows terminal-cols
-                            status-lines status-pos))
+    ;; Status line is fixed at one row, docked to the bottom (§1.4).
+    ;; `status`/`status-position` (domain/options, deleted R2.2) always
+    ;; resolved to "on" (1 row) / "bottom", which is exactly what
+    ;; render-status-bar's default :status-row (the bottom row) already
+    ;; draws — so this is not a behaviour change.
+    (render-status-bar buffer session terminal-rows terminal-cols)
     (when (eq mode :picker)
       (%render-client-picker buffer terminal-rows terminal-cols
                              (or picker-items '()) picker-query
@@ -177,13 +169,18 @@
     (%render-bell-and-cursor buffer active-pane)
     (%discard-background-bells session window)
     ;; set-titles: emit OSC 0 to set the outer terminal window title.
-    (when (nerimux/options:get-option "set-titles")
-      (let* ((title-fmt (nerimux/options:get-option "set-titles-string" "#W"))
-             (win        (session-active-window session))
-             (pane       (session-active-pane session))
-             (ctx        (nerimux/format:format-context-from-session session win pane))
-             (title      (nerimux/format:expand-format title-fmt ctx)))
-        (format buffer "~C]0;~A~C" +esc+ title (code-char 7))))
+    ;; set-titles defaulted to off (domain/options, deleted R2.2) — a change
+    ;; from that default, made unconditional per R2.2: R6.11 changes the
+    ;; CONTENT of the title later; this only removes the dead on/off branch,
+    ;; since nothing could ever have flipped it on with no config to write
+    ;; through.  set-titles-string's content is unchanged for now
+    ;; ("#S:#I:#W" = session name : window index : window name).
+    (let* ((win   (session-active-window session))
+           (title (format nil "~A:~D:~A"
+                          (session-name session)
+                          (if win (window-id win) 0)
+                          (if win (window-name win) ""))))
+      (format buffer "~C]0;~A~C" +esc+ title (code-char 7)))
     (get-output-stream-string buffer)))
 
 (defun render-session (session terminal-rows terminal-cols)

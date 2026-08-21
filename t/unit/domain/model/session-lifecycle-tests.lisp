@@ -60,25 +60,30 @@
 
   ;; ── Window index stability ──────────────────────────────────────────────────
 
-  ;; The first window created by create-initial-session gets id=base-index (0).
-  (it "window-index-starts-at-base-index"
+  ;; The first window created by create-initial-session gets id 1 (§1.4 of
+  ;; docs/notes/workspace-requirements.md: window / pane numbering starts at 1).
+  (it "window-index-starts-at-one"
     (unless (pty-available-p)
       (skip "no PTY available (sandboxed environment)"))
     (with-session (session 24 80)
       (let ((win (session-active-window session)))
-        (expect (= 0 (window-id win))))))
+        (expect (= 1 (window-id win))))))
 
-  ;; session-new-window assigns the lowest free id >= base-index, not 1+length.
+  ;; session-new-window assigns the lowest free id >= base-index, not
+  ;; 1+length.  §1.4 fixes base-index at 1 everywhere the app actually calls
+  ;; this (bootstrap/workspace-window.lisp's +first-window-index+), so the
+  ;; explicit 1 here mirrors production rather than relying on the function's
+  ;; own optional default of 0.
   (it "session-new-window-uses-lowest-free-id"
     (unless (pty-available-p)
       (skip "no PTY available (sandboxed environment)"))
     (with-session (session 24 80)
       (let ((first-win (session-active-window session)))
-        (expect (= 0 (window-id first-win)))
-        ;; Add a second window; should get id=1.
-        (session-new-window session "b" 23 80)
+        (expect (= 1 (window-id first-win)))
+        ;; Add a second window; should get id=2.
+        (session-new-window session "b" 23 80 1)
         (let* ((wins      (session-windows session))
-               (second-win (find 1 wins :key #'window-id)))
+               (second-win (find 2 wins :key #'window-id)))
           (expect second-win :to-be-truthy)))))
 
   ;; ── create-initial-session ID counter ───────────────────────────────────────

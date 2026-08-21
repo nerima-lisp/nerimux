@@ -69,35 +69,23 @@
                       (expect (eq :next-window cmd))
                       (expect (equal '("-t" "2") args))))))))))))
 
-  ;;; -- exit-unattached: terminate when the last client detaches ----------------
+  ;;; -- R8.3: the server never exits on its own ----------------------------------
 
-  ;; %exit-after-last-detach-p is true only when NO clients remain AND exit-unattached
-  ;; is on; default (off) keeps the session alive across detaches.
-  (it "exit-after-last-detach-respects-option"
-    (with-fresh-options
-      (let ((nerimux::*clients* nil))
-        (nerimux/options:set-option "exit-unattached" t)
-        (expect (nerimux::%exit-after-last-detach-p) :to-be-truthy))
-      (let ((nerimux::*clients* nil))
-        (nerimux/options:set-option "exit-unattached" nil)
-        (expect (nerimux::%exit-after-last-detach-p) :to-be-falsy))
-      (let ((nerimux::*clients* (list (nerimux::%make-client-conn))))
-        (nerimux/options:set-option "exit-unattached" t)
-        (expect (nerimux::%exit-after-last-detach-p) :to-be-falsy))))
-
-  ;; %exit-when-empty-p is true only when NO sessions remain AND exit-empty is on
-  ;; (default); off keeps the server alive with zero sessions.
-  (it "exit-when-empty-respects-option"
-    (with-fresh-options
-      (let ((nerimux::*server-sessions* nil))
-        (nerimux/options:set-option "exit-empty" t)
-        (expect (nerimux::%exit-when-empty-p) :to-be-truthy))
-      (let ((nerimux::*server-sessions* nil))
-        (nerimux/options:set-option "exit-empty" nil)
-        (expect (nerimux::%exit-when-empty-p) :to-be-falsy))
-      (let ((nerimux::*server-sessions* (list (cons "0" (make-fake-session)))))
-        (nerimux/options:set-option "exit-empty" t)
-        (expect (nerimux::%exit-when-empty-p) :to-be-falsy))))
+  ;; Dropping the last attached client must not stop the server: R8.3 retired
+  ;; exit-unattached and exit-empty (both now OFF-equivalent constants, i.e.
+  ;; gone from src entirely), so panes and the runtime stay alive across every
+  ;; client detaching.  Only an explicit :quit disposition — `nerimux kill` or
+  ;; the confirm-view quit — clears *running*.  Driven through
+  ;; %apply-client-disposition, the actual production caller of :drop
+  ;; (%run-multi-server-loop / %dispatch-ready-clients), rather than asserting
+  ;; a constant directly.
+  (it "last-client-detach-leaves-running-true"
+    (let* ((conn (nerimux::%make-client-conn))
+           (nerimux::*clients* (list conn))
+           (nerimux::*running* t))
+      (expect (null (nerimux::%apply-client-disposition :drop conn)))
+      (expect (null nerimux::*clients*))
+      (expect nerimux::*running* :to-be-truthy)))
 
   ;;; -- Integration: a broadcast frame reaches every attached client ------------
 

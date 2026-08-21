@@ -72,12 +72,14 @@
 
 ;;; ── Window-level pane ID allocation ────────────────────────────────────────
 
+(defconstant +pane-base-index+ 1
+  "First pane id in a window (§1.4: window / pane numbering starts at 1).")
+
 (defun next-pane-id (window)
-  "Smallest pane id >= pane-base-index not already used in WINDOW.
+  "Smallest pane id >= +PANE-BASE-INDEX+ not already used in WINDOW.
    Window-level concern: queries pane membership, not geometry."
-  (let* ((base (or (nerimux/options:get-option "pane-base-index") 0))
-         (used (mapcar #'pane-id (window-panes window))))
-    (loop for i from base
+  (let ((used (mapcar #'pane-id (window-panes window))))
+    (loop for i from +pane-base-index+
           unless (member i used) return i)))
 
 ;;; ── Size-hint conversion ────────────────────────────────────────────────────

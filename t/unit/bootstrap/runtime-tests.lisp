@@ -11,13 +11,6 @@
   `(let ((,pane-var (make-pane :id 1 :fd -1 :pid -1 :screen (make-screen 5 3))))
      ,@body))
 
-(defmacro with-isolated-state (&body body)
-  "Run BODY with config isolated (with-isolated-config).  Kept as a thin alias
-   so call sites that predate the removal of the hooks subsystem still read
-   the same; hooks isolation dropped out with nerimux/hooks."
-  `(with-isolated-config
-     ,@body))
-
 (describe "runtime-suite"
 
   ;;; ── Global variables exist and have sensible types ───────────────────────────
@@ -59,49 +52,10 @@
 
   ;;; ── CPS reader states ────────────────────────────────────────────────────────
 
-  ;; reader-eof-state returns NIL when remain-on-exit is not set.
-  (it "reader-eof-state-returns-nil-without-remain-on-exit"
+  ;; reader-eof-state always returns NIL and stops the reader loop: pane
+  ;; 終了時は即座に閉じる (§1.4).  R2.6 removed the remain-on-exit parking
+  ;; state (#'reader-remain-on-exit-state) and its banner entirely, so EOF has
+  ;; exactly one outcome now, independent of any option.
+  (it "reader-eof-state-always-returns-nil"
     (with-dead-pane (pane)
-      (with-isolated-options ("remain-on-exit" nil)
-        (expect (null (nerimux::reader-eof-state pane))))))
-
-  ;; reader-eof-state returns #'reader-remain-on-exit-state when remain-on-exit is set.
-  (it "reader-eof-state-returns-remain-state-when-option-set"
-    (with-dead-pane (pane)
-      (with-isolated-options ("remain-on-exit" t)
-        (let ((result (nerimux::reader-eof-state pane)))
-          (expect (functionp result))))))
-
-  ;; reader-eof-state honors a PANE-LOCAL remain-on-exit override at
-  ;; runtime: with the GLOBAL remain-on-exit NIL but the pane-local value set to
-  ;; T, reader-eof-state must return the parking state #'reader-remain-on-exit-state
-  ;; (proving runtime.lisp's get-option-for-pane read honors per-pane overrides).
-  (it "reader-eof-state-honors-pane-local-remain-on-exit"
-    (with-isolated-state
-      (let* ((sess (make-fake-session))
-             (pane (nerimux/model:session-active-pane sess))
-             (nerimux::*dirty* nil))
-        (nerimux/options:set-option "remain-on-exit" nil)
-        (nerimux/options:set-option-for-pane "remain-on-exit" "on" pane)
-        (let ((result (nerimux::reader-eof-state pane)))
-          (expect (eq #'nerimux::reader-remain-on-exit-state result))))))
-
-  ;; %remain-on-exit-banner expands remain-on-exit-format and wraps it in
-  ;; reverse video; an empty format falls back to the built-in message.
-  (it "remain-on-exit-banner-uses-format-option"
-    (let ((pane (make-pane :id 1 :fd -1 :pid -1 :screen (make-screen 10 3))))
-      (with-isolated-options ("remain-on-exit-format" "DEAD")
-        (let ((banner (nerimux::%remain-on-exit-banner pane)))
-          (expect (search "DEAD" banner))
-          (expect (search (format nil "~C[7m" #\Escape) banner))))
-      (with-isolated-options ("remain-on-exit-format" "")
-        (expect (string= nerimux::+remain-on-exit-message+
-                         (nerimux::%remain-on-exit-banner pane))))))
-
-  ;; reader-eof-state writes the remain-on-exit-format banner to the pane
-  ;; screen when remain-on-exit is set.
-  (it "reader-eof-state-writes-format-banner-to-screen"
-    (let ((pane (make-pane :id 1 :fd -1 :pid -1 :screen (make-screen 10 3))))
-      (with-isolated-options ("remain-on-exit" t "remain-on-exit-format" "BYE")
-        (nerimux::reader-eof-state pane)
-        (expect (search "BYE" (row-string (pane-screen pane) 0 :end 10)))))))
+      (expect (null (nerimux::reader-eof-state pane))))))

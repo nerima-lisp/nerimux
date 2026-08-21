@@ -55,35 +55,16 @@
         (check-table (list (list rows 30 "no clients → rows fallback to *term-rows*")
                            (list cols 100 "no clients → cols fallback to *term-cols*"))))))
 
-  ;; window-size "largest" sizes to the biggest attached client.
-  (it "multi-effective-size-largest-mode"
-    (with-fresh-options
-      (nerimux/options:set-option "window-size" "largest")
-      (let ((nerimux::*clients*
-              (list (nerimux::%make-client-conn :rows 50 :cols 200)
-                    (nerimux::%make-client-conn :rows 24 :cols 80))))
-        (multiple-value-bind (rows cols) (nerimux::%effective-client-size)
-          (check-table (list (list rows 50 "largest rows")
-                             (list cols 200 "largest cols")))))))
-
-  ;; window-size "latest" sizes to the most-recent client (front of *clients*).
-  (it "multi-effective-size-latest-mode"
-    (with-fresh-options
-      (nerimux/options:set-option "window-size" "latest")
-      (let ((nerimux::*clients*
-              (list (nerimux::%make-client-conn :rows 40 :cols 120)   ; most recent
-                    (nerimux::%make-client-conn :rows 24 :cols 80))))
-        (multiple-value-bind (rows cols) (nerimux::%effective-client-size)
-          (check-table (list (list rows 40 "latest rows")
-                             (list cols 120 "latest cols")))))))
-
-  ;; window-size "manual" ignores client sizes and keeps *term-rows*/cols.
-  (it "multi-effective-size-manual-mode-keeps-current"
-    (with-fresh-options
-      (nerimux/options:set-option "window-size" "manual")
-      (let ((nerimux::*clients* (list (nerimux::%make-client-conn :rows 99 :cols 99)))
-            (nerimux::*term-rows* 30)
-            (nerimux::*term-cols* 100))
-        (multiple-value-bind (rows cols) (nerimux::%effective-client-size)
-          (check-table (list (list rows 30 "manual keeps current rows")
-                             (list cols 100 "manual keeps current cols"))))))))
+  ;; The window-size option ("largest" / "latest" / "manual") is gone with
+  ;; domain/options (R2.2): §1.4 hardcodes the shared size to always follow
+  ;; the smallest attached client, with no other mode selectable, so a third
+  ;; client joining at a smaller size than either of the two already covered
+  ;; above still pulls the effective size down further.
+  (it "multi-effective-size-smallest-still-wins-with-three-clients"
+    (let ((nerimux::*clients*
+            (list (nerimux::%make-client-conn :rows 50 :cols 200)
+                  (nerimux::%make-client-conn :rows 40 :cols 120)
+                  (nerimux::%make-client-conn :rows 24 :cols 80))))
+      (multiple-value-bind (rows cols) (nerimux::%effective-client-size)
+        (check-table (list (list rows 24 "effective rows = smallest of three clients")
+                           (list cols 80 "effective cols = smallest of three clients")))))))

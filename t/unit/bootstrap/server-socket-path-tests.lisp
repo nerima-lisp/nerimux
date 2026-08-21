@@ -21,42 +21,40 @@
           (p2 (nerimux::socket-path "beta")))
       (expect (string/= p1 p2))))
 
-  ;; socket-path embeds $TMPDIR in the result when it is set, overriding /tmp.
+  ;; socket-path embeds $TMPDIR in the result when it is set (§1.4 / R2.7):
+  ;; no -L/-S override and no $TMUX_TMPDIR exist any more (R1.17 removed the
+  ;; CLI flags, R2.7 dropped the env var alongside them), so $TMPDIR is the
+  ;; only input to the socket base directory.
   (it "socket-path-uses-tmpdir-env-var"
-    (with-temporary-posix-environment-variable ("TMUX_TMPDIR" nil)
-      (with-temporary-posix-environment-variable ("TMPDIR" "/var/folders/test")
-        (let ((path (nerimux::socket-path "envtest")))
-          (expect (search "/var/folders/test" path))))))
+    (with-temporary-posix-environment-variable ("TMPDIR" "/var/folders/test")
+      (let ((path (nerimux::socket-path "envtest")))
+        (expect (search "/var/folders/test" path)))))
 
   ;; socket-path uses /tmp as the socket directory when $TMPDIR is unset.
   (it "socket-path-falls-back-to-tmp-when-no-tmpdir"
-    (with-temporary-posix-environment-variable ("TMUX_TMPDIR" nil)
-      (with-temporary-posix-environment-variable ("TMPDIR" nil)
-        (let ((path (nerimux::socket-path "tmptestfb")))
-          (expect (search "/tmp" path))))))
-
-  ;; socket-path prefers $TMUX_TMPDIR over $TMPDIR (tmux precedence).
-  (it "socket-path-tmux-tmpdir-beats-tmpdir"
-    (with-temporary-posix-environment-variable ("TMUX_TMPDIR" "/tmp/tmux-tmpdir-test")
-      (let ((path (nerimux::socket-path "envtest2")))
-        (expect (search "/tmp/tmux-tmpdir-test" path)))))
+    (with-temporary-posix-environment-variable ("TMPDIR" nil)
+      (let ((path (nerimux::socket-path "tmptestfb")))
+        (expect (search "/tmp" path)))))
 
   ;; Sockets live in a per-UID directory.
   (it "socket-path-uses-per-uid-directory"
-    (with-temporary-posix-environment-variable ("TMUX_TMPDIR" nil)
-      (let ((path (nerimux::socket-path "uidtest")))
-        (expect (search (format nil "nerimux-~D/" (sb-posix:getuid)) path)))))
+    (let ((path (nerimux::socket-path "uidtest")))
+      (expect (search (format nil "nerimux-~D/" (sb-posix:getuid)) path))))
 
-  ;; The global -S flag returns its path verbatim; -L replaces the socket name.
-  (it "socket-path-honors-global-flag-overrides"
-    (let ((nerimux::*socket-path-override* "/tmp/custom-nerimux.sock")
-          (nerimux::*socket-name-override* nil))
-      (expect (string= "/tmp/custom-nerimux.sock" (nerimux::socket-path "whatever"))))
-    (let ((nerimux::*socket-path-override* nil)
-          (nerimux::*socket-name-override* "mylabel"))
-      (let ((path (nerimux::socket-path "ignored-name")))
-        (expect (search "nerimux-mylabel.sock" path))
-        (expect (null (search "ignored-name" path))))))
+  ;; The per-UID socket directory is created mode 0700 (§1.4 / R2.7), so a
+  ;; socket file another local user could connect through is not left
+  ;; reachable via a world/group-traversable directory.
+  (it "socket-directory-is-mode-0700"
+    (let ((dir (nerimux::%socket-directory)))
+      (expect (= #o700 (logand (sb-posix:stat-mode (sb-posix:stat dir)) #o777)))))
+
+  ;; socket-path uses a fixed name for a given session name — no -L/-S
+  ;; override can change it (R1.17 removed both CLI flags).
+  (it "socket-path-name-is-fixed-for-a-given-session-name"
+    (let ((p1 (nerimux::socket-path "fixedname"))
+          (p2 (nerimux::socket-path "fixedname")))
+      (expect (string= p1 p2))
+      (expect (search "nerimux-fixedname.sock" p1))))
 
   ;;; -- stale-socket ------------------------------------------------------------
 
@@ -90,16 +88,17 @@
   ;; never produces a socket (a crashed or never-started background server),
   ;; rather than returning silently as if it had succeeded — a real user
   ;; would otherwise see `new-session -d` "succeed" with no server running.
+  ;; A random, never-used session name stands in for "no server running":
+  ;; there is no override left to force an unreachable path (R1.17 removed
+  ;; -L/-S), so socket-path's real, fixed-name resolution is exercised as-is.
   (it "ensure-server-running-signals-when-socket-never-appears"
     (with-stubbed-fdefinition
         ((nerimux::%launch-server-and-poll-when-live
           (lambda (&rest args) (declare (ignore args)) nil)))
-      (let ((nerimux::*socket-path-override*
-              "/nonexistent-dir-xyz/nerimux-never-appears.sock")
-            (nerimux::*socket-name-override* nil))
-        (signals error
-          (nerimux::%ensure-server-running "test-session")
-          "must signal when the socket never appears after launch-and-poll"))))
+      (signals error
+        (nerimux::%ensure-server-running
+         (format nil "test-session-never-appears-~D" (random 1000000)))
+        "must signal when the socket never appears after launch-and-poll")))
 
   ;;; -- launch-server-and-poll: diagnostics must not block startup --------------
 
@@ -193,62 +192,38 @@
                         (logand (sb-posix:stat-mode (sb-posix:stat dir)) #o777))))
         (ignore-errors (sb-posix:rmdir dir)))))
 
-  ;;; -- option-reader port installation ----------------------------------------
+  ;;; -- server log rotation (R2.8) ------------------------------------------
 
-  ;; run-server must install the three option-reader ports the terminal layer
-  ;; consults.  They were installed only on the deleted standalone startup path,
-  ;; so on the surviving entry point `history-limit', `alternate-screen' and
-  ;; `scroll-on-clear' were inert -- and inert SILENTLY, because every unset
-  ;; fallback succeeds: the history limit quietly used a fixed constant, and
-  ;; (or (null fn) ...) made alternate-screen unconditionally allowed.  Nothing
-  ;; errored, so nothing caught it.
-  ;;
-  ;; Asserting functionp alone would not be enough -- a callback wired to the
-  ;; wrong option would still be a function.  Each is called and checked against
-  ;; the live option value it is supposed to read.
-  (it "run-server-installs-the-option-reader-ports"
-    (let ((nerimux/terminal:*history-limit-function* nil)
-          (nerimux/terminal:*alternate-screen-enabled-function* nil)
-          (nerimux/terminal:*scroll-on-clear-function* nil))
-      (nerimux::%install-composition-root-hooks)
-      (expect (functionp nerimux/terminal:*history-limit-function*))
-      (expect (functionp nerimux/terminal:*alternate-screen-enabled-function*))
-      (expect (functionp nerimux/terminal:*scroll-on-clear-function*))
-      (expect (eql (nerimux/options:get-option "history-limit")
-                   (funcall nerimux/terminal:*history-limit-function*)))
-      (expect (eql (nerimux/options:get-option "alternate-screen")
-                   (funcall nerimux/terminal:*alternate-screen-enabled-function*)))
-      (expect (eql (nerimux/options:get-option "scroll-on-clear")
-                   (funcall nerimux/terminal:*scroll-on-clear-function*)))))
-
-  ;; The port must track the option, not capture its value at install time.
-  (it "installed-history-limit-port-follows-the-live-option"
-    (let ((nerimux/terminal:*history-limit-function* nil)
-          (original (nerimux/options:get-option "history-limit")))
-      (nerimux::%install-composition-root-hooks)
+  ;; %server-log-if-output-exists-action returns :append when LOG-PATH does
+  ;; not exist yet (first server start for this name), and when it exists but
+  ;; is smaller than +server-log-rotate-bytes+.
+  (it "server-log-if-output-exists-action-appends-when-small-or-absent"
+    (expect (eq :append
+                (nerimux::%server-log-if-output-exists-action
+                 "/nonexistent-dir-xyz/never-created.log")))
+    (let ((path (format nil "~A/nerimux-log-small-test-~D.log"
+                        (string-right-trim "/" (or (sb-ext:posix-getenv "TMPDIR") "/tmp"))
+                        (random 1000000))))
       (unwind-protect
            (progn
-             (nerimux/options:set-option "history-limit" 4321)
-             (expect (eql 4321 (funcall nerimux/terminal:*history-limit-function*))))
-        (nerimux/options:set-option "history-limit" original))))
+             (with-open-file (s path :direction :output :if-does-not-exist :create)
+               (write-string "small log, well under the rotation threshold" s))
+             (expect (eq :append (nerimux::%server-log-if-output-exists-action path))))
+        (ignore-errors (delete-file path)))))
 
-  ;; The config layer resolves `set-environment -t TARGET' through this hook
-  ;; rather than calling NERIMUX::SERVER-FIND-SESSION, which would be the
-  ;; APPLICATION layer reaching up into BOOTSTRAP.  The hook defaults to NIL and
-  ;; every unresolved lookup answers NIL, so an uninstalled hook would look
-  ;; exactly like an unknown target name -- silent, which is the failure mode the
-  ;; three option ports above already demonstrated.  Hence this assertion lives
-  ;; here, against the composition root, and not only in the config tests: the
-  ;; config test helper binds the hook itself and therefore cannot prove that
-  ;; run-server does.
-  ;;
-  ;; Checking FUNCTIONP alone would pass for a hook wired to the wrong function,
-  ;; so the installed hook is called against a registry holding a known session.
-  (it "run-server-installs-the-session-lookup-hook"
-    (let ((nerimux/config:*session-lookup* nil))
-      (nerimux::%install-composition-root-hooks)
-      (expect (functionp nerimux/config:*session-lookup*))
-      (let* ((session (make-fake-session :nwindows 1 :npanes 1))
-             (nerimux::*server-sessions* (list (cons "hook-probe" session))))
-        (expect (eq session (funcall nerimux/config:*session-lookup* "hook-probe")))
-        (expect (null (funcall nerimux/config:*session-lookup* "no-such-session")))))))
+  ;; %server-log-if-output-exists-action returns :supersede — start a fresh
+  ;; file — once LOG-PATH is at or above +server-log-rotate-bytes+ (1 MB,
+  ;; §1.4 / R2.8), so a server that has been running a long time does not
+  ;; grow its log file without bound.
+  (it "server-log-if-output-exists-action-supersedes-past-1mb"
+    (let ((path (format nil "~A/nerimux-log-big-test-~D.log"
+                        (string-right-trim "/" (or (sb-ext:posix-getenv "TMPDIR") "/tmp"))
+                        (random 1000000))))
+      (unwind-protect
+           (progn
+             (with-open-file (s path :direction :output :if-does-not-exist :create)
+               (write-sequence
+                (make-string nerimux::+server-log-rotate-bytes+ :initial-element #\a)
+                s))
+             (expect (eq :supersede (nerimux::%server-log-if-output-exists-action path))))
+        (ignore-errors (delete-file path))))))

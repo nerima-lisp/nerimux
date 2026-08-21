@@ -1,11 +1,19 @@
 (in-package #:nerimux/test)
 
-;;;; renderer tests — part G: direct unit tests for %dispatch-align-token,
-;;;; %split-align-attr, %status-align-buckets, %status-bar-default-segments,
-;;;; and %content-search-match-p flag matrix.
+;;;; renderer tests — part G: direct unit tests for %split-align-attr,
+;;;; %status-align-buckets, and %status-bar-default-segments.
 ;;;;
 ;;;; These helpers previously had no direct unit tests — they were covered only
 ;;;; transitively through %compose-aligned-line and #{C:} integration tests.
+;;;;
+;;;; domain/format (R2.3) is gone, taking nerimux/format::%content-search-
+;;;; match-p and its whole #{C:} content-search format directive with it — see
+;;;; renderer-format-tests.lisp's header for the deletion list.
+;;;; %status-bar-default-segments (R2.2) no longer takes a format context or
+;;;; returns a justify value: status-justify is fixed "left" (its registered
+;;;; default, §1.4) with no config able to set it otherwise, so the function's
+;;;; signature is now (session sgr-code) → (values left right) — see
+;;;; renderer-statusbar.lisp.
 
 (describe "renderer-suite"
 
@@ -119,85 +127,16 @@
       (expect (string= "" centre))
       (expect (string= "" right))))
 
-  ;;; ── %content-search-match-p flag matrix ──────────────────────────────────────
-  ;;;
-  ;;; %content-search-match-p tests LINE against TERM using the four flag
-  ;;; combinations: plain-glob / regex (regex-p) × case-sensitive / insensitive
-  ;;; (ci-p).  Plain-glob wraps TERM as *TERM* (contains-with-globbing); regex
-  ;;; scans the whole line.  These direct unit tests complement the #{C:} end-to-
-  ;;; end integration tests in format-tests-e.lisp.
-
-  ;; %content-search-match-p (glob, case-sensitive) matches when TERM is a substring.
-  (it "content-search-match-p-plain-glob-match"
-    (expect (nerimux/format::%content-search-match-p "foo" "foobar" nil nil) :to-be-truthy)
-    (expect (nerimux/format::%content-search-match-p "bar" "foobar" nil nil) :to-be-truthy)
-    (expect (nerimux/format::%content-search-match-p "baz" "foobar" nil nil) :to-be-falsy))
-
-  ;; %content-search-match-p (glob, ci-p=NIL) is case-sensitive.
-  (it "content-search-match-p-plain-glob-case-sensitive"
-    (expect (nerimux/format::%content-search-match-p "FOO" "foobar" nil nil) :to-be-falsy))
-
-  ;; %content-search-match-p (glob, ci-p=T) folds case on both pattern and line.
-  (it "content-search-match-p-glob-case-insensitive"
-    (expect (nerimux/format::%content-search-match-p "FOO" "foobar" nil t) :to-be-truthy)
-    (expect (nerimux/format::%content-search-match-p "foo" "FOOBAR" nil t) :to-be-truthy))
-
-  ;; %content-search-match-p (regex, case-sensitive) matches regex against the full line.
-  (it "content-search-match-p-regex-match"
-    (expect (nerimux/format::%content-search-match-p "b.r" "foobar" t nil) :to-be-truthy)
-    (expect (nerimux/format::%content-search-match-p "b.r" "foobaz" t nil) :to-be-falsy))
-
-  ;; %content-search-match-p (regex) respects ^ anchor — ^foo matches line start only.
-  (it "content-search-match-p-regex-anchor"
-    (expect (nerimux/format::%content-search-match-p "^foo" "foobar" t nil) :to-be-truthy)
-    (expect (nerimux/format::%content-search-match-p "^bar" "foobar" t nil) :to-be-falsy))
-
-  ;; %content-search-match-p (regex, ci-p=T) folds case for the regex scan.
-  (it "content-search-match-p-regex-case-insensitive"
-    (expect (nerimux/format::%content-search-match-p "FOO" "foobar" t t) :to-be-truthy))
-
   ;;; ── %status-bar-default-segments ─────────────────────────────────────────────
   ;;;
-  ;;; %status-bar-default-segments returns (values LEFT RIGHT JUSTIFY) from live
-  ;;; session state and options.  We exercise the main paths: default clock right,
-  ;;; custom status-right, and the justify option.
+  ;;; %status-bar-default-segments returns (values LEFT RIGHT) composed from
+  ;;; live session state — status-justify is no longer a third return value
+  ;;; (see file header).
 
-  ;; %status-bar-default-segments returns exactly three values: left, right, justify.
-  (it "status-bar-default-segments-returns-three-values"
-    (with-empty-status-bar-options ("status-justify" "left")
-      (let* ((sess (make-renderer-test-session 80 6))
-             (ctx  (nerimux/format:format-context-from-session
-                    sess
-                    (nerimux/model:session-active-window sess)
-                    (nerimux/model:session-active-pane sess))))
-        (multiple-value-bind (left right justify)
-            (nerimux/renderer::%status-bar-default-segments sess ctx "44;97")
-          (expect (stringp left))
-          (expect (stringp right))
-          (expect (stringp justify))))))
-
-  ;; %status-bar-default-segments returns the status-justify option as the third value.
-  (it "status-bar-default-segments-justify-option-propagated"
-    (with-empty-status-bar-options ("status-justify" "centre")
-      (let* ((sess (make-renderer-test-session 80 6))
-             (ctx  (nerimux/format:format-context-from-session
-                    sess
-                    (nerimux/model:session-active-window sess)
-                    (nerimux/model:session-active-pane sess))))
-        (multiple-value-bind (_left _right justify)
-            (nerimux/renderer::%status-bar-default-segments sess ctx "44;97")
-          (declare (ignore _left _right))
-          (expect (string= "centre" justify))))))
-
-  ;; %status-bar-default-segments reflects a custom status-right option in RIGHT.
-  (it "status-bar-default-segments-custom-right-appears"
-    (with-isolated-options ("status-right" "MY-RIGHT" "status-left" nil)
-      (let* ((sess (make-renderer-test-session 80 6))
-             (ctx  (nerimux/format:format-context-from-session
-                    sess
-                    (nerimux/model:session-active-window sess)
-                    (nerimux/model:session-active-pane sess))))
-        (multiple-value-bind (_left right _justify)
-            (nerimux/renderer::%status-bar-default-segments sess ctx "44;97")
-          (declare (ignore _left _justify))
-          (expect (search "MY-RIGHT" right)))))))
+  ;; %status-bar-default-segments returns exactly two string values: left and right.
+  (it "status-bar-default-segments-returns-two-values"
+    (let ((sess (make-renderer-test-session 80 6)))
+      (multiple-value-bind (left right)
+          (nerimux/renderer::%status-bar-default-segments sess "44;97")
+        (expect (stringp left))
+        (expect (stringp right))))))

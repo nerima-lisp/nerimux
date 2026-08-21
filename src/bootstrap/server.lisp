@@ -23,24 +23,14 @@
 (defvar *runtime-server-name* "default"
   "Name used to select the server's persistent runtime snapshot.")
 
-(defvar *socket-path-override* nil
-  "Full socket path from the global -S flag (tmux -S); when set, socket-path
-   returns it verbatim for every server name.")
-
-(defvar *socket-name-override* nil
-  "Socket name from the global -L flag (tmux -L); when set, it replaces the
-   server-name-derived socket file name inside the per-UID socket directory.")
-
 (defun %socket-tmp-base ()
-  "The socket base directory: $TMUX_TMPDIR, else $TMPDIR, else /tmp — the same
-   precedence real tmux uses."
-  (let ((tmux-tmpdir (sb-ext:posix-getenv "TMUX_TMPDIR"))
-        (tmpdir      (sb-ext:posix-getenv "TMPDIR")))
+  "The socket base directory: $TMPDIR, else /tmp (§1.4 — no -L/-S override,
+   and no tmux-derived temp-dir env var: R1.17 removed the CLI flags that
+   could reach an override, and R2.7 drops that env var alongside them)."
+  (let ((tmpdir (sb-ext:posix-getenv "TMPDIR")))
     (string-right-trim
      "/"
-     (cond ((and tmux-tmpdir (plusp (length tmux-tmpdir))) tmux-tmpdir)
-           ((and tmpdir (plusp (length tmpdir))) tmpdir)
-           (t "/tmp")))))
+     (if (and tmpdir (plusp (length tmpdir))) tmpdir "/tmp"))))
 
 (defun %socket-directory ()
   "Per-UID socket directory <base>/nerimux-<uid> (tmux's /tmp/tmux-UID/),
@@ -56,22 +46,20 @@
     dir))
 
 (defun socket-path (name)
-  "Filesystem path of the Unix socket for the server named NAME.
-   tmux layout: sockets live in a private per-UID directory under $TMUX_TMPDIR
-   (or $TMPDIR, or /tmp).  The global -S flag (*socket-path-override*) supplies
-   a verbatim path; -L (*socket-name-override*) picks a different socket name
-   in the per-UID directory."
-  (or *socket-path-override*
-      (format nil "~A/nerimux-~A.sock"
-              (%socket-directory)
-              (or *socket-name-override* name))))
+  "Filesystem path of the Unix socket for the server named NAME: a fixed name
+   inside the per-UID socket directory (§1.4). No -L/-S override exists —
+   R1.17 removed the CLI flags that could set one."
+  (format nil "~A/nerimux-~A.sock" (%socket-directory) name))
+
+(defconstant +status-line-rows+ 1
+  "Rows the status bar occupies. Fixed at 1 (§1.4 — no `status' option).")
 
 (defun %relayout-active-window (session rows cols)
   "Relayout SESSION's active window for ROWS and COLS, if any."
   (let ((active-window (session-active-window session)))
     (when active-window
       (window-relayout active-window
-                       (- rows (nerimux/options:status-line-count))
+                       (- rows +status-line-rows+)
                        cols))))
 
 ;;; ── Message-type dispatch macro ──────────────────────────────────────────────
@@ -107,57 +95,12 @@
                      `(,condition ,@body)))
                  rules))))
 
-(defun %install-composition-root-hooks ()
-  "Install every callback a lower layer needs from this, the composition root.
-
-   Two kinds live here.  The option readers let the terminal layer read an option
-   WITHOUT depending on the options package, and *session-lookup* lets the config
-   layer resolve a target name against the live session registry WITHOUT
-   depending on this bootstrap package.  Both are the same dependency inversion,
-   and both are installed in one function so there is a single place to forget
-   rather than several.
-
-   Each of these is a callback the domain or application calls.  When one is not
-   installed the caller falls back -- and every fallback succeeds silently, which
-   is why this being missing produced no error and no warning:
-
-     *history-limit-function*             unset -> trimming uses a fixed 1000,
-                                          so `history-limit' (default 2000) had
-                                          no effect on what was actually trimmed,
-                                          even though #{history_limit} reads the
-                                          option directly and displayed the new
-                                          value.
-     *alternate-screen-enabled-function*  unset -> (or (null fn) ...) is always
-                                          true, so `alternate-screen' could never
-                                          turn the alt screen off.
-     *scroll-on-clear-function*           unset -> same shape.
-
-     nerimux/config:*session-lookup*      unset -> set-environment -t resolves
-                                          nothing, exactly as an unknown target
-                                          name would.
-
-   The three option readers lived in the deleted main.lisp and were only ever
-   called on the standalone / control-mode startup path; run-server never called
-   them, so on the surviving entry point these three options were inert."
-  (setf nerimux/terminal:*history-limit-function*
-        (lambda () (nerimux/options:get-option "history-limit"))
-        nerimux/terminal:*alternate-screen-enabled-function*
-        (lambda () (nerimux/options:get-option "alternate-screen"))
-        nerimux/terminal:*scroll-on-clear-function*
-        (lambda () (nerimux/options:get-option "scroll-on-clear"))
-        nerimux/config:*session-lookup*
-        #'server-find-session))
-
 (defun run-server (name)
   "Run a headless server owning a session, serving clients attaching to
    (socket-path NAME).  The session persists across detaches until its last
    window is killed."
   (require :sb-posix)
   (install-pty-port)              ; wire the PTY adapter into the domain port
-  (%install-composition-root-hooks) ; wire every lower-layer callback (see above)
-  ;; $SHELL first, so a default-shell line in the config file still wins.
-  (init-default-shell)
-  (ignore-errors (load-config-file))
   (setf *running*          t
         *dirty*            t
         *resize-pending*   nil

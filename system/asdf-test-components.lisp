@@ -20,7 +20,6 @@
       (:file "helpers-pty-runtime")
       (:file "helpers-network-listener")
       (:file "helpers-net-protocol")
-      (:file "helpers-options")
       (:file "helpers-process-fixtures")
       (:file "helpers-screen-assertions")
       (:file "helpers-loop-fixtures")
@@ -132,51 +131,12 @@
          :serial t
          :components
          ((:file "global-picker-tests")))
-        (:module "domain/format"
-         :serial t
-         :components
-         ((:file "format-tests") ; format expansion - part I (shorthands, brace/conditional, context, window_flags, helpers)
-          (:file "format-tests-d") ; format expansion - part IV (shorthand-table, %expand-brace, %truthy-p, pane/client vars)
-          (:file "format-structural-tests") ; structural pane/session/window/terminal format variables
-          (:file "format-modifier-tests") ; truncation/logical/quote/char/path modifiers
-          (:file "format-tests-b") ; format expansion - part II (path/substitute/nested/strftime/context/glob/regex)
-          (:file "format-tests-c") ; format expansion - part III (arithmetic/vars/geometry/pane_at_edges/pane-synchronized)
-          (:file "format-tests-e") ; format expansion - part V (content-search, glob-match-p, pane-visible-lines, apply-pad-modifier, window-raw-flags)
-          (:file "format-tests-f"))) ; format expansion - part VI (new context keys, modifier chaining, glob/regex match, format variables)
         (:module "domain/model-2"
          :pathname "domain/model"
          :serial t
          :components
          ((:file "target-tests") ; parse-session/window/pane/target, find-by-target - part I
           (:file "target-tests-b"))) ; %sigil-id, %name-prefix-p, edge cases, table-driven parse-target, multi-digit ids - part II
-        (:module "domain/buffer"
-         :serial t
-         :components
-         ((:file "buffer-tests-ring")
-          (:file "buffer-tests-clipboard")
-          (:file "buffer-tests-named")))
-        (:module "domain/options"
-         :serial t
-         :components
-         ((:file "options-tests") ; option registry, coercions, boolean defaults, make-option-spec - part I
-          (:file "options-display-tests") ; scope/display presence, array names, value display quoting
-          (:file "options-tests-b") ; define-option-accessor, type-coercions, scoped overrides, show-options - part II
-          (:file "options-tests-c"))) ; type-coercion dispatch, option-table macro, spec accessors, server options, show-option sorting - part III
-        (:module "application/config"
-         :serial t
-         :components
-         ((:file "config-key-table-runtime-tests")
-          (:file "config-directives-tests") ; directive parsing - part I (suite, bindable commands, basic apply/set directives)
-          (:file "config-load-tests") ; directive parsing - load strings/streams/files and config paths
-          (:file "config-bind-directive-tests") ; directive parsing - bind/unbind, notes, brace blocks, sequences
-          (:file "config-directives-tests-c") ; directive parsing - part III (load-config-file, command-keyword, parse-bind-args, key-table edge cases)
-          (:file "config-directives-tests-b") ; directive parsing - part II (%parse-bind-args, tokenizer, set aliases, server flag, terminal option routing)
-          (:file "config-source-run-tests") ; directive parsing - source-file, run-shell, path expansion
-          (:file "config-if-shell-tests") ; directive parsing - if-shell flags, format truthiness, brace blocks
-          (:file "config-source-file-tests") ; directive parsing - source-file flags, glob expansion, missing diagnostics
-          (:file "config-preprocessor-environment-tests") ; directive parsing - preprocessor, environment, key-table side effects
-          (:file "config-directives-tests-d") ; directive parsing - part IV (set-g-status-off, bind-key-n, load-config, %elif, line-continuation, comments, styles)
-          (:file "config-directives-tests-e"))) ; directive parsing - part V (macro registry, env-set-p, key-table edge cases, remaining bind/set directives)
         (:module "presentation/renderer"
          :serial t
          :components
@@ -218,11 +178,6 @@
           (:file "commands-tests-l") ; copy-mode exit resets rect-select, yank-rectangle fixed columns - part XII
           (:file "commands-tests-i") ; rectangle selection-text, run-copy-command, copy-mode set-cursor - part IX
           (:file "commands-copy-navigation-tests"))) ; copy-mode search next/prev/forward/backward guards
-        (:module "application/config-2"
-         :pathname "application/config"
-         :serial t
-         :components
-         ((:file "config-tests-defaults")))
         (:module "infrastructure/net"
          :serial t
          :components

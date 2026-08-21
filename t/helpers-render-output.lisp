@@ -22,21 +22,17 @@
     (nerimux/renderer::render-pane s session pane)))
 
 (defmacro with-copy-mode-render-fixture ((session-var pane-var screen-var w h
-                                          &key (content "")
-                                               (position-format "")
-                                               (options '()))
+                                          &key (content ""))
                                          &body body)
-  "Bind a renderer session, its pane, and screen under isolated copy-mode defaults."
-  (let ((option-pairs (if (and (consp options) (eq (car options) 'quote))
-                          (second options)
-                          options)))
-    `(with-isolated-options ("copy-mode-position-style" "default"
-                             "copy-mode-position-format" ,position-format
-                             ,@option-pairs)
-       (let* ((,session-var (make-renderer-test-session ,w ,h :content ,content))
-              (,pane-var (first (window-panes (session-active-window ,session-var))))
-              (,screen-var (pane-screen ,pane-var)))
-         ,@body))))
+  "Bind a renderer session, its pane, and screen for copy-mode rendering tests.
+   Copy-mode position text and line-number gutters have no config surface any
+   more (R2.2/R2.3: both were fixed values or retired outright per
+   docs/notes/workspace-requirements.md §1.4/§R6.8), so there is nothing left
+   to isolate here beyond building the fixture itself."
+  `(let* ((,session-var (make-renderer-test-session ,w ,h :content ,content))
+          (,pane-var (first (window-panes (session-active-window ,session-var))))
+          (,screen-var (pane-screen ,pane-var)))
+     ,@body))
 
 (defmacro with-copy-mode-selection-fixture ((session-var pane-var screen-var w h
                                              &key (content "")
@@ -45,15 +41,11 @@
                                                   (cursor-row nil)
                                                   (cursor-col nil)
                                                   (selecting-p t)
-                                                  (copy-mode-p t)
-                                                  (position-format "")
-                                                  (options '()))
+                                                  (copy-mode-p t))
                                             &body body)
   "Bind a copy-mode renderer fixture with selection state preconfigured."
   `(with-copy-mode-render-fixture (,session-var ,pane-var ,screen-var ,w ,h
-                                   :content ,content
-                                   :position-format ,position-format
-                                   :options ,options)
+                                   :content ,content)
      (setf (screen-copy-mode-p ,screen-var) ,copy-mode-p
            (screen-copy-selecting ,screen-var) ,selecting-p
            (screen-copy-offset ,screen-var) 0

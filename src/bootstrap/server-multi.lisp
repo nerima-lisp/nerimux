@@ -97,31 +97,14 @@
           (reduce fn *clients* :key #'client-conn-cols)))
 
 (defun %effective-client-size ()
-  "Return (values ROWS COLS) the session should render at, per the `window-size`
-   option over the attached clients:
-     smallest — min over all clients (default; the safe shared session-layout
-                size for every client);
-     largest  — max over all clients;
-     latest   — the most recently attached/resized client (*clients* is kept
-                most-recent-first);
-     manual   — keep the current *term-rows*/*term-cols* (no auto-resize).
-   Falls back to *term-rows*/*term-cols* when no clients are attached.
-   NOTE: largest/latest can exceed a smaller client's terminal — they are honoured
-   for parity, but smallest stays the safe default for the shared session-layout
-   design."
+  "Return (values ROWS COLS) the session should render at: the smallest
+   attached client's geometry, so the shared session layout fits every
+   attached client (§1.4 — multiple clients are allowed; the shared size
+   follows the smallest one; R8.4).
+   Falls back to *term-rows*/*term-cols* when no clients are attached."
   (if (null *clients*)
       (values *term-rows* *term-cols*)
-      (let ((mode (or (nerimux/options:get-option "window-size") "smallest")))
-        (cond
-          ((string-equal mode "largest")
-           (%client-size-reduce #'max))
-          ((string-equal mode "latest")
-           (let ((c (first *clients*)))
-             (values (client-conn-rows c) (client-conn-cols c))))
-          ((string-equal mode "manual")
-           (values *term-rows* *term-cols*))
-          (t                            ; "smallest" and any unknown value
-           (%client-size-reduce #'min))))))
+      (%client-size-reduce #'min)))
 
 (defun %apply-effective-size (session)
   "Set *term-rows*/*term-cols* to the effective (smallest-client) geometry,

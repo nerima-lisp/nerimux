@@ -22,27 +22,12 @@
 
 (describe "advanced-suite"
 
-  ;;; ── synchronize-panes: sends keystrokes to all panes ─────────────────────────
-
-  ;; synchronize-panes previously drove the keystroke-forwarding fanout
-  ;; (removed with presentation/events); the option itself is still a
-  ;; first-class registered option, so this verifies the toggle round-trips.
-  (it "synchronize-panes-sends-to-all"
-    (let ((prev (nerimux/options:get-option "synchronize-panes")))
-      (unwind-protect
-           (progn
-             (nerimux/options:set-option "synchronize-panes" t)
-             (expect (nerimux/options:get-option "synchronize-panes"))
-             (nerimux/options:set-option "synchronize-panes" nil)
-             (expect (not (nerimux/options:get-option "synchronize-panes"))))
-        (nerimux/options:set-option "synchronize-panes" prev))))
-
-  ;; synchronize-panes is a registered option with boolean type and default nil.
-  (it "synchronize-panes-option-registered"
-    (let ((spec (gethash "synchronize-panes" nerimux/options:*option-registry*)))
-      (expect spec :to-be-truthy)
-      (expect (eq :boolean (nerimux/options:option-spec-type spec)))
-      (expect (null (nerimux/options:option-spec-default spec)))))
+  ;; synchronize-panes never drove any behavior (the keystroke-forwarding
+  ;; fanout it once gated was removed with presentation/events) and R2.2
+  ;; deleted nerimux/options wholesale.  A dead option with zero live callers
+  ;; leaves nothing to replace with a constant, so it is gone rather than
+  ;; hardcoded — there is no "synchronize-panes-sends-to-all" behavior to
+  ;; assert.
 
   ;;; ── Layout persistence: round-trip ──────────────────────────────────────────
 

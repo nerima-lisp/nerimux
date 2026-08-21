@@ -254,22 +254,25 @@
       (expect (equal '("-c" "echo hi") args))
       (expect search-p :to-be-falsy)))
 
-  ;; %target-program-and-args with a NIL/empty DEFAULT-COMMAND returns the
-  ;; configured default shell directly, with no extra args.
+  ;; %target-program-and-args with a NIL/empty DEFAULT-COMMAND returns
+  ;; %default-shell's result directly, with no extra args.  §1.4/R2.5: the
+  ;; shell is $SHELL (or /bin/sh when unset), no longer a config option, so
+  ;; the fixture stubs the real process environment rather than an option
+  ;; table (t/helpers-overlay-assertions.lisp's
+  ;; with-temporary-posix-environment-variable — the pattern
+  ;; posix-port.lisp's environment-value docstring calls for).
   (it "target-program-and-args-nil-command-uses-default-shell"
-    (with-isolated-config
-      (nerimux/options:set-option "default-shell" "/bin/zsh")
+    (with-temporary-posix-environment-variable ("SHELL" "/bin/zsh")
       (multiple-value-bind (program args search-p)
           (nerimux/pty::%target-program-and-args nil)
         (expect (string= "/bin/zsh" program))
         (expect (null args))
         (expect search-p :to-be-falsy))))
 
-  ;; %target-program-and-args requests a PATH search (SEARCH-P = T) when the
-  ;; configured default shell is not an absolute path.
+  ;; %target-program-and-args requests a PATH search (SEARCH-P = T) when
+  ;; $SHELL is not an absolute path.
   (it "target-program-and-args-relative-shell-requests-path-search"
-    (with-isolated-config
-      (nerimux/options:set-option "default-shell" "zsh")
+    (with-temporary-posix-environment-variable ("SHELL" "zsh")
       (multiple-value-bind (program args search-p)
           (nerimux/pty::%target-program-and-args "")
         (declare (ignore args))

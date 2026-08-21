@@ -157,35 +157,26 @@
      :assertions ((:row-blank 0)
                   (:cursor-y 0))))
 
-  ;; With scroll-on-clear on, ESC[2J moves the visible content into the scrollback
-  ;; before erasing, so a full-screen clear stays in history.
-  (it "scroll-on-clear-on-pushes-screen-to-history"
-    (let ((nerimux/terminal/actions::*scroll-on-clear-function* (lambda () t)))
-      (with-screen (s 5 3)
-        (fill-screen s)
-        (expect (null (nerimux/terminal/types:screen-scrollback s)))
-        (feed s (esc "[2J"))
-        (expect (= 3 (length (nerimux/terminal/types:screen-scrollback s))))
-        (dotimes (y 3)
-          (expect (row-blank-p s y))))))
+  ;; ESC[2J always moves the visible content into the scrollback before
+  ;; erasing (§1.4: scroll-on-clear is unconditional now that the option and
+  ;; its callback are gone), so a full-screen clear stays in history.
+  (it "ed2-pushes-screen-to-history"
+    (with-screen (s 5 3)
+      (fill-screen s)
+      (expect (null (nerimux/terminal/types:screen-scrollback s)))
+      (feed s (esc "[2J"))
+      (expect (= 3 (length (nerimux/terminal/types:screen-scrollback s))))
+      (dotimes (y 3)
+        (expect (row-blank-p s y)))))
 
-  ;; With scroll-on-clear off (no policy installed), ESC[2J erases without pushing to
-  ;; the scrollback — the existing default behaviour.
-  (it "scroll-on-clear-off-discards-content"
-    (let ((nerimux/terminal/actions::*scroll-on-clear-function* nil))
-      (with-screen (s 5 3)
-        (fill-screen s)
-        (feed s (esc "[2J"))
-        (expect (null (nerimux/terminal/types:screen-scrollback s))))))
-
-  ;; scroll-on-clear does not push to history on the alternate screen (no scrollback).
+  ;; scroll-on-clear still does not push to history on the alternate screen
+  ;; (no scrollback there) — this guard is independent of the old option.
   (it "scroll-on-clear-skips-alternate-screen"
-    (let ((nerimux/terminal/actions::*scroll-on-clear-function* (lambda () t)))
-      (with-screen (s 5 3)
-        (feed s (esc "[?1049h"))
-        (fill-screen s)
-        (feed s (esc "[2J"))
-        (expect (null (nerimux/terminal/types:screen-scrollback s))))))
+    (with-screen (s 5 3)
+      (feed s (esc "[?1049h"))
+      (fill-screen s)
+      (feed s (esc "[2J"))
+      (expect (null (nerimux/terminal/types:screen-scrollback s)))))
 
   (define-direct-erase-cases
     (erase-display-direct-mode-0-from-cy-zero

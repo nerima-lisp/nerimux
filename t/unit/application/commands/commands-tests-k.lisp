@@ -14,7 +14,6 @@
              for cursor = (getf options :cursor)
              for action = (getf options :action)
              for expectations = (getf options :expectations)
-             for wrap-search = (getf options :wrap-search)
              for body = `(let ((s (make-screen ,width ,height)))
                            ,fixture
                            (nerimux/commands::copy-mode-enter s)
@@ -25,10 +24,7 @@
                            (%check-copy-mode-search-expectations s ',expectations))
              collect
              `(it ,(string-downcase (symbol-name name))
-                ,(if (eq wrap-search :off)
-                     `(with-isolated-options ("wrap-search" nil)
-                        ,body)
-                     body)))))
+                ,body))))
 
 (describe "commands-suite"
 
@@ -86,22 +82,19 @@
      :action (nerimux/commands::copy-mode-search-forward s "(")
      :expectations ((:cursor-col 2 "literal '(' must be found at col 2"))))
 
-  ;; ── wrap-search: search wraps around the buffer ends (default on) ────────────
+  ;; ── wrap-search: search always wraps around the buffer ends ──────────────────
+  ;;
+  ;; §1.4 of docs/notes/workspace-requirements.md fixes this: "検索は折り返す"
+  ;; ("search wraps around"), and R6.8 confirms no on/off toggle survives —
+  ;; there is no configuration path left to turn it off.
 
   (define-copy-mode-search-cases
     (copy-mode-search-forward-wraps-to-top
-     "With wrap-search on, forward search wraps to the first match in the buffer."
+     "Forward search wraps to the first match in the buffer when nothing matches below."
      :fixture (feed s "abc")
      :cursor (cons 2 0)
      :action (nerimux/commands::copy-mode-search-forward s "abc")
      :expectations ((:cursor (0 . 0) "no match below -> wrap to row 0 col 0")))
-    (copy-mode-search-forward-no-wrap-when-off
-     "With wrap-search off, forward search with no lower match leaves the cursor."
-     :wrap-search :off
-     :fixture (feed s "abc")
-     :cursor (cons 2 0)
-     :action (nerimux/commands::copy-mode-search-forward s "abc")
-     :expectations ((:cursor (2 . 0) "wrap-search off -> cursor stays put")))
     (copy-mode-search-backward-wraps-to-bottom
      "With wrap-search on, backward search wraps to the last match in the buffer."
      :fixture (feed-lines s "" "" "" "" "abc")
