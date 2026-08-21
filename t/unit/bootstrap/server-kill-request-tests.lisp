@@ -135,12 +135,12 @@
               nil)))
         (nerimux::%force-kill-panes (list still-alive already-dead)))
       (expect (= 2 (length closed))
-              "close-pane-pty (SIGHUP-equivalent teardown) ran for every pane up front")
+              )
       (expect (equal (list (list 424242 0)
                            (list 424243 0)
                            (list 424242 sb-posix:sigkill))
                      (nreverse kills))
-              "alive-probe both, then SIGKILL only the pid that probed alive")))
+              )))
 
   ;;; ── run-kill: CLI exit-code / message mapping ─────────────────────────────
 

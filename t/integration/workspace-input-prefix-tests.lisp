@@ -35,7 +35,7 @@
         (expect (string= "no pane UP" (first (nerimux::client-conn-message-log conn))))
         (nerimux::%handle-multi-key-message s conn #(106)) ; j
         (expect (string= "no pane DOWN" (first (nerimux::client-conn-message-log conn))))
-        (expect (eq left (nerimux::client-conn-focus conn)) "k/j did not move focus"))))
+        (expect (eq left (nerimux::client-conn-focus conn)) ))))
 
   ;; R4.1: an arrow-escape sequence sent the way a real client actually sends
   ;; it -- ESC, then `[`, then `A` as three SEPARATE one-byte messages -- must
@@ -117,7 +117,7 @@
         ;; focus in :detail/:normal, but neither reaches dispatch here.
         (nerimux::%handle-multi-key-message s conn #(104)) ; h -- swallowed
         (nerimux::%handle-multi-key-message s conn #(106)) ; j -- swallowed
-        (expect (eq left (nerimux::client-conn-focus conn)) "both swallowed bytes had no effect")
+        (expect (eq left (nerimux::client-conn-focus conn)) )
         ;; Byte 3 is no longer swallowed and dispatches normally.
         (nerimux::%handle-multi-key-message s conn #(108)) ; l -- live again
         (expect (eq right (nerimux::client-conn-focus conn))))))
@@ -154,7 +154,7 @@
         (nerimux::%handle-multi-key-message s conn #(91))
         (nerimux::%handle-multi-key-message s conn #(65))
         (expect (eq :normal (nerimux::client-conn-mode conn))
-                "swallowed: neither byte reopened the picker or acted in :normal"))))
+                ))))
 
   ;; R4.4: a byte struck right after C-q that the 1.5 table does not bind is
   ;; discarded -- it must not fall through to the pane the way an unprefixed
@@ -176,8 +176,8 @@
                (expect (nerimux::client-conn-ui-prefix-p conn))
                (nerimux::%handle-multi-key-message sess conn #(101)) ; e: unbound
                (expect (null (nerimux::client-conn-ui-prefix-p conn))
-                       "the prefix byte was consumed either way")
-               (expect (null fed) "the unbound key never reached the pane"))
+                       )
+               (expect (null fed) ))
           (setf (fdefinition 'nerimux/model:pane-feed) orig)))))
 
   ;; R4.4: C-q C-q returns to :normal -- the one prefix action with no pane

@@ -105,9 +105,9 @@
       (nerimux::%handle-multi-key-message session conn #(17))
       (nerimux::%handle-multi-key-message session conn #(45))
       (expect (= 4 (length (nerimux/model:window-panes window-1)))
-              "window-1 stays capped at 4")
+              )
       (expect (= 2 (length (nerimux::%worktree-windows worktree)))
-              "a second window opened for the same worktree")
+              )
       (let ((window-2 (nerimux/model:session-active-window session)))
         (expect (not (eq window-1 window-2)))
         (expect (= 1 (length (nerimux/model:window-panes window-2))))
@@ -136,7 +136,7 @@
         (expect (not (member window-1 (nerimux/model:session-windows session))))
         (expect (not (member window-1 (nerimux::%worktree-windows worktree))))
         (expect (eq window-2 (nerimux/model:session-active-window session))
-                "refocus falls to the sibling window in the same worktree")
+                )
         (expect (eq (nerimux/model:window-active-pane window-2)
                     (nerimux::client-conn-focus conn)))
 
@@ -164,15 +164,15 @@
       (nerimux::%handle-multi-key-message session conn #(122)) ; z
       (expect (nerimux/model:window-zoom-p window))
       (expect (= 1 (length (nerimux/model:window-panes window)))
-              "zoomed: window-panes collapses to the single active leaf")
+              )
 
       (nerimux::%handle-multi-key-message session conn #(17))
       (nerimux::%handle-multi-key-message session conn #(45)) ; -
-      (expect (not (nerimux/model:window-zoom-p window)) "the split un-zoomed first")
+      (expect (not (nerimux/model:window-zoom-p window)) )
       (expect (= 4 (length (nerimux/model:window-panes window)))
-              "the real 4-pane count survives, not a 5th pane squeezed in")
+              )
       (expect (= 2 (length (nerimux::%worktree-windows worktree)))
-              "the 5th pane opened a new window instead of subdividing the zoomed pane")))
+              )))
 
   ;; R5.7: a pane that comes back from %open-client-worktree-pane without a
   ;; live PTY is recorded as a durable startup failure, not just a one-shot

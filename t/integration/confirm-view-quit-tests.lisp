@@ -32,7 +32,7 @@
         ;; while the confirmation is up.
         (nerimux::%handle-multi-key-message s conn #(106)) ; j
         (expect (nerimux::client-conn-confirm-view conn)
-                "still up: j neither answered nor leaked through")
+                )
         ;; n cancels.
         (nerimux::%handle-multi-key-message s conn #(110)) ; n
         (expect (null (nerimux::client-conn-confirm-view conn)))

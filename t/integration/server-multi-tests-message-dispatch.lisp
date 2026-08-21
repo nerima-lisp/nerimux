@@ -822,7 +822,7 @@
         (nerimux::%handle-multi-key-message s conn #(91)) ; [: swallowed
         (nerimux::%handle-multi-key-message s conn #(66)) ; B: swallowed
         (expect (eq :normal (nerimux::client-conn-mode conn))
-                "still normal: neither swallowed byte reopened the picker or acted"))))
+                ))))
 
   ;; The replacement for those arrow branches. C-p/C-n are used rather than j/k
   ;; because every other key in the picker is a character of the search query --
@@ -854,11 +854,11 @@
         (nerimux::%handle-multi-key-message s conn #(14)) ; C-n
         (expect (= 1 (nerimux::client-conn-picker-index conn)))
         (expect (eq :picker (nerimux::client-conn-mode conn))
-                "C-n moved the selection without leaving the picker")
+                )
         (nerimux::%handle-multi-key-message s conn #(16)) ; C-p
         (expect (= 0 (nerimux::client-conn-picker-index conn)))
         (expect (string= "" (nerimux::client-conn-picker-query conn))
-                "neither key was appended to the search query"))))
+                ))))
 
   (it "multi-picker-selects-a-worktree-pane-in-an-inactive-window"
     (with-fake-session (s :nwindows 2)

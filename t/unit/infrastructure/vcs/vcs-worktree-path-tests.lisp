@@ -17,14 +17,27 @@
 ;;;; No PTY, no real git repository -- plain directory creation to simulate
 ;;;; "a worktree with this name already exists".
 
+(defvar *fake-repo-counter* 0)
+
 (defun %fresh-fake-repo-git-dir ()
   "A repository.git/-shaped directory path (with a trailing slash, as
    %RESOLVE-WORKTREE-PATH's callers already ensure via %ENSURE-TRAILING-SLASH)
-   under the temp directory, unique per test run."
+   under the temp directory.
+
+   The name has to differ between PROCESSES, not just between calls: these tests
+   create real directories and never remove them, and what they assert is which
+   suffix is free. RANDOM alone does not give that — SBCL's initial
+   *RANDOM-STATE* is fixed, so every process draws the same first number, finds
+   the previous run's leftovers, and gets -4 where it expects -2. The clock and
+   the process id are what actually vary; the counter keeps calls within one
+   process apart."
   (nerimux/vcs::%ensure-trailing-slash
    (namestring
     (merge-pathnames
-     (format nil "nerimux-worktree-path-test-~D.git/" (random 1000000))
+     (format nil "nerimux-worktree-path-test-~D-~D-~D.git/"
+             (get-universal-time)
+             (sb-posix:getpid)
+             (incf *fake-repo-counter*))
      (host-kit:temporary-directory)))))
 
 (describe "renderer-suite/vcs-worktree-path-timestamp-format"

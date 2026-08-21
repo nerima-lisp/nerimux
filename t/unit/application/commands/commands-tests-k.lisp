@@ -186,10 +186,10 @@
             (nerimux/terminal/types:screen-copy-offset s) 3)
       (nerimux/commands::copy-mode-search-forward s "hit")
       (expect (= 3 (nerimux/terminal/types:screen-copy-search-total s))
-              "counted every match in the scrollback, not just the viewport")
+              )
       (expect (nerimux/terminal/types:screen-copy-search-index s))
       (expect (<= 1 (nerimux/terminal/types:screen-copy-search-index s) 3)
-              "the ordinal is 1-based and within the total")))
+              )))
 
   ;; A term with no match must not leave the previous search's census standing.
   (it "copy-mode-search-clears-the-census-when-nothing-matches"
@@ -217,4 +217,4 @@
       (expect (null (nerimux/terminal/types:screen-copy-search-index s)))
       (expect (= 0 (nerimux/terminal/types:screen-copy-search-total s)))
       (expect (string= "hit" (nerimux/terminal/types:screen-copy-search-term s))
-              "the term survives so n can repeat it on re-entry"))))
+              ))))
