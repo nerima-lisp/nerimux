@@ -17,6 +17,18 @@
 
 ;;; ── Layering guard helpers ───────────────────────────────────────────────────
 
+(defun %file-text (path)
+  "PATH's contents as a string.
+
+   This used to live in the domain/format structural tests, which went with
+   domain/format itself (R2). The three callers below were left behind, so this
+   file referenced a function that no longer existed anywhere -- which would
+   have taken the layering guard down with it, silently, since a guard that
+   cannot load reports no violations rather than reporting a failure."
+  (with-open-file (in path :external-format :utf-8)
+    (let ((buffer (make-string (file-length in))))
+      (subseq buffer 0 (read-sequence buffer in)))))
+
 (defparameter *layer-rank*
   '(("nerimux/model" . 0) ("nerimux/terminal" . 0) ("nerimux/terminal/actions" . 0)
     ("nerimux/terminal/parser" . 0) ("nerimux/ports" . 0)

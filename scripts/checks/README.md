@@ -51,6 +51,25 @@ one that went unnoticed. The second is how a test file becomes decoration.
 component list. `t/e2e/e2e-smoke.lisp` is a known orphan — it is run by hand
 against a built binary (see the getting-started guide), not by any ASDF system.
 
+## internal-call-check.pl — every %helper call resolves, with a plausible arity
+
+The cheapest approximation of "it compiles" that needs no compiler. It checks
+only names beginning with `%`, the convention for internal helpers, and that
+restriction is what makes it sound: a `%name` is always defined in this tree —
+never a Common Lisp symbol, never inherited from a sibling, never a stray
+variable. So an unresolved `%name` call is a defect rather than a gap in what
+the checker knows about the world.
+
+It found one: the layering guard called `%file-text`, whose definition had gone
+with the domain/format tests it happened to live in (R2). A guard that cannot
+load reports no violations rather than reporting a failure, so nothing else
+would have noticed.
+
+Blind spots, shared with the rest of this directory: calls through `apply` or
+`funcall`, names built by `intern`, and anything a macro generates. Names
+defined inside a `define-*` form are accepted without an arity, because the
+macro decides the lambda list and this checker cannot read macros.
+
 ## export-check.pl — single-colon references resolve
 
 A `PKG:SYM` reference to a symbol `PKG` does not export is a **read-time** error.
