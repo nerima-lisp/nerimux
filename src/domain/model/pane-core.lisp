@@ -27,10 +27,6 @@
   ;; ── Spawn record (#{pane_start_command} / #{pane_start_path}) ────────────
   (start-command "" :type string)     ; resolved command the pane started with
   (start-path    "" :type string)     ; initial working directory
-  ;; ── Death record (remain-on-exit / #{pane_dead_status} family) ───────────
-  (dead-status nil)                   ; NIL or exit code of the dead child
-  (dead-signal nil)                   ; NIL or terminating signal number
-  (dead-time   nil)                   ; NIL or universal-time when the pane died
   (unread-output-p nil :type boolean)
   (bell-p nil :type boolean)
   (process-exited-p nil :type boolean)

@@ -36,9 +36,6 @@
    #:pane-tty
    #:pane-start-command
    #:pane-start-path
-   #:pane-dead-status
-   #:pane-dead-signal
-   #:pane-dead-time
    #:pane-unread-output-p
    #:pane-bell-p
    #:pane-process-exited-p

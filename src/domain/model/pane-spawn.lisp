@@ -118,11 +118,7 @@
             (pane-start-path pane) (or start-dir
                                        (nerimux/ports:working-directory)
                                        "")
-            ;; The pane is alive again — clear the death record so
-            ;; #{pane_dead_status} and friends read empty.
-            (pane-dead-status pane) nil
-            (pane-dead-signal pane) nil
-            (pane-dead-time pane) nil
+            ;; The pane is alive again — clear the exit record.
             (pane-unread-output-p pane) nil
             (pane-bell-p pane) nil
             (pane-process-exited-p pane) nil

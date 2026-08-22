@@ -1,7 +1,7 @@
 (in-package #:nerimux/test)
 
-;;;; renderer tests — part G: direct unit tests for %split-align-attr,
-;;;; %status-align-buckets, and %status-bar-default-segments.
+;;;; renderer tests — part G: direct unit tests for %split-align-attr and
+;;;; %status-align-buckets.
 ;;;;
 ;;;; These helpers previously had no direct unit tests — they were covered only
 ;;;; transitively through %compose-aligned-line and #{C:} integration tests.
@@ -9,11 +9,10 @@
 ;;;; domain/format (R2.3) is gone, taking nerimux/format::%content-search-
 ;;;; match-p and its whole #{C:} content-search format directive with it — see
 ;;;; renderer-format-tests.lisp's header for the deletion list.
-;;;; %status-bar-default-segments (R2.2) no longer takes a format context or
-;;;; returns a justify value: status-justify is fixed "left" (its registered
-;;;; default, §1.4) with no config able to set it otherwise, so the function's
-;;;; signature is now (session sgr-code) → (values left right) — see
-;;;; renderer-statusbar.lisp.
+;;;; %status-bar-default-segments (R2.2) is gone too, along with the format
+;;;; context and status-justify value it used to return: R6.5's status bar is
+;;;; composed directly by %status-left-text/%status-middle-text/%status-right-
+;;;; text (renderer-statusbar.lisp) instead.
 
 (describe "renderer-suite"
 
@@ -125,18 +124,4 @@
         (nerimux/renderer::%status-align-buckets "abc def")
       (expect (string= "abc def" left))
       (expect (string= "" centre))
-      (expect (string= "" right))))
-
-  ;;; ── %status-bar-default-segments ─────────────────────────────────────────────
-  ;;;
-  ;;; %status-bar-default-segments returns (values LEFT RIGHT) composed from
-  ;;; live session state — status-justify is no longer a third return value
-  ;;; (see file header).
-
-  ;; %status-bar-default-segments returns exactly two string values: left and right.
-  (it "status-bar-default-segments-returns-two-values"
-    (let ((sess (make-renderer-test-session 80 6)))
-      (multiple-value-bind (left right)
-          (nerimux/renderer::%status-bar-default-segments sess "44;97")
-        (expect (stringp left))
-        (expect (stringp right))))))
+      (expect (string= "" right)))))

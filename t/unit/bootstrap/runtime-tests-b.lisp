@@ -1,6 +1,6 @@
 (in-package #:nerimux/test)
 
-;;;; wait-for-channel, reader EOF and the pane death record — part II
+;;;; wait-for-channel, reader EOF, and sigwinch — part II
 
 (describe "runtime-suite"
 
@@ -63,18 +63,3 @@
           (nerimux::*resize-pending* nil))
       (finishes (nerimux::install-sigwinch-handler)
                 "install-sigwinch-handler must not signal")))
-
-  ;;; ── Pane death record (#{pane_dead_status} / #{pane_dead_time}) ──────────────
-  ;;;
-  ;;; The death record itself (pane-dead-status / pane-dead-time) survives R2.6:
-  ;;; only the remain-on-exit banner that used to render it is gone, since the
-  ;;; pane closes immediately now instead of parking on a formatted message.
-
-  ;; reader-eof-state records the death time on a pane whose fd hits EOF (the
-  ;; synthetic fd has no known child, so status/signal stay NIL).
-  (it "reader-eof-state-stamps-dead-time"
-    (let ((pane (make-pane :id 1 :fd 9999 :pid -1 :screen (make-screen 20 3))))
-      (nerimux::reader-eof-state pane)
-      (expect (integerp (nerimux/model:pane-dead-time pane)))
-      (expect (null (nerimux/model:pane-dead-status pane)))
-      (expect (= -1 (nerimux/model:pane-fd pane))))))

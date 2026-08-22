@@ -2,8 +2,8 @@
 
 ;;;; renderer tests — direct unit tests for the renderer-statusbar-layout.lisp
 ;;;; helpers that had no dedicated coverage: %sgr-sequence-end, %split-comma-attrs,
-;;;; %status-segment-limit, %status-align-block-step, %status-align-step,
-;;;; %status-emit-segment, %status-pad-to, and %expand-segment-or-empty.
+;;;; %status-align-block-step, %status-align-step, %status-emit-segment,
+;;;; %status-pad-to, and %expand-segment-or-empty.
 ;;;; These were previously exercised only transitively (if at all) through
 ;;;; %compose-aligned-line and #{...} integration tests.
 
@@ -46,22 +46,6 @@
   ;; %split-comma-attrs with a trailing comma includes a trailing empty field.
   (it "split-comma-attrs-trailing-comma"
     (expect (equal '("a" "b" "") (nerimux/renderer::%split-comma-attrs "a,b,"))))
-
-  ;;; ── %status-segment-limit ────────────────────────────────────────────────────
-
-  ;; %status-segment-limit returns the truncated numeric value when given a number.
-  (it "status-segment-limit-numeric-value"
-    (expect (= 20 (nerimux/renderer::%status-segment-limit 20)))
-    (expect (= 20 (nerimux/renderer::%status-segment-limit 20.7))))
-
-  ;; %status-segment-limit falls back to the tmux default of 40 for non-numbers.
-  (it "status-segment-limit-defaults-for-non-numeric"
-    (expect (= 40 (nerimux/renderer::%status-segment-limit nil)))
-    (expect (= 40 (nerimux/renderer::%status-segment-limit "40"))))
-
-  ;; %status-segment-limit clamps negative values to 0.
-  (it "status-segment-limit-clamps-negative"
-    (expect (= 0 (nerimux/renderer::%status-segment-limit -5))))
 
   ;;; ── %status-align-block-step / %status-align-step ───────────────────────────
 

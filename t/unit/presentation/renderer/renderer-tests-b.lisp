@@ -1,37 +1,20 @@
 (in-package #:nerimux/test)
 
-;;;; status-bar segment style, on/off, and BEL — part II
+;;;; status-bar on/off, and BEL — part II
 ;;;;
 ;;;; §1.4/R2.2/R2.3 fixed the status bar's shape: `status` is always "on"
 ;;;; (exactly one row, always drawn — R6.5), `status-position` is always
 ;;;; "bottom" (window-tree.lisp:%assign-window-tree no longer offsets panes
 ;;;; for a top-positioned bar), multi-line status (`status` 2..5,
 ;;;; `status-format[N]`) and status-left/-right's #{...} template expansion
-;;;; are gone outright — render-extra-status-line, status-line-count, and
-;;;; %status-sgr-from-style no longer exist.  See renderer-statusbar.lisp and
+;;;; are gone outright — render-extra-status-line, status-line-count,
+;;;; %status-sgr-from-style, %status-segment-style-sgr, and
+;;;; %apply-segment-style (the per-segment style override, R6.5's fixed
+;;;; single-SGR status line has no per-segment style left to apply) no
+;;;; longer exist.  See renderer-statusbar.lisp and
 ;;;; renderer-statusbar-layout.lisp.
 
 (describe "renderer-suite"
-
-  ;;; ── %status-segment-style-sgr ────────────────────────────────────────────────
-
-  ;; %status-segment-style-sgr always returns its BASE-SGR argument unchanged —
-  ;; status-left-style/status-right-style (domain/options, deleted R2.2) both
-  ;; defaulted to "", which always fell back to the base style, so the
-  ;; per-segment override branch is gone rather than hardcoded to a dead value.
-  (it "status-segment-style-sgr-returns-base-unchanged"
-    (expect (string= "44;97" (nerimux/renderer::%status-segment-style-sgr "44;97"))))
-
-  ;; %apply-segment-style wraps TEXT in the segment SGR and reverts to the base.
-  (it "apply-segment-style-wraps-and-reverts"
-    (let ((out (nerimux/renderer::%apply-segment-style "TEXT" "31" "44")))
-      (expect (search (format nil "~C[31m" #\Escape) out))
-      (expect (search "TEXT" out))
-      (expect (search (format nil "~C[44m" #\Escape) out))))
-
-  ;; %apply-segment-style returns TEXT unchanged when the segment SGR equals the base.
-  (it "apply-segment-style-noop-when-equal-to-base"
-    (expect (string= "TEXT" (nerimux/renderer::%apply-segment-style "TEXT" "44" "44"))))
 
   ;;; ── status is always on ──────────────────────────────────────────────────────
 
