@@ -39,7 +39,17 @@
                (ap    (session-active-pane sess))
                (sc    (pane-screen ap)))
           (setf (nerimux/terminal/types:screen-bell-pending sc) initial-pending)
+          (format *error-output* "~&DIAG initial-pending=~S active-pane-eq-ap=~S bell-pending-before-render=~S active-pane-fd=~S window-panes-count=~S~%"
+                  initial-pending
+                  (eq ap (nerimux::session-active-pane sess))
+                  (nerimux/terminal/types:screen-bell-pending sc)
+                  (nerimux/model:pane-fd (nerimux::session-active-pane sess))
+                  (length (nerimux/model:window-panes (nerimux::session-active-window sess))))
           (let ((out (render-session-to-string sess 6 20)))
+            (format *error-output* "~&DIAG bell-pending-after-render=~S out-has-bel=~S out-length=~S~%"
+                    (nerimux/terminal/types:screen-bell-pending sc)
+                    (and (find (code-char 7) out) t)
+                    (length out))
             (expect (if initial-pending
                         (find (code-char 7) out)
                         (null (find (code-char 7) out))))
