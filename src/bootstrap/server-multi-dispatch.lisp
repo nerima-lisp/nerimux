@@ -187,7 +187,11 @@ behavior (:96-107 pre-R4.4) is gone."
             (if new-pane
                 (progn
                   (when worktree (worktree-add-pane worktree new-pane))
-                  (start-reader-thread new-pane)
+                  ;; A split whose PTY failed to spawn comes back with a dead
+                  ;; (non-live) pane; starting a reader thread on it would call
+                  ;; select-fds on an invalid fd and crash the process.
+                  (when (pane-live-p new-pane)
+                    (start-reader-thread new-pane))
                   (window-select-pane window new-pane)
                   (%set-client-focus conn new-pane)
                   (%mark-dirty))
@@ -802,7 +806,8 @@ callback mirror %WORKSPACE-PREFIX-FETCH-REPOSITORY, one level up
              (let* ((window (%workspace-new-window
                              session
                              :name (%worktree-window-name worktree)
-                             :start-dir path))
+                             :start-dir path
+                             :start-reader-p nil))
                     (pane (window-active-pane window)))
                (cond
                  ((null pane)
@@ -814,7 +819,9 @@ callback mirror %WORKSPACE-PREFIX-FETCH-REPOSITORY, one level up
                   ;; (pane-mark-startup-failure) instead of only a
                   ;; one-shot notification, so it survives as the `!`
                   ;; overview mark (3.4) rather than vanishing once the
-                  ;; message log scrolls.
+                  ;; message log scrolls. No reader thread: start-reader-thread
+                  ;; would call select-fds on a dead pane's fd (-1 or worse,
+                  ;; unvalidated), which process-kit rejects outright.
                   (pane-mark-startup-failure pane)
                   (worktree-add-pane worktree pane)
                   (%set-client-selected-worktree conn worktree)
@@ -823,6 +830,7 @@ callback mirror %WORKSPACE-PREFIX-FETCH-REPOSITORY, one level up
                   (%mark-dirty)
                   t)
                  (t
+                  (start-reader-thread pane)
                   (worktree-add-pane worktree pane)
                   (%set-client-selected-worktree conn worktree)
                   (%set-client-focus conn pane)

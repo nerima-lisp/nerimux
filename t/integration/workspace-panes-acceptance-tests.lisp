@@ -12,12 +12,21 @@
 ;;;; the fd-9999/pid--1 "live without a real PTY" convention already used in
 ;;;; t/unit/bootstrap/runtime-tests-b.lisp) so pane-live-p reads true and the
 ;;;; R5.7 startup-failure branch is not accidentally exercised by every split.
+;;;;
+;;;; start-reader-thread is ALSO stubbed to a no-op here. runtime-tests-b.lisp
+;;;; only ever calls reader-eof-state directly against its fd-9999 pane, which
+;;;; never touches select(2); this suite drives splits through the real
+;;;; %workspace-prefix-split, which spawns a genuine reader thread that calls
+;;;; select-fds on the pane's fd. process-kit's select(2) wrapper rejects any
+;;;; fd >= 1022 (FD-SET-OVERFLOW) — fd 9999 was never meant to be watched, only
+;;;; to read as "live" — so leaving the real reader thread running here would
+;;;; crash the process the first time it polled.
 
 (defmacro %with-r5-fixture ((session-var conn-var worktree-var window-var) &body body)
-  "Stub %fork-pane, build one organization/repository/worktree, open the
-   worktree's first pane via the real overview-Enter production path
-   (%focus-selected-client-worktree), and bind SESSION-VAR/CONN-VAR/
-   WORKTREE-VAR/WINDOW-VAR for BODY."
+  "Stub %fork-pane and start-reader-thread, build one organization/repository/
+   worktree, open the worktree's first pane via the real overview-Enter
+   production path (%focus-selected-client-worktree), and bind SESSION-VAR/
+   CONN-VAR/WORKTREE-VAR/WINDOW-VAR for BODY."
   `(with-loop-state
      (with-stubbed-fdefinition
          ((nerimux/model::%fork-pane
@@ -26,7 +35,9 @@
              (let ((pane (make-no-pty-pane id x y cols rows)))
                (setf (nerimux/model:pane-fd pane) 9999
                      (nerimux/model:pane-start-path pane) (or start-dir ""))
-               pane))))
+               pane)))
+          (nerimux::start-reader-thread
+           (lambda (pane) (declare (ignore pane)) nil)))
        (let* ((organization
                 (nerimux/model:make-organization
                  :id "org" :host "github.com" :name "team"))
