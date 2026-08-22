@@ -21,23 +21,34 @@
 ;;;; fd >= 1022 (FD-SET-OVERFLOW) — fd 9999 was never meant to be watched, only
 ;;;; to read as "live" — so leaving the real reader thread running here would
 ;;;; crash the process the first time it polled.
+;;;;
+;;;; *resize-pty* is bound to a no-op for the same reason: window-relayout
+;;;; calls it unguarded (unlike write-pty/close-pty, which every caller wraps
+;;;; in ignore-errors) whenever a live pane's geometry changes, which every
+;;;; split/close/zoom in this suite does. Outside a running server it is nil
+;;;; (install-pty-port only runs at server startup), so an unstubbed call here
+;;;; would signal undefined-function on nil.
 
 (defmacro %with-r5-fixture ((session-var conn-var worktree-var window-var) &body body)
-  "Stub %fork-pane and start-reader-thread, build one organization/repository/
-   worktree, open the worktree's first pane via the real overview-Enter
-   production path (%focus-selected-client-worktree), and bind SESSION-VAR/
-   CONN-VAR/WORKTREE-VAR/WINDOW-VAR for BODY."
+  "Stub %fork-pane and start-reader-thread, bind *resize-pty* to a no-op,
+   build one organization/repository/worktree, open the worktree's first pane
+   via the real overview-Enter production path
+   (%focus-selected-client-worktree), and bind SESSION-VAR/CONN-VAR/
+   WORKTREE-VAR/WINDOW-VAR for BODY."
   `(with-loop-state
-     (with-stubbed-fdefinition
-         ((nerimux/model::%fork-pane
-           (lambda (session id x y cols rows &key start-dir)
-             (declare (ignore session))
-             (let ((pane (make-no-pty-pane id x y cols rows)))
-               (setf (nerimux/model:pane-fd pane) 9999
-                     (nerimux/model:pane-start-path pane) (or start-dir ""))
-               pane)))
-          (nerimux::start-reader-thread
-           (lambda (pane) (declare (ignore pane)) nil)))
+     (let ((nerimux/ports:*resize-pty* (lambda (fd rows cols)
+                                         (declare (ignore fd rows cols))
+                                         nil)))
+       (with-stubbed-fdefinition
+           ((nerimux/model::%fork-pane
+             (lambda (session id x y cols rows &key start-dir)
+               (declare (ignore session))
+               (let ((pane (make-no-pty-pane id x y cols rows)))
+                 (setf (nerimux/model:pane-fd pane) 9999
+                       (nerimux/model:pane-start-path pane) (or start-dir ""))
+                 pane)))
+            (nerimux::start-reader-thread
+             (lambda (pane) (declare (ignore pane)) nil)))
        (let* ((organization
                 (nerimux/model:make-organization
                  :id "org" :host "github.com" :name "team"))
@@ -58,7 +69,7 @@
          (nerimux::%set-client-selected-tree-object ,conn-var ,worktree-var)
          (nerimux::%handle-multi-key-message ,session-var ,conn-var #(13)) ; Enter
          (let ((,window-var (nerimux/model:session-active-window ,session-var)))
-           ,@body)))))
+           ,@body))))))
 
 (describe "workspace-panes-acceptance-suite"
 
@@ -71,7 +82,9 @@
           (make-single-pane-session :width 3 :height 2)
         (let* ((worktree
                  (nerimux/model:make-worktree :id "wt" :path "/tmp/wt" :branch "feat/tiny"))
-               (conn (%make-test-conn)))
+               (conn (%make-test-conn))
+               ;; %client-notify no-ops unless CONN is in *clients* (%client-live-p).
+               (nerimux::*clients* (list conn)))
           (nerimux/model:worktree-add-pane worktree pane)
           (nerimux::%set-client-focus conn pane)
           (nerimux::%handle-multi-key-message session conn #(17)) ; C-q
@@ -208,7 +221,9 @@
                   :id "wt" :repository repository
                   :path "/tmp/nerimux-r5-7-wt" :branch "feat/broken"))
                (session (nerimux/model:make-session :id 1 :name "0" :windows nil))
-               (conn (%make-test-conn)))
+               (conn (%make-test-conn))
+               ;; %client-notify no-ops unless CONN is in *clients* (%client-live-p).
+               (nerimux::*clients* (list conn)))
           (nerimux/model:organization-add-repository organization repository)
           (nerimux/model:repository-add-worktree repository worktree)
           (setf (nerimux::client-conn-view conn) :overview)
