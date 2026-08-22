@@ -51,6 +51,19 @@ one that went unnoticed. The second is how a test file becomes decoration.
 component list. `t/e2e/e2e-smoke.lisp` is a known orphan — it is run by hand
 against a built binary (see the getting-started guide), not by any ASDF system.
 
+## suite-structure-check.pl — every test is inside a suite
+
+A test registered outside its DESCRIBE still runs, so a green result says
+nothing about it. What it breaks is the shape of the tree cl-weave hands to its
+collector: the root gains a test case where every other child is a suite.
+
+It found one. attention-tests.lisp had a closing paren too many after its second
+test, which ended the suite early and put the third test on the root — through
+every green run this repository ever had.
+
+Also reports a file whose parens do not balance, which is the same mistake one
+step earlier and the reason read-check exists.
+
 ## internal-call-check.pl — every %helper call resolves, with a plausible arity
 
 The cheapest approximation of "it compiles" that needs no compiler. It checks
