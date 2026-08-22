@@ -119,15 +119,17 @@
         (nerimux/model:repository-add-worktree repository worktree)
         (setf (nerimux::client-conn-view conn) :overview)
         (nerimux::%set-client-selected-tree-object conn repository)
-        (format *error-output*
+        (format t
                 "~&DIAG view=~S selected-eq-repo=~S selected-type=~S selected-repo-fn=~S selected-repo-eq=~S~%"
                 (nerimux::client-conn-view conn)
                 (eq repository (nerimux::client-conn-selected-tree-object conn))
                 (type-of (nerimux::client-conn-selected-tree-object conn))
                 (type-of (nerimux::%client-selected-repository conn))
                 (eq repository (nerimux::%client-selected-repository conn)))
+        (finish-output)
         (nerimux::%handle-multi-key-message s conn #(110))
-        (format *error-output* "~&DIAG mode-after-n=~S~%" (nerimux::client-conn-mode conn))
+        (format t "~&DIAG mode-after-n=~S~%" (nerimux::client-conn-mode conn))
+        (finish-output)
         (expect (eq :command (nerimux::client-conn-mode conn)))
         (expect (string= "wt-create --branch "
                          (nerimux::client-conn-command-buffer conn)))
