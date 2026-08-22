@@ -108,6 +108,7 @@
    #:session-select-window
    #:session-insert-window
    #:session-new-window
+   #:session-remove-window
    #:session-active-pane
    #:session-last-active
    #:session-created
