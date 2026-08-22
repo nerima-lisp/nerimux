@@ -16,6 +16,8 @@
   (it "r8-2-c-q-shift-q-shows-confirm-with-live-pane-count-and-swallows-other-keys"
     (with-fake-session (s :nwindows 1 :npanes 2)
       (let* ((conn (%make-test-conn))
+             ;; %client-notify no-ops unless CONN is in *clients* (%client-live-p).
+             (nerimux::*clients* (list conn))
              (win (first (nerimux/model:session-windows s)))
              (panes (nerimux/model:window-panes win)))
         (setf (nerimux/model:pane-fd (first panes)) 9999) ; one live pane
