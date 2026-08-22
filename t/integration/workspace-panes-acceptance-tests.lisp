@@ -112,10 +112,13 @@
                        (nerimux/model:pane-start-path
                         (nerimux/model:window-active-pane window-1))))
 
-      ;; focus move
+      ;; focus move: the split above is :v (top/bottom, "-"), so the pane
+      ;; below is a geometric neighbor in the :down direction (j) -- :left/
+      ;; :right (h/l) have no candidate to move to and pane-neighbor would
+      ;; correctly leave focus unchanged.
       (let ((before (nerimux::client-conn-focus conn)))
         (nerimux::%handle-multi-key-message session conn #(17))
-        (nerimux::%handle-multi-key-message session conn #(104)) ; h
+        (nerimux::%handle-multi-key-message session conn #(106)) ; j
         (expect (not (eq before (nerimux::client-conn-focus conn)))))
 
       ;; two more splits -> 4 panes, the window cap (+max-panes-per-window+)

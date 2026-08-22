@@ -112,6 +112,7 @@
                             :active pane))
          (sess (make-session :id session-id :name session-name
                              :windows (list win) :active win)))
+    (setf (pane-window pane) win)
     (window-select-pane win pane)
     (session-select-window sess win)
     (values sess win pane)))
