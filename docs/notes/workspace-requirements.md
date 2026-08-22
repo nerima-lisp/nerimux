@@ -290,6 +290,8 @@ prompt.lisp 削除 (R1.1)
 
 ### R1. 削除
 
+> 完了・マージ済み。詳細は §5 冒頭の進捗メモを参照。
+
 R1.1 `presentation/prompt/prompt.lisp` の編集 API を削除する。`prompt-active-p` を読む
 renderer の 4 分岐も、常に偽であることを根拠に畳む。
 
@@ -361,6 +363,8 @@ R1.17 **CLI のグローバルフラグを `-V` / `-h` だけにする。** `-L`
 
 ### R2. 設定機構の全廃
 
+> 大半が実装済みと見られる（§5 冒頭の進捗メモ参照）。個別項目は着手前に再確認すること。
+
 R2.1 `application/config` を削除する。`.tmux.conf` / `$NERIMUX_CONF` /
 `~/.config/nerimux/nerimux.conf` を読まない。`server.lisp` の `load-config-file` 呼び出しと
 設定由来の警告出力も消える。
@@ -399,6 +403,8 @@ R2.8 server log は 1 MB を超えていたら起動時に新規作成する
 
 ### R3. clipboard を OSC 52 のみにする
 
+> 大半が実装済みと見られる（§5 冒頭の進捗メモ参照）。個別項目は着手前に再確認すること。
+
 R3.1 yank は `%maybe-copy-to-clipboard`（`commands-copy-mode-clip.lisp:74`）だけを行う。
 `set-clipboard` オプションが消えるので無条件に送出する。
 
@@ -411,6 +417,8 @@ R3.3 pane から届いた OSC 52 はクライアント端末へ素通しする�
 pane 内のアプリが送った OSC 52 も同様に届くこと。`domain/buffer/` が存在しないこと。
 
 ### R4. 入力経路と prefix キー
+
+> 大半が実装済みと見られる（§5 冒頭の進捗メモ参照）。個別項目は着手前に再確認すること。
 
 R4.1 **矢印キー判定を削除する。** `%client-key-sequence-p` と、それを使う
 `%handle-client-normal-key-payload` / `%handle-client-copy-key-payload` の分岐を消す。
@@ -427,6 +435,9 @@ R4.4 **`C-q` を本物の prefix に格上げする。** 1.5 の表のとおり�
 破棄する。現在の「未束縛なら素通し」（`:96-107`）をやめる。
 
 ### R5. pane 分割と window
+
+> 大半が実装済みと見られる（§5 冒頭の進捗メモ参照）。R5.5 は未確認。個別項目は
+> 着手前に再確認すること。
 
 R5.1 分割は常に 50/50。`%split-fits-p`（`window-core.lisp:86`）が入らないと判定した
 ときはメッセージを出して何もしない。
@@ -460,6 +471,8 @@ window 行に表示する。status line のタブは番号のみ。
 `:input` モード中に ESC が pane へ届くこと。prefix の未束縛キーが pane へ漏れないこと。
 
 ### R6. 表示
+
+> 大半が実装済みと見られる（§5 冒頭の進捗メモ参照）。個別項目は着手前に再確認すること。
 
 R6.1 worktree 行に複数の状態トークンを表示する。`MISSING` / `BARE` / `LOCKED` /
 `PRUNABLE` / `DIRTY` / `CONFLICT` / `AHEAD n` / `BEHIND n` を併記し、`AHEAD` と `BEHIND` は
@@ -540,6 +553,9 @@ R6.12 **action menu は実装しない。** `:` コマンド行を §11 の「ke
 
 ### R7. VCS 操作
 
+> 大半が実装済みと見られる（§5 冒頭の進捗メモ参照。R7.1–R7.6 すべてが `vcs.lisp`
+> のコメントに要件番号として引用されている）。個別項目は着手前に再確認すること。
+
 R7.1 **明示的な fetch を追加する。** `C-q F` で選択中の repository、`C-q C-f` で
 選択中の organization 配下を fetch し、完了後に status を refresh する。
 cl-vcs-kit の `vcs-fetch`（`vcs-commands-operation.lisp:103`、`vcs-worktree` と同じ
@@ -567,6 +583,9 @@ cwd による worktree 自動選択（`server-multi-dispatch.lisp:320-329`）は
 
 ### R8. server のライフサイクル
 
+> 大半が実装済みと見られる（§5 冒頭の進捗メモ参照。R8.1–R8.4 すべてがコード・
+> テストのコメントに要件番号として引用されている）。個別項目は着手前に再確認すること。
+
 R8.1 **CLI に `nerimux kill` を追加する。** socket 経由で `*running*` を落とす。
 **生きている pane があれば拒否し、pane 一覧を出して非 0 で終了する。**
 `--force` を付けたときだけ実行し、pane には **SIGHUP を送って数秒待ち、
@@ -580,6 +599,8 @@ pane は残る。
 R8.4 複数 client の同時 attach を許す。**共有サイズは最小の client に合わせる。**
 
 ### R9. 品質ゲートと構成
+
+> R9.1–R9.3 は実装済みと見られる（§5 冒頭の進捗メモ参照）。R9.4/R9.5 は未確認。
 
 R9.1 **層検査を `::` も検出するよう強化する。** `system-composition-tests.lisp` の
 source-text layering guard（`:82`）に、`nerimux/xxx::yyy` 形式の参照を層違反として
@@ -601,6 +622,9 @@ persistence / prompt が消える）。**さらなる統廃合は R1・R2 完了
 
 ### R10. ドキュメント
 
+> 未確認。R10.1 が列挙した 6 ページに加え、現在 `docs/src/reference/security-model.md`
+> が存在する（この節が書かれた時点にはなかったページ）。個別項目は着手前に再確認すること。
+
 R10.1 **tmux への言及を全部落とす。** `docs/src/reference/compatibility.md` を削除し、
 `docs/src/guide/configuration.md` を削除する。残るのは index / getting-started /
 architecture / sibling-libraries / development-rules / benchmarks の 6 つ。
@@ -614,6 +638,29 @@ R10.3 README を更新する。CLI 入口 3 つ、設定を持たないこと、
 R10.4 `docs/src/benchmarks.md` から予算テストの記述を外す。
 
 ## 5. 作業順序
+
+> **進捗（2026-08-22 追記）**: R1 は完了し、`feat/phase3-r1-deletions` ブランチが
+> PR #8（マージコミット `8e5a399`）として `main` に入った。R1.1–R1.17 は個別に
+> ツリーへ照合済み（例: `pipe-pane` / `get-option` / `domain/hooks` へのソース参照が
+> 0 件、`docs/src/reference/security-model.md` が read-only attach の不在を明記）。
+>
+> 同じブランチの一連のコミット（`d023a3f` 設定機構全廃、`70c7bab` prefix 配線、
+> `608a18e` 5階層tree、`bcaa747` 状態トークン、`7b8b100` VCS操作、`43111e5` kill、
+> ほか）で、R2–R9 の大半もあわせて実装済みになっている。`grep -rhoE 'R[0-9]+\.[0-9]+'
+> src t` で、R2.2–R2.8・R3.1–R3.3・R4.1–R4.4・R5.1–R5.4・R5.6–R5.8・R6.1–R6.12・
+> R7.1–R7.6・R8.1–R8.4・R9.1–R9.3 が要件番号としてコード・テストのコメントに
+> そのまま引用されているのを確認できる。R2.1（`application/config` 削除）は
+> ディレクトリの不在で、R1.13（tags/notes/recent-activity 削除）はモデルへの
+> 実参照 0 件で、それぞれ別途確認した。
+>
+> 未確認のまま残るのは R5.5（専用の worktree クローズ手段を作らない、という
+> 「作らない」判断そのものの確認）、R9.4/R9.5（CI 運用と package 数の実測）、
+> R10 全体（ドキュメント側。`docs/src/` は現在 7 ページあり、R10.1 が列挙した
+> 6 ページ + `reference/security-model.md`）である。
+>
+> **本節末尾の指示どおり「R1 を終えた時点で一度ベースラインを取り直し、R2 の
+> 見積もりをやり直すこと」はまだ行われていない。このメモはその代わりにはならない
+> ——着手前に個別項目を現在のツリーに対して再確認すること。**
 
 依存の向きで決まる。
 
