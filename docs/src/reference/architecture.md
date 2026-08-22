@@ -30,8 +30,8 @@ SIGWINCH ──► %maybe-send-resize                     ready client
               workspace UI handlers                 focused pane's PTY      +msg-command+ payload
               (per-CLIENT-CONN mode:                 (:input mode only —    → %handle-client-ui-command
                :normal/:picker/:command/:copy —        pty-write via the      (workspace UI vocabulary:
-               overview/detail/attention nav,           *write-pty* port)      wt-create, tree-*, picker-*,
-               wt-create/wt-delete, copy-mode nav)                             attention-*, mode, focus …)
+               overview/detail nav, wt-create/          *write-pty* port)      wt-create, tree-*, picker-*,
+               wt-delete, copy-mode nav)                                       mode, focus …)
                                                             ▲
                                                             │ pane-feed, screen update, *dirty* = T
                                               ┌─────────────┴──────────────┐
@@ -45,7 +45,6 @@ SIGWINCH ──► %maybe-send-resize                     ready client
      %receive-server-frame                    %render-client-frame (per client, at
      writes +msg-frame+ payload                that client's own rows×cols):
      straight to *standard-output*               render-workspace-overview-to-tui-string /
-                                                  render-workspace-attention-to-tui-string /
                                                   render-session-to-tui-string
                                                 → +msg-frame+ frame back to that client
 ```
@@ -59,12 +58,13 @@ rendering happen server-side, keyed off the per-connection `CLIENT-CONN`
 struct in `src/bootstrap/server-multi.lisp`.
 
 The server renders **per client**, not once for the whole session: each
-attached `CLIENT-CONN` can be at a different view (overview/detail/attention),
-a different UI mode, and a different terminal size, so `%render-client-frame`
+attached `CLIENT-CONN` can be at a different view (overview/detail), a
+different UI mode, and a different terminal size, so `%render-client-frame`
 (`src/bootstrap/server-multi.lisp`) picks the matching renderer and the
 client's own `rows`/`cols` on every broadcast. The shared pane/PTY layout
-underneath is still sized once, from the `window-size` option applied across
-all attached clients (`%effective-client-size`).
+underneath is still sized once, from the smallest attached client's geometry
+(`%effective-client-size` — there is no `window-size` option to fall back to
+any more; the configuration system that held it is gone).
 
 A key an attached client sends only reaches a pane's PTY through `:input`
 mode (`i` from `:normal`, or a `split-window -I` stdin target). There is no
@@ -97,15 +97,19 @@ The layering rule is:
   side — and an unbound one would reproduce this codebase's most repeated
   failure, a port nobody installs whose fallback succeeds silently. The wrappers
   still earn their place by naming the dependency in one file instead of
-  scattering raw `sb-ext:` calls through `domain/model/` and `domain/format/`.
+  scattering raw `sb-ext:` calls through `domain/model/` (`domain/format/`,
+  the other place they used to scatter through, was deleted whole along with
+  the configuration system it supported).
 
   Git is neither: it does not go through `domain` at all. `bootstrap` calls the
   `nerimux/vcs` infrastructure package directly (`workspace-organizations`,
   `refresh-workspace-organizations-async`, …), which is legal because bootstrap
   sits above every layer.
-- `application` holds use cases over the domain model: what is left in
-  `commands/` (copy mode, the command-line tokenizer, and pane PTY
-  teardown), and `.tmux.conf` directive parsing in `config/`.
+- `application` holds use cases over the domain model: `commands/` (copy
+  mode, the command-line tokenizer, and pane PTY teardown) and `picker/` (the
+  global picker item model). `.tmux.conf` directive parsing (`config/`) is
+  gone — the configuration system was deleted whole, along with
+  `domain/options/` and `domain/format/`.
 - `infrastructure` provides the real PTY/socket/VCS adapters and binds the
   domain's port variables to them.
 - `presentation` turns model state into escape codes and, for the workspace
@@ -189,21 +193,15 @@ nerimux/
 │   ├── domain/             # pure model + logic (no I/O)
 │   │   ├── terminal/       #   VT100/ANSI emulator (data structs ⁄ logic split)
 │   │   ├── model/          #   session → window → pane tree, layouts
-│   │   ├── format/         #   #{...} format-string engine
-│   │   ├── options/        #   option registry + scopes
-│   │   ├── buffer/         #   paste buffers
 │   │   └── ports/          #   the PTY port variables, plus the posix wrappers
 │   ├── application/        # use cases over the domain model
 │   │   ├── commands/       #   copy-mode and the command-line tokenizer —
 │   │   │   └── copy-mode/  #     what outlived the command table
-│   │   ├── config/         #   tmux.conf directive parsing: options, hooks,
-│   │   │                   #   source-file, run/if-shell (bind/unbind parse
-│   │   │                   #   and are discarded — see note above)
 │   │   └── picker/         #   global picker item model (build/filter across
 │   │                       #   the workspace catalog)
 │   ├── infrastructure/     # adapters: PTY, sockets, raw-mode stdin input, VCS
 │   └── presentation/       # renderer
-│       └── renderer/       #   pane compositor + workspace views + cl-tui-kit — see
+│       └── renderer/       #   pane compositor + workspace view + cl-tui-kit — see
 │                           #   below, it is one render path, not two
 └── t/
     ├── unit/               # feature-focused spec files
@@ -218,18 +216,22 @@ layer widgets (the picker modal, the workspace tree) on top.
 There are **two independent first passes**, and the split is deliberate:
 
 - **The pane view** — `render-session-to-string` (`renderer-compose.lisp`),
-  reading status-bar options, laying out panes and emitting escape codes. This
-  is the VT100 machinery: pane and border rendering, status-bar composition,
-  style/SGR emission, copy-mode overlays. Fifteen files, exercised on every
+  drawing the fixed one-row status line, laying out panes and emitting escape
+  codes. This is the VT100 machinery: pane and border rendering, status-line
+  composition, style/SGR emission, copy-mode overlays. Exercised on every
   frame that shows terminal content.
-- **The workspace views** — `render-workspace-overview-to-string` and
-  `render-workspace-attention-to-string` (`renderer-workspace.lisp`), drawing
-  the organization → repository → worktree tree and the attention list.
+- **The workspace view** — `render-workspace-overview-to-string`
+  (`renderer-workspace.lisp`), drawing the organization → repository →
+  worktree tree. Its sibling `render-workspace-attention-to-string`, which
+  drew a standalone attention list, was deleted along with the client-facing
+  `:attention` view (workspace contraction phase 3, R1.7); the attention
+  *model* it read from survives and still drives the `!` marks this function
+  draws on the tree.
 
-The workspace views depend on `renderer-format.lisp` (generic ANSI primitives)
-and nothing else in the pane renderer. They used to live inside
+The workspace view depends on `renderer-format.lisp` (generic ANSI primitives)
+and nothing else in the pane renderer. It used to live inside
 `renderer-compose.lisp`, which made the workspace UI appear to require the whole
-VT100 stack; moving them out in 2026-08 made the real dependency visible, and the
+VT100 stack; moving it out in 2026-08 made the real dependency visible, and the
 ASDF load order now states it — `renderer-workspace` loads immediately after
 `renderer-format`, ahead of the entire pane chain.
 

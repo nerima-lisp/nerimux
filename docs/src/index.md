@@ -16,8 +16,10 @@ default key bindings.
 
 - **Overview** — navigate the organization → repository → worktree tree and
   inspect pane state in the selected worktree.
-- **Detail and attention views** — focus a worktree or collect unread, bell,
-  exit, dirty, and conflict signals that need attention.
+- **Detail view** — focus a worktree. There is no separate attention view to
+  navigate to any more (the client-facing `:attention` view, its key and its
+  widget were deleted); unread, bell, exit, dirty, and conflict signals
+  instead surface as `!` marks on the Overview tree and Global picker.
 - **Global picker** — press `C-p` to search organizations, repositories,
   worktrees, panes, metadata, and attention items.
 - **Thin-client sessions** — `C-q d` detaches one client while the runtime and
@@ -56,13 +58,19 @@ ratios, pane limits — is a compiled-in constant.
 - **cl-process-kit** — timeout-guarded subprocess run, and `select(2)` over
   raw fds.
 - **cl-concurrent-kit** — one reader thread per PTY pane, plus the locks and
-  the preemptive `with-timeout` that bounds `pipe-pane`.
+  the preemptive `with-timeout` that bounds the PTY child-exit wait. It no
+  longer bounds `pipe-pane`, which was deleted; see
+  [Dogfooded sibling libraries](guide/sibling-libraries.md).
 - **cl-regex-kit** — regexes (format `s///` and `m/r:` matching).
 - **cl-codec-kit** — UTF-8 string↔octet conversion for protocol frames, PTY
   output and OSC payloads.
 - **cl-host-kit** — pathname/string host operations.
 - **cl-cli** — startup argv/flag parsing.
-- **cl-boundary-kit** — the process boundary behind `run-shell`/`if-shell`.
+- **cl-boundary-kit** — supplied the process boundary behind `run-shell`/
+  `if-shell`, before the configuration system that carried those directives
+  was deleted; nothing in `src/` calls into it any more, though `nerimux.asd`
+  still lists it as a dependency. See
+  [Dogfooded sibling libraries](guide/sibling-libraries.md).
 - **cl-parser-kit** — the command-line tokenizer.
 - **cl-tui-kit** — headless surface rendering, layout and widgets for the
   per-client frames (workspace overview, detail, picker).

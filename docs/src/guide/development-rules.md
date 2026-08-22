@@ -155,8 +155,8 @@ from the umbrella packages in `src/bootstrap/package*.lisp`.
 
 Include:
 
-1. What you ran — command line, config file, and the byte/escape sequence if it
-   is an emulation bug.
+1. What you ran — command line and the byte/escape sequence if it is an
+   emulation bug. There is no config file to include; nerimux reads none.
 2. What tmux does in the same situation.
 3. What nerimux does instead.
 

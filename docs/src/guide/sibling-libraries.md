@@ -51,11 +51,14 @@ something declarative comes back that is worth reasoning over relationally.
   (`main-startup-flags.lisp`, `*cli-app*`), replacing the old ad hoc
   `-L`/`-S`-only scanner with real tmux(1) flag parity — flags may now appear
   in any order before the command word.
-- [cl-boundary-kit](https://github.com/nerima-lisp/cl-boundary-kit) supplies
+- [cl-boundary-kit](https://github.com/nerima-lisp/cl-boundary-kit) supplied
   the process boundary (`nerimux/config:*process-boundary*`) that the
   `run-shell` / `if-shell` config directives — and the other config-time shell
-  directives — run through, so tests can swap in a fake process without shelling
-  out for real.  There is no non-directive form of those two any more.
+  directives — ran through, so tests could swap in a fake process without
+  shelling out for real. The configuration system that owned those directives
+  was deleted whole (`application/config`, `domain/options`, `domain/format`);
+  `run-shell` and `if-shell` went with it, and nothing in `src/` calls into
+  cl-boundary-kit any more. `nerimux.asd` still lists it as a dependency.
 - [cl-tty-kit](https://github.com/nerima-lisp/cl-tty-kit) backs the PTY layer:
   pane spawn, byte-transparent master-fd read/write, raw mode, and
   terminal-size queries all delegate to it (`src/infrastructure/pty/`). It also
@@ -74,18 +77,22 @@ something declarative comes back that is worth reasoning over relationally.
   sites call: `#(shell-command)` format expansion, the `#{pane_current_*}` OS
   probes, and the copy-mode `copy-command` pipe. `process-kit:run` escalates
   SIGTERM→SIGKILL over the child's process group on a deadline overrun, so a
-  hung command never orphans a shell. `run-shell` / `if-shell` deliberately
-  stay on cl-boundary-kit, which supplies the injectable test double
-  (`make-test-process-boundary`) that cl-process-kit has no equivalent for.
+  hung command never orphans a shell. `run-shell` / `if-shell` used to stay on
+  cl-boundary-kit instead, for its injectable test double
+  (`make-test-process-boundary`, which cl-process-kit had no equivalent for);
+  both directives and that test double were deleted with the configuration
+  system. See the cl-boundary-kit note above.
 - [cl-concurrent-kit](https://github.com/nerima-lisp/cl-concurrent-kit) replaced
   `bordeaux-threads` as the threading vocabulary: the per-pane PTY reader
-  threads and the config-time background `run-shell`, the screen mutex, the
-  `wait-for` channel's condition variable, and the
-  preemptive `with-timeout` that bounds `pipe-pane` and the PTY child-exit
-  wait.  It no longer bounds `run-shell`: that wrapper lived in the deleted
-  commands-shell.lisp, and the surviving config directive bounds itself through
-  cl-boundary-kit's own `:timeout` instead. See the retirement note below for the two API differences
-  that matter when reading pre-migration code.
+  threads, the screen mutex, the `wait-for` channel's condition variable, the
+  VCS worktree-scan thread pool and its fetch lock (`vcs.lisp`), and the
+  preemptive `with-timeout` that bounds the PTY child-exit wait
+  (`pty-child-exit-status`). It no longer bounds `pipe-pane` or the
+  config-time background `run-shell`: `pipe-pane` and the whole configuration
+  system that ran `run-shell` in the background were both deleted — see the
+  cl-boundary-kit note above for `run-shell`/`if-shell`. See the retirement
+  note below for the two API differences that matter when reading
+  pre-migration code.
 - [cl-regex-kit](https://github.com/nerima-lisp/cl-regex-kit) replaced
   `cl-ppcre` behind every regular expression nerimux exposes: the `#{m/r:…}`
   match and `#{s/…/…/}` substitute format modifiers (`format-modifiers.lisp`),
