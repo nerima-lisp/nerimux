@@ -1,9 +1,12 @@
 (in-package #:nerimux/test)
 
 ;;;; renderer tests — part E: %clamp-status-segment, set-cursor-shape in rendered output,
-;;;; render-session nil-window, render-panes-borders nil-window, status-justify-line,
-;;;; %status-bar-line gap, inline style blocks, SGR-aware width,
-;;;; background-window bell relay.
+;;;; render-session nil-window, render-panes-borders nil-window, inline style
+;;;; blocks, SGR-aware width, background-window bell relay.
+;;;;
+;;;; R6.5 deleted %status-justify-line/%justify-right/%justify-centre along
+;;;; with the session-name/window-list/clock status bar they composed — see
+;;;; renderer-statusbar.lisp and renderer-statusbar-workspace-tests.lisp.
 ;;;;
 ;;;; §1.1 retired the alert machinery outright: bell-action and visual-bell
 ;;;; (domain/options, deleted R2.2) are gone, so %emit-bell always writes an
@@ -55,46 +58,6 @@
     (finishes
       (let ((buf (make-string-output-stream)))
         (nerimux/renderer::%render-panes-and-borders buf nil nil nil nil 80))))
-
-  ;;; ── status-justify-line dispatch table ──────────────────────────────────────
-
-  ;; %status-justify-line dispatches correctly to right/centre/left strategies.
-  (it-each (("right"   "L" "R" 20 "right")
-            ("centre"  "L" "R" 20 "centre")
-            ("left"    "L" "R" 20 "left (default)")
-            ("unknown" "L" "R" 20 "unknown falls back to left"))
-      "status-justify-line: ~*~*~*~*~A"
-      (justify left right cols desc)
-    (declare (ignore desc))
-    (let ((result (nerimux/renderer::%status-justify-line left right cols justify)))
-      (expect (<= (length result) cols))
-      (expect (search left result))))
-
-  ;;; ── %justify-right gap calculation ──────────────────────────────────────────
-
-  ;; %justify-right total length equals cols when content fits.
-  (it "status-bar-line-gap-fills-exactly"
-    (let* ((left  "abcde")
-           (time  "12:34")
-           (cols  20)
-           (line  (nerimux/renderer::%justify-right left time cols)))
-      (expect (<= (length line) cols))))
-
-  ;; %justify-right with empty left and time strings produces spaces up to cols.
-  (it "status-bar-line-empty-left-and-time"
-    (let ((line (nerimux/renderer::%justify-right "" "" 10)))
-      (expect (<= (length line) 10))))
-
-  ;;; ── render-session-to-string status content ─────────────────────────────────
-
-  ;; The frame always includes the HH:MM time pattern — status-right's fixed
-  ;; value is "#{time}", composed directly (R2.3).
-  (it "render-session-status-includes-time"
-    (let* ((sess (make-renderer-test-session 40 5))
-           (out  (render-session-to-string sess 6 40)))
-      ;; The default right status is HH:MM — 5 chars with a colon at position 2.
-      ;; We just check a colon is present in a 5-char time substring.
-      (expect (find #\: out))))
 
   ;;; ── inline #[attr] style blocks + SGR-aware width (renderer-statusbar) ────────
   ;;;
@@ -168,14 +131,6 @@
       (expect (string= txt (nerimux/renderer::%clamp-status-segment txt 5)))
       (expect (= 3 (nerimux/renderer::%visible-length
                     (nerimux/renderer::%clamp-status-segment txt 3))))))
-
-  ;; %justify-right computes the gap from visible cells, so SGR doesn't shove content off-edge.
-  (it "justify-right-ignores-sgr-width"
-    (let* ((esc  #\Escape)
-           (left (format nil "~C[32mABC~C[0m" esc esc))   ; 3 visible cells
-           (line (nerimux/renderer::%justify-right left "RR" 20)))
-      (expect (= 20 (nerimux/renderer::%visible-length line)))
-      (expect (search "RR" line))))
 
   ;;; ── Background-window bell relay ─────────────────────────────────────────────
   ;;;

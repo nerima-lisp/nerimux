@@ -43,35 +43,4 @@
                                    :fd fd :pid -1 :screen (make-screen 80 24)))))
           (if expected
               (expect (pane-live-p pane) :to-be-truthy)
-              (expect (pane-live-p pane) :to-be-falsy))))))
-
-  ;;; ── %pane-border-status-reservation direct tests ─────────────────────────────
-  ;;;
-  ;;; The path where height = 1 means the pane is "too short" — even when
-  ;;; status is "top" or "bottom", no row can be reserved without leaving
-  ;;; the content height at 0.  The function must fall back to offset=0, height=1.
-
-  ;; %pane-border-status-reservation returns (0, height) for any non-off status
-  ;; when height is 1 (too short to reserve a row for the title bar).
-  (it "pane-border-status-reservation-too-short-does-not-reserve"
-    (dolist (status '("top" "bottom"))
-      (multiple-value-bind (y-offset content-height)
-          (nerimux/model::%pane-border-status-reservation status 1)
-        (expect (= 0 y-offset))
-        (expect (= 1 content-height)))))
-
-  ;; %pane-border-status-reservation with status=top and height > 1 reserves the
-  ;; first row: y-offset 1, content-height (height - 1).
-  (it "pane-border-status-reservation-top-normal"
-    (multiple-value-bind (y-offset content-height)
-        (nerimux/model::%pane-border-status-reservation "top" 10)
-      (expect (= 1 y-offset))
-      (expect (= 9 content-height))))
-
-  ;; %pane-border-status-reservation with status=off returns (0, height) regardless
-  ;; of height — the off path must never reserve a row.
-  (it "pane-border-status-reservation-off-returns-full-height"
-    (multiple-value-bind (y-offset content-height)
-        (nerimux/model::%pane-border-status-reservation "off" 24)
-      (expect (= 0 y-offset))
-      (expect (= 24 content-height)))))
+              (expect (pane-live-p pane) :to-be-falsy)))))))

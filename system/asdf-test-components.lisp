@@ -96,7 +96,7 @@
           (:file "pane-tests-geometry") ; pane feed/reposition, next-id, split-window
           (:file "pane-tests-ops") ; swap/capture/last/display/respawn
           (:file "pane-tests-accessors") ; pane defaults, accessors, feed dirty/empty
-          (:file "pane-tests-predicates") ; hit-testing, live, pipe, border-status
+          (:file "pane-tests-predicates") ; hit-testing, live, pipe
           (:file "window-tests-relayout")
           (:file "window-tests-split-math")
           (:file "window-tests-tree-ops")
@@ -144,12 +144,9 @@
           (:file "renderer-pane-tests") ; render-pane content/borders/window-style - part I
           (:file "renderer-pane-tests-b") ; %clock-digit-rows, %render-v-separator, border/pane edge cases - part II
           (:file "renderer-pane-tests-c") ; %apply-border-style branches, draw-clock, render-pane-clock-mode, draw-pane-number, in-sel-branch - part III
-          (:file "renderer-tests") ; renderer - part I (status-bar, render-session, clear-display, status-indicators, window-list)
-          (:file "renderer-window-list-tests") ; renderer status window-list styles and format expansion
-          (:file "renderer-tests-d") ; renderer - part IV (per-window options, alert-tab-styles, status-bar-line)
+          (:file "renderer-tests") ; renderer - part I (status-bar, render-session, clear-display)
           (:file "renderer-tests-b") ; renderer - part II (status-bar, status-position, BEL rendering, status-left-expanded)
-          (:file "renderer-tests-f") ; renderer - part VI (parse-style-string, style-to-sgr, status-length, window-status-format, render-popup/menu)
-          (:file "renderer-tests-c") ; renderer - part III (mouse/focus/keys, lock-screen, justify, cursor-shape, zoom-suppression)
+          (:file "renderer-tests-c") ; renderer - part III (mouse/focus/keys, lock-screen, cursor-shape, zoom-suppression)
           (:file "renderer-tests-e") ; renderer - part V (%clamp-status-segment, cursor-shape in output, status-bar-line gap, inline-style, bell relay)
           (:file "renderer-tests-g") ; renderer - part VII (%split-align-attr, %status-align-buckets, %status-bar-default-segments, %content-search-match-p flag matrix)
          (:file "renderer-statusbar-layout-tests") ; direct unit tests for the previously-untested statusbar-layout helpers

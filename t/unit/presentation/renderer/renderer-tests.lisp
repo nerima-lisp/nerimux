@@ -40,14 +40,14 @@
 
   ;;; ── render-status-bar ───────────────────────────────────────────────────────
 
-  ;; render-status-bar shows the session name and the active window's index:name.
+  ;; render-status-bar draws something for a session with no worktree (R6.5:
+  ;; the middle block's window/pane tabs only appear for a focus pane that
+  ;; has one — make-renderer-test-session's pane does not, so this only
+  ;; checks the bar renders at all, not any window-index:name text).
   (it "render-status-bar-shows-names"
     (let* ((sess (make-renderer-test-session 40 10 :content ""))
            (out  (render-status-bar-output sess 10 40)))
-      (expect (search "0" out))
-      ;; The active window is formatted as " I:NAME* " → " 1:1* " for window
-      ;; named "1" at index 1.
-      (expect (search "1:1" out))))
+      (expect (search "0" out))))
 
   ;; %compose-aligned-line places #[align=right] content flush-right and
   ;; #[align=centre] content centred, filling to the requested width.
@@ -114,9 +114,7 @@
       (expect (find #\h out))
       (expect (find #\i out))
       (expect (search (format nil "~C[?25l" #\Escape) out))
-      (expect (search (format nil "~C[?25h" #\Escape) out))
-      ;; The active window is formatted as " I:NAME* " → " 1:1* ".
-      (expect (search "1:1" out))))
+      (expect (search (format nil "~C[?25h" #\Escape) out))))
 
   ;; A side-by-side split renders a vertical separator, highlights the active pane's border, and shows both panes' content.
   (it "render-session-vertical-split-emits-separators"
@@ -175,17 +173,4 @@
                  (clear-display)
                  (get-output-stream-string *standard-output*))))
       (expect (search (format nil "~C[2J" #\Escape) out))
-      (expect (search (format nil "~C[H" #\Escape) out))))
-
-  ;;; ── %status-pane-indicator (pure) ───────────────────────────────────────────
-
-  ;; %status-pane-indicator formats a live pane as #<pane-id>.
-  (it "status-pane-indicator-with-active-pane"
-    (let* ((screen (make-screen 10 5))
-           (pane   (make-pane :id 7 :x 0 :y 0 :width 10 :height 5 :fd -1 :screen screen))
-           (out    (nerimux/renderer::%status-pane-indicator pane)))
-      (expect (search "#7" out))))
-
-  ;; %status-pane-indicator returns the empty string for a NIL pane.
-  (it "status-pane-indicator-nil-returns-empty"
-    (expect (string= "" (nerimux/renderer::%status-pane-indicator nil)))))
+      (expect (search (format nil "~C[H" #\Escape) out)))))

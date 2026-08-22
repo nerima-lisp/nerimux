@@ -47,13 +47,16 @@
                               ""))
 
   ;; copy-mode-line-numbers is always off: no gutter is ever drawn, so the
-  ;; pane's visible content is exactly the fed content, unchanged.
+  ;; pane's visible content is exactly the fed content, unchanged. The
+  ;; position overlay (R6.8, unrelated to the gutter) is suppressed here so it
+  ;; does not show up as unaccounted-for trailing text in the comparison.
   (it "copy-mode-never-draws-a-line-number-gutter"
     (let* ((sess   (make-renderer-test-session 8 2 :content "ABCDEFGH"))
            (pane   (first (window-panes (session-active-window sess))))
            (screen (pane-screen pane)))
       (setf (screen-copy-mode-p screen) t
-            (screen-copy-cursor screen) (cons 1 0))
+            (screen-copy-cursor screen) (cons 1 0)
+            (nerimux/terminal/types:screen-copy-hide-position screen) t)
       (let ((vis (%strip-csi-sequences (render-pane-output sess pane))))
         (expect (string= "ABCDEFGH" vis)))))
 
@@ -120,14 +123,20 @@
       (let ((out (render-pane-output sess pane)))
         (expect (%reverse-video-p out)))))
 
-  ;; When copy-selecting is T but mark is NIL, sel-active is false.
+  ;; When copy-selecting is T but mark is NIL, sel-active is false. Both
+  ;; renders keep copy-mode-p T so the (unrelated) position overlay is
+  ;; present in both and cancels out of the comparison; only the
+  ;; selecting/mark/cursor state under test changes between them.
   (it "in-sel-branch-selecting-but-no-mark"
     (let* ((sess   (make-renderer-test-session 8 4 :content "ABCDEFGH"))
            (pane   (first (window-panes (session-active-window sess))))
            (screen (pane-screen pane)))
+      (setf (screen-copy-mode-p    screen) t
+            (screen-copy-selecting screen) nil
+            (screen-copy-mark      screen) nil
+            (screen-copy-cursor    screen) nil)
       (let ((baseline (render-pane-output sess pane)))
-        (setf (screen-copy-mode-p    screen) t
-              (screen-copy-selecting screen) t
+        (setf (screen-copy-selecting screen) t
               (screen-copy-mark      screen) nil
               (screen-copy-cursor    screen) (cons 0 3))
         (let ((out (render-pane-output sess pane)))
