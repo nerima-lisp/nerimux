@@ -1,12 +1,13 @@
 (in-package #:nerimux/test)
 
-;;;; renderer tests — part E: %clamp-status-segment, set-cursor-shape in rendered output,
+;;;; renderer tests — part E: set-cursor-shape in rendered output,
 ;;;; render-session nil-window, render-panes-borders nil-window, inline style
 ;;;; blocks, SGR-aware width, background-window bell relay.
 ;;;;
-;;;; R6.5 deleted %status-justify-line/%justify-right/%justify-centre along
-;;;; with the session-name/window-list/clock status bar they composed — see
-;;;; renderer-statusbar.lisp and renderer-statusbar-workspace-tests.lisp.
+;;;; R6.5 deleted %status-justify-line/%justify-right/%justify-centre and
+;;;; %clamp-status-segment along with the session-name/window-list/clock
+;;;; status bar they composed — see renderer-statusbar.lisp and
+;;;; renderer-statusbar-workspace-tests.lisp.
 ;;;;
 ;;;; §1.1 retired the alert machinery outright: bell-action and visual-bell
 ;;;; (domain/options, deleted R2.2) are gone, so %emit-bell always writes an
@@ -19,16 +20,6 @@
 ;;;; renderer-statusbar-layout.lisp.
 
 (describe "renderer-suite"
-
-  ;;; ── %clamp-status-segment ───────────────────────────────────────────────────
-
-  ;; %clamp-status-segment returns text unchanged when it fits (≤ max) and truncates when it exceeds max.
-  (it "clamp-status-segment-table"
-    (check-status-segment-clamp-cases
-     '(("hello" 10 "hello" "shorter than max -> unchanged")
-       ("hello"  5 "hello" "exactly max length -> unchanged")
-       ("hello"  3 "hel"   "exceeds max -> truncated to 3 chars")
-       (""      10 ""      "empty string -> always unchanged"))))
 
   ;;; ── set-cursor-shape in rendered output ──────────────────────────────────────
 
@@ -123,14 +114,6 @@
            (expected (format nil "~C[0;44;97mX~C[0;44;97mY" esc esc)))
       (expect (null (search "#[" out)))
       (expect (string= expected out))))
-
-  ;; %clamp-status-segment measures visible cells; SGR escapes don't count and survive.
-  (it "clamp-status-segment-counts-visible-not-sgr"
-    (let* ((esc #\Escape)
-           (txt (format nil "~C[32mhello~C[0m" esc esc)))   ; 5 visible cells
-      (expect (string= txt (nerimux/renderer::%clamp-status-segment txt 5)))
-      (expect (= 3 (nerimux/renderer::%visible-length
-                    (nerimux/renderer::%clamp-status-segment txt 3))))))
 
   ;;; ── Background-window bell relay ─────────────────────────────────────────────
   ;;;

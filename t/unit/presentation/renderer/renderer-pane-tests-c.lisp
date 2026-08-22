@@ -47,9 +47,11 @@
                               ""))
 
   ;; copy-mode-line-numbers is always off: no gutter is ever drawn, so the
-  ;; pane's visible content is exactly the fed content, unchanged. The
-  ;; position overlay (R6.8, unrelated to the gutter) is suppressed here so it
-  ;; does not show up as unaccounted-for trailing text in the comparison.
+  ;; pane's visible content starts with the fed content, unchanged, rather
+  ;; than a line-number prefix. It does not equal "ABCDEFGH" outright: row 1
+  ;; is empty and still renders as trailing spaces to fill the pane's height.
+  ;; The position overlay (R6.8, unrelated to the gutter) is suppressed here
+  ;; so it does not show up as unaccounted-for trailing text either.
   (it "copy-mode-never-draws-a-line-number-gutter"
     (let* ((sess   (make-renderer-test-session 8 2 :content "ABCDEFGH"))
            (pane   (first (window-panes (session-active-window sess))))
@@ -58,7 +60,7 @@
             (screen-copy-cursor screen) (cons 1 0)
             (nerimux/terminal/types:screen-copy-hide-position screen) t)
       (let ((vis (%strip-csi-sequences (render-pane-output sess pane))))
-        (expect (string= "ABCDEFGH" vis)))))
+        (expect (eql 0 (search "ABCDEFGH" vis))))))
 
   ;;; -- in-sel branch coverage via render-pane ----------------------------------
 

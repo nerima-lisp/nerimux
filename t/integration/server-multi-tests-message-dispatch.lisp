@@ -126,7 +126,10 @@
         (nerimux::%handle-multi-key-message s conn #(27))
         (expect (eq :normal (nerimux::client-conn-mode conn)))
         (expect (eq :overview (nerimux::client-conn-view conn)))
-        (nerimux::%handle-multi-key-message s conn #(13))
+        ;; n reopens the same prompt after cancelling (R6.3 gave Enter on a
+        ;; repository row expand/collapse instead — %focus-selected-client-
+        ;; worktree — so n is the only key that starts worktree-create now).
+        (nerimux::%handle-multi-key-message s conn #(110))
         (expect (eq :command (nerimux::client-conn-mode conn)))
         (expect (string= "wt-create --branch "
                          (nerimux::client-conn-command-buffer conn)))
@@ -167,7 +170,10 @@
                        t))
                (setf (nerimux::client-conn-view conn) :overview)
                (nerimux::%set-client-selected-tree-object conn repository)
-               (nerimux::%handle-multi-key-message s conn #(13))
+               ;; n starts worktree-create; Enter on a repository row now
+               ;; expands/collapses it instead (R6.3, %focus-selected-client-
+               ;; worktree).
+               (nerimux::%handle-multi-key-message s conn #(110))
                (nerimux::%handle-multi-key-message
                 s conn
                 (cl-codec-kit:string-to-octets

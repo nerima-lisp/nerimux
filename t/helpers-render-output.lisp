@@ -74,17 +74,6 @@
   (with-output-to-string (s)
     (nerimux/renderer::render-tree-borders s tree active-pane width)))
 
-(defmacro check-status-segment-clamp-cases (cases)
-  "Assert %clamp-status-segment rows shaped (TEXT MAX EXPECTED DESC)."
-  `(check-table
-    (mapcar (lambda (row)
-              (destructuring-bind (text max expected desc) row
-                (list (nerimux/renderer::%clamp-status-segment text max)
-                      expected
-                      desc)))
-            ,cases)
-    :test #'string=))
-
 (defmacro check-visible-truncate-cases (cases)
   "Assert %visible-truncate rows shaped (INPUT MAX EXPECTED DESC)."
   `(check-table
