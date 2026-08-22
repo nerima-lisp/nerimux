@@ -31,15 +31,21 @@ the heap only decides when it fires:
 | 16 GB | 80 MB | fine |
 | 16 GB | 1 GB | deadlock |
 
-So every observation follows from one fact. Work that stays under the threshold
-finishes — the checks in `scripts/checks/`, loading a system, running a few
-suites. Work that crosses it stops, wherever it happens to be, which is why the
-stopping point moves and why raising the heap appears to help without fixing
-anything. No amount of retrying, sharding, or splitting changes it: the suite
-allocates more than any heap holds before its first collection.
+Work that stays under the threshold finishes: the checks in `scripts/checks/`,
+loading a system, running a handful of suites. Work that crosses it stops
+wherever it happens to be, which is why raising the heap looks like progress
+without fixing anything.
 
-Nothing in this repository can work around that, and nothing here should be
-changed in response to it.
+That accounts for a lot, but not for all of it, and the difference matters.
+Running the whole suite still stops with collection effectively disabled —
+`(setf (sb-ext:bytes-consed-between-gcs) (* 50 1024 1024 1024))` under a 64 GB
+heap, 292 MB consed, `sb-ext:*after-gc-hooks*` never fired. Loading the system
+completes; `cl-weave:run-all` over the full tree then blocks with no collection
+having run. So there is a second stall here that the collector does not explain,
+and it has not been identified.
+
+Nothing in this repository can work around either, and nothing here should be
+changed in response to them.
 
 Two measurement traps make this hard to see. `ps` reports `%cpu` as a lifetime
 average, so a process that ran for a moment and then stopped forever reads as
