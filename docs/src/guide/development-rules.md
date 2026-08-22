@@ -8,26 +8,38 @@ to trip over and that no general guide would mention.
 ## When the suite starts and then stops dead
 
 `nix run .#test` printing `Running test system nerimux/test` and then producing
-nothing — no output, no error, no CPU — is almost never the suite. Check the
-machine before you check the code:
+nothing — no output, no error, no CPU — has been seen on macOS/arm64, and it is
+not the suite. Garbage collection deadlocks. Check for it before reading a line
+of Lisp:
 
-```bash
-vm_stat | head -4          # "Pages free" in the low thousands means no free RAM
-sysctl vm.swapusage        # used ≈ total means the swap file is full too
-ps -eo %cpu,command -r | head -5
+```lisp
+;; sbcl --script this-file
+(let (l) (dotimes (i 5000000) (push i l)) (length l))   ; ~80 MB
+(format t "~&GC survived~%")
 ```
 
-Memory exhaustion is one cause, and the cheap one to rule out. It is not the
-only one: the same symptom has been seen on macOS/arm64 with the machine idle
-and gigabytes free. In that form it stops before any code in this repository is
-read — looking up the first sibling system is enough — every available SBCL
-version reproduces it, and the stopping point moves between runs. The cause is
-not known. What matters here is that none of it is evidence about the tests.
+On an affected machine that never prints, with the process at zero CPU and
+unkillable by `sb-ext:with-timeout` — the block is below Lisp, and every thread
+is parked at a stop-the-world safepoint.
 
-If you retry, run `sbcl --script run-tests.lisp` from a fixed directory rather
-than `nix run .#test`, which copies the tree to a new temporary directory each
-time. ASDF's output paths follow the source path, so a retry through the app
-recompiles from nothing while a retry from a fixed directory resumes.
+What the size sweep shows is that the *first* collection is the one that dies;
+the heap only decides when it fires:
+
+| dynamic space | allocated | result |
+|---|---|---|
+| 1 GB (default) | 80 MB | deadlock |
+| 16 GB | 80 MB | fine |
+| 16 GB | 1 GB | deadlock |
+
+So every observation follows from one fact. Work that stays under the threshold
+finishes — the checks in `scripts/checks/`, loading a system, running a few
+suites. Work that crosses it stops, wherever it happens to be, which is why the
+stopping point moves and why raising the heap appears to help without fixing
+anything. No amount of retrying, sharding, or splitting changes it: the suite
+allocates more than any heap holds before its first collection.
+
+Nothing in this repository can work around that, and nothing here should be
+changed in response to it.
 
 Two measurement traps make this hard to see. `ps` reports `%cpu` as a lifetime
 average, so a process that ran for a moment and then stopped forever reads as
