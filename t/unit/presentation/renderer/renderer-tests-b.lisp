@@ -30,6 +30,12 @@
 
   ;; render-session-to-string emits BEL (byte 7) when bell-pending is T and clears
   ;; the flag; emits no BEL when bell-pending is NIL.
+  ;;
+  ;; %client-title-osc's OSC 0 title sequence is BEL-terminated (R6.11) and is
+  ;; always the last thing written, regardless of any pane's bell state -- so
+  ;; OUT always contains at least one BEL. %bel-before-title-osc strips that
+  ;; trailing OSC sequence before searching, isolating the pane-bell relay
+  ;; this test actually covers.
   (it "render-bel-table"
     (dolist (row '((t   "bell-pending T: BEL emitted and flag cleared")
                    (nil "bell-pending NIL: BEL absent")))
@@ -39,19 +45,10 @@
                (ap    (session-active-pane sess))
                (sc    (pane-screen ap)))
           (setf (nerimux/terminal/types:screen-bell-pending sc) initial-pending)
-          (format *error-output* "~&DIAG initial-pending=~S active-pane-eq-ap=~S bell-pending-before-render=~S active-pane-fd=~S window-panes-count=~S~%"
-                  initial-pending
-                  (eq ap (nerimux::session-active-pane sess))
-                  (nerimux/terminal/types:screen-bell-pending sc)
-                  (nerimux/model:pane-fd (nerimux::session-active-pane sess))
-                  (length (nerimux/model:window-panes (nerimux::session-active-window sess))))
-          (let ((out (render-session-to-string sess 6 20)))
-            (format *error-output* "~&DIAG bell-pending-after-render=~S out-has-bel=~S out-length=~S~%"
-                    (nerimux/terminal/types:screen-bell-pending sc)
-                    (and (find (code-char 7) out) t)
-                    (length out))
+          (let* ((out    (render-session-to-string sess 6 20))
+                 (before (%bel-before-title-osc out)))
             (expect (if initial-pending
-                        (find (code-char 7) out)
-                        (null (find (code-char 7) out))))
+                        (find (code-char 7) before)
+                        (null (find (code-char 7) before))))
             (when initial-pending
               (expect (nerimux/terminal/types:screen-bell-pending sc) :to-be-falsy))))))))

@@ -132,7 +132,9 @@
       (setf (nerimux/terminal/types:screen-bell-pending
              (nerimux/model:pane-screen pane2)) t)
       (let ((out (nerimux/renderer::render-session-to-string sess 5 20)))
-        (expect (null (find (code-char 7) out)))
+        ;; %bel-before-title-osc: OUT's trailing OSC-0 title sequence is
+        ;; BEL-terminated regardless of any pane's bell state (R6.11).
+        (expect (null (find (code-char 7) (%bel-before-title-osc out))))
         (expect (null (nerimux/terminal/types:screen-bell-pending
                        (nerimux/model:pane-screen pane2)))))))
 

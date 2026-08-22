@@ -21,6 +21,16 @@
   (with-output-to-string (s)
     (nerimux/renderer::render-pane s session pane)))
 
+(defun %bel-before-title-osc (frame)
+  "FRAME with its trailing OSC 0 title sequence (%client-title-osc,
+   renderer-workspace.lisp, R6.11) removed. That sequence is BEL-terminated
+   and always the last thing render-session-to-string writes, independent of
+   any pane's bell state, so a plain (find (code-char 7) frame) can never
+   tell a real pane-bell relay apart from that terminator. Tests asserting
+   on the pane-bell relay should search this instead of FRAME directly."
+  (let ((osc-start (search (format nil "~C]0;" #\Escape) frame)))
+    (if osc-start (subseq frame 0 osc-start) frame)))
+
 (defmacro with-copy-mode-render-fixture ((session-var pane-var screen-var w h
                                           &key (content ""))
                                          &body body)
