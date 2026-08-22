@@ -119,32 +119,30 @@
         (nerimux/model:repository-add-worktree repository worktree)
         (setf (nerimux::client-conn-view conn) :overview)
         (nerimux::%set-client-selected-tree-object conn repository)
-        (format t
-                "~&DIAG view=~S selected-eq-repo=~S selected-type=~S selected-repo-fn=~S selected-repo-eq=~S~%"
-                (nerimux::client-conn-view conn)
-                (eq repository (nerimux::client-conn-selected-tree-object conn))
-                (type-of (nerimux::client-conn-selected-tree-object conn))
-                (type-of (nerimux::%client-selected-repository conn))
-                (eq repository (nerimux::%client-selected-repository conn)))
-        (finish-output)
         (nerimux::%handle-multi-key-message s conn #(110))
-        (format t "~&DIAG mode-after-n=~S~%" (nerimux::client-conn-mode conn))
-        (finish-output)
         (expect (eq :command (nerimux::client-conn-mode conn)))
         (expect (string= "wt-create --branch "
                          (nerimux::client-conn-command-buffer conn)))
         (nerimux::%handle-multi-key-message s conn #(27))
         (expect (eq :normal (nerimux::client-conn-mode conn)))
         (expect (eq :overview (nerimux::client-conn-view conn)))
-        ;; n reopens the same prompt after cancelling (R6.3 gave Enter on a
-        ;; repository row expand/collapse instead — %focus-selected-client-
-        ;; worktree — so n is the only key that starts worktree-create now).
+        ;; ESC arms R4.3's 2-byte swallow window (%client-esc-swallow-start),
+        ;; so the next two bytes after it never reach dispatch -- two no-op
+        ;; presses clear it before n reopens the same prompt (R6.3 gave Enter
+        ;; on a repository row expand/collapse instead —
+        ;; %focus-selected-client-worktree — so n is the only key that starts
+        ;; worktree-create now).
+        (nerimux::%handle-multi-key-message s conn #(0))
+        (nerimux::%handle-multi-key-message s conn #(0))
         (nerimux::%handle-multi-key-message s conn #(110))
         (expect (eq :command (nerimux::client-conn-mode conn)))
         (expect (string= "wt-create --branch "
                          (nerimux::client-conn-command-buffer conn)))
         (nerimux::%handle-multi-key-message s conn #(27))
         (nerimux::%set-client-selected-tree-object conn worktree)
+        ;; Same R4.3 swallow window as above.
+        (nerimux::%handle-multi-key-message s conn #(0))
+        (nerimux::%handle-multi-key-message s conn #(0))
         (nerimux::%handle-multi-key-message s conn #(88))
         (expect (eq :command (nerimux::client-conn-mode conn)))
         (expect (string= "wt-delete --confirm"
@@ -366,6 +364,10 @@
                          (nerimux::client-conn-command-buffer conn)))
         (nerimux::%handle-multi-key-message s conn #(27))
         (nerimux::%set-client-selected-tree-object conn worktree)
+        ;; ESC arms R4.3's 2-byte swallow window (%client-esc-swallow-start);
+        ;; two no-op presses clear it before U reaches dispatch.
+        (nerimux::%handle-multi-key-message s conn #(0))
+        (nerimux::%handle-multi-key-message s conn #(0))
         (nerimux::%handle-multi-key-message s conn #(85))
         (expect (eq :command (nerimux::client-conn-mode conn)))
         (expect (string= "wt-unlock --confirm"
