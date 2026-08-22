@@ -7,13 +7,14 @@
 ;;;; it, so the command a contributor runs by hand and the command CI runs are
 ;;;; the same one.
 ;;;;
-;;;; Which suite runs is chosen by NERIMUX_TEST_SYSTEM, defaulting to the main
-;;;; suite. The two registered suites are:
+;;;; Which suite runs is chosen by NERIMUX_TEST_SYSTEM, defaulting to the only
+;;;; registered suite:
 ;;;;
 ;;;;   nerimux/test      the full unit + integration suite (checks.default)
-;;;;   nerimux/dataflow  the copy-mode lifecycle read-model (checks.dataflow)
+;;;;   nerimux/pty-test  the real-PTY suite; needs /dev/ptmx, so it is an app
+;;;;                     (nix run .#test-pty) and deliberately not a check
 ;;;;
-;;;; Every one of them defines its own ASDF :perform (test-op ...) that signals
+;;;; It defines its own ASDF :perform (test-op ...) that signals
 ;;;; an error on failure, so dispatching through ASDF:TEST-SYSTEM keeps the
 ;;;; pass/fail contract in the .asd rather than duplicating a runner per suite.
 

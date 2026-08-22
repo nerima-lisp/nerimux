@@ -1,0 +1,148 @@
+(in-package #:nerimux/test)
+
+;;;; Direct unit tests for FETCH-REPOSITORY-ASYNC / FETCH-ORGANIZATION-ASYNC's
+;;;; duplicate-fetch suppression (vcs.lisp:664-738), the R7.1 requirement:
+;;;; "進行中の同一対象への重複実行を抑止する" (a fetch already running for a
+;;;; target is not started again).
+;;;;
+;;;; *IN-PROGRESS-FETCHES* + *FETCH-LOCK* implement this: %FETCH-BEGIN claims
+;;;; a (:repository id) or (:organization id) key and returns T only if it
+;;;; was not already claimed; a call made while a fetch is in flight for the
+;;;; same key invokes its ON-COMPLETE immediately with NIL and starts no
+;;;; thread at all -- the in-flight fetch's own callback is the one that
+;;;; eventually reports the real result. These tests mock %VCS-CALL (the same
+;;;; technique vcs-tests.lisp's "async vcs scan errors" and "prune-worktrees
+;;;; default dry-run" suites already use) so the first fetch can be held open
+;;;; deliberately, long enough for a second call to observe it in flight --
+;;;; this is a controlled synchronization delay inside the mock, not a fixed
+;;;; sleep-and-hope wait on the assertions themselves, which all poll with a
+;;;; bounded deadline.
+
+(defun %mock-vcs-call-with-delayed-fetch (call-log delay-seconds)
+  "Return a replacement for NERIMUX/VCS::%VCS-CALL: MAKE-VCS-REPOSITORY
+   returns a placeholder backend handle; VCS-FETCH sleeps DELAY-SECONDS (so a
+   concurrent second call can observe the first one still in flight), records
+   one entry in CALL-LOG, and returns T. Every real VCS-FETCH invocation --
+   never MAKE-VCS-REPOSITORY, which %REPOSITORY-BACKEND calls once per
+   VCS-FETCH too -- adds exactly one entry, so (LENGTH (CDR CALL-LOG)) counts
+   real fetches, which is the only thing these tests need from the log (not
+   which repository each call was for)."
+  (lambda (name &rest arguments)
+    (cond
+      ((string= name "MAKE-VCS-REPOSITORY") :fake-backend-repository)
+      ((string= name "VCS-FETCH")
+       (sleep delay-seconds)
+       (push t (cdr call-log))
+       t)
+      (t (error "unexpected %%vcs-call in fetch-dedup test: ~A ~A" name arguments)))))
+
+(defmacro with-mocked-vcs-fetch ((call-log &key (delay 0.3)) &body body)
+  "Rebind NERIMUX/VCS::%VCS-CALL to the delayed-fetch mock for BODY, restoring
+   the original definition afterward even if BODY signals."
+  (let ((original (gensym "ORIGINAL")))
+    `(let ((,original (fdefinition 'nerimux/vcs::%vcs-call))
+           (,call-log (list :log)))
+       (unwind-protect
+            (progn
+              (setf (fdefinition 'nerimux/vcs::%vcs-call)
+                    (%mock-vcs-call-with-delayed-fetch ,call-log ,delay))
+              ,@body)
+         (setf (fdefinition 'nerimux/vcs::%vcs-call) ,original)))))
+
+(defun %poll-until (predicate &key (timeout-seconds 2.0))
+  "Poll PREDICATE every 10ms until it returns true or TIMEOUT-SECONDS elapses.
+   Returns the predicate's final value."
+  (let ((deadline (+ (get-internal-real-time)
+                     (round (* timeout-seconds internal-time-units-per-second)))))
+    (loop for result = (funcall predicate)
+          when result return result
+          while (< (get-internal-real-time) deadline)
+          do (sleep 0.01)
+          finally (return (funcall predicate)))))
+
+(describe "renderer-suite/vcs-fetch-dedup-repository"
+
+  ;; R7.1: a fetch issued for a repository while an earlier fetch for the
+  ;; SAME repository is still running does not start a second real fetch --
+  ;; its ON-COMPLETE fires immediately with NIL, and the in-flight fetch is
+  ;; the only one that ever calls %VCS-CALL "VCS-FETCH".
+  (it "does not start a second real fetch while one is already in flight for the same repository"
+    (with-mocked-vcs-fetch (call-log :delay 0.3)
+      (let* ((repository
+               (nerimux/model:make-repository
+                :specification "workspace-owner/dedup-repo"
+                :local-path "/tmp/nerimux-fetch-dedup-repo"))
+             (first-result :pending)
+             (second-result :pending))
+        (nerimux/vcs:fetch-repository-async
+         repository
+         :on-complete (lambda (result) (setf first-result result)))
+        ;; Issued while the first fetch is still sleeping inside the mock.
+        (nerimux/vcs:fetch-repository-async
+         repository
+         :on-complete (lambda (result) (setf second-result result)))
+        ;; The duplicate's callback must have already fired -- %FETCH-BEGIN
+        ;; is checked synchronously in the caller's own thread before any
+        ;; worker is spawned, so this needs no polling at all.
+        (expect (null second-result))
+        (expect (eq :pending first-result))
+        ;; Now wait for the real (first) fetch to finish.
+        (expect (%poll-until (lambda () (not (eq :pending first-result)))))
+        (expect (eq repository first-result))
+        ;; Exactly one real VCS-FETCH call happened -- the duplicate never
+        ;; reached %VCS-CALL at all.
+        (expect (= 1 (length (cdr call-log))))))))
+
+(describe "renderer-suite/vcs-fetch-dedup-repository-recovery"
+
+  ;; Once the in-flight fetch completes, the key is released
+  ;; (%FETCH-END, called from the completion callback) -- a later fetch for
+  ;; the same repository is not suppressed and actually runs.
+  (it "allows a fresh fetch for the same repository once the prior one has completed"
+    (with-mocked-vcs-fetch (call-log :delay 0.05)
+      (let* ((repository
+               (nerimux/model:make-repository
+                :specification "workspace-owner/dedup-repo-recovery"
+                :local-path "/tmp/nerimux-fetch-dedup-recovery"))
+             (first-done nil)
+             (second-result :pending))
+        (nerimux/vcs:fetch-repository-async
+         repository :on-complete (lambda (result)
+                                   (declare (ignore result))
+                                   (setf first-done t)))
+        (expect (%poll-until (lambda () first-done)))
+        (nerimux/vcs:fetch-repository-async
+         repository :on-complete (lambda (result) (setf second-result result)))
+        (expect (%poll-until (lambda () (not (eq :pending second-result)))))
+        (expect (eq repository second-result))
+        (expect (= 2 (length (cdr call-log))))))))
+
+(describe "renderer-suite/vcs-fetch-dedup-organization"
+
+  ;; R7.1's other target: C-q C-f fetches every repository under an
+  ;; organization. The dedup key is (:organization id), independent from the
+  ;; (:repository id) key above -- a repository-level and an
+  ;; organization-level fetch of the same underlying repository do not
+  ;; collide with each other's in-progress marker.
+  (it "does not start a second organization-wide fetch while one is already in flight"
+    (with-mocked-vcs-fetch (call-log :delay 0.3)
+      (let* ((repository
+               (nerimux/model:make-repository
+                :specification "workspace-owner/dedup-org-repo"
+                :local-path "/tmp/nerimux-fetch-dedup-org"))
+             (organization
+               (nerimux/model:make-organization
+                :host "workspace-owner" :name "dedup-org"
+                :repositories (list repository)))
+             (first-result :pending)
+             (second-result :pending))
+        (nerimux/vcs:fetch-organization-async
+         organization
+         :on-complete (lambda (result) (setf first-result result)))
+        (nerimux/vcs:fetch-organization-async
+         organization
+         :on-complete (lambda (result) (setf second-result result)))
+        (expect (null second-result))
+        (expect (%poll-until (lambda () (not (eq :pending first-result)))))
+        (expect (equal (list repository) first-result))
+        (expect (= 1 (length (cdr call-log))))))))

@@ -1,9 +1,9 @@
 (in-package #:nerimux/model)
 
-;;; ── Window resize, rotate, and zoom operations ───────────────────────────────
+;;; ── Window resize and zoom operations ─────────────────────────────────────────
 ;;;
-;;; This file holds the window-resize-active, window-rotate, and window-zoom-toggle
-;;; operations split from window-core.lisp/window-tree.lisp.  All functions depend on:
+;;; This file holds the window-resize-active and window-zoom-toggle operations
+;;; split from window-core.lisp/window-tree.lisp.  All functions depend on:
 ;;;   - window struct accessors (window-core.lisp)
 ;;;   - layout helpers: layout-find-leaf, layout-find-parent, layout-split-*,
 ;;;     resize-find-split, resize-direction-orientation, layout-leaves (layout.lisp)
@@ -13,10 +13,6 @@
 ;;; Data/logic separation:
 ;;;   %zoom-in-geometry / %zoom-out-geometry — pure tree-slot mutations (no I/O)
 ;;;   window-zoom-toggle                     — orchestrator: tree mutation + PTY resize
-;;;   %rotate-panes                          — pure functional list rotation
-;;;   window-rotate                          — orchestrator: rotates panes, rebuilds the
-;;;                                             tree via layout.lisp's %build-flat-tree :h,
-;;;                                             and relays out
 
 ;;; ── Resize via the tree ──────────────────────────────────────────────────────
 
@@ -61,40 +57,6 @@
                   (setf (layout-split-ratio split) new-ratio)
                   (window-relayout-current window)
                   active)))))))))
-
-;;; ── Rotate-window ────────────────────────────────────────────────────────────
-;;;
-;;; rotate_window(Window, :up)   :- move first pane to end of panes list, relayout.
-;;; rotate_window(Window, :down) :- move last  pane to front of panes list, relayout.
-
-(defun %rotate-panes (panes direction)
-  "Return a new list of PANES rotated in DIRECTION.
-   :UP moves the first pane to the end of the list.
-   :DOWN moves the last pane to the front of the list."
-  (ecase direction
-    (:up   (append (rest panes) (list (first panes))))
-    (:down (append (last panes) (butlast panes)))))
-
-(defun window-rotate (window &optional (direction :up))
-  "Rotate pane ordering within WINDOW.
-   :UP moves the first pane to the end (forward rotation, tmux default).
-   :DOWN moves the last pane to the front (reverse rotation).
-   When WINDOW is zoomed, the saved pre-zoom layout is rotated and the visible
-   zoomed pane stays unchanged until the user unzooms."
-  (let* ((zoomed-p    (window-zoom-p window))
-         (source-tree (or (and zoomed-p (window-zoom-tree window))
-                          (window-tree window)))
-         (panes (if zoomed-p
-                    (and source-tree (layout-leaves source-tree))
-                    (window-panes window))))
-    (when (> (length panes) 1)
-      (let ((new-panes (%rotate-panes panes direction)))
-        (if zoomed-p
-            (setf (window-zoom-tree window) (%build-flat-tree new-panes :h))
-            (progn
-              (setf (window-panes window) new-panes
-                    (window-tree  window) (%build-flat-tree new-panes :h))
-              (window-relayout window (window-height window) (window-width window))))))))
 
 ;;; ── Zoom helpers — pure tree transforms ─────────────────────────────────────
 ;;;

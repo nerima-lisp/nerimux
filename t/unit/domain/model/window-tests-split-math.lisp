@@ -109,20 +109,12 @@
               (expect (nerimux/model::%split-fits-p p orient) :to-be-truthy)
               (expect (nerimux/model::%split-fits-p p orient) :to-be-falsy))))))
 
-  ;; window-split :full refuses root splits that cannot leave both panes at min size.
-  (it "window-split-full-obeys-axis-minimums"
-    (with-session (session 24 80)
-      (dolist (row '((:h 4 24 "full h-split needs at least 5 columns")
-                     (:v 80 2 "full v-split needs at least 3 rows")))
-        (destructuring-bind (direction width height desc) row
-          (declare (ignore desc))
-          (let* ((p0   (make-no-pty-pane 1 0 0 width height))
-                 (leaf (make-layout-leaf p0))
-                 (win  (make-window :id 1 :name "w" :width width :height height
-                                    :panes (list p0)
-                                    :tree leaf)))
-            (window-select-pane win p0)
-            (expect (null (window-split session win direction :full t)))
-            (expect (eq leaf (window-tree win)))
-            (expect (equal (list p0) (window-panes win)))
-            (expect (eq p0 (window-active-pane win)))))))))
+  ;; window-split-full-obeys-axis-minimums moved to
+  ;; t/pty/window-tests-split-math-pty.lisp (R9.2 case-by-case audit): it
+  ;; wraps its table-driven body in WITH-SESSION, which spawns a real
+  ;; PTY-backed session via create-initial-session -- unlike every other case
+  ;; in this file, which passes NIL or a hand-built no-PTY window/pane and so
+  ;; never reaches spawn-pty.  It was also the one case in this file with no
+  ;; pty-available-p skip guard around that spawn -- the moved copy adds one
+  ;; (see the R9.2/R9.3 report on this gap).
+  )

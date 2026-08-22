@@ -27,12 +27,8 @@
   "Alist mapping session-name (string) to session object for the running server.")
 (defvar *server-marked-pane* nil
   "The single server-wide marked pane (set by mark-pane / select-pane -m).
-   NIL when no pane is marked.  Mirrors tmux's global marked-pane singleton.")
-(defvar *client-read-only* nil
-  "When non-NIL the attached client is read-only: keystrokes and mouse events
-   are NOT forwarded to panes.  Set by attach-session -r.")
-(defvar *status-timer* nil "Background thread for status-interval redraws.")
-
+   NIL when no pane is marked.  A single global slot rather than per-session
+   state, since mark-pane addresses one pane across the whole server.")
 (defun %mark-dirty ()
   "Set the shared redraw flag."
   (setf *dirty* t))
@@ -62,14 +58,6 @@
   "Seconds before wait-for-channel gives up waiting for a signal.
    A bounded wait prevents indefinite blocking when signal-channel is
    never called (e.g., after an unexpected server shutdown).")
-
-(defconstant +default-display-time-ms+ 750
-  "Default overlay display time in milliseconds when the display-time option is
-   unset.  The status timer checks every +status-timer-poll-seconds+, so actual
-   dismiss may lag up to that granularity.")
-
-(defconstant +ms-per-second+ 1000.0
-  "Milliseconds per second; used to convert display-time (ms) to seconds.")
 
 ;;; -- Wait-for channel synchronization ----------------------------------------
 
@@ -134,9 +122,6 @@
   "Return LIST truncated to at most LIMIT elements; returns LIST unchanged when
    it already fits."
   (if (> (length list) limit) (subseq list 0 limit) list))
-
-;;; NOTE: popup, menu structs, *active-popup*, *active-menu* live in
-;;; src/prompt.lisp (nerimux/prompt package) so the renderer can see them.
 
 ;;; -- SIGWINCH ---------------------------------------------------------------
 

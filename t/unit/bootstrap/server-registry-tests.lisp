@@ -12,31 +12,6 @@
         (let ((found (nerimux::server-find-session "alpha")))
           (expect (eq sess found))))))
 
-  ;; server-remove-session removes a previously added session from the registry.
-  (it "server-remove-session"
-    (with-empty-registry
-      (let ((sess (make-session :id 1 :name "beta" :windows nil)))
-        (nerimux::server-add-session sess)
-        (nerimux::server-remove-session "beta")
-        (expect (null (nerimux::server-find-session "beta"))))))
-
-  ;; server-all-sessions returns one entry per registered session.
-  (it "server-all-sessions"
-    (with-empty-registry
-      (let ((s1 (make-session :id 1 :name "one" :windows nil))
-            (s2 (make-session :id 2 :name "two" :windows nil)))
-        (nerimux::server-add-session s1)
-        (nerimux::server-add-session s2)
-        (let ((all (nerimux::server-all-sessions)))
-          (expect (= 2 (length all)))
-          (expect (member s1 all) :to-be-truthy)
-          (expect (member s2 all) :to-be-truthy)))))
-
-  ;; server-all-sessions returns NIL (empty list) when no sessions are registered.
-  (it "server-all-sessions-empty-registry"
-    (with-empty-registry
-      (expect (null (nerimux::server-all-sessions)))))
-
   ;; server-find-session returns NIL for an unknown name, NIL, or an empty string.
   (it "server-find-session-nil-inputs-table"
     (dolist (row '(("no-such-session" "unknown name -> nil")
@@ -47,22 +22,6 @@
         (with-empty-registry
           (expect (null (nerimux::server-find-session input)))))))
 
-  ;; Add 3 sessions, remove the middle one; exactly 2 sessions remain.
-  (it "multi-session-add-remove"
-    (with-empty-registry
-      (let ((s1 (make-session :id 1 :name "alpha" :windows nil))
-            (s2 (make-session :id 2 :name "beta"  :windows nil))
-            (s3 (make-session :id 3 :name "gamma" :windows nil)))
-        (nerimux::server-add-session s1)
-        (nerimux::server-add-session s2)
-        (nerimux::server-add-session s3)
-        (nerimux::server-remove-session "beta")
-        (let ((all (nerimux::server-all-sessions)))
-          (expect (= 2 (length all)))
-          (expect (member s1 all) :to-be-truthy)
-          (expect (member s3 all) :to-be-truthy)
-          (expect (member s2 all) :to-be-falsy)))))
-
   ;; Adding a session whose name already exists replaces the old one.
   (it "server-add-session-replaces-existing-name"
     (with-empty-registry
@@ -70,7 +29,6 @@
             (s2 (make-session :id 2 :name "same" :windows nil)))
         (nerimux::server-add-session s1)
         (nerimux::server-add-session s2)
-        (expect (= 1 (length (nerimux::server-all-sessions))))
         (expect (eq s2 (nerimux::server-find-session "same"))))))
 
   ;; server-find-session with a name prefix 'my' finds the session named 'mysession'.
@@ -94,21 +52,4 @@
             (let ((found (nerimux::server-find-session query)))
               (if expect-found
                   (expect (eq sess found))
-                  (expect (null found)))))))))
-
-  ;; server-current-session returns the session with the highest last-active time.
-  (it "server-current-session-by-last-active"
-    (with-empty-registry
-      (let ((s1 (make-session :id 1 :name "older"  :windows nil :last-active 100))
-            (s2 (make-session :id 2 :name "newest" :windows nil :last-active 999))
-            (s3 (make-session :id 3 :name "middle" :windows nil :last-active 500)))
-        (nerimux::server-add-session s1)
-        (nerimux::server-add-session s2)
-        (nerimux::server-add-session s3)
-        (let ((current (nerimux::server-current-session)))
-          (expect (eq s2 current))))))
-
-  ;; server-current-session returns NIL when no sessions are registered.
-  (it "server-current-session-empty-registry-returns-nil"
-    (with-empty-registry
-      (expect (null (nerimux::server-current-session))))))
+                  (expect (null found))))))))))

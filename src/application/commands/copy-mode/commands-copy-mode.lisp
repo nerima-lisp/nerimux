@@ -48,7 +48,13 @@
         (screen-copy-line-selection-p screen) nil
         (screen-copy-rect-select-p  screen) nil
         (screen-copy-exit-on-bottom screen) nil
-        (screen-copy-mode-entered-by-mouse-p screen) nil))
+        (screen-copy-mode-entered-by-mouse-p screen) nil
+        ;; The match census belongs to the search that produced it (R6.8). The
+        ;; term itself is deliberately kept, so re-entering copy mode can repeat
+        ;; the last search with n -- but its ordinal describes a buffer that has
+        ;; been taking live output ever since, so it does not survive.
+        (screen-copy-search-index   screen) nil
+        (screen-copy-search-total   screen) 0))
 
 (defun %clamp-row-col (screen row col)
   "Return (cons clamped-row clamped-col) with row in [0, height-1] and col in [0, width-1]."
@@ -117,7 +123,7 @@
         (screen-copy-rect-select-p    screen) nil
         (screen-dirty-p               screen) t))
 
-;;; copy-mode-clear-selection (tmux clear-selection) was removed: its only two
+;;; copy-mode-clear-selection (the clear-selection copy-mode command) was removed: its only two
 ;;; callers, copy-mode-copy-selection-no-cancel and the :clear finish branch of
 ;;; define-copy-pipe-commands (commands-copy-mode-clip.lisp), were themselves
 ;;; dead and were deleted first; re-grepped for zero remaining callers before

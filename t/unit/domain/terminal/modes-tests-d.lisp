@@ -1,21 +1,15 @@
 (in-package #:nerimux/test)
 
-;;;; Modes tests — part IV: mouse reporting DEC private modes, bracketed paste, focus events, app-cursor, auto-wrap, reset-sgr-pen, screen-display-cell.
+;;;; Modes tests — part IV: mouse reporting DEC private modes (accepted and
+;;;; ignored), bracketed paste, focus events, app-cursor, auto-wrap,
+;;;; reset-sgr-pen, screen-display-cell.
 
 ;;; ── Mouse reporting DEC private mode tests (1000/1002/1003/1006) ────────────
 ;;;
-;;; The original ~80 lines of repetitive mode-toggle tests have been refactored:
-;;; a shared helper function (test-dec-pm-toggle) captures the pattern and each
-;;; test is now a one-line call, satisfying the test_abstraction_issues finding.
-
-(defun test-dec-pm-toggle-numeric (mode set-value accessor)
-  "Shared helper: verify that DEC PM MODE toggles ACCESSOR on SCREEN to
-   SET-VALUE on set (h) and back to 0 on reset (l)."
-  (with-screen (s 20 5)
-    (feed s (esc "[?~Dh" mode))
-    (expect (= set-value (funcall accessor s)))
-    (feed s (esc "[?~Dl" mode))
-    (expect (= 0 (funcall accessor s)))))
+;;; Mouse-mode state tracking (screen-mouse-mode / screen-mouse-sgr-mode) was
+;;; removed; these modes now fall through to the same silently-ignored path as
+;;; any other unrecognised DEC private mode — see
+;;; mouse-reporting-modes-are-silently-ignored below.
 
 (defun test-dec-pm-toggle-boolean (mode accessor)
   "Shared helper: verify that DEC PM MODE toggles boolean ACCESSOR on SCREEN
@@ -29,17 +23,21 @@
 
 (describe "terminal-suite/direct-modes-suite"
 
-  (it "mouse-mode-numeric-toggle-table"
-    ;; ESC[?1000/1002/1003h sets mouse-mode to 1/2/3; the corresponding l resets to 0.
-    (dolist (row '((1000 1) (1002 2) (1003 3)))
-      (destructuring-bind (mode expected-val) row
-        (test-dec-pm-toggle-numeric mode expected-val #'nerimux/terminal/types:screen-mouse-mode))))
+  ;; Mouse-reporting modes (1000/1002/1003/1006) carry no state anymore, but a
+  ;; real client may still send them — set and reset sequences must be accepted
+  ;; without error and leave the rest of the screen untouched.
+  (it "mouse-reporting-modes-are-silently-ignored"
+    (with-screen (s 20 5)
+      (feed s "hello")
+      (dolist (mode '(1000 1002 1003 1006))
+        (finishes (feed s (esc "[?~Dh" mode)))
+        (finishes (feed s (esc "[?~Dl" mode))))
+      (check-row s 0 "hello")))
 
   (it "dec-pm-boolean-toggle-table"
-    ;; DEC private modes 1/1004/1006/2004 toggle their boolean accessors via h/l sequences.
+    ;; DEC private modes 1/1004/2004 toggle their boolean accessors via h/l sequences.
     (dolist (row (list (list 1    #'nerimux/terminal/types:screen-app-cursor-keys)
                        (list 1004 #'nerimux/terminal/types:screen-focus-events)
-                       (list 1006 #'nerimux/terminal/types:screen-mouse-sgr-mode)
                        (list 2004 #'nerimux/terminal/types:screen-bracketed-paste)))
       (destructuring-bind (mode accessor) row
         (test-dec-pm-toggle-boolean mode accessor))))

@@ -112,9 +112,9 @@
 ;;; previous cell instead of being placed in a new one.
 ;;;
 ;;; The DEFINITION is CHAR-WIDTH: a character combines exactly when it is
-;;; zero-width, minus the control-code carve-out below.  This is also tmux's own
-;;; rule — screen_write_cell() routes any cell of width 0 to
-;;; screen_write_combine().
+;;; zero-width, minus the control-code carve-out below.  This is the general
+;;; terminal rule: a cell of width 0 is always routed to the combining path,
+;;; never placed as its own cell.
 ;;;
 ;;; It replaces a hand-written list of five ranges, which was a second answer to
 ;;; a question CHAR-WIDTH already answers, and disagreed with it in both

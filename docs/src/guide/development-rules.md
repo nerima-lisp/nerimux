@@ -5,6 +5,75 @@ The organization-wide contribution guide lives in
 This page records only the rules specific to nerimux — the ones that are easy
 to trip over and that no general guide would mention.
 
+## When the suite starts and then stops dead
+
+`nix run .#test` printing `Running test system nerimux/test` and then producing
+nothing — no output, no error, no CPU — has been seen on macOS/arm64, and it is
+not the suite. Garbage collection deadlocks. Check for it before reading a line
+of Lisp:
+
+```lisp
+;; sbcl --script this-file
+(let (l) (dotimes (i 5000000) (push i l)) (length l))   ; ~80 MB
+(format t "~&GC survived~%")
+```
+
+On an affected machine that never prints, with the process at zero CPU and
+unkillable by `sb-ext:with-timeout` — the block is below Lisp, and every thread
+is parked at a stop-the-world safepoint.
+
+What the size sweep shows is that the *first* collection is the one that dies;
+the heap only decides when it fires:
+
+| dynamic space | allocated | result |
+|---|---|---|
+| 1 GB (default) | 80 MB | deadlock |
+| 16 GB | 80 MB | fine |
+| 16 GB | 1 GB | deadlock |
+
+Work that stays under the threshold finishes: the checks in `scripts/checks/`,
+loading a system, running a handful of suites. Work that crosses it stops
+wherever it happens to be, which is why raising the heap looks like progress
+without fixing anything.
+
+That accounts for a lot, but not for all of it, and the difference matters.
+Running the whole suite still stops with collection effectively disabled —
+`(setf (sb-ext:bytes-consed-between-gcs) (* 50 1024 1024 1024))` under a 64 GB
+heap, 292 MB consed, `sb-ext:*after-gc-hooks*` never fired. Loading the system
+completes; `cl-weave:run-all` over the full tree then blocks with no collection
+having run. So there is a second stall here that the collector does not explain,
+and it has not been identified.
+
+Nothing in this repository can work around either, and nothing here should be
+changed in response to them.
+
+Two measurement traps make this hard to see. `ps` reports `%cpu` as a lifetime
+average, so a process that ran for a moment and then stopped forever reads as
+`0.0` and looks idle rather than stuck — the cumulative `time` column is what
+settles it. And `sample` cannot walk SBCL's Lisp stack, so the main thread shows
+as a single unresolvable frame no matter where it is.
+
+The static checks in `scripts/checks/` are what remains available when this
+happens. They are not a substitute for the suite and do not claim to be.
+
+## Three failures the suite cannot report
+
+A test suite reports on tests that ran. It says nothing when it could not load —
+and the three ways this tree stops loading all look like silence rather than a
+red test:
+
+- a file that no longer reads (a deleted line took a parent form's closing paren
+  with it);
+- a manifest entry with no file behind it (ASDF aborts, and *every* test
+  disappears at once), or a file with no manifest entry (it is simply never
+  loaded, and its tests quietly stop running);
+- a `PKG:SYM` reference to a symbol `PKG` does not export, which is a *read-time*
+  error, so the file is unreadable rather than merely broken.
+
+`scripts/checks/` covers all three without ASDF and without a compile. Run them
+before you trust a green, and especially before you trust a green after a
+deletion. See that directory's README for what each one does and does not cover.
+
 ## The flake only sees git-tracked files
 
 `nix build` and `nix flake check` copy the *git tree*, not the working
@@ -14,10 +83,37 @@ you get a confusing "file not found" failure.
 
 ## Tests must not leak global state
 
-Tests that bind keys, set options, or install hooks must wrap themselves in the
-isolation helpers (`with-isolated-config`, `with-isolated-hooks`, …) from
-`t/helpers-*.lisp`. Otherwise they clobber the default bindings for every test
-that runs after them.
+Tests that mutate a special variable the runtime reads — the session registry,
+the dirty flag, the running flag — must wrap themselves in the isolation helpers
+in `t/helpers-*.lisp`. Otherwise they clobber that state for every test after
+them.
+
+There used to be more of these helpers than there are now: the ones that
+isolated the option store, the config directives, and the hook registry went
+with the machinery they isolated. There is no configuration to leak anymore.
+
+## CI gates Linux; macOS is checked by hand
+
+`.github/workflows/ci.yml` runs `nix flake check` on `ubuntu-latest`, and that
+is the gate a pull request has to pass. The flake defines the same checks for
+`aarch64-darwin`, but nothing runs them automatically — a development machine
+cannot cross-build the Linux side without a remote builder, so `nix flake check`
+on a Mac only ever exercises the Darwin attributes.
+
+The practical rule: run `nix flake check` locally before pushing, and say which
+platform you ran it on when you report a green. A green on one is not a green on
+the other.
+
+## The real-PTY suite is a separate system
+
+`nerimux/test` spawns no pseudo-terminal. Every case that forks a shell under a
+PTY lives in `nerimux/pty-test` and runs through `nix run .#test-pty`.
+
+It is an app, not a check, on purpose. A check builds in a sandbox with no
+`/dev/ptmx`, so those cases would hit their skip guard and be counted as passes —
+one number covering both "the logic is right" and "the PTY integration works",
+with only the first ever true. Adding it to `checks` would restore exactly the
+false green the split removed.
 
 ## The suite runs sequentially by design
 

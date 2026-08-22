@@ -48,8 +48,9 @@
              (let ((forms (append (mapcar #'expand-step steps)
                                   (mapcar #'expand-assertion assertions))))
                (if cap-aware-p
-                   `((let ((cap (or (nerimux/options:get-option "history-limit")
-                                    nerimux/terminal:+max-scrollback-lines+)))
+                   ;; trim-scroll-history no longer reads an option (§1.4, §2.2 of
+                   ;; the requirements doc): it always caps at the plain constant.
+                   `((let ((cap nerimux/terminal:+max-scrollback-lines+))
                        (declare (ignorable cap))
                        (with-screen (s ,width ,height)
                          ,@forms)))
@@ -78,15 +79,16 @@
      :assertions ((:scrollback-length= 1 "scrollback should have 1 entry after one scroll")
                   (:first-scrollback-char #\h 0 "scrollback row 0 should start with 'h'")))
     (scroll-up-one-caps-at-max-scrollback
-     "scroll-up-one trims the scrollback to the effective history-limit.
-     trim-scroll-history honours the 'history-limit' option (default 2000)
-     which supersedes +max-scrollback-lines+ (1000) at runtime."
+     "scroll-up-one trims the scrollback to +max-scrollback-lines+ (10,000,
+     §1.4). Seeding scrollback to the cap directly (cheap cons cells) and
+     pushing one real row over it exercises the boundary without looping
+     scroll-up-one 10,000 times."
      :screen (5 3)
      :cap t
      :steps ((:seed-scrollback-to-cap 5)
              (:scroll-up))
      :assertions ((:scrollback-length<=cap
-                   "scrollback must not exceed the effective history-limit (~D)")))
+                   "scrollback must not exceed +max-scrollback-lines+ (~D)")))
     (scroll-up-partial-region-does-not-push-to-scrollback
      "Scrolling within a partial scroll region (scroll-top > 0) must NOT add to the
      scrollback: only full-top-of-screen scrolling contributes to history, matching

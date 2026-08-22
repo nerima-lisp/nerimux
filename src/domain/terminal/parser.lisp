@@ -51,7 +51,7 @@
   ;; ── Standard ESC sequences ───────────────────────────────────────────────
   (#x5B  (make-csi-k '() nil nil))                ; ESC [ → CSI
   (#x5D  #'osc-state)                              ; ESC ] → OSC
-  (#x50  (make-dcs-k))                             ; ESC P → DCS (tmux passthrough or discard)
+  (#x50  (make-dcs-k))                             ; ESC P → DCS (passthrough tag or discard)
   (#x4D  (cursor-ri screen)    #'ground-state)    ; ESC M → RI
   (#x63  (ris-action screen)   #'ground-state)    ; ESC c → RIS
   (#x37  (save-cursor screen)    #'ground-state)  ; ESC 7 → DECSC

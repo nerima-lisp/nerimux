@@ -1,5 +1,5 @@
 {
-  description = "nerimux — a tmux-compatible terminal multiplexer in Common Lisp";
+  description = "nerimux — a git-worktree workspace multiplexer in Common Lisp";
 
   inputs = {
     # nixos-unstable, not nixpkgs-unstable: it advances only after the NixOS
@@ -10,9 +10,9 @@
     # `github:nerima-lisp/cl-weave` follows that repo's default branch, so an
     # upstream push to main would break this repo's CI without warning.
     #
-    # cl-weave and cl-prolog-kit are consumed as flakes, so they take
-    # `inputs.nixpkgs.follows`: without it each drags in its own nixpkgs,
-    # inflating flake.lock and rebuilding the same derivations twice.
+    # cl-weave is consumed as a flake, so it takes `inputs.nixpkgs.follows`:
+    # without it it drags in its own nixpkgs, inflating flake.lock and
+    # rebuilding the same derivations twice.
     cl-weave = {
       url = "github:nerima-lisp/cl-weave/v1.1.4";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -21,18 +21,6 @@
       # rev survives in our lock. paredit-cli is a transitive dev tool only and
       # is never linked into nerimux.
       inputs.paredit-cli.url = "github:nerima-lisp/paredit-cli/v1.4.0";
-    };
-
-    # Transitive only: cl-dataflow-kit depends on cl-prolog-kit, and siblings are
-    # consumed as source, so the source has to be on the registry even though
-    # nothing in nerimux.asd names it. It WAS direct until nerimux/reasoning was
-    # retired on 2026-08-20; removing it then looked safe because nerimux.asd no
-    # longer mentions it, and `nix flake check` caught that immediately with
-    # `Component "cl-prolog-kit" not found, required by #<SYSTEM "cl-dataflow-kit">`.
-    # Check the siblings' own .asd files, not just nerimux.asd, before removing.
-    cl-prolog-kit = {
-      url = "github:nerima-lisp/cl-prolog-kit/v1.5.0";
-      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     # `flake = false`: consumed as a plain source checkout, pushed onto ASDF's
@@ -60,10 +48,6 @@
     # nothing in nerimux.asd names it. Not a direct dependency of nerimux.
     cl-log-kit = {
       url = "github:nerima-lisp/cl-log-kit/v2.0.1";
-      flake = false;
-    };
-    cl-dataflow-kit = {
-      url = "github:nerima-lisp/cl-dataflow-kit/v1.2.0";
       flake = false;
     };
     # Transitive only: cl-log-kit depends on cl-date-kit >= 0.2.0, and
@@ -96,13 +80,6 @@
       # src/infrastructure/pty/pty.lisp's process-kit:wait-for-input call
       # needs.
       url = "github:nerima-lisp/cl-process-kit/v3.1.0";
-      flake = false;
-    };
-    cl-history-kit = {
-      # Bounded command-history store + prefix-filtered recall navigation,
-      # replacing the hand-rolled list-and-cursor *prompt-history* walk in
-      # runtime-history.lisp / prompt.lisp.
-      url = "github:nerima-lisp/cl-history-kit/v1.0.2";
       flake = false;
     };
     cl-concurrent-kit = {
@@ -181,16 +158,13 @@
       self,
       nixpkgs,
       cl-weave,
-      cl-prolog-kit,
       cl-cli,
       cl-boundary-kit,
       cl-log-kit,
-      cl-dataflow-kit,
       cl-date-kit,
       cl-parser-kit,
       cl-tty-kit,
       cl-process-kit,
-      cl-history-kit,
       cl-concurrent-kit,
       cl-regex-kit,
       cl-codec-kit,
@@ -245,17 +219,14 @@
       # goes on ASDF's central registry rather than through nixpkgs Lisp
       # packaging. This one list drives every sbcl invocation below.
       siblingRepos = [
-        cl-prolog-kit
         cl-weave
         cl-cli
         cl-boundary-kit
         cl-log-kit
-        cl-dataflow-kit
         cl-date-kit
         cl-parser-kit
         cl-tty-kit
         cl-process-kit
-        cl-history-kit
         cl-concurrent-kit
         cl-regex-kit
         cl-codec-kit
@@ -328,7 +299,11 @@
             cp -r ${self} ./src-tree
             chmod -R u+w ./src-tree
             cd ./src-tree
-            sbcl --script run-tests.lisp
+            # The default 1 GB dynamic space is not enough to load this system: ASDF
+            # stalls resolving it rather than signalling heap exhaustion. Measured on
+            # darwin/arm64 -- 1024 and 2048 MiB hang, 4096 and above resolve in
+            # milliseconds. Nothing here is skipped or relaxed by raising it.
+            sbcl --dynamic-space-size 4096 --script run-tests.lisp
             touch "$out"
           '';
     in
@@ -386,7 +361,7 @@
             '';
 
             meta = {
-              description = "A tmux-compatible terminal multiplexer in Common Lisp";
+              description = "A git-worktree workspace multiplexer in Common Lisp";
               homepage = "https://github.com/nerima-lisp/nerimux";
               license = pkgs.lib.licenses.mit;
               mainProgram = "nerimux";
@@ -463,15 +438,11 @@
       # check` evaluates each attribute as its own derivation, in parallel, with
       # build caching. Add a check here rather than a job in ci.yml.
       checks = forAllSystems (system: {
-        # The full unit + integration suite. PTY tests self-skip when
-        # /dev/ptmx is unavailable, so a sandboxed run stays meaningful.
+        # The full unit + integration suite. It spawns no pseudo-terminal: the
+        # cases that do live in nerimux/pty-test and run as `nix run .#test-pty`,
+        # because a sandbox has no /dev/ptmx and they would otherwise skip and be
+        # counted as passes (R9.2).
         default = mkTestCheck system "nerimux-tests" "nerimux/test";
-
-        # The cl-dataflow-kit-backed copy-mode lifecycle read-model (src/dataflow/).
-        # Its former sibling, `weave` (the cl-prolog-kit reasoning read-model over
-        # src/reasoning/), was removed with that system: it projected the config
-        # key-table store, which no longer exists.
-        dataflow = mkTestCheck system "nerimux-dataflow-tests" "nerimux/dataflow";
 
         # Fails `nix flake check` when any tracked file is unformatted,
         # turning the formatter into an enforced CI gate.
@@ -507,7 +478,25 @@
               cp -r ${self} "$work/src-tree"
               chmod -R u+w "$work/src-tree"
               cd "$work/src-tree"
-              exec sbcl --script run-tests.lisp
+              exec sbcl --dynamic-space-size 4096 --script run-tests.lisp
+            '';
+          };
+
+          testPty = pkgs.writeShellApplication {
+            name = "nerimux-test-pty";
+            runtimeInputs = [
+              sbcl
+              pkgs.coreutils
+            ];
+            text = ''
+              export NERIMUX_SIBLING_REGISTRY="${siblingRegistry}"
+              export NERIMUX_TEST_SYSTEM="nerimux/pty-test"
+              work="$(mktemp -d)"
+              trap 'rm -rf "$work"' EXIT
+              cp -r ${self} "$work/src-tree"
+              chmod -R u+w "$work/src-tree"
+              cd "$work/src-tree"
+              exec sbcl --dynamic-space-size 4096 --script run-tests.lisp
             '';
           };
         in
@@ -518,7 +507,7 @@
             type = "app";
             program = "${self.packages.${system}.nerimux}/bin/nerimux";
             meta = {
-              description = "nerimux — a tmux-compatible terminal multiplexer in Common Lisp";
+              description = "nerimux — a git-worktree workspace multiplexer in Common Lisp";
               mainProgram = "nerimux";
             };
           };
@@ -529,6 +518,20 @@
             meta = {
               description = "Run nerimux's test suite (NERIMUX_TEST_SYSTEM selects which one)";
               mainProgram = "nerimux-test";
+            };
+          };
+
+          # The real-PTY suite. Deliberately an app and NOT a check: it needs
+          # /dev/ptmx, which the sandbox a check builds in does not have. Running
+          # it there would report a pass for cases that skipped, which is the
+          # false green splitting the suite exists to prevent. Run it on a real
+          # machine, by hand or from a job with a PTY available.
+          test-pty = {
+            type = "app";
+            program = "${testPty}/bin/nerimux-test-pty";
+            meta = {
+              description = "Run nerimux's real-PTY suite (needs /dev/ptmx)";
+              mainProgram = "nerimux-test-pty";
             };
           };
         }
@@ -572,7 +575,7 @@
               export -f nerimux-coverage
 
               echo "nerimux dev shell"
-              echo "  run tests:       sbcl --script run-tests.lisp"
+              echo "  run tests:       sbcl --dynamic-space-size 4096 --script run-tests.lisp"
               echo "  load in a REPL:  nerimux-sbcl --eval '(asdf:load-system \"nerimux\")'"
               echo "  coverage report: nerimux-coverage [output-dir]"
             '';

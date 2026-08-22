@@ -121,6 +121,8 @@
    #:screen-bell-pending
    ;; Copy-mode search term (/ ? n N)
    #:screen-copy-search-term
+   #:screen-copy-search-index
+   #:screen-copy-search-total
    #:screen-copy-search-direction
    ;; Copy-mode line-selection flag (V)
    #:screen-copy-line-selection-p
@@ -140,8 +142,6 @@
    ;; OSC 7 current working directory
    #:screen-cwd
    ;; Mouse reporting mode
-   #:screen-mouse-mode
-   #:screen-mouse-sgr-mode
    ;; Auto-wrap mode (?7h / ?7l)
    #:screen-autowrap
    #:screen-pending-wrap

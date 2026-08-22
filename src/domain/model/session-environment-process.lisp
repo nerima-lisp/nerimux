@@ -14,9 +14,9 @@
 
 (defparameter *update-environment*
   (copy-list +default-update-environment+)
-  "List of environment variable names to propagate into new panes.
-   Mirrors tmux's update-environment server option.  Used as a fallback when
-   the option string has not been set.")
+  "List of environment variable names to propagate into new panes: the
+   update-environment mechanism.  Used as a fallback when the option string
+   has not been set.")
 
 ;;; ── Process-level POSIX environment helpers ──────────────────────────────────
 

@@ -102,21 +102,12 @@
   (it "field-delimiter-constant-is-ascii-nul"
     (expect (= 0 nerimux/protocol:+field-delimiter+)))
 
-  ;; +attach-flag-read-only+ must equal 1 (bit 0 of the flags byte).  This pins
-  ;; the bit position so that encode/decode of the read-only flag follow
-  ;; the tmux CLIENT_READONLY wire convention.
-  (it "attach-flag-read-only-constant-value-is-bit-zero"
-    (expect (= 1 nerimux/protocol:+attach-flag-read-only+))
-    (expect (= 1 (logcount nerimux/protocol:+attach-flag-read-only+))))
-
   ;; The frame-layout constants must be mutually consistent:
   ;;   +payload-length-offset+ (1) + 4 bytes == +header-size+ (5)
-  ;;   +attach-flags-offset+ must equal 4 (rows,cols occupy 4 bytes)
   ;;   +cols-offset-in-size-payload+ must equal 2 (after the 2-byte rows u16)
   (it "frame-layout-offset-constants-are-consistent"
     (expect (= +header-size+
            (+ nerimux/protocol:+payload-length-offset+ 4)))
-    (expect (= 4 nerimux/protocol:+attach-flags-offset+))
     (expect (= 2 nerimux/protocol:+cols-offset-in-size-payload+)))
 
   ;;; ── decode-frame start/end window narrowing ──────────────────────────────────
@@ -154,18 +145,4 @@
       (expect (= +msg-attach+ type))
       (multiple-value-bind (rows cols) (decode-size payload)
         (expect (= 65535 rows))
-        (expect (= 65535 cols)))))
-
-  ;;; ── decode-attach-flags with various payload lengths ─────────────────────────
-
-  ;; decode-attach-flags on a 4-byte payload (no flags byte) returns 0.
-  (it "decode-attach-flags-exactly-four-bytes-returns-zero"
-    (let ((payload (nerimux/protocol:u16-octets-pair 24 80)))
-      (expect (= 0 (decode-attach-flags payload)))))
-
-  ;; decode-attach-flags on a 5-byte payload returns byte 4.
-  (it "decode-attach-flags-five-bytes-returns-byte-value"
-    (let* ((size-bytes (nerimux/protocol:u16-octets-pair 10 20))
-           (payload    (concatenate '(simple-array (unsigned-byte 8) (*))
-                                    size-bytes #(42))))
-      (expect (= 42 (decode-attach-flags payload))))))
+        (expect (= 65535 cols))))))

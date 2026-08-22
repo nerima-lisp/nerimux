@@ -62,8 +62,8 @@
          (gethash name (session-environment session))
        (if present-p
            (values value :session)
-           ;; Fall back to the live process environment (tmux inherits unset
-           ;; session vars from the server's environment).  The fallback lives
+           ;; Fall back to the live process environment: an unset session var
+           ;; still resolves from the server's own environment.  The fallback lives
            ;; in the else-branch so it stays reachable — a `(t ...)` middle
            ;; cond clause would make it dead code.
            (let ((process-value (process-environment-value name)))
@@ -87,9 +87,9 @@
 (defun session-set-environment (session name value &key hidden)
   "Store NAME=VALUE in SESSION's environment overlay.
    Removes NAME from the unset list if it was explicitly unset before.
-   HIDDEN marks the variable hidden (tmux set-environment -h: excluded from
-   plain show-environment and from child environments); a plain set clears an
-   existing hidden mark, matching tmux's environ_set with no flags.
+   HIDDEN marks the variable hidden (set-environment -h: excluded from
+   plain show-environment and from child environments); a plain set (HIDDEN
+   not given) clears an existing hidden mark rather than preserving it.
    Returns SESSION."
   (setf (session-environment-unsets session)
         (delete name (session-environment-unsets session) :test #'string=))
@@ -111,7 +111,7 @@
   session)
 
 (defvar *global-hidden-environment-names* nil
-  "Names marked hidden via set-environment -hg (tmux ENVIRON_HIDDEN on the
-   global environment).  nerimux maps the global environment onto the real
+  "Names marked hidden via set-environment -hg (the hidden flag applied to
+   the global environment).  nerimux maps the global environment onto the real
    process environment, so hidden globals are tracked here and stripped from
    child-process environments and plain show-environment listings.")

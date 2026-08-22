@@ -39,26 +39,16 @@
       (feed s (esc "[?1049l"))  ; exit alt screen -- primary grid restored
       (expect (string= "hello" (row-string s 0 :end 5)))))
 
-  ;; When the alternate-screen policy reports off, ESC[?1049h does NOT switch to the
-  ;; alt buffer — full-screen app output stays on the MAIN screen (and scrollback).
-  (it "alternate-screen-off-suppresses-alt-buffer"
+  ;; ESC[?1049h always enters the alt screen (§1.4: the alternate-screen option
+  ;; and its callback are gone, so entry is unconditional apart from the
+  ;; already-active no-op guard covered elsewhere).
+  (it "esc-1049h-enters-alt-buffer"
     (with-screen (s 10 5)
-      (let ((nerimux/terminal:*alternate-screen-enabled-function* (lambda () nil)))
-        (feed s "primary")
-        (feed s (esc "[?1049h"))   ; normally enters the alt screen — suppressed here
-        (feed s "ALT")
-        (expect (null (nerimux/terminal/types::screen-alt-cells s)))
-        (expect (search "ALT" (row-string s 0 :end 10))))))
-
-  ;; With the policy reporting on (default), ESC[?1049h still enters the alt screen.
-  (it "alternate-screen-on-still-enters-alt-buffer"
-    (with-screen (s 10 5)
-      (let ((nerimux/terminal:*alternate-screen-enabled-function* (lambda () t)))
-        (feed s "hello")
-        (feed s (esc "[?1049h"))
-        (expect (not (null (nerimux/terminal/types::screen-alt-cells s))))
-        (feed s (esc "[?1049l"))
-        (expect (string= "hello" (row-string s 0 :end 5))))))
+      (feed s "hello")
+      (feed s (esc "[?1049h"))
+      (expect (not (null (nerimux/terminal/types::screen-alt-cells s))))
+      (feed s (esc "[?1049l"))
+      (expect (string= "hello" (row-string s 0 :end 5)))))
 
   ;; ESC[?1047h / ESC[?1047l (alt screen buffer, the 1049 component) round-trips the
   ;; primary screen content.

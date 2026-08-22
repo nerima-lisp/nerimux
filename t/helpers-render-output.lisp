@@ -21,22 +21,28 @@
   (with-output-to-string (s)
     (nerimux/renderer::render-pane s session pane)))
 
+(defun %bel-before-title-osc (frame)
+  "FRAME with its trailing OSC 0 title sequence (%client-title-osc,
+   renderer-workspace.lisp, R6.11) removed. That sequence is BEL-terminated
+   and always the last thing render-session-to-string writes, independent of
+   any pane's bell state, so a plain (find (code-char 7) frame) can never
+   tell a real pane-bell relay apart from that terminator. Tests asserting
+   on the pane-bell relay should search this instead of FRAME directly."
+  (let ((osc-start (search (format nil "~C]0;" #\Escape) frame)))
+    (if osc-start (subseq frame 0 osc-start) frame)))
+
 (defmacro with-copy-mode-render-fixture ((session-var pane-var screen-var w h
-                                          &key (content "")
-                                               (position-format "")
-                                               (options '()))
+                                          &key (content ""))
                                          &body body)
-  "Bind a renderer session, its pane, and screen under isolated copy-mode defaults."
-  (let ((option-pairs (if (and (consp options) (eq (car options) 'quote))
-                          (second options)
-                          options)))
-    `(with-isolated-options ("copy-mode-position-style" "default"
-                             "copy-mode-position-format" ,position-format
-                             ,@option-pairs)
-       (let* ((,session-var (make-renderer-test-session ,w ,h :content ,content))
-              (,pane-var (first (window-panes (session-active-window ,session-var))))
-              (,screen-var (pane-screen ,pane-var)))
-         ,@body))))
+  "Bind a renderer session, its pane, and screen for copy-mode rendering tests.
+   Copy-mode position text and line-number gutters have no config surface any
+   more (R2.2/R2.3: both were fixed values or retired outright per
+   docs/notes/workspace-requirements.md §1.4/§R6.8), so there is nothing left
+   to isolate here beyond building the fixture itself."
+  `(let* ((,session-var (make-renderer-test-session ,w ,h :content ,content))
+          (,pane-var (first (window-panes (session-active-window ,session-var))))
+          (,screen-var (pane-screen ,pane-var)))
+     ,@body))
 
 (defmacro with-copy-mode-selection-fixture ((session-var pane-var screen-var w h
                                              &key (content "")
@@ -45,15 +51,11 @@
                                                   (cursor-row nil)
                                                   (cursor-col nil)
                                                   (selecting-p t)
-                                                  (copy-mode-p t)
-                                                  (position-format "")
-                                                  (options '()))
+                                                  (copy-mode-p t))
                                             &body body)
   "Bind a copy-mode renderer fixture with selection state preconfigured."
   `(with-copy-mode-render-fixture (,session-var ,pane-var ,screen-var ,w ,h
-                                   :content ,content
-                                   :position-format ,position-format
-                                   :options ,options)
+                                   :content ,content)
      (setf (screen-copy-mode-p ,screen-var) ,copy-mode-p
            (screen-copy-selecting ,screen-var) ,selecting-p
            (screen-copy-offset ,screen-var) 0
@@ -77,31 +79,10 @@
   (with-output-to-string (buf)
     (nerimux/renderer::render-overlay buf width height)))
 
-(defun render-popup-output (popup rows cols)
-  "Render POPUP to a string using the production renderer."
-  (with-output-to-string (s)
-    (nerimux/renderer::render-popup s popup rows cols)))
-
-(defun render-menu-output (menu rows cols)
-  "Render MENU to a string using the production renderer."
-  (with-output-to-string (s)
-    (nerimux/renderer::render-menu s menu rows cols)))
-
 (defun render-tree-borders-output (tree active-pane width)
   "Render TREE borders for ACTIVE-PANE to a string using the production renderer."
   (with-output-to-string (s)
     (nerimux/renderer::render-tree-borders s tree active-pane width)))
-
-(defmacro check-status-segment-clamp-cases (cases)
-  "Assert %clamp-status-segment rows shaped (TEXT MAX EXPECTED DESC)."
-  `(check-table
-    (mapcar (lambda (row)
-              (destructuring-bind (text max expected desc) row
-                (list (nerimux/renderer::%clamp-status-segment text max)
-                      expected
-                      desc)))
-            ,cases)
-    :test #'string=))
 
 (defmacro check-visible-truncate-cases (cases)
   "Assert %visible-truncate rows shaped (INPUT MAX EXPECTED DESC)."

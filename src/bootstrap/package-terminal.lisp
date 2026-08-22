@@ -59,9 +59,6 @@
    #:clear-scrollback
    #:trim-below-cursor
    #:+max-scrollback-lines+
-   #:*history-limit-function*
-   #:*alternate-screen-enabled-function*
-   #:*scroll-on-clear-function*
    ;; Focus event reporting (?1004)
    #:focus-event-report
    ;; Erase
@@ -254,8 +251,6 @@
    ;; OSC 7 current working directory
    #:screen-cwd
    ;; Mouse reporting mode
-   #:screen-mouse-mode
-   #:screen-mouse-sgr-mode
    ;; Lock (for renderer <-> reader-thread synchronisation)
    #:screen-lock
    ;; Resize the grid in place
@@ -316,13 +311,12 @@
    #:screen-drain-queue
    ;; Copy-mode search term
    #:screen-copy-search-term
+   #:screen-copy-search-index
+   #:screen-copy-search-total
    #:screen-copy-search-direction
    ;; Copy-mode line-selection flag
    #:screen-copy-line-selection-p
    ;; Copy-mode rectangle-select flag
    #:screen-copy-rect-select-p
-   ;; Scroll history limit callback (injected at startup)
-   #:+max-scrollback-lines+
-   #:*history-limit-function*
-   #:*alternate-screen-enabled-function*
-   #:*scroll-on-clear-function*))
+   ;; Scrollback cap (fixed; see requirements 1.4)
+   #:+max-scrollback-lines+))

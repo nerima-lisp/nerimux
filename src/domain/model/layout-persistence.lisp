@@ -2,8 +2,8 @@
 
 ;;; -- Layout persistence (layout string serialization) --------------------------
 ;;;
-;;; Encode the layout tree in tmux's WxH,X,Y format.
-;;; Full tmux format: checksum,WxH,X,Y[node1,node2]  or  checksum,WxH,X,Y,pane-id
+;;; Encode the layout tree as a WxH,X,Y layout string.
+;;; Full form: checksum,WxH,X,Y[node1,node2]  or  checksum,WxH,X,Y,pane-id
 ;;;
 ;;; For nerimux we use a simplified subset:
 ;;;   Leaf:  "WxH,X,Y,pane-id"
@@ -11,14 +11,14 @@
 ;;;   V-split: "WxH,X,Y[first,second]"
 ;;; The 4-hex-digit checksum prefix is computed from the string.
 
-;;; tmux rolling checksum constants -- match the algorithm in tmux's layout.c.
+;;; Rolling checksum constants for the layout string's integrity check.
 (defconstant +checksum-multiplier+ 61
-  "Multiplier for the tmux rolling 16-bit layout checksum (from tmux layout.c).")
+  "Multiplier for the rolling 16-bit layout-string checksum.")
 (defconstant +checksum-mask+ #xFFFF
-  "16-bit mask applied at each step of the tmux rolling layout checksum.")
+  "16-bit mask applied at each step of the rolling layout-string checksum.")
 
 (defun %layout-checksum (str)
-  "Compute the tmux-style 16-bit checksum of STR.
+  "Compute STR's rolling 16-bit layout-string checksum.
    Algorithm: rolling multiply-add on character codes (multiplier = +checksum-multiplier+).
    Returns a 4-hex-digit string."
   (format nil "~4,'0X"
@@ -63,7 +63,7 @@
                          close-bracket))))
 
 (defun layout->string (window)
-  "Serialize WINDOW's layout tree to a tmux-format layout string with checksum.
+  "Serialize WINDOW's layout tree to a WxH,X,Y layout string with checksum.
    Returns NIL when the window has no tree."
   (let ((tree (window-tree window)))
     (when tree

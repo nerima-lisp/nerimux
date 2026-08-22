@@ -28,7 +28,7 @@
    Each RULE is either (first-char CHAR) or (contains-char CHAR).
    Produces a DEFUN whose body is a flat OR over all rule tests."
   `(defun target-field-p (field)
-     "Return true when FIELD looks like a tmux target rather than a command name.
+     "Return true when FIELD looks like a target selector rather than a command name.
    A field is a target when it starts with '$' (session sigil), contains ':'
    (session:window syntax), or contains '.' (window.pane syntax).
    This predicate is the sole policy point for target detection; keeping it

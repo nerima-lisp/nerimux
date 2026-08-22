@@ -16,9 +16,21 @@
 ;;;; this file).
 ;;;;
 ;;;; Load order (declared in nerimux.asd): renderer-format → renderer-style
-;;;;             → renderer-pane → renderer-overlay → renderer-statusbar
+;;;;             → renderer-pane → renderer-statusbar
 ;;;;             → renderer-compose-protocols → renderer-compose-overlay
 ;;;;             → renderer-compose-effects → renderer-compose
+
+(defun %session-title-pane (session focus-pane)
+  "The pane RENDER-SESSION-TO-STRING's own ACTIVE-PANE binding resolves to,
+   duplicated as a top-level function so RENDER-SESSION-TO-TUI-STRING
+   (renderer-tui-kit.lisp, loads after this file) can derive the same pane
+   at its own call boundary for the R6.11 title -- see the comment on
+   render-session-to-string's title block below for why that second call is
+   the one that actually reaches the client."
+  (let* ((window (session-active-window session))
+         (panes (when window (window-panes window))))
+    (or (and focus-pane (find focus-pane panes :test #'eq))
+        (session-active-pane session))))
 
 (defun %render-panes-and-borders (buffer session window panes active-pane terminal-cols
                                   &key (viewport 0))
@@ -56,12 +68,16 @@
       (%emit-sgr stream 7)
       (when attention
         (%emit-sgr stream 33)))
-  (let ((width (min inner-width (length text))))
-    (write-string text stream :start 0 :end width)
-    (when (< width inner-width)
-      (write-string (make-string (- inner-width width)
-                                 :initial-element #\Space)
-                    stream)))
+  ;; %display-clip measures by CHAR-WIDTH, not (length text), and pads its
+  ;; own truncation branch to exactly INNER-WIDTH columns — see R6.9's
+  ;; comment on %display-clip in renderer-format.lisp for why a picker
+  ;; result naming a Japanese branch needs this instead of (min inner-width
+  ;; (length text)).
+  (let* ((clipped (%display-clip text inner-width))
+         (pad (- inner-width (%display-width clipped))))
+    (write-string clipped stream)
+    (when (plusp pad)
+      (write-string (make-string pad :initial-element #\Space) stream)))
   (reset-attrs stream)
   (write-char #\| stream))
 
@@ -112,9 +128,13 @@
              (plusp terminal-rows)
              (plusp terminal-cols))
     (let* ((text (concatenate 'string ":" command-buffer))
-           (start (max 0 (- (length text) terminal-cols)))
-           (visible (subseq text start))
-           (width (length visible)))
+           ;; %display-clip-tail keeps the tail (where the cursor always
+           ;; sits) visible by trimming from the front, measured by display
+           ;; width rather than (length text) -- R6.9; a `:wt-delete
+           ;; <branch>` command line naming a Japanese branch must not
+           ;; scroll a wide character in half.
+           (visible (%display-clip-tail text terminal-cols))
+           (width (%display-width visible)))
       (move-to stream (1- terminal-rows) 0)
       (write-string visible stream)
       (when (< width terminal-cols)
@@ -137,33 +157,23 @@
   (let* ((buffer      (make-string-output-stream))
          (window      (session-active-window session))
          (panes       (when window (window-panes window)))
-         (active-pane (or (and focus-pane
-                               (find focus-pane panes :test #'eq))
-                          (session-active-pane session)))
-         ;; Status row count from the `status` option (0..5).  The pane layout
-         ;; reserves the matching count via nerimux/config:*status-height*, kept
-         ;; in sync by the `status` option's side-effect — so the bar and the
-         ;; pane area stay in lockstep in normal use.
-         (status-lines (nerimux/options:status-line-count))
-         (status-on   (> status-lines 0))
-         (status-pos  (nerimux/options:get-option "status-position" "bottom")))
+         (active-pane (%session-title-pane session focus-pane)))
     (cursor-invisible buffer)
     (%render-panes-and-borders buffer session window panes active-pane terminal-cols
                                :viewport viewport)
-    ;; pane-border-status title lines (drawn after borders so they overwrite border cells)
-    (when (and window panes
-               (string/= (nerimux/options:get-option "pane-border-status" "off") "off"))
-      (dolist (pane panes)
-        (%render-pane-border-status buffer pane session window)))
+    ;; pane-border-status (border title lines) is deleted outright — R6.6.
     ;; copy-mode search-match highlighting on the active pane (it is the one that
     ;; can be in copy mode), overdrawn after panes/borders.
     (when (and active-pane (pane-screen active-pane)
                (screen-copy-mode-p (pane-screen active-pane)))
       (%render-copy-search-matches buffer active-pane))
     (%render-overlay-layer buffer active-pane terminal-rows terminal-cols)
-    (when status-on
-      (render-status-region buffer session terminal-rows terminal-cols
-                            status-lines status-pos))
+    ;; Status line is fixed at one row, docked to the bottom (§1.4).
+    ;; `status`/`status-position` (domain/options, deleted R2.2) always
+    ;; resolved to "on" (1 row) / "bottom", which is exactly what
+    ;; render-status-bar's default :status-row (the bottom row) already
+    ;; draws — so this is not a behaviour change.
+    (render-status-bar buffer session terminal-rows terminal-cols)
     (when (eq mode :picker)
       (%render-client-picker buffer terminal-rows terminal-cols
                              (or picker-items '()) picker-query
@@ -171,21 +181,28 @@
     (when (eq mode :command)
       (%render-client-command-line buffer terminal-rows terminal-cols
                                    command-buffer))
-    (%render-mouse-sequences buffer active-pane)
-    ;; allow-passthrough: emit any DCS-passthrough sequences (images, nested tmux).
+    ;; allow-passthrough: emit any DCS-passthrough sequences (images, a nested multiplexer).
     (when panes (%render-passthrough buffer panes))
     (when panes (%render-clipboard buffer panes))
     (%render-bell-and-cursor buffer active-pane)
-    ;; Relay bells from background windows (bell-action 'any'/'other').
-    (%render-background-bells buffer session window)
+    (%discard-background-bells session window)
     ;; set-titles: emit OSC 0 to set the outer terminal window title.
-    (when (nerimux/options:get-option "set-titles")
-      (let* ((title-fmt (nerimux/options:get-option "set-titles-string" "#W"))
-             (win        (session-active-window session))
-             (pane       (session-active-pane session))
-             (ctx        (nerimux/format:format-context-from-session session win pane))
-             (title      (nerimux/format:expand-format title-fmt ctx)))
-        (format buffer "~C]0;~A~C" +esc+ title (code-char 7))))
+    ;; set-titles defaulted to off (domain/options, deleted R2.2); made
+    ;; unconditional by R2.2, content fixed to "nerimux: <repository> —
+    ;; <worktree>" by R6.11 (previously "#S:#I:#W" = session name : window
+    ;; index : window name).  Embedded here for a caller of the plain-ANSI
+    ;; entry point directly, but a client only ever sees this through
+    ;; RENDER-SESSION-TO-TUI-STRING (renderer-tui-kit.lisp), whose
+    ;; ansi-frame/tui-kit round-trip parses OSC sequences out of this frame
+    ;; text and then discards them when redrawing from the parsed grid
+    ;; (%frame-grid-skip-osc in renderer-tui-kit.lisp does not retain what
+    ;; it skips) -- that function re-emits the same title after the
+    ;; round-trip so it actually reaches the outer terminal.
+    (let ((worktree (and active-pane (pane-worktree active-pane))))
+      (write-string
+       (%client-title-osc (and worktree (worktree-repository worktree))
+                          worktree)
+       buffer))
     (get-output-stream-string buffer)))
 
 (defun render-session (session terminal-rows terminal-cols)

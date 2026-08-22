@@ -126,12 +126,23 @@
         (nerimux::%handle-multi-key-message s conn #(27))
         (expect (eq :normal (nerimux::client-conn-mode conn)))
         (expect (eq :overview (nerimux::client-conn-view conn)))
-        (nerimux::%handle-multi-key-message s conn #(13))
+        ;; ESC arms R4.3's 2-byte swallow window (%client-esc-swallow-start),
+        ;; so the next two bytes after it never reach dispatch -- two no-op
+        ;; presses clear it before n reopens the same prompt (R6.3 gave Enter
+        ;; on a repository row expand/collapse instead —
+        ;; %focus-selected-client-worktree — so n is the only key that starts
+        ;; worktree-create now).
+        (nerimux::%handle-multi-key-message s conn #(0))
+        (nerimux::%handle-multi-key-message s conn #(0))
+        (nerimux::%handle-multi-key-message s conn #(110))
         (expect (eq :command (nerimux::client-conn-mode conn)))
         (expect (string= "wt-create --branch "
                          (nerimux::client-conn-command-buffer conn)))
         (nerimux::%handle-multi-key-message s conn #(27))
         (nerimux::%set-client-selected-tree-object conn worktree)
+        ;; Same R4.3 swallow window as above.
+        (nerimux::%handle-multi-key-message s conn #(0))
+        (nerimux::%handle-multi-key-message s conn #(0))
         (nerimux::%handle-multi-key-message s conn #(88))
         (expect (eq :command (nerimux::client-conn-mode conn)))
         (expect (string= "wt-delete --confirm"
@@ -167,7 +178,10 @@
                        t))
                (setf (nerimux::client-conn-view conn) :overview)
                (nerimux::%set-client-selected-tree-object conn repository)
-               (nerimux::%handle-multi-key-message s conn #(13))
+               ;; n starts worktree-create; Enter on a repository row now
+               ;; expands/collapses it instead (R6.3, %focus-selected-client-
+               ;; worktree).
+               (nerimux::%handle-multi-key-message s conn #(110))
                (nerimux::%handle-multi-key-message
                 s conn
                 (cl-codec-kit:string-to-octets
@@ -350,6 +364,10 @@
                          (nerimux::client-conn-command-buffer conn)))
         (nerimux::%handle-multi-key-message s conn #(27))
         (nerimux::%set-client-selected-tree-object conn worktree)
+        ;; ESC arms R4.3's 2-byte swallow window (%client-esc-swallow-start);
+        ;; two no-op presses clear it before U reaches dispatch.
+        (nerimux::%handle-multi-key-message s conn #(0))
+        (nerimux::%handle-multi-key-message s conn #(0))
         (nerimux::%handle-multi-key-message s conn #(85))
         (expect (eq :command (nerimux::client-conn-mode conn)))
         (expect (string= "wt-unlock --confirm"
@@ -741,7 +759,16 @@
         (expect (null (nerimux::client-conn-picker-regex-p conn)))
         (expect (null (nerimux::%client-picker-visible-items conn))))))
 
-  (it "multi-picker-key-input-filters-navigates-and-selects-worktree"
+  ;; R4/§6 regression note: this used to drive #(27 91 65)/#(27 91 66) — a
+  ;; 3-byte arrow escape in one call — to prove picker index navigation. That
+  ;; is the exact §2.1 bug shape: client.lisp sends one stdin byte per msg-key
+  ;; frame, so a real arrow arrives as ESC, then `[`, then a letter, as three
+  ;; SEPARATE calls. The ESC alone already matches the picker's ESC branch,
+  ;; which closes the picker and arms R4.3's 2-byte swallow, so the `[` and the
+  ;; letter never reach any dispatch. Those four branches were unreachable from
+  ;; any real client and are now deleted; C-p/C-n move the selection instead
+  ;; (covered by multi-picker-c-p-c-n-move-the-selection below).
+  (it "multi-picker-key-input-filters-by-query-and-selects-worktree"
     (with-fake-session (s)
       (let* ((organization
                (nerimux/model:make-organization
@@ -770,17 +797,86 @@
               (nerimux/picker:build-global-picker-items
                (list organization))
               (nerimux::client-conn-picker-index conn) 0)
-        (nerimux::%handle-multi-key-message s conn #(27 91 66))
-        (expect (= 1 (nerimux::client-conn-picker-index conn)))
-        (nerimux::%handle-multi-key-message s conn #(27 91 65))
-        (expect (= 0 (nerimux::client-conn-picker-index conn)))
-        (nerimux::%handle-multi-key-message
-         s conn (cl-codec-kit:string-to-octets "feature" :encoding :utf-8))
+        ;; Typed one byte per message, matching client.lisp's real framing.
+        (loop for character across "feature"
+              do (nerimux::%handle-multi-key-message
+                  s conn (vector (char-code character))))
         (expect (string= "feature" (nerimux::client-conn-picker-query conn)))
         (expect (= 1 (length (nerimux::%client-picker-visible-items conn))))
         (nerimux::%handle-multi-key-message s conn #(13))
         (expect (eq :normal (nerimux::client-conn-mode conn)))
         (expect (eq pane (nerimux::client-conn-focus conn))))))
+
+  ;; Direct proof of the finding above: an arrow-escape sequence sent the way
+  ;; a real client actually sends it -- one byte per message -- never moves
+  ;; the picker's selection index, because the second and third bytes are
+  ;; swallowed before %move-client-picker-index is ever reached.
+  (it "picker-arrow-key-bytes-one-at-a-time-do-not-move-the-index"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org" :host "github.com" :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo" :organization organization
+                :specification "github.com/team/repo"))
+             (worktree-a
+               (nerimux/model:make-worktree
+                :id "a" :repository repository :path "/tmp/a" :branch "a"))
+             (worktree-b
+               (nerimux/model:make-worktree
+                :id "b" :repository repository :path "/tmp/b" :branch "b"))
+             (conn (%make-test-conn)))
+        (nerimux/model:organization-add-repository organization repository)
+        (nerimux/model:repository-add-worktree repository worktree-a)
+        (nerimux/model:repository-add-worktree repository worktree-b)
+        (setf (nerimux::client-conn-mode conn) :picker
+              (nerimux::client-conn-picker-items conn)
+              (nerimux/picker:build-global-picker-items (list organization))
+              (nerimux::client-conn-picker-index conn) 0)
+        (expect (< 1 (length (nerimux::%client-picker-visible-items conn))))
+        (nerimux::%handle-multi-key-message s conn #(27)) ; ESC: closes the picker
+        (expect (eq :normal (nerimux::client-conn-mode conn)))
+        (nerimux::%handle-multi-key-message s conn #(91)) ; [: swallowed
+        (nerimux::%handle-multi-key-message s conn #(66)) ; B: swallowed
+        (expect (eq :normal (nerimux::client-conn-mode conn))
+                ))))
+
+  ;; The replacement for those arrow branches. C-p/C-n are used rather than j/k
+  ;; because every other key in the picker is a character of the search query --
+  ;; a letter that also moved the cursor could not be typed.
+  (it "multi-picker-c-p-c-n-move-the-selection"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org" :host "github.com" :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo" :organization organization
+                :specification "github.com/team/repo"))
+             (worktree-a
+               (nerimux/model:make-worktree
+                :id "a" :repository repository :path "/tmp/a" :branch "a"))
+             (worktree-b
+               (nerimux/model:make-worktree
+                :id "b" :repository repository :path "/tmp/b" :branch "b"))
+             (conn (%make-test-conn)))
+        (nerimux/model:organization-add-repository organization repository)
+        (nerimux/model:repository-add-worktree repository worktree-a)
+        (nerimux/model:repository-add-worktree repository worktree-b)
+        (setf (nerimux::client-conn-mode conn) :picker
+              (nerimux::client-conn-picker-items conn)
+              (nerimux/picker:build-global-picker-items (list organization))
+              (nerimux::client-conn-picker-index conn) 0)
+        (expect (< 1 (length (nerimux::%client-picker-visible-items conn))))
+        (nerimux::%handle-multi-key-message s conn #(14)) ; C-n
+        (expect (= 1 (nerimux::client-conn-picker-index conn)))
+        (expect (eq :picker (nerimux::client-conn-mode conn))
+                )
+        (nerimux::%handle-multi-key-message s conn #(16)) ; C-p
+        (expect (= 0 (nerimux::client-conn-picker-index conn)))
+        (expect (string= "" (nerimux::client-conn-picker-query conn))
+                ))))
 
   (it "multi-picker-selects-a-worktree-pane-in-an-inactive-window"
     (with-fake-session (s :nwindows 2)
@@ -865,21 +961,22 @@
   ;; had nothing to translate for, and this test was the only thing still
   ;; calling it.
 
-  ;; A resize moves the client to the front of *clients* so window-size "latest"
-  ;; tracks the just-resized client.
-  (it "multi-resize-marks-client-latest"
-    (with-fresh-options
-      (nerimux/options:set-option "window-size" "latest")
-      (with-fake-session (s)
-        (let* ((a (%make-test-conn :rows 24 :cols 80))
-               (b (%make-test-conn :rows 30 :cols 100))
-               (nerimux::*clients* (list a b))   ; a is front initially
-               (payload (nerimux/protocol::u16-octets-pair 50 150)))
-          (nerimux::%handle-multi-client-message nerimux::+msg-resize+ payload s b)
-          (expect (eq b (first nerimux::*clients*)))
-          (multiple-value-bind (rows cols) (nerimux::%effective-client-size)
-            (check-table (list (list rows 50 "latest tracks the just-resized client's new rows")
-                               (list cols 150 "latest tracks the just-resized client's new cols"))))))))
+  ;; A resize updates the resized client's own geometry and immediately
+  ;; re-applies the effective shared size, which §1.4 / R8.4 fix to the
+  ;; smallest attached client — not the just-resized one.  window-size
+  ;; "latest" (and "largest"/"manual") went away with domain/options (R2.2).
+  (it "multi-resize-updates-geometry-and-reapplies-smallest-size"
+    (with-fake-session (s)
+      (let* ((a (%make-test-conn :rows 24 :cols 80))
+             (b (%make-test-conn :rows 30 :cols 100))
+             (nerimux::*clients* (list a b))
+             (payload (nerimux/protocol::u16-octets-pair 50 150)))
+        (nerimux::%handle-multi-client-message nerimux::+msg-resize+ payload s b)
+        (expect (= 50 (nerimux::client-conn-rows b)))
+        (expect (= 150 (nerimux::client-conn-cols b)))
+        (multiple-value-bind (rows cols) (nerimux::%effective-client-size)
+          (check-table (list (list rows 24 "effective rows = smallest attached client (a), not the resized one")
+                             (list cols 80 "effective cols = smallest attached client (a), not the resized one")))))))
 
   ;; The client-local C-q prefix (%handle-workspace-prefix-key) followed by
   ;; `d` still detaches: :drop on the second key, session survives.  This used
@@ -890,21 +987,20 @@
   ;; ever was.
   (it "multi-handle-key-detach-drops-client"
     (with-fake-session (s)
-      (with-isolated-config
-        (let* ((conn   (%make-test-conn))
-               (prefix (make-array 1 :element-type '(unsigned-byte 8)
-                                      :initial-contents
-                                      (list (nerimux::client-conn-workspace-prefix-code conn))))
-               (d-key  (make-array 1 :element-type '(unsigned-byte 8)
-                                      :initial-contents (list (char-code #\d)))))
-          ;; The prefix byte alone is absorbed: no disposition yet, but the
-          ;; client is now armed for the following `d`.
-          (expect (null (nerimux::%handle-multi-client-message
-                         nerimux::+msg-key+ prefix s conn)))
-          (expect (nerimux::client-conn-ui-prefix-p conn))
-          (expect (eq :drop (nerimux::%handle-multi-client-message
-                             nerimux::+msg-key+ d-key s conn)))
-          (expect nerimux::*running* :to-be-truthy)))))
+      (let* ((conn   (%make-test-conn))
+             (prefix (make-array 1 :element-type '(unsigned-byte 8)
+                                    :initial-contents
+                                    (list (nerimux::client-conn-workspace-prefix-code conn))))
+             (d-key  (make-array 1 :element-type '(unsigned-byte 8)
+                                    :initial-contents (list (char-code #\d)))))
+        ;; The prefix byte alone is absorbed: no disposition yet, but the
+        ;; client is now armed for the following `d`.
+        (expect (null (nerimux::%handle-multi-client-message
+                       nerimux::+msg-key+ prefix s conn)))
+        (expect (nerimux::client-conn-ui-prefix-p conn))
+        (expect (eq :drop (nerimux::%handle-multi-client-message
+                           nerimux::+msg-key+ d-key s conn)))
+        (expect nerimux::*running* :to-be-truthy))))
 
   ;; A key the workspace UI does not bind (:normal mode, no stdin-target set)
   ;; is a no-op: NIL disposition, CONN's mode/view unchanged, and -- unlike the
@@ -912,65 +1008,24 @@
   ;; straight into the active pane's pty -- nothing is written to the pane.
   (it "multi-handle-unbound-normal-key-is-noop"
     (with-fake-session (s)
-      (with-isolated-config
-        (let* ((conn (%make-test-conn))
-               (before-mode (nerimux::client-conn-mode conn))
-               (before-view (nerimux::client-conn-view conn))
-               (key (make-array 1 :element-type '(unsigned-byte 8)
-                                   :initial-contents (list (char-code #\z))))
-               (writes nil))
-          (flet ((rec (fd bytes) (declare (ignore fd)) (push bytes writes)))
-            (let ((orig (fdefinition 'nerimux::pty-write)))
-              (unwind-protect
-                   (progn
-                     (setf (fdefinition 'nerimux::pty-write) #'rec)
-                     (expect (null (nerimux::%handle-multi-client-message
-                                    nerimux::+msg-key+ key s conn))))
-                (setf (fdefinition 'nerimux::pty-write) orig))))
-          (expect (null writes))
-          (expect (eq before-mode (nerimux::client-conn-mode conn)))
-          (expect (eq before-view (nerimux::client-conn-view conn)))
-          (expect nerimux::*running* :to-be-truthy)))))
-
-  ;; A +msg-attach+ frame whose flags byte sets +attach-flag-read-only+ marks the
-  ;; connection read-only; a plain (no-flag) attach leaves it NIL.
-  (it "multi-attach-readonly-flag-sets-conn-slot"
-    (with-fake-session (s)
-      (let* ((conn   (%make-test-conn))
-             (nerimux::*clients* (list conn))
-             (ro-payload (nerimux/protocol::to-octets
-                          (concatenate 'list
-                                       (nerimux/protocol::u16-octets-pair 30 100)
-                                       (list nerimux/protocol:+attach-flag-read-only+)))))
-        (nerimux::%handle-multi-client-message nerimux::+msg-attach+ ro-payload s conn)
-        (expect (nerimux::client-conn-read-only-p conn) :to-be-truthy)
-        ;; A subsequent plain attach (no flags byte) clears it again.
-        (nerimux::%handle-multi-client-message
-         nerimux::+msg-attach+ (nerimux/protocol::u16-octets-pair 30 100) s conn)
-        (expect (nerimux::client-conn-read-only-p conn) :to-be-falsy))))
-
-  ;; When a connection is read-only, a printable key dispatched through
-  ;; %handle-multi-client-message must NOT reach the active pane (no pty-write).
-  (it "multi-readonly-conn-suppresses-pane-input"
-    (with-fake-session (s)
-      (with-isolated-config
-        (let* ((conn (%make-test-conn))
-               (nerimux::*clients* (list conn))
-               (writes nil))
-          (setf (nerimux::client-conn-read-only-p conn) t)
-          ;; Capture any pty-write the key would otherwise forward to the pane.
-          (flet ((rec (fd bytes) (declare (ignore fd)) (push bytes writes)))
-            (let ((orig (fdefinition 'nerimux::pty-write)))
-              (unwind-protect
-                   (progn
-                     (setf (fdefinition 'nerimux::pty-write) #'rec)
-                     (nerimux::%handle-multi-client-message
-                      nerimux::+msg-key+
-                      (make-array 1 :element-type '(unsigned-byte 8)
-                                    :initial-contents (list (char-code #\a)))
-                      s conn))
-                (setf (fdefinition 'nerimux::pty-write) orig))))
-          (expect (null writes))))))
+      (let* ((conn (%make-test-conn))
+             (before-mode (nerimux::client-conn-mode conn))
+             (before-view (nerimux::client-conn-view conn))
+             (key (make-array 1 :element-type '(unsigned-byte 8)
+                                 :initial-contents (list (char-code #\z))))
+             (writes nil))
+        (flet ((rec (fd bytes) (declare (ignore fd)) (push bytes writes)))
+          (let ((orig (fdefinition 'nerimux::pty-write)))
+            (unwind-protect
+                 (progn
+                   (setf (fdefinition 'nerimux::pty-write) #'rec)
+                   (expect (null (nerimux::%handle-multi-client-message
+                                  nerimux::+msg-key+ key s conn))))
+              (setf (fdefinition 'nerimux::pty-write) orig))))
+        (expect (null writes))
+        (expect (eq before-mode (nerimux::client-conn-mode conn)))
+        (expect (eq before-view (nerimux::client-conn-view conn)))
+        (expect nerimux::*running* :to-be-truthy))))
 
   ;; An explicit +msg-detach+ message yields :drop.
   (it "multi-handle-detach-message-drops-client"
@@ -983,13 +1038,6 @@
     (with-fake-session (s)
       (expect (eq :drop (nerimux::%handle-multi-client-message nil #() s (%make-test-conn))))
       (expect (eq :drop (nerimux::%handle-multi-client-message 99 #() s (%make-test-conn))))))
-
-  ;; A detach-other-clients command message yields :detach-others.
-  (it "multi-handle-detach-other-clients-command"
-    (with-fake-session (s)
-      (let ((payload (nerimux/protocol::encode-command-payload :detach-other-clients)))
-        (expect (eq :detach-others (nerimux::%handle-multi-client-message
-                                    nerimux::+msg-command+ payload s (%make-test-conn)))))))
 
   (it "multi-client-ui-keymaps-drive-input-copy-search-and-command"
     (with-fake-session (s)
@@ -1004,7 +1052,14 @@
          (cl-codec-kit:string-to-octets "needle" :encoding :utf-8))
         (nerimux::%handle-multi-key-message s conn #(105))
         (expect (eq :input (nerimux::client-conn-mode conn)))
+        ;; R4.2: :input mode has no keyboard exit of its own -- ESC is
+        ;; forwarded to the pane like any other byte instead of kicking the
+        ;; client back to :normal (the §2.1 bug this redesign fixes).
         (nerimux::%handle-multi-key-message s conn #(27))
+        (expect (eq :input (nerimux::client-conn-mode conn)))
+        ;; R4.4: the C-q prefix (C-q C-q) is the only way out of :input.
+        (nerimux::%handle-multi-key-message s conn #(17)) ; C-q
+        (nerimux::%handle-multi-key-message s conn #(17)) ; C-q again -> :normal
         (expect (eq :normal (nerimux::client-conn-mode conn)))
         (nerimux::%handle-multi-key-message s conn #(99))
         (expect (eq :copy (nerimux::client-conn-mode conn)))

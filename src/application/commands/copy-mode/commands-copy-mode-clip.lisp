@@ -40,63 +40,30 @@
       (%rectangle-selection-text screen)
       (%selection-text screen)))
 
-;;; ── copy-pipe helper ─────────────────────────────────────────────────────────
+;;; ── Clipboard ─────────────────────────────────────────────────────────────
 ;;;
-;;; When the "copy-command" option is set to a non-empty string, the yank text
-;;; is also piped to that shell command via process-kit:run.  Errors are
-;;; silently swallowed so a misconfigured copy-command does not crash the session.
-
-(defconstant +copy-command-timeout+ 30
-  "Maximum seconds to wait for a copy-command subprocess before giving up.")
-
-(defun %run-shell-cmd-with-input (command text)
-  "Pipe TEXT as stdin to COMMAND (a shell string), bounded by +copy-command-timeout+.
-   process-kit:run owns the deadline: on overrun it escalates SIGTERM->SIGKILL
-   over the child's process group, so no belt-and-suspenders WITH-TIMEOUT is
-   needed and no orphaned shell survives the deadline.  Errors are silently
-   swallowed so a misconfigured command does not crash the session."
-  (ignore-errors
-    (process-kit:run "/bin/sh" (list "-c" command)
-                     :input text
-                     :timeout +copy-command-timeout+
-                     :on-timeout :return)))
-
-(defun %run-copy-command (text)
-  "Pipe TEXT to the shell command stored in the \"copy-command\" option.
-   No-op when the option is empty or TEXT is NIL/empty.
-   The subprocess is bounded by +copy-command-timeout+ seconds so a hanging
-   copy-command does not block the event loop indefinitely."
-  (when (and text (plusp (length text)))
-    (let ((cmd (ignore-errors (nerimux/options:get-option "copy-command"))))
-      (when (and (stringp cmd) (plusp (length cmd)))
-        (%run-shell-cmd-with-input cmd text)))))
+;;; yank sends the selection to the host terminal via OSC 52 only (§1.1/§R3.1
+;;; of docs/notes/workspace-requirements.md: nerimux keeps no paste buffer and
+;;; runs no copy-command).
 
 (defun %maybe-copy-to-clipboard (screen text)
-  "When the set-clipboard option is on/external, enqueue an OSC 52 sequence on
-   SCREEN's clipboard-queue so the renderer copies TEXT to the host's system
-   clipboard on the next frame.  No-op when set-clipboard is off."
-  (let ((mode (or (ignore-errors (nerimux/options:get-option "set-clipboard")) "on")))
-    (when (member mode '("on" "external") :test #'equal)
-      (push (nerimux/terminal/parser:osc52-clipboard-sequence text)
-            (screen-clipboard-queue screen)))))
+  "Enqueue an OSC 52 sequence on SCREEN's clipboard-queue so the renderer
+   copies TEXT to the host's system clipboard on the next frame."
+  (push (nerimux/terminal/parser:osc52-clipboard-sequence text)
+        (screen-clipboard-queue screen)))
 
 (defun %copy-mode-do-yank (screen)
-  "Shared copy work for the yank/copy-selection family: place the current
-   selection text into the paste buffer, emit OSC 52 when set-clipboard is
-   on/external, and pipe via the copy-command option.  Does NOT touch the
-   selection or copy-mode state.  No-op when there is no selection text."
+  "Shared copy work for the yank/copy-selection family: emit OSC 52 for the
+   current selection text.  Does NOT touch the selection or copy-mode state.
+   No-op when there is no selection text."
   (let ((text (%get-selection-text screen)))
     (when (and text (plusp (length text)))
-      (nerimux/buffer:add-paste-buffer text)
-      (%maybe-copy-to-clipboard screen text)
-      (%run-copy-command text))))
+      (%maybe-copy-to-clipboard screen text))))
 
 (defun copy-mode-yank (screen)
-  "Copy selected text to paste buffer (and pipe via copy-command if configured),
-   then exit copy mode.  In rectangle-select mode the rectangular region is used.
-   When set-clipboard is on/external, also emits OSC 52 to the host terminal so
-   the selection reaches the system clipboard.  This is the exit-on-yank path
-   bound to vi y / Enter / emacs M-w / mouse-drag-release."
+  "Copy selected text to the host clipboard via OSC 52, then exit copy mode.
+   In rectangle-select mode the rectangular region is used.  This is the
+   exit-on-yank path bound to vi y / Enter / emacs M-w / mouse-drag-release."
   (%copy-mode-do-yank screen)
   (copy-mode-cancel-selection screen)
   (copy-mode-exit screen))

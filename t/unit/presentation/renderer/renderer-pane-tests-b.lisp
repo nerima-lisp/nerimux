@@ -3,17 +3,15 @@
 ;;;; renderer-pane tests — part B: %render-v-separator,
 ;;;; render-tree-borders with :v split, layout-subtree-rect single-leaf,
 ;;;; subtree-contains-p nil-pane corner case, additional in-sel/pane/border coverage.
+;;;;
+;;;; R6.6 deleted pane-border-status/pane-border-format outright (no label is
+;;;; ever drawn on a border) and R2.4 deleted the pane-border-lines glyph
+;;;; dispatch (%dispatch-pane-border-chars) — see renderer-borders.lisp and
+;;;; renderer-pane-tests.lisp's header.
 
 (defun %in-sel (row col sr er sc ec &optional rect-p)
   "Call in-selection-p with positional args in a more readable order."
   (nerimux/renderer::in-selection-p row col sr er sc ec rect-p))
-
-(defun %border-status-output (pane session win status-val fmt-val)
-  "Run %render-pane-border-status with STATUS-VAL and FMT-VAL options and return output."
-  (with-isolated-options ("pane-border-status" status-val
-                          "pane-border-format"  fmt-val)
-    (with-output-to-string (s)
-      (nerimux/renderer::%render-pane-border-status s pane session win))))
 
 (describe "renderer-suite"
 
@@ -249,53 +247,6 @@
     (let ((screen (make-selecting-screen 10 5 0 0 1 0 :offset 7)))
       (expect (= 7 (nerimux/terminal/types:screen-copy-offset screen)))))
 
-  ;;; -- %render-pane-border-status coverage ------------------------------------
-  ;;;
-  ;;; %render-pane-border-status (~line 250-271 in renderer-pane.lisp) is only
-  ;;; reachable when pane-border-status is not "off".  These tests exercise the
-  ;;; top/bottom row placement branches and the format expansion path.
-
-  ;; %render-pane-border-status does nothing when pane-border-status is "off".
-  (it "render-pane-border-status-off-produces-nothing"
-    (let* ((pane (make-test-pane 20 5 :id 1))
-           (sess (make-fake-session :nwindows 1))
-           (win  (first (nerimux/model:session-windows sess)))
-           (out  (%border-status-output pane sess win "off" " #{pane_index} ")))
-      (expect (string= "" out))))
-
-  ;; %render-pane-border-status with status=top places the label on the RESERVED row
-  ;; just above the content (pane-y - 1), so it never overwrites pane content.
-  (it "render-pane-border-status-top-positions-above-content"
-    (let* ((pane (make-test-pane 20 5 :id 1 :y 3))
-           (sess (make-fake-session :nwindows 1))
-           (win  (first (nerimux/model:session-windows sess)))
-           (out  (%border-status-output pane sess win "top" "TITLE")))
-      ;; Reserved row = pane-y - 1 = 2 → ESC[3;1H (1-based: 2+1=3)
-      (expect (search (format nil "~C[3;" #\Escape) out))
-      (expect (search "TITLE" out))))
-
-  ;; %render-pane-border-status with status=bottom places the label on the RESERVED
-  ;; row just below the content (pane-y + pane-height).
-  (it "render-pane-border-status-bottom-positions-below-content"
-    (let* ((pane (make-test-pane 20 5 :id 1 :y 0))
-           (sess (make-fake-session :nwindows 1))
-           (win  (first (nerimux/model:session-windows sess)))
-           (out  (%border-status-output pane sess win "bottom" "BOT")))
-      ;; Reserved row = pane-y + pane-height = 0 + 5 = 5 → ESC[6;1H
-      (expect (search (format nil "~C[6;" #\Escape) out))
-      (expect (search "BOT" out))))
-
-  ;; %render-pane-border-status truncates the label to pane-width characters.
-  (it "render-pane-border-status-truncates-to-pane-width"
-    (let* ((pane (make-test-pane 5 3 :id 1))
-           (sess (make-fake-session :nwindows 1))
-           (win  (first (nerimux/model:session-windows sess)))
-           (out  (%border-status-output pane sess win "top" "ABCDEFGHIJ")))
-      ;; Only the first 5 visible chars should appear (pane-width=5).
-      ;; The status text "ABCDEFGHIJ" should be truncated to "ABCDE".
-      (expect (search "ABCDE" out))
-      (expect (null (search "ABCDEF" out)))))
-
   ;;; -- copy-mode search-match highlighting -------------------------------------
 
   ;; %all-match-ranges returns every match span; regex with literal fallback.
@@ -308,16 +259,14 @@
                (nerimux/renderer::%all-match-ranges "(" "a ( b"))))
 
   ;; When copy mode has a search term, render-session-to-string overdraws matches in
-  ;; copy-mode-match-style.
+  ;; +sgr-copy-mode-match+ (copy-mode-match-style's fixed "bg=green" → SGR 42).
   (it "copy-mode-search-matches-highlighted-in-frame"
     (with-fake-session (s)
       (feed (active-screen s) "hello world hello")
       (nerimux/commands::copy-mode-enter (active-screen s))
       (setf (nerimux/terminal/types:screen-copy-search-term (active-screen s)) "hello")
-      (let* ((expected (nerimux/renderer:style-to-sgr
-                        (nerimux/renderer:parse-style-string "bg=green")))
-             (frame    (nerimux/renderer:render-session-to-string s 24 81)))
-        (expect frame :to-contain-sgr expected))))
+      (let ((frame (nerimux/renderer:render-session-to-string s 24 81)))
+        (expect frame :to-contain-sgr nerimux/renderer::+sgr-copy-mode-match+))))
 
   ;; With copy mode active but no search term, no match-style SGR is emitted.
   (it "copy-mode-no-search-term-no-highlight"
@@ -325,28 +274,5 @@
       (feed (active-screen s) "hello world")
       (nerimux/commands::copy-mode-enter (active-screen s))
       (setf (nerimux/terminal/types:screen-copy-search-term (active-screen s)) nil)
-      (let* ((match-sgr (nerimux/renderer:style-to-sgr
-                         (nerimux/renderer:parse-style-string "bg=green")))
-             (frame     (nerimux/renderer:render-session-to-string s 24 81)))
-        (expect frame :not :to-contain-sgr match-sgr))))
-
-  ;;; -- %dispatch-pane-border-chars table ----------------------------------------
-
-  ;; %dispatch-pane-border-chars with unknown style falls back to single-line glyphs.
-  (it "dispatch-pane-border-chars-single-is-default"
-    (multiple-value-bind (v h)
-        (nerimux/renderer::%dispatch-pane-border-chars "unknown-style")
-      (expect (char= #\│ v))
-      (expect (char= #\─ h))))
-
-  ;; %dispatch-pane-border-chars returns the expected glyphs for each named style.
-  (it "dispatch-pane-border-chars-all-styles"
-    (flet ((chars (style) (multiple-value-list
-                           (nerimux/renderer::%dispatch-pane-border-chars style))))
-      (dolist (c '(("single" #\│ #\─ "single fallback")
-                   ("double" #\║ #\═ "double: ║ ═")
-                   ("heavy"  #\┃ #\━ "heavy: ┃ ━")
-                   ("simple" #\| #\- "simple: | -")))
-        (destructuring-bind (style ev eh desc) c
-          (declare (ignore desc))
-          (expect (equal (list ev eh) (chars style))))))))
+      (let ((frame (nerimux/renderer:render-session-to-string s 24 81)))
+        (expect frame :not :to-contain-sgr nerimux/renderer::+sgr-copy-mode-match+)))))

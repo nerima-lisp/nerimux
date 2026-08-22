@@ -1,53 +1,43 @@
 ;;; Global CLI flag definitions.
 ;;;
 ;;; The define-flag-parser macro and the %parse-attach-flags/%parse-new-session-flags
-;;; parsers it generated were removed with the tmux startup modes that used them;
-;;; the surviving entry surface (attach, server, -V, -h) takes no per-mode flags.
+;;; parsers it generated were removed with the startup modes that used them;
+;;; attach and server take no flags of their own.  kill (R8.1) is the one
+;;; exception — its --force is parsed by run-kill itself
+;;; (main-startup-commands.lisp), not by *cli-app* below, per the next
+;;; paragraph.
 
 (in-package :nerimux)
 
 ;;; ── Global CLI flags (cl-cli) ────────────────────────────────────────────────
 ;;;
-;;; `nerimux [flags] [command [flags]]` mirrors real tmux(1) (verified against
-;;; `man 1 tmux`, tmux 3.7b: usage `tmux [-2CDhlNuVv] [-c shell-command]
-;;; [-f file] [-L socket-name] [-S socket-path] [-T features] [command
-;;; [flags]]`).  Global flags may appear in ANY order before the command word.
+;;; `nerimux [flags] [command [flags]]`.  The only GLOBAL flags are -V
+;;; (version) and -h (usage); every other flag nerimux once accepted (socket
+;;; selection, config file, colour downsampling, read-only attach, and the
+;;; rest) is gone along with the settings and startup modes it configured.
+;;; An unrecognised global flag is a fatal "unknown flag" error.
 ;;;
-;;; This replaces the old hand-rolled -L/-S-only argv scanner with a real
-;;; option parser, so global flags work in any order rather than only as
-;;; argv's first token.
-;;;
-;;; Flags with real, additional effects: -L/-S (socket), -f (config file, see
-;;; config-paths.lisp), -2 (256-colour downsampling, see renderer-format.lisp
-;;; *color-downsample-fn*), -r (read-only attach, see runtime.lisp
-;;; *client-read-only* and server-multi-dispatch.lisp's per-connection
-;;; enforcement), -V (version), -h (usage).  -C (control mode) was
-;;; removed with the tmux compatibility surface and is now an unknown flag.
-;;; Flags accepted for tmux(1) compatibility with no further behaviour wired
-;;; up: -D, -N, -T, -c, -u, -v (real tmux's own -l is likewise documented as
-;;; "currently has no effect").  Accepting-without-erroring is still a real
-;;; improvement: today every one of these is a fatal "unknown flag" error.
+;;; kill's --force (R8.1, 1.6) is deliberately NOT added here: 1.6 fixes the
+;;; global flags at exactly -V and -h, and --force only means anything after
+;;; `kill`.  *cli-app*'s single positional (:mode-args, :rest-p t) swallows
+;;; the whole "kill --force" tail in one shot once the mixed-argument scanner
+;;; reaches the non-flag "kill" token (cl-cli's rest positionals consume
+;;; every remaining token unconditionally rather than re-testing each one
+;;; against the option table — verified by reading cl-cli 1.3.0's
+;;; parser-consumption.lisp, the version pinned in flake.lock), so "--force"
+;;; is never matched against *cli-app*'s option table at all and cannot
+;;; trigger cl-cli's "unknown option" error the way it would if it appeared
+;;; before the mode word.
 
 (defparameter *cli-app*
   (cl-cli:make-app
    :name "nerimux"
-   :summary "A tmux-compatible terminal multiplexer."
+   :summary "A workspace multiplexer for git worktrees."
    ;; -h/-V dispatch through run-usage/run-version below, not cl-cli's own
    ;; help/version machinery, to keep their exact existing output.
    :auto-help nil
    :global-options
-   (list (cl-cli:make-option :name "socket-name"    :short #\L :kind :value)
-         (cl-cli:make-option :name "socket-path"    :short #\S :kind :value)
-         (cl-cli:make-option :name "file"           :short #\f :kind :value)
-         (cl-cli:make-option :name "force-256"      :short #\2 :kind :flag)
-         (cl-cli:make-option :name "read-only"      :short #\r :kind :flag)
-         (cl-cli:make-option :name "no-daemonize"   :short #\D :kind :flag)
-         (cl-cli:make-option :name "no-start-server" :short #\N :kind :flag)
-         (cl-cli:make-option :name "login-shell"    :short #\l :kind :flag)
-         (cl-cli:make-option :name "utf8"           :short #\u :kind :flag)
-         (cl-cli:make-option :name "features"       :short #\T :kind :value)
-         (cl-cli:make-option :name "shell-command"  :short #\c :kind :value)
-         (cl-cli:make-option :name "verbose"        :short #\v :kind :count)
+   (list
          ;; :key overrides the default derived key (:version / :help), which
          ;; cl-cli reserves for its own built-in --version/--help dispatch
          ;; even with :auto-help nil (see %validate-user-option-keys).

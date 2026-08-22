@@ -2,16 +2,13 @@
 
 ;;;; ASDF system-composition tests.
 ;;;;
-;;;; src/dataflow/ is a cold-path read-model with no call site anywhere in src/
-;;;; outside its own directory.  It was moved out of core `nerimux' into the
-;;;; optional `nerimux/dataflow-model' system so that cl-dataflow-kit stops
-;;;; riding along in the shipped binary's dependency closure.
-;;;;
-;;;; Its counterpart, `nerimux/reasoning' (cl-prolog-kit, over src/reasoning/),
-;;;; has since been deleted outright -- it projected the config key-table store,
-;;;; and that store went when nothing was left to read it.  The cl-prolog-kit
-;;;; assertions below therefore now guard something stronger than a layering
-;;;; rule: that kit should not reappear in the closure at all.
+;;;; src/dataflow/ (nerimux/dataflow-model, cl-dataflow-kit) and src/reasoning/
+;;;; (nerimux/reasoning, cl-prolog-kit) have both been deleted outright, along
+;;;; with the optional systems that carried them -- neither appears in
+;;;; nerimux.asd anymore.  The cl-prolog-kit and cl-dataflow-kit assertions
+;;;; below therefore guard something stronger than a layering rule: that
+;;;; neither kit reappears in the dependency closure at all, direct or
+;;;; transitive.
 ;;;;
 ;;;; Nothing else in the suite would notice that regressing: re-adding either
 ;;;; kit to core :depends-on compiles clean, loads clean, and every other test
@@ -20,15 +17,25 @@
 
 ;;; ── Layering guard helpers ───────────────────────────────────────────────────
 
+(defun %file-text (path)
+  "PATH's contents as a string.
+
+   This used to live in the domain/format structural tests, which went with
+   domain/format itself (R2). The three callers below were left behind, so this
+   file referenced a function that no longer existed anywhere -- which would
+   have taken the layering guard down with it, silently, since a guard that
+   cannot load reports no violations rather than reporting a failure."
+  (with-open-file (in path :external-format :utf-8)
+    (let ((buffer (make-string (file-length in))))
+      (subseq buffer 0 (read-sequence buffer in)))))
+
 (defparameter *layer-rank*
   '(("nerimux/model" . 0) ("nerimux/terminal" . 0) ("nerimux/terminal/actions" . 0)
-    ("nerimux/terminal/parser" . 0) ("nerimux/options" . 0) ("nerimux/buffer" . 0)
-    ("nerimux/hooks" . 0) ("nerimux/format" . 0) ("nerimux/ports" . 0)
-    ("nerimux/persistence" . 0)
-    ("nerimux/config" . 1) ("nerimux/commands" . 1) ("nerimux/picker" . 1)
+    ("nerimux/terminal/parser" . 0) ("nerimux/ports" . 0)
+    ("nerimux/commands" . 1) ("nerimux/picker" . 1)
     ("nerimux/pty" . 2) ("nerimux/net" . 2) ("nerimux/protocol" . 2)
     ("nerimux/transport" . 2) ("nerimux/vcs" . 2)
-    ("nerimux/renderer" . 3) ("nerimux/prompt" . 3) ("nerimux/input" . 3)
+    ("nerimux/renderer" . 3) ("nerimux/input" . 3)
     ("nerimux" . 4)
     ;; Below every layer, not above one: nothing declaring :use or
     ;; :import-from of nerimux/text can ever be an upward violation, so -1
@@ -244,7 +251,7 @@
 (defun %file-layer-name (segments)
   "SEGMENTS is a file's path under src/, split on `/'.  Its layer marker
    word, or NIL if the first segment is not one of the five layer
-   directories (e.g. src/dataflow/ -- see the guard's header comment).
+   directories (see the guard's header comment).
    *layer-name-rank* maps NAME -> RANK, so the name itself comes back via
    the matched pair's CAR, not its CDR -- CDR is the rank integer, which is
    not a string designator and breaks every later (assoc ... :test #'string=)
@@ -367,10 +374,9 @@
   ;;; This guard scans the SOURCE TEXT of every file under src/ instead of any
   ;;; defpackage form.  It derives a FILE's layer from its path
   ;;; (src/domain/... -> DOMAIN, src/application/... -> APPLICATION, and so
-  ;;; on -- src/dataflow/ matches none of the five and is skipped, since
-  ;;; nerimux/dataflow-model is an optional sibling ASDF system that the two
-  ;;; tests above already guard out of core :depends-on).  It derives a
-  ;;; referenced PACKAGE's layer from the first layer marker inside that
+  ;;; on -- a file outside the five layer directories matches none of them
+  ;;; and is skipped).  It derives a referenced PACKAGE's layer from the
+  ;;; first layer marker inside that
   ;;; package's own (:documentation ...) string in
   ;;; src/bootstrap/package*.lisp: "DOMAIN layer", "APPLICATION layer",
   ;;; "INFRASTRUCTURE layer", "PRESENTATION layer", "BOOTSTRAP layer", or

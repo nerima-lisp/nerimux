@@ -56,11 +56,6 @@ something declarative comes back that is worth reasoning over relationally.
   `run-shell` / `if-shell` config directives — and the other config-time shell
   directives — run through, so tests can swap in a fake process without shelling
   out for real.  There is no non-directive form of those two any more.
-- [cl-dataflow-kit](https://github.com/nerima-lisp/cl-dataflow-kit) models the
-  copy-mode lifecycle as an inspectable state machine (`src/dataflow/`), the
-  cl-dataflow-kit counterpart to `src/reasoning/` above — same cold-path-only rule,
-  same dedicated flake check (`dataflow`), and likewise an optional system
-  (`nerimux/dataflow-model`) rather than part of the shipped binary.
 - [cl-tty-kit](https://github.com/nerima-lisp/cl-tty-kit) backs the PTY layer:
   pane spawn, byte-transparent master-fd read/write, raw mode, and
   terminal-size queries all delegate to it (`src/infrastructure/pty/`). It also
@@ -82,21 +77,6 @@ something declarative comes back that is worth reasoning over relationally.
   hung command never orphans a shell. `run-shell` / `if-shell` deliberately
   stay on cl-boundary-kit, which supplies the injectable test double
   (`make-test-process-boundary`) that cl-process-kit has no equivalent for.
-- [cl-history-kit](https://github.com/nerima-lisp/cl-history-kit) replaced the
-  hand-rolled list-and-cursor walk behind the prompt subsystem's Up/Down
-  recall (`runtime-history.lisp`, `prompt.lisp`). Storage, capacity, and
-  navigation are now cl-history-kit's: `history-add`/`history-entries` for the
-  store, `history-merge` to carry entries across a capacity change when
-  `prompt-history-limit` is set at runtime, and `history-previous`/
-  `history-next` for recall. This is a deliberate behavior change from real
-  tmux: cl-history-kit's recall is **prefix-filtered** (the buffer at the
-  start of a walk becomes both its match filter and its restore origin,
-  zsh-style), where tmux's own Up/Down is an unfiltered raw walk. Chosen for
-  the better editing ergonomics over strict Up/Down parity. The tmux
-  `:command-prompt` command this was originally written for lost its handler
-  along with the rest of `src/application/dispatch/`; the prompt/history
-  machinery survives because copy-mode search (`commands-copy-mode-search.lisp`)
-  opens the same prompt for its own query input.
 - [cl-concurrent-kit](https://github.com/nerima-lisp/cl-concurrent-kit) replaced
   `bordeaux-threads` as the threading vocabulary: the per-pane PTY reader
   threads and the config-time background `run-shell`, the screen mutex, the

@@ -31,7 +31,7 @@
 
   ;; %drop-client (no bye, no socket) removes the conn from *clients*.
   (it "multi-drop-client-removes-from-registry"
-    (with-isolated-hooks
+    (progn
       (let* ((a (%make-test-conn))
              (b (%make-test-conn))
              (nerimux::*clients* (list a b)))

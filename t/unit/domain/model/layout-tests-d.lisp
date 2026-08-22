@@ -1,51 +1,11 @@
 (in-package #:nerimux/test)
 
-;;;; layout tests — part D: %main-pane-extent boundary table, layout-split struct
-;;;; defaults, checksum constants, zoomed-window pane-neighbor guard,
-;;;; +neighbor-edge-tolerance+ constant, pane-neighbor up/down symmetry, and
-;;;; layout-split type predicates.
+;;;; layout tests — part D: layout-split struct defaults, checksum constants,
+;;;; zoomed-window pane-neighbor guard, +neighbor-edge-tolerance+ constant,
+;;;; pane-neighbor up/down symmetry, layout-split-axis-extent, and layout-split
+;;;; type predicates.
 
 (describe "layout-tree-suite"
-
-  ;;; ── %main-pane-extent — pure extent resolver ─────────────────────────────────
-  ;;;
-  ;;; Three code paths (Prolog-like rules):
-  ;;;   rule1: main-size alone leaves no room → cap main to (available - 1)
-  ;;;   rule2: other-size non-zero AND fits AND leaves room for main → other region wins
-  ;;;   rule3: default → main-size as-is
-
-  ;; %main-pane-extent returns main-size when it fits and other-size is zero.
-  (it "main-pane-extent-normal-main-size"
-    ;; available=99, main-size=80, other-size=0 → 80
-    (expect (= 80 (nerimux/model::%main-pane-extent 99 80 0)))
-    ;; available=30, main-size=12, other-size=0 → 12
-    (expect (= 12 (nerimux/model::%main-pane-extent 30 12 0))))
-
-  ;; %main-pane-extent caps main-size so at least 1 cell remains for others.
-  (it "main-pane-extent-main-size-too-large-clamped"
-    ;; available=10, main-size=10 → (>= 10+1 10) → cap: max(1, 10-1) = 9
-    (expect (= 9 (nerimux/model::%main-pane-extent 10 10 0)))
-    ;; available=5, main-size=100 → also capped to 4
-    (expect (= 4 (nerimux/model::%main-pane-extent 5 100 0))))
-
-  ;; %main-pane-extent uses available-other-size when other-size fits and leaves room.
-  (it "main-pane-extent-other-size-overrides-when-fitting"
-    ;; available=119, main-size=80, other-size=30 → (89 >= 80) → main = 119-30 = 89
-    (expect (= 89 (nerimux/model::%main-pane-extent 119 80 30)))
-    ;; available=49, main-size=24, other-size=20 → (29 >= 24) → main = 49-20 = 29
-    (expect (= 29 (nerimux/model::%main-pane-extent 49 24 20))))
-
-  ;; %main-pane-extent ignores other-size when it does not leave room for main.
-  (it "main-pane-extent-other-size-too-big-falls-back-to-main-size"
-    ;; available=20, main-size=15, other-size=10 → 20-10=10 < 15 → falls back to 15
-    (expect (= 15 (nerimux/model::%main-pane-extent 20 15 10)))
-    ;; available=100, main-size=80, other-size=200 → other-size > available → fails
-    (expect (= 80 (nerimux/model::%main-pane-extent 100 80 200))))
-
-  ;; %main-pane-extent treats other-size=0 as 'unset'; rule2 condition requires plusp.
-  (it "main-pane-extent-zero-other-size-ignored"
-    ;; other-size=0 is the 'unset' sentinel; rule2's (plusp 0) = NIL → skip to rule3
-    (expect (= 40 (nerimux/model::%main-pane-extent 80 40 0))))
 
   ;;; ── layout-split struct defaults ─────────────────────────────────────────────
 
@@ -106,23 +66,6 @@
   ;; +neighbor-edge-tolerance+ must be 2 to account for the 1-cell separator.
   (it "neighbor-edge-tolerance-value"
     (expect (= 2 nerimux/model::+neighbor-edge-tolerance+)))
-
-  ;;; ── define-named-layout-rules macro coverage ─────────────────────────────────
-
-  ;; apply-named-layout dispatches :tiled to %layout-tiled, placing all panes in a grid.
-  (it "define-named-layout-rules-generates-tiled-dispatch"
-    ;; 4 panes: ceil(sqrt 4) = 2 cols, ceil(4/2) = 2 rows.
-    (let* ((panes (loop for i from 1 to 4 collect (tl-pane i 1 1)))
-           (win   (make-window :id 1 :name "w" :width 81 :height 25
-                               :panes panes
-                               :tree  (nerimux/model::%build-flat-tree panes :h))))
-      (apply-named-layout win :tiled)
-      ;; All panes must have positive geometry after tiled layout.
-      (dolist (p (window-panes win))
-        (expect (> (pane-width  p) 0))
-        (expect (> (pane-height p) 0)))
-      ;; The root must be a :v split (two rows stacked).
-      (expect (eq :v (nerimux/model::layout-split-orientation (window-tree win))))))
 
   ;;; ── layout-split-axis-extent: nested tree ────────────────────────────────────
 

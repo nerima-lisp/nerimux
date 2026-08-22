@@ -193,92 +193,30 @@
     (cl-tui-kit/layout:layout-child-rectangle
      layout :nerimux-frame bounds)))
 
-(defun %workspace-tree-widget-key (node)
-  (typecase node
-    (organization (list :organization (organization-id node)))
-    (repository (list :repository (repository-id node)))
-    (worktree (list :worktree (worktree-id node)))
-    (t (list :workspace-object node))))
+;;; %workspace-tree-widget-key / %workspace-tree-widget-label /
+;;; %workspace-tree-visible-entries used to live here as this widget's own
+;;; copies. R6.3's 5-level tree (org -> repository -> worktree -> window ->
+;;; pane) needs the same traversal, key, and label logic in two places (this
+;;; widget and RENDER-WORKSPACE-OVERVIEW-TO-STRING's own plain-ANSI tree,
+;;; renderer-workspace.lisp), so it moved there as %WORKSPACE-TREE-NODE-KEY /
+;;; %WORKSPACE-FLAT-TREE-ENTRIES (which already returns each row's
+;;; fully-composed label, refresh tag included) rather than staying
+;;; duplicated. That file loads before this one, so calling into it here is
+;;; a same-direction (not upward) reference.
 
-(defun %workspace-tree-widget-label (node)
-  (labels ((value (candidate fallback)
-             (let ((text (and candidate (princ-to-string candidate))))
-               (if (and text (plusp (length text))) text fallback)))
-           (attention-mark (attention-p)
-             (if attention-p "!" " ")))
-    (typecase node
-      (organization
-       (format nil "org ~A ~A ~A [~A]"
-               (attention-mark
-                (or (plusp (organization-attention-count node))
-                    (organization-attention-worktrees node)))
-               (value (or (and (plusp (length (organization-host node)))
-                               (organization-host node))
-                           (and (plusp (length (organization-name node)))
-                                (organization-name node)))
-                      (organization-id node))
-               (value (organization-name node) "default")
-               (if (organization-missing-p node) "MISSING"
-                   (format nil "~D repo~:P"
-                           (length (organization-repositories node))))))
-      (repository
-       (format nil "repo ~A ~A [~A]"
-               (attention-mark
-                (or (repository-dirty-p node)
-                    (repository-conflict-p node)
-                    (plusp (repository-ahead node))
-                    (plusp (repository-behind node))
-                    (repository-missing-p node)
-                    (some #'worktree-attention-p
-                          (repository-worktrees node))))
-               (value (or (and (plusp (length (repository-specification node)))
-                               (repository-specification node))
-                           (and (plusp (length (repository-local-path node)))
-                                (repository-local-path node)))
-                      (repository-id node))
-               (cond
-                 ((repository-missing-p node) "MISSING")
-                 ((repository-conflict-p node) "CONFLICT")
-                 ((repository-dirty-p node) "DIRTY")
-                 ((null (repository-worktrees node)) "NO-WORKTREE")
-                 (t (format nil "~D wt~:P"
-                            (length (repository-worktrees node)))))))
-      (worktree
-       (format nil "wt ~A ~A [~A]"
-               (attention-mark (worktree-attention-p node))
-               (value (worktree-branch node)
-                      (value (worktree-path node) (worktree-id node)))
-               (cond
-                 ((worktree-missing-p node) "MISSING")
-                 ((worktree-bare-p node) "BARE")
-                 ((worktree-locked-p node) "LOCKED")
-                 ((worktree-prunable-p node) "PRUNABLE")
-                 (t "ready"))))
-      (t (princ-to-string node)))))
-
-(defun %workspace-tree-visible-entries (organizations offset limit)
-  (let* ((offset (max 0 offset))
-         (limit (max 0 limit))
-         (index 0)
-         (end (+ offset limit))
-         (entries nil))
-    (labels ((visit (level node)
-               (when (>= index end)
-                 (throw 'workspace-tree-visible-entries-done nil))
-               (when (>= index offset)
-                 (push (cons level node) entries))
-               (incf index)))
-      (catch 'workspace-tree-visible-entries-done
-        (dolist (organization organizations)
-          (visit 0 organization)
-          (dolist (repository (organization-repositories organization))
-            (visit 1 repository)
-            (dolist (worktree (repository-worktrees repository))
-              (visit 2 worktree))))))
-    (nreverse entries)))
+(defun %tree-entry-render-text (entry)
+  "One tree row's display text: 2 spaces per LEVEL of indent, the `!`
+   attention mark or a blank, then LABEL (already carrying any R6.2 refresh
+   tag -- see %WORKSPACE-FLAT-TREE-ENTRIES)."
+  (destructuring-bind (level label object kind) entry
+    (format nil "~A~:[ ~;!~] ~A"
+            (make-string (* 2 level) :initial-element #\Space)
+            (%workspace-tree-node-attention-p object kind)
+            label)))
 
 (defun %render-workspace-tree-widget
-    (surface organizations rows cols selected-tree-object tree-scroll)
+    (surface organizations rows cols selected-tree-object tree-scroll
+     &key expanded-node-ids refreshing-ids stale-ids)
   (let* ((rows (max 1 rows))
          (cols (max 1 cols))
          (multi-column-p (>= cols 9))
@@ -296,29 +234,28 @@
               (cl-tui-kit/core:make-rectangle
                0 (1+ body-start) left-width
                (max 1 (- body-end (1+ body-start))))))
-        (let* ((entries (%workspace-tree-visible-entries
-                         organizations tree-scroll visible-rows))
+        (let* ((all-entries
+                 (%workspace-flat-tree-entries
+                  organizations expanded-node-ids
+                  :refreshing-ids refreshing-ids :stale-ids stale-ids))
+               (entry-count (length all-entries))
+               (entries (subseq all-entries
+                                (min tree-scroll entry-count)
+                                (min (+ tree-scroll visible-rows) entry-count)))
                (model
                  (cl-tui-kit/widgets:make-list-model
                   :count (length entries)
                   :item-at (lambda (index) (nth index entries))
                   :key-at (lambda (entry index)
                             (declare (ignore index))
-                            (%workspace-tree-widget-key (cdr entry)))
+                            (%workspace-tree-node-key (third entry)))
                   :label-at (lambda (entry index)
                               (declare (ignore index))
-                              (format nil "~A~A"
-                                      (make-string (* 2 (car entry))
-                                                   :initial-element #\Space)
-                                      (%workspace-tree-widget-label
-                                       (cdr entry))))
+                              (%tree-entry-render-text entry))
                   :render-item
                   (lambda (entry index)
                     (declare (ignore index))
-                    (format nil "~A~A"
-                            (make-string (* 2 (car entry))
-                                         :initial-element #\Space)
-                            (%workspace-tree-widget-label (cdr entry)))))))
+                    (%tree-entry-render-text entry)))))
         (cl-tui-kit/widgets:render-widget
          (cl-tui-kit/widgets:make-list-widget
           model
@@ -326,7 +263,7 @@
           :rectangle rectangle
           :selected-key
           (and selected-tree-object
-               (%workspace-tree-widget-key selected-tree-object))
+               (%workspace-tree-node-key selected-tree-object))
           :offset 0
           :focusable-p nil)
          surface
@@ -396,58 +333,6 @@
     (cl-tui-kit/widgets:render-widget
      modal surface (%frame-area rows cols))))
 
-(defun %attention-widget-key (event)
-  (list :attention-item
-        (getf event :kind)
-        (getf event :object)))
-
-(defun %attention-item-display-text (event &optional selected-p)
-  (format nil "~:[ ~;>~]~:[ ~;!~] ~A  [~{~A~^,~}]"
-          selected-p
-          (or (typep (getf event :object) 'pane)
-              (eq (getf event :kind) :runtime-recovery))
-          (getf event :label)
-          (mapcar (lambda (reason)
-                    (string-downcase (symbol-name reason)))
-                  (getf event :reasons))))
-
-(defun %render-attention-widget
-    (surface rows cols events selected-object)
-  (let* ((events (or events nil))
-         (selected-event
-           (find selected-object events
-                 :key (lambda (event) (getf event :object))
-                 :test #'eq))
-         (model
-           (cl-tui-kit/widgets:make-list-model
-            :count (length events)
-            :item-at (lambda (position) (nth position events))
-            :key-at (lambda (event position)
-                      (declare (ignore position))
-                      (%attention-widget-key event))
-            :label-at (lambda (event position)
-                        (declare (ignore position))
-                        (%attention-item-display-text event))
-            :render-item (lambda (event position)
-                           (declare (ignore position))
-                           (%attention-item-display-text
-                            event
-                            (eq event selected-event)))))
-         (body-y (min 2 (max 0 (1- rows))))
-         (body-height (max 1 (- rows body-y 1)))
-         (rectangle
-           (cl-tui-kit/core:make-rectangle 0 body-y cols body-height))
-         (widget
-           (cl-tui-kit/widgets:make-list-widget
-            model
-            :id :nerimux-attention-results
-            :rectangle rectangle
-            :selected-key
-            (and selected-event (%attention-widget-key selected-event))
-            :row-height 1
-            :focusable-p nil)))
-    (cl-tui-kit/widgets:render-widget widget surface rectangle)))
-
 (defun %surface-from-ansi-frame (frame rows cols &key (viewport 0))
   (let* ((rows (max 1 rows))
          (cols (max 1 cols))
@@ -509,11 +394,44 @@
                      (cl-tui-kit/core:make-style))
                     stream))))
 
+;;; ── Terminal-too-small guard (R6.10) ────────────────────────────────────────
+;;;
+;;; Placed in %RENDER-ANSI-FRAME-WITH-TUI-KIT rather than in either public
+;;; entry point separately: RENDER-SESSION-TO-TUI-STRING (pane view) and
+;;; RENDER-WORKSPACE-OVERVIEW-TO-TUI-STRING (workspace overview) both funnel
+;;; through this one function, so putting the guard here covers both without
+;;; duplicating it. ROWS/COLS are read fresh on every call (the server passes
+;;; the client's current size each frame, not stored state), so recovery on
+;;; resize falls out of that per-frame re-evaluation rather than needing any
+;;; dedicated "was too small" flag.
+
+(defconstant +min-terminal-cols+ 40)
+(defconstant +min-terminal-rows+ 10)
+
+(defun %terminal-too-small-p (rows cols)
+  (or (< rows +min-terminal-rows+) (< cols +min-terminal-cols+)))
+
+(defun %render-terminal-too-small-surface (rows cols)
+  "A ROWS x COLS surface containing only the centred too-small warning."
+  (let* ((rows (max 1 rows))
+         (cols (max 1 cols))
+         (surface (cl-tui-kit/core:make-surface cols rows))
+         (message (format nil "terminal too small (need ~Dx~D)"
+                          +min-terminal-cols+ +min-terminal-rows+))
+         (text (%display-clip message cols))
+         (row (floor rows 2))
+         (col (%center-coord cols (%display-width text))))
+    (cl-tui-kit/core:surface-draw-text surface col row text :max-width cols)
+    surface))
+
 (defun %render-ansi-frame-with-tui-kit
     (frame rows cols &key (viewport 0) widget-renderer)
-  (let ((surface (%surface-from-ansi-frame
-                  frame rows cols :viewport viewport)))
-    (when widget-renderer
+  (let* ((too-small-p (%terminal-too-small-p rows cols))
+         (surface (if too-small-p
+                      (%render-terminal-too-small-surface rows cols)
+                      (%surface-from-ansi-frame frame rows cols
+                                                :viewport viewport))))
+    (when (and widget-renderer (not too-small-p))
       (funcall widget-renderer surface))
     (%surface-to-ansi-frame surface)))
 
@@ -523,26 +441,38 @@
                                        (picker-index 0) (picker-regex-p nil)
                                        (command-buffer ""))
   "Render a client frame through cl-tui-kit's headless surface/widget path."
-  (let ((widget-renderer
-          (when (eq mode :picker)
-            (lambda (surface)
-              (%render-picker-widget
-               surface terminal-rows terminal-cols picker-items picker-query
-               picker-index picker-regex-p)))))
-    (%render-ansi-frame-with-tui-kit
-     (render-session-to-string
-      session terminal-rows terminal-cols
-      :focus-pane focus-pane
-      :viewport viewport
-      :mode (if (eq mode :picker) :normal mode)
-      :picker-items picker-items
-      :picker-query picker-query
-      :picker-index picker-index
-      :picker-regex-p picker-regex-p
-      :command-buffer command-buffer)
-     terminal-rows terminal-cols
-     :viewport 0
-     :widget-renderer widget-renderer)))
+  (let* ((widget-renderer
+           (when (eq mode :picker)
+             (lambda (surface)
+               (%render-picker-widget
+                surface terminal-rows terminal-cols picker-items picker-query
+                picker-index picker-regex-p))))
+         ;; R6.11: the OSC-0 title RENDER-SESSION-TO-STRING embeds in its
+         ;; frame text does not survive %RENDER-ANSI-FRAME-WITH-TUI-KIT's
+         ;; ansi-frame/tui-kit round-trip (its frame-grid parser skips OSC
+         ;; sequences without retaining them, then the surface is redrawn
+         ;; from the parsed grid) -- re-derive the same pane here and
+         ;; re-emit after the round-trip, at the boundary a client actually
+         ;; receives.
+         (active-pane (%session-title-pane session focus-pane))
+         (worktree (and active-pane (pane-worktree active-pane))))
+    (concatenate
+     'string
+     (%render-ansi-frame-with-tui-kit
+      (render-session-to-string
+       session terminal-rows terminal-cols
+       :focus-pane focus-pane
+       :viewport viewport
+       :mode (if (eq mode :picker) :normal mode)
+       :picker-items picker-items
+       :picker-query picker-query
+       :picker-index picker-index
+       :picker-regex-p picker-regex-p
+       :command-buffer command-buffer)
+      terminal-rows terminal-cols
+      :viewport 0
+      :widget-renderer widget-renderer)
+     (%client-title-osc (and worktree (worktree-repository worktree)) worktree))))
 
 (defun render-workspace-overview-to-tui-string
     (organizations terminal-rows terminal-cols &key focus-pane
@@ -551,123 +481,158 @@
                                                (tree-scroll 0)
                                                (messages nil)
                                                (mode :normal)
-                                               (prefix-code #x11))
-  "Render the workspace overview through cl-tui-kit's headless backend."
-  (%render-ansi-frame-with-tui-kit
-   (render-workspace-overview-to-string
-    organizations terminal-rows terminal-cols
-    :focus-pane focus-pane
-    :selected-tree-object selected-tree-object
-    :selected-worktree selected-worktree
-    :tree-scroll tree-scroll
-    :messages messages
-    :mode mode
-    :prefix-code prefix-code
-    :render-tree-p nil)
-   terminal-rows terminal-cols
-   :viewport 0
-   :widget-renderer
-   (lambda (surface)
-     (%render-workspace-tree-widget
-      surface organizations terminal-rows terminal-cols
-      selected-tree-object tree-scroll))))
+                                               (prefix-code #x11)
+                                               expanded-node-ids
+                                               refreshing-ids
+                                               stale-ids
+                                               (scanning-p nil)
+                                               (command-buffer ""))
+  "Render the workspace overview through cl-tui-kit's headless backend.
+   EXPANDED-NODE-IDS / REFRESHING-IDS / STALE-IDS / SCANNING-P /
+   COMMAND-BUFFER are forwarded to RENDER-WORKSPACE-OVERVIEW-TO-STRING and,
+   for the tree, to %RENDER-WORKSPACE-TREE-WIDGET -- see that function and
+   %WORKSPACE-FLAT-TREE-ENTRIES (renderer-workspace.lisp) for what each one
+   means (R6.2/R6.3)."
+  ;; R6.11: same round-trip-discards-OSC situation as
+  ;; render-session-to-tui-string above -- re-derive the title selection at
+  ;; this boundary and re-emit after the round-trip.
+  (multiple-value-bind (title-repository title-worktree)
+      (%workspace-title-selection focus-pane selected-tree-object
+                                  selected-worktree)
+    (concatenate
+     'string
+     (%render-ansi-frame-with-tui-kit
+      (render-workspace-overview-to-string
+       organizations terminal-rows terminal-cols
+       :focus-pane focus-pane
+       :selected-tree-object selected-tree-object
+       :selected-worktree selected-worktree
+       :tree-scroll tree-scroll
+       :messages messages
+       :mode mode
+       :prefix-code prefix-code
+       :render-tree-p nil
+       :expanded-node-ids expanded-node-ids
+       :refreshing-ids refreshing-ids
+       :stale-ids stale-ids
+       :scanning-p scanning-p
+       :command-buffer command-buffer)
+      terminal-rows terminal-cols
+      :viewport 0
+      :widget-renderer
+      ;; R6.2: while the initial scan is still running there is nothing for
+      ;; the tree widget to draw -- the ANSI pass above already rendered the
+      ;; "scanning..." placeholder frame, so skip overlaying an empty tree
+      ;; box on top of it.
+      (unless (and scanning-p (null organizations))
+        (lambda (surface)
+          (%render-workspace-tree-widget
+           surface organizations terminal-rows terminal-cols
+           selected-tree-object tree-scroll
+           :expanded-node-ids expanded-node-ids
+           :refreshing-ids refreshing-ids
+           :stale-ids stale-ids))))
+     (%client-title-osc title-repository title-worktree))))
 
-(defun render-workspace-attention-to-tui-string
-    (organizations terminal-rows terminal-cols &key focus-pane
-                                                  (selected-object nil)
-                                                  (messages nil)
-                                                  (recovery-items nil)
-                                                  (mode :normal)
-                                                  (prefix-code #x11))
-  "Render the attention view through cl-tui-kit's headless backend."
-  (let ((events (%workspace-attention-events organizations
-                                             messages
-                                             recovery-items)))
-    (%render-ansi-frame-with-tui-kit
-     (render-workspace-attention-to-string
-      organizations terminal-rows terminal-cols
-      :focus-pane focus-pane
-      :selected-object selected-object
-      :messages messages
-      :recovery-items recovery-items
-      :mode mode
-      :prefix-code prefix-code)
-     terminal-rows terminal-cols
-     :viewport 0
-     :widget-renderer
-     (lambda (surface)
-       (%render-attention-widget
-        surface terminal-rows terminal-cols events selected-object)))))
+;;; ── Confirm view (R6.4, R8.2) ────────────────────────────────────────────
+;;;
+;;; Every destructive operation (worktree delete/prune, server quit — R8.2's
+;;; C-q Q) and every operation failure routes through this one full-screen
+;;; view instead of a status-line message, per the design doc's §10 and
+;;; R6.4.  cl-tui-kit's box-widget (verified present at the pinned
+;;; flake.lock revision, d5413a655746 — v4.1.3 — by reading that exact
+;;; commit's src/widgets.lisp: MAKE-BOX-WIDGET/SURFACE-DRAW-BORDER draw a
+;;; plain bordered rectangle around a child widget) has no title slot of its
+;;; own, so the title is stamped onto the box's top border row with a second
+;;; SURFACE-DRAW-TEXT call after the box renders — the same "render, then
+;;; touch up one row" shape %CLIENT-TITLE-OSC already uses at the frame
+;;; boundary, just applied to a widget surface instead of the final ANSI
+;;; string.  This is new box drawing, not a revival of R1.10's removed
+;;; popup/menu frame (renderer-overlay.lisp): that drew its own border
+;;; characters by hand; this delegates entirely to cl-tui-kit's widget.
 
-(defun %render-duration-ms (thunk)
-  "Wall-clock milliseconds for one call of THUNK, as (values MS RESULT)."
-  (let* ((start  (get-internal-real-time))
-         (result (funcall thunk))
-         (end    (get-internal-real-time)))
-    (values (floor (* 1000 (- end start)) internal-time-units-per-second)
-            result)))
+(defstruct confirm-view
+  "Data for one full-screen confirm/failure view (R6.4).  OPERATION titles
+   the box (\"WORKTREE DELETE\", \"SERVER QUIT\", ...).  FIELDS is an
+   ordered list of (LABEL . VALUE) string pairs, one per body line —
+   repository/worktree/branch/state/panes for a destructive-operation
+   confirmation, or the design doc's five failure fields (operation/
+   repository/worktree/reason/next) when PROMPT-P is NIL.  The caller
+   (server-multi-dispatch.lisp, out of this agent's scope) owns building and
+   storing an instance of this and reading the eventual y/n answer — this
+   struct and RENDER-CONFIRM-VIEW-TO-TUI-STRING are the rendering contract
+   between the two sides."
+  (operation "" :type string)
+  (fields nil :type list)
+  (prompt-p t :type boolean))
 
-(defun %median-ms (samples)
-  "Median of SAMPLES, a non-empty list of millisecond counts."
-  (let ((sorted (sort (copy-list samples) #'<)))
-    (nth (floor (length sorted) 2) sorted)))
+(defconstant +confirm-view-min-inner-width+ 20
+  "Floor for the box's inner width so the y/n footer (\"y execute   n
+   cancel\", 18 columns) always has room even when every field is short.")
 
-(defun benchmark-workspace-overview (&key (organization-count 1000)
-                                          (repository-count organization-count)
-                                          (worktree-count 5000)
-                                          (pane-count worktree-count)
-                                          (rows 40)
-                                          (cols 160)
-                                          (samples 5))
-  "Render the workspace overview at the mandatory scale and report frame cost.
+(defun %confirm-view-content-lines (view)
+  "VIEW's body: one \"label: value\" line per field, a blank separator, then
+   the y/n footer (PROMPT-P) or a single dismiss line (a failure display,
+   design doc §10)."
+  (append
+   (mapcar (lambda (field) (format nil "~A: ~A" (car field) (cdr field)))
+           (confirm-view-fields view))
+   (list "")
+   (list (if (confirm-view-prompt-p view)
+             "y execute   n cancel"
+             "press any key to continue"))))
 
-   The timing method is deliberate.  This used to take a SINGLE
-   get-internal-real-time sample per frame with no warm-up, which on a shared
-   machine measures machine availability as much as render cost: the same binary
-   on the same tree measured 67-75ms idle and 102-112ms under load, against a
-   100ms budget, so the check inverted on unrelated processes' work.
+(defun %confirm-view-box-rectangle (rows cols lines title)
+  "Centre a box sized to fit TITLE and LINES within a ROWS x COLS screen,
+   clamped to the screen itself so a corner case at the R6.10 floor (40x10)
+   still gets a box rather than an oversized one."
+  (let* ((content-width (reduce #'max (mapcar #'%display-width lines)
+                                :initial-value 0))
+         (title-width (+ 2 (%display-width title)))
+         (inner-width (max +confirm-view-min-inner-width+
+                           content-width title-width))
+         (width (min cols (+ inner-width 4)))
+         (height (min rows (+ (length lines) 2)))
+         (x (%center-coord cols width))
+         (y (%center-coord rows height)))
+    (cl-tui-kit/core:make-rectangle x y width height)))
 
-   It now discards a warm-up render of each frame -- first-call page faults and
-   lazily-built caches land there instead of in a measured sample -- and reports
-   the MEDIAN of SAMPLES runs, so a GC pause or a scheduling hiccup landing in
-   one sample no longer decides the result.  No explicit GC is forced: that would
-   put an SBCL internal in the presentation layer, and the median already absorbs
-   a collection landing in any single sample.
+(defun %render-confirm-view-box (surface rectangle lines)
+  "Draw the bordered box: one MAKE-TEXT-WIDGET per LINES entry, stacked by
+   MAKE-FORM-WIDGET (as %RENDER-PICKER-WIDGET above already stacks its own
+   field widgets) and wrapped in MAKE-BOX-WIDGET at RECTANGLE."
+  (let* ((body (cl-tui-kit/widgets:make-form-widget
+                (mapcar #'cl-tui-kit/widgets:make-text-widget lines)
+                :id :nerimux-confirm-body))
+         (box (cl-tui-kit/widgets:make-box-widget
+               body :id :nerimux-confirm-box :border-kind :single)))
+    (cl-tui-kit/widgets:render-widget box surface rectangle)))
 
-   The budget this feeds is unchanged; only the estimator is.  Raising SAMPLES
-   narrows the estimate at linear cost."
-  (let* ((organizations
-           (nerimux/picker::%benchmark-organizations
-            organization-count repository-count worktree-count pane-count))
-         (scroll-offset
-           (max 0 (- (+ organization-count repository-count worktree-count) 1)))
-         (render-initial
-           (lambda ()
-             (render-workspace-overview-to-tui-string
-              organizations rows cols :tree-scroll 0)))
-         (render-scrolled
-           (lambda ()
-             (render-workspace-overview-to-tui-string
-              organizations rows cols :tree-scroll scroll-offset)))
-         (initial-frame (funcall render-initial))   ; warm-up, not measured
-         (scroll-frame  (funcall render-scrolled))  ; warm-up, not measured
-         (initial-times '())
-         (scroll-times  '()))
-    (dotimes (i samples)
-      (multiple-value-bind (ms frame) (%render-duration-ms render-initial)
-        (push ms initial-times)
-        (setf initial-frame frame))
-      (multiple-value-bind (ms frame) (%render-duration-ms render-scrolled)
-        (push ms scroll-times)
-        (setf scroll-frame frame)))
-    (list :organization-count organization-count
-          :repository-count repository-count
-          :worktree-count worktree-count
-          :pane-count pane-count
-          :tree-node-count (+ organization-count repository-count worktree-count)
-          :item-count (+ organization-count repository-count worktree-count pane-count)
-          :initial-frame-nonempty-p (plusp (length initial-frame))
-          :scroll-frame-nonempty-p (plusp (length scroll-frame))
-          :sample-count samples
-          :initial-frame-ms (%median-ms initial-times)
-          :scroll-frame-ms  (%median-ms scroll-times))))
+(defun %stamp-confirm-view-title (surface rectangle title)
+  "Overwrite two columns of the box's top border with \" TITLE \" — the
+   mock-up's ┌ WORKTREE DELETE ───...  form; make-box-widget has no title
+   slot of its own (see the section comment above)."
+  (let* ((inner-width (max 0 (- (cl-tui-kit/core:rectangle-width rectangle) 4)))
+         (text (%display-clip (format nil " ~A " title) inner-width)))
+    (cl-tui-kit/core:surface-draw-text
+     surface
+     (+ (cl-tui-kit/core:rectangle-x rectangle) 2)
+     (cl-tui-kit/core:rectangle-y rectangle)
+     text)))
+
+(defun render-confirm-view-to-tui-string (view rows cols)
+  "R6.4: render VIEW (a CONFIRM-VIEW) as a full-screen frame with one
+   centred bordered box — the destructive-operation confirmation (worktree
+   delete/prune, C-q Q's server quit per R8.2) and the design doc §10
+   failure display share this one renderer, distinguished by
+   CONFIRM-VIEW-PROMPT-P (y/n footer vs. a single dismiss line)."
+  (let* ((rows (max 1 rows))
+         (cols (max 1 cols))
+         (surface (cl-tui-kit/core:make-surface cols rows))
+         (lines (%confirm-view-content-lines view))
+         (rectangle (%confirm-view-box-rectangle
+                     rows cols lines (confirm-view-operation view))))
+    (%render-confirm-view-box surface rectangle lines)
+    (%stamp-confirm-view-title surface rectangle (confirm-view-operation view))
+    (%surface-to-ansi-frame surface)))
+

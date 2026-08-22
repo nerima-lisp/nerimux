@@ -8,22 +8,32 @@
 (defconstant +server-socket-poll-max-iterations+ 30
   "Maximum number of socket-existence probes (30 x 0.1 s = 3 s total wait).")
 
+(defconstant +server-log-rotate-bytes+ (* 1024 1024)
+  "Server log rotation threshold (§1.4 / R2.8): a log at or above this size is
+   replaced with a fresh file at startup instead of appended to.")
+
+(defun %server-log-if-output-exists-action (log-path)
+  "The SB-EXT:RUN-PROGRAM :if-output-exists action for LOG-PATH: :supersede
+   (start a fresh file) when the existing log is at least
+   +server-log-rotate-bytes+, else :append."
+  (if (and (probe-file log-path)
+           (>= (or (ignore-errors
+                     (with-open-file (s log-path) (file-length s)))
+                   0)
+               +server-log-rotate-bytes+))
+      :supersede
+      :append))
+
 (defun %stale-socket-p (socket-path)
   "True when SOCKET-PATH exists but no server accepts connections on it.
-   tmux treats such leftover socket files (e.g. after a crash) as stale:
-   it unlinks them and starts a fresh server instead of failing to attach."
+   A leftover socket file like this (e.g. after a crash) should not block
+   attaching: it is unlinked and a fresh server started instead of failing."
   (and (probe-file socket-path)
        (not (handler-case
                 (let ((sock (nerimux/net:connect-to socket-path)))
                   (nerimux/net:close-socket sock)
                   t)
               (error () nil)))))
-
-(defun %global-socket-flag-args ()
-  "The global -L/-S flags to re-inject into a spawned server child's argv so it
-   binds the same socket the parent resolved."
-  (append (when *socket-path-override* (list "-S" *socket-path-override*))
-          (when *socket-name-override* (list "-L" *socket-name-override*))))
 
 (defun %secure-log-directory (log-path)
   "Best-effort chmod LOG-PATH's parent directory to 0700 once it exists, so a
@@ -63,10 +73,8 @@
    fail server auto-start outright.  Creating/securing LOG-PATH's directory
    and the log-redirected run-program attempt are therefore wrapped together;
    any signal there falls back to an un-redirected launch instead of
-   propagating and blocking startup -- the same diagnostics-must-not-break-
-   the-primary-operation shape %save-runtime-state/%restore-runtime-state
-   already use in runtime-lifecycle.lisp, degrading to a report (here: no
-   log) rather than propagating."
+   propagating and blocking startup -- diagnostics must not break the
+   primary operation, so this degrades to no log rather than propagating."
   (let ((launched
           (handler-case
               (progn
@@ -74,7 +82,9 @@
                 (%secure-log-directory log-path)
                 (sb-ext:run-program exe args
                                     :wait nil
-                                    :output log-path :if-output-exists :append
+                                    :output log-path
+                                    :if-output-exists
+                                    (%server-log-if-output-exists-action log-path)
                                     :error :output))
             (condition ()
              (ignore-errors
@@ -88,8 +98,8 @@
 
 (defun %ensure-server-running (session-name)
   "Start a background server for SESSION-NAME if no live socket exists.
-   A stale socket file (present but refusing connections) is unlinked first,
-   matching tmux's crash-recovery behaviour.
+   A stale socket file (present but refusing connections) is unlinked
+   first rather than treated as a live server (see %stale-socket-p).
    Uses sb-ext:run-program with *posix-argv* to spawn a separate process.
    Only enters the polling loop when run-program succeeded.
    Polls every +server-socket-poll-interval-seconds+ for up to
@@ -104,8 +114,7 @@
    being discarded."
   (let* ((socket-path (socket-path session-name))
          (exe         (first sb-ext:*posix-argv*))
-         (args        (append (%global-socket-flag-args)
-                              (list "server" session-name)))
+         (args        (list "server" session-name))
          (log-path    (%runtime-log-path session-name)))
     (when (%stale-socket-p socket-path)
       (ignore-errors (delete-file socket-path)))

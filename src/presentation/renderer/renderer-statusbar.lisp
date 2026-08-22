@@ -2,129 +2,133 @@
 
 ;;;; Status bar composition for the nerimux renderer.
 ;;;;
-;;;; This file owns the status bar: option lookup, format expansion, justify
-;;;; logic, and the render-status-bar entry point.  It has no knowledge of
-;;;; session-frame compositing; that lives in renderer-compose.lisp.
+;;;; This file owns the status bar: format composition and the
+;;;; render-status-bar entry point.  It has no knowledge of session-frame
+;;;; compositing; that lives in renderer-compose.lisp.
+;;;;
+;;;; R6.5 replaced the previous status bar (session name, whole-session
+;;;; window list, clock) with the workspace-scoped contract: attention mark +
+;;;; repository + worktree + state token on the left, the CURRENT worktree's
+;;;; window/pane tabs in the middle (not every window in the session — a
+;;;; worktree's own windows, %WORKTREE-TREE-WINDOWS, renderer-workspace.lisp),
+;;;; and the latest client notification on the right.  No clock (§1.4/R6.5).
+;;;; The old per-option R2.2/R2.3 "fixed at its registered default" comments
+;;;; this file used to carry no longer apply to any of the content below —
+;;;; there is no more session/window-list template to have fixed.
 ;;;;
 ;;;; Load order (declared in nerimux.asd): renderer-format → renderer-style
-;;;;             → renderer-statusbar-layout → renderer-pane → renderer-overlay
+;;;;             → renderer-statusbar-layout → renderer-pane
 ;;;;             → renderer-statusbar → renderer-compose
 
-;;; ── Alert-priority style table ─────────────────────────────────────────────
-;;;
-;;; define-window-alert-priority-table expands to a COND expression that walks
-;;; a declarative priority list: each entry is (condition-expr style-var) where
-;;; style-var must already be bound to a string.  The first entry whose
-;;; condition is true AND whose style is non-empty wins.  FALLBACK is the
-;;; unconditional last resort.
-;;;
-;;; Matches the define-csi-rules / define-alert-action-rules convention used
-;;; elsewhere: declarative (fact . result) pairs instead of hand-rolled cond.
+;;; The status line is one row at the bottom, always (requirements §1.4).
+;;; nerimux/options:status-line-count and +max-status-lines+ (the "status"
+;;; option could pick 0..5 rows) are gone with domain/options (R2.2) — this
+;;; is the one place that concept survives, as a fixed constant instead of a
+;;; cross-package function call, so anything outside nerimux/renderer that
+;;; still needs to reserve rows for the status line (e.g. pane-area layout)
+;;; has exactly one definition to reference rather than each side keeping
+;;; its own copy of "1".
 
-(defmacro define-window-alert-priority-table (fallback &rest entries)
-  "Expand to a COND expression that returns the first non-empty style whose
-   alert condition is true, or FALLBACK when no alert matches.
-   Each ENTRY is (condition-expr style-var).
-   Condition-expr and style-var are evaluated once, in order."
-  `(cond
-     ,@(mapcar (lambda (entry)
-                 (destructuring-bind (condition style-var) entry
-                   `((and ,condition (plusp (length ,style-var))) ,style-var)))
-               entries)
-     (t ,fallback)))
+(defconstant +status-line-rows+ 1
+  "Rows reserved at the bottom of the terminal for the status line.")
 
-;;; ── Status bar data formatters (pure) ─────────────────────────────────────
+;;; ── Left block: attention + repository + worktree + state token ───────────
 
-(defun %status-pane-indicator (active-pane)
-  "Pane-number string for the status bar, or empty string when ACTIVE-PANE is NIL."
-  (if active-pane (format nil " #~D" (pane-id active-pane)) ""))
+(defun %status-left-fields (focus-pane)
+  "(VALUES ATTENTION REPOSITORY-TEXT WORKTREE-TEXT STATE-TEXT) for the status
+   line's left block (R6.5). Each of REPOSITORY-TEXT/WORKTREE-TEXT/STATE-TEXT
+   is %WORKSPACE-EM-DASH when FOCUS-PANE (or its worktree/repository) is
+   absent — design doc §2/§3.3: an unselected value must show as such, never
+   silently carry the previous frame's text forward."
+  (let* ((worktree (and focus-pane (pane-worktree focus-pane)))
+         (repository (and worktree (worktree-repository worktree))))
+    (values (if (and worktree (worktree-attention-p worktree)) "!" " ")
+            (if repository (%repository-title-text repository) (%workspace-em-dash))
+            (if worktree (%worktree-title-text worktree) (%workspace-em-dash))
+            (if worktree (%worktree-status-label worktree) (%workspace-em-dash)))))
 
-(defun %window-has-bell-p (window)
-  "T when WINDOW's sticky bell flag is set and monitor-bell is on for it.
-   Mirrors the #{window_bell_flag} computation in format-context.lisp."
-  (and (nerimux/options:get-option-for-context "monitor-bell" :window window)
-       (window-bell-flag window)))
+(defun %status-left-text (focus-pane &key include-repository-p)
+  "The left block's text. INCLUDE-REPOSITORY-P T includes the repository
+   field; NIL omits it — the first thing %COMPOSE-WORKSPACE-STATUS-LINE
+   drops when the line does not fit (R6.5: notification, then tabs, then
+   repository name; branch and state token are never dropped)."
+  (multiple-value-bind (attention repository worktree state)
+      (%status-left-fields focus-pane)
+    (if include-repository-p
+        (format nil "~A ~A ~A ~A" attention repository worktree state)
+        (format nil "~A ~A ~A" attention worktree state))))
 
-(defun %window-option (window name)
-  "Read NAME from WINDOW's option context."
-  (nerimux/options:get-option-for-context name :window window))
+;;; ── Middle block: the current worktree's window/pane tabs (R6.5/R6.7) ─────
 
-(defun %window-status-style (session window active-p)
-  "Resolve the status-bar style string for WINDOW's tab.
-   Active window → window-status-current-style.  For a non-active window, the
-   highest-priority non-empty alert style wins: bell > activity > last
-   (previously active) > the normal window-status-style.  Every option is read
-   per-window via get-option-for-context, so alert styles can be set per-window."
-  (if active-p
-      (%window-option window "window-status-current-style")
-      (let ((bell-style     (%window-option window "window-status-bell-style"))
-            (activity-style (%window-option window "window-status-activity-style"))
-            (last-style     (%window-option window "window-status-last-style"))
-            (normal-style   (%window-option window "window-status-style")))
-        (define-window-alert-priority-table normal-style
-          ((%window-has-bell-p window)              bell-style)
-          ((window-activity-flag window)            activity-style)
-          ((eq window (session-last-window session)) last-style)))))
+(defun %status-pane-tab-token (pane focus-pane)
+  "PANE's status-bar tab token, including its own leading separator: a space
+   normally, or `!` in its place when PANE has unread output (R6.7) — the
+   marker doubles as the separator, matching the format the requirements
+   give ([w1: 1 2*!3]: pane 3's `!` sits where the usual space would, with no
+   extra glue needed between it and the previous pane's tab)."
+  (format nil "~:[ ~;!~]~D~:[~;*~]"
+          (pane-unread-output-p pane)
+          (pane-id pane)
+          (eq pane focus-pane)))
 
-(defun %render-window-tab (session window active-window window-stream)
-  "Write WINDOW's status-bar tab label (format-expanded, per-window styled,
-   with any inline #[attr] blocks resolved) to WINDOW-STREAM.  ACTIVE-WINDOW
-   selects window-status-current-format/-style over the plain variants."
-  (let* ((context  (nerimux/format:format-context-from-window session window))
-         (active-p (eq window active-window))
-         (fmt      (nerimux/options:get-option-for-context
-                    (if active-p "window-status-current-format" "window-status-format")
-                    :window window))
-         ;; Style honors alert state (bell/activity/last) for non-active windows.
-         (style    (%window-status-style session window active-p))
-         (label    (nerimux/format:expand-format fmt context)))
-    ;; Apply the per-window style, then expand any inline #[attr] blocks
-    ;; embedded in the label.  Within a window label, #[default] reverts to
-    ;; the window's own style (or the status default when it is unstyled).
-    ;; STYLED-P is true when we emitted a wrapper SGR or the label injected
-    ;; one, so the trailing reset keeps colour from bleeding into the
-    ;; separator / next window.
-    (let* ((sgr-code (when (and style (plusp (length style)))
-                       (%status-sgr-from-style style)))
-           (expanded (%status-expand-style-blocks
-                      label (or sgr-code +sgr-default-status+)))
-           (styled-p (or sgr-code (not (eq expanded label)))))
-      (when sgr-code
-        (%emit-sgr window-stream sgr-code))
-      (write-string expanded window-stream)
-      (when styled-p
-        (reset-attrs window-stream)))))
+(defun %status-window-tab (window focus-pane)
+  (format nil "[w~D:~{~A~}]"
+          (window-id window)
+          (mapcar (lambda (pane) (%status-pane-tab-token pane focus-pane))
+                  (window-panes window))))
 
-(defun %status-window-list-styled (session active-window)
-  "Window-tab string with current-style applied to the active window entry.
-   Uses window-status-format, window-status-current-format, window-status-separator,
-   window-status-current-style, window-status-style, and the alert-state styles
-   (window-status-{bell,activity,last}-style).
-   The format/style options are resolved PER WINDOW via get-option-for-context
-   (pane→window→global→default), so e.g. `set-window-option -t :2
-   window-status-current-style fg=red` styles only that window's tab.  A
-   non-active window with a pending bell, unseen activity, or that is the last
-   (previously active) window picks up the corresponding alert style
-   (bell > activity > last > normal).
-   window-status-separator stays global — it sits between windows and has no
-   single owning window."
-  (let ((separator (nerimux/options:get-option "window-status-separator" " ")))
-    (with-output-to-string (window-stream)
-      (let ((first-p t))
-        (dolist (window (nerimux/model:session-windows-in-index-order session))
-          (unless first-p (write-string separator window-stream))
-          (setf first-p nil)
-          (%render-window-tab session window active-window window-stream))))))
+(defun %status-window-pane-tabs (focus-pane)
+  "The middle block: FOCUS-PANE's worktree's window/pane tabs
+   ([w1: 1 2*][w2: 1], R6.5), or NIL when there is no worktree or it has no
+   open windows — the caller shows %WORKSPACE-EM-DASH for NIL."
+  (let* ((worktree (and focus-pane (pane-worktree focus-pane)))
+         (windows (and worktree (%worktree-tree-windows worktree))))
+    (when windows
+      (format nil "~{~A~}"
+              (mapcar (lambda (window) (%status-window-tab window focus-pane))
+                      windows)))))
 
-(defun %status-left-text (session active-window active-pane)
-  "Left portion of the status bar: prompt text or session/window/pane info.
-   Uses %status-window-list-styled so per-window style options take effect."
-  (if (prompt-active-p)
-      (prompt-text)
-      (format nil " ~A~A~A"
-              (session-name session)
-              (%status-window-list-styled session active-window)
-              (%status-pane-indicator active-pane))))
+(defun %status-middle-text (focus-pane)
+  (or (%status-window-pane-tabs focus-pane) (%workspace-em-dash)))
+
+;;; ── Right block: latest notification (R6.5) ────────────────────────────────
+
+(defun %status-right-text (messages)
+  "The right block: the single most recent notification, or an em-dash when
+   there is none yet. MESSAGES is CLIENT-CONN-MESSAGE-LOG (most-recent-first,
+   %CLIENT-NOTIFY conses onto its front) — the 64-entry cap stays on the
+   conn's log (R6.5: \"display only, not retention, changes\"); this only
+   ever reads the first entry."
+  (if messages (first messages) (%workspace-em-dash)))
+
+;;; ── Composition with width-driven degradation (R6.5) ───────────────────────
+
+(defun %compose-workspace-status-line (focus-pane messages cols)
+  "Assemble the R6.5 status line, dropping blocks right-to-left when COLS is
+   too narrow: the notification first, then the window/pane tabs, then the
+   repository name — branch and state token are never dropped (design doc
+   §11). A final %VISIBLE-TRUNCATE is the safety net below the terminal's
+   40-column floor (R6.10 already refuses anything narrower)."
+  (let ((middle (%status-middle-text focus-pane))
+        (right (%status-right-text messages)))
+    (labels ((assemble (include-repository-p include-middle-p include-right-p)
+               (format nil "~{~A~^  ~}"
+                       (remove nil
+                               (list (%status-left-text
+                                      focus-pane
+                                      :include-repository-p include-repository-p)
+                                     (and include-middle-p middle)
+                                     (and include-right-p right))))))
+      (let ((full (assemble t t t)))
+        (if (<= (%visible-length full) cols)
+            full
+            (let ((no-notification (assemble t t nil)))
+              (if (<= (%visible-length no-notification) cols)
+                  no-notification
+                  (let ((no-tabs (assemble t nil nil)))
+                    (if (<= (%visible-length no-tabs) cols)
+                        no-tabs
+                        (%visible-truncate (assemble nil nil nil) cols))))))))))
 
 (defun %render-status-line (stream status-row sgr-code line)
   "Emit a fully-composed status LINE at STATUS-ROW, wrapped in SGR-CODE, then reset."
@@ -133,115 +137,19 @@
   (write-string line stream)
   (reset-attrs stream))
 
-(defun %render-status-bar-format0 (stream status-row sgr-code status-fmt0 context terminal-cols)
-  "Render the single-template status bar path for STATUS-FMT0."
-  (%render-status-line stream status-row sgr-code
-                       (%compose-aligned-line
-                        (nerimux/format:expand-format-safe status-fmt0 context)
-                        sgr-code terminal-cols)))
-
-(defun %status-bar-default-segments (session context sgr-code)
-  "Return the fallback status-bar segments and justification mode.
-   The left segment includes either prompt text or the session/window/pane
-   summary; the right segment uses status-right or the default clock string."
-  (let* ((active-window (session-active-window session))
-         (active-pane   (session-active-pane session))
-         (left-raw      (%status-expand-style-blocks
-                         (if (prompt-active-p)
-                             (prompt-text)
-                             (%status-format-or-default
-                              "status-left" context
-                              (lambda () (%status-left-text session active-window active-pane))))
-                         sgr-code))
-         (right-raw   (%status-expand-style-blocks
-                       (%status-format-or-default
-                        "status-right" context #'nerimux/format::%current-time-string)
-                       sgr-code))
-         (left-style-sgr  (%status-segment-style-sgr "status-left-style"  sgr-code))
-         (right-style-sgr (%status-segment-style-sgr "status-right-style" sgr-code))
-         (left        (%apply-segment-style
-                       (%clamp-status-segment
-                        left-raw (nerimux/options:get-option "status-left-length" 40))
-                       left-style-sgr sgr-code))
-         (right       (%apply-segment-style
-                       (%clamp-status-segment
-                        right-raw (nerimux/options:get-option "status-right-length" 40))
-                       right-style-sgr sgr-code))
-         (justify     (nerimux/options:get-option "status-justify" "left")))
-    (values left right justify)))
-
-(defun %render-status-bar-default (stream session status-row sgr-code context terminal-cols)
-  "Render the default left/right status bar path."
-  ;; Expand inline #[attr] style blocks into SGR escapes; #[default] reverts to
-  ;; SGR-CODE (the base status style) so the bar's bg/fg returns between segments.
-  (multiple-value-bind (left right justify)
-      (%status-bar-default-segments session context sgr-code)
-    (%render-status-line stream status-row sgr-code
-                         (%status-justify-line left right terminal-cols justify))))
-
 (defun render-status-bar (stream session terminal-rows terminal-cols
-                          &key (status-row (1- terminal-rows)))
-  "Draw the status bar at STATUS-ROW with dynamic format string expansion.
-   STATUS-ROW defaults to (1- TERMINAL-ROWS), i.e. the bottom row.
-   Respects status-style, status-justify, status-left-length, status-right-length,
-   and window-status-current-style options."
-  (let* ((active-window (session-active-window session))
-         (active-pane   (session-active-pane session))
-         ;; Pass terminal dimensions so #{client_width} / #{client_height} work
-         ;; in status-left, status-right, and window-status-format strings.
-         (context       (nerimux/format:format-context-from-session
-                         session active-window active-pane
-                       :client-width  terminal-cols
-                       :client-height (max 0 (- terminal-rows 1))))
-         (sgr-code    (%status-sgr-from-style (%effective-status-style)))
-         (status-fmt0 (nerimux/options:get-option "status-format[0]" "")))
-    ;; status-format[0] template path: when SET (and no prompt is active) the bar
-    ;; is rendered from that single format, with #[align=…] regions positioned by
-    ;; %compose-aligned-line and #{W:…}/#{…} expanded.  Procedural path follows.
-    (if (and (stringp status-fmt0) (plusp (length status-fmt0)) (not (prompt-active-p)))
-        (%render-status-bar-format0 stream status-row sgr-code status-fmt0 context terminal-cols)
-        (%render-status-bar-default stream session status-row sgr-code context terminal-cols))))
-
-(defun render-extra-status-line (stream session terminal-cols row index)
-  "Render the INDEX-th extra status line (INDEX >= 1) at ROW from the option
-   status-format[INDEX], expanded against SESSION's format context and padded to
-   TERMINAL-COLS with the base status style.  An unset/blank status-format[INDEX]
-   draws a blank styled row (which is still required, since the pane area has
-   shrunk to leave this row to the status region)."
-  (let* ((fmt      (nerimux/options:get-option
-                    (format nil "status-format[~D]" index) ""))
-         (sgr-code (%status-sgr-from-style
-                    (%effective-status-style)))
-         (context  (nerimux/format:format-context-from-session
-                    session (session-active-window session)
-                    (session-active-pane session)
-                    :client-width terminal-cols))
-         ;; Expand #{...} (leaving #[...] markers intact) then compose via the
-         ;; same align-aware path as status-format[0], so #[align=right]/#[align=
-         ;; centre] work in the extra rows too.  An empty format composes to a
-         ;; blank styled row.
-         (expanded (if (and (stringp fmt) (plusp (length fmt)))
-                       (nerimux/format:expand-format-safe fmt context)
-                       ""))
-         (line     (%compose-aligned-line expanded sgr-code terminal-cols)))
-    (%render-status-line stream row sgr-code line)))
-
-       ;; status-line-count and its parser moved to nerimux/options (domain).
-;;; The row count is derived from the `status' option in exactly one place now;
-;;; this file used to hold a second copy that the pane layout did not consult.
-;;; See src/domain/options/options-api.lisp.
-
-(defun render-status-region (stream session terminal-rows terminal-cols lines position)
-  "Render a LINES-row status region.  The main bar (status-left, the window
-   list, and status-right) is drawn on the outer edge — the bottom-most row when
-   POSITION is \"bottom\" (the default), the top-most row when \"top\" — matching
-   the single-line layout.  Additional rows render status-format[1..LINES-1]
-   stacked inward from the main bar."
-  (let* ((bottom-p (string/= position "top"))
-         (main-row (if bottom-p (1- terminal-rows) 0)))
-    (render-status-bar stream session terminal-rows terminal-cols
-                       :status-row main-row)
-    (loop for index from 1 below lines
-          for row = (if bottom-p (- main-row index) (+ main-row index))
-          do (render-extra-status-line stream session terminal-cols row index))))
-
+                          &key (status-row (- terminal-rows +status-line-rows+))
+                            (focus-pane (session-active-pane session))
+                            (messages nil))
+  "Draw the R6.5 status line at STATUS-ROW (defaults to the bottom row,
+   §1.4/R2.2).
+   FOCUS-PANE/MESSAGES default from SESSION / empty for a caller that has not
+   been updated to pass the attached client's own focus pane and
+   notification log (renderer-compose.lisp's render-session-to-string call
+   site does not yet — see the R6 report for the small additive change that
+   closes the gap); SESSION-ACTIVE-PANE is the correct answer whenever a
+   client's focus tracks the session's active pane, which is the common
+   case, so this degrades gracefully rather than going blank."
+  (%render-status-line stream status-row +sgr-default-status+
+                       (%compose-workspace-status-line focus-pane messages
+                                                       terminal-cols)))

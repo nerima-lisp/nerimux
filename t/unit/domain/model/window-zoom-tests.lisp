@@ -2,38 +2,6 @@
 
 (describe "model-suite"
 
-  ;;; ── apply-named-layout ───────────────────────────────────────────────────────
-
-  ;; even-horizontal places n panes side by side with equal width.
-  (it "apply-named-layout-even-horizontal-positions-panes"
-    (let* ((p0  (make-no-pty-pane 1 0 0 1 1))
-           (p1  (make-no-pty-pane 2 0 0 1 1))
-           (win (make-window :id 1 :name "w" :width 81 :height 24
-                             :panes (list p0 p1)
-                             :tree (make-layout-leaf p0))))
-      (apply-named-layout win :even-horizontal)
-      ;; 81 cols - 1 separator = 80 usable, floor(80/2) = 40 each.
-      (check-table (list (list (pane-x      p0) 0  "p0 must start at column 0")
-                         (list (pane-width  p0) 40 "p0 width must be 40")
-                         (list (pane-x      p1) 41 "p1 must start at column 41")
-                         (list (pane-width  p1) 40 "p1 width must be 40")
-                         (list (pane-height p0) 24 "p0 height unchanged")
-                         (list (pane-height p1) 24 "p1 height unchanged")))))
-
-  ;; even-vertical places n panes stacked with equal height.
-  (it "apply-named-layout-even-vertical-positions-panes"
-    (let* ((p0  (make-no-pty-pane 1 0 0 1 1))
-           (p1  (make-no-pty-pane 2 0 0 1 1))
-           (win (make-window :id 1 :name "w" :width 80 :height 25
-                             :panes (list p0 p1)
-                             :tree (make-layout-leaf p0))))
-      (apply-named-layout win :even-vertical)
-      ;; 25 rows - 1 separator = 24, floor(24/2) = 12 each.
-      (check-table (list (list (pane-y      p0) 0  "p0 must start at row 0")
-                         (list (pane-height p0) 12 "p0 height must be 12")
-                         (list (pane-y      p1) 13 "p1 must start at row 13")
-                         (list (pane-height p1) 12 "p1 height must be 12")))))
-
   ;;; ── window-zoom-toggle ───────────────────────────────────────────────────────
 
   ;; Zooming a 2-pane window replaces the tree with a single-leaf tree so the

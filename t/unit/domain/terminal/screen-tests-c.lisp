@@ -121,7 +121,6 @@
                        (list #'nerimux/terminal/types:screen-bracketed-paste nil    "bracketed-paste defaults to NIL")
                        (list #'nerimux/terminal/types:screen-app-cursor-keys nil    "app-cursor-keys defaults to NIL")
                        (list #'screen-title                                   ""     "title defaults to empty string")
-                       (list #'screen-mouse-mode                              0      "mouse-mode defaults to 0")
                        (list #'screen-copy-mark                               nil    "copy-mark defaults to NIL")))
       (destructuring-bind (accessor expected desc) row
         (declare (ignore desc))

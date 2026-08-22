@@ -14,7 +14,7 @@
   ;; quiet — asserted here rather than only at the dispatch level, because the
   ;; regression that matters is a stray frame reaching a real client.
   (it "command-client-unknown-command-notifies-and-sends-no-reply"
-    (with-isolated-hooks
+    (progn
       (with-fake-session (s)
         (with-test-listener (listener path (%test-socket-path "reply") :backlog 4)
           (let* ((client      (nerimux/net:connect-to path))
@@ -39,8 +39,8 @@
                                (list (nerimux/net:socket-fd client)) 200000))))))))))
 
   ;; A client that connects and sends a +msg-command+ frame directly (the
-  ;; surviving wire-level path client.lisp itself uses for :attach-target and
-  ;; :detach-other-clients) decodes on the server side as a command keyword
+  ;; surviving wire-level path client.lisp itself uses for :attach-target)
+  ;; decodes on the server side as a command keyword
   ;; plus its argument list.  This used to be driven through the now-deleted
   ;; run-command-client CLI helper; the socket-level encode/decode contract it
   ;; exercised survives independently of that helper, so the frame is built
@@ -69,42 +69,30 @@
                       (expect (eq :next-window cmd))
                       (expect (equal '("-t" "2") args))))))))))))
 
-  ;;; -- exit-unattached: terminate when the last client detaches ----------------
+  ;;; -- R8.3: the server never exits on its own ----------------------------------
 
-  ;; %exit-after-last-detach-p is true only when NO clients remain AND exit-unattached
-  ;; is on; default (off) keeps the session alive across detaches.
-  (it "exit-after-last-detach-respects-option"
-    (with-fresh-options
-      (let ((nerimux::*clients* nil))
-        (nerimux/options:set-option "exit-unattached" t)
-        (expect (nerimux::%exit-after-last-detach-p) :to-be-truthy))
-      (let ((nerimux::*clients* nil))
-        (nerimux/options:set-option "exit-unattached" nil)
-        (expect (nerimux::%exit-after-last-detach-p) :to-be-falsy))
-      (let ((nerimux::*clients* (list (nerimux::%make-client-conn))))
-        (nerimux/options:set-option "exit-unattached" t)
-        (expect (nerimux::%exit-after-last-detach-p) :to-be-falsy))))
-
-  ;; %exit-when-empty-p is true only when NO sessions remain AND exit-empty is on
-  ;; (default); off keeps the server alive with zero sessions.
-  (it "exit-when-empty-respects-option"
-    (with-fresh-options
-      (let ((nerimux::*server-sessions* nil))
-        (nerimux/options:set-option "exit-empty" t)
-        (expect (nerimux::%exit-when-empty-p) :to-be-truthy))
-      (let ((nerimux::*server-sessions* nil))
-        (nerimux/options:set-option "exit-empty" nil)
-        (expect (nerimux::%exit-when-empty-p) :to-be-falsy))
-      (let ((nerimux::*server-sessions* (list (cons "0" (make-fake-session)))))
-        (nerimux/options:set-option "exit-empty" t)
-        (expect (nerimux::%exit-when-empty-p) :to-be-falsy))))
+  ;; Dropping the last attached client must not stop the server: R8.3 retired
+  ;; exit-unattached and exit-empty (both now OFF-equivalent constants, i.e.
+  ;; gone from src entirely), so panes and the runtime stay alive across every
+  ;; client detaching.  Only an explicit :quit disposition — `nerimux kill` or
+  ;; the confirm-view quit — clears *running*.  Driven through
+  ;; %apply-client-disposition, the actual production caller of :drop
+  ;; (%run-multi-server-loop / %dispatch-ready-clients), rather than asserting
+  ;; a constant directly.
+  (it "last-client-detach-leaves-running-true"
+    (let* ((conn (nerimux::%make-client-conn))
+           (nerimux::*clients* (list conn))
+           (nerimux::*running* t))
+      (expect (null (nerimux::%apply-client-disposition :drop conn)))
+      (expect (null nerimux::*clients*))
+      (expect nerimux::*running* :to-be-truthy)))
 
   ;;; -- Integration: a broadcast frame reaches every attached client ------------
 
   ;; Two clients attached to the server both receive a broadcast frame — the core
   ;; multi-client property (one render fanned out to all).
   (it "multi-broadcast-reaches-all-clients"
-    (with-isolated-hooks
+    (progn
       (with-fake-session (s)
         (with-test-listener (listener path (%test-socket-path "mtest") :backlog 4)
           (let* ((client1 (nerimux/net:connect-to path))
@@ -127,10 +115,10 @@
                     (multiple-value-bind (type payload)
                         (nerimux::read-frame (nerimux/net:socket-stream client))
                       (declare (ignore payload))
-                      (expect (eql nerimux::+msg-frame+ type)))))))))))))
+                      (expect (eql nerimux::+msg-frame+ type))))))))))))
 
   (it "multi-broadcast-renders-private-client-surfaces"
-    (with-isolated-hooks
+    (progn
       (with-fake-session (s :npanes 2)
         (let* ((window (session-active-window s))
                (panes (window-panes window))
@@ -191,7 +179,7 @@
                   (ignore-errors (nerimux/net:close-socket socket))))))))))
 
   (it "multi-socket-c-q-d-detaches-with-session-resident"
-    (with-isolated-hooks
+    (progn
       (with-fake-session (s)
         (let* ((window (session-active-window s))
                (pane (window-active-pane window))
@@ -246,70 +234,4 @@
                       (nerimux::%drop-client conn)))
                   (dolist (socket
                             (remove nil (list client1 client2 server1 server2)))
-                    (ignore-errors (nerimux/net:close-socket socket)))))))))))
-
-  (it "multi-socket-renders-live-pty-output"
-    (with-pty-available
-      (with-session (s 8 40)
-        (with-loop-state
-          (let* ((window (session-active-window s))
-                 (pane (window-active-pane window))
-                 (marker "nerimux-live-pty-marker")
-                 (nerimux::*clients* nil)
-                 (nerimux::*workspace-catalog-refresh-started-p* t))
-            (with-test-listener (listener path (%test-socket-path "mpty")
-                                           :backlog 2)
-              (let* ((client (nerimux/net:connect-to path))
-                     (server (nerimux/net:accept-connection listener))
-                     (conn nil))
-                (flet ((screen-text (screen-pane)
-                         (let ((screen (pane-screen screen-pane)))
-                           (cl-concurrent-kit:with-lock-held
-                               ((nerimux/terminal:screen-lock screen))
-                             (with-output-to-string (output)
-                               (dotimes (y (screen-height screen))
-                                 (dotimes (x (screen-width screen))
-                                   (write-char
-                                    (cell-char (screen-cell screen x y))
-                                    output)))))))
-                       (send-and-dispatch (frame)
-                         (send-frame (nerimux/net:socket-stream client) frame)
-                         (let ((ready (select-fds
-                                       (list (nerimux::client-conn-fd conn))
-                                       1000000)))
-                           (expect ready :to-be-truthy)
-                           (when ready
-                             (nerimux::%read-and-dispatch-client-message s conn)))))
-                  (unwind-protect
-                       (when (and client server pane)
-                         (setf conn (nerimux::%add-client server))
-                         (expect (null (send-and-dispatch (msg-attach 8 40)))
-                                 :to-be-truthy)
-                         (setf (nerimux::client-conn-view conn) :detail
-                               (nerimux::client-conn-focus conn) pane)
-                         (nerimux::start-reader-thread pane)
-                         (pty-write (pane-fd pane)
-                                    (format nil "printf '%s\\n' ~A~%" marker))
-                         (loop repeat 100
-                               until (search marker (screen-text pane))
-                               do (sleep 0.05))
-                         (expect (search marker (screen-text pane))
-                                 :to-be-truthy)
-                         (setf nerimux::*dirty* t)
-                         (nerimux::%broadcast-frame s)
-                         (let ((ready (select-fds
-                                       (list (nerimux/net:socket-fd client))
-                                       1000000)))
-                           (expect ready :to-be-truthy)
-                           (when ready
-                             (multiple-value-bind (type payload)
-                                 (nerimux::read-frame
-                                  (nerimux/net:socket-stream client))
-                               (expect (eql nerimux::+msg-frame+ type))
-                               (expect (search marker
-                                               (decode-text payload))
-                                       :to-be-truthy)))))
-                    (when (and conn (member conn nerimux::*clients*))
-                      (nerimux::%drop-client conn))
-                    (dolist (socket (remove nil (list client server)))
-                      (ignore-errors (nerimux/net:close-socket socket))))))))))))
+                    (ignore-errors (nerimux/net:close-socket socket))))))))))))

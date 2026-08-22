@@ -47,44 +47,23 @@
    :h → window-width (columns); :v → window-height (rows)."
   (orient-case direction :h (window-width window) :v (window-height window)))
 
-(defun %status-top-offset ()
-  "Rows reserved at the TOP of the window for a top-positioned status bar: the
-   status row count when status-position is \"top\", else 0.  Panes are laid out
-   starting at this y so a top status bar never overlaps them (and a bottom bar
-   leaves the top flush at y=0).
-
-   Both the count and the position come from the option table, which is domain
-   state.  This used to read nerimux/config:*status-height* -- an application
-   variable holding a cached copy that could disagree with what the renderer
-   actually painted."
-  (let ((lines (nerimux/options:status-line-count)))
-    (if (and (plusp lines)
-             (string-equal (or (nerimux/options:get-option "status-position") "bottom")
-                           "top"))
-        lines
-        0)))
-
-(defun %assign-window-tree (window w h &optional (top-offset 0))
-  "Assign WINDOW's split tree into a W x H area, offset DOWN by TOP-OFFSET rows.
-   TOP-OFFSET defaults to 0; callers pass the result of %status-top-offset when
-   they want the top status-bar shift (e.g. window-relayout), or leave it at 0
-   for pure geometry operations (named layouts, resize handlers) that already
-   handle the offset themselves.  Separating offset-reading from layout-assign
-   keeps this function pure — option reads happen at the orchestration call site."
+(defun %assign-window-tree (window w h)
+  "Assign WINDOW's split tree into a W x H area, starting at y=0.
+   Status line is fixed to the bottom of the outer terminal (§1.4), so a
+   window's own panes always start flush at the top of its area — there is no
+   longer a top-positioned status bar to offset around."
   (when (window-tree window)
-    (layout-assign (window-tree window) 0 top-offset w h)))
+    (layout-assign (window-tree window) 0 0 w h)))
 
 (defun window-relayout (window rows cols)
   "Re-fit WINDOW's panes into ROWS x COLS using the binary split tree.
-   Reads the live status-position option here (orchestration boundary) and passes
-   the computed offset to %assign-window-tree so that function stays pure.
    After assigning geometry via the tree, each pane's screen and PTY are
    notified via pane-reposition — completing the data/logic separation:
    layout-assign owns geometry, pane-reposition owns the I/O side effects."
   (setf (window-width  window) cols
         (window-height window) rows)
   (when (window-tree window)
-    (%assign-window-tree window cols rows (%status-top-offset))
+    (%assign-window-tree window cols rows)
     (window-refresh-panes window)
     (dolist (pane (window-panes window))
       (pane-reposition pane

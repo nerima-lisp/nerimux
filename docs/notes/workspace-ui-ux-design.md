@@ -11,7 +11,7 @@
 
 - **Global picker（第5章、`C-p`）** は `feat: add workspace runtime and picker`
   (commit `8351773`) として実装され、main に反映済みである。`client-conn-view`
-  （`:overview`/`:detail`/`:attention`）と `cl-tui-kit` ベースの
+  （`:overview`/`:detail`。`:attention` はR1.7で削除された）と `cl-tui-kit` ベースの
   `src/presentation/renderer/renderer-tui-kit.lisp` を使う。この経路の上で、
   第8章が要求するworktree操作のうちcreate/delete/status表示（`n`/`X`キー、
   `wt-create`/`wt-delete`コマンド）に加えて、**lock/unlock（第8.4節、`L`/`U`
@@ -47,9 +47,9 @@ worktreeを中心に、実行時のUI/UXを定義する。実装履歴ではな�
 repositoryの、どのworktreeで、どのpaneを操作しているか」を失わないための運用
 契約である。
 
-tmux互換層のsession persistenceにも`repository`という内部概念があるが、Git
-repositoryとは別物である。本書でいう`repository`は、常にGitのbare repositoryを
-指す。本書の各項目はworkspace UI/UXの契約であり、実装済みか追加実装が必要かは、
+本書でいう`repository`は、常にGitのbare repositoryを指す。かつてtmux互換層の
+session persistenceが同じ語を別の意味で使っていたが、その層は削除された（R1）。
+本書の各項目はworkspace UI/UXの契約であり、実装済みか追加実装が必要かは、
 受け入れ条件と検証結果で判定する。
 
 ## 1. 目的と適用範囲
@@ -62,8 +62,8 @@ repositoryとは別物である。本書でいう`repository`は、常にGitのb
 - worktreeごとのpaneを開き、コマンドの実行場所を明示する
 - dirty、conflict、missing、locked、prunableなどの注意状態を見落とさない
 
-tmux互換のpane操作やセッション管理は実行面として維持する。一方、repositoryと
-worktreeのライフサイクルはworkspace面で扱い、pane操作と混ぜない。
+pane操作は実行面として維持する。一方、repositoryとworktreeのライフサイクルは
+workspace面で扱い、pane操作と混ぜない。
 
 ### 1.1 起動と接続
 
@@ -83,11 +83,13 @@ nerimux attach /path/to/worktree
 - `/path/to/worktree`: 指定pathのworktreeへfocusする。存在しない場合は、pathを修正する
   かpickerへ戻れるエラーを表示する。
 - slashを含むselectorはorganization/repositoryとlocal worktree pathの両方として解決し、
-  候補が複数なら対象を選ばせる。
+  候補が複数ならpickerを候補で絞った状態で開く（R7.6）。
 - `C-q d`はclientをdetachするが、runtimeとworktreeごとのpaneは保持する。
 
-引数なしの`nerimux`はtmux互換のstandalone entry pointとして残す。workspaceの初期導線と
-互換導線を同じ画面上で混同させない。
+CLIの入口は`attach` / `server` / `kill`の3つで、グローバルフラグは`-V`と`-h`だけである
+（1.6、R1.17）。引数なしの`nerimux`をtmux互換のstandalone entry pointとして残すという
+当初の想定は実装されておらず、削除された。pane分割はworkspace面そのものに組み込まれて
+おり（1.1「pane分割層はUIに配線する」）、互換専用の入口を別に用意する必要はない。
 
 ## 2. 利用者のメンタルモデル
 
@@ -146,29 +148,33 @@ pane:       $PANE
 
 ### 4.1 レイアウト
 
-標準画面は、header、tree、footerの3領域で構成する。
+標準画面は、header、tree、footerの3領域で構成する。treeはorganization → repository →
+worktree → window → paneの5階層で、初期状態は全折りたたみ（organizationの行のみ）である
+（R6.3）。以下は展開後の例を示す。
 
 ```text
 ┌ Workspace  [overview]  refresh: ready  context: $WORKTREE ─────────────┐
 │ ! org-host/name                                                         │
 │   └ ! repo-specification                         [3 worktrees]          │
 │     ├ ! feature — $WORKTREE                  DIRTY AHEAD 2  [pane 2]    │
-│     │ ├ pane/1 shell                                                     │
-│     │ └ pane/2 test                                                      │
-│     ├   main — $OTHER_WORKTREE                     CLEAN  [pane 1]       │
-│     └   missing — $MISSING_WORKTREE              MISSING                  │
+│     │ └ w1: feature (1)                                                 │
+│     │   ├ pane/1 shell                                                  │
+│     │   └ pane/2 test                                                   │
+│     ├   main — $OTHER_WORKTREE                     CLEAN  [pane 1]      │
+│     └   missing — $MISSING_WORKTREE              MISSING                │
 ├─────────────────────────────────────────────────────────────────────────┤
-│ ↑/↓ select  Enter open/create  C-p picker  r refresh  o overview  d detail│
+│ j/k select  Enter open/close  C-p picker  r refresh  o overview  d detail│
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 4.2 Header
 
-headerには、現在のmode、refresh状態、実行コンテキストを表示する。
+headerには、現在のmode、refresh状態、実行コンテキストを表示する。viewは`overview`と
+`detail`の2つのみであり、attention viewは削除された（R1.7）。attentionの`!`マークは
+モデル側の状態として残り、tree・picker・status lineに表示される（3.4）。
 
 - `overview`: organizationからpaneまでの階層を表示する
 - `detail`: 選択対象のfull path、branch、HEAD、statusを表示する
-- `attention`: 対応が必要な対象だけを表示する
 - `refreshing`: inventoryまたはstatusを更新中であることを示す
 - `stale`: 最後の更新に失敗し、表示値が古いことを示す
 
@@ -182,6 +188,7 @@ headerには、現在のmode、refresh状態、実行コンテキストを表示
   なければ新しいpaneを作成する。
 - repositoryを選択した状態でEnterを押した場合、bare repositoryへ移動せず、worktreeの
   選択または作成へ進む。
+- windowまたはpaneを選択してEnterを押すと、そこへフォーカスしてdetailへ移る（R6.3）。
 - paneの選択は実行コンテキストを変更するが、repositoryやworktreeの状態を変更しない。
 
 ## 5. Global picker
@@ -191,11 +198,13 @@ headerには、現在のmode、refresh状態、実行コンテキストを表示
 ### 5.1 表示と検索
 
 pickerの既定検索はliteral検索とし、明示的な操作でregex検索へ切り替える。
-検索対象には、表示ラベルだけでなく次の属性を含める。
+検索対象には、表示ラベルだけでなく次の属性を含める。`tags`フィールドはモデルから
+削除されたため検索対象から外れる（R1.13）。windowはpicker上の種別を持たず、検索対象にも
+含めない — pickerが横断するのはorganization/repository/worktree/paneの階層のみである。
 
-- organization: host、name、tags
-- repository: specification、local path、remote、tags
-- worktree: branch、path、HEAD、status、tags
+- organization: host、name
+- repository: specification、local path、remote
+- worktree: branch、path、HEAD、status
 - pane: pane番号、title、起動コマンド、shell
 
 表示ラベルは種別を推測できる形式にする。
@@ -240,7 +249,11 @@ pickerの既定検索はliteral検索とし、明示的な操作でregex検索�
 
 - worktreeの`CONFLICT`、`DIRTY`、`MISSING`、`PRUNABLE`はrepositoryへ伝播する。
 - repository配下のattentionが1件でもあれば、repository行と上位organization行に`!`を付ける。
-- `AHEAD`と`BEHIND`は数値を保持する。単なる`CHANGED`への丸めは行わない。
+- `AHEAD`と`BEHIND`は数値を保持する。単なる`CHANGED`への丸めは行わない。値はローカルの
+  remote-tracking refから読むため、**最後に明示的にfetchした時点からの差**であり、fetch
+  を実行しない限り更新されない（R7.5、`C-q F` / `C-q C-f`）。これは7.1「fetchを暗黙に
+  行わない」および14「対象外」の自動fetch禁止と矛盾しない — fetchは常に利用者の明示操作
+  である。
 - `BARE`はrepositoryの種別表示として使い、worktreeの健康状態と同列に扱わない。
 - status取得失敗時に`CLEAN`を仮定してはならない。
 
@@ -311,7 +324,8 @@ bare repositoryのpathを選択した場合は、worktree選択へ戻し、bare 
 
 ### 8.2 worktreeを作成する
 
-repository行のaction menuから開始する。作成前にbranch、start point、pathをpreviewする。
+repository選択時の`n`キー、または`:`コマンド行の`wt-create`から開始する（action menuは
+実装しない、R6.12・11節）。作成前にbranch、start point、pathをpreviewする。
 
 ```sh
 git --git-dir="$REPOSITORY" worktree add -b "$BRANCH" "$WORKTREE" "$START_POINT"
@@ -320,8 +334,8 @@ git --git-dir="$REPOSITORY" worktree add -b "$BRANCH" "$WORKTREE" "$START_POINT"
 期待結果は、指定pathにlinked worktreeが作成され、refresh後にbranchとpathを持つ新しい行が
 選択されることである。
 
-既存branchを接続する場合は、branchの既存worktreeと衝突しないことを確認してから、
-`git --git-dir="$REPOSITORY" worktree add "$WORKTREE" "$BRANCH"`を実行する。
+`wt-create`は常に新規branchを作る。既存branchへ接続する経路は無い（R7.4）ため、branchが
+別worktreeで使用中かどうかの衝突チェックも不要である。
 
 成功時は自動的にrefreshし、新しいworktreeを選択してpane作成またはattachへ進む。失敗時は
 入力値、Gitのエラー、再試行可能な修正方法を表示し、部分的に作成されたpathを成功扱いにしない。
@@ -388,29 +402,53 @@ pruneは自動実行しない。dry-runに含まれるpathと、paneや利用者
 
 ## 9. Keymapとaction
 
-| キー / action | workspaceでの意味 | 制約 |
+`C-q`は本物のprefixである（1.5、R4.4）。prefixを受けた次のキーは9.1の表で解決し、
+未束縛なら破棄する — pane内のアプリへ素通しさせない。`:normal`モードの素キーは9.2の表で
+解決する。attention viewの削除（R1.7）により`a`は解放され、矢印キーの判定は削除された
+（R4.1）ため、選択移動は`j` / `k` / `h` / `l`とprefixだけに一本化されている。
+
+### 9.1 Prefix（`C-q`）action
+
+| prefixキー | action | 制約 |
+| --- | --- | --- |
+| `C-q -` | 選択中paneの window を上下に分割 | 分割不可なら何もせずメッセージのみ |
+| `C-q \|` | 選択中paneの window を左右に分割 | 同上 |
+| `C-q x` | 選択中のpaneを閉じる | windowの最後の1枚ならwindowごと閉じる |
+| `C-q z` | zoomを切り替える | zoom中の他操作は先にzoomを解除してから実行する |
+| `C-q h` / `j` / `k` / `l` | paneのフォーカスを隣へ移動 | zoomを解除してから移動 |
+| `C-q n` / `C-q p` | 現在のworktreeのwindowを前後に循環 | windowが1つ以下なら何もしない |
+| `C-q F` | 選択中のrepositoryをfetch | 同一対象への重複実行は抑止する |
+| `C-q C-f` | 選択中のorganization配下をfetch | 同上 |
+| `C-q d` | detach | runtimeとworktreeごとのpaneは保持する |
+| `C-q Q` | serverを終了 | 10節の確認ビュー経由（R6.4） |
+| `C-q C-q` | `:normal`へ戻る | 唯一、pane/windowの有無を問わない操作 |
+
+### 9.2 `:normal`モードの素キー
+
+| キー | workspaceでの意味 | 制約 |
 | --- | --- | --- |
 | `C-p` | global pickerを開く | literal検索から開始 |
-| `C-q d` | detach | paneの既存互換操作 |
-| `o` | overviewへ移動 | workspace modeのみ |
-| `d` | detailへ移動 | 選択対象が必要 |
-| `a` | attentionだけを表示 | 注意状態がなければ理由を表示 |
-| `j` / `k` / 矢印 | 選択移動 | 展開状態を保持 |
-| `Enter` | 選択対象を開く | repositoryではworktree選択へ進む |
+| `o` | overviewへ移動 | |
+| `d` | detailへ移動 | |
+| `j` / `k` / `h` / `l` | 選択移動 | 展開状態を保持 |
+| `Enter` | 選択対象を開く/閉じる | organization・repository行は展開/折りたたみ、worktree行は直前のpaneへ接続（無ければ作成）、window/pane行はそこへフォーカス（R6.3） |
 | `n` | worktree作成 | repository選択時のみ有効 |
 | `X` | worktree削除 | 確認完了時のみ実行 |
 | `L` / `U` | lock / unlock | 選択worktreeのみ |
 | `r` | refresh | 進行中の同一refreshは重複させない |
-| `i` | detailを表示 | full pathとstatusを含む |
-| `c` | 選択pathやIDをcopy | 省略前の値をcopyする |
-| `:` | command/action入力 | 実行前に対象contextを表示 |
-| `Esc` | cancel / 上位へ戻る | 破壊操作の確認も取消可能 |
+| `i` | input modeへ入る | 選択中paneへキー入力を転送する |
+| `c` | copy-modeへ入る | 検索・選択・yankはcopy-mode内のキーで行う |
+| `:` | command入力 | 直後にコマンド名の一覧を補完表示する（R6.12、11節） |
 
-pane内の既存tmux操作はこのkeymapと衝突しないよう、workspace modeとpane modeを区別する。
+pane内の操作はこのkeymapと衝突しないよう、`:normal`モードとpane側のモード（`:input` /
+`:copy`）を区別する。
 
 ## 10. Loading、エラー、復旧
 
-エラーは、次の形式で対象と次のactionを同時に表示する。
+エラーは、R6.4の確認ビュー（`cl-tui-kit`のwidgetで描く全画面ビュー）に、operation /
+repository / worktree / reason / nextの5項目を並べて表示する。破壊操作の確認と操作失敗の
+表示は同じ描画経路を共有する — popup/menuの専用枠描画は削除されたため（R1.10）、確認
+ビューが唯一の恒久的なフィードバック面になる。
 
 ```text
 [WORKTREE OPERATION BLOCKED]
@@ -426,11 +464,14 @@ next:       unlock the worktree, then refresh
 | ghq inventory失敗 | `inventory stale` | retry、設定確認 |
 | bare判定失敗 | `repository unknown` | repository path確認、再scan |
 | worktree path消失 | `MISSING` | path確認、prune preview |
-| branchが別worktreeで使用中 | `branch occupied` | 既存worktreeへ移動、別branchを選択 |
 | dirty worktreeの削除 | `DIRTY` | detail確認、追加確認、cancel |
 | lockされたworktreeの削除 | `LOCKED` | unlock、またはcancel |
 | pane起動失敗 | `pane unavailable` | error保持、別pane作成、retry |
 | status取得中断 | `UNKNOWN / stale` | retry。`CLEAN`にはしない |
+
+`branch occupied`（branchが別worktreeで使用中）は対象外になった。`wt-create`は常に新規
+branchを作るため（R7.4）、既存branchへ接続する経路自体が無くなり、衝突チェックの出番が
+ない。
 
 操作の失敗はtreeを空にして隠してはならない。失敗した対象、最後に成功した情報、再試行
 actionを残す。
@@ -438,7 +479,8 @@ actionを残す。
 ## 11. Accessibilityと狭い画面への対応
 
 - 注意状態は色、記号、文字列の3つのうち少なくとも文字列ともう1つで表す。
-- すべてのactionはkeymapだけでなくaction menuから到達できる。
+- action menuは実装しない（R6.12）。すべてのactionはkeymapに加え、`:`コマンド行から
+  到達できる。`:`の直後にコマンド名の一覧を補完表示し、keymap以外の到達手段とする。
 - pathを省略する場合は末尾を優先し、detailとcopyでは完全な値を提供する。
 - loading中も選択行の位置を安定させ、更新のたびに画面を先頭へ戻さない。
 - pickerでは種別をlabelとiconの両方で区別し、iconを描画できない環境でもlabelだけで判別できる。
@@ -511,4 +553,5 @@ inventory、worktree list、statusがそれぞれ非空であることを確認�
 - paneの中身をworkspaceのstatus情報として推測すること
 
 これらは別の明示的な操作仕様と確認フローが必要であり、workspace overviewの暗黙動作には
-含めない。
+含めない。`C-q F` / `C-q C-f`（1.5、R7.1）は利用者が明示的に叩くfetchであり、ここで
+禁じる「自動fetch」ではない — refreshからは独立した別操作であることに変わりはない。

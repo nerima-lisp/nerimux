@@ -1,8 +1,7 @@
 (in-package #:nerimux/test)
 
 ;;;; Tests for Sprint 3 advanced features:
-;;;;  synchronize-panes, layout persistence,
-;;;;  pipe-pane, session groups, choose-session.
+;;;;  synchronize-panes, layout persistence, update-environment.
 
 ;;; ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -21,49 +20,14 @@
     (session-select-window sess win)
     (values sess win p0 p1)))
 
-(defun %make-group-test-window (id)
-  "Build a minimal no-PTY window for session-group propagation tests."
-  (let ((pane (make-no-pty-pane (+ 10 id) 0 0 80 24)))
-    (let ((win (make-window :id id :name (format nil "w~D" id)
-                            :width 80 :height 24
-                            :panes (list pane) :tree (make-layout-leaf pane))))
-      (setf (nerimux/model:pane-window pane) win)
-      (window-select-pane win pane)
-      win)))
-
-(defmacro with-grouped-sessions ((s1 s2 win) &body body)
-  "Bind S1/S2 to two grouped sessions sharing window WIN (group registry isolated)."
-  `(let* ((,win (%make-group-test-window 1))
-          (,s1  (make-session :id 1 :name "a" :windows (list ,win)))
-          (,s2  (make-session :id 2 :name "b"))
-          (nerimux::*session-groups* nil))
-     (session-select-window ,s1 ,win)
-     (nerimux::server-new-session-in-group ,s2 ,s1)
-     ,@body))
-
 (describe "advanced-suite"
 
-  ;;; ── synchronize-panes: sends keystrokes to all panes ─────────────────────────
-
-  ;; synchronize-panes previously drove the keystroke-forwarding fanout
-  ;; (removed with presentation/events); the option itself is still a
-  ;; first-class registered option, so this verifies the toggle round-trips.
-  (it "synchronize-panes-sends-to-all"
-    (let ((prev (nerimux/options:get-option "synchronize-panes")))
-      (unwind-protect
-           (progn
-             (nerimux/options:set-option "synchronize-panes" t)
-             (expect (nerimux/options:get-option "synchronize-panes"))
-             (nerimux/options:set-option "synchronize-panes" nil)
-             (expect (not (nerimux/options:get-option "synchronize-panes"))))
-        (nerimux/options:set-option "synchronize-panes" prev))))
-
-  ;; synchronize-panes is a registered option with boolean type and default nil.
-  (it "synchronize-panes-option-registered"
-    (let ((spec (gethash "synchronize-panes" nerimux/options:*option-registry*)))
-      (expect spec :to-be-truthy)
-      (expect (eq :boolean (nerimux/options:option-spec-type spec)))
-      (expect (null (nerimux/options:option-spec-default spec)))))
+  ;; synchronize-panes never drove any behavior (the keystroke-forwarding
+  ;; fanout it once gated was removed with presentation/events) and R2.2
+  ;; deleted nerimux/options wholesale.  A dead option with zero live callers
+  ;; leaves nothing to replace with a constant, so it is gone rather than
+  ;; hardcoded — there is no "synchronize-panes-sends-to-all" behavior to
+  ;; assert.
 
   ;;; ── Layout persistence: round-trip ──────────────────────────────────────────
 
@@ -92,68 +56,6 @@
         (expect (and csum (= 4 (length csum))))
         (expect (every (lambda (ch) (or (digit-char-p ch) (find ch "ABCDEFabcdef")))
                        (or csum ""))))))
-
-  ;;; ── pipe-pane tee output ─────────────────────────────────────────────────────
-
-  ;; pipe-pane-open marks the pane active; pipe-pane-close clears every pipe slot.
-  (it "pipe-pane-tees-output"
-    (let ((p (make-no-pty-pane 1 0 0 80 24)))
-      ;; Initially no pipe.
-      (expect (null (pane-pipe-active-p p)))
-      ;; Close is a no-op when there is no pipe.
-      (finishes (nerimux/commands:pipe-pane-close p))
-      (expect (null (pane-pipe-fd p)))
-      (expect (null (pane-pipe-output-stream p)))
-      (expect (null (pane-pipe-output-thread p)))
-      (expect (null (pane-pipe-process p)))))
-
-  ;; pipe-pane-write does nothing and does not signal an error when pipe-fd is NIL.
-  (it "pipe-pane-write-is-no-op-when-no-pipe"
-    (let ((p     (make-no-pty-pane 1 0 0 80 24))
-          (bytes (make-array 5 :element-type '(unsigned-byte 8)
-                               :initial-contents '(104 101 108 108 111))))
-      (expect (null (pane-pipe-fd p)))
-      (finishes (nerimux/commands:pipe-pane-write p bytes))))
-
-  ;;; ── Session groups ───────────────────────────────────────────────────────────
-
-  ;; session struct has session-group slot defaulting to NIL.
-  (it "session-group-slot-defaults-nil"
-    (let ((sess (make-session :id 1 :name "x")))
-      (expect (null (session-group sess)))))
-
-  ;; server-new-session-in-group links two sessions so they share the window list.
-  (it "session-groups-share-windows"
-    (let* ((p0   (make-no-pty-pane 1 0 0 80 24))
-           (win  (make-window :id 1 :name "w" :width 80 :height 24
-                              :panes (list p0) :tree (make-layout-leaf p0)))
-           (s1   (make-session :id 1 :name "a" :windows (list win)))
-           (s2   (make-session :id 2 :name "b")))
-      (window-select-pane win p0)
-      (session-select-window s1 win)
-      ;; Bind sessions into a group.
-      (let ((nerimux::*session-groups* nil))
-        (nerimux::server-new-session-in-group s2 s1)
-        (expect (session-group s1) :to-be-truthy)
-        (expect (eql (session-group s1) (session-group s2)))
-        (expect (eq (session-windows s1) (session-windows s2))))))
-
-  ;; Inserting a window into one grouped session makes it visible in the others
-  ;; (tmux session groups share ONE window set, not just the initial list value).
-  (it "session-group-new-window-propagates-to-peers"
-    (with-grouped-sessions (s1 s2 win)
-      (let ((new-win (%make-group-test-window 2)))
-        (session-insert-window s1 new-win)
-        (expect (member new-win (session-windows s2)))
-        (expect (member win (session-windows s2))))))
-
-  ;; session-windows-changed on a session without a group is a no-op.
-  (it "session-group-sync-ignores-ungrouped-sessions"
-    (let* ((win (%make-group-test-window 1))
-           (s   (make-session :id 3 :name "solo" :windows (list win)))
-           (nerimux::*session-groups* nil))
-      (finishes (nerimux/model:session-windows-changed s))
-      (expect (equal (list win) (session-windows s)))))
 
   ;;; ── update-environment ───────────────────────────────────────────────────────
 

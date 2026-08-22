@@ -11,24 +11,27 @@
    child environment.  Bound by callers that need per-pane env vars (e.g.
    new-window -e VAR=val).  Consumed by %fork-pane and reset to NIL after use.")
 
-;;; ── Shared option-reading helper for pane spawn operations ─────────────────
+;;; ── Fixed pane environment ──────────────────────────────────────────────────
 ;;;
-;;; Both %fork-pane and respawn-pane read the same two options and apply the
-;;; same (and … (plusp (length …))) guard.  %read-shell-spawn-options captures
-;;; that shared logic in one named step.
+;;; §1.4 / R2.5: every pane's child gets TERM=screen-256color and
+;;; COLORTERM=truecolor.  Both used to come from the 'default-terminal' option
+;;; (TERM only; COLORTERM was never sent); now they are fixed, so there is
+;;; nothing left to read from nerimux/options.
 
-(defun %read-shell-spawn-options ()
-  "Read the 'default-terminal' and 'default-command' options for PTY spawn calls.
-   Returns (values term-or-nil command-or-nil) where a value is NIL when the
-   option is unset or empty — matching the guard (and val (plusp (length val)))."
-  (let ((term (nerimux/options:get-option "default-terminal"))
-        (cmd  (nerimux/options:get-option "default-command")))
-    (values (and term (plusp (length term)) term)
-            (and cmd  (plusp (length cmd))  cmd))))
+(defconstant +pane-term+
+    (if (boundp (quote +pane-term+))
+        (symbol-value (quote +pane-term+))
+        "screen-256color")
+  "TERM given to every pane's child process (§1.4: names the emulator's
+   truecolor-capable screen entry; sgr.lisp:134-181 implements the 38/48/58;2
+   sequences this advertises).")
+
+(defparameter *pane-colorterm-env* (cons "COLORTERM" "truecolor")
+  "COLORTERM entry merged into every pane's child environment (§1.4 / R2.5).")
 
 (defun %spawn-pty-with-default-options (rows cols &key start-dir default-command environment)
-  "Spawn a PTY shell using the configured default-terminal and default-command.
-   ROWS is the number of terminal rows; COLS is the number of terminal columns.
+  "Spawn a PTY shell at ROWS x COLS running DEFAULT-COMMAND (or the configured
+   shell when NIL) with ENVIRONMENT as its child environment.
    Returns (values fd pid slave-path).  Shared by %fork-pane and respawn-pane.
    Calls the nerimux/ports:spawn-pty port (installed by install-pty-port)."
   (spawn-pty rows cols
@@ -38,50 +41,47 @@
 
 ;;; ── %spawn-shell-for-pane — shared spawn skeleton ───────────────────────────
 ;;;
-;;; %fork-pane and respawn-pane both: (1) read the default-terminal/default-command
-;;; options, (2) assemble a child environment that merges the session overlay with
-;;; *pane-extra-env* (consuming and resetting it), then (3) spawn a PTY with the
-;;; resolved default-command.  %spawn-shell-for-pane captures that shared skeleton;
-;;; callers differ only in what they do with the resulting (fd pid slave-path).
+;;; %fork-pane and respawn-pane both: (1) assemble a child environment fixing
+;;; TERM/COLORTERM and merging the session overlay with EXTRA-ENV and
+;;; *pane-extra-env* (consuming and resetting it), then (2) spawn a PTY with
+;;; the caller's DEFAULT-COMMAND (or NIL, meaning "run the shell").
+;;; %spawn-shell-for-pane captures that shared skeleton; callers differ only in
+;;; what they do with the resulting (fd pid slave-path).
 
 (defun %spawn-shell-for-pane (session rows cols &key start-dir default-command extra-env)
   "Spawn a shell for a pane at COLS x ROWS, merging SESSION's environment overlay
-   with EXTRA-ENV and the consumed *PANE-EXTRA-ENV*.
-   DEFAULT-COMMAND overrides the configured 'default-command' option when given.
-   Returns (values fd pid slave-path term command) — TERM and COMMAND are the
-   resolved default-terminal/default-command options, returned so callers that
-   need the resolved command (e.g. respawn-pane's :default-command fallback)
-   do not have to read the options a second time."
-  (multiple-value-bind (term command) (%read-shell-spawn-options)
-    (let ((environment (session-child-environment session
-                                                   :term term
-                                                   :extra-env (append extra-env
-                                                                      *pane-extra-env*))))
-      ;; Consume *pane-extra-env*: reset so a later pane spawn without -e starts clean.
-      (setf *pane-extra-env* nil)
-      (multiple-value-bind (fd pid slave-path)
-          (%spawn-pty-with-default-options rows cols
-                                           :start-dir start-dir
-                                           :default-command (or default-command command)
-                                           :environment environment)
-        (values fd pid slave-path term command)))))
+   with *PANE-COLORTERM-ENV*, EXTRA-ENV, and the consumed *PANE-EXTRA-ENV*.
+   DEFAULT-COMMAND, when non-NIL, is run via sh -c instead of the shell
+   (§1.4: NIL is the default everywhere — the pane always starts a shell).
+   Returns (values fd pid slave-path)."
+  (let ((environment (session-child-environment session
+                                                 :term +pane-term+
+                                                 :extra-env (list* *pane-colorterm-env*
+                                                                   (append extra-env
+                                                                           *pane-extra-env*)))))
+    ;; Consume *pane-extra-env*: reset so a later pane spawn without -e starts clean.
+    (setf *pane-extra-env* nil)
+    (%spawn-pty-with-default-options rows cols
+                                     :start-dir start-dir
+                                     :default-command default-command
+                                     :environment environment)))
 
 (defun %fork-pane (session id x y cols rows &key start-dir)
   "Spawn a shell and build a PTY-backed pane at position (X,Y) sized COLS x ROWS.
    COLS is the number of terminal columns; ROWS is the number of terminal rows.
    START-DIR: when non-NIL, the child shell is started in that directory.
    SESSION supplies the child environment overlay used for spawn.
-   When 'default-command' is set to a non-empty string, it is run via sh -c.
+   A split or new-window pane always starts the shell (§1.4: default-command
+   is empty, and there is no configuration path left to change it).
    Extra environment variables may be injected via the *PANE-EXTRA-ENV* dynamic
    variable (alist of (NAME . VALUE)), which is consumed once and reset.
    Returns the new pane.  The PTY file descriptor and child PID are embedded
    in the pane struct; callers should call close-pty on them at teardown."
-  (multiple-value-bind (fd pid slave-path term command)
+  (multiple-value-bind (fd pid slave-path)
       (%spawn-shell-for-pane session rows cols :start-dir start-dir)
-    (declare (ignore term))
     (make-pane :id id :x x :y y :width cols :height rows
                :fd fd :pid pid :tty (or slave-path "")
-               :start-command (or command "")
+               :start-command ""
                :start-path (or start-dir
                                (nerimux/ports:working-directory)
                                "")
@@ -105,7 +105,7 @@
         (rows    (pane-height pane)))
     ;; Close the old PTY; ignore errors (process may have already exited).
     (ignore-errors (close-pty old-fd old-pid))
-    ;; Open a fresh PTY-backed shell at the same geometry, respecting options.
+    ;; Open a fresh PTY-backed shell at the same geometry.
     (multiple-value-bind (new-fd new-pid slave-path)
         (%spawn-shell-for-pane session rows cols
                                :start-dir start-dir
@@ -118,11 +118,7 @@
             (pane-start-path pane) (or start-dir
                                        (nerimux/ports:working-directory)
                                        "")
-            ;; The pane is alive again — clear the death record so
-            ;; #{pane_dead_status} and friends read empty.
-            (pane-dead-status pane) nil
-            (pane-dead-signal pane) nil
-            (pane-dead-time pane) nil
+            ;; The pane is alive again — clear the exit record.
             (pane-unread-output-p pane) nil
             (pane-bell-p pane) nil
             (pane-process-exited-p pane) nil

@@ -40,8 +40,6 @@
                 #:screen-copy-mark
                 #:screen-copy-mark-offset
                 #:screen-copy-cursor
-                #:screen-mouse-mode
-                #:screen-mouse-sgr-mode
                 #:screen-title
                 #:screen-copy-line-selection-p
                 #:screen-copy-rect-select-p
@@ -94,24 +92,16 @@
                 #:pane-live-p
                 #:pane-neighbor
                 #:pane-at-position
-                #:apply-named-layout
                 #:window-lock
                 ;; New window management
                 #:window-last-active-time
                 #:window-automatic-rename-p
-                #:window-rotate
                 #:session-last-window
                 #:session-move-window
                 #:session-swap-windows
                 ;; Pane management
                 #:window-last-active
                 #:respawn-pane
-                ;; New pane slots
-                #:pane-pipe-fd
-                #:pane-pipe-active-p
-                #:pane-pipe-output-stream
-                #:pane-pipe-output-thread
-                #:pane-pipe-process
                 #:pane-window
                 #:pane-marked
                 #:pane-title
@@ -119,7 +109,6 @@
                 ;; Window options
                 #:window-local-options
                 ;; New session slots
-                #:session-group
                 #:session-clients
                 ;; Window layout-cycle-index slot
                 #:window-layout-cycle-index
@@ -139,9 +128,6 @@
                 ;; Pane liveness check
                 #:pane-live-p)
   (:import-from #:nerimux
-                ;; Session groups
-                #:*session-groups*
-                #:server-new-session-in-group
                 ;; Runtime state (needed by tests)
                 #:*server-sessions*)
   (:import-from #:nerimux/renderer
@@ -154,7 +140,7 @@
                 #:+header-size+
                 #:encode-frame #:decode-frame
                 #:msg-attach #:msg-key #:msg-resize #:msg-detach #:msg-frame #:msg-bye
-                #:msg-command #:msg-reply #:decode-attach-flags #:+attach-flag-read-only+
+                #:msg-command #:msg-reply
                 #:encode-command-payload #:decode-command-payload
                 #:u16-octets-pair
                 #:decode-size #:decode-text #:to-octets)
@@ -164,65 +150,9 @@
                 #:make-listener #:accept-connection #:connect-to
                 #:socket-stream #:socket-fd #:close-socket
                 #:unix-socket-available-p)
-  (:import-from #:nerimux/config
-                #:apply-config-directive)
   (:import-from #:nerimux/commands
                 ;; pane PTY teardown: reader-thread EOF and server shutdown
-                #:close-pane-pty
-                ;; pipe-pane: pane output tee'd to an external process
-                #:pipe-pane-open
-                #:pipe-pane-close
-                #:pipe-pane-write)
-  (:import-from #:nerimux/prompt
-                #:prompt #:make-prompt #:prompt-p
-                #:*prompt*
-                #:prompt-active-p
-                #:prompt-start
-                #:prompt-input
-                #:prompt-backspace
-                #:prompt-history-prev
-                #:prompt-history-next
-                #:prompt-clear
-                #:prompt-text
-                #:prompt-vi-normal-p
-                #:prompt-notify-change
-                #:prompt-delete-char
-                #:with-active-prompt
-                #:*overlay*
-                #:*overlay-scroll-offset*
-                #:*overlay-shown-at*
-                #:overlay-shown-at
-                #:overlay-active-p
-                #:show-overlay
-                #:show-transient-overlay
-                #:clear-overlay
-                #:overlay-lines
-                #:overlay-scroll
-                #:+default-popup-width+ #:+default-popup-height+
-                #:popup #:make-popup #:popup-p
-                #:popup-width #:popup-height
-                #:popup-screen #:popup-pane #:popup-title #:popup-close-on-exit
-                #:*active-popup*
-                #:show-popup #:close-popup #:popup-active-p
-                #:show-menu #:close-menu #:menu-active-p
-                #:menu #:make-menu #:menu-p
-                #:menu-title #:menu-items #:menu-selected-index
-                #:menu-x #:menu-y
-                #:*active-menu*
-                #:prompt-label
-                #:prompt-buffer
-                #:prompt-on-submit
-                #:prompt-on-change
-                #:prompt-on-cancel
-                #:prompt-single-key
-                #:prompt-cursor-index
-                #:prompt-cursor-bol
-                #:prompt-cursor-eol
-                #:prompt-cursor-back
-                #:prompt-cursor-forward
-                #:prompt-kill-to-end
-                #:prompt-kill-to-start
-                #:prompt-kill-word-back)
+                #:close-pane-pty)
   (:import-from #:nerimux/pty
                 #:forkpty-with-shell
                 #:pty-write

@@ -1,6 +1,6 @@
 (in-package #:nerimux/test)
 
-;;;; copy-mode-exit, clear-history, rotate-window — part VI
+;;;; copy-mode-exit, clear-history — part VI
 
 (defun %clear-history-fixture ()
   "Single-pane window \"w\" in session \"0\" whose screen has a non-empty
@@ -18,22 +18,6 @@
                             (nerimux/terminal/types:make-cell
                              :char #\X :fg 7 :bg 0 :attrs 0 :width 1))))
     (values sess win screen)))
-
-(defun %rotate-window-fixture ()
-  "Three-pane window \"w\" (p0 p1 p2) in session \"0\".
-   Returns (values sess win p0 p1 p2)."
-  (let* ((p0 (%make-test-pane :id 1))
-         (p1 (%make-test-pane :id 2))
-         (p2 (%make-test-pane :id 3))
-         (win (make-window :id 1 :name "w" :width 30 :height 6
-                           :tree (make-layout-split :h (make-layout-leaf p0)
-                                   (make-layout-split :h (make-layout-leaf p1)
-                                                      (make-layout-leaf p2) 1/2)
-                                   1/2)
-                           :panes (list p0 p1 p2)))
-         (sess (make-session :id 1 :name "0" :windows (list win))))
-    (session-select-window sess win)
-    (values sess win p0 p1 p2)))
 
 (describe "commands-suite"
 
@@ -62,23 +46,4 @@
       (declare (ignore win))
       (with-command-test-state (sess)
         (nerimux/terminal/actions:clear-scrollback screen)
-        (expect (null (nerimux/terminal/types:screen-scrollback screen))))))
-
-  ;;; ── rotate-window ────────────────────────────────────────────────────────────
-
-  ;; window-rotate with :up (the default, tmux forward) moves the first pane to end.
-  (it "cmd-rotate-window-forward-default"
-    (multiple-value-bind (sess win p0 p1 p2) (%rotate-window-fixture)
-      (declare (ignore p2))
-      (with-command-test-state (sess)
-        (nerimux/model:window-rotate win :up)
-        (expect (eq p1 (first (window-panes win))))
-        (expect (eq p0 (car (last (window-panes win))))))))
-
-  ;; window-rotate :down (tmux backward) moves the last pane to the front.
-  (it "cmd-rotate-window-d-rotates-backward"
-    (multiple-value-bind (sess win p0 p1 p2) (%rotate-window-fixture)
-      (declare (ignore p0 p1))
-      (with-command-test-state (sess)
-        (nerimux/model:window-rotate win :down)
-        (expect (eq p2 (first (window-panes win))))))))
+        (expect (null (nerimux/terminal/types:screen-scrollback screen)))))))

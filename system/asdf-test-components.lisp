@@ -11,20 +11,20 @@
       (:file "helpers-render-output")
       (:file "helpers-events-cps")
       (:file "helpers-key-bindings")
+      ;; Named for overlays, but the contents are POSIX-env and config-directive
+      ;; assertion macros used by 36 call sites across config, bootstrap and the
+      ;; other helper files. The name is the only thing about it that is stale.
       (:file "helpers-overlay-assertions")
       (:file "helpers-session-naming")
       (:file "helpers-pane-fixtures")
-      (:file "helpers-pty-runtime")
       (:file "helpers-network-listener")
       (:file "helpers-net-protocol")
-      (:file "helpers-options")
-      (:file "helpers-prompt-history")
       (:file "helpers-process-fixtures")
       (:file "helpers-screen-assertions")
       (:file "helpers-loop-fixtures")
-      (:file "helpers-mouse-fixtures")
       (:file "helpers-layout-fixtures")
       (:file "helpers-renderer-fixtures")
+      (:file "helpers-renderer-benchmark")
       (:file "helpers-session-fixtures")
       (:file "helpers-input-fixtures")
       (:file "helpers-pipe-fixtures")
@@ -96,9 +96,8 @@
           (:file "pane-tests-geometry") ; pane feed/reposition, next-id, split-window
           (:file "pane-tests-ops") ; swap/capture/last/display/respawn
           (:file "pane-tests-accessors") ; pane defaults, accessors, feed dirty/empty
-          (:file "pane-tests-predicates") ; hit-testing, live, pipe, border-status
+          (:file "pane-tests-predicates") ; hit-testing, live, pipe
           (:file "window-tests-relayout")
-          (:file "window-tests-pane-ops")
           (:file "window-tests-split-math")
           (:file "window-tests-tree-ops")
           (:file "window-neighbor-tests") ; pane-neighbor directional lookup
@@ -107,7 +106,6 @@
           (:file "window-tests-c") ; find-window-by-name, list-windows-format, auto-rename-from-osc - part III
           (:file "session-state-core")
           (:file "session-state-structural")
-          (:file "session-lifecycle-tests")
           (:file "session-window-tests") ; start-directory, all-panes ordering, window flags
           (:file "session-environment-tests") ; environment overlay, process helpers, child env merge
           (:file "organization-tests")
@@ -125,64 +123,19 @@
         (:module "infrastructure/vcs"
          :serial t
          :components
-         ((:file "vcs-tests")))
-        (:module "domain/persistence"
-         :serial t
-         :components
-         ((:file "runtime-state-tests")))
+         ((:file "vcs-tests")
+          (:file "vcs-fetch-dedup-tests") ; R7.1: one fetch in flight per target
+          (:file "vcs-worktree-path-tests"))) ; R7.2: timestamp-sha path, -2/-3 on collision
         (:module "application/picker"
          :serial t
          :components
          ((:file "global-picker-tests")))
-        (:module "domain/format"
-         :serial t
-         :components
-         ((:file "format-tests") ; format expansion - part I (shorthands, brace/conditional, context, window_flags, helpers)
-          (:file "format-tests-d") ; format expansion - part IV (shorthand-table, %expand-brace, %truthy-p, pane/client vars)
-          (:file "format-structural-tests") ; structural pane/session/window/terminal format variables
-          (:file "format-modifier-tests") ; truncation/logical/quote/char/path modifiers
-          (:file "format-tests-b") ; format expansion - part II (path/substitute/nested/strftime/context/glob/regex)
-          (:file "format-tests-c") ; format expansion - part III (arithmetic/vars/geometry/pane_at_edges/pane-synchronized)
-          (:file "format-tests-e") ; format expansion - part V (content-search, glob-match-p, pane-visible-lines, apply-pad-modifier, window-raw-flags)
-          (:file "format-tests-f"))) ; format expansion - part VI (new context keys, modifier chaining, glob/regex match, format variables)
         (:module "domain/model-2"
          :pathname "domain/model"
          :serial t
          :components
          ((:file "target-tests") ; parse-session/window/pane/target, find-by-target - part I
           (:file "target-tests-b"))) ; %sigil-id, %name-prefix-p, edge cases, table-driven parse-target, multi-digit ids - part II
-        (:module "domain/buffer"
-         :serial t
-         :components
-         ((:file "buffer-tests-ring")
-          (:file "buffer-tests-clipboard")
-          (:file "buffer-tests-named")))
-        (:module "domain/options"
-         :serial t
-         :components
-         ((:file "options-tests") ; option registry, coercions, boolean defaults, make-option-spec - part I
-          (:file "options-display-tests") ; scope/display presence, array names, value display quoting
-          (:file "options-tests-b") ; define-option-accessor, type-coercions, scoped overrides, show-options - part II
-          (:file "options-tests-c"))) ; type-coercion dispatch, option-table macro, spec accessors, server options, show-option sorting - part III
-        (:module "domain/hooks"
-         :serial t
-         :components
-         ((:file "hooks-tests"))) ; hook-event-constants, hook-registry, add/run/remove/clear/list-hooks
-        (:module "application/config"
-         :serial t
-         :components
-         ((:file "config-key-table-runtime-tests")
-          (:file "config-directives-tests") ; directive parsing - part I (suite, bindable commands, basic apply/set directives)
-          (:file "config-load-tests") ; directive parsing - load strings/streams/files and config paths
-          (:file "config-bind-directive-tests") ; directive parsing - bind/unbind, notes, brace blocks, sequences
-          (:file "config-directives-tests-c") ; directive parsing - part III (load-config-file, command-keyword, parse-bind-args, key-table edge cases)
-          (:file "config-directives-tests-b") ; directive parsing - part II (%parse-bind-args, tokenizer, set aliases, server flag, terminal option routing)
-          (:file "config-source-run-tests") ; directive parsing - source-file, run-shell, path expansion
-          (:file "config-if-shell-tests") ; directive parsing - if-shell flags, format truthiness, brace blocks
-          (:file "config-source-file-tests") ; directive parsing - source-file flags, glob expansion, missing diagnostics
-          (:file "config-preprocessor-environment-tests") ; directive parsing - preprocessor, environment, key-table side effects
-          (:file "config-directives-tests-d") ; directive parsing - part IV (set-g-status-off, bind-key-n, load-config, %elif, line-continuation, comments, styles)
-          (:file "config-directives-tests-e"))) ; directive parsing - part V (macro registry, env-set-p, key-table edge cases, remaining bind/set directives)
         (:module "presentation/renderer"
          :serial t
          :components
@@ -191,20 +144,22 @@
           (:file "renderer-pane-tests") ; render-pane content/borders/window-style - part I
           (:file "renderer-pane-tests-b") ; %clock-digit-rows, %render-v-separator, border/pane edge cases - part II
           (:file "renderer-pane-tests-c") ; %apply-border-style branches, draw-clock, render-pane-clock-mode, draw-pane-number, in-sel-branch - part III
-          (:file "renderer-tests") ; renderer - part I (status-bar, render-session, clear-display, status-indicators, window-list)
-          (:file "renderer-window-list-tests") ; renderer status window-list styles and format expansion
-          (:file "renderer-tests-d") ; renderer - part IV (per-window options, alert-tab-styles, status-bar-line)
-          (:file "renderer-overlay-cursor-tests") ; renderer overlay, cursor visibility, message placement
+          (:file "renderer-tests") ; renderer - part I (status-bar, render-session, clear-display)
           (:file "renderer-tests-b") ; renderer - part II (status-bar, status-position, BEL rendering, status-left-expanded)
-          (:file "renderer-tests-f") ; renderer - part VI (parse-style-string, style-to-sgr, status-length, window-status-format, render-popup/menu)
-          (:file "renderer-tests-c") ; renderer - part III (mouse/focus/keys, lock-screen, justify, cursor-shape, zoom-suppression)
+          (:file "renderer-tests-c") ; renderer - part III (mouse/focus/keys, lock-screen, cursor-shape, zoom-suppression)
           (:file "renderer-tests-e") ; renderer - part V (%clamp-status-segment, cursor-shape in output, status-bar-line gap, inline-style, bell relay)
           (:file "renderer-tests-g") ; renderer - part VII (%split-align-attr, %status-align-buckets, %status-bar-default-segments, %content-search-match-p flag matrix)
          (:file "renderer-statusbar-layout-tests") ; direct unit tests for the previously-untested statusbar-layout helpers
          (:file "renderer-pane-selection-tests") ; direct unit tests for %compute-selection-bounds
          (:file "renderer-compose-effects-tests") ; direct unit tests for %render-passthrough/%render-clipboard drain gating
-         (:file "renderer-overlay-layer-tests") ; direct unit tests for %render-overlay-layer's popup>menu>overlay>cursor priority dispatch
          (:file "renderer-pane-search-tests") ; direct unit tests for %render-copy-search-matches's current-vs-plain match style branch
+      (:file "renderer-workspace-status-tokens-tests") ; R6.1: tokens combine; CLEAN vs UNKNOWN
+      (:file "renderer-workspace-clip-tests") ; R6.9: clipping measures cells, not characters
+      (:file "renderer-workspace-tree-tests") ; R6.3: five levels, collapsed by default
+      (:file "renderer-workspace-command-completion-tests") ; R6.12
+      (:file "renderer-statusbar-workspace-tests") ; R6.5/R6.7: three blocks, truncation order
+      (:file "renderer-copy-mode-position-tests") ; R6.8
+      (:file "renderer-tui-kit-min-size-tests") ; R6.10
          (:file "renderer-tui-kit-tests"))) ; headless cl-tui-kit surface/backend adapter
  ; wait-for command channel state and argument validation
         (:module "application/commands"
@@ -226,20 +181,6 @@
           (:file "commands-tests-l") ; copy-mode exit resets rect-select, yank-rectangle fixed columns - part XII
           (:file "commands-tests-i") ; rectangle selection-text, run-copy-command, copy-mode set-cursor - part IX
           (:file "commands-copy-navigation-tests"))) ; copy-mode search next/prev/forward/backward guards
-        (:module "presentation/prompt"
-         :serial t
-         :components
-         ((:file "overlay-tests")
-          (:file "overlay-popup-menu-tests")
-          (:file "overlay-transient-tests")
-          (:file "prompt-tests")
-          (:file "prompt-editing-tests")
-          (:file "prompt-tests-wiring")))
-        (:module "application/config-2"
-         :pathname "application/config"
-         :serial t
-         :components
-         ((:file "config-tests-defaults")))
         (:module "infrastructure/net"
          :serial t
          :components
@@ -255,13 +196,13 @@
          :components
          ((:file "server-registry-tests")
           (:file "server-window-link-tests")
-          (:file "server-command-tests")
-          (:file "server-session-listing-tests") ; list-sessions, rename-session, switch-client, session groups
-          (:file "server-session-message-tests") ; session groups, dispatch, attach/resize edge cases
+          (:file "server-session-listing-tests")
           (:file "server-socket-path-tests") ; socket paths and stale sockets
           (:file "server-client-cps-tests") ; client key CPS, runtime registry, resize edge cases
           (:file "runtime-lifecycle-tests")
-          (:file "system-composition-tests"))) ; core excludes the optional reasoning/dataflow kits
+      (:file "server-kill-request-tests") ; R8.1/R8.3
+      (:file "workspace-window-naming-tests") ; R5.8
+          (:file "system-composition-tests"))) ; layering guard; core declares no optional kit
         (:module "infrastructure/pty"
          :serial t
          :components
@@ -279,10 +220,8 @@
          ((:file "runtime-tests") ; globals, pane-reader-loop, EOF/remain-on-exit, alert actions
           (:file "runtime-reader-cps-tests") ; reader CPS state machine contracts
           (:file "runtime-channel-helper-tests") ; cap-list and channel plist helpers
-          (:file "runtime-prompt-history-io-tests")
-          (:file "runtime-message-log-core-tests")
-          (:file "runtime-tests-c") ; stop-reader-threads, add-message-log, add-prompt-history, wait-for-channel - part III
-          (:file "runtime-tests-b") ; add-message-log table-driven, add-prompt-history, wait-for-channel - part II
+          (:file "runtime-tests-c") ; stop-reader-threads, wait-for-channel - part III
+          (:file "runtime-tests-b") ; wait-for-channel - part II
           (:file "main-tests")
           (:file "main-entry-tests")))
         (:module "feature"
@@ -304,4 +243,8 @@
          (:file "client-tests-frame-dispatch")
          (:file "client-tests-startup-modes")
          (:file "client-tests-command-client")
+         (:file "workspace-input-prefix-tests") ; R4: driven from client bytes
+         (:file "workspace-panes-acceptance-tests") ; R5 acceptance sequence
+         (:file "confirm-view-quit-tests") ; R8.2
+         (:file "attach-selector-resolution-tests") ; R7.6
          (:file "client-receive-tests")))))))

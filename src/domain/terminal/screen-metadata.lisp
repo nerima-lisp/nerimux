@@ -47,7 +47,8 @@
 ;;;
 ;;; A custom palette entry set by OSC 4 shadows the built-in xterm palette for
 ;;; that index.  Storage is lazily allocated (NIL until the first set) to keep the
-;;; common no-override screen cheap.  Mirrors tmux colour_palette_set/_get/_clear.
+;;; common no-override screen cheap, the standard pattern for a sparse
+;;; per-index override table.
 
 (defun %palette-override-get (screen index)
   "Return the custom 0xRRGGBB override for palette INDEX, or NIL when INDEX has no

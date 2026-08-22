@@ -36,13 +36,22 @@
               collect (cons pos (+ pos tlen))
               do (setf start (+ pos (max 1 tlen)))))))
 
-(defun %option-style-sgr (option-name default)
-  "SGR attribute string for the tmux style option OPTION-NAME (falling back to
-   DEFAULT when unset), or NIL when the resolved style string is empty.
-   Parses the tmux style string via the renderer style pipeline."
-  (let ((style (nerimux/options:get-option option-name default)))
-    (when (and style (plusp (length style)))
-      (style-to-sgr (parse-style-string style)))))
+;;; copy-mode-match-style / copy-mode-current-match-style are fixed at their
+;;; registry defaults "bg=green" / "bg=magenta" (R2.2: no config exists to
+;;; change them) — SGR "42" / "45" is what parse-style-string + style-to-sgr
+;;; always resolved those two strings to, so the strings themselves are gone
+;;; (R2.4) and only the resolved codes remain.
+
+(defconstant +sgr-copy-mode-match+
+    (if (boundp (quote +sgr-copy-mode-match+))
+        (symbol-value (quote +sgr-copy-mode-match+))
+        "42")
+  "SGR for a copy-mode search match: bg=green.")
+(defconstant +sgr-copy-mode-current-match+
+    (if (boundp (quote +sgr-copy-mode-current-match+))
+        (symbol-value (quote +sgr-copy-mode-current-match+))
+        "45")
+  "SGR for the copy-mode search match under the cursor: bg=magenta.")
 
 (defun %render-row-search-matches (buffer row row-str term w
                                     cur-row cur-col match-sgr current-sgr
@@ -69,9 +78,8 @@
     (when (and screen (screen-copy-mode-p screen))
       (let ((term (screen-copy-search-term screen)))
         (when (and term (plusp (length term)))
-          (let* ((match-sgr   (%option-style-sgr "copy-mode-match-style" "bg=green"))
-                 (current-sgr  (%option-style-sgr "copy-mode-current-match-style"
-                                                "bg=magenta"))
+          (let* ((match-sgr   +sgr-copy-mode-match+)
+                 (current-sgr  +sgr-copy-mode-current-match+)
                  (cursor       (screen-copy-cursor screen))
                  (cur-row      (and (consp cursor) (car cursor)))
                  (cur-col      (and (consp cursor) (cdr cursor)))

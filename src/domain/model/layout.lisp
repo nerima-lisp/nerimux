@@ -6,11 +6,13 @@
 ;;; pane; every internal node splits its rectangle into two children along one
 ;;; axis at a fractional ratio.  This lets a split halve ONLY the active pane's
 ;;; rectangle and supports arbitrary nested/mixed layouts (a pane split top/
-;;; bottom, one half then split left/right, …), matching real tmux.
+;;; bottom, one half then split left/right, …).
 ;;;
-;;; Orientations use tmux's -v/-h naming so the keywords are not inverted:
-;;;   :v  — top/bottom split  (children stacked vertically;  tmux split-window -v / C-b ")
-;;;   :h  — left/right split   (children side by side;        tmux split-window -h / C-b %)
+;;; Orientations use -v/-h naming so the keywords are not inverted:
+;;;   :v  — top/bottom split  (children stacked vertically; the divider runs
+;;;         horizontally)
+;;;   :h  — left/right split  (children side by side; the divider runs
+;;;         vertically)
 
 (defconstant +pane-min-width+  2
   "Smallest interior width (columns) a pane may occupy.")
@@ -176,12 +178,11 @@
                    (+ first-extent 1 second-extent) ; same-axis split: stack + 1-cell separator
                    (max first-extent second-extent))))
 
-;;; ── Named layouts (tree builder only) ───────────────────────────────────────
+;;; ── %build-flat-tree ─────────────────────────────────────────────────────────
 ;;;
-;;; %build-flat-tree is a pure tree-construction helper that only needs
-;;; layout types (make-layout-leaf, make-layout-split), so it belongs here.
-;;; apply-named-layout uses WINDOW struct accessors so it lives in window-core.lisp
-;;; (which loads after layout.lisp, avoiding a forward reference).
+;;; A pure tree-construction helper that only needs layout types
+;;; (make-layout-leaf, make-layout-split), so it belongs here rather than in a
+;;; file that pulls in WINDOW struct accessors.
 
 (defun %build-flat-tree (panes orientation)
   "Build a right-leaning binary split chain from PANES using ORIENTATION.

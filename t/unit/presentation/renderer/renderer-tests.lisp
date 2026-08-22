@@ -1,11 +1,15 @@
 (in-package #:nerimux/test)
 
 ;;;; render-status-bar, render-session, clear-display, and status-pane indicators
+;;;;
+;;;; status-format[0] (domain/options + domain/format, deleted R2.2/R2.3) is
+;;;; gone: the status bar is now always composed procedurally (left/window-
+;;;; list/right), never expanded from a template — see renderer-statusbar.lisp.
 
 ;;; ── Test fixtures ───────────────────────────────────────────────────────────
 ;;;
 ;;; make-renderer-test-session is defined in t/helpers-renderer-fixtures.lisp
-;;; and shared across renderer-tests.lisp, renderer-pane-tests.lisp, and prompt-tests.lisp.
+;;; and shared across renderer-tests.lisp and renderer-pane-tests.lisp.
 
 (defun make-split-session (w h orient)
   "A 1-window session split into two panes (fd -1, no PTY).
@@ -36,15 +40,14 @@
 
   ;;; ── render-status-bar ───────────────────────────────────────────────────────
 
-  ;; render-status-bar shows the session name and the active window's index:name.
+  ;; render-status-bar draws something for a session with no worktree (R6.5:
+  ;; the middle block's window/pane tabs only appear for a focus pane that
+  ;; has one — make-renderer-test-session's pane does not, so this only
+  ;; checks the bar renders at all, not any window-index:name text).
   (it "render-status-bar-shows-names"
-    (with-minimal-status-bar-options
-      (let* ((sess (make-renderer-test-session 40 10 :content ""))
-             (out  (render-status-bar-output sess 10 40)))
-        (expect (search "0" out))
-        ;; The active window is formatted using window-status-current-format:
-        ;; " #{window_index}:#{window_name}* " → " 1:1* " for window named "1" at index 1.
-        (expect (search "1:1" out)))))
+    (let* ((sess (make-renderer-test-session 40 10 :content ""))
+           (out  (render-status-bar-output sess 10 40)))
+      (expect (search "0" out))))
 
   ;; %compose-aligned-line places #[align=right] content flush-right and
   ;; #[align=centre] content centred, filling to the requested width.
@@ -60,54 +63,16 @@
         (expect (= 10 (nerimux/renderer::%visible-length
                        (compose "L#[align=centre]C#[align=right]R")))))))
 
-  ;; When status-format[0] is set, the bar renders from that template with
-  ;; #[align=right] honoured, instead of the procedural left/window-list/right path.
-  (it "render-status-bar-uses-status-format0-template"
-    (with-isolated-options ("status-format[0]" "LEFThere#[align=right]RIGHThere")
-      (let* ((sess (make-renderer-test-session 40 10 :content ""))
-             (out  (render-status-bar-output sess 10 40))
-             ;; Strip ALL CSI sequences (the leading cursor-move ESC[10;1H and any SGR).
-             (vis  (cl-regex-kit:replace-all
-                    (cl-regex-kit:compile-regex
-                     (format nil "~C\\[[0-9;?]*[A-Za-z]" #\Escape))
-                    out ""))
-             (rpos (search "RIGHThere" vis)))
-        (expect (eql 0 (search "LEFThere" vis)))
-        (expect (and rpos (= (+ rpos (length "RIGHThere")) 40))))))
-
-  ;; status-format[0] expands #{W:...}, so the window list appears in the template.
-  (it "render-status-bar-status-format0-expands-W-window-list"
-    (with-isolated-options ("status-format[0]" "#{W:[#{window_index}]}")
-      (let* ((sess (make-renderer-test-session 40 10 :content ""))
-             (out  (render-status-bar-output sess 10 40))
-             (vis  (cl-regex-kit:replace-all
-                    (cl-regex-kit:compile-regex
-                     (format nil "~C\\[[0-9;?]*[A-Za-z]" #\Escape))
-                    out "")))
-        (expect (search "[" vis)))))
-
-  ;; With *prompt* explicitly inactive, the status bar shows the normal status
-  ;; (window 1) and never the prompt text — pinning the active/inactive exclusion.
-  (it "status-bar-no-prompt-when-inactive"
-    (with-minimal-status-bar-options
-      (let ((nerimux/prompt:*prompt* nil))
-        (let* ((sess (make-renderer-test-session 40 10 :content ""))
-               (out  (render-status-bar-output sess 10 40)))
-          ;; window-status-current-format renders active window as " 1:1* "
-          (expect (search "1:1" out))
-          (expect (null (search "rename-window:" out)))))))
-
   ;; The status bar does not show a COPY/offset indicator when a pane is in copy mode.
   (it "render-status-bar-copy-mode-has-no-indicator"
-    (with-minimal-status-bar-options
-      (let* ((sess   (make-renderer-test-session 60 10 :content ""))
-             (ap     (session-active-pane sess))
-             (screen (pane-screen ap)))
-        (setf (screen-copy-mode-p screen) t
-              (screen-copy-offset screen) 3)
-        (let ((out (render-status-bar-output sess 10 60)))
-          (expect (null (search "COPY" out)))
-          (expect (null (search "+3" out)))))))
+    (let* ((sess   (make-renderer-test-session 60 10 :content ""))
+           (ap     (session-active-pane sess))
+           (screen (pane-screen ap)))
+      (setf (screen-copy-mode-p screen) t
+            (screen-copy-offset screen) 3)
+      (let ((out (render-status-bar-output sess 10 60)))
+        (expect (null (search "COPY" out)))
+        (expect (null (search "+3" out))))))
 
   ;; The status bar never shows a COPY indicator for a pane that is not in copy mode.
   (it "render-status-bar-no-copy-indicator-live"
@@ -121,55 +86,35 @@
     ;; The bar is: move-to, ESC[44;97m, <status content>, ESC[0m.  The visible
     ;; status content sits between the colour SGR and the trailing reset, and the
     ;; renderer guarantees it is no longer than the terminal width.
-    (with-minimal-status-bar-options
-      (let* ((width  8)
-             (sess   (make-renderer-test-session width 10 :content ""))
-             (out    (render-status-bar-output sess 10 width))
-             (color  (format nil "~C[44;97m" #\Escape))
-             (reset  (format nil "~C[0m" #\Escape))
-             (start  (+ (search color out) (length color)))
-             (end    (search reset out :start2 start))
-             (content (subseq out start end)))
-        ;; Measure VISIBLE cells: the default window-status-current-style is
-        ;; "reverse", so the active window is wrapped in a zero-width ESC[7m…
-        ;; highlight.  The renderer now fills the full terminal width with visible
-        ;; glyphs and preserves that SGR, so the raw length may exceed WIDTH while
-        ;; the on-screen width does not.
-        (expect (<= (nerimux/renderer::%visible-length content) width))
-        ;; The full line (left text + gap + time) is longer than the terminal, so
-        ;; the HH:MM time string (right portion) is truncated off the visible content.
-        ;; We verify this by checking the content is shorter than the full line would be.
-        (expect (< (length content) 20)))))
-
-  ;; An active *prompt* replaces the whole left status segment with its
-  ;; "LABEL: BUFFER" text — the prompt text appears and the normal
-  ;; window-list (1:1*) is absent.
-  (it "render-status-bar-active-prompt-replaces-left-segment"
-    (let ((nerimux/prompt:*prompt* nil))
-      (nerimux/prompt:prompt-start "rename-window" "abc" nil)
-      (unwind-protect
-           (let* ((sess (make-renderer-test-session 60 10 :content ""))
-                  (out  (render-status-bar-output sess 10 60)))
-             ;; prompt-text formats as "LABEL: BUFFER".
-             (expect (search "rename-window: abc" out))
-             ;; When prompt is active, the window list (1:1*) is suppressed.
-             (expect (null (search "1:1*" out))))
-        (nerimux/prompt:prompt-clear))))
+    (let* ((width  8)
+           (sess   (make-renderer-test-session width 10 :content ""))
+           (out    (render-status-bar-output sess 10 width))
+           (color  (format nil "~C[44;97m" #\Escape))
+           (reset  (format nil "~C[0m" #\Escape))
+           (start  (+ (search color out) (length color)))
+           (end    (search reset out :start2 start))
+           (content (subseq out start end)))
+      ;; Measure VISIBLE cells: the active window's tab is wrapped in a
+      ;; zero-width ESC[7m… reverse-video highlight (window-status-current-
+      ;; style's fixed value).  The renderer fills the full terminal width
+      ;; with visible glyphs and preserves that SGR, so the raw length may
+      ;; exceed WIDTH while the on-screen width does not.
+      (expect (<= (nerimux/renderer::%visible-length content) width))
+      ;; The full line (left text + gap + time) is longer than the terminal, so
+      ;; the HH:MM time string (right portion) is truncated off the visible content.
+      ;; We verify this by checking the content is shorter than the full line would be.
+      (expect (< (length content) 20))))
 
   ;;; ── render-session-to-string (full frame) ───────────────────────────────────
 
   ;; render-session-to-string emits pane content plus cursor-hide/show sequences and the status bar.
   (it "render-session-to-string-full-frame"
-    (with-minimal-status-bar-options
-      (let* ((sess (make-renderer-test-session 20 5 :content "hi"))
-             (out  (render-session-to-string sess 6 20)))
-        (expect (find #\h out))
-        (expect (find #\i out))
-        (expect (search (format nil "~C[?25l" #\Escape) out))
-        (expect (search (format nil "~C[?25h" #\Escape) out))
-        ;; The active window is formatted with window-status-current-format
-        ;; default: " #{window_index}:#{window_name}* " → " 1:1* "
-        (expect (search "1:1" out)))))
+    (let* ((sess (make-renderer-test-session 20 5 :content "hi"))
+           (out  (render-session-to-string sess 6 20)))
+      (expect (find #\h out))
+      (expect (find #\i out))
+      (expect (search (format nil "~C[?25l" #\Escape) out))
+      (expect (search (format nil "~C[?25h" #\Escape) out))))
 
   ;; A side-by-side split renders a vertical separator, highlights the active pane's border, and shows both panes' content.
   (it "render-session-vertical-split-emits-separators"
@@ -228,17 +173,4 @@
                  (clear-display)
                  (get-output-stream-string *standard-output*))))
       (expect (search (format nil "~C[2J" #\Escape) out))
-      (expect (search (format nil "~C[H" #\Escape) out))))
-
-  ;;; ── %status-pane-indicator (pure) ───────────────────────────────────────────
-
-  ;; %status-pane-indicator formats a live pane as #<pane-id>.
-  (it "status-pane-indicator-with-active-pane"
-    (let* ((screen (make-screen 10 5))
-           (pane   (make-pane :id 7 :x 0 :y 0 :width 10 :height 5 :fd -1 :screen screen))
-           (out    (nerimux/renderer::%status-pane-indicator pane)))
-      (expect (search "#7" out))))
-
-  ;; %status-pane-indicator returns the empty string for a NIL pane.
-  (it "status-pane-indicator-nil-returns-empty"
-    (expect (string= "" (nerimux/renderer::%status-pane-indicator nil)))))
+      (expect (search (format nil "~C[H" #\Escape) out)))))

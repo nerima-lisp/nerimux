@@ -15,44 +15,6 @@
    #:parse-integer-or-nil
    #:non-empty-string))
 
-(defpackage #:nerimux/config
-  (:use #:cl)
-  (:documentation
-   "APPLICATION layer: everything that turns a .tmux.conf into runtime state --
-    directive loading (tokenizer, %if/%elif preprocessor, source-file recursion,
-    set-option routing).  The key-table store that used to share this package went
-    with the keystroke pipeline: nothing read it once the workspace UI took over
-    key handling, so bind/unbind now parse and do nothing.  See
-    docs/src/reference/compatibility.md.")
-  (:export
-   #:+pty-buf-size+
-   #:+poll-timeout-us+
-   #:+accept-timeout-us+
-   #:+pty-poll-timeout-us+
-   #:load-config-file
-   #:load-config-from-stream
-   #:load-config-from-string
-   #:source-files
-   #:apply-config-directive
-   #:apply-option-side-effects
-   #:config-file-path
-   ;; -f startup-flag override (set by the cl-cli global-option parser in
-   ;; main-startup-flags.lisp), consulted first by config-file-path.
-   #:*config-file-override*
-   ;; cl-boundary-kit process boundary used by the config-time shell
-   ;; directives, including run-shell/if-shell; see
-   ;; config-directives-runtime-services.lisp.
-   #:*process-boundary*
-   ;; %if condition evaluator hook (set by top-level package)
-   #:*config-condition-evaluator*
-   ;; Session lookup hook, same shape and for the same reason: the live session
-   ;; registry belongs to the BOOTSTRAP layer, and set-environment -t needs to
-   ;; resolve a target name against it.  Calling nerimux::server-find-session
-   ;; directly would be this APPLICATION package depending on the layer above it.
-   ;; Installed by run-server; see %install-composition-root-hooks.
-   #:*session-lookup*
-   ;; Reads $SHELL into the `default-shell' option; called once from run-server.
-   #:init-default-shell))
 
 ;; No :import-from for the sibling kits: every descriptor-level operator in
 ;; src/infrastructure/pty/ is written qualified (cl-tty-kit:, process-kit:,
@@ -117,29 +79,11 @@
    #:prune-worktrees
    #:lock-worktree-async
    #:unlock-worktree-async
-   #:prune-worktrees-async))
-
-(defpackage #:nerimux/persistence
-  (:use #:cl)
-  (:documentation
-   "DOMAIN layer: versioned, data-only runtime snapshots.  Serialization is
-    deliberately reader-safe so restoring sessions, clients, worktrees, tags,
-    and notes never evaluates persisted input.")
-  (:export
-   #:+runtime-snapshot-version+
-   #:runtime-snapshot #:runtime-snapshot-p
-   #:make-runtime-snapshot
-   #:runtime-snapshot-version
-   #:runtime-snapshot-sessions
-   #:runtime-snapshot-clients
-   #:runtime-snapshot-worktrees
-   #:runtime-snapshot-tags
-   #:runtime-snapshot-notes
-   #:runtime-snapshot->plist
-   #:serialize-runtime-snapshot
-   #:deserialize-runtime-snapshot
-   #:save-runtime-snapshot
-   #:load-runtime-snapshot))
+   #:prune-worktrees-async
+   ;; Explicit fetch (R7.1). AHEAD/BEHIND read the local remote-tracking ref, so
+   ;; they only move when someone fetches; these are how that is asked for.
+   #:fetch-repository-async
+   #:fetch-organization-async))
 
 (defpackage #:nerimux/picker
   (:use #:cl)
@@ -175,14 +119,12 @@
    #:+header-size+
    ;; Frame layout constants
    #:+payload-length-offset+
-   #:+attach-flag-read-only+
-   #:+attach-flags-offset+
    #:+cols-offset-in-size-payload+
    ;; Frame codec
    #:encode-frame #:decode-frame
    ;; Typed message constructors
    #:msg-attach #:msg-key #:msg-resize #:msg-detach #:msg-frame #:msg-bye
-   #:msg-command #:msg-reply #:decode-attach-flags
+   #:msg-command #:msg-reply
    ;; Command message codec (protocol-command.lisp, same package)
    #:+field-delimiter+
    #:encode-command-payload #:decode-command-payload #:target-field-p

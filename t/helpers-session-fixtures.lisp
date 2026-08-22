@@ -2,26 +2,6 @@
 
 ;;;; Session and buffer fixtures.
 
-(defmacro with-two-window-status-session ((sess win0 win1
-                                           &key (rows 6) (cols 80)
-                                           (mouse t)
-                                           (current-format "A")
-                                           (format "B")
-                                           (separator "|"))
-                                          &body body)
-  "Run BODY with a 2-window status-bar session tailored for click-hit tests."
-  `(with-isolated-options ("mouse" ,mouse
-                           "window-status-current-format" ,current-format
-                           "window-status-format" ,format
-                           "window-status-separator" ,separator)
-     (multiple-value-bind (,sess ,win0 _p0 ,win1 _p1)
-         (make-two-window-session ,cols (1- ,rows))
-       (declare (ignore _p0 _p1))
-       (session-select-window ,sess ,win0)
-       (with-loop-state
-         (let ((nerimux::*term-rows* ,rows)
-               (nerimux::*term-cols* ,cols))
-           ,@body)))))
 
 (defmacro with-empty-session ((var) &body body)
   "Bind VAR to a windowless session suitable for empty-state guard tests.
@@ -29,31 +9,16 @@
   `(let ((,var (make-session :id 1 :name "0" :windows nil)))
      ,@body))
 
-(defmacro with-empty-buffers (&body body)
-  "Run BODY with an empty paste buffer ring.
-   Isolates buffer state so tests cannot contaminate each other."
-  `(let ((old-buffers nerimux/buffer:*paste-buffers*)
-         (old-index nerimux/buffer:*buffer-auto-index*))
-     (unwind-protect
-          (progn
-            (nerimux/buffer:clear-paste-buffers)
-            ,@body)
-       (setf nerimux/buffer:*paste-buffers* old-buffers
-             nerimux/buffer:*buffer-auto-index* old-index))))
-
 (defmacro with-minimal-loop-session ((pane-var win-var sess-var &rest keys) &body body)
   "Combine with-minimal-session + with-loop-state for dispatch tests."
   `(with-minimal-session (,pane-var ,win-var ,sess-var ,@keys)
      (with-loop-state
        ,@body)))
 
-(defmacro with-session ((var rows cols) &body body)
-  "Bind VAR to a fresh session of ROWS x COLS, run BODY, then close all PTYs."
-  `(let ((,var (create-initial-session ,rows ,cols)))
-     (unwind-protect
-          (progn ,@body)
-       (dolist (p (all-panes ,var))
-         (ignore-errors (pty-close (pane-fd p) (pane-pid p)))))))
+;;; WITH-SESSION (real PTY-backed session, via create-initial-session) moved
+;;; to t/pty/helpers.lisp: R9.2's case-by-case audit found every one of its
+;;; callers spawned a real PTY, so all of them moved into the nerimux/pty-test
+;;; system, and this macro had no remaining caller here.
 
 (defun make-fake-window (id name &key (npanes 1))
   "A window with NPANES fake panes (fd -1) and a matching tree; the first pane is active.
@@ -103,30 +68,6 @@
   `(with-fake-session (,var :nwindows 1 :npanes 2)
      ,@body))
 
-(defmacro with-option-session ((var &rest make-args) &body body)
-  "Bind VAR to a fresh fake session and run BODY inside WITH-ISOLATED-CONFIG.
-   Use this when the test exercises option/config mutations (set-option, prefix,
-   key-table rewrites) that must not leak between tests.  Unlike WITH-FAKE-SESSION
-   this does NOT wrap in WITH-LOOP-STATE; add it explicitly when needed:
-     (with-option-session (s) (with-loop-state ...))"
-  `(with-isolated-config
-     (let ((,var (make-fake-session ,@make-args)))
-       ,@body)))
-
-(defmacro with-isolated-mouse-session ((var &key (nwindows 1) (npanes 1)
-                                            (rows 25) (cols 40)
-                                            (mouse t))
-                                       &body body)
-  "Run BODY with isolated config, mouse enabled, and a fake session.
-   NWINDOWS/NPANES control the session shape; ROWS/COLS default to the geometry
-   used by the mouse dispatch tests."
-  `(with-isolated-config
-     (with-mouse-option (,mouse)
-       (with-fake-session (,var :nwindows ,nwindows :npanes ,npanes)
-         (let ((nerimux::*term-rows* ,rows)
-               (nerimux::*term-cols* ,cols))
-           ,@body)))))
-
 (defmacro with-minimal-session ((pane-var win-var sess-var
                                  &key (width 20) (height 5)) &body body)
   "Bind PANE-VAR, WIN-VAR, SESS-VAR to a fresh single-pane session of WIDTH x HEIGHT.
@@ -171,6 +112,7 @@
                             :active pane))
          (sess (make-session :id session-id :name session-name
                              :windows (list win) :active win)))
+    (setf (pane-window pane) win)
     (window-select-pane win pane)
     (session-select-window sess win)
     (values sess win pane)))

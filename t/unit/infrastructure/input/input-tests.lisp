@@ -105,9 +105,13 @@
   ;; ── Package / constant coverage ─────────────────────────────────────────────
 
   ;; +poll-timeout-us+ is a positive fixnum used as the default select timeout.
+  ;; It moved to nerimux/ports (posix-port.lisp) when nerimux/config was
+  ;; deleted: a select-loop timing constant has no business living next to a
+  ;; config-file loader, and now that the loader is gone there is nowhere
+  ;; upward to depend on.
   (it "poll-timeout-us-constant-is-positive"
     (let ((timeout (symbol-value
-                    (find-symbol "+POLL-TIMEOUT-US+" '#:nerimux/config))))
+                    (find-symbol "+POLL-TIMEOUT-US+" '#:nerimux/ports))))
       (expect (integerp timeout))
       (expect (plusp timeout))))
 

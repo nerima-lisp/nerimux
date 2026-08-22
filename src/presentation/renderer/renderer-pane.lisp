@@ -132,7 +132,8 @@
   "Substitute the pane's window-style default colours DEF-FG / DEF-BG only for
    cells whose colour is the terminal-default sentinel (+default-color+).  Cells
    carrying an explicit palette index (including 7=white / 0=black) or true-colour
-   are left untouched, matching tmux's COLOUR_DEFAULT-gated window-style recolour."
+   are left untouched -- only cells still carrying the terminal-default sentinel
+   are eligible for window-style recolour."
   (let ((raw-fg (cell-fg cell))
         (raw-bg (cell-bg cell)))
     (values (if (and def-fg (= raw-fg nerimux/terminal/types:+default-color+)) def-fg raw-fg)
@@ -177,40 +178,51 @@
   selection-fg selection-bg
   mark-fg mark-bg)
 
-(defun %resolve-pane-style-colours (pane)
-  "Resolve PANE's window-style default colours and the copy-mode selection/mark
-   colours into a PANE-STYLE-COLOURS struct.
-   window-style / window-active-style: the active pane uses window-active-style,
-   every other pane window-style.  Empty (the default) → NIL defaults → no
-   recolouring, so panes render exactly as before unless the user opts in.
-   copy-mode-selection-style overrides the default reverse-video selection
-   highlight when it provides colours; copy-mode-mark-style colours the marked row."
-  (let* ((pane-win      (pane-window pane))
-         (pane-active-p (and pane-win (eq pane (window-active-pane pane-win))))
-         (window-style  (nerimux/options:get-option-for-pane
-                         (if pane-active-p "window-active-style" "window-style")
-                         pane)))
-    (multiple-value-bind (def-fg def-bg) (%window-style-default-colors window-style)
-      (multiple-value-bind (selection-fg selection-bg)
-          (%window-style-default-colors
-           (nerimux/options:get-option "copy-mode-selection-style" "reverse"))
-        (multiple-value-bind (mark-fg mark-bg)
-            (%window-style-default-colors
-             (nerimux/options:get-option "copy-mode-mark-style" "bg=red,fg=black"))
-          (make-pane-style-colours
-           :def-fg def-fg :def-bg def-bg
-           :selection-fg selection-fg :selection-bg selection-bg
-           :mark-fg mark-fg :mark-bg mark-bg))))))
+;;; window-style / window-active-style (the pane-background recolour hook)
+;;; defaulted to "" — no override — and nothing could ever set them once
+;;; domain/options (R2.2) has no config or set-option to write through, so
+;;; DEF-FG/DEF-BG below are always NIL: %pane-cell-base-colors never
+;;; recolours a cell.  copy-mode-mark-style (§1.4: mark the selection anchor
+;;; row) is the one style here that ever resolved to real colours — its
+;;; default "bg=red,fg=black" parsed via the old %color-name-to-cell-color
+;;; table to cell colours 1 (red) / 0 (black); those two integers are now
+;;; hardcoded instead of re-derived from the string every frame.
+;;;
+;;; copy-mode-selection-style (§1.4/R6.8: selection shown by video reverse)
+;;; never resolved to a colour either way — its default "reverse" and the
+;;; registry's "#{E:mode-style}" both parse to a plist with no :fg/:bg key,
+;;; so SELECTION-FG/-BG were always NIL and the highlight always came from
+;;; the reverse-video XOR in %pane-cell-attrs (below), never from a colour
+;;; substitution here.  Deleting the dead colour path leaves that XOR as the
+;;; only mechanism, matching the fixed decision exactly.
 
-(defun %render-pane-body (stream screen pane-height
-                          line-number-gutter-width content-origin-x content-width
+(defconstant +copy-mode-mark-fg+ 0
+  "Cell-colour index for the copy-mode mark row's foreground (black).
+   copy-mode-mark-style's fixed value is \"bg=red,fg=black\"; see the note above.")
+(defconstant +copy-mode-mark-bg+ 1
+  "Cell-colour index for the copy-mode mark row's background (red).")
+
+(defun %resolve-pane-style-colours (pane)
+  "Return PANE's fixed style colours as a PANE-STYLE-COLOURS struct.
+   DEF-FG/DEF-BG and SELECTION-FG/-BG are always NIL (see the note above this
+   function); only MARK-FG/MARK-BG carry a real colour."
+  (declare (ignore pane))
+  (make-pane-style-colours
+   :def-fg nil :def-bg nil
+   :selection-fg nil :selection-bg nil
+   :mark-fg +copy-mode-mark-fg+ :mark-bg +copy-mode-mark-bg+))
+
+(defun %render-pane-body (stream screen pane-height pane-width
                           origin-x origin-y
-                          line-number-base-style line-number-current-style line-number-mode
                           colours
                           &optional viewport)
-  "Render every row of PANE's screen content (and line-number gutter, when
-   active) to STREAM under the screen lock, then clear the screen's dirty flag.
-   COLOURS is the PANE-STYLE-COLOURS struct from %resolve-pane-style-colours."
+  "Render every row of PANE's screen content to STREAM under the screen
+   lock, then clear the screen's dirty flag.  COLOURS is the
+   PANE-STYLE-COLOURS struct from %resolve-pane-style-colours.
+   copy-mode-line-numbers is fixed \"off\" (§1.4), so there is no gutter to
+   reserve — content always fills the pane's full width; the per-row
+   gutter renderer this used to call
+   (renderer-pane-copy-mode-line-number.lisp) is now empty."
   (with-lock-held ((screen-lock screen))
     ;; Hoist selection boundary computation outside the cell loop so it is
     ;; computed once per frame instead of once per cell (~1920 times).
@@ -226,15 +238,9 @@
                                             :rect-p sel-rect-p
                                             :mark-row sel-mark-row :mark-col sel-mark-col)))
         (loop for row below pane-height do
-          (when (plusp line-number-gutter-width)
-            (%render-copy-mode-line-number-row stream screen row origin-x origin-y
-                                               line-number-gutter-width
-                                               line-number-base-style
-                                               line-number-current-style
-                                               line-number-mode))
-          (when (plusp content-width)
-            (move-to stream (+ origin-y row) content-origin-x)
-            (%render-cell-row stream screen content-width row
+          (when (plusp pane-width)
+            (move-to stream (+ origin-y row) origin-x)
+            (%render-cell-row stream screen pane-width row
                               sel
                               sgr-reg
                               (pane-style-def-fg colours) (pane-style-def-bg colours)
@@ -248,27 +254,17 @@
 
 (defun render-pane (stream session pane &key (viewport 0))
   "Draw the pane's screen into the real terminal at the pane's (x, y) offset."
+  (declare (ignore session))
   (let* ((screen      (pane-screen  pane))
          (pane-width  (pane-width  pane))
          (pane-height (pane-height pane))
          (origin-x    (pane-x     pane))
-         (origin-y    (pane-y     pane))
-         (line-number-mode (%copy-mode-line-number-mode))
-         (line-number-base-style
-           (%copy-mode-line-number-style-spec
-            (nerimux/options:get-option "copy-mode-line-number-style" "")))
-         (line-number-current-style
-           (%copy-mode-line-number-style-spec
-            (nerimux/options:get-option "copy-mode-current-line-number-style" ""))))
-    (multiple-value-bind (line-number-gutter-width content-origin-x content-width)
-        (%copy-mode-pane-geometry screen origin-x pane-height pane-width)
-      (%render-pane-body stream screen pane-height
-                         line-number-gutter-width content-origin-x content-width
-                         origin-x origin-y
-                         line-number-base-style line-number-current-style line-number-mode
-                         (%resolve-pane-style-colours pane)
-                         viewport)
-      ;; Copy-mode overlay is rendered as a right-aligned slice so it does not
-      ;; repaint the whole pane row.
-      (%render-copy-mode-position-overlay stream session pane
-                                          content-origin-x origin-y content-width))))
+         (origin-y    (pane-y     pane)))
+    (%render-pane-body stream screen pane-height pane-width
+                       origin-x origin-y
+                       (%resolve-pane-style-colours pane)
+                       viewport)
+    ;; Copy-mode overlay is rendered as a right-aligned slice so it does not
+    ;; repaint the whole pane row.
+    (%render-copy-mode-position-overlay stream pane
+                                        origin-x origin-y pane-width)))

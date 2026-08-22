@@ -10,8 +10,7 @@
 (defstruct (organization
             (:constructor %make-organization
                 (&key id host name repositories active-worktree-count
-                      attention-count missing-p tags notes recent-activity
-                      counts-derived-p)))
+                      attention-count missing-p counts-derived-p)))
   (id "" :type string)
   (host "" :type string)
   (name "" :type string)
@@ -19,9 +18,6 @@
   (active-worktree-count 0 :type fixnum)
   (attention-count 0 :type fixnum)
   (missing-p nil :type boolean)
-  (tags nil :type list)
-  (notes "" :type string)
-  (recent-activity nil :type list)
   (counts-derived-p nil :type boolean))
 
 (defun organization-key (host name)
@@ -36,7 +32,7 @@
 (defun make-organization (&key id host name repositories
                              (active-worktree-count 0)
                              (attention-count 0)
-                             missing-p tags (notes "") recent-activity)
+                             missing-p)
   (let* ((host-string (%model-string host))
          (name-string (%model-string name)))
     (%make-organization
@@ -47,9 +43,6 @@
      :active-worktree-count active-worktree-count
      :attention-count attention-count
      :missing-p (not (null missing-p))
-     :tags (copy-list tags)
-     :notes (%model-string notes)
-     :recent-activity (copy-list recent-activity)
      :counts-derived-p nil)))
 
 (defun organization-repository-count (organization)

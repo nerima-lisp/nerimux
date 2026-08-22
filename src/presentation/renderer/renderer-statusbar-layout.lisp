@@ -7,7 +7,7 @@
 
 ;;; ── SGR-aware length / truncation (inline #[attr] support) ───────────────────
 ;;;
-;;; tmux status strings may embed CSI SGR sequences — both from window-status
+;;; Status strings may embed CSI SGR sequences — both from window-status
 ;;; styling and from inline #[fg=…] blocks (expanded below).  Those sequences are
 ;;; zero-width on screen, so gap math and width clamping must count VISIBLE cells,
 ;;; not raw characters.  For escape-free strings these reduce exactly to
@@ -34,20 +34,28 @@
         (if (< j len) (1+ j) len)))))
 
 (defun %visible-length (str)
-  "Number of visible cells in STR, skipping CSI SGR escape sequences.
-   Equals (LENGTH STR) for strings with no escape sequences."
+  "Display-column width of STR, skipping CSI SGR escape sequences and
+   counting each remaining character by NERIMUX/TERMINAL/TYPES:CHAR-WIDTH
+   (0/1/2 — R6.9) rather than by character count, so a fullwidth window or
+   session name (CJK, kana, hangul) does not desync status-bar column math
+   the way (LENGTH STR) would.  Equals (LENGTH STR) for escape-free ASCII."
   (let ((n 0) (i 0) (len (length str)))
     (loop while (< i len)
           for esc-end = (%sgr-sequence-end str i)
           do (if esc-end
                  (setf i esc-end)
-                 (progn (incf n) (incf i))))
+                 (progn (incf n (nerimux/terminal/types:char-width (char str i)))
+                        (incf i))))
     n))
 
 (defun %visible-truncate (str n)
-  "Prefix of STR holding at most N visible cells; CSI escape sequences are copied
-   through without counting toward N.  Equals (SUBSEQ STR 0 (MIN N (LENGTH STR)))
-   for escape-free strings."
+  "Prefix of STR holding at most N display columns; CSI escape sequences are
+   copied through without counting toward N, and a fullwidth character that
+   would straddle the N-column boundary is dropped whole rather than split
+   (R6.9) — the caller's own gap math (e.g. %JUSTIFY-RIGHT, %STATUS-PAD-TO)
+   already fills the resulting short column with spaces, so this does not
+   pad itself.  Equals (SUBSEQ STR 0 (MIN N (LENGTH STR))) for escape-free
+   ASCII."
   (if (>= n (%visible-length str))
       str
       (with-output-to-string (out)
@@ -57,21 +65,30 @@
                 do (if esc-end
                        (progn (write-string str out :start i :end esc-end)
                               (setf i esc-end))
-                       (progn (write-char (char str i) out)
-                              (incf seen)
-                              (incf i))))))))
+                       (let ((w (nerimux/terminal/types:char-width (char str i))))
+                         (if (<= (+ seen w) n)
+                             (progn (write-char (char str i) out)
+                                    (incf seen w)
+                                    (incf i))
+                             (setf i len)))))))))
 
 (defun %status-style-block-sgr (body base-sgr)
-  "SGR escape string for one inline #[BODY] status block.
-   An empty / \"default\" / \"none\" BODY resets to BASE-SGR (reset + base attrs);
-   any other BODY is parsed as a tmux style string (e.g. \"fg=green,bold\")."
-  (let ((b (string-trim " " body)))
-    (if (member b '("" "default" "none") :test #'string-equal)
-        (format nil "~C[0;~Am" +esc+ base-sgr)
-        (format nil "~C[~Am" +esc+ (%status-sgr-from-style b)))))
+  "SGR escape string for one inline #[BODY] status block: always resets to
+   BASE-SGR (reset + base attrs), regardless of BODY.
+   Previously an empty / \"default\" / \"none\" BODY reset to BASE-SGR while
+   any other BODY was parsed as a style string (e.g. \"fg=green,bold\")
+   via %status-sgr-from-style, which R2.4 deleted along with the rest of the
+   style-string parser.  A non-default/none/empty BODY can only occur in
+   live data now (a window/session name that happens to contain literal
+   \"#[...]\" text — status-left/-right/window-status-format are fixed
+   templates that never embed one themselves, R2.3), so there is no longer a
+   config-authored style for a non-trivial BODY to mean anything; BODY is
+   accepted but ignored."
+  (declare (ignore body))
+  (format nil "~C[0;~Am" +esc+ base-sgr))
 
 (defun %status-expand-style-blocks (str base-sgr)
-  "Replace tmux inline #[…] style blocks in STR with CSI SGR escape sequences.
+  "Replace inline #[…] style blocks in STR with CSI SGR escape sequences.
    #[fg=green,bold] → ESC[1;32m ; #[default] → reset to BASE-SGR.  Returns STR
    unchanged when it contains no #[ block, so default/format paths are untouched."
   (if (search "#[" str)
@@ -92,30 +109,13 @@
                        (progn (write-char (char str i) out) (incf i))))))
       str))
 
-(defun %status-format-or-default (opt-name context default-fn)
-  "Return the expanded format string for OPT-NAME when it differs from its registered default;
-   otherwise call DEFAULT-FN.  CONTEXT is the format-expansion plist."
-  (let* ((spec    (gethash opt-name nerimux/options:*option-registry*))
-         (default (when spec (nerimux/options:option-spec-default spec)))
-         (current (nerimux/options:get-option opt-name nil)))
-    (if (and current (not (equal current default)))
-        (nerimux/format:expand-format current context)
-        (funcall default-fn))))
-
-(defun %status-segment-limit (max-length)
-  "Return a sane visible-length limit for status segment truncation.
-   Missing or malformed values fall back to the tmux default of 40 cells."
-  (if (numberp max-length)
-      (max 0 (truncate max-length))
-      40))
-
-(defun %clamp-status-segment (raw-text max-length)
-  "Return RAW-TEXT truncated to at most MAX-LENGTH visible cells.
-   CSI SGR sequences (from inline #[attr] blocks) do not count toward the limit."
-  (let ((limit (%status-segment-limit max-length)))
-    (if (> (%visible-length raw-text) limit)
-        (%visible-truncate raw-text limit)
-        raw-text)))
+;;; %status-format-or-default, %status-segment-limit, and
+;;; %clamp-status-segment used to live here: the option-driven per-segment
+;;; length cap ("status-left-length" et al.) that fed R6.5's predecessor
+;;; status bar. R6.5 replaced that bar outright with a fixed 3-block layout
+;;; whose own width handling is %COMPOSE-WORKSPACE-STATUS-LINE's progressive
+;;; degradation (renderer-statusbar.lisp) rather than a per-segment cap, so
+;;; nothing calls these any more; removed rather than left as dead code.
 
 (defun %split-comma-attrs (body)
   "Split BODY on commas and preserve empty fields."
@@ -126,68 +126,17 @@
           if pos do (setf start (1+ pos))
           else do (return (nreverse parts)))))
 
-;;; ── Status bar justify strategies (data layer) ───────────────────────────────
-;;;
-;;; define-justify-strategy is a Prolog-like fact table mapping a justify
-;;; keyword string to a layout formula:
-;;;   justify_strategy("right",  left, right-str, cols) :- %justify-right(…).
-;;;   justify_strategy("centre", left, right-str, cols) :- %justify-centre(…).
-;;;   justify_strategy(default,  left, right-str, cols) :- %justify-right(…).
-;;;
-;;; (Heterogeneous bodies — different formula per arm — so we use the
-;;; table to dispatch to per-strategy helpers rather than inlining the bodies.)
-
-(defun %justify-right (left right-str cols)
-  "Layout formula for right-justify: place RIGHT-STR flush against the right edge."
-  (let* ((gap  (max 0 (- cols (%visible-length left) (%visible-length right-str) 1)))
-         (line (format nil "~A~A ~A" left
-                       (make-string gap :initial-element #\Space)
-                       right-str)))
-    (%visible-truncate line cols)))
-
-(defun %justify-centre (left right-str cols)
-  "Layout formula for centre-justify: pad before LEFT so the combined text is centred."
-  (let* ((llen  (%visible-length left))
-         (rlen  (%visible-length right-str))
-         (total (+ llen 1 rlen))   ; 1 = the separator space before right-str
-         (pad-l (%center-coord cols total))
-         (gap   (max 0 (- cols llen pad-l 1 rlen)))
-         (line  (format nil "~A~A~A ~A"
-                        (make-string pad-l :initial-element #\Space)
-                        left
-                        (make-string gap :initial-element #\Space)
-                        right-str)))
-    (%visible-truncate line cols)))
-
-(defun %status-justify-line (left right-str cols justify)
-  "Assemble the status bar according to JUSTIFY (\"left\" \"centre\" \"right\").
-   COLS is the terminal width; result is truncated to COLS."
-  (if (string-equal justify "centre")
-      (%justify-centre left right-str cols)
-      (%justify-right  left right-str cols)))
-
-(defun %status-segment-style-sgr (option-name base-sgr)
-  "SGR parameter string for a status-segment style OPTION-NAME (status-left-style /
-   status-right-style), falling back to BASE-SGR (the status-style) when the option
-   is unset or \"default\"."
-  (let ((s (nerimux/options:get-option option-name "")))
-    (if (member s '("" "default") :test #'string-equal)
-        base-sgr
-        (%status-sgr-from-style s))))
-
-(defun %apply-segment-style (text seg-sgr base-sgr)
-  "Wrap a status-bar segment TEXT in its SEG-SGR style, reverting to BASE-SGR after
-   (so inter-segment padding keeps the base status style).  Returns TEXT unchanged
-   when SEG-SGR = BASE-SGR.  The wrapping SGR has zero visible length, so it does
-   not affect the justify padding (which uses %visible-length)."
-  (if (string= seg-sgr base-sgr)
-      text
-      (format nil "~C[~Am~A~C[~Am" +esc+ seg-sgr text +esc+ base-sgr)))
+;;; %justify-right / %justify-centre / %status-justify-line and
+;;; %status-segment-style-sgr / %apply-segment-style used to live here: the
+;;; left+right two-segment layout and per-segment SGR override for R6.5's
+;;; predecessor status bar (session name + window list vs. the clock). R6.5's
+;;; fixed 3-block layout has its own composer, %COMPOSE-WORKSPACE-STATUS-LINE
+;;; (renderer-statusbar.lisp), so these are gone rather than left unreachable.
 
 ;;; ── #[align=…] regions + status-format[0] template path ─────────────────────
 ;;;
-;;; tmux's status line is a single format whose #[align=left|centre|right] blocks
-;;; divide it into three regions positioned within the terminal width.  nerimux
+;;; A status line format can be a single string whose #[align=left|centre|right]
+;;; blocks divide it into three regions positioned within the terminal width.  nerimux
 ;;; normally renders the bar procedurally (status-left + window-list + status-
 ;;; right); when status-format[0] is SET it instead expands that template and
 ;;; composes the regions here.  The procedural default path is unchanged.

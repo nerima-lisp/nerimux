@@ -9,7 +9,7 @@
   ;; %accept-pending-connection accepts and registers a new client when the
   ;; listener fd appears in READY.
   (it "accept-pending-connection-registers-client-when-listener-ready"
-    (with-isolated-hooks
+    (progn
       (with-test-listener (listener path (%test-socket-path "accept-helper") :backlog 4)
         (let* ((listener-fd (nerimux/net:socket-fd listener))
                (nerimux::*clients* nil)
@@ -25,7 +25,7 @@
   ;; %accept-pending-connection does nothing when the listener fd is absent from
   ;; READY — no client is registered.
   (it "accept-pending-connection-noop-when-listener-not-ready"
-    (with-isolated-hooks
+    (progn
       (with-test-listener (listener path (%test-socket-path "accept-helper-noop") :backlog 4)
         (let ((listener-fd (nerimux/net:socket-fd listener))
               (nerimux::*clients* nil))
@@ -44,7 +44,7 @@
   ;; %dispatch-ready-clients drops a client whose stream yields EOF (a real closed
   ;; socket), removing it from *clients*.
   (it "dispatch-ready-clients-drops-client-on-eof"
-    (with-isolated-hooks
+    (progn
       (with-fake-session (s)
         (with-test-listener (listener path (%test-socket-path "dispatch-helper") :backlog 4)
           (let* ((client      (nerimux/net:connect-to path))

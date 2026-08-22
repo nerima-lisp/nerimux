@@ -1,7 +1,5 @@
 (in-package #:nerimux)
 
-(defvar *runtime-recovery-items* nil)
-
 (defvar *last-selected-worktree-token* nil
   "Stable selector for the most recently selected worktree across clients.")
 
@@ -28,83 +26,424 @@
        (error ,(if condition-var (list condition-var) '())
          ,on-error))))
 
+(defvar *client-esc-swallow-counts* (make-hash-table :test #'eq :weakness :key)
+  "CONN -> count of upcoming key bytes to discard unconditionally.
+
+Set by ESC in a text-input UI mode (:picker / :command, R4.3): the client
+forwards stdin one byte at a time, so an arrow key still arrives as the
+3-byte escape sequence ESC [ A/B/C/D, split across three separate key
+messages. R4.1 dropped byte-sequence matching entirely, so without this the
+trailing 2 bytes of that sequence would land on whatever key handler runs
+next (typically the search/command buffer) as literal `[` and a letter.
+Keyed by CONN rather than a client-conn slot because client-conn is defined
+in server-multi.lisp, outside this file's scope; :weakness :key lets a
+dropped connection's entry be reclaimed instead of leaking.")
+
+(defun %client-esc-swallow-start (conn &optional (n 2))
+  (setf (gethash conn *client-esc-swallow-counts*) n))
+
+(defun %client-esc-swallow-consume (conn)
+  "If CONN has a pending swallow count, decrement it and return T (the byte
+   this call was invoked for must be discarded). Returns NIL otherwise."
+  (let ((remaining (gethash conn *client-esc-swallow-counts*)))
+    (when (and remaining (plusp remaining))
+      (if (<= remaining 1)
+          (remhash conn *client-esc-swallow-counts*)
+          (setf (gethash conn *client-esc-swallow-counts*) (1- remaining)))
+      t)))
+
 (defun %handle-multi-attach-or-resize (session conn type payload)
-  "Update CONN's geometry from PAYLOAD, keep attach -r state, refresh client
-   ordering for window-size latest, and reapply the effective shared size."
+  "Update CONN's geometry from PAYLOAD, refresh client ordering for
+   window-size latest, and reapply the effective shared size."
+  (declare (ignore type))
   (multiple-value-bind (rows cols) (decode-size payload)
     (setf (client-conn-rows conn) rows
           (client-conn-cols conn) cols))
-  ;; attach-session -r carries read-only state in the optional attach flags byte.
-  (when (= type +msg-attach+)
-    (setf (client-conn-read-only-p conn)
-          (logtest (decode-attach-flags payload) +attach-flag-read-only+)))
   ;; Keep this client most-recent so window-size latest follows the active peer.
   (setf *clients* (cons conn (remove conn *clients*)))
   (%apply-effective-size session)
   nil)
 
 (defun %handle-multi-key-message (session conn payload)
-  "Feed PAYLOAD through the stdin-target fast path or the shared key pipeline."
-  (multiple-value-bind (prefix-handled prefix-result)
-      (%handle-workspace-prefix-key conn payload)
-    (if prefix-handled
-        prefix-result
-        (cond
-          ((and (eq (client-conn-mode conn) :normal)
-                (%client-byte-p payload 16))
-           (%open-client-picker conn))
-          ((eq (client-conn-mode conn) :picker)
-           (%handle-client-picker-key-payload session conn payload))
-          ((eq (client-conn-mode conn) :input)
-           (%handle-client-input-key-payload session conn payload))
-          ((eq (client-conn-mode conn) :copy)
-           (%handle-client-copy-key-payload session conn payload))
-          ((eq (client-conn-mode conn) :command)
-           (%handle-client-command-key-payload session conn payload))
-          ;; A key the workspace UI does not bind is dropped in :normal mode.
-          ;; It used to fall through to process-client-keys, the tmux keystroke
-          ;; pipeline (prefix key + key tables) -- that fallthrough was the only
-          ;; thing making tmux prefix bindings reachable from an attached
-          ;; client.  Typing into a pane is what :input mode is for; a
-          ;; split-window -I stdin-target still gets fed directly.
-          ((eq (client-conn-mode conn) :normal)
-           (or (%handle-client-normal-key-payload session conn payload)
-               (%feed-client-stdin-target conn payload)))
-          (t
-           (%feed-client-stdin-target conn payload))))))
+  "Feed PAYLOAD through the stdin-target fast path or the shared key pipeline.
+   A byte consumed by CONN's pending ESC-swallow (R4.3) never reaches any of
+   this: it is discarded before the prefix key and mode dispatch even see it."
+  (cond
+    ;; Swallowed by a pending ESC sequence (R4.3): never reaches any dispatch.
+    ((%client-esc-swallow-consume conn) nil)
+    ;; A confirmation owns every key while it is up (R6.4).
+    ((client-conn-confirm-view conn)
+     (nth-value 1 (%handle-confirm-key session conn payload)))
+    (t
+     (multiple-value-bind (prefix-handled prefix-result)
+         (%handle-workspace-prefix-key session conn payload)
+       (if prefix-handled
+           prefix-result
+           (cond
+             ((and (eq (client-conn-mode conn) :normal)
+                   (%client-byte-p payload 16))
+              (%open-client-picker conn))
+             ((eq (client-conn-mode conn) :picker)
+              (%handle-client-picker-key-payload session conn payload))
+             ((eq (client-conn-mode conn) :input)
+              (%handle-client-input-key-payload session conn payload))
+             ((eq (client-conn-mode conn) :copy)
+              (%handle-client-copy-key-payload session conn payload))
+             ((eq (client-conn-mode conn) :command)
+              (%handle-client-command-key-payload session conn payload))
+             ;; A key the workspace UI does not bind is dropped in :normal mode.
+             ;; It used to fall through to the prefix-key keystroke pipeline
+             ;; (prefix key + key tables) -- that fallthrough was the only
+             ;; thing making prefix bindings reachable from an attached
+             ;; client.  Typing into a pane is what :input mode is for; a
+             ;; stdin-target still gets fed.
+             ((eq (client-conn-mode conn) :normal)
+              (or (%handle-client-normal-key-payload session conn payload)
+                  (%feed-client-stdin-target conn payload)))
+             (t
+              (%feed-client-stdin-target conn payload))))))))
 
 (defun %feed-client-stdin-target (conn payload)
   "Feed PAYLOAD to CONN's split-window -I stdin target, if it has one.
    Returns NIL either way: an unbound key is a no-op, not a loop disposition."
   (let ((stdin-target (client-conn-stdin-target conn)))
-    (when (and stdin-target (not (client-conn-read-only-p conn)))
+    (when stdin-target
       (pane-feed stdin-target payload)
       (%mark-dirty))
     nil))
 
-(defun %handle-workspace-prefix-key (conn payload)
-  "Handle the client-local prefix and `d` detach binding.
+(defun %handle-workspace-prefix-key (session conn payload)
+  "Handle the client-local prefix (C-q, R4.4) and the key it introduces.
 
-The prefix is consumed before the stdin-target path, so C-q d always detaches
-the terminal connection while leaving the resident panes and runtime intact.
-Any non-`d` byte after the prefix is passed through to the normal key pipeline.
-"
+The prefix is consumed before the stdin-target path.  Once struck, the next
+byte is resolved against 1.5's binding table by %workspace-prefix-dispatch;
+a byte the table does not recognize is discarded there instead of falling
+through to the normal key pipeline — the old 'unbound means pass through'
+behavior (:96-107 pre-R4.4) is gone."
   (let ((single-byte (and (arrayp payload)
                           (= (length payload) 1)
                           (aref payload 0))))
     (cond
       ((client-conn-ui-prefix-p conn)
        (setf (client-conn-ui-prefix-p conn) nil)
-       (if (and (integerp single-byte)
-                (= single-byte (char-code #\d)))
-           (values t :drop)
-           (values nil nil)))
+       (values t (%workspace-prefix-dispatch session conn single-byte)))
       ((and (integerp single-byte)
             (= single-byte (client-conn-workspace-prefix-code conn)))
        (setf (client-conn-ui-prefix-p conn) t)
        (values t nil))
       (t
        (values nil nil)))))
+
+;;; ── C-q prefix action table (R4.4, 1.5) ─────────────────────────────────────
+;;;
+;;; Each action below takes SESSION/CONN and returns NIL (keep serving) or
+;;; :drop (detach, for `d`).  %workspace-prefix-dispatch is the single place
+;;; that maps a struck byte to an action; a byte not listed here is dropped.
+
+(defconstant +max-panes-per-window+ 4
+  "Hard cap on panes within one window (§1.4, R5.2).  A split requested while
+   a window is already at the cap opens a new window for the same worktree
+   instead of subdividing an existing pane further.")
+
+(defun %workspace-prefix-context (session conn)
+  "Return (values PANE WINDOW WORKTREE) for CONN's current focus, or all NIL
+   when nothing is focused.  The shared starting point for every prefix
+   action below."
+  (let* ((pane (%resolve-client-focus-pane session nil conn))
+         (window (and pane (pane-window pane)))
+         (worktree (and pane (pane-worktree pane))))
+    (values pane window worktree)))
+
+(defun %workspace-prefix-unzoom (window)
+  "R5.6: split, focus move, window switch, and pane close all disturb a
+   zoomed layout, so each un-zooms WINDOW first when it is zoomed, rather
+   than acting on (or silently failing against) the collapsed zoom tree."
+  (when (and window (window-zoom-p window))
+    (window-zoom-toggle window)))
+
+(defun %workspace-prefix-split (session conn orient)
+  "C-q - / C-q | : split the focused pane's window along ORIENT (R5.1/R5.3).
+   At the per-window pane cap, opens a new window in the same worktree
+   instead (R5.2) via the existing %open-client-worktree-pane path."
+  (multiple-value-bind (pane window worktree)
+      (%workspace-prefix-context session conn)
+    (cond
+      ((or (null pane) (null window))
+       (%client-notify conn "no focused pane"))
+      (t
+       ;; Un-zoom BEFORE reading window-panes: while zoomed, window-panes
+       ;; reflects only the single collapsed leaf (window-refresh-panes runs
+       ;; against the zoom's 1-leaf tree, not the real one), so the pane-cap
+       ;; check below would undercount a window that is actually already at
+       ;; +max-panes-per-window+.
+       (%workspace-prefix-unzoom window)
+       (cond
+         ((>= (length (window-panes window)) +max-panes-per-window+)
+          (%open-client-worktree-pane session conn worktree))
+         (t
+          (let ((new-pane (window-split session window orient
+                                        :start-dir (and worktree
+                                                        (worktree-path worktree)))))
+            (if new-pane
+                (progn
+                  (when worktree (worktree-add-pane worktree new-pane))
+                  ;; A split whose PTY failed to spawn comes back with a dead
+                  ;; (non-live) pane; starting a reader thread on it would call
+                  ;; select-fds on an invalid fd and crash the process.
+                  (when (pane-live-p new-pane)
+                    (start-reader-thread new-pane))
+                  (window-select-pane window new-pane)
+                  (%set-client-focus conn new-pane)
+                  (%mark-dirty))
+                ;; %split-fit-p already refused the split (too small); R5.1
+                ;; asks only for a message and otherwise doing nothing.
+                (%client-notify conn "pane too small to split")))))))
+    nil))
+
+(defun %workspace-refocus-after-window-close (session conn worktree)
+  "R5.4 fallback focus once a window closes because its last pane closed:
+   another window of the same WORKTREE (most recently active first), else
+   overview."
+  (let* ((candidates (and worktree (worktree-panes worktree)))
+         (best-pane
+           (and candidates
+                (first (sort (copy-list candidates) #'>
+                             :key (lambda (p) (window-last-active-time
+                                               (pane-window p))))))))
+    (if best-pane
+        (let* ((window (pane-window best-pane))
+               (active (window-active-pane window)))
+          (session-select-window session window)
+          (%set-client-focus conn active))
+        (%set-client-view conn :overview))))
+
+(defun %workspace-prefix-close-pane (session conn)
+  "C-q x : close the focused pane (R5.4).  Kills its PTY, drops it from its
+   worktree and window, and — when that empties the window — closes the
+   window too and refocuses per %workspace-refocus-after-window-close."
+  (multiple-value-bind (pane window worktree)
+      (%workspace-prefix-context session conn)
+    (cond
+      ((or (null pane) (null window))
+       (%client-notify conn "no focused pane"))
+      (t
+       (%workspace-prefix-unzoom window)
+       (close-pane-pty pane)
+       (when worktree
+         (setf (worktree-panes worktree) (delete pane (worktree-panes worktree)))
+         (setf (pane-worktree pane) nil))
+       (let ((sibling (window-remove-pane window pane)))
+         (if sibling
+             (progn
+               (window-select-pane window sibling)
+               (session-select-window session window)
+               (%set-client-focus conn sibling))
+             (progn
+               (session-remove-window session window)
+               (%workspace-refocus-after-window-close session conn worktree))))))
+    (%mark-dirty)
+    nil))
+
+(defun %workspace-prefix-toggle-zoom (session conn)
+  "C-q z : toggle zoom on the focused pane's window."
+  (multiple-value-bind (pane window) (%workspace-prefix-context session conn)
+    (declare (ignore pane))
+    (if window
+        (progn (window-zoom-toggle window) (%mark-dirty))
+        (%client-notify conn "no focused pane")))
+  nil)
+
+(defun %workspace-prefix-move-focus (session conn direction)
+  "C-q h/j/k/l : move focus to the neighbouring pane in DIRECTION,
+   un-zooming first per R5.6."
+  (multiple-value-bind (pane window) (%workspace-prefix-context session conn)
+    (cond
+      ((or (null pane) (null window))
+       (%client-notify conn "no focused pane"))
+      (t
+       (%workspace-prefix-unzoom window)
+       (let ((neighbor (pane-neighbor window pane direction)))
+         (if neighbor
+             (progn
+               (window-select-pane window neighbor)
+               (%set-client-focus conn neighbor)
+               (%mark-dirty))
+             (%client-notify conn (format nil "no pane ~A" direction)))))))
+  nil)
+
+(defun %workspace-prefix-cycle-window (session conn delta)
+  "C-q n / C-q p : cycle DELTA steps through the current worktree's windows
+   (wrapping), un-zooming the departing window first per R5.6."
+  (multiple-value-bind (pane window worktree)
+      (%workspace-prefix-context session conn)
+    (declare (ignore pane))
+    (cond
+      ((or (null window) (null worktree))
+       (%client-notify conn "no worktree selected"))
+      (t
+       (let* ((windows (%worktree-windows worktree))
+              (count (length windows))
+              (index (position window windows :test #'eq)))
+         (if (or (null index) (<= count 1))
+             (%client-notify conn "no other window")
+             (let* ((next-window (nth (mod (+ index delta) count) windows)))
+               (%workspace-prefix-unzoom window)
+               (session-select-window session next-window)
+               (%set-client-focus conn (window-active-pane next-window))
+               (%mark-dirty)))))))
+  nil)
+
+(defun %workspace-prefix-fetch-repository (conn)
+  "C-q F (R7.1): fetch the selected repository, then refresh status.
+
+A fetch already running for this repository is not started twice; the
+caller that finds one in flight is told so and the in-flight fetch's own
+completion is what eventually refreshes the picker (nerimux/vcs's
+FETCH-REPOSITORY-ASYNC)."
+  (let ((repository (%client-selected-repository conn)))
+    (cond
+      ((not repository)
+       (%client-notify conn "fetch requires a selected repository"))
+      ((not (nerimux/vcs:vcs-package-available-p))
+       (%client-notify conn "VCS adapter unavailable"))
+      (t
+       (%client-notify conn "fetching...")
+       (handler-case
+           (nerimux/vcs:fetch-repository-async
+            repository
+            :on-complete
+            (lambda (result)
+              (if result
+                  (progn
+                    (%refresh-client-picker conn)
+                    (%client-notify conn "fetch complete"))
+                  (%client-notify conn "fetch already in progress")))
+            :on-error
+            (lambda (condition)
+              (%client-notify conn (format nil "fetch failed: ~A" condition))))
+         (error (condition)
+           (%client-notify conn (format nil "fetch failed: ~A" condition)))))))
+  nil)
+
+(defun %workspace-prefix-fetch-organization (conn)
+  "C-q C-f (R7.1): fetch every repository in the selected organization
+concurrently, then refresh status. Duplicate suppression and the completion
+callback mirror %WORKSPACE-PREFIX-FETCH-REPOSITORY, one level up
+(nerimux/vcs:FETCH-ORGANIZATION-ASYNC)."
+  (let ((organization (%client-selected-organization conn)))
+    (cond
+      ((not organization)
+       (%client-notify conn "fetch requires a selected organization"))
+      ((not (nerimux/vcs:vcs-package-available-p))
+       (%client-notify conn "VCS adapter unavailable"))
+      (t
+       (%client-notify conn "fetching organization...")
+       (handler-case
+           (nerimux/vcs:fetch-organization-async
+            organization
+            :on-complete
+            (lambda (repositories)
+              (if repositories
+                  (progn
+                    (%refresh-client-picker conn)
+                    (%client-notify conn "fetch complete"))
+                  (%client-notify conn "fetch already in progress")))
+            :on-error
+            (lambda (repository condition)
+              (%client-notify
+               conn
+               (format nil "fetch failed for ~A: ~A"
+                       (nerimux/model:repository-id repository) condition))))
+         (error (condition)
+           (%client-notify conn (format nil "fetch failed: ~A" condition)))))))
+  nil)
+
+(defun %open-confirm-view (conn operation fields action)
+  "Put a y/n confirmation in front of CONN and remember what to run on y.
+   OPERATION titles the box; FIELDS is the ordered (LABEL . VALUE) body."
+  (setf (client-conn-confirm-view conn)
+        (nerimux/renderer:make-confirm-view :operation operation
+                                            :fields fields
+                                            :prompt-p t)
+        (client-conn-confirm-action conn) action)
+  (%mark-dirty)
+  nil)
+
+(defun %close-confirm-view (conn)
+  "Take the confirmation down and forget its pending action."
+  (setf (client-conn-confirm-view conn) nil
+        (client-conn-confirm-action conn) nil)
+  (%mark-dirty))
+
+(defun %handle-confirm-key (session conn payload)
+  "Answer the confirmation CONN is looking at.  Returns two values: whether the
+   key was consumed here, and the loop disposition.
+
+   Only y and n are consumed.  Every other key is swallowed too — a
+   confirmation that let j scroll the tree underneath it would be asking about
+   one thing while the user changed another."
+  (declare (ignore session))
+  (let ((action (client-conn-confirm-action conn)))
+    (cond
+      ((%client-key-p payload #\y)
+       (%close-confirm-view conn)
+       (values t (and action (funcall action))))
+      ((%client-key-p payload #\n)
+       (%close-confirm-view conn)
+       (%client-notify conn "cancelled")
+       (values t nil))
+      (t (values t nil)))))
+
+(defun %workspace-prefix-quit-server (session conn)
+  "C-q Q (R8.2): ask before stopping the server, showing how many panes are
+   still running so the count is in front of the user at the moment they answer
+   — not discovered afterwards."
+  (let* ((live  (%session-live-panes session))
+         (count (length live)))
+    (%open-confirm-view
+     conn
+     "SERVER QUIT"
+     (list (cons "session" (session-name session))
+           (cons "panes" (format nil "~D open" count))
+           (cons "effect" (if (plusp count)
+                              "every pane is signalled and the server exits"
+                              "the server exits")))
+     (lambda ()
+       ;; The confirm view already showed the live-pane count, so answering y IS
+       ;; the force decision; %server-kill-request's refusal branch exists for
+       ;; `nerimux kill` without --force, which has no screen to show it on.
+       (%server-kill-request session t)
+       :quit))))
+
+(defun %workspace-prefix-dispatch (session conn byte)
+  "Resolve BYTE — the key struck right after C-q — against 1.5's table and
+   run its action.  Returns the loop disposition (NIL to keep serving,
+   :drop for `d`).  A BYTE with no binding here is discarded: the prefix
+   already consumed it and nothing else happens (R4.4)."
+  (when (integerp byte)
+    (cond
+      ((= byte (char-code #\-)) (%workspace-prefix-split session conn :v))
+      ((= byte (char-code #\|)) (%workspace-prefix-split session conn :h))
+      ((= byte (char-code #\x)) (%workspace-prefix-close-pane session conn))
+      ((= byte (char-code #\z)) (%workspace-prefix-toggle-zoom session conn))
+      ((= byte (char-code #\h)) (%workspace-prefix-move-focus session conn :left))
+      ((= byte (char-code #\j)) (%workspace-prefix-move-focus session conn :down))
+      ((= byte (char-code #\k)) (%workspace-prefix-move-focus session conn :up))
+      ((= byte (char-code #\l)) (%workspace-prefix-move-focus session conn :right))
+      ((= byte (char-code #\n)) (%workspace-prefix-cycle-window session conn 1))
+      ((= byte (char-code #\p)) (%workspace-prefix-cycle-window session conn -1))
+      ((= byte (char-code #\F)) (%workspace-prefix-fetch-repository conn))
+      ((= byte #x06) (%workspace-prefix-fetch-organization conn)) ; C-f
+      ((= byte (char-code #\d)) :drop)
+      ((= byte (char-code #\Q)) (%workspace-prefix-quit-server session conn))
+      ((= byte (client-conn-workspace-prefix-code conn))
+       ;; C-q C-q: back to :normal — the only prefix action with no pane or
+       ;; worktree precondition, so it is handled inline rather than via a
+       ;; one-line %workspace-prefix-* wrapper.
+       (%transition-client-ui-mode conn :enter-normal)
+       (%mark-dirty)
+       nil)
+      (t nil))))
 
 (defparameter +client-ui-modes+ '(:normal :input :copy :command :picker))
 
@@ -165,70 +504,16 @@ Any non-`d` byte after the prefix is passed through to the normal key pipeline.
 
 (defun %workspace-tree-objects
     (&optional (organizations (nerimux/vcs:workspace-organizations)))
-  (loop for organization in organizations
-        append
-        (cons organization
-              (loop for repository in
-                        (nerimux/model:organization-repositories organization)
-                    append
-                    (cons repository
-                          (copy-list
-                           (nerimux/model:repository-worktrees repository)))))))
+  "The tree rows a client can currently select, in display order.
 
-(defun %workspace-repository-attention-p (repository)
-  (or (nerimux/model:repository-dirty-p repository)
-      (nerimux/model:repository-conflict-p repository)
-      (plusp (nerimux/model:repository-ahead repository))
-      (plusp (nerimux/model:repository-behind repository))
-      (nerimux/model:repository-missing-p repository)
-      (some #'nerimux/model:worktree-attention-p
-            (nerimux/model:repository-worktrees repository))))
-
-(defun %workspace-attention-items
-    (&optional (organizations (nerimux/vcs:workspace-organizations))
-               (messages nil))
-  "Return attention objects in the same order as the attention renderer.
-
-The objects remain the domain instances used by the catalog, so selecting an
-entry can focus its pane or return to the matching worktree without parsing a
-display label back into a target string."
-  (let ((items nil))
-    (dolist (organization organizations)
-      (dolist (repository (nerimux/model:organization-repositories organization))
-        (dolist (worktree (nerimux/model:repository-worktrees repository))
-          (when (nerimux/model:worktree-attention-p worktree)
-            (push worktree items))
-          (dolist (pane (reverse (nerimux/model:worktree-panes worktree)))
-            (when (nerimux/model:pane-attention-p pane)
-              (push pane items))))
-        (when (%workspace-repository-attention-p repository)
-          (push repository items))))
-    (dolist (recovery-item (reverse *runtime-recovery-items*))
-      (push recovery-item items))
-    (dolist (message (reverse messages))
-      (push message items))
-    (nreverse items)))
-
-(defun %attention-clamp-index (conn items)
-  (setf (client-conn-attention-index conn)
-        (if items
-            (min (1- (length items))
-                 (max 0 (client-conn-attention-index conn)))
-            0)))
-
-(defun %refresh-client-attention
-    (conn &optional (organizations (nerimux/vcs:workspace-organizations)))
-  (let* ((old-items (client-conn-attention-items conn))
-         (old-object (nth (client-conn-attention-index conn) old-items))
-         (items (%workspace-attention-items
-                 organizations
-                 (client-conn-message-log conn)))
-         (old-index (and old-object (position old-object items :test #'eq))))
-    (setf (client-conn-attention-items conn) items)
-    (if old-index
-        (setf (client-conn-attention-index conn) old-index)
-        (%attention-clamp-index conn items))
-    items))
+   Delegates to the renderer rather than walking the model itself. It used to
+   flatten organization -> repository -> worktree unconditionally, which was
+   correct only while the tree was always fully expanded: once R6.3 made rows
+   collapse and added the window and pane levels, this enumeration and the drawn
+   frame described different lists, and j/k walked the cursor onto rows the
+   frame was not showing."
+  (nerimux/renderer:workspace-tree-objects organizations
+                                           (%workspace-expanded-nodes)))
 
 (defun %workspace-worktree-matches-token-p (worktree token)
   (or (eq worktree token)
@@ -266,6 +551,33 @@ display label back into a target string."
                   token
                   (nerimux/model:worktree-path worktree)))
                (%workspace-worktrees organizations))))
+
+(defun %workspace-find-repository-for-attach (token organizations)
+  "The repository TOKEN names, by specification, local path, or id (R7.6).
+
+   `nerimux attach github.com/org/repo` is a repository selector, and until this
+   existed the attach path matched only against worktrees — so a repository
+   spec resolved to nothing and reported \"attach target not found\" for
+   something the workspace was holding."
+  (when (and (stringp token) (plusp (length token)))
+    (loop for organization in organizations
+          thereis
+          (find-if (lambda (repository)
+                     (some (lambda (field)
+                             (and (stringp field) (string= field token)))
+                           (list (nerimux/model:repository-specification
+                                  repository)
+                                 (nerimux/model:repository-local-path repository)
+                                 (nerimux/model:repository-id repository))))
+                   (nerimux/model:organization-repositories organization)))))
+
+(defun %open-client-picker-filtered (conn query)
+  "Open the picker with QUERY already typed (R7.6)."
+  (%open-client-picker conn)
+  (setf (client-conn-picker-query conn) (or query ""))
+  (%refresh-client-picker conn)
+  (%mark-dirty)
+  conn)
 
 (defun %worktree-selection-token (worktree)
   (and worktree
@@ -316,27 +628,49 @@ display label back into a target string."
     (%worktree-selection-token worktree)))
 
 (defun %client-attach-selection (conn organizations)
+  "Resolve what this client attached to, and say so when it is not one thing.
+
+   A selector with a slash can name a repository (github.com/org/repo) or a
+   local path, and both can be present at once. Picking one silently would send
+   the user somewhere they did not ask for, so an ambiguous selector opens the
+   picker with the selector already typed, filtered to what it matched (R7.6).
+   Selection by cwd, and by whatever was selected last, is unchanged: neither is
+   a selector the user typed, so neither can be ambiguous in this sense."
   (let* ((explicit (client-conn-attach-target conn))
+         (explicitp (and (stringp explicit) (plusp (length explicit))))
          (cwd (client-conn-attach-cwd conn))
          (previous (or (%client-selection-token conn)
                        *last-selected-worktree-token*))
-         (worktree (or (and (stringp explicit)
-                            (plusp (length explicit))
-                            (%workspace-find-worktree-for-attach
-                             explicit organizations))
-                       (and (stringp cwd)
-                            (plusp (length cwd))
-                            (%workspace-find-worktree-for-attach cwd organizations))
-                       (and previous
-                            (%workspace-find-worktree previous organizations)))))
-    (when worktree
-      (%set-client-selected-worktree conn worktree))
-    (when (and (stringp explicit)
-               (plusp (length explicit))
-               organizations
-               (null worktree))
-      (%client-notify conn (format nil "attach target not found: ~A" explicit)))
-    worktree))
+         (explicit-worktree
+           (and explicitp
+                (%workspace-find-worktree-for-attach explicit organizations)))
+         (explicit-repository
+           (and explicitp
+                (%workspace-find-repository-for-attach explicit organizations))))
+    (cond
+      ;; Both readings hit: let the user say which, rather than guessing.
+      ((and explicit-worktree explicit-repository)
+       (%open-client-picker-filtered conn explicit)
+       nil)
+      (t
+       (let ((worktree
+               (or explicit-worktree
+                   (and (stringp cwd)
+                        (plusp (length cwd))
+                        (%workspace-find-worktree-for-attach cwd organizations))
+                   (and previous
+                        (%workspace-find-worktree previous organizations)))))
+         (cond
+           (worktree
+            (%set-client-selected-worktree conn worktree))
+           ;; A repository and no worktree in it: select the repository so the
+           ;; overview opens there, rather than reporting it as not found.
+           (explicit-repository
+            (%set-client-selected-tree-object conn explicit-repository))
+           ((and explicitp organizations)
+            (%client-notify conn
+                            (format nil "attach target not found: ~A" explicit))))
+         worktree)))))
 
 (defun %rebind-client-selection (conn organizations)
   (or (%client-attach-selection conn organizations)
@@ -391,8 +725,7 @@ display label back into a target string."
                (setf (client-conn-picker-items client)
                      (nerimux/picker:build-global-picker-items organizations))
                (%picker-clamp-index client
-                                    (%client-picker-visible-items client))
-               (%refresh-client-attention client organizations))
+                                    (%client-picker-visible-items client)))
              (when (and on-complete (%client-live-p conn))
                (funcall on-complete organizations))
              (%mark-dirty))
@@ -408,7 +741,6 @@ display label back into a target string."
       (let ((organizations (nerimux/vcs:workspace-organizations)))
         (setf (client-conn-picker-items conn)
               (nerimux/picker:build-global-picker-items organizations))
-        (%refresh-client-attention conn organizations)
         (when on-complete
           (funcall on-complete organizations))))
   conn)
@@ -441,15 +773,9 @@ display label back into a target string."
     (and items
          (nth (client-conn-picker-index conn) items))))
 
-(defun %worktree-window-name (worktree)
-  (or (and (worktree-branch worktree)
-           (plusp (length (worktree-branch worktree)))
-           (worktree-branch worktree))
-      (and (worktree-path worktree)
-           (plusp (length (worktree-path worktree)))
-           (worktree-path worktree))
-      (worktree-id worktree)
-      "worktree"))
+;;; %worktree-window-name and %worktree-windows live in workspace-window.lisp
+;;; (which loads before this file), next to the other worktree-window
+;;; creation logic they serve.
 
 (defun %client-worktree-pane (session worktree)
   (and worktree
@@ -480,156 +806,41 @@ display label back into a target string."
              (let* ((window (%workspace-new-window
                              session
                              :name (%worktree-window-name worktree)
-                             :start-dir path))
+                             :start-dir path
+                             :start-reader-p nil))
                     (pane (window-active-pane window)))
-               (if pane
-                   (progn
-                     (worktree-add-pane worktree pane)
-                     (%set-client-selected-worktree conn worktree)
-                     (%set-client-focus conn pane)
-                     (%mark-dirty)
-                     t)
-                   (progn
-                     (%client-notify conn "worktree pane unavailable")
-                     nil))))
+               (cond
+                 ((null pane)
+                  (%client-notify conn "worktree pane unavailable")
+                  nil)
+                 ((not (pane-live-p pane))
+                  ;; R5.7: a pane that came back without a live PTY is a
+                  ;; startup failure — record it as durable pane state
+                  ;; (pane-mark-startup-failure) instead of only a
+                  ;; one-shot notification, so it survives as the `!`
+                  ;; overview mark (3.4) rather than vanishing once the
+                  ;; message log scrolls. No reader thread: start-reader-thread
+                  ;; would call select-fds on a dead pane's fd (-1 or worse,
+                  ;; unvalidated), which process-kit rejects outright.
+                  (pane-mark-startup-failure pane)
+                  (worktree-add-pane worktree pane)
+                  (%set-client-selected-worktree conn worktree)
+                  (%set-client-focus conn pane)
+                  (%client-notify conn "worktree pane failed to start")
+                  (%mark-dirty)
+                  t)
+                 (t
+                  (start-reader-thread pane)
+                  (worktree-add-pane worktree pane)
+                  (%set-client-selected-worktree conn worktree)
+                  (%set-client-focus conn pane)
+                  (%mark-dirty)
+                  t))))
          (error (condition)
            (%client-notify
             conn
             (format nil "worktree open failed: ~A" condition))
            nil))))))
-
-(defun %select-client-attention-relative (conn delta)
-  (let ((items (%refresh-client-attention conn)))
-    (when items
-      (setf (client-conn-attention-index conn)
-            (max 0
-                 (min (1- (length items))
-                      (+ (client-conn-attention-index conn) delta)))))
-    (%mark-dirty)
-    t))
-
-(defun %runtime-recovery-path (item)
-  (getf item :worktree-path))
-
-(defun %runtime-recovery-command (item)
-  (or (getf item :start-command)
-      (and (getf item :pane-state)
-           (getf (getf item :pane-state) :start-command))
-      ""))
-
-(defun %runtime-recovery-valid-path-p (path)
-  (or (null path)
-      (and (stringp path)
-           (plusp (length path))
-           (probe-file path))))
-
-(defun %remove-runtime-recovery-item (item)
-  (setf *runtime-recovery-items*
-        (remove item *runtime-recovery-items* :test #'eq))
-  item)
-
-(defun %recover-client-attention-item (session conn item)
-  (let* ((kind (getf item :kind))
-         (pane (getf item :pane))
-         (path (%runtime-recovery-path item))
-         (command (%runtime-recovery-command item)))
-    (cond
-      ((not (%runtime-recovery-valid-path-p path))
-       (%client-notify conn "runtime recovery path is missing"))
-      ((eq kind :lost-pane)
-       (if (and pane (not (nerimux/model:pane-live-p pane)))
-           (handler-case
-               (progn
-                 (respawn-pane session pane
-                               :start-dir path
-                               :default-command
-                               (and (plusp (length command)) command))
-                 (start-reader-thread pane)
-                 (let ((window (nerimux/model:pane-window pane)))
-                   (when window
-                     (nerimux/model:window-select-pane window pane)))
-                 (%set-client-focus conn pane)
-                 (%remove-runtime-recovery-item item)
-                 (%client-notify conn "runtime pane restarted"))
-             (error (condition)
-               (%client-notify
-                conn
-                (format nil "runtime pane restart failed: ~A" condition))))
-           (%client-notify conn "runtime pane is unavailable")))
-      ((eq kind :orphan-pane)
-       (handler-case
-           (let* ((window (%workspace-new-window
-                           session
-                           :name (or (getf item :window-name) "recovered")
-                           :start-dir path
-                           :start-reader-p nil))
-                  (new-pane (and window (window-active-pane window))))
-             (if new-pane
-                 (progn
-                   (respawn-pane session new-pane
-                                 :start-dir path
-                                 :default-command
-                                 (and (plusp (length command)) command))
-                   (start-reader-thread new-pane)
-                   (when (getf item :pane-state)
-                     (%runtime-restore-pane-state
-                      new-pane
-                      (getf item :pane-state)))
-                   (setf (pane-dead-status new-pane) nil
-                         (pane-dead-signal new-pane) nil
-                         (pane-dead-time new-pane) nil
-                         (pane-process-exited-p new-pane) nil
-                         (pane-non-zero-exit-p new-pane) nil
-                         (pane-startup-failed-p new-pane) nil)
-                   (let ((worktree (%workspace-find-worktree path)))
-                     (when worktree
-                       (worktree-add-pane worktree new-pane)
-                       (%set-client-selected-worktree conn worktree)))
-                   (nerimux/model:window-select-pane window new-pane)
-                   (%set-client-focus conn new-pane)
-                   (%remove-runtime-recovery-item item)
-                   (%client-notify conn "runtime pane recreated"))
-                 (%client-notify conn "runtime pane is unavailable")))
-         (error (condition)
-           (%client-notify
-            conn
-            (format nil "runtime pane recreation failed: ~A" condition)))))
-      (t
-       (%client-notify conn "runtime recovery item is unsupported")))
-    (%mark-dirty)
-    t))
-
-(defun %focus-client-attention (session conn)
-  (let* ((items (%refresh-client-attention conn))
-         (item (nth (client-conn-attention-index conn) items)))
-    (cond
-      ((typep item 'nerimux/model:pane)
-       (%set-client-focus conn item))
-      ((typep item 'nerimux/model:worktree)
-       (%set-client-selected-worktree conn item)
-       (let ((pane (%client-worktree-pane session item)))
-         (if pane
-             (%set-client-focus conn pane)
-             (%open-client-worktree-pane session conn item))))
-      ((typep item 'nerimux/model:repository)
-       (let* ((worktree (or (nerimux/model:repository-main-worktree item)
-                            (first (nerimux/model:repository-worktrees item))))
-              (pane (%client-worktree-pane session worktree)))
-         (if worktree
-             (progn
-               (%set-client-selected-tree-object conn worktree)
-               (if pane
-                   (%set-client-focus conn pane)
-                   (%open-client-worktree-pane session conn worktree)))
-             (progn
-               (%set-client-selected-tree-object conn item)
-               (%client-notify conn "repository has no worktree")))))
-      ((and (listp item) (getf item :runtime-recovery-p))
-       (%recover-client-attention-item session conn item))
-      ((stringp item)
-       (%client-notify conn item)))
-    (%mark-dirty)
-    t))
 
 (defun %select-client-picker-item (session conn)
   (let* ((item (%picker-selected-item conn))
@@ -728,18 +939,25 @@ display label back into a target string."
          (equalp payload #(10)))
      (%select-client-picker-item session conn))
     ((equalp payload #(27))
+     ;; R4.3: the client forwards one byte at a time, so an arrow key still
+     ;; arrives as ESC [ A/B/C/D across 3 separate key messages. Swallow the
+     ;; 2 bytes that would otherwise follow so they cannot land in whatever
+     ;; mode this ESC leaves the connection in.
+     (%client-esc-swallow-start conn)
      (%close-client-picker conn)
      t)
     ((equalp payload #(18))
      (%set-client-picker-regex conn nil nil))
-    ((equalp payload #(27 91 65))
+    ;; C-p / C-n move the selection. Not j and k: every other key here is a
+    ;; character of the search query, so a letter cannot also be a movement.
+    ;; This replaces four ESC [ A/B/C/D branches that were unreachable — the
+    ;; client sends one byte at a time, so the ESC closed the picker and R4.3
+    ;; swallowed the two bytes that would have identified the arrow. That left
+    ;; the picker with no way to move the selection at all.
+    ((equalp payload #(16))
      (%move-client-picker-index conn -1))
-    ((equalp payload #(27 91 66))
+    ((equalp payload #(14))
      (%move-client-picker-index conn 1))
-    ((equalp payload #(27 91 67))
-     (%move-client-picker-index conn 1))
-    ((equalp payload #(27 91 68))
-     (%move-client-picker-index conn -1))
     ((or (equalp payload #(8))
          (equalp payload #(127)))
      (%delete-client-picker-query-character conn))
@@ -758,9 +976,6 @@ display label back into a target string."
 
 (defun %client-key-p (payload character)
   (%client-byte-p payload (char-code character)))
-
-(defun %client-key-sequence-p (payload sequence)
-  (equalp payload sequence))
 
 (defun %client-payload-text (payload)
   (cond
@@ -786,22 +1001,26 @@ display label back into a target string."
 
 (defun %client-restore-command-view (conn)
   (let ((view (client-conn-command-return-view conn)))
-    (when (member view '(:overview :detail :attention) :test #'eq)
+    (when (member view '(:overview :detail) :test #'eq)
       (setf (client-conn-view conn) view))
     (setf (client-conn-command-return-view conn) nil)))
 
 (defun %client-select-pane-direction (session conn direction)
   (let* ((pane (%resolve-client-focus-pane session nil conn))
-         (window (and pane (nerimux/model:pane-window pane)))
-         (neighbor (and window (pane-neighbor window pane direction))))
-    (if neighbor
-        (progn
-          (%set-client-focus conn neighbor)
-          (%mark-dirty)
-          t)
-        (progn
-          (%client-notify conn (format nil "no pane ~A" direction))
-          t))))
+         (window (and pane (nerimux/model:pane-window pane))))
+    ;; R5.6: a zoomed window has no neighbours (pane-neighbor returns NIL by
+    ;; design), so un-zoom before looking one up rather than reporting "no
+    ;; pane <direction>" for a move that would otherwise have succeeded.
+    (%workspace-prefix-unzoom window)
+    (let ((neighbor (and window (pane-neighbor window pane direction))))
+      (if neighbor
+          (progn
+            (%set-client-focus conn neighbor)
+            (%mark-dirty)
+            t)
+          (progn
+            (%client-notify conn (format nil "no pane ~A" direction))
+            t)))))
 
 (defun %client-start-worktree-create (conn)
   (if (%client-selected-repository conn)
@@ -828,50 +1047,77 @@ display label back into a target string."
   t)
 
 (defun %focus-selected-client-worktree (session conn)
-  (unless (client-conn-selected-worktree conn)
-    (%select-client-tree-worktree conn nil))
-  (let* ((object (%client-tree-object conn))
-         (worktree (client-conn-selected-worktree conn))
-         (pane (%client-worktree-pane session worktree)))
+  "Enter on the selected tree row (R6.3).
+
+   What Enter means depends on the level, and the two upper levels mean
+   something the tree had no way to express before: organization and repository
+   rows toggle open and closed, so a workspace of a thousand repositories opens
+   showing organizations rather than everything at once. Enter on those used to
+   start a worktree-create prompt — which made the create flow reachable but
+   left expansion with no key at all."
+  (let ((object (%client-tree-object conn)))
     (cond
-      (pane
-       (%set-client-focus conn pane)
+      ((typep object 'nerimux/model:organization)
+       (%toggle-workspace-node-expanded
+        :organization (nerimux/model:organization-id object))
        (%mark-dirty)
        t)
-      (worktree
-       (or (%open-client-worktree-pane session conn worktree) t))
       ((typep object 'nerimux/model:repository)
-       (%client-start-worktree-create conn))
-      ((typep object 'nerimux/model:organization)
-       (%client-start-worktree-create conn))
+       (%toggle-workspace-node-expanded
+        :repository (nerimux/model:repository-id object))
+       (%mark-dirty)
+       t)
+      ((typep object 'nerimux/model:pane)
+       (%set-client-focus conn object)
+       (%set-client-view conn :detail)
+       (%mark-dirty)
+       t)
+      ((typep object 'nerimux/model:window)
+       (let ((pane (nerimux/model:window-active-pane object)))
+         (when pane
+           (%set-client-focus conn pane)
+           (%set-client-view conn :detail)))
+       (%mark-dirty)
+       t)
       (t
-       (%client-notify conn "no worktree selected")
-       t))))
+       (unless (client-conn-selected-worktree conn)
+         (%select-client-tree-worktree conn nil))
+       (let* ((worktree (client-conn-selected-worktree conn))
+              ;; The pane last focused in this worktree, so Enter returns to
+              ;; where the user was rather than to whichever pane happens to be
+              ;; first (R6.3).
+              (pane (or (%worktree-remembered-pane worktree)
+                        (%client-worktree-pane session worktree))))
+         (cond
+           ((and pane (nerimux/model:pane-live-p pane))
+            (%set-client-focus conn pane)
+            (%remember-worktree-pane worktree pane)
+            (%mark-dirty)
+            t)
+           (worktree
+            (or (%open-client-worktree-pane session conn worktree) t))
+           (t
+            (%client-notify conn "no worktree selected")
+            t)))))))
 
 (defun %handle-client-normal-key-payload (session conn payload)
   (let ((view (client-conn-view conn)))
     (cond
-      ((or (%client-key-sequence-p payload #(27 91 65))
-           (%client-key-p payload #\k))
+      ((%client-key-p payload #\k)
        (case view
          (:overview (%select-client-tree-relative conn -1) t)
          (:detail (%client-select-pane-direction session conn :up))
-         (:attention (%select-client-attention-relative conn -1))
          (otherwise nil)))
-      ((or (%client-key-sequence-p payload #(27 91 66))
-           (%client-key-p payload #\j))
+      ((%client-key-p payload #\j)
        (case view
          (:overview (%select-client-tree-relative conn 1) t)
          (:detail (%client-select-pane-direction session conn :down))
-         (:attention (%select-client-attention-relative conn 1))
          (otherwise nil)))
-      ((or (%client-key-sequence-p payload #(27 91 67))
-           (%client-key-p payload #\l))
+      ((%client-key-p payload #\l)
        (if (eq view :detail)
            (%client-select-pane-direction session conn :right)
            nil))
-      ((or (%client-key-sequence-p payload #(27 91 68))
-           (%client-key-p payload #\h))
+      ((%client-key-p payload #\h)
        (if (eq view :detail)
            (%client-select-pane-direction session conn :left)
            nil))
@@ -879,8 +1125,6 @@ display label back into a target string."
        (cond
          ((eq view :overview)
           (%focus-selected-client-worktree session conn))
-         ((eq view :attention)
-          (%focus-client-attention session conn))
          (t t)))
       ((and (eq view :overview) (%client-key-p payload #\n))
        (%client-start-worktree-create conn))
@@ -896,9 +1140,6 @@ display label back into a target string."
       ((%client-key-p payload #\o)
        (%set-client-view conn :overview)
        t)
-      ((%client-key-p payload #\a)
-       (%set-client-view conn :attention)
-       t)
       ((%client-key-p payload #\r)
        (%client-refresh-workspace conn)
        t)
@@ -912,75 +1153,64 @@ display label back into a target string."
       (t nil))))
 
 (defun %handle-client-input-key-payload (session conn payload)
-  (if (%client-byte-p payload 27)
-      (progn
-        (%transition-client-ui-mode conn :enter-normal)
-        (%mark-dirty)
-        t)
-      (if (client-conn-read-only-p conn)
-          t
-          (let ((pane (or (client-conn-stdin-target conn)
-                          (%resolve-client-focus-pane session nil conn))))
-            (cond
-              ((null pane)
-               (%client-notify conn "no focused pane"))
-              ((pane-live-p pane)
-               (handler-case
-                   (nerimux/pty:pty-write (pane-fd pane) payload)
-                 (error (condition)
-                   (%client-notify
-                    conn
-                    (format nil "input failed: ~A" condition)))))
-              ((pane-screen pane)
-               (pane-feed pane payload))
-              (t
-               (%client-notify conn "focused pane is unavailable")))
-            (%mark-dirty)
-            t))))
+  "Every byte, ESC included, is forwarded to the focused pane: :input mode has
+   no keyboard exit of its own (that returns with the C-q prefix, R4.4)."
+  (let ((pane (or (client-conn-stdin-target conn)
+                  (%resolve-client-focus-pane session nil conn))))
+    (cond
+      ((null pane)
+       (%client-notify conn "no focused pane"))
+      ((pane-live-p pane)
+       (handler-case
+           (nerimux/pty:pty-write (pane-fd pane) payload)
+         (error (condition)
+           (%client-notify
+            conn
+            (format nil "input failed: ~A" condition)))))
+      ((pane-screen pane)
+       (pane-feed pane payload))
+      (t
+       (%client-notify conn "focused pane is unavailable")))
+    (%mark-dirty)
+    t))
 
 (defun %handle-client-copy-key-payload (session conn payload)
-  (cond
-    ((%client-byte-p payload 27)
-     (%client-exit-copy-mode session conn))
-    (t
-     (let* ((pane (%resolve-client-focus-pane session nil conn))
-            (screen (and pane (pane-screen pane))))
-       (cond
-         ((null screen)
-          (%client-notify conn "no focused pane")
-          (%transition-client-ui-mode conn :enter-normal))
-         ((or (%client-key-sequence-p payload #(27 91 65))
-              (%client-key-p payload #\k))
-          (copy-mode-move-cursor screen :up))
-         ((or (%client-key-sequence-p payload #(27 91 66))
-              (%client-key-p payload #\j))
-          (copy-mode-move-cursor screen :down))
-         ((or (%client-key-sequence-p payload #(27 91 68))
-              (%client-key-p payload #\h))
-          (copy-mode-move-cursor screen :left))
-         ((or (%client-key-sequence-p payload #(27 91 67))
-              (%client-key-p payload #\l))
-          (copy-mode-move-cursor screen :right))
-         ((%client-key-p payload #\g)
-          (copy-mode-scroll screen most-positive-fixnum))
-         ((%client-key-p payload #\G)
-          (copy-mode-scroll screen (- most-positive-fixnum)))
-         ((%client-key-p payload #\Space)
-          (copy-mode-begin-selection screen))
-         ((%client-key-p payload #\y)
-          (copy-mode-yank screen))
-         ((%client-key-p payload #\n)
-          (copy-mode-search-next screen))
-         ((%client-key-p payload #\N)
-          (copy-mode-search-prev screen))
-         ((%client-key-p payload #\/)
-          (%client-enter-command-mode conn "search-forward "))
-         ((%client-key-p payload #\?)
-          (%client-enter-command-mode conn "search-backward "))
-         ((%client-key-p payload #\q)
-          (%client-exit-copy-mode session conn)))
-       (%mark-dirty)
-       t))))
+  "Copy-mode exit is bound to q only; ESC is a plain, unbound byte here (it no
+   longer doubles as an exit key -- see R4.2)."
+  (let* ((pane (%resolve-client-focus-pane session nil conn))
+         (screen (and pane (pane-screen pane))))
+    (cond
+      ((null screen)
+       (%client-notify conn "no focused pane")
+       (%transition-client-ui-mode conn :enter-normal))
+      ((%client-key-p payload #\k)
+       (copy-mode-move-cursor screen :up))
+      ((%client-key-p payload #\j)
+       (copy-mode-move-cursor screen :down))
+      ((%client-key-p payload #\h)
+       (copy-mode-move-cursor screen :left))
+      ((%client-key-p payload #\l)
+       (copy-mode-move-cursor screen :right))
+      ((%client-key-p payload #\g)
+       (copy-mode-scroll screen most-positive-fixnum))
+      ((%client-key-p payload #\G)
+       (copy-mode-scroll screen (- most-positive-fixnum)))
+      ((%client-key-p payload #\Space)
+       (copy-mode-begin-selection screen))
+      ((%client-key-p payload #\y)
+       (copy-mode-yank screen))
+      ((%client-key-p payload #\n)
+       (copy-mode-search-next screen))
+      ((%client-key-p payload #\N)
+       (copy-mode-search-prev screen))
+      ((%client-key-p payload #\/)
+       (%client-enter-command-mode conn "search-forward "))
+      ((%client-key-p payload #\?)
+       (%client-enter-command-mode conn "search-backward "))
+      ((%client-key-p payload #\q)
+       (%client-exit-copy-mode session conn)))
+    (%mark-dirty)
+    t))
 
 (defun %client-command-buffer-delete-character (conn)
   (let ((buffer (client-conn-command-buffer conn)))
@@ -1085,6 +1315,8 @@ display label back into a target string."
 (defun %handle-client-command-key-payload (session conn payload)
   (cond
     ((%client-byte-p payload 27)
+     ;; R4.3: see the matching comment in %handle-client-picker-key-payload.
+     (%client-esc-swallow-start conn)
      (setf (client-conn-command-buffer conn) "")
      (%client-restore-command-view conn)
      (%transition-client-ui-mode conn :enter-normal)
@@ -1147,11 +1379,9 @@ display label back into a target string."
   pane)
 
 (defun %set-client-view (conn view)
-  (when (member view '(:overview :detail :attention) :test #'eq)
+  (when (member view '(:overview :detail) :test #'eq)
     (setf (client-conn-view conn) view
           (client-conn-mode conn) :normal)
-    (when (eq view :attention)
-      (%refresh-client-attention conn))
     (%mark-dirty))
   (client-conn-view conn))
 
@@ -1346,6 +1576,24 @@ display label back into a target string."
                (nerimux/model:organization-repositories object)))
          (and (= (length repositories) 1)
               (first repositories)))))))
+
+(defun %client-selected-organization (conn &optional target)
+  "Resolve the organization C-q C-f should fetch: the selected organization
+itself, or the organization owning the selected repository or worktree.
+Mirrors %CLIENT-SELECTED-REPOSITORY's object-resolution chain, one level up
+the tree (R7.1)."
+  (let ((object
+          (or (%workspace-find-tree-object target)
+              (%client-tree-object conn)
+              (%workspace-find-tree-object (%client-selection-token conn))
+              (and (client-conn-focus conn)
+                   (nerimux/model:pane-worktree (client-conn-focus conn))))))
+    (typecase object
+      (nerimux/model:organization object)
+      (nerimux/model:repository (nerimux/model:repository-organization object))
+      (nerimux/model:worktree
+       (let ((repository (nerimux/model:worktree-repository object)))
+         (and repository (nerimux/model:repository-organization repository)))))))
 
 (defun %client-operation-worktree (conn &optional target)
   (or (%workspace-find-worktree target)
@@ -1646,29 +1894,36 @@ preview, or a preview of a different repository."
                 (format nil "worktree prune failed: ~A" condition))))
            t)))))
 
+(defun %handle-client-kill-command (session conn args)
+  "Serve `nerimux kill` (R8.1): answer with OK or DENIED, then drop the client.
+
+   The reply is not optional. send-kill-request blocks on a +msg-reply+, so a
+   handler that only acted and returned would leave the CLI waiting on a server
+   that considers the exchange finished. Returning :QUIT here is what stops the
+   serve loop -- and it only reaches the loop because
+   %handle-multi-command-message forwards this value rather than discarding it."
+  (multiple-value-bind (status descriptions)
+      (%server-kill-request session (%client-kill-force-p args))
+    (send-frame (client-conn-stream conn)
+                (msg-reply (if (eq status :denied)
+                               (format nil "DENIED~{~%~A~}" descriptions)
+                               "OK")))
+    (%drop-client conn)
+    (if (eq status :ok) :quit t)))
+
+(defun %client-kill-force-p (args)
+  "True when a kill command carried --force."
+  (and args (member "--force" args :test #'string=) t))
+
 (defun %handle-client-ui-command (session conn cmd target args)
   "Apply a client-local UI command, returning true when CMD is recognized."
   (cond
+    ((eq cmd :kill)
+     (%handle-client-kill-command session conn args))
     ((eq cmd :attach-target)
      (%client-attach-target conn args))
     ((member cmd '(:overview :workspace-overview :home) :test #'eq)
      (%set-client-view conn :overview)
-     t)
-    ((member cmd '(:attention :workspace-attention :attention-view) :test #'eq)
-     (%set-client-view conn :attention)
-     t)
-    ((member cmd '(:attention-up :attention-prev) :test #'eq)
-     (%select-client-attention-relative
-      conn
-      (- (or (%parse-client-integer (or target (first args))) 1)))
-     t)
-    ((member cmd '(:attention-down :attention-next) :test #'eq)
-     (%select-client-attention-relative
-      conn
-      (or (%parse-client-integer (or target (first args))) 1))
-     t)
-    ((member cmd '(:attention-select :attention-open) :test #'eq)
-     (%focus-client-attention session conn)
      t)
     ((member cmd '(:detail :pane-detail) :test #'eq)
      (%set-client-view conn :detail)
@@ -1813,21 +2068,25 @@ preview, or a preview of a different repository."
     (t nil)))
 
 (defun %handle-multi-command-message (session conn payload)
-  "Run a forwarded command or detach other clients, returning the loop disposition."
+  "Run a forwarded client-local UI command, returning the loop disposition."
   (multiple-value-bind (cmd target args) (decode-command-payload payload)
-    (cond
-      ;; The one built-in control command: drop all OTHER clients (attach -d).
-      ((eq cmd :detach-other-clients) :detach-others)
-      ((%handle-client-ui-command session conn cmd target args) nil)
-      ;; Anything the workspace UI does not recognize is rejected.  This used to
-      ;; fall through to %dispatch-forwarded-command, which ran the name against
-      ;; the tmux command table server-side -- that fallthrough was the only
-      ;; thing making the tmux command surface reachable from the `:` prompt.
-      (cmd
-       (%client-notify conn (format nil "unknown command: ~(~A~)" cmd))
-       (%mark-dirty)
-       nil)
-      (t (%mark-dirty) nil))))
+    (let ((result (%handle-client-ui-command session conn cmd target args)))
+      (cond
+        ;; The handler's own value decides the disposition. This used to be
+        ;; discarded to NIL unconditionally, which made :QUIT unreachable from
+        ;; any forwarded command however the handler was written -- the key path
+        ;; already forwarded its handler's value, which is why C-q d worked and
+        ;; nothing on this path could ever stop the server.
+        (result (if (eq result :quit) :quit nil))
+        ;; Anything the workspace UI does not recognize is rejected.  This used
+        ;; to fall through to %dispatch-forwarded-command, which ran the name
+        ;; against a server-side command table -- that fallthrough was the only
+        ;; thing making the forwarded-command surface reachable from `:`.
+        (cmd
+         (%client-notify conn (format nil "unknown command: ~(~A~)" cmd))
+         (%mark-dirty)
+         nil)
+        (t (%mark-dirty) nil)))))
 
 ;;; ── Per-client message dispatch ─────────────────────────────────────────────
 

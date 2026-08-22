@@ -46,12 +46,10 @@ nav:
   - Home: index.md
   - Getting started: getting-started.md
   - Guide:
-      - Configuration: guide/configuration.md
       - Dogfooded sibling libraries: guide/sibling-libraries.md
       - Development rules: guide/development-rules.md
   - Reference:
       - Architecture: reference/architecture.md
-      - Compatibility: reference/compatibility.md
       - Security model: reference/security-model.md
   - Benchmarks: benchmarks.md
 

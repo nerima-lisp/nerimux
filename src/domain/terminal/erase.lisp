@@ -61,10 +61,12 @@
        (erase-region screen 0 0 (1- w) (1- cy)))
      (erase-region screen 0 cy cx cy)))
   (2
-   ;; scroll-on-clear (tmux option, on by default): move the visible content into
-   ;; history before erasing, so a full-screen clear stays in the scrollback.
+   ;; A full-screen clear moves the visible content into history first, so what
+   ;; was on screen stays reachable in the scrollback. This was conditional on
+   ;; the scroll-on-clear option; with no config to turn it off it is simply what
+   ;; a clear does.
    (let ((w (screen-width screen)) (h (screen-height screen)))
-     (when (%scroll-on-clear-p) (scroll-screen-to-history screen))
+     (scroll-screen-to-history screen)
      (erase-region screen 0 0 (1- w) (1- h))))
   (3
    (let ((w (screen-width screen)) (h (screen-height screen)))

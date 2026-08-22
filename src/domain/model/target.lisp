@@ -1,10 +1,10 @@
 (in-package #:nerimux)
 
 ;;;; Session/window/pane target parsing and lookup — the "-t session:window.pane"
-;;;; DSL's data and matching layers. The tmux-style single public entry point
-;;;; that used to compose these (resolve-target/resolve-target-context) was
-;;;; deleted once nothing called it; find-pane-by-target itself still has a
-;;;; live caller.
+;;;; DSL's data and matching layers. The single public entry point that used
+;;;; to compose these (resolve-target/resolve-target-context) was deleted
+;;;; once nothing called it; find-pane-by-target itself still has a live
+;;;; caller.
 ;;;;
 ;;;; Architecture (data / logic separation):
 ;;;;   DATA  — parse-target splits a string into its three components
@@ -40,9 +40,10 @@
    The WINDOW portion is between the first colon and the first dot (if any).
    The PANE portion is everything after the first dot.
    A BARE token (no ':' or '.') carrying an id sigil selects its component
-   directly, matching tmux's position-independent ids: %N → pane, @N → window
-   ($N or a plain name → session).  Without this, `-t %2` / `-t @3` were
-   mis-parsed as session names and silently fell back to the active object."
+   directly, using the position-independent id convention: %N → pane, @N →
+   window ($N or a plain name → session).  Without this, `-t %2` / `-t @3`
+   were mis-parsed as session names and silently fell back to the active
+   object."
   (if (or (null target-string) (string= target-string ""))
       (values nil nil nil)
       (let* ((colon-pos (position #\: target-string))

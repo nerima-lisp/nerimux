@@ -56,20 +56,12 @@
     (let ((pane (make-no-pty-pane 1 0 0 5 5)))
       (expect (progn (pane-reposition pane 0 0 10 10) t) :to-be-truthy)))
 
-  ;; pane-border-status controls how pane-reposition reserves rows for the title bar.
-  (it "pane-reposition-border-status-table"
-    (dolist (row '(("top"    1  23 "top status shifts content down, height -1")
-                   ("bottom" 0  23 "bottom status keeps y, height -1")
-                   ("off"    0  24 "no status, full height preserved")))
-      (destructuring-bind (status expected-y expected-h desc) row
-        (declare (ignore desc))
-        (with-fresh-options
-          (nerimux/options:set-option "pane-border-status" status)
-          (let ((pane (make-no-pty-pane 1 0 0 20 5)))
-            (pane-reposition pane 0 0 80 24)
-            (expect (= expected-y (pane-y pane)))
-            (expect (= expected-h (pane-height pane)))
-            (expect (= expected-h (screen-height (pane-screen pane)))))))))
+  ;; pane-border-status and the row it used to reserve for a title bar are
+  ;; gone (R6.6: border is a plain line, never a status row — see
+  ;; pane-geometry.lisp's pane-reposition docstring).  pane-reposition's
+  ;; geometry is now always the full allocated rectangle; that is exercised
+  ;; by pane-reposition-updates-geometry-and-screen and
+  ;; pane-reposition-zero-origin above.
 
   ;; ── pane-reposition degenerate-layout guard ─────────────────────────────────
   ;;
@@ -77,11 +69,10 @@
   ;; to cl-tty-kit:set-terminal-size, whose %assert-terminal-dimension demands
   ;; POSITIVE integers and signals ("Terminal columns must be a positive integer,
   ;; got 0.") BEFORE attempting the ioctl — where the cffi path it replaced sent a
-  ;; 0x0 winsize to the kernel and dropped the -1 return.  pane-reposition is the
-  ;; one caller that COMPUTES its dimensions rather than receiving them:
-  ;; %pane-border-status-reservation returns a CONTENT-HEIGHT of 0 for an
-  ;; allocated HEIGHT of 0, so a degenerate layout would signal out of what is
-  ;; otherwise a pure geometry update.
+  ;; 0x0 winsize to the kernel and dropped the -1 return.  pane-reposition's
+  ;; geometry is now the caller's HEIGHT/WIDTH verbatim (no border-status
+  ;; reservation to compute it from), so a degenerate layout reaches the guard
+  ;; whenever the caller passes a zero dimension directly.
   ;;
   ;; The fd guard alone is NOT enough and this test would pass vacuously on a
   ;; make-no-pty-pane, whose fd is -1 — so the pane is given a positive fd and
@@ -90,71 +81,42 @@
   ;; pane-reposition skips the PTY resize when a computed dimension is zero, and
   ;; still performs it for a sane geometry.
   (it "pane-reposition-degenerate-dimensions-skip-the-pty-resize"
-    (with-fresh-options
-      (nerimux/options:set-option "pane-border-status" "off")
-      (let* ((calls nil)
-             (nerimux/ports:*resize-pty*
-               (lambda (fd rows cols) (push (list fd rows cols) calls)))
-             (pane (make-no-pty-pane 1 0 0 20 5)))
-        (setf (pane-fd pane) 3)              ; positive: the fd guard passes
-        ;; height 0 → content-height 0
-        (finishes (pane-reposition pane 0 0 40 0)
-                  "a zero content height must not reach set-pty-size")
-        (expect (null calls))
-        ;; width 0
-        (finishes (pane-reposition pane 0 0 0 10)
-                  "a zero width must not reach set-pty-size")
-        (expect (null calls))
-        ;; Positive control: a sane geometry still resizes, and still transposes
-        ;; into set-pty-size's (FD ROWS COLS) order.
-        (pane-reposition pane 0 0 40 10)
-        (expect (equal (list (list 3 10 40)) calls)))))
+    (let* ((calls nil)
+           (nerimux/ports:*resize-pty*
+             (lambda (fd rows cols) (push (list fd rows cols) calls)))
+           (pane (make-no-pty-pane 1 0 0 20 5)))
+      (setf (pane-fd pane) 3)              ; positive: the fd guard passes
+      ;; height 0
+      (finishes (pane-reposition pane 0 0 40 0)
+                "a zero height must not reach set-pty-size")
+      (expect (null calls))
+      ;; width 0
+      (finishes (pane-reposition pane 0 0 0 10)
+                "a zero width must not reach set-pty-size")
+      (expect (null calls))
+      ;; Positive control: a sane geometry still resizes, and still transposes
+      ;; into set-pty-size's (FD ROWS COLS) order.
+      (pane-reposition pane 0 0 40 10)
+      (expect (equal (list (list 3 10 40)) calls))))
 
   ;; ── next-pane-id direct tests (pure, no PTY) ─────────────────────────────
 
-  ;; next-pane-id returns pane-base-index when the window has no panes (default 0).
-  (it "next-pane-id-returns-base-index-for-empty-window"
+  ;; next-pane-id returns 1 when the window has no panes (§1.4 of
+  ;; docs/notes/workspace-requirements.md: pane numbering starts at 1 — fixed
+  ;; via window-core.lisp's +pane-base-index+, no longer a config option).
+  (it "next-pane-id-returns-one-for-empty-window"
     (let ((win (make-window :id 1 :name "w" :panes nil)))
-      ;; With pane-base-index=0 (default), first pane id is 0.
-      (expect (= (or (nerimux/options:get-option "pane-base-index") 0)
-                 (nerimux/model::next-pane-id win)))))
+      (expect (= 1 (nerimux/model::next-pane-id win)))))
 
-  ;; next-pane-id returns the lowest id >= pane-base-index not already in use.
+  ;; next-pane-id returns the lowest id >= 1 not already in use.
   (it "next-pane-id-fills-lowest-gap"
-    (let* ((base (or (nerimux/options:get-option "pane-base-index") 0))
-           (p1  (make-no-pty-pane (+ base 1) 0 0 10 5))
-           (p3  (make-no-pty-pane (+ base 3) 0 0 10 5))
-           (win (make-window :id 1 :name "w" :panes (list p1 p3))))
-      ;; The lowest gap above base should be filled.
-      (expect (= base (nerimux/model::next-pane-id win)))))
+    (let* ((p2  (make-no-pty-pane 2 0 0 10 5))
+           (p3  (make-no-pty-pane 3 0 0 10 5))
+           (win (make-window :id 1 :name "w" :panes (list p2 p3))))
+      ;; id 1 is the lowest free id (below the used 2 and 3).
+      (expect (= 1 (nerimux/model::next-pane-id win)))))
 
-  ;; ── split-window -d flag (no-focus) ─────────────────────────────────────────
-
-  ;; window-split :no-focus t creates the new pane but keeps the original active pane.
-  (it "split-window-no-focus"
-    (unless (pty-available-p)
-      (skip "PTY not available"))
-    (with-session (session 41 10)
-      (let* ((win (session-active-window session))
-             (active-pane (window-active-pane win)))
-        (let ((new-pane (window-split session win :h :no-focus t)))
-          (expect (not (null new-pane)))
-          (expect (eq active-pane (window-active-pane win)))
-          (expect (= 2 (length (window-panes win))))
-          ;; Clean up
-          (ignore-errors (pty-close (pane-fd new-pane) (pane-pid new-pane)))))))
-
-  ;; ── split-window -l size hint ────────────────────────────────────────────────
-
-  ;; window-split with a fractional size hint assigns the new pane a proportional width.
-  (it "split-window-size-hint-percentage"
-    (unless (pty-available-p)
-      (skip "PTY not available"))
-    (with-session (session 81 10)
-      (let ((win (session-active-window session)))
-        ;; Split with 0.25 size → new pane should be ~20 cols (25% of 80-col avail)
-        (let ((new-pane (window-split session win :h :size 0.25)))
-          (when new-pane
-            (expect (> (pane-width new-pane) 0))
-            (expect (< (pane-width new-pane) 81))
-            (ignore-errors (pty-close (pane-fd new-pane) (pane-pid new-pane)))))))))
+  ;; split-window-no-focus and split-window-size-hint-percentage (window-split
+  ;; -d / -l, real PTY spawns via WITH-SESSION) moved to
+  ;; t/pty/pane-tests-geometry-pty.lisp (R9.2).
+  )

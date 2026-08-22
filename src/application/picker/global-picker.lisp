@@ -190,15 +190,6 @@
                         (nerimux/model:organization-name
                          (picker-item-organization item)))
                    (and (picker-item-organization item)
-                        (nerimux/model:organization-tags
-                         (picker-item-organization item)))
-                   (and (picker-item-organization item)
-                        (nerimux/model:organization-notes
-                         (picker-item-organization item)))
-                   (and (picker-item-organization item)
-                        (nerimux/model:organization-recent-activity
-                         (picker-item-organization item)))
-                   (and (picker-item-organization item)
                         (when (nerimux/model:organization-missing-p
                                (picker-item-organization item))
                           "missing"))
@@ -256,15 +247,6 @@
                         (when (nerimux/model:repository-missing-p
                                (picker-item-repository item))
                           "missing"))
-                   (and (picker-item-repository item)
-                        (nerimux/model:repository-tags
-                         (picker-item-repository item)))
-                   (and (picker-item-repository item)
-                        (nerimux/model:repository-notes
-                         (picker-item-repository item)))
-                   (and (picker-item-repository item)
-                        (nerimux/model:repository-recent-activity
-                         (picker-item-repository item)))
                    (and (picker-item-worktree item)
                         (nerimux/model:worktree-status
                          (picker-item-worktree item)))
@@ -309,15 +291,6 @@
                    (and (picker-item-worktree item)
                         (nerimux/model:worktree-attention-reasons
                          (picker-item-worktree item)))
-                   (and (picker-item-worktree item)
-                        (nerimux/model:worktree-tags
-                         (picker-item-worktree item)))
-                   (and (picker-item-worktree item)
-                        (nerimux/model:worktree-notes
-                         (picker-item-worktree item)))
-                   (and (picker-item-worktree item)
-                        (nerimux/model:worktree-recent-activity
-                         (picker-item-worktree item)))
                    (and (picker-item-pane item)
                         (nerimux/model:pane-id (picker-item-pane item)))
                    (and (picker-item-pane item)
@@ -328,10 +301,6 @@
                    (and (picker-item-pane item)
                         (nerimux/model:pane-start-path
                          (picker-item-pane item)))
-                   (and (picker-item-pane item)
-                        (nerimux/model:pane-tags (picker-item-pane item)))
-                   (and (picker-item-pane item)
-                        (nerimux/model:pane-note (picker-item-pane item)))
                    (and (picker-item-pane item)
                         (nerimux/model:pane-last-output
                          (picker-item-pane item)))

@@ -1,7 +1,7 @@
 (in-package #:nerimux/test)
 
 ;;;; screen tests — part B: copy-mode slots, alt-screen cursor save,
-;;;; mouse-sgr-mode, response-queue, origin-mode, tab-stops,
+;;;; response-queue, origin-mode, tab-stops,
 ;;;; screen-lock, screen-cells/screen-parser accessors.
 
 (describe "terminal-suite/copy-mode-slots"
@@ -89,28 +89,6 @@
         ;; SGR state restored: bold + red should be back
         (expect (= saved-attrs (nerimux/terminal/types:screen-cur-attrs s)))
         (expect (= saved-fg (nerimux/terminal/types:screen-cur-fg s)))))))
-
-;;; ── SUITE: mouse-sgr-mode slot ───────────────────────────────────────────────
-
-(describe "terminal-suite/mouse-sgr-mode-suite"
-
-  ;; mouse-sgr-mode is NIL on a fresh screen.
-  (it "screen-mouse-sgr-mode-defaults-false"
-    (with-screen (s 10 5)
-      (expect (screen-mouse-sgr-mode s) :to-be-falsy)))
-
-  ;; ESC[?1006h enables SGR extended mouse encoding.
-  (it "screen-mouse-sgr-mode-enabled-by-1006h"
-    (with-screen (s 10 5)
-      (feed s (esc "[?1006h"))
-      (expect (screen-mouse-sgr-mode s) :to-be-truthy)))
-
-  ;; ESC[?1006l disables SGR extended mouse encoding.
-  (it "screen-mouse-sgr-mode-disabled-by-1006l"
-    (with-screen (s 10 5)
-      (feed s (esc "[?1006h"))
-      (feed s (esc "[?1006l"))
-      (expect (screen-mouse-sgr-mode s) :to-be-falsy))))
 
 ;;; ── SUITE: response-queue ────────────────────────────────────────────────────
 

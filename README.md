@@ -27,20 +27,12 @@ nerimux attach /path/to/worktree       # open a local worktree
 `attach` auto-starts the headless runtime and connects a thin client. Use
 `C-q d` to detach and `C-p` to open the global picker. A selector containing a
 slash is resolved as an organization/repository selector or a local worktree
-path. Pass `-r`/`--read-only` to attach without forwarding key, paste, or
-mouse input to panes. `attach` and `server` are the only commands; anything
-else — including `nerimux` with no arguments — prints the usage summary and
-exits non-zero.
+path. `attach` and `server` are the only commands; anything else — including
+`nerimux` with no arguments — prints the usage summary and exits non-zero.
 
-nerimux still parses a real `.tmux.conf` — `%if`, `%hidden`, variable
-assignments, brace blocks and `source-file` — from `$NERIMUX_CONF`, then
-`~/.config/nerimux/nerimux.conf`, then your existing tmux config. `run-shell`,
-`if-shell`, `set-environment` and the `set-option` values that drive the
-status bar, pane borders, `default-shell` and status height still take
-effect. `bind`/`unbind` and `set-hook` lines still parse without error but do
-nothing: the key-table store and the command-hook registry they wrote into were
-both removed once nothing read them. nerimux now warns to stderr when it sees
-one, rather than staying silent as it used to.
+nerimux reads no configuration file and has no runtime-configurable options.
+Every value the workspace UI depends on — shell, `$TERM`, scrollback length,
+split ratios, pane limits, and the rest — is a compiled-in constant.
 
 ## Install
 
@@ -63,12 +55,10 @@ so a build either reproduces exactly or fails loudly. From a checkout,
 
 - [Getting started](https://nerima-lisp.github.io/nerimux/getting-started/) —
   install, usage, default key bindings, running the suite
-- [Configuration](https://nerima-lisp.github.io/nerimux/guide/configuration/) —
-  `.tmux.conf` syntax and path resolution
-- [Compatibility](https://nerima-lisp.github.io/nerimux/reference/compatibility/) —
-  what is implemented, what is deliberately different, where the risk is
 - [Architecture](https://nerima-lisp.github.io/nerimux/reference/architecture/) —
   event flow, layering, source layout
+- [Security model](https://nerima-lisp.github.io/nerimux/reference/security-model/) —
+  the socket directory as the trust boundary
 
 ## Development
 
@@ -82,25 +72,21 @@ nix fmt              # format Nix sources (treefmt)
 Tests live in `t/` and run under
 [cl-weave](https://github.com/nerima-lisp/cl-weave), the org's test framework.
 `sbcl --script run-tests.lisp` is the entry point CI and the flake both use;
-set `NERIMUX_TEST_SYSTEM` to pick either `nerimux/test` (default) or
-`nerimux/dataflow`.
+`NERIMUX_TEST_SYSTEM` selects the system tested and defaults to `nerimux/test`,
+the only registered suite.
 
-nerimux is the org's L4 application package and its testbed: it runs on twelve
+nerimux is the org's L4 application package and its testbed: it runs on eleven
 sibling libraries — [cl-cli](https://github.com/nerima-lisp/cl-cli),
 [cl-boundary-kit](https://github.com/nerima-lisp/cl-boundary-kit),
 [cl-parser-kit](https://github.com/nerima-lisp/cl-parser-kit),
 [cl-tty-kit](https://github.com/nerima-lisp/cl-tty-kit),
 [cl-process-kit](https://github.com/nerima-lisp/cl-process-kit),
-[cl-history-kit](https://github.com/nerima-lisp/cl-history-kit),
 [cl-concurrent-kit](https://github.com/nerima-lisp/cl-concurrent-kit),
 [cl-regex-kit](https://github.com/nerima-lisp/cl-regex-kit),
 [cl-codec-kit](https://github.com/nerima-lisp/cl-codec-kit),
 [cl-host-kit](https://github.com/nerima-lisp/cl-host-kit),
 [cl-tui-kit](https://github.com/nerima-lisp/cl-tui-kit) and
 [cl-vcs-kit](https://github.com/nerima-lisp/cl-vcs-kit).
-[cl-dataflow-kit](https://github.com/nerima-lisp/cl-dataflow-kit) is dogfooded
-too, but backs the optional `nerimux/dataflow-model` system rather than the
-shipped binary.
 It has **no external dependencies**: it was the last repository in
 the org with any, and the final two (`bordeaux-threads`, `cl-ppcre`) were
 replaced by siblings on 2026-08-02. See

@@ -29,19 +29,10 @@
       nil)))
 
 (defun %apply-global-cli-invocation (invocation)
-  "Apply INVOCATION's parsed global options as side effects (socket overrides,
-   config-file override, colour-capability downsampling, read-only attach)
-   and return the remaining :mode-args rest positional — the mode word plus
-   its own args."
-  (let ((socket-name (cl-cli:option-value invocation :socket-name))
-        (socket-path (cl-cli:option-value invocation :socket-path))
-        (file        (cl-cli:option-value invocation :file)))
-    (when socket-name (setf *socket-name-override* socket-name))
-    (when socket-path (setf *socket-path-override* socket-path))
-    (when file (setf nerimux/config:*config-file-override* file))
-    (setf nerimux/renderer:*color-downsample-fn*
-          (when (cl-cli:option-value invocation :force-256) #'nerimux/renderer:%rgb-int-to-256))
-    (when (cl-cli:option-value invocation :read-only) (setf *client-read-only* t)))
+  "Return INVOCATION's remaining :mode-args rest positional — the mode word
+   plus its own args.  INVOCATION carries no other global options; -V and -h
+   are the only global flags and are handled by
+   %dispatch-global-cli-flag-actions."
   (cl-cli:positional-value invocation :mode-args))
 
 (defun %dispatch-global-cli-flag-actions (invocation mode-args)
@@ -55,9 +46,9 @@
 
 (defun main ()
   "Binary entry point - dispatches on the first argv item via *startup-modes*.
-   Global tmux(1)-compatible flags (-2/-D/-L/-N/-r/-S/-T/-V/-c/-f/-h/-l/-u/-v)
-   are parsed by *cli-app* (cl-cli, see main-startup-flags.lisp) from anywhere
-   in the leading flag run, in any order, before mode dispatch.
+   The global flags -V and -h are parsed by *cli-app* (cl-cli, see
+   main-startup-flags.lisp) from anywhere in the leading flag run, in any
+   order, before mode dispatch.
    Each entry in *startup-modes* is a plist (handler-symbol &key :raw-args-p).
    :raw-args-p T modes receive the full argv tail; all others receive a single
    session name (defaulting to \"0\").
@@ -86,12 +77,14 @@
 
    This used to have two other branches.  A recognized-looking command word was
    forwarded to a running server as a command client, and a bare `nerimux` with
-   no arguments started the standalone in-process multiplexer.  Both belonged to
-   the tmux compatibility surface: the forwarding branch is what actually made
-   `nerimux list-sessions` work, independently of the *startup-modes* table, so
-   removing the table entries alone would not have removed the capability.
-   The entry surface is now `attach` and `server`, and anything else — including
-   no argument at all — is rejected rather than guessed at."
+   no arguments started the standalone in-process multiplexer.  Both belonged
+   to the removed command-forwarding surface: the forwarding branch is what
+   actually made `nerimux list-sessions` work, independently of the
+   *startup-modes* table, so removing the table entries alone would not have
+   removed the capability.
+   The entry surface is now `attach`, `server`, and `kill` (1.6, R8.1), and
+   anything else — including no argument at all — is rejected rather than
+   guessed at."
   (declare (ignore rest))
   (declare (ignorable mode))
   (write-string (%usage-string) *error-output*)

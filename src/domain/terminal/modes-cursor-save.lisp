@@ -6,8 +6,10 @@
 
 (defun save-cursor (screen)
   "DECSC (ESC 7): save the cursor position, full SGR pen, charset state, and origin mode.
-   Mirrors tmux's input_save_state, which memcpy's the input cell (attrs/fg/bg) plus the
-   charset designation (set/g0set/g1set) and records s->mode (incl. MODE_ORIGIN).
+   A correct DECSC saves more than just cursor position: also the pen
+   (attrs/fg/bg), the charset designation (g0/g1/active), and the mode state
+   (including origin mode) -- omitting any of these breaks apps that rely on
+   DECSC/DECRC to round-trip full cursor state, not just x/y.
    Saves: cursor-x/y, cur-fg/bg/attrs/attrs2/ul-color, g0/g1/active charset, origin-mode."
   (setf (screen-saved-cursor screen)
         (list (screen-cursor-x     screen)
@@ -58,8 +60,8 @@
 
 (defun restore-cursor (screen)
   "DECRC (ESC 8): restore the cursor position, SGR pen, charset state, and origin mode
-   saved by DECSC.  Mirrors tmux's input_restore_state.  With nothing previously saved,
-   home the cursor and reset the SGR pen, charset, and origin mode to VT100 defaults."
+   saved by DECSC.  With nothing previously saved, home the cursor and reset the
+   SGR pen, charset, and origin mode to VT100 defaults."
   (if (null (screen-saved-cursor screen))
       (%restore-cursor-to-defaults screen)
       (%restore-cursor-from-snapshot screen (screen-saved-cursor screen))))

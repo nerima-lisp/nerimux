@@ -116,7 +116,7 @@
   ;; from; its survival in *CLIENTS* is therefore a real isolation check and not
   ;; an artefact of the loop having skipped it.
   (it "dispatch-ready-clients-drops-only-the-sender-of-a-malformed-command-frame"
-    (with-isolated-hooks
+    (progn
       (with-fake-session (s)
         (with-test-listener (listener path (%test-socket-path "malformed-utf8")
                                       :backlog 4)
