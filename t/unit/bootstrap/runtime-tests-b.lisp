@@ -62,4 +62,4 @@
     (let ((nerimux::*dirty* nil)
           (nerimux::*resize-pending* nil))
       (finishes (nerimux::install-sigwinch-handler)
-                "install-sigwinch-handler must not signal")))
+                "install-sigwinch-handler must not signal"))))
