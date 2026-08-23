@@ -96,11 +96,33 @@
             until (probe-file socket-path)
             do (sleep +server-socket-poll-interval-seconds+)))))
 
+(defun %server-respawn-command (session-name)
+  "(values EXE ARGS) respawning this image as `… server SESSION-NAME`.
+   sb-ext:*posix-argv* cannot be replayed for this: the C runtime strips the
+   runtime options it consumed (--core, --noinform, …), so under the Nix
+   wrapper — a bare sbcl runtime plus a separate core file — respawning
+   argv[0] with only (\"server\" NAME) starts a plain SBCL REPL that never
+   binds the socket.  Rebuild the command from *runtime-pathname* and
+   *core-pathname* instead, and always suppress init files: the spawned
+   server must stay as hermetic as the wrapper keeps its parent.  In an
+   :executable-core image *core-pathname* equals the runtime and no --core
+   option is needed; %application-argv (main-startup.lisp) strips the
+   --no-userinit prefix either way."
+  (let* ((runtime (namestring sb-ext:*runtime-pathname*))
+         (core (and sb-ext:*core-pathname*
+                    (namestring sb-ext:*core-pathname*))))
+    (values runtime
+            (append (when (and core (string/= core runtime))
+                      (list "--noinform" "--core" core))
+                    (list "--no-sysinit" "--no-userinit"
+                          "server" session-name)))))
+
 (defun %ensure-server-running (session-name)
   "Start a background server for SESSION-NAME if no live socket exists.
    A stale socket file (present but refusing connections) is unlinked
    first rather than treated as a live server (see %stale-socket-p).
-   Uses sb-ext:run-program with *posix-argv* to spawn a separate process.
+   Uses sb-ext:run-program with %server-respawn-command's runtime+core
+   command to spawn a separate process.
    Only enters the polling loop when run-program succeeded.
    Polls every +server-socket-poll-interval-seconds+ for up to
    +server-socket-poll-max-iterations+ iterations for the socket to appear.
@@ -112,17 +134,16 @@
    The spawned server's stdout/stderr are redirected to %runtime-log-path's
    per-session-name log file so a crash leaves a forensic trail instead of
    being discarded."
-  (let* ((socket-path (socket-path session-name))
-         (exe         (first sb-ext:*posix-argv*))
-         (args        (list "server" session-name))
-         (log-path    (%runtime-log-path session-name)))
-    (when (%stale-socket-p socket-path)
-      (ignore-errors (delete-file socket-path)))
-    (unless (probe-file socket-path)
-      ;; Guard: run-program may fail in test environments or when the
-      ;; binary is not yet on PATH.  Only poll if the spawn succeeded.
-      ;; :wait nil means non-blocking, so run-program returns after starting the child.
-      (%launch-server-and-poll-when-live socket-path exe args log-path))
-    (unless (probe-file socket-path)
-      (error "server failed to start (timed out waiting for socket at ~A)"
-             socket-path))))
+  (multiple-value-bind (exe args) (%server-respawn-command session-name)
+    (let ((socket-path (socket-path session-name))
+          (log-path    (%runtime-log-path session-name)))
+      (when (%stale-socket-p socket-path)
+        (ignore-errors (delete-file socket-path)))
+      (unless (probe-file socket-path)
+        ;; Guard: run-program may fail in test environments or when the
+        ;; binary is not yet on PATH.  Only poll if the spawn succeeded.
+        ;; :wait nil means non-blocking, so run-program returns after starting the child.
+        (%launch-server-and-poll-when-live socket-path exe args log-path))
+      (unless (probe-file socket-path)
+        (error "server failed to start (timed out waiting for socket at ~A)"
+               socket-path)))))
