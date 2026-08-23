@@ -7,9 +7,9 @@
 A workspace-oriented terminal multiplexer written entirely in Common Lisp.
 The primary UI navigates an organization → repository → worktree → pane
 workspace, with a thin client attached to a headless runtime. The entry
-surface is workspace-only — `attach` and `server` are the only commands —
-and every verified behavior is pinned by a regression suite that runs
-hermetically through Nix.
+surface is workspace-only — `attach`, `server`, and `kill` are the only
+commands — and every verified behavior is pinned by a regression suite that
+runs hermetically through Nix.
 
 Full documentation is published at <https://nerima-lisp.github.io/nerimux/>.
 The source for that site lives in [docs/src/](docs/src/).
@@ -20,15 +20,17 @@ The source for that site lives in [docs/src/](docs/src/).
 nix run github:nerima-lisp/nerimux -- attach
 
 nerimux attach                         # open the workspace overview
-nerimux attach organization/repository # focus a repository/worktree
+nerimux attach github.com/org/repo     # focus a repository by its ghq spec
 nerimux attach /path/to/worktree       # open a local worktree
+nerimux kill                           # stop the server (--force closes panes)
 ```
 
 `attach` auto-starts the headless runtime and connects a thin client. Use
 `C-q d` to detach and `C-p` to open the global picker. A selector containing a
-slash is resolved as an organization/repository selector or a local worktree
-path. `attach` and `server` are the only commands; anything else — including
-`nerimux` with no arguments — prints the usage summary and exits non-zero.
+slash is resolved as a repository selector — the full ghq specification,
+`host/organization/repository` — or a local worktree path. `attach`, `server`,
+and `kill` are the only commands; anything else — including `nerimux` with no
+arguments — prints the usage summary and exits non-zero.
 
 nerimux reads no configuration file and has no runtime-configurable options.
 Every value the workspace UI depends on — shell, `$TERM`, scrollback length,
@@ -39,7 +41,7 @@ split ratios, pane limits, and the rest — is a compiled-in constant.
 ```nix
 # flake.nix
 inputs.nerimux = {
-  url = "github:nerima-lisp/nerimux/v0.1.0";
+  url = "github:nerima-lisp/nerimux/v0.2.0";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
@@ -72,8 +74,10 @@ nix fmt              # format Nix sources (treefmt)
 Tests live in `t/` and run under
 [cl-weave](https://github.com/nerima-lisp/cl-weave), the org's test framework.
 `sbcl --script run-tests.lisp` is the entry point CI and the flake both use;
-`NERIMUX_TEST_SYSTEM` selects the system tested and defaults to `nerimux/test`,
-the only registered suite.
+`NERIMUX_TEST_SYSTEM` selects the system tested and defaults to `nerimux/test`.
+Real-PTY integration cases live in a second suite, `nerimux/pty-test`, run
+separately with `nix run .#test-pty` because the hermetic flake gate has no
+`/dev/ptmx`.
 
 nerimux is the org's L4 application package and its testbed: it runs on eleven
 sibling libraries — [cl-cli](https://github.com/nerima-lisp/cl-cli),

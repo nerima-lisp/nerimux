@@ -129,7 +129,7 @@ round-trip、connection slot への read-only state、read-only client の pane 
 
 | 作業単位 | 内容 | 保留理由 |
 | --- | --- | --- |
-| `workspace-overview` branch (97ebf05) | organization/repository/worktree/pane の全画面 overview + worktree 操作 (attach/lock/unlock/delete/prune) | main の `render-session-to-string` は既に client 単位の `:overview`/`:detail`/`:attention` view（`client-conn-view`、cl-tui-kit ベースの `renderer-tui-kit.lisp` 経由）を実装済みで、`workspace-overview` は同じ関数名を session 単位の `workspace-mode-p` 分岐で上書きしようとする、独立して書かれた別アーキテクチャだった。ドメインモデルも `nerimux/model`（main）と `nerimux/workspace`（このbranch）で重複している。機械的な merge では両者の分岐ロジックが同じ入口を奪い合い、正しく動作しないコードになるため、今回は統合を見送った。branch と worktree (`20260817T154253-d1ea1c1`) は削除せず保持している。次に着手する際は、まず `client-conn-view` 方式と `workspace-mode-p` 方式のどちらを正とするかを決め、選ばれなかった側の呼び出しグラフ（renderer、dispatch、ドメインモデル）を書き換える前提で見積もること。|
+| `workspace-overview` branch (97ebf05) | organization/repository/worktree/pane の全画面 overview + worktree 操作 (attach/lock/unlock/delete/prune) | main の `render-session-to-string` は既に client 単位の `:overview`/`:detail`/`:attention` view（`client-conn-view`、cl-tui-kit ベースの `renderer-tui-kit.lisp` 経由）を実装済みで、`workspace-overview` は同じ関数名を session 単位の `workspace-mode-p` 分岐で上書きしようとする、独立して書かれた別アーキテクチャだった。ドメインモデルも `nerimux/model`（main）と `nerimux/workspace`（このbranch）で重複している。機械的な merge では両者の分岐ロジックが同じ入口を奪い合い、正しく動作しないコードになるため、今回は統合を見送った。branch と worktree (`20260817T154253-d1ea1c1`) は削除せず保持している(2026-08-19 節の註のとおり、この branch と worktree はその後消失しており、現在の保持対象ではない)。次に着手する際は、まず `client-conn-view` 方式と `workspace-mode-p` 方式のどちらを正とするかを決め、選ばれなかった側の呼び出しグラフ（renderer、dispatch、ドメインモデル）を書き換える前提で見積もること。|
 
 ### 削除した worktree / branch
 
@@ -225,12 +225,73 @@ wc -l` は 240 を返す。統合直前の状態からの差分は
    削除されたのは CLI 側の `-r` flag parsing だけであり、`*client-read-only*`
    (`src/bootstrap/runtime.lisp`) を non-nil にする経路がどこにもなくなった。
    つまり「削除」ではなく「配線を失って到達不能になった」状態である。
+   （2026-08-23 註: この wire flag と enforcement はその後完全に削除された。
+   `grep -rn "client-conn-read-only-p\|attach-flag-read-only" src/ t/` は
+   0 件。現状は `docs/src/reference/security-model.md` が正。）
 
 この区別と、影響を受けた他の claim (dispatch/events 由来の Sprint 1〜3 の各
 機能) の詳細な突き合わせは `docs/notes/permissions-and-verification.md` の
 冒頭注記と `docs/notes/coverage-audit-history.md` の該当箇所の "Since
 removed" 注記、および公開ドキュメントの
-`docs/src/reference/compatibility.md`(Removed節) と
+`docs/src/reference/compatibility.md`(Removed節。2026-08-23 註: このファイルは
+その後削除され現存しない) と
 `docs/src/reference/security-model.md`(No access control beyond the socket
 boundary節) に記録した。`docs/src/reference/security-model.md` は
 `nix build .#docs`(`mkdocs build --strict`) で exit code 0 を確認済み。
+
+## 2026-08-23 attach 導線の修復
+
+このセクションは、全導線を実バイナリで駆動する E2E 検証で見つかった欠陥の
+修復と、その main への反映・掃除を記録する。
+
+### 統合した作業単位
+
+すべて PR #10 (`fix/workspace-flow-repairs`、merge commit `0710baf`) の
+1 commit = 1 作業単位。
+
+| commit | 内容 |
+| --- | --- |
+| `eb47977` | `organization-recompute-counts` の `mapcan` が worktree リストを破壊的連結し、同一 organization に 2 個目のリポジトリが入ると循環リスト化してカタログスキャンが無限ループしていたのを修正 |
+| `471c37d` | attach の server 自動起動が argv[0] を再実行していたのを修正。SBCL の C ランタイムは消費済みの `--core` を `*posix-argv*` から除去するため、Nix ラッパー構成では素の SBCL REPL が起動し自動起動は一度も動作していなかった |
+| `7dba857` | serve loop が select の readiness 1 回につき 1 フレームしか読まず、1 回の read(2) でストリームバッファに合体吸収された後続フレーム(attach 直後の `:attach-target` など)が次のキー入力まで放置されていたのを、`listen` によるドレインで修正 |
+| `d8bfe0f` | ghq ルート内の読めないリポジトリ 1 個でスキャン全体が中断しカタログが無言で空になっていたのを、エントリ単位で隔離し missing フラグ表示に変更 |
+| `877fe28` | カタログはスキャン完了時点で存在するのに、全リポジトリの status 取得完了まで画面が dirty にならず「scanning...」のままだったのを、`:on-catalog` フックで即時描画に変更 |
+
+### 検証
+
+- ローカル (macOS) ではテストスイートが実行不能(既知の SBCL 停止問題)の
+  ため、検証は「built binary を PTY で駆動する導線スイート」で行った:
+  CLI フラグ/usage、server の socket 生成、attach 自動起動、ツリー操作、
+  pane 起動とシェル往復、detach/reattach、picker、セレクタ/パス attach、
+  kill 拒否と `--force`、実 ghq ルート(92 リポジトリ)のカタログ描画、の
+  35 項目。単一走行で 34/35、残る 1 項目 (picker Enter) も独立 3 走行で
+  PASS を確認した。揺らぎは記録済みの macOS 固有スレッド停止によるもの。
+- `scripts/checks` の静的検査 4 種と `nix build .` はローカルで exit 0。
+- canonical gate は PR #10 の CI (`nix flake check`, x86_64-linux) で pass。
+
+### 削除した worktree / branch
+
+| 対象 | 種別 | 削除理由 |
+| --- | --- | --- |
+| `.worktrees/20260821T101817-dcdd4fb` | worktree (detached, dcdd4fb) | 変更なし、固有の作業なし。 |
+| `origin/update_flake_lock_action` | remote branch | 2026-08-17 作成の flake.lock 更新で、workspace-only 化以前のツリーが前提。open PR もなく、main 側の lock が既に更新済みで陳腐化していた。定期 workflow が必要になれば再生成する。 |
+| `fix/workspace-flow-repairs` | local + remote branch | PR #10 merge 済みで main から到達可能。 |
+
+作業に使った worktree (`.worktrees/20260823T003126-08c9aa0`) と docs branch
+は、この記録を含む docs 反映が main に到達したのを確認してから削除する。
+
+### 残る注意点
+
+- `t/e2e/e2e-smoke.lisp` は削除済みの standalone mode と `C-b` prefix を
+  前提にしており、現在のエントリ面では成立しない。`attach`/`C-q d` 前提の
+  書き直しが別作業として残る(docs/src/getting-started.md にも現状を記載)。
+- `nerimux kill` の拒否メッセージ先頭に wire プロトコルの status token
+  (`DENIED`) がそのまま混入して表示される。表示崩れのみの軽微な問題。
+- 修正 5 件はいずれも既存の単体スイートでは到達できない形の欠陥だった
+  (単一リポジトリのフィクスチャ、ラッパー経由でのみ発現、TCP セグメント
+  分割依存、実環境の壊れたクローンが必要)。回帰テスト化は別作業として残る。
+- バージョン表記が三つ巴で食い違っている: `nerimux -V` は 0.1.0、
+  `nerimux.asd` は 0.3.0、最新 tag は v0.2.0。どれを正とするかの整理が
+  別作業として残る(README のピン例は最新 tag の v0.2.0 に合わせた)。
+- `src/presentation/renderer/renderer.lisp` ヘッダの "File layout" 一覧が
+  現在のファイル構成と一致していない(コメントのみの陳腐化)。
