@@ -167,12 +167,21 @@
             nil)
           (error condition)))))
 
-(defun refresh-workspace-organizations-async (&key query on-complete on-error)
-  "Refresh and store the workspace catalog on a worker thread."
+(defun refresh-workspace-organizations-async (&key query on-catalog on-complete
+                                                on-error)
+  "Refresh and store the workspace catalog on a worker thread.
+   ON-CATALOG, when given, is called with the organizations as soon as the
+   scan itself completes — before the per-repository status refresh, which
+   runs `git status` across every repository and can take seconds on a large
+   root.  ON-COMPLETE still fires only after the statuses; a UI caller uses
+   ON-CATALOG to paint the freshly scanned tree instead of holding the
+   \"scanning...\" placeholder until every status has arrived."
   (scan-repositories-async
    :query query
    :on-complete (lambda (organizations)
                   (set-workspace-organizations organizations)
+                  (when on-catalog
+                    (funcall on-catalog organizations))
                   (refresh-workspace-status-async
                    :organizations organizations
                    :on-complete on-complete
