@@ -197,7 +197,14 @@
                          (setf (gethash key organizations) candidate))))
               (nerimux/model:organization-add-repository
                organization repository)
-              (list-repository-worktrees repository))))
+              ;; One unreadable repository (a broken or half-deleted clone in
+              ;; the ghq root) must not abort the scan: the enclosing
+              ;; handler-case would blank the entire catalog with no message.
+              ;; Keep the entry, mark it missing, move on.
+              (handler-case
+                  (list-repository-worktrees repository)
+                (error ()
+                  (setf (nerimux/model:repository-missing-p repository) t))))))
         (let ((result
                 (sort (loop for organization being the hash-values of organizations
                             collect organization)
