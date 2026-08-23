@@ -69,9 +69,13 @@
                               (repository-worktrees repository))))
 
 (defun organization-recompute-counts (organization)
+  ;; APPEND over copies, never MAPCAN: MAPCAN nconcs the repositories' own
+  ;; worktree lists in place, and once an organization holds two repositories
+  ;; a second recompute closes that shared tail into a cycle, hanging every
+  ;; later traversal (the workspace scan spins at 100% CPU forever).
   (let ((worktrees
-          (mapcan #'repository-worktrees
-                  (organization-repositories organization))))
+          (loop for repository in (organization-repositories organization)
+                append (copy-list (repository-worktrees repository)))))
     (setf (organization-missing-p organization)
           (some #'repository-missing-p
                 (organization-repositories organization))

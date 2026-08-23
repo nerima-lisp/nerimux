@@ -330,6 +330,15 @@
       ;; true forever with no on-error callback ever going to run.
       (handler-case
           (nerimux/vcs:refresh-workspace-organizations-async
+         ;; Paint the tree the moment the scan lands: the status refresh
+         ;; behind it runs git across every repository and can take seconds
+         ;; on a large root, and nothing else marks the screen dirty in the
+         ;; meantime — clients would hold the "scanning..." placeholder (or a
+         ;; stale empty tree) until every status arrived.
+         :on-catalog
+         (lambda (organizations)
+           (declare (ignore organizations))
+           (%mark-dirty))
          :on-complete
          (lambda (organizations)
            ;; R6.2: flips scanning-p false for every client from here on,

@@ -32,15 +32,32 @@
     (:quit :quit)
     (:drop (%drop-client conn :bye t) nil)))
 
+(defun %dispatch-buffered-client-messages (session conn)
+  "Dispatch the message select reported for CONN, then keep dispatching while
+   CONN's stream still holds buffered input.  One read(2) can slurp several
+   protocol frames into the Lisp stream's buffer — the client sends
+   msg-attach and its attach-target command back-to-back, and they usually
+   coalesce into one segment — after which the raw fd is no longer readable,
+   so select alone would leave the buffered tail unread until some later
+   keystroke arrived.  Returns :quit when a disposition ends the session."
+  (loop
+    (let ((disposition (%read-and-dispatch-client-message session conn)))
+      (when (eq :quit (%apply-client-disposition disposition conn))
+        (return :quit))
+      ;; :drop closed CONN's socket; reading further would error.
+      (when (eq disposition :drop)
+        (return nil))
+      (unless (ignore-errors (listen (client-conn-stream conn)))
+        (return nil)))))
+
 (defun %dispatch-ready-clients (session ready)
-  "Read + dispatch one message from every client whose fd is in READY.
+  "Read + dispatch pending messages from every client whose fd is in READY.
    Returns :quit as soon as any client's disposition ends the session, else NIL
    once every ready client has been served."
   (loop for conn in (copy-list *clients*)
         when (member (client-conn-fd conn) ready)
-          do (let ((disposition (%read-and-dispatch-client-message session conn)))
-               (when (eq :quit (%apply-client-disposition disposition conn))
-                 (return :quit)))))
+          do (when (eq :quit (%dispatch-buffered-client-messages session conn))
+               (return :quit))))
 
 (defun %multi-serve-iteration (listener session)
   "One iteration of the multi-client server loop: broadcast a dirty frame, then
