@@ -20,15 +20,24 @@ nix build .                           # → ./result/bin/nerimux
 
 ```bash
 nerimux attach                         # open the workspace overview
-nerimux attach organization/repository # focus a repository/worktree
+nerimux attach github.com/org/repo     # focus a repository by its ghq spec
 nerimux attach /path/to/worktree       # open a local worktree
+nerimux kill                           # stop the server (--force closes panes)
 ```
 
 `attach` auto-starts the headless runtime and connects a thin client. A selector
-containing a slash is resolved as an organization/repository selector or a
-local worktree path. `attach` and `server` are the only commands; anything
-else — including `nerimux` with no arguments — prints the usage summary and
-exits non-zero. `-V`/`-h` are the only global flags.
+containing a slash is resolved as a repository selector — the full ghq
+specification, `host/organization/repository` — or a local worktree path; a
+selector that matches both readings at once opens the global picker with the
+selector pre-typed instead of guessing. `attach`, `server`, and `kill` are the
+only commands; anything else — including `nerimux` with no arguments — prints
+the usage summary and exits non-zero. `-V`/`-h` are the only global flags.
+
+The overview tree appears as soon as the repository scan finishes; the
+per-repository VCS status (dirty/ahead/behind flags) streams in afterwards,
+since it runs `git status` across every repository. A repository the scan
+cannot read — a broken or half-deleted clone in the root — is kept in the
+tree flagged `!` rather than aborting the scan.
 
 If `attach` has to auto-start the server and something goes wrong, the
 spawned server's stdout/stderr are captured to a per-session-name log file
@@ -98,17 +107,20 @@ nerimux-coverage ./coverage-report    # sb-cover report via cl-weave
 
 The main suite (`find t -name '*.lisp' | wc -l` for today's file count) runs on
 [cl-weave](https://github.com/nerima-lisp/cl-weave) and covers the VT100
-emulator, layout geometry, copy mode, the client/server protocol, and live
-PTY integration against a real shell. PTY tests self-skip where `/dev/ptmx`
-is unavailable, so sandboxed runs stay meaningful. The runner is deliberately
-sequential — tests share global session/socket/PTY state.
+emulator, layout geometry, copy mode, and the client/server protocol. The
+runner is deliberately sequential — tests share global session/socket state.
 
-There is also an end-to-end smoke test that drives the real binary inside a
-PTY. It is deliberately kept out of the ASDF test system:
+Live PTY integration against a real shell is a separate system,
+`nerimux/pty-test`, run with `nix run .#test-pty`. It was split out of the
+main suite (R9.2) so that `nix flake check` never reports a pass for PTY
+work it silently skipped in a sandbox without `/dev/ptmx`; run it yourself
+when touching PTY code, because the flake gate does not.
 
-```bash
-nix build .
-sbcl --no-sysinit --no-userinit --script t/e2e/e2e-smoke.lisp result/bin/nerimux
-```
+There is also an end-to-end smoke script, `t/e2e/e2e-smoke.lisp`, kept out of
+the ASDF test system because it needs a built binary and a real `/dev/ptmx`.
+It currently predates the workspace-only entry surface: it launches the bare
+binary as the PTY's shell (relying on the removed standalone mode) and detaches
+with the removed `C-b` prefix, so it does not pass against today's binary and
+needs a rewrite around `attach`/`C-q d` before it is usable again.
 
 Measured suite runtimes are recorded in [Benchmarks](benchmarks.md).

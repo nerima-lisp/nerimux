@@ -16,8 +16,8 @@ stdin, raw mode                                %multi-serve-iteration, one per t
   ▼                                              2. select() listener fd + every
 %forward-stdin-byte                                 client fd (+poll-timeout-us+)
   │  +msg-key+ frame                              3. accept a new connection
-  ▼                                              4. dispatch one message per
-SIGWINCH ──► %maybe-send-resize                     ready client
+  ▼                                              4. drain every buffered message
+SIGWINCH ──► %maybe-send-resize                     from each ready client
   │  +msg-resize+ frame
   ▼                                                            │
    length-prefixed frame, Unix socket ───────────────────────► ▼
@@ -49,13 +49,9 @@ SIGWINCH ──► %maybe-send-resize                     ready client
                                                 → +msg-frame+ frame back to that client
 ```
 
-The client holds no session state at all — no prefix key, no key tables, no
-per-window layout. It puts stdin in raw mode, forwards every byte as a
-`+msg-key+` frame, forwards a `+msg-resize+` frame when `SIGWINCH` fires, and
-writes back whatever `+msg-frame+` payload the server sends
-(`src/bootstrap/client.lisp`). All key handling, mode transitions, and
-rendering happen server-side, keyed off the per-connection `CLIENT-CONN`
-struct in `src/bootstrap/server-multi.lisp`.
+The client side of the diagram is `src/bootstrap/client.lisp`; everything on
+the server side is keyed off the per-connection `CLIENT-CONN` struct in
+`src/bootstrap/server-multi.lisp`.
 
 The server renders **per client**, not once for the whole session: each
 attached `CLIENT-CONN` can be at a different view (overview/detail), a
@@ -185,7 +181,7 @@ REPL) is gone too.
 ```
 nerimux/
 ├── flake.nix               # Nix build + checks (pure Lisp, no C compilation)
-├── nerimux.asd             # ASDF systems: nerimux, /test
+├── nerimux.asd             # ASDF systems: nerimux, /test, /pty-test
 ├── run-tests.lisp          # single Lisp-level test entry point
 ├── src/
 │   ├── bootstrap/          # packages, entry point (`attach`/`server`), the
