@@ -62,9 +62,9 @@
   "Try the unredirected server launch after diagnostic logging is unavailable."
   (handler-case
       (sb-ext:run-program exe args :wait nil :output nil :error nil)
-    (sb-ext:process-error () nil)
     (file-error () nil)
-    (stream-error () nil)))
+    (stream-error () nil)
+    (error () nil)))
 
 (defun %launch-server-and-poll-when-live (socket-path exe args log-path)
   "Spawn EXE/ARGS non-blocking, redirecting its stdout and stderr to LOG-PATH
@@ -95,7 +95,7 @@
                                     :error :output))
             (file-error () (%launch-server-without-log exe args))
             (stream-error () (%launch-server-without-log exe args))
-            (sb-ext:process-error () (%launch-server-without-log exe args)))))
+            (error () (%launch-server-without-log exe args)))))
     ;; Poll only when we actually attempted a launch.  This avoids the
     ;; unconditional 3-second dead-time when run-program silently failed.
     (when launched

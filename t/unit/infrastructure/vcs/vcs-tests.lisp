@@ -31,6 +31,19 @@
       (expect (string= "local" organization))
       (expect (string= "default" name)))))
 
+(describe "vcs callback dispatch"
+  (it "defers a callback through the supplied dispatcher"
+    (let ((queued nil)
+          (result nil))
+      (nerimux/vcs::%dispatch-callback
+       (lambda (thunk) (setf queued thunk))
+       (lambda (value) (setf result value))
+       :done)
+      (expect (null result))
+      (expect (functionp queued))
+      (funcall queued)
+      (expect (eq :done result)))))
+
 (describe "vcs worktree status"
   (it "marks an absent worktree without querying the adapter"
     (let* ((path
@@ -77,9 +90,10 @@
            (threads
              (nerimux/vcs:refresh-repositories-async
               repositories
-              :refresh-function (lambda (repository)
-                                  (declare (ignore repository))
-                                  (sleep 0.2))
+              :status-reader (lambda (repository)
+                               (declare (ignore repository))
+                               (sleep 0.2)
+                               nil)
               :on-complete (lambda (refreshed)
                              (declare (ignore refreshed))
                              (setf completed t))))
@@ -113,9 +127,10 @@
            (threads
              (nerimux/vcs:refresh-workspace-status-async
               :organizations (list organization)
-              :refresh-function (lambda (repository)
-                                  (declare (ignore repository))
-                                  (sleep 0.2))
+              :status-reader (lambda (repository)
+                               (declare (ignore repository))
+                               (sleep 0.2)
+                               nil)
               :on-complete (lambda (refreshed)
                              (declare (ignore refreshed))
                              (setf completed t))))
@@ -131,6 +146,37 @@
       (loop until completed
             while (< (get-internal-real-time) deadline)
             do (sleep 0.01))
+      (expect completed))))
+
+(describe "async vcs status ownership"
+  (it "applies worker results and completes only through the dispatcher"
+    (let* ((repository
+             (nerimux/model:make-repository
+              :specification "workspace-owner/project"
+              :local-path "/tmp/project"))
+           (queued nil)
+           (completed nil)
+           (thread
+             (first
+              (nerimux/vcs:refresh-repositories-async
+               (list repository)
+               :status-reader (lambda (current)
+                                (expect (eq repository current))
+                                :dirty)
+               :status-applier (lambda (current update)
+                                 (expect (eq :dirty update))
+                                 (setf (nerimux/model:repository-dirty-p current)
+                                       t))
+               :callback-dispatch (lambda (thunk) (push thunk queued))
+               :on-complete (lambda (repositories)
+                              (expect (equal (list repository) repositories))
+                              (setf completed t))))))
+      (sb-thread:join-thread thread :timeout 2)
+      (expect (= 1 (length queued)))
+      (expect (not (nerimux/model:repository-dirty-p repository)))
+      (expect (not completed))
+      (funcall (pop queued))
+      (expect (nerimux/model:repository-dirty-p repository))
       (expect completed))))
 
 (describe "async vcs batch edge cases"
@@ -157,9 +203,9 @@
                         (* 2 internal-time-units-per-second))))
       (nerimux/vcs:refresh-repositories-async
        (list repository)
-       :refresh-function (lambda (current)
-                           (declare (ignore current))
-                           (error "synthetic repository refresh failure"))
+       :status-reader (lambda (current)
+                        (declare (ignore current))
+                        (error "synthetic repository refresh failure"))
        :on-error (lambda (current condition)
                    (setf error-repository current
                          condition-seen condition))

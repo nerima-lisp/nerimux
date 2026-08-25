@@ -2,17 +2,6 @@
 
 ;;;; OSC 7 and OSC 8 helpers.
 
-(defun %hex-digit-16 (digit)
-  "Return the numeric value of an ASCII hexadecimal digit DIGIT, or NIL."
-  (let ((code (char-code digit)))
-    (cond
-      ((<= (char-code #\0) code (char-code #\9))
-       (- code (char-code #\0)))
-      ((<= (char-code #\A) code (char-code #\F))
-       (+ 10 (- code (char-code #\A))))
-      ((<= (char-code #\a) code (char-code #\f))
-       (+ 10 (- code (char-code #\a)))))))
-
 (defun %flush-utf8-octets (octets out)
   "Write accumulated UTF-8 OCTETS to the string stream OUT and reset OCTETS."
   (when (> (length octets) 0)

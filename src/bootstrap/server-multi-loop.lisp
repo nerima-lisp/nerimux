@@ -72,6 +72,7 @@
    Returns :quit when the session must end, else NIL.  Factored out (taking the
    listener + session, mutating *clients*) so the dispatch/teardown logic is
    unit-testable without driving a full process loop."
+  (%drain-main-thread-callbacks)
   (%broadcast-frame session)
   (let* ((listener-fd (socket-fd listener))
          (ready       (select-fds (cons listener-fd (%client-fds)) +poll-timeout-us+)))

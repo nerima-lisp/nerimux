@@ -35,8 +35,9 @@
                      (lambda () t)
                      (fdefinition 'nerimux/vcs:prune-worktrees-async)
                      (lambda (received-repository
-                              &key dry-run verbose on-complete on-error)
-                       (declare (ignore verbose on-error))
+                              &key dry-run verbose on-complete on-error
+                                callback-dispatch)
+                       (declare (ignore verbose on-error callback-dispatch))
                        (setf call (list received-repository dry-run))
                        (funcall on-complete "")
                        t))
@@ -95,8 +96,9 @@
                      (lambda () t)
                      (fdefinition 'nerimux/vcs:prune-worktrees-async)
                      (lambda (received-repository
-                              &key dry-run verbose on-complete on-error)
-                       (declare (ignore verbose on-error))
+                              &key dry-run verbose on-complete on-error
+                                callback-dispatch)
+                       (declare (ignore verbose on-error callback-dispatch))
                        (setf call (list received-repository dry-run))
                        (unless dry-run
                          (setf (nerimux/model:repository-worktrees
@@ -212,6 +214,6 @@
 
   ;; Direct proof of the finding above: an arrow-escape sequence sent the way
   ;; a real client actually sends it -- one byte per message -- never moves
-  ;; the picker's selection index, because the second and third bytes are
-  ;; swallowed before %move-client-picker-index is ever reached.
+;; the picker's selection index, because the second and third bytes are
+;; swallowed before %move-client-picker-index is ever reached.
 )

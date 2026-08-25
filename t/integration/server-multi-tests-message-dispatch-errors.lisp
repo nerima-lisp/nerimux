@@ -49,9 +49,11 @@
                  (nerimux::%set-client-selected-tree-object conn repository)
                  (setf (fdefinition 'nerimux/vcs:create-worktree-async)
                        (lambda (received-repository
-                                &key branch path force on-complete on-error)
+                                &key branch path force on-complete on-error
+                                  callback-dispatch)
                          (declare
-                          (ignore received-repository branch path force on-complete))
+                          (ignore received-repository branch path force on-complete
+                                 callback-dispatch))
                          (funcall on-error "create async failure")
                          t))
                  (nerimux::%client-create-worktree
@@ -74,8 +76,9 @@
                  (nerimux::%set-client-selected-tree-object conn worktree)
                  (setf (fdefinition 'nerimux/vcs:delete-worktree-async)
                        (lambda (received-worktree
-                                &key force on-complete on-error)
-                         (declare (ignore received-worktree force on-complete))
+                                &key force on-complete on-error callback-dispatch)
+                         (declare (ignore received-worktree force on-complete
+                                             callback-dispatch))
                          (funcall on-error "delete async failure")
                          t))
                  (nerimux::%client-delete-worktree conn nil '("--confirm"))
@@ -95,8 +98,9 @@
 
                  (setf (fdefinition 'nerimux/vcs:lock-worktree-async)
                        (lambda (received-worktree
-                                &key reason on-complete on-error)
-                         (declare (ignore received-worktree reason on-complete))
+                                &key reason on-complete on-error callback-dispatch)
+                         (declare (ignore received-worktree reason on-complete
+                                             callback-dispatch))
                          (funcall on-error "lock async failure")
                          t))
                  (nerimux::%client-lock-worktree conn nil '("--confirm"))
@@ -115,8 +119,10 @@
                    "worktree lock failed: lock synchronous failure"))
 
                  (setf (fdefinition 'nerimux/vcs:unlock-worktree-async)
-                       (lambda (received-worktree &key on-complete on-error)
-                         (declare (ignore received-worktree on-complete))
+                       (lambda (received-worktree
+                                &key on-complete on-error callback-dispatch)
+                         (declare (ignore received-worktree on-complete
+                                             callback-dispatch))
                          (funcall on-error "unlock async failure")
                          t))
                  (nerimux::%client-unlock-worktree conn nil '("--confirm"))
@@ -137,9 +143,11 @@
                  (nerimux::%set-client-selected-tree-object conn repository)
                  (setf (fdefinition 'nerimux/vcs:prune-worktrees-async)
                        (lambda (received-repository
-                                &key dry-run verbose on-complete on-error)
+                                &key dry-run verbose on-complete on-error
+                                  callback-dispatch)
                          (declare
-                          (ignore received-repository dry-run verbose on-complete))
+                          (ignore received-repository dry-run verbose on-complete
+                                 callback-dispatch))
                          (funcall on-error "prune async failure")
                          t))
                  (nerimux::%client-prune-worktrees conn nil nil :dry-run t)
@@ -178,9 +186,11 @@
                        (lambda () t)
                      (fdefinition 'nerimux/vcs:create-worktree-async)
                      (lambda (received-repository
-                              &key branch path force on-complete on-error)
+                              &key branch path force on-complete on-error
+                                callback-dispatch)
                        (declare
-                        (ignore received-repository branch path force on-error))
+                        (ignore received-repository branch path force on-error
+                               callback-dispatch))
                        (funcall on-complete worktree)
                        t))
                  (nerimux::%set-client-selected-tree-object conn repository)
@@ -192,8 +202,10 @@
                   (%worktree-message-seen-p conn "worktree created"))
 
                  (setf (fdefinition 'nerimux/vcs:delete-worktree-async)
-                       (lambda (received-worktree &key force on-complete on-error)
-                         (declare (ignore received-worktree force on-error))
+                       (lambda (received-worktree
+                                &key force on-complete on-error callback-dispatch)
+                         (declare (ignore received-worktree force on-error
+                                             callback-dispatch))
                          (funcall on-complete nil)
                          t))
                  (nerimux::%set-client-selected-tree-object conn worktree)

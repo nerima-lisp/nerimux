@@ -85,7 +85,6 @@
         (nerimux/pty:forkpty-with-shell 24 80 :default-command "exit 7")
       (unwind-protect
            (progn
-             (sleep 0.3)
              (multiple-value-bind (code kind) (nerimux/pty:pty-child-exit-status fd)
                (expect (= 7 code))
                (expect (eq :exited kind))))

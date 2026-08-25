@@ -4,6 +4,16 @@
 
 (describe "server-multi-suite"
 
+  (it "main-thread-callback-queue-preserves-order"
+    (let ((events nil)
+          (nerimux::*main-thread-callbacks* nil))
+      (nerimux::%enqueue-main-thread-callback
+       (lambda () (setf events (nconc events (list :first)))))
+      (nerimux::%enqueue-main-thread-callback
+       (lambda () (setf events (nconc events (list :second)))))
+      (nerimux::%drain-main-thread-callbacks)
+      (expect (equal '(:first :second) events))))
+
   ;;; ── %handle-multi-client-message: per-client dispatch ────────────────────────
 
   ;; A resize message updates the client's geometry and re-applies the effective size.
@@ -83,8 +93,8 @@
                      (lambda () nil)
                      (fdefinition
                       'nerimux/vcs:refresh-workspace-organizations-async)
-                     (lambda (&key on-complete on-error)
-                       (declare (ignore on-error))
+                     (lambda (&key on-complete on-error callback-dispatch)
+                       (declare (ignore on-error callback-dispatch))
                        (funcall on-complete nil)))
                (setf (nerimux::client-conn-view conn) :overview)
                (nerimux::%handle-multi-key-message s conn #(16))
@@ -171,8 +181,10 @@
                      (lambda () t)
                      (fdefinition 'nerimux/vcs:create-worktree-async)
                      (lambda (received-repository
-                              &key branch path force on-complete on-error)
-                       (declare (ignore path force on-complete on-error))
+                              &key branch path force on-complete on-error
+                                callback-dispatch)
+                       (declare (ignore path force on-complete on-error
+                                       callback-dispatch))
                        (setf call (list received-repository branch))
                        t))
                (setf (nerimux::client-conn-view conn) :overview)
@@ -223,8 +235,9 @@
                (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
                      (lambda () t)
                      (fdefinition 'nerimux/vcs:delete-worktree-async)
-                     (lambda (received-worktree &key force on-complete on-error)
-                       (declare (ignore on-complete on-error))
+                     (lambda (received-worktree
+                              &key force on-complete on-error callback-dispatch)
+                       (declare (ignore on-complete on-error callback-dispatch))
                        (setf call (list received-worktree force))
                        t))
                (setf (nerimux::client-conn-view conn) :overview)
@@ -276,8 +289,10 @@
                (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
                      (lambda () t)
                      (fdefinition 'nerimux/vcs:delete-worktree-async)
-                     (lambda (received-worktree &key force on-complete on-error)
-                       (declare (ignore force on-complete on-error))
+                     (lambda (received-worktree
+                              &key force on-complete on-error callback-dispatch)
+                       (declare (ignore force on-complete on-error
+                                       callback-dispatch))
                        (setf call received-worktree)
                        t))
                (setf (nerimux::client-conn-view conn) :overview)
@@ -308,8 +323,10 @@
                (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
                      (lambda () t)
                      (fdefinition 'nerimux/vcs:delete-worktree-async)
-                     (lambda (received-worktree &key force on-complete on-error)
-                       (declare (ignore force on-complete on-error))
+                     (lambda (received-worktree
+                              &key force on-complete on-error callback-dispatch)
+                       (declare (ignore force on-complete on-error
+                                       callback-dispatch))
                        (setf call received-worktree)
                        t))
                (setf (nerimux::client-conn-view conn) :overview)
@@ -401,8 +418,9 @@
                (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
                      (lambda () t)
                      (fdefinition 'nerimux/vcs:lock-worktree-async)
-                     (lambda (received-worktree &key reason on-complete on-error)
-                       (declare (ignore on-error))
+                     (lambda (received-worktree
+                              &key reason on-complete on-error callback-dispatch)
+                       (declare (ignore on-error callback-dispatch))
                        (setf call (list received-worktree reason))
                        (funcall on-complete t)
                        t))
@@ -448,8 +466,9 @@
                (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
                      (lambda () t)
                      (fdefinition 'nerimux/vcs:unlock-worktree-async)
-                     (lambda (received-worktree &key on-complete on-error)
-                       (declare (ignore on-error))
+                     (lambda (received-worktree
+                              &key on-complete on-error callback-dispatch)
+                       (declare (ignore on-error callback-dispatch))
                        (setf call received-worktree)
                        (funcall on-complete t)
                        t))
@@ -501,8 +520,9 @@
                      (lambda () t)
                      (fdefinition 'nerimux/vcs:prune-worktrees-async)
                      (lambda (received-repository
-                              &key dry-run verbose on-complete on-error)
-                       (declare (ignore verbose on-error))
+                              &key dry-run verbose on-complete on-error
+                                callback-dispatch)
+                       (declare (ignore verbose on-error callback-dispatch))
                        (setf call (list received-repository dry-run))
                        (unless dry-run
                          (setf (nerimux/model:repository-worktrees
@@ -564,8 +584,9 @@
                      (lambda () t)
                      (fdefinition 'nerimux/vcs:prune-worktrees-async)
                      (lambda (received-repository
-                              &key dry-run verbose on-complete on-error)
-                       (declare (ignore verbose on-error))
+                              &key dry-run verbose on-complete on-error
+                                callback-dispatch)
+                       (declare (ignore verbose on-error callback-dispatch))
                        (setf call (list received-repository dry-run))
                        (unless dry-run
                          (setf (nerimux/model:repository-worktrees

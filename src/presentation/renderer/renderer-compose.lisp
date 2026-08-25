@@ -195,7 +195,7 @@
     ;; RENDER-SESSION-TO-TUI-STRING (renderer-tui-kit.lisp), whose
     ;; ansi-frame/tui-kit round-trip parses OSC sequences out of this frame
     ;; text and then discards them when redrawing from the parsed grid
-    ;; (%frame-grid-skip-osc in renderer-tui-kit.lisp does not retain what
+    ;; (%frame-grid-skip-osc in renderer-tui-kit-frame-grid.lisp does not retain what
     ;; it skips) -- that function re-emits the same title after the
     ;; round-trip so it actually reaches the outer terminal.
     (let ((worktree (and active-pane (pane-worktree active-pane))))

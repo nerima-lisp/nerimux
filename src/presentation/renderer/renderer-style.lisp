@@ -18,7 +18,7 @@
 ;;;; constant to the stream is renderer-format.lisp's existing %emit-sgr /
 ;;;; reset-attrs; no replacement "output side" composer was needed.
 ;;;;
-;;;; Load order: renderer-format → renderer-style-data → renderer-style → renderer-pane → renderer.
+;;;; Load order: renderer-format → renderer-style-data → renderer-style → pane and composition modules.
 ;;;; All files share the nerimux/renderer package (no defpackage here).
 
 (defconstant +sgr-default-status+

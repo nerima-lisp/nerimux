@@ -24,13 +24,5 @@
       (load (merge-pathnames #P"bootstrap/package-application.lisp" base)))
     (setf *package-fragments-loaded* t)))
 
-(declaim (notinline nerimux::client-conn-stream
-                    (setf nerimux::client-conn-stream)
-                    nerimux::client-conn-rows
-                    (setf nerimux::client-conn-rows)
-                    nerimux::client-conn-cols
-                    (setf nerimux::client-conn-cols)
-                    nerimux::client-conn-message-log
-                    (setf nerimux::client-conn-message-log)
-                    nerimux/model:window-tree
+(declaim (notinline nerimux/model:window-tree
                     (setf nerimux/model:window-tree)))

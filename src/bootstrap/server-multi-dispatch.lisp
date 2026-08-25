@@ -1,5 +1,55 @@
 (in-package #:nerimux)
 
+;;;; Shared multi-client connection data.
+
+(defparameter +default-workspace-prefix-key-code+ #x11
+  "Control-Q, the workspace UI prefix used by the multi-client overview.")
+
+(defstruct (client-conn (:constructor %make-client-conn))
+  "One attached client: its socket, a cached binary STREAM and FD, a private
+   keystroke STATE (so each client has independent prefix/copy-mode state), the
+   ROWS×COLS geometry it last reported, an optional command-stdin target pane,
+   its private UI state, cached frame, and private message log."
+  socket
+  stream
+  fd
+  stdin-target
+  (message-log nil)
+  (rows 24 :type fixnum)
+  (cols 80 :type fixnum)
+  (focus nil)
+  (selected-tree-object nil)
+  (selected-worktree nil)
+  (tree-scroll 0 :type fixnum)
+  (workspace-prefix-code +default-workspace-prefix-key-code+ :type fixnum)
+  (ui-prefix-p nil :type boolean)
+  (viewport 0 :type fixnum)
+  (mode :normal)
+  (command-buffer "" :type string)
+  (command-return-view nil)
+  (view :detail)
+  (attach-target nil)
+  (attach-cwd nil)
+  (picker-items nil)
+  (picker-query "" :type string)
+  (picker-regex-p nil :type boolean)
+  (picker-index 0 :type fixnum)
+  ;; Set to the REPOSITORY-ID of the repository a dry-run prune preview was
+  ;; just shown for; a confirm (dry-run nil) prune must match it, so
+  ;; wt-prune-confirm --confirm cannot skip straight past the preview a user
+  ;; is meant to review first. Cleared once a confirmed prune completes.
+  (pending-prune-preview-repository-id nil)
+  ;; The full-screen confirmation (R6.4) this client is currently looking at, or
+  ;; NIL. Per client, not per server: two attached clients can be mid-answer on
+  ;; different questions, and a confirmation one of them never saw must not
+  ;; capture the other's keystrokes.
+  (confirm-view nil)
+  ;; What to run when the user answers y to CONFIRM-VIEW. A closure of no
+  ;; arguments; NIL when no confirmation is up. Kept beside the view rather than
+  ;; encoded in it so the renderer keeps taking plain data.
+  (confirm-action nil)
+  (frame nil))
+
 ;; SERVER-MULTI.LISP initializes the registry after this dispatch file loads.
 (declaim (special *clients*))
 
@@ -36,8 +86,8 @@ forwards stdin one byte at a time, so an arrow key still arrives as the
 messages. R4.1 dropped byte-sequence matching entirely, so without this the
 trailing 2 bytes of that sequence would land on whatever key handler runs
 next (typically the search/command buffer) as literal `[` and a letter.
-Keyed by CONN rather than a client-conn slot because client-conn is defined
-in server-multi.lisp, outside this file's scope; :weakness :key lets a
+Keyed by CONN rather than a client-conn slot because client-conn is shared
+data defined above; :weakness :key lets a
 dropped connection's entry be reclaimed instead of leaking.")
 
 (defun %client-esc-swallow-start (conn &optional (n 2))

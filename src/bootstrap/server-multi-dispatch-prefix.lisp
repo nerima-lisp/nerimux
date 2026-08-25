@@ -177,6 +177,7 @@ FETCH-REPOSITORY-ASYNC)."
        (handler-case
            (nerimux/vcs:fetch-repository-async
             repository
+            :callback-dispatch #'%enqueue-main-thread-callback
             :on-complete
             (lambda (result)
               (if result
@@ -207,6 +208,7 @@ callback mirror %WORKSPACE-PREFIX-FETCH-REPOSITORY, one level up
        (handler-case
            (nerimux/vcs:fetch-organization-async
             organization
+            :callback-dispatch #'%enqueue-main-thread-callback
             :on-complete
             (lambda (repositories)
               (if repositories
@@ -310,4 +312,3 @@ callback mirror %WORKSPACE-PREFIX-FETCH-REPOSITORY, one level up
        (%mark-dirty)
        nil)
       (t nil))))
-

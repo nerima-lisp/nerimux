@@ -120,7 +120,7 @@
         (expect (zerop (nerimux::%move-client-tree-scroll conn "down")))
         (expect (eq main-worktree
                     (nerimux::%rebind-client-selection conn organizations)))
-        (expect nerimux::*dirty*)))))
+        (expect nerimux::*dirty*))))
 
   (it "updates-picker-query-regex-and-index"
     (multiple-value-bind (organizations organization repository main-worktree
@@ -246,6 +246,7 @@
                    (progn
                      (nerimux::%client-rebind-prefix conn "c-b")
                      (nerimux::client-conn-workspace-prefix-code conn)))))))
+  )
 
 (describe "server-dispatch-helper-edge-suite"
 

@@ -143,11 +143,17 @@ The bootstrap dispatch layer follows the same separation. The shared
 `define-message-dispatch-fn` macro in `src/bootstrap/server.lisp` expands
 declarative rules into the common conditional dispatch form. The
 `define-multi-msg-dispatch` wrapper in `server.lisp` supplies the multi-client
-handler shape used by `server-multi.lisp`; per-message helpers live in the
+handler shape used by `server-multi.lisp`; the client connection data lives in
+the shared `server-multi-dispatch.lisp` module, while per-message helpers live in the
 `server-multi-dispatch-prefix.lisp`, `server-multi-dispatch-picker.lisp`, and
-`server-multi-dispatch-command.lisp` files, while the client registry data
-remains in `server-multi.lisp`. The terminal parser is a CPS state machine, with its data
-structs kept apart from the `actions`, `csi`, and `sgr` logic.
+`server-multi-dispatch-command.lisp` files. The terminal parser is a CPS state machine, with its data
+structs kept apart from the `actions`, `csi`, and `sgr` logic. Character writing is split by role:
+`char-write-definitions.lisp` holds declarative charset and width facts,
+`char-write-cells.lisp` owns cell placement, and `char-write.lisp` coordinates
+charset remapping, wrapping, insertion, and cursor movement.
+SGR follows the same dependency direction: `sgr-definitions.lisp` owns the
+attribute rule table, `sgr-colors.lisp` decodes extended colours, `sgr.lisp`
+coordinates application, and `sgr-report.lisp` encodes status reports.
 
 ## Source layout
 
@@ -188,21 +194,28 @@ The renderer has two independent first passes, and the split is deliberate:
   codes. This is the VT100 machinery: pane and border rendering, status-line
   composition, style/SGR emission, copy-mode overlays. Exercised on every
   frame that shows terminal content.
-- **The workspace view** — `render-workspace-overview-to-string`
-  (`renderer-workspace.lisp`), drawing the organization → repository →
-  worktree tree, including the `!` markers for unread, bell, exit, dirty, and
-  conflict state.
+- **The workspace view** — `renderer-workspace-status-title.lisp` owns status
+  labels and terminal titles shared by both views, while
+  `renderer-workspace-command-line.lisp` owns workspace command completion.
+  `renderer-workspace-tree.lisp` projects the organization → repository →
+  worktree → window → pane rows, including attention and refresh state.
+  `render-workspace-overview-to-string` (`renderer-workspace.lisp`) draws those
+  presentation values and that projection into the ANSI frame.
 
 The `render-session-to-tui-string` and
 `render-workspace-overview-to-tui-string` wrappers pass the selected ANSI frame
-through `cl-tui-kit`'s headless surface. `renderer-tui-kit.lisp` applies picker,
-tree, and other workspace widgets there before encoding the frame sent to the
-client.
+through `cl-tui-kit`'s headless surface. `renderer-tui-kit-frame-grid.lisp`
+decodes ANSI cursor, erase, and text operations into a fixed grid;
+`renderer-tui-kit-widgets.lisp` builds the picker and workspace-tree widgets;
+`renderer-tui-kit.lisp` transfers the grid to a surface and owns the public
+session/workspace entry points; and `renderer-tui-kit-confirm-view.lisp` owns
+confirmation-view data and rendering.
 
 The workspace view depends on `renderer-format.lisp` (generic ANSI primitives)
-and `renderer-tui-kit.lisp`; the ASDF load order loads `renderer-workspace`
-immediately after `renderer-format`, ahead of the pane chain.
+and `renderer-tui-kit.lisp`; the ASDF load order loads its status/title,
+command-line, and tree-projection modules before `renderer-workspace`, all
+ahead of the pane and composition modules.
 
-`renderer.lisp` is an empty load-order stub. `renderer-compose-protocols.lisp`
-holds `clear-display`, called by the client during raw-mode setup rather than by
-either render pass.
+The composition path is split across protocol, overlay, effect, and frame
+modules. `renderer-compose-protocols.lisp` holds `clear-display`, called by the
+client during raw-mode setup rather than by either render pass.

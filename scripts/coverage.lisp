@@ -35,11 +35,9 @@
     "src/domain/terminal/modes-dec-pm-definitions.lisp"
     "src/domain/terminal/screen-data.lisp"
     "src/infrastructure/pty/pty-ffi.lisp"
-    "src/presentation/renderer/renderer-pane-copy-mode-line-number.lisp"
     "src/presentation/renderer/renderer-format-definitions.lisp"
     "src/presentation/renderer/renderer-style-data.lisp"
-    "src/presentation/renderer/renderer-style.lisp"
-    "src/presentation/renderer/renderer.lisp"))
+    "src/presentation/renderer/renderer-style.lisp"))
 
 (sb-ext:restrict-compiler-policy 'sb-cover:store-coverage-data 3)
 
@@ -86,6 +84,7 @@
   (cl-weave:reset-coverage)
   (asdf:load-system "nerimux" :force t)
   (unless (cl-weave:run-all :reporter :spec :max-workers 1
+                            :pass-with-no-tests nil
                             :timeout-ms +coverage-test-timeout-ms+
                             :coverage t :coverage-reset nil
                             :coverage-include-pathnames (list *nerimux-source-root*)

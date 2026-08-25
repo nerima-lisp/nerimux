@@ -317,5 +317,3 @@ the tree (R7.1)."
         (progn
           (%client-notify conn "invalid workspace prefix key")
           t))))
-
-

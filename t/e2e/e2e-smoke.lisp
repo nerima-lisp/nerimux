@@ -29,8 +29,8 @@
 (defconstant +e2e-marker-timeout-seconds+ 6
   "Maximum seconds to wait for the marker to appear in the rendered output.")
 
-(defconstant +e2e-detach-settle-seconds+  0.5
-  "Seconds to let nerimux process the detach key before cleaning up the PTY.")
+(defconstant +e2e-detach-timeout-seconds+ 3
+  "Maximum seconds to wait for nerimux to exit after the detach key.")
 
 (defconstant +e2e-poll-timeout-us+ nerimux/ports:+poll-timeout-us+
   "Select timeout in microseconds when polling the PTY for output.")
@@ -119,13 +119,17 @@
              ;; Detach: prefix C-q (byte 17) then 'd'.
              (pty-write fd (make-array 2 :element-type '(unsigned-byte 8)
                                           :initial-contents (list 17 (char-code #\d))))
-             (sleep +e2e-detach-settle-seconds+)
-             (if found
-                 (progn (format t "[e2e] PASS — marker rendered by nerimux~%")
-                        (sb-ext:exit :code 0))
-                 (progn (format t "[e2e] FAIL — marker not found in rendered output~%")
-                        (format t "[e2e] captured ~D bytes~%" (fill-pointer acc))
-                        (sb-ext:exit :code 1)))))
+             (multiple-value-bind (exit-code exit-kind)
+                 (pty-child-exit-status
+                  fd
+                  (cl-date-kit:duration-of-seconds +e2e-detach-timeout-seconds+))
+               (if (and found (eq :exited exit-kind) (zerop exit-code))
+                   (progn (format t "[e2e] PASS — marker rendered and nerimux exited cleanly~%")
+                          (sb-ext:exit :code 0))
+                   (progn (format t "[e2e] FAIL — marker=~A exit-kind=~A exit-code=~A~%"
+                                  (if found :found :missing) exit-kind exit-code)
+                          (format t "[e2e] captured ~D bytes~%" (fill-pointer acc))
+                          (sb-ext:exit :code 1))))))
       (pty-close fd pid))))
 
 (let ((binary (or (second sb-ext:*posix-argv*) "result/bin/nerimux")))

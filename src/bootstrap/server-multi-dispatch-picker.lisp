@@ -268,32 +268,48 @@
 
 (defun %refresh-client-picker (conn &key on-complete on-error)
   (if (nerimux/vcs:vcs-package-available-p)
-      (handler-case
-          (nerimux/vcs:refresh-workspace-organizations-async
-           :on-complete
-           (lambda (organizations)
-             (dolist (client
-                       (remove-duplicates
-                        (remove-if-not #'%client-live-p
-                                       (cons conn (copy-list *clients*)))
-                        :test #'eq))
-               (%rebind-client-selection client organizations)
-               (setf (client-conn-picker-items client)
-                     (nerimux/picker:build-global-picker-items organizations))
-               (%picker-clamp-index client
-                                    (%client-picker-visible-items client)))
-             (when (and on-complete (%client-live-p conn))
-               (funcall on-complete organizations))
-             (%mark-dirty))
-           :on-error
-           (lambda (condition)
-             (when (and on-error (%client-live-p conn))
-               (funcall on-error condition))
-             (%mark-dirty)))
-        (error (condition)
-          (when (and on-error (%client-live-p conn))
-            (funcall on-error condition))
-          (%mark-dirty)))
+      (let ((refresh-failed-p nil))
+        (%set-workspace-catalog-refresh-state
+         (nerimux/vcs:workspace-organizations))
+        (handler-case
+            (nerimux/vcs:refresh-workspace-organizations-async
+             :callback-dispatch #'%enqueue-main-thread-callback
+             :on-catalog
+             (lambda (organizations)
+               (%set-workspace-catalog-refresh-state organizations)
+               (%mark-dirty))
+             :on-complete
+             (lambda (organizations)
+               (%set-workspace-catalog-refresh-state
+                organizations :stale-p refresh-failed-p)
+               (dolist (client
+                         (remove-duplicates
+                          (remove-if-not #'%client-live-p
+                                         (cons conn (copy-list *clients*)))
+                          :test #'eq))
+                 (%rebind-client-selection client organizations)
+                 (setf (client-conn-picker-items client)
+                       (nerimux/picker:build-global-picker-items organizations))
+                 (%picker-clamp-index client
+                                      (%client-picker-visible-items client)))
+               (when (and on-complete (%client-live-p conn))
+                 (funcall on-complete organizations))
+               (%mark-dirty))
+             :on-error
+             (lambda (condition)
+               (setf refresh-failed-p t)
+               (%set-workspace-catalog-refresh-state
+                (nerimux/vcs:workspace-organizations) :stale-p t)
+               (when (and on-error (%client-live-p conn))
+                 (funcall on-error condition))
+               (%mark-dirty)))
+          (error (condition)
+            (setf refresh-failed-p t)
+            (%set-workspace-catalog-refresh-state
+             (nerimux/vcs:workspace-organizations) :stale-p t)
+            (when (and on-error (%client-live-p conn))
+              (funcall on-error condition))
+            (%mark-dirty))))
       (let ((organizations (nerimux/vcs:workspace-organizations)))
         (setf (client-conn-picker-items conn)
               (nerimux/picker:build-global-picker-items organizations))
@@ -349,10 +365,6 @@
        (%client-notify conn "worktree has no path")
        nil)
       ((worktree-missing-p worktree)
-       (unless (worktree-missing-p worktree)
-         (setf (worktree-missing-p worktree) t)
-         (when (worktree-repository worktree)
-           (repository-recompute-status (worktree-repository worktree))))
        (%client-notify conn "worktree is missing")
        nil)
       (t

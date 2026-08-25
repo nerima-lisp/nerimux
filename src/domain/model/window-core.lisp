@@ -1,27 +1,5 @@
 (in-package #:nerimux/model)
 
-;;; ── Window ─────────────────────────────────────────────────────────────────
-
-(defstruct window
-  "A named collection of panes with one active (focused) pane.
-   TREE is the binary split-tree layout. PANES is the derived flat list of leaves,
-   kept in tree order via window-refresh-panes."
-  (id   0  :type fixnum)
-  (name "" :type string)
-  (width  80 :type fixnum)
-  (height 24 :type fixnum)
-  (panes nil :type list)
-  (active nil)
-  (tree  nil)
-  (local-options (make-hash-table :test #'equal) :type hash-table) ; per-window option overrides
-  (zoom-p      nil :type boolean)  ; T when this window's active pane is zoomed
-  (zoom-tree   nil)               ; saved layout tree before zooming, NIL when not zoomed
-  (last-active nil)               ; previously active pane (for C-b ;)
-  (last-active-time 0 :type integer)  ; universal-time when this window was last focused
-  (automatic-rename-p t :type boolean) ; when T, OSC 0/2 title updates window-name
-  (layout-cycle-index 0 :type fixnum) ; index into the layouts cycle for C-b Space
-  (lock (make-lock :name "window") :read-only t))
-
 (defun window-refresh-panes (window)
   "Recompute WINDOW's derived PANES list from its TREE (when present)."
   (when (window-tree window)
@@ -57,9 +35,6 @@
   "Current extent of PANE along ORIENT's split axis."
   (orient-case orient :v (pane-height pane) :h (pane-width pane)))
 
-(defconstant +pane-separator-width+ 1
-  "Width in cells of the separator drawn between panes in a split layout.")
-
 (defun %split-axis-fits-p (extent orient)
   "T when EXTENT is large enough to split along ORIENT.
    Requires at least 2 * axis-floor + +pane-separator-width+ cells."
@@ -71,9 +46,6 @@
   (%split-axis-fits-p (%orient-pane-extent pane orient) orient))
 
 ;;; ── Window-level pane ID allocation ────────────────────────────────────────
-
-(defconstant +pane-base-index+ 1
-  "First pane id in a window (§1.4: window / pane numbering starts at 1).")
 
 (defun next-pane-id (window)
   "Smallest pane id >= +PANE-BASE-INDEX+ not already used in WINDOW.
@@ -118,25 +90,6 @@
   (if full
       (%split-axis-fits-p (%window-axis-extent window direction) direction)
       (%split-fits-p active direction)))
-
-(defstruct (%split-spec (:constructor %make-split-spec))
-  "The configuration of a single window-split call, gathered into one value so
-   %compute-new-pane-split and %splice-split-into-tree take one argument
-   instead of threading five-plus keywords by hand.
-   NO-FOCUS: keep the current active pane selected instead of focusing the new one.
-   SIZE: integer (cells) or real (fraction 0..1) sizing the new pane, or NIL for 1/2.
-   START-DIR: non-NIL working directory for the new pane's shell.
-   BEFORE: T inserts the new pane before (left of / above) the active pane.
-   FULL: T spans the split across the whole window (split-window -f), splitting
-   the tree root instead of just the active pane's leaf.
-   INPUT-ONLY: T creates a screen-only pane (no PTY) fed via INPUT-BYTES."
-  (no-focus    nil)
-  (size        nil)
-  (start-dir   nil)
-  (before      nil)
-  (full        nil)
-  (input-only  nil)
-  (input-bytes nil))
 
 (defun %new-split-pane (session window direction active spec)
   "Construct the new pane created by a split of ACTIVE along DIRECTION.

@@ -114,7 +114,9 @@
        (:file "erase")     ; erase-region, erase-display, erase-line rule tables
        (:file "edit")      ; delete/insert chars+lines (uses %copy-row, %clear-row from scroll)
        (:file "cursor")    ; cursor movement (uses scroll-up-one)
-       (:file "char-write") ; combining chars, DEC graphics, wide/normal cell writes (uses cursor-down/scroll, insert-chars)
+       (:file "char-write-definitions") ; DEC graphics facts and character-width classification
+       (:file "char-write-cells") ; combining and wide/normal cell placement
+       (:file "char-write") ; charset, wrap, and insert-mode writing flow
        (:file "modes-alt-screen") ; DEC modes — alt-screen enter/exit helpers (part I)
        (:file "modes-dec-pm-definitions") ; compile-time DEC PM rule table
        (:file "modes-cursor-save") ; DECSC/DECRC cursor save-restore + DECSCUSR shape
@@ -124,12 +126,18 @@
        (:file "modes-ansi-sm-rm-definitions") ; compile-time ANSI SM/RM rule table
        (:file "screen-projection") ; copy-mode scrollback viewport cell projection
        (:file "screen-osc-state")  ; focus reports, BEL, title stack, OSC title/colour state
-       (:file "sgr")
+       (:file "sgr-definitions") ; attribute helpers and compile-time SGR rule table
+       (:file "sgr-colors")      ; extended-colour parameter decoding
+       (:file "sgr")             ; SGR application flow
+       (:file "sgr-report")      ; pen-to-SGR status-report encoding
        (:file "csi-replies-definitions") ; compile-time reply fact-table constructors
        (:file "csi-replies")    ; CSI reply-queue helpers (DSR/DA/CPR/DECRQM/XTWINOPS); loads before csi
        (:file "csi-parameters") ; CSI parameter-to-domain-value translation
        (:file "csi-dispatch")   ; DEFINE-CSI-RULES macro that emits EXECUTE-CSI
-       (:file "csi")            ; declarative CSI action rule table
+       (:file "csi")            ; cursor, screen-edit, and SGR rules
+       (:file "csi-device-rules") ; reports, tabulation, and private-mode rules
+       (:file "csi-extended-rules") ; rectangular and extended-control rules
+       (:file "csi-compose")    ; compose rule sets into EXECUTE-CSI
        (:file "parser-dcs")    ; DCS passthrough/XTGETTCAP/DECRQSS helpers (loads before parser)
        (:file "parser-core")   ; parser byte predicates + Prolog-like DEFINE-STATE macro
        (:file "parser-csi")    ; CSI continuation builder and byte-class predicates
@@ -152,7 +160,8 @@
        (:file "layout")            ; tree structure + traversal (uses pane-reposition)
        (:file "layout-persistence") ; layout string serialization
        (:file "layout-geometry")    ; rectangle assignment + resize helpers (uses pane-id, pane-x/y/w/h)
-       (:file "window-core")        ; window struct + core ops (split/constants)
+       (:file "window-definitions") ; window records and pane-numbering constants
+       (:file "window-core")        ; window selection and split behavior
        (:file "window-tree")        ; tree mutation + relayout/remove helpers
        (:file "window-operations")  ; window resize/rotate/zoom (uses window + layout helpers)
        (:file "window-neighbor") ; directional pane navigation (uses window-panes)
@@ -162,9 +171,12 @@
        (:file "session-environment-child")      ; child env snapshot assembly
        (:file "pane-spawn")))                   ; PTY-backed pane factory + respawn
      (:module "infrastructure/vcs"
-      :serial t
-      :components
-      ((:file "vcs")))             ; optional cl-vcs-kit adapter
+     :serial t
+     :components
+       ((:file "vcs")
+        (:file "vcs-async-operations")
+        (:file "vcs-worktree-operations")
+        (:file "vcs-fetch")))
      (:module "application/picker"
       :serial t
       :components
@@ -205,16 +217,18 @@
       :components
       ((:file "renderer-format-definitions") ; compile-time ANSI fact-table constructors
        (:file "renderer-format")     ; ANSI primitives (shared by both paths below)
-       ;; The workspace views depend on renderer-format and nothing else in this
-       ;; module; loading them here, ahead of the pane compositor, states that.
-       (:file "renderer-workspace")  ; workspace tree + attention views (plain ANSI)
+       ;; Workspace presentation helpers and tree projection depend on no pane
+       ;; compositor; their order here states that boundary.
+       (:file "renderer-workspace-status-title") ; shared status/title labels
+       (:file "renderer-workspace-command-line") ; command completion footer
+       (:file "renderer-workspace-tree") ; shared tree data projection
+       (:file "renderer-workspace")  ; workspace frame (plain ANSI)
        (:file "renderer-style-data") ; declarative style/SGR/border-charset dispatch tables
        (:file "renderer-style")     ; style-string parsing + SGR emission logic
        (:file "renderer-pane-selection") ; selection bounds helpers
        (:file "renderer-statusbar-layout"); status bar layout helpers (needed by renderer-pane-copy-mode-overlay below)
        (:file "renderer-pane-search")    ; pane content search match ranges
        (:file "renderer-pane-copy-mode-overlay")      ; copy-mode position-banner overlay rendering
-       (:file "renderer-pane-copy-mode-line-number")  ; copy-mode line-number gutter rendering
        (:file "renderer-pane")           ; pane cell rendering (selection, copy-mode highlights)
        (:file "renderer-borders")        ; split-tree separators + pane border rendering
        (:file "renderer-statusbar")      ; status bar composition
@@ -222,8 +236,10 @@
        (:file "renderer-compose-overlay")   ; cursor placement for the active pane
        (:file "renderer-compose-effects")   ; bell / cursor / queue drain effects
        (:file "renderer-compose")        ; PANE frame compositing + entry points
-       (:file "renderer-tui-kit")        ; headless cl-tui-kit surface/backend adapter
-       (:file "renderer")))         ; documentation stub (intentionally empty)
+       (:file "renderer-tui-kit-frame-grid") ; ANSI frame decoding into a fixed grid
+       (:file "renderer-tui-kit-widgets") ; workspace tree and picker widgets
+       (:file "renderer-tui-kit")       ; headless surface conversion and entry points
+       (:file "renderer-tui-kit-confirm-view"))) ; confirmation data and rendering
      (:module "infrastructure/input"
       :serial t
       :components
@@ -262,25 +278,45 @@
   :entry-point "nerimux:main"
   :in-order-to ((test-op (test-op "nerimux/test"))))
 
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  ;; ASDF parses DEFSystem option values as data. Register the generated
-  ;; component tree after loading it, so the source is refreshed at load time
-  ;; without relying on reader-time #. evaluation.
-  (eval
-   `(asdf:defsystem "nerimux/test"
-      :description "Test suite for nerimux, authored natively in cl-weave"
-      :author "takeokunn <bararararatty@gmail.com>"
-      :maintainer "takeokunn <bararararatty@gmail.com>"
-      :license "MIT"
-      :version "0.3.0"
-      :homepage "https://github.com/nerima-lisp/nerimux"
-      :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
-      :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-      :depends-on ("nerimux" (:version "cl-weave" "1.3.0"))
-      :components ,(symbol-value (find-symbol "*NERIMUX-TEST-COMPONENTS*" :cl-user))
-      :perform (test-op (op c)
-                 (declare (ignore op c))
-                 (funcall (find-symbol "RUN-TESTS" (find-package "NERIMUX/TEST")))))))
+(cl-user::define-system-with-nerimux-test-components "nerimux/test"
+  :description "Test suite for nerimux, authored natively in cl-weave"
+  :author "takeokunn <bararararatty@gmail.com>"
+  :maintainer "takeokunn <bararararatty@gmail.com>"
+  :license "MIT"
+  :version "0.3.0"
+  :homepage "https://github.com/nerima-lisp/nerimux"
+  :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
+  :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
+  :depends-on ("nerimux" (:version "cl-weave" "1.3.0"))
+  :perform (test-op (op c)
+             (declare (ignore op c))
+             (funcall (find-symbol "RUN-TESTS" (find-package "NERIMUX/TEST")))))
+
+(defsystem "nerimux/vcs-test"
+  :description "Focused VCS infrastructure tests for nerimux"
+  :author "takeokunn <bararararatty@gmail.com>"
+  :maintainer "takeokunn <bararararatty@gmail.com>"
+  :license "MIT"
+  :version "0.3.0"
+  :homepage "https://github.com/nerima-lisp/nerimux"
+  :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
+  :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
+  :depends-on ("nerimux" (:version "cl-weave" "1.3.0"))
+  :pathname "t"
+  :serial t
+  :components ((:file "package")
+               (:file "suite")
+               (:file "helpers-process-fixtures")
+               (:module "unit/infrastructure/vcs"
+                :serial t
+                :components ((:file "vcs-tests")
+                             (:file "vcs-fetch-dedup-tests")
+                             (:file "vcs-worktree-path-tests")
+                             (:file "vcs-operations-tests")
+                             (:file "vcs-async-operations-tests"))))
+  :perform (test-op (op c)
+             (declare (ignore op c))
+             (funcall (find-symbol "RUN-TESTS" (find-package "NERIMUX/TEST")))))
 
 
 ;; The real-PTY suite, split out of nerimux/test by R9.2.

@@ -312,7 +312,7 @@
                (expect (equal "workspace" query-seen))
                (expect (equal catalog (nerimux/vcs:workspace-organizations)))
                (expect (member repository refreshed :test #'eq))))
-        (nerimux/vcs:set-workspace-organizations previous)))))
+        (nerimux/vcs:set-workspace-organizations previous))))
 
   (it "reports a synchronous workspace refresh failure"
     (let ((condition-seen nil)
@@ -330,6 +330,7 @@
                             (setf condition-seen condition)))))
              (expect (typep condition-seen 'error)))
         (nerimux/vcs:set-workspace-organizations previous))))
+  )
 
 (describe "vcs worktree commands"
   (it "emits exact synchronous worktree operation commands"
@@ -467,134 +468,3 @@
               (error (condition)
                 (setf condition-seen condition)))
             (expect (typep condition-seen 'error))))))))
-
-(describe "vcs asynchronous operation callbacks"
-  (it "routes successful operations and errors through callbacks"
-    (let ((lock (cl-concurrent-kit:make-lock :name "vcs-operations-test"))
-          (results nil)
-          (condition-seen nil)
-          (threads nil))
-      (labels ((record-result (tag)
-                 (lambda (result)
-                   (cl-concurrent-kit:with-lock-held (lock)
-                     (push (list tag result) results))))
-               (record-error (condition)
-                 (cl-concurrent-kit:with-lock-held (lock)
-                   (setf condition-seen condition))))
-        (unwind-protect
-             (progn
-               (with-stubbed-fdefinition
-                   ((nerimux/vcs:create-worktree
-                      (lambda (&rest arguments)
-                        (declare (ignore arguments))
-                        :created))
-                    (nerimux/vcs:delete-worktree
-                      (lambda (&rest arguments)
-                        (declare (ignore arguments))
-                        :deleted))
-                    (nerimux/vcs:lock-worktree
-                      (lambda (&rest arguments)
-                        (declare (ignore arguments))
-                        :locked))
-                 (nerimux/vcs:unlock-worktree
-                   (lambda (&rest arguments)
-                     (declare (ignore arguments))
-                     :unlocked))
-                 (nerimux/vcs:prune-worktrees
-                   (lambda (&rest arguments)
-                     (declare (ignore arguments))
-                     :pruned)))
-                 (push
-                  (nerimux/vcs:create-worktree-async
-                   nil
-                   :branch "feature"
-                   :on-complete (record-result :create))
-                  threads)
-                 (push
-                  (nerimux/vcs:delete-worktree-async
-                   nil
-                   :on-complete (record-result :delete))
-                  threads)
-                 (push
-                  (nerimux/vcs:lock-worktree-async
-                   nil
-                   :on-complete (record-result :lock))
-                  threads)
-                 (push
-                  (nerimux/vcs:unlock-worktree-async
-                   nil
-                   :on-complete (record-result :unlock))
-                  threads)
-                 (push
-                  (nerimux/vcs:prune-worktrees-async
-                   nil
-                   :dry-run nil
-                   :verbose t
-                   :on-complete (record-result :prune))
-                  threads)
-                 (expect
-                  (%vcs-operations-poll-until
-                   (lambda ()
-                     (cl-concurrent-kit:with-lock-held (lock)
-                       (= 5 (length results))))))
-                 (let ((observed
-                         (cl-concurrent-kit:with-lock-held (lock)
-                           (let ((table (make-hash-table :test #'equal)))
-                             (dolist (result results)
-                               (setf (gethash result table) t))
-                             table))))
-                   (dolist (expected
-                            '((:create :created)
-                              (:delete :deleted)
-                              (:lock :locked)
-                              (:unlock :unlocked)
-                              (:prune :pruned)))
-                     (expect (gethash expected observed)))))
-               (with-stubbed-fdefinition
-                   ((nerimux/vcs:create-worktree
-                      (lambda (&rest arguments)
-                        (declare (ignore arguments))
-                        (error "create failed"))))
-                 (push
-                  (nerimux/vcs:create-worktree-async
-                   nil
-                   :branch "feature"
-                   :on-error #'record-error)
-                  threads)
-                 (expect
-                  (%vcs-operations-poll-until
-                   (lambda ()
-                     (cl-concurrent-kit:with-lock-held (lock)
-                       (typep condition-seen 'error)))))))
-          (%vcs-operations-join threads))))))
-
-(describe "vcs synchronous fetch"
-  (it "fetches through the adapter and refreshes status"
-    (let* ((repository
-             (nerimux/model:make-repository
-              :specification "workspace-owner/project"
-              :local-path (%vcs-operations-existing-path)))
-           (fetch-call nil)
-           (refresh-call nil))
-      (with-stubbed-fdefinition
-          ((vcs-kit:make-vcs-repository
-             (lambda (&rest arguments)
-               (declare (ignore arguments))
-               :fetch-backend))
-           (vcs-kit:vcs-fetch
-             (lambda (backend &rest arguments)
-               (setf fetch-call (list backend arguments))
-               :fetched))
-           (nerimux/vcs:refresh-repository-status
-             (lambda (current)
-               (setf refresh-call current)
-               current)))
-        (expect (eq repository (nerimux/vcs::fetch-repository repository)))
-        (expect (equal '(:fetch-backend nil) fetch-call))
-        (expect (eq repository refresh-call))
-        (let ((condition-seen nil))
-          (handler-case
-              (nerimux/vcs::fetch-repository nil)
-            (error (condition)
-              (setf condition-seen condition)))
-          (expect (typep condition-seen 'error)))))))

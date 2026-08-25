@@ -135,7 +135,7 @@
                     (values code :signaled)
                     (values code :exited)))))
         (cl-concurrent-kit:operation-timed-out () nil)
-        (sb-ext:process-error () nil)))))
+        (error () nil)))))
 
 (defun forkpty-with-shell (rows cols &key start-dir default-command environment)
   "Spawn a child shell process on a fresh PTY of size ROWS×COLS.

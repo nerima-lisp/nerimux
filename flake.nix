@@ -187,7 +187,31 @@
       # purely as source: each checkout goes on ASDF's central registry rather
       # than through nixpkgs Lisp packaging. This one list drives every SBCL
       # invocation below.
-      siblingRepos = [
+      patchedClTuiKit =
+        system:
+        let
+          pkgs = pkgsFor system;
+          boundedDatumPatch = pkgs.writeText "cl-tui-kit-bounded-datum.patch" ''
+            diff --git a/src/list.lisp b/src/list.lisp
+            --- a/src/list.lisp
+            +++ b/src/list.lisp
+            @@ -36,5 +36,6 @@
+             (defun %validated-model-count (value name)
+               (unless (and (integerp value) (>= value 0))
+            -    (error 'callback-contract-error :callback name :value (bounded-datum value)
+            +    (error 'callback-contract-error :callback name
+            +           :value (cl-tui-kit/core::bounded-datum value)
+                        :detail (format nil "~A must return a non-negative integer." name)))
+               value)
+          '';
+        in
+        pkgs.applyPatches {
+          name = "cl-tui-kit-${cl-tui-kit.shortRev or "v4.1.3"}";
+          src = cl-tui-kit;
+          patches = [ boundedDatumPatch ];
+        };
+
+      siblingRepos = system: [
         cl-weave
         cl-cli
         cl-date-kit
@@ -200,18 +224,20 @@
         cl-regex-kit
         cl-codec-kit
         cl-host-kit
-        cl-tui-kit
+        (patchedClTuiKit system)
         cl-vcs-kit
       ];
 
       # Colon-separated source roots, read by run-tests.lisp. Keeping the list
       # in one variable means the checks, the app and the devShell cannot drift
       # apart on which siblings they can see.
-      siblingRegistry = nixpkgs.lib.concatStringsSep ":" (map toString siblingRepos);
+      siblingRegistry = system: nixpkgs.lib.concatStringsSep ":" (map toString (siblingRepos system));
 
-      siblingRegistryPushEvals = nixpkgs.lib.concatMapStringsSep " " (
-        repo: ''--eval "(push (truename \"${repo}/\") asdf:*central-registry*)"''
-      ) siblingRepos;
+      siblingRegistryPushEvals =
+        system:
+        nixpkgs.lib.concatMapStringsSep " " (
+          repo: ''--eval "(push (truename \"${repo}/\") asdf:*central-registry*)"''
+        ) (siblingRepos system);
 
       # Plain SBCL, with NO Quicklisp-packaged libraries wrapped around it.
       #
@@ -259,7 +285,7 @@
               sbcl
               pkgs.coreutils
             ];
-            NERIMUX_SIBLING_REGISTRY = siblingRegistry;
+            NERIMUX_SIBLING_REGISTRY = siblingRegistry system;
             NERIMUX_TEST_SYSTEM = testSystem;
           }
           ''
@@ -274,7 +300,7 @@
             ${pkgs.coreutils}/bin/timeout --signal=TERM --kill-after=30s 2700 \
               ${sbcl}/bin/sbcl --dynamic-space-size 4096 --no-sysinit \
               --no-userinit --disable-debugger --script run-tests.lisp
-            touch "$out"
+            ${pkgs.coreutils}/bin/touch "$out"
           '';
     in
     {
@@ -305,8 +331,11 @@
                 --no-sysinit \
                 --no-userinit \
                 --eval "(require :asdf)" \
+                --eval "(sb-impl::module-provide-contrib :sb-posix)" \
+                --eval "(asdf:register-preloaded-system \"sb-posix\")" \
+                --eval "(setf asdf/source-registry:*source-registry* (make-hash-table :test (function equal)))" \
                 --eval "(push (truename \".\") asdf:*central-registry*)" \
-                ${siblingRegistryPushEvals} \
+                ${siblingRegistryPushEvals system} \
                 --eval "(asdf:load-system \"nerimux\")" \
                 --eval "(sb-ext:save-lisp-and-die \"nerimux.core\"
                            :toplevel #'nerimux:main
@@ -385,7 +414,7 @@
                   sbcl
                   pkgs.coreutils
                 ];
-                NERIMUX_SIBLING_REGISTRY = siblingRegistry;
+                NERIMUX_SIBLING_REGISTRY = siblingRegistry system;
               }
               ''
                 export HOME="$TMPDIR/home"
@@ -441,7 +470,7 @@
               pkgs.coreutils
             ];
             text = ''
-              export NERIMUX_SIBLING_REGISTRY="${siblingRegistry}"
+              export NERIMUX_SIBLING_REGISTRY="${siblingRegistry system}"
               export NERIMUX_TEST_SYSTEM="''${NERIMUX_TEST_SYSTEM:-nerimux/test}"
               # Run against a writable copy for the same reason the checks do:
               # the suite compiles in place and ${self} is read-only.
@@ -465,7 +494,7 @@
               pkgs.coreutils
             ];
             text = ''
-              export NERIMUX_SIBLING_REGISTRY="${siblingRegistry}"
+              export NERIMUX_SIBLING_REGISTRY="${siblingRegistry system}"
               export NERIMUX_TEST_SYSTEM="nerimux/pty-test"
               work="$(mktemp -d)"
               trap 'rm -rf "$work"' EXIT
@@ -529,7 +558,7 @@
               sbcl
               pkgs.coreutils
             ];
-            NERIMUX_SIBLING_REGISTRY = siblingRegistry;
+            NERIMUX_SIBLING_REGISTRY = siblingRegistry system;
             shellHook = ''
               # Registers the central-registry entries the checks use, so an
               # interactive `sbcl` session finds nerimux and every sibling
@@ -541,8 +570,11 @@
               nerimux-sbcl() {
                 sbcl --dynamic-space-size 4096 --no-sysinit --no-userinit \
                      --disable-debugger --eval "(require :asdf)" \
+                     --eval "(sb-impl::module-provide-contrib :sb-posix)" \
+                     --eval "(asdf:register-preloaded-system \"sb-posix\")" \
+                     --eval "(setf asdf/source-registry:*source-registry* (make-hash-table :test (function equal)))" \
                      --eval "(push (truename \".\") asdf:*central-registry*)" \
-                     ${siblingRegistryPushEvals} \
+                     ${siblingRegistryPushEvals system} \
                      "$@"
               }
 

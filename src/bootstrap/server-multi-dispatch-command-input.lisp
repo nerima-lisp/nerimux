@@ -366,5 +366,3 @@
     (t
      (%client-command-buffer-append conn payload)
      t)))
-
-

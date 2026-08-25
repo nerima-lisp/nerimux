@@ -7,10 +7,11 @@
 ;;;; it, so the command a contributor runs by hand and the command CI runs are
 ;;;; the same one.
 ;;;;
-;;;; Which suite runs is chosen by NERIMUX_TEST_SYSTEM, defaulting to the only
-;;;; registered suite:
+;;;; Which suite runs is chosen by NERIMUX_TEST_SYSTEM, defaulting to the full
+;;;; suite:
 ;;;;
 ;;;;   nerimux/test      the full unit + integration suite (checks.default)
+;;;;   nerimux/vcs-test  focused VCS infrastructure suite
 ;;;;   nerimux/pty-test  the real-PTY suite; needs /dev/ptmx, so it is an app
 ;;;;                     (nix run .#test-pty) and deliberately not a check
 ;;;;
@@ -19,16 +20,18 @@
 ;;;; pass/fail contract in the .asd rather than duplicating a runner per suite.
 
 (require :asdf)
+(sb-impl::module-provide-contrib :sb-posix)
+(asdf:register-preloaded-system "sb-posix")
 
 ;;; ASDF has to be told where this checkout and its sibling libraries are.
 ;;; Sibling packages are consumed purely as source (see flake.nix), so they go
 ;;; on the central registry rather than through nixpkgs Lisp packaging.
-;;;
+(setf asdf/source-registry:*source-registry*
+      (make-hash-table :test (function equal)))
+
 ;;; NERIMUX_SIBLING_REGISTRY is a colon-separated list of sibling source roots
-;;; supplied by flake.nix. It is optional: an unset value leaves the registry
-;;; alone, which is what a developer wants when the siblings are already on
-;;; CL_SOURCE_REGISTRY (the nixpkgs sbcl wrapper only ever *prefixes* that
-;;; variable, so an outer value survives).
+;;; supplied by flake.nix. An unset value still permits dependencies explicitly
+;;; registered by the invoking image, without scanning machine-global trees.
 (push (uiop:pathname-directory-pathname *load-truename*)
       asdf:*central-registry*)
 
