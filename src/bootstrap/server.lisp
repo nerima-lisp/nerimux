@@ -141,7 +141,10 @@ and multi-client message handlers structurally aligned."
 
 (defmacro define-key-rules (name (session-var conn-var payload-var) &rest clauses)
   "Build a named key-payload dispatch function from a declarative rule table.
-   CLAUSES may start with a docstring, exactly like an ordinary DEFUN body.
+   CLAUSES may start with a docstring, exactly like an ordinary DEFUN body,
+   then an optional (:LET ((var expr)...)) form -- exactly a LET*, in scope
+   for every rule below it -- for a dispatcher whose rules need shared
+   context (e.g. the focused pane's screen) rather than PAYLOAD-VAR alone.
    Each remaining RULE is (PATTERN &rest BODY) where PATTERN is:
      character → (%CLIENT-KEY-P PAYLOAD-VAR character)
      integer   → (%CLIENT-BYTE-P PAYLOAD-VAR integer)
@@ -149,21 +152,26 @@ and multi-client message handlers structurally aligned."
      anything else → used verbatim as the COND test
    SESSION-VAR, CONN-VAR, and PAYLOAD-VAR are bound in every rule body."
   (let* ((docstring (and (stringp (first clauses)) (first clauses)))
-         (rules (if docstring (rest clauses) clauses)))
+         (rest1 (if docstring (rest clauses) clauses))
+         (let-form (and (consp (first rest1)) (eq (caar rest1) :let)
+                        (first rest1)))
+         (bindings (second let-form))
+         (rules (if let-form (rest rest1) rest1)))
     `(defun ,name (,session-var ,conn-var ,payload-var)
        ,@(when docstring (list docstring))
        (declare (ignorable ,session-var ,conn-var ,payload-var))
-       (cond
-         ,@(mapcar
-            (lambda (rule)
-              (destructuring-bind (pattern &rest body) rule
-                `(,(cond
-                     ((eq pattern t)       t)
-                     ((characterp pattern) `(%client-key-p ,payload-var ,pattern))
-                     ((integerp pattern)   `(%client-byte-p ,payload-var ,pattern))
-                     (t                    pattern))
-                  ,@body)))
-            rules)))))
+       (let* ,bindings
+         (cond
+           ,@(mapcar
+              (lambda (rule)
+                (destructuring-bind (pattern &rest body) rule
+                  `(,(cond
+                       ((eq pattern t)       t)
+                       ((characterp pattern) `(%client-key-p ,payload-var ,pattern))
+                       ((integerp pattern)   `(%client-byte-p ,payload-var ,pattern))
+                       (t                    pattern))
+                    ,@body)))
+              rules))))))
 
 (defmacro define-command-rules
     (name (session-var conn-var cmd-var target-var args-var) &rest clauses)
