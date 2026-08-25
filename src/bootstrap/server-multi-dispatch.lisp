@@ -66,15 +66,43 @@
 ;;; message-dispatch macro itself lives in server.lisp, which ASDF loads before
 ;;; this file; server-multi.lisp then uses the same expansion.
 (defmacro with-loop-safe-error (binding &body body)
-  "Run BODY, catching any ERROR so one bad client/command can never wedge the
-   multi-client event loop.  On success, returns BODY's value; on an ERROR,
-   evaluates and returns ON-ERROR instead — optionally with the condition bound
-   to CONDITION-VAR so ON-ERROR can log it.  This is the single shape behind
-   this file's 'never let one client take down the server loop' invariant."
+  "Run BODY, catching a failed client/command so one of them can never wedge
+   the multi-client event loop.  On success, returns BODY's value; on a
+   failure, evaluates and returns ON-ERROR instead — optionally with the
+   condition bound to CONDITION-VAR so ON-ERROR can log it.  This is the
+   single shape behind this file's 'never let one client take down the server
+   loop' invariant.
+
+   The clause is (OR ERROR SB-EXT:TIMEOUT), not ERROR, and the difference is
+   the whole invariant.  SB-EXT:TIMEOUT is a SERIOUS-CONDITION that is
+   deliberately NOT an ERROR — verified on SBCL 2.6.6:
+   (subtypep 'sb-ext:timeout 'error) => NIL — so an ERROR-only clause misses
+   it silently.
+
+   That is exactly the condition this macro is wrapped around.  SEND-FRAME
+   (infrastructure/net/transport.lisp) bounds its write with
+   SB-EXT:WITH-TIMEOUT and documents itself as signalling SB-EXT:TIMEOUT when
+   the peer is too slow to accept it.  %BROADCAST-FRAME calls it through this
+   macro for every attached client on every dirty frame.  With an ERROR-only
+   clause, one client whose socket stalls for +send-frame-timeout-seconds+ —
+   a suspended terminal, a laggy hop, a full send buffer — raised a condition
+   that passed straight through this handler, through the serve loop, and out
+   of RUN-SERVER, taking the process down and disconnecting EVERY client.
+   The macro promised the opposite of what it did, for the one failure it
+   most needed to contain.
+
+   %DROP-CLIENT (server-multi.lisp) already had the correct shape, listing
+   (SB-EXT:TIMEOUT () NIL) beside its socket and stream clauses; this brings
+   the shared macro in line with it.
+
+   Deliberately NOT widening to SERIOUS-CONDITION: that would also swallow
+   STORAGE-CONDITION, and heap exhaustion must stay fatal rather than be
+   retried once per client per frame.  Confirmed the narrow specifier keeps
+   it fatal."
   (let ((condition-var (first binding))
         (on-error (getf (rest binding) :on-error)))
     `(handler-case (progn ,@body)
-       (error ,(if condition-var (list condition-var) '())
+       ((or error sb-ext:timeout) ,(if condition-var (list condition-var) '())
          ,on-error))))
 
 (defvar *client-esc-swallow-counts* (make-hash-table :test #'eq :weakness :key)

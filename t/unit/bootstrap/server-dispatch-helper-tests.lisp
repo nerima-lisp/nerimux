@@ -37,6 +37,48 @@
 
 (describe "server-dispatch-helper-suite"
 
+  ;;; -- with-loop-safe-error containment ---------------------------------------
+  ;;;
+  ;;; This macro carries the file's "never let one client take down the server
+  ;;; loop" invariant, and had no test at all -- which is how it came to miss
+  ;;; the one condition it most needed to contain.
+  ;;;
+  ;;; SB-EXT:TIMEOUT is a SERIOUS-CONDITION that is deliberately NOT an ERROR,
+  ;;; so the obvious (ERROR ...) clause reads as if it catches everything and
+  ;;; silently does not.  SEND-FRAME bounds every socket write with
+  ;;; SB-EXT:WITH-TIMEOUT and documents itself as signalling exactly this, and
+  ;;; %BROADCAST-FRAME runs it through this macro for every attached client on
+  ;;; every dirty frame -- so one stalled peer escaped the handler and took the
+  ;;; whole server down with it.
+  ;;;
+  ;;; The third case is not padding: it pins that the fix stayed NARROW.
+  ;;; Widening to SERIOUS-CONDITION would also catch STORAGE-CONDITION, turning
+  ;;; heap exhaustion into a per-client-per-frame retry loop instead of a
+  ;;; fatal error.
+
+  (it "with-loop-safe-error-contains-a-send-timeout"
+    (let ((ran nil))
+      (expect (eq :contained
+                  (nerimux::with-loop-safe-error (nil :on-error :contained)
+                    (setf ran t)
+                    (sb-ext:with-timeout 0.05 (sleep 5)))))
+      (expect ran)))
+
+  (it "with-loop-safe-error-contains-an-ordinary-error-and-binds-it"
+    (expect (search "boom"
+                    (nerimux::with-loop-safe-error
+                        (condition :on-error (princ-to-string condition))
+                      (error "boom")))))
+
+  (it "with-loop-safe-error-does-not-swallow-storage-condition"
+    ;; Heap exhaustion must stay fatal; SIGNAL rather than a real allocation
+    ;; failure, since the point is which clause matches, not how it arose.
+    (expect (eq :propagated
+                (handler-case
+                    (nerimux::with-loop-safe-error (nil :on-error :wrongly-caught)
+                      (signal 'storage-condition))
+                  (storage-condition () :propagated)))))
+
   (it "resolves-workspace-selectors-and-attach-paths"
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)

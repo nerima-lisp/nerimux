@@ -65,9 +65,19 @@
             (let* ((mode  (first mode-args))
                    (rest  (rest mode-args))
                    (entry (cdr (assoc mode *startup-modes* :test #'equal))))
+              ;; (OR ERROR SB-EXT:TIMEOUT), not ERROR: this is the outermost
+              ;; net, and SB-EXT:TIMEOUT is a SERIOUS-CONDITION that is
+              ;; deliberately not an ERROR, so an ERROR-only clause lets it
+              ;; through — into precisely the raw SBCL debugger this handler
+              ;; exists to keep a real user out of.  It is a reachable
+              ;; condition here, not a theoretical one: SEND-FRAME bounds
+              ;; every socket write with SB-EXT:WITH-TIMEOUT and documents
+              ;; itself as signalling it, and both the client loop and the
+              ;; server loop reach this frame.  See the fuller note on
+              ;; WITH-LOOP-SAFE-ERROR in server-multi-dispatch.lisp.
               (handler-case
                   (%dispatch-startup-mode-entry entry mode rest)
-                (error (c)
+                ((or error sb-ext:timeout) (c)
                   (format *error-output* "~&nerimux: ~A~%" c)
                   (sb-ext:exit :code 1)))))))))
 
