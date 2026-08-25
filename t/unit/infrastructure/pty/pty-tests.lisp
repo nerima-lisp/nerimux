@@ -14,6 +14,28 @@
 ;;;; (The child-environment assignment logic now lives in
 ;;;; session-environment-tests.lisp.)
 
+(defun %wait-until-process-gone (pid &optional (deadline-seconds 5))
+  "Poll until PID is no longer a live process, bounded by DEADLINE-SECONDS.
+   Returns T when it went away, NIL when the deadline passed first.
+
+   Deliberately not SB-EXT:PROCESS-WAIT, and deliberately taking a PID rather
+   than a process object: the caller has just handed its process object to
+   PTY-CLOSE, which closes it, so SBCL's own bookkeeping for it is gone.
+   %PROCESS-ALIVE-P asks the kernel instead (kill(pid, 0)).
+
+   The deadline is the point.  Every wait in this file must be able to fail;
+   an unbounded one here cannot even be interrupted, because PROCESS-WAIT
+   parks in select(2) where SBCL cannot deliver a timeout.  Shape follows the
+   deadline loop already used in t/unit/infrastructure/vcs/vcs-tests.lisp."
+  (let ((deadline (+ (get-internal-real-time)
+                     (* deadline-seconds internal-time-units-per-second))))
+    (loop
+      (unless (nerimux::%process-alive-p pid)
+        (return t))
+      (when (>= (get-internal-real-time) deadline)
+        (return nil))
+      (sleep 0.01))))
+
 (describe "pty process table"
   (it "remembers-and-takes-processes-atomically"
     (let* ((master-fd (gensym "synthetic-master-"))
@@ -184,6 +206,27 @@
             (ignore-errors (sb-ext:process-wait process))
             (ignore-errors (sb-ext:process-close process)))))))
 
+  ;; Never SB-EXT:PROCESS-WAIT on a process PTY-CLOSE has touched.
+  ;;
+  ;; PTY-CLOSE calls SB-EXT:PROCESS-CLOSE on this very process object as part
+  ;; of its contract, so waiting on it afterwards waits on a handle whose
+  ;; bookkeeping is already released and never completes.  That alone would be
+  ;; a slow test; what makes it fatal is HOW it waits.  PROCESS-WAIT polls
+  ;; through SERVE-ALL-EVENTS, i.e. select(2) -- a foreign call.  SBCL can only
+  ;; deliver an interrupt at a safepoint, so a thread parked there is reachable
+  ;; by neither SB-EXT:WITH-TIMEOUT nor INTERRUPT-THREAD: no deadline of any
+  ;; kind can break it out.
+  ;;
+  ;; That is not hypothetical.  This test wedged the ENTIRE suite: the run
+  ;; produced no output at all (every cl-weave reporter formats a collected
+  ;; event list at the end, so a hung run prints nothing rather than stopping
+  ;; visibly), CI hit its 30-minute job ceiling, and GitHub reported the
+  ;; timeout as `cancelled' -- which reads as "someone cancelled it", not as a
+  ;; failing test.
+  ;;
+  ;; Poll the PID instead.  %PROCESS-ALIVE-P asks the OS via kill(pid, 0)
+  ;; rather than SBCL's released handle, and the deadline turns "the child
+  ;; never died" into a red test instead of a wedged runner.
   (it "pty-close-signals-and-closes-a-registered-process"
     (let* ((process (sb-ext:run-program
                      "/bin/sh" '("-c" "exec sleep 60")
@@ -195,11 +238,13 @@
            (progn
              (nerimux/pty::%remember-pty-process master-fd pty)
              (nerimux/pty:pty-close master-fd child-pid)
-             (sb-ext:process-wait process)
-             (expect (eq :signaled (sb-ext:process-status process)))
+             ;; The SIGHUP landed: the child is gone within the deadline.
+             (expect (%wait-until-process-gone child-pid))
              (expect (null (gethash master-fd nerimux/pty::*pty-processes*))))
-        (ignore-errors (sb-posix:kill child-pid sb-posix:sighup))
-        (ignore-errors (sb-ext:process-wait process))
+        ;; SIGKILL, not SIGHUP: cleanup must not depend on the very signal the
+        ;; assertion above is testing, or a regression in PTY-CLOSE would leak
+        ;; a 60-second sleeper into every later test in the run.
+        (ignore-errors (sb-posix:kill child-pid sb-posix:sigkill))
         (ignore-errors (sb-ext:process-close process))
         (nerimux/pty::%take-pty-process master-fd))))
 
