@@ -32,20 +32,93 @@
      "/"
      (if (and tmpdir (plusp (length tmpdir))) tmpdir "/tmp"))))
 
+(defun %verify-socket-directory-private (dir uid)
+  "Refuse to trust DIR as the socket boundary unless LSTAT shows it is,
+   right now, a real directory (not a symlink), owned by UID, with mode
+   exactly #o700.  Signals an error naming DIR and the failed property
+   instead of returning when any check fails (fail-closed per the security
+   model: docs/src/reference/security-model.md, \"The socket directory is
+   the security boundary\").
+
+   Uses LSTAT, never STAT: STAT follows a symlink and would report the
+   permissions of whatever DIR points to rather than of DIR itself, which
+   is exactly the check a symlinked DIR needs to fail."
+  (let ((stat (handler-case (sb-posix:lstat dir)
+                (sb-posix:syscall-error (c)
+                  (error "nerimux: refusing to start: cannot verify socket ~
+                          directory ~A is private (~A)"
+                         dir c)))))
+    (when (sb-posix:s-islnk (sb-posix:stat-mode stat))
+      (error "nerimux: refusing to start: socket directory ~A is a ~
+              symlink, not a real directory -- the socket boundary ~
+              (docs/src/reference/security-model.md) cannot be trusted ~
+              through a link another user may have created"
+             dir))
+    (unless (sb-posix:s-isdir (sb-posix:stat-mode stat))
+      (error "nerimux: refusing to start: socket directory ~A is not a ~
+              directory"
+             dir))
+    (unless (= (sb-posix:stat-uid stat) uid)
+      (error "nerimux: refusing to start: socket directory ~A is owned by ~
+              uid ~D, not the current uid ~D -- another user could control ~
+              the socket boundary"
+             dir (sb-posix:stat-uid stat) uid))
+    (let ((mode (logand (sb-posix:stat-mode stat) #o777)))
+      (unless (= mode #o700)
+        (error "nerimux: refusing to start: socket directory ~A has mode ~
+                ~3,'0O, not the required 0700 -- a group- or ~
+                world-accessible directory would let another local user ~
+                reach the socket"
+               dir mode)))
+    stat))
+
 (defun %socket-directory ()
   "Per-UID socket directory <base>/nerimux-<uid>, created mode 0700 when
-   possible.  Returns the directory string without a
-   trailing slash.  Creation/chmod failures are ignored — socket binding will
-   surface a real permission problem with a better error."
+   possible and then VERIFIED (not merely attempted) to be private before
+   being trusted: see docs/src/reference/security-model.md, \"The socket
+   directory is the security boundary\" -- anyone who can reach the socket
+   this directory holds can run commands as the owning user.  Returns the
+   directory string without a trailing slash, or signals an error naming
+   the path and the failed property (%verify-socket-directory-private,
+   above) when the directory cannot be made private.  Startup refuses to
+   proceed rather than warn-and-continue: a directory that already existed
+   as a symlink, or already belonged to another uid, or was left
+   group/world-writable, must stop the server, not just fail to fix itself.
+
+   CHMOD is gated on having just created DIR, and never runs against a path
+   that already existed.  SB-POSIX:CHMOD FOLLOWS SYMLINKS and exports no
+   LCHMOD, so chmod-then-verify handed an attacker a confused deputy: plant
+   nerimux-<uid> as a symlink to any directory the victim owns, and the
+   victim's own startup would chmod THAT target to 0700 -- silently narrowing
+   permissions on a directory of the attacker's choosing -- before the LSTAT
+   below correctly refused to start.  Verifying first means a pre-existing
+   path is only ever inspected, never mutated.
+
+   Residual TOCTOU window: ENSURE-DIRECTORIES-EXIST and the LSTAT inside
+   %VERIFY-SOCKET-DIRECTORY-PRIVATE both resolve DIR by path, so the race is
+   narrowed -- to the gap between that LSTAT and the later socket BIND in
+   RUN-SERVER -- rather than eliminated.  SB-POSIX binds no
+   mkdirat/fchmodat/fstatat.  It does bind OPEN (with O-NOFOLLOW and
+   O-DIRECTORY), FSTAT, FCHMOD and FCHDIR, which together could pin one
+   descriptor across verify-and-bind; that is not done here because FCHDIR
+   mutates process-wide working directory, and this server spawns PTY
+   children from multiple threads that inherit it.  The obstacle is that
+   cost, not the absence of a primitive."
   (require :sb-posix)
   (let* ((uid (sb-posix:getuid))
-         (dir (format nil "~A/nerimux-~D" (%socket-tmp-base) uid)))
-    (handler-case
-        (ensure-directories-exist (format nil "~A/" dir))
-      (file-error () nil))
-    (handler-case
-        (sb-posix:chmod dir #o700)
-      (sb-posix:syscall-error () nil))
+         (dir (format nil "~A/nerimux-~D" (%socket-tmp-base) uid))
+         (pre-existing (handler-case (and (sb-posix:lstat dir) t)
+                         (sb-posix:syscall-error () nil))))
+    (unless pre-existing
+      (handler-case
+          (ensure-directories-exist (format nil "~A/" dir))
+        (file-error () nil))
+      ;; Only ever on a path this process just created, so there is no
+      ;; attacker-planted symlink for CHMOD to follow.
+      (handler-case
+          (sb-posix:chmod dir #o700)
+        (sb-posix:syscall-error () nil)))
+    (%verify-socket-directory-private dir uid)
     dir))
 
 (defun socket-path (name)
@@ -64,6 +137,10 @@
       (window-relayout active-window
                        (- rows +status-line-rows+)
                        cols))))
+
+;;; PEER-IO-FAILURE, which several handlers in this file's dispatch path use,
+;;; is defined in runtime.lisp -- nerimux.asd loads BOOTSTRAP-RUNTIME before
+;;; BOOTSTRAP-SERVER, and runtime-reader.lisp needs the type too.
 
 ;;; ── Message-type dispatch macro ──────────────────────────────────────────────
 ;;;

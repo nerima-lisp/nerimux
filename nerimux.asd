@@ -58,13 +58,13 @@
   ;;                          which has neither construct either.
   :depends-on (:cl-date-kit      ; exact elapsed-time values for deadline APIs
                :cl-concurrent-kit ; threads, locks, condvars and preemptive deadlines
-               :cl-regex-kit     ; regex engine behind the format #{m/r:...} and #{s///:} modifiers
+               :cl-regex-kit     ; regex engine behind copy-mode search/highlight and picker query matching
                :cl-cli           ; startup argv/flag parsing (main-startup-flags)
                :cl-parser-kit    ; commands-tokenizer combinator rewrite
                :cl-tty-kit       ; PTY spawn/raw-mode/fd-io, ioctl window size, colour downsampling
-               :cl-process-kit   ; timeout-guarded subprocess run, and select(2) over raw fds
+               :cl-process-kit   ; select(2)/wait-for-input over raw fds (PTY readiness poll)
                :cl-codec-kit     ; string<->octet UTF-8 codec (protocol, PTY, OSC payloads)
-               :cl-host-kit      ; pathname/string host ops (split-string, directory helpers)
+               :cl-host-kit      ; split-string, used by the OSC rgb: colour parser
                :cl-tui-kit/ansi  ; headless surface/backend rendering for per-client frames
                :cl-tui-kit/layout ; geometry and viewport layout for client frames
                :cl-tui-kit/widgets ; widget rendering for client frames

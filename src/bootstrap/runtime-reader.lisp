@@ -59,7 +59,29 @@
     (if (null bytes)
         #'reader-eof-state
         (progn
-          (pane-feed pane bytes)
+          ;; PANE-FEED is not just a screen update: after processing the bytes
+          ;; it drains the device-report queue (DA1/DA2/CPR/DSR/DECRQM/
+          ;; XTGETTCAP/DECRQSS/OSC-colour) back to the PTY through WRITE-PTY,
+          ;; i.e. PTY-WRITE -- which is bounded by SB-EXT:WITH-TIMEOUT and so
+          ;; can signal SB-EXT:TIMEOUT when the pane's child has stopped
+          ;; draining its input (SIGTSTP'd, wedged) for longer than
+          ;; +PTY-WRITE-TIMEOUT-SECONDS+.
+          ;;
+          ;; This runs on a per-pane reader THREAD, and an unhandled condition
+          ;; on a non-main thread does not merely kill that thread: under
+          ;; --disable-debugger SBCL prints "unhandled condition in
+          ;; --disable-debugger mode, quitting" and the WHOLE PROCESS exits.
+          ;; Verified directly with a two-thread probe -- the main thread's
+          ;; scheduled output never ran.  One pane whose child stopped reading
+          ;; would therefore disconnect every client on every pane.
+          ;;
+          ;; Contained rather than propagated: a device-report reply that
+          ;; cannot be delivered is not worth a reader thread, let alone the
+          ;; server.  The pane keeps its screen state and the loop continues;
+          ;; a genuinely dead pane still reaches READER-EOF-STATE by its read
+          ;; returning NIL.
+          (handler-case (pane-feed pane bytes)
+            (peer-io-failure () nil))
           (nerimux/model:pane-mark-output pane bytes)
           (when (find 7 bytes)
             (nerimux/model:pane-mark-bell pane))

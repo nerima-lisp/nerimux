@@ -198,7 +198,7 @@
       ((pane-live-p pane)
        (handler-case
            (nerimux/pty:pty-write (pane-fd pane) payload)
-         (error (condition)
+         (peer-io-failure (condition)
            (%client-notify
             conn
             (format nil "input failed: ~A" condition)))))
@@ -303,7 +303,26 @@
         (handler-case
             (let* ((tokens (tokenize-command-string input))
                    (name (first tokens))
-                   (cmd (and name (intern (string-upcase name) :keyword)))
+                   ;; FIND-SYMBOL, never INTERN: NAME comes from
+                   ;; CLIENT-CONN-COMMAND-BUFFER, which is filled one keystroke
+                   ;; at a time by %CLIENT-COMMAND-BUFFER-APPEND with no length
+                   ;; cap, straight from the wire.  INTERN here let any peer
+                   ;; grow the KEYWORD package without bound -- CL never
+                   ;; releases interned symbols -- simply by typing a fresh
+                   ;; garbage name and pressing Enter, repeatedly, for the life
+                   ;; of the server.
+                   ;;
+                   ;; Falling back to the raw string rather than NIL keeps the
+                   ;; "unknown command" report: DEFINE-COMMAND-RULES compares
+                   ;; with EQ/MEMBER against keyword literals, so a string
+                   ;; matches nothing and falls through exactly as an
+                   ;; unrecognised keyword did, while NIL would instead read as
+                   ;; "no command at all" and report nothing.  Same shape as
+                   ;; DECODE-COMMAND-PAYLOAD (infrastructure/net/protocol-command.lisp)
+                   ;; and %CLIENT-UI-MODE-VALUE.
+                   (cmd (and name
+                             (or (find-symbol (string-upcase name) :keyword)
+                                 name)))
                    (search-direction (%client-search-direction name)))
               (if search-direction
                   (multiple-value-bind (target args)

@@ -127,8 +127,19 @@
           and do (setf start (1+ i))))
 
 (defun decode-command-payload (payload)
-  "Decode a +msg-command+ PAYLOAD into (values command-keyword target args).
-   COMMAND-KEYWORD is a keyword symbol of the command name.
+  "Decode a +msg-command+ PAYLOAD into (values command target args).
+   COMMAND is the keyword symbol for the command name when that name matches
+   an existing symbol in the KEYWORD package, or the raw command-name string
+   when no such keyword exists.  Every command name the dispatch tables
+   recognize is written as a literal keyword in source, so it is already
+   interned by the time this runs; an unrecognized name is therefore never
+   turned into a freshly interned keyword (which would grow the KEYWORD
+   package without bound under client-controlled input) -- it is passed
+   through as a string instead.  %HANDLE-CLIENT-UI-COMMAND compares COMMAND
+   with EQ against keywords, so a string never matches and is handled the
+   same as an unrecognized command; %HANDLE-MULTI-COMMAND-MESSAGE still
+   reports \"unknown command: ~A\" for it, since a string is truthy and
+   prints fine, whereas NIL would fall through and silently drop the message.
    TARGET is a string or NIL when absent.
    ARGS is a list of argument strings (may be nil).
    The first NUL-delimited field is examined by TARGET-FIELD-P to determine
@@ -141,10 +152,12 @@
        (values nil nil nil))
       ((and (>= (length fields) 2)
             (target-field-p (first fields)))
-       (values (intern (string-upcase (second fields)) :keyword)
+       (values (or (find-symbol (string-upcase (second fields)) :keyword)
+                   (second fields))
                (first fields)
                (cddr fields)))
       (t
-       (values (intern (string-upcase (first fields)) :keyword)
+       (values (or (find-symbol (string-upcase (first fields)) :keyword)
+                   (first fields))
                nil
                (rest fields))))))

@@ -73,7 +73,7 @@
    single shape behind this file's 'never let one client take down the server
    loop' invariant.
 
-   The clause is (OR ERROR SB-EXT:TIMEOUT), not ERROR, and the difference is
+   The clause is PEER-IO-FAILURE (server.lisp), not ERROR, and the difference is
    the whole invariant.  SB-EXT:TIMEOUT is a SERIOUS-CONDITION that is
    deliberately NOT an ERROR — verified on SBCL 2.6.6:
    (subtypep 'sb-ext:timeout 'error) => NIL — so an ERROR-only clause misses
@@ -102,7 +102,7 @@
   (let ((condition-var (first binding))
         (on-error (getf (rest binding) :on-error)))
     `(handler-case (progn ,@body)
-       ((or error sb-ext:timeout) ,(if condition-var (list condition-var) '())
+       (peer-io-failure ,(if condition-var (list condition-var) '())
          ,on-error))))
 
 (defvar *client-esc-swallow-counts* (make-hash-table :test #'eq :weakness :key)

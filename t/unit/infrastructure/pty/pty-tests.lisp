@@ -314,6 +314,40 @@
       (nerimux/pty:pty-write
        -1 (make-array 1 :element-type '(unsigned-byte 8)
                       :initial-contents '(1)))))
+  (it "pty-write-signals-sb-ext-timeout-when-the-underlying-write-hangs"
+    (with-stubbed-fdefinition
+        ((cl-tty-kit:fd-write-octets
+           (lambda (&rest arguments)
+             (declare (ignore arguments))
+             ;; Well past +pty-write-timeout-seconds+ (2s) so with-timeout,
+             ;; not this sleep completing, is what ends the call; short
+             ;; enough that the test itself still finishes in a couple of
+             ;; seconds.
+             (sleep (+ nerimux/pty::+pty-write-timeout-seconds+ 1))
+             0)))
+      ;; CL-WEAVE:SIGNALS cannot express this.  Its :TO-THROW matcher goes
+      ;; through THROWN-CONDITION (cl-weave 1.3.0,
+      ;; src/matcher-runtime.lisp:153-161), which is
+      ;;   (handler-case (progn (funcall thunk) nil) (error (c) c))
+      ;; -- ERROR only.  SB-EXT:TIMEOUT is a SERIOUS-CONDITION deliberately
+      ;; NOT an ERROR (the very asymmetry PEER-IO-FAILURE exists for), so it
+      ;; sails straight through that handler and is reported as a test ERROR
+      ;; rather than a caught signal.  commands-tests-c.lisp works around the
+      ;; same limitation for CL-CONCURRENT-KIT:OPERATION-TIMED-OUT the same
+      ;; way: catch it directly.
+      ;;
+      ;; Still proves boundedness.  Unbounded, the stub's sleep would return
+      ;; normally, PTY-WRITE would return, the PROGN would yield NIL, and
+      ;; (typep nil 'sb-ext:timeout) is NIL -- red.  Bounded, the timeout
+      ;; fires first and TYPEP confirms the exact condition class.
+      (expect (typep (handler-case
+                         (progn
+                           (nerimux/pty:pty-write
+                            90129 (make-array 1 :element-type '(unsigned-byte 8)
+                                                :initial-contents '(1)))
+                           nil)
+                       (sb-ext:timeout (condition) condition))
+                     'sb-ext:timeout))))
 
   ;;; ── terminal-size ─────────────────────────────────────────────────────────────
 

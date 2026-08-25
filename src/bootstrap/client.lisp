@@ -12,6 +12,9 @@
 ;;;;   %forward-stdin-byte   — read one byte from stdin and forward it to the server
 ;;;;   %decode-server-frame  — pure: read one server frame, return disposition + text
 ;;;;   %receive-server-frame — effect boundary: call decode, then write text to stdout
+;;;;   %run-attach-session   — handshake + event loop, socket-testable without a live terminal;
+;;;;                           contains PEER-IO-FAILURE (server.lisp) so a wedged peer exits
+;;;;                           this session cleanly instead of escaping into the debugger
 
 ;;; ── run-client event-loop helpers ───────────────────────────────────────────
 
@@ -88,11 +91,54 @@
                            (list (or target "")
                                  (%client-working-directory)))))
 
+(defun %run-attach-session (stream server-socket-fd target)
+  "Send the initial handshake (msg-attach, then the attach-target command) on
+   STREAM, then run the blocking stdin<->server relay loop until the server
+   signals end-of-session or a PEER-IO-FAILURE (server.lisp) is caught.
+
+   Extracted from RUN-CLIENT so this pure networking session (no terminal
+   calls -- no WITH-RAW-MODE, TERMINAL-SIZE, or INSTALL-SIGWINCH-HANDLER) is
+   independently testable with a socket pair, the same way
+   %MAYBE-SEND-RESIZE / %FORWARD-STDIN-BYTE / %RECEIVE-IF-READY already are
+   (see the file header's Event-loop decomposition note).
+
+   PEER-IO-FAILURE is SB-EXT:TIMEOUT from a wedged peer, or any ERROR from
+   the socket -- SEND-FRAME (infrastructure/net/transport.lisp) documents
+   itself as signalling exactly the former when the peer is too slow to
+   accept a write, and every send below reaches it.  The handshake sends and
+   every send inside the loop are one continuous single-connection session:
+   a failure at any point in it means the same thing, the connection is
+   dead, so one HANDLER-CASE wraps the whole session rather than a separate
+   one per SEND-FRAME call site.
+
+   Unlike the server's WITH-LOOP-SAFE-ERROR (server-multi-dispatch.lisp),
+   whose return value is a per-message loop disposition fed back into a
+   dispatch table, this is a single blocking client loop with no caller
+   waiting on a disposition: the right response is to report the failure to
+   *ERROR-OUTPUT* and return, exactly as reaching :exit (+msg-bye+ / EOF)
+   already does, so RUN-CLIENT's WITH-RAW-MODE still restores the terminal
+   and its outer UNWIND-PROTECT still closes the socket."
+  (handler-case
+      (progn
+        (send-frame stream (msg-attach *term-rows* *term-cols*))
+        (%send-client-attach-target stream target)
+        (loop
+          (%maybe-send-resize stream)
+          (let ((ready (select-fds (list 0 server-socket-fd) +poll-timeout-us+)))
+            (when (member 0 ready)
+              (%forward-stdin-byte stream))
+            (when (eq :exit (%receive-if-ready stream server-socket-fd ready))
+              (return)))))
+    (peer-io-failure (c)
+      (format *error-output* "~&nerimux: connection lost: ~A~%" c))))
+
 (defun run-client (name &key target)
   "Attach to the server at (socket-path NAME): forward stdin + resizes, render
    the frames the server returns, and exit on detach / server close.
    TARGET is an optional explicit organization/repository/worktree selector;
-   the current working directory is sent for cwd-based attach selection."
+   the current working directory is sent for cwd-based attach selection.
+   The handshake and event loop are %RUN-ATTACH-SESSION (above); this
+   function only owns the terminal/socket setup and teardown around it."
   (require :sb-posix)
   (let ((socket (connect-to (socket-path name))))
     (unwind-protect
@@ -103,15 +149,7 @@
            (install-sigwinch-handler)
            (with-raw-mode
              (clear-display)
-             (send-frame stream (msg-attach *term-rows* *term-cols*))
-             (%send-client-attach-target stream target)
-             (loop
-               (%maybe-send-resize stream)
-               (let ((ready (select-fds (list 0 server-socket-fd) +poll-timeout-us+)))
-                 (when (member 0 ready)
-                   (%forward-stdin-byte stream))
-                 (when (eq :exit (%receive-if-ready stream server-socket-fd ready))
-                   (return))))))
+             (%run-attach-session stream server-socket-fd target)))
       (close-socket socket))))
 
 ;;; ── nerimux kill (R8.1) ──────────────────────────────────────────────────
@@ -162,15 +200,23 @@
    line, from the server's reply), or :eof (the connection ended with no
    reply).  FORCE-P asks the server to SIGHUP then SIGKILL every live pane
    instead of refusing.
+   A PEER-IO-FAILURE (server.lisp) on the SEND-FRAME below -- SB-EXT:TIMEOUT
+   from a wedged peer, or any ERROR -- is treated exactly like :eof: no reply
+   arrived either way, so this reuses RUN-KILL's existing \"no reply from
+   server\" report (main-startup-commands.lisp) instead of inventing a second
+   message for the same user-visible outcome.
    Connection failure (no server running at NAME) is not caught here: it
    propagates as an ERROR, handled the same way main() already handles any
    other startup error (main-startup.lisp)."
   (let ((socket (connect-to (socket-path name))))
     (unwind-protect
          (let ((stream (socket-stream socket)))
-           (send-frame stream
-                       (msg-command :kill nil
-                                    (when force-p (list "--force"))))
+           (handler-case
+               (send-frame stream
+                           (msg-command :kill nil
+                                        (when force-p (list "--force"))))
+             (peer-io-failure ()
+               (return-from send-kill-request (values :eof nil))))
            (multiple-value-bind (disposition text) (%read-kill-reply stream)
              (if (eq disposition :reply)
                  (values (%parse-kill-reply-status text) text)

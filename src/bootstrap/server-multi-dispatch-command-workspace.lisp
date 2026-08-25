@@ -7,7 +7,7 @@
   (let ((name (cond ((stringp value) value)
                     ((symbolp value) (symbol-name value)))))
     (when name
-      (let ((mode (intern (string-upcase name) :keyword)))
+      (let ((mode (find-symbol (string-upcase name) :keyword)))
         (and (%client-ui-mode-p mode) mode)))))
 
 (defun %set-client-ui-mode (conn mode)

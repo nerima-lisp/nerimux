@@ -111,6 +111,48 @@
    a daemonizing grandchild still holding the PTY open) so the reader thread
    that calls this at EOF cannot block forever.")
 
+(defconstant +pty-write-timeout-seconds+ 2
+  "Wall-clock timeout, in bare seconds, for PTY-WRITE's write to a PTY master
+   fd.  Bare seconds rather than a CL-DATE-KIT:DURATION: this bounds an
+   SB-EXT:WITH-TIMEOUT call, not a CL-CONCURRENT-KIT:WITH-TIMEOUT one (see
+   +PTY-CHILD-WAIT-TIMEOUT+ above for that distinct convention), and mirrors
+   +SEND-FRAME-TIMEOUT-SECONDS+ (infrastructure/net/transport.lisp), which
+   takes the same bare form for the same reason.
+
+   PTY-WRITE has TWO callers, on two different threads, and both matter:
+
+     * %HANDLE-CLIENT-INPUT-KEY-PAYLOAD
+       (bootstrap/server-multi-dispatch-command-input.lisp), on the single
+       serve-loop thread -- an unbounded write against a full PTY input
+       buffer would hang every attached client with no recovery.  This is the
+       hot path: it forwards one keystroke, 1-4 UTF-8 bytes.
+     * %DRAIN-RESPONSE-QUEUE (domain/model/pane-core.lisp), reached through
+       PANE-FEED on the PER-PANE READER THREAD, writing device-report replies
+       (DA1/DA2/CPR/DSR/DECRQM/XTGETTCAP/DECRQSS/OSC-colour) back to the
+       child.  PTY-WRITE reaches it as NERIMUX/PORTS:*WRITE-PTY*, which is
+       why a grep for direct callers misses it.
+
+   The second one is the dangerous one and an earlier version of this
+   docstring denied it existed.  An unhandled condition on a non-main thread
+   does not kill just that thread: under --disable-debugger SBCL quits the
+   whole process.  READER-READING-STATE (bootstrap/runtime-reader.lisp)
+   therefore contains PEER-IO-FAILURE around its PANE-FEED call; do not
+   remove that guard while this timeout exists.
+
+   2 seconds is long enough for a transient backlog (a child busy processing
+   a burst of input) to drain, and short enough that a genuinely stuck pane
+   stalls its caller for a bounded, barely perceptible instant instead of
+   forever.
+
+   Measured cost, so the tradeoff is on the record: SB-EXT:WITH-TIMEOUT
+   registers and deregisters a timer against SBCL's global timer queue on
+   every call, costing ~228 bytes consed per call against 0 for the bare
+   write.  On the keystroke path that is per-keystroke.  Accepted here
+   because the alternative it replaces is an unbounded hang of every client;
+   arming the timer only after a non-blocking first write reports EWOULDBLOCK
+   would remove the cost from the common case, and is the change to make if
+   this ever shows up in a profile.")
+
 (defun pty-child-exit-status (master-fd &optional (timeout +pty-child-wait-timeout+))
   "Exit information for MASTER-FD's child process, called at PTY EOF (the child
    has closed the slave, so the wait does not normally block for a live shell;
@@ -191,7 +233,12 @@
 ;;; observe unchanged behavior.
 
 (defun pty-write (fd data)
-  "Write DATA (octet vector or UTF-8 string) to the PTY master fd."
+  "Write DATA (octet vector or UTF-8 string) to the PTY master fd, within
+   +PTY-WRITE-TIMEOUT-SECONDS+.  Signals SB-EXT:TIMEOUT when the write does
+   not complete in time (a full PTY input buffer against a stuck child), the
+   way SEND-FRAME (infrastructure/net/transport.lisp) signals it for a slow
+   peer -- see +PTY-WRITE-TIMEOUT-SECONDS+'s docstring for why this caller in
+   particular must not block unbounded."
   (etypecase data
     (string
      (pty-write fd (cl-codec-kit:string-to-octets data :encoding :utf-8)))
@@ -205,7 +252,8 @@
      ;;     are always positive, and the domain already gates real writes on
      ;;     (> (pane-fd pane) 0).
      (when (and (>= fd 0) (plusp (length data)))
-       (cl-tty-kit:fd-write-octets fd data)))))
+       (sb-ext:with-timeout +pty-write-timeout-seconds+
+         (cl-tty-kit:fd-write-octets fd data))))))
 
 (defun pty-read-blocking-into (fd buffer)
   "Block until data arrives on FD, read into the caller-supplied octet BUFFER, and
