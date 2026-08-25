@@ -508,4 +508,43 @@
 
   (it "nerimux-version-string-matches-asdf-version"
     (expect (string= (asdf:component-version (asdf:find-system "nerimux"))
-                     (nerimux/version:version-string)))))
+                     (nerimux/version:version-string))))
+
+  ;;; -- the reporter can print the domain model --------------------------------
+  ;;;
+  ;;; These two guard the runner's *PRINT-CIRCLE* binding (t/suite.lisp).
+  ;;; Without it, a failed assertion whose ACTUAL value is any linked model
+  ;;; object sends SBCL's structure pretty printer into unbounded recursion and
+  ;;; kills the process mid-report -- so instead of one red test, the run
+  ;;; produces no results at all and every other test's outcome is lost.
+  ;;;
+  ;;; The ordering matters: the binding check below fails CLEANLY if someone
+  ;;; removes the binding, which is the signal we want.  The render check that
+  ;;; follows it proves the actual behaviour, but can only ever be reached
+  ;;; while the binding is in place -- a regression that got past the first
+  ;;; check would take the process down here rather than report.  That is
+  ;;; precisely why the cheap canary comes first.
+
+  (it "the-runner-binds-print-circle"
+    (expect *print-circle*))
+
+  (it "a-cyclic-model-object-renders-without-exhausting-the-stack"
+    (let ((organization (nerimux/model:make-organization :id "org" :name "org"))
+          (repository (nerimux/model:make-repository :id "repo")))
+      (nerimux/model:organization-add-repository organization repository)
+      ;; Pin the cycle itself: without this the render below would prove
+      ;; nothing, because a non-cyclic structure prints fine either way.
+      (expect (eq organization
+                  (nerimux/model:repository-organization repository)))
+      (expect (member repository
+                      (nerimux/model:organization-repositories organization)
+                      :test #'eq))
+      ;; ~S with the pretty printer on is exactly how a reporter renders a
+      ;; failed assertion's value.
+      (let ((rendered (let ((*print-pretty* t))
+                        (format nil "~S" organization))))
+        (expect (plusp (length rendered)))
+        ;; #N= is the circular-reference label: its presence is what
+        ;; distinguishes "cycle detected and rendered" from "happened not to
+        ;; recurse", so this asserts the mechanism, not just survival.
+        (expect (search "#1=" rendered))))))
