@@ -204,4 +204,3 @@
                           worktree)
        buffer))
     (get-output-stream-string buffer)))
-
