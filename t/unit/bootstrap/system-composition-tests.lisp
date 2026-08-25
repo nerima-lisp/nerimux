@@ -494,4 +494,18 @@
       (expect (> (length layered-files) 50))
       (expect (> total-refs 100))
       (expect (null unclassified))
-      (expect (null violations)))))
+      (expect (null violations))))
+
+  ;;; -- version string --------------------------------------------------------
+  ;;;
+  ;;; nerimux.asd's :version comment calls itself "Single source of truth for
+  ;;; the version: flake.nix reads this form and release.yml refuses to
+  ;;; publish a tag that disagrees with it" -- but nothing previously checked
+  ;;; it against nerimux/version:version-string, the literal every runtime
+  ;;; reporter (-V, the cl-cli option spec, XTVERSION/DA3, #{version}) actually
+  ;;; returns. The two had drifted silently to "0.3.0" vs "0.1.0" before this
+  ;;; test existed.
+
+  (it "nerimux-version-string-matches-asdf-version"
+    (expect (string= (asdf:component-version (asdf:find-system "nerimux"))
+                     (nerimux/version:version-string)))))

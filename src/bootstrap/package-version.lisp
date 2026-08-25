@@ -21,5 +21,13 @@
 (in-package #:nerimux/version)
 
 (defun version-string ()
-  "Return the nerimux runtime version string."
-  "0.1.0")
+  "Return the nerimux runtime version string.
+
+   Kept as a literal, not a read of nerimux.asd's :version at runtime, because
+   this package stays dependency-free even in the built standalone binary
+   where ASDF's system definitions are not guaranteed to still be registered.
+   nerimux.asd's :version is the single source of truth; the
+   nerimux-version-string-matches-asdf-version test in
+   t/unit/bootstrap/package-version-tests.lisp pins this literal to it so the
+   two cannot drift silently again."
+  "0.3.0")
