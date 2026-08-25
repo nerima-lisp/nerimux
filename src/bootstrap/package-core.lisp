@@ -33,7 +33,6 @@
    ;; PTY lifecycle
    #:forkpty-with-shell    ; (rows cols) → (values master-fd child-pid slave-path)
    #:pty-write             ; (fd data)   — write octets/string to PTY
-   #:pty-read-blocking     ; (fd size)   → octet-vector or nil on EOF
    #:pty-read-blocking-into ; (fd buffer) → octet-vector or nil; reuses BUFFER
    #:pty-close             ; (fd pid)
    #:pty-child-exit-status ; (fd &optional duration) → (values code :exited|:signaled) or NIL
@@ -68,7 +67,6 @@
    #:refresh-workspace-status-async
    #:workspace-organizations
    #:set-workspace-organizations
-   #:refresh-workspace-organizations
    #:refresh-workspace-organizations-async
    #:create-worktree
    #:delete-worktree

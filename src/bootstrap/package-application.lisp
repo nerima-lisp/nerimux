@@ -66,7 +66,6 @@
   (:export
    #:main
    #:*server-sessions*
-   #:*server-marked-pane*
    #:server-add-session
    #:server-find-session
    #:find-session-by-target

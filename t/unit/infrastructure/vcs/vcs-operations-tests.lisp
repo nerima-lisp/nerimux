@@ -276,62 +276,6 @@
                        (setf condition-seen condition)))))
         (expect (typep condition-seen 'error))))))
 
-(describe "vcs workspace refresh"
-  (it "stores the scanned catalog and refreshes each repository"
-    (let* ((path (%vcs-operations-existing-path))
-           (repository
-             (nerimux/model:make-repository
-              :specification "workspace-owner/project"
-              :local-path path))
-           (organization
-             (nerimux/model:make-organization
-              :host "workspace-owner"
-              :name "workspace"))
-           (catalog (list organization))
-           (query-seen nil)
-           (refreshed nil)
-           (callback-result nil)
-           (previous (nerimux/vcs:workspace-organizations)))
-      (nerimux/model:organization-add-repository organization repository)
-      (unwind-protect
-           (with-stubbed-fdefinition
-               ((nerimux/vcs:scan-repositories
-                  (lambda (&key query)
-                    (setf query-seen query)
-                    catalog))
-                (nerimux/vcs:refresh-repository-status
-                  (lambda (current)
-                    (push current refreshed)
-                    current)))
-             (let ((result
-                     (nerimux/vcs:refresh-workspace-organizations
-                      :query "workspace"
-                      :on-complete (lambda (organizations)
-                                     (setf callback-result organizations)))))
-               (expect (eq result callback-result))
-               (expect (equal "workspace" query-seen))
-               (expect (equal catalog (nerimux/vcs:workspace-organizations)))
-               (expect (member repository refreshed :test #'eq))))
-        (nerimux/vcs:set-workspace-organizations previous))))
-
-  (it "reports a synchronous workspace refresh failure"
-    (let ((condition-seen nil)
-          (previous (nerimux/vcs:workspace-organizations)))
-      (unwind-protect
-           (with-stubbed-fdefinition
-               ((nerimux/vcs:scan-repositories
-                  (lambda (&key query)
-                    (declare (ignore query))
-                    (error "scan failed"))))
-             (expect
-              (null
-               (nerimux/vcs:refresh-workspace-organizations
-                :on-error (lambda (condition)
-                            (setf condition-seen condition)))))
-             (expect (typep condition-seen 'error)))
-        (nerimux/vcs:set-workspace-organizations previous))))
-  )
-
 (describe "vcs worktree commands"
   (it "emits exact synchronous worktree operation commands"
     (let* ((repository-path (%vcs-operations-existing-path))

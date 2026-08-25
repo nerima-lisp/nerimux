@@ -205,7 +205,3 @@
        buffer))
     (get-output-stream-string buffer)))
 
-(defun render-session (session terminal-rows terminal-cols)
-  "Repaint all panes and the status bar; flush to *standard-output* in one write."
-  (write-string (render-session-to-string session terminal-rows terminal-cols))
-  (force-output))

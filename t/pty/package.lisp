@@ -150,7 +150,7 @@
   (:import-from #:nerimux/pty
                 #:forkpty-with-shell
                 #:pty-write
-                #:pty-read-blocking
+                #:pty-read-blocking-into
                 #:pty-close
                 #:pty-child-exit-status
                 #:set-pty-size

@@ -90,7 +90,7 @@
           (nerimux/model::%drain-response-queue pane screen)
           (expect (null (nerimux/terminal/types:screen-response-queue screen)))
           (expect (equalp (cl-codec-kit:string-to-octets reply :encoding :utf-8)
-                          (pty-read-blocking read-fd 32)))))))
+                          (pty-read-blocking-into read-fd (make-array 32 :element-type '(unsigned-byte 8)))))))))
 
   ;; With a synthetic (no-PTY) pane, %drain-response-queue still clears the
   ;; queue (nothing accumulates unboundedly) but performs no write.

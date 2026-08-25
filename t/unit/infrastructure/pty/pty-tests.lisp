@@ -275,14 +275,14 @@
                         (cl-concurrent-kit:with-timeout duration (sleep 60))
                       (cl-concurrent-kit:operation-timed-out () nil))))))
 
-  ;;; ── pty-write / pty-read-blocking (real pipe) ────────────────────────────────
+  ;;; ── pty-write / pty-read-blocking-into (real pipe) ───────────────────────────
 
   ;; pty-write encodes a UTF-8 string and writes it to the fd; the bytes are
-  ;; readable back via pty-read-blocking.
+  ;; readable back via pty-read-blocking-into.
   (it "pty-write-string-round-trips-through-pipe"
     (with-pipe-fds (rfd wfd)
       (pty-write wfd "hi")
-      (let ((result (pty-read-blocking rfd 16)))
+      (let ((result (pty-read-blocking-into rfd (make-array 16 :element-type '(unsigned-byte 8)))))
         (expect (equalp #(104 105) result)))))
 
   ;; pty-write accepts a raw octet vector and writes it verbatim.
@@ -290,7 +290,7 @@
     (with-pipe-fds (rfd wfd)
       (pty-write wfd (make-array 3 :element-type '(unsigned-byte 8)
                                  :initial-contents '(1 2 3)))
-      (let ((result (pty-read-blocking rfd 16)))
+      (let ((result (pty-read-blocking-into rfd (make-array 16 :element-type '(unsigned-byte 8)))))
         (expect (equalp #(1 2 3) result)))))
 
   ;; pty-write with a zero-length octet vector performs no write (no bytes land
@@ -299,13 +299,6 @@
     (with-pipe-fds (rfd wfd)
       (pty-write wfd (make-array 0 :element-type '(unsigned-byte 8)))
       (expect (null (nerimux/pty:select-fds (list rfd) 10000)))))
-
-  ;; pty-read-blocking returns NIL when the write end of the pipe is closed
-  ;; before any data is written (EOF).
-  (it "pty-read-blocking-returns-nil-on-eof"
-    (with-pipe-fds (rfd wfd)
-      (sb-posix:close wfd)
-      (expect (null (pty-read-blocking rfd 16)))))
 
   (it "pty-read-blocking-into-maps-would-block-to-nil"
     (with-stubbed-fdefinition

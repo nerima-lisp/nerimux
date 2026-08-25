@@ -184,14 +184,6 @@
       (let ((out (render-session-to-string sess 3 5)))
         (expect (null (find (code-char #x2502) out))))))
 
-  ;; render-session (unlike render-session-to-string) writes its frame directly to *standard-output*.
-  (it "render-session-writes-to-standard-output"
-    (let ((out (let ((*standard-output* (make-string-output-stream)))
-                 (render-session (make-renderer-test-session 10 4 :content "hi") 5 10)
-                 (get-output-stream-string *standard-output*))))
-      (expect (plusp (length out)))
-      (expect (find #\h out))))
-
   (it "render-session-picker-overlay-renders-hierarchy-and-attention"
     (let* ((items (make-renderer-picker-items))
            (out (render-session-to-string

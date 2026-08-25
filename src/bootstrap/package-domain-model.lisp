@@ -148,8 +148,7 @@
    #:organization-id #:organization-host #:organization-name
    #:organization-repositories #:organization-active-worktree-count
    #:organization-attention-count #:organization-missing-p
-   #:organization-key #:organization-repository-count
-   #:organization-add-repository #:organization-recompute-counts
+   #:organization-key #:organization-add-repository #:organization-recompute-counts
    #:repository #:repository-p #:make-repository
    #:repository-id #:repository-organization #:repository-specification
    #:repository-path #:repository-local-path #:repository-remote

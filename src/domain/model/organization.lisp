@@ -45,5 +45,3 @@
      :missing-p (not (null missing-p))
      :counts-derived-p nil)))
 
-(defun organization-repository-count (organization)
-  (length (organization-repositories organization)))

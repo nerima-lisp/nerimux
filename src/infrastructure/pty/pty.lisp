@@ -210,8 +210,7 @@
 (defun pty-read-blocking-into (fd buffer)
   "Block until data arrives on FD, read into the caller-supplied octet BUFFER, and
    return a fresh exact-size octet vector holding just the bytes read — or NIL on
-   EOF/would-block.  Same return contract as pty-read-blocking (fresh exact-size
-   vector, or NIL), but BUFFER is reused across calls to eliminate the per-read
+   EOF/would-block.  BUFFER is reused across calls to eliminate the per-read
    4 KB allocation on the hot read path: only the (subseq buffer 0 count) result
    (count bytes) is freshly allocated.  Because that result is a copy, BUFFER may
    be safely overwritten by the next read even if the caller retains the result.
@@ -224,16 +223,6 @@
   (let ((count (cl-tty-kit:fd-read-octets fd buffer)))
     (when (and count (plusp count))
       (subseq buffer 0 count))))
-
-(defun pty-read-blocking (fd buffer-size)
-  "Block until data arrives on FD, then return an octet vector of up to BUFFER-SIZE bytes.
-   Returns NIL on EOF or error.
-
-   Thin allocating wrapper over pty-read-blocking-into: allocates a fresh
-   BUFFER-SIZE scratch buffer per call and reads into it, preserving the historic
-   (fd size) signature for callers/tests that do not manage their own buffer."
-  (pty-read-blocking-into
-   fd (make-array buffer-size :element-type '(unsigned-byte 8))))
 
 (defun pty-close (master-fd child-pid)
   "Send SIGHUP to the child process and close the PTY master.

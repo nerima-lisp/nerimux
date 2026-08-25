@@ -69,7 +69,7 @@
     (loop
       (when (> (get-internal-real-time) deadline) (return nil))
       (when (select-fds (list fd) +e2e-poll-timeout-us+)
-        (let ((chunk (pty-read-blocking fd +e2e-read-buf-size+)))
+        (let ((chunk (pty-read-blocking-into fd (make-array +e2e-read-buf-size+ :element-type '(unsigned-byte 8)))))
           (when chunk
             (%accumulate-chunk acc chunk)
             (when (%search-in-tail substr acc (max +e2e-search-window-bytes+ mlen))
@@ -92,7 +92,7 @@
                    (>= (- now last-output) quiet-ticks))
           (return t)))
       (when (select-fds (list fd) +e2e-poll-timeout-us+)
-        (let ((chunk (pty-read-blocking fd +e2e-read-buf-size+)))
+        (let ((chunk (pty-read-blocking-into fd (make-array +e2e-read-buf-size+ :element-type '(unsigned-byte 8)))))
           (when chunk
             (%accumulate-chunk acc chunk)
             (setf last-output (get-internal-real-time))))))))

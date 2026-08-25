@@ -112,26 +112,6 @@
                  (lambda () (apply callback arguments)))
         (apply callback arguments))))
 
-(defun refresh-workspace-organizations (&key query on-complete on-error)
-  "Refresh and store the workspace catalog synchronously."
-  (handler-case
-      (let ((organizations (scan-repositories :query query)))
-        (set-workspace-organizations organizations)
-        (dolist (repository
-                  (loop for organization in organizations
-                        append (nerimux/model:organization-repositories
-                                organization)))
-          (refresh-repository-status repository))
-        (when on-complete
-          (funcall on-complete organizations))
-        organizations)
-    (error (condition)
-      (if on-error
-          (progn
-            (funcall on-error condition)
-            nil)
-          (error condition)))))
-
 (defun refresh-workspace-organizations-async
     (&key query on-catalog on-complete on-error callback-dispatch)
   "Refresh and store the workspace catalog on a worker thread.

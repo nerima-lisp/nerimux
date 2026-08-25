@@ -66,8 +66,7 @@
 
    Prompt/overlay/menu/popup state used to be isolated here too, as was the
    read-only attach flag; both went with the deletions in R1."
-  `(let ((nerimux::*dirty* nil)
-         (nerimux::*server-marked-pane* nil))
+  `(let ((nerimux::*dirty* nil))
      (with-global-running t
        (unwind-protect (progn ,@body)
          (stop-nerimux-threads)))))

@@ -22,7 +22,6 @@
       (nerimux/model:organization-add-repository organization repository)
       (nerimux/model:repository-add-worktree repository dirty-worktree)
       (nerimux/model:repository-add-worktree repository missing-worktree)
-      (expect (= 1 (nerimux/model:organization-repository-count organization)))
       (expect (eq organization (nerimux/model:repository-organization repository)))
       (expect (eq repository (nerimux/model:worktree-repository dirty-worktree)))
       (expect (eq dirty-worktree
