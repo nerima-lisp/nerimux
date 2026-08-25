@@ -57,7 +57,7 @@
   ;; are an untouched no-op.
   (when (> (pane-fd pane) 0)
     (multiple-value-bind (code kind)
-        (ignore-errors (nerimux/pty:pty-child-exit-status (pane-fd pane)))
+        (nerimux/pty:pty-child-exit-status (pane-fd pane))
       (nerimux/model:pane-mark-process-exit
        pane
        :status (and (eq kind :exited) code)
@@ -91,5 +91,6 @@
   "Signal shutdown and join each thread in THREADS with a bounded timeout."
   (setf *running* nil)
   (dolist (thread threads)
-    (ignore-errors
-      (%join-thread-with-timeout thread +reader-thread-join-timeout+))))
+    (handler-case
+        (%join-thread-with-timeout thread +reader-thread-join-timeout+)
+      (sb-thread:join-thread-error () nil))))

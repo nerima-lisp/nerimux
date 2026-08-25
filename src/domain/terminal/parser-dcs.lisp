@@ -52,16 +52,30 @@
    "T when BUFFER begins with \"$q\" (DECRQSS request status string query)."
    36 113))                  ; $ q  ; q
 
+(defun %hex-digit-16 (digit)
+  "Return the numeric value of an ASCII hexadecimal digit DIGIT, or NIL."
+  (let ((code (char-code digit)))
+    (cond
+      ((<= (char-code #\0) code (char-code #\9))
+       (- code (char-code #\0)))
+      ((<= (char-code #\A) code (char-code #\F))
+       (+ 10 (- code (char-code #\A))))
+      ((<= (char-code #\a) code (char-code #\f))
+       (+ 10 (- code (char-code #\a)))))))
+
 (defun %hex-decode-string (hex)
   "Decode an even-length hex string to its ASCII characters, or NIL if malformed.
    XTGETTCAP encodes capability names in hex (\"Tc\" → \"5463\")."
-  (when (and (plusp (length hex)) (evenp (length hex)))
-    (ignore-errors
-      (with-output-to-string (out)
-        (loop for i from 0 below (length hex) by 2
-              do (write-char (code-char (parse-integer hex :start i :end (+ i 2)
-                                                        :radix 16))
-                             out))))))
+  (when (and (stringp hex)
+             (plusp (length hex))
+             (evenp (length hex))
+             (loop for ch of-type character across hex
+                   always (%hex-digit-16 ch)))
+    (with-output-to-string (out)
+      (loop for i from 0 below (length hex) by 2
+            for high = (%hex-digit-16 (aref hex i))
+            for low = (%hex-digit-16 (aref hex (1+ i)))
+            do (write-char (code-char (+ (* high 16) low)) out)))))
 
 (defun %hex-encode-string (string)
   "Hex-encode STRING's characters as lowercase hex (for XTGETTCAP reply values)."

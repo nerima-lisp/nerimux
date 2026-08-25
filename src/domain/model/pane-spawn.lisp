@@ -103,8 +103,8 @@
         (old-pid (pane-pid pane))
         (cols    (pane-width  pane))
         (rows    (pane-height pane)))
-    ;; Close the old PTY; ignore errors (process may have already exited).
-    (ignore-errors (close-pty old-fd old-pid))
+    ;; The concrete PTY adapter handles already-closed descriptors.
+    (close-pty old-fd old-pid)
     ;; Open a fresh PTY-backed shell at the same geometry.
     (multiple-value-bind (new-fd new-pid slave-path)
         (%spawn-shell-for-pane session rows cols

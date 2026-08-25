@@ -55,7 +55,9 @@
   ;; under ERROR would otherwise change behaviour silently.
   (it "with-timeout-signals-operation-timed-out-not-sb-ext-timeout"
     (expect (typep (handler-case
-                       (cl-concurrent-kit:with-timeout 1/1000 (sleep 60))
+                       (cl-concurrent-kit:with-timeout
+                        (cl-date-kit:duration-of-millis 1)
+                        (sleep 60))
                      (cl-concurrent-kit:operation-timed-out (c) c))
                    'error)))
 

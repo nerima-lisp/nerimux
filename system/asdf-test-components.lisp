@@ -125,7 +125,8 @@
          :components
          ((:file "vcs-tests")
           (:file "vcs-fetch-dedup-tests") ; R7.1: one fetch in flight per target
-          (:file "vcs-worktree-path-tests"))) ; R7.2: timestamp-sha path, -2/-3 on collision
+          (:file "vcs-worktree-path-tests") ; R7.2: timestamp-sha path, -2/-3 on collision
+          (:file "vcs-operations-tests")))
         (:module "application/picker"
          :serial t
          :components
@@ -199,6 +200,7 @@
           (:file "server-session-listing-tests")
           (:file "server-socket-path-tests") ; socket paths and stale sockets
           (:file "server-client-cps-tests") ; client key CPS, runtime registry, resize edge cases
+          (:file "server-dispatch-helper-tests") ; selection, picker, and command helper algebra
           (:file "runtime-lifecycle-tests")
       (:file "server-kill-request-tests") ; R8.1/R8.3
       (:file "workspace-window-naming-tests") ; R5.8
@@ -235,6 +237,10 @@
          (:file "server-multi-tests-support")
          (:file "server-multi-tests-size")
          (:file "server-multi-tests-message-dispatch")
+         (:file "server-multi-tests-message-dispatch-worktree")
+         (:file "server-multi-tests-message-dispatch-errors")
+         (:file "server-multi-tests-message-dispatch-picker")
+         (:file "server-multi-tests-message-dispatch-routing")
          (:file "server-multi-tests-forwarding")
          (:file "server-multi-tests-loop")
         (:file "server-multi-command-client-tests")

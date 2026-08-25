@@ -85,6 +85,9 @@
       (expect (= 5 (length clipped)))
       (expect (= 5 (nerimux/renderer::%display-width clipped)))))
 
+  (it "coerces non-string values before clipping"
+    (expect (string= "1..." (nerimux/renderer::%display-clip 12345 4))))
+
   ;; Text already within WIDTH is returned unchanged (no padding, no
   ;; ellipsis), for both ASCII and Japanese input.
   (it "returns text unchanged when it already fits, ASCII or Japanese"

@@ -41,35 +41,35 @@
   (let ((height (length grid))
         (width (length (aref grid 0)))
         (count (or (first params) 1)))
-    (case final
-      ((#\A #\B)
+    (cond
+      ((or (char= final #\A) (char= final #\B))
        (let ((delta (if (plusp count) count 1)))
          (if (char= final #\A)
              (decf row delta)
              (incf row delta))))
-      ((#\C #\D)
+      ((or (char= final #\C) (char= final #\D))
        (let ((delta (if (plusp count) count 1)))
          (if (char= final #\C)
              (incf col delta)
              (decf col delta))))
-      ((#\G)
+      ((char= final #\G)
        (setf col (1- (%frame-grid-param params 0 1))))
-      ((#\d)
+      ((char= final #\d)
        (setf row (1- (%frame-grid-param params 0 1))))
-      ((#\H #\f)
+      ((or (char= final #\H) (char= final #\f))
        (setf row (1- (%frame-grid-param params 0 1))
              col (1- (%frame-grid-param params 1 1))))
-      ((#\J)
+      ((char= final #\J)
        (when (member (or (first params) 0) '(2 3))
          (%clear-frame-grid grid)))
-      ((#\K)
+      ((char= final #\K)
        (%frame-grid-clear-line (aref grid (max 0 (min row (1- height))))
                                col
                                (or (first params) 0)))
-      ((#\s)
+      ((char= final #\s)
        (setf saved-row row
              saved-col col))
-      ((#\u)
+      ((char= final #\u)
        (setf row saved-row
              col saved-col)))
     (values (max 0 (min row (1- height)))
@@ -558,7 +558,7 @@
    repository/worktree/branch/state/panes for a destructive-operation
    confirmation, or the design doc's five failure fields (operation/
    repository/worktree/reason/next) when PROMPT-P is NIL.  The caller
-   (server-multi-dispatch.lisp, out of this agent's scope) owns building and
+   (multi-dispatch command handler, out of this agent's scope) owns building and
    storing an instance of this and reading the eventual y/n answer — this
    struct and RENDER-CONFIRM-VIEW-TO-TUI-STRING are the rendering contract
    between the two sides."
@@ -635,4 +635,3 @@
     (%render-confirm-view-box surface rectangle lines)
     (%stamp-confirm-view-title surface rectangle (confirm-view-operation view))
     (%surface-to-ansi-frame surface)))
-

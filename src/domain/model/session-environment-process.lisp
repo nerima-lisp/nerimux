@@ -57,13 +57,15 @@
 
 (defmacro %with-posix-env-op ((name posix-fn-name) &body call-args)
   "Assert NAME is a non-empty string, then call the SB-POSIX function named
-   POSIX-FN-NAME (looked up lazily) with CALL-ARGS, ignoring errors.
+   POSIX-FN-NAME (looked up lazily) with CALL-ARGS, ignoring syscall failures.
    Expands to a progn so callers can append their own return form."
   `(progn
      (%assert-environment-variable-name ,name)
      (let ((%posix-fn (find-posix-function ,posix-fn-name)))
        (when %posix-fn
-         (ignore-errors (funcall %posix-fn ,@call-args))))))
+         (handler-case
+             (funcall %posix-fn ,@call-args)
+           (sb-posix:syscall-error () nil))))))
 
 (defun process-set-environment (name value)
   "Set NAME=VALUE in the current process environment when SB-POSIX is available.

@@ -326,7 +326,7 @@
       (cl-regex-kit:compile-regex query
                                  :case-insensitive t
                                  :octal nil)
-    (error () nil)))
+    (cl-regex-kit:regex-syntax-error () nil)))
 
 (defun filter-global-picker-items (items query &key regex-p)
   (check-type items list)

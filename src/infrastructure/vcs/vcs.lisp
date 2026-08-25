@@ -3,52 +3,17 @@
 (defun vcs-package-available-p ()
   (not (null (find-package :vcs-kit))))
 
-(defun %vcs-symbol (name)
-  (let ((package (find-package :vcs-kit)))
-    (when package
-      (multiple-value-bind (symbol status)
-          (find-symbol (string-upcase name) package)
-        (declare (ignore status))
-        (when (and symbol (fboundp symbol))
-          symbol)))))
-
-(defun %vcs-function (name)
-  (or (%vcs-symbol name)
-      (error "cl-vcs-kit function ~A is unavailable. Load cl-vcs-kit before scanning the workspace."
-             name)))
-
-(defun %vcs-call (name &rest arguments)
-  (apply (%vcs-function name) arguments))
-
-(defun %optional-vcs-value (object names)
-  (dolist (name names)
-    (let ((function (%vcs-symbol name)))
-      (when function
-        (return-from %optional-vcs-value (funcall function object)))))
-  nil)
-
-(defun %adapter-string (value)
+(defun %string-value (value)
   (cond
     ((null value) "")
     ((stringp value) value)
     ((pathnamep value) (namestring value))
     (t (princ-to-string value))))
 
-(defun %adapter-boolean (value)
-  (not (member value '(nil :false :no "false" "no")
-               :test #'equal)))
-
-(defun %adapter-integer (value)
-  (cond
-    ((integerp value) value)
-    ((stringp value)
-     (or (ignore-errors (parse-integer value :junk-allowed t)) 0))
-    (t 0)))
-
 (defun %specification-parts (specification)
   (let ((parts nil)
         (start 0)
-        (string (%adapter-string specification)))
+        (string (%string-value specification)))
     (loop for end = (position #\/ string :start start)
           do (push (subseq string start end) parts)
           if end
@@ -71,17 +36,10 @@
 
 (defun %repository-from-entry (entry)
   (let* ((specification
-           (%adapter-string
-            (%optional-vcs-value
-             entry '("GHQ-REPOSITORY-ENTRY-SPECIFICATION"
-                    "GHQ-ENTRY-SPECIFICATION"))))
-         (path (%adapter-string
-                (%optional-vcs-value
-                 entry '("GHQ-REPOSITORY-ENTRY-PATH"
-                        "GHQ-ENTRY-PATH"))))
-         (backend (%optional-vcs-value
-                   entry '("GHQ-REPOSITORY-ENTRY-BACKEND"
-                          "GHQ-ENTRY-BACKEND")))
+           (%string-value
+            (vcs-kit:ghq-repository-entry-specification entry)))
+         (path (%string-value (vcs-kit:ghq-repository-entry-path entry)))
+         (backend (vcs-kit:ghq-repository-entry-backend entry))
          (host nil)
          (name nil))
     (multiple-value-setq (host name)
@@ -195,9 +153,7 @@
   "Build the organization/repository hierarchy from ghq-list-repositories."
   (handler-case
       (let ((organizations (make-hash-table :test #'equal)))
-        (dolist (entry (if query
-                           (%vcs-call "GHQ-LIST-REPOSITORIES" :query query)
-                           (%vcs-call "GHQ-LIST-REPOSITORIES")))
+        (dolist (entry (vcs-kit:ghq-list-repositories :query query))
           (multiple-value-bind (candidate repository)
               (%repository-from-entry entry)
             (let* ((key (nerimux/model:organization-id candidate))
@@ -230,23 +186,20 @@
           (error condition)))))
 
 (defun %make-vcs-repository (directory)
-  (%vcs-call "MAKE-VCS-REPOSITORY" directory))
-
-(defun %raw-worktree-value (raw names)
-  (%optional-vcs-value raw names))
+  (vcs-kit:make-vcs-repository directory))
 
 (defun %path-missing-p (path)
   (and (stringp path)
        (plusp (length path))
-       (null (ignore-errors (probe-file path)))))
+       (null (probe-file path))))
 
 (defun list-repository-worktrees (repository)
   "Refresh REPOSITORY's worktree list from vcs-list-worktrees."
   (let* ((previous (copy-list (nerimux/model:repository-worktrees repository)))
          (backend-repository
-           (%make-vcs-repository (nerimux/model:repository-path repository)))
+         (%make-vcs-repository (nerimux/model:repository-path repository)))
          (raw-worktrees
-           (%vcs-call "VCS-LIST-WORKTREES" backend-repository)))
+           (vcs-kit:vcs-list-worktrees backend-repository)))
     (setf (nerimux/model:repository-missing-p repository)
           (%path-missing-p (nerimux/model:repository-path repository)))
     (dolist (old-worktree previous)
@@ -255,9 +208,7 @@
     (setf (nerimux/model:repository-worktrees repository) nil
           (nerimux/model:repository-main-worktree repository) nil)
     (dolist (raw raw-worktrees)
-      (let* ((path (%adapter-string
-                    (%raw-worktree-value
-                     raw '("VCS-WORKTREE-PATH" "WORKTREE-PATH"))))
+      (let* ((path (vcs-kit:vcs-worktree-path raw))
              (old-worktree (find path previous
                                   :key #'nerimux/model:worktree-path
                                   :test #'string=))
@@ -267,10 +218,8 @@
                          (nerimux/model:worktree-id old-worktree))
                 :repository repository
                 :path path
-                :branch (%raw-worktree-value
-                         raw '("VCS-WORKTREE-BRANCH" "WORKTREE-BRANCH"))
-                :head (%raw-worktree-value
-                       raw '("VCS-WORKTREE-HEAD" "WORKTREE-HEAD"))
+                :branch (vcs-kit:vcs-worktree-branch raw)
+                :head (vcs-kit:vcs-worktree-head raw)
                 :status (and old-worktree
                              (nerimux/model:worktree-status old-worktree))
                 :panes (and old-worktree
@@ -285,38 +234,17 @@
                 :behind (if old-worktree
                             (nerimux/model:worktree-behind old-worktree)
                             0)
-                :bare-p (%adapter-boolean
-                         (%raw-worktree-value
-                          raw '("VCS-WORKTREE-BARE-P" "VCS-WORKTREE-BARE")))
-                :locked-p (%adapter-boolean
-                           (%raw-worktree-value
-                            raw '("VCS-WORKTREE-LOCKED-P"
-                                  "VCS-WORKTREE-LOCKED")))
-                :prunable-p (%adapter-boolean
-                             (%raw-worktree-value
-                              raw '("VCS-WORKTREE-PRUNABLE-P"
-                                    "VCS-WORKTREE-PRUNABLE")))
-                :missing-p
-                (or (%adapter-boolean
-                     (%raw-worktree-value
-                      raw '("VCS-WORKTREE-MISSING-P"
-                            "WORKTREE-MISSING-P"
-                            "VCS-WORKTREE-MISSING")))
-                    (%path-missing-p path)))))
+                :bare-p (vcs-kit:vcs-worktree-bare-p raw)
+                :locked-p (vcs-kit:vcs-worktree-locked-p raw)
+                :prunable-p (vcs-kit:vcs-worktree-prunable-p raw)
+                :missing-p (%path-missing-p path))))
         (dolist (pane (nerimux/model:worktree-panes worktree))
           (setf (nerimux/model:pane-worktree pane) worktree))
         (nerimux/model:repository-add-worktree repository worktree)))
     repository))
 
 (defun %status-entry-conflict-p (entry)
-  (or (%adapter-boolean
-       (%optional-vcs-value
-        entry '("VCS-STATUS-ENTRY-CONFLICT-P"
-               "VCS-STATUS-ENTRY-CONFLICT")))
-      (member (%optional-vcs-value
-               entry '("VCS-STATUS-ENTRY-KIND" "VCS-STATUS-ENTRY-INDEX-STATUS"))
-              '(:unmerged :conflict :conflicted "unmerged" "conflict" "conflicted")
-              :test #'equal)))
+  (eq (vcs-kit:vcs-status-entry-kind entry) :unmerged))
 
 (defun worktree-status (worktree)
   "Refresh WORKTREE status from vcs-status-structured."
@@ -328,7 +256,7 @@
                              (nerimux/model:repository-path repository))))
          (missing-p (and (stringp directory)
                          (plusp (length directory))
-                         (null (ignore-errors (probe-file directory))))))
+                         (null (probe-file directory)))))
     (if missing-p
         (progn
           (setf (nerimux/model:worktree-missing-p worktree) t
@@ -352,19 +280,12 @@
                ;; (FETCH-REPOSITORY / FETCH-ORGANIZATION-ASYNC below). No
                ;; automatic fetch runs before a status refresh (design
                ;; document §3.7 and §14).
-               (snapshot (%vcs-call "VCS-STATUS-STRUCTURED" backend-repository))
-               (entries (%optional-vcs-value
-                         snapshot '("VCS-STATUS-SNAPSHOT-ENTRIES"
-                                    "VCS-STATUS-ENTRIES")))
-               (branch-head (%optional-vcs-value
-                             snapshot '("VCS-STATUS-SNAPSHOT-BRANCH-HEAD"
-                                        "VCS-STATUS-BRANCH-HEAD")))
-               (ahead (%optional-vcs-value
-                       snapshot '("VCS-STATUS-SNAPSHOT-AHEAD"
-                                  "VCS-STATUS-AHEAD")))
-               (behind (%optional-vcs-value
-                        snapshot '("VCS-STATUS-SNAPSHOT-BEHIND"
-                                   "VCS-STATUS-BEHIND"))))
+               (snapshot (vcs-kit:vcs-status-structured backend-repository))
+               (entries (vcs-kit:vcs-status-snapshot-entries snapshot))
+               (branch-head
+                 (vcs-kit:vcs-status-snapshot-branch-head snapshot))
+               (ahead (vcs-kit:vcs-status-snapshot-ahead snapshot))
+               (behind (vcs-kit:vcs-status-snapshot-behind snapshot)))
           (setf (nerimux/model:worktree-missing-p worktree) nil
                 (nerimux/model:worktree-status worktree) snapshot
                 (nerimux/model:worktree-head worktree)
@@ -374,8 +295,8 @@
                 (nerimux/model:worktree-dirty-p worktree) (not (null entries))
                 (nerimux/model:worktree-conflict-p worktree)
                 (not (null (some #'%status-entry-conflict-p entries)))
-                (nerimux/model:worktree-ahead worktree) (%adapter-integer ahead)
-                (nerimux/model:worktree-behind worktree) (%adapter-integer behind))
+                (nerimux/model:worktree-ahead worktree) (or ahead 0)
+                (nerimux/model:worktree-behind worktree) (or behind 0))
           (when repository
             (setf (nerimux/model:repository-missing-p repository)
                   (%path-missing-p (nerimux/model:repository-path repository)))
@@ -474,12 +395,12 @@
   "Return REPOSITORY-GIT-DIR/.worktrees/BASE-NAME, or that name with -2, -3,
 ... appended until a path that does not already exist is found (R7.2)."
   (let ((candidate (%worktree-path-candidate repository-git-dir base-name nil)))
-    (if (null (ignore-errors (probe-file candidate)))
+    (if (null (probe-file candidate))
         candidate
         (loop for suffix from 2
               for numbered = (%worktree-path-candidate
                                repository-git-dir base-name suffix)
-              when (null (ignore-errors (probe-file numbered)))
+              when (null (probe-file numbered))
                 return numbered))))
 
 (defun %resolve-worktree-path (repository start-point-short-sha path)
@@ -488,17 +409,17 @@
 PATH, when given, is used verbatim. Otherwise the path is fixed to
 <repo>.git/.worktrees/<created-time>-<start-point-short-sha> (R7.2), with
 -2, -3, ... appended if that name is already taken."
-  (or (and path (%adapter-string path))
+  (or (and path (%string-value path))
       (%unique-worktree-path
        (%ensure-trailing-slash
-        (%adapter-string (nerimux/model:repository-path repository)))
+        (%string-value (nerimux/model:repository-path repository)))
        (format nil "~A-~A" (%timestamp-token) start-point-short-sha))))
 
 (defun %repository-backend (repository)
   (%make-vcs-repository (nerimux/model:repository-path repository)))
 
 (defun %rev-parse (repository &rest arguments)
-  (apply #'%vcs-call "GIT-REV-PARSE-VALUE" (%repository-backend repository)
+  (apply #'vcs-kit:git-rev-parse-value (%repository-backend repository)
          arguments))
 
 (defun %default-branch-start-point (repository)
@@ -520,11 +441,11 @@ state."
 BRANCH names the new branch; git worktree add -b always creates it (R7.4),
 there is no mode that attaches to an existing branch. START-POINT defaults to
 REPOSITORY's default branch tip (R7.3) when not given."
-  (unless (and repository branch (plusp (length (%adapter-string branch))))
+  (unless (and repository branch (plusp (length (%string-value branch))))
     (error "A repository and non-empty branch are required to create a worktree."))
-  (let* ((branch-name (%adapter-string branch))
+  (let* ((branch-name (%string-value branch))
          (resolved-start-point
-           (or (and start-point (%adapter-string start-point))
+           (or (and start-point (%string-value start-point))
                (%default-branch-start-point repository)))
          (worktree-path
            (%resolve-worktree-path
@@ -534,7 +455,7 @@ REPOSITORY's default branch tip (R7.3) when not given."
            (append (list "add")
                    (when force (list "--force"))
                    (list "-b" branch-name worktree-path resolved-start-point))))
-    (apply #'%vcs-call "VCS-WORKTREE" backend-repository arguments)
+    (apply #'vcs-kit:vcs-worktree backend-repository arguments)
     (list-repository-worktrees repository)
     (refresh-repository-status repository)
     (or (nerimux/model:repository-worktree-by-path repository worktree-path)
@@ -559,7 +480,7 @@ REPOSITORY's default branch tip (R7.3) when not given."
             (append (list "remove")
                     (when force (list "--force"))
                     (list (nerimux/model:worktree-path worktree)))))
-      (apply #'%vcs-call "VCS-WORKTREE" backend-repository arguments)
+      (apply #'vcs-kit:vcs-worktree backend-repository arguments)
       (list-repository-worktrees repository)
       (refresh-repository-status repository)
       t)))
@@ -573,10 +494,10 @@ REPOSITORY's default branch tip (R7.3) when not given."
             (%make-vcs-repository (nerimux/model:repository-path repository)))
           (arguments
             (append (list "lock")
-                    (when (and reason (plusp (length (%adapter-string reason))))
-                      (list "--reason" (%adapter-string reason)))
+                    (when (and reason (plusp (length (%string-value reason))))
+                      (list "--reason" (%string-value reason)))
                     (list (nerimux/model:worktree-path worktree)))))
-      (apply #'%vcs-call "VCS-WORKTREE" backend-repository arguments)
+      (apply #'vcs-kit:vcs-worktree backend-repository arguments)
       (list-repository-worktrees repository)
       (refresh-repository-status repository)
       t)))
@@ -589,7 +510,7 @@ REPOSITORY's default branch tip (R7.3) when not given."
     (let ((backend-repository
             (%make-vcs-repository (nerimux/model:repository-path repository)))
           (arguments (list "unlock" (nerimux/model:worktree-path worktree))))
-      (apply #'%vcs-call "VCS-WORKTREE" backend-repository arguments)
+      (apply #'vcs-kit:vcs-worktree backend-repository arguments)
       (list-repository-worktrees repository)
       (refresh-repository-status repository)
       t)))
@@ -608,7 +529,7 @@ false DRY-RUN once a user has explicitly confirmed the operation."
            (append (list "prune")
                    (when dry-run (list "--dry-run"))
                    (when verbose (list "--verbose"))))
-         (result (apply #'%vcs-call "VCS-WORKTREE" backend-repository arguments)))
+         (result (apply #'vcs-kit:vcs-worktree backend-repository arguments)))
     (list-repository-worktrees repository)
     (refresh-repository-status repository)
     result))
@@ -708,7 +629,7 @@ return NIL without changing anything."
   "Fetch REPOSITORY's remotes with git fetch, then refresh its status."
   (unless repository
     (error "A repository is required to fetch."))
-  (%vcs-call "VCS-FETCH" (%repository-backend repository))
+  (vcs-kit:vcs-fetch (%repository-backend repository))
   (refresh-repository-status repository)
   repository)
 
@@ -752,4 +673,3 @@ fetched invokes ON-COMPLETE immediately with NIL and starts no threads."
         (progn
           (when on-complete (funcall on-complete nil))
           nil))))
-

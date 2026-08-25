@@ -73,7 +73,9 @@
   (it "pty-child-exit-status-times-out-on-a-live-child"
     (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
     (with-pty-shell (fd pid)
-      (expect (null (nerimux/pty:pty-child-exit-status fd 0.05)))))
+      (expect (null (nerimux/pty:pty-child-exit-status
+                     fd
+                     (cl-date-kit:duration-of-millis 50))))))
 
   ;; pty-child-exit-status reports :exited with the real exit code once the
   ;; child has actually terminated.

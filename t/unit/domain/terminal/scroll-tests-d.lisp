@@ -151,6 +151,44 @@
       ;; Old row 1 is now at row 2.
       (check-row s 2 "ROW1"))))
 
+;;; ── SUITE: scroll metadata and resize refill ───────────────────────────────
+
+(describe "terminal-suite/scroll-metadata-and-resize"
+
+  (it "scroll-up-one-shifts-line-size-metadata"
+    (with-screen (s 5 3)
+      (let ((sizes (nerimux/terminal/types:screen-line-sizes s)))
+        (setf (gethash 1 sizes) :double-width)
+        (nerimux/terminal/actions:scroll-up-one s)
+        (multiple-value-bind (value present-p) (gethash 0 sizes)
+          (expect present-p)
+          (expect (eq :double-width value)))
+        (expect (not (nth-value 1 (gethash 1 sizes)))))))
+
+  (it "trim-below-cursor-refills-visible-rows-from-history"
+    (with-screen (s 5 4)
+      (setf (nerimux/terminal/types:screen-cursor-y s) 0
+            (nerimux/terminal/types:screen-scrollback s)
+            (list (make-array 2 :initial-element
+                              (nerimux/terminal/types:blank-cell)))
+            (nerimux/terminal/types:screen-scrollback-wrapped s)
+            (list nil nil nil))
+      (nerimux/terminal/actions:trim-below-cursor s)
+      (expect (= 3 (nerimux/terminal/types:screen-cursor-y s)))
+      (expect (null (nerimux/terminal/types:screen-scrollback s)))
+      (expect (null (nerimux/terminal/types:screen-scrollback-wrapped s)))))
+
+  (it "trim-below-cursor-is-noop-on-alt-screen"
+    (with-screen (s 5 4)
+      (nerimux/terminal/actions:enter-alt-screen s)
+      (setf (nerimux/terminal/types:screen-cursor-y s) 0
+            (nerimux/terminal/types:screen-scrollback s)
+            (list (make-array 5 :initial-element
+                              (nerimux/terminal/types:blank-cell))))
+      (nerimux/terminal/actions:trim-below-cursor s)
+      (expect (= 0 (nerimux/terminal/types:screen-cursor-y s)))
+      (expect (= 1 (length (nerimux/terminal/types:screen-scrollback s)))))))
+
 ;;; ── SUITE: push-row-to-scrollback internals ──────────────────────────────────
 ;;;
 ;;; %push-row-to-scrollback is private but its effect (prepend row to scrollback

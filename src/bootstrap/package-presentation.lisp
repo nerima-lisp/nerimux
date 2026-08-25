@@ -8,9 +8,8 @@
    "PRESENTATION layer: the only package that writes to the real terminal.  Composites
     every pane's emulator screen, the borders between them, and the status bar into
     one full repaint, emitted as raw ANSI/VT100 escapes with no curses dependency and
-    flushed as a single write to avoid tearing.  Also owns style-string parsing and
-    the true-colour downsampling used when the outer terminal cannot show 24-bit
-    colour.")
+    flushed as a single write to avoid tearing.  Also owns the true-colour downsampling
+    used when the outer terminal cannot show 24-bit colour.")
   (:export
    #:render-session
    #:render-session-to-string
@@ -26,8 +25,6 @@
    #:confirm-view-operation #:confirm-view-fields #:confirm-view-prompt-p
    #:render-confirm-view-to-tui-string
    #:clear-display
-   #:parse-style-string
-   #:style-to-sgr
    ;; Terminal colour-capability downsampling hook; see renderer-format.lisp.
    ;; Nothing installs it now that the startup flag that did was removed, so it
    ;; stays NIL and the renderer emits 24-bit colour unconditionally.

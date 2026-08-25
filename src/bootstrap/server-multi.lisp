@@ -88,7 +88,7 @@
 ;;; Ownership split: this file defines and mutates the tables; the render
 ;;; call in %RENDER-CLIENT-FRAME below reads them into the R6 renderer
 ;;; entry points (nerimux/renderer:render-workspace-overview-to-tui-string).
-;;; The mutators are for server-multi-dispatch.lisp's key handlers to call
+;;; The mutators are for the multi-dispatch key handlers to call
 ;;; (Enter on an org/repo row, a VCS fetch/refresh starting and settling, a
 ;;; pane gaining focus within a worktree) -- see the R6 report for exactly
 ;;; which handler calls which function.
@@ -104,7 +104,7 @@
 (defun %workspace-expanded-nodes ()
   "The expanded-row set, for callers that load before its DEFVAR.
 
-   server-multi-dispatch.lisp is compiled before this file, so naming the
+   the multi-dispatch files are compiled before this file, so naming the
    variable there would compile as an undeclared free reference. A function is
    only a forward reference, which resolves at call time."
   *workspace-expanded-node-ids*)
@@ -375,7 +375,13 @@
    unregister it.  Safe to call more than once."
   (when (member conn *clients*)
     (setf (client-conn-ui-prefix-p conn) nil)
-    (when bye
-      (ignore-errors (send-frame (client-conn-stream conn) (msg-bye))))
-    (ignore-errors (close-socket (client-conn-socket conn)))
+    (when (and bye (streamp (client-conn-stream conn)))
+      (handler-case
+          (send-frame (client-conn-stream conn) (msg-bye))
+        (sb-ext:timeout () nil)
+        (sb-bsd-sockets:socket-error () nil)
+        (stream-error () nil)))
+    (let ((socket (client-conn-socket conn)))
+      (when socket
+        (close-socket socket)))
     (setf *clients* (remove conn *clients*))))

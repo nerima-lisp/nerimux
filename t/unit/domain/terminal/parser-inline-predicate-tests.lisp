@@ -1,5 +1,9 @@
 (in-package #:nerimux/test)
 
+(declaim (notinline nerimux/terminal/parser::printable-ascii-p
+                   nerimux/terminal/parser::utf8-lead-p
+                   nerimux/terminal/parser::utf8-continuation-p))
+
 ;;;; parser tests — part C2: parser-inline-predicates.
 
 ;;; ── SUITE: parser-inline-predicates ─────────────────────────────────────────

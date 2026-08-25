@@ -20,4 +20,6 @@
    signalling a type error, which is what lets option lookups pass through a
    value that may legitimately be absent."
   (and (stringp string)
-       (ignore-errors (apply #'parse-integer string args))))
+       (handler-case (apply #'parse-integer string args)
+         (parse-error () nil)
+         (type-error () nil))))

@@ -10,7 +10,8 @@
     ;; Direct source loads fall back from src/bootstrap/package.lisp to the
     ;; repository root before resolving fragment paths.
     (let* ((source-path (or *load-pathname* *compile-file-pathname*))
-           (root (or (ignore-errors (asdf:system-source-directory :nerimux))
+           (root (or (handler-case (asdf:system-source-directory :nerimux)
+                       (asdf:missing-component () nil))
                      (and source-path (merge-pathnames #P"../../" source-path))))
            (base (merge-pathnames #P"src/" root)))
       (load (merge-pathnames #P"bootstrap/package-version.lisp" base))

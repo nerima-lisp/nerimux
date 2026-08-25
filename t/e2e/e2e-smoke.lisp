@@ -4,20 +4,16 @@
 ;;;; real /dev/ptmx).  Run it from the dev shell:
 ;;;;
 ;;;;   nix build .
-;;;;   sbcl --no-sysinit --no-userinit --script t/e2e/e2e-smoke.lisp \
+;;;;   nerimux-sbcl --script t/e2e/e2e-smoke.lisp \
 ;;;;         result/bin/nerimux
 ;;;;
-;;;; The test spawns nerimux on a pseudo-terminal, types `echo <marker>` at the
-;;;; keyboard, and verifies the marker appears in nerimux's *rendered* output —
-;;;; proving the full pipeline: stdin → key forward → inner shell → PTY reader
-;;;; thread → screen → renderer.  Then it sends the detach key (C-b d) and
-;;;; verifies the process exits cleanly.
+;;;; The test spawns `nerimux attach` on a pseudo-terminal, enters :input mode,
+;;;; types `echo <marker>` at the keyboard, and verifies the marker appears in
+;;;; nerimux's *rendered* output — proving the full pipeline: stdin → key
+;;;; forward → inner shell → PTY reader thread → screen → renderer.  Then it
+;;;; sends the detach key (C-q d) and verifies the process exits cleanly.
 
 (require :asdf)
-;; Loaded before the form that names SB-POSIX:SETENV, so the package exists by
-;; the time the reader reaches it.  --script reads and evaluates one form at a
-;; time, which is what makes an in-file REQUIRE enough here.
-(require :sb-posix)
 (push (truename ".") asdf:*central-registry*)
 (asdf:load-system :nerimux)
 (use-package :nerimux/pty)
@@ -81,7 +77,7 @@
 
 (defun %wait-for-startup-render (fd seconds acc)
   "Poll FD until nerimux has rendered at least once and output has gone quiet.
-   The integration smoke drives a saved-core wrapper, whose startup time varies
+   The integration smoke drives the built binary, whose startup time varies
    enough that a fixed sleep can type before raw mode and the first pane are ready."
   (let ((deadline (+ (get-internal-real-time)
                      (* seconds internal-time-units-per-second)))
@@ -105,27 +101,24 @@
 
 (defun e2e (binary)
   (format t "~&[e2e] driving ~A~%" binary)
-  ;; Point the pane's shell at the binary under test. There is no longer an
-  ;; option to set: %default-shell reads $SHELL and falls back to /bin/sh, so the
-  ;; environment is the only lever, which is also what a user has.
-  ;;
-  ;; This file is not in the nerimux/test ASDF system — it is run by hand against
-  ;; a built binary (see docs/src/getting-started.md) — so nothing but an actual
-  ;; e2e run will catch a stale reference here.
-  (sb-posix:setenv "SHELL" binary 1)
-  (multiple-value-bind (fd pid) (forkpty-with-shell 24 80)
+  (multiple-value-bind (fd pid)
+      (forkpty-with-shell 24 80
+                          :default-command (format nil "exec ~S attach" binary))
     (unwind-protect
          (let ((marker "E2E_PROOF_4242")
                (acc    (%make-accumulator)))
            ;; Let nerimux and its inner shell start up.
            (%wait-for-startup-render fd +e2e-startup-timeout-seconds+ acc)
-           ;; Type a command at the (emulated) keyboard.
+           ;; The workspace drops unbound normal-mode keys; enter :input before
+           ;; sending the command to the focused pane.
+           (pty-write fd (make-array 1 :element-type '(unsigned-byte 8)
+                                      :initial-contents (list (char-code #\i))))
            (pty-write fd (format nil "echo ~A~%" marker))
            ;; Wait for the marker to appear in rendered output.
            (let ((found (%wait-for-marker fd marker +e2e-marker-timeout-seconds+ acc)))
-             ;; Detach: prefix C-b (byte 2) then 'd'.
+             ;; Detach: prefix C-q (byte 17) then 'd'.
              (pty-write fd (make-array 2 :element-type '(unsigned-byte 8)
-                                          :initial-contents (list 2 (char-code #\d))))
+                                          :initial-contents (list 17 (char-code #\d))))
              (sleep +e2e-detach-settle-seconds+)
              (if found
                  (progn (format t "[e2e] PASS — marker rendered by nerimux~%")

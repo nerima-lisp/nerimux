@@ -8,8 +8,8 @@ A workspace-oriented terminal multiplexer written entirely in Common Lisp.
 The primary UI navigates an organization → repository → worktree → pane
 workspace, with a thin client attached to a headless runtime. The entry
 surface is workspace-only — `attach`, `server`, and `kill` are the only
-commands — and every verified behavior is pinned by a regression suite that
-runs hermetically through Nix.
+commands. The core regression suite runs hermetically through Nix; live PTY
+integration is an explicit host-side check.
 
 Full documentation is published at <https://nerima-lisp.github.io/nerimux/>.
 The source for that site lives in [docs/src/](docs/src/).
@@ -19,18 +19,21 @@ The source for that site lives in [docs/src/](docs/src/).
 ```bash
 nix run github:nerima-lisp/nerimux -- attach
 
-nerimux attach                         # open the workspace overview
-nerimux attach github.com/org/repo     # focus a repository by its ghq spec
-nerimux attach /path/to/worktree       # open a local worktree
-nerimux kill                           # stop the server (--force closes panes)
+nix run github:nerima-lisp/nerimux -- attach github.com/org/repo
+nix run github:nerima-lisp/nerimux -- attach /path/to/worktree
+nix run github:nerima-lisp/nerimux -- kill  # stop the server
 ```
+
+The examples use the flake directly. After `nix build .`, invoke the same
+commands with `./result/bin/nerimux`.
 
 `attach` auto-starts the headless runtime and connects a thin client. Use
 `C-q d` to detach and `C-p` to open the global picker. A selector containing a
-slash is resolved as a repository selector — the full ghq specification,
-`host/organization/repository` — or a local worktree path. `attach`, `server`,
-and `kill` are the only commands; anything else — including `nerimux` with no
-arguments — prints the usage summary and exits non-zero.
+slash is resolved against the ghq catalog — the full specification,
+`host/organization/repository` — or against a local worktree path. `server`
+runs the headless runtime without attaching a client, and `kill` stops it.
+Anything else — including `nerimux` with no arguments — prints the usage
+summary and exits non-zero.
 
 nerimux reads no configuration file and has no runtime-configurable options.
 Every value the workspace UI depends on — shell, `$TERM`, scrollback length,
@@ -41,7 +44,7 @@ split ratios, pane limits, and the rest — is a compiled-in constant.
 ```nix
 # flake.nix
 inputs.nerimux = {
-  url = "github:nerima-lisp/nerimux/v0.2.0";
+  url = "github:nerima-lisp/nerimux/v0.3.0";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
@@ -67,6 +70,7 @@ so a build either reproduces exactly or fails loudly. From a checkout,
 ```sh
 nix develop          # SBCL with every dependency on the ASDF registry
 nix run .#test       # run the test suite
+CL_WEAVE_TEST_FILTER=renderer nix run .#test  # run matching cl-weave tests
 nix flake check      # tests + formatting + docs, the same gate CI uses
 nix fmt              # format Nix sources (treefmt)
 ```
@@ -75,13 +79,15 @@ Tests live in `t/` and run under
 [cl-weave](https://github.com/nerima-lisp/cl-weave), the org's test framework.
 `sbcl --script run-tests.lisp` is the entry point CI and the flake both use;
 `NERIMUX_TEST_SYSTEM` selects the system tested and defaults to `nerimux/test`.
+Set `CL_WEAVE_TEST_FILTER` to a case-insensitive substring of the cl-weave test
+path when iterating on one area of the suite.
 Real-PTY integration cases live in a second suite, `nerimux/pty-test`, run
 separately with `nix run .#test-pty` because the hermetic flake gate has no
 `/dev/ptmx`.
 
-nerimux is the org's L4 application package and its testbed: it runs on eleven
+nerimux is the org's L4 application package and its testbed: it runs on the
 sibling libraries — [cl-cli](https://github.com/nerima-lisp/cl-cli),
-[cl-boundary-kit](https://github.com/nerima-lisp/cl-boundary-kit),
+[cl-date-kit](https://github.com/nerima-lisp/cl-date-kit),
 [cl-parser-kit](https://github.com/nerima-lisp/cl-parser-kit),
 [cl-tty-kit](https://github.com/nerima-lisp/cl-tty-kit),
 [cl-process-kit](https://github.com/nerima-lisp/cl-process-kit),
@@ -91,9 +97,7 @@ sibling libraries — [cl-cli](https://github.com/nerima-lisp/cl-cli),
 [cl-host-kit](https://github.com/nerima-lisp/cl-host-kit),
 [cl-tui-kit](https://github.com/nerima-lisp/cl-tui-kit) and
 [cl-vcs-kit](https://github.com/nerima-lisp/cl-vcs-kit).
-It has **no external dependencies**: it was the last repository in
-the org with any, and the final two (`bordeaux-threads`, `cl-ppcre`) were
-replaced by siblings on 2026-08-02. See
+It has **no external dependencies**. See
 [Dogfooded sibling libraries](https://nerima-lisp.github.io/nerimux/guide/sibling-libraries/).
 
 ## Contributing

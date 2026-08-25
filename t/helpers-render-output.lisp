@@ -74,11 +74,6 @@
         (nerimux/renderer::render-status-bar s sess rows cols :status-row status-row)
         (nerimux/renderer::render-status-bar s sess rows cols))))
 
-(defun render-overlay-output (width height)
-  "Render the current overlay to a string using the production renderer."
-  (with-output-to-string (buf)
-    (nerimux/renderer::render-overlay buf width height)))
-
 (defun render-tree-borders-output (tree active-pane width)
   "Render TREE borders for ACTIVE-PANE to a string using the production renderer."
   (with-output-to-string (s)

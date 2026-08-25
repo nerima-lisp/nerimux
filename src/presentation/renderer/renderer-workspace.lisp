@@ -157,12 +157,11 @@
       (repository-id repository)))
 
 (defun %worktree-tree-label (worktree)
-  (or (and (worktree-branch worktree)
-           (plusp (length (worktree-branch worktree)))
-           (worktree-branch worktree))
-      (and (plusp (length (worktree-path worktree)))
-           (worktree-path worktree))
-      (worktree-id worktree)))
+  (let ((branch (worktree-branch worktree))
+        (path (worktree-path worktree)))
+    (or (when (and branch (plusp (length branch))) branch)
+        (and (plusp (length path)) path)
+        (worktree-id worktree))))
 
 (defun %window-tree-label (window)
   "WINDOW's tree-row label: id + name. NAME is already branch + sequence
@@ -277,7 +276,7 @@
   "Command names the `:` prompt completes against (R6.12): the wt-* family
    plus the other names already surfaced in the overview footer's help text
    below. A presentation-layer literal rather than an import from
-   server-multi-dispatch.lisp's command table, for the same upward-layering
+   multi-dispatch command table, for the same upward-layering
    reason %WORKTREE-TREE-WINDOWS above is a local duplicate rather than a
    call across packages -- keep in sync with that table by hand if it grows.")
 
@@ -372,12 +371,11 @@
 
 (defun %worktree-title-text (worktree)
   (or (and worktree
-           (or (and (worktree-branch worktree)
-                    (plusp (length (worktree-branch worktree)))
-                    (worktree-branch worktree))
-               (and (plusp (length (worktree-path worktree)))
-                    (worktree-path worktree))
-               (worktree-id worktree)))
+           (let ((branch (worktree-branch worktree))
+                 (path (worktree-path worktree)))
+             (or (when (and branch (plusp (length branch))) branch)
+                 (and (plusp (length path)) path)
+                 (worktree-id worktree))))
       "-"))
 
 (defun %client-title-osc (repository worktree)

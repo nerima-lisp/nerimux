@@ -75,7 +75,8 @@
 
 (defun close-socket (socket)
   "Close SOCKET, ignoring errors (e.g. already closed by its stream)."
-  (ignore-errors (sb-bsd-sockets:socket-close socket)))
+  (handler-case (sb-bsd-sockets:socket-close socket)
+    (sb-bsd-sockets:socket-error () nil)))
 
 (defun %make-probe-socket-path ()
   "Generate a unique throwaway socket path in the temp directory."
@@ -88,8 +89,8 @@
    Probes by binding then removing a throwaway socket path; returns NIL when
    the environment forbids it (e.g. a restricted sandbox)."
   (let ((path (%make-probe-socket-path)))
-    (%swallow-to-nil (error)
+    (%swallow-to-nil (sb-bsd-sockets:socket-error file-error)
       (let ((socket (make-listener path)))
         (close-socket socket)
-        (ignore-errors (delete-file path))
+        (delete-file path)
         t))))

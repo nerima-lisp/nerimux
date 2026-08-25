@@ -1,5 +1,36 @@
 (in-package #:nerimux/test)
 
+(describe "vcs value helpers"
+  (it "normalizes values and splits repository specifications"
+    (expect (string= "" (nerimux/vcs::%string-value nil)))
+    (expect (string= "value" (nerimux/vcs::%string-value "value")))
+    (expect (string= (namestring #P"/tmp/project")
+                     (nerimux/vcs::%string-value #P"/tmp/project")))
+    (expect (string= "42" (nerimux/vcs::%string-value 42)))
+    (expect (equal '("org" "project")
+                   (nerimux/vcs::%specification-parts "org//project/")))
+    (expect (equal '("project")
+                   (nerimux/vcs::%specification-parts "/project/")))
+    (expect (null (nerimux/vcs::%specification-parts nil))))
+
+  (it "derives organization and repository names by specification shape"
+    (multiple-value-bind (organization name)
+        (nerimux/vcs::%organization-and-name "host/org/project")
+      (expect (string= "host" organization))
+      (expect (string= "org" name)))
+    (multiple-value-bind (organization name)
+        (nerimux/vcs::%organization-and-name "org/project")
+      (expect (string= "local" organization))
+      (expect (string= "org" name)))
+    (multiple-value-bind (organization name)
+        (nerimux/vcs::%organization-and-name "project")
+      (expect (string= "local" organization))
+      (expect (string= "default" name)))
+    (multiple-value-bind (organization name)
+        (nerimux/vcs::%organization-and-name nil)
+      (expect (string= "local" organization))
+      (expect (string= "default" name)))))
+
 (describe "vcs worktree status"
   (it "marks an absent worktree without querying the adapter"
     (let* ((path
@@ -102,26 +133,63 @@
             do (sleep 0.01))
       (expect completed))))
 
+(describe "async vcs batch edge cases"
+  (it "completes immediately for an empty repository set"
+    (let ((completed :not-called)
+          (threads :not-called))
+      (setf threads
+            (nerimux/vcs:refresh-repositories-async
+             nil
+             :on-complete (lambda (repositories)
+                            (setf completed repositories))))
+      (expect (null threads))
+      (expect (equal '() completed))))
+
+  (it "reports a repository refresh error before completing the batch"
+    (let* ((repository
+             (nerimux/model:make-repository
+              :specification "workspace-owner/project"
+              :local-path "/tmp/project"))
+           (error-repository nil)
+           (condition-seen nil)
+           (completed nil)
+           (deadline (+ (get-internal-real-time)
+                        (* 2 internal-time-units-per-second))))
+      (nerimux/vcs:refresh-repositories-async
+       (list repository)
+       :refresh-function (lambda (current)
+                           (declare (ignore current))
+                           (error "synthetic repository refresh failure"))
+       :on-error (lambda (current condition)
+                   (setf error-repository current
+                         condition-seen condition))
+       :on-complete (lambda (repositories)
+                      (declare (ignore repositories))
+                      (setf completed t)))
+      (loop until completed
+            while (< (get-internal-real-time) deadline)
+            do (sleep 0.01))
+      (expect (eq repository error-repository))
+      (expect condition-seen)
+      (expect completed))))
+
 (describe "async vcs scan errors"
   (it "reports a scan failure without leaking an unhandled worker error"
-    (let ((original (fdefinition 'nerimux/vcs::%vcs-call))
-          (condition-seen nil)
+    (let ((condition-seen nil)
           (deadline (+ (get-internal-real-time)
                        (* 2 internal-time-units-per-second))))
-      (unwind-protect
-           (progn
-             (setf (fdefinition 'nerimux/vcs::%vcs-call)
-                   (lambda (&rest arguments)
-                     (declare (ignore arguments))
-                     (error "synthetic ghq failure")))
-             (nerimux/vcs:scan-repositories-async
-              :on-error (lambda (condition)
-                          (setf condition-seen condition)))
-             (loop until condition-seen
-                   while (< (get-internal-real-time) deadline)
-                   do (sleep 0.01))
-             (expect condition-seen))
-        (setf (fdefinition 'nerimux/vcs::%vcs-call) original)))))
+      (with-stubbed-fdefinition
+          ((vcs-kit:ghq-list-repositories
+             (lambda (&rest arguments)
+               (declare (ignore arguments))
+               (error "synthetic ghq failure"))))
+        (nerimux/vcs:scan-repositories-async
+         :on-error (lambda (condition)
+                     (setf condition-seen condition)))
+        (loop until condition-seen
+              while (< (get-internal-real-time) deadline)
+              do (sleep 0.01))
+        (expect condition-seen)))))
 
 ;;; %preserve-pane-associations runs on EVERY catalog refresh, via
 ;;; set-workspace-organizations.  A refresh replaces the whole organization tree
@@ -212,28 +280,30 @@
 ;; Regression guard for the review finding that PRUNE-WORKTREES's :DRY-RUN
 ;; keyword had no default, so (prune-worktrees repository) with no keyword
 ;; silently performed a LIVE destructive prune despite the docstring calling
-;; dry-run "the caller's default". This mocks %VCS-CALL directly (as the
-;; "async vcs scan errors" suite above does) rather than requiring vcs-kit,
-;; and inspects the exact arguments the VCS-WORKTREE call receives.
+;; dry-run "the caller's default". The test replaces the direct cl-vcs-kit
+;; functions and inspects the exact arguments VCS-WORKTREE receives.
 (describe "prune-worktrees default dry-run"
   (it "defaults to a dry run when :dry-run is omitted entirely"
-    (let ((original (fdefinition 'nerimux/vcs::%vcs-call))
-          (captured-arguments nil))
-      (unwind-protect
-           (let ((repository
-                   (nerimux/model:make-repository
-                    :specification "workspace-owner/project"
-                    :local-path "/tmp/nerimux-prune-default-dry-run-test")))
-             (setf (fdefinition 'nerimux/vcs::%vcs-call)
-                   (lambda (name &rest arguments)
-                     (cond
-                       ((string= name "VCS-WORKTREE")
-                        (setf captured-arguments arguments)
-                        "")
-                       ((string= name "VCS-LIST-WORKTREES") nil)
-                       (t :fake-backend-repository))))
-             ;; No :dry-run keyword at all -- this is the exact call shape the
-             ;; review flagged as unsafe.
-             (nerimux/vcs:prune-worktrees repository)
-             (expect (member "--dry-run" captured-arguments :test #'equal)))
-        (setf (fdefinition 'nerimux/vcs::%vcs-call) original)))))
+    (let ((captured-arguments nil)
+          (repository
+            (nerimux/model:make-repository
+             :specification "workspace-owner/project"
+             :local-path "/tmp/nerimux-prune-default-dry-run-test")))
+      (with-stubbed-fdefinition
+          ((vcs-kit:make-vcs-repository
+             (lambda (&rest arguments)
+               (declare (ignore arguments))
+               :fake-backend-repository))
+           (vcs-kit:vcs-worktree
+             (lambda (backend-repository &rest arguments)
+               (declare (ignore backend-repository))
+               (setf captured-arguments arguments)
+               ""))
+           (vcs-kit:vcs-list-worktrees
+             (lambda (&rest arguments)
+               (declare (ignore arguments))
+               nil)))
+        ;; No :dry-run keyword at all -- this is the exact call shape the
+        ;; review flagged as unsafe.
+        (nerimux/vcs:prune-worktrees repository)
+        (expect (member "--dry-run" captured-arguments :test #'equal))))))

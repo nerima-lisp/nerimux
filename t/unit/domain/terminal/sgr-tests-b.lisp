@@ -269,6 +269,33 @@
            (nerimux/terminal/sgr::%encode-truecolor-rgb 300 -5 999)))
     (expect (= #x1000000 (nerimux/terminal/sgr::%encode-truecolor-rgb nil nil nil))))
 
+  (it "sgr-inline-helpers-are-callable-through-function-cells"
+    (with-screen (s 10 2)
+      (funcall (symbol-function 'nerimux/terminal/sgr::attr-on)
+               s nerimux/terminal/types:+attr-bold+)
+      (funcall (symbol-function 'nerimux/terminal/sgr::attr-off)
+               s nerimux/terminal/types:+attr-bold+)
+      (funcall (symbol-function 'nerimux/terminal/sgr::attr2-on)
+               s nerimux/terminal/types:+attr2-overline+)
+      (funcall (symbol-function 'nerimux/terminal/sgr::attr2-off)
+               s nerimux/terminal/types:+attr2-overline+)
+      (let ((encoded
+              (funcall (symbol-function 'nerimux/terminal/sgr::%encode-truecolor-rgb)
+                       1 2 3)))
+        (expect (= #x1010203 encoded)))
+      (let ((tail
+              (funcall (symbol-function 'nerimux/terminal/sgr::%set-truecolor)
+                       s #'(setf nerimux/terminal/types:screen-cur-fg)
+                       '(38 2 1 2 3 99))))
+        (expect (= #x1010203 (nerimux/terminal/types:screen-cur-fg s)))
+        (expect (equal '(99) tail)))
+      (let ((tail
+              (funcall (symbol-function 'nerimux/terminal/sgr::%consume-256-color-param)
+                       s #'(setf nerimux/terminal/types:screen-cur-bg)
+                       '(48 5 42 99))))
+        (expect (= 42 (nerimux/terminal/types:screen-cur-bg s)))
+        (expect (equal '(99) tail)))))
+
   ;; %apply-sgr-group applies a (38 2 R G B) colon group as a true-colour fg.
   (it "apply-sgr-group-truecolor-sets-fg"
     (with-screen (s 10 2)

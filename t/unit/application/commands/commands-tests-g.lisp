@@ -53,6 +53,16 @@
         (declare (ignore desc))
         (expect (equal expected (nerimux/commands:tokenize-command-string input))))))
 
+  (it "tokenizer matcher rejects separators and end-of-input"
+    (dolist (index '(0 3))
+      (multiple-value-bind (matched consumed text value)
+          (nerimux/commands::%argument-token-matcher
+           (if (zerop index) "  abc" "abc") index)
+        (expect (null matched))
+        (expect (= index consumed))
+        (expect (null text))
+        (expect (null value)))))
+
   ;;; ── %copy-mode-find-forward / %copy-mode-find-backward ──────────────────────
 
   (define-copy-mode-find-cases

@@ -10,44 +10,30 @@
 ;;;; was not already claimed; a call made while a fetch is in flight for the
 ;;;; same key invokes its ON-COMPLETE immediately with NIL and starts no
 ;;;; thread at all -- the in-flight fetch's own callback is the one that
-;;;; eventually reports the real result. These tests mock %VCS-CALL (the same
-;;;; technique vcs-tests.lisp's "async vcs scan errors" and "prune-worktrees
-;;;; default dry-run" suites already use) so the first fetch can be held open
+;;;; eventually reports the real result. These tests replace the direct
+;;;; VCS-KIT:VCS-FETCH boundary (the same technique vcs-tests.lisp's "async vcs
+;;;; scan errors" and "prune-worktrees default dry-run" suites already use) so
+;;;; the first fetch can be held open
 ;;;; deliberately, long enough for a second call to observe it in flight --
-;;;; this is a controlled synchronization delay inside the mock, not a fixed
-;;;; sleep-and-hope wait on the assertions themselves, which all poll with a
-;;;; bounded deadline.
-
-(defun %mock-vcs-call-with-delayed-fetch (call-log delay-seconds)
-  "Return a replacement for NERIMUX/VCS::%VCS-CALL: MAKE-VCS-REPOSITORY
-   returns a placeholder backend handle; VCS-FETCH sleeps DELAY-SECONDS (so a
-   concurrent second call can observe the first one still in flight), records
-   one entry in CALL-LOG, and returns T. Every real VCS-FETCH invocation --
-   never MAKE-VCS-REPOSITORY, which %REPOSITORY-BACKEND calls once per
-   VCS-FETCH too -- adds exactly one entry, so (LENGTH (CDR CALL-LOG)) counts
-   real fetches, which is the only thing these tests need from the log (not
-   which repository each call was for)."
-  (lambda (name &rest arguments)
-    (cond
-      ((string= name "MAKE-VCS-REPOSITORY") :fake-backend-repository)
-      ((string= name "VCS-FETCH")
-       (sleep delay-seconds)
-       (push t (cdr call-log))
-       t)
-      (t (error "unexpected %%vcs-call in fetch-dedup test: ~A ~A" name arguments)))))
+(defun %delayed-vcs-fetch (call-log delay-seconds)
+  "Return a direct VCS-FETCH stub that records each real fetch invocation."
+  (lambda (repository &rest arguments)
+    (declare (ignore repository arguments))
+    (sleep delay-seconds)
+    (push t (cdr call-log))
+    t))
 
 (defmacro with-mocked-vcs-fetch ((call-log &key (delay 0.3)) &body body)
-  "Rebind NERIMUX/VCS::%VCS-CALL to the delayed-fetch mock for BODY, restoring
-   the original definition afterward even if BODY signals."
-  (let ((original (gensym "ORIGINAL")))
-    `(let ((,original (fdefinition 'nerimux/vcs::%vcs-call))
-           (,call-log (list :log)))
-       (unwind-protect
-            (progn
-              (setf (fdefinition 'nerimux/vcs::%vcs-call)
-                    (%mock-vcs-call-with-delayed-fetch ,call-log ,delay))
-              ,@body)
-         (setf (fdefinition 'nerimux/vcs::%vcs-call) ,original)))))
+  "Replace the direct cl-vcs-kit fetch boundary for BODY."
+  `(let ((,call-log (list :log)))
+     (with-stubbed-fdefinition
+         ((vcs-kit:make-vcs-repository
+            (lambda (&rest arguments)
+              (declare (ignore arguments))
+              :fake-backend-repository))
+          (vcs-kit:vcs-fetch
+            (%delayed-vcs-fetch ,call-log ,delay)))
+       ,@body)))
 
 (defun %poll-until (predicate &key (timeout-seconds 2.0))
   "Poll PREDICATE every 10ms until it returns true or TIMEOUT-SECONDS elapses.
@@ -65,7 +51,7 @@
   ;; R7.1: a fetch issued for a repository while an earlier fetch for the
   ;; SAME repository is still running does not start a second real fetch --
   ;; its ON-COMPLETE fires immediately with NIL, and the in-flight fetch is
-  ;; the only one that ever calls %VCS-CALL "VCS-FETCH".
+  ;; the only one that ever calls VCS-KIT:VCS-FETCH.
   (it "does not start a second real fetch while one is already in flight for the same repository"
     (with-mocked-vcs-fetch (call-log :delay 0.3)
       (let* ((repository
@@ -90,7 +76,7 @@
         (expect (%poll-until (lambda () (not (eq :pending first-result)))))
         (expect (eq repository first-result))
         ;; Exactly one real VCS-FETCH call happened -- the duplicate never
-        ;; reached %VCS-CALL at all.
+        ;; reached VCS-KIT:VCS-FETCH at all.
         (expect (= 1 (length (cdr call-log))))))))
 
 (describe "renderer-suite/vcs-fetch-dedup-repository-recovery"

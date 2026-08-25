@@ -74,7 +74,8 @@
    The old child path ignored chdir failures; keeping NIL preserves that behavior
    by letting the child inherit the current directory."
   (when (%string-non-empty-p start-dir)
-    (ignore-errors (truename start-dir))))
+    (handler-case (truename start-dir)
+      (file-error () nil))))
 
 (defun %default-shell ()
   "Shell to spawn for a pane's child process: $SHELL, or \"/bin/sh\" when unset
@@ -103,18 +104,19 @@
     (remhash master-fd *pty-processes*)
     pty))
 
-(defconstant +pty-child-wait-timeout+ 5
-  "Wall-clock timeout, in seconds, for PTY-CHILD-EXIT-STATUS's wait on a child
-   that has already closed its PTY slave.  The child should already be
-   exiting by then; this bounds the rare case where it lingers (e.g. a
-   daemonizing grandchild still holding the PTY open) so the reader thread
+(defparameter +pty-child-wait-timeout+ (cl-date-kit:duration-of-seconds 5)
+  "Wall-clock timeout, as a CL-DATE-KIT:DURATION, for PTY-CHILD-EXIT-STATUS's
+   wait on a child that has already closed its PTY slave.  The child should
+   already be exiting by then; this bounds the rare case where it lingers (e.g.
+   a daemonizing grandchild still holding the PTY open) so the reader thread
    that calls this at EOF cannot block forever.")
 
 (defun pty-child-exit-status (master-fd &optional (timeout +pty-child-wait-timeout+))
   "Exit information for MASTER-FD's child process, called at PTY EOF (the child
    has closed the slave, so the wait does not normally block for a live shell;
-   bounded by TIMEOUT seconds regardless, default +PTY-CHILD-WAIT-TIMEOUT+ —
-   override only for tests that need a live child to time out quickly).
+   bounded by TIMEOUT, a CL-DATE-KIT:DURATION, default
+   +PTY-CHILD-WAIT-TIMEOUT+ — override only for tests that need a live child to
+   time out quickly). NIL leaves the wait unbounded.
    Returns (values CODE KIND) where KIND is :exited (CODE = exit code) or
    :signaled (CODE = signal number), or NIL when the child is unknown (foreign
    fd, synthetic test pane), the wait times out, or the wait fails."
@@ -133,7 +135,7 @@
                     (values code :signaled)
                     (values code :exited)))))
         (cl-concurrent-kit:operation-timed-out () nil)
-        (error () nil)))))
+        (sb-ext:process-error () nil)))))
 
 (defun forkpty-with-shell (rows cols &key start-dir default-command environment)
   "Spawn a child shell process on a fresh PTY of size ROWS×COLS.
@@ -176,7 +178,9 @@
              ;; tty field's existing (empty) value that callers store.
              (values master pid ""))
         (unless success
-          (ignore-errors (cl-tty-kit:close-pty pty)))))))
+          (handler-case
+              (cl-tty-kit:close-pty pty)
+            (cl-tty-kit:pty-operation-failed () nil)))))))
 
 ;;; ── Public: PTY I/O ────────────────────────────────────────────────────────
 ;;;
@@ -237,22 +241,28 @@
    A non-positive CHILD-PID is ignored: kill(-1)/kill(0) broadcast the signal to
    the whole process group (including this process), which must never happen.
    Likewise a negative MASTER-FD is not closed."
-  (ignore-errors
-    ;; nerimux-specific teardown: SIGHUP (NOT cl-tty-kit's SIGTERM->SIGKILL
-    ;; escalation) then close the master.  Drop the retained cl-tty-kit PTY
-    ;; struct from *pty-processes* so it is no longer reachable; closing its
-    ;; SBCL process object closes the master stream (and fd), as before.
-    ;; sb-posix:kill, NOT process-kit's signal API: that one is shaped around a
-    ;; process handle it spawned and checks process-group ownership, whereas
-    ;; nerimux holds a bare pid from a cl-tty-kit PTY. sb-posix ships with SBCL
-    ;; and is not an external dependency.
-    (when (> child-pid 0)
-      (sb-posix:kill child-pid sb-posix:sighup))
-    (when (>= master-fd 0)
-      (let ((pty (%take-pty-process master-fd)))
-        (if pty
-            (sb-ext:process-close (cl-tty-kit:pty-process pty))
-            (sb-posix:close master-fd))))))
+  ;; nerimux-specific teardown: SIGHUP (NOT cl-tty-kit's SIGTERM->SIGKILL
+  ;; escalation) then close the master.  Drop the retained cl-tty-kit PTY
+  ;; struct from *pty-processes* so it is no longer reachable; closing its
+  ;; SBCL process object closes the master stream (and fd), as before.
+  ;; sb-posix:kill, NOT process-kit's signal API: that one is shaped around a
+  ;; process handle it spawned and checks process-group ownership, whereas
+  ;; nerimux holds a bare pid from a cl-tty-kit PTY. sb-posix ships with SBCL
+  ;; and is not an external dependency.
+  (when (> child-pid 0)
+    (handler-case
+        (sb-posix:kill child-pid sb-posix:sighup)
+      (sb-posix:syscall-error () nil)))
+  (when (>= master-fd 0)
+    (let ((pty (%take-pty-process master-fd)))
+      (if pty
+          (handler-case
+              (sb-ext:process-close (cl-tty-kit:pty-process pty))
+            (stream-error () nil)
+            (file-error () nil))
+          (handler-case
+              (sb-posix:close master-fd)
+            (sb-posix:syscall-error () nil))))))
 
 ;;; ── Public: select-based I/O multiplexing ─────────────────────────────────
 
