@@ -86,7 +86,14 @@
 (defun %workspace-prefix-close-pane (session conn)
   "C-q x : close the focused pane (R5.4).  Kills its PTY, drops it from its
    worktree and window, and — when that empties the window — closes the
-   window too and refocuses per %workspace-refocus-after-window-close."
+   window too and refocuses per %workspace-refocus-after-window-close.
+
+   RETIRE-PANE-PTY rather than CLOSE-PANE-PTY: this is the one path that
+   closes a single pane while the server keeps serving, so it is the one path
+   whose pane still has a live reader thread that must be told to stop.  The
+   shutdown paths (%FORCE-KILL-PANES, RUN-SERVER's unwind) deliberately keep
+   using CLOSE-PANE-PTY, because they read PANE-PID back afterwards to
+   escalate to SIGKILL."
   (multiple-value-bind (pane window worktree)
       (%workspace-prefix-context session conn)
     (cond
@@ -94,7 +101,7 @@
        (%client-notify conn "no focused pane"))
       (t
        (%workspace-prefix-unzoom window)
-       (close-pane-pty pane)
+       (retire-pane-pty pane)
        (when worktree
          (setf (worktree-panes worktree) (delete pane (worktree-panes worktree)))
          (setf (pane-worktree pane) nil))

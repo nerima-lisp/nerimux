@@ -30,7 +30,7 @@
    #:copy-mode-search-backward
    #:copy-mode-search-next
    #:copy-mode-search-prev
-   #:tokenize-command-string))
+   #:tokenize-command-string #:retire-pane-pty))
 
 (defpackage #:nerimux
   (:use #:cl

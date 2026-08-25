@@ -23,14 +23,38 @@
    fresh exact-size copy of the bytes read, so handing that copy downstream is
    safe even though the scratch buffer is overwritten by the next read.")
 
+(defun %pane-retired-p (pane)
+  "True once PANE's fd has been cleared, which is this loop's ONLY per-pane
+   stop signal.
+
+   %RUN-READER-STATES loops on the global *RUNNING*, so STOP-READER-THREADS is
+   a whole-server shutdown; nothing else ever told a single pane's reader to
+   stop.  Without this check the loop is not merely leaked but actively
+   harmful, because SELECT-FDS maps a closed descriptor's EBADF to NIL by
+   design (see its docstring in infrastructure/pty/pty.lisp: turning that race
+   into a signal would take the serve loop down).  For the serve loop that is
+   right; for this loop it means a retired pane polls a dead fd every 50ms
+   forever, and then acts on whatever the OS later assigns that number.
+   RETIRE-PANE-PTY publishes the -1 before closing so this check wins the
+   race."
+  (not (plusp (pane-fd pane))))
+
 (defun reader-idle-state (pane)
-  "Poll the pane PTY fd; transition to reading if data is available."
-  (if (select-fds (list (pane-fd pane)) +pty-poll-timeout-us+)
-      #'reader-reading-state
-      #'reader-idle-state))
+  "Poll the pane PTY fd; transition to reading if data is available, or stop
+   when PANE has been retired underneath this thread."
+  (cond
+    ((%pane-retired-p pane) nil)
+    ((select-fds (list (pane-fd pane)) +pty-poll-timeout-us+)
+     #'reader-reading-state)
+    (t #'reader-idle-state)))
 
 (defun reader-reading-state (pane)
-  "Read one PTY chunk and feed it to PANE; transition to eof if EOF."
+  "Read one PTY chunk and feed it to PANE; transition to eof if EOF.
+
+   Re-checks retirement because the fd can be cleared between the SELECT-FDS
+   that reported it readable and this read."
+  (when (%pane-retired-p pane)
+    (return-from reader-reading-state nil))
   (let ((bytes (pty-read-blocking-into (pane-fd pane) *reader-scratch-buffer*)))
     (if (null bytes)
         #'reader-eof-state

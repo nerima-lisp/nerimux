@@ -27,11 +27,44 @@
               (incf calls)
               (when (= 7 (first fds)) fds))))
         (expect (eq #'nerimux::reader-reading-state
-                    (nerimux::reader-idle-state pane)))
-        (setf (pane-fd pane) -1)
-        (expect (eq #'nerimux::reader-idle-state
                     (nerimux::reader-idle-state pane))))
-      (expect (= 2 calls))))
+      (expect (= 1 calls))))
+
+  ;; This case previously asserted the OPPOSITE: that a pane with fd -1 still
+  ;; returned #'reader-idle-state, i.e. kept polling forever.  It was pinning a
+  ;; defect rather than a contract.  Nothing stops a single pane's reader
+  ;; except this check -- %run-reader-states loops on the GLOBAL *running* --
+  ;; so a pane closed while the server keeps serving left a thread polling a
+  ;; dead fd every 50ms for the life of the process, and then acting on
+  ;; whatever the OS reassigned that number to.  Flipped deliberately.
+  (it "reader-idle-state-stops-when-the-pane-is-retired"
+    (let ((pane (make-pane :id 1 :fd -1 :pid -1 :screen (make-screen 10 3)))
+          (calls 0))
+      (with-stubbed-fdefinition
+          ((nerimux/pty:select-fds
+            (lambda (fds timeout-us)
+              (declare (ignore fds timeout-us))
+              (incf calls)
+              nil)))
+        (expect (null (nerimux::reader-idle-state pane))))
+      ;; Not merely "returned NIL": it must not have touched the descriptor at
+      ;; all.  select-fds maps a closed fd's EBADF to NIL, so reaching it would
+      ;; look identical from the return value alone.
+      (expect (zerop calls))))
+
+  ;; The fd can be cleared between the select that reported it readable and
+  ;; the read, so reading-state carries the same guard.
+  (it "reader-reading-state-stops-when-the-pane-is-retired"
+    (let ((pane (make-pane :id 1 :fd -1 :pid -1 :screen (make-screen 10 3)))
+          (reads 0))
+      (with-stubbed-fdefinition
+          ((nerimux/pty:pty-read-blocking-into
+            (lambda (fd buffer)
+              (declare (ignore fd buffer))
+              (incf reads)
+              nil)))
+        (expect (null (nerimux::reader-reading-state pane))))
+      (expect (zerop reads))))
 
   (it "reader-reading-state-handles-empty-and-nonempty-pty-reads"
     (let ((pane (make-pane :id 1 :fd 7 :pid -1 :screen (make-screen 10 3)))
@@ -100,6 +133,56 @@
                       (nerimux::start-reader-thread pane)))
           (expect (functionp reader-function))
           (finishes (funcall reader-function))))))
+
+  ;; ── retire-pane-pty ─────────────────────────────────────────────────────────
+  ;;
+  ;; The ORDER is the safety property, not just the end state.  The reader
+  ;; thread re-reads (pane-fd pane) on every poll from another thread, so if
+  ;; the close landed before the -1 became visible there would be a window in
+  ;; which the reader sees a positive fd that is already closed -- and once
+  ;; the OS reuses that number, reader-eof-state's (> (pane-fd pane) 0) guard
+  ;; still passes on the stale value and closes whatever *pty-processes* now
+  ;; has under it, which is a different, live pane's shell.
+  ;;
+  ;; Asserting the slots afterwards would pass either way.  This observes the
+  ;; slot values AT THE MOMENT close-pty is called, which is the only way to
+  ;; tell the two orderings apart.
+  (it "retire-pane-pty-clears-the-pane-before-closing-the-descriptor"
+    (let ((pane (make-pane :id 1 :fd 7 :pid 4321 :screen (make-screen 10 3)))
+          (observed-fd :never-called)
+          (observed-pid :never-called)
+          (fd-at-close nil)
+          (pid-at-close nil))
+      (with-stubbed-fdefinition
+          ((nerimux/ports:close-pty
+            (lambda (fd pid)
+              (setf observed-fd fd
+                    observed-pid pid
+                    fd-at-close (pane-fd pane)
+                    pid-at-close (pane-pid pane)))))
+        (nerimux/commands:retire-pane-pty pane))
+      ;; close-pty still receives the REAL descriptor and pid -- clearing first
+      ;; must not turn the close into a no-op on -1, which would leak the fd.
+      (expect (eql 7 observed-fd))
+      (expect (eql 4321 observed-pid))
+      ;; ...while the pane already read as retired at that instant.
+      (expect (eql -1 fd-at-close))
+      (expect (eql -1 pid-at-close))
+      (expect (eql -1 (pane-fd pane)))
+      (expect (eql -1 (pane-pid pane)))))
+
+  ;; close-pane-pty is the other half of the pair and must NOT retire: the
+  ;; --force shutdown path closes every pane, waits out the SIGHUP grace
+  ;; period, then reads pane-pid back to escalate to SIGKILL.  Clearing the
+  ;; pid there would send that escalation at nothing and orphan the children.
+  (it "close-pane-pty-leaves-the-pid-for-sigkill-escalation"
+    (let ((pane (make-pane :id 1 :fd 7 :pid 4321 :screen (make-screen 10 3))))
+      (with-stubbed-fdefinition
+          ((nerimux/ports:close-pty
+            (lambda (fd pid) (declare (ignore fd pid)) nil)))
+        (nerimux/commands:close-pane-pty pane))
+      (expect (eql 7 (pane-fd pane)))
+      (expect (eql 4321 (pane-pid pane)))))
 
   ;; %run-reader-states exits immediately when *running* is NIL, even
   ;; given a non-NIL initial state (loop while *running*).
