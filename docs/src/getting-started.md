@@ -25,18 +25,22 @@ nerimux attach /path/to/worktree       # open a local worktree
 nerimux kill                           # stop the server (--force closes panes)
 ```
 
+These examples assume `nerimux` is on `PATH`. From a checkout, use
+`./result/bin/nerimux`; with no build, prefix the command with
+`nix run github:nerima-lisp/nerimux --`.
+
 `attach` auto-starts the headless runtime and connects a thin client. A selector
-containing a slash is resolved as a repository selector — the full ghq
-specification, `host/organization/repository` — or a local worktree path; a
-selector that matches both readings at once opens the global picker with the
-selector pre-typed instead of guessing. `attach`, `server`, and `kill` are the
-only commands; anything else — including `nerimux` with no arguments — prints
-the usage summary and exits non-zero. `-V`/`-h` are the only global flags.
+containing a slash is resolved against the ghq catalog — the full
+specification, `host/organization/repository` — or against a local worktree
+path; a selector that matches both readings at once opens the global picker
+with the selector pre-typed instead of guessing. `attach`, `server`, and `kill`
+are the only commands; anything else — including `nerimux` with no arguments —
+prints the usage summary and exits non-zero. `-V`/`-h` are the only global flags.
 
 The overview tree appears as soon as the repository scan finishes; the
 per-repository VCS status (dirty/ahead/behind flags) streams in afterwards,
 since it runs `git status` across every repository. A repository the scan
-cannot read — a broken or half-deleted clone in the root — is kept in the
+cannot read — an incomplete or otherwise unreadable checkout — is kept in the
 tree flagged `!` rather than aborting the scan.
 
 If `attach` has to auto-start the server and something goes wrong, the
@@ -74,9 +78,8 @@ Inside the picker, every printable key is a character of the search query, so
 the selection moves with **`C-p`** and **`C-n`** rather than `j` and `k`.
 `C-r` toggles regex matching, `Enter` selects, `Esc` closes.
 
-The tmux keystroke pipeline (prefix bindings, `bind`/`unbind`) and the tmux
-command surface are gone. nerimux reads no configuration file; every key
-binding and layout value above is a compiled-in constant.
+nerimux reads no configuration file; every key binding and layout value above
+is a compiled-in constant.
 
 ## Development
 
@@ -92,8 +95,17 @@ the sibling-library registry already set up:
 
 ```bash
 nerimux-sbcl --eval '(asdf:load-system "nerimux")' --eval '(nerimux:main)'
-nerimux-coverage ./coverage-report    # sb-cover report via cl-weave
+nix build .#coverage-report --print-build-logs
 ```
+
+The coverage derivation writes the generated report to
+`result/cover-index.html` (or to the path printed by `nix build` with
+`--no-link --print-out-paths`).
+
+The coverage gate requires 100% expression and branch coverage. The small
+set of declaration-only, FFI-constant, and static-style source files excluded
+from the report is listed explicitly in `scripts/coverage.lisp`; runtime code
+and the behavior of those declarations' consumers remain in scope.
 
 ## Testing
 
@@ -105,22 +117,25 @@ nerimux-coverage ./coverage-report    # sb-cover report via cl-weave
 | `formatting` | treefmt / nixfmt over every tracked Nix file |
 | `docs` | this site, built with `mkdocs --strict` |
 
-The main suite (`find t -name '*.lisp' | wc -l` for today's file count) runs on
-[cl-weave](https://github.com/nerima-lisp/cl-weave) and covers the VT100
+The main suite runs on [cl-weave](https://github.com/nerima-lisp/cl-weave) and covers the VT100
 emulator, layout geometry, copy mode, and the client/server protocol. The
 runner is deliberately sequential — tests share global session/socket state.
 
 Live PTY integration against a real shell is a separate system,
 `nerimux/pty-test`, run with `nix run .#test-pty`. It was split out of the
-main suite (R9.2) so that `nix flake check` never reports a pass for PTY
-work it silently skipped in a sandbox without `/dev/ptmx`; run it yourself
-when touching PTY code, because the flake gate does not.
+main suite so that `nix flake check` does not imply a result for host PTY work
+that cannot run in a sandbox without `/dev/ptmx`; run it yourself when touching
+PTY code, because the flake gate does not include it.
 
 There is also an end-to-end smoke script, `t/e2e/e2e-smoke.lisp`, kept out of
 the ASDF test system because it needs a built binary and a real `/dev/ptmx`.
-It currently predates the workspace-only entry surface: it launches the bare
-binary as the PTY's shell (relying on the removed standalone mode) and detaches
-with the removed `C-b` prefix, so it does not pass against today's binary and
-needs a rewrite around `attach`/`C-q d` before it is usable again.
+It launches the binary with `attach`, enters `:input` mode with `i`, sends a
+marker through the attached pane, verifies the rendered output, and detaches
+with `C-q d`:
+
+```bash
+nix build .
+nerimux-sbcl --script t/e2e/e2e-smoke.lisp result/bin/nerimux
+```
 
 Measured suite runtimes are recorded in [Benchmarks](benchmarks.md).

@@ -2,21 +2,15 @@
 
 ;;;; OSC 7 and OSC 8 helpers.
 
-(defun %hex-digit-16 (char)
-  "Return the numeric value of a hexadecimal digit CHAR, or NIL if invalid."
-  (digit-char-p char 16))
-
 (defun %flush-utf8-octets (octets out)
   "Write accumulated UTF-8 OCTETS to the string stream OUT and reset OCTETS."
   (when (> (length octets) 0)
-    (write-string
-     (or (handler-case
-             (cl-codec-kit:octets-to-string octets :encoding :utf-8)
-           (error () nil))
-         (coerce (loop for i below (length octets)
-                       collect (code-char (aref octets i)))
-                 'string))
-     out)
+    (write-string (cl-codec-kit:octets-to-string
+                    octets
+                    :encoding :utf-8
+                    :errorp nil
+                    :replacement #\REPLACEMENT_CHARACTER)
+                  out)
     (setf (fill-pointer octets) 0)))
 
 (defun %percent-decode (encoded-string)
@@ -57,10 +51,11 @@
 
 (defun %osc7-path (body)
   "Extract the filesystem path from an OSC 7 file:// URL and percent-decode it."
-  (let ((prefix "file://"))
-    (if (and (>= (length body) (length prefix))
-             (string= body prefix :end1 (length prefix) :end2 (length prefix)))
-        (let* ((after-scheme (subseq body (length prefix)))
+  (let* ((prefix "file://")
+         (prefix-length (length prefix)))
+    (if (and (>= (length body) prefix-length)
+             (string= prefix body :end2 prefix-length))
+        (let* ((after-scheme (subseq body prefix-length))
                (slash        (position #\/ after-scheme)))
           (if slash (%percent-decode (subseq after-scheme slash)) "/"))
         body)))

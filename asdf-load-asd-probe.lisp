@@ -1,0 +1,10 @@
+(require :asdf)
+
+(asdf:initialize-source-registry '(:source-registry :ignore-inherited-configuration))
+(push (truename ".") asdf:*central-registry*)
+(format t "BEFORE-LOAD-ASD~%")
+(finish-output)
+(asdf:load-asd (truename "asdf-load-asd-probe.asd"))
+(format t "AFTER-LOAD-ASD~%")
+(finish-output)
+(format t "FOUND ~S~%" (asdf:find-system "nerimux-asdf-probe" nil))

@@ -16,24 +16,31 @@
   "The SB-EXT:RUN-PROGRAM :if-output-exists action for LOG-PATH: :supersede
    (start a fresh file) when the existing log is at least
    +server-log-rotate-bytes+, else :append."
-  (if (and (probe-file log-path)
-           (>= (or (ignore-errors
-                     (with-open-file (s log-path) (file-length s)))
-                   0)
-               +server-log-rotate-bytes+))
-      :supersede
-      :append))
+  (handler-case
+      (if (and (probe-file log-path)
+               (>= (with-open-file (s log-path) (file-length s))
+                   +server-log-rotate-bytes+))
+          :supersede
+          :append)
+    (file-error () :append)
+    (stream-error () :append)))
 
 (defun %stale-socket-p (socket-path)
   "True when SOCKET-PATH exists but no server accepts connections on it.
    A leftover socket file like this (e.g. after a crash) should not block
    attaching: it is unlinked and a fresh server started instead of failing."
-  (and (probe-file socket-path)
-       (not (handler-case
-                (let ((sock (nerimux/net:connect-to socket-path)))
-                  (nerimux/net:close-socket sock)
-                  t)
-              (error () nil)))))
+  (handler-case
+      (and (probe-file socket-path)
+           (not (handler-case
+                    (let ((sock (nerimux/net:connect-to socket-path)))
+                      (nerimux/net:close-socket sock)
+                      t)
+                  (sb-ext:timeout () nil)
+                  (sb-bsd-sockets:socket-error () nil)
+                  (file-error () nil)
+                  (stream-error () nil))))
+    (file-error () nil)
+    (stream-error () nil)))
 
 (defun %secure-log-directory (log-path)
   "Best-effort chmod LOG-PATH's parent directory to 0700 once it exists, so a
@@ -41,22 +48,23 @@
    pane/environment-derived data) is not left world/group-readable under
    whatever the process umask happens to be (CWE-732).
 
-   Mirrors %socket-directory's sb-posix:chmod pattern in server.lisp exactly,
-   including its dependency mechanism: sb-posix is not an ASDF dependency of
-   this system (see nerimux/ports:find-posix-function's docstring), so it may
-   not be loaded here.  %ensure-server-running -- this function's caller --
-   runs in the ATTACHING/parent process spawning a new server child, not
-   inside run-server itself, so run-server's own (require :sb-posix) cannot
-   be assumed to have already executed in this process.  Hence the same
-   (require :sb-posix) immediately before use that server.lisp performs.
+   SB-POSIX is an SBCL runtime module rather than an ASDF dependency, so this
+   helper ensures it is loaded before the direct chmod call.
 
    Chmod is defense in depth for the log's contents, not a precondition for
-   logging or for starting the server, so any failure (missing sb-posix,
-   permission error, race) is ignored exactly as %socket-directory ignores
-   its own creation/chmod failures."
+   logging or for starting the server, so syscall failures are ignored."
   (require :sb-posix)
-  (ignore-errors
-    (sb-posix:chmod (directory-namestring log-path) #o700)))
+  (handler-case
+      (sb-posix:chmod (directory-namestring log-path) #o700)
+    (sb-posix:syscall-error () nil)))
+
+(defun %launch-server-without-log (exe args)
+  "Try the unredirected server launch after diagnostic logging is unavailable."
+  (handler-case
+      (sb-ext:run-program exe args :wait nil :output nil :error nil)
+    (file-error () nil)
+    (stream-error () nil)
+    (error () nil)))
 
 (defun %launch-server-and-poll-when-live (socket-path exe args log-path)
   "Spawn EXE/ARGS non-blocking, redirecting its stdout and stderr to LOG-PATH
@@ -72,9 +80,8 @@
    XDG_STATE_HOME/NERIMUX_RUNTIME_STATE (common in containers/CI) would now
    fail server auto-start outright.  Creating/securing LOG-PATH's directory
    and the log-redirected run-program attempt are therefore wrapped together;
-   any signal there falls back to an un-redirected launch instead of
-   propagating and blocking startup -- diagnostics must not break the
-   primary operation, so this degrades to no log rather than propagating."
+   known filesystem, stream, and process-launch failures fall back to an
+   un-redirected launch instead of blocking startup."
   (let ((launched
           (handler-case
               (progn
@@ -86,9 +93,9 @@
                                     :if-output-exists
                                     (%server-log-if-output-exists-action log-path)
                                     :error :output))
-            (condition ()
-             (ignore-errors
-               (sb-ext:run-program exe args :wait nil :output nil :error nil))))))
+            (file-error () (%launch-server-without-log exe args))
+            (stream-error () (%launch-server-without-log exe args))
+            (error () (%launch-server-without-log exe args)))))
     ;; Poll only when we actually attempted a launch.  This avoids the
     ;; unconditional 3-second dead-time when run-program silently failed.
     (when launched
@@ -138,7 +145,9 @@
     (let ((socket-path (socket-path session-name))
           (log-path    (%runtime-log-path session-name)))
       (when (%stale-socket-p socket-path)
-        (ignore-errors (delete-file socket-path)))
+        (handler-case
+            (delete-file socket-path)
+          (file-error () nil)))
       (unless (probe-file socket-path)
         ;; Guard: run-program may fail in test environments or when the
         ;; binary is not yet on PATH.  Only poll if the spawn succeeded.

@@ -254,6 +254,41 @@
                   nerimux/terminal/types:+default-color+
                   0 attrs2))))
 
+  (it-each ((#.nerimux/terminal/types:+default-color+ nil ";39")
+            (#.nerimux/terminal/types:+default-color+ t ";49")
+            (1 nil ";31")
+            (2 t ";42")
+            (8 nil ";90")
+            (15 t ";107")
+            (16 nil ";38;5;16")
+            (255 t ";48;5;255")
+            (#.(logior #x1000000 (ash 255 16) (ash 0 8) 128)
+             nil ";38;2;255;0;128")
+            (#.(logior #x1000000 (ash 0 16) (ash 128 8) 255)
+             t ";48;2;0;128;255"))
+      "emit-sgr-color ~A background ~A -> ~A"
+      (color background-p expected)
+    (let ((out (with-output-to-string (s)
+                  (funcall (symbol-function 'nerimux/terminal/sgr::%emit-sgr-color)
+                           s color background-p))))
+      (expect (string= expected out))))
+
+  (it-each ((#.nerimux/terminal/types:+attr-bold+  ";1")
+            (#.nerimux/terminal/types:+attr-dim+  ";2")
+            (#.nerimux/terminal/types:+attr-italic+  ";3")
+            (#.nerimux/terminal/types:+attr-underline+  ";4")
+            (#.nerimux/terminal/types:+attr-blink+  ";5")
+            (#.nerimux/terminal/types:+attr-reverse+  ";7")
+            (#.nerimux/terminal/types:+attr-conceal+  ";8")
+            (#.nerimux/terminal/types:+attr-strikethrough+  ";9"))
+      "pen-to-sgr-params-attrs ~A -> ~A"
+      (attrs expected)
+    (expect (string= (concatenate 'string "0" expected)
+                     (nerimux/terminal/sgr:%pen-to-sgr-params
+                      nerimux/terminal/types:+default-color+
+                      nerimux/terminal/types:+default-color+
+                      attrs 0))))
+
   ;; SGR 0 after setting italic, conceal, and strikethrough zeroes all attr bits.
   (it "sgr-reset-clears-new-attrs"
     (with-screen (s 10 2)

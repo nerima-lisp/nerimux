@@ -22,15 +22,14 @@
 ;;;; to read as "live" — so leaving the real reader thread running here would
 ;;;; crash the process the first time it polled.
 ;;;;
-;;;; *resize-pty* is bound to a no-op for the same reason: window-relayout
-;;;; calls it unguarded (unlike write-pty/close-pty, which every caller wraps
-;;;; in ignore-errors) whenever a live pane's geometry changes, which every
-;;;; split/close/zoom in this suite does. Outside a running server it is nil
-;;;; (install-pty-port only runs at server startup), so an unstubbed call here
-;;;; would signal undefined-function on nil.
+;;;; *resize-pty* and *close-pty* are bound to no-ops for the same reason:
+;;;; window-relayout and pane close call those ports while this suite uses
+;;;; synthetic panes. Outside a running server they are nil because
+;;;; install-pty-port only runs at server startup.
 
 (defmacro %with-r5-fixture ((session-var conn-var worktree-var window-var) &body body)
-  "Stub %fork-pane and start-reader-thread, bind *resize-pty* to a no-op,
+  "Stub %fork-pane and start-reader-thread, bind PTY resize and close ports to
+   no-ops,
    build one organization/repository/worktree, open the worktree's first pane
    via the real overview-Enter production path
    (%focus-selected-client-worktree), and bind SESSION-VAR/CONN-VAR/
@@ -38,7 +37,10 @@
   `(with-loop-state
      (let ((nerimux/ports:*resize-pty* (lambda (fd rows cols)
                                          (declare (ignore fd rows cols))
-                                         nil)))
+                                         nil))
+           (nerimux/ports:*close-pty* (lambda (fd pid)
+                                        (declare (ignore fd pid))
+                                        nil)))
        (with-stubbed-fdefinition
            ((nerimux/model::%fork-pane
              (lambda (session id x y cols rows &key start-dir)

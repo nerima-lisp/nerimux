@@ -42,3 +42,23 @@
                        `(,condition ,@body)))
                    rules)
          (t (values))))))
+
+(defmacro define-csi-rule-set (name &body rules)
+  "Define NAME as a declarative provider of CSI RULES.
+The generated macro expands to a quoted rule list so composition can inspect
+the data without evaluating rule predicates outside EXECUTE-CSI."
+  `(defmacro ,name ()
+     (list 'quote ',rules)))
+
+(defmacro define-composed-csi-rules (&rest rule-set-names)
+  "Define EXECUTE-CSI from RULE-SET-NAMES in the given order."
+  (let ((rules
+          (loop for name in rule-set-names
+                for expansion = (macroexpand-1 (list name))
+                unless (and (consp expansion)
+                            (eq (first expansion) 'quote)
+                            (consp (rest expansion))
+                            (null (cddr expansion)))
+                  do (error "~S is not a CSI rule-set macro" name)
+                append (second expansion))))
+    `(define-csi-rules ,@rules)))

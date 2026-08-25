@@ -1,7 +1,7 @@
 (in-package #:nerimux/test)
 
 ;;;; Direct unit tests for %WORKSPACE-FLAT-TREE-ENTRIES / %WORKSPACE-NODE-
-;;;; EXPANDED-P / %WORKSPACE-NODE-REFRESH-TAG (renderer-workspace.lisp), the
+;;;; EXPANDED-P / %WORKSPACE-NODE-REFRESH-TAG (renderer-workspace-tree.lisp), the
 ;;;; R6.2/R6.3 tree contract:
 ;;;;
 ;;;;   - 5 levels: organization -> repository -> worktree -> window -> pane.

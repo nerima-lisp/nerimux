@@ -293,9 +293,9 @@
   ;;; -- renderer load order -----------------------------------------------------
   ;;;
   ;;; Be precise about what this proves.  It asserts the DECLARED component
-  ;;; order in nerimux.asd, nothing stronger.  The workspace views
-  ;;; (renderer-workspace.lisp) depend on renderer-format.lisp and on none of
-  ;;; the pane compositor; loading them ahead of that chain is how the .asd
+  ;;; order in nerimux.asd, nothing stronger.  The workspace tree projection
+  ;;; and frame depend on renderer-format.lisp and on none of the pane
+  ;;; compositor; loading them ahead of that chain is how the .asd
   ;;; states it, and this catches someone quietly reordering it back -- the
   ;;; likely regression, since "move the file next to renderer-compose" looks
   ;;; tidy.
@@ -315,17 +315,77 @@
                                         '("src" "presentation/renderer")))
            (names  (mapcar #'asdf:component-name
                            (asdf:component-children module)))
-           (format-pos    (position "renderer-format"    names :test #'string=))
+           (format-pos (position "renderer-format" names :test #'string=))
+           (status-title-pos
+             (position "renderer-workspace-status-title" names :test #'string=))
+           (command-line-pos
+             (position "renderer-workspace-command-line" names :test #'string=))
+           (tree-pos (position "renderer-workspace-tree" names :test #'string=))
            (workspace-pos (position "renderer-workspace" names :test #'string=))
-           (compose-pos   (position "renderer-compose"   names :test #'string=)))
+           (compose-pos (position "renderer-compose" names :test #'string=)))
       ;; Vacuity guard: a typo'd module path returns NIL children, and every
       ;; position below would then be NIL rather than wrong.
       (expect (plusp (length names)))
       (expect format-pos)
+      (expect status-title-pos)
+      (expect command-line-pos)
+      (expect tree-pos)
       (expect workspace-pos)
       (expect compose-pos)
-      (expect (< format-pos workspace-pos))
+      (expect (< format-pos status-title-pos command-line-pos tree-pos workspace-pos))
       (expect (< workspace-pos compose-pos))))
+
+  (it "renderer-tui-kit-modules-load-in-dependency-order"
+    (let* ((module (asdf:find-component (asdf:find-system "nerimux")
+                                        '("src" "presentation/renderer")))
+           (names (mapcar #'asdf:component-name
+                          (asdf:component-children module)))
+           (compose-pos (position "renderer-compose" names :test #'string=))
+           (frame-grid-pos
+             (position "renderer-tui-kit-frame-grid" names :test #'string=))
+           (widgets-pos
+             (position "renderer-tui-kit-widgets" names :test #'string=))
+           (tui-kit-pos (position "renderer-tui-kit" names :test #'string=))
+           (confirm-pos
+             (position "renderer-tui-kit-confirm-view" names :test #'string=)))
+      (expect (consp names))
+      (expect compose-pos)
+      (expect frame-grid-pos)
+      (expect widgets-pos)
+      (expect tui-kit-pos)
+      (expect confirm-pos)
+      (expect (< compose-pos frame-grid-pos widgets-pos tui-kit-pos confirm-pos))))
+
+  (it "terminal-character-writing-modules-load-in-dependency-order"
+    (let* ((module (asdf:find-component (asdf:find-system "nerimux")
+                                        '("src" "domain/terminal")))
+           (names (mapcar #'asdf:component-name
+                          (asdf:component-children module)))
+           (definitions-pos
+             (position "char-write-definitions" names :test #'string=))
+           (cells-pos (position "char-write-cells" names :test #'string=))
+           (flow-pos (position "char-write" names :test #'string=)))
+      (expect (consp names))
+      (expect definitions-pos)
+      (expect cells-pos)
+      (expect flow-pos)
+      (expect (< definitions-pos cells-pos flow-pos))))
+
+  (it "terminal-sgr-modules-load-in-dependency-order"
+    (let* ((module (asdf:find-component (asdf:find-system "nerimux")
+                                        '("src" "domain/terminal")))
+           (names (mapcar #'asdf:component-name
+                          (asdf:component-children module)))
+           (definitions-pos (position "sgr-definitions" names :test #'string=))
+           (colors-pos (position "sgr-colors" names :test #'string=))
+           (flow-pos (position "sgr" names :test #'string=))
+           (report-pos (position "sgr-report" names :test #'string=)))
+      (expect (consp names))
+      (expect definitions-pos)
+      (expect colors-pos)
+      (expect flow-pos)
+      (expect report-pos)
+      (expect (< definitions-pos colors-pos flow-pos report-pos))))
 
   ;;; -- layering -----------------------------------------------------------
   ;;;

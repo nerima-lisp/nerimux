@@ -1,0 +1,18 @@
+(require :asdf)
+(setf asdf/source-registry:*source-registry*
+      (make-hash-table :test #'equal))
+
+(format t "BEFORE-LOAD~%")
+(finish-output)
+(load (truename "asdf-module-two-system-probe.asd"))
+(format t "AFTER-LOAD~%")
+(finish-output)
+(let ((one (asdf/system-registry:registered-system "asdf-module-probe-one"))
+      (two (asdf/system-registry:registered-system "asdf-module-probe-two")))
+  (format t "ONE=~S TWO=~S~%" one two)
+  (finish-output)
+  (format t "BEFORE-DUMMY~%")
+  (finish-output)
+  (let ((dummy (make-instance 'asdf/system:system :name "dummy")))
+    (format t "AFTER-DUMMY=~S~%" dummy)
+    (finish-output)))

@@ -221,6 +221,19 @@
       (nerimux/terminal/actions:dec-pm-reset s '(6))
       (expect (nerimux/terminal/types:screen-origin-mode s) :to-be-falsy)))
 
+  (it "dec-pm-accepted-no-op-modes-and-legacy-alt-screen"
+    (with-screen (s 20 5)
+      (nerimux/terminal/actions:dec-pm-set s '(2026 2048 12))
+      (nerimux/terminal/actions:dec-pm-reset s '(2026 2048 12))
+      (expect (null (nerimux/terminal/types:screen-alt-cells s)))
+      (feed s "primary")
+      (nerimux/terminal/actions:dec-pm-set s '(47))
+      (expect (not (null (nerimux/terminal/types:screen-alt-cells s))))
+      (feed s "alt")
+      (nerimux/terminal/actions:dec-pm-reset s '(47))
+      (expect (null (nerimux/terminal/types:screen-alt-cells s)))
+      (expect (string= "primary" (row-string s 0 :end 7)))))
+
   ;; ESC[?25l hides the cursor (screen-cursor-visible → NIL); ESC[?25h shows it again (→ T).
   (it "dectcem-hide-and-show"
     (with-screen (s 20 5)

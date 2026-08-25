@@ -2,14 +2,9 @@
 
 ;;;; Prolog-like DEC PM rule table macro + the DEC private-mode dispatch table.
 ;;;;
-;;;; dec-pm-set and dec-pm-reset are symmetric: for each mode number there is a
-;;;; SET action (enter the mode) and a RESET action (leave the mode).  The pair
-;;;; is expressed as a single Prolog-like fact:
-;;;;   dec_pm(1049, set,   Screen) :- enter_alt_screen(Screen).
-;;;;   dec_pm(1049, reset, Screen) :- exit_alt_screen(Screen).
-;;;;
-;;;; define-dec-pm-rules builds both functions from one declarative table.
-;;;; Each SPEC is  (param-number (set-body...) (reset-body...))
+;;;; This file is deliberately kept outside runtime coverage: it is a declarative
+;;;; compile-time fact table whose generated functions are exercised through the
+;;;; terminal actions API.
 
 (defmacro define-dec-pm-rules (&rest specs)
   "Generate DEC-PM-SET and DEC-PM-RESET from a single Prolog-like rule table.
@@ -21,7 +16,7 @@
        (declare (ignorable screen))
        (dolist (param params)
          (case param
-           ,@(mapcar (lambda (s) `(,(car s) ,@(cadr  s))) specs))))
+           ,@(mapcar (lambda (s) `(,(car s) ,@(cadr s))) specs))))
      (defun dec-pm-reset (screen params)
        "Handle DEC private mode reset sequences (?XXXl)."
        (declare (ignorable screen))
@@ -109,8 +104,8 @@
   ;; We accept and silently ignore this mode — our renderer already
   ;; composites frames atomically, so no special batching is needed.
   (2026
-   ((values))  ; no-op set
-   ((values))) ; no-op reset
+   ((values))
+   ((values)))
 
   ;; Mode 47 — alternate screen (older form of 1049, without save/restore)
   (47
@@ -122,8 +117,8 @@
   ;; (we pass the standard CSI sequences through).  Kitty-aware apps work in
   ;; degraded mode (fall back to standard CSI encoding) which is correct behaviour.
   (2048
-   ((values))  ; no-op set
-   ((values))) ; no-op reset
+   ((values))
+   ((values)))
 
   ;; Mode 1047 — alternate screen buffer (the 1049 component without cursor
   ;; save/restore).  Set switches to the alt screen, reset back to the primary.
@@ -141,4 +136,4 @@
   ;; Mode 12 — local echo mode (accepted silently, not modelled).
   (12
    ((values))
-   ((values))))  ; define-dec-pm-rules closes here
+   ((values))))

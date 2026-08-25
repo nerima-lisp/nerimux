@@ -2,7 +2,7 @@
 
 ;;;; CSI (Control Sequence Introducer) declarative rule table.
 ;;;;
-;;;; define-csi-rules in csi-dispatch.lisp builds EXECUTE-CSI from these facts.
+;;;; define-csi-rule-set in csi-dispatch.lisp names these facts for composition.
 ;;;; Parameter interpretation lives in csi-parameters.lisp.
 ;;;; All grid mutations (insert/delete chars, scroll-region margins, alternate
 ;;;; screen) live in nerimux/terminal/actions; the rule table below calls them
@@ -12,7 +12,7 @@
 ;;; computed replies, DECRQM mode-state tables, XTWINOPS size-report helpers)
 ;;; called by the rules below lives in csi-replies.lisp, which loads first.
 
-(define-csi-rules
+(define-csi-rule-set csi-screen-rules
 
   ;; CUU – Cursor Up
   ((and (null intermed) (char= final #\A))
@@ -132,134 +132,4 @@
 
   ;; SGR – Select Graphic Rendition
   ((and (null intermed) (char= final #\m))
-   (apply-sgr screen params))
-
-  ;; DSR – Device Status Report.  Replies are queued onto the response-queue,
-  ;; which the PTY loop drains back to the application (same path as DA1/DA2).
-  ;;   CSI 5 n → device status: ESC [ 0 n  (terminal OK)
-  ((and (null intermed) (char= final #\n) (= p1 5))
-   (enqueue-dsr-reply screen))
-  ;; CPR – Cursor Position Report.
-  ;;   CSI 6 n → ESC [ <row> ; <col> R  (1-based; apps like shells, vim, less
-  ;;   block waiting for this reply, so an unanswered query hangs them).
-  ((and (null intermed) (char= final #\n) (= p1 6))
-   (enqueue-cpr-reply screen))
-
-  ;; DECSTBM – Set Top and Bottom Margins.  Params are 1-based; an omitted
-  ;; bottom (p2 = 0) means "full screen", matching real-terminal ESC[r reset.
-  ((and (null intermed) (char= final #\r))
-   (multiple-value-call #'decstbm screen (%csi-decstbm-params screen p1 p2)))
-
-  ;; CHT – Cursor Forward Tabulation (CSI N I)
-  ((and (null intermed) (char= final #\I))
-   (cursor-cht screen p1*))
-
-  ;; CBT – Cursor Backward Tabulation (CSI N Z)
-  ((and (null intermed) (char= final #\Z))
-   (cursor-cbt screen p1*))
-
-  ;; TBC – Tab Clear (CSI N g).  p1=0 (or omitted) clears the stop at the cursor
-  ;; column; p1=3 clears all tab stops.
-  ((and (null intermed) (char= final #\g))
-   (clear-tab-stops screen p1))
-
-  ;; DA1 – Primary Device Attributes (CSI c or CSI 0 c)
-  ;; Response: ESC [ ? 1 ; 2 c  (VT100 with AVO)
-  ;; DA1 (CSI c): require NO private marker so it does not shadow DA2 (CSI > c),
-  ;; whose '>' now lives in PRIVATE rather than INTERMED.
-  ((and (null intermed) (null private) (char= final #\c))
-   (enqueue-da1-reply screen))
-
-  ;; DA2 – Secondary Device Attributes (CSI > c or CSI > 0 c)
-  ;; Response: ESC [ > 1 ; 10 ; 0 c
-  ((and (eql private #\>) (char= final #\c))
-   (enqueue-da2-reply screen))
-
-  ;; XTPUSHTITLE – push window title onto the title stack (CSI > Ps t).
-  ;; Saves the current title so it can be restored later.  The stack is
-  ;; bounded to +title-stack-max-depth+ entries (xterm limit) — the oldest
-  ;; entry is discarded when the limit is exceeded.  Used by neovim and other TUIs.
-  ((and (eql private #\>) (char= final #\t))
-   (push-title-stack screen))
-
-  ;; XTPOPTITLE – pop and restore the most recently pushed title (CSI < Ps t).
-  ;; A pop on an empty stack is a no-op, matching xterm.
-  ((and (eql private #\<) (char= final #\t))
-   (pop-title-stack screen))
-
-  ;; XTVERSION — query terminal name/version (CSI > q)
-  ((and (eql private #\>) (char= final #\q))
-   (enqueue-xtversion-reply screen))
-
-  ;; DA3 — Tertiary Device Attributes (CSI = c): reply ESC P ! | <unit-id> ST
-  ((and (eql private #\=) (char= final #\c))
-   (enqueue-da3-reply screen))
-
-  ;; DEC Private Mode Set (?...h) — e.g. ?1049h enters the alternate screen
-  ((and (eql private #\?) (char= final #\h))
-   (dec-pm-set screen params))
-
-  ;; DEC Private Mode Reset (?...l) — e.g. ?1049l exits the alternate screen
-  ((and (eql private #\?) (char= final #\l))
-   (dec-pm-reset screen params))
-
-  ;; DECRQM — Request DEC private Mode (CSI ? Ps $ p): reply with the mode's
-  ;; current state (ESC [ ? Ps ; Pm $ y) so apps can detect feature support.
-  ((and (eql private #\?) (eql intermed #\$) (char= final #\p))
-   (enqueue-decrqm-reply screen p1))
-
-  ;; DECRQM for ANSI (non-private) modes (CSI Ps $ p): reply ESC [ Ps ; Pm $ y
-  ;; (no ? marker).  Covers IRM (4) and LNM (20).
-  ((and (null private) (eql intermed #\$) (char= final #\p))
-   (enqueue-decrqm-ansi-reply screen p1))
-
-  ;; DECERA — Erase Rectangular Area (CSI Pt ; Pl ; Pb ; Pr $ z).
-  ;; Fills the rectangle with BCE (background-colour-erase) blanks.
-  ;; Parameters: top left bottom right (all 1-based inclusive).
-  ((and (null private) (eql intermed #\$) (char= final #\z))
-   (let ((p3 (%csi-leading-int (third  params)))
-         (p4 (%csi-leading-int (fourth params))))
-     (decera screen p1 p2 p3 p4)))
-
-  ;; DECFRA — Fill Rectangular Area (CSI Pc ; Pt ; Pl ; Pb ; Pr $ x).
-  ;; Fills the rectangle with character code Pc, using the current SGR pen.
-  ;; Parameters: char-code top left bottom right (all 1-based; Pc is the char).
-  ((and (null private) (eql intermed #\$) (char= final #\x))
-   (let ((p3 (%csi-leading-int (third  params)))
-         (p4 (%csi-leading-int (fourth params)))
-         (p5 (%csi-leading-int (fifth  params))))
-     (decfra screen p1 p2 p3 p4 p5)))
-
-  ;; DECCRA — Copy Rectangular Area (CSI Pt ; Pl ; Pb ; Pr ; Pp ; Ptp ; Plp ; Ppp $ v).
-  ;; Copies source rectangle to target.  Page parameters (Pp, Ppp) are ignored.
-  ;; Parameters: src-top src-left src-bottom src-right src-page tgt-top tgt-left tgt-page.
-  ((and (null private) (eql intermed #\$) (char= final #\v))
-   (let ((p3 (%csi-leading-int (third  params)))
-         (p4 (%csi-leading-int (fourth params)))
-         (p6 (%csi-leading-int (sixth  params)))
-         (p7 (%csi-leading-int (seventh params))))
-     (deccra screen p1 p2 p3 p4 p6 p7)))
-
-  ;; ANSI Set/Reset Mode — CSI Ps h / CSI Ps l (NO private marker).  IRM (mode 4)
-  ;; toggles insert/replace; other ANSI modes are accepted and ignored.
-  ((and (null private) (null intermed) (char= final #\h))
-   (set-ansi-mode screen params))
-  ((and (null private) (null intermed) (char= final #\l))
-   (reset-ansi-mode screen params))
-
-  ;; DECSTR — Soft Terminal Reset (CSI ! p): restore modes/SGR to defaults without
-  ;; clearing the screen or moving the cursor (cf. RIS, ESC c, which does both).
-  ((and (eql intermed #\!) (char= final #\p))
-   (decstr-action screen))
-
-  ;; XTWINOPS — window operations / reports (CSI Ps ; … t, no private marker).
-  ;; We answer the size REPORTS (+xtwinops-text-area-query+ = text area in
-  ;; characters, +xtwinops-screen-query+ = screen in characters) so apps can
-  ;; learn the grid size; window-manipulation operations (resize/move/iconify)
-  ;; are no-ops for a multiplexer.
-  ((and (null private) (char= final #\t))
-   (enqueue-xtwinops-reply screen p1))
-
-  ;; DECSCUSR — cursor shape: CSI N SP q (intermediate = space, final = q)
-  ((and (eql intermed #\Space) (char= final #\q))
-   (set-cursor-shape screen p1)))
+   (apply-sgr screen params)))

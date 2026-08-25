@@ -1,0 +1,36 @@
+(require :asdf)
+
+(setf asdf/source-registry:*source-registry*
+      (make-hash-table :test #'equal))
+
+(defparameter *end* (gensym "END"))
+
+(with-open-file (stream (truename "asdf-module-two-system-probe.asd"))
+  (let ((*package* (find-package :asdf-user))
+        (forms nil))
+    (loop repeat 3
+          do (push (read stream nil *end*) forms))
+    (setf forms (nreverse forms))
+    (format t "BEFORE-FORM-1~%")
+    (finish-output)
+    (eval (first forms))
+    (format t "AFTER-FORM-1~%")
+    (finish-output)
+    (let ((*load-truename* (truename "asdf-module-two-system-probe.asd"))
+          (*load-pathname* (truename "asdf-module-two-system-probe.asd")))
+      (format t "BEFORE-FORM-2~%")
+      (finish-output)
+      (eval (second forms))
+      (format t "AFTER-FORM-2~%")
+      (finish-output)
+      (format t "BEFORE-FORM-3~%")
+      (finish-output)
+      (eval (third forms))
+      (format t "AFTER-FORM-3~%")
+      (finish-output))))
+
+(format t "BEFORE-DUMMY~%")
+(finish-output)
+(let ((dummy (make-instance 'asdf/system:system :name "dummy")))
+  (format t "AFTER-DUMMY=~S~%" dummy)
+  (finish-output))

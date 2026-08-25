@@ -35,7 +35,7 @@
    %dispatch-global-cli-flag-actions."
   (cl-cli:positional-value invocation :mode-args))
 
-(defun %dispatch-global-cli-flag-actions (invocation mode-args)
+(defun %dispatch-global-cli-flag-actions (invocation)
   "Run the flag-driven entry points that today double as *startup-modes* mode
    names (-V/-h), so they work regardless of where they appear in argv.
    Returns T when one of them ran (the caller must not also dispatch a mode)."
@@ -61,7 +61,7 @@
     (if (null invocation)
         (sb-ext:exit :code 1)
         (let ((mode-args (%apply-global-cli-invocation invocation)))
-          (unless (%dispatch-global-cli-flag-actions invocation mode-args)
+          (unless (%dispatch-global-cli-flag-actions invocation)
             (let* ((mode  (first mode-args))
                    (rest  (rest mode-args))
                    (entry (cdr (assoc mode *startup-modes* :test #'equal))))

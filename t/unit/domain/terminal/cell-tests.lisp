@@ -1,5 +1,8 @@
 (in-package #:nerimux/test)
 
+(declaim (notinline nerimux/terminal/types:clamp
+                   nerimux/terminal/types:char-width))
+
 ;;;; Cell tests (src/terminal/cell.lisp).
 ;;;; Tests: attribute constants, cell struct, blank-cell, clamp,
 ;;;;        safe-code-char, char-width classification, combining chars,

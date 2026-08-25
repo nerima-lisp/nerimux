@@ -38,11 +38,14 @@
    trailing slash.  Creation/chmod failures are ignored — socket binding will
    surface a real permission problem with a better error."
   (require :sb-posix)
-  (let* ((uid (handler-case (sb-posix:getuid) (error () 0)))
+  (let* ((uid (sb-posix:getuid))
          (dir (format nil "~A/nerimux-~D" (%socket-tmp-base) uid)))
-    (ignore-errors
-      (ensure-directories-exist (format nil "~A/" dir))
-      (sb-posix:chmod dir #o700))
+    (handler-case
+        (ensure-directories-exist (format nil "~A/" dir))
+      (file-error () nil))
+    (handler-case
+        (sb-posix:chmod dir #o700)
+      (sb-posix:syscall-error () nil))
     dir))
 
 (defun socket-path (name)
@@ -71,7 +74,7 @@
 ;;;
 ;;; define-message-dispatch-fn is the shared COND-expansion engine used by both
 ;;; define-msg-dispatch (single-client server) and define-multi-msg-dispatch
-;;; (multi-client server, server-multi.lisp + server-multi-loop.lisp).  Both
+;;; (below, used by the multi-client runtime).  Both
 ;;; wrappers delegate to it so the two event loops can never diverge in their
 ;;; macro structure.
 
@@ -81,7 +84,7 @@
    DOCSTRING is its documentation string.  Each RULE is (condition &rest body).
    The generated function dispatches via COND and returns whatever the matching
    arm returns.  Shared infrastructure for define-msg-dispatch (server.lisp) and
-   define-multi-msg-dispatch (server-multi.lisp + server-multi-loop.lisp).
+   define-multi-msg-dispatch (below).
 
    Prolog analogy:
      fn(nil, ...) :- rule1-body.
@@ -94,6 +97,24 @@
                    (destructuring-bind (condition &rest body) rule
                      `(,condition ,@body)))
                  rules))))
+
+(defmacro define-multi-msg-dispatch (&rest rules)
+  "Build %HANDLE-MULTI-CLIENT-MESSAGE from a message-type rule table.
+
+Each RULE is (CONDITION &rest BODY). TYPE, PAYLOAD, SESSION, and CONN are
+bound in every rule body. The shared dispatch macro keeps the single-client
+and multi-client message handlers structurally aligned."
+  `(define-message-dispatch-fn
+       %handle-multi-client-message
+       (type payload session conn)
+       "Dispatch one message of TYPE/PAYLOAD from client CONN.  Returns a disposition:
+     :quit           — a command ended the session (loop must stop);
+     :drop           — CONN should be removed (EOF / detach / unknown type);
+     :detach-others  — drop every OTHER client (the `attach -d' request);
+     NIL             — keep serving.
+   Resize/attach updates CONN's geometry and re-applies the effective size; keys
+   run through the shared prefix/copy-mode pipeline with CONN's private state."
+       ,@rules))
 
 (defun run-server (name)
   "Run a headless server owning a session, serving clients attaching to
@@ -110,7 +131,8 @@
          (path    (socket-path name)))
     (setf *bound-socket-path* path)
     (server-add-session session)
-    (ignore-errors (delete-file path))
+    (handler-case (delete-file path)
+      (file-error () nil))
     (let ((listener (make-listener path)))
       (dolist (pane (all-panes session))
         (start-reader-thread pane))
@@ -121,6 +143,7 @@
    ;; (%run-multi-server-loop, server-multi-loop.lisp).
            (%run-multi-server-loop listener session)
         (close-socket listener)
-        (ignore-errors (delete-file path))
+        (handler-case (delete-file path)
+          (file-error () nil))
         (dolist (pane (all-panes session))
           (close-pane-pty pane))))))

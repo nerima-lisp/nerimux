@@ -10,5 +10,5 @@
 ;;;; nerimux.asd's :serial component list here — because that list is
 ;;;; outside this file's ownership; see the R2 renderer report.
 ;;;;
-;;;; Load order: renderer-format → renderer-style-data → renderer-style → renderer-pane → renderer.
+;;;; Load order: renderer-format → renderer-style-data → renderer-style → pane and composition modules.
 ;;;; All files share the nerimux/renderer package (no defpackage here).

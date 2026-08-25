@@ -36,7 +36,7 @@
    #:pty-read-blocking     ; (fd size)   → octet-vector or nil on EOF
    #:pty-read-blocking-into ; (fd buffer) → octet-vector or nil; reuses BUFFER
    #:pty-close             ; (fd pid)
-   #:pty-child-exit-status ; (fd &optional timeout) → (values code :exited|:signaled) or NIL
+   #:pty-child-exit-status ; (fd &optional duration) → (values code :exited|:signaled) or NIL
    #:set-pty-size          ; (fd rows cols)
    ;; Terminal raw mode
    #:enable-raw-mode!      ; (fd)

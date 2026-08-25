@@ -21,57 +21,42 @@
 
 ;;; ── Client connection registry ──────────────────────────────────────────────
 
-(defparameter +default-workspace-prefix-key-code+ #x11
-  "Control-Q, the workspace UI prefix used by the multi-client overview.")
-
-(defstruct (client-conn (:constructor %make-client-conn))
-  "One attached client: its socket, a cached binary STREAM and FD, a private
-   keystroke STATE (so each client has independent prefix/copy-mode state), the
-   ROWS×COLS geometry it last reported, an optional command-stdin target pane,
-   its private UI state, cached frame, and private message log."
-  socket
-  stream
-  fd
-  stdin-target
-  (message-log nil)
-  (rows 24 :type fixnum)
-  (cols 80 :type fixnum)
-  (focus nil)
-  (selected-tree-object nil)
-  (selected-worktree nil)
-  (tree-scroll 0 :type fixnum)
-  (workspace-prefix-code +default-workspace-prefix-key-code+ :type fixnum)
-  (ui-prefix-p nil :type boolean)
-  (viewport 0 :type fixnum)
-  (mode :normal)
-  (command-buffer "" :type string)
-  (command-return-view nil)
-  (view :detail)
-  (attach-target nil)
-  (attach-cwd nil)
-  (picker-items nil)
-  (picker-query "" :type string)
-  (picker-regex-p nil :type boolean)
-  (picker-index 0 :type fixnum)
-  ;; Set to the REPOSITORY-ID of the repository a dry-run prune preview was
-  ;; just shown for; a confirm (dry-run nil) prune must match it, so
-  ;; wt-prune-confirm --confirm cannot skip straight past the preview a user
-  ;; is meant to review first. Cleared once a confirmed prune completes.
-  (pending-prune-preview-repository-id nil)
-  ;; The full-screen confirmation (R6.4) this client is currently looking at, or
-  ;; NIL. Per client, not per server: two attached clients can be mid-answer on
-  ;; different questions, and a confirmation one of them never saw must not
-  ;; capture the other's keystrokes.
-  (confirm-view nil)
-  ;; What to run when the user answers y to CONFIRM-VIEW. A closure of no
-  ;; arguments; NIL when no confirmation is up. Kept beside the view rather than
-  ;; encoded in it so the renderer keeps taking plain data.
-  (confirm-action nil)
-  (frame nil))
-
 (defvar *clients* nil
   "List of CLIENT-CONN structs currently attached to the multi-client server.
    Mutated only by the single server event loop, so it needs no locking.")
+
+(defvar *main-thread-callback-lock*
+  (cl-concurrent-kit:make-lock :name "nerimux-main-thread-callbacks"))
+
+(defvar *main-thread-callbacks* nil
+  "Callbacks queued for execution by the multi-client event loop.")
+
+(defun %enqueue-main-thread-callback (thunk)
+  "Queue THUNK for execution by the multi-client event loop.
+
+VCS workers use this boundary before touching client or catalog state owned by
+the event loop.  The queue is the only cross-thread state in this layer; the
+callbacks themselves run serially in the loop."
+  (check-type thunk function)
+  (cl-concurrent-kit:with-lock-held (*main-thread-callback-lock*)
+    (push thunk *main-thread-callbacks*))
+  nil)
+
+(defun %drain-main-thread-callbacks ()
+  "Run callbacks queued by worker threads, keeping one failure local."
+  (let ((callbacks
+          (cl-concurrent-kit:with-lock-held (*main-thread-callback-lock*)
+            (prog1 (nreverse *main-thread-callbacks*)
+              (setf *main-thread-callbacks* nil)))))
+    (dolist (callback callbacks)
+      (handler-case
+          (funcall callback)
+        (error (condition)
+          (format *error-output*
+                  "~&nerimux main-thread callback failed: ~A~%"
+                  condition)
+          (finish-output *error-output*)))))
+  nil)
 
 (defvar *workspace-catalog-refresh-started-p* nil
   "Whether the initial asynchronous ghq/worktree catalog refresh was started.")
@@ -88,7 +73,7 @@
 ;;; Ownership split: this file defines and mutates the tables; the render
 ;;; call in %RENDER-CLIENT-FRAME below reads them into the R6 renderer
 ;;; entry points (nerimux/renderer:render-workspace-overview-to-tui-string).
-;;; The mutators are for server-multi-dispatch.lisp's key handlers to call
+;;; The mutators are for the multi-dispatch key handlers to call
 ;;; (Enter on an org/repo row, a VCS fetch/refresh starting and settling, a
 ;;; pane gaining focus within a worktree) -- see the R6 report for exactly
 ;;; which handler calls which function.
@@ -104,7 +89,7 @@
 (defun %workspace-expanded-nodes ()
   "The expanded-row set, for callers that load before its DEFVAR.
 
-   server-multi-dispatch.lisp is compiled before this file, so naming the
+   the multi-dispatch files are compiled before this file, so naming the
    variable there would compile as an undeclared free reference. A function is
    only a forward reference, which resolves at call time."
   *workspace-expanded-node-ids*)
@@ -144,6 +129,29 @@
     (if stale-p
         (setf (gethash key *workspace-stale-ids*) t)
         (remhash key *workspace-stale-ids*))))
+
+(defun %set-workspace-catalog-refresh-state (organizations &key stale-p)
+  "Settle every visible node in ORGANIZATIONS as fresh or stale.
+
+   Catalog refresh is a batch operation, so its callbacks carry the complete
+   tree rather than one node at a time.  Keeping the traversal here makes the
+   marker key contract identical to the renderer's tree-node keys."
+  (labels ((settle (kind id)
+             (if stale-p
+                 (%clear-workspace-refreshing kind id :stale-p t)
+                 (%clear-workspace-refreshing kind id)))
+           (mark (kind id)
+             (if stale-p
+                 (settle kind id)
+                 (%mark-workspace-refreshing kind id))))
+    (dolist (organization organizations)
+      (mark :organization (nerimux/model:organization-id organization))
+      (dolist (repository
+                (nerimux/model:organization-repositories organization))
+        (mark :repository (nerimux/model:repository-id repository))
+        (dolist (worktree (nerimux/model:repository-worktrees repository))
+          (mark :worktree (nerimux/model:worktree-id worktree)))))
+    nil))
 
 (defvar *workspace-worktree-last-pane* (make-hash-table :test #'equal)
   "WORKTREE-ID -> the pane a client was last focused on within that worktree
@@ -324,49 +332,60 @@
     (when (and (not *workspace-catalog-refresh-started-p*)
                (nerimux/vcs:vcs-package-available-p))
       (setf *workspace-catalog-refresh-started-p* t)
+      (%set-workspace-catalog-refresh-state
+       (nerimux/vcs:workspace-organizations))
       ;; handler-case rather than ignore-errors: a synchronous failure
       ;; kicking the async refresh off (e.g. thread creation) must still
       ;; flip *workspace-catalog-loaded-p*, or R6.2's scanning-p is stuck
       ;; true forever with no on-error callback ever going to run.
-      (handler-case
-          (nerimux/vcs:refresh-workspace-organizations-async
-         ;; Paint the tree the moment the scan lands: the status refresh
-         ;; behind it runs git across every repository and can take seconds
-         ;; on a large root, and nothing else marks the screen dirty in the
-         ;; meantime — clients would hold the "scanning..." placeholder (or a
-         ;; stale empty tree) until every status arrived.
-         :on-catalog
-         (lambda (organizations)
-           (declare (ignore organizations))
-           (%mark-dirty))
-         :on-complete
-         (lambda (organizations)
-           ;; R6.2: flips scanning-p false for every client from here on,
-           ;; regardless of whether ORGANIZATIONS turned out empty.
-           (setf *workspace-catalog-loaded-p* t)
-           (dolist (client (remove-duplicates
-                            (remove-if-not #'%client-live-p
-                                           (copy-list *clients*))
-                            :test #'eq))
-             (%rebind-client-selection client organizations)
-             (setf (client-conn-picker-items client)
-                   (nerimux/picker:build-global-picker-items organizations))
-             (%picker-clamp-index client
-                                  (%client-picker-visible-items client)))
-           (%mark-dirty))
-         :on-error
-         (lambda (condition)
-           (declare (ignore condition))
-           ;; R6.2: a failed initial scan must still stop showing
-           ;; "scanning..." -- otherwise a client attached before the error
-           ;; is stuck on the placeholder forever, with no way to retry from
-           ;; here (retry is `r`/refresh once the ordinary tree is showing).
-           (setf *workspace-catalog-loaded-p* t)
-           (%mark-dirty)))
-        (error (condition)
-          (declare (ignore condition))
-          (setf *workspace-catalog-loaded-p* t)
-          (%mark-dirty))))
+      (let ((refresh-failed-p nil))
+        (handler-case
+            (nerimux/vcs:refresh-workspace-organizations-async
+             :callback-dispatch #'%enqueue-main-thread-callback
+             ;; Paint the tree the moment the scan lands: the status refresh
+             ;; behind it runs git across every repository and can take seconds
+             ;; on a large root, and nothing else marks the screen dirty in the
+             ;; meantime — clients would hold the "scanning..." placeholder (or
+             ;; a stale empty tree) until every status arrived.
+             :on-catalog
+             (lambda (organizations)
+               (%set-workspace-catalog-refresh-state organizations)
+               (%mark-dirty))
+             :on-complete
+             (lambda (organizations)
+               ;; R6.2: flips scanning-p false for every client from here on,
+               ;; regardless of whether ORGANIZATIONS turned out empty.
+               (setf *workspace-catalog-loaded-p* t)
+               (%set-workspace-catalog-refresh-state
+                organizations :stale-p refresh-failed-p)
+               (dolist (client (remove-duplicates
+                                (remove-if-not #'%client-live-p
+                                               (copy-list *clients*))
+                                :test #'eq))
+                 (%rebind-client-selection client organizations)
+                 (setf (client-conn-picker-items client)
+                       (nerimux/picker:build-global-picker-items organizations))
+                 (%picker-clamp-index client
+                                      (%client-picker-visible-items client)))
+               (%mark-dirty))
+             :on-error
+             (lambda (condition)
+               (declare (ignore condition))
+               (setf refresh-failed-p t)
+               ;; R6.2: a failed initial scan must still stop showing
+               ;; "scanning..." -- otherwise a client attached before the
+               ;; error is stuck on the placeholder forever.
+               (setf *workspace-catalog-loaded-p* t)
+               (%set-workspace-catalog-refresh-state
+                (nerimux/vcs:workspace-organizations) :stale-p t)
+               (%mark-dirty)))
+          (error (condition)
+            (declare (ignore condition))
+            (setf refresh-failed-p t
+                  *workspace-catalog-loaded-p* t)
+            (%set-workspace-catalog-refresh-state
+             (nerimux/vcs:workspace-organizations) :stale-p t)
+            (%mark-dirty)))))
     (%mark-dirty)
     conn))
 
@@ -375,7 +394,13 @@
    unregister it.  Safe to call more than once."
   (when (member conn *clients*)
     (setf (client-conn-ui-prefix-p conn) nil)
-    (when bye
-      (ignore-errors (send-frame (client-conn-stream conn) (msg-bye))))
-    (ignore-errors (close-socket (client-conn-socket conn)))
+    (when (and bye (streamp (client-conn-stream conn)))
+      (handler-case
+          (send-frame (client-conn-stream conn) (msg-bye))
+        (sb-ext:timeout () nil)
+        (sb-bsd-sockets:socket-error () nil)
+        (stream-error () nil)))
+    (let ((socket (client-conn-socket conn)))
+      (when socket
+        (close-socket socket)))
     (setf *clients* (remove conn *clients*))))

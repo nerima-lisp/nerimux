@@ -19,8 +19,8 @@
       (skip "no PTY available (sandboxed environment)"))
     (with-pty-shell (fd pid)
       (let ((marker "NERIMUX_MARKER_42"))
-        ;; Give the shell a moment to start, then send a command.
-        (sleep 0.2)
+        ;; Wait for the initial prompt/output to settle before sending input.
+        (drain-pty fd :deadline-seconds 2.0 :quiet-windows 2)
         (pty-write fd (format nil "echo ~A~%" marker))
         (let ((out (drain-pty fd :stop-marker marker)))
           (expect (search marker out))))))
@@ -32,7 +32,7 @@
       (let ((bytes (map '(simple-array (unsigned-byte 8) (*))
                         #'char-code
                         (format nil "printf DONE_OCTETS~%"))))
-        (sleep 0.2)
+        (drain-pty fd :deadline-seconds 2.0 :quiet-windows 2)
         (pty-write fd bytes)
         (let ((out (drain-pty fd :stop-marker "DONE_OCTETS")))
           (expect (search "DONE_OCTETS" out))))))
@@ -78,7 +78,7 @@
     (unless (pty-available-p)
       (skip "no PTY available (sandboxed environment)"))
     (with-pty-shell (fd pid)
-      (sleep 0.2)
+      (drain-pty fd :deadline-seconds 2.0 :quiet-windows 2)
       (sb-posix:kill pid 9)              ; SIGKILL — untrappable
       (multiple-value-bind (code kind) (nerimux/pty:pty-child-exit-status fd)
         (expect (eq kind :signaled))

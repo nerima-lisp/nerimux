@@ -6,7 +6,7 @@
   "Parse the OSC command integer from PAYLOAD up to SEMICOLON-POSITION."
   (handler-case
       (parse-integer (subseq payload 0 semicolon-position))
-    (error () nil)))
+    (parse-error () nil)))
 
 (defun %handle-osc-52 (text)
   "Handle OSC 52 clipboard write: decode Base64 payload and call *osc52-handler*."
@@ -17,7 +17,7 @@
              (decoded-text  (and decoded-bytes
                                  (handler-case
                                      (cl-codec-kit:octets-to-string decoded-bytes :encoding :utf-8)
-                                   (error () nil)))))
+                                   (cl-codec-kit:decode-error () nil)))))
         (when (and decoded-text *osc52-handler*)
           (funcall *osc52-handler* decoded-text))))))
 

@@ -62,6 +62,7 @@
           (:file "modes-tests-e") ; decstr-action/decaln-action direct calls, set-ansi-mode/reset-ansi-mode direct calls - part V
           (:file "sgr-tests") ; sgr suite: fg/bg tables, truecolor, colon SGR, pen-to-sgr-params - part I
           (:file "sgr-tests-b") ; direct-action-sgr, sgr-extended, extra codes, define-sgr-rules, consume-256-color - part II
+          (:file "csi-composition-tests") ; declarative CSI rule-set composition
           (:file "csi-tests") ; cursor-movement/DECSCUSR/CBT/SU-SD - part I
           (:file "csi-tests-d") ; REP/da-response/DECRQM/XTWINOPS/CPR/DA-table/REP-count-zero - part IV
           (:file "csi-tests-b") ; ECH/DSR/ich-dch/decstbm/execute-csi-direct/%csi-decstbm-params - part II
@@ -97,6 +98,7 @@
           (:file "pane-tests-ops") ; swap/capture/last/display/respawn
           (:file "pane-tests-accessors") ; pane defaults, accessors, feed dirty/empty
           (:file "pane-tests-predicates") ; hit-testing, live, pipe
+          (:file "window-definition-tests") ; declarative record expansion
           (:file "window-tests-relayout")
           (:file "window-tests-split-math")
           (:file "window-tests-tree-ops")
@@ -125,7 +127,9 @@
          :components
          ((:file "vcs-tests")
           (:file "vcs-fetch-dedup-tests") ; R7.1: one fetch in flight per target
-          (:file "vcs-worktree-path-tests"))) ; R7.2: timestamp-sha path, -2/-3 on collision
+          (:file "vcs-worktree-path-tests") ; R7.2: timestamp-sha path, -2/-3 on collision
+          (:file "vcs-operations-tests")
+          (:file "vcs-async-operations-tests")))
         (:module "application/picker"
          :serial t
          :components
@@ -199,6 +203,7 @@
           (:file "server-session-listing-tests")
           (:file "server-socket-path-tests") ; socket paths and stale sockets
           (:file "server-client-cps-tests") ; client key CPS, runtime registry, resize edge cases
+          (:file "server-dispatch-helper-tests") ; selection, picker, and command helper algebra
           (:file "runtime-lifecycle-tests")
       (:file "server-kill-request-tests") ; R8.1/R8.3
       (:file "workspace-window-naming-tests") ; R5.8
@@ -235,6 +240,10 @@
          (:file "server-multi-tests-support")
          (:file "server-multi-tests-size")
          (:file "server-multi-tests-message-dispatch")
+         (:file "server-multi-tests-message-dispatch-worktree")
+         (:file "server-multi-tests-message-dispatch-errors")
+         (:file "server-multi-tests-message-dispatch-picker")
+         (:file "server-multi-tests-message-dispatch-routing")
          (:file "server-multi-tests-forwarding")
          (:file "server-multi-tests-loop")
         (:file "server-multi-command-client-tests")
@@ -248,3 +257,8 @@
          (:file "confirm-view-quit-tests") ; R8.2
          (:file "attach-selector-resolution-tests") ; R7.6
          (:file "client-receive-tests")))))))
+
+(defmacro define-system-with-nerimux-test-components (name &rest options)
+  (append (list (intern "DEFSYSTEM" "ASDF") name)
+          options
+          (list :components *nerimux-test-components*)))

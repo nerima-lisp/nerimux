@@ -4,10 +4,10 @@
 ;;;
 ;;; This file holds the window-resize-active and window-zoom-toggle operations
 ;;; split from window-core.lisp/window-tree.lisp.  All functions depend on:
-;;;   - window struct accessors (window-core.lisp)
+;;;   - window struct accessors (window-definitions.lisp)
 ;;;   - layout helpers: layout-find-leaf, layout-find-parent, layout-split-*,
 ;;;     resize-find-split, resize-direction-orientation, layout-leaves (layout.lisp)
-;;;   - %axis-floor, +pane-separator-width+ (window-core.lisp)
+;;;   - %axis-floor (layout.lisp), +pane-separator-width+ (window-definitions.lisp)
 ;;;   - pane-reposition (pane-geometry.lisp)
 ;;;
 ;;; Data/logic separation:

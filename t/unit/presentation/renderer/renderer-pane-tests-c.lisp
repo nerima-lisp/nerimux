@@ -9,8 +9,8 @@
 ;;;; copy-mode-position-format template with a fixed "[POS/LIMIT]" string
 ;;;; (renderer-pane-copy-mode-overlay.lisp:%copy-mode-position-overlay-text).
 ;;;; copy-mode-line-numbers is fixed "off" (§1.4): the gutter this used to
-;;;; draw is gone outright — renderer-pane-copy-mode-line-number.lisp is now
-;;;; an empty file, and %render-pane-body always uses the pane's full width.
+;;;; draw is gone outright, and %render-pane-body always uses the pane's full
+;;;; width.
 
 (describe "renderer-suite"
 

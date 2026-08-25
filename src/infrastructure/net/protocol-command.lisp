@@ -107,7 +107,7 @@
 ;;; the session, and every other attached client keep running.  That guard is
 ;;; load-bearing — it is the only thing standing between a strict decode here
 ;;; and a server-wide crash, and it has been accidentally disabled once before
-;;; (see the macro-ordering note at the top of server-multi-dispatch.lisp).
+;;; (see the macro-ordering note at the top of the core server-multi-dispatch.lisp).
 ;;; Both halves are pinned together in
 ;;; t/unit/infrastructure/net/protocol-command-malformed-utf8-tests.lisp so
 ;;; neither the strictness nor the guard can be removed on its own.

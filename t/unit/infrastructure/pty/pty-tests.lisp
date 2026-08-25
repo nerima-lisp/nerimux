@@ -14,6 +14,18 @@
 ;;;; (The child-environment assignment logic now lives in
 ;;;; session-environment-tests.lisp.)
 
+(describe "pty process table"
+  (it "remembers-and-takes-processes-atomically"
+    (let* ((master-fd (gensym "synthetic-master-"))
+           (pty (list :synthetic)))
+      (unwind-protect
+           (progn
+             (expect (null (nerimux/pty::%take-pty-process master-fd)))
+             (nerimux/pty::%remember-pty-process master-fd pty)
+             (expect (eq pty (nerimux/pty::%take-pty-process master-fd)))
+             (expect (null (nerimux/pty::%take-pty-process master-fd))))
+        (nerimux/pty::%take-pty-process master-fd)))))
+
 (describe "pty-unit-suite"
 
   ;;; ── %string-non-empty-p ──────────────────────────────────────────────────────
@@ -67,6 +79,137 @@
   (it "set-pty-size-is-fbound"
     (expect (fboundp 'nerimux/pty:set-pty-size)))
 
+  (it "set-pty-size-forwards-columns-rows-and-fd-in-library-order"
+    (let ((call nil))
+      (with-stubbed-fdefinition
+          ((cl-tty-kit:set-terminal-size
+             (lambda (columns rows fd)
+               (setf call (list columns rows fd)))))
+        (nerimux/pty:set-pty-size 91 24 80))
+      (expect (equal '(80 24 91) call))))
+
+  (it "forkpty-with-shell-registers-the-spawned-pty"
+    (let* ((pty (gensym "PTY-"))
+           (master-fd 90123)
+           (child-pid 45678)
+           (spawn-arguments nil)
+           (resize-call nil))
+      (with-stubbed-fdefinition
+          ((cl-tty-kit:make-pty
+             (lambda (&rest arguments)
+               (setf spawn-arguments arguments)
+               pty))
+           (cl-tty-kit:pty-fd
+             (lambda (object)
+               (declare (ignore object))
+               master-fd))
+           (cl-tty-kit:pty-pid
+             (lambda (object)
+               (declare (ignore object))
+               child-pid))
+           (nerimux/pty:set-pty-size
+             (lambda (fd rows cols)
+               (setf resize-call (list fd rows cols)))))
+        (unwind-protect
+             (multiple-value-bind (fd pid slave-path)
+                 (nerimux/pty:forkpty-with-shell
+                  24 80 :start-dir "/tmp" :default-command "echo hi"
+                  :environment '("A=1"))
+               (expect (= master-fd fd))
+               (expect (= child-pid pid))
+               (expect (string= "" slave-path))
+               (expect (equal (list master-fd 24 80) resize-call))
+               (expect (equal "/bin/sh" (getf spawn-arguments :program)))
+               (expect (equal '("-c" "echo hi")
+                              (getf spawn-arguments :args)))
+               (expect (equal '("A=1") (getf spawn-arguments :environment)))
+               (expect (pathnamep (getf spawn-arguments :directory)))
+               (expect (eq pty (gethash master-fd nerimux/pty::*pty-processes*))))
+          (nerimux/pty::%take-pty-process master-fd)))))
+
+  (it "forkpty-with-shell-closes-the-pty-when-resize-fails"
+    (let* ((pty (gensym "PTY-"))
+           (master-fd 90124)
+           (closed nil))
+      (with-stubbed-fdefinition
+          ((cl-tty-kit:make-pty (lambda (&rest arguments)
+                                  (declare (ignore arguments))
+                                  pty))
+           (cl-tty-kit:pty-fd (lambda (object)
+                                (declare (ignore object))
+                                master-fd))
+           (cl-tty-kit:pty-pid (lambda (object)
+                                 (declare (ignore object))
+                                 45679))
+           (nerimux/pty:set-pty-size (lambda (&rest arguments)
+                                       (declare (ignore arguments))
+                                       (error "synthetic resize failure")))
+           (cl-tty-kit:close-pty (lambda (object)
+                                  (setf closed object))))
+        (signals error
+          (nerimux/pty:forkpty-with-shell 24 80))
+        (expect (eq pty closed))
+        (expect (null (gethash master-fd nerimux/pty::*pty-processes*))))))
+
+  (it "pty-child-exit-status-reports-exit-and-signal-kinds"
+    (let ((master-fd 90125)
+          (processes nil))
+      (labels ((start-process (command)
+                 (let ((process (sb-ext:run-program
+                                 "/bin/sh" (list "-c" command)
+                                 :search t :wait nil :output nil :error nil)))
+                   (push process processes)
+                   process))
+               (remember-process (process)
+                 (nerimux/pty::%remember-pty-process
+                  master-fd
+                  (cl-tty-kit::%make-pty :process process :stream nil))))
+        (unwind-protect
+             (progn
+               (remember-process (start-process "exit 17"))
+               (multiple-value-bind (code kind)
+                   (nerimux/pty:pty-child-exit-status
+                    master-fd (cl-date-kit:duration-of-millis 1000))
+                 (expect (= 17 code))
+                 (expect (eq :exited kind)))
+               (nerimux/pty::%take-pty-process master-fd)
+               (remember-process (start-process "kill -TERM $$"))
+               (multiple-value-bind (code kind)
+                   (nerimux/pty:pty-child-exit-status
+                    master-fd (cl-date-kit:duration-of-millis 1000))
+                 (expect (numberp code))
+                 (expect (eq :signaled kind))))
+          (nerimux/pty::%take-pty-process master-fd)
+          (dolist (process processes)
+            (ignore-errors (sb-ext:process-wait process))
+            (ignore-errors (sb-ext:process-close process)))))))
+
+  (it "pty-close-signals-and-closes-a-registered-process"
+    (let* ((process (sb-ext:run-program
+                     "/bin/sh" '("-c" "exec sleep 60")
+                     :search t :wait nil :output nil :error nil))
+           (pty (cl-tty-kit::%make-pty :process process :stream nil))
+           (master-fd 90126)
+           (child-pid (sb-ext:process-pid process)))
+      (unwind-protect
+           (progn
+             (nerimux/pty::%remember-pty-process master-fd pty)
+             (nerimux/pty:pty-close master-fd child-pid)
+             (sb-ext:process-wait process)
+             (expect (eq :signaled (sb-ext:process-status process)))
+             (expect (null (gethash master-fd nerimux/pty::*pty-processes*))))
+        (ignore-errors (sb-posix:kill child-pid sb-posix:sighup))
+        (ignore-errors (sb-ext:process-wait process))
+        (ignore-errors (sb-ext:process-close process))
+        (nerimux/pty::%take-pty-process master-fd))))
+
+  (it "pty-close-closes-an-unregistered-fd-without-signalling"
+    (with-pipe-fds (read-fd write-fd)
+      (declare (ignore write-fd))
+      (nerimux/pty:pty-close read-fd 0)
+      (expect (null (gethash read-fd nerimux/pty::*pty-processes*)))
+      (signals sb-posix:syscall-error (sb-posix:close read-fd))))
+
   ;;; ── select-fds: the dead-pane fd sentinel ───────────────────────────────────
 
   ;; pane-fd -1 is nerimux's documented "no PTY / dead pane" sentinel, and the
@@ -102,11 +245,12 @@
   ;; child there means the reader thread never returns from EOF handling, so
   ;; the deadline is the only thing keeping the server alive.
   ;;
-  ;;  1. THE DEADLINE IS A BARE FORM.  cl-concurrent-kit's WITH-TIMEOUT is shaped
-  ;;     like SB-EXT:WITH-TIMEOUT — (with-timeout SECS ...) — not like
-  ;;     bordeaux-threads' (bt:with-timeout (SECS) ...).  Carrying the old parens
-  ;;     over expands to (SECS), calling the timeout VALUE as a function; passing
-  ;;     a computed rather than literal deadline is what distinguishes the two.
+  ;;  1. THE DEADLINE IS A BARE FORM.  cl-concurrent-kit's WITH-TIMEOUT takes a
+  ;;     CL-DATE-KIT:DURATION as (with-timeout duration ...), not as
+  ;;     bordeaux-threads' (bt:with-timeout (duration) ...).  Carrying the old
+  ;;     parens over expands to (duration), calling the value as a function;
+  ;;     passing a computed rather than literal duration keeps that distinction
+  ;;     observable.
   ;;
   ;;  2. THE CONDITION IS AN ERROR.  SB-EXT:TIMEOUT is a SERIOUS-CONDITION that is
   ;;     deliberately NOT an ERROR, so pty.lisp's (error () nil) clause — the one
@@ -119,18 +263,17 @@
   ;; reason 2 — the same precedent as commands-tests-c.lisp's
   ;; with-timeout-signals-operation-timed-out-not-sb-ext-timeout.
   (it "pty-child-exit-status-deadline-is-a-bare-form-signalling-an-error"
-    (let* ((seconds (/ 1 1000))              ; computed, not a literal
+    (let* ((duration (cl-date-kit:duration-of-millis 1)) ; computed, not literal
            (condition (handler-case
-                          (cl-concurrent-kit:with-timeout seconds (sleep 60))
+                          (cl-concurrent-kit:with-timeout duration (sleep 60))
                         (cl-concurrent-kit:operation-timed-out (c) c))))
       (expect (typep condition 'cl-concurrent-kit:operation-timed-out))
       (expect (typep condition 'error))
       (expect (not (typep condition 'sb-ext:timeout)))
       ;; The clause pty.lisp actually writes, exercised as written.
       (expect (null (handler-case
-                        (cl-concurrent-kit:with-timeout seconds (sleep 60))
-                      (cl-concurrent-kit:operation-timed-out () nil)
-                      (error () :wrong-clause))))))
+                        (cl-concurrent-kit:with-timeout duration (sleep 60))
+                      (cl-concurrent-kit:operation-timed-out () nil))))))
 
   ;;; ── pty-write / pty-read-blocking (real pipe) ────────────────────────────────
 
@@ -164,6 +307,21 @@
       (sb-posix:close wfd)
       (expect (null (pty-read-blocking rfd 16)))))
 
+  (it "pty-read-blocking-into-maps-would-block-to-nil"
+    (with-stubbed-fdefinition
+        ((cl-tty-kit:fd-read-octets (lambda (&rest arguments)
+                                      (declare (ignore arguments))
+                                      nil)))
+      (expect (null (nerimux/pty:pty-read-blocking-into
+                     90128
+                     (make-array 8 :element-type '(unsigned-byte 8)))))))
+
+  (it "pty-write-ignores-the-negative-fd-sentinel"
+    (finishes
+      (nerimux/pty:pty-write
+       -1 (make-array 1 :element-type '(unsigned-byte 8)
+                      :initial-contents '(1)))))
+
   ;;; ── terminal-size ─────────────────────────────────────────────────────────────
 
   ;; terminal-size returns (values rows cols), both positive integers — either
@@ -174,6 +332,24 @@
       (expect (integerp cols))
       (expect (plusp rows))
       (expect (plusp cols))))
+
+  (it "terminal-size-swaps-library-values-and-falls-back-on-invalid-values"
+    (let ((reported '(123 45)))
+      (with-stubbed-fdefinition
+          ((cl-tty-kit:terminal-size (lambda (fd)
+                                        (declare (ignore fd))
+                                        (apply #'values reported))))
+        (multiple-value-bind (rows cols) (nerimux/pty:terminal-size)
+          (expect (= 45 rows))
+          (expect (= 123 cols)))
+        (setf reported '(nil nil))
+        (multiple-value-bind (rows cols) (nerimux/pty:terminal-size)
+          (expect (= nerimux/pty:+default-term-rows+ rows))
+          (expect (= nerimux/pty:+default-term-cols+ cols)))
+        (setf reported '(1001 40))
+        (multiple-value-bind (rows cols) (nerimux/pty:terminal-size)
+          (expect (= nerimux/pty:+default-term-rows+ rows))
+          (expect (= nerimux/pty:+default-term-cols+ cols))))))
 
   ;;; ── %target-program-and-args ─────────────────────────────────────────────────
 
@@ -225,6 +401,45 @@
       (expect (eq #'nerimux/pty:pty-write nerimux/ports:*write-pty*))
       (expect (eq #'nerimux/pty:set-pty-size nerimux/ports:*resize-pty*))
       (expect (eq #'nerimux/pty:pty-close nerimux/ports:*close-pty*))))
+
+  (it "pty-port-wrappers-forward-to-installed-functions"
+    (let* ((spawn-call nil)
+          (write-call nil)
+          (resize-call nil)
+          (close-call nil)
+          (nerimux/ports:*spawn-pty*
+            (lambda (rows cols &key start-dir default-command environment)
+              (setf spawn-call (list rows cols start-dir default-command environment))
+              (values 3 4 "/dev/pts/wrapper")))
+          (nerimux/ports:*write-pty*
+            (lambda (fd bytes)
+              (setf write-call (list fd bytes))
+              :written))
+          (nerimux/ports:*resize-pty*
+            (lambda (fd rows cols)
+              (setf resize-call (list fd rows cols))
+              :resized))
+          (nerimux/ports:*close-pty*
+            (lambda (fd pid)
+              (setf close-call (list fd pid))
+              :closed)))
+      (multiple-value-bind (fd pid tty)
+          (nerimux/ports:spawn-pty
+           24 80 :start-dir "/tmp" :default-command "echo hi"
+           :environment '("A=1"))
+        (expect (= 3 fd))
+        (expect (= 4 pid))
+        (expect (string= "/dev/pts/wrapper" tty)))
+      (expect (equal '(24 80 "/tmp" "echo hi" ("A=1")) spawn-call))
+      (let ((bytes (make-array 2 :element-type '(unsigned-byte 8)
+                               :initial-contents '(7 8))))
+        (expect (eq :written (nerimux/ports:write-pty 9 bytes)))
+        (expect (= 9 (or (first write-call) -1)))
+        (expect (equalp bytes (second write-call))))
+      (expect (eq :resized (nerimux/ports:resize-pty 9 30 100)))
+      (expect (equal '(9 30 100) resize-call))
+      (expect (eq :closed (nerimux/ports:close-pty 9 10)))
+      (expect (equal '(9 10) close-call))))
 
   ;;; ── terminal-size fallback constants ─────────────────────────────────────────
 

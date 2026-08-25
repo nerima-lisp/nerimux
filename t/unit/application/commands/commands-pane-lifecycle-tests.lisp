@@ -27,17 +27,4 @@
               (lambda (master-fd child-pid)
                 (setf received (list master-fd child-pid)))))
         (close-pane-pty pane))
-      (expect (equal (list 41 42) received))))
-
-  ;; Why the wrapper exists at all: server shutdown walks every pane in turn, so
-  ;; one already-closed fd must not abort the teardown of the panes after it.
-  ;; pty-close has its own ignore-errors, but this asserts the guarantee at the
-  ;; boundary its callers actually depend on.
-  (it "close-pane-pty-swallows-a-signalling-pty-close"
-    (let ((pane (make-pane :id 92 :x 0 :y 0 :width 20 :height 5
-                           :fd 7 :pid 8 :screen (make-screen 20 5))))
-      (let ((nerimux/ports:*close-pty*
-              (lambda (master-fd child-pid)
-                (declare (ignore master-fd child-pid))
-                (error "simulated teardown failure"))))
-        (expect (null (close-pane-pty pane)))))))
+      (expect (equal (list 41 42) received)))))

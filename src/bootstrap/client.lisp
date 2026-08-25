@@ -76,9 +76,11 @@
     (%receive-server-frame stream)))
 
 (defun %client-working-directory ()
-  (or (ignore-errors (namestring (truename *default-pathname-defaults*)))
-      (ignore-errors (namestring *default-pathname-defaults*))
-      ""))
+  (let ((defaults *default-pathname-defaults*))
+    (or (handler-case (namestring (truename defaults))
+          (file-error () nil))
+        (and (pathnamep defaults) (namestring defaults))
+        "")))
 
 (defun %send-client-attach-target (stream target)
   (send-frame stream
@@ -116,7 +118,7 @@
 ;;;
 ;;; A one-shot control connection: connect, send one +msg-command+, read back
 ;;; the +msg-reply+ the server's `:kill` command handler sends (that handler
-;;; lives in server-multi-dispatch.lisp, out of this file's scope -- see the
+;;; lives in server-multi-dispatch-command.lisp, out of this file's scope -- see the
 ;;; interface reported alongside this change), then disconnect.  It never
 ;;; sends +msg-attach+, so it is not RUN-CLIENT above -- but the server
 ;;; registers any accepted connection as a full client (%add-client,
@@ -144,7 +146,7 @@
 
 (defun %parse-kill-reply-status (text)
   "Classify a kill command's +msg-reply+ TEXT: the server-side contract
-   (server-multi-dispatch.lisp, out of scope here) is that the first line is
+   (server-multi-dispatch-command.lisp, out of scope here) is that the first line is
    literally \"OK\" or \"DENIED\".  Anything else -- an empty reply, a typo,
    a future reply shape this client does not know about -- is read as
    :denied so an unrecognized reply fails closed rather than reporting a

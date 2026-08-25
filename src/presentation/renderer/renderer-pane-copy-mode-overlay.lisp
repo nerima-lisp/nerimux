@@ -17,7 +17,7 @@
          (pos    (screen-copy-offset screen))
          (limit  (length (screen-scrollback screen)))
          (term   (screen-copy-search-term screen))
-         (active (and term (plusp (length term)) term))
+         (active (when (and term (plusp (length term))) term))
          (index  (screen-copy-search-index screen))
          (total  (screen-copy-search-total screen)))
     (format nil "[~D/~D]~@[ /~A~]~@[ ~A~]"

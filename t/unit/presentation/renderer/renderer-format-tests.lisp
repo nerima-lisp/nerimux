@@ -175,6 +175,25 @@
       (expect (= 99 (nerimux/renderer::%maybe-downsample-color (logior #x1000000 1))))
       (expect (= 5  (nerimux/renderer::%maybe-downsample-color 5)))))
 
+  (it "maybe-downsample-color-function-object-covers-dispatch"
+    (let ((nerimux/renderer:*color-downsample-fn* (lambda (n) (declare (ignore n)) 99))
+          (fn (symbol-function 'nerimux/renderer::%maybe-downsample-color)))
+      (expect (= 99 (funcall fn (logior #x1000000 1))))
+      (expect (= 5 (funcall fn 5)))))
+
+  (it-each ((0 "" "no underline colour")
+            (16 ";58;5;16" "palette underline colour")
+            (#.(logior #x1000000 (ash 255 16) (ash 0 8) 128)
+             ";58;2;255;0;128"
+             "true-colour underline colour"))
+      "emit underline colour ~A → ~A"
+      (n expected desc)
+    (declare (ignore desc))
+    (let ((out (with-output-to-string (s)
+                  (funcall (symbol-function 'nerimux/renderer::%emit-ul-color)
+                           s n))))
+      (expect (string= expected out))))
+
   ;; End-to-end: with *color-downsample-fn* bound to #'%rgb-int-to-256 (as
   ;; %apply-global-cli-invocation wires it for -2), render-cell-attrs emits the
   ;; downsampled 256-colour SGR form (;38;5;N) instead of raw true-colour
