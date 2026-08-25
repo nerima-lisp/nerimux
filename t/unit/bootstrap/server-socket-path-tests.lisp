@@ -26,9 +26,21 @@
   ;; CLI flags, R2.7 dropped the env var alongside them), so $TMPDIR is the
   ;; only input to the socket base directory.
   (it "socket-path-uses-tmpdir-env-var"
-    (with-temporary-posix-environment-variable ("TMPDIR" "/var/folders/test")
-      (let ((path (nerimux::socket-path "envtest")))
-        (expect (search "/var/folders/test" path)))))
+    ;; %socket-directory now VERIFIES the per-uid directory (fail-closed),
+    ;; so the fixture TMPDIR must be a real, writable location it can
+    ;; actually create and secure -- a fixed path like /var/folders/test
+    ;; that this sandbox cannot create previously worked only because the
+    ;; old code ignored ENSURE-DIRECTORIES-EXIST/CHMOD failures outright.
+    (let ((base (format nil "~A/nerimux-tmpdir-env-fixture-~D"
+                        (string-right-trim "/" (or (sb-ext:posix-getenv "TMPDIR") "/tmp"))
+                        (random 1000000))))
+      (unwind-protect
+           (with-temporary-posix-environment-variable ("TMPDIR" base)
+             (let ((path (nerimux::socket-path "envtest")))
+               (expect (search base path))))
+        (ignore-errors
+         (sb-posix:rmdir (format nil "~A/nerimux-~D" base (sb-posix:getuid))))
+        (ignore-errors (sb-posix:rmdir base)))))
 
   ;; socket-path uses /tmp as the socket directory when $TMPDIR is unset.
   (it "socket-path-falls-back-to-tmp-when-no-tmpdir"
@@ -47,6 +59,139 @@
   (it "socket-directory-is-mode-0700"
     (let ((dir (nerimux::%socket-directory)))
       (expect (= #o700 (logand (sb-posix:stat-mode (sb-posix:stat dir)) #o777)))))
+
+  ;;; -- socket directory privacy: %verify-socket-directory-private (fail-closed) -
+  ;;;
+  ;;; %socket-directory used to attempt ENSURE-DIRECTORIES-EXIST and CHMOD
+  ;;; #o700 and ignore either failing, trusting socket BIND to surface a
+  ;;; permission problem later.  That covers BIND failing outright but not a
+  ;;; pre-existing directory that is a symlink, owned by another uid, or left
+  ;;; group/world-writable -- none of which stop BIND from succeeding.  These
+  ;;; cases now go through %verify-socket-directory-private, which signals an
+  ;;; error (refusing startup) rather than warning and continuing.  Fixture
+  ;;; directories are built under a fresh, uniquely-named scratch path and
+  ;;; removed afterward; none of these depend on $TMPDIR/nerimux-<uid> or its
+  ;;; real mode.
+
+  ;; An acceptable directory (real directory, owned by us, mode exactly
+  ;; 0700) passes: no error, and the STAT it returns is truthy.
+  (it "verify-socket-directory-private-accepts-a-private-directory"
+    (let ((dir (format nil "~A/nerimux-privacy-ok-~D"
+                       (string-right-trim "/" (or (sb-ext:posix-getenv "TMPDIR") "/tmp"))
+                       (random 1000000))))
+      (unwind-protect
+           (progn
+             (ensure-directories-exist (format nil "~A/" dir))
+             (sb-posix:chmod dir #o700)
+             (expect (and (nerimux::%verify-socket-directory-private dir (sb-posix:getuid)) t)
+                     :to-be-truthy))
+        (ignore-errors (sb-posix:rmdir dir)))))
+
+  ;; A directory whose mode is not exactly 0700 (here 0755, group- and
+  ;; world-readable/executable) is rejected: this is the "left
+  ;; group/world-writable" case the security model calls the whole trust
+  ;; boundary.
+  (it "verify-socket-directory-private-rejects-non-0700-mode"
+    (let ((dir (format nil "~A/nerimux-privacy-mode-~D"
+                       (string-right-trim "/" (or (sb-ext:posix-getenv "TMPDIR") "/tmp"))
+                       (random 1000000))))
+      (unwind-protect
+           (progn
+             (ensure-directories-exist (format nil "~A/" dir))
+             (sb-posix:chmod dir #o755)
+             (signals error
+               (nerimux::%verify-socket-directory-private dir (sb-posix:getuid))
+               "must refuse a group/world-accessible socket directory"))
+        (ignore-errors (sb-posix:rmdir dir)))))
+
+  ;; A symlinked directory is rejected via LSTAT on the link itself, even
+  ;; though the link's target is a real, privately-owned, mode-0700
+  ;; directory -- STAT (which follows the link) would incorrectly approve
+  ;; this; LSTAT is what makes the check see the symlink.
+  (it "verify-socket-directory-private-rejects-a-symlink"
+    (let* ((target (format nil "~A/nerimux-privacy-target-~D"
+                           (string-right-trim "/" (or (sb-ext:posix-getenv "TMPDIR") "/tmp"))
+                           (random 1000000)))
+           (link (format nil "~A/nerimux-privacy-link-~D"
+                         (string-right-trim "/" (or (sb-ext:posix-getenv "TMPDIR") "/tmp"))
+                         (random 1000000))))
+      (unwind-protect
+           (progn
+             (ensure-directories-exist (format nil "~A/" target))
+             (sb-posix:chmod target #o700)
+             (sb-posix:symlink target link)
+             (signals error
+               (nerimux::%verify-socket-directory-private link (sb-posix:getuid))
+               "must refuse a symlinked socket directory even when its target is private"))
+        (ignore-errors (sb-posix:unlink link))
+        (ignore-errors (sb-posix:rmdir target)))))
+
+  ;; A path that is a regular file, not a directory, is rejected.
+  (it "verify-socket-directory-private-rejects-a-non-directory"
+    (let ((path (format nil "~A/nerimux-privacy-file-~D"
+                        (string-right-trim "/" (or (sb-ext:posix-getenv "TMPDIR") "/tmp"))
+                        (random 1000000))))
+      (unwind-protect
+           (progn
+             (with-open-file (s path :direction :output :if-does-not-exist :create)
+               (declare (ignore s)))
+             (signals error
+               (nerimux::%verify-socket-directory-private path (sb-posix:getuid))
+               "must refuse a socket directory path that is a plain file"))
+        (ignore-errors (delete-file path)))))
+
+  ;; A path that does not exist at all is rejected (LSTAT fails) rather than
+  ;; silently treated as acceptable.
+  (it "verify-socket-directory-private-rejects-a-missing-path"
+    (signals error
+      (nerimux::%verify-socket-directory-private
+       (format nil "/nonexistent-nerimux-privacy-dir-~D" (random 1000000))
+       (sb-posix:getuid))
+      "must refuse when the socket directory does not exist"))
+
+  ;; Ownership mismatch is rejected.  Chowning a real fixture to another uid
+  ;; would require privileges this test cannot assume, so the mismatch is
+  ;; expressed the portable way: the directory is genuinely owned by the
+  ;; current uid, and EXPECTED-UID is deliberately wrong, which exercises
+  ;; exactly the same STAT-UID/=UID comparison a real cross-uid directory
+  ;; would fail.
+  (it "verify-socket-directory-private-rejects-uid-mismatch"
+    (let ((dir (format nil "~A/nerimux-privacy-uid-~D"
+                       (string-right-trim "/" (or (sb-ext:posix-getenv "TMPDIR") "/tmp"))
+                       (random 1000000))))
+      (unwind-protect
+           (progn
+             (ensure-directories-exist (format nil "~A/" dir))
+             (sb-posix:chmod dir #o700)
+             (signals error
+               (nerimux::%verify-socket-directory-private
+                dir (1+ (sb-posix:getuid)))
+               "must refuse when the directory's owner does not match the expected uid"))
+        (ignore-errors (sb-posix:rmdir dir)))))
+
+  ;; End-to-end: %socket-directory itself refuses to start when
+  ;; $TMPDIR/nerimux-<uid> already exists as a symlink -- the exact defect
+  ;; this change closes.  ENSURE-DIRECTORIES-EXIST and CHMOD both resolve
+  ;; the symlinked path (CHMOD follows it, privately securing the target,
+  ;; not the link), so only the LSTAT-based verification catches this.
+  (it "socket-directory-refuses-a-pre-existing-symlinked-directory"
+    (let* ((base (format nil "~A/nerimux-privacy-base-~D"
+                         (string-right-trim "/" (or (sb-ext:posix-getenv "TMPDIR") "/tmp"))
+                         (random 1000000)))
+           (target (format nil "~A/real-target" base))
+           (uid-dir (format nil "~A/nerimux-~D" base (sb-posix:getuid))))
+      (unwind-protect
+           (progn
+             (ensure-directories-exist (format nil "~A/" target))
+             (sb-posix:chmod target #o700)
+             (sb-posix:symlink target uid-dir)
+             (with-temporary-posix-environment-variable ("TMPDIR" base)
+               (signals error
+                 (nerimux::%socket-directory)
+                 "must refuse to start when the per-uid socket directory is a pre-existing symlink")))
+        (ignore-errors (sb-posix:unlink uid-dir))
+        (ignore-errors (sb-posix:rmdir target))
+        (ignore-errors (sb-posix:rmdir base)))))
 
   ;; socket-path uses a fixed name for a given session name — no -L/-S
   ;; override can change it (R1.17 removed both CLI flags).

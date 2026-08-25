@@ -159,163 +159,106 @@
     (:pane (nerimux/model:pane-attention-p (picker-item-pane item)))
     (otherwise nil)))
 
+(defparameter *organization-search-fields*
+  (list #'nerimux/model:organization-id
+        #'nerimux/model:organization-host
+        #'nerimux/model:organization-name
+        (lambda (organization)
+          (when (nerimux/model:organization-missing-p organization)
+            "missing"))
+        (lambda (organization)
+          (when (plusp (nerimux/model:organization-attention-count organization))
+            (format nil "attention ~D"
+                    (nerimux/model:organization-attention-count organization))))
+        (lambda (organization)
+          (format nil "repositories ~D worktrees ~D"
+                  (length (nerimux/model:organization-repositories organization))
+                  (nerimux/model:organization-active-worktree-count organization))))
+  "Organization-level fields folded into a picker item's search text.
+   Each is a function of one ORGANIZATION, returning a string or NIL.")
+
+(defparameter *repository-search-fields*
+  (list #'nerimux/model:repository-id
+        #'nerimux/model:repository-specification
+        #'nerimux/model:repository-local-path
+        #'nerimux/model:repository-remote
+        #'nerimux/model:repository-backend
+        (lambda (repository)
+          (when (nerimux/model:repository-dirty-p repository) "dirty"))
+        (lambda (repository)
+          (when (nerimux/model:repository-conflict-p repository) "conflict"))
+        (lambda (repository)
+          (when (plusp (nerimux/model:repository-ahead repository))
+            (format nil "ahead ~D" (nerimux/model:repository-ahead repository))))
+        (lambda (repository)
+          (when (plusp (nerimux/model:repository-behind repository))
+            (format nil "behind ~D" (nerimux/model:repository-behind repository))))
+        (lambda (repository)
+          (when (nerimux/model:repository-missing-p repository) "missing")))
+  "Repository-level fields folded into a picker item's search text.
+   Each is a function of one REPOSITORY, returning a string or NIL.")
+
+(defparameter *worktree-search-fields*
+  (list #'nerimux/model:worktree-id
+        #'nerimux/model:worktree-branch
+        #'nerimux/model:worktree-path
+        #'nerimux/model:worktree-head
+        #'nerimux/model:worktree-status
+        (lambda (worktree)
+          (when (nerimux/model:worktree-dirty-p worktree) "dirty"))
+        (lambda (worktree)
+          (when (nerimux/model:worktree-conflict-p worktree) "conflict"))
+        (lambda (worktree)
+          (when (plusp (nerimux/model:worktree-ahead worktree))
+            (format nil "ahead ~D" (nerimux/model:worktree-ahead worktree))))
+        (lambda (worktree)
+          (when (plusp (nerimux/model:worktree-behind worktree))
+            (format nil "behind ~D" (nerimux/model:worktree-behind worktree))))
+        (lambda (worktree)
+          (when (nerimux/model:worktree-bare-p worktree) "bare"))
+        (lambda (worktree)
+          (when (nerimux/model:worktree-locked-p worktree) "locked"))
+        (lambda (worktree)
+          (when (nerimux/model:worktree-prunable-p worktree) "prunable"))
+        (lambda (worktree)
+          (when (nerimux/model:worktree-missing-p worktree) "missing"))
+        #'nerimux/model:worktree-attention-reasons)
+  "Worktree-level fields folded into a picker item's search text.
+   Each is a function of one WORKTREE, returning a string or NIL.")
+
+(defparameter *pane-search-fields*
+  (list #'nerimux/model:pane-id
+        #'nerimux/model:pane-title
+        #'nerimux/model:pane-start-command
+        #'nerimux/model:pane-start-path
+        #'nerimux/model:pane-last-output
+        #'nerimux/model:pane-notification
+        #'nerimux/model:pane-last-output-time
+        #'nerimux/model:pane-last-focused-time
+        #'nerimux/model:pane-attention-reasons)
+  "Pane-level fields folded into a picker item's search text.
+   Each is a function of one PANE, returning a string or NIL.")
+
+(defun %level-search-values (level-object field-fns)
+  "Apply each of FIELD-FNS to LEVEL-OBJECT, or return NIL when LEVEL-OBJECT
+   itself is NIL (the picker item does not reach that level)."
+  (when level-object (mapcar (lambda (fn) (funcall fn level-object)) field-fns)))
+
 (defun %picker-item-search-text (item)
   (with-output-to-string (stream)
     (dolist (value
-             (list (picker-item-id item)
-                   (picker-item-kind item)
-                   (picker-item-label item)
-                   (and (picker-item-organization item)
-                        (nerimux/model:organization-id
-                         (picker-item-organization item)))
-                   (and (picker-item-repository item)
-                        (nerimux/model:repository-id
-                         (picker-item-repository item)))
-                   (and (picker-item-worktree item)
-                        (nerimux/model:worktree-id
-                         (picker-item-worktree item)))
-                   (and (picker-item-worktree item)
-                        (nerimux/model:worktree-branch
-                         (picker-item-worktree item)))
-                   (and (picker-item-worktree item)
-                        (nerimux/model:worktree-path
-                         (picker-item-worktree item)))
-                   (and (picker-item-worktree item)
-                        (nerimux/model:worktree-head
-                         (picker-item-worktree item)))
-                   (and (picker-item-organization item)
-                        (nerimux/model:organization-host
-                         (picker-item-organization item)))
-                   (and (picker-item-organization item)
-                        (nerimux/model:organization-name
-                         (picker-item-organization item)))
-                   (and (picker-item-organization item)
-                        (when (nerimux/model:organization-missing-p
-                               (picker-item-organization item))
-                          "missing"))
-                   (and (picker-item-organization item)
-                        (when (plusp
-                               (nerimux/model:organization-attention-count
-                                (picker-item-organization item)))
-                          (format nil
-                                  "attention ~D"
-                                  (nerimux/model:organization-attention-count
-                                   (picker-item-organization item)))))
-                   (and (picker-item-organization item)
-                        (format nil
-                                "repositories ~D worktrees ~D"
-                                (length
-                                 (nerimux/model:organization-repositories
-                                  (picker-item-organization item)))
-                                (nerimux/model:organization-active-worktree-count
-                                 (picker-item-organization item))))
-                   (and (picker-item-repository item)
-                        (nerimux/model:repository-specification
-                         (picker-item-repository item)))
-                   (and (picker-item-repository item)
-                        (nerimux/model:repository-local-path
-                         (picker-item-repository item)))
-                   (and (picker-item-repository item)
-                        (nerimux/model:repository-remote
-                         (picker-item-repository item)))
-                   (and (picker-item-repository item)
-                        (nerimux/model:repository-backend
-                         (picker-item-repository item)))
-                   (and (picker-item-repository item)
-                        (when (nerimux/model:repository-dirty-p
-                               (picker-item-repository item))
-                          "dirty"))
-                   (and (picker-item-repository item)
-                        (when (nerimux/model:repository-conflict-p
-                               (picker-item-repository item))
-                          "conflict"))
-                   (and (picker-item-repository item)
-                        (when (plusp (nerimux/model:repository-ahead
-                                      (picker-item-repository item)))
-                          (format nil
-                                  "ahead ~D"
-                                  (nerimux/model:repository-ahead
-                                   (picker-item-repository item)))))
-                   (and (picker-item-repository item)
-                        (when (plusp (nerimux/model:repository-behind
-                                      (picker-item-repository item)))
-                          (format nil
-                                  "behind ~D"
-                                  (nerimux/model:repository-behind
-                                   (picker-item-repository item)))))
-                   (and (picker-item-repository item)
-                        (when (nerimux/model:repository-missing-p
-                               (picker-item-repository item))
-                          "missing"))
-                   (and (picker-item-worktree item)
-                        (nerimux/model:worktree-status
-                         (picker-item-worktree item)))
-                   (and (picker-item-worktree item)
-                        (when (nerimux/model:worktree-dirty-p
-                               (picker-item-worktree item))
-                          "dirty"))
-                   (and (picker-item-worktree item)
-                        (when (nerimux/model:worktree-conflict-p
-                               (picker-item-worktree item))
-                          "conflict"))
-                   (and (picker-item-worktree item)
-                        (when (plusp (nerimux/model:worktree-ahead
-                                      (picker-item-worktree item)))
-                          (format nil
-                                  "ahead ~D"
-                                  (nerimux/model:worktree-ahead
-                                   (picker-item-worktree item)))))
-                   (and (picker-item-worktree item)
-                        (when (plusp (nerimux/model:worktree-behind
-                                      (picker-item-worktree item)))
-                          (format nil
-                                  "behind ~D"
-                                  (nerimux/model:worktree-behind
-                                   (picker-item-worktree item)))))
-                   (and (picker-item-worktree item)
-                        (when (nerimux/model:worktree-bare-p
-                               (picker-item-worktree item))
-                          "bare"))
-                   (and (picker-item-worktree item)
-                        (when (nerimux/model:worktree-locked-p
-                               (picker-item-worktree item))
-                          "locked"))
-                   (and (picker-item-worktree item)
-                        (when (nerimux/model:worktree-prunable-p
-                               (picker-item-worktree item))
-                          "prunable"))
-                   (and (picker-item-worktree item)
-                        (when (nerimux/model:worktree-missing-p
-                               (picker-item-worktree item))
-                          "missing"))
-                   (and (picker-item-worktree item)
-                        (nerimux/model:worktree-attention-reasons
-                         (picker-item-worktree item)))
-                   (and (picker-item-pane item)
-                        (nerimux/model:pane-id (picker-item-pane item)))
-                   (and (picker-item-pane item)
-                        (nerimux/model:pane-title (picker-item-pane item)))
-                   (and (picker-item-pane item)
-                        (nerimux/model:pane-start-command
-                         (picker-item-pane item)))
-                   (and (picker-item-pane item)
-                        (nerimux/model:pane-start-path
-                         (picker-item-pane item)))
-                   (and (picker-item-pane item)
-                        (nerimux/model:pane-last-output
-                         (picker-item-pane item)))
-                   (and (picker-item-pane item)
-                        (nerimux/model:pane-notification
-                         (picker-item-pane item)))
-                   (and (picker-item-pane item)
-                        (nerimux/model:pane-last-output-time
-                         (picker-item-pane item)))
-                   (and (picker-item-pane item)
-                        (nerimux/model:pane-last-focused-time
-                         (picker-item-pane item)))
-                    (and (picker-item-pane item)
-                         (nerimux/model:pane-attention-reasons
-                          (picker-item-pane item)))))
+             (list* (picker-item-id item)
+                    (picker-item-kind item)
+                    (picker-item-label item)
+                    (append
+                     (%level-search-values
+                      (picker-item-organization item) *organization-search-fields*)
+                     (%level-search-values
+                      (picker-item-repository item) *repository-search-fields*)
+                     (%level-search-values
+                      (picker-item-worktree item) *worktree-search-fields*)
+                     (%level-search-values
+                      (picker-item-pane item) *pane-search-fields*))))
       (let ((string (%picker-string value)))
         (when (plusp (length string))
           (write-string string stream)
@@ -326,7 +269,7 @@
       (cl-regex-kit:compile-regex query
                                  :case-insensitive t
                                  :octal nil)
-    (error () nil)))
+    (cl-regex-kit:regex-syntax-error () nil)))
 
 (defun filter-global-picker-items (items query &key regex-p)
   (check-type items list)

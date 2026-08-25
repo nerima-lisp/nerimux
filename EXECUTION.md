@@ -290,8 +290,80 @@ boundary節) に記録した。`docs/src/reference/security-model.md` は
 - 修正 5 件はいずれも既存の単体スイートでは到達できない形の欠陥だった
   (単一リポジトリのフィクスチャ、ラッパー経由でのみ発現、TCP セグメント
   分割依存、実環境の壊れたクローンが必要)。回帰テスト化は別作業として残る。
-- バージョン表記が三つ巴で食い違っている: `nerimux -V` は 0.1.0、
+- ~~バージョン表記が三つ巴で食い違っている: `nerimux -V` は 0.1.0、
   `nerimux.asd` は 0.3.0、最新 tag は v0.2.0。どれを正とするかの整理が
-  別作業として残る(README のピン例は最新 tag の v0.2.0 に合わせた)。
+  別作業として残る(README のピン例は最新 tag の v0.2.0 に合わせた)。~~
+  **2026-08-25 に解消**。`nerimux.asd` の `:version` を正とし
+  (`:version` のコメント自身が single source of truth を宣言している)、
+  `nerimux/version:version-string` を 0.3.0 に合わせた。両者の一致は
+  `nerimux-version-string-matches-asdf-version` で固定してある。
 - `src/presentation/renderer/renderer.lisp` ヘッダの "File layout" 一覧が
   現在のファイル構成と一致していない(コメントのみの陳腐化)。
+
+## 2026-08-25 実欠陥の修正とマクロ集約
+
+### 統合した作業単位
+
+feature branch `feat/2026-cl-modernization` を `main` (72ed86e) から切り、
+12 commit を fast-forward で反映した。squash も merge commit も作っていないので、
+以下の粒度がそのまま main に残る。
+
+| 種別 | commit | 内容 |
+| --- | --- | --- |
+| 掃除 | b90aa67 | ASDF GC デッドロック調査の残骸 42 ファイル(1358行)を削除。`nerimux.asd`/`flake.nix`/`scripts/`/docs のどこからも参照が無いことを確認済み |
+| 欠陥 | d272a24 | `version-string` が 0.1.0 のまま `nerimux.asd` の 0.3.0 から乖離。ビルド済みバイナリが実際に誤報告していた。ドリフト固定テストつき |
+| 削除 | 2ea7143 | 本番から参照 0 のシンボル 5 件と専用テストを削除。副次的に、削除済みシンボルを参照したままの `:import-from` 2 件も修正 |
+| docs | 2fe63b4 | 4 文書から参照されながら実在しなかった `docs/src/reference/compatibility.md` を再構築 |
+| 整理 | bcfc942 fddebcf | `DEFINE-STATE` のパターン多相を 1 層上へ一般化した `DEFINE-KEY-RULES`/`DEFINE-COMMAND-RULES` を追加し、手書き `cond` を 4 関数分変換 |
+| 整理 | f397855 c710879 | worktree 操作 5 関数の重複した `:on-error`/`handler-case` 本体を `flet` へ集約。picker の検索テキスト抽出 ~40 節を宣言的テーブルへ |
+| 欠陥 | 5712146 | テスト 1 件の失敗が CI 全体をプロセスごと落としていた。`:spec` レポータが `~S` で循環モデルを出力し `*print-circle*` 未束縛 |
+| 欠陥 | 931cdc2 | 閉じた pane の reader スレッドが停止せず、fd 再利用で別 pane のシェルを閉じていた |
+| 欠陥 | b5b995e | `sb-ext:timeout` が `error` ではないため全ハンドラを貫通し、遅いクライアント 1 つでサーバ全体が落ちていた |
+| 欠陥 | b2714b2 | 残る監査所見 6 件の修正と、6 次元レビューがその修正自身に見つけた欠陥の修復 |
+
+最後の 1 件は、レビューが実装の前提を否定した例として記録しておく。
+`pty-write` は `nerimux/ports:*write-pty*` として設置されるため直接の呼び出し元を
+grep しても 2 経路目(reader スレッド)が見えず、そこへタイムアウトを足したことで
+「pane 1 つが詰まると全クライアント切断」を作り込んでいた。
+
+### 検証
+
+- `scripts/checks/` 5 種のうち read / manifest / export / suite-structure は exit 0。
+  **終了ステータスはファイルへリダイレクトして読むこと** — `| tail` を挟むと `$?` が
+  パイプ末尾のものになり、この作業中に実際に誤読した。
+- `internal-call-check.pl` は exit 1 だが、**変更前のベースラインと同一の 9 件**で増減なし。
+  `window-core.lisp` の `%split-spec-*` は `define-window-records` マクロ経由で
+  定義されるため、チェッカが `:conc-name` を学習できないことによる偽陽性。
+  ゲートを緩めず欠陥を名指しして残す。
+- `CL_WEAVE_TEST_FILTER=<部分文字列> nix run .#test` で個別スイートは**実行できる**。
+  protocol 97/97、client 58/58、socket 37/37、runtime 43/43、pty-write 9/9、
+  command 134/134、worktree 56/56、system-composition 11/11、いずれも failed 0 / errored 0。
+- `nix build .` exit 0、バイナリ起動して `nerimux 0.3.0`。
+  `nix build .#docs` (mkdocs `--strict`) exit 0。
+- フィルタ無しのフルスイートは依然このマシンで実行不能(既知の SBCL GC デッドロック、
+  本変更とは無関係)。canonical gate の `nix flake check` も同じ理由で未実行。
+
+### 削除した worktree / branch
+
+| 対象 | 種別 | 削除理由 |
+| --- | --- | --- |
+| `feat/2026-modernization-sweep` | local branch | セッション序盤に `origin/main` から誤って切ったもの。固有 commit 0 件で、失われる作業は無い |
+| `.worktrees/20260825T105830-72ed86e` | worktree | 上記 12 commit の作業場所。main へ fast-forward 済み |
+| `feat/2026-cl-modernization` | local branch | 同上。main から到達可能 |
+
+### 残る注意点
+
+- **`t/pty/` の実 PTY 挙動はこのセッションで一度も実行できていない。** `pty.lisp` を
+  変更したにもかかわらず、ゲート(`nerimux/test`)は `t/pty/` を走らせず、`pty` フィルタは
+  3 回ともデッドロックした。`nix run .#test-pty` が通る環境での確認が残る。
+- `pty-write` の `sb-ext:with-timeout` は 1 回あたり約 228 バイト consing する(実測、
+  素の呼び出しは 0 バイト)。キーストロークごとのコスト。防いでいるのが「全クライアントの
+  無期限ハング」なので有界コストを選んだが、非ブロッキング先行書き込みにすれば
+  共通経路から外せる。判断根拠は `+pty-write-timeout-seconds+` の docstring に記録。
+- カバレッジ欠落 3 件: `decode-command-payload` の target 有り分岐、`send-kill-request` の
+  `error` 側、`%handle-client-input-key-payload` がタイムアウトを捕まえる経路の E2E。
+- ソケットディレクトリ検証の fail-closed 化により、uid が変わった環境や読み取り専用
+  `/tmp` では**起動を拒否する**。意図した挙動だが、従来「起動はしていた」環境が
+  落ちうる変更である。
+- `cl-weave:signals` は `sb-ext:timeout` を捕捉できない(`thrown-condition` が `error`
+  のみ)。非 `error` の serious-condition を assert するテストは `handler-case` を直接書く。

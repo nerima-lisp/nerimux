@@ -24,7 +24,10 @@
    reused for the scan rather than recompiled from the string, which the cl-ppcre
    version did (it compiled TERM once just to test validity, then handed the raw
    string to ALL-MATCHES)."
-  (let ((scanner (ignore-errors (cl-regex-kit:compile-regex term :octal nil))))
+  (let ((scanner
+          (handler-case
+              (cl-regex-kit:compile-regex term :octal nil)
+            (cl-regex-kit:regex-syntax-error () nil))))
     (if scanner
         (loop for match in (cl-regex-kit:all-matches scanner row-str)
               for s = (cl-regex-kit:match-start match)

@@ -1,28 +1,8 @@
 (in-package #:nerimux/test)
 
-;;;; R8.1: `nerimux kill` server-side decision (%server-kill-request,
-;;;; %force-kill-panes, server-multi-loop.lisp) and CLI-side exit-code mapping
-;;;; (run-kill, main-startup-commands.lisp).
-;;;;
-;;;; NOTE for team-lead: this file does NOT exercise `nerimux kill` end to
-;;;; end over a real socket. %handle-client-ui-command
-;;;; (server-multi-dispatch.lisp) has no case for CMD :kill, so a `:kill`
-;;;; +msg-command+ frame falls into %handle-multi-command-message's "unknown
-;;;; command" branch and no +msg-reply+ is ever sent -- confirmed by grepping
-;;;; src/ for "OK"/"DENIED"/+msg-reply+ senders: client.lisp's
-;;;; send-kill-request (:130-176) is the only place that constructs or reads
-;;;; a kill +msg-reply+, and nothing on the server side produces one.
-;;;; server-multi-loop.lisp:71-84's own comment already flags this as
-;;;; unfinished wiring ("out of this file's scope -- see the report to
-;;;; team-lead"). A real `nerimux kill` today hangs until read-frame's own
-;;;; timeout and reports "no reply from server". Per §6's requirement for a
-;;;; byte-stream-driven integration test, that test cannot be written until
-;;;; the :kill case is added to %handle-client-ui-command and something sends
-;;;; the +msg-reply+ client.lisp expects. The tests below cover R8.1 at the
-;;;; function boundary on both sides of that gap instead: %server-kill-request
-;;;; (what the missing dispatch case needs to call) and run-kill (what
-;;;; already correctly calls send-kill-request and maps its result to an exit
-;;;; code).
+;;;; R8.1: `nerimux kill` server-side decision and client-side reply mapping.
+;;;; Socket I/O stays at the transport seams here; dispatch and exit-code tests
+;;;; cover the protocol contract without depending on a live daemon.
 
 (defmacro %with-stubbed-run-kill-exit (code-var &body body)
   "Local copy of main-entry-tests.lisp's WITH-STUBBED-EXIT idiom (not shared
@@ -146,6 +126,111 @@
     (expect (not (nerimux::%process-alive-p 0)))
     (expect (not (nerimux::%process-alive-p -1)))
     (expect (not (nerimux::%process-alive-p nil))))
+
+  (it "r8-1-read-kill-reply-skips-broadcasts-and-decodes-replies"
+    (let ((frames (list (list +msg-frame+ #(1 2))
+                        (list +msg-reply+ #(3 4))))
+          (decoded-payload nil))
+      (with-stubbed-fdefinition
+          ((nerimux/transport:read-frame
+            (lambda (stream)
+              (declare (ignore stream))
+              (destructuring-bind (type payload) (pop frames)
+                (values type payload))))
+           (nerimux/protocol:decode-text
+            (lambda (payload)
+              (setf decoded-payload payload)
+              (format nil "OK~%server stopped"))))
+        (multiple-value-bind (disposition text)
+            (nerimux::%read-kill-reply :stream)
+          (expect (eq :reply disposition))
+          (expect (string= (format nil "OK~%server stopped") text))))
+      (expect (equalp #(3 4) decoded-payload))))
+
+  (it "r8-1-read-kill-reply-treats-bye-and-eof-as-no-reply"
+    (dolist (terminal-frame (list (list +msg-bye+ nil)
+                                  (list nil nil)))
+      (let ((frames (list terminal-frame)))
+        (with-stubbed-fdefinition
+            ((nerimux/transport:read-frame
+              (lambda (stream)
+                (declare (ignore stream))
+                (destructuring-bind (type payload) (pop frames)
+                  (values type payload)))))
+          (multiple-value-bind (disposition text)
+              (nerimux::%read-kill-reply :stream)
+            (expect (eq :eof disposition))
+            (expect (null text)))))))
+
+  (it "r8-1-parse-kill-reply-fails-closed"
+    (expect (eq :ok
+                (nerimux::%parse-kill-reply-status
+                 (format nil "OK~%server stopped"))))
+    (expect (eq :denied
+                (nerimux::%parse-kill-reply-status
+                 (format nil "DENIED~%pane 1"))))
+    (expect (eq :denied (nerimux::%parse-kill-reply-status ""))))
+
+  (it "r8-1-send-kill-request-encodes-force-and-closes-the-socket"
+    (let ((path nil)
+          (sent nil)
+          (closed nil))
+      (with-stubbed-fdefinition
+          ((nerimux::socket-path
+            (lambda (name)
+              (setf path name)
+              "/tmp/nerimux-test.sock"))
+           (nerimux/net:connect-to
+            (lambda (socket-path)
+              (declare (ignore socket-path))
+              :socket))
+           (nerimux/net:socket-stream
+            (lambda (socket)
+              (declare (ignore socket))
+              :stream))
+           (nerimux/protocol:msg-command
+            (lambda (command target args)
+              (list command target args)))
+           (nerimux/transport:send-frame
+            (lambda (stream frame)
+              (setf sent (list stream frame))))
+           (nerimux::%read-kill-reply
+            (lambda (stream)
+              (declare (ignore stream))
+              (values :reply (format nil "OK~%server stopped"))))
+           (nerimux/net:close-socket
+            (lambda (socket)
+              (setf closed socket))))
+        (multiple-value-bind (status text)
+            (nerimux::send-kill-request "0" t)
+          (expect (eq :ok status))
+          (expect (string= (format nil "OK~%server stopped") text))))
+      (expect (string= "0" path))
+      (expect (equal (list :stream (list :kill nil (list "--force"))) sent))
+      (expect (eq :socket closed))))
+
+  (it "r8-1-send-kill-request-returns-eof-without-force"
+    (let ((command nil))
+      (with-stubbed-fdefinition
+          ((nerimux::socket-path (lambda (name) (declare (ignore name)) "/tmp/test"))
+           (nerimux/net:connect-to (lambda (path) (declare (ignore path)) :socket))
+           (nerimux/net:socket-stream (lambda (socket) (declare (ignore socket)) :stream))
+           (nerimux/protocol:msg-command
+            (lambda (name target args)
+              (setf command (list name target args))
+              :command))
+           (nerimux/transport:send-frame (lambda (stream frame)
+                                           (declare (ignore stream frame))))
+           (nerimux::%read-kill-reply (lambda (stream)
+                                        (declare (ignore stream))
+                                        (values :eof nil)))
+           (nerimux/net:close-socket (lambda (socket)
+                                       (declare (ignore socket)))))
+        (multiple-value-bind (status text)
+            (nerimux::send-kill-request "0" nil)
+          (expect (eq :eof status))
+          (expect (null text))))
+      (expect (equal (list :kill nil nil) command))))
 
   ;;; ── run-kill: CLI exit-code / message mapping ─────────────────────────────
 

@@ -1,5 +1,7 @@
 (in-package #:nerimux/test)
 
+(declaim (notinline nerimux/terminal/types:reset-sgr-pen))
+
 ;;;; Screen tests — part III: screen-clear-dirty, reset-sgr-pen, bell-pending, screen-consume-bell, miscellaneous slots, copy-mode extra slots.
 
 (describe "terminal-suite/resize"

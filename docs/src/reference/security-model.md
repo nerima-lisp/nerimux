@@ -17,6 +17,30 @@ The server socket is created in a per-user directory with mode `0700` under
 can write to that socket can run commands as the owning user. The directory
 permissions, not the protocol, are what confines this.
 
+Because that is the whole boundary, it is **verified rather than assumed**.
+Before binding, the server `lstat`s the directory and refuses to start unless
+it is a real directory (not a symlink), owned by the current uid, and mode
+exactly `0700`. Failure is fatal and names the property that failed — the
+server does not warn and continue, because continuing would mean serving from
+a directory that does not confine anything:
+
+```
+nerimux: refusing to start: socket directory /tmp/nerimux-501 has mode 0755,
+not the required 0700 -- a group- or world-accessible directory would let
+another local user reach the socket
+```
+
+`chmod` runs only on a directory nerimux just created, never on one that
+already existed. `sb-posix:chmod` follows symlinks and there is no `lchmod`,
+so chmod-ing a pre-existing path would let someone who planted a symlink
+there redirect the permission change onto a directory of their choosing.
+
+One race is narrowed rather than closed: the check and the later `bind` both
+resolve the path by name, so a sufficiently fast local attacker could swap the
+directory in between. Closing that needs a pinned directory descriptor and
+`fchdir`, which mutates process-wide working directory in a server that spawns
+PTY children from several threads — see the note in `%socket-directory`.
+
 ## No access control beyond the socket boundary
 
 There is no read-write/read-only ACL over connected clients, and no

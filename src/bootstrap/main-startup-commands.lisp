@@ -9,7 +9,7 @@
 ;;; along with that table; main-startup.lisp rejects an unrecognized word
 ;;; rather than forwarding it.  `kill` (R8.1) is new, not revived: it talks
 ;;; to the server over the same +msg-command+ channel worktree commands
-;;; already use (server-multi-dispatch.lisp), not that removed table.
+;;; already use the multi-dispatch command handlers, not that removed table.
 ;;;
 ;;; main-startup.lisp keeps argv parsing and dispatch.
 

@@ -74,7 +74,8 @@
    The old child path ignored chdir failures; keeping NIL preserves that behavior
    by letting the child inherit the current directory."
   (when (%string-non-empty-p start-dir)
-    (ignore-errors (truename start-dir))))
+    (handler-case (truename start-dir)
+      (file-error () nil))))
 
 (defun %default-shell ()
   "Shell to spawn for a pane's child process: $SHELL, or \"/bin/sh\" when unset
@@ -103,18 +104,61 @@
     (remhash master-fd *pty-processes*)
     pty))
 
-(defconstant +pty-child-wait-timeout+ 5
-  "Wall-clock timeout, in seconds, for PTY-CHILD-EXIT-STATUS's wait on a child
-   that has already closed its PTY slave.  The child should already be
-   exiting by then; this bounds the rare case where it lingers (e.g. a
-   daemonizing grandchild still holding the PTY open) so the reader thread
+(defparameter +pty-child-wait-timeout+ (cl-date-kit:duration-of-seconds 5)
+  "Wall-clock timeout, as a CL-DATE-KIT:DURATION, for PTY-CHILD-EXIT-STATUS's
+   wait on a child that has already closed its PTY slave.  The child should
+   already be exiting by then; this bounds the rare case where it lingers (e.g.
+   a daemonizing grandchild still holding the PTY open) so the reader thread
    that calls this at EOF cannot block forever.")
+
+(defconstant +pty-write-timeout-seconds+ 2
+  "Wall-clock timeout, in bare seconds, for PTY-WRITE's write to a PTY master
+   fd.  Bare seconds rather than a CL-DATE-KIT:DURATION: this bounds an
+   SB-EXT:WITH-TIMEOUT call, not a CL-CONCURRENT-KIT:WITH-TIMEOUT one (see
+   +PTY-CHILD-WAIT-TIMEOUT+ above for that distinct convention), and mirrors
+   +SEND-FRAME-TIMEOUT-SECONDS+ (infrastructure/net/transport.lisp), which
+   takes the same bare form for the same reason.
+
+   PTY-WRITE has TWO callers, on two different threads, and both matter:
+
+     * %HANDLE-CLIENT-INPUT-KEY-PAYLOAD
+       (bootstrap/server-multi-dispatch-command-input.lisp), on the single
+       serve-loop thread -- an unbounded write against a full PTY input
+       buffer would hang every attached client with no recovery.  This is the
+       hot path: it forwards one keystroke, 1-4 UTF-8 bytes.
+     * %DRAIN-RESPONSE-QUEUE (domain/model/pane-core.lisp), reached through
+       PANE-FEED on the PER-PANE READER THREAD, writing device-report replies
+       (DA1/DA2/CPR/DSR/DECRQM/XTGETTCAP/DECRQSS/OSC-colour) back to the
+       child.  PTY-WRITE reaches it as NERIMUX/PORTS:*WRITE-PTY*, which is
+       why a grep for direct callers misses it.
+
+   The second one is the dangerous one and an earlier version of this
+   docstring denied it existed.  An unhandled condition on a non-main thread
+   does not kill just that thread: under --disable-debugger SBCL quits the
+   whole process.  READER-READING-STATE (bootstrap/runtime-reader.lisp)
+   therefore contains PEER-IO-FAILURE around its PANE-FEED call; do not
+   remove that guard while this timeout exists.
+
+   2 seconds is long enough for a transient backlog (a child busy processing
+   a burst of input) to drain, and short enough that a genuinely stuck pane
+   stalls its caller for a bounded, barely perceptible instant instead of
+   forever.
+
+   Measured cost, so the tradeoff is on the record: SB-EXT:WITH-TIMEOUT
+   registers and deregisters a timer against SBCL's global timer queue on
+   every call, costing ~228 bytes consed per call against 0 for the bare
+   write.  On the keystroke path that is per-keystroke.  Accepted here
+   because the alternative it replaces is an unbounded hang of every client;
+   arming the timer only after a non-blocking first write reports EWOULDBLOCK
+   would remove the cost from the common case, and is the change to make if
+   this ever shows up in a profile.")
 
 (defun pty-child-exit-status (master-fd &optional (timeout +pty-child-wait-timeout+))
   "Exit information for MASTER-FD's child process, called at PTY EOF (the child
    has closed the slave, so the wait does not normally block for a live shell;
-   bounded by TIMEOUT seconds regardless, default +PTY-CHILD-WAIT-TIMEOUT+ —
-   override only for tests that need a live child to time out quickly).
+   bounded by TIMEOUT, a CL-DATE-KIT:DURATION, default
+   +PTY-CHILD-WAIT-TIMEOUT+ — override only for tests that need a live child to
+   time out quickly). NIL leaves the wait unbounded.
    Returns (values CODE KIND) where KIND is :exited (CODE = exit code) or
    :signaled (CODE = signal number), or NIL when the child is unknown (foreign
    fd, synthetic test pane), the wait times out, or the wait fails."
@@ -176,7 +220,9 @@
              ;; tty field's existing (empty) value that callers store.
              (values master pid ""))
         (unless success
-          (ignore-errors (cl-tty-kit:close-pty pty)))))))
+          (handler-case
+              (cl-tty-kit:close-pty pty)
+            (cl-tty-kit:pty-operation-failed () nil)))))))
 
 ;;; ── Public: PTY I/O ────────────────────────────────────────────────────────
 ;;;
@@ -187,7 +233,12 @@
 ;;; observe unchanged behavior.
 
 (defun pty-write (fd data)
-  "Write DATA (octet vector or UTF-8 string) to the PTY master fd."
+  "Write DATA (octet vector or UTF-8 string) to the PTY master fd, within
+   +PTY-WRITE-TIMEOUT-SECONDS+.  Signals SB-EXT:TIMEOUT when the write does
+   not complete in time (a full PTY input buffer against a stuck child), the
+   way SEND-FRAME (infrastructure/net/transport.lisp) signals it for a slow
+   peer -- see +PTY-WRITE-TIMEOUT-SECONDS+'s docstring for why this caller in
+   particular must not block unbounded."
   (etypecase data
     (string
      (pty-write fd (cl-codec-kit:string-to-octets data :encoding :utf-8)))
@@ -201,13 +252,13 @@
      ;;     are always positive, and the domain already gates real writes on
      ;;     (> (pane-fd pane) 0).
      (when (and (>= fd 0) (plusp (length data)))
-       (cl-tty-kit:fd-write-octets fd data)))))
+       (sb-ext:with-timeout +pty-write-timeout-seconds+
+         (cl-tty-kit:fd-write-octets fd data))))))
 
 (defun pty-read-blocking-into (fd buffer)
   "Block until data arrives on FD, read into the caller-supplied octet BUFFER, and
    return a fresh exact-size octet vector holding just the bytes read — or NIL on
-   EOF/would-block.  Same return contract as pty-read-blocking (fresh exact-size
-   vector, or NIL), but BUFFER is reused across calls to eliminate the per-read
+   EOF/would-block.  BUFFER is reused across calls to eliminate the per-read
    4 KB allocation on the hot read path: only the (subseq buffer 0 count) result
    (count bytes) is freshly allocated.  Because that result is a copy, BUFFER may
    be safely overwritten by the next read even if the caller retains the result.
@@ -221,38 +272,34 @@
     (when (and count (plusp count))
       (subseq buffer 0 count))))
 
-(defun pty-read-blocking (fd buffer-size)
-  "Block until data arrives on FD, then return an octet vector of up to BUFFER-SIZE bytes.
-   Returns NIL on EOF or error.
-
-   Thin allocating wrapper over pty-read-blocking-into: allocates a fresh
-   BUFFER-SIZE scratch buffer per call and reads into it, preserving the historic
-   (fd size) signature for callers/tests that do not manage their own buffer."
-  (pty-read-blocking-into
-   fd (make-array buffer-size :element-type '(unsigned-byte 8))))
-
 (defun pty-close (master-fd child-pid)
   "Send SIGHUP to the child process and close the PTY master.
 
    A non-positive CHILD-PID is ignored: kill(-1)/kill(0) broadcast the signal to
    the whole process group (including this process), which must never happen.
    Likewise a negative MASTER-FD is not closed."
-  (ignore-errors
-    ;; nerimux-specific teardown: SIGHUP (NOT cl-tty-kit's SIGTERM->SIGKILL
-    ;; escalation) then close the master.  Drop the retained cl-tty-kit PTY
-    ;; struct from *pty-processes* so it is no longer reachable; closing its
-    ;; SBCL process object closes the master stream (and fd), as before.
-    ;; sb-posix:kill, NOT process-kit's signal API: that one is shaped around a
-    ;; process handle it spawned and checks process-group ownership, whereas
-    ;; nerimux holds a bare pid from a cl-tty-kit PTY. sb-posix ships with SBCL
-    ;; and is not an external dependency.
-    (when (> child-pid 0)
-      (sb-posix:kill child-pid sb-posix:sighup))
-    (when (>= master-fd 0)
-      (let ((pty (%take-pty-process master-fd)))
-        (if pty
-            (sb-ext:process-close (cl-tty-kit:pty-process pty))
-            (sb-posix:close master-fd))))))
+  ;; nerimux-specific teardown: SIGHUP (NOT cl-tty-kit's SIGTERM->SIGKILL
+  ;; escalation) then close the master.  Drop the retained cl-tty-kit PTY
+  ;; struct from *pty-processes* so it is no longer reachable; closing its
+  ;; SBCL process object closes the master stream (and fd), as before.
+  ;; sb-posix:kill, NOT process-kit's signal API: that one is shaped around a
+  ;; process handle it spawned and checks process-group ownership, whereas
+  ;; nerimux holds a bare pid from a cl-tty-kit PTY. sb-posix ships with SBCL
+  ;; and is not an external dependency.
+  (when (> child-pid 0)
+    (handler-case
+        (sb-posix:kill child-pid sb-posix:sighup)
+      (sb-posix:syscall-error () nil)))
+  (when (>= master-fd 0)
+    (let ((pty (%take-pty-process master-fd)))
+      (if pty
+          (handler-case
+              (sb-ext:process-close (cl-tty-kit:pty-process pty))
+            (stream-error () nil)
+            (file-error () nil))
+          (handler-case
+              (sb-posix:close master-fd)
+            (sb-posix:syscall-error () nil))))))
 
 ;;; ── Public: select-based I/O multiplexing ─────────────────────────────────
 

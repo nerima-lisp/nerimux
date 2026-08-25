@@ -34,7 +34,9 @@
 
    SCAN returns a MATCH-RESULT struct, not cl-ppcre's four values, so the start
    column is read back with MATCH-START rather than taken as the first value."
-  (let ((scanner (ignore-errors (cl-regex-kit:compile-regex term :octal nil))))
+  (let ((scanner
+          (handler-case (cl-regex-kit:compile-regex term :octal nil)
+            (cl-regex-kit:regex-syntax-error () nil))))
     (if scanner
         (lambda (str start)
           (let ((match (cl-regex-kit:scan scanner str :start start)))

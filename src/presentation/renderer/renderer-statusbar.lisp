@@ -10,7 +10,8 @@
 ;;;; window list, clock) with the workspace-scoped contract: attention mark +
 ;;;; repository + worktree + state token on the left, the CURRENT worktree's
 ;;;; window/pane tabs in the middle (not every window in the session — a
-;;;; worktree's own windows, %WORKTREE-TREE-WINDOWS, renderer-workspace.lisp),
+;;;; worktree's own windows, %WORKTREE-TREE-WINDOWS,
+;;;; renderer-workspace-tree.lisp),
 ;;;; and the latest client notification on the right.  No clock (§1.4/R6.5).
 ;;;; The old per-option R2.2/R2.3 "fixed at its registered default" comments
 ;;;; this file used to carry no longer apply to any of the content below —

@@ -11,7 +11,7 @@
 ;;;; an optional explicit PATH.
 ;;;;
 ;;;; %UNIQUE-WORKTREE-PATH uses real PROBE-FILE against the filesystem (not a
-;;;; mocked %VCS-CALL), so these tests create real directories under
+;;;; mocked VCS-KIT command), so these tests create real directories under
 ;;;; HOST-KIT:TEMPORARY-DIRECTORY, the same fixture pattern vcs-tests.lisp's
 ;;;; "vcs worktree status" suite already uses for a missing-worktree path.
 ;;;; No PTY, no real git repository -- plain directory creation to simulate

@@ -58,9 +58,6 @@
 ;;;   %attach-full-screen-pane  — window data setup (PTY pane → tree leaf)
 ;;;   session-new-window        — session attachment (window → session list)
 
-(defconstant +pane-base-index+ 1
-  "First pane id in a window (§1.4: window / pane numbering starts at 1).")
-
 (defun %attach-full-screen-pane (window rows cols &key start-dir)
   "Fork a shell and install it as WINDOW's sole full-screen leaf pane.
    START-DIR: when non-NIL, the shell starts in that directory.

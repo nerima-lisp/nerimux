@@ -36,6 +36,33 @@
     (session-select-window sess win)
     sess))
 
+(defun make-renderer-picker-items ()
+  (let* ((organization
+           (nerimux/model:make-organization
+            :id "org" :host "github.com" :name "team"))
+         (repository
+           (nerimux/model:make-repository
+            :id "repo"
+            :organization organization
+            :specification "github.com/team/repo"))
+         (worktree
+           (nerimux/model:make-worktree
+            :id "feature"
+            :repository repository
+            :path "/tmp/feature"
+            :branch "feature/picker"
+            :dirty-p t))
+         (pane
+           (nerimux/model:make-pane
+            :id 7
+            :title "editor"
+            :start-command "nvim"
+            :start-path "/tmp/feature")))
+    (nerimux/model:organization-add-repository organization repository)
+    (nerimux/model:repository-add-worktree repository worktree)
+    (nerimux/model:worktree-add-pane worktree pane)
+    (nerimux/picker:build-global-picker-items (list organization))))
+
 (describe "renderer-suite"
 
   ;;; ── render-status-bar ───────────────────────────────────────────────────────
@@ -157,13 +184,57 @@
       (let ((out (render-session-to-string sess 3 5)))
         (expect (null (find (code-char #x2502) out))))))
 
-  ;; render-session (unlike render-session-to-string) writes its frame directly to *standard-output*.
-  (it "render-session-writes-to-standard-output"
-    (let ((out (let ((*standard-output* (make-string-output-stream)))
-                 (render-session (make-renderer-test-session 10 4 :content "hi") 5 10)
-                 (get-output-stream-string *standard-output*))))
-      (expect (plusp (length out)))
-      (expect (find #\h out))))
+  (it "render-session-picker-overlay-renders-hierarchy-and-attention"
+    (let* ((items (make-renderer-picker-items))
+           (out (render-session-to-string
+                 (make-renderer-test-session 40 8)
+                 12 60
+                 :mode :picker
+                 :picker-items items
+                 :picker-query "team"
+                 :picker-index 1
+                 :picker-regex-p t)))
+      (expect (search "regex query: team" out))
+      (expect (search "github.com/team" out))
+      (expect (search "github.com/team/repo" out))
+      (expect (search "feature/picker" out))
+      (expect (search "pane/7 editor" out))
+      (expect (search (format nil "~C[7m" #\Escape) out))
+      (expect (search (format nil "~C[33m" #\Escape) out))))
+
+  (it "render-session-picker-overlay-shows-empty-results"
+    (let ((out (render-session-to-string
+                (make-renderer-test-session 20 5)
+                10 40
+                :mode :picker
+                :picker-query "missing")))
+      (expect (search "no matches" out))))
+
+  (it "render-client-picker-skips-an-undisplayable-terminal"
+    (let ((stream (make-string-output-stream)))
+      (nerimux/renderer::%render-client-picker
+       stream 4 11 (make-renderer-picker-items) "" 0)
+      (expect (string= "" (get-output-stream-string stream)))))
+
+  (it "render-session-command-overlay-renders-and-clips-the-tail"
+    (let ((out (render-session-to-string
+                (make-renderer-test-session 20 5)
+                8 24
+                :mode :command
+                :command-buffer "status")))
+      (expect (search ":status" out)))
+    (let ((stream (make-string-output-stream)))
+      (nerimux/renderer::%render-client-command-line
+       stream 3 8 "abcdefghij")
+      (let ((out (get-output-stream-string stream)))
+        (expect (search "cdefghij" out)))))
+
+  (it "render-client-command-line-rejects-invalid-dimensions-and-input"
+    (let ((stream (make-string-output-stream)))
+      (nerimux/renderer::%render-client-command-line stream 0 10 "x")
+      (nerimux/renderer::%render-client-command-line stream 5 0 "x")
+      (nerimux/renderer::%render-client-command-line stream 5 10 nil)
+      (expect (string= "" (get-output-stream-string stream)))))
 
   ;;; ── clear-display ───────────────────────────────────────────────────────────
 

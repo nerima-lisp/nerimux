@@ -30,7 +30,7 @@
    #:copy-mode-search-backward
    #:copy-mode-search-next
    #:copy-mode-search-prev
-   #:tokenize-command-string))
+   #:tokenize-command-string #:retire-pane-pty))
 
 (defpackage #:nerimux
   (:use #:cl
@@ -66,7 +66,6 @@
   (:export
    #:main
    #:*server-sessions*
-   #:*server-marked-pane*
    #:server-add-session
    #:server-find-session
    #:find-session-by-target

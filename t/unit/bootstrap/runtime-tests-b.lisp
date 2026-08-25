@@ -40,14 +40,16 @@
   ;;; (pane 終了時は即座に閉じる, §1.4 / R2.6 — there is no remain-on-exit parking
   ;;; state left to keep the pane visible under any longer).  #{pane_dead} keyed on
   ;;; (<= pane-fd 0), and respawn-pane (without -k) is gated on the pane being dead;
-  ;;; previously the reader never reset the fd so both were wrong.  The test uses a
-  ;;; high synthetic fd (closing it yields EBADF, swallowed by pty-close's
-  ;;; ignore-errors) and pid -1 (no signal is ever sent).
+  ;;; previously the reader never reset the fd so both were wrong.  The test binds
+  ;;; the PTY close port to a no-op and uses a high synthetic fd with pid -1.
 
   ;; reader-eof-state always marks the pane dead (pane-fd/pane-pid reset to -1)
   ;; and always returns NIL, stopping the reader loop.
   (it "reader-eof-state-marks-pane-dead-and-stops"
-    (let ((pane (make-pane :id 1 :fd 9999 :pid -1 :screen (make-screen 5 3))))
+    (let ((nerimux/ports:*close-pty* (lambda (fd pid)
+                                      (declare (ignore fd pid))
+                                      nil))
+          (pane (make-pane :id 1 :fd 9999 :pid -1 :screen (make-screen 5 3))))
       (expect (null (nerimux::reader-eof-state pane)))
       (expect (= -1 (pane-fd pane)))
       (expect (= -1 (pane-pid pane)))))

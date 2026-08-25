@@ -14,13 +14,13 @@
     # without it it drags in its own nixpkgs, inflating flake.lock and
     # rebuilding the same derivations twice.
     cl-weave = {
-      url = "github:nerima-lisp/cl-weave/v1.1.4";
+      url = "github:nerima-lisp/cl-weave/v1.3.0";
       inputs.nixpkgs.follows = "nixpkgs";
       # cl-weave's own flake still declares its paredit-cli dev input under the
       # pre-migration owner; pin it to the org (and to a tag) so no takeokunn/*
       # rev survives in our lock. paredit-cli is a transitive dev tool only and
       # is never linked into nerimux.
-      inputs.paredit-cli.url = "github:nerima-lisp/paredit-cli/v1.4.0";
+      inputs.paredit-cli.url = "github:nerima-lisp/paredit-cli/v1.6.0";
     };
 
     # `flake = false`: consumed as a plain source checkout, pushed onto ASDF's
@@ -33,75 +33,53 @@
     # same goal `follows` serves for the two flake inputs above, reached a
     # different way, not an omission.
     cl-cli = {
-      url = "github:nerima-lisp/cl-cli/v1.2.0";
+      url = "github:nerima-lisp/cl-cli/v1.3.0";
       flake = false;
     };
-    cl-boundary-kit = {
-      # v1.0.0: first stable release, no exported symbol/protocol/behavior
-      # changes from 0.6.0 (upstream release notes) — just an example-bootstrap
-      # fix and a semver-stability commitment.
-      url = "github:nerima-lisp/cl-boundary-kit/v2.0.1";
-      flake = false;
-    };
-    # Transitive only: cl-boundary-kit depends on cl-log-kit, and siblings are
-    # consumed as source, so the source has to be on the registry even though
-    # nothing in nerimux.asd names it. Not a direct dependency of nerimux.
-    cl-log-kit = {
-      url = "github:nerima-lisp/cl-log-kit/v2.0.1";
-      flake = false;
-    };
-    # Transitive only: cl-log-kit depends on cl-date-kit >= 0.2.0, and
-    # siblings are consumed as source, so the source has to be on the
-    # registry even though nothing in nerimux.asd names it directly.
+    # Direct runtime dependency: cl-concurrent-kit's timeout API consumes
+    # CL-DATE-KIT:DURATION values.
     cl-date-kit = {
       url = "github:nerima-lisp/cl-date-kit/v1.0.0";
       flake = false;
     };
     cl-parser-kit = {
-      url = "github:nerima-lisp/cl-parser-kit/v1.0.3";
+      url = "github:nerima-lisp/cl-parser-kit/v1.1.1";
       flake = false;
     };
     cl-tty-kit = {
-      # v1.1.0: adds set-terminal-size (ioctl TIOCSWINSZ), which replaces
-      # nerimux's own cffi ioctl call in pty.lisp. That call used a FIXED
-      # prototype for a variadic syscall, which misfires on the arm64 ABI, so
-      # pane resize was a silent no-op on Apple Silicon; cl-tty-kit goes
-      # through sb-unix:unix-ioctl, which marshals the pointer correctly.
-      #
-      # (v1.0.2 was the previous pin, for the raw-mode fix: a duplicate defvar
-      # shadowed *raw-mode-tcsetattr-function*'s platform-specific initial
-      # value, crashing nerimux every time it entered raw mode. Still present.)
-      url = "github:nerima-lisp/cl-tty-kit/v1.2.0";
+      # Provides the terminal-size ioctl and raw-mode fixes used by nerimux's
+      # PTY layer, including arm64-safe ioctl marshalling.
+      url = "github:nerima-lisp/cl-tty-kit/v1.6.1";
       flake = false;
     };
     cl-process-kit = {
-      # v3.1.0 exports wait-for-input/select-fds (verified with
-      # `git show v3.1.0:src/package.lisp`), which
-      # src/infrastructure/pty/pty.lisp's process-kit:wait-for-input call
-      # needs.
-      url = "github:nerima-lisp/cl-process-kit/v3.1.0";
+      # Exports wait-for-input/select-fds, which the PTY process supervisor
+      # calls directly.
+      url = "github:nerima-lisp/cl-process-kit/v3.2.0";
+      flake = false;
+    };
+    cl-log-kit = {
+      # Transitive runtime dependency: cl-process-kit's ASDF system requires
+      # this source even though nerimux does not call its API directly.
+      url = "github:nerima-lisp/cl-log-kit/v2.2.0";
       flake = false;
     };
     cl-concurrent-kit = {
-      # Replaces bordeaux-threads: threads, locks, condition variables and a
-      # preemptive WITH-TIMEOUT, each a thin wrapper over SB-THREAD/SB-EXT.
-      #
-      # v0.3.0 (the previous pin) predates #:lock/#:with-timeout, which
-      # src/timeout.lisp needs. v0.4.0 is the earliest tag confirmed to
-      # export both (verified with `git show v0.4.0:src/package.lisp`).
-      url = "github:nerima-lisp/cl-concurrent-kit/v0.4.0";
+      # Supplies the threads, locks, condition variables and preemptive
+      # WITH-TIMEOUT primitives used by the orchestration layer.
+      url = "github:nerima-lisp/cl-concurrent-kit/v0.6.1";
+      flake = false;
+    };
+    cl-boundary-kit = {
+      # Transitive runtime dependency: cl-concurrent-kit's ASDF system requires
+      # this source even though nerimux does not call its API directly.
+      url = "github:nerima-lisp/cl-boundary-kit/v2.3.0";
       flake = false;
     };
     cl-regex-kit = {
-      # Replaces cl-ppcre: a from-scratch Thompson-NFA + Pike-VM engine.
-      #
-      # v0.3.0 already ships :template-syntax :backslash
-      # (src/api-replace.lisp) and the src/pike-vm-capture.lisp paren fix
-      # (verified with `git show v0.3.0:src/api-replace.lisp`).
-      #
-      # Depends on cl-parser-kit, which is already an input above; siblings are
-      # consumed as source, so that one checkout serves both.
-      url = "github:nerima-lisp/cl-regex-kit/v0.3.0";
+      # Provides the compile-regex, scan, match, split and replace-all API used
+      # by the command parser and format expansion code.
+      url = "github:nerima-lisp/cl-regex-kit/v2.0.0";
       flake = false;
     };
     cl-codec-kit = {
@@ -114,22 +92,13 @@
       # `:depends-on ()` — depth 0, so this input pulls in nothing else.
       # cl-tty-kit and cl-process-kit (both already inputs above) consume it
       # too, so one checkout serves all three.
-      url = "github:nerima-lisp/cl-codec-kit/v0.4.0";
+      url = "github:nerima-lisp/cl-codec-kit/v0.5.0";
       flake = false;
     };
     cl-host-kit = {
-      # Pathname/string host operations, replacing direct uiop: calls
-      # (2026-08-01 org-wide uiop->cl-host-kit migration). Still used for
-      # split-string and the pathname-directory-pathname/directory-pathname-p
-      # helpers.
-      #
-      # This pin was marked STALE while nerimux's octet conversion went through
-      # this package's own string/octet wrappers, which exist only in the
-      # uncommitted src/text-encoding.lisp and in no tag. Those call sites now
-      # go to cl-codec-kit, and v0.2.1 does export split-string,
-      # pathname-directory-pathname and directory-pathname-p (verified with
-      # `git show v0.2.1:src/package.lisp`), so the pin is current again.
-      url = "github:nerima-lisp/cl-host-kit/v0.2.5";
+      # Provides the pathname and host-string operations still used by the
+      # bootstrap loader and environment parsing.
+      url = "github:nerima-lisp/cl-host-kit/v0.3.1";
       flake = false;
     };
     cl-tui-kit = {
@@ -159,13 +128,13 @@
       nixpkgs,
       cl-weave,
       cl-cli,
-      cl-boundary-kit,
-      cl-log-kit,
       cl-date-kit,
       cl-parser-kit,
       cl-tty-kit,
       cl-process-kit,
+      cl-log-kit,
       cl-concurrent-kit,
+      cl-boundary-kit,
       cl-regex-kit,
       cl-codec-kit,
       cl-host-kit,
@@ -214,35 +183,61 @@
         in
         builtins.head (builtins.match "[[:space:]]*:version \"([^\"]*)\"" versionLine);
 
-      # Every dogfooded sibling library is dependency-free (or depends only on
-      # other siblings here), so each is consumed purely as source: its checkout
-      # goes on ASDF's central registry rather than through nixpkgs Lisp
-      # packaging. This one list drives every sbcl invocation below.
-      siblingRepos = [
+      # Every dogfooded sibling and its ASDF transitive sources are consumed
+      # purely as source: each checkout goes on ASDF's central registry rather
+      # than through nixpkgs Lisp packaging. This one list drives every SBCL
+      # invocation below.
+      patchedClTuiKit =
+        system:
+        let
+          pkgs = pkgsFor system;
+          boundedDatumPatch = pkgs.writeText "cl-tui-kit-bounded-datum.patch" ''
+            diff --git a/src/list.lisp b/src/list.lisp
+            --- a/src/list.lisp
+            +++ b/src/list.lisp
+            @@ -36,5 +36,6 @@
+             (defun %validated-model-count (value name)
+               (unless (and (integerp value) (>= value 0))
+            -    (error 'callback-contract-error :callback name :value (bounded-datum value)
+            +    (error 'callback-contract-error :callback name
+            +           :value (cl-tui-kit/core::bounded-datum value)
+                        :detail (format nil "~A must return a non-negative integer." name)))
+               value)
+          '';
+        in
+        pkgs.applyPatches {
+          name = "cl-tui-kit-${cl-tui-kit.shortRev or "v4.1.3"}";
+          src = cl-tui-kit;
+          patches = [ boundedDatumPatch ];
+        };
+
+      siblingRepos = system: [
         cl-weave
         cl-cli
-        cl-boundary-kit
-        cl-log-kit
         cl-date-kit
         cl-parser-kit
         cl-tty-kit
         cl-process-kit
+        cl-log-kit
+        cl-boundary-kit
         cl-concurrent-kit
         cl-regex-kit
         cl-codec-kit
         cl-host-kit
-        cl-tui-kit
+        (patchedClTuiKit system)
         cl-vcs-kit
       ];
 
       # Colon-separated source roots, read by run-tests.lisp. Keeping the list
       # in one variable means the checks, the app and the devShell cannot drift
       # apart on which siblings they can see.
-      siblingRegistry = nixpkgs.lib.concatStringsSep ":" (map toString siblingRepos);
+      siblingRegistry = system: nixpkgs.lib.concatStringsSep ":" (map toString (siblingRepos system));
 
-      siblingRegistryPushEvals = nixpkgs.lib.concatMapStringsSep " " (
-        repo: ''--eval "(push (truename \"${repo}/\") asdf:*central-registry*)"''
-      ) siblingRepos;
+      siblingRegistryPushEvals =
+        system:
+        nixpkgs.lib.concatMapStringsSep " " (
+          repo: ''--eval "(push (truename \"${repo}/\") asdf:*central-registry*)"''
+        ) (siblingRepos system);
 
       # Plain SBCL, with NO Quicklisp-packaged libraries wrapped around it.
       #
@@ -290,7 +285,7 @@
               sbcl
               pkgs.coreutils
             ];
-            NERIMUX_SIBLING_REGISTRY = siblingRegistry;
+            NERIMUX_SIBLING_REGISTRY = siblingRegistry system;
             NERIMUX_TEST_SYSTEM = testSystem;
           }
           ''
@@ -299,12 +294,13 @@
             cp -r ${self} ./src-tree
             chmod -R u+w ./src-tree
             cd ./src-tree
-            # The default 1 GB dynamic space is not enough to load this system: ASDF
-            # stalls resolving it rather than signalling heap exhaustion. Measured on
-            # darwin/arm64 -- 1024 and 2048 MiB hang, 4096 and above resolve in
-            # milliseconds. Nothing here is skipped or relaxed by raising it.
-            sbcl --dynamic-space-size 4096 --script run-tests.lisp
-            touch "$out"
+            # Keep the heap explicit for the Darwin builder. This only controls
+            # available address space; every test component is still loaded and the
+            # test runner keeps its bounded 45-minute timeout.
+            ${pkgs.coreutils}/bin/timeout --signal=TERM --kill-after=30s 2700 \
+              ${sbcl}/bin/sbcl --dynamic-space-size 4096 --no-sysinit \
+              --no-userinit --disable-debugger --script run-tests.lisp
+            ${pkgs.coreutils}/bin/touch "$out"
           '';
     in
     {
@@ -335,8 +331,11 @@
                 --no-sysinit \
                 --no-userinit \
                 --eval "(require :asdf)" \
+                --eval "(sb-impl::module-provide-contrib :sb-posix)" \
+                --eval "(asdf:register-preloaded-system \"sb-posix\")" \
+                --eval "(setf asdf/source-registry:*source-registry* (make-hash-table :test (function equal)))" \
                 --eval "(push (truename \".\") asdf:*central-registry*)" \
-                ${siblingRegistryPushEvals} \
+                ${siblingRegistryPushEvals system} \
                 --eval "(asdf:load-system \"nerimux\")" \
                 --eval "(sb-ext:save-lisp-and-die \"nerimux.core\"
                            :toplevel #'nerimux:main
@@ -405,18 +404,17 @@
           # to upload as an artifact without a local SBCL checkout. Mirrors
           # cl-tty-kit's package of the same name (scripts/coverage.lisp is
           # this project's counterpart to its scripts/coverage.lisp). Runs in
-          # the same writable-copy-of-$self shape as mkTestCheck below, which
-          # is proven to run the full suite cleanly inside the Nix sandbox —
-          # unlike an interactive `nix develop` shell, where this exact suite
-          # is known to hang (a real PTY/tty artifact of that environment, not
-          # a suite bug; see the devShell nerimux-coverage helper below, which
-          # calls this same script for local use once that hang is a non-issue
-          # for the caller).
+          # a writable copy with an isolated HOME, just like mkTestCheck, so
+          # compilation artifacts cannot modify the source tree. The
+          # interactive devShell helper below remains a separate local path.
           coverage-report =
             pkgs.runCommand "nerimux-coverage-report"
               {
-                nativeBuildInputs = [ sbcl ];
-                NERIMUX_SIBLING_REGISTRY = siblingRegistry;
+                nativeBuildInputs = [
+                  sbcl
+                  pkgs.coreutils
+                ];
+                NERIMUX_SIBLING_REGISTRY = siblingRegistry system;
               }
               ''
                 export HOME="$TMPDIR/home"
@@ -424,7 +422,10 @@
                 cp -r ${self} ./src-tree
                 chmod -R u+w ./src-tree
                 cd ./src-tree
-                timeout 2700 sbcl --script scripts/coverage.lisp ./coverage-report
+                ${pkgs.coreutils}/bin/timeout --signal=TERM --kill-after=30s 2700 \
+                  ${sbcl}/bin/sbcl --dynamic-space-size 4096 --no-sysinit \
+                  --no-userinit --disable-debugger --script scripts/coverage.lisp \
+                  ./coverage-report
                 mkdir -p "$out"
                 cp -R ./coverage-report/. "$out/"
               '';
@@ -469,16 +470,20 @@
               pkgs.coreutils
             ];
             text = ''
-              export NERIMUX_SIBLING_REGISTRY="${siblingRegistry}"
+              export NERIMUX_SIBLING_REGISTRY="${siblingRegistry system}"
               export NERIMUX_TEST_SYSTEM="''${NERIMUX_TEST_SYSTEM:-nerimux/test}"
               # Run against a writable copy for the same reason the checks do:
               # the suite compiles in place and ${self} is read-only.
               work="$(mktemp -d)"
               trap 'rm -rf "$work"' EXIT
+              mkdir -p "$work/home"
+              export HOME="$work/home"
               cp -r ${self} "$work/src-tree"
               chmod -R u+w "$work/src-tree"
               cd "$work/src-tree"
-              exec sbcl --dynamic-space-size 4096 --script run-tests.lisp
+              exec timeout --signal=TERM --kill-after=30s 2700 \
+                sbcl --dynamic-space-size 4096 --no-sysinit --no-userinit \
+                --disable-debugger --script run-tests.lisp
             '';
           };
 
@@ -489,14 +494,18 @@
               pkgs.coreutils
             ];
             text = ''
-              export NERIMUX_SIBLING_REGISTRY="${siblingRegistry}"
+              export NERIMUX_SIBLING_REGISTRY="${siblingRegistry system}"
               export NERIMUX_TEST_SYSTEM="nerimux/pty-test"
               work="$(mktemp -d)"
               trap 'rm -rf "$work"' EXIT
+              mkdir -p "$work/home"
+              export HOME="$work/home"
               cp -r ${self} "$work/src-tree"
               chmod -R u+w "$work/src-tree"
               cd "$work/src-tree"
-              exec sbcl --dynamic-space-size 4096 --script run-tests.lisp
+              exec timeout --signal=TERM --kill-after=30s 2700 \
+                sbcl --dynamic-space-size 4096 --no-sysinit --no-userinit \
+                --disable-debugger --script run-tests.lisp
             '';
           };
         in
@@ -545,8 +554,11 @@
         in
         {
           default = pkgs.mkShell {
-            packages = [ sbcl ];
-            NERIMUX_SIBLING_REGISTRY = siblingRegistry;
+            packages = [
+              sbcl
+              pkgs.coreutils
+            ];
+            NERIMUX_SIBLING_REGISTRY = siblingRegistry system;
             shellHook = ''
               # Registers the central-registry entries the checks use, so an
               # interactive `sbcl` session finds nerimux and every sibling
@@ -556,23 +568,27 @@
               # correctly once `(require :asdf)` and the registry pushes below
               # have run.
               nerimux-sbcl() {
-                sbcl --eval "(require :asdf)" \
+                sbcl --dynamic-space-size 4096 --no-sysinit --no-userinit \
+                     --disable-debugger --eval "(require :asdf)" \
+                     --eval "(sb-impl::module-provide-contrib :sb-posix)" \
+                     --eval "(asdf:register-preloaded-system \"sb-posix\")" \
+                     --eval "(setf asdf/source-registry:*source-registry* (make-hash-table :test (function equal)))" \
                      --eval "(push (truename \".\") asdf:*central-registry*)" \
-                     ${siblingRegistryPushEvals} \
+                     ${siblingRegistryPushEvals system} \
                      "$@"
               }
-              export -f nerimux-sbcl
 
               # Delegates to scripts/coverage.lisp — the single source of
               # truth for the sb-cover instrumentation-order recipe (also used
               # by `nix build .#coverage-report`, which runs it hermetically
               # inside the Nix sandbox rather than this interactive shell).
               nerimux-coverage() {
-                local report_dir="''${1:-./coverage-report}/"
-                sbcl --script scripts/coverage.lisp "$report_dir"
+                report_dir="''${1:-./coverage-report}/"
+                timeout --signal=TERM --kill-after=30s 2700 \
+                  sbcl --dynamic-space-size 4096 --no-sysinit --no-userinit \
+                  --disable-debugger --script scripts/coverage.lisp "$report_dir"
                 echo "Coverage report: $report_dir" "cover-index.html"
               }
-              export -f nerimux-coverage
 
               echo "nerimux dev shell"
               echo "  run tests:       sbcl --dynamic-space-size 4096 --script run-tests.lisp"

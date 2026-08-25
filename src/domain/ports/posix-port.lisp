@@ -1,12 +1,17 @@
 (in-package #:nerimux/ports)
 
+;;;; SBCL is the supported runtime.  Load SB-POSIX here because this early port
+;;;; owns the syscall-error boundary for working-directory and environment ops.
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (require :sb-posix))
+
 ;;;; POSIX symbol lookup.
 ;;;;
-;;;; Domain code must not depend on SB-POSIX being present, and must not reach
-;;;; up into the application layer to ask.  This resolves an SB-POSIX function
-;;;; by name at CALL time -- deferred, so a load-time defvar cannot capture NIL
-;;;; before the package exists -- and returns NIL when the implementation does
-;;;; not offer it, leaving the caller to decide what a missing syscall means.
+;;;; Domain code must not reach up into the application layer to ask.  This
+;;;; resolves an SB-POSIX function by name at CALL time -- deferred, so a
+;;;; load-time defvar cannot capture NIL before the package exists -- and
+;;;; returns NIL when the implementation does not offer it, leaving the caller
+;;;; to decide what a missing syscall means.
 ;;;;
 ;;;; It lived in nerimux/config, which made every domain caller depend upward on
 ;;;; application for a pure reflection helper.  Its application-side callers now
@@ -59,19 +64,19 @@
 
 (defun environment-value (name)
   "Value of environment variable NAME in this process, or NIL when unset."
-  (ignore-errors (sb-ext:posix-getenv name)))
+  (sb-ext:posix-getenv name))
 
 (defun environment-entries ()
   "The process environment as a list of \"NAME=VALUE\" strings, or NIL."
-  (ignore-errors (sb-ext:posix-environ)))
+  (sb-ext:posix-environ))
 
 (defun working-directory ()
   "This process's current working directory, or NIL when unavailable.
 
-   Resolved through FIND-POSIX-FUNCTION rather than called directly: getcwd
-   lives in SB-POSIX, which needs (require :sb-posix).  run-server does that at
-   startup, but a REPL or a test harness that never calls run-server would hit
-   an undefined function instead.  This is the same treatment
-   process-set-environment already gives SETENV/UNSETENV."
+   Resolved through FIND-POSIX-FUNCTION so only an exported implementation
+   function is called.  Syscall failures return NIL."
   (let ((getcwd (find-posix-function "GETCWD")))
-    (and getcwd (ignore-errors (funcall getcwd)))))
+    (and getcwd
+         (handler-case
+             (funcall getcwd)
+           (sb-posix:syscall-error () nil)))))

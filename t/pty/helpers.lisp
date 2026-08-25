@@ -154,7 +154,7 @@
     (loop
       (when (> (get-internal-real-time) end) (return))
       (if (select-fds (list fd) 200000)          ; 200 ms poll
-          (let ((chunk (pty-read-blocking fd 4096)))
+          (let ((chunk (pty-read-blocking-into fd (make-array 4096 :element-type '(unsigned-byte 8)))))
             (setf quiet-count 0)
             (when chunk
               (loop for b across chunk

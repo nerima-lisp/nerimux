@@ -2,6 +2,132 @@
 
 (describe "renderer-suite/tui-kit"
 
+  (it "covers ANSI frame-grid state transitions"
+    (let* ((escape (code-char 27))
+           (grid (nerimux/renderer::%make-frame-grid 3 6)))
+      (expect (equal '(2 0 0)
+                     (nerimux/renderer::%frame-grid-params "?2;;bad")))
+      (expect (= 9 (nerimux/renderer::%frame-grid-param '(nil 7) 0 9)))
+      (expect (= 7 (nerimux/renderer::%frame-grid-param '(2 7) 1 9)))
+      (setf (char (aref grid 0) 0) #\x
+            (char (aref grid 0) 1) #\x
+            (char (aref grid 0) 2) #\x)
+      (nerimux/renderer::%frame-grid-clear-line (aref grid 0) 1 1)
+      (expect (string= "  x   " (aref grid 0)))
+      (nerimux/renderer::%frame-grid-clear-line (aref grid 0) 0 2)
+      (expect (string= "      " (aref grid 0)))
+      (setf (char (aref grid 0) 0) #\x
+            (char (aref grid 0) 1) #\x
+            (char (aref grid 0) 2) #\x)
+      (nerimux/renderer::%frame-grid-clear-line (aref grid 0) 2 2)
+      (expect (string= "      " (aref grid 0)))
+      (multiple-value-bind (row col saved-row saved-col)
+          (nerimux/renderer::%frame-grid-apply-csi
+           grid 1 2 1 3 '(0) #\A)
+        (expect (= 0 row))
+        (expect (= 2 col))
+        (expect (= 1 saved-row))
+        (expect (= 3 saved-col)))
+      (nerimux/renderer::%frame-grid-apply-csi grid 0 0 0 0 '(0) #\B)
+      (nerimux/renderer::%frame-grid-apply-csi grid 2 2 0 0 '(2) #\A)
+      (nerimux/renderer::%frame-grid-apply-csi grid 1 1 0 0 '(0) #\C)
+      (nerimux/renderer::%frame-grid-apply-csi grid 1 1 0 0 '(2) #\D)
+      (nerimux/renderer::%frame-grid-apply-csi grid 1 1 0 0 '(3) #\G)
+      (nerimux/renderer::%frame-grid-apply-csi grid 1 1 0 0 '(2) #\d)
+      (nerimux/renderer::%frame-grid-apply-csi grid 1 1 0 0 '(2 3) #\H)
+      (nerimux/renderer::%frame-grid-apply-csi grid 1 1 0 0 '(1 2) #\f)
+      (nerimux/renderer::%frame-grid-apply-csi grid 1 1 0 0 '(1) #\J)
+      (nerimux/renderer::%frame-grid-apply-csi grid 1 1 0 0 '(2) #\J)
+      (nerimux/renderer::%frame-grid-apply-csi grid 1 1 0 0 '(1) #\K)
+      (nerimux/renderer::%frame-grid-apply-csi grid 1 1 0 0 '(2) #\K)
+      (nerimux/renderer::%frame-grid-apply-csi grid 1 1 0 0 '(0) #\K)
+      (multiple-value-bind (row col saved-row saved-col)
+          (nerimux/renderer::%frame-grid-apply-csi
+           grid 2 4 0 0 nil #\s)
+        (multiple-value-bind (restored-row restored-col)
+            (nerimux/renderer::%frame-grid-apply-csi
+             grid 0 0 saved-row saved-col nil #\u)
+          (expect (= 2 row))
+          (expect (= 4 col))
+          (expect (= 2 restored-row))
+          (expect (= 4 restored-col))))
+      (expect (= 1 (nerimux/renderer::%frame-grid-put-char grid 0 0 #\A)))
+      (expect (char= #\A (char (aref grid 0) 0)))
+      (expect (= 0 (nerimux/renderer::%frame-grid-put-char grid 0 5 #\B)))
+      (expect (= 0 (nerimux/renderer::%frame-grid-put-char grid 0 6 #\C)))
+      (expect (= 1 (nerimux/renderer::%frame-grid-put-char grid -1 0 #\D)))
+      (multiple-value-bind (index row col saved-row saved-col)
+          (nerimux/renderer::%frame-grid-parse-csi
+           "2;3Htail" 0 grid 0 0 0 0)
+        (expect (= 4 index))
+        (expect (= 1 row))
+        (expect (= 2 col))
+        (expect (= 0 saved-row))
+        (expect (= 0 saved-col)))
+      (multiple-value-bind (index row col saved-row saved-col)
+          (nerimux/renderer::%frame-grid-parse-csi
+           "2" 0 grid 0 0 0 0)
+        (expect (= 1 index))
+        (expect (= 0 row))
+        (expect (= 0 col))
+        (expect (= 0 saved-row))
+        (expect (= 0 saved-col)))
+      (expect (= 6 (nerimux/renderer::%frame-grid-skip-osc
+                    (format nil "title~C" (code-char 7)) 0)))
+      (expect (= 7 (nerimux/renderer::%frame-grid-skip-osc
+                    (format nil "title~C\\" escape) 0)))
+      (expect (= 5 (nerimux/renderer::%frame-grid-skip-osc "title" 0)))
+      (let ((frame
+              (concatenate
+               'string
+               "A"
+               (string #\Newline)
+               "B"
+               (string #\Return)
+               (string #\Backspace)
+               (string #\Tab)
+               (string (code-char 1))
+               (string escape) "[2J"
+               (string escape) "]title" (string (code-char 7))
+               (string escape) "]st" (string escape) "\\"
+               (string escape) "x"
+               (string escape))))
+        (expect (not (search "A" (nerimux/renderer::%frame-grid-text
+                                   (nerimux/renderer::%ansi-frame-grid frame 3 6))))))
+      (nerimux/renderer::%clear-frame-grid grid)
+      (expect (string= "      " (nerimux/renderer::%frame-grid-row grid 0)))))
+
+  (it "renders terminal-size and confirm-view boundaries"
+    (expect (nerimux/renderer::%terminal-too-small-p 9 40))
+    (expect (nerimux/renderer::%terminal-too-small-p 10 39))
+    (expect (not (nerimux/renderer::%terminal-too-small-p 10 40)))
+    (let* ((warning
+             (nerimux/renderer::%render-terminal-too-small-surface 10 40))
+           (warning-text (cl-tui-kit/core:surface-string warning))
+           (confirm
+             (nerimux/renderer::make-confirm-view
+              :operation "WORKTREE DELETE"
+              :fields '(("repository" . "team/repo")
+                        ("worktree" . "feature/ui"))
+              :prompt-p t))
+           (failure
+             (nerimux/renderer::make-confirm-view
+              :operation "OPERATION FAILED"
+              :fields '(("reason" . "not found"))
+              :prompt-p nil))
+           (confirm-text
+             (nerimux/renderer::render-confirm-view-to-tui-string
+              confirm 10 40))
+           (failure-text
+             (nerimux/renderer::render-confirm-view-to-tui-string
+              failure 10 40)))
+      (expect (search "terminal too small" warning-text))
+      (expect (search "WORKTREE DELETE" confirm-text))
+      (expect (search "repository: team/repo" confirm-text))
+      (expect (search "y execute" confirm-text))
+      (expect (search "OPERATION FAILED" failure-text))
+      (expect (search "press any key to continue" failure-text))))
+
   (it "maps ANSI cursor movement into a headless surface"
     (let* ((escape (string (code-char 27)))
            (surface

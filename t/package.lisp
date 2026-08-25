@@ -132,7 +132,6 @@
                 #:*server-sessions*)
   (:import-from #:nerimux/renderer
                 #:render-session-to-string
-                #:render-session
                 #:clear-display)
   (:import-from #:nerimux/protocol
                 #:+msg-attach+ #:+msg-key+ #:+msg-resize+
@@ -156,7 +155,7 @@
   (:import-from #:nerimux/pty
                 #:forkpty-with-shell
                 #:pty-write
-                #:pty-read-blocking
+                #:pty-read-blocking-into
                 #:pty-close
                 #:select-fds)
   (:export #:run-tests

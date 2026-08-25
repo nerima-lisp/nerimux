@@ -10,18 +10,16 @@
 ;;;; nerimux/test; only the genuinely PTY-spawning cases moved here.
 ;;;;
 ;;;; The import list mirrors t/package.lisp's on purpose: every case below is a
-;;;; verbatim relocation of code that already compiled under those imports, so
-;;;; copying the same shape here is the lowest-risk way to keep every symbol
-;;;; resolvable without a compile pass (this worktree's ASDF cannot load either
-;;;; system right now -- see the R9.2/R9.3 report for the structure-check-only
-;;;; verification tier this was built under).
+;;;; relocation of code that uses the same public surface.  Keeping the import
+;;;; shape aligned lets ASDF compile this system independently of the normal
+;;;; sandbox-safe test system.
 
 (defpackage #:nerimux/pty-test
   ;; The test framework is cl-weave, used natively: every file registers its
   ;; own top-level (describe "name" (it "case" ...) ...) block directly with
-  ;; cl-weave's global registry.  Because this system never loads
-  ;; nerimux/test's ~280 other files, RUN-PTY-TESTS's cl-weave:run-all only
-  ;; ever sees the suites this package's files register.
+  ;; cl-weave's global registry.  Because this system loads only its own test
+  ;; components, RUN-PTY-TESTS's cl-weave:run-all sees only the suites this
+  ;; package registers.
   (:use #:cl)
   (:shadowing-import-from #:cl-weave #:describe)
   (:import-from #:cl-weave
@@ -152,7 +150,7 @@
   (:import-from #:nerimux/pty
                 #:forkpty-with-shell
                 #:pty-write
-                #:pty-read-blocking
+                #:pty-read-blocking-into
                 #:pty-close
                 #:pty-child-exit-status
                 #:set-pty-size

@@ -23,19 +23,65 @@
    fresh exact-size copy of the bytes read, so handing that copy downstream is
    safe even though the scratch buffer is overwritten by the next read.")
 
+(defun %pane-retired-p (pane)
+  "True once PANE's fd has been cleared, which is this loop's ONLY per-pane
+   stop signal.
+
+   %RUN-READER-STATES loops on the global *RUNNING*, so STOP-READER-THREADS is
+   a whole-server shutdown; nothing else ever told a single pane's reader to
+   stop.  Without this check the loop is not merely leaked but actively
+   harmful, because SELECT-FDS maps a closed descriptor's EBADF to NIL by
+   design (see its docstring in infrastructure/pty/pty.lisp: turning that race
+   into a signal would take the serve loop down).  For the serve loop that is
+   right; for this loop it means a retired pane polls a dead fd every 50ms
+   forever, and then acts on whatever the OS later assigns that number.
+   RETIRE-PANE-PTY publishes the -1 before closing so this check wins the
+   race."
+  (not (plusp (pane-fd pane))))
+
 (defun reader-idle-state (pane)
-  "Poll the pane PTY fd; transition to reading if data is available."
-  (if (select-fds (list (pane-fd pane)) +pty-poll-timeout-us+)
-      #'reader-reading-state
-      #'reader-idle-state))
+  "Poll the pane PTY fd; transition to reading if data is available, or stop
+   when PANE has been retired underneath this thread."
+  (cond
+    ((%pane-retired-p pane) nil)
+    ((select-fds (list (pane-fd pane)) +pty-poll-timeout-us+)
+     #'reader-reading-state)
+    (t #'reader-idle-state)))
 
 (defun reader-reading-state (pane)
-  "Read one PTY chunk and feed it to PANE; transition to eof if EOF."
+  "Read one PTY chunk and feed it to PANE; transition to eof if EOF.
+
+   Re-checks retirement because the fd can be cleared between the SELECT-FDS
+   that reported it readable and this read."
+  (when (%pane-retired-p pane)
+    (return-from reader-reading-state nil))
   (let ((bytes (pty-read-blocking-into (pane-fd pane) *reader-scratch-buffer*)))
     (if (null bytes)
         #'reader-eof-state
         (progn
-          (pane-feed pane bytes)
+          ;; PANE-FEED is not just a screen update: after processing the bytes
+          ;; it drains the device-report queue (DA1/DA2/CPR/DSR/DECRQM/
+          ;; XTGETTCAP/DECRQSS/OSC-colour) back to the PTY through WRITE-PTY,
+          ;; i.e. PTY-WRITE -- which is bounded by SB-EXT:WITH-TIMEOUT and so
+          ;; can signal SB-EXT:TIMEOUT when the pane's child has stopped
+          ;; draining its input (SIGTSTP'd, wedged) for longer than
+          ;; +PTY-WRITE-TIMEOUT-SECONDS+.
+          ;;
+          ;; This runs on a per-pane reader THREAD, and an unhandled condition
+          ;; on a non-main thread does not merely kill that thread: under
+          ;; --disable-debugger SBCL prints "unhandled condition in
+          ;; --disable-debugger mode, quitting" and the WHOLE PROCESS exits.
+          ;; Verified directly with a two-thread probe -- the main thread's
+          ;; scheduled output never ran.  One pane whose child stopped reading
+          ;; would therefore disconnect every client on every pane.
+          ;;
+          ;; Contained rather than propagated: a device-report reply that
+          ;; cannot be delivered is not worth a reader thread, let alone the
+          ;; server.  The pane keeps its screen state and the loop continues;
+          ;; a genuinely dead pane still reaches READER-EOF-STATE by its read
+          ;; returning NIL.
+          (handler-case (pane-feed pane bytes)
+            (peer-io-failure () nil))
           (nerimux/model:pane-mark-output pane bytes)
           (when (find 7 bytes)
             (nerimux/model:pane-mark-bell pane))
@@ -57,7 +103,7 @@
   ;; are an untouched no-op.
   (when (> (pane-fd pane) 0)
     (multiple-value-bind (code kind)
-        (ignore-errors (nerimux/pty:pty-child-exit-status (pane-fd pane)))
+        (nerimux/pty:pty-child-exit-status (pane-fd pane))
       (nerimux/model:pane-mark-process-exit
        pane
        :status (and (eq kind :exited) code)
@@ -91,5 +137,6 @@
   "Signal shutdown and join each thread in THREADS with a bounded timeout."
   (setf *running* nil)
   (dolist (thread threads)
-    (ignore-errors
-      (%join-thread-with-timeout thread +reader-thread-join-timeout+))))
+    (handler-case
+        (%join-thread-with-timeout thread +reader-thread-join-timeout+)
+      (sb-thread:join-thread-error () nil))))

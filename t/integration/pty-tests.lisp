@@ -9,7 +9,7 @@
 ;;;; nerimux/pty-test ASDF system, which `nix flake check` does not run.  The
 ;;;; cases below never call pty-available-p or forkpty-with-shell -- they
 ;;;; either assert on pure constants/arguments, or exercise pty-write /
-;;;; pty-read-blocking / select-fds through an ordinary pipe (with-pipe-fds),
+;;;; pty-read-blocking-into / select-fds through an ordinary pipe (with-pipe-fds),
 ;;;; which needs no /dev/ptmx -- so they stayed here and keep running under
 ;;;; `nix flake check`'s sandboxed nerimux/test.
 
@@ -83,7 +83,7 @@
 
   ;;; ── Octet round-trip through the cl-tty-kit-backed I/O ──────────────────────
 
-  ;; pty-write (octet vector) -> pty-read-blocking round-trips the exact bytes
+  ;; pty-write (octet vector) -> pty-read-blocking-into round-trips the exact bytes
   ;; through a real pipe, now that both delegate to cl-tty-kit's byte-transparent
   ;; fd-write-octets / fd-read-octets.  Includes 0, 127, 128, 255 to prove no
   ;; character re-encoding corrupts high bytes.
@@ -92,20 +92,9 @@
       (let ((original (make-array 5 :element-type '(unsigned-byte 8)
                                     :initial-contents '(0 1 127 128 255))))
         (nerimux/pty:pty-write wfd original)
-        (let ((recovered (nerimux/pty:pty-read-blocking rfd 4096)))
+        (let ((recovered (nerimux/pty:pty-read-blocking-into rfd (make-array 4096 :element-type '(unsigned-byte 8)))))
           (expect (equalp original recovered))
           (expect (typep recovered '(simple-array (unsigned-byte 8) (*))))))))
-
-  ;; pty-read-blocking returns NIL when read(2) returns 0 (EOF) or negative.
-  (it "pty-read-blocking-returns-nil-on-closed-fd"
-    ;; A pipe whose write end is closed immediately delivers EOF on the read end.
-    ;; with-pipe-fds is defined in t/helpers-pipe-fixtures.lisp.
-    (with-pipe-fds (rfd wfd)
-      ;; Close the write end so the read end gets EOF.
-      (sb-posix:close wfd)
-      ;; wfd is now closed; with-pipe-fds will call ignore-errors on the second close.
-      (let ((result (nerimux/pty:pty-read-blocking rfd 1)))
-        (expect (null result)))))
 
   ;; select-fds always returns a list (possibly nil), never another type.
   (it "select-fds-returns-list-type"
@@ -124,17 +113,6 @@
     (with-pipe-fds (rfd _wfd)
       (let ((ready (nerimux/pty:select-fds (list rfd) 0)))
         (expect (null ready)))))
-
-  ;; pty-read-blocking returns an (unsigned-byte 8) vector containing the written bytes.
-  (it "pty-read-blocking-returns-octet-vector-when-data-available"
-    (with-pipe-fds (rfd wfd)
-      (write-octets-to-fd wfd #(1 2 3))
-      (let ((result (nerimux/pty:pty-read-blocking rfd 4096)))
-        (expect result :to-be-truthy)
-        (expect (= 3 (length result)))
-        (expect (= 1 (aref result 0)))
-        (expect (= 2 (aref result 1)))
-        (expect (= 3 (aref result 2))))))
 
   ;; pty-close with a valid positive pid but negative fd sends SIGHUP but skips close.
   (it "pty-close-positive-pid-negative-fd-is-noop"

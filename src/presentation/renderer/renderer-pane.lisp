@@ -220,9 +220,7 @@
    lock, then clear the screen's dirty flag.  COLOURS is the
    PANE-STYLE-COLOURS struct from %resolve-pane-style-colours.
    copy-mode-line-numbers is fixed \"off\" (§1.4), so there is no gutter to
-   reserve — content always fills the pane's full width; the per-row
-   gutter renderer this used to call
-   (renderer-pane-copy-mode-line-number.lisp) is now empty."
+   reserve — content always fills the pane's full width."
   (with-lock-held ((screen-lock screen))
     ;; Hoist selection boundary computation outside the cell loop so it is
     ;; computed once per frame instead of once per cell (~1920 times).

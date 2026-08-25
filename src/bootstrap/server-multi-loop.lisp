@@ -17,19 +17,24 @@
 
 (defun %read-and-dispatch-client-message (session conn)
   "Read one frame from CONN and dispatch it via %handle-multi-client-message.
-   A read/decode error is treated as a disconnect (:drop) so one malformed or
-   dropped client cannot take down the multi-client event loop."
+   End-of-stream is returned as :eof so the server does not write a goodbye
+   frame to a peer that has already closed.  Other read/decode errors are
+   treated as a disconnect (:drop) so one malformed client cannot take down
+   the multi-client event loop."
   (with-loop-safe-error (nil :on-error :drop)
     (multiple-value-bind (type payload) (read-frame (client-conn-stream conn))
-      (%handle-multi-client-message type payload session conn))))
+      (if type
+          (%handle-multi-client-message type payload session conn)
+          :eof))))
 
 (defun %apply-client-disposition (disposition conn)
   "Act on DISPOSITION (the result of dispatching CONN's message): drop CONN on
-   :drop.  Returns :quit when the caller's loop must stop, else NIL.
+   :drop or :eof.  Returns :quit when the caller's loop must stop, else NIL.
    Dropping the last client is not a reason to stop — panes keep running while
    nobody is attached (R8.3)."
   (case disposition
     (:quit :quit)
+    (:eof (%drop-client conn :bye nil) nil)
     (:drop (%drop-client conn :bye t) nil)))
 
 (defun %dispatch-buffered-client-messages (session conn)
@@ -44,10 +49,11 @@
     (let ((disposition (%read-and-dispatch-client-message session conn)))
       (when (eq :quit (%apply-client-disposition disposition conn))
         (return :quit))
-      ;; :drop closed CONN's socket; reading further would error.
-      (when (eq disposition :drop)
+      ;; :drop and :eof closed CONN's socket; reading further would error.
+      (when (member disposition '(:drop :eof))
         (return nil))
-      (unless (ignore-errors (listen (client-conn-stream conn)))
+      (unless (handler-case (listen (client-conn-stream conn))
+                (stream-error () nil))
         (return nil)))))
 
 (defun %dispatch-ready-clients (session ready)
@@ -66,6 +72,7 @@
    Returns :quit when the session must end, else NIL.  Factored out (taking the
    listener + session, mutating *clients*) so the dispatch/teardown logic is
    unit-testable without driving a full process loop."
+  (%drain-main-thread-callbacks)
   (%broadcast-frame session)
   (let* ((listener-fd (socket-fd listener))
          (ready       (select-fds (cons listener-fd (%client-fds)) +poll-timeout-us+)))
@@ -88,14 +95,14 @@
 ;;; %server-kill-request is the one function both entry points call:
 ;;;   - R8.1's `nerimux kill` command.  client.lisp's send-kill-request talks
 ;;;     to it over the socket; the +msg-command+ -> %server-kill-request
-;;;     wiring itself belongs in server-multi-dispatch.lisp's
+;;;     wiring itself belongs in server-multi-dispatch-command.lisp's
 ;;;     %handle-client-ui-command / %handle-multi-command-message, out of
 ;;;     this file's scope (see the report to team-lead for the exact case to
 ;;;     add and why %handle-multi-command-message needs a small change of
 ;;;     its own to let a :quit disposition through at all).
 ;;;   - R8.2's C-q Q, once R6.4's confirm view has shown the live-pane count
 ;;;     and the user answered y.  %workspace-prefix-quit-server
-;;;     (server-multi-dispatch.lisp, the R8.2 stub) is also out of this
+;;;     (server-multi-dispatch-prefix.lisp, the R8.2 stub) is also out of this
 ;;;     file's scope; it should call this function directly with FORCE-P T,
 ;;;     the same way a confirmed y answer already means "go ahead" for every
 ;;;     other R6.4 confirmation.
@@ -132,12 +139,13 @@
   (require :sb-posix)
   (and (integerp pid) (plusp pid)
        (handler-case (progn (sb-posix:kill pid 0) t)
-         (error () nil))))
+         (sb-posix:syscall-error () nil))))
 
 (defun %force-kill-panes (panes)
   "R8.1/R8.2 --force path: close-pane-pty every PANE — the same SIGHUP +
    master-close every other pane-teardown call site already sends
-   (server-multi-dispatch.lisp:222, runtime-reader.lisp:65, server.lisp:126)
+   the multi-dispatch command/prefix files, runtime-reader.lisp:65, and
+   server.lisp:126)
    — then wait +kill-sighup-grace-seconds+ and SIGKILL whichever pid is
    still alive.  Does not touch window/worktree bookkeeping (pane lists,
    active window, focus): the server process is about to exit, so there is
@@ -147,7 +155,9 @@
   (sleep +kill-sighup-grace-seconds+)
   (dolist (pane panes)
     (when (%process-alive-p (pane-pid pane))
-      (ignore-errors (sb-posix:kill (pane-pid pane) sb-posix:sigkill)))))
+      (handler-case
+          (sb-posix:kill (pane-pid pane) sb-posix:sigkill)
+        (sb-posix:syscall-error () nil)))))
 
 (defun %server-kill-request (session force-p)
   "Handle a kill request (R8.1's `nerimux kill`, and R8.2's C-q Q once

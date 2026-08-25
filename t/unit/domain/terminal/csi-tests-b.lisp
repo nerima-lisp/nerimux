@@ -1,5 +1,8 @@
 (in-package #:nerimux/test)
 
+(declaim (notinline nerimux/terminal/csi::%csi-leading-int
+                   nerimux/terminal/csi::%csi-decstbm-params))
+
 ;;;; csi tests — part B: ECH, DECRQM, XTWINOPS, CPR, DA table,
 ;;;; REP count=0, VPR/CNL/HPR, ICH, DCH, ED/EL, SGR in CSI, IL/DL,
 ;;;; DECFRA, DECCRA, REP in cell-with-attributes suites.

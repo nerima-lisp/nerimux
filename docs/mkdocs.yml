@@ -51,6 +51,7 @@ nav:
   - Reference:
       - Architecture: reference/architecture.md
       - Security model: reference/security-model.md
+      - Compatibility: reference/compatibility.md
   - Benchmarks: benchmarks.md
 
 # Working records (coverage audits and similar) live in docs/notes/, which is

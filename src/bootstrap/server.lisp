@@ -32,17 +32,93 @@
      "/"
      (if (and tmpdir (plusp (length tmpdir))) tmpdir "/tmp"))))
 
+(defun %verify-socket-directory-private (dir uid)
+  "Refuse to trust DIR as the socket boundary unless LSTAT shows it is,
+   right now, a real directory (not a symlink), owned by UID, with mode
+   exactly #o700.  Signals an error naming DIR and the failed property
+   instead of returning when any check fails (fail-closed per the security
+   model: docs/src/reference/security-model.md, \"The socket directory is
+   the security boundary\").
+
+   Uses LSTAT, never STAT: STAT follows a symlink and would report the
+   permissions of whatever DIR points to rather than of DIR itself, which
+   is exactly the check a symlinked DIR needs to fail."
+  (let ((stat (handler-case (sb-posix:lstat dir)
+                (sb-posix:syscall-error (c)
+                  (error "nerimux: refusing to start: cannot verify socket ~
+                          directory ~A is private (~A)"
+                         dir c)))))
+    (when (sb-posix:s-islnk (sb-posix:stat-mode stat))
+      (error "nerimux: refusing to start: socket directory ~A is a ~
+              symlink, not a real directory -- the socket boundary ~
+              (docs/src/reference/security-model.md) cannot be trusted ~
+              through a link another user may have created"
+             dir))
+    (unless (sb-posix:s-isdir (sb-posix:stat-mode stat))
+      (error "nerimux: refusing to start: socket directory ~A is not a ~
+              directory"
+             dir))
+    (unless (= (sb-posix:stat-uid stat) uid)
+      (error "nerimux: refusing to start: socket directory ~A is owned by ~
+              uid ~D, not the current uid ~D -- another user could control ~
+              the socket boundary"
+             dir (sb-posix:stat-uid stat) uid))
+    (let ((mode (logand (sb-posix:stat-mode stat) #o777)))
+      (unless (= mode #o700)
+        (error "nerimux: refusing to start: socket directory ~A has mode ~
+                ~3,'0O, not the required 0700 -- a group- or ~
+                world-accessible directory would let another local user ~
+                reach the socket"
+               dir mode)))
+    stat))
+
 (defun %socket-directory ()
   "Per-UID socket directory <base>/nerimux-<uid>, created mode 0700 when
-   possible.  Returns the directory string without a
-   trailing slash.  Creation/chmod failures are ignored — socket binding will
-   surface a real permission problem with a better error."
+   possible and then VERIFIED (not merely attempted) to be private before
+   being trusted: see docs/src/reference/security-model.md, \"The socket
+   directory is the security boundary\" -- anyone who can reach the socket
+   this directory holds can run commands as the owning user.  Returns the
+   directory string without a trailing slash, or signals an error naming
+   the path and the failed property (%verify-socket-directory-private,
+   above) when the directory cannot be made private.  Startup refuses to
+   proceed rather than warn-and-continue: a directory that already existed
+   as a symlink, or already belonged to another uid, or was left
+   group/world-writable, must stop the server, not just fail to fix itself.
+
+   CHMOD is gated on having just created DIR, and never runs against a path
+   that already existed.  SB-POSIX:CHMOD FOLLOWS SYMLINKS and exports no
+   LCHMOD, so chmod-then-verify handed an attacker a confused deputy: plant
+   nerimux-<uid> as a symlink to any directory the victim owns, and the
+   victim's own startup would chmod THAT target to 0700 -- silently narrowing
+   permissions on a directory of the attacker's choosing -- before the LSTAT
+   below correctly refused to start.  Verifying first means a pre-existing
+   path is only ever inspected, never mutated.
+
+   Residual TOCTOU window: ENSURE-DIRECTORIES-EXIST and the LSTAT inside
+   %VERIFY-SOCKET-DIRECTORY-PRIVATE both resolve DIR by path, so the race is
+   narrowed -- to the gap between that LSTAT and the later socket BIND in
+   RUN-SERVER -- rather than eliminated.  SB-POSIX binds no
+   mkdirat/fchmodat/fstatat.  It does bind OPEN (with O-NOFOLLOW and
+   O-DIRECTORY), FSTAT, FCHMOD and FCHDIR, which together could pin one
+   descriptor across verify-and-bind; that is not done here because FCHDIR
+   mutates process-wide working directory, and this server spawns PTY
+   children from multiple threads that inherit it.  The obstacle is that
+   cost, not the absence of a primitive."
   (require :sb-posix)
-  (let* ((uid (handler-case (sb-posix:getuid) (error () 0)))
-         (dir (format nil "~A/nerimux-~D" (%socket-tmp-base) uid)))
-    (ignore-errors
-      (ensure-directories-exist (format nil "~A/" dir))
-      (sb-posix:chmod dir #o700))
+  (let* ((uid (sb-posix:getuid))
+         (dir (format nil "~A/nerimux-~D" (%socket-tmp-base) uid))
+         (pre-existing (handler-case (and (sb-posix:lstat dir) t)
+                         (sb-posix:syscall-error () nil))))
+    (unless pre-existing
+      (handler-case
+          (ensure-directories-exist (format nil "~A/" dir))
+        (file-error () nil))
+      ;; Only ever on a path this process just created, so there is no
+      ;; attacker-planted symlink for CHMOD to follow.
+      (handler-case
+          (sb-posix:chmod dir #o700)
+        (sb-posix:syscall-error () nil)))
+    (%verify-socket-directory-private dir uid)
     dir))
 
 (defun socket-path (name)
@@ -62,6 +138,10 @@
                        (- rows +status-line-rows+)
                        cols))))
 
+;;; PEER-IO-FAILURE, which several handlers in this file's dispatch path use,
+;;; is defined in runtime.lisp -- nerimux.asd loads BOOTSTRAP-RUNTIME before
+;;; BOOTSTRAP-SERVER, and runtime-reader.lisp needs the type too.
+
 ;;; ── Message-type dispatch macro ──────────────────────────────────────────────
 ;;;
 ;;; define-msg-dispatch follows the define-csi-rules / with-incoming-frame
@@ -71,7 +151,7 @@
 ;;;
 ;;; define-message-dispatch-fn is the shared COND-expansion engine used by both
 ;;; define-msg-dispatch (single-client server) and define-multi-msg-dispatch
-;;; (multi-client server, server-multi.lisp + server-multi-loop.lisp).  Both
+;;; (below, used by the multi-client runtime).  Both
 ;;; wrappers delegate to it so the two event loops can never diverge in their
 ;;; macro structure.
 
@@ -81,7 +161,7 @@
    DOCSTRING is its documentation string.  Each RULE is (condition &rest body).
    The generated function dispatches via COND and returns whatever the matching
    arm returns.  Shared infrastructure for define-msg-dispatch (server.lisp) and
-   define-multi-msg-dispatch (server-multi.lisp + server-multi-loop.lisp).
+   define-multi-msg-dispatch (below).
 
    Prolog analogy:
      fn(nil, ...) :- rule1-body.
@@ -94,6 +174,110 @@
                    (destructuring-bind (condition &rest body) rule
                      `(,condition ,@body)))
                  rules))))
+
+(defmacro define-multi-msg-dispatch (&rest rules)
+  "Build %HANDLE-MULTI-CLIENT-MESSAGE from a message-type rule table.
+
+Each RULE is (CONDITION &rest BODY). TYPE, PAYLOAD, SESSION, and CONN are
+bound in every rule body. The shared dispatch macro keeps the single-client
+and multi-client message handlers structurally aligned."
+  `(define-message-dispatch-fn
+       %handle-multi-client-message
+       (type payload session conn)
+       "Dispatch one message of TYPE/PAYLOAD from client CONN.  Returns a disposition:
+     :quit           — a command ended the session (loop must stop);
+     :drop           — CONN should be removed (EOF / detach / unknown type);
+     :detach-others  — drop every OTHER client (the `attach -d' request);
+     NIL             — keep serving.
+   Resize/attach updates CONN's geometry and re-applies the effective size; keys
+   run through the shared prefix/copy-mode pipeline with CONN's private state."
+       ,@rules))
+
+;;; ── Key-payload and UI-command dispatch macros ───────────────────────────────
+;;;
+;;; The same pattern-polymorphism DEFINE-STATE uses for the terminal parser
+;;; (nerimux/terminal/parser's parser-core.lisp: an integer pattern becomes a
+;;; byte-equality test, a symbol becomes a predicate call, anything else
+;;; passes through verbatim) generalized one layer up again, for the two
+;;; remaining hand-rolled COND shapes in the client dispatch layer: matching a
+;;; key payload against a literal character/byte, and matching a UI command
+;;; keyword against a literal keyword/keyword-list. Both keep the same
+;;; escape hatch DEFINE-STATE does — a pattern that isn't one of the literal
+;;; shapes passes through as the COND test unchanged, so a compound AND/OR or
+;;; a predicate call reads exactly as it always did.
+;;;
+;;; %HANDLE-CLIENT-UI-COMMAND dispatches a fixed, compile-time-enumerable set
+;;; of workspace UI command keywords reached from exactly two call sites
+;;; (%handle-multi-command-message and %submit-client-command) — not the
+;;; open-ended, user-configurable tmux command table R1 deleted (see git log
+;;; 2a5fa47, "delete the tmux command table and keystroke pipeline"). That
+;;; table's failure mode was runtime FIND-SYMBOL over an unbounded,
+;;; config-file-driven vocabulary; DEFINE-COMMAND-RULES below expands to a
+;;; literal, compile-time COND over a closed keyword set, which is a
+;;; different mechanism, not a reintroduction of the deleted one.
+
+(defmacro define-key-rules (name (session-var conn-var payload-var) &rest clauses)
+  "Build a named key-payload dispatch function from a declarative rule table.
+   CLAUSES may start with a docstring, exactly like an ordinary DEFUN body,
+   then an optional (:LET ((var expr)...)) form -- exactly a LET*, in scope
+   for every rule below it -- for a dispatcher whose rules need shared
+   context (e.g. the focused pane's screen) rather than PAYLOAD-VAR alone.
+   Each remaining RULE is (PATTERN &rest BODY) where PATTERN is:
+     character → (%CLIENT-KEY-P PAYLOAD-VAR character)
+     integer   → (%CLIENT-BYTE-P PAYLOAD-VAR integer)
+     t         → default clause
+     anything else → used verbatim as the COND test
+   SESSION-VAR, CONN-VAR, and PAYLOAD-VAR are bound in every rule body."
+  (let* ((docstring (and (stringp (first clauses)) (first clauses)))
+         (rest1 (if docstring (rest clauses) clauses))
+         (let-form (and (consp (first rest1)) (eq (caar rest1) :let)
+                        (first rest1)))
+         (bindings (second let-form))
+         (rules (if let-form (rest rest1) rest1)))
+    `(defun ,name (,session-var ,conn-var ,payload-var)
+       ,@(when docstring (list docstring))
+       (declare (ignorable ,session-var ,conn-var ,payload-var))
+       (let* ,bindings
+         (cond
+           ,@(mapcar
+              (lambda (rule)
+                (destructuring-bind (pattern &rest body) rule
+                  `(,(cond
+                       ((eq pattern t)       t)
+                       ((characterp pattern) `(%client-key-p ,payload-var ,pattern))
+                       ((integerp pattern)   `(%client-byte-p ,payload-var ,pattern))
+                       (t                    pattern))
+                    ,@body)))
+              rules))))))
+
+(defmacro define-command-rules
+    (name (session-var conn-var cmd-var target-var args-var) &rest clauses)
+  "Build a named UI-command dispatch function from a declarative rule table.
+   CLAUSES may start with a docstring, exactly like an ordinary DEFUN body.
+   Each remaining RULE is (PATTERN &rest BODY) where PATTERN is:
+     (keyword...) → (MEMBER CMD-VAR '(keyword...) :test #'EQ)
+     keyword      → (EQ CMD-VAR keyword)
+     t            → default clause
+     anything else → used verbatim as the COND test
+   SESSION-VAR, CONN-VAR, CMD-VAR, TARGET-VAR, and ARGS-VAR are bound in
+   every rule body."
+  (let* ((docstring (and (stringp (first clauses)) (first clauses)))
+         (rules (if docstring (rest clauses) clauses)))
+    `(defun ,name (,session-var ,conn-var ,cmd-var ,target-var ,args-var)
+       ,@(when docstring (list docstring))
+       (declare (ignorable ,session-var ,conn-var ,cmd-var ,target-var ,args-var))
+       (cond
+         ,@(mapcar
+            (lambda (rule)
+              (destructuring-bind (pattern &rest body) rule
+                `(,(cond
+                     ((eq pattern t) t)
+                     ((and (consp pattern) (every #'keywordp pattern))
+                      `(member ,cmd-var ',pattern :test #'eq))
+                     ((keywordp pattern) `(eq ,cmd-var ,pattern))
+                     (t pattern))
+                  ,@body)))
+            rules)))))
 
 (defun run-server (name)
   "Run a headless server owning a session, serving clients attaching to
@@ -110,7 +294,8 @@
          (path    (socket-path name)))
     (setf *bound-socket-path* path)
     (server-add-session session)
-    (ignore-errors (delete-file path))
+    (handler-case (delete-file path)
+      (file-error () nil))
     (let ((listener (make-listener path)))
       (dolist (pane (all-panes session))
         (start-reader-thread pane))
@@ -121,6 +306,7 @@
    ;; (%run-multi-server-loop, server-multi-loop.lisp).
            (%run-multi-server-loop listener session)
         (close-socket listener)
-        (ignore-errors (delete-file path))
+        (handler-case (delete-file path)
+          (file-error () nil))
         (dolist (pane (all-panes session))
           (close-pane-pty pane))))))

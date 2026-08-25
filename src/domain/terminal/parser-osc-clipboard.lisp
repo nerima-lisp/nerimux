@@ -50,20 +50,19 @@
 
 (defun %base64-decode (encoded-string)
   "Decode Base64-encoded ENCODED-STRING into a byte vector."
-  (handler-case
-      (let* ((alphabet +base64-alphabet+)
-             (input-length (length encoded-string))
-             (output (make-array 0 :element-type '(unsigned-byte 8)
-                                   :fill-pointer 0 :adjustable t)))
-        (when (= (mod input-length 4) 0)
-          (loop for group-start from 0 below input-length by 4
-                do (multiple-value-bind (byte0 byte1 byte2)
-                       (%decode-base64-group alphabet encoded-string group-start)
-                     (when byte0 (vector-push-extend byte0 output))
-                     (when byte1 (vector-push-extend byte1 output))
-                     (when byte2 (vector-push-extend byte2 output))))
-          output))
-    (error () nil)))
+  (when (and (stringp encoded-string)
+             (zerop (mod (length encoded-string) 4)))
+    (let* ((alphabet +base64-alphabet+)
+           (input-length (length encoded-string))
+           (output (make-array 0 :element-type '(unsigned-byte 8)
+                                 :fill-pointer 0 :adjustable t)))
+      (loop for group-start from 0 below input-length by 4
+            do (multiple-value-bind (byte0 byte1 byte2)
+                   (%decode-base64-group alphabet encoded-string group-start)
+                 (when byte0 (vector-push-extend byte0 output))
+                 (when byte1 (vector-push-extend byte1 output))
+                 (when byte2 (vector-push-extend byte2 output))))
+      output)))
 
 (defun %base64-encode (bytes)
   "Encode a sequence of (unsigned-byte 8) BYTES to a padded Base64 string."

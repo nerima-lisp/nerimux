@@ -5,7 +5,7 @@
 ;;; %handle-client-message (the single-client wrapper, define-msg-dispatch) and
 ;;; the CPS keystroke walker it dispatched into were deleted with the
 ;;; single-client server path.  define-message-dispatch-fn itself is still
-;;; live: define-multi-msg-dispatch (server-multi-dispatch.lisp) builds
+;;; live: define-multi-msg-dispatch (server.lisp) builds
 ;;; %handle-multi-client-message from it.  This expands the macro into a
 ;;; throwaway dispatch function of its own so the shared COND-expansion engine
 ;;; stays under direct test without duplicating the multi-client forwarding

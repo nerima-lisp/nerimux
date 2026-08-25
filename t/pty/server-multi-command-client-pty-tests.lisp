@@ -52,11 +52,16 @@
                          (nerimux::start-reader-thread pane)
                          (pty-write (pane-fd pane)
                                     (format nil "printf '%s\\n' ~A~%" marker))
-                         (loop repeat 100
-                               until (search marker (screen-text pane))
-                               do (sleep 0.05))
-                         (expect (search marker (screen-text pane))
-                                 :to-be-truthy)
+                         (let ((marker-seen-p
+                                 (let ((deadline (+ (get-internal-real-time)
+                                                    (* 5 internal-time-units-per-second))))
+                                   (loop
+                                     when (search marker (screen-text pane))
+                                       return t
+                                     when (>= (get-internal-real-time) deadline)
+                                       return nil
+                                     do (sb-thread:thread-yield)))))
+                           (expect marker-seen-p :to-be-truthy))
                          (setf nerimux::*dirty* t)
                          (nerimux::%broadcast-frame s)
                          (let ((ready (select-fds

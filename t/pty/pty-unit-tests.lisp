@@ -73,7 +73,9 @@
   (it "pty-child-exit-status-times-out-on-a-live-child"
     (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
     (with-pty-shell (fd pid)
-      (expect (null (nerimux/pty:pty-child-exit-status fd 0.05)))))
+      (expect (null (nerimux/pty:pty-child-exit-status
+                     fd
+                     (cl-date-kit:duration-of-millis 50))))))
 
   ;; pty-child-exit-status reports :exited with the real exit code once the
   ;; child has actually terminated.
@@ -83,7 +85,6 @@
         (nerimux/pty:forkpty-with-shell 24 80 :default-command "exit 7")
       (unwind-protect
            (progn
-             (sleep 0.3)
              (multiple-value-bind (code kind) (nerimux/pty:pty-child-exit-status fd)
                (expect (= 7 code))
                (expect (eq :exited kind))))

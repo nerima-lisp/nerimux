@@ -314,12 +314,47 @@
   ;; A command name containing ':' is not misidentified as a target when only
   ;; one field is present (no ambiguity — target detection requires >= 2 fields).
   (it "decode-command-payload-command-name-with-colon-is-not-misidentified"
+    ;; Flipped per docs/src/guide/development-rules.md ("Check existing tests
+    ;; before flipping behavior"): this case used to assert
+    ;; (eq (intern "WEIRD:NAME" :keyword) command), which only passed because
+    ;; DECODE-COMMAND-PAYLOAD used to INTERN the command name -- creating the
+    ;; very keyword the assertion then re-interned to compare against.  Now
+    ;; that an unrecognized command name returns the raw string instead (so
+    ;; client-controlled input can no longer grow the KEYWORD package without
+    ;; bound), the test's real intent -- that a ':' in a single-field payload
+    ;; is read as part of the command name, not misidentified as a target --
+    ;; is checked by comparing the returned NAME text rather than symbol
+    ;; identity.
     ;; Encode manually: a single NUL-terminated field with ':' in the name.
     ;; With only 1 field decode-command-payload cannot treat it as a target.
     (let* ((name-bytes (cl-codec-kit:string-to-octets "weird:name" :encoding :utf-8))
            (payload    (concatenate '(simple-array (unsigned-byte 8) (*))
                                     name-bytes #(0))))
       (multiple-value-bind (command target args) (decode-command-payload payload)
-        (expect (eq (intern "WEIRD:NAME" :keyword) command))
+        ;; STRINGP first, and STRING= rather than STRING-EQUAL, because
+        ;; STRING-EQUAL takes a string DESIGNATOR: it happily compares a
+        ;; symbol by its SYMBOL-NAME, so (string-equal "weird:name" :|WEIRD:NAME|)
+        ;; is T.  An assertion written that way passes against the old
+        ;; INTERN-based code too and would not have caught a regression back
+        ;; to it.  (stringp :|WEIRD:NAME|) is NIL, so this discriminates.
+        (expect (stringp command))
+        (expect (string= "weird:name" command))
         (expect (null target))
-        (expect (null args))))))
+        (expect (null args)))))
+
+  ;; Regression coverage for the fix: an unrecognized command name must not
+  ;; create a new KEYWORD-package symbol as a side effect of decoding, since
+  ;; CL never releases interned symbols and a client can send unbounded
+  ;; distinct names.  Asserting only the return value would not catch a
+  ;; regression back to INTERN, because INTERN's return value looks
+  ;; identical to a FIND-SYMBOL hit on a pre-existing keyword -- the absence
+  ;; of the interned symbol before and after decoding is the only
+  ;; observable difference.
+  (it "decode-command-payload-unseen-command-name-does-not-intern-a-keyword"
+    (let ((unseen-name "nerimux-test-unseen-command-9f3c2a"))
+      (expect (null (find-symbol (string-upcase unseen-name) :keyword)))
+      (let* ((name-bytes (cl-codec-kit:string-to-octets unseen-name :encoding :utf-8))
+             (payload    (concatenate '(simple-array (unsigned-byte 8) (*))
+                                      name-bytes #(0))))
+        (decode-command-payload payload))
+      (expect (null (find-symbol (string-upcase unseen-name) :keyword))))))

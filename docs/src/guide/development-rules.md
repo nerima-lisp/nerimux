@@ -88,10 +88,6 @@ the dirty flag, the running flag — must wrap themselves in the isolation helpe
 in `t/helpers-*.lisp`. Otherwise they clobber that state for every test after
 them.
 
-There used to be more of these helpers than there are now: the ones that
-isolated the option store, the config directives, and the hook registry went
-with the machinery they isolated. There is no configuration to leak anymore.
-
 ## CI gates Linux; macOS is checked by hand
 
 `.github/workflows/ci.yml` runs `nix flake check` on `ubuntu-latest`, and that
@@ -122,12 +118,16 @@ runtime, socket and PTY state, and the PTY tests fork real shells; a parallel
 runner corrupts forked-child state and leaks reader threads. `run-tests.lisp`
 drives `cl-weave:run-all` with `:max-workers 1`. Do not parallelize it.
 
+When iterating on one area, set `CL_WEAVE_TEST_FILTER` to a
+case-insensitive substring of the cl-weave test path:
+
+```sh
+CL_WEAVE_TEST_FILTER=renderer nix run .#test
+```
+
 Each test that spawns a background thread or server joins it itself (see
 `with-loop-state` in `t/helpers-loop-fixtures.lisp`), so isolation does not
 depend on suite boundaries or execution order.
-
-PTY tests self-skip when `/dev/ptmx` is unavailable — for example inside the
-Nix sandbox on some platforms — so a sandboxed check run is still meaningful.
 
 ## Behavior changes need a tmux reference
 
@@ -150,6 +150,27 @@ message.
 data structs (`types`) from logic (`actions`, `csi`, `sgr`). New code should
 land in the matching layer, and new public accessors must also be re-exported
 from the umbrella packages in `src/bootstrap/package*.lisp`.
+
+## Two timeout vocabularies, and which takes which
+
+The codebase bounds waits with two different macros, and they do **not** take
+the same kind of deadline. Passing the wrong one is silent, not a type error.
+
+`cl-concurrent-kit:with-timeout` takes a `cl-date-kit:DURATION`. Construct it
+with `cl-date-kit:duration-of-millis` or `cl-date-kit:duration-of-seconds`,
+never a bare number. It signals `cl-concurrent-kit:operation-timed-out`, which
+**is** an `error`, so an ordinary `(error ...)` clause catches it.
+
+`sb-ext:with-timeout` takes **bare seconds**. `+send-frame-timeout-seconds+`
+and `+pty-write-timeout-seconds+` are both plain integers for that reason. It
+signals `sb-ext:timeout`, which is a `serious-condition` and deliberately
+**not** an `error` — so an `(error ...)` clause silently misses it and the
+condition escapes. On a non-main thread that is fatal to the whole process,
+not just the thread. Use the `peer-io-failure` type (`src/bootstrap/runtime.lisp`),
+which is `(or error sb-ext:timeout)`, wherever you contain either one.
+
+Prefer bounding a wait at all over picking the prettier vocabulary: an
+unbounded wait on the serve-loop thread hangs every attached client.
 
 ## Reporting bugs
 

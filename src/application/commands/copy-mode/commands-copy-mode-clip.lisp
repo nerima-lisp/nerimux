@@ -72,6 +72,6 @@
 ;;; append-selection(-and-cancel), the copy-pipe/pipe command family, and
 ;;; explicit rectangle-on/off were removed: none of them is reachable from
 ;;; %handle-client-copy-key-payload (the sole copy-mode dispatch entry in
-;;; server-multi-dispatch.lisp) or from any other live call site — confirmed
+;;; multi-dispatch command handlers) or from any other live call site — confirmed
 ;;; via grep for each bare identifier across src/, where the only hits were
 ;;; this file's own definitions and the export list in package-application.lisp.
