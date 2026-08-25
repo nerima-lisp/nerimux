@@ -348,21 +348,20 @@
             (%mark-dirty)))))
   t)
 
-(defun %handle-client-command-key-payload (session conn payload)
-  (cond
-    ((%client-byte-p payload 27)
-     ;; R4.3: see the matching comment in %handle-client-picker-key-payload.
-     (%client-esc-swallow-start conn)
-     (setf (client-conn-command-buffer conn) "")
-     (%client-restore-command-view conn)
-     (%transition-client-ui-mode conn :enter-normal)
-     (%mark-dirty)
-     t)
-    ((or (%client-byte-p payload 13) (%client-byte-p payload 10))
-     (%submit-client-command session conn))
-    ((or (%client-byte-p payload 8) (%client-byte-p payload 127))
-     (%client-command-buffer-delete-character conn)
-     t)
-    (t
-     (%client-command-buffer-append conn payload)
-     t)))
+(define-key-rules %handle-client-command-key-payload (session conn payload)
+  (27
+   ;; R4.3: see the matching comment in %handle-client-picker-key-payload.
+   (%client-esc-swallow-start conn)
+   (setf (client-conn-command-buffer conn) "")
+   (%client-restore-command-view conn)
+   (%transition-client-ui-mode conn :enter-normal)
+   (%mark-dirty)
+   t)
+  ((or (%client-byte-p payload 13) (%client-byte-p payload 10))
+   (%submit-client-command session conn))
+  ((or (%client-byte-p payload 8) (%client-byte-p payload 127))
+   (%client-command-buffer-delete-character conn)
+   t)
+  (t
+   (%client-command-buffer-append conn payload)
+   t))

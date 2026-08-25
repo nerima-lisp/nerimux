@@ -116,6 +116,84 @@ and multi-client message handlers structurally aligned."
    run through the shared prefix/copy-mode pipeline with CONN's private state."
        ,@rules))
 
+;;; ── Key-payload and UI-command dispatch macros ───────────────────────────────
+;;;
+;;; The same pattern-polymorphism DEFINE-STATE uses for the terminal parser
+;;; (nerimux/terminal/parser's parser-core.lisp: an integer pattern becomes a
+;;; byte-equality test, a symbol becomes a predicate call, anything else
+;;; passes through verbatim) generalized one layer up again, for the two
+;;; remaining hand-rolled COND shapes in the client dispatch layer: matching a
+;;; key payload against a literal character/byte, and matching a UI command
+;;; keyword against a literal keyword/keyword-list. Both keep the same
+;;; escape hatch DEFINE-STATE does — a pattern that isn't one of the literal
+;;; shapes passes through as the COND test unchanged, so a compound AND/OR or
+;;; a predicate call reads exactly as it always did.
+;;;
+;;; %HANDLE-CLIENT-UI-COMMAND dispatches a fixed, compile-time-enumerable set
+;;; of workspace UI command keywords reached from exactly two call sites
+;;; (%handle-multi-command-message and %submit-client-command) — not the
+;;; open-ended, user-configurable tmux command table R1 deleted (see git log
+;;; 2a5fa47, "delete the tmux command table and keystroke pipeline"). That
+;;; table's failure mode was runtime FIND-SYMBOL over an unbounded,
+;;; config-file-driven vocabulary; DEFINE-COMMAND-RULES below expands to a
+;;; literal, compile-time COND over a closed keyword set, which is a
+;;; different mechanism, not a reintroduction of the deleted one.
+
+(defmacro define-key-rules (name (session-var conn-var payload-var) &rest clauses)
+  "Build a named key-payload dispatch function from a declarative rule table.
+   CLAUSES may start with a docstring, exactly like an ordinary DEFUN body.
+   Each remaining RULE is (PATTERN &rest BODY) where PATTERN is:
+     character → (%CLIENT-KEY-P PAYLOAD-VAR character)
+     integer   → (%CLIENT-BYTE-P PAYLOAD-VAR integer)
+     t         → default clause
+     anything else → used verbatim as the COND test
+   SESSION-VAR, CONN-VAR, and PAYLOAD-VAR are bound in every rule body."
+  (let* ((docstring (and (stringp (first clauses)) (first clauses)))
+         (rules (if docstring (rest clauses) clauses)))
+    `(defun ,name (,session-var ,conn-var ,payload-var)
+       ,@(when docstring (list docstring))
+       (declare (ignorable ,session-var ,conn-var ,payload-var))
+       (cond
+         ,@(mapcar
+            (lambda (rule)
+              (destructuring-bind (pattern &rest body) rule
+                `(,(cond
+                     ((eq pattern t)       t)
+                     ((characterp pattern) `(%client-key-p ,payload-var ,pattern))
+                     ((integerp pattern)   `(%client-byte-p ,payload-var ,pattern))
+                     (t                    pattern))
+                  ,@body)))
+            rules)))))
+
+(defmacro define-command-rules
+    (name (session-var conn-var cmd-var target-var args-var) &rest clauses)
+  "Build a named UI-command dispatch function from a declarative rule table.
+   CLAUSES may start with a docstring, exactly like an ordinary DEFUN body.
+   Each remaining RULE is (PATTERN &rest BODY) where PATTERN is:
+     (keyword...) → (MEMBER CMD-VAR '(keyword...) :test #'EQ)
+     keyword      → (EQ CMD-VAR keyword)
+     t            → default clause
+     anything else → used verbatim as the COND test
+   SESSION-VAR, CONN-VAR, CMD-VAR, TARGET-VAR, and ARGS-VAR are bound in
+   every rule body."
+  (let* ((docstring (and (stringp (first clauses)) (first clauses)))
+         (rules (if docstring (rest clauses) clauses)))
+    `(defun ,name (,session-var ,conn-var ,cmd-var ,target-var ,args-var)
+       ,@(when docstring (list docstring))
+       (declare (ignorable ,session-var ,conn-var ,cmd-var ,target-var ,args-var))
+       (cond
+         ,@(mapcar
+            (lambda (rule)
+              (destructuring-bind (pattern &rest body) rule
+                `(,(cond
+                     ((eq pattern t) t)
+                     ((and (consp pattern) (every #'keywordp pattern))
+                      `(member ,cmd-var ',pattern :test #'eq))
+                     ((keywordp pattern) `(eq ,cmd-var ,pattern))
+                     (t pattern))
+                  ,@body)))
+            rules)))))
+
 (defun run-server (name)
   "Run a headless server owning a session, serving clients attaching to
    (socket-path NAME).  The session persists across detaches until its last
