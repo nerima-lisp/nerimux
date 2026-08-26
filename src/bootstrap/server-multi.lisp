@@ -325,16 +325,37 @@ callbacks themselves run serially in the loop."
    down the shared select(2) serve loop.  %ADD-CLIENT refuses the newest
    connection at the cap rather than closing the eldest registered one:
    close-eldest could evict a live attached client to make room for a probe.
-   Recovery at the cap is partial, and the boundary matters: a client that
-   ever WROTE something self-clears (a stalled mid-frame read arms
-   +SOCKET-STREAM-TIMEOUT-SECONDS+, 30s, net.lisp; a stalled attached client
-   hits SEND-FRAME's write timeout on the next broadcast) -- but a connection
-   that sends ZERO bytes is never in select(2)'s ready set, so no read is
-   ever attempted, no timeout is ever armed, and its slot is held until the
-   server restarts.  Accepted for now because reaching that state takes a
-   deliberate same-uid connect-and-hold loop, not any real client; if that
-   trade stops being acceptable, the fix is an idle-registration timer that
-   drops a conn N seconds after %ADD-CLIENT unless a first frame completed.
+
+   Recovery is no longer partial the way it once was.  A connection that
+   CLOSES -- with or without ever sending a byte first, e.g. %STALE-SOCKET-P's
+   connect-then-close liveness probe (main-startup-socket.lisp) run on every
+   `nerimux attach` -- is reclaimed promptly: either SELECT-FDS reports its fd
+   ready (the peer's EOF is itself a readiness event) and READ-FRAME's EOF
+   drops it, or the next dirty-frame broadcast's write to it fails and
+   %DROP-CLIENT does.  %DROP-CLIENT now closes with :ABORT T
+   (NERIMUX/NET:CLOSE-SOCKET), which matters here because a broadcast write
+   failing mid-frame leaves the tail of that frame buffered in the fd-stream:
+   an ordinary (non-abort) close tries to flush that tail before releasing the
+   fd, hits BROKEN-PIPE a second time against the same dead peer, and --
+   confirmed on SBCL 2.6.6 -- never reaches its own UNIX-CLOSE, so the fd
+   leaked forever even though *CLIENTS* bookkeeping looked perfectly clean.
+   :ABORT T skips that flush, so a peer that is already gone cannot make the
+   close of THIS end's own fd fail.
+
+   One narrower case still holds a slot past the cap's help: a connection
+   that is accepted and then neither closes NOR ever sends anything AND is
+   never written to, because *DIRTY* never turns true again (no keystroke, no
+   pane output, on any client, session-wide) after it was registered.  With
+   no EOF to make it SELECT-ready and no broadcast to time out against, its
+   slot is held until either some other activity marks the session dirty
+   (which then reclaims it exactly as above) or the server restarts.  Reaching
+   that state needs a connection that is opened and then left hanging open on
+   an otherwise completely idle session -- narrower than a client that simply
+   disconnects, and not what %STALE-SOCKET-P or a normal attach/detach cycle
+   does.  If that residual trade stops being acceptable, the fix is an
+   idle-registration timer that drops a conn N seconds after %ADD-CLIENT
+   unless a first frame completed.
+
    A `nerimux kill` arriving while capped is refused like any other
    connection -- it cannot be told apart at accept time -- and reports
    \"no reply from server\" promptly rather than hanging.")
@@ -424,12 +445,20 @@ callbacks themselves run serially in the loop."
    in %RUN-MULTI-SERVER-LOOP's unwind cleanup, and a handler/cleanup body has
    no guard above it short of MAIN's process-exit net.  The dangerous case is
    real, not theoretical: when a send to a dead peer fails mid-write, the
-   frame's tail stays in the fd-stream's Lisp buffer, and CLOSE retries that
-   flush — a second BROKEN-PIPE, now outside every guard.  Every `attach` to
-   a live server triggers it, because %STALE-SOCKET-P's liveness probe is a
-   connect-then-close that the loop registers as a client and then writes to.
-   Unregister first so a signaling close can never leave the ghost conn in
-   *CLIENTS* to be re-dropped (and re-signal) by the cleanup pass."
+   frame's tail stays in the fd-stream's Lisp buffer.  A plain CLOSE tries to
+   flush that tail before it will release the fd, hits BROKEN-PIPE a second
+   time, and — confirmed against SBCL 2.6.6's SB-BSD-SOCKETS:SOCKET-CLOSE,
+   which on that failure defers to (CLOSE stream) and never reaches its own
+   UNIX-CLOSE call — the file descriptor is NEVER ACTUALLY CLOSED, even
+   though the condition is caught here and CONN correctly leaves *CLIENTS*.
+   Every `attach` to a live server used to leak exactly one fd this way,
+   because %STALE-SOCKET-P's liveness probe is a connect-then-close that the
+   loop registers as a client, writes a frame to, and then drops.
+   CLOSE-SOCKET is called with :ABORT T for exactly this reason: :ABORT
+   skips the flush-before-close attempt, so a peer that is already gone
+   cannot make the close of ITS OWN fd fail.  Unregister first so a
+   signaling close can never leave the ghost conn in *CLIENTS* to be
+   re-dropped (and re-signal) by the cleanup pass."
   (when (member conn *clients*)
     (setf *clients* (remove conn *clients*))
     (setf (client-conn-ui-prefix-p conn) nil)
@@ -442,7 +471,7 @@ callbacks themselves run serially in the loop."
     (let ((socket (client-conn-socket conn)))
       (when socket
         (handler-case
-            (close-socket socket)
+            (close-socket socket :abort t)
           ;; No logging here: a dead peer already gone by the time we get to
           ;; close it is routine and expected on every drop, not a fault worth a line.
           (peer-io-failure () nil))))))

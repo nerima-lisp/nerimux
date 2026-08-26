@@ -1,5 +1,14 @@
 (in-package #:nerimux/renderer)
 
+(defconstant +frame-grid-continuation+ (code-char 0)
+  "Sentinel written into the grid cell immediately right of a double-width
+   character (R6.9-frame-grid). %frame-grid-text skips it, so the flattened
+   row hands the real wide glyph alone to %surface-draw-text (already
+   display-width aware) instead of a synthetic filler that would double the
+   column it consumes. #\\Nul never reaches here as real content: the parse
+   loop in %ANSI-FRAME-GRID only calls %FRAME-GRID-PUT-CHAR for characters
+   with (char-code >= 32).")
+
 (defun %make-frame-grid (rows cols)
   (let ((grid (make-array rows)))
     (dotimes (row rows grid)
@@ -78,14 +87,35 @@
             saved-col)))
 
 (defun %frame-grid-put-char (grid row col character)
-  (let ((height (length grid))
-        (width (length (aref grid 0))))
+  "Write CHARACTER into GRID at (ROW, COL) and return the column the next
+   character belongs at (0 signals a row wrap -- the caller advances ROW).
+
+   A double-width CHARACTER (CJK, most emoji -- NERIMUX/TERMINAL/TYPES:
+   CHAR-WIDTH, the same measure R6.9's %DISPLAY-WIDTH uses) advances the
+   column by 2 instead of 1 and marks the cell to its right with
+   +FRAME-GRID-CONTINUATION+. The previous single-column advance here
+   under-consumed the grid by one column per wide character, so every
+   character written after it in the row -- with no intervening MOVE-TO,
+   e.g. a border glyph appended right after a padded label -- landed one
+   grid column left of where the source ANSI text (already correctly
+   %DISPLAY-CLIP/%DISPLAY-WIDTH laid out) placed it. A zero-width character
+   (combining marks) keeps the pre-fix one-column advance: that class is
+   unaffected by this fix and stays as it was."
+  (let* ((height (length grid))
+         (width (length (aref grid 0)))
+         (char-width (if (= 2 (nerimux/terminal/types:char-width character))
+                         2
+                         1))
+         (fits-p (<= (+ col char-width) width)))
     (when (and (<= 0 row) (< row height)
                (<= 0 col) (< col width))
-      (setf (char (aref grid row) col) character))
-    (if (< (1+ col) width)
-        (1+ col)
-        0)))
+      (setf (char (aref grid row) col) character)
+      (when (and fits-p (= char-width 2))
+        (setf (char (aref grid row) (1+ col)) +frame-grid-continuation+)))
+    (let ((advance (if fits-p char-width 1)))
+      (if (< (+ col advance) width)
+          (+ col advance)
+          0))))
 
 (defun %frame-grid-parse-csi (frame start grid row col saved-row saved-col)
   (let ((end start)
@@ -172,8 +202,15 @@
   (aref grid row))
 
 (defun %frame-grid-text (grid)
+  "Flatten GRID to one newline-joined string. +FRAME-GRID-CONTINUATION+
+   cells are omitted rather than written as a space: the wide glyph to
+   their left already accounts for both columns once this text reaches
+   %SURFACE-DRAW-TEXT (display-width aware), so re-emitting the
+   continuation cell as a real character would double-count that column."
   (with-output-to-string (stream)
     (dotimes (row (length grid))
-      (write-string (%frame-grid-row grid row) stream)
+      (loop for character across (%frame-grid-row grid row)
+            unless (char= character +frame-grid-continuation+)
+              do (write-char character stream))
       (unless (= row (1- (length grid)))
         (terpri stream)))))

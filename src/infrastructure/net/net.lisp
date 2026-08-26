@@ -73,9 +73,21 @@
   "The underlying file descriptor of SOCKET (for select-based multiplexing)."
   (sb-bsd-sockets:socket-file-descriptor socket))
 
-(defun close-socket (socket)
-  "Close SOCKET, ignoring errors (e.g. already closed by its stream)."
-  (handler-case (sb-bsd-sockets:socket-close socket)
+(defun close-socket (socket &key abort)
+  "Close SOCKET, ignoring errors (e.g. already closed by its stream).
+
+   ABORT is forwarded to SB-BSD-SOCKETS:SOCKET-CLOSE, which forwards it to
+   CL:CLOSE on the socket's cached stream when one has been made (see
+   SOCKET-STREAM below) rather than closing the raw fd directly. With ABORT
+   NIL (the default), CLOSE first tries to flush any output still buffered
+   in that stream; a peer that already broke the pipe makes that flush fail
+   with a second BROKEN-PIPE, and on SBCL that failure happens BEFORE the
+   underlying UNIX-CLOSE, so the fd is never actually released even though
+   this function swallows the condition and returns normally.  Pass ABORT T
+   to close a socket whose peer may already be gone (e.g. tearing down a
+   dropped client) — it skips the flush attempt entirely, so a broken peer
+   cannot prevent this end's own fd from being freed."
+  (handler-case (sb-bsd-sockets:socket-close socket :abort abort)
     (sb-bsd-sockets:socket-error () nil)))
 
 (defun %make-probe-socket-path ()

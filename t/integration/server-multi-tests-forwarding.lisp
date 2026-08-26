@@ -2,6 +2,25 @@
 
 ;;;; Command dispatch and client-output tests for the multi-client server.
 
+(defun %raw-fd-open-p (fd)
+  "T when FD is still open at the OS level: attempts a raw close(2) on FD and
+   reports whether that syscall itself succeeded (0, meaning FD was open) or
+   failed because FD was already closed (-1, EBADF).
+
+   Used by the connection-leak tests below, which cannot trust
+   (null *clients*) alone: the confirmed defect left *clients* bookkeeping
+   perfectly clean (the conn really was removed) while the underlying OS
+   file descriptor stayed open forever, because closing a client whose
+   broadcast write had already failed made CL:CLOSE's own flush-before-close
+   retry hit a second BROKEN-PIPE and abort before ever reaching UNIX-CLOSE
+   -- silently swallowed by %DROP-CLIENT's (necessarily broad)
+   PEER-IO-FAILURE handler.  A second close(2) on an fd this test's own
+   CLIENT socket still separately owns is harmless: CLIENT's own close will
+   likewise just see EBADF and ignore it, same as any other double-close."
+  (zerop (sb-alien:alien-funcall
+          (sb-alien:extern-alien "close" (function sb-alien:int sb-alien:int))
+          fd)))
+
 (describe "server-multi-suite"
 
   ;;; ── Command dispatch ──────────────────────────────────────────────────────
@@ -96,4 +115,69 @@
         (expect (null (nerimux::%add-client :fake-socket))))
       (expect (= nerimux::+max-clients+ (length nerimux::*clients*)))
       (expect (eq full nerimux::*clients*))
-      (expect (= 1 close-call-count)))))
+      (expect (= 1 close-call-count))))
+
+  ;;; ── Connection leak: client closes without ever reading a frame back ─────
+  ;;;
+  ;;; %stale-socket-p's liveness probe (main-startup-socket.lisp:28-43) connects
+  ;;; to a live server then closes immediately, never reading anything back --
+  ;;; the same shape as a real client that sends its attach frame and vanishes
+  ;;; before the first render reaches it.  Both must still be reclaimed by the
+  ;;; ordinary %multi-serve-iteration event-loop path (the real select-fds +
+  ;;; broadcast/read-frame + %apply-client-disposition pipeline), not just by
+  ;;; the direct %dispatch-ready-clients call the sibling test in
+  ;;; server-multi-tests-loop.lisp already covers.
+  ;;;
+  ;;; Checking (null *clients*) alone is NOT a sufficient oracle here: the
+  ;;; confirmed defect left *clients* bookkeeping perfectly clean (the conn
+  ;;; really was removed) while the underlying OS file descriptor stayed open
+  ;;; forever, because closing a client whose broadcast write had already
+  ;;; failed made CL:CLOSE's own flush-before-close retry hit a second
+  ;;; BROKEN-PIPE and abort before ever reaching UNIX-CLOSE -- silently
+  ;;; swallowed by %DROP-CLIENT's (necessarily broad) PEER-IO-FAILURE handler.
+  ;;; %RAW-FD-OPEN-P (defined above, outside this DESCRIBE) re-closes the raw
+  ;;; descriptor directly to check what actually happened at the OS level,
+  ;;; independent of *CLIENTS*.
+
+  (it "multi-serve-iteration-closes-the-fd-of-a-client-that-attaches-then-closes-without-reading"
+    (with-fake-session (s)
+      (with-test-listener
+          (listener path (%test-socket-path "leak-attach-noread") :backlog 4)
+        (let* ((nerimux::*clients* nil)
+               (client (connect-to path))
+               (server-sock (accept-connection listener)))
+          (unwind-protect
+              (progn
+                (expect server-sock :to-be-truthy)
+                (let* ((conn   (nerimux::%add-client server-sock))
+                       (raw-fd (nerimux::client-conn-fd conn)))
+                  (send-frame (socket-stream client) (msg-attach 24 80))
+                  (close-socket client)
+                  (loop repeat 20
+                        until (eq :quit (nerimux::%multi-serve-iteration listener s)))
+                  (expect (null nerimux::*clients*))
+                  (expect (null (%raw-fd-open-p raw-fd)))))
+            (ignore-errors (close-socket client)))))))
+
+  ;; Bare variant: the client sends NOTHING at all before closing -- exactly
+  ;; %stale-socket-p's own probe shape (connect, close, never send, never
+  ;; read).  This is the case that leaks on every `nerimux attach` to a live
+  ;; server.
+  (it "multi-serve-iteration-closes-the-fd-of-a-client-that-closes-without-sending-or-reading"
+    (with-fake-session (s)
+      (with-test-listener
+          (listener path (%test-socket-path "leak-bare-noread") :backlog 4)
+        (let* ((nerimux::*clients* nil)
+               (client (connect-to path))
+               (server-sock (accept-connection listener)))
+          (unwind-protect
+              (progn
+                (expect server-sock :to-be-truthy)
+                (let* ((conn   (nerimux::%add-client server-sock))
+                       (raw-fd (nerimux::client-conn-fd conn)))
+                  (close-socket client)
+                  (loop repeat 20
+                        until (eq :quit (nerimux::%multi-serve-iteration listener s)))
+                  (expect (null nerimux::*clients*))
+                  (expect (null (%raw-fd-open-p raw-fd)))))
+            (ignore-errors (close-socket client))))))))
