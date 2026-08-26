@@ -282,11 +282,18 @@ boundary節) に記録した。`docs/src/reference/security-model.md` は
 
 ### 残る注意点
 
-- `t/e2e/e2e-smoke.lisp` は削除済みの standalone mode と `C-b` prefix を
+- ~~`t/e2e/e2e-smoke.lisp` は削除済みの standalone mode と `C-b` prefix を
   前提にしており、現在のエントリ面では成立しない。`attach`/`C-q d` 前提の
-  書き直しが別作業として残る(docs/src/getting-started.md にも現状を記載)。
-- `nerimux kill` の拒否メッセージ先頭に wire プロトコルの status token
-  (`DENIED`) がそのまま混入して表示される。表示崩れのみの軽微な問題。
+  書き直しが別作業として残る(docs/src/getting-started.md にも現状を記載)。~~
+  **2026-08-26 に解消**。`e2e-smoke.lisp` は headless な `server`/`kill`
+  シナリオと実 PTY 経由の `attach` シナリオを束ねるディスパッチャに
+  書き直した。`attach`/`C-q d` 前提のシナリオは `attach-scenario.lisp` に
+  分離してあり、`helpers.lisp` と `server-kill-scenario.lisp` を含めた
+  4 ファイル構成になっている。
+- ~~`nerimux kill` の拒否メッセージ先頭に wire プロトコルの status token
+  (`DENIED`) がそのまま混入して表示される。表示崩れのみの軽微な問題。~~
+  **2026-08-26 に解消**。`run-kill` が表示前に先頭の status 行を落とす
+  (`%strip-kill-reply-status-line`)。wire 契約は不変。
 - 修正 5 件はいずれも既存の単体スイートでは到達できない形の欠陥だった
   (単一リポジトリのフィクスチャ、ラッパー経由でのみ発現、TCP セグメント
   分割依存、実環境の壊れたクローンが必要)。回帰テスト化は別作業として残る。

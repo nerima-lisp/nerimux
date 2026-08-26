@@ -10,9 +10,13 @@
 (defun %accept-pending-connection (listener listener-fd ready)
   "When LISTENER-FD is in READY, accept and register the new connection.
    accept-connection may return NIL on a race (peer disappeared between
-   select and accept), in which case nothing is registered."
+   select and accept), in which case nothing is registered.  A PEER-IO-FAILURE
+   from accept itself (e.g. EMFILE fd exhaustion) is swallowed the same way:
+   the failed accept is dropped rather than propagating out of the serve loop
+   and killing the server out from under every already-attached client."
   (when (member listener-fd ready)
-    (let ((sock (accept-connection listener)))
+    (let ((sock (handler-case (accept-connection listener)
+                  (peer-io-failure () nil))))
       (when sock (%add-client sock)))))
 
 (defun %read-and-dispatch-client-message (session conn)

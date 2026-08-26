@@ -411,4 +411,27 @@
                 (nerimux/vcs:create-worktree repository :branch "")
               (error (condition)
                 (setf condition-seen condition)))
-            (expect (typep condition-seen 'error))))))))
+            (expect (typep condition-seen 'error)))))))
+
+  ;; %rev-parse must call GIT-REV-PARSE-VALUE (a git-layer entry point) with a
+  ;; VCS-KIT:REPOSITORY handle (MAKE-REPOSITORY), never the backend-layer
+  ;; VCS-KIT:VCS-REPOSITORY that VCS-WORKTREE takes -- %run-git check-types its
+  ;; REPOSITORY argument as (OR NULL REPOSITORY), so passing the wrong struct
+  ;; type-errors before any git runs, which silently made worktree creation a
+  ;; no-op.
+  (it "rev-parse-passes-a-git-layer-repository-handle-not-the-vcs-backend-one"
+    (let* ((repository-path (%vcs-operations-existing-path))
+           (repository
+             (nerimux/model:make-repository
+              :specification "workspace-owner/project"
+              :local-path repository-path))
+           (captured nil))
+      (with-stubbed-fdefinition
+          ((vcs-kit:git-rev-parse-value
+             (lambda (backend &rest arguments)
+               (declare (ignore arguments))
+               (setf captured backend)
+               "origin/main")))
+        (nerimux/vcs::%rev-parse repository "origin/HEAD"))
+      (expect (typep captured 'vcs-kit:repository))
+      (expect (not (typep captured 'vcs-kit:vcs-repository))))))

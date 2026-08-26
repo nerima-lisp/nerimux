@@ -495,7 +495,9 @@ The test suite is organized by scope:
 - `t/integration/`: PTY/socket/client-server tests that exercise runtime behavior across process boundaries.
   - Current files: `t/integration/client-tests.lisp`, `t/integration/net-tests.lisp`, `t/integration/pty-tests.lisp`, `t/integration/server-multi-tests.lisp`
 - `t/e2e/`: end-to-end smoke checks that run against a built binary.
-  - Current file: `t/e2e/e2e-smoke.lisp`
+  - Entry point: `t/e2e/e2e-smoke.lisp`, which dispatches to the scenario
+    files it loads (`helpers.lisp`, `server-kill-scenario.lisp`,
+    `attach-scenario.lisp`)
 
 Unit and integration tests are wired through `nerimux.asd` and `t/suite.lisp`. E2E checks are intentionally kept out of the ASDF `nerimux/test` system and run separately.
 

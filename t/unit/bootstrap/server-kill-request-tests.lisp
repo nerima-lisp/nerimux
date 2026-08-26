@@ -249,7 +249,11 @@
       (expect (eql 0 exit-code))))
 
   ;; R8.1: refused (live panes, no --force) -> exit 1, panes listed, and told
-  ;; to retry with --force.
+  ;; to retry with --force.  The stubbed text below is the real wire shape
+  ;; (server-multi-dispatch-command.lisp: (format nil "DENIED~{~%~A~}"
+  ;; descriptions)), not just the pane-list tail, so this test exercises
+  ;; run-kill's F5 fix: the "DENIED" status-token line %parse-kill-reply-
+  ;; status already consumed must not leak into what the user sees.
   (it "r8-1-run-kill-exits-one-and-lists-panes-when-denied"
     (let ((orig (fdefinition 'nerimux::send-kill-request))
           exit-code errout)
@@ -258,7 +262,7 @@
              (setf (fdefinition 'nerimux::send-kill-request)
                    (lambda (name force-p)
                      (declare (ignore name force-p))
-                     (values :denied "pane 1 (pid 123) in /tmp/wt")))
+                     (values :denied (format nil "DENIED~%pane 1 (pid 123) in /tmp/wt"))))
              (setf errout
                    (with-output-to-string (*error-output*)
                      (%with-stubbed-run-kill-exit exit-code
@@ -266,7 +270,88 @@
         (setf (fdefinition 'nerimux::send-kill-request) orig))
       (expect (eql 1 exit-code))
       (expect (search "pane 1 (pid 123)" errout) :to-be-truthy)
-      (expect (search "--force" errout) :to-be-truthy)))
+      (expect (search "--force" errout) :to-be-truthy)
+      ;; F5: the wire status token is protocol internals, not user-facing text.
+      (expect (search "DENIED" errout) :to-be-falsy)))
+
+  ;; F5, multi-pane: the status line strip must remove only the first line,
+  ;; leaving every pane in a multi-pane refusal intact.
+  (it "r8-1-run-kill-strips-only-the-status-line-with-multiple-panes-denied"
+    (let ((orig (fdefinition 'nerimux::send-kill-request))
+          exit-code errout)
+      (unwind-protect
+           (progn
+             (setf (fdefinition 'nerimux::send-kill-request)
+                   (lambda (name force-p)
+                     (declare (ignore name force-p))
+                     (values :denied (format nil "DENIED~%pane 1 (pid 123) in /tmp/wt~%pane 2 (pid 456) in /tmp/wt"))))
+             (setf errout
+                   (with-output-to-string (*error-output*)
+                     (%with-stubbed-run-kill-exit exit-code
+                       (nerimux::run-kill nil)))))
+        (setf (fdefinition 'nerimux::send-kill-request) orig))
+      (expect (eql 1 exit-code))
+      (expect (search "pane 1 (pid 123)" errout) :to-be-truthy)
+      (expect (search "pane 2 (pid 456)" errout) :to-be-truthy)
+      (expect (search "DENIED" errout) :to-be-falsy)))
+
+  ;; F3/cycle-3 fix: no server running at all -- send-kill-request
+  ;; (client.lisp) catches SB-BSD-SOCKETS:SOCKET-ERROR itself, narrowly
+  ;; around its own connect-to step, and reports this as (values :no-server
+  ;; nil); stubbed here at the send-kill-request seam like every other
+  ;; run-kill test in this file (see r8-1-run-kill-exits-zero-... above),
+  ;; rather than reaching into connect-to, to match this file's established
+  ;; style of testing run-kill's status dispatch as a black box over
+  ;; send-kill-request's return value.  run-kill must turn :no-server into a
+  ;; clean one-line message on *error-output* and exit 1, never the raw
+  ;; "Socket error in ...: 2 (No such file or directory)" report.
+  (it "r8-1-run-kill-reports-a-clean-message-and-exits-one-when-no-server-is-running"
+    (let ((orig (fdefinition 'nerimux::send-kill-request))
+          exit-code errout)
+      (unwind-protect
+           (progn
+             (setf (fdefinition 'nerimux::send-kill-request)
+                   (lambda (name force-p)
+                     (declare (ignore name force-p))
+                     (values :no-server nil)))
+             (setf errout
+                   (with-output-to-string (*error-output*)
+                     (%with-stubbed-run-kill-exit exit-code
+                       (nerimux::run-kill nil)))))
+        (setf (fdefinition 'nerimux::send-kill-request) orig))
+      (expect (eql 1 exit-code))
+      (expect (search "no server running" errout) :to-be-truthy)
+      (expect (search "Socket error" errout) :to-be-falsy)))
+
+  ;; cycle-3 fix: a SOCKET-ERROR signalled by send-kill-request AFTER a
+  ;; successful connect (e.g. an ECONNRESET while reading the reply) is a
+  ;; mid-session failure, not "no server running" -- run-kill must not
+  ;; mislabel it, and must not catch it at all. Before this fix, run-kill
+  ;; wrapped its whole body in a socket-error handler that printed "no
+  ;; server running" for this case too; now the condition is left to
+  ;; propagate to main()'s generic top-level handler-case, so this test
+  ;; asserts it escapes run-kill uncaught (catching it here only to assert
+  ;; on it, not because run-kill does).
+  (it "r8-1-run-kill-does-not-mislabel-a-mid-session-socket-error-as-no-server-running"
+    (let ((orig (fdefinition 'nerimux::send-kill-request))
+          exit-code errout signalled)
+      (unwind-protect
+           (progn
+             (setf (fdefinition 'nerimux::send-kill-request)
+                   (lambda (name force-p)
+                     (declare (ignore name force-p))
+                     (error 'sb-bsd-sockets:socket-error
+                            :syscall "read" :errno 104)))
+             (setf errout
+                   (with-output-to-string (*error-output*)
+                     (handler-case
+                         (%with-stubbed-run-kill-exit exit-code
+                           (nerimux::run-kill nil))
+                       (sb-bsd-sockets:socket-error () (setf signalled t))))))
+        (setf (fdefinition 'nerimux::send-kill-request) orig))
+      (expect signalled)
+      (expect (null exit-code))
+      (expect (search "no server running" errout) :to-be-falsy)))
 
   ;; No reply at all (:eof) is also a non-zero exit, distinct message.
   (it "r8-1-run-kill-exits-one-with-no-reply-message-on-eof"

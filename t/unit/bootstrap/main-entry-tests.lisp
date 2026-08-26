@@ -170,4 +170,26 @@
                     (nerimux::main))))))
       (expect (eql 1 exit-code))
       (expect (search "nerimux:" errout) :to-be-truthy)
-      (expect (search "boom -x 80" errout) :to-be-truthy))))
+      (expect (search "boom -x 80" errout) :to-be-truthy)))
+
+  ;; MAIN binds *PRINT-CIRCLE* T around the whole mode dispatch (see its
+  ;; docstring): the domain model is cyclic (REPOSITORY <-> ORGANIZATION
+  ;; back-pointers), and a condition report that walks into one without this
+  ;; bound exhausts the control stack instead of printing.  Drive a mode
+  ;; handler that captures the ambient value and errors, same shape as
+  ;; unhandled-mode-error-prints-message-and-exits-one above.
+  (it "main-binds-print-circle-around-mode-dispatch"
+    (let (exit-code captured-print-circle)
+      (with-stubbed-fdefinition
+          ((nerimux::run-server
+            (lambda (name)
+              (declare (ignore name))
+              (setf captured-print-circle *print-circle*)
+              (error "boom"))))
+        (with-output-to-string (*error-output*)
+          (with-stubbed-exit exit-code
+            (let ((sb-ext:*posix-argv* (list "nerimux" "server" "work"))
+                  (*print-circle* nil))
+              (nerimux::main)))))
+      (expect (eql 1 exit-code))
+      (expect (eq t captured-print-circle)))))

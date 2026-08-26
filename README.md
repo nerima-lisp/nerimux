@@ -83,7 +83,9 @@ Set `CL_WEAVE_TEST_FILTER` to a case-insensitive substring of the cl-weave test
 path when iterating on one area of the suite.
 Real-PTY integration cases live in a second suite, `nerimux/pty-test`, run
 separately with `nix run .#test-pty` because the hermetic flake gate has no
-`/dev/ptmx`.
+`/dev/ptmx`. A separate end-to-end smoke script drives the real built binary
+under a real PTY; run it with `nix run .#e2e` for the same `/dev/ptmx`
+reason.
 
 nerimux is the org's L4 application package and its testbed: it runs on the
 sibling libraries — [cl-cli](https://github.com/nerima-lisp/cl-cli),

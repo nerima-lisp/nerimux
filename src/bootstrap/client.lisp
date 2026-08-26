@@ -197,18 +197,30 @@
   "Connect to (socket-path NAME), send a `:kill` command (R8.1), and return
    (values STATUS TEXT).  STATUS is :ok (the server accepted the kill and is
    shutting down), :denied (live panes refused it; TEXT lists them, one per
-   line, from the server's reply), or :eof (the connection ended with no
-   reply).  FORCE-P asks the server to SIGHUP then SIGKILL every live pane
-   instead of refusing.
-   A PEER-IO-FAILURE (server.lisp) on the SEND-FRAME below -- SB-EXT:TIMEOUT
+   line, from the server's reply), :eof (the connection ended with no
+   reply), or :no-server (no server was running at NAME at all).  FORCE-P
+   asks the server to SIGHUP then SIGKILL every live pane instead of
+   refusing.
+   A PEER-IO-FAILURE (runtime.lisp) on the SEND-FRAME below -- SB-EXT:TIMEOUT
    from a wedged peer, or any ERROR -- is treated exactly like :eof: no reply
    arrived either way, so this reuses RUN-KILL's existing \"no reply from
    server\" report (main-startup-commands.lisp) instead of inventing a second
    message for the same user-visible outcome.
-   Connection failure (no server running at NAME) is not caught here: it
-   propagates as an ERROR, handled the same way main() already handles any
-   other startup error (main-startup.lisp)."
-  (let ((socket (connect-to (socket-path name))))
+   Connection failure (no server running at NAME) IS caught here, narrowly,
+   around CONNECT-TO only: it signals SB-BSD-SOCKETS:SOCKET-ERROR both for a
+   missing socket file (ENOENT) and for a stale one left behind by a server
+   that has already died (ECONNREFUSED) -- either is turned into (values
+   :no-server nil) so RUN-KILL (main-startup-commands.lisp) can print its
+   \"no server running\" one-liner instead of the raw errno report.  A
+   SOCKET-ERROR raised later
+   in this function -- e.g. an ECONNRESET while reading the reply after a
+   successful connect+send -- is a mid-session failure, not \"no server
+   running\", and is deliberately left to propagate uncaught: narrowing the
+   handler to just CONNECT-TO is the fix, since wrapping the whole function
+   mislabelled that case."
+  (let ((socket (handler-case (connect-to (socket-path name))
+                  (sb-bsd-sockets:socket-error ()
+                    (return-from send-kill-request (values :no-server nil))))))
     (unwind-protect
          (let ((stream (socket-stream socket)))
            (handler-case

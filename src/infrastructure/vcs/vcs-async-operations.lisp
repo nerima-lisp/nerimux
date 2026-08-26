@@ -21,7 +21,11 @@
                             (status-reader #'%read-repository-status)
                             (status-applier #'%apply-repository-status)
                             callback-dispatch)
-  "Read each repository on a worker and apply its status through the dispatcher."
+  "Read each repository on a worker and apply its status through the dispatcher.
+   ON-COMPLETE receives REPOSITORIES itself, once every worker has settled --
+   in the order given, not reordered by which worker happens to finish last.
+   REFRESH-WORKSPACE-STATUS-ASYNC below wraps this ON-COMPLETE to hand its own
+   caller ORGANIZATIONS instead, for exactly that reason."
   (let* ((repositories (copy-list repositories))
          (remaining (cl-concurrent-kit:make-atomic-counter
                      (length repositories)))
@@ -79,12 +83,19 @@
           on-error (status-reader #'%read-repository-status)
           (status-applier #'%apply-repository-status)
           callback-dispatch)
-  "Refresh all catalog repositories concurrently without blocking the UI."
+  "Refresh all catalog repositories concurrently without blocking the UI.
+   ON-COMPLETE receives ORGANIZATIONS, not the flattened repository list
+   REFRESH-REPOSITORIES-ASYNC completes with: every workspace-level caller
+   feeds the argument to organization-consuming code (picker items, tree
+   rebind), and handing it repositories type-errors on the first access."
   (refresh-repositories-async
    (loop for organization in organizations
          append (nerimux/model:organization-repositories organization))
    :on-repository on-repository
-   :on-complete on-complete
+   :on-complete (and on-complete
+                     (lambda (repositories)
+                       (declare (ignore repositories))
+                       (funcall on-complete organizations)))
    :on-error on-error
    :status-reader status-reader
    :status-applier status-applier

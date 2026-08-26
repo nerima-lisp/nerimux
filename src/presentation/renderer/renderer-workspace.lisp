@@ -242,11 +242,6 @@
                                      (or (worktree-head selected-worktree) "-"))
                              (format nil "state: ~A"
                                      (worktree-state selected-worktree))
-                             (format nil "status: ~A"
-                                     (or (and (worktree-status selected-worktree)
-                                              (princ-to-string
-                                               (worktree-status selected-worktree)))
-                                         "-"))
                              (format nil "attention: ~A"
                                      (reason-text
                                       (worktree-attention-reasons selected-worktree)))

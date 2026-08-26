@@ -146,7 +146,37 @@
       (loop until completed
             while (< (get-internal-real-time) deadline)
             do (sleep 0.01))
-      (expect completed))))
+      (expect completed)))
+
+  (it "completes with the organizations, not the flattened repositories"
+    (let* ((repositories
+             (loop for index from 1 to 3
+                   collect
+                   (nerimux/model:make-repository
+                    :specification (format nil "workspace-owner/project-~D" index)
+                    :local-path (format nil "/tmp/project-~D" index))))
+           (organization
+             (nerimux/model:make-organization
+              :host "workspace-owner"
+              :name "workspace"
+              :repositories repositories))
+           (completed-with :not-called)
+           (deadline (+ (get-internal-real-time)
+                        (* 2 internal-time-units-per-second))))
+      (nerimux/vcs:refresh-workspace-status-async
+       :organizations (list organization)
+       :status-reader (lambda (repository)
+                        (declare (ignore repository))
+                        nil)
+       :on-complete (lambda (result)
+                      (setf completed-with result)))
+      (loop until (not (eq completed-with :not-called))
+            while (< (get-internal-real-time) deadline)
+            do (sleep 0.01))
+      (expect (listp completed-with))
+      (expect (= 1 (length completed-with)))
+      (expect (eq organization (first completed-with)))
+      (expect (not (eq repositories completed-with))))))
 
 (describe "async vcs status ownership"
   (it "applies worker results and completes only through the dispatcher"
@@ -322,6 +352,96 @@
              (expect (not (member pane (nerimux/model:worktree-panes surviving-worktree)
                                   :test #'eq))))
         (nerimux/vcs:set-workspace-organizations previous)))))
+
+(defun %bare-status-fixture-directory (label)
+  "Create and return a fresh, existing temporary directory path for LABEL."
+  (let ((path
+          (namestring
+           (merge-pathnames
+            (format nil "nerimux-bare-status-~A-~D-~D/" label
+                    (get-universal-time) (random 1000000))
+            (host-kit:temporary-directory)))))
+    (ensure-directories-exist path)
+    path))
+
+;; F10: `git worktree list` includes the bare repository root itself (ghq's
+;; `<repo>.git` layout as its own entry); running `git status` there always
+;; fails, since a bare root has no working tree. Both refresh paths used to
+;; collect status for every raw/model worktree unconditionally, which turned
+;; every successful worktree operation (create/lock/unlock/delete) against a
+;; bare repository into a false "failed" notify. Status collection must skip
+;; the bare entry while still keeping it in the worktree list/model.
+(describe "vcs bare worktree status collection"
+  (it "%read-repository-refresh skips the bare entry and updates only the working worktree"
+    (let* ((bare-path (%bare-status-fixture-directory "refresh-bare"))
+           (work-path (%bare-status-fixture-directory "refresh-work"))
+           (repository
+             (nerimux/model:make-repository
+              :specification "workspace-owner/project"
+              :local-path bare-path))
+           (raw-worktrees
+             (list (vcs-kit::%make-vcs-worktree
+                    :path bare-path :branch nil :head "bare-head" :bare-p t)
+                   (vcs-kit::%make-vcs-worktree
+                    :path work-path :branch "main" :head "work-head"))))
+      (with-stubbed-fdefinition
+          ((vcs-kit:make-vcs-repository
+             (lambda (directory &rest arguments)
+               (declare (ignore arguments))
+               directory))
+           (vcs-kit:vcs-list-worktrees
+             (lambda (&rest arguments)
+               (declare (ignore arguments))
+               raw-worktrees))
+           (vcs-kit:vcs-status-structured
+             (lambda (backend-directory &rest arguments)
+               (declare (ignore arguments))
+               (if (string= backend-directory bare-path)
+                   (error "status must not run against the bare root")
+                   (vcs-kit::%make-vcs-status-snapshot
+                    :entries nil :branch-head "work-head"
+                    :ahead 0 :behind 0)))))
+        (let* ((refresh (nerimux/vcs::%read-repository-refresh repository))
+               (updates
+                 (nerimux/vcs::%repository-refresh-status-updates refresh)))
+          (expect (= 1 (length updates)))
+          (expect (string= work-path
+                           (nerimux/vcs::%worktree-status-update-path
+                            (first updates))))))))
+
+  (it "%read-repository-status skips the bare worktree and updates only the working worktree"
+    (let* ((bare-path (%bare-status-fixture-directory "status-bare"))
+           (work-path (%bare-status-fixture-directory "status-work"))
+           (repository
+             (nerimux/model:make-repository
+              :specification "workspace-owner/project"
+              :local-path bare-path))
+           (bare-worktree
+             (nerimux/model:make-worktree
+              :repository repository :path bare-path :bare-p t))
+           (work-worktree
+             (nerimux/model:make-worktree
+              :repository repository :path work-path :branch "main")))
+      (nerimux/model:repository-add-worktree repository bare-worktree)
+      (nerimux/model:repository-add-worktree repository work-worktree)
+      (with-stubbed-fdefinition
+          ((vcs-kit:make-vcs-repository
+             (lambda (directory &rest arguments)
+               (declare (ignore arguments))
+               directory))
+           (vcs-kit:vcs-status-structured
+             (lambda (backend-directory &rest arguments)
+               (declare (ignore arguments))
+               (if (string= backend-directory bare-path)
+                   (error "status must not run against the bare root")
+                   (vcs-kit::%make-vcs-status-snapshot
+                    :entries nil :branch-head "work-head"
+                    :ahead 0 :behind 0)))))
+        (let ((updates (nerimux/vcs::%read-repository-status repository)))
+          (expect (= 1 (length updates)))
+          (expect (string= work-path
+                           (nerimux/vcs::%worktree-status-update-path
+                            (first updates)))))))))
 
 ;; Regression guard for the review finding that PRUNE-WORKTREES's :DRY-RUN
 ;; keyword had no default, so (prune-worktrees repository) with no keyword
