@@ -109,28 +109,22 @@
 
   ;; On a narrow terminal, the status bar's visible content is clamped to the terminal width.
   (it "render-status-bar-truncates-long-line"
-    ;; A very narrow terminal forces the status line to be truncated via subseq.
-    ;; The bar is: move-to, ESC[44;97m, <status content>, ESC[0m.  The visible
-    ;; status content sits between the colour SGR and the trailing reset, and the
-    ;; renderer guarantees it is no longer than the terminal width.
+    ;; A very narrow terminal forces the status line to be truncated.
+    ;; The bar is: move-to, ESC[<base>m, <status content + padding>, ESC[0m.
+    ;; The content between the base SGR and the trailing reset may embed
+    ;; further zero-width SGR wraps (branch/state colouring), so it is
+    ;; measured in VISIBLE cells: truncation plus background padding fill the
+    ;; row to exactly the terminal width, never past it.
     (let* ((width  8)
            (sess   (make-renderer-test-session width 10 :content ""))
            (out    (render-status-bar-output sess 10 width))
-           (color  (format nil "~C[44;97m" #\Escape))
+           (color  (format nil "~C[~Am" #\Escape
+                           nerimux/renderer::+sgr-default-status+))
            (reset  (format nil "~C[0m" #\Escape))
            (start  (+ (search color out) (length color)))
            (end    (search reset out :start2 start))
            (content (subseq out start end)))
-      ;; Measure VISIBLE cells: the active window's tab is wrapped in a
-      ;; zero-width ESC[7m… reverse-video highlight (window-status-current-
-      ;; style's fixed value).  The renderer fills the full terminal width
-      ;; with visible glyphs and preserves that SGR, so the raw length may
-      ;; exceed WIDTH while the on-screen width does not.
-      (expect (<= (nerimux/renderer::%visible-length content) width))
-      ;; The full line (left text + gap + time) is longer than the terminal, so
-      ;; the HH:MM time string (right portion) is truncated off the visible content.
-      ;; We verify this by checking the content is shorter than the full line would be.
-      (expect (< (length content) 20))))
+      (expect (= width (nerimux/renderer::%visible-length content)))))
 
   ;;; ── render-session-to-string (full frame) ───────────────────────────────────
 
@@ -148,13 +142,14 @@
     (let* ((sess  (make-split-session 5 3 :h))
            (win   (session-active-window sess))
            (panes (window-panes win))
-           (green (format nil "~C[32m" #\Escape)))
+           (accent (format nil "~C[~Am" #\Escape
+                           nerimux/renderer::+sgr-active-border+)))
       (feed (pane-screen (first  panes)) "AAA")
       (feed (pane-screen (second panes)) "BBB")
       (let ((out (render-session-to-string sess 3 11)))   ; full width = 2*5+1
         (expect (find (code-char #x2502) out))
         ;; pane 0 is active and non-last, so its right border is highlighted.
-        (expect (search green out))
+        (expect (search accent out))
         (expect (find #\A out))
         (expect (find #\B out)))))
 
@@ -222,7 +217,9 @@
                 8 24
                 :mode :command
                 :command-buffer "status")))
-      (expect (search ":status" out)))
+      ;; The `:` prompt carries its own accent SGR, so the visible text is
+      ;; checked with escapes stripped.
+      (expect (search ":status" (strip-sgr out))))
     (let ((stream (make-string-output-stream)))
       (nerimux/renderer::%render-client-command-line
        stream 3 8 "abcdefghij")

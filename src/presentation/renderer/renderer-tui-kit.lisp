@@ -1,42 +1,32 @@
 (in-package #:nerimux/renderer)
 
 (defun %surface-from-ansi-frame (frame rows cols &key (viewport 0))
+  "Parse FRAME into a headless CL-TUI-KIT/CORE surface, preserving SGR
+   styling (R-style-preservation).
+
+   Previously this drew through CL-TUI-KIT/WIDGETS's text-widget +
+   viewport-widget pair for VIEWPORT > 0 (unstyled, and separately from the
+   VIEWPORT = 0 path below).  A VIEWPORT-WIDGET renders its child clipped to
+   AREA at (0, -OFFSET-Y): with AREA = (0 0 COLS ROWS) and OFFSET-Y =
+   VIEWPORT, that shows content rows [VIEWPORT, VIEWPORT+ROWS) at surface
+   rows [0, ROWS) -- exactly the window drawn row-by-row below, so dropping
+   the widget path changes no visible output for VIEWPORT > 0, and folding
+   VIEWPORT = 0 into the same CONTENT-HEIGHT = ROWS case (viewport offset
+   0) unifies what were two separate code paths."
   (let* ((rows (max 1 rows))
          (cols (max 1 cols))
-         (viewport (max 0 viewport)))
-    (if (zerop viewport)
-        (let* ((grid (%ansi-frame-grid frame rows cols))
-               (surface (cl-tui-kit/core:make-surface cols rows)))
-          (cl-tui-kit/core:surface-draw-text
-           surface 0 0 (%frame-grid-text grid) :max-width cols)
-          surface)
-        (let* ((rectangle (%frame-area rows cols))
-               (content-height (+ rows viewport))
-               (content-rectangle
-                 (cl-tui-kit/core:make-rectangle 0 0 cols content-height))
-               (grid (%ansi-frame-grid frame content-height cols))
-               (text
-                 (cl-tui-kit/widgets:make-text-widget
-                  (%frame-grid-text grid)
-                  :id :nerimux-frame
-                  :rectangle content-rectangle))
-               (viewport
-                 (cl-tui-kit/core:make-viewport
-                  :bounds rectangle
-                  :content-width cols
-                  :content-height content-height
-                  :offset-y (max 0 viewport)))
-               (root
-                 (cl-tui-kit/widgets:make-viewport-widget
-                  text
-                  :id :nerimux-client-viewport
-                  :rectangle rectangle
-                  :viewport viewport
-                  :content-width cols
-                  :content-height content-height))
-               (surface (cl-tui-kit/core:make-surface cols rows)))
-          (cl-tui-kit/widgets:render-widget root surface rectangle)
-          surface))))
+         (viewport (max 0 viewport))
+         (content-height (+ rows viewport))
+         (surface (cl-tui-kit/core:make-surface cols rows)))
+    (multiple-value-bind (grid style-grid)
+        (%ansi-frame-grid frame content-height cols)
+      (dotimes (surface-row rows surface)
+        (let ((content-row (+ surface-row viewport)))
+          (cl-tui-kit/core:surface-draw-styled-text
+           surface 0 surface-row
+           (%frame-grid-row-spans (%frame-grid-row grid content-row)
+                                  (%frame-grid-style-row style-grid content-row))
+           :max-width cols))))))
 
 (defun %surface-to-ansi-frame (surface)
   (let ((escape (code-char 27))

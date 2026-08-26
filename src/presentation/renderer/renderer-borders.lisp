@@ -36,23 +36,26 @@
 (defconstant +sgr-active-border+
     (if (boundp (quote +sgr-active-border+))
         (symbol-value (quote +sgr-active-border+))
-        "32")
-  "SGR for the active pane's border: pane-active-border-style's fixed value
-   \"fg=green\" (foreground green, SGR 32).")
+        +sgr-accent+)
+  "SGR for a separator that borders the active pane: the theme accent.
+   Replaces the pre-theme fixed \"fg=green\" (SGR 32).")
+
+(defun %split-touches-active-p (node active-pane)
+  "True when either child of split NODE contains ACTIVE-PANE."
+  (or (subtree-contains-p (layout-split-first node) active-pane)
+      (subtree-contains-p (layout-split-second node) active-pane)))
 
 (defun %render-h-separator (stream node active-pane terminal-cols)
   "Draw the vertical column between the left and right children of an :h split.
-   Coloured green when it borders the active pane, otherwise left at the
-   terminal's default colour."
+   Accent-coloured when it borders the active pane, otherwise a faint gray
+   (+SGR-LINE+) so inactive structure recedes."
   (let* ((a          (layout-split-first  node))
-         (b          (layout-split-second node))
          (rect       (layout-subtree-rect a))
          (border-col (+ (getf rect :x) (getf rect :w)))
-         (activep    (or (subtree-contains-p a active-pane)
-                         (subtree-contains-p b active-pane))))
+         (activep    (%split-touches-active-p node active-pane)))
     (when (< border-col terminal-cols)
       (reset-attrs stream)
-      (when activep (%emit-sgr stream +sgr-active-border+))
+      (%emit-sgr stream (if activep +sgr-active-border+ +sgr-line+))
       (let ((top    (getf rect :y))
             (height (getf rect :h)))
         (loop for row from top below (+ top height)
@@ -61,16 +64,20 @@
       (reset-attrs stream))))
 
 (defun %render-v-separator (stream node active-pane terminal-cols)
-  "Draw the horizontal row between the top and bottom children of a :v split."
-  (declare (ignore active-pane))
+  "Draw the horizontal row between the top and bottom children of a :v split,
+   with the same active-accent/inactive-faint colouring as the vertical bars
+   (the pre-theme version left every horizontal bar uncoloured)."
   (let* ((a    (layout-split-first  node))
          (rect (layout-subtree-rect a))
          (border-row (+ (getf rect :y) (getf rect :h)))
          (x          (getf rect :x))
-         (w          (min (getf rect :w) (- terminal-cols x))))
+         (w          (min (getf rect :w) (- terminal-cols x)))
+         (activep    (%split-touches-active-p node active-pane)))
     (reset-attrs stream)
+    (%emit-sgr stream (if activep +sgr-active-border+ +sgr-line+))
     (move-to stream border-row x)
-    (loop repeat (max 0 w) do (write-char +pane-border-horizontal+ stream))))
+    (loop repeat (max 0 w) do (write-char +pane-border-horizontal+ stream))
+    (reset-attrs stream)))
 
 ;;; ── Tree border walk (logic layer) ──────────────────────────────────────────
 

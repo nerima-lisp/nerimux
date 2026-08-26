@@ -82,6 +82,8 @@
     (let ((stream (make-string-output-stream)))
       (nerimux/renderer::%render-workspace-command-line
        stream 0 200 "wt-create feat/x")
-      (let ((line (get-output-stream-string stream)))
+      ;; The prompt's `:` is wrapped in its own accent SGR, so the visible
+      ;; text is compared with the escapes stripped.
+      (let ((line (strip-sgr (get-output-stream-string stream))))
         (expect (search ":wt-create feat/x" line))
         (expect (not (search "wt-delete" line)))))))

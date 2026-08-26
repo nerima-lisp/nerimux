@@ -104,7 +104,8 @@
   ;; fragile to any future retuning of the ellipsis/padding rule), this
   ;; computes the expected clipped text with the SAME %DISPLAY-CLIP function
   ;; the production code calls, at the SAME left-width the layout uses for
-  ;; this terminal size (26 columns at cols=80: (min 30 (floor 80 3))), and
+  ;; this terminal size (26 columns at cols=80: %workspace-left-width's
+  ;; (min 44 (floor 80 3))), and
   ;; confirms that exact clipped text -- not the unclipped original --
   ;; appears verbatim in the rendered frame.
   (it "renders the tree row with the same clipped text %display-clip itself produces"

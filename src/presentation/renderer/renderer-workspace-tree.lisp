@@ -5,6 +5,15 @@
 ;;;; pane flattening. Both the plain ANSI workspace renderer and the
 ;;;; cl-tui-kit tree consume this projection.
 
+(defun %workspace-left-width (cols)
+  "The tree panel's width: a third of the terminal, capped at 44 columns.
+   Shared by the plain-ANSI workspace frame and the cl-tui-kit tree widget so
+   the two passes can never disagree about where the first separator sits
+   (they used to hold independent copies of this formula).  The pre-theme cap
+   was 30, which truncated every github.com/<org> label even on a wide
+   terminal."
+  (max 1 (min 44 (floor cols 3))))
+
 (defun %repository-attention-p (repository)
   "T when REPOSITORY itself, or any worktree under it, needs attention."
   (or (repository-dirty-p repository)

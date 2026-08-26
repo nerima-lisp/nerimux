@@ -174,15 +174,19 @@
         (expect (plusp (length out)))
         (expect (find #\│ out)))))
 
-  ;; The active pane's border is always coloured green (SGR 32) —
-  ;; pane-active-border-style's fixed value — and a border that touches no
-  ;; active pane carries no colour.
+  ;; The border touching the active pane is coloured with the theme accent
+  ;; (+SGR-ACTIVE-BORDER+); a border that touches no active pane renders in
+  ;; the faint separator colour (+SGR-LINE+) instead, never the accent.
   (it "render-tree-borders-active-pane-always-coloured"
     (let* ((l0   (tl-leaf 1 1 1))
            (l1   (tl-leaf 2 1 1))
            (tree (make-layout-split :h l0 l1)))
       (nerimux/model::layout-assign tree 0 0 81 24)
-      (expect (search (format nil "~C[32m" #\Escape)
-                      (render-tree-borders-output tree (layout-leaf-pane l0) 81)))
-      (expect (null (search (format nil "~C[32m" #\Escape)
-                            (render-tree-borders-output tree nil 81)))))))
+      (let ((active-out (render-tree-borders-output tree (layout-leaf-pane l0) 81))
+            (inactive-out (render-tree-borders-output tree nil 81)))
+        (expect active-out
+                :to-contain-sgr nerimux/renderer::+sgr-active-border+)
+        (expect inactive-out
+                :not :to-contain-sgr nerimux/renderer::+sgr-active-border+)
+        (expect inactive-out
+                :to-contain-sgr nerimux/renderer::+sgr-line+)))))

@@ -1,5 +1,57 @@
 (in-package #:nerimux/renderer)
 
+;;; ── Widget themes ───────────────────────────────────────────────────────────
+;;;
+;;; cl-tui-kit widgets resolve their colours through theme roles
+;;; (:foreground, :selected, :border, …).  These two themes translate the
+;;; renderer's SGR palette (renderer-style.lisp) into cl-tui-kit styles: the
+;;; tree theme is transparent (list rows sit on the frame's own background),
+;;; the panel theme carries a raised dark background for the picker modal so
+;;; the dialog reads as a surface above the frame.
+
+(defun %make-workspace-tree-theme ()
+  (cl-tui-kit/core:make-theme
+   (list
+    (cons :foreground (cl-tui-kit/core:make-style))
+    (cons :selected (cl-tui-kit/core:make-style
+                     :bold t
+                     :background (cl-tui-kit/core:indexed-color 237)))
+    (cons :accent (cl-tui-kit/core:make-style
+                   :bold t
+                   :foreground (cl-tui-kit/core:indexed-color 117)))
+    (cons :muted (cl-tui-kit/core:make-style
+                  :foreground (cl-tui-kit/core:indexed-color 245))))))
+
+(defun %make-picker-panel-theme ()
+  (flet ((panel (&rest arguments)
+           (apply #'cl-tui-kit/core:make-style
+                  :background (cl-tui-kit/core:indexed-color 235)
+                  arguments)))
+    (cl-tui-kit/core:make-theme
+     (list
+      (cons :background (panel))
+      (cons :foreground (panel))
+      (cons :muted (panel :foreground (cl-tui-kit/core:indexed-color 245)))
+      (cons :accent (panel :bold t
+                           :foreground (cl-tui-kit/core:indexed-color 117)))
+      (cons :selected (cl-tui-kit/core:make-style
+                       :bold t
+                       :background (cl-tui-kit/core:indexed-color 237)))
+      (cons :border (panel :foreground (cl-tui-kit/core:indexed-color 111)))
+      (cons :title (panel :bold t
+                          :foreground (cl-tui-kit/core:indexed-color 117)))
+      (cons :warning (panel :bold t
+                            :foreground (cl-tui-kit/core:indexed-color 179)))
+      (cons :error (panel :bold t
+                          :foreground (cl-tui-kit/core:indexed-color 203)))
+      (cons :success (panel :foreground (cl-tui-kit/core:indexed-color 114)))))))
+
+(defvar *workspace-tree-theme* (%make-workspace-tree-theme)
+  "Theme for the workspace overview's tree list widget.")
+
+(defvar *picker-panel-theme* (%make-picker-panel-theme)
+  "Theme for the global picker's modal, input, list, and text widgets.")
+
 (defun %frame-area (rows cols)
   (let* ((bounds (cl-tui-kit/core:make-rectangle 0 0 cols rows))
          (layout
@@ -31,7 +83,7 @@
          (cols (max 1 cols))
          (multi-column-p (>= cols 9))
          (left-width (if multi-column-p
-                         (max 1 (min 30 (floor cols 3)))
+                         (%workspace-left-width cols)
                          0))
          (body-start 1)
          (body-end (max body-start (- rows 2)))
@@ -71,6 +123,7 @@
             model
             :id :nerimux-workspace-tree
             :rectangle rectangle
+            :theme *workspace-tree-theme*
             :selected-key
             (and selected-tree-object
                  (%workspace-tree-node-key selected-tree-object))
@@ -103,20 +156,27 @@
                            (%picker-item-display-text item))))
          (title
            (cl-tui-kit/widgets:make-text-widget
-            (format nil
-                    "GLOBAL PICKER [~:[literal~;regex~]] | search workspace"
-                    regex-p)
-            :id :nerimux-picker-title))
+            (format nil "PICKER (~:[literal~;regex~])" regex-p)
+            :id :nerimux-picker-title
+            :role :title
+            :theme *picker-panel-theme*))
          (input
            (cl-tui-kit/widgets:make-input-widget
             :value query
-            :placeholder "search workspace, repository, worktree, or pane"
+            ;; The leading space is deliberate: cl-tui-kit's input widget
+            ;; (v4.1.3) draws its cursor cell even when unfocused, and with
+            ;; an empty value that reverse-video cell lands on column 0 --
+            ;; over the placeholder's first character.  Giving the cursor a
+            ;; space to sit on keeps the whole placeholder readable.
+            :placeholder " search workspace, repository, worktree, or pane"
             :id :nerimux-picker-query
+            :theme *picker-panel-theme*
             :focusable-p nil))
          (results
            (cl-tui-kit/widgets:make-list-widget
             list-model
             :id :nerimux-picker-results
+            :theme *picker-panel-theme*
             :selected-key
             (and selected-item (%picker-widget-key selected-item))
             :row-height 1
@@ -126,17 +186,21 @@
             (if items
                 (format nil "~D result~:P" (length items))
                 "no matches")
-            :id :nerimux-picker-status))
+            :id :nerimux-picker-status
+            :role :muted
+            :theme *picker-panel-theme*))
          (form
            (cl-tui-kit/widgets:make-form-widget
             (list title input results status)
             :id :nerimux-picker-form
+            :theme *picker-panel-theme*
             :focusable-p nil))
          (modal
            (cl-tui-kit/widgets:make-modal-widget
             form
             :id :nerimux-global-picker
             :rectangle (%frame-area rows cols)
+            :theme *picker-panel-theme*
             :open-p t
             :focusable-p nil
             :outside-close-p nil)))

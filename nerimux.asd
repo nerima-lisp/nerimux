@@ -217,14 +217,16 @@
       :components
       ((:file "renderer-format-definitions") ; compile-time ANSI fact-table constructors
        (:file "renderer-format")     ; ANSI primitives (shared by both paths below)
+       ;; The theme palette loads right after the ANSI primitives so both the
+       ;; workspace frame and the pane compositor can reference its constants.
+       (:file "renderer-style-data") ; declarative style/SGR/border-charset dispatch tables
+       (:file "renderer-style")     ; theme palette + fixed SGR constants
        ;; Workspace presentation helpers and tree projection depend on no pane
        ;; compositor; their order here states that boundary.
        (:file "renderer-workspace-status-title") ; shared status/title labels
        (:file "renderer-workspace-command-line") ; command completion footer
        (:file "renderer-workspace-tree") ; shared tree data projection
        (:file "renderer-workspace")  ; workspace frame (plain ANSI)
-       (:file "renderer-style-data") ; declarative style/SGR/border-charset dispatch tables
-       (:file "renderer-style")     ; style-string parsing + SGR emission logic
        (:file "renderer-pane-selection") ; selection bounds helpers
        (:file "renderer-statusbar-layout"); status bar layout helpers (needed by renderer-pane-copy-mode-overlay below)
        (:file "renderer-pane-search")    ; pane content search match ranges

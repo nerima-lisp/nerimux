@@ -93,9 +93,14 @@
            (pane-2 (nerimux/model:make-pane :id 2 :fd -1))
            (pane-3 (nerimux/model:make-pane :id 3 :fd -1 :unread-output-p t))
            (window (nerimux/model:make-window
-                    :id 1 :name "w" :panes (list pane-1 pane-2 pane-3))))
-      (expect (string= "[w1: 1 2*!3]"
-                       (nerimux/renderer::%status-window-tab window pane-2)))))
+                    :id 1 :name "w" :panes (list pane-1 pane-2 pane-3)))
+           (tab (nerimux/renderer::%status-window-tab window pane-2)))
+      ;; The visible shape is the requirement's exact "[w1: 1 2*!3]"; the
+      ;; theme adds zero-width SGR around the unread mark (amber) and the
+      ;; focused pane's "2*" (bold accent) without changing it.
+      (expect (string= "[w1: 1 2*!3]" (strip-sgr tab)))
+      (expect tab :to-contain-sgr nerimux/renderer::+sgr-warn+)
+      (expect tab :to-contain-sgr nerimux/renderer::+sgr-accent-bold+)))
 
   ;; The per-pane token in isolation, both branches: unread -> "!", read ->
   ;; " " as the leading marker; active -> trailing "*", inactive -> none.
@@ -103,11 +108,13 @@
     (let* ((pane-unread-active (nerimux/model:make-pane :id 5 :fd -1 :unread-output-p t))
            (pane-read-inactive (nerimux/model:make-pane :id 6 :fd -1)))
       (expect (string= "!5*"
-                       (nerimux/renderer::%status-pane-tab-token
-                        pane-unread-active pane-unread-active)))
+                       (strip-sgr
+                        (nerimux/renderer::%status-pane-tab-token
+                         pane-unread-active pane-unread-active))))
       (expect (string= " 6"
-                       (nerimux/renderer::%status-pane-tab-token
-                        pane-read-inactive pane-unread-active)))))
+                       (strip-sgr
+                        (nerimux/renderer::%status-pane-tab-token
+                         pane-read-inactive pane-unread-active))))))
 
   ;; The middle block strings together every window under the focused pane's
   ;; worktree (%WORKTREE-TREE-WINDOWS, R5.8 id order), not just the focused
@@ -124,7 +131,8 @@
       (nerimux/model:worktree-add-pane worktree pane-1)
       (nerimux/model:worktree-add-pane worktree pane-2)
       (expect (string= "[w1: 1*][w2: 2]"
-                       (nerimux/renderer::%status-middle-text pane-1))))))
+                       (strip-sgr
+                        (nerimux/renderer::%status-middle-text pane-1)))))))
 
 (describe "renderer-suite/statusbar-workspace-degradation"
 

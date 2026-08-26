@@ -217,14 +217,15 @@
 (describe "renderer-suite/workspace-scanning-placeholder"
 
   ;; R6.2: while the initial ghq/worktree scan is still running, the whole
-  ;; frame is replaced by an empty tree plus a centred "scanning..." message
+  ;; frame is replaced by an empty tree plus a centred scanning message
   ;; -- no header, no tree box, nothing that implies data has loaded.
-  (it "shows only scanning... while the initial catalog scan is still running"
+  ;; The " nerimux " chip is the ordinary frame's header signature.
+  (it "shows only the scanning message while the initial catalog scan is still running"
     (let ((frame
             (nerimux/renderer:render-workspace-overview-to-string
              nil 24 80 :scanning-p t)))
-      (expect (search "scanning..." frame))
-      (expect (not (search "WORKSPACES" frame)))))
+      (expect (search "scanning workspaces..." frame))
+      (expect (not (search " nerimux " frame)))))
 
   ;; Once organizations exist, scanning-p no longer applies even if left T --
   ;; the guard is specifically "still scanning AND nothing has arrived yet".
@@ -233,5 +234,5 @@
       (let ((frame
               (nerimux/renderer:render-workspace-overview-to-string
                (list organization) 24 80 :scanning-p t)))
-        (expect (search "WORKSPACES" frame))
-        (expect (not (search "scanning..." frame)))))))
+        (expect (search " nerimux " frame))
+        (expect (not (search "scanning workspaces..." frame)))))))

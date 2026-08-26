@@ -26,7 +26,7 @@
     (let ((frame
             (nerimux/renderer:render-workspace-overview-to-tui-string
              nil 10 40)))
-      (expect (search "WORKSPACES" frame))
+      (expect (search " nerimux " frame))
       (expect (not (search "terminal too small" frame)))))
 
   ;; One column short of the floor (39x10): too small.
@@ -35,7 +35,7 @@
             (nerimux/renderer:render-workspace-overview-to-tui-string
              nil 10 39)))
       (expect (search "terminal too small (need 40x10)" frame))
-      (expect (not (search "WORKSPACES" frame)))))
+      (expect (not (search " nerimux " frame)))))
 
   ;; One row short of the floor (40x9): too small.
   (it "shows only the too-small warning at 40x9, one row short"
@@ -43,7 +43,7 @@
             (nerimux/renderer:render-workspace-overview-to-tui-string
              nil 9 40)))
       (expect (search "terminal too small (need 40x10)" frame))
-      (expect (not (search "WORKSPACES" frame)))))
+      (expect (not (search " nerimux " frame)))))
 
   ;; Both dimensions short at once: still just the warning, not two.
   ;; 39x5 is short in both dimensions and still wide enough to print the
@@ -70,7 +70,7 @@
              nil 24 80)))
       (expect (search "terminal too small" too-small))
       (expect (not (search "terminal too small" recovered)))
-      (expect (search "WORKSPACES" recovered))))
+      (expect (search " nerimux " recovered))))
 
   ;; The direct predicate, since it is the one branch condition the whole
   ;; guard turns on: exact boundary values on both sides.

@@ -20,7 +20,10 @@
          +workspace-command-names+))))
 
 (defun %render-workspace-command-line (stream row cols command-buffer)
-  "Draw the workspace command line and completion candidates at ROW."
+  "Draw the workspace command line and completion candidates at ROW.
+   The `:` prompt renders bold accent, the typed buffer in the default
+   colour, completion candidates faint; widths are still measured on the
+   escape-free text so the clip math is unchanged."
   (let* ((typed (format nil ":~A" command-buffer))
          (typed-width (%display-width typed))
          (completions (%workspace-command-completions command-buffer)))
@@ -33,10 +36,15 @@
                (suffix (if completions
                            (%display-clip (format nil "  ~{~A~^ ~}" completions) remaining)
                            ""))
-               (text (concatenate 'string typed suffix))
-               (width (%display-width text)))
+               (width (+ typed-width (%display-width suffix))))
           (move-to stream row 0)
-          (write-string text stream)
+          (%emit-sgr stream +sgr-accent-bold+)
+          (write-char #\: stream)
+          (reset-attrs stream)
+          (write-string command-buffer stream)
+          (%emit-sgr stream +sgr-faint+)
+          (write-string suffix stream)
+          (reset-attrs stream)
           (when (< width cols)
             (write-string (make-string (- cols width) :initial-element #\Space) stream))
           (reset-attrs stream)))))

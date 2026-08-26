@@ -18,13 +18,14 @@
 
   ;;; ── status is always on ──────────────────────────────────────────────────────
 
-  ;; render-session-to-string always emits the blue status-bar background —
-  ;; the `status` option (domain/options, deleted R2.2) always resolved to
-  ;; "on" with no config able to turn it off.
+  ;; render-session-to-string always emits the status bar's base SGR — the
+  ;; `status` option (domain/options, deleted R2.2) always resolved to "on"
+  ;; with no config able to turn it off.  Referenced through the constant so
+  ;; a palette change cannot silently detach this from the renderer.
   (it "render-session-always-shows-status-bar"
     (let* ((sess (make-renderer-test-session 20 5))
            (out  (render-session-to-string sess 6 20)))
-      (expect (search (format nil "~C[44;97m" #\Escape) out))))
+      (expect out :to-contain-sgr nerimux/renderer::+sgr-default-status+)))
 
   ;;; ── BEL rendering ────────────────────────────────────────────────────────────
 

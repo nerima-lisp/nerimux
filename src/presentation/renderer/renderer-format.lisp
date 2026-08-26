@@ -185,6 +185,71 @@
                        (make-string (- budget taken) :initial-element #\Space)
                        (if ellipsis-p "..." ""))))))
 
+;;; ── SGR-aware width math ────────────────────────────────────────────────────
+;;;
+;;; Moved here from renderer-statusbar-layout.lisp: the workspace frame's
+;;; styled header/footer rows need the same escape-skipping clip math the
+;;; status bar uses, and this file loads ahead of both consumers.
+
+(defun %sgr-sequence-end (str start)
+  "If STR has a CSI escape starting at START, return the index just past its final byte.
+   Otherwise returns NIL.
+
+   CSI encoding: ESC (0x1B) '[' (0x5B) <parameter-bytes 0x30–0x3F>*
+                 <intermediate-bytes 0x20–0x2F>* <final-byte 0x40–0x7E>.
+   The function skips all bytes until the first final-byte or end of string,
+   returning (1+ final-byte-index) on success, or LEN when the sequence is
+   unterminated.  Callers should treat an unterminated sequence as consuming
+   the rest of the string."
+  (let ((len (length str)))
+    (when (and (< (1+ start) len)
+               (char= (char str start) +esc+)
+               (char= (char str (1+ start)) #\[))
+      (let ((j (+ start 2)))
+        (loop while (and (< j len)
+                         (not (<= #x40 (char-code (char str j)) #x7e)))
+              do (incf j))
+        (if (< j len) (1+ j) len)))))
+
+(defun %visible-length (str)
+  "Display-column width of STR, skipping CSI SGR escape sequences and
+   counting each remaining character by NERIMUX/TERMINAL/TYPES:CHAR-WIDTH
+   (0/1/2 — R6.9) rather than by character count, so a fullwidth window or
+   session name (CJK, kana, hangul) does not desync status-bar column math
+   the way (LENGTH STR) would.  Equals (LENGTH STR) for escape-free ASCII."
+  (let ((n 0) (i 0) (len (length str)))
+    (loop while (< i len)
+          for esc-end = (%sgr-sequence-end str i)
+          do (if esc-end
+                 (setf i esc-end)
+                 (progn (incf n (nerimux/terminal/types:char-width (char str i)))
+                        (incf i))))
+    n))
+
+(defun %visible-truncate (str n)
+  "Prefix of STR holding at most N display columns; CSI escape sequences are
+   copied through without counting toward N, and a fullwidth character that
+   would straddle the N-column boundary is dropped whole rather than split
+   (R6.9) — the caller's own gap math (e.g. %JUSTIFY-RIGHT, %STATUS-PAD-TO)
+   already fills the resulting short column with spaces, so this does not
+   pad itself.  Equals (SUBSEQ STR 0 (MIN N (LENGTH STR))) for escape-free
+   ASCII."
+  (if (>= n (%visible-length str))
+      str
+      (with-output-to-string (out)
+        (let ((seen 0) (i 0) (len (length str)))
+          (loop while (and (< i len) (< seen n))
+                for esc-end = (%sgr-sequence-end str i)
+                do (if esc-end
+                       (progn (write-string str out :start i :end esc-end)
+                              (setf i esc-end))
+                       (let ((w (nerimux/terminal/types:char-width (char str i))))
+                         (if (<= (+ seen w) n)
+                             (progn (write-char (char str i) out)
+                                    (incf seen w)
+                                    (incf i))
+                             (setf i len)))))))))
+
 (defun %display-clip-tail (text width)
   "Return the trailing slice of TEXT whose display width fits within WIDTH,
    trimming from the front rather than the back -- the shape a live-edited

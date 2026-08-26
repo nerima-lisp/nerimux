@@ -39,22 +39,24 @@
               collect (cons pos (+ pos tlen))
               do (setf start (+ pos (max 1 tlen)))))))
 
-;;; copy-mode-match-style / copy-mode-current-match-style are fixed at their
-;;; registry defaults "bg=green" / "bg=magenta" (R2.2: no config exists to
-;;; change them) — SGR "42" / "45" is what parse-style-string + style-to-sgr
-;;; always resolved those two strings to, so the strings themselves are gone
-;;; (R2.4) and only the resolved codes remain.
+;;; copy-mode-match-style / copy-mode-current-match-style were fixed at their
+;;; registry defaults "bg=green" / "bg=magenta" (SGR 42/45) after R2.2/R2.4
+;;; deleted the option system.  The theme pass replaced those legacy primary
+;;; backgrounds with palette values (renderer-style.lisp): matches sit on the
+;;; amber "needs attention" colour, the match under the cursor on the accent,
+;;; both with dark text so the highlighted content stays readable.
 
 (defconstant +sgr-copy-mode-match+
     (if (boundp (quote +sgr-copy-mode-match+))
         (symbol-value (quote +sgr-copy-mode-match+))
-        "42")
-  "SGR for a copy-mode search match: bg=green.")
+        "48;5;179;38;5;235")
+  "SGR for a copy-mode search match: amber background, dark text.")
 (defconstant +sgr-copy-mode-current-match+
     (if (boundp (quote +sgr-copy-mode-current-match+))
         (symbol-value (quote +sgr-copy-mode-current-match+))
-        "45")
-  "SGR for the copy-mode search match under the cursor: bg=magenta.")
+        "48;5;117;38;5;235")
+  "SGR for the copy-mode search match under the cursor: accent background,
+   dark text.")
 
 (defun %render-row-search-matches (buffer row row-str term w
                                     cur-row cur-col match-sgr current-sgr

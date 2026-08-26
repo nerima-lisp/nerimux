@@ -48,16 +48,41 @@
             (if worktree (%worktree-title-text worktree) (%workspace-em-dash))
             (if worktree (%worktree-status-label worktree) (%workspace-em-dash)))))
 
+(defun %status-state-text (worktree)
+  "WORKTREE's status tokens, each wrapped in its palette colour
+   (%WORKTREE-STATE-TOKEN-SGR), or the em-dash placeholder when WORKTREE is
+   absent.  Styled sibling of %WORKTREE-STATUS-LABEL, kept out of that shared
+   helper because the workspace tree feeds the plain label through
+   %DISPLAY-CLIP, which must never see escape sequences."
+  (if worktree
+      (format nil "~{~A~^ ~}"
+              (mapcar (lambda (token)
+                        (let ((sgr (%worktree-state-token-sgr token)))
+                          (if sgr (%status-wrap token sgr) token)))
+                      (%worktree-status-tokens worktree)))
+      (%workspace-em-dash)))
+
 (defun %status-left-text (focus-pane &key include-repository-p)
-  "The left block's text. INCLUDE-REPOSITORY-P T includes the repository
-   field; NIL omits it — the first thing %COMPOSE-WORKSPACE-STATUS-LINE
-   drops when the line does not fit (R6.5: notification, then tabs, then
-   repository name; branch and state token are never dropped)."
+  "The left block's text, styled: attention mark in alert red, repository
+   muted, worktree branch in bold lavender, state tokens palette-coloured.
+   INCLUDE-REPOSITORY-P T includes the repository field; NIL omits it — the
+   first thing %COMPOSE-WORKSPACE-STATUS-LINE drops when the line does not
+   fit (R6.5: notification, then tabs, then repository name; branch and
+   state token are never dropped)."
   (multiple-value-bind (attention repository worktree state)
       (%status-left-fields focus-pane)
-    (if include-repository-p
-        (format nil "~A ~A ~A ~A" attention repository worktree state)
-        (format nil "~A ~A ~A" attention worktree state))))
+    (declare (ignore state))
+    (let* ((source-worktree (and focus-pane (pane-worktree focus-pane)))
+           (attention-styled (if (string= attention "!")
+                                 (%status-wrap "!" +sgr-alert+)
+                                 attention))
+           (repository-styled (%status-wrap repository +sgr-muted+))
+           (worktree-styled (%status-wrap worktree +sgr-branch+))
+           (state-styled (%status-state-text source-worktree)))
+      (if include-repository-p
+          (format nil "~A ~A ~A ~A"
+                  attention-styled repository-styled worktree-styled state-styled)
+          (format nil "~A ~A ~A" attention-styled worktree-styled state-styled)))))
 
 ;;; ── Middle block: the current worktree's window/pane tabs (R6.5/R6.7) ─────
 
@@ -66,17 +91,23 @@
    normally, or `!` in its place when PANE has unread output (R6.7) — the
    marker doubles as the separator, matching the format the requirements
    give ([w1: 1 2*!3]: pane 3's `!` sits where the usual space would, with no
-   extra glue needed between it and the previous pane's tab)."
-  (format nil "~:[ ~;!~]~D~:[~;*~]"
-          (pane-unread-output-p pane)
-          (pane-id pane)
-          (eq pane focus-pane)))
+   extra glue needed between it and the previous pane's tab).  The visible
+   text is unchanged by the theme; the unread mark renders amber and the
+   focused pane's `N*` renders bold accent."
+  (let ((separator (if (pane-unread-output-p pane)
+                       (%status-wrap "!" +sgr-warn+)
+                       " ")))
+    (if (eq pane focus-pane)
+        (format nil "~A~A" separator
+                (%status-wrap (format nil "~D*" (pane-id pane)) +sgr-accent-bold+))
+        (format nil "~A~D" separator (pane-id pane)))))
 
 (defun %status-window-tab (window focus-pane)
-  (format nil "[w~D:~{~A~}]"
-          (window-id window)
+  (format nil "~A~{~A~}~A"
+          (%status-wrap (format nil "[w~D:" (window-id window)) +sgr-muted+)
           (mapcar (lambda (pane) (%status-pane-tab-token pane focus-pane))
-                  (window-panes window))))
+                  (window-panes window))
+          (%status-wrap "]" +sgr-muted+)))
 
 (defun %status-window-pane-tabs (focus-pane)
   "The middle block: FOCUS-PANE's worktree's window/pane tabs
@@ -100,7 +131,9 @@
    %CLIENT-NOTIFY conses onto its front) — the 64-entry cap stays on the
    conn's log (R6.5: \"display only, not retention, changes\"); this only
    ever reads the first entry."
-  (if messages (first messages) (%workspace-em-dash)))
+  (if messages
+      (%status-wrap (first messages) +sgr-muted-italic+)
+      (%workspace-em-dash)))
 
 ;;; ── Composition with width-driven degradation (R6.5) ───────────────────────
 
@@ -131,11 +164,19 @@
                         no-tabs
                         (%visible-truncate (assemble nil nil nil) cols))))))))))
 
-(defun %render-status-line (stream status-row sgr-code line)
-  "Emit a fully-composed status LINE at STATUS-ROW, wrapped in SGR-CODE, then reset."
+(defun %render-status-line (stream status-row sgr-code line &optional cols)
+  "Emit a fully-composed status LINE at STATUS-ROW, wrapped in SGR-CODE, then
+   reset.  When COLS is given, pad the remainder of the row with spaces while
+   SGR-CODE's background is still active, so the bar spans the full terminal
+   width instead of stopping where the text ends."
   (move-to stream status-row 0)
   (%emit-sgr stream sgr-code)
   (write-string line stream)
+  (when cols
+    (let ((gap (- cols (%visible-length line))))
+      (when (plusp gap)
+        (%emit-sgr stream (concatenate 'string "0;" sgr-code))
+        (write-string (make-string gap :initial-element #\Space) stream))))
   (reset-attrs stream))
 
 (defun render-status-bar (stream session terminal-rows terminal-cols
@@ -153,4 +194,5 @@
    case, so this degrades gracefully rather than going blank."
   (%render-status-line stream status-row +sgr-default-status+
                        (%compose-workspace-status-line focus-pane messages
-                                                       terminal-cols)))
+                                                       terminal-cols)
+                       terminal-cols))

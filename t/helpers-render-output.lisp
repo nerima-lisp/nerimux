@@ -16,6 +16,19 @@
    \"48;2;10;20;30\")."
   (and (search (format nil "~C[~Am" #\Escape (first expected)) actual) t))
 
+(defun strip-sgr (string)
+  "STRING with every CSI escape sequence removed: the visible text of a
+   styled renderer string.  Tests that pin exact visible shapes (\"[w1: 1
+   2*!3]\") compare against this, with separate :to-contain-sgr assertions
+   for the styling itself."
+  (with-output-to-string (out)
+    (let ((i 0) (len (length string)))
+      (loop while (< i len)
+            for esc-end = (nerimux/renderer::%sgr-sequence-end string i)
+            do (if esc-end
+                   (setf i esc-end)
+                   (progn (write-char (char string i) out) (incf i)))))))
+
 (defun render-pane-output (session pane)
   "Render PANE to a string using the production renderer."
   (with-output-to-string (s)
