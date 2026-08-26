@@ -254,6 +254,24 @@
       (expect (search "GLOBAL PICKER" output))
       (expect (search "no matches" output))))
 
+  (it "joins frame rows with CR+LF so a raw-mode tty never sees a bare LF"
+    ;; The client's tty runs with OPOST off, so the terminal receives the
+    ;; frame bytes verbatim: a bare #\Newline moves down without returning
+    ;; the column, staircasing every full-width row and scrolling the top of
+    ;; the frame off the screen.  Every emulator in the test stack (pyte
+    ;; drivers, %ansi-frame-grid) implicitly treats LF as CR+LF, which is
+    ;; how the defect shipped invisibly -- so assert on the raw bytes here,
+    ;; not through any screen model.
+    (let* ((surface (cl-tui-kit/core:make-surface 10 3))
+           (output (nerimux/renderer::%surface-to-ansi-frame surface))
+           (newlines 0))
+      (loop for index from 0 below (length output)
+            when (char= (char output index) #\Newline)
+              do (incf newlines)
+                 (expect (and (plusp index)
+                              (char= (char output (1- index)) #\Return))))
+      (expect (= 2 newlines))))
+
   (it "renders the bare repository overview with pane attention and preview"
     (let* ((pane (nerimux/model:make-pane :id 7 :title "editor"))
            (worktree

@@ -56,7 +56,17 @@
                   (setf previous-style style)))
               (write-string (cl-tui-kit/core:cell-content cell) stream))))
         (unless (= row (1- (cl-tui-kit/core:surface-height surface)))
-          (terpri stream)))
+          ;; CR+LF, not TERPRI's bare #\Newline: the client's tty is in raw
+          ;; mode (OPOST off), so the terminal receives these bytes verbatim
+          ;; with no ONLCR translation.  A bare LF moves down without
+          ;; returning the column; after each full-width row the frame
+          ;; staircases past the right margin and its top half scrolls off
+          ;; the screen -- a real terminal showed only the empty panel
+          ;; bottoms and the status line.  No automated check caught this
+          ;; because every screen model in reach (pyte drivers, the
+          ;; frame-grid parser above) treats LF as CR+LF.
+          (write-string #.(coerce (list #\Return #\Linefeed) 'string)
+                        stream)))
       (write-string (cl-tui-kit/ansi:ansi-encode-style
                      (cl-tui-kit/core:make-style))
                     stream))))
