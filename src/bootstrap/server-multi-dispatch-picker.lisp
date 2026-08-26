@@ -101,12 +101,43 @@
                   (string= prefix path :end2 (length prefix)))))))
 
 (defun %workspace-find-worktree-for-attach (token organizations)
+  "Resolve an EXPLICIT attach selector TOKEN to a worktree.
+   The prefix fallback deliberately asks \"is TOKEN a directory prefix of the
+   worktree's path\" -- TOKEN names a place to search UNDER, so an ancestor
+   token matching the first worktree found is the intended behavior here
+   (pinned by server-dispatch-helper-tests).  Do not reuse this for cwd-based
+   auto-selection: a cwd is the LONGER string, and this direction silently
+   matched an arbitrary worktree from any ancestor directory --
+   %WORKSPACE-FIND-WORKTREE-FOR-CWD below is that path's correct inverse."
   (or (%workspace-find-worktree token organizations)
       (find-if (lambda (worktree)
                  (%workspace-directory-prefix-p
                   token
                   (nerimux/model:worktree-path worktree)))
                (%workspace-worktrees organizations))))
+
+(defun %workspace-find-worktree-for-cwd (cwd organizations)
+  "The worktree CWD sits inside, preferring the most specific (deepest) match.
+
+   %workspace-find-worktree-for-attach is for an explicit selector: TOKEN names a
+   directory to search under, so the worktree's path is the longer string and
+   TOKEN the prefix. A cwd runs the other way -- it is the longer string, and the
+   worktree's path must be its prefix. Reusing the attach direction here let any
+   ancestor of every worktree (the ghq root, $HOME) match every worktree path as
+   a 'prefix' of TOKEN and silently pre-select whichever worktree the scan
+   reached first. Two worktrees can also nest (one's path a prefix of another's),
+   so this keeps the longest-matching -- most specific -- worktree rather than
+   the first one found."
+  (or (%workspace-find-worktree cwd organizations)
+      (let ((best nil))
+        (dolist (worktree (%workspace-worktrees organizations))
+          (let ((path (nerimux/model:worktree-path worktree)))
+            (when (and (%workspace-directory-prefix-p path cwd)
+                       (or (null best)
+                           (> (length path)
+                              (length (nerimux/model:worktree-path best)))))
+              (setf best worktree))))
+        best)))
 
 (defun %workspace-find-repository-for-attach (token organizations)
   "The repository TOKEN names, by specification, local path, or id (R7.6).
@@ -213,7 +244,7 @@
                (or explicit-worktree
                    (and (stringp cwd)
                         (plusp (length cwd))
-                        (%workspace-find-worktree-for-attach cwd organizations))
+                        (%workspace-find-worktree-for-cwd cwd organizations))
                    (and previous
                         (%workspace-find-worktree previous organizations)))))
          (cond

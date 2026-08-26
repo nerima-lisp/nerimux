@@ -97,6 +97,81 @@
       (nerimux/renderer::%clear-frame-grid grid)
       (expect (string= "      " (nerimux/renderer::%frame-grid-row grid 0)))))
 
+  ;; R6.9-frame-grid: %FRAME-GRID-PUT-CHAR used to advance the grid column
+  ;; by 1 per CHARACTER regardless of display width, so during the
+  ;; ANSI-frame round-trip every live frame goes through
+  ;; (%SURFACE-FROM-ANSI-FRAME), a double-width glyph (CJK, most emoji --
+  ;; NERIMUX/TERMINAL/TYPES:CHAR-WIDTH, the same measure %DISPLAY-WIDTH
+  ;; uses) only consumed 1 grid column instead of 2. Anything written after
+  ;; it in the same row with no intervening MOVE-TO -- e.g. the border glyph
+  ;; %WRITE-PICKER-BOX-LINE appends right after a padded label -- landed one
+  ;; column left of where the already-correct %DISPLAY-CLIP/%DISPLAY-WIDTH
+  ;; text intended. "AA" (2 ASCII columns) and "あ" (1 character, 2 display
+  ;; columns) must place a trailing "|" at the same raw grid index.
+  (it "advances the frame-grid column by display width, not character count"
+    (let* ((ascii-grid (nerimux/renderer::%ansi-frame-grid "AA|" 1 10))
+           (wide-grid (nerimux/renderer::%ansi-frame-grid "あ|" 1 10)))
+      (expect (= 2 (position #\| (nerimux/renderer::%frame-grid-row ascii-grid 0))))
+      (expect (= 2 (position #\| (nerimux/renderer::%frame-grid-row wide-grid 0))))
+      ;; The continuation sentinel sits between the glyph and the pipe, and
+      ;; %frame-grid-text drops it so the flattened row hands the surface a
+      ;; single wide character, not a synthetic filler that would double
+      ;; count the column.
+      (expect (char= (char (nerimux/renderer::%frame-grid-row wide-grid 0) 1)
+                     nerimux/renderer::+frame-grid-continuation+))
+      (expect (search "あ|" (nerimux/renderer::%frame-grid-text wide-grid)))))
+
+  ;; Same fix, exercised through the full ANSI-frame -> surface round-trip
+  ;; (%SURFACE-FROM-ANSI-FRAME) rather than the frame-grid internals
+  ;; directly -- ground truth for what a client actually receives once
+  ;; %SURFACE-TO-ANSI-FRAME re-serialises the surface.
+  (it "keeps a trailing separator column-aligned across an ASCII and a wide-character row through the surface round-trip"
+    (flet ((pipe-column (surface row cols)
+             (loop for column from 0 below cols
+                   when (string= "|" (cl-tui-kit/core:cell-content
+                                       (cl-tui-kit/core:surface-cell
+                                        surface column row)))
+                     return column)))
+      (let* ((ascii-surface
+               (nerimux/renderer::%surface-from-ansi-frame
+                (format nil "AA|~%BB|") 2 10))
+             ;; #x1F468 (man) is confirmed width 2 by
+             ;; t/unit/domain/terminal/char-write-tests.lisp's
+             ;; emoji-zwj-sequence-costs-no-extra-column test.
+             (wide-surface
+               (nerimux/renderer::%surface-from-ansi-frame
+                (format nil "あ|~%~A|" (string (code-char #x1F468))) 2 10)))
+        (expect (= (pipe-column ascii-surface 0 10) (pipe-column wide-surface 0 10)))
+        (expect (= (pipe-column ascii-surface 1 10) (pipe-column wide-surface 1 10))))))
+
+  ;; Regression test for the fix at the boundary every live frame crosses
+  ;; (RENDER-SESSION-TO-TUI-STRING / RENDER-WORKSPACE-OVERVIEW-TO-TUI-STRING
+  ;; both funnel ANSI-frame text through %SURFACE-FROM-ANSI-FRAME): a row
+  ;; built the way %RENDER-CLIENT-PICKER and RENDER-WORKSPACE-OVERVIEW-TO-
+  ;; STRING's `cell` helper both do it -- a label with a border glyph
+  ;; appended right after via WRITE-CHAR, no MOVE-TO between them -- must
+  ;; place that border in the same surface CELL column whether the label is
+  ;; ASCII or a realistic mix of CJK, ASCII, and an emoji (generalizing
+  ;; test 2's single-character case to a multi-character label, the shape
+  ;; pane content and preview text actually take). (Note: cl-tui-kit's own
+  ;; WIDGET rows -- the tree list and the C-p picker's cl-tui-kit-widget
+  ;; box -- draw straight onto the surface via surface-draw-text, verified
+  ;; separately as already display-width safe there; this is for the
+  ;; ANSI-frame-TEXT rows that route through the frame-grid parse instead.)
+  (it "keeps a border glyph cell-aligned through the surface round-trip when the preceding label mixes ASCII, CJK, and an emoji"
+    (flet ((border-column (label)
+             (let* ((row (format nil "~A|END" label))
+                    (surface (nerimux/renderer::%surface-from-ansi-frame row 1 40)))
+               (loop for column from 0 below 40
+                     when (string= "|" (cl-tui-kit/core:cell-content
+                                        (cl-tui-kit/core:surface-cell surface column 0)))
+                       return column))))
+      ;; "検証チーム" (5 CJK, 10 cols) + "main" (4 ASCII, 4 cols) +
+      ;; man-emoji (1 char, 2 cols) = 16 columns before "|".
+      (let ((mixed-label (format nil "検証チームmain~A" (string (code-char #x1F468)))))
+        (expect (= 14 (border-column "AAAAAAAAAAAAAA")))
+        (expect (= 16 (border-column mixed-label))))))
+
   (it "renders terminal-size and confirm-view boundaries"
     (expect (nerimux/renderer::%terminal-too-small-p 9 40))
     (expect (nerimux/renderer::%terminal-too-small-p 10 39))
