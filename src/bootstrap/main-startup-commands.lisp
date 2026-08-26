@@ -52,6 +52,17 @@
    argument, not a global one."
   (and (member "--force" rest :test #'string=) t))
 
+(defun %strip-kill-reply-status-line (text)
+  "Drop TEXT's first line -- the wire status token (\"OK\" or \"DENIED\",
+   %parse-kill-reply-status, client.lisp) that %parse-kill-reply-status
+   already consumed to decide :ok vs :denied.  The status token is protocol
+   internals: run-kill's :denied branch below prints the remainder (the pane
+   list) to the user, and that token has no business appearing in it.  Any
+   trailing newline right after the status line is dropped with it so the
+   pane list does not start with a blank line."
+  (let ((newline (position #\Newline text)))
+    (if newline (subseq text (1+ newline)) "")))
+
 (defun run-kill (rest)
   "CLI entry point for `nerimux kill [--force]` (R8.1): ask the server at
    the fixed session name (\"0\" -- R1.5 fixes the session to one) to shut
@@ -59,9 +70,17 @@
    `nerimux kill` is refused, printing the still-open panes and exiting 1,
    when any pane is alive; --force tells the server to SIGHUP then SIGKILL
    them first.
-   No server running at all is not handled here: send-kill-request's
-   connection failure propagates as an ERROR, caught by main()'s top-level
-   handler-case the same way every other startup error is."
+   No server running at all: send-kill-request (client.lisp) reports this as
+   (values :no-server nil) -- it catches SB-BSD-SOCKETS:SOCKET-ERROR itself,
+   narrowly around its own connect-to step -- and that case is reported here
+   as a clean one-line message rather than the raw errno text.  A
+   SOCKET-ERROR raised later in send-kill-request (e.g. an ECONNRESET
+   reading the reply after a successful connect+send) is a mid-session
+   failure, not \"no server running\": send-kill-request deliberately does
+   not catch it there, so it is not :no-server here either, and it
+   propagates to main()'s generic top-level handler-case unchanged, exactly
+   like any other unexpected ERROR from send-kill-request (a malformed
+   reply, a programming error)."
   (multiple-value-bind (status text)
       (send-kill-request "0" (%kill-force-p rest))
     (case status
@@ -70,7 +89,10 @@
        (format *error-output*
                "~&nerimux: kill refused, panes still open:~%~A~%~
                 nerimux: retry with --force to close them~%"
-               text)
+               (%strip-kill-reply-status-line text))
+       (sb-ext:exit :code 1))
+      (:no-server
+       (format *error-output* "~&nerimux: no server running~%")
        (sb-ext:exit :code 1))
       (t
        (format *error-output* "~&nerimux: kill: no reply from server~%")

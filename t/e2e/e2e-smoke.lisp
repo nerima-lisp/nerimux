@@ -1,136 +1,140 @@
-;;;; End-to-end smoke test: drive the *real* nerimux binary inside a PTY.
+;;;; End-to-end smoke test entry point: dispatches headless server/kill
+;;;; scenarios (pure stock SBCL, no ASDF/nerimux) and the real-PTY attach
+;;;; scenario (loads :nerimux) against a real, already-built nerimux binary.
 ;;;;
-;;;; This is not part of the ASDF test-system (it needs a built binary and a
-;;;; real /dev/ptmx).  Run it from the dev shell:
+;;;; Kept at this path/name because existing docs reference it directly.
+;;;; Run via `nix run .#e2e`, or from the dev shell after a build:
 ;;;;
 ;;;;   nix build .
-;;;;   nerimux-sbcl --script t/e2e/e2e-smoke.lisp \
-;;;;         result/bin/nerimux
+;;;;   nerimux-sbcl --script t/e2e/e2e-smoke.lisp result/bin/nerimux
 ;;;;
-;;;; The test spawns `nerimux attach` on a pseudo-terminal, enters :input mode,
-;;;; types `echo <marker>` at the keyboard, and verifies the marker appears in
-;;;; nerimux's *rendered* output — proving the full pipeline: stdin → key
-;;;; forward → inner shell → PTY reader thread → screen → renderer.  Then it
-;;;; sends the detach key (C-q d) and verifies the process exits cleanly.
+;;;; or, baked to the flake-built binary:
+;;;;
+;;;;   nix run .#e2e
+;;;;
+;;;; Optional trailing arguments restrict which scenarios run, by name:
+;;;;
+;;;;   nerimux-sbcl --script t/e2e/e2e-smoke.lisp result/bin/nerimux attach
+;;;;
+;;;; With no scenario names given, every scenario runs in the fixed order
+;;;; below. The three kill-* scenarios other than kill-without-server share
+;;;; one server process spawned by server-starts (see
+;;;; server-kill-scenario.lisp), so selecting them apart from that group
+;;;; produces a FAIL, not a skip -- they are not independent tests.
 
-(require :asdf)
-(push (truename ".") asdf:*central-registry*)
-(asdf:load-system :nerimux)
-(use-package :nerimux/pty)
+(defparameter *e2e-dir*
+  (make-pathname :name nil :type nil :defaults *load-truename*)
+  "Directory this file was loaded from, used to locate the sibling scenario
+   files regardless of the caller's current working directory.")
 
-;;; ── Timing constants ─────────────────────────────────────────────────────────
+(defparameter *e2e-repo-root*
+  (truename (merge-pathnames "../../" *e2e-dir*))
+  "The nerimux checkout root, two directories up from t/e2e/. Bound before
+   attach-scenario.lisp is (lazily) loaded, since it needs this to configure
+   ASDF's central registry.")
 
-(defconstant +e2e-startup-timeout-seconds+ 8
-  "Maximum seconds to wait for nerimux and its inner shell to initialize before typing.")
+(load (merge-pathnames "helpers.lisp" *e2e-dir*))
+(load (merge-pathnames "server-kill-scenario.lisp" *e2e-dir*))
 
-(defconstant +e2e-startup-quiet-seconds+ 0.5
-  "Seconds of quiet PTY output after first render before typing the marker command.")
+;;; ── Scenario table ────────────────────────────────────────────────────────
+;;;
+;;; :ATTACH is special-cased: its file is loaded lazily, only when selected,
+;;; so a load failure (missing system, missing /dev/ptmx, ...) cannot take
+;;; down the headless scenario results that ran before it.
 
-(defconstant +e2e-marker-timeout-seconds+ 6
-  "Maximum seconds to wait for the marker to appear in the rendered output.")
+(defparameter *scenarios*
+  (list (cons "kill-without-server"    'scenario-kill-without-server)
+        (cons "server-starts"          'scenario-server-starts)
+        (cons "kill-refuses-with-pane" 'scenario-kill-refuses-with-pane)
+        (cons "kill-force-cleans"      'scenario-kill-force-cleans)
+        (cons "attach"                 :attach))
+  "Mode-name -> handler-symbol (or :ATTACH), in the fixed run order.")
 
-(defconstant +e2e-detach-timeout-seconds+ 3
-  "Maximum seconds to wait for nerimux to exit after the detach key.")
+(defun %run-attach-scenario-lazily (binary)
+  "Load attach-scenario.lisp and run RUN-ATTACH-SCENARIO, catching any error
+   -- including a load failure -- so it reports as a FAIL for this one
+   scenario rather than aborting the whole run."
+  (handler-case
+      (progn
+        (load (merge-pathnames "attach-scenario.lisp" *e2e-dir*))
+        (funcall (find-symbol "RUN-ATTACH-SCENARIO") binary))
+    ((or error sb-ext:timeout) (c)
+      (let ((*print-circle* t))
+        (values nil (format nil "attach scenario failed to load or run: ~A" c))))))
 
-(defconstant +e2e-poll-timeout-us+ nerimux/ports:+poll-timeout-us+
-  "Select timeout in microseconds when polling the PTY for output.")
+(defun %run-one-scenario (name binary)
+  (let ((entry (cdr (assoc name *scenarios* :test #'string=))))
+    (handler-case
+        (if (eq entry :attach)
+            (%run-attach-scenario-lazily binary)
+            (funcall entry binary))
+      ((or error sb-ext:timeout) (c)
+        (let ((*print-circle* t))
+          (values nil (format nil "signalled ~A" c)))))))
 
-(defconstant +e2e-read-buf-size+   nerimux/ports:+pty-buf-size+
-  "PTY read buffer size in bytes.")
+(defun %selected-scenario-names (filter-args)
+  "All scenario names in order when FILTER-ARGS is empty, else the subset of
+   *SCENARIOS* named in FILTER-ARGS, still in *SCENARIOS*'s fixed order."
+  (if (null filter-args)
+      (mapcar #'car *scenarios*)
+      (remove-if-not (lambda (n) (member n filter-args :test #'string=))
+                      (mapcar #'car *scenarios*))))
 
-(defconstant +e2e-search-window-bytes+ (* 64 1024)
-  "Maximum recent PTY output bytes to scan for the marker.")
+(defparameter +ksc-reap-timeout-seconds+ 5
+  "Bound for confirming *KSC-SERVER-PROCESS* has exited during RUN-E2E's
+   unconditional post-loop reap.")
 
-;;; ── Accumulator helpers ──────────────────────────────────────────────────────
+(defun %reap-server-process ()
+  "Unconditionally SIGKILL and confirm exit of *KSC-SERVER-PROCESS* (defined
+   in server-kill-scenario.lisp, loaded eagerly by this file before RUN-E2E
+   is ever called). A spawned `nerimux server` outlives this process
+   whenever SERVER-STARTS times out or KILL-FORCE-CLEANS fails to confirm
+   exit; this reap runs regardless of which scenarios passed or failed. A
+   no-op when the process is nil or already exited."
+  (when (and *ksc-server-process* (sb-ext:process-alive-p *ksc-server-process*))
+    (ignore-errors (sb-ext:process-kill *ksc-server-process* 9))
+    (poll-until (lambda () (not (sb-ext:process-alive-p *ksc-server-process*)))
+                +ksc-reap-timeout-seconds+)))
 
-(defun %make-accumulator ()
-  "Return a fresh adjustable byte vector for accumulating PTY output."
-  (make-array 0 :element-type '(unsigned-byte 8) :adjustable t :fill-pointer 0))
+(defparameter +ksc-attach-kill-timeout-seconds+ 10
+  "Bound for the `kill --force' RUN-E2E issues to clean up whatever server
+   the attach scenario auto-started and left running.")
 
-(defun %accumulate-chunk (acc chunk)
-  "Append CHUNK (octet vector) to ACC (adjustable fill-pointer vector)."
-  (loop for b across chunk do (vector-push-extend b acc)))
+(defun %reap-attach-server (binary names)
+  "When \"attach\" was among the selected scenario NAMES, issue `BINARY kill
+   --force' to clean up whatever server RUN-ATTACH-SCENARIO auto-started
+   (attach-scenario.lisp): attach detaches without killing, by design --
+   the server is meant to persist for reattachment -- so nothing else in
+   this file's control flow ever stops it. This reuses the product's own
+   cleanup path rather than tracking the attach scenario's server pid.
+   A \"no reply from server\" failure (nonzero exit, no crash) is expected
+   and ignored whenever the attach scenario never got far enough to start
+   a server, or something else already cleaned it up."
+  (when (member "attach" names :test #'string=)
+    (ignore-errors
+      (run-program-bounded binary '("kill" "--force")
+                            :timeout-seconds +ksc-attach-kill-timeout-seconds+))))
 
-(defun %search-in-tail (substr acc tail-size)
-  "Search for SUBSTR (string) in the last TAIL-SIZE bytes of ACC (octet vector).
-   Scanning only the tail avoids re-scanning gigabytes of prior PTY output."
-  (let* ((len (fill-pointer acc))
-         (start (max 0 (- len tail-size))))
-    (search substr (map 'string #'code-char (subseq acc start)))))
+(defun run-e2e (binary filter-args)
+  "Run the selected scenarios against BINARY in order, printing one PASS/FAIL
+   line per scenario, then a summary line. Exits 0 only when at least one
+   scenario was selected and every selected scenario passed -- a selection
+   matching nothing is a FAIL, not a vacuous pass."
+  (let* ((names (%selected-scenario-names filter-args))
+         (passed 0)
+         (failed 0))
+    (dolist (name names)
+      (multiple-value-bind (ok detail) (%run-one-scenario name binary)
+        (format t "~&[e2e] ~:[FAIL~;PASS~] ~A -- ~A~%" ok name detail)
+        (finish-output)
+        (if ok (incf passed) (incf failed))))
+    (%reap-server-process)
+    (%reap-attach-server binary names)
+    (format t "~&[e2e] ~D selected, ~D passed, ~D failed~%"
+            (length names) passed failed)
+    (finish-output)
+    (sb-ext:exit :code (if (and (plusp (length names)) (zerop failed)) 0 1))))
 
-;;; ── CPS-style polling loop ───────────────────────────────────────────────────
-
-(defun %wait-for-marker (fd substr seconds acc)
-  "Poll FD for PTY output up to SECONDS, accumulating into ACC.
-   Returns T when SUBSTR appears in the output, NIL on timeout."
-  (let ((deadline (+ (get-internal-real-time)
-                     (* seconds internal-time-units-per-second)))
-        (mlen (length substr)))
-    (loop
-      (when (> (get-internal-real-time) deadline) (return nil))
-      (when (select-fds (list fd) +e2e-poll-timeout-us+)
-        (let ((chunk (pty-read-blocking-into fd (make-array +e2e-read-buf-size+ :element-type '(unsigned-byte 8)))))
-          (when chunk
-            (%accumulate-chunk acc chunk)
-            (when (%search-in-tail substr acc (max +e2e-search-window-bytes+ mlen))
-              (return t))))))))
-
-(defun %wait-for-startup-render (fd seconds acc)
-  "Poll FD until nerimux has rendered at least once and output has gone quiet.
-   The integration smoke drives the built binary, whose startup time varies
-   enough that a fixed sleep can type before raw mode and the first pane are ready."
-  (let ((deadline (+ (get-internal-real-time)
-                     (* seconds internal-time-units-per-second)))
-        (quiet-ticks (* +e2e-startup-quiet-seconds+
-                        internal-time-units-per-second))
-        (last-output nil))
-    (loop
-      (let ((now (get-internal-real-time)))
-        (when (> now deadline)
-          (return (not (null last-output))))
-        (when (and last-output
-                   (>= (- now last-output) quiet-ticks))
-          (return t)))
-      (when (select-fds (list fd) +e2e-poll-timeout-us+)
-        (let ((chunk (pty-read-blocking-into fd (make-array +e2e-read-buf-size+ :element-type '(unsigned-byte 8)))))
-          (when chunk
-            (%accumulate-chunk acc chunk)
-            (setf last-output (get-internal-real-time))))))))
-
-;;; ── E2E entry point ──────────────────────────────────────────────────────────
-
-(defun e2e (binary)
-  (format t "~&[e2e] driving ~A~%" binary)
-  (multiple-value-bind (fd pid)
-      (forkpty-with-shell 24 80
-                          :default-command (format nil "exec ~S attach" binary))
-    (unwind-protect
-         (let ((marker "E2E_PROOF_4242")
-               (acc    (%make-accumulator)))
-           ;; Let nerimux and its inner shell start up.
-           (%wait-for-startup-render fd +e2e-startup-timeout-seconds+ acc)
-           ;; The workspace drops unbound normal-mode keys; enter :input before
-           ;; sending the command to the focused pane.
-           (pty-write fd (make-array 1 :element-type '(unsigned-byte 8)
-                                      :initial-contents (list (char-code #\i))))
-           (pty-write fd (format nil "echo ~A~%" marker))
-           ;; Wait for the marker to appear in rendered output.
-           (let ((found (%wait-for-marker fd marker +e2e-marker-timeout-seconds+ acc)))
-             ;; Detach: prefix C-q (byte 17) then 'd'.
-             (pty-write fd (make-array 2 :element-type '(unsigned-byte 8)
-                                          :initial-contents (list 17 (char-code #\d))))
-             (multiple-value-bind (exit-code exit-kind)
-                 (pty-child-exit-status
-                  fd
-                  (cl-date-kit:duration-of-seconds +e2e-detach-timeout-seconds+))
-               (if (and found (eq :exited exit-kind) (zerop exit-code))
-                   (progn (format t "[e2e] PASS — marker rendered and nerimux exited cleanly~%")
-                          (sb-ext:exit :code 0))
-                   (progn (format t "[e2e] FAIL — marker=~A exit-kind=~A exit-code=~A~%"
-                                  (if found :found :missing) exit-kind exit-code)
-                          (format t "[e2e] captured ~D bytes~%" (fill-pointer acc))
-                          (sb-ext:exit :code 1))))))
-      (pty-close fd pid))))
-
-(let ((binary (or (second sb-ext:*posix-argv*) "result/bin/nerimux")))
-  (e2e binary))
+(let ((binary  (or (second sb-ext:*posix-argv*) "result/bin/nerimux"))
+      (filters (nthcdr 2 sb-ext:*posix-argv*)))
+  (run-e2e binary filters))

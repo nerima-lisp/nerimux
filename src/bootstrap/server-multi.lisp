@@ -317,9 +317,36 @@ callbacks themselves run serially in the loop."
 
 ;;; ── Connection lifecycle ────────────────────────────────────────────────────
 
+(defconstant +max-clients+ 32
+  "Hard cap on the number of simultaneously registered *CLIENTS* entries.
+
+   Bounds *CLIENTS* growth against a same-uid runaway loop that opens
+   connections and never closes them, so unbounded fd consumption cannot take
+   down the shared select(2) serve loop.  %ADD-CLIENT refuses the newest
+   connection at the cap rather than closing the eldest registered one:
+   close-eldest could evict a live attached client to make room for a probe.
+   Recovery at the cap is partial, and the boundary matters: a client that
+   ever WROTE something self-clears (a stalled mid-frame read arms
+   +SOCKET-STREAM-TIMEOUT-SECONDS+, 30s, net.lisp; a stalled attached client
+   hits SEND-FRAME's write timeout on the next broadcast) -- but a connection
+   that sends ZERO bytes is never in select(2)'s ready set, so no read is
+   ever attempted, no timeout is ever armed, and its slot is held until the
+   server restarts.  Accepted for now because reaching that state takes a
+   deliberate same-uid connect-and-hold loop, not any real client; if that
+   trade stops being acceptable, the fix is an idle-registration timer that
+   drops a conn N seconds after %ADD-CLIENT unless a first frame completed.
+   A `nerimux kill` arriving while capped is refused like any other
+   connection -- it cannot be told apart at accept time -- and reports
+   \"no reply from server\" promptly rather than hanging.")
+
 (defun %add-client (socket)
   "Register SOCKET as a new client: build its CLIENT-CONN and mark
-   the screen dirty so the new client gets an immediate paint.  Returns the conn."
+   the screen dirty so the new client gets an immediate paint.  Returns the
+   conn, or NIL when +MAX-CLIENTS+ are already registered -- SOCKET is closed
+   instead of registered in that case."
+  (when (>= (length *clients*) +max-clients+)
+    (close-socket socket)
+    (return-from %add-client nil))
   (let ((conn (%make-client-conn :socket socket
                                  :stream (socket-stream socket)
                                  :fd     (socket-fd socket)
@@ -391,8 +418,20 @@ callbacks themselves run serially in the loop."
 
 (defun %drop-client (conn &key bye)
   "Remove CONN: optionally send a bye frame, close its socket, and
-   unregister it.  Safe to call more than once."
+   unregister it.  Safe to call more than once.
+
+   MUST NOT SIGNAL: this runs as WITH-LOOP-SAFE-ERROR's on-error handler and
+   in %RUN-MULTI-SERVER-LOOP's unwind cleanup, and a handler/cleanup body has
+   no guard above it short of MAIN's process-exit net.  The dangerous case is
+   real, not theoretical: when a send to a dead peer fails mid-write, the
+   frame's tail stays in the fd-stream's Lisp buffer, and CLOSE retries that
+   flush — a second BROKEN-PIPE, now outside every guard.  Every `attach` to
+   a live server triggers it, because %STALE-SOCKET-P's liveness probe is a
+   connect-then-close that the loop registers as a client and then writes to.
+   Unregister first so a signaling close can never leave the ghost conn in
+   *CLIENTS* to be re-dropped (and re-signal) by the cleanup pass."
   (when (member conn *clients*)
+    (setf *clients* (remove conn *clients*))
     (setf (client-conn-ui-prefix-p conn) nil)
     (when (and bye (streamp (client-conn-stream conn)))
       (handler-case
@@ -402,5 +441,8 @@ callbacks themselves run serially in the loop."
         (stream-error () nil)))
     (let ((socket (client-conn-socket conn)))
       (when socket
-        (close-socket socket)))
-    (setf *clients* (remove conn *clients*))))
+        (handler-case
+            (close-socket socket)
+          ;; No logging here: a dead peer already gone by the time we get to
+          ;; close it is routine and expected on every drop, not a fault worth a line.
+          (peer-io-failure () nil))))))

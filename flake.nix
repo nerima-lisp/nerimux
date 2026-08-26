@@ -481,7 +481,9 @@
               cp -r ${self} "$work/src-tree"
               chmod -R u+w "$work/src-tree"
               cd "$work/src-tree"
-              exec timeout --signal=TERM --kill-after=30s 2700 \
+              # No exec: it would replace the shell and the EXIT trap above
+              # would never run, leaking $work on every invocation.
+              timeout --signal=TERM --kill-after=30s 2700 \
                 sbcl --dynamic-space-size 4096 --no-sysinit --no-userinit \
                 --disable-debugger --script run-tests.lisp
             '';
@@ -503,9 +505,39 @@
               cp -r ${self} "$work/src-tree"
               chmod -R u+w "$work/src-tree"
               cd "$work/src-tree"
-              exec timeout --signal=TERM --kill-after=30s 2700 \
+              # No exec: it would replace the shell and the EXIT trap above
+              # would never run, leaking $work on every invocation.
+              timeout --signal=TERM --kill-after=30s 2700 \
                 sbcl --dynamic-space-size 4096 --no-sysinit --no-userinit \
                 --disable-debugger --script run-tests.lisp
+            '';
+          };
+
+          # End-to-end smoke: headless server/kill scenarios plus the
+          # real-PTY attach scenario (t/e2e/e2e-smoke.lisp), driven against
+          # the flake-built binary rather than a hand-run `nix build .`.
+          # Runs read-only against ${self} in the store -- unlike test and
+          # test-pty, e2e-smoke.lisp never compiles nerimux in place: the
+          # headless scenarios only spawn the already-built binary as a
+          # subprocess, and the attach scenario ASDF:LOAD-SYSTEMs nerimux,
+          # which (like the package derivation above, flake.nix:314-368)
+          # only ever writes its build output (fasls) under HOME's ASDF
+          # cache, not next to the source. Only HOME needs a writable
+          # scratch directory.
+          e2e = pkgs.writeShellApplication {
+            name = "nerimux-e2e";
+            runtimeInputs = [
+              sbcl
+              pkgs.coreutils
+            ];
+            text = ''
+              export NERIMUX_SIBLING_REGISTRY="${siblingRegistry system}"
+              home="$(mktemp -d)"
+              trap 'rm -rf "$home"' EXIT
+              export HOME="$home"
+              cd ${self}
+              sbcl --dynamic-space-size 4096 --script t/e2e/e2e-smoke.lisp \
+                "${self.packages.${system}.nerimux}/bin/nerimux" "$@"
             '';
           };
         in
@@ -541,6 +573,18 @@
             meta = {
               description = "Run nerimux's real-PTY suite (needs /dev/ptmx)";
               mainProgram = "nerimux-test-pty";
+            };
+          };
+
+          # End-to-end smoke against the built binary. Also needs a real
+          # PTY for the attach scenario, so it is an app, not a check, for
+          # the same reason test-pty is.
+          e2e = {
+            type = "app";
+            program = "${e2e}/bin/nerimux-e2e";
+            meta = {
+              description = "Run nerimux's end-to-end smoke scenarios (needs /dev/ptmx)";
+              mainProgram = "nerimux-e2e";
             };
           };
         }

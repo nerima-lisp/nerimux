@@ -314,8 +314,13 @@
     worktree))
 
 (defun %read-repository-status (repository)
-  (mapcar #'%read-worktree-status
-          (nerimux/model:repository-worktrees repository)))
+  (loop for worktree in (nerimux/model:repository-worktrees repository)
+        ;; A bare root (ghq's `<repo>.git` layout) has no working tree of
+        ;; its own, so running `git status` against it always fails; that
+        ;; used to turn every successful worktree op into a false "failed"
+        ;; notify once this ran during the async catalog status refresh.
+        unless (nerimux/model:worktree-bare-p worktree)
+          collect (%read-worktree-status worktree)))
 
 (defun %apply-repository-status
     (repository updates &optional (missing-p nil missing-p-p))
@@ -340,13 +345,14 @@
      :raw-worktrees raw-worktrees
      :missing-p missing-p
      :status-updates
-     (mapcar
-      (lambda (raw)
-        (%read-worktree-status-at
-         (vcs-kit:vcs-worktree-path raw)
-         (vcs-kit:vcs-worktree-head raw)
-         (nerimux/model:repository-path repository)))
-      raw-worktrees))))
+     (loop for raw in raw-worktrees
+           ;; Same reasoning as %read-repository-status: a bare root has no
+           ;; working tree, so status collection must skip it here too.
+           unless (vcs-kit:vcs-worktree-bare-p raw)
+             collect (%read-worktree-status-at
+                      (vcs-kit:vcs-worktree-path raw)
+                      (vcs-kit:vcs-worktree-head raw)
+                      (nerimux/model:repository-path repository))))))
 
 (defun %apply-repository-refresh (repository refresh)
   (%apply-repository-worktrees

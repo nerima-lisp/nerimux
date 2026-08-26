@@ -17,6 +17,11 @@ The server socket is created in a per-user directory with mode `0700` under
 can write to that socket can run commands as the owning user. The directory
 permissions, not the protocol, are what confines this.
 
+Within that boundary the server also caps concurrent client connections
+(`+max-clients+`), so a runaway same-user loop that opens connections and
+never closes them exhausts its own budget instead of the server's file
+descriptors. This is a resource bound, not an authorization mechanism.
+
 Because that is the whole boundary, it is **verified rather than assumed**.
 Before binding, the server `lstat`s the directory and refuses to start unless
 it is a real directory (not a symlink), owned by the current uid, and mode

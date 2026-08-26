@@ -91,6 +91,12 @@
    showing organizations rather than everything at once. Enter on those used to
    start a worktree-create prompt — which made the create flow reachable but
    left expansion with no key at all."
+  ;; A fresh client has no selection, so %client-tree-object returns nil and
+  ;; every typep below misses; the dispatch must not typecase a nil selection.
+  ;; This fallback used to live inside the catch-all (t) branch, which made
+  ;; the FIRST Enter a no-op "primer" that only set up state for the second.
+  (unless (%client-tree-object conn)
+    (%select-client-tree-worktree conn nil))
   (let ((object (%client-tree-object conn)))
     (cond
       ((typep object 'nerimux/model:organization)

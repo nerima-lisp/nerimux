@@ -184,7 +184,7 @@ nerimux/
 └── t/
     ├── unit/               # feature-focused spec files
     ├── integration/        # PTY/socket/runtime integration specs
-    └── e2e/                # binary-level smoke test
+    └── e2e/                # binary-level smoke scenarios
 ```
 
 The renderer has two independent first passes, and the split is deliberate:

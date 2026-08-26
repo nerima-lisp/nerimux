@@ -129,9 +129,17 @@ PTY code, because the flake gate does not include it.
 
 There is also an end-to-end smoke script, `t/e2e/e2e-smoke.lisp`, kept out of
 the ASDF test system because it needs a built binary and a real `/dev/ptmx`.
-It launches the binary with `attach`, enters `:input` mode with `i`, sends a
-marker through the attached pane, verifies the rendered output, and detaches
-with `C-q d`:
+Like `nerimux/pty-test`, it is not part of `nix flake check`; run it
+yourself. It runs headless `server`/`kill` scenarios against the binary as a
+subprocess, then launches it with `attach`, enters `:input` mode with `i`,
+sends a marker through the attached pane, verifies the rendered output, and
+detaches with `C-q d`:
+
+```bash
+nix run .#e2e
+```
+
+or, against a manual build:
 
 ```bash
 nix build .

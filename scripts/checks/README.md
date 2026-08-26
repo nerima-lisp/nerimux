@@ -48,8 +48,9 @@ Checking only the first direction catches a deletion that went too far but not
 one that went unnoticed. The second is how a test file becomes decoration.
 
 `t/pty/` is excluded: it belongs to `nerimux/pty-test`, which has its own
-component list. `t/e2e/e2e-smoke.lisp` is a known orphan — it is run by hand
-against a built binary (see the getting-started guide), not by any ASDF system.
+component list. Every file under `t/e2e/` is excluded by design — it runs
+against a built binary via `nix run .#e2e` (or by hand, see the
+getting-started guide), not through any ASDF system.
 
 ## suite-structure-check.pl — every test is inside a suite
 

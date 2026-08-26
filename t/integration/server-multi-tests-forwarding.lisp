@@ -39,4 +39,61 @@
         (expect (equal (list b) nerimux::*clients*))
         ;; Idempotent: dropping again is a no-op.
         (nerimux::%drop-client a)
-        (expect (equal (list b) nerimux::*clients*))))))
+        (expect (equal (list b) nerimux::*clients*)))))
+
+  ;; %drop-client MUST NOT SIGNAL (its own docstring's contract): it runs as
+  ;; WITH-LOOP-SAFE-ERROR's on-error handler and in %RUN-MULTI-SERVER-LOOP's
+  ;; unwind cleanup, both without any guard above them.  A dead peer's socket
+  ;; failing to close (e.g. a second BROKEN-PIPE on the retry flush) must not
+  ;; propagate out of here, and CONN must still come off the registry.
+  (it "multi-drop-client-does-not-signal-when-close-socket-fails"
+    (let* ((conn (%make-test-conn))
+           (nerimux::*clients* (list conn)))
+      (setf (nerimux::client-conn-socket conn) :fake-socket)
+      (with-stubbed-fdefinition
+          ((nerimux/net:close-socket
+            (lambda (&rest args)
+              (declare (ignore args))
+              (error "peer gone"))))
+        (finishes (nerimux::%drop-client conn)
+                  "%drop-client must not signal when close-socket fails"))
+      (expect (null nerimux::*clients*))))
+
+  ;;; ── Accept-loop resilience ───────────────────────────────────────────────
+
+  ;; %accept-pending-connection must not let a failure from accept-connection
+  ;; itself (e.g. EMFILE fd exhaustion) escape into the serve loop and kill
+  ;; the whole server (CWE-703): the failed accept is dropped, and nothing is
+  ;; registered, but already-attached clients keep being served.
+  (it "multi-accept-pending-connection-survives-accept-connection-failure"
+    (let ((nerimux::*clients* nil))
+      (with-stubbed-fdefinition
+          ((nerimux/net:accept-connection
+            (lambda (&rest args)
+              (declare (ignore args))
+              (error "EMFILE"))))
+        (finishes
+         (nerimux::%accept-pending-connection :fake-listener 5 (list 5))
+         "%accept-pending-connection must not signal when accept-connection fails"))
+      (expect (null nerimux::*clients*))))
+
+  ;;; ── Connection cap ───────────────────────────────────────────────────────
+
+  ;; %add-client refuses a new connection once *clients* already holds
+  ;; +max-clients+ entries (refuse-newest, not evict-eldest): it closes the
+  ;; incoming socket instead of registering it, and the registry is left
+  ;; untouched.
+  (it "multi-add-client-refuses-at-max-clients-cap"
+    (let* ((full (loop repeat nerimux::+max-clients+ collect (%make-test-conn)))
+           (nerimux::*clients* full)
+           (close-call-count 0))
+      (with-stubbed-fdefinition
+          ((nerimux/net:close-socket
+            (lambda (&rest args)
+              (declare (ignore args))
+              (incf close-call-count)
+              nil)))
+        (expect (null (nerimux::%add-client :fake-socket))))
+      (expect (= nerimux::+max-clients+ (length nerimux::*clients*)))
+      (expect (eq full nerimux::*clients*))
+      (expect (= 1 close-call-count)))))

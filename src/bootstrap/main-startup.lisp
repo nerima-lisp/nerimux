@@ -57,7 +57,15 @@
    %parse-global-cli-argv already reports a malformed global flag: a one-line
    message on *error-output* and exit 1 — never the raw SBCL debugger, which
    the saved core would otherwise drop a real user into."
-  (let ((invocation (%parse-global-cli-argv (%application-argv))))
+  ;; *PRINT-CIRCLE* T for the whole main thread: the domain model is cyclic
+  ;; (REPOSITORY <-> ORGANIZATION back-pointers), and every ~A of a condition
+  ;; whose datum holds one — this outermost net, the dispatch-layer
+  ;; "... failed: ~A" notifies, %DRAIN-MAIN-THREAD-CALLBACKS — otherwise
+  ;; exhausts the control stack mid-report and lands in the debugger the
+  ;; saved core exists to avoid.  Same rationale as WITH-CYCLE-SAFE-PRINTING
+  ;; (t/suite.lisp); a thread that reports conditions must rebind this itself.
+  (let ((*print-circle* t)
+        (invocation (%parse-global-cli-argv (%application-argv))))
     (if (null invocation)
         (sb-ext:exit :code 1)
         (let ((mode-args (%apply-global-cli-invocation invocation)))

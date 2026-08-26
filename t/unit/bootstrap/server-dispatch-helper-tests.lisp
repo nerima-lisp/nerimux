@@ -426,6 +426,56 @@
           (setf (nerimux::client-conn-selected-tree-object conn) nil)
           (expect (eq main-worktree (nerimux::%client-tree-object conn)))))))
 
+  ;; F9 regression: a freshly attached client has NO selection at all --
+  ;; %client-tree-object returns nil (no selected-tree-object, no
+  ;; selected-worktree, no focus pane). The FIRST Enter used to bind OBJECT to
+  ;; that nil before dispatching, miss every typep clause, and fall into the
+  ;; catch-all worktree branch -- which selected row 0 as a side effect but
+  ;; then read a still-nil client-conn-selected-worktree and reported "no
+  ;; worktree selected", even though row 0 was a perfectly good organization
+  ;; that should have expanded. Only the SECOND Enter worked, because the
+  ;; first one's fallback had, by then, set up state for it.
+  (it "first-enter-on-a-fresh-client-toggles-the-default-row-not-a-nil-selection"
+    (let* ((organization
+             (nerimux/model:make-organization
+              :id "org" :host "github.com" :name "team"))
+           (conn (nerimux::%make-client-conn))
+           (nerimux/vcs::*workspace-organizations* (list organization))
+           (nerimux::*workspace-expanded-node-ids*
+             (make-hash-table :test #'equal))
+           (nerimux::*clients* (list conn))
+           (nerimux::*dirty* nil))
+      (setf (nerimux::client-conn-view conn) :overview)
+      ;; Fresh conn: nothing selected, nothing focused.
+      (expect (null (nerimux::%client-tree-object conn)))
+      (expect (nerimux::%focus-selected-client-worktree nil conn))
+      ;; The organization row (the only row) must have toggled open ...
+      (expect (gethash (list :organization "org")
+                       nerimux::*workspace-expanded-node-ids*))
+      ;; ... and the nil-selection catch-all must never have fired.
+      (expect (null (find "no worktree selected"
+                         (nerimux::client-conn-message-log conn)
+                         :test #'string=)))))
+
+  ;; Empty-catalog edge: no organizations at all (as opposed to the test
+  ;; above, one organization with no selection yet). This is a
+  ;; characterization test pinning current correct behavior, not a fix
+  ;; guard -- %select-client-tree-worktree/%workspace-find-tree-object/
+  ;; %client-tree-object (server-multi-dispatch-picker.lisp,
+  ;; server-multi-dispatch-command-workspace.lisp) are all nil-safe over an
+  ;; empty organizations list, so the catch-all branch in
+  ;; %focus-selected-client-worktree (server-multi-dispatch-command-input.lisp)
+  ;; is reached the same way as the fresh-client case above, and reports
+  ;; "no worktree selected" without signalling.
+  (it "focus-selected-client-worktree-on-an-empty-catalog-reports-no-worktree-selected"
+    (let* ((conn (nerimux::%make-client-conn))
+           (nerimux/vcs::*workspace-organizations* nil)
+           (nerimux::*clients* (list conn))
+           (nerimux::*dirty* nil))
+      (expect (eq t (nerimux::%focus-selected-client-worktree nil conn)))
+      (expect (equal (list "no worktree selected")
+                      (nerimux::client-conn-message-log conn)))))
+
   (it "parses-client-options-and-viewport-values"
     (let ((conn (nerimux::%make-client-conn)))
       (expect (= 42 (nerimux::%parse-client-integer "42")))
