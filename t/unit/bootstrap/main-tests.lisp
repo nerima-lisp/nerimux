@@ -67,22 +67,34 @@
           (expect (eq expected-key (car (first *main-calls*))))
           (expect (equal expected-name (first (cdr (first *main-calls*)))))))))
 
-  ;; An unrecognized mode word and a bare `nerimux` with no args are both now
-  ;; usage errors: %dispatch-unknown-mode no longer forwards to a running
-  ;; server or falls back to a standalone run, it always prints usage to
-  ;; *error-output* and exits 1, and no entry function is dispatched.
-  (it "dispatch-unknown-mode-and-no-args-print-usage-and-exit-one"
-    (dolist (argv-tail '(("bogus" "foo") ()))
-      (with-stubbed-entries
-        (let (exit-code errout)
-          (setf errout
-                (with-output-to-string (*error-output*)
-                  (with-stubbed-main-exit exit-code
-                    (let ((sb-ext:*posix-argv* (cons "nerimux" argv-tail)))
-                      (nerimux::main)))))
-          (expect (eql 1 exit-code))
-          (expect (search "usage: nerimux" errout) :to-be-truthy)
-          (expect (null *main-calls*))))))
+  ;; An unrecognized mode word is a usage error: %dispatch-unknown-mode no
+  ;; longer forwards to a running server or falls back to a standalone run,
+  ;; it always prints usage to *error-output* and exits 1, and no entry
+  ;; function is dispatched.
+  (it "dispatch-unknown-mode-prints-usage-and-exits-one"
+    (with-stubbed-entries
+      (let (exit-code errout)
+        (setf errout
+              (with-output-to-string (*error-output*)
+                (with-stubbed-main-exit exit-code
+                  (let ((sb-ext:*posix-argv* (list "nerimux" "bogus" "foo")))
+                    (nerimux::main)))))
+        (expect (eql 1 exit-code))
+        (expect (search "usage: nerimux" errout) :to-be-truthy)
+        (expect (null *main-calls*)))))
+
+  ;; FR-001: a bare `nerimux` (no argv at all) no longer takes the
+  ;; unknown-mode usage-error path -- %dispatch-startup-mode-entry defaults
+  ;; that case to `attach` at its own default-session convention, so this
+  ;; dispatches exactly like the ("attach") row of dispatch-main-table above:
+  ;; one :client call, session name "0", and no usage error/exit at all.
+  (it "dispatch-no-args-falls-back-to-attach-with-default-session"
+    (with-stubbed-entries
+      (let ((sb-ext:*posix-argv* (list "nerimux")))
+        (nerimux::main))
+      (expect (= 1 (length *main-calls*)))
+      (expect (eq :client (car (first *main-calls*))))
+      (expect (equal "0" (first (cdr (first *main-calls*)))))))
 
   ;; main routes argv correctly when the saved core is launched through SBCL options.
   (it "dispatch-main-from-sbcl-wrapper-argv"

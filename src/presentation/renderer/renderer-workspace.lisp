@@ -84,15 +84,22 @@
 
 ;;; ── Initial-scan placeholder (R6.2) ─────────────────────────────────────────
 
-(defun %render-workspace-scanning-frame (terminal-rows terminal-cols)
+(defun %render-workspace-scanning-frame (terminal-rows terminal-cols &key scan-progress)
   "The whole-frame placeholder shown while the initial ghq/worktree catalog
    scan is still running (R6.2): an empty tree plus a centred \"scanning...\"
    line, in place of the ordinary header/tree/panes/preview layout, which has
-   nothing to show yet."
+   nothing to show yet.
+   SCAN-PROGRESS (FR-004b), when a positive integer, names how many
+   repositories the scan has found so far instead of the bare ellipsis -- a
+   scan that legitimately runs tens of seconds otherwise looks identical at
+   second 1 and second 30.  NIL or 0 keeps the plain ellipsis wording."
   (let* ((rows (max 1 terminal-rows))
          (cols (max 1 terminal-cols))
          (stream (make-string-output-stream))
-         (message "scanning workspaces...")
+         (message (if (and (integerp scan-progress) (plusp scan-progress))
+                      (format nil "scanning workspaces... ~D repositories"
+                              scan-progress)
+                      "scanning workspaces..."))
          (text (%display-clip message cols)))
     (cursor-invisible stream)
     (move-to stream (floor rows 2) (%center-coord cols (%display-width text)))
@@ -101,6 +108,33 @@
     (reset-attrs stream)
     (write-string (%client-title-osc nil nil) stream)
     (get-output-stream-string stream)))
+
+(defun %render-workspace-empty-catalog-hint (stream rows cols ghq-root)
+  "Three centred lines shown over the (otherwise empty) interior when
+   ORGANIZATIONS is empty and no scan is running (FR-004c): the ghq catalog
+   genuinely has nothing in it, which needs to read differently from the
+   SCANNING-P placeholder above -- an empty tree because the scan has not
+   finished yet, versus an empty tree because there is nothing to find.
+   Callable only once the caller has confirmed ORGANIZATIONS is empty and
+   SCANNING-P is false, so it does not re-check either here.
+   Uses the same centred-line technique as
+   %RENDER-WORKSPACE-SCANNING-FRAME rather than the %CELL/%EMIT-STYLED-ROW
+   panel machinery: these lines float over the tree/panes/preview panels'
+   empty interior instead of belonging to one of them, and the header/footer
+   drawn by the caller are left alone.  Each line is %DISPLAY-CLIP'd -- a
+   plain-text clip -- before it is wrapped in SGR, per this file's
+   clip-before-SGR ordering rule (%DISPLAY-CLIP must never see escapes)."
+  (let ((top (max 0 (1- (floor rows 2))))
+        (lines (list (cons "no repositories found" +sgr-muted-italic+)
+                     (cons (format nil "ghq root: ~A" ghq-root) +sgr-muted+)
+                     (cons "get one: ghq get <owner>/<repo>" +sgr-muted+))))
+    (loop for (text . sgr) in lines
+          for row from top
+          for clipped = (%display-clip text cols)
+          do (move-to stream row (%center-coord cols (%display-width clipped)))
+             (%emit-sgr stream sgr)
+             (write-string clipped stream)
+             (reset-attrs stream))))
 
 (defun render-workspace-overview-to-string
     (organizations terminal-rows terminal-cols &key focus-pane
@@ -115,15 +149,24 @@
                                             refreshing-ids
                                             stale-ids
                                             (scanning-p nil)
+                                            (scan-progress nil)
+                                            (catalog-empty-hint nil)
                                             (command-buffer ""))
   "Render the bare-repository/worktree overview used by an attached client.
    The output is intentionally a complete ANSI frame so it can share the
    headless cl-tui-kit backend with the detail view.
    SCANNING-P (R6.2), when true and ORGANIZATIONS is still empty, replaces
    the whole frame with the initial-scan placeholder instead of the ordinary
-   layout below, which has nothing to show yet."
+   layout below, which has nothing to show yet. SCAN-PROGRESS (FR-004b) is
+   forwarded to that placeholder unchanged -- see
+   %RENDER-WORKSPACE-SCANNING-FRAME.
+   CATALOG-EMPTY-HINT (FR-004c), when non-NIL (a ghq root path) and
+   ORGANIZATIONS is empty with no scan running, draws a 3-line
+   no-repositories-found guide over the interior instead of leaving it
+   blank -- see %RENDER-WORKSPACE-EMPTY-CATALOG-HINT."
   (if (and scanning-p (null organizations))
-      (%render-workspace-scanning-frame terminal-rows terminal-cols)
+      (%render-workspace-scanning-frame terminal-rows terminal-cols
+                                        :scan-progress scan-progress)
       (let* ((rows (max 1 terminal-rows))
              (cols (max 1 terminal-cols))
              (stream (make-string-output-stream))
@@ -394,6 +437,13 @@
                         do (%emit-styled-row stream row (1- right-col) 1
                                              (%sgr-wrap "│" +sgr-line+)))))
               (cell body-start 0 cols "WORKSPACE OVERVIEW (terminal too narrow for panels)"))
+          ;; Reaching this branch already means (not (and scanning-p (null
+          ;; organizations))) -- the IF above took its other arm otherwise --
+          ;; so ORGANIZATIONS being null here already implies SCANNING-P is
+          ;; false; no need to re-check it.
+          (when (and (null organizations) catalog-empty-hint)
+            (%render-workspace-empty-catalog-hint stream rows cols
+                                                  catalog-empty-hint))
           (reset-attrs stream)
           (if (eq mode :command)
               (%render-workspace-command-line stream (1- rows) cols command-buffer)

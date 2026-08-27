@@ -130,27 +130,36 @@ callbacks themselves run serially in the loop."
         (setf (gethash key *workspace-stale-ids*) t)
         (remhash key *workspace-stale-ids*))))
 
-(defun %set-workspace-catalog-refresh-state (organizations &key stale-p)
-  "Settle every visible node in ORGANIZATIONS as fresh or stale.
+(defun %set-workspace-catalog-refresh-state (organizations mode &key stale-p)
+  "Mark or settle every visible node in ORGANIZATIONS in one pass, per MODE.
 
    Catalog refresh is a batch operation, so its callbacks carry the complete
    tree rather than one node at a time.  Keeping the traversal here makes the
-   marker key contract identical to the renderer's tree-node keys."
-  (labels ((settle (kind id)
-             (if stale-p
-                 (%clear-workspace-refreshing kind id :stale-p t)
-                 (%clear-workspace-refreshing kind id)))
-           (mark (kind id)
-             (if stale-p
-                 (settle kind id)
-                 (%mark-workspace-refreshing kind id))))
+   marker key contract identical to the renderer's tree-node keys.
+
+   MODE is required and distinguishes the two calls a refresh needs: :MARK
+   records that a refresh is now in flight for every node
+   (%MARK-WORKSPACE-REFRESHING) -- what a refresh's start, and its
+   in-progress on-catalog callback, both want; :SETTLE clears that in-flight
+   mark (%CLEAR-WORKSPACE-REFRESHING), tagging every node stale when STALE-P
+   and fresh otherwise -- what a refresh's terminal callback, on-complete or
+   on-error, wants. The previous version had no MODE: it always marked
+   unless STALE-P was already true, so a *successful* on-complete re-marked
+   every node refreshing instead of settling it, and the tree-wide
+   \"refreshing\" label never cleared after a scan that succeeded. MODE makes
+   that choice explicit at every call site instead of leaving it to STALE-P,
+   which never distinguished in-flight from finished in the first place."
+  (labels ((visit (kind id)
+             (ecase mode
+               (:mark (%mark-workspace-refreshing kind id))
+               (:settle (%clear-workspace-refreshing kind id :stale-p stale-p)))))
     (dolist (organization organizations)
-      (mark :organization (nerimux/model:organization-id organization))
+      (visit :organization (nerimux/model:organization-id organization))
       (dolist (repository
                 (nerimux/model:organization-repositories organization))
-        (mark :repository (nerimux/model:repository-id repository))
+        (visit :repository (nerimux/model:repository-id repository))
         (dolist (worktree (nerimux/model:repository-worktrees repository))
-          (mark :worktree (nerimux/model:worktree-id worktree)))))
+          (visit :worktree (nerimux/model:worktree-id worktree)))))
     nil))
 
 (defvar *workspace-worktree-last-pane* (make-hash-table :test #'equal)
@@ -187,6 +196,15 @@ callbacks themselves run serially in the loop."
    \"still scanning\" from \"scanned and genuinely found zero repositories\"
    for R6.2's scanning-p -- a plain (null organizations) check cannot tell
    those two apart.")
+
+(defvar *workspace-scan-progress* nil
+  "Repository count the in-flight initial catalog scan has processed so far
+   (FR-004b), or NIL when no scan is currently running. Distinct from
+   *WORKSPACE-CATALOG-LOADED-P*: that flag flips once, permanently, on the
+   first scan's completion, while this tracks whichever scan is in flight
+   right now (the initial one in %ADD-CLIENT below), so the renderer can show
+   \"N found so far\" instead of a bare scanning indicator while a large ghq
+   root is still being walked.")
 
 ;;; with-loop-safe-error is defined in server-multi-dispatch.lisp (which loads
 ;;; first) so it is available at compile time to every user, including here.
@@ -271,6 +289,13 @@ callbacks themselves run serially in the loop."
                :expanded-node-ids *workspace-expanded-node-ids*
                :refreshing-ids *workspace-refreshing-ids*
                :stale-ids *workspace-stale-ids*
+               ;; FR-004b: how far the in-flight initial scan has gotten, and
+               ;; where to point a client whose catalog is empty. GHQ-ROOT-
+               ;; DIRECTORY is cached in nerimux/vcs (not re-run per frame,
+               ;; which this call site is) precisely because it is called
+               ;; from here on every dirty frame.
+               :scan-progress *workspace-scan-progress*
+               :catalog-empty-hint (nerimux/vcs:ghq-root-directory)
                ;; NIL (not scanning) when no refresh was ever kicked off at
                ;; all -- e.g. the VCS adapter is unavailable (%ADD-CLIENT's
                ;; (nerimux/vcs:vcs-package-available-p) guard) -- so that
@@ -380,8 +405,10 @@ callbacks themselves run serially in the loop."
     (when (and (not *workspace-catalog-refresh-started-p*)
                (nerimux/vcs:vcs-package-available-p))
       (setf *workspace-catalog-refresh-started-p* t)
+      ;; :MARK: this refresh is starting, so every currently-visible node
+      ;; goes into the refreshing set (R6.2).
       (%set-workspace-catalog-refresh-state
-       (nerimux/vcs:workspace-organizations))
+       (nerimux/vcs:workspace-organizations) :mark)
       ;; handler-case rather than ignore-errors: a synchronous failure
       ;; kicking the async refresh off (e.g. thread creation) must still
       ;; flip *workspace-catalog-loaded-p*, or R6.2's scanning-p is stuck
@@ -390,22 +417,42 @@ callbacks themselves run serially in the loop."
         (handler-case
             (nerimux/vcs:refresh-workspace-organizations-async
              :callback-dispatch #'%enqueue-main-thread-callback
+             ;; FR-004b: repository count as the scan discovers each entry,
+             ;; well before on-catalog/on-complete -- the renderer's
+             ;; "N found" while a large ghq root is still being walked.
+             :on-progress
+             (lambda (count)
+               (setf *workspace-scan-progress* count)
+               (%mark-dirty))
              ;; Paint the tree the moment the scan lands: the status refresh
              ;; behind it runs git across every repository and can take seconds
              ;; on a large root, and nothing else marks the screen dirty in the
              ;; meantime — clients would hold the "scanning..." placeholder (or
              ;; a stale empty tree) until every status arrived.
+             ;;
+             ;; :MARK, not :SETTLE: the status refresh this callback's
+             ;; caller runs next (refresh-workspace-status-async) is still in
+             ;; flight for every one of these nodes, so they stay marked
+             ;; refreshing rather than being settled here only to be
+             ;; re-marked moments later.
              :on-catalog
              (lambda (organizations)
-               (%set-workspace-catalog-refresh-state organizations)
+               (%set-workspace-catalog-refresh-state organizations :mark)
                (%mark-dirty))
              :on-complete
              (lambda (organizations)
                ;; R6.2: flips scanning-p false for every client from here on,
                ;; regardless of whether ORGANIZATIONS turned out empty.
-               (setf *workspace-catalog-loaded-p* t)
+               (setf *workspace-catalog-loaded-p* t
+                     *workspace-scan-progress* nil)
+               ;; :SETTLE: the refresh this callback closes out has actually
+               ;; finished (successfully unless a per-repository status
+               ;; fetch failed along the way, tracked in REFRESH-FAILED-P) --
+               ;; the case the old single-mode function got backwards, since
+               ;; a successful on-complete used to re-mark every node
+               ;; refreshing instead of clearing the mark (FR-005).
                (%set-workspace-catalog-refresh-state
-                organizations :stale-p refresh-failed-p)
+                organizations :settle :stale-p refresh-failed-p)
                (dolist (client (remove-duplicates
                                 (remove-if-not #'%client-live-p
                                                (copy-list *clients*))
@@ -423,16 +470,24 @@ callbacks themselves run serially in the loop."
                ;; R6.2: a failed initial scan must still stop showing
                ;; "scanning..." -- otherwise a client attached before the
                ;; error is stuck on the placeholder forever.
-               (setf *workspace-catalog-loaded-p* t)
+               (setf *workspace-catalog-loaded-p* t
+                     *workspace-scan-progress* nil)
+               ;; :SETTLE + stale: the refresh has terminated (in error), so
+               ;; the in-flight mark must clear here too, not stay set --
+               ;; there is no further on-complete coming to clear it.
                (%set-workspace-catalog-refresh-state
-                (nerimux/vcs:workspace-organizations) :stale-p t)
+                (nerimux/vcs:workspace-organizations) :settle :stale-p t)
                (%mark-dirty)))
           (error (condition)
             (declare (ignore condition))
             (setf refresh-failed-p t
-                  *workspace-catalog-loaded-p* t)
+                  *workspace-catalog-loaded-p* t
+                  *workspace-scan-progress* nil)
+            ;; :SETTLE + stale: kicking the refresh off itself failed
+            ;; synchronously, so no callback above will ever run to clear
+            ;; the :mark this function set moments ago.
             (%set-workspace-catalog-refresh-state
-             (nerimux/vcs:workspace-organizations) :stale-p t)
+             (nerimux/vcs:workspace-organizations) :settle :stale-p t)
             (%mark-dirty)))))
     (%mark-dirty)
     conn))

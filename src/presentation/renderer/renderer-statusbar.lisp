@@ -135,20 +135,45 @@
       (%status-wrap (first messages) +sgr-muted-italic+)
       (%workspace-em-dash)))
 
+;;; ── Mode chip (FR-003) ──────────────────────────────────────────────────────
+
+(defun %status-mode-chip (mode)
+  "The status line's leftmost, always-kept segment (FR-003): a bold MODE-name
+   chip so a client landing in a freshly opened pane can tell at a glance
+   whether a keystroke reaches the shell yet. :NORMAL -- the mode that
+   swallows keys (nerimux-normal-mode-swallows-nothing) -- adds a muted
+   \" i to type\" hint after the chip; every other mode value that reaches
+   here (:input, :copy, :command, :picker, ...) shows the chip alone, the
+   mode name already being the whole message. Styled with %STATUS-WRAP (not
+   %SGR-WRAP) so it restores the status bar's own base style rather than a
+   plain reset; +sgr-mode-chip+ (renderer-style.lisp) is the same chip the
+   workspace footer uses (%workspace-footer-line, renderer-workspace.lisp)."
+  (let ((chip (%status-wrap (format nil " ~:@(~A~) " mode) +sgr-mode-chip+)))
+    (if (eq mode :normal)
+        (format nil "~A ~A" chip (%status-wrap "i to type" +sgr-muted-italic+))
+        chip)))
+
 ;;; ── Composition with width-driven degradation (R6.5) ───────────────────────
 
-(defun %compose-workspace-status-line (focus-pane messages cols)
+(defun %compose-workspace-status-line (focus-pane messages cols &key (mode :normal))
   "Assemble the R6.5 status line, dropping blocks right-to-left when COLS is
    too narrow: the notification first, then the window/pane tabs, then the
    repository name — branch and state token are never dropped (design doc
-   §11). A final %VISIBLE-TRUNCATE is the safety net below the terminal's
-   40-column floor (R6.10 already refuses anything narrower)."
+   §11). The MODE chip (FR-003, %STATUS-MODE-CHIP) is placed ahead of all
+   three and is never dropped either: it is a safety feature (whether a
+   keystroke reaches the shell), not a display convenience, so it must
+   survive as far into a narrow terminal as the fields design doc §11 already
+   protects. Being first also means the final %VISIBLE-TRUNCATE safety net
+   below the terminal's 40-column floor (R6.10 already refuses anything
+   narrower) keeps it, since that truncation keeps a string's prefix."
   (let ((middle (%status-middle-text focus-pane))
-        (right (%status-right-text messages)))
+        (right (%status-right-text messages))
+        (mode-chip (%status-mode-chip mode)))
     (labels ((assemble (include-repository-p include-middle-p include-right-p)
                (format nil "~{~A~^  ~}"
                        (remove nil
-                               (list (%status-left-text
+                               (list mode-chip
+                                     (%status-left-text
                                       focus-pane
                                       :include-repository-p include-repository-p)
                                      (and include-middle-p middle)
@@ -182,17 +207,21 @@
 (defun render-status-bar (stream session terminal-rows terminal-cols
                           &key (status-row (- terminal-rows +status-line-rows+))
                             (focus-pane (session-active-pane session))
-                            (messages nil))
+                            (messages nil)
+                            (mode :normal))
   "Draw the R6.5 status line at STATUS-ROW (defaults to the bottom row,
    §1.4/R2.2).
    FOCUS-PANE/MESSAGES default from SESSION / empty for a caller that has not
    been updated to pass the attached client's own focus pane and
-   notification log (renderer-compose.lisp's render-session-to-string call
-   site does not yet — see the R6 report for the small additive change that
-   closes the gap); SESSION-ACTIVE-PANE is the correct answer whenever a
+   notification log; SESSION-ACTIVE-PANE is the correct answer whenever a
    client's focus tracks the session's active pane, which is the common
-   case, so this degrades gracefully rather than going blank."
+   case, so this degrades gracefully rather than going blank.
+   MODE (FR-003) feeds the mode chip (%STATUS-MODE-CHIP) that
+   %COMPOSE-WORKSPACE-STATUS-LINE now always draws first; this docstring
+   used to describe render-session-to-string's call site as not yet passing
+   it, which renderer-compose.lisp's render-session-to-string now does."
   (%render-status-line stream status-row +sgr-default-status+
                        (%compose-workspace-status-line focus-pane messages
-                                                       terminal-cols)
+                                                       terminal-cols
+                                                       :mode mode)
                        terminal-cols))

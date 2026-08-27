@@ -80,18 +80,28 @@
       (expect (eql 1 exit-code))
       (expect (search "usage: nerimux" errout) :to-be-truthy)))
 
-  ;; `nerimux` with no arguments used to fall back to run-standalone; that
-  ;; fallback is gone, so a bare invocation is now a usage error too -- the
-  ;; entry surface has no implicit default mode anymore.
-  (it "dispatch-no-arguments-prints-usage-and-exits-one"
-    (let (exit-code errout)
-      (setf errout
-            (with-output-to-string (*error-output*)
-              (with-stubbed-exit exit-code
-                (let ((sb-ext:*posix-argv* (list "nerimux")))
-                  (nerimux::main)))))
-      (expect (eql 1 exit-code))
-      (expect (search "usage: nerimux" errout) :to-be-truthy)))
+  ;; `nerimux` with no arguments used to fall back to run-standalone, then
+  ;; later became a usage error when that fallback was removed; FR-001 gives
+  ;; it a new, deliberate default instead of either: a bare invocation now
+  ;; attaches (%dispatch-startup-mode-entry's own-mode-nil branch defaults to
+  ;; `attach`), so it must reach run-client with the default session name and
+  ;; never touch sb-ext:exit or *error-output* at all -- unlike every other
+  ;; case in this file, this path is not an error path.
+  ;; main-tests.lisp's dispatch-no-args-falls-back-to-attach-with-default-
+  ;; session pins the same behaviour from the *startup-modes* table's side;
+  ;; this one drives it through main() using this file's own
+  ;; with-stubbed-fdefinition idiom (see dispatch-version-and-help-flags
+  ;; below) instead of main-tests.lisp's with-stubbed-entries/*main-calls*.
+  (it "dispatch-no-arguments-falls-back-to-attach-with-default-session"
+    (let (client-args)
+      (with-stubbed-fdefinition
+          ((nerimux::run-client
+            (lambda (&rest args) (setf client-args args)))
+           (nerimux::%ensure-server-running
+            (lambda (&rest _) (declare (ignore _)) nil)))
+        (let ((sb-ext:*posix-argv* (list "nerimux")))
+          (nerimux::main)))
+      (expect (equal '("0") client-args))))
 
   ;;; ── -V / --version / -h / --help / bad-flag usage ───────────────────────────
 

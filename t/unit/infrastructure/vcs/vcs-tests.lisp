@@ -353,6 +353,78 @@
                                   :test #'eq))))
         (nerimux/vcs:set-workspace-organizations previous)))))
 
+;;; ── merge-workspace-organizations (FR-002) ──────────────────────────────────
+;;;
+;;; A cwd with nothing in the catalog under it yet gets one chance to resolve
+;;; and register its repository synchronously (RESOLVE-DIRECTORY-
+;;; ORGANIZATIONS + this merge) before falling back to the ordinary overview.
+;;; RESOLVE-DIRECTORY-ORGANIZATIONS itself shells out to git and has no
+;;; hermetic-suite precedent anywhere in this tree (see the attach-target
+;;; jump test in attach-selector-resolution-tests.lisp, which registers the
+;;; repository directly instead); this only exercises the pure merge step.
+
+(describe "merge-workspace-organizations"
+
+  ;; A wholly new organization (by id) is added outright alongside whatever
+  ;; was already in the catalog.
+  (it "adds-a-wholly-new-organization-by-id"
+    (let ((previous (nerimux/vcs:workspace-organizations)))
+      (unwind-protect
+           (let ((existing (nerimux/model:make-organization
+                            :id "org-existing" :host "github.com" :name "existing")))
+             (nerimux/vcs:set-workspace-organizations (list existing))
+             (let* ((incoming (nerimux/model:make-organization
+                               :id "org-new" :host "github.com" :name "new"))
+                    (merged (nerimux/vcs:merge-workspace-organizations
+                             (list incoming))))
+               (expect (= 2 (length merged)))
+               (expect (find incoming merged :test #'eq))
+               (expect (find existing merged :test #'eq))))
+        (nerimux/vcs:set-workspace-organizations previous))))
+
+  ;; An organization already present in the catalog (matched by id) gets only
+  ;; the repositories it does not already hold -- one matched by local-path
+  ;; is left exactly as it was (same instance, not duplicated), and a
+  ;; genuinely new one is appended.
+  (it "adds-only-the-missing-repository-to-an-already-present-organization"
+    (let ((previous (nerimux/vcs:workspace-organizations)))
+      (unwind-protect
+           (let* ((organization (nerimux/model:make-organization
+                                 :id "org" :host "github.com" :name "team"))
+                  (existing-repository (nerimux/model:make-repository
+                                       :id "repo-existing"
+                                       :specification "github.com/team/existing"
+                                       :local-path "/workspace/existing")))
+             (nerimux/model:organization-add-repository
+              organization existing-repository)
+             (nerimux/vcs:set-workspace-organizations (list organization))
+             (let* ((incoming-organization (nerimux/model:make-organization
+                                            :id "org" :host "github.com" :name "team"))
+                    (duplicate-repository (nerimux/model:make-repository
+                                           :id "repo-duplicate"
+                                           :specification "github.com/team/existing"
+                                           :local-path "/workspace/existing"))
+                    (new-repository (nerimux/model:make-repository
+                                     :id "repo-new"
+                                     :specification "github.com/team/new"
+                                     :local-path "/workspace/new")))
+               (nerimux/model:organization-add-repository
+                incoming-organization duplicate-repository)
+               (nerimux/model:organization-add-repository
+                incoming-organization new-repository)
+               (let* ((merged (nerimux/vcs:merge-workspace-organizations
+                              (list incoming-organization)))
+                      (merged-organization (first merged))
+                      (repositories (nerimux/model:organization-repositories
+                                     merged-organization)))
+                 (expect (= 1 (length merged)))
+                 (expect (eq organization merged-organization))
+                 (expect (= 2 (length repositories)))
+                 (expect (find existing-repository repositories :test #'eq))
+                 (expect (find new-repository repositories :test #'eq))
+                 (expect (not (find duplicate-repository repositories :test #'eq))))))
+        (nerimux/vcs:set-workspace-organizations previous)))))
+
 (defun %bare-status-fixture-directory (label)
   "Create and return a fresh, existing temporary directory path for LABEL."
   (let ((path
@@ -363,6 +435,46 @@
             (host-kit:temporary-directory)))))
     (ensure-directories-exist path)
     path))
+
+;;; ── resolve-directory-organizations fail-closed contract (FR-002) ───────────
+;;;
+;;; Coverage gap flagged by test/security review: RESOLVE-DIRECTORY-
+;;; ORGANIZATIONS's docstring asserts it "[r]eturns NIL, without signalling,
+;;; for a non-git DIRECTORY or any failure along the way", but nothing pinned
+;;; that external contract with a test -- it was read off the docstring, not
+;;; verified. Every case below resolves to NIL regardless of whether a git
+;;; binary is even on PATH: the outer HANDLER-CASE (ERROR () NIL) inside
+;;; RESOLVE-DIRECTORY-ORGANIZATIONS catches whatever a missing or failing git
+;;; invocation raises, so these are hermetic and independent of the git-call-
+;;; count/timeout work happening concurrently to this file in vcs.lisp --
+;;; that work changes HOW the git invocation runs, not whether a failure
+;;; along the way still resolves to NIL.
+
+(describe "resolve-directory-organizations-fail-closed-suite"
+
+  (it "returns-nil-for-a-nonexistent-path"
+    (expect (null (nerimux/vcs:resolve-directory-organizations
+                   (format nil "/nonexistent-nerimux-resolve-probe-~D"
+                           (random 1000000))))))
+
+  ;; An existing, real directory that is simply not a git repository (no
+  ;; .git, not inside a work tree) -- git-worktree-list fails there just as
+  ;; surely as against a nonexistent path, from the other direction: this
+  ;; time the directory exists but git itself has nothing to report.
+  (it "returns-nil-for-a-directory-that-is-not-a-git-repository"
+    (let ((dir (%bare-status-fixture-directory "resolve-non-git")))
+      (unwind-protect
+           (expect (null (nerimux/vcs:resolve-directory-organizations dir)))
+        (ignore-errors (sb-posix:rmdir dir)))))
+
+  ;; The guard ahead of any git invocation at all: an empty string, and any
+  ;; non-string, both short-circuit to NIL before %directory-repository-root
+  ;; is ever called -- these two cannot depend on git's behavior even in
+  ;; principle.
+  (it "returns-nil-for-empty-or-non-string-input"
+    (expect (null (nerimux/vcs:resolve-directory-organizations "")))
+    (expect (null (nerimux/vcs:resolve-directory-organizations nil)))
+    (expect (null (nerimux/vcs:resolve-directory-organizations 42)))))
 
 ;; F10: `git worktree list` includes the bare repository root itself (ghq's
 ;; `<repo>.git` layout as its own entry); running `git status` there always

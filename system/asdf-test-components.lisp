@@ -207,6 +207,7 @@
           (:file "runtime-lifecycle-tests")
       (:file "server-kill-request-tests") ; R8.1/R8.3
       (:file "workspace-window-naming-tests") ; R5.8
+      (:file "workspace-catalog-refresh-state-tests") ; FR-005: mark/settle, not re-mark
           (:file "system-composition-tests"))) ; layering guard; core declares no optional kit
         (:module "infrastructure/pty"
          :serial t

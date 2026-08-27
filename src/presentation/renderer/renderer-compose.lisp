@@ -178,7 +178,9 @@
     ;; resolved to "on" (1 row) / "bottom", which is exactly what
     ;; render-status-bar's default :status-row (the bottom row) already
     ;; draws — so this is not a behaviour change.
-    (render-status-bar buffer session terminal-rows terminal-cols)
+    ;; :mode forwarded (FR-003) so the status line's mode chip reflects the
+    ;; client's actual mode instead of render-status-bar's :normal default.
+    (render-status-bar buffer session terminal-rows terminal-cols :mode mode)
     (when (eq mode :picker)
       (%render-client-picker buffer terminal-rows terminal-cols
                              (or picker-items '()) picker-query

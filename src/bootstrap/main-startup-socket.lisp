@@ -140,7 +140,12 @@
    other startup error).
    The spawned server's stdout/stderr are redirected to %runtime-log-path's
    per-session-name log file so a crash leaves a forensic trail instead of
-   being discarded."
+   being discarded.
+   Prints a one-line \"starting server...\" notice to *error-output* right
+   before entering the spawn path (FR-004a): the client's clear-display only
+   runs after a successful connect, so without this notice the up-to-3-second
+   poll below looks like a hung shell.  Attaching to an already-live server
+   takes neither this branch nor the notice."
   (multiple-value-bind (exe args) (%server-respawn-command session-name)
     (let ((socket-path (socket-path session-name))
           (log-path    (%runtime-log-path session-name)))
@@ -149,6 +154,11 @@
             (delete-file socket-path)
           (file-error () nil)))
       (unless (probe-file socket-path)
+        ;; No live socket: we are about to spawn a server the caller will
+        ;; then wait on, so tell the user before the wait starts rather than
+        ;; leaving them staring at an apparently frozen terminal (FR-004a).
+        (format *error-output* "~&nerimux: starting server...~%")
+        (force-output *error-output*)
         ;; Guard: run-program may fail in test environments or when the
         ;; binary is not yet on PATH.  Only poll if the spawn succeeded.
         ;; :wait nil means non-blocking, so run-program returns after starting the child.

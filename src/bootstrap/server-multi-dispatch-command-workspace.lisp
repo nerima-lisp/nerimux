@@ -136,14 +136,69 @@
 (defun %client-live-p (conn)
   (member conn *clients* :test #'eq))
 
+(defun %attach-target-session ()
+  "The one live session a running server holds, or NIL outside one.
+
+   %CLIENT-ATTACH-TARGET below needs a session to jump a cwd-matched client
+   straight to its detail pane (FR-002's %FOCUS-SELECTED-CLIENT-WORKTREE
+   call), but its one call site -- the :ATTACH-TARGET rule in
+   server-multi-dispatch-command.lisp, which is outside this change's scope
+   -- invokes it as (%client-attach-target conn args), with no session
+   argument, and server-dispatch-helper-tests.lisp calls it the same way
+   directly. Adding a session parameter would have to default to something
+   in both of those callers anyway, so this reads the one session
+   RUN-SERVER (server.lisp) registers instead of threading one through:
+   *SERVER-SESSIONS* is empty in the unit test (no session ever registered
+   there), which is exactly what keeps this whole feature a no-op there
+   rather than a broken multiple-value-setq target."
+  (cdr (first *server-sessions*)))
+
 (defun %client-attach-target (conn args)
   (let ((target (first args))
-        (cwd (second args)))
+        (cwd (second args))
+        (session (%attach-target-session)))
     (setf (client-conn-attach-target conn)
           (and (stringp target) (plusp (length target)) target)
           (client-conn-attach-cwd conn)
           (and (stringp cwd) (plusp (length cwd)) cwd))
-    (%client-attach-selection conn (nerimux/vcs:workspace-organizations))
+    (multiple-value-bind (worktree source)
+        (%client-attach-selection conn (nerimux/vcs:workspace-organizations))
+      ;; FR-002: a cwd with nothing in the catalog under it yet -- neither an
+      ;; explicit nor a previous match either, or %CLIENT-ATTACH-SELECTION
+      ;; would already have used one of those -- gets one chance to resolve
+      ;; and register its repository synchronously before falling back to
+      ;; the ordinary overview with nothing selected.
+      (when (and session
+                 (null worktree)
+                 (stringp cwd)
+                 (plusp (length cwd)))
+        ;; Synchronous, on this single-threaded dispatch loop, is a user
+        ;; decision (FR-002): the cwd match has to resolve before the
+        ;; client's first frame, and an "overview first, then jump" fallback
+        ;; was considered and explicitly rejected during requirements review.
+        ;; The accepted stop-radius: RESOLVE-DIRECTORY-ORGANIZATIONS makes
+        ;; exactly one git invocation, bounded by its own short (2s) explicit
+        ;; timeout (see vcs.lisp), and CWD only ever names a directory this
+        ;; same OS user's `nerimux attach` sent over the attach socket -- a
+        ;; same-UID boundary, not arbitrary input.
+        (let ((organizations (nerimux/vcs:resolve-directory-organizations cwd)))
+          (when organizations
+            (nerimux/vcs:merge-workspace-organizations organizations)
+            (multiple-value-setq (worktree source)
+              (%client-attach-selection
+               conn (nerimux/vcs:workspace-organizations))))))
+      ;; Only a CWD match (freshly resolved above, or already in the catalog)
+      ;; jumps straight to the detail pane -- an :EXPLICIT selector or a
+      ;; :PREVIOUS selection lands on the overview as before, per spec.
+      ;;
+      ;; %FOCUS-SELECTED-CLIENT-WORKTREE is defined in
+      ;; server-multi-dispatch-command-input.lisp, which nerimux.asd loads
+      ;; AFTER this file -- a forward reference, same rationale as
+      ;; %WORKSPACE-EXPANDED-NODES in server-multi.lisp: harmless for a
+      ;; function (unlike a special variable), since by the time this ever
+      ;; RUNS both files have loaded.
+      (when (and session (eq source :cwd))
+        (%focus-selected-client-worktree session conn)))
     (%mark-dirty)
     t))
 

@@ -110,7 +110,9 @@
                ~2T-h | --help~26Tprint this summary and exit~%~
                ~%~
                A selector containing a slash resolves as an~%~
-               organization/repository selector or a local worktree path.~%"))
+               organization/repository selector or a local worktree path.~%~
+               ~%~
+               Running nerimux with no command opens the workspace UI (same as attach).~%"))
 
 (defun run-usage (raw-args)
   "Print the usage summary to stdout and exit 0 (-h/--help)."

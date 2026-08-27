@@ -1,11 +1,20 @@
 (in-package #:nerimux/vcs)
 
 (defun scan-repositories-async
-    (&key query on-complete on-error callback-dispatch)
-  "Run SCAN-REPOSITORIES on a worker thread and return its thread handle."
+    (&key query on-complete on-error on-progress callback-dispatch)
+  "Run SCAN-REPOSITORIES on a worker thread and return its thread handle.
+   ON-PROGRESS (FR-004b) is dispatched through CALLBACK-DISPATCH exactly like
+   ON-COMPLETE/ON-ERROR -- it runs on the worker thread inside
+   SCAN-REPOSITORIES, so it must cross the same boundary before touching any
+   UI state the event loop owns."
   (cl-concurrent-kit:make-thread
    (lambda ()
      (scan-repositories :query query
+                        :on-progress
+                        (and on-progress
+                             (lambda (count)
+                               (%dispatch-callback callback-dispatch
+                                                   on-progress count)))
                         :on-complete
                         (lambda (organizations)
                           (%dispatch-callback callback-dispatch on-complete

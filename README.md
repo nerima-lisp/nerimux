@@ -17,8 +17,9 @@ The source for that site lives in [docs/src/](docs/src/).
 ## Quick Start
 
 ```bash
-nix run github:nerima-lisp/nerimux -- attach
+nix run github:nerima-lisp/nerimux              # same as `attach`
 
+nix run github:nerima-lisp/nerimux -- attach
 nix run github:nerima-lisp/nerimux -- attach github.com/org/repo
 nix run github:nerima-lisp/nerimux -- attach /path/to/worktree
 nix run github:nerima-lisp/nerimux -- kill  # stop the server
@@ -27,13 +28,16 @@ nix run github:nerima-lisp/nerimux -- kill  # stop the server
 The examples use the flake directly. After `nix build .`, invoke the same
 commands with `./result/bin/nerimux`.
 
-`attach` auto-starts the headless runtime and connects a thin client. Use
-`C-q d` to detach and `C-p` to open the global picker. A selector containing a
-slash is resolved against the ghq catalog — the full specification,
-`host/organization/repository` — or against a local worktree path. `server`
-runs the headless runtime without attaching a client, and `kill` stops it.
-Anything else — including `nerimux` with no arguments — prints the usage
-summary and exits non-zero.
+`attach` auto-starts the headless runtime and connects a thin client. Running
+`nerimux` with no command at all is the same as `attach`; only an
+unrecognized command word prints the usage summary and exits non-zero. If the
+current directory sits inside a worktree ghq already tracks (a subdirectory
+counts too), `attach` opens straight into that worktree's pane instead of the
+overview. Use `C-q d` to detach and `C-p` to open the global picker. A
+selector containing a slash is resolved against the ghq catalog — the full
+specification, `host/organization/repository` — or against a local worktree
+path. `server` runs the headless runtime without attaching a client, and
+`kill` stops it.
 
 nerimux reads no configuration file and has no runtime-configurable options.
 Every value the workspace UI depends on — shell, `$TERM`, scrollback length,
