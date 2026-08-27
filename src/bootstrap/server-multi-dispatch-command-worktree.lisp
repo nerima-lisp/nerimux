@@ -1,5 +1,55 @@
 (in-package #:nerimux)
 
+(defun %client-create-worktree-now (repository branch conn session &key path force)
+  "The worktree-create core shared by both entry paths (item 5): `n`'s
+   immediate auto-branch create (server-multi-dispatch-command-input.lisp,
+   %CLIENT-START-WORKTREE-CREATE) and `:wt-create --branch <name> --confirm`
+   (%CLIENT-CREATE-WORKTREE below). Takes REPOSITORY and BRANCH as already
+   resolved and validated -- it does not itself gate on --confirm, since that
+   gate belongs to whichever caller is exposed to an unconfirmed keystroke:
+   for `n` a single keystroke IS the confirmation, and for `:` the gate is
+   %CLIENT-CREATE-WORKTREE's own guard, run before this is ever reached.
+
+   On completion, jumps CONN straight to the new worktree's shell when
+   SESSION is available (user decision: create now attaches immediately,
+   with no intermediate branch prompt) -- both callers want this, so it
+   lives here once rather than being duplicated at each call site. SESSION
+   may be NIL (e.g. no session registered yet, or a hermetic unit test with
+   no *SERVER-SESSIONS* entry), in which case the jump is simply skipped and
+   the worktree is only selected, exactly as before this feature existed."
+  (%client-notify conn (format nil "creating worktree ~A" branch))
+  (%mark-workspace-refreshing
+   :repository (nerimux/model:repository-id repository))
+  (flet ((%on-error (condition)
+           (%clear-workspace-refreshing
+            :repository (nerimux/model:repository-id repository)
+            :stale-p t)
+           (%client-notify
+            conn
+            (format nil "worktree create failed: ~A" condition))
+           (%mark-dirty)))
+    (handler-case
+        (nerimux/vcs:create-worktree-async
+         repository
+         :branch branch
+         :path path
+         :force force
+         :callback-dispatch #'%enqueue-main-thread-callback
+         :on-complete
+         (lambda (worktree)
+           (%clear-workspace-refreshing
+            :repository (nerimux/model:repository-id repository))
+           (when (%client-live-p conn)
+             (%set-client-selected-worktree conn worktree)
+             (when session
+               (%focus-selected-client-worktree session conn)))
+           (%refresh-client-picker conn)
+           (%client-notify conn "worktree created")
+           (%mark-dirty))
+         :on-error #'%on-error)
+      (error (condition) (%on-error condition))))
+  t)
+
 (defun %client-create-worktree (conn target args)
   (if (not (%client-boolean-option-p args '("--confirm" "confirm")))
       (progn
@@ -22,38 +72,15 @@
            (%client-notify conn "VCS adapter unavailable")
            t)
           (t
-           (%client-notify
-            conn
-            (format nil "creating worktree ~A" branch))
-           (%mark-workspace-refreshing
-            :repository (nerimux/model:repository-id repository))
-           (flet ((%on-error (condition)
-                    (%clear-workspace-refreshing
-                     :repository (nerimux/model:repository-id repository)
-                     :stale-p t)
-                    (%client-notify
-                     conn
-                     (format nil "worktree create failed: ~A" condition))
-                    (%mark-dirty)))
-             (handler-case
-                 (nerimux/vcs:create-worktree-async
-                  repository
-                  :branch branch
-                  :path path
-                  :force force
-                  :callback-dispatch #'%enqueue-main-thread-callback
-                  :on-complete
-                  (lambda (worktree)
-                    (%clear-workspace-refreshing
-                     :repository (nerimux/model:repository-id repository))
-                    (when (%client-live-p conn)
-                      (%set-client-selected-worktree conn worktree))
-                    (%refresh-client-picker conn)
-                    (%client-notify conn "worktree created")
-                    (%mark-dirty))
-                  :on-error #'%on-error)
-               (error (condition) (%on-error condition))))
-           t)))))
+           ;; %ATTACH-TARGET-SESSION, not a threaded parameter: this function's
+           ;; own call signature (CONN TARGET ARGS) is fixed by its `:`
+           ;; command-dispatch call site (server-multi-dispatch-command.lisp,
+           ;; outside this change's scope), which has no session argument to
+           ;; pass through either -- same rationale as that function's own
+           ;; docstring.
+           (%client-create-worktree-now
+            repository branch conn (%attach-target-session)
+            :path path :force force))))))
 
 (defun %client-delete-worktree (conn target args)
   (if (not (%client-boolean-option-p args '("--confirm" "confirm")))

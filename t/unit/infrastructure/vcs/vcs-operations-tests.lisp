@@ -413,6 +413,39 @@
                 (setf condition-seen condition)))
             (expect (typep condition-seen 'error)))))))
 
+  ;; Review-round fix: a repository with no remote, or one where `git remote
+  ;; set-head origin` was simply never run (both routine, not contrived),
+  ;; makes `git rev-parse origin/HEAD` fail outright (exit 128) rather than
+  ;; return something empty. %DEFAULT-BRANCH-START-POINT must fall back to
+  ;; local HEAD in that case instead of propagating the ORIGIN/HEAD failure,
+  ;; since HEAD is resolvable for any repository CREATE-WORKTREE is ever
+  ;; called against.
+  (it "falls back to local HEAD when origin/HEAD cannot be resolved"
+    (let* ((repository-path (%vcs-operations-existing-path))
+           (repository
+             (nerimux/model:make-repository
+              :specification "workspace-owner/project"
+              :local-path repository-path))
+           (condition-seen nil)
+           (start-point nil))
+      (with-stubbed-fdefinition
+          ((vcs-kit:git-rev-parse-value
+             (lambda (backend &rest arguments)
+               (declare (ignore backend))
+               (cond
+                 ((equal '("origin/HEAD") arguments)
+                  (error "fatal: ambiguous argument 'origin/HEAD': unknown revision or path not in the working tree."))
+                 ((equal '("HEAD") arguments)
+                  "deadbeefcafe")
+                 (t
+                  (error "unexpected rev-parse arguments: ~S" arguments))))))
+        (handler-case
+            (setf start-point
+                  (nerimux/vcs::%default-branch-start-point repository))
+          (error (condition) (setf condition-seen condition))))
+      (expect (null condition-seen))
+      (expect (string= "deadbeefcafe" start-point))))
+
   ;; %rev-parse must call GIT-REV-PARSE-VALUE (a git-layer entry point) with a
   ;; VCS-KIT:REPOSITORY handle (MAKE-REPOSITORY), never the backend-layer
   ;; VCS-KIT:VCS-REPOSITORY that VCS-WORKTREE takes -- %run-git check-types its

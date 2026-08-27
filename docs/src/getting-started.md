@@ -88,15 +88,62 @@ and panes.
 | `C-q d` | Detach while keeping the runtime session resident |
 | `C-p` | Open the global picker |
 | `o` / `d` | Overview / detail view |
-| `j` / `k` / `h` / `l` | Move the selection |
-| `Enter` | Expand or collapse an organization or repository; focus a worktree, window, or pane |
+| `j` / `k` | Move the selection one row |
+| `J` / `K` | Jump to the next / previous repository row |
+| `h` / `l` | Collapse / expand the selected organization or repository (in detail view: move focus to an adjacent pane) |
+| `Enter` | Dive in: toggle an organization row open or closed; on a repository row, jump straight into its main worktree; on a worktree, window, or pane row, open its shell (or create one if none is open yet) |
+| `n` | Create a worktree for the selected repository and jump straight into its shell |
+| `X` | Delete the selected worktree (asks for confirmation) |
+| `L` / `U` | Lock / unlock the selected worktree (asks for confirmation) |
+| `/` | Filter the tree incrementally |
 | `r` | Refresh the workspace catalog and VCS state |
 | `i` / `c` / `:` | Input / copy / command mode |
 | `Esc` | Close or cancel the active modal or mode |
 
-The tree opens showing organizations only; `Enter` opens one level at a time.
-`Enter` on a worktree returns to the pane you last had there, or starts one if
-you never opened it.
+### The overview tree
+
+The overview is a single full-width tree — organization → repository →
+worktree → window → pane — with no side panels. It opens **fully expanded
+down to the pane level**: a window row is only shown when a worktree has more
+than one window, since with exactly one window its panes attach directly
+under the worktree row instead. Rows are ordered by activity rather than by
+catalog order: whichever organization, repository, or worktree had output or
+focus most recently sorts first among its siblings. Re-sorting only happens
+when the catalog itself changes — a scan landing, a merge, a worktree
+create/delete — never while a client is just moving the selection, so a row
+never jumps out from under the cursor mid-navigation.
+
+Each worktree row also carries a compact status cluster to the right of its
+label: a state tag (`CLEAN`, `DIRTY`, `CONFLICT`, ...), ahead/behind counts
+(`+N`/`-N`) when nonzero, a pane count (`Np`, or `Np!` once any pane has
+exited), and a relative last-activity time (`now`, `Nm`, `Nh`, `Nd`). Below
+the tree, a separator line, a 2-line detail panel describing whatever row is
+selected, and a 1-line strip for the most recent message fill the rest of the
+frame above the footer.
+
+`/` starts an incremental, case-insensitive substring filter over the tree:
+a row stays visible when its own text matches or any of its descendants'
+does (so a matching pane keeps its worktree, repository, and organization
+ancestors on screen). While typing the query the footer shows a `/query`
+input prompt; `Enter` accepts the query and returns to normal navigation,
+keeping it applied and shown thereafter as a muted `/query` chip in the
+footer, while `Esc` cancels and clears it. A query that matches nothing
+replaces the row list with a centered `no matches: /query` notice, so an
+empty tree always reads as "filtered to zero", never as a broken screen.
+
+### Creating a worktree
+
+Press `n` on a selected repository to create a worktree right away: nerimux
+generates a branch name (`wt-<timestamp>`), creates the worktree, and jumps
+straight into its shell — there is no branch-name prompt in between. To pick
+the branch name yourself, use the command line instead:
+
+```
+: wt-create --branch <name> --confirm
+```
+
+Both paths land you in the new worktree's shell as soon as it is ready —
+selecting and creating both mean "enter it," not "select it and stop."
 
 Inside the picker, every printable key is a character of the search query, so
 the selection moves with **`C-p`** and **`C-n`** rather than `j` and `k`.

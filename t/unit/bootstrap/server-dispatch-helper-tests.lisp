@@ -125,19 +125,16 @@
         (%make-server-dispatch-helper-fixture)
       (let ((nerimux::*dirty* nil)
             (nerimux::*last-selected-worktree-token* nil)
-            (nerimux::*workspace-expanded-node-ids*
+            ;; PR2 polarity inversion: absent from *WORKSPACE-COLLAPSED-NODE-
+            ;; IDS* means expanded now, so an empty (freshly bound, for test
+            ;; isolation) table already shows the whole 4-row tree below --
+            ;; nothing needs to be marked to reveal it, unlike the pre-PR2
+            ;; *WORKSPACE-EXPANDED-NODE-IDS* this replaces.
+            (nerimux::*workspace-collapsed-node-ids*
               (make-hash-table :test #'equal))
             (nerimux/vcs::*workspace-organizations* organizations)
             (conn (nerimux::%make-client-conn)))
-        (setf (gethash (list :organization
-                             (nerimux/model:organization-id organization))
-                       nerimux::*workspace-expanded-node-ids*)
-              t
-              (gethash (list :repository
-                             (nerimux/model:repository-id repository))
-                       nerimux::*workspace-expanded-node-ids*)
-              t
-              (nerimux::client-conn-rows conn) 5)
+        (setf (nerimux::client-conn-rows conn) 5)
         (let ((objects (nerimux::%workspace-tree-objects organizations)))
           (expect (= 4 (length objects)))
           (expect (eq organization (first objects)))
@@ -441,7 +438,11 @@
               :id "org" :host "github.com" :name "team"))
            (conn (nerimux::%make-client-conn))
            (nerimux/vcs::*workspace-organizations* (list organization))
-           (nerimux::*workspace-expanded-node-ids*
+           ;; PR2 polarity inversion: the org row starts EXPANDED (absent from
+           ;; this table), so the first Enter's toggle must COLLAPSE it --
+           ;; the opposite direction from the pre-PR2 *WORKSPACE-EXPANDED-
+           ;; NODE-IDS* this replaces.
+           (nerimux::*workspace-collapsed-node-ids*
              (make-hash-table :test #'equal))
            (nerimux::*clients* (list conn))
            (nerimux::*dirty* nil))
@@ -449,9 +450,10 @@
       ;; Fresh conn: nothing selected, nothing focused.
       (expect (null (nerimux::%client-tree-object conn)))
       (expect (nerimux::%focus-selected-client-worktree nil conn))
-      ;; The organization row (the only row) must have toggled open ...
+      ;; The organization row (the only row, expanded by default) must have
+      ;; toggled to collapsed ...
       (expect (gethash (list :organization "org")
-                       nerimux::*workspace-expanded-node-ids*))
+                       nerimux::*workspace-collapsed-node-ids*))
       ;; ... and the nil-selection catch-all must never have fired.
       (expect (null (find "no worktree selected"
                          (nerimux::client-conn-message-log conn)
@@ -500,3 +502,201 @@
       (expect (nerimux::%client-kill-force-p '("--force")))
       (expect (null (nerimux::%client-kill-force-p '("--FORCE"))))
       (expect (null (nerimux::%client-kill-force-p nil))))))
+
+;;; PR2 tree-navigation redesign (R6.3 pivot): Enter on a repository row dives
+;;; straight into its main worktree's shell instead of toggling it
+;;; open/closed; h/l collapse/expand the owning repository from any row
+;;; level; J/K jump the selection across repository rows only.
+
+(describe "server-dispatch-helper-tree-navigation-suite"
+
+  ;; Enter on a repository row with a live pane already attached to its main
+  ;; worktree jumps straight to that pane's shell (view :detail, focus set),
+  ;; with no intermediate expand/collapse step. FD 9999 fakes "live" without
+  ;; a real PTY (the same technique used elsewhere in this suite, e.g.
+  ;; confirm-view-quit-tests.lisp), so %OPEN-CLIENT-WORKTREE-PANE's spawn
+  ;; path is never reached.
+  (it "enter-on-a-repository-row-with-a-main-worktree-jumps-straight-to-its-shell"
+    (with-fake-session (s)
+      (let* ((pane (nerimux/model:window-active-pane
+                    (nerimux/model:session-active-window s)))
+             (organization
+               (nerimux/model:make-organization
+                :id "org" :host "github.com" :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo" :organization organization
+                :specification "github.com/team/repo"))
+             (worktree
+               (nerimux/model:make-worktree
+                :id "main" :repository repository :path "/tmp/main" :branch "main"))
+             (conn (nerimux::%make-client-conn)))
+        (nerimux/model:organization-add-repository organization repository)
+        (nerimux/model:repository-add-worktree repository worktree)
+        (nerimux/model:worktree-add-pane worktree pane)
+        (setf (nerimux/model:pane-fd pane) 9999) ; "live" without a real PTY
+        (setf (nerimux::client-conn-view conn) :overview)
+        (nerimux::%set-client-selected-tree-object conn repository)
+        (expect (nerimux::%focus-selected-client-worktree s conn))
+        (expect (eq :detail (nerimux::client-conn-view conn)))
+        (expect (eq pane (nerimux::client-conn-focus conn))))))
+
+  ;; A repository with no worktrees at all reports it rather than silently
+  ;; doing nothing or erroring.
+  (it "enter-on-a-repository-row-with-no-worktrees-notifies-instead-of-crashing"
+    (let* ((organization
+             (nerimux/model:make-organization
+              :id "org" :host "github.com" :name "team"))
+           (repository
+             (nerimux/model:make-repository
+              :id "repo" :organization organization
+              :specification "github.com/team/repo"))
+           (conn (nerimux::%make-client-conn))
+           ;; %CLIENT-NOTIFY only appends to the message log for a live
+           ;; (registered) client -- see %CLIENT-LIVE-P.
+           (nerimux::*clients* (list conn)))
+      (nerimux/model:organization-add-repository organization repository)
+      (setf (nerimux::client-conn-view conn) :overview)
+      (nerimux::%set-client-selected-tree-object conn repository)
+      (expect (eq t (nerimux::%focus-selected-client-worktree nil conn)))
+      (expect (string= "repository has no worktrees"
+                       (first (nerimux::client-conn-message-log conn))))
+      ;; No jump happened -- the view is untouched.
+      (expect (eq :overview (nerimux::client-conn-view conn)))))
+
+  ;; Enter on an organization row still toggles its collapse state (unchanged
+  ;; from the repository-row pivot above) -- a direct, non-edge-case check
+  ;; distinct from the fresh-client regression test above.
+  (it "enter-on-an-organization-row-toggles-its-collapse-state"
+    (let* ((organization
+             (nerimux/model:make-organization
+              :id "org-toggle" :host "github.com" :name "team"))
+           (conn (nerimux::%make-client-conn))
+           (nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
+           (nerimux::*dirty* nil))
+      (nerimux::%set-client-selected-tree-object conn organization)
+      (expect (nerimux::%focus-selected-client-worktree nil conn))
+      (expect (gethash (list :organization "org-toggle")
+                       nerimux::*workspace-collapsed-node-ids*))
+      (expect (nerimux::%focus-selected-client-worktree nil conn))
+      (expect (null (gethash (list :organization "org-toggle")
+                             nerimux::*workspace-collapsed-node-ids*)))))
+
+  ;; h on a worktree row collapses its OWNING repository (worktree rows carry
+  ;; no collapse state of their own) and moves the selection up to that
+  ;; repository, so the cursor is never left on a row the collapse itself
+  ;; just hid. l then expands it again.
+  (it "h-collapses-the-owning-repository-and-l-expands-it-again"
+    (multiple-value-bind (organizations organization repository main-worktree
+                          feature-worktree)
+        (%make-server-dispatch-helper-fixture)
+      (declare (ignore organizations organization main-worktree))
+      (let ((nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
+            (nerimux::*dirty* nil)
+            (conn (nerimux::%make-client-conn))
+            (repo-key (list :repository (nerimux/model:repository-id repository))))
+        (nerimux::%set-client-selected-tree-object conn feature-worktree)
+        (expect (nerimux::%client-tree-collapse-selected conn))
+        (expect (gethash repo-key nerimux::*workspace-collapsed-node-ids*))
+        (expect (eq repository (nerimux::%client-tree-object conn)))
+        (expect (nerimux::%client-tree-expand-selected conn))
+        (expect (null (gethash repo-key nerimux::*workspace-collapsed-node-ids*))))))
+
+  ;; J moves the selection to the next REPOSITORY row only, skipping the
+  ;; worktree rows in between.
+  (it "J-jumps-the-selection-forward-to-the-next-repository-row"
+    (let* ((organization
+             (nerimux/model:make-organization
+              :id "org-jk" :host "github.com" :name "team"))
+           (repo-a
+             (nerimux/model:make-repository
+              :id "repo-a" :organization organization
+              :specification "github.com/team/repo-a"))
+           (repo-b
+             (nerimux/model:make-repository
+              :id "repo-b" :organization organization
+              :specification "github.com/team/repo-b"))
+           (worktree-a
+             (nerimux/model:make-worktree
+              :id "wt-a" :repository repo-a :path "/tmp/a" :branch "a"))
+           (worktree-b
+             (nerimux/model:make-worktree
+              :id "wt-b" :repository repo-b :path "/tmp/b" :branch "b"))
+           (conn (nerimux::%make-client-conn)))
+      (nerimux/model:organization-add-repository organization repo-a)
+      (nerimux/model:organization-add-repository organization repo-b)
+      (nerimux/model:repository-add-worktree repo-a worktree-a)
+      (nerimux/model:repository-add-worktree repo-b worktree-b)
+      (let ((nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
+            (nerimux::*dirty* nil)
+            (nerimux/vcs::*workspace-organizations* (list organization)))
+        ;; ORGANIZATION-ADD-REPOSITORY pushnew-prepends, so the display order
+        ;; is org, repo-b, worktree-b, repo-a, worktree-a -- select worktree-b
+        ;; first, so J has to skip past it to land on repo-a.
+        (nerimux::%set-client-selected-tree-object conn worktree-b)
+        (expect (eq repo-a (nerimux::%select-client-tree-repository-relative conn 1)))
+        (expect (eq repo-a (nerimux::%client-tree-object conn))))))
+
+  ;; FIXED: %SELECT-CLIENT-TREE-REPOSITORY-RELATIVE's LOOP used to step
+  ;; `by direction` directly, and CL's LOOP requires a BY step to be a
+  ;; positive real -- a SIMPLE-TYPE-ERROR fired the instant DIRECTION was
+  ;; negative, so every K press in :overview was broken (verified directly
+  ;; against SBCL 2.6.6: `(loop for i from 3 by -1 ...)` errors the same way,
+  ;; before the loop body ever runs). The fix always steps a positive
+  ;; iteration count and multiplies by DIRECTION to get the index. This test
+  ;; pins the required behaviour (K moves backward to the previous
+  ;; repository row).
+  (it "K-jumps-the-selection-backward-to-the-previous-repository-row"
+    (let* ((organization
+             (nerimux/model:make-organization
+              :id "org-jk-back" :host "github.com" :name "team"))
+           (repo-a
+             (nerimux/model:make-repository
+              :id "repo-a-back" :organization organization
+              :specification "github.com/team/repo-a-back"))
+           (repo-b
+             (nerimux/model:make-repository
+              :id "repo-b-back" :organization organization
+              :specification "github.com/team/repo-b-back"))
+           (worktree-a
+             (nerimux/model:make-worktree
+              :id "wt-a-back" :repository repo-a :path "/tmp/a-back" :branch "a"))
+           (worktree-b
+             (nerimux/model:make-worktree
+              :id "wt-b-back" :repository repo-b :path "/tmp/b-back" :branch "b"))
+           (conn (nerimux::%make-client-conn)))
+      (nerimux/model:organization-add-repository organization repo-a)
+      (nerimux/model:organization-add-repository organization repo-b)
+      (nerimux/model:repository-add-worktree repo-a worktree-a)
+      (nerimux/model:repository-add-worktree repo-b worktree-b)
+      (let ((nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
+            (nerimux::*dirty* nil)
+            (nerimux/vcs::*workspace-organizations* (list organization)))
+        ;; Display order: org, repo-b, worktree-b, repo-a, worktree-a --
+        ;; select repo-a and expect K to land back on repo-b.
+        (nerimux::%set-client-selected-tree-object conn repo-a)
+        (expect (eq repo-b (nerimux::%select-client-tree-repository-relative conn -1)))
+        (expect (eq repo-b (nerimux::%client-tree-object conn))))))
+
+  ;; Review-round fix: +MAX-TREE-FILTER-LENGTH+ (256, security review) caps
+  ;; CLIENT-CONN-TREE-FILTER's length -- %CLIENT-TREE-FILTER-BUFFER-APPEND
+  ;; must refuse further characters outright once the cap is hit, not
+  ;; silently truncate (truncating would still accept and discard an
+  ;; unbounded payload forever, only quietly); the query's CONTENTS must be
+  ;; unchanged by the refused keystroke, not just its length.
+  (it "refuses to grow the tree filter past +max-tree-filter-length+"
+    (let ((conn (nerimux::%make-client-conn)))
+      (setf (nerimux::client-conn-tree-filter conn)
+            (make-string nerimux::+max-tree-filter-length+ :initial-element #\a))
+      (expect (null (nerimux::%client-tree-filter-buffer-append conn "b")))
+      (expect (= nerimux::+max-tree-filter-length+
+                 (length (nerimux::client-conn-tree-filter conn))))
+      (expect (string= (make-string nerimux::+max-tree-filter-length+ :initial-element #\a)
+                       (nerimux::client-conn-tree-filter conn)))
+      ;; Below the cap, an ordinary append still works -- this is a hard
+      ;; ceiling, not a broken append path.
+      (setf (nerimux::client-conn-tree-filter conn)
+            (make-string (1- nerimux::+max-tree-filter-length+) :initial-element #\a))
+      (expect (nerimux::%client-tree-filter-buffer-append conn "b"))
+      (expect (= nerimux::+max-tree-filter-length+
+                 (length (nerimux::client-conn-tree-filter conn)))))))

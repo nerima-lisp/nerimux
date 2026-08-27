@@ -43,7 +43,11 @@
    MEDIAN of SAMPLES runs, so a GC pause or a scheduling hiccup landing in one
    sample does not decide the result. No explicit GC is forced; the median
    already absorbs a collection landing in any single sample. Raising SAMPLES
-   narrows the estimate at linear cost."
+   narrows the estimate at linear cost.
+
+   PR2: the tree defaults to fully expanded now, so this measures the
+   worst-case fully-expanded render cost rather than a collapsed-by-default
+   one."
   (let* ((organizations
            (nerimux/picker::%benchmark-organizations
             organization-count repository-count worktree-count pane-count))

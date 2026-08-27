@@ -353,6 +353,140 @@
                                   :test #'eq))))
         (nerimux/vcs:set-workspace-organizations previous)))))
 
+;;; PR2 item 6 (activity order): SET-WORKSPACE-ORGANIZATIONS reorders
+;;; worktrees within a repository, repositories within an organization, and
+;;; organizations themselves, most-recently-active first -- recency is the
+;;; MAX of every pane's last-output/last-focused time under a worktree (0
+;;; when it has none). Each case below constructs the PRE-sort order as the
+;;; OPPOSITE of the expected POST-sort order, so a passing assertion proves
+;;; the sort actually ran rather than the fixture happening to already be in
+;;; the right order.
+
+(describe "workspace catalog activity ordering"
+
+  ;; 2 repositories, each holding 1 worktree with a distinct, known pane
+  ;; activity time: the more-recently-active repository/worktree pair sorts
+  ;; first, both at the repository level (within the organization) and the
+  ;; worktree level (within its own repository).
+  (it "sorts repositories and their worktrees by most-recent pane activity first"
+    (let ((previous (nerimux/vcs:workspace-organizations)))
+      (unwind-protect
+           (let* ((organization
+                    (nerimux/model:make-organization
+                     :id "org-activity" :host "github.com" :name "team"))
+                  ;; Added in reverse-of-expected order: repo-old first, then
+                  ;; repo-new -- ORGANIZATION-ADD-REPOSITORY prepends, so the
+                  ;; pre-sort order is (repo-new repo-old), the opposite of
+                  ;; what activity order must produce.
+                  (repo-old
+                    (nerimux/model:make-repository
+                     :id "repo-old" :organization organization
+                     :specification "github.com/team/old"))
+                  (repo-new
+                    (nerimux/model:make-repository
+                     :id "repo-new" :organization organization
+                     :specification "github.com/team/new"))
+                  (worktree-old
+                    (nerimux/model:make-worktree
+                     :id "wt-old" :repository repo-old
+                     :path "/tmp/old" :branch "old"))
+                  (worktree-new
+                    (nerimux/model:make-worktree
+                     :id "wt-new" :repository repo-new
+                     :path "/tmp/new" :branch "new"))
+                  (pane-old (nerimux/model:make-pane :id 1 :fd -1))
+                  (pane-new (nerimux/model:make-pane :id 2 :fd -1)))
+             (nerimux/model:organization-add-repository organization repo-old)
+             (nerimux/model:organization-add-repository organization repo-new)
+             (nerimux/model:repository-add-worktree repo-old worktree-old)
+             (nerimux/model:repository-add-worktree repo-new worktree-new)
+             (nerimux/model:worktree-add-pane worktree-old pane-old)
+             (nerimux/model:worktree-add-pane worktree-new pane-new)
+             (setf (nerimux/model:pane-last-output-time pane-old)
+                   (- (get-universal-time) 600)
+                   (nerimux/model:pane-last-output-time pane-new)
+                   (- (get-universal-time) 60))
+             (nerimux/vcs:set-workspace-organizations (list organization))
+             (let ((sorted-organization (first (nerimux/vcs:workspace-organizations))))
+               (expect (equal (list repo-new repo-old)
+                              (nerimux/model:organization-repositories
+                               sorted-organization)))))
+        (nerimux/vcs:set-workspace-organizations previous))))
+
+  ;; A worktree with no pane activity at all (recency 0) sorts BELOW any
+  ;; worktree with a real timestamp, however small.
+  (it "sorts a worktree with no pane activity below any worktree with a timestamp"
+    (let ((previous (nerimux/vcs:workspace-organizations)))
+      (unwind-protect
+           (let* ((organization
+                    (nerimux/model:make-organization
+                     :id "org-nil-time" :host "github.com" :name "team"))
+                  (repository
+                    (nerimux/model:make-repository
+                     :id "repo-nil-time" :organization organization
+                     :specification "github.com/team/repo"))
+                  ;; Added in reverse-of-expected order: worktree-active
+                  ;; first, worktree-idle second -- REPOSITORY-ADD-WORKTREE
+                  ;; prepends, so pre-sort order is (worktree-idle
+                  ;; worktree-active), the opposite of the expected result.
+                  (worktree-active
+                    (nerimux/model:make-worktree
+                     :id "wt-active" :repository repository
+                     :path "/tmp/active" :branch "active"))
+                  (worktree-idle
+                    (nerimux/model:make-worktree
+                     :id "wt-idle" :repository repository
+                     :path "/tmp/idle" :branch "idle"))
+                  (pane (nerimux/model:make-pane :id 3 :fd -1)))
+             (nerimux/model:organization-add-repository organization repository)
+             (nerimux/model:repository-add-worktree repository worktree-active)
+             (nerimux/model:repository-add-worktree repository worktree-idle)
+             (nerimux/model:worktree-add-pane worktree-active pane)
+             (setf (nerimux/model:pane-last-output-time pane)
+                   (- (get-universal-time) 30))
+             (nerimux/vcs:set-workspace-organizations (list organization))
+             (let ((sorted-organization (first (nerimux/vcs:workspace-organizations))))
+               (expect (equal (list worktree-active worktree-idle)
+                              (nerimux/model:repository-worktrees
+                               (first (nerimux/model:organization-repositories
+                                       sorted-organization)))))))
+        (nerimux/vcs:set-workspace-organizations previous))))
+
+  ;; A tie (both worktrees at recency 0, no pane activity anywhere) leaves the
+  ;; existing order exactly as it was -- STABLE-SORT, not an arbitrary
+  ;; reshuffle.
+  (it "keeps the existing order for tied (no-activity) worktrees"
+    (let ((previous (nerimux/vcs:workspace-organizations)))
+      (unwind-protect
+           (let* ((organization
+                    (nerimux/model:make-organization
+                     :id "org-tie" :host "github.com" :name "team"))
+                  (repository
+                    (nerimux/model:make-repository
+                     :id "repo-tie" :organization organization
+                     :specification "github.com/team/repo"))
+                  (worktree-first
+                    (nerimux/model:make-worktree
+                     :id "wt-first" :repository repository
+                     :path "/tmp/first" :branch "first"))
+                  (worktree-second
+                    (nerimux/model:make-worktree
+                     :id "wt-second" :repository repository
+                     :path "/tmp/second" :branch "second")))
+             (nerimux/model:organization-add-repository organization repository)
+             ;; Added second-then-first so pushnew's prepend makes the
+             ;; pre-sort (and, since both tie, expected post-sort) order
+             ;; (worktree-first worktree-second).
+             (nerimux/model:repository-add-worktree repository worktree-second)
+             (nerimux/model:repository-add-worktree repository worktree-first)
+             (nerimux/vcs:set-workspace-organizations (list organization))
+             (let ((sorted-organization (first (nerimux/vcs:workspace-organizations))))
+               (expect (equal (list worktree-first worktree-second)
+                              (nerimux/model:repository-worktrees
+                               (first (nerimux/model:organization-repositories
+                                       sorted-organization)))))))
+        (nerimux/vcs:set-workspace-organizations previous)))))
+
 ;;; ── merge-workspace-organizations (FR-002) ──────────────────────────────────
 ;;;
 ;;; A cwd with nothing in the catalog under it yet gets one chance to resolve

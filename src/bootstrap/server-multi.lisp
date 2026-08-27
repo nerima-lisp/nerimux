@@ -78,29 +78,31 @@ callbacks themselves run serially in the loop."
 ;;; pane gaining focus within a worktree) -- see the R6 report for exactly
 ;;; which handler calls which function.
 
-(defvar *workspace-expanded-node-ids* (make-hash-table :test #'equal)
-  "Set of expanded organization/repository tree-node keys (R6.3), keyed the
-   same way as NERIMUX/RENDERER:%WORKSPACE-TREE-NODE-KEY returns (a
-   (:ORGANIZATION ID) or (:REPOSITORY ID) list). Presence (any non-NIL
-   value) means expanded; absence means collapsed, the tree's default state.
-   Worktree/window/pane rows are never keys here -- only these two levels
-   toggle independently (R6.3).")
+(defvar *workspace-collapsed-node-ids* (make-hash-table :test #'equal)
+  "Set of collapsed organization/repository tree-node keys (R6.3, inverted
+   for the redesign: rows are now all-expanded by default, so this table
+   only has to record the exceptions), keyed the same way as
+   NERIMUX/RENDERER:%WORKSPACE-TREE-NODE-KEY returns (a (:ORGANIZATION ID)
+   or (:REPOSITORY ID) list). Presence (any non-NIL value) means collapsed;
+   absence means expanded, the tree's default state. Worktree/window/pane
+   rows are never keys here -- only these two levels toggle independently
+   (R6.3).")
 
-(defun %workspace-expanded-nodes ()
-  "The expanded-row set, for callers that load before its DEFVAR.
+(defun %workspace-collapsed-nodes ()
+  "The collapsed-row set, for callers that load before its DEFVAR.
 
    the multi-dispatch files are compiled before this file, so naming the
    variable there would compile as an undeclared free reference. A function is
    only a forward reference, which resolves at call time."
-  *workspace-expanded-node-ids*)
+  *workspace-collapsed-node-ids*)
 
-(defun %toggle-workspace-node-expanded (kind id)
+(defun %toggle-workspace-node-collapsed (kind id)
   "Flip the KIND (:ORGANIZATION or :REPOSITORY) / ID row's collapse state
    (R6.3's Enter-toggles-collapse behaviour)."
   (let ((key (list kind id)))
-    (if (gethash key *workspace-expanded-node-ids*)
-        (remhash key *workspace-expanded-node-ids*)
-        (setf (gethash key *workspace-expanded-node-ids*) t))))
+    (if (gethash key *workspace-collapsed-node-ids*)
+        (remhash key *workspace-collapsed-node-ids*)
+        (setf (gethash key *workspace-collapsed-node-ids*) t))))
 
 (defvar *workspace-refreshing-ids* (make-hash-table :test #'equal)
   "Set of organization/repository/worktree tree-node keys a VCS operation is
@@ -286,7 +288,10 @@ callbacks themselves run serially in the loop."
                :prefix-code (client-conn-workspace-prefix-code conn)
                ;; R6.2/R6.3/R6.12: server-lifetime tree state, defined above
                ;; in this file, and the client's own in-flight `:` buffer.
-               :expanded-node-ids *workspace-expanded-node-ids*
+               :collapsed-node-ids *workspace-collapsed-node-ids*
+               ;; Per-client, not server-lifetime: CONN's own in-flight `/`
+               ;; tree-filter query (or NIL when none is active).
+               :tree-filter (client-conn-tree-filter conn)
                :refreshing-ids *workspace-refreshing-ids*
                :stale-ids *workspace-stale-ids*
                ;; FR-004b: how far the in-flight initial scan has gotten, and

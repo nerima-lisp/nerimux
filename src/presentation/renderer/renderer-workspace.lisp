@@ -6,10 +6,19 @@
 ;;;;
 ;;;; This is the FIRST of the two passes behind the workspace UI.  The second,
 ;;;; in renderer-tui-kit.lisp, replays this frame into a cl-tui-kit surface and
-;;;; draws the tree and picker as real widgets on top -- which is why
+;;;; draws the tree as a real widget on top -- which is why
 ;;;; render-workspace-overview-to-string is called from there with
 ;;;; :render-tree-p NIL.  That is deliberate plumbing between the two passes,
 ;;;; not a redundant duplicate.
+;;;;
+;;;; Overview redesign PR2: the WORKTREES/PANES/PREVIEW three-column layout
+;;;; ("worktrees column hard to read", "Enter floods the screen with a
+;;;; branch list") is gone. The frame is now one column, top to bottom:
+;;;; header (1 row, unchanged) / tree (WORKSPACE-TREE-VIEW-ROWS rows, full
+;;;; width, defaulting to fully expanded -- see renderer-workspace-tree.lisp)
+;;;; / a horizontal separator (1 row) / a 2-line detail panel for whatever
+;;;; tree row is selected / a 1-line most-recent-message strip / the footer
+;;;; (unchanged, except it now also carries the tree-filter prompt/chip).
 ;;;;
 ;;;; These functions used to live in renderer-compose.lisp, the pane-frame
 ;;;; compositor.  They were the workspace views' ONLY reason to reach into that
@@ -65,18 +74,25 @@
           (%sgr-wrap key +sgr-accent-bold+)
           (%sgr-wrap description +sgr-muted+)))
 
-(defun %workspace-footer-line (mode prefix-code)
+(defun %workspace-footer-line (mode prefix-code &optional tree-filter)
   "The overview footer: a mode chip followed by two-tone key hints.  The
    pre-theme footer spelled out every :wt-* command; those are discoverable
    from the `:` prompt's completion now, so the footer keeps only the
-   single-key surface."
-  (format nil " ~A  ~{~A~^  ~}"
+   single-key surface. When TREE-FILTER is a non-empty string, a muted
+   `/query` chip is prepended so an active filter stays visible after the
+   user leaves tree-filter input mode and returns to ordinary navigation
+   (R... one-column redesign, PR2)."
+  (format nil " ~A~A  ~{~A~^  ~}"
+          (if (plusp (length (or tree-filter "")))
+              (format nil "~A  " (%sgr-wrap (format nil "/~A" tree-filter) +sgr-muted+))
+              "")
           (%sgr-wrap (format nil " ~:@(~A~) " mode) +sgr-mode-chip+)
           (list (%workspace-hint "j/k" "select")
                 (%workspace-hint "Enter" "open/create")
                 (%workspace-hint "n" "new")
                 (%workspace-hint "X" "delete")
                 (%workspace-hint "L/U" "lock")
+                (%workspace-hint "/" "filter")
                 (%workspace-hint ":" "command")
                 (%workspace-hint "C-p" "picker")
                 (%workspace-hint (format nil "~A d" (%workspace-prefix-label prefix-code))
@@ -87,7 +103,7 @@
 (defun %render-workspace-scanning-frame (terminal-rows terminal-cols &key scan-progress)
   "The whole-frame placeholder shown while the initial ghq/worktree catalog
    scan is still running (R6.2): an empty tree plus a centred \"scanning...\"
-   line, in place of the ordinary header/tree/panes/preview layout, which has
+   line, in place of the ordinary header/tree/detail/footer layout, which has
    nothing to show yet.
    SCAN-PROGRESS (FR-004b), when a positive integer, names how many
    repositories the scan has found so far instead of the bare ellipsis -- a
@@ -119,8 +135,8 @@
    SCANNING-P is false, so it does not re-check either here.
    Uses the same centred-line technique as
    %RENDER-WORKSPACE-SCANNING-FRAME rather than the %CELL/%EMIT-STYLED-ROW
-   panel machinery: these lines float over the tree/panes/preview panels'
-   empty interior instead of belonging to one of them, and the header/footer
+   panel machinery: these lines float over the tree/detail panels' empty
+   interior instead of belonging to one of them, and the header/footer
    drawn by the caller are left alone.  Each line is %DISPLAY-CLIP'd -- a
    plain-text clip -- before it is wrapped in SGR, per this file's
    clip-before-SGR ordering rule (%DISPLAY-CLIP must never see escapes)."
@@ -145,16 +161,21 @@
                                             (mode :normal)
                                             (prefix-code #x11)
                                             (render-tree-p t)
-                                            expanded-node-ids
+                                            collapsed-node-ids
                                             refreshing-ids
                                             stale-ids
                                             (scanning-p nil)
                                             (scan-progress nil)
                                             (catalog-empty-hint nil)
-                                            (command-buffer ""))
-  "Render the bare-repository/worktree overview used by an attached client.
-   The output is intentionally a complete ANSI frame so it can share the
-   headless cl-tui-kit backend with the detail view.
+                                            (command-buffer "")
+                                            (tree-filter nil)
+                                            (precomputed-tree-entries nil))
+  "Render the bare-repository/worktree overview used by an attached client:
+   a header, the tree (its only panel now -- PR2's one-column redesign), a
+   separator, a 2-line detail panel for the current selection, a
+   most-recent-message strip, and the footer. The output is intentionally a
+   complete ANSI frame so it can share the headless cl-tui-kit backend with
+   the detail view.
    SCANNING-P (R6.2), when true and ORGANIZATIONS is still empty, replaces
    the whole frame with the initial-scan placeholder instead of the ordinary
    layout below, which has nothing to show yet. SCAN-PROGRESS (FR-004b) is
@@ -163,31 +184,52 @@
    CATALOG-EMPTY-HINT (FR-004c), when non-NIL (a ghq root path) and
    ORGANIZATIONS is empty with no scan running, draws a 3-line
    no-repositories-found guide over the interior instead of leaving it
-   blank -- see %RENDER-WORKSPACE-EMPTY-CATALOG-HINT."
+   blank -- see %RENDER-WORKSPACE-EMPTY-CATALOG-HINT.
+   TREE-FILTER, when a non-empty string, narrows the tree to matching rows
+   and their ancestors (see %WORKSPACE-FILTER-TREE-ENTRIES) regardless of
+   MODE; MODE = :TREE-FILTER additionally swaps the footer for the
+   `/query` input prompt (see %RENDER-WORKSPACE-TREE-FILTER-LINE).
+   PRECOMPUTED-TREE-ENTRIES, when non-NIL, is used verbatim instead of
+   calling %WORKSPACE-FLAT-TREE-ENTRIES again -- RENDER-WORKSPACE-OVERVIEW-
+   TO-TUI-STRING (renderer-tui-kit.lisp) flattens the tree once per frame
+   and passes the result here, since this function used to redo that same
+   walk of the org/repo/worktree/pane graph on every call regardless of
+   whether the caller already had it. NIL still means \"not supplied\" (the
+   default, and what a direct caller such as a test gets), so it falls back
+   to computing it here exactly as before; the one frame where that is
+   wrong -- FILTER narrows the tree to genuinely zero rows, which is also
+   NIL -- just recomputes an already-empty result, which is cheap and not a
+   correctness gap."
   (if (and scanning-p (null organizations))
       (%render-workspace-scanning-frame terminal-rows terminal-cols
                                         :scan-progress scan-progress)
       (let* ((rows (max 1 terminal-rows))
              (cols (max 1 terminal-cols))
              (stream (make-string-output-stream))
-             (multi-column-p (>= cols 9))
-             (left-width (if multi-column-p (%workspace-left-width cols) cols))
-             (remaining (if multi-column-p (- cols left-width 1) 0))
-             (center-width (if multi-column-p (max 1 (floor remaining 2)) 0))
-             (right-width (if multi-column-p
-                              (max 1 (- cols left-width center-width 2))
-                              0))
-             (center-col (if multi-column-p (1+ left-width) 0))
-             (right-col (if multi-column-p (+ center-col center-width 1) 0))
-             (body-start 1)
-             (body-end (max body-start (- rows 2)))
+             (wide-enough-p (>= cols 9))
+             ;; The fixed 6-row overhead (header + separator + 2-line detail
+             ;; + message + footer) needs at least 7 rows before the tree
+             ;; gets even a single row of its own; below that, the footer
+             ;; row (FOOTER-ROW, always ROWS-1) lands on top of the detail
+             ;; rows instead of below them, and some rows compute past the
+             ;; terminal's actual height entirely.
+             (tall-enough-p (>= rows 7))
+             (view-rows (workspace-tree-view-rows rows))
+             (tree-top 1)
+             (tree-bottom (+ tree-top view-rows))
+             (separator-row tree-bottom)
+             (detail-row-1 (1+ separator-row))
+             (detail-row-2 (1+ detail-row-1))
+             (message-row (1+ detail-row-2))
+             (footer-row (max 0 (1- rows)))
              (selected-object
                (or selected-tree-object
                    selected-worktree
                    (and focus-pane (pane-worktree focus-pane))))
+             (selected-pane
+               (and (typep selected-object 'pane) selected-object))
              (selected-worktree
-               (and (typep selected-object 'worktree)
-                    selected-object))
+               (and (typep selected-object 'worktree) selected-object))
              (selected-repository
                (cond
                  ((typep selected-object 'repository) selected-object)
@@ -206,14 +248,7 @@
                                    (organization-repositories organization)
                                    sum (length (repository-worktrees repository))))
                    (loop for organization in organizations
-                         sum (organization-active-worktree-count organization))))
-             ;; Computed for both passes now: the tui pass (render-tree-p NIL)
-             ;; leaves row drawing to the tree widget but still labels the
-             ;; panel and its scroll position here.
-             (all-tree-entries
-               (%workspace-flat-tree-entries organizations expanded-node-ids
-                                             :refreshing-ids refreshing-ids
-                                             :stale-ids stale-ids)))
+                         sum (organization-active-worktree-count organization)))))
         (labels
             ((cell (row col width value)
                (when (plusp width)
@@ -229,22 +264,74 @@
                    (when (plusp pad)
                      (write-string (make-string pad :initial-element #\Space)
                                    stream)))))
-             (reason-text (reasons)
-               (if reasons
-                   (format nil "~{~A~^,~}"
-                           (mapcar (lambda (reason)
-                                     (string-downcase (symbol-name reason)))
-                                   reasons))
-                   "-"))
-             (worktree-state (worktree)
-               (%worktree-status-label worktree))
+             (field (key value)
+               (format nil "~A ~A" (%sgr-wrap key +sgr-muted+) value))
+             (state-field (key state)
+               (format nil "~A ~A"
+                       (%sgr-wrap key +sgr-muted+)
+                       (let ((sgr (%worktree-state-token-sgr state)))
+                         (if sgr (%sgr-wrap state sgr) state))))
              (repository-state (repository)
                (cond
                  ((repository-missing-p repository) "MISSING")
                  ((repository-conflict-p repository) "CONFLICT")
                  ((repository-dirty-p repository) "DIRTY")
                  ((null (repository-worktrees repository)) "NO-WORKTREE")
-                 (t "ready"))))
+                 (t "ready")))
+             (tree-row-text (entry)
+               (destructuring-bind (level label object kind) entry
+                 (let* ((selected (eq object selected-object))
+                        (attention (%workspace-tree-node-attention-p object kind))
+                        (indent (make-string (* 2 level) :initial-element #\Space))
+                        (plain-prefix
+                          (format nil "~A~:[ ~;>~]~:[ ~;!~] "
+                                  indent selected attention))
+                        (base-plain (format nil "~A~A" plain-prefix label))
+                        (styled-prefix
+                          (format nil "~A~A~A "
+                                  indent
+                                  (if selected (%sgr-wrap ">" +sgr-accent-bold+) " ")
+                                  (if attention (%sgr-wrap "!" +sgr-alert+) " ")))
+                        (base-styled (format nil "~A~A" styled-prefix label)))
+                   (if (eq kind :worktree)
+                       (multiple-value-bind (plain styled)
+                           (%worktree-tree-info-suffix
+                            object (max 0 (- cols (%display-width base-plain) 2)))
+                         (declare (ignore plain))
+                         (if (plusp (length styled))
+                             (format nil "~A  ~A" base-styled styled)
+                             base-styled))
+                       base-styled))))
+             (detail-lines ()
+               (cond
+                 (selected-worktree
+                  (list
+                   (field "path:" (worktree-path selected-worktree))
+                   (format nil "~A  ~A"
+                           (field "head:" (or (worktree-head selected-worktree) "-"))
+                           (%workspace-state-text selected-worktree))))
+                 (selected-pane
+                  (list
+                   (field "pane:" (%pane-tree-label selected-pane))
+                   (%sgr-wrap
+                    (let ((output (pane-last-output selected-pane)))
+                      (if (plusp (length output)) output "(no output)"))
+                    +sgr-muted+)))
+                 (selected-repository
+                  (list
+                   (field "repository:" (%repository-tree-label selected-repository))
+                   (format nil "~A  ~A"
+                           (state-field "state:" (repository-state selected-repository))
+                           (field "worktrees:"
+                                  (princ-to-string
+                                   (length (repository-worktrees selected-repository)))))))
+                 (selected-organization
+                  (list
+                   (field "organization:" (%organization-tree-label selected-organization))
+                   (field "repositories:"
+                          (princ-to-string
+                           (length (organization-repositories selected-organization))))))
+                 (t (list (%sgr-wrap "(no selection)" +sgr-muted-italic+) "")))))
           (cursor-invisible stream)
           (when render-tree-p
             (dotimes (row rows)
@@ -263,180 +350,71 @@
                    (%sgr-wrap (princ-to-string worktree-count)
                               +sgr-accent-bold+)
                    (%sgr-wrap "worktree" +sgr-muted+)))
-          (if multi-column-p
-              (let* ((tree-count (length all-tree-entries))
-                     (visible-tree-rows (max 0 (- body-end (1+ body-start))))
-                     (max-tree-scroll (max 0 (- tree-count
-                                                visible-tree-rows)))
-                       (tree-scroll (max 0 (min tree-scroll max-tree-scroll)))
-                       (visible-tree-lines
-                         (subseq all-tree-entries
-                                 (min tree-scroll tree-count)
-                                 (min (+ tree-scroll visible-tree-rows) tree-count))))
-                  (%emit-styled-row
-                   stream body-start 0 left-width
-                   (if (plusp max-tree-scroll)
-                       (format nil "~A ~A"
-                               (%sgr-wrap "WORKTREES" +sgr-accent-bold+)
-                               (%sgr-wrap (format nil "~D/~D"
-                                                  tree-scroll max-tree-scroll)
-                                          +sgr-faint+))
-                       (%sgr-wrap "WORKTREES" +sgr-accent-bold+)))
-                  (when render-tree-p
-                    (loop for entry in visible-tree-lines
-                          for row from (1+ body-start) below body-end
-                          do (destructuring-bind (level label object kind) entry
-                               (let* ((attention
-                                        (%workspace-tree-node-attention-p object kind))
-                                      (selected
-                                        (eq object selected-object))
-                                      (state
-                                        (case kind
-                                          (:organization
-                                           (and (organization-missing-p object)
-                                                "MISSING"))
-                                          (:repository (repository-state object))
-                                          (:worktree (worktree-state object))
-                                          (t nil)))
-                                      (prefix
-                                        (format nil "~A~:[ ~;>~]~:[ ~;!~] "
-                                                (make-string (* 2 level)
-                                                             :initial-element #\Space)
-                                                selected attention)))
-                                 (cell row 0 left-width
-                                       (format nil "~A~A~:[~; [~A]~]"
-                                               prefix label state state))))))
+          (if (and wide-enough-p tall-enough-p)
+              ;; ALL-TREE-ENTRIES/TREE-COUNT are computed unconditionally
+              ;; here now, not inside a (WHEN RENDER-TREE-P ...) guard: the
+              ;; NO-MATCHES-P message below must appear even when
+              ;; RENDER-TREE-P is NIL (the real client's tui-kit pass, which
+              ;; leaves ordinary row *content* to the tree widget) --
+              ;; otherwise a filter with zero matches produced a silent blank
+              ;; tree area with no way to tell "broken" from "no matches"
+              ;; apart from an empty catalog, which CATALOG-EMPTY-HINT does
+              ;; not cover (it only fires when ORGANIZATIONS itself is
+              ;; empty). The tree widget still recomputes its own copy
+              ;; separately (renderer-tui-kit-widgets.lisp) -- see
+              ;; RENDER-WORKSPACE-OVERVIEW-TO-TUI-STRING's own NO-MATCHES-P
+              ;; check for why that is not wasted, either.
+              (let* ((all-tree-entries
+                       (or precomputed-tree-entries
+                           (%workspace-flat-tree-entries
+                            organizations collapsed-node-ids
+                            :refreshing-ids refreshing-ids
+                            :stale-ids stale-ids
+                            :filter tree-filter)))
+                     (tree-count (length all-tree-entries))
+                     (no-matches-p (and (plusp (length (or tree-filter "")))
+                                        (plusp (length organizations))
+                                        (zerop tree-count))))
+                (cond
+                  (no-matches-p
+                   (let* ((message (format nil "no matches: /~A" tree-filter))
+                          ;; Clip-before-SGR (this file's ordering rule):
+                          ;; %DISPLAY-CLIP never sees an escape, so it is
+                          ;; wrapped in SGR only after clipping.
+                          (clipped (%display-clip message cols))
+                          (width (%display-width clipped)))
+                     (%emit-styled-row
+                      stream (+ tree-top (floor view-rows 2))
+                      (%center-coord cols width) width
+                      (%sgr-wrap clipped +sgr-muted-italic+))))
+                  (render-tree-p
+                   (let* ((max-tree-scroll (max 0 (- tree-count view-rows)))
+                          (tree-scroll (max 0 (min tree-scroll max-tree-scroll)))
+                          (visible-tree-lines
+                            (subseq all-tree-entries
+                                    (min tree-scroll tree-count)
+                                    (min (+ tree-scroll view-rows) tree-count))))
+                     (loop for entry in visible-tree-lines
+                           for row from tree-top below tree-bottom
+                           do (%emit-styled-row stream row 0 cols (tree-row-text entry))))))
                 (%emit-styled-row
-                 stream body-start center-col center-width
-                 (format nil "~A ~A"
-                         (%sgr-wrap "PANES" +sgr-accent-bold+)
-                         (%sgr-wrap "d=dirty e=exited u=unread" +sgr-faint+)))
-                (if selected-worktree
-                    (let ((panes (reverse (worktree-panes selected-worktree))))
-                      (if panes
-                          (loop for pane in panes
-                                for row from (1+ body-start) below body-end
-                                do (let ((focused (eq pane focus-pane))
-                                         (dirty (and (pane-worktree pane)
-                                                     (worktree-dirty-p
-                                                      (pane-worktree pane))))
-                                         (exited (pane-process-exited-p pane))
-                                         (unread (pane-unread-output-p pane)))
-                                     (flet ((flag (label on sgr)
-                                              (if on
-                                                  (%sgr-wrap (format nil "~A:!" label)
-                                                             sgr)
-                                                  (%sgr-wrap (format nil "~A:-" label)
-                                                             +sgr-faint+))))
-                                       (%emit-styled-row
-                                        stream row center-col center-width
-                                        (format nil "~A~A ~A ~A ~A"
-                                                (if focused
-                                                    (%sgr-wrap ">" +sgr-accent-bold+)
-                                                    " ")
-                                                (if focused
-                                                    (%sgr-wrap (%pane-tree-label pane)
-                                                               +sgr-accent-bold+)
-                                                    (%pane-tree-label pane))
-                                                (flag "d" dirty +sgr-warn+)
-                                                (flag "e" exited +sgr-alert+)
-                                                (flag "u" unread +sgr-warn+))))))
-                          (%emit-styled-row stream (1+ body-start) center-col
-                                            center-width
-                                            (%sgr-wrap "(no attached panes)"
-                                                       +sgr-muted-italic+))))
-                    (%emit-styled-row
-                     stream (1+ body-start) center-col center-width
-                     (%sgr-wrap
-                      (if selected-repository
-                          (format nil "~A: select a worktree or press Enter"
-                                  (%repository-tree-label selected-repository))
-                          (if selected-organization
-                              (format nil "~A: select a repository or press Enter"
-                                      (%organization-tree-label selected-organization))
-                              "(select a worktree)"))
-                      +sgr-muted-italic+)))
-                (%emit-styled-row stream body-start right-col right-width
-                                  (%sgr-wrap "PREVIEW" +sgr-accent-bold+))
-                (flet ((field (key value)
-                         (format nil "~A ~A" (%sgr-wrap key +sgr-muted+) value))
-                       (state-field (key state)
-                         (format nil "~A ~A"
-                                 (%sgr-wrap key +sgr-muted+)
-                                 (let ((sgr (%worktree-state-token-sgr state)))
-                                   (if sgr (%sgr-wrap state sgr) state)))))
-                  (let ((preview-lines
-                          (append
-                           (mapcar (lambda (message)
-                                     (%sgr-wrap (format nil "message: ~A" message)
-                                                +sgr-muted-italic+))
-                                   (reverse messages))
-                           (cond
-                             (selected-worktree
-                              (list
-                               (field "path:" (worktree-path selected-worktree))
-                               (field "branch:"
-                                      (%sgr-wrap
-                                       (or (worktree-branch selected-worktree) "-")
-                                       +sgr-branch+))
-                               (field "head:"
-                                      (or (worktree-head selected-worktree) "-"))
-                               (field "state:"
-                                      (%workspace-state-text selected-worktree))
-                               (field "attention:"
-                                      (reason-text
-                                       (worktree-attention-reasons selected-worktree)))
-                               (when focus-pane
-                                 (field "output:"
-                                        (pane-last-output focus-pane)))))
-                             (selected-repository
-                              (list
-                               (field "repository:"
-                                      (%repository-tree-label selected-repository))
-                               (field "path:"
-                                      (or (repository-path selected-repository) "-"))
-                               (state-field "state:"
-                                            (repository-state selected-repository))
-                               (field "worktrees:"
-                                      (princ-to-string
-                                       (length (repository-worktrees
-                                                selected-repository))))
-                               (field "attention:"
-                                      (if (%repository-attention-p selected-repository)
-                                          (%sgr-wrap "yes" +sgr-warn+)
-                                          "no"))))
-                             (selected-organization
-                              (list
-                               (field "organization:"
-                                      (%organization-tree-label selected-organization))
-                               (state-field "state:"
-                                            (if (organization-missing-p
-                                                 selected-organization)
-                                                "MISSING"
-                                                "ready"))
-                               (field "repositories:"
-                                      (princ-to-string
-                                       (length (organization-repositories
-                                                selected-organization))))
-                               (field "attention:"
-                                      (princ-to-string
-                                       (organization-attention-count
-                                        selected-organization)))))
-                             (t (list (%sgr-wrap "No worktree selected"
-                                                 +sgr-muted-italic+)))))))
-                    (loop for line in (remove nil preview-lines)
-                          for row from (1+ body-start) below body-end
-                          do (%emit-styled-row stream row right-col right-width
-                                               line))))
-                (when (< left-width cols)
-                  (loop for row from body-start below body-end
-                        do (%emit-styled-row stream row left-width 1
-                                             (%sgr-wrap "│" +sgr-line+))))
-                (when (< right-col cols)
-                  (loop for row from body-start below body-end
-                        do (%emit-styled-row stream row (1- right-col) 1
-                                             (%sgr-wrap "│" +sgr-line+)))))
-              (cell body-start 0 cols "WORKSPACE OVERVIEW (terminal too narrow for panels)"))
+                 stream separator-row 0 cols
+                 (%sgr-wrap (make-string cols :initial-element #\─) +sgr-line+))
+                (let ((lines (detail-lines)))
+                  (%emit-styled-row stream detail-row-1 0 cols (or (first lines) ""))
+                  (%emit-styled-row stream detail-row-2 0 cols (or (second lines) "")))
+                (when messages
+                  (%emit-styled-row
+                   stream message-row 0 cols
+                   (%sgr-wrap (format nil "message: ~A" (first messages))
+                              +sgr-muted-italic+))))
+              (cell (min tree-top (max 0 (1- rows))) 0 cols
+                    (cond
+                      ((and (not wide-enough-p) (not tall-enough-p))
+                       "WORKSPACE OVERVIEW (terminal too small for panels)")
+                      ((not wide-enough-p)
+                       "WORKSPACE OVERVIEW (terminal too narrow for panels)")
+                      (t "WORKSPACE OVERVIEW (terminal too short for panels)"))))
           ;; Reaching this branch already means (not (and scanning-p (null
           ;; organizations))) -- the IF above took its other arm otherwise --
           ;; so ORGANIZATIONS being null here already implies SCANNING-P is
@@ -445,10 +423,14 @@
             (%render-workspace-empty-catalog-hint stream rows cols
                                                   catalog-empty-hint))
           (reset-attrs stream)
-          (if (eq mode :command)
-              (%render-workspace-command-line stream (1- rows) cols command-buffer)
-              (%emit-styled-row stream (1- rows) 0 cols
-                                (%workspace-footer-line mode prefix-code)))
+          (cond
+            ((eq mode :command)
+             (%render-workspace-command-line stream footer-row cols command-buffer))
+            ((eq mode :tree-filter)
+             (%render-workspace-tree-filter-line stream footer-row cols tree-filter))
+            (t
+             (%emit-styled-row stream footer-row 0 cols
+                               (%workspace-footer-line mode prefix-code tree-filter))))
           ;; R6.11: embedded here for a caller of the plain-ANSI entry point
           ;; directly, but a client only ever sees this through
           ;; RENDER-WORKSPACE-OVERVIEW-TO-TUI-STRING (renderer-tui-kit.lisp),

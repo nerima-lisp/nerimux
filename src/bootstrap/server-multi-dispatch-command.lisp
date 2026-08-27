@@ -57,10 +57,18 @@
    (%select-client-tree-worktree conn (or target (first args)))
    t)
   (:tree-top
-   (%set-client-selected-tree-object conn (first (%workspace-tree-objects)))
+   (%set-client-selected-tree-object
+    conn
+    (first (%workspace-tree-objects
+            (nerimux/vcs:workspace-organizations)
+            (client-conn-tree-filter conn))))
    t)
   (:tree-bottom
-   (%set-client-selected-tree-object conn (car (last (%workspace-tree-objects))))
+   (%set-client-selected-tree-object
+    conn
+    (car (last (%workspace-tree-objects
+                (nerimux/vcs:workspace-organizations)
+                (client-conn-tree-filter conn)))))
    t)
   ((:worktree-create :create-worktree :wt-create)
    (%client-create-worktree conn target args))

@@ -87,3 +87,68 @@
       (let ((line (strip-sgr (get-output-stream-string stream))))
         (expect (search ":wt-create feat/x" line))
         (expect (not (search "wt-delete" line)))))))
+
+;;; PR2's `/` tree-filter mode: %RENDER-WORKSPACE-TREE-FILTER-LINE is the
+;;; `:` command-line's sibling for the overview's text filter, and
+;;; %WORKSPACE-FOOTER-LINE grows a muted "/query" chip so an active filter
+;;; stays visible once the user leaves :tree-filter mode and returns to
+;;; ordinary :normal navigation.
+
+(describe "renderer-suite/workspace-tree-filter-line-rendering"
+
+  ;; Direct unit coverage of %RENDER-WORKSPACE-TREE-FILTER-LINE: the typed
+  ;; query follows a bold-accent `/`.
+  (it "shows a bold slash followed by the typed query"
+    (let ((stream (make-string-output-stream)))
+      (nerimux/renderer::%render-workspace-tree-filter-line stream 0 40 "feat")
+      (let ((line (strip-sgr (get-output-stream-string stream))))
+        (expect (search "/feat" line)))))
+
+  ;; An empty query still shows the bare `/` prompt -- the mode the user is
+  ;; in, not just what they have typed so far.
+  (it "shows the bare slash prompt for an empty query"
+    (let ((stream (make-string-output-stream)))
+      (nerimux/renderer::%render-workspace-tree-filter-line stream 0 40 nil)
+      (let ((line (strip-sgr (get-output-stream-string stream))))
+        (expect (search "/" line))
+        (expect (not (search "/f" line))))))
+
+  ;; End to end through RENDER-WORKSPACE-OVERVIEW-TO-STRING: :NORMAL mode with
+  ;; a non-empty TREE-FILTER still shows the ordinary key-hint footer, plus
+  ;; the "/query" chip prepended -- the filter stays visible after Enter
+  ;; returns the user to :normal (see %TRANSITION-CLIENT-UI-MODE's :accept
+  ;; handling in server-multi-dispatch-command-workspace.lisp).
+  (it "keeps the /query chip in the ordinary footer once back in :normal mode"
+    ;; Wide enough (200 cols) that the whole footer -- chip, mode, and every
+    ;; hint -- survives %VISIBLE-TRUNCATE uncut; at 80 columns the hint list
+    ;; alone already overflows and the tail ("detach") would be clipped,
+    ;; which is a rendering-budget fact unrelated to what this test checks.
+    (let ((frame
+            (nerimux/renderer:render-workspace-overview-to-string
+             nil 24 200 :mode :normal :tree-filter "feat")))
+      (let ((plain (strip-sgr frame)))
+        (expect (search "/feat" plain))
+        ;; The ordinary footer hints are still there -- :tree-filter mode did
+        ;; not silently steal the footer's normal-mode content. "detach" and
+        ;; "C-p" are footer-only strings; "select" is not used here because
+        ;; ORGANIZATIONS being empty also puts "(no selection)" in the
+        ;; detail panel, which would make that check pass for the wrong
+        ;; reason.
+        (expect (search "detach" plain))
+        (expect (search "C-p" plain)))))
+
+  ;; :TREE-FILTER mode replaces the whole footer with the /query input line
+  ;; instead -- no ordinary key hints while the user is actively typing a
+  ;; query.
+  (it "replaces the footer with the /query input line in :tree-filter mode"
+    (let ((frame
+            (nerimux/renderer:render-workspace-overview-to-string
+             nil 24 80 :mode :tree-filter :tree-filter "feat")))
+      (let ((plain (strip-sgr frame)))
+        (expect (search "/feat" plain))
+        ;; "detach"/"C-p" are footer-only strings -- unlike "select", neither
+        ;; collides with the detail panel's "(no selection)" text (ORGANIZA-
+        ;; TIONS is empty here too), so their absence is a real signal that
+        ;; the ordinary footer never rendered.
+        (expect (not (search "detach" plain)))
+        (expect (not (search "C-p" plain)))))))
