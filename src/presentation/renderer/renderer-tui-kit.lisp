@@ -153,9 +153,12 @@
                                                refreshing-ids
                                                stale-ids
                                                (scanning-p nil)
+                                               (scan-progress nil)
+                                               (catalog-empty-hint nil)
                                                (command-buffer ""))
   "Render the workspace overview through cl-tui-kit's headless backend.
    EXPANDED-NODE-IDS / REFRESHING-IDS / STALE-IDS / SCANNING-P /
+   SCAN-PROGRESS / CATALOG-EMPTY-HINT /
    COMMAND-BUFFER are forwarded to RENDER-WORKSPACE-OVERVIEW-TO-STRING and,
    for the tree, to %RENDER-WORKSPACE-TREE-WIDGET -- see that function and
    %WORKSPACE-FLAT-TREE-ENTRIES (renderer-workspace-tree.lisp) for what each one
@@ -183,6 +186,8 @@
        :refreshing-ids refreshing-ids
        :stale-ids stale-ids
        :scanning-p scanning-p
+       :scan-progress scan-progress
+       :catalog-empty-hint catalog-empty-hint
        :command-buffer command-buffer)
       terminal-rows terminal-cols
       :viewport 0
@@ -190,8 +195,11 @@
       ;; R6.2: while the initial scan is still running there is nothing for
       ;; the tree widget to draw -- the ANSI pass above already rendered the
       ;; "scanning..." placeholder frame, so skip overlaying an empty tree
-      ;; box on top of it.
-      (unless (and scanning-p (null organizations))
+      ;; box on top of it.  The same holds for the empty-catalog hint (FR-004c):
+      ;; the ANSI pass centred its guidance where an empty tree box would
+      ;; otherwise paint over it.
+      (unless (and (null organizations)
+                   (or scanning-p catalog-empty-hint))
         (lambda (surface)
           (%render-workspace-tree-widget
            surface organizations terminal-rows terminal-cols

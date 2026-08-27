@@ -19,6 +19,7 @@ nix build .                           # → ./result/bin/nerimux
 ## Usage
 
 ```bash
+nerimux                                # same as `attach` with no selector
 nerimux attach                         # open the workspace overview
 nerimux attach github.com/org/repo     # focus a repository by its ghq spec
 nerimux attach /path/to/worktree       # open a local worktree
@@ -29,19 +30,41 @@ These examples assume `nerimux` is on `PATH`. From a checkout, use
 `./result/bin/nerimux`; with no build, prefix the command with
 `nix run github:nerima-lisp/nerimux --`.
 
-`attach` auto-starts the headless runtime and connects a thin client. A selector
-containing a slash is resolved against the ghq catalog — the full
-specification, `host/organization/repository` — or against a local worktree
-path; a selector that matches both readings at once opens the global picker
-with the selector pre-typed instead of guessing. `attach`, `server`, and `kill`
-are the only commands; anything else — including `nerimux` with no arguments —
-prints the usage summary and exits non-zero. `-V`/`-h` are the only global flags.
+`attach` auto-starts the headless runtime and connects a thin client. Running
+`nerimux` with no command at all defaults to `attach`; `attach`, `server`,
+and `kill` are the only commands, and only an unrecognized command word
+prints the usage summary and exits non-zero. `-V`/`-h` are the only global
+flags. A selector containing a slash is resolved against the ghq catalog —
+the full specification, `host/organization/repository` — or against a local
+worktree path; a selector that matches both readings at once opens the
+global picker with the selector pre-typed instead of guessing.
+
+If the current directory is inside a worktree ghq already tracks — a
+subdirectory of one counts too — `attach` skips the overview and opens
+straight into that worktree's pane: the one last focused there, or a new
+shell if none was open yet. This resolves against the running server's
+catalog even before the initial scan has finished, by resolving and merging
+just that directory's repository synchronously. The pane opens in normal
+mode, with a mode chip (`NORMAL`, plus an `i to type` hint) at the left edge
+of the status bar. An explicit selector (`attach github.com/org/repo`, `attach
+/path/to/worktree`) still opens the overview with that item selected, not the
+pane directly.
 
 The overview tree appears as soon as the repository scan finishes; the
 per-repository VCS status (dirty/ahead/behind flags) streams in afterwards,
 since it runs `git status` across every repository. A repository the scan
 cannot read — an incomplete or otherwise unreadable checkout — is kept in the
-tree flagged `!` rather than aborting the scan.
+tree flagged `!` rather than aborting the scan. While the initial scan is
+still running, attaching shows a placeholder screen (`scanning workspaces...`,
+with a running repository count once the scan has found any) instead of an
+empty tree; if the ghq root has no repositories at all once the scan
+finishes, the overview shows that directly, with the ghq root path and a
+`ghq get <owner>/<repo>` hint, rather than a permanently empty tree.
+
+If `nerimux` has to auto-start the server — no server was already running for
+the target session — it prints `nerimux: starting server...` to stderr before
+the client's screen takes over, so the wait for the new server's socket does
+not look like a hung shell.
 
 If `attach` has to auto-start the server and something goes wrong, the
 spawned server's stdout/stderr are captured to a per-session-name log file
@@ -55,9 +78,10 @@ The log directory is created `0700`. See `%runtime-log-path` and
 
 ## Default key bindings
 
-The workspace UI uses **`C-q`** as its prefix. The initial view is the overview;
-`C-p` opens the global picker across organizations, repositories, worktrees, and
-panes.
+The workspace UI uses **`C-q`** as its prefix. The initial view is the
+overview, unless the cwd-match above jumps straight to a worktree's pane;
+`C-p` opens the global picker across organizations, repositories, worktrees,
+and panes.
 
 | Key | Action |
 |---|---|

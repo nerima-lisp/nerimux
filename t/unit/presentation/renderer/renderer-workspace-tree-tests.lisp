@@ -235,4 +235,46 @@
               (nerimux/renderer:render-workspace-overview-to-string
                (list organization) 24 80 :scanning-p t)))
         (expect (search " nerimux " frame))
-        (expect (not (search "scanning workspaces..." frame)))))))
+        (expect (not (search "scanning workspaces..." frame))))))
+
+  ;; FR-004b: a positive SCAN-PROGRESS names how many repositories the scan
+  ;; has found so far, instead of the bare ellipsis -- a scan that
+  ;; legitimately runs tens of seconds otherwise looks identical at second 1
+  ;; and second 30.
+  (it "shows the repository count in the scanning message when scan-progress is a positive integer"
+    (let ((frame
+            (nerimux/renderer:render-workspace-overview-to-string
+             nil 24 80 :scanning-p t :scan-progress 12)))
+      (expect (search "scanning workspaces... 12 repositories" frame))))
+
+  ;; NIL scan-progress (the default) keeps the plain ellipsis wording.
+  (it "keeps the plain ellipsis wording when scan-progress is nil"
+    (let ((frame
+            (nerimux/renderer:render-workspace-overview-to-string
+             nil 24 80 :scanning-p t :scan-progress nil)))
+      (expect (search "scanning workspaces..." frame))
+      (expect (not (search "repositories" frame))))))
+
+(describe "renderer-suite/workspace-catalog-empty-hint"
+
+  ;; FR-004c: an empty catalog with no scan running shows a 3-line guide
+  ;; naming the ghq root, instead of leaving the interior blank -- an empty
+  ;; tree because the scan has not finished (the scanning-p placeholder
+  ;; above) needs to read differently from an empty tree because there is
+  ;; genuinely nothing to find.
+  (it "shows the no-repositories-found guide with the ghq root when the catalog is empty"
+    (let ((frame
+            (nerimux/renderer:render-workspace-overview-to-string
+             nil 24 80 :catalog-empty-hint "/tmp/ghq")))
+      (expect (search "no repositories found" frame))
+      (expect (search "/tmp/ghq" frame))
+      (expect (search "ghq get <owner>/<repo>" frame))))
+
+  ;; While a scan is running, this branch never applies -- scanning-p on an
+  ;; empty catalog takes the whole-frame scanning placeholder instead (R6.2),
+  ;; which has nothing to do with catalog-empty-hint at all.
+  (it "does not show the empty-catalog hint while a scan is running"
+    (let ((frame
+            (nerimux/renderer:render-workspace-overview-to-string
+             nil 24 80 :scanning-p t :catalog-empty-hint "/tmp/ghq")))
+      (expect (not (search "no repositories found" frame))))))

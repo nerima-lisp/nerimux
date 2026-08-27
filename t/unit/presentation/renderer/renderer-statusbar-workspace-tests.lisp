@@ -61,22 +61,26 @@
 
 (describe "renderer-suite/statusbar-workspace-three-blocks"
 
-  ;; The composed line is EXACTLY the three blocks joined by a two-space
-  ;; separator, in left/middle/right order -- nothing else (in particular, no
-  ;; clock, which R6.5 explicitly drops: "時計を含まない"). Deriving the
-  ;; expected value from the same building-block functions
-  ;; (%STATUS-LEFT-TEXT/%STATUS-MIDDLE-TEXT/%STATUS-RIGHT-TEXT) the composer
-  ;; itself calls, rather than a hand-typed literal, is what makes this a
-  ;; real "no 4th segment was silently added" check: if a clock block were
-  ;; spliced in, this equality would break.
-  (it "composes exactly left+middle+right, with no clock or other segment, when it all fits"
+  ;; The composed line is EXACTLY the mode chip followed by the three blocks,
+  ;; joined by a two-space separator, in chip/left/middle/right order --
+  ;; nothing else (in particular, no clock, which R6.5 explicitly drops:
+  ;; "時計を含まない"). Deriving the expected value from the same
+  ;; building-block functions (%STATUS-MODE-CHIP/%STATUS-LEFT-TEXT/
+  ;; %STATUS-MIDDLE-TEXT/%STATUS-RIGHT-TEXT) the composer itself calls,
+  ;; rather than a hand-typed literal, is what makes this a real "no 5th
+  ;; segment was silently added" check: if a clock block were spliced in,
+  ;; this equality would break.  FR-003 added the mode chip as the always-
+  ;; kept leading segment; the default :mode of :normal is what
+  ;; %compose-workspace-status-line uses when the caller (here) passes none.
+  (it "composes exactly mode-chip+left+middle+right, with no clock or other segment, when it all fits"
     (multiple-value-bind (pane) (%fixture-pane-with-worktree)
       (let* ((messages (list "build ok"))
+             (mode-chip (nerimux/renderer::%status-mode-chip :normal))
              (left (nerimux/renderer::%status-left-text
                     pane :include-repository-p t))
              (middle (nerimux/renderer::%status-middle-text pane))
              (right (nerimux/renderer::%status-right-text messages))
-             (expected (format nil "~A  ~A  ~A" left middle right))
+             (expected (format nil "~A  ~A  ~A  ~A" mode-chip left middle right))
              (composed
                (nerimux/renderer::%compose-workspace-status-line
                 pane messages 200)))
@@ -177,4 +181,76 @@
       (let ((composed
               (nerimux/renderer::%compose-workspace-status-line
                pane (list "notification") 5)))
-        (expect (<= (nerimux/renderer::%visible-length composed) 5))))))
+        (expect (<= (nerimux/renderer::%visible-length composed) 5)))))
+
+  ;; Coverage gap flagged by test/security review: %compose-workspace-
+  ;; status-line's docstring asserts the mode chip is "never dropped ... it
+  ;; must survive as far into a narrow terminal as the fields design doc
+  ;; §11 already protects", but nothing exercised that claim with a non-
+  ;; default MODE threaded through the same shrink-by-one-column ladder as
+  ;; the drops-notification-then-tabs-then-repository-name test above, nor
+  ;; at the R6.10 40-column floor its own comment cites. :input is used
+  ;; (rather than the default :normal) so this cannot be satisfied by
+  ;; accident via some unrelated "NORMAL" substring appearing elsewhere in
+  ;; the assembled left/middle/right blocks.
+  (it "keeps the INPUT mode chip through every degradation stage, down to the 40-column floor"
+    (multiple-value-bind (pane) (%fixture-pane-with-worktree :branch "feature/wide-enough-branch")
+      (let* ((messages (list "a very long notification that will not fit once things get tight"))
+             (full (nerimux/renderer::%compose-workspace-status-line
+                    pane messages 500 :mode :input))
+             (full-width (nerimux/renderer::%visible-length full))
+             (stage-1 (nerimux/renderer::%compose-workspace-status-line
+                       pane messages (1- full-width) :mode :input))
+             (stage-1-width (nerimux/renderer::%visible-length stage-1)))
+        (expect (search "INPUT" (strip-sgr full)))
+        (expect (search "INPUT" (strip-sgr stage-1)))
+        (let* ((stage-2 (nerimux/renderer::%compose-workspace-status-line
+                          pane messages (1- stage-1-width) :mode :input))
+               (stage-2-width (nerimux/renderer::%visible-length stage-2)))
+          (expect (search "INPUT" (strip-sgr stage-2)))
+          (let ((stage-3 (nerimux/renderer::%compose-workspace-status-line
+                          pane messages (1- stage-2-width) :mode :input)))
+            (expect (search "INPUT" (strip-sgr stage-3)))
+            (expect (search "INPUT"
+                            (strip-sgr
+                             (nerimux/renderer::%compose-workspace-status-line
+                              pane messages 40 :mode :input))))))))))
+
+(describe "renderer-suite/statusbar-workspace-mode-chip"
+
+  ;; FR-003: the mode chip is the status line's leftmost, always-kept
+  ;; segment -- a client landing in a freshly opened pane can tell at a
+  ;; glance whether a keystroke reaches the shell yet. :NORMAL is the mode
+  ;; that swallows keys (nerimux-normal-mode-swallows-nothing), so it alone
+  ;; adds the " i to type" hint after the chip; every other mode shows the
+  ;; chip alone.
+  (it "includes NORMAL and the i-to-type hint for :normal, and INPUT without the hint for :input"
+    (multiple-value-bind (pane) (%fixture-pane-with-worktree)
+      (let* ((messages (list "build ok"))
+             (normal-line
+               (strip-sgr
+                (nerimux/renderer::%compose-workspace-status-line
+                 pane messages 200 :mode :normal)))
+             (input-line
+               (strip-sgr
+                (nerimux/renderer::%compose-workspace-status-line
+                 pane messages 200 :mode :input))))
+        (expect (search "NORMAL" normal-line))
+        (expect (search "i to type" normal-line))
+        (expect (search "INPUT" input-line))
+        (expect (not (search "i to type" input-line))))))
+
+  ;; The same contract holds through render-status-bar, the entry point
+  ;; %compose-workspace-status-line's only production caller
+  ;; (renderer-compose.lisp) actually threads MODE through.
+  (it "render-status-bar threads mode through to the chip"
+    (multiple-value-bind (pane) (%fixture-pane-with-worktree)
+      (multiple-value-bind (session) (make-single-pane-session)
+        (let ((output
+                (strip-sgr
+                 (with-output-to-string (s)
+                   (nerimux/renderer::render-status-bar
+                    s session 24 200
+                    :focus-pane pane :messages (list "build ok") :mode :input)))))
+          (expect (search "INPUT" output))
+          (expect (not (search "i to type" output))))))))

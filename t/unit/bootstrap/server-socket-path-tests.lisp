@@ -245,6 +245,25 @@
          (format nil "test-session-never-appears-~D" (random 1000000)))
         "must signal when the socket never appears after launch-and-poll")))
 
+  ;; FR-004a: right before entering the spawn path (no live socket found),
+  ;; %ensure-server-running prints a one-line "starting server..." notice to
+  ;; *error-output* -- the client's clear-display only runs after a
+  ;; successful connect, so without this notice the up-to-3-second poll
+  ;; below looks like a hung shell rather than an auto-starting server. Same
+  ;; stub as the test above (no real spawn attempted); the notice must
+  ;; appear regardless of how the spawn itself turns out.
+  (it "ensure-server-running-prints-a-starting-server-notice-before-spawning"
+    (with-stubbed-fdefinition
+        ((nerimux::%launch-server-and-poll-when-live
+          (lambda (&rest args) (declare (ignore args)) nil)))
+      (let (errout)
+        (setf errout
+              (with-output-to-string (*error-output*)
+                (ignore-errors
+                 (nerimux::%ensure-server-running
+                  (format nil "test-session-notice-~D" (random 1000000))))))
+        (expect (search "nerimux: starting server..." errout) :to-be-truthy))))
+
   ;;; -- launch-server-and-poll: diagnostics must not block startup --------------
 
   ;; %launch-server-and-poll-when-live redirects the spawned server's

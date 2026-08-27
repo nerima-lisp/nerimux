@@ -68,6 +68,12 @@
    #:workspace-organizations
    #:set-workspace-organizations
    #:refresh-workspace-organizations-async
+   ;; cwd-match auto-registration (FR-002): resolve a directory's git
+   ;; repository synchronously and fold it into the live catalog, for the
+   ;; attach path to use before the next full scan would otherwise find it.
+   #:resolve-directory-organizations
+   #:merge-workspace-organizations
+   #:ghq-root-directory
    #:create-worktree
    #:delete-worktree
    #:create-worktree-async

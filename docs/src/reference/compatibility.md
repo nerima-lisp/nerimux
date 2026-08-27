@@ -67,7 +67,7 @@ below are — a real client depends on it every frame.
   attached client's terminal. Implementation: `src/bootstrap/server.lisp`
   (`%socket-tmp-base`, `%socket-directory`, `socket-path`, lines 26–55) and
   `src/bootstrap/main-startup-socket.lisp` for stale-socket handling;
-  `src/bootstrap/server-multi.lisp:215-242` for the shared-size-is-the-min
+  `src/bootstrap/server-multi.lisp:232-246` for the shared-size-is-the-min
   behavior (R8.4).
 - **Pane spawning defaults.** Every pane's shell is `$SHELL`, or `/bin/sh`
   if unset (`src/infrastructure/pty/pty.lisp:81-89`), and every pane's child
@@ -94,9 +94,9 @@ below are — a real client depends on it every frame.
   (R1.17). `nerimux kill [--force]` is new — it is not a tmux command; it
   asks the server to shut down, refusing (exit 1, listing open panes) unless
   `--force` is given, in which case panes are sent `SIGHUP` then `SIGKILL`.
-  See `*startup-modes*` in `src/bootstrap/main-startup-commands.lisp:117-128`
+  See `*startup-modes*` in `src/bootstrap/main-startup-commands.lisp:141-156`
   for the exact surviving surface, and `run-kill`
-  (`src/bootstrap/main-startup-commands.lisp:55-77`) for the kill semantics.
+  (`src/bootstrap/main-startup-commands.lisp:66-99`) for the kill semantics.
 - **The entire tmux command table and keystroke pipeline are gone.**
   `src/application/dispatch/` and `src/presentation/events/` do not exist
   in the current tree (confirmed by directory absence). No tmux command

@@ -222,7 +222,15 @@
    the user somewhere they did not ask for, so an ambiguous selector opens the
    picker with the selector already typed, filtered to what it matched (R7.6).
    Selection by cwd, and by whatever was selected last, is unchanged: neither is
-   a selector the user typed, so neither can be ambiguous in this sense."
+   a selector the user typed, so neither can be ambiguous in this sense.
+
+   Returns (VALUES WORKTREE SOURCE), where SOURCE is :EXPLICIT, :CWD,
+   :PREVIOUS, or NIL saying which of those three matched -- FR-002 needs to
+   know specifically that a cwd match is why the worktree was found, so it
+   can jump the client straight to the worktree's detail pane only in that
+   case, not for an explicit selector or a remembered previous selection.
+   Existing single-value callers (e.g. %REBIND-CLIENT-SELECTION) are
+   unaffected: they only ever used the first value."
   (let* ((explicit (client-conn-attach-target conn))
          (explicitp (and (stringp explicit) (plusp (length explicit))))
          (cwd (client-conn-attach-cwd conn))
@@ -233,20 +241,30 @@
                 (%workspace-find-worktree-for-attach explicit organizations)))
          (explicit-repository
            (and explicitp
-                (%workspace-find-repository-for-attach explicit organizations))))
+                (%workspace-find-repository-for-attach explicit organizations)))
+         ;; Evaluated lazily via AND, same as the OR they replace below: a cwd
+         ;; lookup only runs when there was no explicit-worktree hit, and a
+         ;; previous-token lookup only when neither of the first two hit.
+         (cwd-worktree
+           (and (not explicit-worktree)
+                (stringp cwd)
+                (plusp (length cwd))
+                (%workspace-find-worktree-for-cwd cwd organizations)))
+         (previous-worktree
+           (and (not explicit-worktree)
+                (not cwd-worktree)
+                previous
+                (%workspace-find-worktree previous organizations))))
     (cond
       ;; Both readings hit: let the user say which, rather than guessing.
       ((and explicit-worktree explicit-repository)
        (%open-client-picker-filtered conn explicit)
-       nil)
+       (values nil nil))
       (t
-       (let ((worktree
-               (or explicit-worktree
-                   (and (stringp cwd)
-                        (plusp (length cwd))
-                        (%workspace-find-worktree-for-cwd cwd organizations))
-                   (and previous
-                        (%workspace-find-worktree previous organizations)))))
+       (let* ((worktree (or explicit-worktree cwd-worktree previous-worktree))
+              (source (cond (explicit-worktree :explicit)
+                            (cwd-worktree :cwd)
+                            (previous-worktree :previous))))
          (cond
            (worktree
             (%set-client-selected-worktree conn worktree))
@@ -257,7 +275,7 @@
            ((and explicitp organizations)
             (%client-notify conn
                             (format nil "attach target not found: ~A" explicit))))
-         worktree)))))
+         (values worktree source))))))
 
 (defun %rebind-client-selection (conn organizations)
   (or (%client-attach-selection conn organizations)
@@ -300,19 +318,24 @@
 (defun %refresh-client-picker (conn &key on-complete on-error)
   (if (nerimux/vcs:vcs-package-available-p)
       (let ((refresh-failed-p nil))
+        ;; :MARK: this refresh is starting (see the matching call and
+        ;; rationale in %ADD-CLIENT, server-multi.lisp -- FR-005).
         (%set-workspace-catalog-refresh-state
-         (nerimux/vcs:workspace-organizations))
+         (nerimux/vcs:workspace-organizations) :mark)
         (handler-case
             (nerimux/vcs:refresh-workspace-organizations-async
              :callback-dispatch #'%enqueue-main-thread-callback
+             ;; :MARK: the scan landed but the status refresh behind it is
+             ;; still in flight for every one of these nodes.
              :on-catalog
              (lambda (organizations)
-               (%set-workspace-catalog-refresh-state organizations)
+               (%set-workspace-catalog-refresh-state organizations :mark)
                (%mark-dirty))
              :on-complete
              (lambda (organizations)
+               ;; :SETTLE: this refresh has actually finished.
                (%set-workspace-catalog-refresh-state
-                organizations :stale-p refresh-failed-p)
+                organizations :settle :stale-p refresh-failed-p)
                (dolist (client
                          (remove-duplicates
                           (remove-if-not #'%client-live-p
@@ -329,15 +352,19 @@
              :on-error
              (lambda (condition)
                (setf refresh-failed-p t)
+               ;; :SETTLE + stale: the refresh terminated in error; no
+               ;; on-complete is coming to clear the in-flight mark.
                (%set-workspace-catalog-refresh-state
-                (nerimux/vcs:workspace-organizations) :stale-p t)
+                (nerimux/vcs:workspace-organizations) :settle :stale-p t)
                (when (and on-error (%client-live-p conn))
                  (funcall on-error condition))
                (%mark-dirty)))
           (error (condition)
             (setf refresh-failed-p t)
+            ;; :SETTLE + stale: kicking the refresh off failed synchronously,
+            ;; so no callback above will run to clear the :mark set above.
             (%set-workspace-catalog-refresh-state
-             (nerimux/vcs:workspace-organizations) :stale-p t)
+             (nerimux/vcs:workspace-organizations) :settle :stale-p t)
             (when (and on-error (%client-live-p conn))
               (funcall on-error condition))
             (%mark-dirty))))

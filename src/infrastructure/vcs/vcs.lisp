@@ -55,6 +55,31 @@
       :backend (or backend :git)))))
 
 (declaim (ftype function list-repository-worktrees))
+;; %APPLY-REPOSITORY-WORKTREES is defined later in this file (near
+;; LIST-REPOSITORY-WORKTREES, which it backs); RESOLVE-DIRECTORY-ORGANIZATIONS
+;; above that point calls it directly to populate a repository from worktrees
+;; already fetched, rather than through LIST-REPOSITORY-WORKTREES, which would
+;; re-run `git worktree list` (F1). Same forward-reference shape as the
+;; declaim above -- harmless for a function, resolved by load time.
+(declaim (ftype function %apply-repository-worktrees))
+
+(defvar *ghq-root-cache* :unresolved
+  "Cached result of VCS-KIT:GHQ-ROOT (FR-002/FR-004b's GHQ-ROOT-DIRECTORY).
+   The ghq root does not change once nerimux has started, but
+   %RENDER-CLIENT-FRAME calls GHQ-ROOT-DIRECTORY on every dirty frame for the
+   empty-catalog hint -- caching here is what keeps that from shelling out to
+   `ghq root` on every frame instead of only on the first one.")
+
+(defun ghq-root-directory ()
+  "The configured ghq root as a string, or NIL when ghq is unavailable or the
+   lookup fails. Bootstrap code must not call VCS-KIT directly -- this is the
+   sanctioned indirection through this package's runtime-optional boundary."
+  (when (eq *ghq-root-cache* :unresolved)
+    (setf *ghq-root-cache*
+          (and (vcs-package-available-p)
+               (handler-case (%string-value (vcs-kit:ghq-root))
+                 (error () nil)))))
+  *ghq-root-cache*)
 
 (defvar *workspace-organizations* nil)
 
@@ -105,6 +130,47 @@
     (setf *workspace-organizations* current)
     (%preserve-pane-associations previous current)))
 
+(defun %repository-already-present-p (repository organizations)
+  (let ((local-path (nerimux/model:repository-local-path repository))
+        (specification (nerimux/model:repository-specification repository)))
+    (some (lambda (organization)
+            (find-if
+             (lambda (candidate)
+               (or (and local-path
+                        (equal local-path
+                               (nerimux/model:repository-local-path candidate)))
+                   (and specification
+                        (equal specification
+                               (nerimux/model:repository-specification candidate)))))
+             (nerimux/model:organization-repositories organization)))
+          organizations)))
+
+(defun merge-workspace-organizations (organizations)
+  "Merge ORGANIZATIONS into *WORKSPACE-ORGANIZATIONS* (FR-002): a wholly new
+   organization (by id) is added outright; for one already present, only the
+   repositories it does not already hold (matched by local-path or
+   specification) are added to it. Existing repositories are left untouched
+   -- this exists to make a repository RESOLVE-DIRECTORY-ORGANIZATIONS just
+   found visible before the next full scan reaches it, not to refresh
+   anything already in the catalog. Goes through SET-WORKSPACE-ORGANIZATIONS
+   so pane associations survive the merge the same way every other catalog
+   mutation preserves them (%PRESERVE-PANE-ASSOCIATIONS)."
+  (when organizations
+    (let ((merged (copy-list (workspace-organizations))))
+      (dolist (organization organizations)
+        (let ((existing
+                (find (nerimux/model:organization-id organization) merged
+                      :key #'nerimux/model:organization-id :test #'equal)))
+          (if existing
+              (dolist (repository
+                        (nerimux/model:organization-repositories organization))
+                (unless (%repository-already-present-p repository merged)
+                  (nerimux/model:organization-add-repository
+                   existing repository)))
+              (setf merged (append merged (list organization))))))
+      (set-workspace-organizations merged)))
+  (workspace-organizations))
+
 (defun %dispatch-callback (callback-dispatch callback &rest arguments)
   (when callback
     (if callback-dispatch
@@ -113,17 +179,21 @@
         (apply callback arguments))))
 
 (defun refresh-workspace-organizations-async
-    (&key query on-catalog on-complete on-error callback-dispatch)
+    (&key query on-catalog on-complete on-error on-progress callback-dispatch)
   "Refresh and store the workspace catalog on a worker thread.
    ON-CATALOG, when given, is called with the organizations as soon as the
    scan itself completes — before the per-repository status refresh, which
    runs `git status` across every repository and can take seconds on a large
    root.  ON-COMPLETE still fires only after the statuses; a UI caller uses
    ON-CATALOG to paint the freshly scanned tree instead of holding the
-   \"scanning...\" placeholder until every status has arrived."
+   \"scanning...\" placeholder until every status has arrived. ON-PROGRESS
+   (FR-004b), when given, is called with the running repository count as the
+   scan discovers each ghq entry -- before ON-CATALOG, and well before
+   ON-COMPLETE's status pass."
   (scan-repositories-async
    :query query
    :callback-dispatch callback-dispatch
+   :on-progress on-progress
    :on-complete (lambda (organizations)
                   (set-workspace-organizations organizations)
                   (when on-catalog
@@ -138,10 +208,15 @@
                                  (funcall on-error condition)))))
    :on-error on-error))
 
-(defun scan-repositories (&key query on-complete on-error)
-  "Build the organization/repository hierarchy from ghq-list-repositories."
+(defun scan-repositories (&key query on-complete on-error on-progress)
+  "Build the organization/repository hierarchy from ghq-list-repositories.
+   ON-PROGRESS (FR-004b), when given, is called once per ghq entry with the
+   running count of entries processed so far -- so a caller on a worker
+   thread's other end can show \"N found\" while a large ghq root is still
+   being walked, instead of only a bare scanning indicator."
   (handler-case
-      (let ((organizations (make-hash-table :test #'equal)))
+      (let ((organizations (make-hash-table :test #'equal))
+            (processed 0))
         (dolist (entry (vcs-kit:ghq-list-repositories :query query))
           (multiple-value-bind (candidate repository)
               (%repository-from-entry entry)
@@ -158,7 +233,9 @@
               (handler-case
                   (list-repository-worktrees repository)
                 (error ()
-                  (setf (nerimux/model:repository-missing-p repository) t))))))
+                  (setf (nerimux/model:repository-missing-p repository) t)))))
+          (incf processed)
+          (when on-progress (funcall on-progress processed)))
         (let ((result
                 (sort (loop for organization being the hash-values of organizations
                             collect organization)
@@ -177,10 +254,138 @@
 (defun %make-vcs-repository (directory)
   (vcs-kit:make-vcs-repository directory))
 
+(defvar *directory-resolve-timeout* 2.0d0
+  "Timeout (seconds) for the single git invocation FR-002's synchronous
+   attach-time resolve makes (%DIRECTORY-REPOSITORY-ROOT). Deliberately much
+   shorter than VCS-KIT's own 30s default, which every OTHER call in this file
+   keeps: this one path runs on the single-threaded dispatch loop, blocking
+   every attached client, before a client's cwd match is even resolved --
+   FR-002 requires that to happen synchronously, so the only lever left is how
+   long a hung mount can hold the loop hostage. 2s is generous for a live
+   disk (`git worktree list` normally completes in tens of milliseconds) and
+   still fails closed well before it could be mistaken for the server
+   itself hanging.")
+
+(defun %make-directory-vcs-repository (directory)
+  "A short-timeout VCS-KIT:VCS-REPOSITORY handle for
+   %DIRECTORY-REPOSITORY-ROOT only. Every other caller in this file keeps
+   %MAKE-VCS-REPOSITORY's ordinary (VCS-KIT default, 30s) timeout on purpose --
+   a background scan or a user-invoked refresh should wait out a slow disk
+   rather than fail closed early -- so this is a separate constructor, not a
+   change to %MAKE-VCS-REPOSITORY itself."
+  (vcs-kit:make-vcs-repository directory
+                                :default-timeout *directory-resolve-timeout*))
+
 (defun %path-missing-p (path)
   (and (stringp path)
        (plusp (length path))
        (null (probe-file path))))
+
+;;; ── cwd-match auto-registration (FR-002) ────────────────────────────────
+
+(defun %directory-repository-root (directory)
+  "DIRECTORY's (VALUES ROOT RAW-WORKTREES) (FR-002): ROOT is the bare entry's
+   path when `git worktree list` reports one -- nerimux's usual bare
+   `<repo>.git` + `.worktrees/` layout, where the bare entry IS the repository
+   and is exactly the local-path a ghq entry would report for it -- else the
+   first entry's path (the main worktree of an ordinary non-bare clone).
+   VCS-KIT:VCS-LIST-WORKTREES works the same from any worktree of a
+   repository -- main, linked, or the bare entry itself -- which is why this
+   needs no separate pass to find \"the\" main worktree; it is the same
+   mechanism %READ-REPOSITORY-WORKTREES already relies on for exactly that
+   reason. Both values are NIL when DIRECTORY is not a git repository or the
+   list comes back empty.
+
+   RAW-WORKTREES is returned, not discarded, so RESOLVE-DIRECTORY-ORGANIZATIONS
+   can hand it straight to %APPLY-REPOSITORY-WORKTREES instead of calling
+   LIST-REPOSITORY-WORKTREES, which would run this same `git worktree list`
+   a second time against the same repository (F1: this whole path runs
+   synchronously on the single-threaded dispatch loop, so a second git
+   invocation is a second chance to block every attached client, not merely
+   redundant work). Uses %MAKE-DIRECTORY-VCS-REPOSITORY's short timeout for
+   the same reason -- this is the one and only git call this path makes.
+
+   This used to go through VCS-KIT:GIT-REV-PARSE-VALUE, one of the
+   %DEFINE-CHECKED-OPERATION family, which type-checks its first argument
+   against VCS-KIT:REPOSITORY -- a distinct, lower-level struct from the
+   backend-neutral VCS-KIT:VCS-REPOSITORY that %MAKE-VCS-REPOSITORY (and
+   every other call in this file) actually builds, so every call signalled
+   SIMPLE-TYPE-ERROR before it ran a single git command."
+  (let ((worktrees
+          (vcs-kit:vcs-list-worktrees
+           (%make-directory-vcs-repository directory))))
+    (when worktrees
+      (let ((bare (find-if #'vcs-kit:vcs-worktree-bare-p worktrees)))
+        (values (vcs-kit:vcs-worktree-path (or bare (first worktrees)))
+                worktrees)))))
+
+(defun %directory-under-p (root path)
+  (and (stringp root) (plusp (length root))
+       (stringp path) (plusp (length path))
+       (let ((prefix (if (char= (char root (1- (length root))) #\/)
+                         root
+                         (concatenate 'string root "/"))))
+         (and (>= (length path) (length prefix))
+              (string= prefix path :end2 (length prefix))))))
+
+(defun %directory-specification (repository-root)
+  "REPOSITORY-ROOT's specification (FR-002): its path relative to the ghq
+   root when it sits under one, so %ORGANIZATION-AND-NAME parses out the
+   same host/org/name a ghq-scanned entry's specification would; \"local\"
+   otherwise, matching %ORGANIZATION-AND-NAME's own fallback for anything it
+   cannot resolve to three parts."
+  (let ((ghq-root (ghq-root-directory)))
+    (if (and repository-root ghq-root
+             (%directory-under-p ghq-root repository-root))
+        (let ((prefix (if (char= (char ghq-root (1- (length ghq-root))) #\/)
+                          ghq-root
+                          (concatenate 'string ghq-root "/"))))
+          (if (>= (length repository-root) (length prefix))
+              (subseq repository-root (length prefix))
+              ""))
+        "local")))
+
+(defun resolve-directory-organizations (directory)
+  "Synchronously resolve the git repository DIRECTORY sits in to an
+   organization list of the same shape WORKSPACE-ORGANIZATIONS returns (0 or
+   1 entries).
+
+   FR-002 needs this to register, on the spot, a repository the background
+   catalog scan has not reached yet -- or never will, for a clone outside
+   ghq's root -- the moment a client attaches with a cwd matching nothing in
+   the catalog, rather than leaving that attach fall through to the ordinary
+   overview with nothing selected. Returns NIL, without signalling, for a
+   non-git DIRECTORY or any failure along the way: a directory that simply
+   is not a repository is the common case here, since this runs on every
+   attach whose cwd missed the catalog, not an error worth surfacing.
+
+   Makes exactly one git invocation (F1): %DIRECTORY-REPOSITORY-ROOT's, whose
+   RAW-WORKTREES value is applied directly via %APPLY-REPOSITORY-WORKTREES
+   below rather than re-fetched through LIST-REPOSITORY-WORKTREES."
+  (handler-case
+      (when (and (stringp directory) (plusp (length directory)))
+        (multiple-value-bind (repository-root raw-worktrees)
+            (%directory-repository-root directory)
+          (when (and repository-root (plusp (length repository-root)))
+            (let* ((specification (%directory-specification repository-root))
+                   (repository
+                     (nerimux/model:make-repository
+                      :specification specification
+                      :local-path repository-root
+                      :backend :git)))
+              (multiple-value-bind (host name)
+                  (%organization-and-name specification)
+                (let ((organization
+                        (nerimux/model:make-organization
+                         :id (nerimux/model:organization-key host name)
+                         :host host
+                         :name name)))
+                  (nerimux/model:organization-add-repository
+                   organization repository)
+                  (%apply-repository-worktrees
+                   repository raw-worktrees (%path-missing-p repository-root))
+                  (list organization)))))))
+    (error () nil)))
 
 (defun %read-repository-worktrees (repository)
   (let ((backend-repository
