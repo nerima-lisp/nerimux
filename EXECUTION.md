@@ -374,3 +374,34 @@ grep しても 2 経路目(reader スレッド)が見えず、そこへタイム
   落ちうる変更である。
 - `cl-weave:signals` は `sb-ext:timeout` を捕捉できない(`thrown-condition` が `error`
   のみ)。非 `error` の serious-condition を assert するテストは `handler-case` を直接書く。
+
+## 2026-08-27 worktree の統合と renderer スタイル保持
+
+### 統合した作業単位
+
+`main` を `origin/main` (`c004327`) へ fast-forward した後、未コミットだった
+renderer の作業を `c67d920` としてコミットし、`main` へ merge commit
+`8c34a33` で反映した。ANSI/SGR スタイルの保持、BCE (Background Color Erase)、
+および renderer の回帰テストを含む。テストファイルは既存の `main` 側にあった
+新しい detail-strip assertions を保持して統合した。
+
+### 削除した worktree / branch
+
+作業ツリーが clean で、`main` から到達可能であることを確認してから削除した。
+
+| 対象 | 種別 | 削除理由 |
+| --- | --- | --- |
+| `.claude/worktrees/agent-ad661d28264190b8c` | worktree | renderer 作業を main へ merge 済み |
+| `.worktrees/20260826T110109-ff18608` | worktree | verification 作業を origin/main へ反映済み |
+| `.worktrees/20260826T194620-0eca538` | worktree | 作業を origin/main へ反映済み |
+| `.worktrees/20260826T234726-35a41d6` | worktree | overview 作業を origin/main へ反映済み |
+| `feat/e2e-verification`, `feat/overview-redesign-pr2` | local branch | main から到達可能 |
+| `feat/startup-ux-pr1`, `fix/frame-crlf` | local branch | main から到達可能 |
+| `fix/verification-round-2`, `worktree-agent-ad661d28264190b8c` | local branch | main から到達可能 |
+
+### 検証
+
+- `CL_WEAVE_TEST_FILTER=renderer nix run .#test` は exit 0、300 passed / 0 failed /
+  0 errored。
+- `git status --short --branch` は clean。未 push のため `main` は
+  `origin/main` より 2 commit 先行している。
