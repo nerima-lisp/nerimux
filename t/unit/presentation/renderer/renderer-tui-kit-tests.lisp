@@ -1,5 +1,18 @@
 (in-package #:nerimux/test)
 
+(defun %expected-sgr-params (style)
+  "The compound SGR parameter string CL-TUI-KIT/ANSI:ANSI-ENCODE-STYLE
+   produces for STYLE, stripped of its ESC[ ... m envelope -- the form
+   T/HELPERS-RENDER-OUTPUT.LISP's :TO-CONTAIN-SGR matcher expects.
+   ANSI-ENCODE-STYLE always leads with reset code 0 and always emits both
+   a foreground and a background code, so a bare code like \"31\" never
+   appears in isolation in real output; deriving the expected compound
+   string from the real encoder (rather than hand-computing SGR ordering)
+   keeps these round-trip assertions honest about what CL-TUI-KIT actually
+   emits."
+  (let ((full (cl-tui-kit/ansi:ansi-encode-style style)))
+    (subseq full 2 (1- (length full)))))
+
 (describe "renderer-suite/tui-kit"
 
   (it "covers ANSI frame-grid state transitions"
@@ -382,4 +395,147 @@
       (expect (search "PANES branch dirty exit unread" output))
       (expect (search "u:!" output))
       (expect (search "pane/7 editor" output))
-      (expect (search "output: ok" output)))))
+      (expect (search "output: ok" output))))
+
+  ;; R-style-preservation: every SGR the source frame carries -- standard
+  ;; and bright colors, 256-indexed and truecolor extended forms,
+  ;; attributes, and their off codes -- used to be dropped by
+  ;; %SURFACE-FROM-ANSI-FRAME (it parsed a characters-only grid and drew it
+  ;; with %SURFACE-DRAW-TEXT's default style), so every client saw a
+  ;; monochrome UI regardless of what the ANSI source frame specified.
+  ;; These tests assert styles survive the ANSI-frame -> surface ->
+  ;; ANSI-backend round trip.
+
+  (it "carries a red foreground SGR through the full ANSI backend round trip"
+    (let* ((escape (string (code-char 27)))
+           (frame (concatenate 'string escape "[31m" "RED" escape "[0m"))
+           (output (nerimux/renderer::%render-ansi-frame-with-tui-kit frame 10 40))
+           (expected (%expected-sgr-params
+                      (cl-tui-kit/core:make-style
+                       :foreground (cl-tui-kit/core:named-color :red)))))
+      (expect output :to-contain-sgr expected)))
+
+  (it "carries 256-indexed and truecolor SGR forms through the full ANSI backend round trip"
+    (let* ((escape (string (code-char 27)))
+           (fg-frame (concatenate 'string escape "[38;5;111m" "X" escape "[0m"))
+           (fg-output (nerimux/renderer::%render-ansi-frame-with-tui-kit fg-frame 10 40))
+           (expected-fg (%expected-sgr-params
+                         (cl-tui-kit/core:make-style
+                          :foreground (cl-tui-kit/core:indexed-color 111))))
+           (bg-frame (concatenate 'string escape "[48;2;10;20;30m" "X" escape "[0m"))
+           (bg-output (nerimux/renderer::%render-ansi-frame-with-tui-kit bg-frame 10 40))
+           (expected-bg (%expected-sgr-params
+                         (cl-tui-kit/core:make-style
+                          :background (cl-tui-kit/core:rgb-color 10 20 30)))))
+      (expect fg-output :to-contain-sgr expected-fg)
+      (expect bg-output :to-contain-sgr expected-bg)))
+
+  (it "carries bright (90-97/100-107) named colors as CL-TUI-KIT indexed 8-15"
+    (let* ((escape (string (code-char 27)))
+           (frame (concatenate 'string escape "[91;104m" "X"))
+           (surface (nerimux/renderer::%surface-from-ansi-frame frame 1 10))
+           (style (cl-tui-kit/core:cell-style (cl-tui-kit/core:surface-cell surface 0 0)))
+           (expected (cl-tui-kit/core:make-style
+                      :foreground (cl-tui-kit/core:indexed-color 9)
+                      :background (cl-tui-kit/core:indexed-color 12))))
+      (expect (cl-tui-kit/core:style= style expected))))
+
+  (it "bounds a styled run at a reset code, leaving trailing text at default style"
+    (let* ((escape (string (code-char 27)))
+           (frame (concatenate 'string escape "[1;4;7m" "AB" escape "[0m" "CD"))
+           (surface (nerimux/renderer::%surface-from-ansi-frame frame 1 10))
+           (styled-a (cl-tui-kit/core:cell-style (cl-tui-kit/core:surface-cell surface 0 0)))
+           (styled-b (cl-tui-kit/core:cell-style (cl-tui-kit/core:surface-cell surface 1 0)))
+           (plain-c (cl-tui-kit/core:cell-style (cl-tui-kit/core:surface-cell surface 2 0)))
+           (expected-styled (cl-tui-kit/core:make-style :bold t :underline t :reverse t)))
+      (expect (cl-tui-kit/core:style= styled-a expected-styled))
+      (expect (cl-tui-kit/core:style= styled-b expected-styled))
+      (expect (cl-tui-kit/core:style= plain-c (cl-tui-kit/core:make-style)))))
+
+  (it "turns off bold/dim, underline, and reverse independently via SGR 22/24/27"
+    (let* ((escape (string (code-char 27)))
+           (frame (concatenate 'string escape "[1;4;7m" "AB" escape "[22;24;27m" "CD"))
+           (surface (nerimux/renderer::%surface-from-ansi-frame frame 1 10))
+           (before (cl-tui-kit/core:cell-style (cl-tui-kit/core:surface-cell surface 0 0)))
+           (after (cl-tui-kit/core:cell-style (cl-tui-kit/core:surface-cell surface 2 0))))
+      (expect (cl-tui-kit/core:style=
+               before (cl-tui-kit/core:make-style :bold t :underline t :reverse t)))
+      (expect (cl-tui-kit/core:style= after (cl-tui-kit/core:make-style)))))
+
+  ;; Generalizes the existing display-width alignment tests above (line
+  ;; ~111 and ~128) to a styled run: the wide character's column layout
+  ;; must be unaffected by carrying a style, and the style itself must
+  ;; reach both the lead cell and (indirectly, via SURFACE-PUT-CELL) the
+  ;; wide glyph's continuation cell.
+  (it "keeps column alignment and per-cell style intact when a styled run includes a wide character"
+    (let* ((escape (string (code-char 27)))
+           (frame (concatenate 'string escape "[32m" "AAあ|" escape "[0m"))
+           (surface (nerimux/renderer::%surface-from-ansi-frame frame 1 10))
+           (green (cl-tui-kit/core:make-style
+                   :foreground (cl-tui-kit/core:named-color :green))))
+      (expect (string= "|" (cl-tui-kit/core:cell-content
+                             (cl-tui-kit/core:surface-cell surface 4 0))))
+      (expect (cl-tui-kit/core:style=
+               green (cl-tui-kit/core:cell-style (cl-tui-kit/core:surface-cell surface 0 0))))
+      (expect (cl-tui-kit/core:style=
+               green (cl-tui-kit/core:cell-style (cl-tui-kit/core:surface-cell surface 2 0))))
+      (expect (cl-tui-kit/core:style=
+               green (cl-tui-kit/core:cell-style (cl-tui-kit/core:surface-cell surface 4 0))))))
+
+  (it "adds no SGR beyond the default reset for unstyled input"
+    (let ((surface (nerimux/renderer::%surface-from-ansi-frame "hello" 1 10))
+          (default (cl-tui-kit/core:make-style)))
+      (dotimes (column 10)
+        (expect (cl-tui-kit/core:style=
+                 default
+                 (cl-tui-kit/core:cell-style
+                  (cl-tui-kit/core:surface-cell surface column 0)))))))
+
+  (it "carries the active background across an EL line erase (BCE)"
+    (let* ((escape (string (code-char 27)))
+           (frame (concatenate 'string escape "[44m" escape "[2K"))
+           (surface (nerimux/renderer::%surface-from-ansi-frame frame 1 10))
+           (style (cl-tui-kit/core:cell-style (cl-tui-kit/core:surface-cell surface 0 0)))
+           (expected (cl-tui-kit/core:make-style
+                      :background (cl-tui-kit/core:named-color :blue))))
+      (expect (cl-tui-kit/core:style= style expected))))
+
+  (it "carries the active background across an ED display erase (BCE)"
+    (let* ((escape (string (code-char 27)))
+           (frame (concatenate 'string escape "[44m" escape "[2J"))
+           (surface (nerimux/renderer::%surface-from-ansi-frame frame 2 10))
+           (expected (cl-tui-kit/core:make-style
+                      :background (cl-tui-kit/core:named-color :blue))))
+      (expect (cl-tui-kit/core:style=
+               expected
+               (cl-tui-kit/core:cell-style (cl-tui-kit/core:surface-cell surface 0 0))))
+      (expect (cl-tui-kit/core:style=
+               expected
+               (cl-tui-kit/core:cell-style (cl-tui-kit/core:surface-cell surface 5 1))))))
+
+  ;; Same fixture shape as "applies the client viewport through the widget
+  ;; path" above: two colored lines plus a third that overwrites row 1 when
+  ;; VIEWPORT=0 clamps the cursor row (CONTENT-HEIGHT=ROWS there), and lands
+  ;; on its own row when VIEWPORT=1 gives the parse a third grid row to
+  ;; write into.  Only row 0 of each result is asserted, which is
+  ;; unambiguous under both behaviors.
+  (it "keeps per-row style intact through the viewport window"
+    (let* ((escape (string (code-char 27)))
+           (frame (concatenate
+                   'string
+                   escape "[31m" "line-0" escape "[0m" (string #\Newline)
+                   escape "[32m" "line-1" escape "[0m" (string #\Newline)
+                   "line-2"))
+           (top (nerimux/renderer::%surface-from-ansi-frame frame 2 10 :viewport 0))
+           (scrolled (nerimux/renderer::%surface-from-ansi-frame frame 2 10 :viewport 1))
+           (red (cl-tui-kit/core:make-style :foreground (cl-tui-kit/core:named-color :red)))
+           (green (cl-tui-kit/core:make-style
+                   :foreground (cl-tui-kit/core:named-color :green))))
+      (expect (search "line-0" (cl-tui-kit/core:surface-string top)))
+      (expect (cl-tui-kit/core:style=
+               red (cl-tui-kit/core:cell-style (cl-tui-kit/core:surface-cell top 0 0))))
+      (expect (search "line-1" (cl-tui-kit/core:surface-string scrolled)))
+      (expect (not (search "line-0" (cl-tui-kit/core:surface-string scrolled))))
+      (expect (cl-tui-kit/core:style=
+               green (cl-tui-kit/core:cell-style
+                      (cl-tui-kit/core:surface-cell scrolled 0 0)))))))
