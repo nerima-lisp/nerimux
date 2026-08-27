@@ -58,10 +58,28 @@
             (%client-notify conn (format nil "no pane ~A" direction))
             t)))))
 
-(defun %client-start-worktree-create (conn)
-  (if (%client-selected-repository conn)
-      (%client-enter-command-mode conn "wt-create --branch ")
-      (%client-notify conn "select a repository to create a worktree"))
+(defun %client-worktree-create-branch-name ()
+  "An auto-generated branch name for `n` (item 5): wt-<YYYYmmddTHHMMSS>, built
+   from DECODE-UNIVERSAL-TIME rather than a date-formatting library -- this
+   codebase has no such dependency, and adding one for a single timestamp
+   string would be disproportionate."
+  (multiple-value-bind (second minute hour date month year)
+      (decode-universal-time (get-universal-time))
+    (format nil "wt-~4,'0D~2,'0D~2,'0DT~2,'0D~2,'0D~2,'0D"
+            year month date hour minute second)))
+
+(defun %client-start-worktree-create (session conn)
+  "n (item 5, user decision): create a worktree immediately, with an
+   auto-generated branch name, for the selected repository, and jump straight
+   into its shell -- no branch prompt in between. This replaces the old
+   behaviour of pre-filling `:` command mode with \"wt-create --branch \";
+   `:wt-create --branch <name> --confirm` still exists for a user-chosen
+   branch name and still requires --confirm (%CLIENT-CREATE-WORKTREE)."
+  (let ((repository (%client-selected-repository conn)))
+    (if repository
+        (%client-create-worktree-now
+         repository (%client-worktree-create-branch-name) conn session)
+        (%client-notify conn "select a repository first")))
   t)
 
 (defun %client-start-worktree-delete (conn)
@@ -100,15 +118,27 @@
   (let ((object (%client-tree-object conn)))
     (cond
       ((typep object 'nerimux/model:organization)
-       (%toggle-workspace-node-expanded
+       (%toggle-workspace-node-collapsed
         :organization (nerimux/model:organization-id object))
        (%mark-dirty)
        t)
       ((typep object 'nerimux/model:repository)
-       (%toggle-workspace-node-expanded
-        :repository (nerimux/model:repository-id object))
-       (%mark-dirty)
-       t)
+       ;; Enter no longer toggles a repository row open/closed (user
+       ;; decision, R6.3 pivot): it dives straight into the repository's
+       ;; main worktree (or its first one, when there is no main) via the
+       ;; SAME open/attach corridor as the (t) worktree branch below --
+       ;; recursing after selecting the worktree reuses that branch instead
+       ;; of duplicating its remembered-pane/open-pane logic here.
+       (let ((worktree (or (nerimux/model:repository-main-worktree object)
+                            (first (nerimux/model:repository-worktrees
+                                    object)))))
+         (if worktree
+             (progn
+               (%set-client-selected-tree-object conn worktree)
+               (%focus-selected-client-worktree session conn))
+             (progn
+               (%client-notify conn "repository has no worktrees")
+               t))))
       ((typep object 'nerimux/model:pane)
        (%set-client-focus conn object)
        (%set-client-view conn :detail)
@@ -142,6 +172,90 @@
             (%client-notify conn "no worktree selected")
             t)))))))
 
+(defun %client-tree-collapsible-repository (object)
+  "The repository whose collapse state H (below) affects when the selected
+   row is OBJECT: OBJECT itself when it already is a repository, else the
+   repository owning it. Worktree/window/pane rows carry no collapse state
+   of their own -- only organization/repository rows do (R6.3) -- so H on
+   one of those has to act on its owning repository instead."
+  (typecase object
+    (nerimux/model:repository object)
+    (nerimux/model:worktree (nerimux/model:worktree-repository object))
+    (nerimux/model:window
+     (let ((pane (or (nerimux/model:window-active-pane object)
+                     (first (nerimux/model:window-panes object)))))
+       (and pane (nerimux/model:pane-worktree pane)
+            (nerimux/model:worktree-repository
+             (nerimux/model:pane-worktree pane)))))
+    (nerimux/model:pane
+     (and (nerimux/model:pane-worktree object)
+          (nerimux/model:worktree-repository
+           (nerimux/model:pane-worktree object))))))
+
+(defun %client-tree-collapse-selected (conn)
+  "H (item 3): collapse the selected row. An organization or repository row
+   collapses directly; a worktree/window/pane row has no collapse state of
+   its own, so this collapses its owning repository instead and moves the
+   selection up to that repository -- otherwise the cursor would be left on
+   a row the collapse itself just removed from the tree."
+  (let ((object (%client-tree-object conn)))
+    (cond
+      ((typep object 'nerimux/model:organization)
+       (setf (gethash (list :organization
+                            (nerimux/model:organization-id object))
+                      (%workspace-collapsed-nodes))
+             t)
+       (%mark-dirty)
+       t)
+      ((typep object 'nerimux/model:repository)
+       (setf (gethash (list :repository (nerimux/model:repository-id object))
+                      (%workspace-collapsed-nodes))
+             t)
+       (%mark-dirty)
+       t)
+      (t
+       (let ((repository (%client-tree-collapsible-repository object)))
+         (when repository
+           (setf (gethash (list :repository
+                                (nerimux/model:repository-id repository))
+                          (%workspace-collapsed-nodes))
+                 t)
+           (%set-client-selected-tree-object conn repository)
+           (%mark-dirty))
+         (not (null repository)))))))
+
+(defun %client-tree-expand-selected (conn)
+  "L (item 3): expand the selected row. Only an organization or repository
+   row carries collapse state; any other row is visible in the first place
+   only because both its ancestors are already expanded, so L on one of
+   those is a no-op."
+  (let ((object (%client-tree-object conn)))
+    (cond
+      ((typep object 'nerimux/model:organization)
+       (remhash (list :organization (nerimux/model:organization-id object))
+                (%workspace-collapsed-nodes))
+       (%mark-dirty)
+       t)
+      ((typep object 'nerimux/model:repository)
+       (remhash (list :repository (nerimux/model:repository-id object))
+                (%workspace-collapsed-nodes))
+       (%mark-dirty)
+       t)
+      (t nil))))
+
+(defun %client-enter-tree-filter-mode (conn)
+  "`/` always starts from an empty query (vim's `/` semantics), even when a
+   previous filter session ended with Enter and left CONN-TREE-FILTER set
+   (%TRANSITION-CLIENT-UI-MODE's :ACCEPT path keeps it on exit, precisely so
+   the filtered view survives into :normal navigation) -- without resetting
+   it here, the next `/` silently prepended new keystrokes onto that old
+   query instead of starting fresh."
+  (setf (client-conn-tree-filter conn) nil
+        (client-conn-tree-scroll conn) 0)
+  (%transition-client-ui-mode conn :enter-tree-filter)
+  (%mark-dirty)
+  t)
+
 (define-key-rules %handle-client-normal-key-payload (session conn payload)
   (:let ((view (client-conn-view conn))))
   (#\k
@@ -157,18 +271,24 @@
   (#\l
    (if (eq view :detail)
        (%client-select-pane-direction session conn :right)
-       nil))
+       (%client-tree-expand-selected conn)))
   (#\h
    (if (eq view :detail)
        (%client-select-pane-direction session conn :left)
-       nil))
+       (%client-tree-collapse-selected conn)))
+  ((and (eq view :overview) (%client-key-p payload #\J))
+   (%select-client-tree-repository-relative conn 1))
+  ((and (eq view :overview) (%client-key-p payload #\K))
+   (%select-client-tree-repository-relative conn -1))
+  ((and (eq view :overview) (%client-key-p payload #\/))
+   (%client-enter-tree-filter-mode conn))
   ((or (%client-byte-p payload 13) (%client-byte-p payload 10))
    (cond
      ((eq view :overview)
       (%focus-selected-client-worktree session conn))
      (t t)))
   ((and (eq view :overview) (%client-key-p payload #\n))
-   (%client-start-worktree-create conn))
+   (%client-start-worktree-create session conn))
   ((and (eq view :overview) (%client-key-p payload #\X))
    (%client-start-worktree-delete conn))
   ((and (eq view :overview) (%client-key-p payload #\L))
@@ -377,4 +497,74 @@
    t)
   (t
    (%client-command-buffer-append conn payload)
+   t))
+
+(defun %client-tree-filter-buffer-delete-character (conn)
+  "Backspace in :tree-filter mode. The tree scroll resets to 0 (item 4): a
+   shorter query can only widen the filtered row set, and a scroll offset
+   left over from the narrower set could point past its end."
+  (let ((query (client-conn-tree-filter conn)))
+    (when (and (stringp query) (plusp (length query)))
+      (setf (client-conn-tree-filter conn) (subseq query 0 (1- (length query)))
+            (client-conn-tree-scroll conn) 0)
+      (%mark-dirty)
+      t)))
+
+(defconstant +max-tree-filter-length+ 256
+  "Hard cap on CLIENT-CONN-TREE-FILTER's length (security review, medium):
+   a single +MSG-KEY+ frame's payload can be up to the transport's own
+   64MiB max, and with no cap here it would land in the filter query
+   verbatim in one %CLIENT-TREE-FILTER-BUFFER-APPEND call. Every dirty
+   frame re-filters the WHOLE tree against the current query
+   (%WORKSPACE-TREE-OBJECTS, called from the single-threaded dispatch/render
+   loop), so an unbounded query is an amplification path: one oversized
+   frame from a same-UID peer turns into a per-node, query-length-scaled
+   scan on every subsequent frame until the filter is cleared -- a
+   same-UID sender is still a peer sharing this loop with every other
+   attached client, not a reason to skip the bound.")
+
+(defun %client-tree-filter-buffer-append (conn payload)
+  "A printable character in :tree-filter mode. The tree scroll resets to 0
+   for the same reason as the delete case above -- a narrower query can only
+   shrink the filtered row set, so a scroll offset from before this keystroke
+   could now point past its end.
+
+   At +MAX-TREE-FILTER-LENGTH+, further characters are refused outright
+   rather than silently truncated: truncating would keep accepting (and
+   discarding) arbitrarily large payloads forever, while refusing once the
+   cap is hit gives the amplification path above a fixed ceiling."
+  (let ((text (%client-payload-text payload))
+        (query (or (client-conn-tree-filter conn) "")))
+    (when (and text
+               (every (lambda (character)
+                        (>= (char-code character) 32))
+                      text)
+               (< (length query) +max-tree-filter-length+))
+      (setf (client-conn-tree-filter conn)
+            (concatenate 'string query text)
+            (client-conn-tree-scroll conn) 0)
+      (%mark-dirty)
+      t)))
+
+(define-key-rules %handle-client-tree-filter-key-payload (session conn payload)
+  "The :tree-filter mode's key handler (item 4), modelled on
+   %HANDLE-CLIENT-COMMAND-KEY-PAYLOAD above: ESC cancels (clears the query,
+   via %TRANSITION-CLIENT-UI-MODE's :cancel handling), Enter accepts (keeps
+   the query, returns to :normal), backspace edits, everything else printable
+   is appended to the query."
+  (27
+   ;; R4.3: see the matching comment in %handle-client-picker-key-payload.
+   (%client-esc-swallow-start conn)
+   (%transition-client-ui-mode conn :cancel)
+   (%mark-dirty)
+   t)
+  ((or (%client-byte-p payload 13) (%client-byte-p payload 10))
+   (%transition-client-ui-mode conn :accept)
+   (%mark-dirty)
+   t)
+  ((or (%client-byte-p payload 8) (%client-byte-p payload 127))
+   (%client-tree-filter-buffer-delete-character conn)
+   t)
+  (t
+   (%client-tree-filter-buffer-append conn payload)
    t))

@@ -122,13 +122,91 @@
               (setf (nerimux/model:pane-worktree pane) nil))))))
   current)
 
+(defun %worktree-recency (worktree)
+  "The most recent activity timestamp among WORKTREE's panes (item 6): the
+   later of each pane's last-output and last-focused time. Both are NIL
+   until a pane has ever produced output or been focused, so they are
+   excluded from the MAX rather than coerced to 0 -- coercing would make
+   \"never happened\" sort as an actual instant (epoch 0), only not the most
+   recent one, which is a fact about REDUCE's argument order rather than
+   about the pane. A worktree with no panes, or only ever-idle ones, has no
+   real timestamp to offer and sorts as least-recent (0)."
+  (let ((times
+          (loop for pane in (nerimux/model:worktree-panes worktree)
+                for output = (nerimux/model:pane-last-output-time pane)
+                for focused = (nerimux/model:pane-last-focused-time pane)
+                when output collect output
+                when focused collect focused)))
+    (if times (reduce #'max times) 0)))
+
+(defun %repository-recency (repository)
+  (let ((times (mapcar #'%worktree-recency
+                       (nerimux/model:repository-worktrees repository))))
+    (if times (reduce #'max times) 0)))
+
+(defun %organization-recency (organization)
+  (let ((times (mapcar #'%repository-recency
+                       (nerimux/model:organization-repositories organization))))
+    (if times (reduce #'max times) 0)))
+
+(defun %sort-workspace-organizations-by-activity (organizations)
+  "Reorder ORGANIZATIONS -- and, in place within each, its repositories, and
+   within each of those, its worktrees -- most-recently-active first (item
+   6, activity order).
+
+   Runs only from SET-WORKSPACE-ORGANIZATIONS, i.e. only when the catalog is
+   published (a scan landing, a merge, a worktree create/delete refresh),
+   never per-frame or mid-navigation: the requirement is that a row must not
+   move under the cursor while a client is looking at it, and a per-frame
+   re-sort would do exactly that on every keystroke that touches pane
+   activity (a reader thread's output alone would reorder the tree the
+   client is currently scrolling).
+
+   STABLE-SORT keeps ties (equal recency, including the common case where
+   every worktree in view is at the default 0) in their existing order,
+   which for a freshly scanned catalog is ghq's own enumeration order --
+   so an all-idle catalog looks exactly as before this feature.  Sorts
+   copies of the WORKTREES/REPOSITORIES lists rather than the lists in
+   place: those lists are shared with whatever built them (e.g.
+   ORGANIZATION-ADD-REPOSITORY's PUSHNEW), and SORT/STABLE-SORT are
+   destructive, so sorting the original list risks corrupting a structure
+   another holder of the same list object still expects to see unmodified."
+  (dolist (organization organizations)
+    (dolist (repository (nerimux/model:organization-repositories organization))
+      (setf (nerimux/model:repository-worktrees repository)
+            (stable-sort (copy-list (nerimux/model:repository-worktrees
+                                     repository))
+                        #'>
+                        :key #'%worktree-recency)))
+    (setf (nerimux/model:organization-repositories organization)
+          (stable-sort (copy-list (nerimux/model:organization-repositories
+                                   organization))
+                      #'>
+                      :key #'%repository-recency)))
+  (stable-sort (copy-list organizations) #'> :key #'%organization-recency))
+
 (defun set-workspace-organizations (organizations)
-  "Replace the workspace catalog with ORGANIZATIONS."
+  "Replace the workspace catalog with ORGANIZATIONS.
+
+As a side effect, reorders the published catalog -- organizations,
+repositories within each, and worktrees within each of those -- most-
+recently-active first (%SORT-WORKSPACE-ORGANIZATIONS-BY-ACTIVITY, item 6).
+That sort runs only here, i.e. only when the catalog is (re-)published, and
+never per-frame or mid-navigation, because a row must not move under a
+client's cursor while it is being looked at."
   (check-type organizations list)
   (let ((previous *workspace-organizations*)
         (current (copy-list organizations)))
     (setf *workspace-organizations* current)
-    (%preserve-pane-associations previous current)))
+    (%preserve-pane-associations previous current)
+    ;; Activity order (item 6) is applied here, after pane associations are
+    ;; re-established above -- not before -- because a worktree's recency
+    ;; comes from its panes' last-output/last-focused times, and those panes
+    ;; are only attached to CURRENT's worktree structs once
+    ;; %PRESERVE-PANE-ASSOCIATIONS has run.  Sorting first would sort every
+    ;; worktree as equally-idle (0), pane associations notwithstanding.
+    (setf *workspace-organizations*
+          (%sort-workspace-organizations-by-activity *workspace-organizations*))))
 
 (defun %repository-already-present-p (repository organizations)
   (let ((local-path (nerimux/model:repository-local-path repository))

@@ -1,6 +1,7 @@
 (in-package #:nerimux)
 
-(defparameter +client-ui-modes+ '(:normal :input :copy :command :picker))
+(defparameter +client-ui-modes+
+  '(:normal :input :copy :command :picker :tree-filter))
 
 (defun %client-picker-items (conn)
   (or (client-conn-picker-items conn)
@@ -58,7 +59,7 @@
                              (nerimux/model:repository-worktrees repository)))))
 
 (defun %workspace-tree-objects
-    (&optional (organizations (nerimux/vcs:workspace-organizations)))
+    (&optional (organizations (nerimux/vcs:workspace-organizations)) filter)
   "The tree rows a client can currently select, in display order.
 
    Delegates to the renderer rather than walking the model itself. It used to
@@ -66,9 +67,16 @@
    correct only while the tree was always fully expanded: once R6.3 made rows
    collapse and added the window and pane levels, this enumeration and the drawn
    frame described different lists, and j/k walked the cursor onto rows the
-   frame was not showing."
+   frame was not showing.
+
+   FILTER, when given, must be the same in-tree-filter query string the frame
+   was rendered with (CLIENT-CONN-TREE-FILTER) -- callers that move the
+   cursor or resolve a selection have to walk the SAME filtered row set the
+   client is actually looking at, or j/k and Enter would land on a row the
+   filter had hidden from the drawn frame."
   (nerimux/renderer:workspace-tree-objects organizations
-                                           (%workspace-expanded-nodes)))
+                                           (%workspace-collapsed-nodes)
+                                           :filter filter))
 
 (defun %workspace-worktree-matches-token-p (worktree token)
   (or (eq worktree token)
@@ -297,8 +305,12 @@
   (%set-client-selected-tree-object conn worktree))
 
 (defun %move-client-tree-scroll (conn delta)
-  (let* ((objects (%workspace-tree-objects))
-         (visible-rows (max 1 (- (client-conn-rows conn) 4)))
+  (let* ((objects (%workspace-tree-objects
+                   (nerimux/vcs:workspace-organizations)
+                   (client-conn-tree-filter conn)))
+         (visible-rows
+           (max 1 (nerimux/renderer:workspace-tree-view-rows
+                   (client-conn-rows conn))))
          (maximum (max 0 (- (length objects) visible-rows))))
     (when (integerp delta)
       (setf (client-conn-tree-scroll conn)
@@ -308,7 +320,9 @@
   (client-conn-tree-scroll conn))
 
 (defun %select-client-tree-worktree (conn token)
-  (let* ((objects (%workspace-tree-objects))
+  (let* ((objects (%workspace-tree-objects
+                   (nerimux/vcs:workspace-organizations)
+                   (client-conn-tree-filter conn)))
          (object (or (%workspace-find-tree-object token)
                      (%client-tree-object conn)
                      (nth (client-conn-tree-scroll conn) objects))))

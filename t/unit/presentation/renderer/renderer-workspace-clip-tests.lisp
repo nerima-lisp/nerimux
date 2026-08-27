@@ -96,55 +96,54 @@
 
 (describe "renderer-suite/workspace-clip-tree-integration"
 
-  ;; End to end through the actual R6.9 call site: a worktree row's branch
-  ;; label reaches the frame through %DISPLAY-CLIP inside RENDER-WORKSPACE-
-  ;; OVERVIEW-TO-STRING's local CELL closure (:render-tree-p defaults T so the
-  ;; plain-ANSI tree draws). Rather than re-deriving the clipped text by hand
-  ;; (duplicating the arithmetic already exercised directly above, and
-  ;; fragile to any future retuning of the ellipsis/padding rule), this
-  ;; computes the expected clipped text with the SAME %DISPLAY-CLIP function
-  ;; the production code calls, at the SAME left-width the layout uses for
-  ;; this terminal size (26 columns at cols=80: %workspace-left-width's
-  ;; (min 44 (floor 80 3))), and
-  ;; confirms that exact clipped text -- not the unclipped original --
+  ;; End to end through the actual PR2 call site: a tree row (organization ->
+  ;; repository -> worktree, all full width now that the WORKTREES/PANES/
+  ;; PREVIEW columns are gone) reaches the frame through %VISIBLE-TRUNCATE
+  ;; inside %EMIT-STYLED-ROW (renderer-workspace.lisp), not through
+  ;; %DISPLAY-CLIP's fixed-left-width column anymore -- render-workspace.lisp
+  ;; builds the whole row (indent + markers + label [+ worktree info suffix])
+  ;; and clips THAT to the full terminal width. This computes the expected
+  ;; truncated text with the SAME %WORKTREE-TREE-INFO-SUFFIX and
+  ;; %VISIBLE-TRUNCATE the production code calls, rather than re-deriving the
+  ;; truncation arithmetic by hand (already exercised directly above), and
+  ;; confirms that exact truncated text -- not the unclipped original --
   ;; appears verbatim in the rendered frame.
-  (it "renders the tree row with the same clipped text %display-clip itself produces"
-    (let* ((left-width 26)
-           (branch (make-string 20 :initial-element (char "検証ブランチ" 0)))
+  (it "renders the tree row with the same visible-truncated text %visible-truncate itself produces"
+    (let* ((cols 20)
+           (branch (make-string 20 :initial-element #\a))
            (worktree
              (nerimux/model:make-worktree
-              :id "wt-ja" :path "/repo/work" :branch branch))
+              :id "wt-clip" :path "/repo/work" :branch branch))
            (repository
              (nerimux/model:make-repository
-              :id "repo-ja" :specification "github.com/team/ja"
+              :id "repo-clip" :specification "github.com/team/clip"
               :local-path "/repo" :worktrees (list worktree)))
            (organization
              (nerimux/model:make-organization
-              :id "github.com/team-ja" :host "github.com" :name "team-ja"
-              :repositories (list repository)))
-           (expanded (make-hash-table :test #'equal)))
-      (setf (gethash (list :organization "github.com/team-ja") expanded) t)
-      (setf (gethash (list :repository "repo-ja") expanded) t)
+              :id "github.com/team-clip" :host "github.com" :name "team-clip"
+              :repositories (list repository))))
       (let* ((frame
                (nerimux/renderer:render-workspace-overview-to-string
-                (list organization) 24 80 :focus-pane nil
-                :expanded-node-ids expanded))
-             ;; The CELL closure clips PREFIX+LABEL+STATE as one string to
-             ;; LEFT-WIDTH, not the label alone (renderer-workspace.lisp's
-             ;; tree-row cell call, "~A~A~:[~; [~A]~]" prefix label state
-             ;; state) -- unselected/no-attention gives a 4-space indent (level
-             ;; 2) + two marker spaces + one literal space (7 chars), and a
-             ;; worktree with no fetched status (:status left NIL here) reports
-             ;; "UNKNOWN" (%worktree-status-tokens), so the clipped text is
-             ;; derived from that same composed string, not from branch alone.
+                (list organization) 24 cols))
+             ;; Level 2 (organization -> repository -> worktree): a 4-space
+             ;; indent, then the selected-marker and attention-marker slots
+             ;; (both a literal space here -- neither applies to this
+             ;; worktree), then the branch label -- matching RENDER-WORKSPACE-
+             ;; OVERVIEW-TO-STRING's TREE-ROW-TEXT closure exactly.
+             (base (format nil "~A~A" (make-string 7 :initial-element #\Space) branch))
+             (suffix
+               (nth-value 1
+                (nerimux/renderer::%worktree-tree-info-suffix
+                 worktree
+                 (max 0 (- cols (nerimux/renderer::%display-width base) 2)))))
              (row-value
-               (format nil "~A~A [UNKNOWN]"
-                       (make-string 7 :initial-element #\Space)
-                       branch))
-             (expected-clipped-label
-               (nerimux/renderer::%display-clip row-value left-width)))
-        (expect (> (nerimux/renderer::%display-width branch) left-width))
-        (expect (search expected-clipped-label frame))
-        ;; And the unclipped 40-column branch name must NOT appear whole --
+               (if (plusp (length suffix))
+                   (format nil "~A  ~A" base suffix)
+                   base))
+             (expected-truncated
+               (nerimux/renderer::%visible-truncate row-value cols)))
+        (expect (> (nerimux/renderer::%display-width row-value) cols))
+        (expect (search expected-truncated frame))
+        ;; And the unclipped 20-column branch name must NOT appear whole --
         ;; otherwise this test would pass vacuously even with a broken clip.
         (expect (not (search branch frame)))))))

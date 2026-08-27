@@ -67,43 +67,76 @@
     (cl-tui-kit/layout:layout-child-rectangle
      layout :nerimux-frame bounds)))
 
-(defun %tree-entry-render-text (entry)
+(defun %tree-entry-render-text (entry width)
   "One tree row's display text: 2 spaces per LEVEL of indent, the `!`
-   attention mark or a blank, then LABEL."
+   attention mark or a blank, then LABEL -- and, for a worktree row, a
+   right-side info cluster (state tag, ahead/behind, pane count, relative
+   last-activity time) clipped to fit WIDTH display columns, built by
+   %WORKTREE-TREE-INFO-SUFFIX. This widget draws every row through
+   CL-TUI-KIT/WIDGETS's list-widget, which applies one uniform per-row style
+   (list.lisp:WIDGET-RENDER draws via SURFACE-DRAW-TEXT with a single STYLE
+   argument) rather than parsing embedded SGR -- so only the plain half of
+   %WORKTREE-TREE-INFO-SUFFIX's two return values is usable here; the
+   coloured STYLED half is for the plain-ANSI render path
+   (renderer-workspace.lisp) only."
   (destructuring-bind (level label object kind) entry
-    (format nil "~A~:[ ~;!~] ~A"
-            (make-string (* 2 level) :initial-element #\Space)
-            (%workspace-tree-node-attention-p object kind)
-            label)))
+    (let* ((prefix (format nil "~A~:[ ~;!~] "
+                           (make-string (* 2 level) :initial-element #\Space)
+                           (%workspace-tree-node-attention-p object kind)))
+           (base (format nil "~A~A" prefix label)))
+      (if (eq kind :worktree)
+          (let* ((suffix-width (max 0 (- width (%display-width base) 2)))
+                 (suffix (%worktree-tree-info-suffix object suffix-width)))
+            (if (plusp (length suffix))
+                (format nil "~A  ~A" base suffix)
+                base))
+          base))))
 
 (defun %render-workspace-tree-widget
     (surface organizations rows cols selected-tree-object tree-scroll
-     &key expanded-node-ids refreshing-ids stale-ids)
+     &key collapsed-node-ids refreshing-ids stale-ids filter precomputed-entries)
+  "Draw the workspace tree as the overview's only panel (one-column
+   redesign, PR2): full terminal width, TERMINAL-ROWS-derived height via
+   WORKSPACE-TREE-VIEW-ROWS so this can't disagree with the ANSI pass's own
+   row budget for the header/separator/detail/message/footer around it. The
+   <9-column narrow-terminal and <7-row narrow/short-terminal fallbacks (the
+   ANSI pass's own \"terminal too narrow/short for panels\" messages) are
+   unchanged: below either threshold this widget draws nothing and leaves
+   the message visible.
+   PRECOMPUTED-ENTRIES, when non-NIL, is used directly instead of calling
+   %WORKSPACE-FLAT-TREE-ENTRIES again -- RENDER-WORKSPACE-OVERVIEW-TO-TUI-
+   STRING (renderer-tui-kit.lisp) already flattens the tree once per frame
+   and passes that result here, so this does not walk the same (possibly
+   large) org/repo/worktree/pane graph a third time. NIL still means \"not
+   supplied\" here too (recompute), so the one frame where FILTER narrows
+   the tree to genuinely zero rows recomputes an already-cheap empty
+   result -- harmless, not a correctness gap."
   (let* ((rows (max 1 rows))
          (cols (max 1 cols))
          (multi-column-p (>= cols 9))
-         (left-width (if multi-column-p
-                         (%workspace-left-width cols)
-                         0))
-         (body-start 1)
-         (body-end (max body-start (- rows 2)))
-         (visible-rows (max 1 (- body-end (1+ body-start))))
+         ;; WORKSPACE-TREE-VIEW-ROWS floors at 1 (MAX 1 (- ROWS 6)), so
+         ;; (PLUSP VIEW-ROWS) used to be vacuously true at every ROWS --
+         ;; this is the widget's half of the same tall-enough-p ROWS>=7
+         ;; floor RENDER-WORKSPACE-OVERVIEW-TO-STRING now enforces, so a
+         ;; too-short terminal skips the tree widget instead of squeezing a
+         ;; 1-row tree into a layout that no longer has room for it.
+         (tall-enough-p (>= rows 7))
+         (tree-top 1)
+         (view-rows (workspace-tree-view-rows rows))
          (tree-scroll (max 0 (or tree-scroll 0))))
-    (when (and multi-column-p
-               organizations
-               (> body-end (1+ body-start)))
+    (when (and multi-column-p tall-enough-p organizations)
       (let ((rectangle
-              (cl-tui-kit/core:make-rectangle
-               0 (1+ body-start) left-width
-               (max 1 (- body-end (1+ body-start))))))
+              (cl-tui-kit/core:make-rectangle 0 tree-top cols view-rows)))
         (let* ((all-entries
-                 (%workspace-flat-tree-entries
-                  organizations expanded-node-ids
-                  :refreshing-ids refreshing-ids :stale-ids stale-ids))
+                 (or precomputed-entries
+                     (%workspace-flat-tree-entries
+                      organizations collapsed-node-ids
+                      :refreshing-ids refreshing-ids :stale-ids stale-ids
+                      :filter filter)))
                (entry-count (length all-entries))
                (entries (subseq all-entries
                                 (min tree-scroll entry-count)
-                                (min (+ tree-scroll visible-rows) entry-count)))
+                                (min (+ tree-scroll view-rows) entry-count)))
                (model
                  (cl-tui-kit/widgets:make-list-model
                   :count (length entries)
@@ -113,11 +146,11 @@
                             (%workspace-tree-node-key (third entry)))
                   :label-at (lambda (entry index)
                               (declare (ignore index))
-                              (%tree-entry-render-text entry))
+                              (%tree-entry-render-text entry cols))
                   :render-item
                   (lambda (entry index)
                     (declare (ignore index))
-                    (%tree-entry-render-text entry)))))
+                    (%tree-entry-render-text entry cols)))))
           (cl-tui-kit/widgets:render-widget
            (cl-tui-kit/widgets:make-list-widget
             model

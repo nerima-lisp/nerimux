@@ -46,7 +46,7 @@ below are — a real client depends on it every frame.
 - **Copy mode**, but with a smaller and differently-bound key set than
   tmux's. What an attached client can reach today is the fixed `cond` in
   `%handle-client-copy-key-payload`
-  (`src/bootstrap/server-multi-dispatch-command-input.lisp:213`): `h`/`j`/`k`/`l`
+  (`src/bootstrap/server-multi-dispatch-command-input.lisp:338-361`): `h`/`j`/`k`/`l`
   to move, `g`/`G` to jump to top/bottom, `Space` to begin a selection, `y`
   to yank, `/` and `?` to open a search prompt with `n`/`N` to repeat, and
   `q` to exit. This is **not** the key set the coverage-audit history
@@ -67,7 +67,7 @@ below are — a real client depends on it every frame.
   attached client's terminal. Implementation: `src/bootstrap/server.lisp`
   (`%socket-tmp-base`, `%socket-directory`, `socket-path`, lines 26–55) and
   `src/bootstrap/main-startup-socket.lisp` for stale-socket handling;
-  `src/bootstrap/server-multi.lisp:232-246` for the shared-size-is-the-min
+  `src/bootstrap/server-multi.lisp:234-248` for the shared-size-is-the-min
   behavior (R8.4).
 - **Pane spawning defaults.** Every pane's shell is `$SHELL`, or `/bin/sh`
   if unset (`src/infrastructure/pty/pty.lisp:81-89`), and every pane's child
@@ -103,7 +103,7 @@ below are — a real client depends on it every frame.
   name resolves from any entry point, and no `bind-key`-style key table
   exists — input is dispatched through a small, hardcoded `C-q` prefix
   table instead (`%workspace-prefix-dispatch`,
-  `src/bootstrap/server-multi-dispatch-prefix.lisp:286`), not a
+  `src/bootstrap/server-multi-dispatch-prefix.lisp:293`), not a
   user-configurable one.
 - **`server-access` (the read-write/read-only client ACL) no longer
   exists anywhere.** `grep -rn server-access src/` returns nothing. See

@@ -21,6 +21,12 @@
   (selected-tree-object nil)
   (selected-worktree nil)
   (tree-scroll 0 :type fixnum)
+  ;; The in-flight `/` overview tree-filter query (:tree-filter mode), or NIL
+  ;; when no filter is active (cleared by ESC, kept by Enter -- see
+  ;; %transition-client-ui-mode). NIL rather than "": an empty string is a
+  ;; filter box the user has entered but not typed into yet, still a real
+  ;; per-frame state the renderer draws differently from no filter at all.
+  (tree-filter nil)
   (workspace-prefix-code +default-workspace-prefix-key-code+ :type fixnum)
   (ui-prefix-p nil :type boolean)
   (viewport 0 :type fixnum)
@@ -170,6 +176,8 @@ dropped connection's entry be reclaimed instead of leaking.")
               (%handle-client-copy-key-payload session conn payload))
              ((eq (client-conn-mode conn) :command)
               (%handle-client-command-key-payload session conn payload))
+             ((eq (client-conn-mode conn) :tree-filter)
+              (%handle-client-tree-filter-key-payload session conn payload))
              ;; A key the workspace UI does not bind is dropped in :normal mode.
              ;; It used to fall through to the prefix-key keystroke pipeline
              ;; (prefix key + key tables) -- that fallthrough was the only

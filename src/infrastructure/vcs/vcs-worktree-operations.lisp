@@ -57,12 +57,26 @@ PATH, when given, is used verbatim. Otherwise the path is fixed to
 
 (defun %default-branch-start-point (repository)
   "Return the commit at REPOSITORY's default branch tip: the commit
-refs/remotes/origin/HEAD currently points to (R7.3).
+refs/remotes/origin/HEAD currently points to (R7.3), falling back to the
+local HEAD when origin/HEAD cannot be resolved.  A repository with no
+remote, or one where `git remote set-head origin` was simply never run --
+both routine in real use, not just a contrived test fixture -- makes `git
+rev-parse origin/HEAD` fail outright (exit 128) rather than return
+something empty, so without this fallback every worktree create against
+such a repository failed with no recourse.  HEAD is resolvable for any
+repository with at least one commit, which is the only kind CREATE-WORKTREE
+is ever called against.
 
 This is only as current as the last fetch (R7.5): call FETCH-REPOSITORY or
 FETCH-REPOSITORY-ASYNC first if it needs to reflect the remote's latest
-state."
-  (%rev-parse repository "origin/HEAD"))
+state.  A HEAD fallback that ALSO fails (e.g. an empty repository with no
+commits at all) is left to signal normally -- CREATE-WORKTREE's caller
+already turns that into a \"worktree create failed: ...\" notification."
+  (or (handler-case
+          (let ((resolved (%rev-parse repository "origin/HEAD")))
+            (and (stringp resolved) (plusp (length resolved)) resolved))
+        (error () nil))
+      (%rev-parse repository "HEAD")))
 
 (defun %short-sha (repository commit)
   (%rev-parse repository "--short" commit))

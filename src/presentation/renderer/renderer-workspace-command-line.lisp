@@ -48,3 +48,30 @@
           (when (< width cols)
             (write-string (make-string (- cols width) :initial-element #\Space) stream))
           (reset-attrs stream)))))
+
+(defun %render-workspace-tree-filter-line (stream row cols tree-filter)
+  "Draw the tree-filter (`/query`) input line at ROW: the `%RENDER-
+   WORKSPACE-COMMAND-LINE` shape, but for the one-column overview's tree
+   search (redesign PR2) -- a bold-accent `/` followed by the typed query.
+   No separate cursor glyph is drawn: like the `:` command line, the real
+   terminal cursor stays hidden (CURSOR-INVISIBLE, called once for the whole
+   frame) and a synthetic block cursor would need an ambiguous-width
+   character the UI theme convention bans, so the end of the typed text is
+   the only cursor cue, exactly as `:` already works."
+  (let* ((typed (format nil "/~A" (or tree-filter "")))
+         (typed-width (%display-width typed)))
+    (if (>= typed-width cols)
+        (let ((visible (%display-clip-tail typed cols)))
+          (move-to stream row 0)
+          (write-string visible stream)
+          (reset-attrs stream))
+        (progn
+          (move-to stream row 0)
+          (%emit-sgr stream +sgr-accent-bold+)
+          (write-char #\/ stream)
+          (reset-attrs stream)
+          (write-string (or tree-filter "") stream)
+          (when (< typed-width cols)
+            (write-string (make-string (- cols typed-width) :initial-element #\Space)
+                          stream))
+          (reset-attrs stream)))))

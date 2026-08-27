@@ -27,6 +27,7 @@
             ((eq event :enter-copy) :copy)
             ((eq event :enter-command) :command)
             ((eq event :enter-picker) :picker)
+            ((eq event :enter-tree-filter) :tree-filter)
             ((member event '(:cancel :accept) :test #'eq) :normal)
             ((eq event :toggle-copy)
              (if (eq current :copy) :normal :copy))
@@ -37,6 +38,13 @@
     (when (and (not (eq next :command)) (eq current :command))
       (setf (client-conn-command-buffer conn) "")
       (%client-restore-command-view conn))
+    ;; Symmetric with :command above: leaving :tree-filter via ESC (:cancel)
+    ;; drops the in-progress query entirely, while Enter (:accept) keeps it --
+    ;; the user is happy with the filtered set and wants to keep navigating
+    ;; it in :normal mode, not have it silently reset to the full tree.
+    (when (and (eq current :tree-filter) (not (eq next :tree-filter))
+               (eq event :cancel))
+      (setf (client-conn-tree-filter conn) nil))
     next))
 
 (defun %set-client-focus (conn pane)
@@ -328,7 +336,9 @@ the tree (R7.1)."
            (nerimux/model:pane-worktree (client-conn-focus conn)))))
 
 (defun %select-client-tree-relative (conn delta)
-  (let* ((objects (%workspace-tree-objects))
+  (let* ((objects (%workspace-tree-objects
+                   (nerimux/vcs:workspace-organizations)
+                   (client-conn-tree-filter conn)))
          (count (length objects)))
     (when (plusp count)
       (let* ((current (%client-tree-object conn))
@@ -336,7 +346,8 @@ the tree (R7.1)."
                              (position current objects :test #'eq))
                         (if (minusp delta) 0 -1)))
              (next (max 0 (min (1- count) (+ index delta))))
-             (visible (max 1 (- (client-conn-rows conn) 4))))
+             (visible (max 1 (nerimux/renderer:workspace-tree-view-rows
+                              (client-conn-rows conn)))))
         (%set-client-selected-tree-object conn (nth next objects))
         (when (< next (client-conn-tree-scroll conn))
           (setf (client-conn-tree-scroll conn) next))
@@ -345,6 +356,46 @@ the tree (R7.1)."
                 (max 0 (+ next 1 (- visible)))))
         (%mark-dirty)
         (nth next objects)))))
+
+(defun %select-client-tree-repository-relative (conn direction)
+  "J/K (item 3): move the selection to the next/previous REPOSITORY row,
+   skipping organization/worktree/window/pane rows in between. Walks the same
+   filtered row set %SELECT-CLIENT-TREE-RELATIVE (j/k) uses, so a repository
+   hidden by an active tree-filter is skipped exactly as j/k already skips
+   any filtered-out row."
+  (let* ((objects (%workspace-tree-objects
+                   (nerimux/vcs:workspace-organizations)
+                   (client-conn-tree-filter conn)))
+         (count (length objects)))
+    (when (plusp count)
+      (let* ((current (%client-tree-object conn))
+             ;; With no current selection, K (direction -1) has to start the
+             ;; search from past the LAST row (COUNT, not 0) so
+             ;; START+DIRECTION lands on the last index and searches
+             ;; backward -- starting at 0 would step to -1 on the very first
+             ;; iteration and find nothing, unlike J, which correctly starts
+             ;; one before the first row.
+             (start (or (and current (position current objects :test #'eq))
+                        (if (minusp direction) count -1)))
+             (visible (max 1 (nerimux/renderer:workspace-tree-view-rows
+                              (client-conn-rows conn)))))
+        ;; LOOP's BY step must be positive (SIMPLE-TYPE-ERROR on SBCL 2.6.6
+        ;; when DIRECTION is -1, i.e. K) -- STEP here is always a positive
+        ;; count of iterations, and INDEX is computed by multiplying it by
+        ;; DIRECTION instead of letting LOOP step negatively itself.
+        (loop for step from 1
+              for index = (+ start (* direction step))
+              while (<= 0 index (1- count))
+              for candidate = (nth index objects)
+              when (typep candidate 'nerimux/model:repository)
+                do (%set-client-selected-tree-object conn candidate)
+                   (when (< index (client-conn-tree-scroll conn))
+                     (setf (client-conn-tree-scroll conn) index))
+                   (when (>= index (+ (client-conn-tree-scroll conn) visible))
+                     (setf (client-conn-tree-scroll conn)
+                           (max 0 (+ index 1 (- visible)))))
+                   (%mark-dirty)
+                   (return candidate))))))
 
 (defun %client-refresh-workspace (conn)
   (%client-notify conn "workspace refresh started")

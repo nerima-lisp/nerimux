@@ -18,6 +18,10 @@
    ;; The visible tree rows, in display order (R6.3). Key dispatch selects by
    ;; index into these, so it must read the same list the frame is drawn from.
    #:workspace-tree-objects
+   ;; Rows available to the tree list in the one-column overview layout
+   ;; (workspace redesign PR2); the bootstrap scroll-clamp math calls this so
+   ;; it can't drift from the layout's own row budget.
+   #:workspace-tree-view-rows
    ;; Full-screen confirmation / failure view (R6.4). The dispatcher builds the
    ;; struct and reads the y/n answer; this package only draws it.
    #:confirm-view #:make-confirm-view #:confirm-view-p

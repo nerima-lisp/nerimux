@@ -149,62 +149,97 @@
                                                (messages nil)
                                                (mode :normal)
                                                (prefix-code #x11)
-                                               expanded-node-ids
+                                               collapsed-node-ids
                                                refreshing-ids
                                                stale-ids
                                                (scanning-p nil)
                                                (scan-progress nil)
                                                (catalog-empty-hint nil)
-                                               (command-buffer ""))
+                                               (command-buffer "")
+                                               (tree-filter nil))
   "Render the workspace overview through cl-tui-kit's headless backend.
-   EXPANDED-NODE-IDS / REFRESHING-IDS / STALE-IDS / SCANNING-P /
-   SCAN-PROGRESS / CATALOG-EMPTY-HINT /
-   COMMAND-BUFFER are forwarded to RENDER-WORKSPACE-OVERVIEW-TO-STRING and,
-   for the tree, to %RENDER-WORKSPACE-TREE-WIDGET -- see that function and
+   COLLAPSED-NODE-IDS / REFRESHING-IDS / STALE-IDS / SCANNING-P /
+   SCAN-PROGRESS / CATALOG-EMPTY-HINT / COMMAND-BUFFER / TREE-FILTER are
+   forwarded to RENDER-WORKSPACE-OVERVIEW-TO-STRING and, for the tree, to
+   %RENDER-WORKSPACE-TREE-WIDGET -- see that function and
    %WORKSPACE-FLAT-TREE-ENTRIES (renderer-workspace-tree.lisp) for what each one
-   means (R6.2/R6.3)."
+   means.
+   The tree is flattened/filtered exactly ONCE per frame, right here, and
+   the result threaded through to both RENDER-WORKSPACE-OVERVIEW-TO-STRING
+   (:PRECOMPUTED-TREE-ENTRIES) and %RENDER-WORKSPACE-TREE-WIDGET
+   (:PRECOMPUTED-ENTRIES) below. Before this, one frame walked the (possibly
+   large) org/repo/worktree/pane graph up to three times: once here for
+   NO-MATCHES-P, again inside the ANSI pass, and a third time inside the
+   tree widget."
   ;; R6.11: same round-trip-discards-OSC situation as
   ;; render-session-to-tui-string above -- re-derive the title selection at
   ;; this boundary and re-emit after the round-trip.
-  (multiple-value-bind (title-repository title-worktree)
-      (%workspace-title-selection focus-pane selected-tree-object
-                                  selected-worktree)
-    (concatenate
-     'string
-     (%render-ansi-frame-with-tui-kit
-      (render-workspace-overview-to-string
-       organizations terminal-rows terminal-cols
-       :focus-pane focus-pane
-       :selected-tree-object selected-tree-object
-       :selected-worktree selected-worktree
-       :tree-scroll tree-scroll
-       :messages messages
-       :mode mode
-       :prefix-code prefix-code
-       :render-tree-p nil
-       :expanded-node-ids expanded-node-ids
-       :refreshing-ids refreshing-ids
-       :stale-ids stale-ids
-       :scanning-p scanning-p
-       :scan-progress scan-progress
-       :catalog-empty-hint catalog-empty-hint
-       :command-buffer command-buffer)
-      terminal-rows terminal-cols
-      :viewport 0
-      :widget-renderer
-      ;; R6.2: while the initial scan is still running there is nothing for
-      ;; the tree widget to draw -- the ANSI pass above already rendered the
-      ;; "scanning..." placeholder frame, so skip overlaying an empty tree
-      ;; box on top of it.  The same holds for the empty-catalog hint (FR-004c):
-      ;; the ANSI pass centred its guidance where an empty tree box would
-      ;; otherwise paint over it.
-      (unless (and (null organizations)
-                   (or scanning-p catalog-empty-hint))
-        (lambda (surface)
-          (%render-workspace-tree-widget
-           surface organizations terminal-rows terminal-cols
-           selected-tree-object tree-scroll
-           :expanded-node-ids expanded-node-ids
+  (let ((all-tree-entries
+          (%workspace-flat-tree-entries
+           organizations collapsed-node-ids
            :refreshing-ids refreshing-ids
-           :stale-ids stale-ids))))
-     (%client-title-osc title-repository title-worktree))))
+           :stale-ids stale-ids
+           :filter tree-filter)))
+    (multiple-value-bind (title-repository title-worktree)
+        (%workspace-title-selection focus-pane selected-tree-object
+                                    selected-worktree)
+      (let ((no-matches-p
+              ;; Same condition RENDER-WORKSPACE-OVERVIEW-TO-STRING uses to
+              ;; decide whether to draw the "no matches: /query" placeholder
+              ;; (PR2 tree-filter fix): a non-empty filter that narrows a
+              ;; non-empty catalog down to zero rows. Read off ALL-TREE-
+              ;; ENTRIES above now rather than recomputed, purely to skip
+              ;; building the tree widget at all in that case -- the
+              ;; widget's own list-widget draws nothing for zero entries
+              ;; either way (WIDGET-RENDER only loops over visible items),
+              ;; so this is belt-and-suspenders against a future cl-tui-kit
+              ;; list-widget that fills its rectangle unconditionally, not a
+              ;; fix for a real overlay seen today.
+              (and organizations
+                   (plusp (length (or tree-filter "")))
+                   (null all-tree-entries))))
+        (concatenate
+         'string
+         (%render-ansi-frame-with-tui-kit
+          (render-workspace-overview-to-string
+           organizations terminal-rows terminal-cols
+           :focus-pane focus-pane
+           :selected-tree-object selected-tree-object
+           :selected-worktree selected-worktree
+           :tree-scroll tree-scroll
+           :messages messages
+           :mode mode
+           :prefix-code prefix-code
+           :render-tree-p nil
+           :collapsed-node-ids collapsed-node-ids
+           :refreshing-ids refreshing-ids
+           :stale-ids stale-ids
+           :scanning-p scanning-p
+           :scan-progress scan-progress
+           :catalog-empty-hint catalog-empty-hint
+           :command-buffer command-buffer
+           :tree-filter tree-filter
+           :precomputed-tree-entries all-tree-entries)
+          terminal-rows terminal-cols
+          :viewport 0
+          :widget-renderer
+          ;; R6.2: while the initial scan is still running there is nothing for
+          ;; the tree widget to draw -- the ANSI pass above already rendered the
+          ;; "scanning..." placeholder frame, so skip overlaying an empty tree
+          ;; box on top of it.  The same holds for the empty-catalog hint (FR-004c)
+          ;; and now NO-MATCHES-P (tree-filter fix): the ANSI pass already drew
+          ;; its own guidance where an empty tree box would otherwise paint over
+          ;; it.
+          (unless (and (null organizations)
+                       (or scanning-p catalog-empty-hint))
+            (unless no-matches-p
+              (lambda (surface)
+                (%render-workspace-tree-widget
+                 surface organizations terminal-rows terminal-cols
+                 selected-tree-object tree-scroll
+                 :collapsed-node-ids collapsed-node-ids
+                 :refreshing-ids refreshing-ids
+                 :stale-ids stale-ids
+                 :filter tree-filter
+                 :precomputed-entries all-tree-entries)))))
+         (%client-title-osc title-repository title-worktree))))))

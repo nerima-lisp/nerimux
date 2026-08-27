@@ -258,14 +258,12 @@
       (expect (search "hello" output))
       (expect (search (string (code-char 27)) output))))
 
-  ;; R6.3 collapse-by-default: the tree's default state shows only
-  ;; organization rows (see renderer-workspace-tree-tests.lisp for the direct
-  ;; unit coverage of that contract), so this widget-level smoke test must
-  ;; pass EXPANDED-NODE-IDS with the organization and repository rows marked
-  ;; expanded to see the worktree's branch label at all -- otherwise this
-  ;; would silently stop testing the tree widget's worktree rendering the
-  ;; moment collapse-by-default shipped, while still nominally passing on
-  ;; the header text alone.
+  ;; PR2 default-expanded polarity: the tree's default state shows the WHOLE
+  ;; depth (see renderer-workspace-tree-tests.lisp for the direct unit
+  ;; coverage of that contract), so this widget-level smoke test needs no
+  ;; COLLAPSED-NODE-IDS entries at all to see the worktree's branch label --
+  ;; the opposite of the pre-PR2 collapse-by-default contract, which needed
+  ;; the organization and repository rows explicitly marked expanded.
   (it "renders the workspace hierarchy through the tree widget"
     (let* ((worktree
              (nerimux/model:make-worktree
@@ -283,17 +281,14 @@
               :id "github.com/team"
               :host "github.com"
               :name "team"
-              :repositories (list repository)))
-           (expanded (make-hash-table :test #'equal)))
-      (setf (gethash (list :organization "github.com/team") expanded) t)
-      (setf (gethash (list :repository "repo-tree") expanded) t)
+              :repositories (list repository))))
       (let ((output
               (nerimux/renderer:render-workspace-overview-to-tui-string
                (list organization)
                12
                100
                :selected-tree-object worktree
-               :expanded-node-ids expanded)))
+               :collapsed-node-ids nil)))
         (expect (search "org" output))
         (expect (search "repo" output))
         (expect (search "feature/tree" output)))))
@@ -359,8 +354,17 @@
                               (char= (char output (1- index)) #\Return))))
       (expect (= 2 newlines))))
 
-  (it "renders the bare repository overview with pane attention and preview"
+  ;; PR2 one-column redesign: the WORKTREES/PANES/PREVIEW three-column layout
+  ;; ("PANES" header, "u:!" per-pane status token) is gone -- the tree is now
+  ;; the overview's only panel, and a selected pane's detail shows through
+  ;; the 2-line detail strip below the tree instead (renderer-workspace.lisp
+  ;; DETAIL-LINES). Selecting the pane directly (:selected-tree-object, not
+  ;; just :focus-pane -- which only resolves down to the pane's WORKTREE, see
+  ;; RENDER-WORKSPACE-OVERVIEW-TO-STRING's SELECTED-OBJECT) is what reaches
+  ;; the pane branch of DETAIL-LINES rather than the worktree branch.
+  (it "renders the bare repository overview with pane attention and detail"
     (let* ((pane (nerimux/model:make-pane :id 7 :title "editor"))
+           (window (nerimux/model:make-window :id 1 :name "w" :panes (list pane)))
            (worktree
              (nerimux/model:make-worktree
               :id "wt"
@@ -381,20 +385,28 @@
               :repositories (list repository)))
            (output
              (progn
+               (setf (nerimux/model:pane-window pane) window)
                (nerimux/model:worktree-add-pane worktree pane)
-               (nerimux/model:pane-mark-output pane #(111 107))
+               (nerimux/model:pane-mark-output
+                pane (map 'vector #'char-code "hello-pane"))
                (nerimux/renderer:render-workspace-overview-to-string
                 (list organization)
                 12
                 100
+                :selected-tree-object pane
                 :focus-pane pane))))
       (expect (search " nerimux " output))
       (expect (search "github.com/team" output))
       (expect (search "feature/ui" output))
-      (expect (search "PANES" (strip-sgr output)))
-      (expect (search "u:!" (strip-sgr output)))
-      (expect (search "pane/7 editor" output))
-      (expect (search "output: ok" (strip-sgr output)))))
+      ;; The tree row carries the `!` attention mark right before the label
+      ;; (PANE-MARK-OUTPUT set UNREAD-OUTPUT-P, which PANE-ATTENTION-P
+      ;; reports) regardless of whether the row is also selected -- the `!`-
+      ;; then-space-then-label sequence is the same either way.
+      (expect (search "! pane/7 editor" (strip-sgr output)))
+      ;; The detail strip shows the selected pane's label and its last
+      ;; output text verbatim, not the old "output: " status-bar phrasing.
+      (expect (search "pane: pane/7 editor" (strip-sgr output)))
+      (expect (search "hello-pane" (strip-sgr output)))))
 
   ;; R-style-preservation: every SGR the source frame carries -- standard
   ;; and bright colors, 256-indexed and truecolor extended forms,
