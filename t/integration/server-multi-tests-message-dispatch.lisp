@@ -26,6 +26,16 @@
       (nerimux::%drain-main-thread-callbacks)
       (expect (equal '(:first :second) events))))
 
+  (it "main-thread-callback-queue-continues-after-callback-error"
+    (let ((events nil)
+          (nerimux::*main-thread-callbacks* nil))
+      (nerimux::%enqueue-main-thread-callback
+       (lambda () (error "expected callback failure")))
+      (nerimux::%enqueue-main-thread-callback
+       (lambda () (push :after-error events)))
+      (nerimux::%drain-main-thread-callbacks)
+      (expect (equal '(:after-error) events))))
+
   ;;; ── %handle-multi-client-message: per-client dispatch ────────────────────────
 
   ;; A resize message updates the client's geometry and re-applies the effective size.
@@ -86,12 +96,244 @@
         (expect (= 3 (nerimux::client-conn-viewport conn)))
         (expect (nerimux::%handle-client-ui-command s conn :viewport nil '("-1")))
         (expect (= 2 (nerimux::client-conn-viewport conn)))
+        (expect (null (nerimux::%handle-client-ui-command
+                       s conn :mode nil '("not-a-mode"))))
+        (expect (eq :copy (nerimux::client-conn-mode conn)))
+        (expect (nerimux::%handle-client-ui-command
+                 s conn :focus nil '("not-a-pane")))
         (expect (nerimux::%handle-client-ui-command s conn :focus nil nil))
         (expect (eq (nerimux::window-active-pane (nerimux::session-active-window s))
                     (nerimux::client-conn-focus conn)))
+        (expect (nerimux::%handle-client-ui-command s conn :viewport nil '("bad")))
         (expect (= 0 (nerimux::client-conn-viewport conn)))
         (expect (nerimux::%handle-client-ui-command s conn :cancel nil nil))
-        (expect (eq :normal (nerimux::client-conn-mode conn))))))
+        (expect (eq :normal (nerimux::client-conn-mode conn)))
+        (expect (nerimux::%handle-client-ui-command s conn :enter-copy nil nil))
+        (expect (eq :copy (nerimux::client-conn-mode conn)))
+        (expect (nerimux::%handle-client-ui-command s conn :toggle-copy nil nil))
+        (expect (eq :normal (nerimux::client-conn-mode conn)))
+        (expect (nerimux::%handle-client-ui-command s conn :enter-input nil nil))
+        (expect (eq :input (nerimux::client-conn-mode conn)))
+        (expect (nerimux::%handle-client-ui-command s conn :enter-normal nil nil))
+        (expect (eq :normal (nerimux::client-conn-mode conn)))
+        (expect (nerimux::%handle-client-ui-command s conn :detail nil nil))
+        (expect (eq :detail (nerimux::client-conn-view conn)))
+        (expect (nerimux::%handle-client-ui-command s conn :home nil nil))
+        (expect (eq :overview (nerimux::client-conn-view conn)))
+        (expect (nerimux::%handle-client-ui-command s conn :tree-scroll nil '("bad")))
+        (expect (= 0 (nerimux::client-conn-tree-scroll conn))))))
+
+  (it "ui-command-mode-and-picker-transitions-share-a-small-contract"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn))
+            (calls nil))
+        (with-stubbed-fdefinition
+            ((nerimux::%open-client-picker
+              (lambda (conn)
+                (push :open calls)
+                (setf (nerimux::client-conn-mode conn) :picker)))
+             (nerimux::%close-client-picker
+              (lambda (conn)
+                (push :close calls)
+                (setf (nerimux::client-conn-mode conn) :normal)))
+             (nerimux::%select-client-picker-item
+              (lambda (session conn)
+                (declare (ignore session))
+                (push :select calls)
+                (setf (nerimux::client-conn-mode conn) :normal)
+                t))
+             (nerimux::%client-enter-copy-mode
+              (lambda (session conn)
+                (declare (ignore session))
+                (setf (nerimux::client-conn-mode conn) :copy))))
+          (expect (nerimux::%handle-client-ui-command s conn :mode nil '("picker")))
+          (expect (eq :picker (nerimux::client-conn-mode conn)))
+          (expect (nerimux::%handle-client-ui-command s conn :accept nil nil))
+          (expect (eq :normal (nerimux::client-conn-mode conn)))
+          (expect (nerimux::%handle-client-ui-command s conn :mode nil '("copy")))
+          (expect (eq :copy (nerimux::client-conn-mode conn)))
+          (expect (nerimux::%handle-client-ui-command s conn :cancel nil nil))
+          (expect (eq :normal (nerimux::client-conn-mode conn)))
+          (expect (equal '(:select :open) calls))))))
+
+  (it "ui-command-aliases-preserve-command-contract"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn))
+            (calls nil))
+        (with-stubbed-fdefinition
+            ((nerimux::%client-rebind-prefix
+              (lambda (conn prefix)
+                (declare (ignore conn))
+                (push (list :prefix prefix) calls)))
+             (nerimux::%select-client-tree-relative
+              (lambda (conn delta)
+                (declare (ignore conn))
+                (push (list :tree delta) calls)))
+             (nerimux::%move-client-tree-scroll
+              (lambda (conn delta)
+                (declare (ignore conn))
+                (push (list :scroll delta) calls))))
+          (expect (nerimux::%handle-client-ui-command
+                   s conn :prefix-key "C-x" nil))
+          (expect (nerimux::%handle-client-ui-command
+                   s conn :tree-prev nil '("2")))
+          (expect (nerimux::%handle-client-ui-command
+                   s conn :tree-next nil nil))
+          (expect (nerimux::%handle-client-ui-command
+                   s conn :tree-scroll nil '("bad")))
+          (expect (equal '((:scroll 1) (:tree 1) (:tree -2) (:prefix "C-x"))
+                         calls))))))
+
+  (it "picker-command-actions-share-a-small-dispatch-contract"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn))
+            (calls nil))
+        (with-stubbed-fdefinition
+            ((nerimux::%select-client-picker-item
+              (lambda (session conn)
+                (declare (ignore session conn))
+                (push :select calls)))
+             (nerimux::%refresh-client-picker
+              (lambda (conn)
+                (declare (ignore conn))
+                (push :refresh calls)))
+             (nerimux::%mark-dirty
+              (lambda ()
+                (push :dirty calls)))
+             (nerimux::%move-client-picker-index
+              (lambda (conn delta)
+                (declare (ignore conn))
+                (push (list :move delta) calls)))
+             (nerimux::%delete-client-picker-query-character
+              (lambda (conn)
+                (declare (ignore conn))
+                (push :backspace calls)))
+             (nerimux::%set-client-picker-query
+              (lambda (conn value)
+                (declare (ignore conn))
+                (push (list :query value) calls)))
+             (nerimux::%set-client-picker-regex
+              (lambda (conn value supplied-p)
+                (declare (ignore conn))
+                (push (list :regex value supplied-p) calls))))
+          (dolist (command '((:picker-accept nil nil)
+                             (:picker-refresh nil nil)
+                             (:picker-next "2" nil)
+                             (:picker-up "2" nil)
+                             (:picker-backspace nil nil)
+                             (:picker-query "needle" nil)
+                             (:picker-query nil ("from-args"))
+                             (:picker-regex "pattern" nil)
+                             (:picker-regex nil ("from-args"))))
+            (destructuring-bind (name target args) command
+              (expect (nerimux::%handle-client-ui-command
+                       s conn name target args))))
+          (expect (equal '((:regex "from-args" ("from-args"))
+                           (:regex "pattern" "pattern")
+                           (:query "from-args")
+                           (:query "needle")
+                           :backspace
+                           (:move -2)
+                           (:move 2)
+                           :dirty
+                           :refresh
+                           :select)
+                         calls))))))
+
+  (it "forwarded-command-message-keeps-ui-and-rejects-unknown-commands"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn)))
+        (expect (null
+                 (nerimux::%handle-multi-command-message
+                  s conn
+                  (nerimux/protocol::encode-command-payload :home))))
+        (expect (eq :overview (nerimux::client-conn-view conn)))
+        (expect (null
+                 (nerimux::%handle-multi-command-message
+                  s conn
+                  (nerimux/protocol::encode-command-payload :not-a-ui-command)))))))
+
+  (it "forwarded-command-message-applies-focus-and-viewport"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn)))
+        (expect (null
+                 (nerimux::%handle-multi-command-message
+                  s conn
+                  (nerimux/protocol::encode-command-payload
+                   :viewport :args '("4")))))
+        (expect (= 4 (nerimux::client-conn-viewport conn)))
+        (expect (null
+                 (nerimux::%handle-multi-command-message
+                  s conn
+                  (nerimux/protocol::encode-command-payload
+                   :focus))))
+        (expect (eq (nerimux::window-active-pane
+                     (nerimux::session-active-window s))
+                    (nerimux::client-conn-focus conn))))))
+
+  (it "kill-command-replies-drops-client-and-forwards-success"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn))
+            (requests nil)
+            (frames nil)
+            (drops nil))
+        (with-stubbed-fdefinition
+            ((nerimux::%server-kill-request
+              (lambda (session force)
+                (push (list session force) requests)
+                (values :ok nil)))
+             (nerimux::send-frame
+              (lambda (stream frame)
+                (push (list stream frame) frames)))
+             (nerimux::%drop-client
+              (lambda (client)
+                (push client drops))))
+          (expect (eq :quit
+                      (nerimux::%handle-client-ui-command
+                       s conn :kill nil '("--force"))))
+          (expect (equal (list (list s t)) requests))
+          (expect (equal (list conn) drops))
+          (expect (= 1 (length frames)))))))
+
+  (it "kill-command-replies-denied-and-still-drops-client"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn))
+            (frames nil)
+            (drops nil))
+        (with-stubbed-fdefinition
+            ((nerimux::%server-kill-request
+              (lambda (session force)
+                (declare (ignore session force))
+                (values :denied '("active clients remain"))))
+             (nerimux::send-frame
+              (lambda (stream frame)
+                (declare (ignore stream))
+                (push frame frames)))
+             (nerimux::%drop-client
+              (lambda (client)
+                (push client drops))))
+          (expect (eq t
+                      (nerimux::%handle-client-ui-command
+                       s conn :kill nil nil)))
+          (expect (= 1 (length frames)))
+          (multiple-value-bind (type payload)
+              (nerimux/protocol::decode-frame (first frames))
+            (expect (= nerimux::+msg-reply+ type))
+            (expect (search "DENIED" (nerimux/protocol::decode-text payload))))
+          (expect (equal (list conn) drops))))))
+
+  (it "forwarded-kill-command-propagates-quit-disposition"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn)))
+        (with-stubbed-fdefinition
+            ((nerimux::%handle-client-kill-command
+              (lambda (session client args)
+                (declare (ignore session client args))
+                :quit)))
+          (expect (eq :quit
+                      (nerimux::%handle-multi-command-message
+                       s conn
+                       (nerimux/protocol::encode-command-payload :kill))))))))
 
   (it "overview-shortcut-opens-worktree-picker"
     (with-fake-session (s)
@@ -373,6 +615,21 @@
                (expect (eq :normal (nerimux::client-conn-mode conn))))
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:delete-worktree-async) delete-fn)))))
+
+  (it "overview-worktree-operation-prompts-report-missing-selection"
+    (dolist (operation
+              '((nerimux::%client-start-worktree-delete
+                 "select a worktree to delete")
+                (nerimux::%client-start-worktree-lock
+                 "select a worktree to lock")
+                (nerimux::%client-start-worktree-unlock
+                 "select a worktree to unlock")))
+      (let* ((conn (%make-test-conn))
+             (nerimux::*clients* (list conn)))
+        (funcall (symbol-function (first operation)) conn)
+        (expect (string= (second operation)
+                         (first (nerimux::client-conn-message-log conn))))
+        (expect (eq :normal (nerimux::client-conn-mode conn))))))
 
   ;; `L`/`U` on a selected worktree pre-fill the lock/unlock command lines,
   ;; mirroring `X`'s "wt-delete --confirm" prefill exactly (both already
@@ -736,6 +993,22 @@
        nil conn (cl-codec-kit:string-to-octets "jk" :encoding :utf-8))
       (expect (string= "jk" (nerimux::client-conn-tree-filter conn)))
       (expect (eq repository (nerimux::client-conn-selected-tree-object conn)))))
+
+  (it "overview-tree-filter-editing-rejects-invalid-input-and-respects-the-cap"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn)))
+        (setf (nerimux::client-conn-tree-filter conn) nil
+              (nerimux::client-conn-tree-scroll conn) 4)
+        (expect (null (nerimux::%client-tree-filter-buffer-delete-character conn)))
+        (expect (null (nerimux::%client-tree-filter-buffer-append conn #(1))))
+        (expect (null (nerimux::%client-tree-filter-buffer-append conn #(10))))
+        (expect (null (nerimux::client-conn-tree-filter conn)))
+        (setf (nerimux::client-conn-tree-filter conn)
+              (make-string nerimux::+max-tree-filter-length+
+                           :initial-element #\x))
+        (expect (null (nerimux::%client-tree-filter-buffer-append conn #(121))))
+        (expect (= nerimux::+max-tree-filter-length+
+                   (length (nerimux::client-conn-tree-filter conn)))))))
 
   ;; `n` with no repository resolvable from the current selection (nothing
   ;; selected, or an organization row selected -- %CLIENT-SELECTED-REPOSITORY

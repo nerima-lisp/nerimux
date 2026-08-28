@@ -30,6 +30,16 @@
                     (nerimux::reader-idle-state pane))))
       (expect (= 1 calls))))
 
+  (it "reader-idle-state-keeps-polling-when-pty-is-not-ready"
+    (let ((pane (make-pane :id 1 :fd 7 :pid -1 :screen (make-screen 10 3))))
+      (with-stubbed-fdefinition
+          ((nerimux/pty:select-fds
+            (lambda (fds timeout-us)
+              (declare (ignore fds timeout-us))
+              nil)))
+        (expect (eq #'nerimux::reader-idle-state
+                    (nerimux::reader-idle-state pane))))))
+
   ;; This case previously asserted the OPPOSITE: that a pane with fd -1 still
   ;; returned #'reader-idle-state, i.e. kept polling forever.  It was pinning a
   ;; defect rather than a contract.  Nothing stops a single pane's reader
@@ -106,6 +116,39 @@
         (expect (= 1 bells))
         (expect (= 2 dirty)))))
 
+  (it "reader-reading-state-contains-peer-io-failure"
+    (let ((pane (make-pane :id 1 :fd 7 :pid -1 :screen (make-screen 10 3)))
+          (payloads (list #(65) nil))
+          (feed-calls 0)
+          (outputs 0)
+          (dirty 0))
+      (let ((nerimux::*reader-scratch-buffer* (make-array 16
+                                                           :element-type '(unsigned-byte 8))))
+        (with-stubbed-fdefinition
+            ((nerimux/pty:pty-read-blocking-into
+              (lambda (fd buffer)
+                (declare (ignore fd buffer))
+                (pop payloads)))
+             (nerimux/model:pane-feed
+              (lambda (received-pane bytes)
+                (declare (ignore received-pane bytes))
+                (incf feed-calls)
+                (error 'nerimux::peer-io-failure)))
+             (nerimux/model:pane-mark-output
+              (lambda (received-pane bytes)
+                (declare (ignore received-pane bytes))
+                (incf outputs)))
+             (nerimux::%mark-dirty
+              (lambda ()
+                (incf dirty))))
+          (expect (eq #'nerimux::reader-idle-state
+                      (nerimux::reader-reading-state pane)))
+          (expect (eq #'nerimux::reader-eof-state
+                      (nerimux::reader-reading-state pane))))
+        (expect (= 1 feed-calls))
+        (expect (= 1 outputs))
+        (expect (= 1 dirty)))))
+
   (it "run-reader-states-executes-the-current-state-before-stopping"
     (with-dead-pane (pane)
       (let ((calls 0)
@@ -133,6 +176,19 @@
                       (nerimux::start-reader-thread pane)))
           (expect (functionp reader-function))
           (finishes (funcall reader-function))))))
+
+  (it "stop-reader-threads-ignores-a-thread-that-cannot-be-joined"
+    (let ((nerimux::*running* t)
+          (joined nil))
+      (with-stubbed-fdefinition
+          ((nerimux::%join-thread-with-timeout
+            (lambda (thread timeout)
+              (declare (ignore timeout))
+              (setf joined thread)
+              (error 'sb-thread:join-thread-error))))
+        (finishes (nerimux::stop-reader-threads '(:reader-thread))))
+      (expect (null nerimux::*running*))
+      (expect (eq :reader-thread joined))))
 
   ;; ── retire-pane-pty ─────────────────────────────────────────────────────────
   ;;

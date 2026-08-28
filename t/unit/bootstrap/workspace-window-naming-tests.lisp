@@ -7,6 +7,46 @@
 
 (describe "workspace-window-naming-suite"
 
+  (it "workspace-new-window-passes-geometry-and-starts-reader-by-default"
+    (let ((arguments nil)
+          (reader-pane nil)
+          (window (nerimux/model:make-window :id 1 :name "new"))
+          (pane :active-pane))
+      (with-stubbed-fdefinition
+          ((nerimux::session-new-window
+            (lambda (session name rows cols base-index start-dir)
+              (setf arguments (list session name rows cols base-index start-dir))
+              window))
+           (nerimux::start-reader-thread
+            (lambda (pane) (setf reader-pane pane)))
+           (nerimux::window-active-pane
+            (lambda (active-window)
+              (declare (ignore active-window))
+              pane))
+           (nerimux/model::%shell-basename
+            (lambda () "shell")))
+        (let ((nerimux::*term-rows* 30)
+              (nerimux::*term-cols* 100))
+          (expect (eq window (nerimux::%workspace-new-window :session
+                                                            :start-dir "/tmp/work")))
+          (expect (equal '(:session "shell" 29 100 1 "/tmp/work") arguments))
+          (expect (eq pane reader-pane))))))
+
+  (it "workspace-new-window-can-defer-reader-start"
+    (let ((reader-called nil)
+          (window :deferred-window))
+      (with-stubbed-fdefinition
+          ((nerimux::session-new-window
+            (lambda (&rest args)
+              (declare (ignore args))
+              window))
+           (nerimux::start-reader-thread
+            (lambda (pane) (declare (ignore pane)) (setf reader-called t))))
+        (expect (eq window (nerimux::%workspace-new-window :session
+                                                            :name "named"
+                                                            :start-reader-p nil)))
+        (expect (not reader-called)))))
+
   ;; The first window for a worktree is bare: just the branch name.
   (it "worktree-window-name-first-window-is-bare-branch-name"
     (let ((worktree

@@ -43,6 +43,91 @@
     (expect (eq :fallback-arm
                 (nerimux::%test-only-message-dispatch-fn :unrecognised nil))))
 
+  (it "session-pane-lifecycle-functions-visit-every-pane"
+    (let ((events nil))
+      (with-stubbed-fdefinition
+          ((nerimux::all-panes
+            (lambda (session) (declare (ignore session)) '(:pane-a :pane-b)))
+           (nerimux::start-reader-thread
+            (lambda (pane) (push (list :start-reader pane) events)))
+           (nerimux::close-pane-pty
+            (lambda (pane) (push (list :close-pty pane) events))))
+        (nerimux::%start-session-reader-threads :session)
+        (nerimux::%close-session-ptys :session)
+        (expect (equal '((:close-pty :pane-b)
+                         (:close-pty :pane-a)
+                         (:start-reader :pane-b)
+                         (:start-reader :pane-a))
+                       events)))))
+
+  (it "relayout-active-window-is-a-noop-without-an-active-window"
+    (let ((calls nil))
+      (with-stubbed-fdefinition
+          ((nerimux::session-active-window (lambda (session)
+                                             (declare (ignore session))
+                                             nil))
+           (nerimux::window-relayout (lambda (&rest args)
+                                       (push args calls))))
+        (expect (null (nerimux::%relayout-active-window :session 24 80)))
+        (expect (null calls)))))
+
+  (it "relayout-active-window-reserves-the-status-row"
+    (let ((calls nil))
+      (with-stubbed-fdefinition
+          ((nerimux::session-active-window (lambda (session)
+                                             (declare (ignore session))
+                                             :window))
+           (nerimux::window-relayout (lambda (&rest args)
+                                       (push args calls))))
+        (nerimux::%relayout-active-window :session 24 80)
+        (expect (equal '(:window 23 80) (first calls))))))
+
+  (it "run-server-initializes-and-cleans-up-around-loop"
+    (let ((events nil)
+          (stop-tag (gensym "SERVER-STOP")))
+      (with-stubbed-fdefinition
+          ((nerimux::install-pty-port
+            (lambda () (push :install-pty-port events)))
+           (nerimux::create-initial-session
+            (lambda (rows cols)
+              (push (list :create-session rows cols) events)
+              :session))
+           (nerimux::socket-path
+            (lambda (name) (push (list :socket-path name) events) "/tmp/nerimux-test.sock"))
+           (nerimux::server-add-session
+            (lambda (session) (push (list :add-session session) events)))
+           (nerimux/net::make-listener
+            (lambda (path &key backlog)
+              (push (list :make-listener path backlog) events)
+              :listener))
+           (nerimux::all-panes
+            (lambda (session) (declare (ignore session)) '(:pane-a)))
+           (nerimux::start-reader-thread
+            (lambda (pane)
+              (declare (ignore pane))
+              :reader-thread))
+           (nerimux::stop-reader-threads
+            (lambda (threads)
+              (push (list :stop-reader-threads threads) events)))
+           (nerimux::install-sigwinch-handler
+            (lambda () (push :install-sigwinch-handler events)))
+           (nerimux::%run-multi-server-loop
+            (lambda (listener session)
+              (push (list :run-loop listener session) events)
+              (throw stop-tag :loop-ended)))
+           (nerimux/net::close-socket
+            (lambda (listener &key abort)
+              (push (list :close-socket listener abort) events)))
+           (nerimux::close-pane-pty
+            (lambda (pane) (declare (ignore pane)) (push :close-pane events))))
+        (expect (eq :loop-ended
+                    (catch stop-tag (nerimux::run-server "demo"))))
+        (expect (equal :install-pty-port (first (last events))))
+        (expect (member '(:run-loop :listener :session) events :test #'equal))
+        (expect (member '(:stop-reader-threads (:reader-thread))
+                        events :test #'equal))
+        (expect (member '(:close-socket :listener nil) events :test #'equal)))))
+
   ;; The two apply-client-size tests that used to close this block were removed
   ;; with the function: it had no production caller left (the multi-client path
   ;; resizes through %apply-effective-size in server-multi.lisp), so these tests

@@ -44,4 +44,36 @@
       (expect (= 3 (length (session-windows sess))))
       (expect (member w0 (session-windows sess)) :to-be-truthy)
       (expect (member w1 (session-windows sess)) :to-be-truthy)
-      (expect (member w2 (session-windows sess)) :to-be-truthy))))
+      (expect (member w2 (session-windows sess)) :to-be-truthy)))
+
+  (it "session-window-index-uses-overrides-and-clears-defaults"
+    (let* ((window (make-window :id 2 :name "w"))
+           (session (make-session :id 1 :name "s" :windows (list window))))
+      (expect (= 2 (nerimux/model::session-window-index session window)))
+      (nerimux/model::set-session-window-index session window 7)
+      (expect (= 7 (nerimux/model::session-window-index session window)))
+      (nerimux/model::set-session-window-index session window 2)
+      (expect (= 2 (nerimux/model::session-window-index session window)))
+      (expect (= 0 (hash-table-count (nerimux/model::session-window-index-map session))))))
+
+  (it "session-windows-in-index-order-is-non-destructive"
+    (let* ((w0 (make-window :id 0 :name "w0"))
+           (w1 (make-window :id 1 :name "w1"))
+           (session (make-session :id 1 :name "s" :windows (list w0 w1))))
+      (nerimux/model::set-session-window-index session w0 3)
+      (nerimux/model::set-session-window-index session w1 1)
+      (let ((ordered (nerimux/model::session-windows-in-index-order session)))
+        (expect (eq w1 (first ordered)))
+        (expect (eq w0 (second ordered)))
+        (expect (eq w0 (first (session-windows session)))))))
+
+  (it "session-remove-window-clears-all-references"
+    (let* ((window (make-window :id 1 :name "w"))
+           (session (make-session :id 1 :name "s" :windows (list window)
+                                  :active window :window-stack (list window))))
+      (nerimux/model::set-session-window-index session window 9)
+      (nerimux/model::session-remove-window session window)
+      (expect (null (nerimux/model::session-windows session)))
+      (expect (null (nerimux/model::session-active session)))
+      (expect (null (nerimux/model::session-window-stack session)))
+      (expect (= 0 (hash-table-count (nerimux/model::session-window-index-map session)))))))

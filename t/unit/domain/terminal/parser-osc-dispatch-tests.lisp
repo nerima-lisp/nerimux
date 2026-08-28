@@ -4,6 +4,26 @@
 
 (describe "terminal-suite/osc-dispatch-edge-cases"
 
+  (it "osc-command-parser-rejects-invalid-and-accepts-zero"
+    (expect (null (nerimux/terminal/parser::%parse-osc-command "x;body" 1)))
+    (expect (= 0 (nerimux/terminal/parser::%parse-osc-command "0;body" 1))))
+
+  (it "osc-133-only-marks-prompt-for-an-a-body"
+    (with-screen (s 20 5)
+      (let ((before (copy-list (nerimux/terminal/types:screen-prompt-marks s))))
+        (nerimux/terminal/parser::%handle-osc-133 s "")
+        (nerimux/terminal/parser::%handle-osc-133 s "B")
+        (expect (equal before (nerimux/terminal/types:screen-prompt-marks s)))
+        (nerimux/terminal/parser::%handle-osc-133 s "A")
+        (expect (= 1 (length (nerimux/terminal/types:screen-prompt-marks s)))))))
+
+  (it "osc-133-dispatches-through-the-command-table"
+    (with-screen (s 20 5)
+      (nerimux/terminal/parser::%dispatch-osc
+       s
+       (cl-codec-kit:string-to-octets "133;A" :encoding :utf-8))
+      (expect (= 1 (length (nerimux/terminal/types:screen-prompt-marks s))))))
+
   ;; An OSC payload with no semicolon is silently discarded (no command to dispatch).
   (it "osc-payload-no-semicolon-is-noop"
     (with-screen (s 20 5)

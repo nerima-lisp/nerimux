@@ -2,10 +2,10 @@
 
 ;;;; Client receive/decode integration tests (src/client.lisp).
 ;;;;
-;;;; client-tests.lisp declares client-suite first; this file keeps the
-;;;; server-frame receive/decode behavior separate from outbound client tests.
+;;;; Keep server-frame receive/decode behavior separate from outbound client
+;;;; tests so cl-weave registers both suites independently.
 
-(describe "client-suite"
+(describe "client-receive-suite"
 
   ;; ── %decode-server-frame pure behavior ──────────────────────────────────────
   ;;
@@ -33,6 +33,23 @@
           (nerimux::%decode-server-frame client-side)
         (expect (eq :frame disposition))
         (expect (string= "PURE-TEXT" text)))))
+
+  (it "decode-server-frame-ignores-unknown-frame"
+    (with-guarded-socket-test
+      (write-sequence (encode-frame 255 #(1 2 3)) server-side)
+      (force-output server-side)
+      (multiple-value-bind (disposition text)
+          (nerimux::%decode-server-frame client-side)
+        (expect (eq :ignore disposition))
+        (expect (null text)))))
+
+  (it "receive-server-frame-ignores-unknown-disposition"
+    (with-stubbed-fdefinition
+        ((nerimux::%decode-server-frame
+          (lambda (stream)
+            (declare (ignore stream))
+            (values :ignore nil))))
+      (expect (null (nerimux::%receive-server-frame nil)))))
 
   ;; %decode-server-frame returns (values :exit nil) on EOF.
   (it "decode-server-frame-returns-exit-on-eof"

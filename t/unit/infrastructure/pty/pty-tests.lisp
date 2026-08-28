@@ -257,6 +257,12 @@
 
   ;;; ── select-fds: the dead-pane fd sentinel ───────────────────────────────────
 
+  (it "select-fds-helper-data-preserves-timeout-contract"
+    (expect (null (nerimux/pty::%timeout-us-to-seconds -1)))
+    (expect (= 0 (nerimux/pty::%timeout-us-to-seconds 0)))
+    (expect (= 3/2 (nerimux/pty::%timeout-us-to-seconds 1500000)))
+    (expect (equal '(0 7) (nerimux/pty::%selectable-fds '(-1 0 -4 7)))))
+
   ;; pane-fd -1 is nerimux's documented "no PTY / dead pane" sentinel, and the
   ;; event loop can still hold one in its poll set for the iteration in which a
   ;; pane is torn down.  process-kit's %validate-fds requires (INTEGER 0) and

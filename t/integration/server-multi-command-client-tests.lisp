@@ -87,6 +87,10 @@
       (expect (null nerimux::*clients*))
       (expect nerimux::*running* :to-be-truthy)))
 
+  (it "quit-disposition-is-returned-to-the-server-loop"
+    (let ((conn (nerimux::%make-client-conn)))
+      (expect (eql :quit (nerimux::%apply-client-disposition :quit conn)))))
+
   ;;; -- Integration: a broadcast frame reaches every attached client ------------
 
   ;; Two clients attached to the server both receive a broadcast frame — the core

@@ -539,3 +539,101 @@
         (expect (not (search "feature/tree" plain)))
         (expect (not (search "(no selection)" plain)))
         (expect (not (search "organization:" plain)))))))
+
+(describe "renderer-suite/workspace-repository-state"
+
+  (it "renders every repository health state in the selected detail panel"
+    (multiple-value-bind (organization repository) (%build-five-level-tree)
+      (let ((states
+              (list (list :missing "MISSING"
+                          (lambda () (setf (nerimux/model:repository-missing-p repository) t)))
+                    (list :conflict "CONFLICT"
+                          (lambda () (setf (nerimux/model:repository-conflict-p repository) t)))
+                    (list :dirty "DIRTY"
+                          (lambda () (setf (nerimux/model:repository-dirty-p repository) t)))
+                    (list :no-worktree "NO-WORKTREE"
+                          (lambda () (setf (nerimux/model:repository-worktrees repository) nil)))
+                    (list :ready "ready" nil))))
+        (dolist (state states)
+          (setf (nerimux/model:repository-missing-p repository) nil
+                (nerimux/model:repository-conflict-p repository) nil
+                (nerimux/model:repository-dirty-p repository) nil
+                (nerimux/model:repository-worktrees repository)
+                (list (nerimux/model:make-worktree :id "state-wt" :path "/wt")))
+          (when (third state) (funcall (third state)))
+          (let ((plain
+                  (strip-sgr
+                   (nerimux/renderer:render-workspace-overview-to-string
+                    (list organization) 24 100
+                    :selected-tree-object repository))))
+            (expect (search (second state) plain))))))))
+
+(describe "renderer-suite/workspace-tree-projection-helpers"
+
+  (it "uses stable identities for every model level and a generic fallback"
+    (multiple-value-bind (organization repository worktree window-1)
+        (%build-five-level-tree)
+      (let ((pane (first (nerimux/model:window-panes window-1))))
+        (expect (equal '(:organization "github.com/team")
+                       (nerimux/renderer::%workspace-tree-node-key organization)))
+        (expect (equal '(:repository "repo-1")
+                       (nerimux/renderer::%workspace-tree-node-key repository)))
+        (expect (equal '(:worktree "wt-1")
+                       (nerimux/renderer::%workspace-tree-node-key worktree)))
+        (expect (equal '(:window 1)
+                       (nerimux/renderer::%workspace-tree-node-key window-1)))
+        (expect (equal '(:pane 1 1)
+                       (nerimux/renderer::%workspace-tree-node-key pane)))
+        (expect (equal '(:workspace-object :other)
+                       (nerimux/renderer::%workspace-tree-node-key :other))))))
+
+  (it "falls back to readable identifiers when labels lack descriptive data"
+    (let ((organization (nerimux/model:make-organization :id "local-id" :host "" :name ""))
+          (repository (nerimux/model:make-repository :id "repo-id" :specification "" :local-path ""))
+          (worktree (nerimux/model:make-worktree :id "wt-id" :path "" :branch nil))
+          (pane (nerimux/model:make-pane :id 7 :fd -1 :title "" :start-command "")))
+      (expect (string= "local-id" (nerimux/renderer::%organization-tree-label organization)))
+      (expect (string= "repo-id" (nerimux/renderer::%repository-tree-label repository)))
+      (expect (string= "wt-id" (nerimux/renderer::%worktree-tree-label worktree)))
+      (expect (string= "pane/7 shell" (nerimux/renderer::%pane-tree-label pane)))))
+
+  (it "prefers each available partial label before its identifier fallback"
+    (let ((host-only (nerimux/model:make-organization :id "org-id" :host "git.example" :name ""))
+          (name-only (nerimux/model:make-organization :id "org-id" :host "" :name "team"))
+          (path-only (nerimux/model:make-repository :id "repo-id" :specification "" :local-path "/work/repo"))
+          (command-only (nerimux/model:make-pane :id 7 :fd -1 :title "" :start-command "make test")))
+      (expect (string= "git.example" (nerimux/renderer::%organization-tree-label host-only)))
+      (expect (string= "team" (nerimux/renderer::%organization-tree-label name-only)))
+      (expect (string= "/work/repo" (nerimux/renderer::%repository-tree-label path-only)))
+      (expect (string= "pane/7 make test" (nerimux/renderer::%pane-tree-label command-only)))))
+
+  (it "keeps only meaningful activity and info tokens"
+    (let* ((worktree (nerimux/model:make-worktree
+                      :id "wt" :path "/tmp/wt" :branch "main"
+                      :ahead 0 :behind 0))
+           (pane (nerimux/model:make-pane :id 1 :fd -1)))
+      (nerimux/model:worktree-add-pane worktree pane)
+      (expect (null (nerimux/renderer::%worktree-last-activity-time worktree)))
+      (expect (nerimux/renderer::%worktree-tree-info-tokens worktree))
+      (expect (string= "" (nerimux/renderer::%workspace-tree-node-search-text :unknown worktree))))))
+
+  (it "uses a readable fallback for non-letter prefix bindings"
+    (expect (string= "key/999"
+                     (nerimux/renderer::%workspace-prefix-label 999))))
+
+  (it "selects the newest output or focus timestamp"
+    (multiple-value-bind (organization repository worktree window-1)
+        (%build-five-level-tree)
+      (declare (ignore organization repository))
+      (let ((pane-1 (first (nerimux/model:window-panes window-1)))
+            (pane-2 (second (nerimux/model:window-panes window-1))))
+        (setf (nerimux/model:pane-last-output-time pane-1) 10
+              (nerimux/model:pane-last-focused-time pane-2) 20)
+        (expect (= 20 (nerimux/renderer::%worktree-last-activity-time worktree))))))
+
+  (it "renders behind-only repository information"
+    (let ((worktree (nerimux/model:make-worktree :id "wt" :behind 2)))
+      (multiple-value-bind (plain styled)
+          (nerimux/renderer::%worktree-tree-info-suffix worktree 80)
+        (declare (ignore styled))
+        (expect (search "-2" plain)))))

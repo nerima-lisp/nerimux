@@ -198,4 +198,124 @@
         (expect (nerimux::client-conn-ui-prefix-p conn))
         (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q again
         (expect (null (nerimux::client-conn-ui-prefix-p conn)))
-        (expect (eq :normal (nerimux::client-conn-mode conn)))))))
+        (expect (eq :normal (nerimux::client-conn-mode conn))))))
+
+  (it "r4-4-prefix-dispatch-drops-only-the-explicit-detach-key"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn)))
+        (dolist (byte '(104 106 108 110 70 6))
+          (expect (null (nerimux::%workspace-prefix-dispatch s conn byte))))
+        (expect (eq :drop
+                    (nerimux::%workspace-prefix-dispatch
+                     s conn (char-code #\d))))
+        (expect (null (nerimux::%workspace-prefix-dispatch s conn 255)))
+        (expect (null (nerimux::%workspace-prefix-dispatch s conn :unknown))))))
+
+  (it "r4-5-prefix-actions-report-missing-focus-without-mutating-session"
+    (with-fake-session (s :nwindows 0)
+      (let ((conn (%make-test-conn)))
+        (expect (null (nerimux::%workspace-prefix-split s conn :h)))
+        (expect (null (nerimux::%workspace-prefix-close-pane s conn)))
+        (expect (null (nerimux::%workspace-prefix-toggle-zoom s conn)))
+        (expect (null (nerimux::%workspace-prefix-move-focus s conn :right)))
+        (expect (null (nerimux::%workspace-prefix-cycle-window s conn 1)))
+        (expect (null (nerimux::client-conn-focus conn)))))))
+
+  (it "r5-6-prefix-unzoom-restores-a-zoomed-window-before-action"
+    (with-fake-two-pane-session (s)
+      (let* ((conn (%make-test-conn))
+             (window (first (nerimux/model:session-windows s))))
+        (nerimux::%set-client-focus conn (nerimux/model:window-active-pane window))
+        (nerimux/model:window-zoom-toggle window)
+        (expect (nerimux/model:window-zoom-p window))
+        (nerimux::%workspace-prefix-unzoom window)
+        (expect (not (nerimux/model:window-zoom-p window))))))
+
+  (it "r7-1-repository-fetch-reports-preconditions-and-completion"
+    (with-fake-session (s)
+      (expect s)
+      (let ((conn (%make-test-conn))
+            (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
+            (fetch (fdefinition 'nerimux/vcs:fetch-repository-async))
+            (refresh (fdefinition 'nerimux::%refresh-client-picker))
+            (notify (fdefinition 'nerimux::%client-notify))
+            (callback nil)
+            (error-callback nil)
+            (refreshed nil)
+            (messages nil))
+        (unwind-protect
+             (progn
+               (setf (fdefinition 'nerimux::%client-notify)
+                     (lambda (connection message)
+                       (declare (ignore connection))
+                       (push message messages)))
+               (nerimux::%workspace-prefix-fetch-repository conn)
+               (expect (search "selected repository" (first messages)))
+               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                     (lambda () t)
+                     (fdefinition 'nerimux/vcs:fetch-repository-async)
+                     (lambda (repository &key on-complete on-error
+                                      callback-dispatch)
+                       (declare (ignore repository callback-dispatch))
+                       (setf callback on-complete error-callback on-error)
+                       t)
+                     (fdefinition 'nerimux::%refresh-client-picker)
+                     (lambda (connection)
+                       (declare (ignore connection))
+                       (setf refreshed t))
+                     (fdefinition 'nerimux::%client-notify)
+                     (lambda (connection message)
+                       (declare (ignore connection))
+                       (push message messages)))
+               (let ((organization (nerimux/model:make-organization
+                                    :id "org" :host "github.com" :name "team"))
+                     (repository nil))
+                 (setf repository (nerimux/model:make-repository
+                                   :id "repo" :organization organization
+                                   :specification "github.com/team/repo"))
+                 (nerimux::%set-client-selected-tree-object conn repository)
+                 (nerimux::%workspace-prefix-fetch-repository conn)
+                 (funcall callback t)
+                 (expect refreshed)
+                 (expect (search "fetch complete" (first messages)))
+                 (funcall error-callback (make-condition 'simple-error
+                                                          :format-control "offline"))
+                 (expect (search "fetch failed" (first messages)))))
+          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
+                (fdefinition 'nerimux/vcs:fetch-repository-async) fetch
+                (fdefinition 'nerimux::%refresh-client-picker) refresh
+                (fdefinition 'nerimux::%client-notify) notify)))))
+
+  (it "r7-1-organization-fetch-reports-unavailable-and-in-progress"
+    (with-fake-session (s)
+      (expect s)
+      (let ((conn (%make-test-conn))
+            (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
+            (fetch (fdefinition 'nerimux/vcs:fetch-organization-async))
+            (notify (fdefinition 'nerimux::%client-notify))
+            (messages nil))
+        (unwind-protect
+             (progn
+               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                     (lambda () nil)
+                     (fdefinition 'nerimux::%client-notify)
+                     (lambda (connection message)
+                       (declare (ignore connection))
+                       (push message messages)))
+               (nerimux::%workspace-prefix-fetch-organization conn)
+               (expect (search "selected organization" (first messages)))
+               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                     (lambda () t)
+                     (fdefinition 'nerimux/vcs:fetch-organization-async)
+                     (lambda (organization &key on-complete on-error
+                                        callback-dispatch)
+                       (declare (ignore organization on-error callback-dispatch))
+                       (funcall on-complete nil)))
+               (let ((organization (nerimux/model:make-organization
+                                    :id "org" :host "github.com" :name "team")))
+                 (nerimux::%set-client-selected-tree-object conn organization)
+                 (nerimux::%workspace-prefix-fetch-organization conn)
+                 (expect (search "already in progress" (first messages)))))
+          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
+                (fdefinition 'nerimux/vcs:fetch-organization-async) fetch
+                (fdefinition 'nerimux::%client-notify) notify)))))

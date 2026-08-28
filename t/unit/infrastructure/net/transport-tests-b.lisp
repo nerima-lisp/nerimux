@@ -316,3 +316,18 @@
                     :called))))
             (expect (null result))
             (expect (null called))))))))
+
+  ;; read-frame converts a transport timeout into the same NIL result as EOF.
+  ;; Stub the first CPS phase so this test remains deterministic and does not
+  ;; wait for the production timeout.
+  (describe "transport-timeout-suite"
+    (it "read-frame-returns-nil-on-transport-timeout"
+      (with-stubbed-fdefinition
+          ((nerimux/transport::%read-header-k
+             (lambda (stream continuation)
+               (declare (ignore stream continuation))
+               (error 'sb-ext:timeout))))
+        (with-temp-octet-file (path)
+          (with-open-file (in path :element-type '(unsigned-byte 8)
+                                   :if-does-not-exist :create)
+            (expect (null (read-frame in))))))))

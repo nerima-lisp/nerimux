@@ -51,6 +51,14 @@
       (expect (char= #\T (char token 8)))
       (expect (every #'digit-char-p (remove #\T token))))))
 
+(describe "renderer-suite/vcs-worktree-path-trailing-slash"
+
+  (it "adds a trailing slash only when the directory name lacks one"
+    (expect (string= "repository/"
+                     (nerimux/vcs::%ensure-trailing-slash "repository")))
+    (expect (string= "repository/"
+                     (nerimux/vcs::%ensure-trailing-slash "repository/")))))
+
 (describe "renderer-suite/vcs-worktree-path-no-collision"
 
   ;; No existing directory of that name: the path is exactly

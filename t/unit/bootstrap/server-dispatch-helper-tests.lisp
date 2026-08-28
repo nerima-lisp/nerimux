@@ -119,6 +119,68 @@
                   (nerimux::%workspace-find-tree-object
                    '(:worktree "feature-id") organizations)))))
 
+  (it "resolves-the-most-specific-worktree-containing-a-cwd"
+    (multiple-value-bind (organizations organization repository main-worktree
+                          feature-worktree)
+        (%make-server-dispatch-helper-fixture)
+      (declare (ignore organization repository))
+      (expect (eq feature-worktree
+                  (nerimux::%workspace-find-worktree-for-cwd
+                   "/workspace/repo/feature/src" organizations)))
+      (expect (eq main-worktree
+                  (nerimux::%workspace-find-worktree-for-cwd
+                   "/workspace/repo/src" organizations)))
+      (expect (null (nerimux::%workspace-find-worktree-for-cwd
+                     "/workspace/other" organizations)))
+      (expect (null (nerimux::%workspace-find-worktree-for-cwd
+                     nil organizations)))))
+
+  (it "builds-selection-tokens-from-model-identities"
+    (let* ((organization
+             (nerimux/model::%make-organization
+              :id "org-id" :host "origin" :name "team"))
+           (repository
+             (nerimux/model::%make-repository
+              :id "repo-id" :organization organization :specification "spec"
+              :local-path "/workspace/repo"))
+           (worktree
+             (nerimux/model::%make-worktree
+              :id "worktree-id" :path "/workspace/repo/feature" :branch 'feature)))
+      (expect (string= "org-id"
+                       (nerimux::%organization-selection-token organization)))
+      (expect (string= "repo-id"
+                       (nerimux::%repository-selection-token repository)))
+      (expect (string= "worktree-id"
+                       (nerimux::%worktree-selection-token worktree)))
+      (expect (null (nerimux::%organization-selection-token nil)))
+      (expect (null (nerimux::%repository-selection-token nil)))
+      (expect (null (nerimux::%worktree-selection-token nil)))))
+
+  (it "resolves-the-collapsible-repository-from-tree-owners"
+    (multiple-value-bind (organizations organization repository main-worktree
+                          feature-worktree)
+        (%make-server-dispatch-helper-fixture)
+      (declare (ignore organizations organization main-worktree))
+      (expect (eq repository
+                   (nerimux::%client-tree-collapsible-repository repository)))
+      (expect (eq repository
+                   (nerimux::%client-tree-collapsible-repository
+                    feature-worktree)))
+      (expect (null (nerimux::%client-tree-collapsible-repository nil)))))
+
+  (it "resolves-the-collapsible-repository-from-window-and-pane-owners"
+    (multiple-value-bind (organizations organization repository main-worktree
+                          feature-worktree)
+        (%make-server-dispatch-helper-fixture)
+      (declare (ignore organizations organization main-worktree))
+      (let* ((pane (nerimux/model:make-pane :id 1))
+             (window (nerimux/model:make-window :id 1 :panes (list pane))))
+        (nerimux/model:worktree-add-pane feature-worktree pane)
+        (expect (eq repository
+                     (nerimux::%client-tree-collapsible-repository window)))
+        (expect (eq repository
+                     (nerimux::%client-tree-collapsible-repository pane))))))
+
   (it "tracks-tree-objects-selection-and-scroll"
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
@@ -281,10 +343,35 @@
                          (nerimux::client-conn-attach-target conn)))
         (expect (string= "/workspace/repo/feature"
                          (nerimux::client-conn-attach-cwd conn)))
-        (expect (= #x02
-                   (progn
-                     (nerimux::%client-rebind-prefix conn "c-b")
-                     (nerimux::client-conn-workspace-prefix-code conn)))))))
+         (expect (= #x02
+                    (progn
+                      (nerimux::%client-rebind-prefix conn "c-b")
+                      (nerimux::client-conn-workspace-prefix-code conn)))))))
+
+  (it "resolves-workspace-tokens-by-kind-and-ignores-option-values"
+    (multiple-value-bind (organizations organization repository main-worktree
+                          feature-worktree)
+        (%make-server-dispatch-helper-fixture)
+      (declare (ignore main-worktree))
+      (let ((conn (nerimux::%make-client-conn)))
+        (expect (null (nerimux::%workspace-find-tree-object nil organizations)))
+        (expect (eq organization
+                    (nerimux::%workspace-find-tree-object
+                     (list :organization "org-id") organizations)))
+        (expect (eq repository
+                    (nerimux::%workspace-find-tree-object
+                     (list :repository "repo-id") organizations)))
+        (expect (eq feature-worktree
+                    (nerimux::%workspace-find-tree-object
+                     (list :worktree "feature-id") organizations)))
+        (expect (null (nerimux::%workspace-find-tree-object
+                       (list :unknown "value") organizations)))
+        (expect (null (nerimux::%client-positional-branch
+                       '("--branch"))))
+        (expect (eq organization
+                    (nerimux::%client-selected-organization conn organization)))
+        (expect (eq repository
+                    (nerimux::%client-selected-repository conn repository))))))
   )
 
 (describe "server-dispatch-helper-edge-suite"
@@ -295,6 +382,7 @@
       (expect (= 65 (nerimux::%client-single-byte (vector 65))))
       (expect (= 65 (nerimux::%client-single-byte "A")))
       (expect (null (nerimux::%client-single-byte (vector 65 66))))
+      (expect (null (nerimux::%client-single-byte (make-array '(1 1) :initial-element 65))))
       (expect (nerimux::%client-byte-p (vector 17) 17))
       (expect (nerimux::%client-key-p "q" #\q))
       (expect (string= "A"
@@ -342,6 +430,122 @@
       (expect (nerimux::%client-enter-command-mode conn 42))
       (expect (string= "" (nerimux::client-conn-command-buffer conn)))))
 
+  (it "command-buffer-delete-character-is-safe-at-both-boundaries"
+    (let ((conn (nerimux::%make-client-conn)))
+      (setf (nerimux::client-conn-command-buffer conn) "abc")
+      (expect (nerimux::%client-command-buffer-delete-character conn))
+      (expect (string= "ab" (nerimux::client-conn-command-buffer conn)))
+      (setf (nerimux::client-conn-command-buffer conn) "")
+      (expect (null (nerimux::%client-command-buffer-delete-character conn)))
+      (expect (string= "" (nerimux::client-conn-command-buffer conn)))))
+
+  (it "command-buffer-append-accepts-printable-text-only"
+    (let ((conn (nerimux::%make-client-conn)))
+      (expect (nerimux::%client-command-buffer-append conn "ab"))
+      (expect (string= "ab" (nerimux::client-conn-command-buffer conn)))
+      (expect (null (nerimux::%client-command-buffer-append conn #(10))))
+      (expect (string= "ab" (nerimux::client-conn-command-buffer conn)))
+      (expect (null (nerimux::%client-command-buffer-append
+                     conn (make-array '(1 1) :initial-element 65))))))
+
+  (it "input-and-copy-dispatch-report-missing-focus"
+    (let ((session (nerimux/model:make-session :id 1 :name "test"))
+          (conn (nerimux::%make-client-conn)))
+      (expect (nerimux::%handle-client-input-key-payload
+               session conn "x"))
+      (expect (nerimux::%handle-client-copy-key-payload
+               session conn "q"))
+      (expect (eq :normal (nerimux::client-conn-mode conn)))))
+
+  (it "copy-dispatches-every-bound-key-through-one-contract"
+    (let* ((session (nerimux/model:make-session :id 1 :name "test"))
+           (conn (nerimux::%make-client-conn))
+           (pane (make-no-pty-pane 1 0 0 4 4))
+           (calls nil))
+      (with-stubbed-fdefinition
+          ((nerimux::%resolve-client-focus-pane
+             (lambda (&rest arguments) (declare (ignore arguments)) pane))
+           (nerimux::copy-mode-move-cursor
+             (lambda (&rest arguments) (push (cons :move arguments) calls)))
+           (nerimux::copy-mode-scroll
+             (lambda (&rest arguments) (push (cons :scroll arguments) calls)))
+           (nerimux::copy-mode-begin-selection
+             (lambda (screen) (push (list :begin screen) calls)))
+           (nerimux::copy-mode-yank
+             (lambda (screen) (push (list :yank screen) calls)))
+           (nerimux::copy-mode-search-next
+             (lambda (screen) (push (list :next screen) calls)))
+           (nerimux::copy-mode-search-prev
+             (lambda (screen) (push (list :prev screen) calls)))
+           (nerimux::%client-enter-command-mode
+             (lambda (connection command)
+               (push (list :command connection command) calls)))
+           (nerimux::%client-exit-copy-mode
+             (lambda (current-session connection)
+               (push (list :exit current-session connection) calls))))
+        (dolist (key '(#\k #\j #\h #\l #\g #\G #\Space #\y #\n #\N #\/ #\? #\q))
+          (nerimux::%handle-client-copy-key-payload session conn (string key)))
+        (expect (= 13 (length calls)))
+        (expect (search "search-backward "
+                        (format nil "~S" calls)))
+        (expect (search "search-forward "
+                        (format nil "~S" calls)))
+        (expect (some (lambda (call) (eq :exit (first call))) calls)))))
+
+  (it "search-submit-reports-invalid-input-and-restores-view"
+    (let* ((session (nerimux/model:make-session :id 1 :name "test"))
+           (conn (nerimux::%make-client-conn))
+           (messages nil)
+           (transitions nil))
+      (with-stubbed-fdefinition
+          ((nerimux::%resolve-client-focus-pane
+             (lambda (&rest arguments) (declare (ignore arguments)) nil))
+           (nerimux::%client-notify
+             (lambda (connection message)
+               (declare (ignore connection))
+               (push message messages)))
+           (nerimux::%client-restore-command-view
+             (lambda (connection) (declare (ignore connection))))
+           (nerimux::%transition-client-ui-mode
+             (lambda (connection event)
+               (declare (ignore connection))
+               (push event transitions))))
+        (nerimux::%submit-client-search session conn :forward '("needle"))
+        (nerimux::%submit-client-search session conn :backward nil)
+        (expect (equal '("no focused pane" "no focused pane") messages))
+        (expect (= 2 (length transitions))))))
+
+  (it "normal-dispatches-state-only-view-and-mode-keys"
+    (let ((session (nerimux/model:make-session :id 1 :name "test"))
+          (conn (nerimux::%make-client-conn))
+          (nerimux::*dirty* nil))
+      (dolist (case '(("d" :normal :detail)
+                      ("o" :normal :overview)
+                      ("i" :input :detail)))
+        (destructuring-bind (payload expected-mode expected-view) case
+          (nerimux::%set-client-ui-mode conn :normal)
+          (nerimux::%set-client-view conn :overview)
+          (expect (nerimux::%handle-client-normal-key-payload
+                   session conn payload))
+          (expect (eq expected-mode (nerimux::client-conn-mode conn)))
+          (expect (eq expected-view (nerimux::client-conn-view conn)))))
+      (expect (eq :input (nerimux::client-conn-mode conn)))))
+
+  (it "command-target-and-search-helpers-preserve-argument-shape"
+    (multiple-value-bind (target args)
+        (nerimux::%client-command-target-and-args '("--target" "pane" "x"))
+      (expect (string= "pane" target))
+      (expect (equal '("x") args)))
+    (multiple-value-bind (target args)
+        (nerimux::%client-command-target-and-args '("x" "y"))
+      (expect (null target))
+      (expect (equal '("x" "y") args)))
+    (expect (eq :forward (nerimux::%client-search-direction "SEARCH-FORWARD")))
+    (expect (eq :backward (nerimux::%client-search-direction "?")))
+    (expect (null (nerimux::%client-search-direction "other")))
+    (expect (string= "hello  world"
+                     (nerimux::%client-search-term '(" hello " "world ")))))
+
   (it "selects-picker-items-and-normalizes-attach-tokens"
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
@@ -358,7 +562,7 @@
           (expect (zerop (nerimux::%picker-clamp-index conn items)))
           (expect (zerop (nerimux::%picker-clamp-index conn nil))))
         (let* ((items (nerimux/picker:build-global-picker-items
-                       organizations))
+                      organizations))
                (organization-item
                  (find-if (lambda (item)
                             (eq :organization
@@ -582,6 +786,32 @@
       (expect (null (gethash (list :organization "org-toggle")
                              nerimux::*workspace-collapsed-node-ids*)))))
 
+  (it "enter-on-a-pane-selects-the-pane-and-enters-detail-view"
+    (with-fake-session (s)
+      (let* ((nerimux::*dirty* nil)
+             (window (nerimux/model:session-active-window s))
+             (pane (nerimux/model:window-active-pane window))
+             (conn (nerimux::%make-client-conn)))
+        (setf (nerimux::client-conn-view conn) :overview)
+        (nerimux::%set-client-selected-tree-object conn pane)
+        (expect (nerimux::%focus-selected-client-worktree s conn))
+        (expect (eq pane (nerimux::client-conn-focus conn)))
+        (expect (eq :detail (nerimux::client-conn-view conn)))
+        (expect nerimux::*dirty*))))
+
+  (it "enter-on-a-window-focuses-its-active-pane"
+    (with-fake-session (s)
+      (let* ((nerimux::*dirty* nil)
+             (window (nerimux/model:session-active-window s))
+             (pane (nerimux/model:window-active-pane window))
+             (conn (nerimux::%make-client-conn)))
+        (setf (nerimux::client-conn-view conn) :overview)
+        (nerimux::%set-client-selected-tree-object conn window)
+        (expect (nerimux::%focus-selected-client-worktree s conn))
+        (expect (eq pane (nerimux::client-conn-focus conn)))
+        (expect (eq :detail (nerimux::client-conn-view conn)))
+        (expect nerimux::*dirty*))))
+
   ;; h on a worktree row collapses its OWNING repository (worktree rows carry
   ;; no collapse state of their own) and moves the selection up to that
   ;; repository, so the cursor is never left on a row the collapse itself
@@ -601,6 +831,65 @@
         (expect (eq repository (nerimux::%client-tree-object conn)))
         (expect (nerimux::%client-tree-expand-selected conn))
         (expect (null (gethash repo-key nerimux::*workspace-collapsed-node-ids*))))))
+
+  (it "h-and-l-toggle-organization-and-repository-rows"
+    (multiple-value-bind (organizations organization repository main-worktree
+                          feature-worktree)
+        (%make-server-dispatch-helper-fixture)
+      (declare (ignore organizations main-worktree feature-worktree))
+      (let ((nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
+            (nerimux::*dirty* nil)
+            (conn (nerimux::%make-client-conn)))
+        (nerimux::%set-client-selected-tree-object conn organization)
+        (expect (nerimux::%client-tree-collapse-selected conn))
+        (expect (nerimux::%client-tree-expand-selected conn))
+        (nerimux::%set-client-selected-tree-object conn repository)
+        (expect (nerimux::%client-tree-collapse-selected conn))
+        (expect (nerimux::%client-tree-expand-selected conn))
+        (expect nerimux::*dirty*))))
+
+  (it "enter-tree-filter-mode-clears-query-and-scroll"
+    (let ((conn (nerimux::%make-client-conn)))
+      (setf (nerimux::client-conn-tree-filter conn) "old"
+            (nerimux::client-conn-tree-scroll conn) 7)
+      (expect (nerimux::%client-enter-tree-filter-mode conn))
+      (expect (null (nerimux::client-conn-tree-filter conn)))
+      (expect (zerop (nerimux::client-conn-tree-scroll conn)))
+      (expect (eq :tree-filter (nerimux::client-conn-mode conn)))))
+
+  (it "tree-relative-selection-empty-workspace"
+    (let ((conn (nerimux::%make-client-conn))
+          (nerimux/vcs::*workspace-organizations* nil)
+          (nerimux::*dirty* nil))
+      (expect (null (nerimux::%select-client-tree-relative conn 1)))
+      (expect (null nerimux::*dirty*))))
+
+  (it "tree-relative-selection-clamps-backward-movement-without-selection"
+    (multiple-value-bind (organizations organization repository main-worktree
+                          feature-worktree)
+        (%make-server-dispatch-helper-fixture)
+      (declare (ignore repository main-worktree feature-worktree))
+      (let ((conn (nerimux::%make-client-conn))
+            (nerimux/vcs::*workspace-organizations* organizations)
+            (nerimux::*dirty* nil))
+        (setf (nerimux::client-conn-rows conn) 7)
+        (expect (eq organization
+                    (nerimux::%select-client-tree-relative conn -1)))
+        (expect (zerop (nerimux::client-conn-tree-scroll conn))))))
+
+  (it "tree-relative-selection-adjusts-scroll-for-a-narrow-view"
+    (multiple-value-bind (organizations organization repository main-worktree
+                          feature-worktree)
+        (%make-server-dispatch-helper-fixture)
+      (declare (ignore main-worktree feature-worktree))
+      (let ((conn (nerimux::%make-client-conn))
+            (nerimux/vcs::*workspace-organizations* organizations)
+            (nerimux::*dirty* nil))
+        (setf (nerimux::client-conn-rows conn) 7)
+        (nerimux::%set-client-selected-tree-object conn organization)
+        (expect (eq repository
+                    (nerimux::%select-client-tree-relative conn 1)))
+        (expect (= 1 (nerimux::client-conn-tree-scroll conn))))))
 
   ;; J moves the selection to the next REPOSITORY row only, skipping the
   ;; worktree rows in between.
@@ -700,3 +989,30 @@
       (expect (nerimux::%client-tree-filter-buffer-append conn "b"))
       (expect (= nerimux::+max-tree-filter-length+
                  (length (nerimux::client-conn-tree-filter conn)))))))
+
+(describe "worktree-pane-memory"
+  (it "ignores incomplete remembers and self-heals stale panes"
+    (let* ((worktree (nerimux/model:make-worktree :id "wt-memory"))
+           (pane (nerimux/model:make-pane :id 101))
+           (other-pane (nerimux/model:make-pane :id 102))
+           (nerimux::*workspace-worktree-last-pane*
+             (make-hash-table :test #'equal)))
+      (expect (null (nerimux::%remember-worktree-pane nil pane)))
+      (expect (null (nerimux::%remember-worktree-pane worktree nil)))
+      (nerimux/model:worktree-add-pane worktree pane)
+      (nerimux::%remember-worktree-pane worktree pane)
+      (expect (eq pane (nerimux::%worktree-remembered-pane worktree)))
+      (nerimux::%remember-worktree-pane worktree other-pane)
+      (expect (null (nerimux::%worktree-remembered-pane worktree)))
+      (expect (null (gethash "wt-memory"
+                             nerimux::*workspace-worktree-last-pane*))))))
+
+(describe "client-search-arguments"
+  (it "normalizes search aliases and whitespace"
+    (expect (eq :forward (nerimux::%client-search-direction "search-forward")))
+    (expect (eq :forward (nerimux::%client-search-direction "/")))
+    (expect (eq :backward (nerimux::%client-search-direction "search-backward")))
+    (expect (eq :backward (nerimux::%client-search-direction "?")))
+    (expect (null (nerimux::%client-search-direction "unknown")))
+    (expect (string= "needle with spaces"
+                     (nerimux::%client-search-term '("  needle" "with" "spaces  "))))))

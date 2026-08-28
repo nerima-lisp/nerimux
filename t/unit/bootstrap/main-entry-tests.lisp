@@ -34,6 +34,40 @@
   (it "run-attach-simple-is-fbound"
     (expect (fboundp 'nerimux::run-attach-simple)))
 
+  (it "run-attach-simple-routes-slash-selector-to-default-server-target"
+    (let (ensure-args client-args)
+      (with-stubbed-fdefinition
+          ((nerimux::%ensure-server-running
+            (lambda (&rest args) (setf ensure-args args)))
+           (nerimux::run-client
+            (lambda (&rest args) (setf client-args args))))
+        (nerimux::run-attach-simple "org/repo")
+        (expect (equal '("0") ensure-args))
+        (expect (equal '("0" :target "org/repo") client-args)))))
+
+  (it "run-attach-simple-keeps-plain-name-as-session"
+    (let (client-args)
+      (with-stubbed-fdefinition
+          ((nerimux::%ensure-server-running (lambda (&rest _) (declare (ignore _)) nil))
+           (nerimux::run-client
+            (lambda (&rest args) (setf client-args args))))
+        (nerimux::run-attach-simple "workspace")
+        (expect (equal '("workspace") client-args)))))
+
+  (it "workspace-attach-target-p-recognizes-path-like-selectors"
+    (dolist (case '(("/tmp/worktree" . t) ("org/repository" . t)
+                    ("repository" . nil) ("" . nil) (nil . nil) (42 . nil)))
+      (expect (eql (cdr case)
+                   (not (null (nerimux::%workspace-attach-target-p
+                               (car case))))))))
+
+  (it "strip-kill-reply-status-line-removes-status-and-blank-separator"
+    (expect (string= (format nil "pane-1~%pane-2~%")
+                     (nerimux::%strip-kill-reply-status-line
+                      (format nil "DENIED~%pane-1~%pane-2~%"))))
+    (expect (string= ""
+                     (nerimux::%strip-kill-reply-status-line "DENIED"))))
+
   ;; Control mode (-C) was removed with the tmux compatibility surface. Both
   ;; entry points it had are gone: the "-C"/"control" *startup-modes* rows and
   ;; the :control cl-cli option that %dispatch-global-cli-flag-actions read.

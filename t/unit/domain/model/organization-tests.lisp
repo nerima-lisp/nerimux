@@ -1,5 +1,46 @@
 (in-package #:nerimux/test)
 
+(describe "organization-values"
+  (it "normalizes model identifiers from supported value types"
+    (let ((organization (nerimux/model:make-organization
+                         :host #p"github.com/"
+                         :name 42
+                         :repositories '(:repository))))
+      (expect (equal "github.com//42"
+                     (nerimux/model:organization-id organization)))
+      (expect (equal "github.com/"
+                     (nerimux/model:organization-host organization)))
+      (expect (equal "42"
+                     (nerimux/model:organization-name organization)))
+      (expect (equal '(:repository)
+                     (nerimux/model:organization-repositories organization)))))
+  (it "uses local and default keys for absent values"
+    (expect (equal "local/default"
+                   (nerimux/model:organization-key nil nil)))
+    (expect (equal "local/default"
+                   (nerimux/model:organization-key "" ""))))
+  (it "formats non-string key values"
+    (expect (equal "git.example/42"
+                   (nerimux/model:organization-key #p"git.example" 42))))
+  (it "retains defaults when optional values are omitted"
+    (let ((organization (nerimux/model:make-organization)))
+      (expect (equal "local/default"
+                     (nerimux/model:organization-id organization)))
+      (expect (null (nerimux/model:organization-repositories organization)))
+      (expect (= 0 (nerimux/model:organization-active-worktree-count organization)))
+      (expect (= 0 (nerimux/model:organization-attention-count organization)))
+      (expect (not (nerimux/model:organization-missing-p organization))))))
+  (it "keeps raw constructor defaults explicit"
+    (let ((organization (nerimux/model::%make-organization)))
+      (expect (equal "" (nerimux/model:organization-id organization)))
+      (expect (equal "" (nerimux/model:organization-host organization)))
+      (expect (equal "" (nerimux/model:organization-name organization)))
+      (expect (null (nerimux/model:organization-repositories organization)))
+      (expect (= 0 (nerimux/model:organization-active-worktree-count organization)))
+      (expect (= 0 (nerimux/model:organization-attention-count organization)))
+      (expect (null (nerimux/model:organization-missing-p organization)))
+      (expect (null (nerimux/model::organization-counts-derived-p organization)))))
+
 (describe "organization-hierarchy"
   (it "links repositories and counts worktree attention"
     (let* ((organization (nerimux/model:make-organization

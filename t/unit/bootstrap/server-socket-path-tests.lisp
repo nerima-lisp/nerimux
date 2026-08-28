@@ -1,5 +1,22 @@
 (in-package #:nerimux/test)
 
+(defmacro with-stubbed-locked-fdefinitions (bindings &body body)
+  (let ((originals (loop for (name replacement) in bindings
+                         collect (list (gensym "ORIGINAL-")
+                                       `(fdefinition ',name)))))
+    `(sb-ext:without-package-locks
+       (let ,originals
+         (unwind-protect
+              (progn
+                ,@(loop for (name replacement) in bindings
+                        for (original-variable original) in originals
+                        collect `(setf (fdefinition ',name) ,replacement))
+                ,@body)
+           (progn
+             ,@(loop for (name replacement) in bindings
+                     for (original-variable original) in originals
+                     collect `(setf (fdefinition ',name) ,original-variable))))))))
+
 ;;;; socket-path and stale-socket tests
 
 (describe "server-suite"
@@ -47,6 +64,34 @@
     (with-temporary-posix-environment-variable ("TMPDIR" nil)
       (let ((path (nerimux::socket-path "tmptestfb")))
         (expect (search "/tmp" path)))))
+
+  ;; An empty TMPDIR is equivalent to an unset one; this exercises the
+  ;; non-empty environment guard rather than relying on the fallback test.
+  (it "socket-tmp-base-falls-back-when-tmpdir-is-empty"
+    (with-temporary-posix-environment-variable ("TMPDIR" "")
+      (expect (string= "/tmp" (nerimux::%socket-tmp-base)))))
+
+  (it "relayout-active-window-adjusts-for-the-status-row"
+    (let ((session (make-fake-session))
+          (calls nil))
+      (with-stubbed-fdefinition
+          ((nerimux::window-relayout
+             (lambda (window rows cols)
+               (push (list window rows cols) calls))))
+        (nerimux::%relayout-active-window session 40 120)
+        (destructuring-bind (window rows cols) (first calls)
+          (expect (eq (session-active-window session) window))
+          (expect (= 39 rows))
+          (expect (= 120 cols))))))
+
+  (it "relayout-active-window-does-nothing-without-a-window"
+    (let ((calls nil))
+      (with-empty-session (session)
+        (with-stubbed-fdefinition
+            ((nerimux::window-relayout
+               (lambda (&rest args) (push args calls))))
+          (nerimux::%relayout-active-window session 40 120)
+          (expect (null calls))))))
 
   ;; Sockets live in a per-UID directory.
   (it "socket-path-uses-per-uid-directory"
@@ -201,6 +246,15 @@
       (expect (string= p1 p2))
       (expect (search "nerimux-fixedname.sock" p1))))
 
+  (it "server-respawn-command-is-hermetic-and-session-specific"
+    (multiple-value-bind (exe args)
+        (nerimux::%server-respawn-command "session-name")
+      (expect (string= (namestring sb-ext:*runtime-pathname*) exe))
+      (expect (member "--no-sysinit" args :test #'string=))
+      (expect (member "--no-userinit" args :test #'string=))
+      (expect (equal "server" (nth (- (length args) 2) args)))
+      (expect (equal "session-name" (car (last args))))))
+
   ;;; -- stale-socket ------------------------------------------------------------
 
   ;; %stale-socket-p returns T for an existing file that refuses connections.
@@ -293,14 +347,11 @@
            (progn
              (with-open-file (s blocker :direction :output :if-does-not-exist :create)
                (declare (ignore s)))
-             (sb-ext:without-package-locks
-               (let ((orig (fdefinition 'sb-ext:run-program)))
-                 (setf (fdefinition 'sb-ext:run-program)
-                       (lambda (&rest args) (push args calls) nil))
-                 (unwind-protect
-                      (nerimux::%launch-server-and-poll-when-live
-                       "/nonexistent-dir-xyz/never.sock" "nerimux" nil log-path)
-                   (setf (fdefinition 'sb-ext:run-program) orig))))
+             (with-stubbed-locked-fdefinitions
+                 ((sb-ext:run-program
+                    (lambda (&rest args) (push args calls) nil)))
+               (nerimux::%launch-server-and-poll-when-live
+                "/nonexistent-dir-xyz/never.sock" "nerimux" nil log-path))
              (expect (= 1 (length calls)))
              (destructuring-bind (exe-arg args-arg &rest keys) (first calls)
                (declare (ignore args-arg))
@@ -356,6 +407,58 @@
                         (logand (sb-posix:stat-mode (sb-posix:stat dir)) #o777))))
         (ignore-errors (sb-posix:rmdir dir)))))
 
+  (it "launch-server-polls-after-a-successful-background-launch"
+    (let* ((dir (format nil "~A/nerimux-log-poll-test-~D"
+                        (string-right-trim "/" (or (sb-ext:posix-getenv "TMPDIR") "/tmp"))
+                        (random 1000000)))
+           (log-path (merge-pathnames "server.log" (format nil "~A/" dir)))
+           (probes 0))
+      (unwind-protect
+           (with-stubbed-locked-fdefinitions
+               ((sb-ext:run-program
+                  (lambda (&rest args)
+                    (declare (ignore args))
+                    t)))
+             (with-stubbed-fdefinition
+                 ((probe-file
+                    (lambda (path)
+                      (declare (ignore path))
+                      (incf probes)
+                      (and (> probes 1) t))))
+               (nerimux::%launch-server-and-poll-when-live
+                "/synthetic/socket" "nerimux" nil log-path)
+               (expect (<= 2 probes))))
+        (ignore-errors (sb-posix:rmdir dir)))))
+
+  ;; A launch failure is diagnostic only: the fallback helper must contain
+  ;; it, including conditions outside the filesystem-specific cases.
+  (it "launch-server-without-log-contains-generic-launch-failure"
+    (sb-ext:without-package-locks
+      (let ((orig (fdefinition 'sb-ext:run-program)))
+        (unwind-protect
+             (progn
+               (setf (fdefinition 'sb-ext:run-program)
+                     (lambda (&rest args)
+                       (declare (ignore args))
+                       (error "launch probe")))
+               (finishes (nerimux::%launch-server-without-log
+                          "nerimux" nil)))
+          (setf (fdefinition 'sb-ext:run-program) orig)))))
+
+  (it "launch-server-without-log-contains-io-failures"
+    (dolist (condition-type '(file-error stream-error))
+      (sb-ext:without-package-locks
+        (let ((orig (fdefinition 'sb-ext:run-program)))
+          (unwind-protect
+               (progn
+                 (setf (fdefinition 'sb-ext:run-program)
+                       (lambda (&rest args)
+                         (declare (ignore args))
+                         (error condition-type)))
+                 (finishes (nerimux::%launch-server-without-log
+                            "nerimux" nil)))
+            (setf (fdefinition 'sb-ext:run-program) orig))))))
+
   ;;; -- server log rotation (R2.8) ------------------------------------------
 
   ;; %server-log-if-output-exists-action returns :append when LOG-PATH does
@@ -390,4 +493,68 @@
                 (make-string nerimux::+server-log-rotate-bytes+ :initial-element #\a)
                 s))
              (expect (eq :supersede (nerimux::%server-log-if-output-exists-action path))))
-        (ignore-errors (delete-file path))))))
+        (ignore-errors (delete-file path)))))
+
+  (it "server-log-if-output-exists-action-appends-when-log-is-not-readable"
+    (let ((path (format nil "~A/nerimux-log-directory-probe-~D"
+                        (string-right-trim "/" (or (sb-ext:posix-getenv "TMPDIR") "/tmp"))
+                        (random 1000000))))
+      (unwind-protect
+           (progn
+             (ensure-directories-exist (format nil "~A/child" path))
+             (expect (eq :append
+                         (nerimux::%server-log-if-output-exists-action path))))
+        (ignore-errors (sb-posix:rmdir path)))))
+
+  (it "server-log-if-output-exists-action-appends-after-probe-file-error"
+    (sb-ext:without-package-locks
+      (let ((original-probe-file (fdefinition 'probe-file)))
+        (unwind-protect
+             (progn
+               (setf (fdefinition 'probe-file)
+                     (lambda (&rest arguments)
+                       (declare (ignore arguments))
+                       (error 'file-error)))
+               (expect (eq :append
+          (nerimux::%server-log-if-output-exists-action
+                            "/synthetic/log-path"))))
+          (setf (fdefinition 'probe-file) original-probe-file)))))
+
+  (it "server-log-if-output-exists-action-appends-after-stream-error"
+    (sb-ext:without-package-locks
+      (let ((original-probe-file (fdefinition 'probe-file)))
+        (unwind-protect
+             (progn
+               (setf (fdefinition 'probe-file)
+                     (lambda (&rest arguments)
+                       (declare (ignore arguments))
+                       (error 'stream-error)))
+               (expect (eq :append
+                           (nerimux::%server-log-if-output-exists-action
+                            "/synthetic/log-path"))))
+          (setf (fdefinition 'probe-file) original-probe-file)))))
+
+  (it "stale-socket-p-returns-nil-after-probe-file-error"
+    (sb-ext:without-package-locks
+      (let ((original-probe-file (fdefinition 'probe-file)))
+        (unwind-protect
+             (progn
+               (setf (fdefinition 'probe-file)
+                     (lambda (&rest arguments)
+                       (declare (ignore arguments))
+                       (error 'file-error)))
+               (expect (null (nerimux::%stale-socket-p "/synthetic/socket"))))
+          (setf (fdefinition 'probe-file) original-probe-file)))))
+
+  (it "stale-socket-p-returns-nil-after-probe-stream-error"
+    (sb-ext:without-package-locks
+      (let ((original-probe-file (fdefinition 'probe-file)))
+        (unwind-protect
+             (progn
+               (setf (fdefinition 'probe-file)
+                     (lambda (&rest arguments)
+                       (declare (ignore arguments))
+                       (error 'stream-error)))
+               (expect (null (nerimux::%stale-socket-p "/synthetic/socket"))))
+          (setf (fdefinition 'probe-file) original-probe-file)))))
+  )

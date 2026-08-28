@@ -7,6 +7,27 @@
 
 (describe "terminal-suite/utf8"
 
+  (it "utf8-byte-classification-and-lead-decoding"
+    (expect (nerimux/terminal/parser::utf8-lead-p #xC0))
+    (expect (nerimux/terminal/parser::utf8-lead-p #xFE))
+    (expect (not (nerimux/terminal/parser::utf8-lead-p #xFF)))
+    (expect (not (nerimux/terminal/parser::utf8-lead-p #x7F)))
+    (expect (nerimux/terminal/parser::utf8-continuation-p #x80))
+    (expect (nerimux/terminal/parser::utf8-continuation-p #xBF))
+    (expect (not (nerimux/terminal/parser::utf8-continuation-p #xC0)))
+    (multiple-value-bind (accumulator remaining)
+        (nerimux/terminal/parser::utf8-lead-decode #xC2)
+      (expect (= 2 accumulator))
+      (expect (= 1 remaining)))
+    (multiple-value-bind (accumulator remaining)
+        (nerimux/terminal/parser::utf8-lead-decode #xE3)
+      (expect (= #x03 accumulator))
+      (expect (= 2 remaining)))
+    (multiple-value-bind (accumulator remaining)
+        (nerimux/terminal/parser::utf8-lead-decode #xF0)
+      (expect (= 0 accumulator))
+      (expect (= 3 remaining))))
+
   ;; Multi-byte UTF-8 characters decode and appear at the correct screen position.
   (it "utf8-multibyte-table"
     (dolist (row '((#\é "2-byte: U+00E9 é")
@@ -93,3 +114,31 @@
       (screen-process-bytes s (make-array 3 :element-type '(unsigned-byte 8)
                                             :initial-contents '(#xED #xBF #xBF)))
       (expect (char= (code-char #xFFFD) (char-at s 0 0))))))
+
+(describe "terminal-suite/cell-primitives"
+  (it "blank-cell-returns-an-independent-default-cell"
+    (let ((first (nerimux/terminal/types:blank-cell))
+          (second (nerimux/terminal/types:blank-cell)))
+      (setf (nerimux/terminal/types:cell-char first) #\X)
+      (expect (char= #\Space (nerimux/terminal/types:cell-char second)))))
+
+  (it "clamp-bounds-values-at-either-end"
+    (expect (= 0 (nerimux/terminal/types:clamp -1 0 10)))
+    (expect (= 5 (nerimux/terminal/types:clamp 5 0 10)))
+    (expect (= 10 (nerimux/terminal/types:clamp 11 0 10))))
+
+  (it "safe-code-char-replaces-invalid-code-points"
+    (expect (char= #\A (nerimux/terminal/types:safe-code-char (char-code #\A))))
+    (expect (char= (code-char #xFFFD) (nerimux/terminal/types:safe-code-char #xD800)))
+    (expect (char= (code-char #xFFFD) (nerimux/terminal/types:safe-code-char char-code-limit))))
+
+  (it "surrogate-code-point-p-covers-range-boundaries"
+    (expect (not (nerimux/terminal/types::surrogate-code-point-p #xD7FF)))
+    (expect (nerimux/terminal/types::surrogate-code-point-p #xD800))
+    (expect (nerimux/terminal/types::surrogate-code-point-p #xDFFF))
+    (expect (not (nerimux/terminal/types::surrogate-code-point-p #xE000))))
+
+  (it "char-width-delegates-unicode-width"
+    (expect (= 0 (nerimux/terminal/types:char-width (code-char #x0301))))
+    (expect (= 2 (nerimux/terminal/types:char-width #\あ)))
+    (expect (= 1 (nerimux/terminal/types:char-width #\A)))))

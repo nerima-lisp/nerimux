@@ -147,6 +147,64 @@
           (setf (fdefinition 'nerimux::%workspace-new-window)
                 original-new-window)))))
 
+  (it "picker-query-helpers-reject-invalid-input-and-wrap-selection"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn)))
+        (expect (null (nerimux::%set-client-picker-query conn 42)))
+        (expect (null (nerimux::%append-client-picker-query-octets
+                       conn #(194 32))))
+        (expect (null (nerimux::%append-client-picker-query-octets
+                       conn #(1))))
+        (expect (null (nerimux::%delete-client-picker-query-character conn)))
+        (setf (nerimux::client-conn-picker-items conn) nil
+              (nerimux::client-conn-picker-index conn) 9)
+        (expect (null (nerimux::%move-client-picker-index conn 1)))
+        (expect (= 0 (nerimux::client-conn-picker-index conn))))))
+
+  (it "picker-query-helpers-normalize-input-and-handle-control-keys"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn)))
+        (expect (nerimux::%set-client-picker-regex conn :on t))
+        (expect (nerimux::%set-client-picker-regex conn "invalid" t))
+        (expect (null (nerimux::%set-client-picker-regex conn :off t)))
+        (expect (nerimux::%set-client-picker-query conn "ab"))
+        (expect (nerimux::%append-client-picker-query-octets conn "c"))
+        (expect (string= "abc" (nerimux::client-conn-picker-query conn)))
+        (expect (nerimux::%delete-client-picker-query-character conn))
+        (expect (string= "ab" (nerimux::client-conn-picker-query conn)))
+        (expect (nerimux::%handle-client-picker-key-payload s conn #(18)))
+        (expect (null (nerimux::%handle-client-picker-key-payload s conn #(16))))
+        (expect (null (nerimux::%handle-client-picker-key-payload s conn #(14))))
+        (expect (nerimux::%handle-client-picker-key-payload s conn #(127))))))
+
+  (it "picker-visible-items-deduplicate-worktrees-and-clamp-selection"
+    (with-fake-session (s)
+      (let* ((worktree (nerimux/model:make-worktree :id "shared" :path "/tmp/shared"))
+             (first-item (nerimux/picker::%make-picker-item
+                          :id "first" :kind :worktree :label "first"
+                          :worktree worktree))
+             (duplicate-item (nerimux/picker::%make-picker-item
+                              :id "duplicate" :kind :worktree :label "duplicate"
+                              :worktree worktree))
+             (organization-item (nerimux/picker::%make-picker-item
+                                 :id "organization" :kind :organization
+                                 :label "organization"))
+             (conn (%make-test-conn)))
+        (setf (nerimux::client-conn-picker-items conn)
+              (list first-item duplicate-item organization-item)
+              (nerimux::client-conn-picker-index conn) 99)
+        (let ((visible (nerimux::%client-picker-visible-items conn)))
+          (expect (= 2 (length visible)))
+          (expect (eq first-item (first visible)))
+          (expect (eq organization-item (second visible)))
+          (expect (= 1 (nerimux::client-conn-picker-index conn))))
+        (setf (nerimux::client-conn-picker-index conn) -4)
+        (nerimux::%client-picker-visible-items conn)
+        (expect (= 0 (nerimux::client-conn-picker-index conn)))
+        (setf (nerimux::client-conn-picker-items conn) nil)
+        (nerimux::%client-picker-visible-items conn)
+        (expect (= 0 (nerimux::client-conn-picker-index conn))))))
+
   ;; The workspace->tmux command vocabulary translation
   ;; (%canonical-client-command: :close -> :kill-pane, :split -> :split-window,
   ;; and so on) was deleted with the tmux command table it fed.  Its only

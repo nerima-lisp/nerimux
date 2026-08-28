@@ -179,7 +179,8 @@
                (available
                  (fdefinition 'nerimux/vcs:vcs-package-available-p))
                (create-fn (fdefinition 'nerimux/vcs:create-worktree-async))
-               (delete-fn (fdefinition 'nerimux/vcs:delete-worktree-async)))
+               (delete-fn (fdefinition 'nerimux/vcs:delete-worktree-async))
+               )
           (unwind-protect
                (progn
                  (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
@@ -215,4 +216,52 @@
                   (%worktree-message-seen-p conn "worktree deleted")))
             (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                   (fdefinition 'nerimux/vcs:create-worktree-async) create-fn
-                  (fdefinition 'nerimux/vcs:delete-worktree-async) delete-fn)))))))
+                 (fdefinition 'nerimux/vcs:delete-worktree-async) delete-fn)))))))
+
+  (it "worktree-operations-reject-unconfirmed-and-unavailable-requests"
+    (with-fake-session (s)
+      (multiple-value-bind (repository worktree conn)
+          (%make-worktree-operation-fixture)
+        (let* ((nerimux::*clients* (list conn))
+               (available
+                 (fdefinition 'nerimux/vcs:vcs-package-available-p)))
+          (unwind-protect
+               (progn
+                 (nerimux::%client-create-worktree conn nil nil)
+                 (nerimux::%client-lock-worktree conn nil nil)
+                 (nerimux::%client-unlock-worktree conn nil nil)
+                 (expect (%worktree-message-seen-p
+                          conn "worktree create requires --confirm"))
+                 (expect (%worktree-message-seen-p
+                          conn "worktree lock requires --confirm"))
+                 (expect (%worktree-message-seen-p
+                          conn "worktree unlock requires --confirm"))
+                 (nerimux::%set-client-selected-tree-object conn nil)
+                 (nerimux::%client-create-worktree conn nil
+                                                   '("--confirm" "--branch" "feature/missing"))
+                 (expect (%worktree-message-seen-p
+                          conn "worktree create requires a repository"))
+                 (nerimux::%client-lock-worktree conn nil '("--confirm"))
+                 (nerimux::%client-unlock-worktree conn nil '("--confirm"))
+                 (expect (%worktree-message-seen-p
+                          conn "worktree lock requires a worktree"))
+                 (expect (%worktree-message-seen-p
+                          conn "worktree unlock requires a worktree"))
+                 (nerimux::%set-client-selected-tree-object conn repository)
+                 (nerimux::%client-create-worktree conn nil '("--confirm"))
+                 (expect (%worktree-message-seen-p
+                          conn "worktree create requires a branch"))
+                 (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                       (lambda () nil))
+                 (nerimux::%client-create-worktree
+                  conn nil '("--confirm" "--branch" "feature/unavailable"))
+                 (nerimux::%set-client-selected-tree-object conn worktree)
+                 (nerimux::%client-lock-worktree conn nil '("--confirm"))
+                 (nerimux::%client-unlock-worktree conn nil '("--confirm"))
+                 (nerimux::%client-delete-worktree conn nil '("--confirm"))
+                 (nerimux::%set-client-selected-tree-object conn nil)
+                 (nerimux::%client-prune-worktrees conn nil nil :dry-run t)
+                 (expect (%worktree-message-seen-p
+                          conn "VCS adapter unavailable")))
+            (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                  available))))))

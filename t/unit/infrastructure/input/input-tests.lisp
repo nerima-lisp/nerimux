@@ -3,8 +3,24 @@
 ;;;; Tests for src/input.lisp: with-raw-mode macroexpansion + export checks
 ;;;; + read-byte-nonblock happy path via a sb-posix pipe pair.
 ;;;; with-raw-mode touches fd 0 (stdin) so it is verified by macroexpansion only.
-;;;; read-byte-nonblock's select+read path is exercised using a pipe fd instead
-;;;; of stdin, so no TTY is required.
+;;;; read-byte-nonblock's select+read path is exercised with deterministic
+;;;; function bindings, so no TTY or process-global stdin state is required.
+
+(defmacro with-function-stubs ((&rest bindings) &body body)
+  (let ((saved (gensym "SAVED")))
+    `(let ((,saved (list ,@(mapcar (lambda (binding)
+                                    `(cons ',(first binding)
+                                           (symbol-function ',(first binding))))
+                                  bindings))))
+       (unwind-protect
+           (progn
+             ,@(mapcar (lambda (binding)
+                         `(setf (symbol-function ',(first binding))
+                                (function ,(second binding))))
+                       bindings)
+             ,@body)
+         (dolist (entry ,saved)
+           (setf (symbol-function (car entry)) (cdr entry)))))))
 
 (describe "input-suite"
 
@@ -133,6 +149,41 @@
       ;; we validate the same mechanics: select-fds with timeout 0 on idle fd.
       (let ((ready (nerimux/pty:select-fds (list rfd) 0)))
         (expect (null ready)))))
+
+  (it "read-byte-nonblock-covers-select-and-read-outcomes"
+    (with-function-stubs
+        ((nerimux/pty:select-fds (lambda (fds timeout-us)
+                                   (declare (ignore fds timeout-us))
+                                   nil))
+         (cl-tty-kit:fd-read-octets (lambda (fd buffer length)
+                                      (declare (ignore fd buffer length))
+                                      (error "read must not run"))))
+      (expect (null (nerimux/input:read-byte-nonblock 0))))
+    (with-function-stubs
+        ((nerimux/pty:select-fds (lambda (fds timeout-us)
+                                   (declare (ignore timeout-us))
+                                   fds))
+         (cl-tty-kit:fd-read-octets (lambda (fd buffer length)
+                                      (declare (ignore fd))
+                                      (setf (aref buffer 0) 65)
+                                      length)))
+      (expect (= 65 (nerimux/input:read-byte-nonblock 0))))
+    (with-function-stubs
+        ((nerimux/pty:select-fds (lambda (fds timeout-us)
+                                   (declare (ignore timeout-us))
+                                   fds))
+         (cl-tty-kit:fd-read-octets (lambda (fd buffer length)
+                                      (declare (ignore fd buffer length))
+                                      0)))
+      (expect (null (nerimux/input:read-byte-nonblock 0))))
+    (with-function-stubs
+        ((nerimux/pty:select-fds (lambda (fds timeout-us)
+                                   (declare (ignore timeout-us))
+                                   fds))
+         (cl-tty-kit:fd-read-octets (lambda (fd buffer length)
+                                      (declare (ignore fd buffer length))
+                                      (error 'cl-tty-kit:pty-operation-failed))))
+      (expect (null (nerimux/input:read-byte-nonblock 0)))))
 
   ;; select-fds returns the fd in a ready list when data has been written.
   (it "read-byte-nonblock-select-returns-ready-list-when-data-present"

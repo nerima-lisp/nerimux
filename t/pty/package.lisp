@@ -153,6 +153,7 @@
                 #:pty-read-blocking-into
                 #:pty-close
                 #:pty-child-exit-status
+                #:select-fds
                 #:set-pty-size
                 #:terminal-size
                 #:install-pty-port

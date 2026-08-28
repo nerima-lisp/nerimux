@@ -50,6 +50,15 @@
           (expect (search "pane 3" (first descriptions)) :to-be-truthy))
         (expect nerimux::*running* :to-be-truthy))))
 
+  (it "r8-1-pane-kill-description-includes-worktree-path"
+    (let* ((worktree (nerimux/model:make-worktree
+                       :id "wt" :path "/tmp/worktree" :branch "feature"))
+           (pane (make-pane :id 7 :fd 9999 :pid 1234
+                            :worktree worktree
+                            :screen (make-screen 10 3))))
+      (expect (string= "pane 7 (pid 1234) in /tmp/worktree"
+                       (nerimux::%pane-kill-description pane)))))
+
   ;; With no live panes at all, even a non-forced request just stops.
   (it "r8-1-stops-immediately-when-no-panes-are-live-even-without-force"
     (with-global-running t
@@ -163,13 +172,13 @@
             (expect (null text)))))))
 
   (it "r8-1-parse-kill-reply-fails-closed"
-    (expect (eq :ok
-                (nerimux::%parse-kill-reply-status
-                 (format nil "OK~%server stopped"))))
-    (expect (eq :denied
-                (nerimux::%parse-kill-reply-status
-                 (format nil "DENIED~%pane 1"))))
-    (expect (eq :denied (nerimux::%parse-kill-reply-status ""))))
+    (dolist (case (list (cons "OK" :ok)
+                        (cons (format nil "OK~%server stopped") :ok)
+                        (cons (format nil "DENIED~%pane 1") :denied)
+                        (cons (format nil "OKAY~%not an acknowledgement") :denied)
+                        (cons "" :denied)))
+      (expect (eq (cdr case)
+                  (nerimux::%parse-kill-reply-status (car case))))))
 
   (it "r8-1-send-kill-request-encodes-force-and-closes-the-socket"
     (let ((path nil)
@@ -231,6 +240,33 @@
           (expect (eq :eof status))
           (expect (null text))))
       (expect (equal (list :kill nil nil) command))))
+
+  (it "r8-1-send-kill-request-maps-peer-io-failure-to-eof-and-closes-socket"
+    (let ((closed nil)
+          (read-kill-reply-called nil))
+      (with-stubbed-fdefinition
+          ((nerimux::socket-path
+            (lambda (name) (declare (ignore name)) "/tmp/nerimux-test-kill.sock"))
+           (nerimux/net:connect-to
+            (lambda (path) (declare (ignore path)) :socket))
+           (nerimux/net:socket-stream
+            (lambda (socket) (declare (ignore socket)) :stream))
+           (nerimux/net:close-socket
+            (lambda (socket) (declare (ignore socket)) (setf closed t)))
+           (nerimux/transport:send-frame
+            (lambda (&rest args)
+              (declare (ignore args))
+              (error 'nerimux::peer-io-failure)))
+           (nerimux::%read-kill-reply
+            (lambda (stream)
+              (declare (ignore stream))
+              (setf read-kill-reply-called t)
+              (values :reply "OK~%"))))
+        (multiple-value-bind (status text) (nerimux::send-kill-request "0" nil)
+          (expect (eq :eof status))
+          (expect (null text))))
+      (expect closed)
+      (expect (null read-kill-reply-called))))
 
   ;;; ── run-kill: CLI exit-code / message mapping ─────────────────────────────
 

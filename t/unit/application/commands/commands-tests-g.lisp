@@ -48,7 +48,11 @@
                  ("foo\"bar baz\"" ("foobar baz")  "adjacent spans concatenate")
                  ("'ab'' cd'"      ("ab cd")       "adjacent single-quoted spans join")
                  ("'a b"           ("a b")         "unterminated single quote")
-                 ("\"xy"           ("xy")          "unterminated double quote")))
+                 ("\"xy"           ("xy")          "unterminated double quote")
+                 ("\"\""             ("")            "empty double-quoted token")
+                 ("a\nb"           ("a\nb")        "newline is part of an argument")
+                 ("a\\"             ("a\\")         "trailing bare backslash is literal")
+                 ("\"a\\"           ("a\\")         "trailing backslash in double quote is literal")))
       (destructuring-bind (input expected desc) c
         (declare (ignore desc))
         (expect (equal expected (nerimux/commands:tokenize-command-string input))))))
@@ -62,6 +66,26 @@
         (expect (= index consumed))
         (expect (null text))
         (expect (null value)))))
+
+  (it "tokenizer matcher reports source span and decoded value"
+    (multiple-value-bind (matched consumed text value)
+        (nerimux/commands::%argument-token-matcher "ab cd" 0)
+      (expect matched)
+      (expect (= 2 consumed))
+      (expect (string= "ab" text))
+      (expect (string= "ab" value))))
+
+  (it "tokenizer quote consumers preserve their distinct escape rules"
+    (let ((single (make-string-output-stream))
+          (double (make-string-output-stream)))
+      (expect (= 5
+                 (nerimux/commands::%consume-single-quoted
+                  "'a\\b'" 0 5 single)))
+      (expect (string= "a\\b" (get-output-stream-string single)))
+      (expect (= 5
+                 (nerimux/commands::%consume-double-quoted
+                  "\"a\\b\"" 0 5 double)))
+      (expect (string= "ab" (get-output-stream-string double)))))
 
   ;;; ── %copy-mode-find-forward / %copy-mode-find-backward ──────────────────────
 

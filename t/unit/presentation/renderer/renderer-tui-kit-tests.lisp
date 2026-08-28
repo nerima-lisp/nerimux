@@ -15,6 +15,17 @@
 
 (describe "renderer-suite/tui-kit"
 
+  (it "constructs the cl-tui-kit themes and frame area"
+    (expect (typep
+             (nerimux/renderer::%make-workspace-tree-theme)
+             'cl-tui-kit/core:theme))
+    (expect (typep
+             (nerimux/renderer::%make-picker-panel-theme)
+             'cl-tui-kit/core:theme))
+    (let ((area (nerimux/renderer::%frame-area 12 40)))
+      (expect (= 40 (cl-tui-kit/core:rectangle-width area)))
+      (expect (= 12 (cl-tui-kit/core:rectangle-height area)))))
+
   (it "covers ANSI frame-grid state transitions"
     (let* ((escape (code-char 27))
            (grid (nerimux/renderer::%make-frame-grid 3 6)))
@@ -291,7 +302,12 @@
                :collapsed-node-ids nil)))
         (expect (search "org" output))
         (expect (search "repo" output))
-        (expect (search "feature/tree" output)))))
+        (expect (search "feature/tree" output)))
+      (let ((surface (nerimux/renderer::%surface-from-ansi-frame "" 12 100)))
+        (nerimux/renderer::%render-workspace-tree-widget
+         surface (list organization) 12 100 worktree 0
+         :collapsed-node-ids nil)
+        (expect (search "feature/tree" (cl-tui-kit/core:surface-string surface))))))
 
   (it "renders the picker through input, list, form, and modal widgets"
     (let* ((worktree
@@ -323,7 +339,13 @@
        surface 16 80 items "feature" 0 nil)
       (let ((output (cl-tui-kit/core:surface-string surface)))
         (expect (search "PICKER (literal)" output))
-        (expect (search "feature/picker-widget" output)))))
+        (expect (search "feature/picker-widget" output)))
+      (let ((non-string-query-surface
+              (nerimux/renderer::%surface-from-ansi-frame "" 16 80)))
+        (nerimux/renderer::%render-picker-widget
+         non-string-query-surface 16 80 items 42 0 nil)
+        (expect (search "42" (cl-tui-kit/core:surface-string
+                               non-string-query-surface))))))
 
   (it "routes client picker mode through the public tui renderer"
     (let ((output
@@ -549,4 +571,36 @@
       (expect (not (search "line-0" (cl-tui-kit/core:surface-string scrolled))))
       (expect (cl-tui-kit/core:style=
                green (cl-tui-kit/core:cell-style
-                      (cl-tui-kit/core:surface-cell scrolled 0 0)))))))
+               (cl-tui-kit/core:surface-cell scrolled 0 0)))))))
+
+  (it "handles SGR extended colors and erase-background style semantics"
+    (let ((default (nerimux/renderer::%default-style)))
+      (multiple-value-bind (color consumed)
+          (nerimux/renderer::%sgr-extended-color #(38 5 300) 0 3)
+        (expect (= 3 consumed))
+        (expect (cl-tui-kit/core:color= color
+                                       (cl-tui-kit/core:indexed-color 255))))
+      (multiple-value-bind (color consumed)
+          (nerimux/renderer::%sgr-extended-color #(48 2 -1 300 7) 0 5)
+        (expect (= 5 consumed))
+        (expect (cl-tui-kit/core:color= color
+                                       (cl-tui-kit/core:rgb-color 0 255 7))))
+      (multiple-value-bind (color consumed)
+          (nerimux/renderer::%sgr-extended-color #(38 5) 0 2)
+        (expect (null color))
+        (expect (= 2 consumed)))
+      (let* ((blue (cl-tui-kit/core:make-style
+                    :background (cl-tui-kit/core:named-color :blue)
+                    :bold t))
+             (erased (nerimux/renderer::%bce-style blue))
+             (applied (nerimux/renderer::%frame-grid-apply-sgr default '(38 5 42 48 2 1 2 3))))
+        (expect (cl-tui-kit/core:color=
+                 (cl-tui-kit/core:style-background erased)
+                 (cl-tui-kit/core:named-color :blue)))
+        (expect (not (cl-tui-kit/core:style-bold erased)))
+        (expect (cl-tui-kit/core:color=
+                 (cl-tui-kit/core:style-foreground applied)
+                 (cl-tui-kit/core:indexed-color 42)))
+        (expect (cl-tui-kit/core:color=
+                 (cl-tui-kit/core:style-background applied)
+                 (cl-tui-kit/core:rgb-color 1 2 3))))))

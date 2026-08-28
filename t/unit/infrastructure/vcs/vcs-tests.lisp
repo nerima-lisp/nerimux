@@ -1,6 +1,10 @@
 (in-package #:nerimux/test)
 
 (describe "vcs value helpers"
+  (it "reports whether the VCS package is loaded"
+    (expect (eq (not (null (find-package :vcs-kit)))
+                (nerimux/vcs::vcs-package-available-p))))
+
   (it "normalizes values and splits repository specifications"
     (expect (string= "" (nerimux/vcs::%string-value nil)))
     (expect (string= "value" (nerimux/vcs::%string-value "value")))
@@ -11,11 +15,17 @@
                    (nerimux/vcs::%specification-parts "org//project/")))
     (expect (equal '("project")
                    (nerimux/vcs::%specification-parts "/project/")))
+    (expect (equal '("org" "project")
+                   (nerimux/vcs::%specification-parts "///org///project///")))
     (expect (null (nerimux/vcs::%specification-parts nil))))
 
   (it "derives organization and repository names by specification shape"
     (multiple-value-bind (organization name)
         (nerimux/vcs::%organization-and-name "host/org/project")
+      (expect (string= "host" organization))
+      (expect (string= "org" name)))
+    (multiple-value-bind (organization name)
+        (nerimux/vcs::%organization-and-name "host/org/project/extra")
       (expect (string= "host" organization))
       (expect (string= "org" name)))
     (multiple-value-bind (organization name)
@@ -516,6 +526,33 @@
                (expect (find existing merged :test #'eq))))
         (nerimux/vcs:set-workspace-organizations previous))))
 
+  ;; Merging must retain the catalog order and append new organizations in
+  ;; their incoming order; this is the observable contract of the linear
+  ;; accumulation in MERGE-WORKSPACE-ORGANIZATIONS.
+  (it "preserves-catalog-and-incoming-organization-order"
+    (let ((previous (nerimux/vcs:workspace-organizations)))
+      (unwind-protect
+           (let* ((existing-a (nerimux/model:make-organization
+                               :id "org-existing-a" :host "host" :name "a"))
+                  (existing-b (nerimux/model:make-organization
+                               :id "org-existing-b" :host "host" :name "b"))
+                  (incoming-existing (nerimux/model:make-organization
+                                      :id "org-existing-a" :host "host"
+                                      :name "a-refresh"))
+                  (incoming-new-a (nerimux/model:make-organization
+                                   :id "org-new-a" :host "host" :name "new-a"))
+                  (incoming-new-b (nerimux/model:make-organization
+                                   :id "org-new-b" :host "host" :name "new-b")))
+             (nerimux/vcs:set-workspace-organizations
+              (list existing-a existing-b))
+             (let ((merged (nerimux/vcs:merge-workspace-organizations
+                            (list incoming-existing incoming-new-a incoming-new-b))))
+               (expect (equal '("org-existing-a" "org-existing-b"
+                                "org-new-a" "org-new-b")
+                              (mapcar #'nerimux/model:organization-id merged)))
+               (expect (eq existing-a (first merged)))))
+        (nerimux/vcs:set-workspace-organizations previous))))
+
   ;; An organization already present in the catalog (matched by id) gets only
   ;; the repositories it does not already hold -- one matched by local-path
   ;; is left exactly as it was (same instance, not duplicated), and a
@@ -609,6 +646,54 @@
     (expect (null (nerimux/vcs:resolve-directory-organizations "")))
     (expect (null (nerimux/vcs:resolve-directory-organizations nil)))
     (expect (null (nerimux/vcs:resolve-directory-organizations 42)))))
+
+(describe "directory repository root suite"
+  (it "returns no root when git reports no worktrees"
+    (let ((backend :fake-backend))
+      (with-stubbed-fdefinition
+          ((nerimux/vcs::%make-directory-vcs-repository
+             (lambda (directory)
+               (declare (ignore directory))
+               backend))
+           (vcs-kit:vcs-list-worktrees
+             (lambda (repository)
+               (expect (eq backend repository))
+               nil)))
+        (multiple-value-bind (root worktrees)
+            (nerimux/vcs::%directory-repository-root "/tmp/empty-worktrees")
+          (expect (null root))
+          (expect (null worktrees))))))
+
+  (it-each ((nil "/tmp/first-worktree"
+             ((:path "/tmp/first-worktree" :bare-p nil)
+              (:path "/tmp/second-worktree" :bare-p nil)))
+            (t "/tmp/bare-repository"
+             ((:path "/tmp/working-tree" :bare-p nil)
+              (:path "/tmp/bare-repository" :bare-p t))))
+      "selects the repository root from worktrees ~S"
+      (expected-bare-p expected-path raw-specs)
+    (let ((worktrees
+            (mapcar (lambda (spec)
+                      (apply #'vcs-kit::%make-vcs-worktree spec))
+                    raw-specs)))
+      (with-stubbed-fdefinition
+          ((nerimux/vcs::%make-directory-vcs-repository
+             (lambda (directory)
+               (declare (ignore directory))
+               :fake-backend))
+           (vcs-kit:vcs-list-worktrees
+             (lambda (backend)
+               (declare (ignore backend))
+               worktrees)))
+        (multiple-value-bind (root returned-worktrees)
+            (nerimux/vcs::%directory-repository-root "/tmp/probe")
+          (expect (string= expected-path root))
+          (expect (eq worktrees returned-worktrees))
+          (expect (eq expected-bare-p
+                      (vcs-kit:vcs-worktree-bare-p
+                       (find expected-path worktrees
+                             :key #'vcs-kit:vcs-worktree-path
+                             :test #'string=)))))))))
 
 ;; F10: `git worktree list` includes the bare repository root itself (ghq's
 ;; `<repo>.git` layout as its own entry); running `git status` there always

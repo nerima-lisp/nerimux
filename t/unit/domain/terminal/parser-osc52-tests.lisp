@@ -42,6 +42,15 @@
             :encoding :utf-8))
         (expect (eq :not-called received)))))
 
+  (it "osc52-invalid-utf8-payload-is-dropped"
+    (let* ((received :not-called)
+           (nerimux/terminal/parser:*osc52-handler*
+             (lambda (text) (setf received text))))
+      ;; 7aCA is Base64 for the invalid UTF-8 byte sequence ED A0 80.
+      (finishes
+        (nerimux/terminal/parser::%handle-osc-52 "c;7aCA"))
+      (expect (eq :not-called received))))
+
   ;;; ── Coverage gap: osc52-clipboard-sequence (outbound OSC 52 builder) ────────
   ;;;
   ;;; osc52-clipboard-sequence is exported from nerimux/terminal/parser but was
@@ -63,3 +72,16 @@
                        (nerimux/terminal/parser::%base64-decode payload)
                        :encoding :utf-8)))
         (expect (string= text decoded))))))
+
+  (it "osc52-inbound-passthrough-enqueues-on-the-screen"
+    (with-screen (s 20 5)
+      (nerimux/terminal/parser::%osc52-inbound-passthrough s "from pane")
+      (expect (equal (list (nerimux/terminal/parser:osc52-clipboard-sequence
+                            "from pane"))
+                     (nerimux/terminal/types:screen-clipboard-queue s)))))
+
+  (it "initialize-osc52-handler-restores-the-passthrough-function"
+    (let ((nerimux/terminal/parser:*osc52-handler* nil))
+      (nerimux/terminal/parser::initialize-osc52-handler)
+      (expect (eq #'nerimux/terminal/parser::%osc52-inbound-passthrough
+                  nerimux/terminal/parser:*osc52-handler*))))

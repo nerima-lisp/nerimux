@@ -1,6 +1,6 @@
 (in-package #:nerimux/test)
 
-(describe "client-suite"
+(describe "client-frame-dispatch-suite"
 
   ;;; ── with-incoming-frame dispatch (socket roundtrip) ─────────────────────────
   ;;;

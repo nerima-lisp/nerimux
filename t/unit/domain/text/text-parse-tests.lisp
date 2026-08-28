@@ -18,7 +18,8 @@
   (it "non-empty-string-table"
     (dolist (row '(("hello" "hello" "non-empty-string of \"hello\" must return itself")
                    (""      nil     "non-empty-string of empty string must return NIL")
-                   (nil     nil     "non-empty-string of NIL input must return NIL")))
+                   (nil     nil     "non-empty-string of NIL input must return NIL")
+                   (42      nil     "non-empty-string of non-string input must return NIL")))
       (destructuring-bind (input expected desc) row
         (declare (ignore desc))
         (expect (equal expected (nerimux/text:non-empty-string input))))))
@@ -52,6 +53,9 @@
   ;; bearing, not defensive.
   (it "parse-integer-or-nil-returns-nil-for-nil-input"
     (expect (null (nerimux/text:parse-integer-or-nil nil))))
+
+  (it "parse-integer-or-nil-returns-nil-for-parse-integer-type-error"
+    (expect (null (nerimux/text:parse-integer-or-nil "1" :start "not-an-index"))))
 
   (it "parse-integer-or-nil-parses-valid-integer"
     (dolist (pair '(("0" 0) ("42" 42) ("-3" -3)))

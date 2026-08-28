@@ -148,6 +148,38 @@
     (let ((result (nerimux/terminal/types:safe-code-char (+ char-code-limit 999))))
       (expect (= nerimux/terminal/types:+unicode-replacement-char+ (char-code result))))))
 
+  ;; Keep the small Unicode and geometry helpers specified by boundary tables.
+  (it "cell-helper-boundaries"
+    (check-table (list (list (nerimux/terminal/types::clamp -1 0 10) 0 "clamp low")
+                       (list (nerimux/terminal/types::clamp 5 0 10) 5 "clamp middle")
+                       (list (nerimux/terminal/types::clamp 11 0 10) 10 "clamp high")
+                       (list (nerimux/terminal/types::surrogate-code-point-p #xD7FF) nil "before surrogate block")
+                       (list (nerimux/terminal/types::surrogate-code-point-p #xD800) t "surrogate start")
+                       (list (nerimux/terminal/types::surrogate-code-point-p #xDFFF) t "surrogate end")
+                       (list (nerimux/terminal/types::surrogate-code-point-p #xE000) nil "after surrogate block")
+                       (list (char-code (nerimux/terminal/types:safe-code-char #x41)) #x41 "valid code point")
+                       (list (char-code (nerimux/terminal/types:safe-code-char #xD800)) #xFFFD "surrogate replacement"))
+                 :test #'equal))
+
+  (it "cell-width-table"
+    (check-table (list (list (nerimux/terminal/types::char-width #\A) 1 "ASCII")
+                       (list (nerimux/terminal/types::char-width (code-char #x301)) 0 "combining mark")
+                       (list (nerimux/terminal/types::char-width (code-char #x231A)) 2 "wide symbol"))
+                 :test #'equal))
+
+  (it "blank-cell-has-default-slots"
+    (let ((c (nerimux/terminal/types:blank-cell)))
+      (expect (char= #\Space (nerimux/terminal/types:cell-char c)))
+      (expect (= nerimux/terminal/types:+default-color+
+                 (nerimux/terminal/types:cell-fg c)))
+      (expect (= nerimux/terminal/types:+default-color+
+                 (nerimux/terminal/types:cell-bg c)))
+      (expect (zerop (nerimux/terminal/types:cell-attrs c)))
+      (expect (zerop (nerimux/terminal/types:cell-attrs2 c)))
+      (expect (zerop (nerimux/terminal/types:cell-ul-color c)))
+      (expect (null (nerimux/terminal/types:cell-combining c)))
+      (expect (= 1 (nerimux/terminal/types:cell-width c)))))
+
 ;;; ── SUITE: cell-hyperlink slot ───────────────────────────────────────────────
 
 (describe "terminal-suite/cell-hyperlink-suite"

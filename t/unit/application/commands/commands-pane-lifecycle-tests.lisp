@@ -6,9 +6,8 @@
 
   ;;; -- close-pane-pty ----------------------------------------------------------
   ;;;
-  ;;; The one symbol in commands-core.lisp still reached from a live path: the
-  ;;; reader thread calls it on pane EOF (runtime-reader.lisp:96) and server
-  ;;; shutdown calls it for every pane (server.lisp:160).  It had no coverage.
+  ;;; These lifecycle operations are reached from the reader thread on pane EOF
+  ;;; (runtime-reader.lisp:96) and from server shutdown (server.lisp:160).
 
   ;; Both parameters are integers, so transposing them compiles clean and
   ;; type-checks -- and would send SIGHUP to whatever process happens to hold the
@@ -27,4 +26,17 @@
               (lambda (master-fd child-pid)
                 (setf received (list master-fd child-pid)))))
         (close-pane-pty pane))
-      (expect (equal (list 41 42) received)))))
+      (expect (equal (list 41 42) received))))
+
+  (it "retire-pane-pty-clears-identifiers-before-closing"
+    (let ((pane (make-pane :id 92 :x 0 :y 0 :width 20 :height 5
+                           :fd 51 :pid 52 :screen (make-screen 20 5)))
+          (observed :never-called))
+      (let ((nerimux/ports:*close-pty*
+              (lambda (master-fd child-pid)
+                (setf observed (list master-fd child-pid
+                                     (pane-fd pane) (pane-pid pane))))))
+        (nerimux/commands:retire-pane-pty pane))
+      (expect (equal (list 51 52 -1 -1) observed))
+      (expect (= -1 (pane-fd pane)))
+      (expect (= -1 (pane-pid pane))))))

@@ -93,6 +93,15 @@
         (finishes (close-socket socket)
                   "second close-socket on same socket must not signal"))))
 
+  ;; The public close operation reduces a low-level socket failure to NIL.
+  (it "close-socket-swallow-socket-error"
+    (with-stubbed-fdefinition
+        ((sb-bsd-sockets:socket-close
+           (lambda (&rest arguments)
+             (declare (ignore arguments))
+             (error 'sb-bsd-sockets:socket-error))))
+      (expect (null (close-socket (list :not-a-real-socket))))))
+
   ;;; ── socket-stream produces a binary stream ────────────────────────────────
 
   ;; socket-stream wraps a bound socket in a binary I/O stream.

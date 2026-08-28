@@ -14,6 +14,21 @@
 
 (describe "protocol-suite"
 
+  (it-each (((1 read 16 "invalid encoder name"))
+            ((encode 1 16 "invalid decoder name"))
+            ((encode read 7 "invalid bit width"))
+            ((encode read 0 "zero bit width"))
+            ((encode read -8 "negative bit width"))
+            ((encode read foo "non-integer bit width"))
+            ((encode read 16 42 "invalid documentation"))
+            (())
+            ((encode read 16 "documentation" :unexpected)))
+      "define-uint-codec-rejects-invalid-schema ~S"
+      (spec)
+    (signals error
+      (macroexpand-1
+       `(nerimux/protocol::define-uint-codec ,spec))))
+
   ;;; ── Octet encoding/decoding helpers ─────────────────────────────────────────
 
   ;; u16-octets encodes a 16-bit value as two big-endian bytes.
@@ -127,6 +142,10 @@
        frame
        (lambda (payload)
          (expect (string= text (decode-text payload)))))))
+
+  (it "decode-text-replaces-malformed-utf8"
+    (expect (string= (format nil "A~Cz" #\REPLACEMENT_CHARACTER)
+                    (decode-text #(65 255 122)))))
 
   ;;; ── Streaming: partial buffers ──────────────────────────────────────────────
 

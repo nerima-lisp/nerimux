@@ -128,4 +128,4 @@
               (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async) refresh-fn))
       (expect captured-on-progress)
       (funcall captured-on-progress 7)
-      (expect (= 7 nerimux::*workspace-scan-progress*)))))
+      (expect (eql 7 nerimux::*workspace-scan-progress*)))))

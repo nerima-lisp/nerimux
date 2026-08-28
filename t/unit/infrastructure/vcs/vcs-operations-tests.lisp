@@ -335,7 +335,43 @@
               (nerimux/vcs:delete-worktree main-worktree)
             (error (condition)
               (setf condition-seen condition)))
-          (expect (typep condition-seen 'error)))))))
+          (expect (typep condition-seen 'error))))))
+
+  (it "rejects invalid worktree and repository inputs before invoking VCS"
+    (let* ((repository-path (%vcs-operations-existing-path))
+           (repository
+             (nerimux/model:make-repository
+              :specification "workspace-owner/project"
+              :local-path repository-path))
+           (main-worktree
+             (nerimux/model:make-worktree
+              :repository repository
+              :path repository-path
+              :branch "main"))
+           (same-path-worktree
+             (nerimux/model:make-worktree
+              :repository repository
+              :path (copy-seq repository-path)
+              :branch "main"))
+           (calls 0))
+      (nerimux/model:repository-add-worktree repository main-worktree)
+      (with-stubbed-fdefinition
+          ((vcs-kit:vcs-worktree
+             (lambda (&rest arguments)
+               (declare (ignore arguments))
+               (incf calls))))
+        (dolist (thunk
+                 (list
+                  (lambda () (nerimux/vcs:delete-worktree nil))
+                  (lambda () (nerimux/vcs:lock-worktree nil))
+                  (lambda () (nerimux/vcs:unlock-worktree nil))
+                  (lambda () (nerimux/vcs:prune-worktrees nil))
+                  (lambda () (nerimux/vcs:delete-worktree same-path-worktree))))
+          (let ((condition-seen nil))
+            (handler-case (funcall thunk)
+              (error (condition) (setf condition-seen condition)))
+            (expect (typep condition-seen 'error))))
+        (expect (zerop calls)))))
 
 (describe "vcs worktree creation"
   (it "creates worktrees from default and explicit start points"
@@ -468,3 +504,76 @@
         (nerimux/vcs::%rev-parse repository "origin/HEAD"))
       (expect (typep captured 'vcs-kit:repository))
       (expect (not (typep captured 'vcs-kit:vcs-repository))))))
+
+  (it "resolves local HEAD when the remote default branch is unavailable"
+    (let ((repository
+            (nerimux/model:make-repository
+             :specification "workspace-owner/project"
+             :local-path (%vcs-operations-existing-path)))
+          (arguments-seen nil))
+      (with-stubbed-fdefinition
+          ((vcs-kit:git-rev-parse-value
+             (lambda (backend &rest arguments)
+               (declare (ignore backend))
+               (push arguments arguments-seen)
+               (if (equal '("origin/HEAD") arguments)
+                   (error "remote default branch unavailable")
+                   "local-head"))))
+        (expect (string= "local-head"
+                         (nerimux/vcs::%default-branch-start-point repository)))
+        (expect (equal '(("HEAD") ("origin/HEAD")) arguments-seen)))))
+
+  (it "builds worktree command arguments from option data"
+    (dolist (row '(("remove" ("--force") ("remove" "--force" "/tmp/tree"))
+                   ("lock" (nil "reason") ("lock" "reason" "/tmp/tree"))
+                   ("unlock" () ("unlock" "/tmp/tree"))))
+      (destructuring-bind (operation options expected) row
+        (expect (equal expected
+                       (append
+                        (apply #'nerimux/vcs::%worktree-command-arguments
+                               operation options)
+                        (list "/tmp/tree"))))))
+    (expect (equal '("add" "-b" "feature/ui" "/tmp/tree" "HEAD")
+                   (nerimux/vcs::%create-worktree-arguments
+                    "feature/ui" "/tmp/tree" "HEAD" nil)))
+    (expect (equal '("add" "--force" "-b" "feature/ui" "/tmp/tree" "HEAD")
+                   (nerimux/vcs::%create-worktree-arguments
+                    "feature/ui" "/tmp/tree" "HEAD" t))))
+
+  (it "normalizes repository specifications and values through pure helpers"
+    (dolist (row '((nil "")
+                   ("owner/project" "owner/project")
+                   (#p"/tmp/project" "/tmp/project")
+                   (42 "42")))
+      (expect (string= (second row)
+                       (nerimux/vcs::%string-value (first row)))))
+    (multiple-value-bind (host name)
+        (nerimux/vcs::%organization-and-name "github/owner/project")
+      (expect (string= "github" host))
+      (expect (string= "owner" name)))
+    (multiple-value-bind (host name)
+        (nerimux/vcs::%organization-and-name "project")
+      (expect (string= "local" host))
+      (expect (string= "default" name))))
+
+  (it "handles directory boundaries and ghq-root specifications"
+    (expect (nerimux/vcs::%directory-under-p "/work/ghq" "/work/ghq/owner/project"))
+    (expect (nerimux/vcs::%directory-under-p "/work/ghq/" "/work/ghq/owner/project"))
+    (expect (not (nerimux/vcs::%directory-under-p "/work/ghq" "/work/ghq-other/project")))
+    (expect (not (nerimux/vcs::%directory-under-p "" "/work/ghq/project")))
+    (with-stubbed-fdefinition
+        ((nerimux/vcs:ghq-root-directory
+           (lambda () "/work/ghq")))
+      (expect (string= "owner/project"
+                       (nerimux/vcs::%directory-specification
+                        "/work/ghq/owner/project")))
+      (expect (string= "local"
+                       (nerimux/vcs::%directory-specification
+                        "/tmp/owner/project")))))
+
+  (it "returns no ghq root when the provider lookup fails"
+    (let ((nerimux/vcs::*ghq-root-cache* :unresolved))
+      (with-stubbed-fdefinition
+          ((vcs-kit:ghq-root
+             (lambda () (error "ghq root unavailable"))))
+        (expect (null (nerimux/vcs:ghq-root-directory)))))))

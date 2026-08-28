@@ -12,9 +12,8 @@
 
   (it "multi-socket-renders-live-pty-output"
     (with-pty-available
-      (with-session (s 8 40)
-        (with-loop-state
-          (let* ((window (session-active-window s))
+      (with-session (s 10 40)
+        (let* ((window (session-active-window s))
                  (pane (window-active-pane window))
                  (marker "nerimux-live-pty-marker")
                  (nerimux::*clients* nil)
@@ -45,7 +44,7 @@
                   (unwind-protect
                        (when (and client server pane)
                          (setf conn (nerimux::%add-client server))
-                         (expect (null (send-and-dispatch (msg-attach 8 40)))
+                         (expect (null (send-and-dispatch (msg-attach 10 40)))
                                  :to-be-truthy)
                          (setf (nerimux::client-conn-view conn) :detail
                                (nerimux::client-conn-focus conn) pane)
@@ -79,4 +78,4 @@
                     (when (and conn (member conn nerimux::*clients*))
                       (nerimux::%drop-client conn))
                     (dolist (socket (remove nil (list client server)))
-                      (ignore-errors (nerimux/net:close-socket socket)))))))))))))
+                      (ignore-errors (nerimux/net:close-socket socket))))))))))))

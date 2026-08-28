@@ -21,17 +21,17 @@
       (finishes (nerimux::wait-for-channel channel-name)
                 "wait-for-channel must return after signal")))
 
-  ;; wait-for-channel returns NIL when no signal arrives within the timeout.
+  ;; wait-for-channel returns NIL when the bounded wait expires.
   (it "wait-for-channel-times-out"
-    ;; Use an isolated channels table so no signal is present.
-    ;; +wait-for-channel-timeout+ is 30 s; we override with a very short one
-    ;; by binding the constant — not possible in CL, so we test the shape only.
-    ;; The real timeout behaviour is verified by the unblocking test above.
+    ;; Stub the blocking primitive so this exercises the timeout result without
+    ;; making the suite sleep for the production timeout.
     (let ((nerimux::*wait-channels* (make-hash-table :test #'equal)))
-      ;; Calling wait-for-channel on a fresh unsignalled channel must eventually
-      ;; return (it uses a bounded condition-wait).  We cannot shrink the timeout
-      ;; in this test, so just verify the function is callable and returns a boolean.
-      (expect (fboundp 'nerimux::wait-for-channel))))
+      (with-stubbed-fdefinition
+          ((nerimux::condition-wait
+            (lambda (cv lock &key timeout)
+              (declare (ignore cv lock timeout))
+              nil)))
+        (expect (null (nerimux::wait-for-channel "timeout-ch"))))))
 
   ;;; ── pane-close dead-pane marking ──────────────────────────────────────────────
   ;;;

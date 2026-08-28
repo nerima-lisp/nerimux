@@ -508,4 +508,29 @@
       (expect (= 5000 (getf result :worktree-count)))
       (expect (= 12000 (getf result :item-count)))
       (expect (= 12000 (getf result :match-count)))
-      (expect (<= (getf result :elapsed-ms) 100)))))
+      (expect (<= (getf result :elapsed-ms) 100))))
+
+  (it "derives stable selection tokens from fallback model fields"
+    (let ((organization
+            (nerimux/model:make-organization
+             :host "github.com"
+             :name "team"))
+          (repository
+            (nerimux/model:make-repository
+             :specification "github.com/team/repo"))
+          (worktree
+            (nerimux/model:make-worktree
+             :path "/tmp/worktree"))
+          (branch-worktree
+            (nerimux/model:make-worktree :branch "feature")))
+      (expect (equal "github.com/team"
+                     (nerimux::%organization-selection-token organization)))
+      (expect (equal "github.com/team/repo"
+                     (nerimux::%repository-selection-token repository)))
+      (expect (equal "/tmp/worktree||"
+                     (nerimux::%worktree-selection-token worktree)))
+      (expect (equal "|feature|"
+                     (nerimux::%worktree-selection-token branch-worktree)))
+      (expect (equal '(:organization "github.com/team")
+                     (nerimux::%tree-object-selection-token organization)))
+      (expect (null (nerimux::%tree-object-selection-token nil))))))

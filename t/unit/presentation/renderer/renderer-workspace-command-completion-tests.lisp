@@ -113,6 +113,13 @@
         (expect (search "/" line))
         (expect (not (search "/f" line))))))
 
+  (it "keeps the tail of an overlong tree-filter query visible"
+    (let ((stream (make-string-output-stream)))
+      (nerimux/renderer::%render-workspace-tree-filter-line
+       stream 0 8 "abcdefghijk")
+      (let ((line (strip-sgr (get-output-stream-string stream))))
+        (expect (equal "defghijk" line)))))
+
   ;; End to end through RENDER-WORKSPACE-OVERVIEW-TO-STRING: :NORMAL mode with
   ;; a non-empty TREE-FILTER still shows the ordinary key-hint footer, plus
   ;; the "/query" chip prepended -- the filter stays visible after Enter

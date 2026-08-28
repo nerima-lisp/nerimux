@@ -119,4 +119,35 @@
          s conn (cl-codec-kit:string-to-octets "overview" :encoding :utf-8))
         (nerimux::%handle-multi-key-message s conn #(13))
         (expect (eq :overview (nerimux::client-conn-view conn)))
-        (expect (eq :normal (nerimux::client-conn-mode conn)))))))
+        (expect (eq :normal (nerimux::client-conn-mode conn))))))
+
+  (it "command-submit-contract-covers-empty-unknown-and-failure"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn))
+            (nerimux::*clients* nil)
+            (original (fdefinition 'nerimux::%handle-client-ui-command)))
+        (unwind-protect
+             (progn
+               (setf nerimux::*clients* (list conn))
+               (nerimux::%handle-multi-key-message s conn #(58))
+               (nerimux::%handle-multi-key-message s conn #(13))
+               (expect (eq :normal (nerimux::client-conn-mode conn)))
+               (nerimux::%handle-multi-key-message s conn #(58))
+               (nerimux::%handle-multi-key-message
+                s conn (cl-codec-kit:string-to-octets "not-a-command"
+                                                       :encoding :utf-8))
+               (nerimux::%handle-multi-key-message s conn #(13))
+               (expect (string= "unknown command: not-a-command"
+                                (first (nerimux::client-conn-message-log conn))))
+               (setf (fdefinition 'nerimux::%handle-client-ui-command)
+                     (lambda (&rest arguments)
+                       (declare (ignore arguments))
+                       (error "expected command failure")))
+               (nerimux::%handle-multi-key-message s conn #(58))
+               (nerimux::%handle-multi-key-message
+                s conn (cl-codec-kit:string-to-octets "home" :encoding :utf-8))
+               (nerimux::%handle-multi-key-message s conn #(13))
+               (expect (search "command failed: expected command failure"
+                               (first (nerimux::client-conn-message-log conn))))
+               (expect (eq :normal (nerimux::client-conn-mode conn))))
+          (setf (fdefinition 'nerimux::%handle-client-ui-command) original))))))

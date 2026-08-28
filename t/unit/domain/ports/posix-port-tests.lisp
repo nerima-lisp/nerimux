@@ -1,6 +1,11 @@
 (in-package #:nerimux/test)
 
 (describe "posix-port"
+  (it "keeps the descriptor loop constants within their documented bounds"
+    (expect (= 4096 nerimux/ports:+pty-buf-size+))
+    (expect (= 50000 nerimux/ports:+poll-timeout-us+))
+    (expect (= 50000 nerimux/ports:+pty-poll-timeout-us+)))
+
   (it "environment-value returns the value of a variable set in the real process environment"
     (with-temporary-posix-environment-variable ("NERIMUX_PORTS_TEST_ENV_VALUE" "sentinel-value")
       (expect (string= "sentinel-value"
@@ -36,6 +41,9 @@
       (expect fn)
       (expect (fboundp fn) :to-be-truthy)
       (expect (eq fn (find-symbol "SETENV" "SB-POSIX")))))
+
+  (it "find-posix-function rejects an exported but unbound SB-POSIX symbol"
+    (expect (null (nerimux/ports:find-posix-function "EUNATCH"))))
 
   (it "find-posix-function returns NIL for a name SB-POSIX does not export"
     (expect (null (nerimux/ports:find-posix-function

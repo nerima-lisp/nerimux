@@ -1,6 +1,24 @@
 (in-package #:nerimux/test)
 
 (describe "vcs asynchronous operation callbacks"
+  (it "completes an empty repository refresh synchronously"
+    (let ((completed nil)
+          (dispatched nil))
+      (expect
+       (null
+        (nerimux/vcs:refresh-repositories-async
+         nil
+         :callback-dispatch
+         (lambda (callback)
+           (setf dispatched callback))
+         :on-complete
+         (lambda (repositories)
+           (setf completed repositories)))))
+      (expect (null completed))
+      (expect dispatched)
+      (funcall dispatched)
+      (expect (null completed))))
+
   (it "applies a captured refresh without filesystem observation"
     (let* ((path (%vcs-operations-existing-path))
            (repository

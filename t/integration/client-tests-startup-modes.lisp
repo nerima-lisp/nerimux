@@ -5,7 +5,7 @@
 ;;; Handlers stored as symbols (not function objects) is the key architectural
 ;;; property that makes test stubs with SETF FDEFINITION work.
 
-(describe "client-suite"
+(describe "client-startup-modes-suite"
 
   ;; Every entry in *startup-modes* stores its handler as a symbol, not a
   ;; function object.  This is required so test stubs with (setf fdefinition) work.

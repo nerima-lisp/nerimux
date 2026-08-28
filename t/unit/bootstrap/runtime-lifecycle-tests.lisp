@@ -23,4 +23,22 @@
         (let ((nerimux::*runtime-server-name* "myserver"))
           (expect
            (string= "/tmp/nerimux-log-xdg-test/nerimux/myserver.log"
-                    (namestring (nerimux::%runtime-log-path "myserver")))))))))
+                    (namestring (nerimux::%runtime-log-path "myserver")))))))
+
+  (it "uses the home state directory when no environment override is set"
+    (with-temporary-posix-environment-variable ("NERIMUX_RUNTIME_STATE" nil)
+      (with-temporary-posix-environment-variable ("XDG_STATE_HOME" nil)
+        (expect
+         (search ".local/state/nerimux/myserver.log"
+                 (namestring (nerimux::%runtime-log-path "myserver")))))))
+
+  (it "uses the home state directory when XDG_STATE_HOME is empty"
+    (with-temporary-posix-environment-variable ("NERIMUX_RUNTIME_STATE" nil)
+      (with-temporary-posix-environment-variable ("XDG_STATE_HOME" "")
+        (expect
+         (search ".local/state/nerimux/myserver.log"
+                 (namestring (nerimux::%runtime-log-path "myserver")))))))
+
+  (it "uses default values for empty server names"
+    (expect (string= "default" (nerimux::%runtime-safe-server-name nil)))
+    (expect (string= "default" (nerimux::%runtime-safe-server-name ""))))))
