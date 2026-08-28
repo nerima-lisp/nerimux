@@ -368,7 +368,14 @@
              :worktree-count 0
              :pane-count 0)))
       (expect (= 0 (getf result :item-count)))
-      (expect (= 0 (getf result :match-count)))))
+      (expect (= 0 (getf result :match-count))))
+    (let ((result
+            (nerimux/picker:benchmark-global-picker
+             :organization-count 1
+             :repository-count 1)))
+      (expect (= 1 (getf result :organization-count)))
+      (expect (= 1 (getf result :repository-count)))
+      (expect (plusp (getf result :item-count)))))
 
   (it "includes pane metadata and propagates pane attention"
     (let* ((organization
