@@ -91,14 +91,14 @@
      (:module "infrastructure/pty"
       :serial t
       :components
-      ((:file "pty-ffi")       ; FFI declarations and platform constants
+       ((:file "pty-ffi")       ; FFI declarations and platform constants
        (:file "pty-rawmode")   ; terminal raw mode management
        (:file "pty")))         ; PTY lifecycle + install-pty-port adapter (references nerimux/ports vars)
      (:module "infrastructure/net"
       :serial t
       :components
-      ((:file "protocol")
-       (:file "protocol-command")  ; +msg-command+ payload codec (same package as protocol)
+      ((:file "protocol-command")  ; wire constants and command payload codec
+       (:file "protocol")
        (:file "transport")
        (:file "net")))
      (:module "domain/terminal"
@@ -157,7 +157,8 @@
        (:file "worktree")           ; worktree aggregate and relationships
        (:file "pane-core")         ; leaf PTY data and feed helpers
        (:file "pane-geometry")     ; geometry update + PTY/screen resize helpers
-       (:file "layout")            ; tree structure + traversal (uses pane-reposition)
+       (:file "layout")            ; tree structure (uses pane-reposition)
+       (:file "layout-visitor")    ; declarative layout traversal macros
        (:file "layout-persistence") ; layout string serialization
        (:file "layout-geometry")    ; rectangle assignment + resize helpers (uses pane-id, pane-x/y/w/h)
        (:file "window-definitions") ; window records and pane-numbering constants
@@ -174,13 +175,14 @@
      :serial t
      :components
        ((:file "vcs")
-        (:file "vcs-async-operations")
-        (:file "vcs-worktree-operations")
-        (:file "vcs-fetch")))
+     (:file "vcs-async-operations")
+     (:file "vcs-worktree-operations")
+     (:file "vcs-fetch")))
      (:module "application/picker"
       :serial t
       :components
-      ((:file "global-picker")))                 ; pure organization/repository/worktree picker
+      ((:file "global-picker")
+       ))       ; pure picker + measurement fixture
      ;; target resolution is a domain/model service; placed in the model directory
      ;; via :pathname so its load slot (after format) stays byte-identical.
      (:module "domain-model-target"
@@ -261,12 +263,17 @@
        (:file "workspace-window") ; workspace window creation
        (:file "server-multi-dispatch") ; shared multi-client handlers
        (:file "server-multi-dispatch-prefix") ; C-q workspace actions
+       (:file "server-multi-workspace-selection") ; workspace catalog selection logic
        (:file "server-multi-dispatch-picker") ; picker/tree selection
        (:file "server-multi-dispatch-command-workspace") ; workspace UI helpers
        (:file "server-multi-dispatch-command-worktree") ; worktree operations
+       (:file "server-multi-command-input-primitives") ; payload predicates and decoding
        (:file "server-multi-dispatch-command-input") ; client input and command entry
+       (:file "server-multi-dispatch-tree-filter") ; tree-filter input mode
        (:file "server-multi-dispatch-command") ; final command dispatcher
+       (:file "server-multi-state") ; mutable multi-client and workspace state
        (:file "server-multi")  ; multi-client client registry + dispatch helpers
+       (:file "server-multi-render") ; client geometry and frame broadcast
        (:file "server-multi-loop") ; multi-client select-multiplexed serve loop
        (:file "runtime-lifecycle") ; per-server state directory and log path
        (:file "client")

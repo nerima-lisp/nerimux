@@ -10,7 +10,7 @@
 
 (defun non-empty-string (string)
   "Return STRING when it is a non-empty string, otherwise NIL."
-  (when (and string (plusp (length string))) string))
+  (when (and (stringp string) (plusp (length string))) string))
 
 (defun parse-integer-or-nil (string &rest args)
   "Parse STRING as an integer and return NIL when parsing fails.

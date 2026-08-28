@@ -21,46 +21,6 @@
 
 ;;; ── Client connection registry ──────────────────────────────────────────────
 
-(defvar *clients* nil
-  "List of CLIENT-CONN structs currently attached to the multi-client server.
-   Mutated only by the single server event loop, so it needs no locking.")
-
-(defvar *main-thread-callback-lock*
-  (cl-concurrent-kit:make-lock :name "nerimux-main-thread-callbacks"))
-
-(defvar *main-thread-callbacks* nil
-  "Callbacks queued for execution by the multi-client event loop.")
-
-(defun %enqueue-main-thread-callback (thunk)
-  "Queue THUNK for execution by the multi-client event loop.
-
-VCS workers use this boundary before touching client or catalog state owned by
-the event loop.  The queue is the only cross-thread state in this layer; the
-callbacks themselves run serially in the loop."
-  (check-type thunk function)
-  (cl-concurrent-kit:with-lock-held (*main-thread-callback-lock*)
-    (push thunk *main-thread-callbacks*))
-  nil)
-
-(defun %drain-main-thread-callbacks ()
-  "Run callbacks queued by worker threads, keeping one failure local."
-  (let ((callbacks
-          (cl-concurrent-kit:with-lock-held (*main-thread-callback-lock*)
-            (prog1 (nreverse *main-thread-callbacks*)
-              (setf *main-thread-callbacks* nil)))))
-    (dolist (callback callbacks)
-      (handler-case
-          (funcall callback)
-        (error (condition)
-          (format *error-output*
-                  "~&nerimux main-thread callback failed: ~A~%"
-                  condition)
-          (finish-output *error-output*)))))
-  nil)
-
-(defvar *workspace-catalog-refresh-started-p* nil
-  "Whether the initial asynchronous ghq/worktree catalog refresh was started.")
-
 ;;; ── Workspace tree UI state (R6.2/R6.3) ─────────────────────────────────────
 ;;;
 ;;; Global, not per-CLIENT-CONN: R6.3 requires collapse state, and R6.2 the
@@ -78,16 +38,6 @@ callbacks themselves run serially in the loop."
 ;;; pane gaining focus within a worktree) -- see the R6 report for exactly
 ;;; which handler calls which function.
 
-(defvar *workspace-collapsed-node-ids* (make-hash-table :test #'equal)
-  "Set of collapsed organization/repository tree-node keys (R6.3, inverted
-   for the redesign: rows are now all-expanded by default, so this table
-   only has to record the exceptions), keyed the same way as
-   NERIMUX/RENDERER:%WORKSPACE-TREE-NODE-KEY returns (a (:ORGANIZATION ID)
-   or (:REPOSITORY ID) list). Presence (any non-NIL value) means collapsed;
-   absence means expanded, the tree's default state. Worktree/window/pane
-   rows are never keys here -- only these two levels toggle independently
-   (R6.3).")
-
 (defun %workspace-collapsed-nodes ()
   "The collapsed-row set, for callers that load before its DEFVAR.
 
@@ -103,16 +53,6 @@ callbacks themselves run serially in the loop."
     (if (gethash key *workspace-collapsed-node-ids*)
         (remhash key *workspace-collapsed-node-ids*)
         (setf (gethash key *workspace-collapsed-node-ids*) t))))
-
-(defvar *workspace-refreshing-ids* (make-hash-table :test #'equal)
-  "Set of organization/repository/worktree tree-node keys a VCS operation is
-   currently refreshing (R6.2). Populate with %MARK-WORKSPACE-REFRESHING /
-   %CLEAR-WORKSPACE-REFRESHING around the async call that refreshes it.")
-
-(defvar *workspace-stale-ids* (make-hash-table :test #'equal)
-  "Set of organization/repository/worktree tree-node keys whose last refresh
-   failed (R6.2): the value shown is the previous successful one, tagged
-   stale instead of presented as current.")
 
 (defun %mark-workspace-refreshing (kind id)
   "Record that the KIND/ID node's data is being refreshed (R6.2), and clear
@@ -164,12 +104,6 @@ callbacks themselves run serially in the loop."
           (visit :worktree (nerimux/model:worktree-id worktree)))))
     nil))
 
-(defvar *workspace-worktree-last-pane* (make-hash-table :test #'equal)
-  "WORKTREE-ID -> the pane a client was last focused on within that worktree
-   (R6.3: worktree-row Enter returns there, or opens a new pane when there
-   is none). Global for the same detach/attach-survival reason as
-   *WORKSPACE-EXPANDED-NODE-IDS* above.")
-
 (defun %remember-worktree-pane (worktree pane)
   "Record PANE as the one to return to next time Enter lands on WORKTREE's
    tree row (R6.3). Call this on every focus change within a worktree, not
@@ -192,22 +126,6 @@ callbacks themselves run serially in the loop."
         (t (remhash (worktree-id worktree) *workspace-worktree-last-pane*)
            nil)))))
 
-(defvar *workspace-catalog-loaded-p* nil
-  "T once the initial async ghq/worktree catalog refresh's on-complete
-   callback (in %ADD-CLIENT below) has run at least once. Distinguishes
-   \"still scanning\" from \"scanned and genuinely found zero repositories\"
-   for R6.2's scanning-p -- a plain (null organizations) check cannot tell
-   those two apart.")
-
-(defvar *workspace-scan-progress* nil
-  "Repository count the in-flight initial catalog scan has processed so far
-   (FR-004b), or NIL when no scan is currently running. Distinct from
-   *WORKSPACE-CATALOG-LOADED-P*: that flag flips once, permanently, on the
-   first scan's completion, while this tracks whichever scan is in flight
-   right now (the initial one in %ADD-CLIENT below), so the renderer can show
-   \"N found so far\" instead of a bare scanning indicator while a large ghq
-   root is still being walked.")
-
 ;;; with-loop-safe-error is defined in server-multi-dispatch.lisp (which loads
 ;;; first) so it is available at compile time to every user, including here.
 
@@ -228,122 +146,6 @@ callbacks themselves run serially in the loop."
    (%handle-multi-command-message session conn payload))
   ;; Unknown message type: treat as disconnect.
   (t :drop))
-
-;;; ── Effective geometry (smallest attached client) ───────────────────────────
-
-(defun %client-size-reduce (fn)
-  "Apply FN (e.g. #'min or #'max) across all attached clients' rows and cols,
-   returning (values ROWS COLS)."
-  (values (reduce fn *clients* :key #'client-conn-rows)
-          (reduce fn *clients* :key #'client-conn-cols)))
-
-(defun %effective-client-size ()
-  "Return (values ROWS COLS) the session should render at: the smallest
-   attached client's geometry, so the shared session layout fits every
-   attached client (§1.4 — multiple clients are allowed; the shared size
-   follows the smallest one; R8.4).
-   Falls back to *term-rows*/*term-cols* when no clients are attached."
-  (if (null *clients*)
-      (values *term-rows* *term-cols*)
-      (%client-size-reduce #'min)))
-
-(defun %apply-effective-size (session)
-  "Set *term-rows*/*term-cols* to the effective (smallest-client) geometry,
-   relayout SESSION's active window for the new size, and mark the screen dirty."
-  (multiple-value-bind (rows cols) (%effective-client-size)
-    (setf *term-rows* rows *term-cols* cols)
-    (%relayout-active-window session rows cols)
-    (%mark-dirty)))
-
-;;; ── Frame broadcast ─────────────────────────────────────────────────────────
-
-(defun %render-client-frame (session conn)
-  "Render SESSION for CONN's geometry and cache the encoded frame on CONN.
-   Session layout remains governed by the effective shared size; this boundary
-   only controls the client-facing surface dimensions."
-  (let ((frame
-          (msg-frame
-           (cond
-             ;; A confirmation owns the whole frame while it is up (R6.4): the
-             ;; question has to be the only thing on screen, or a y/n answer can
-             ;; be given to something the user was not reading.
-             ((client-conn-confirm-view conn)
-              (render-confirm-view-to-tui-string
-               (client-conn-confirm-view conn)
-               (client-conn-rows conn)
-               (client-conn-cols conn)))
-             ((and (eq (client-conn-view conn) :overview)
-                   (not (eq (client-conn-mode conn) :picker)))
-              (render-workspace-overview-to-tui-string
-               (nerimux/vcs:workspace-organizations)
-               (client-conn-rows conn)
-               (client-conn-cols conn)
-               :focus-pane (client-conn-focus conn)
-               :selected-tree-object
-               (client-conn-selected-tree-object conn)
-               :selected-worktree (client-conn-selected-worktree conn)
-               :tree-scroll (client-conn-tree-scroll conn)
-               :messages (client-conn-message-log conn)
-               :mode (client-conn-mode conn)
-               :prefix-code (client-conn-workspace-prefix-code conn)
-               ;; R6.2/R6.3/R6.12: server-lifetime tree state, defined above
-               ;; in this file, and the client's own in-flight `:` buffer.
-               :collapsed-node-ids *workspace-collapsed-node-ids*
-               ;; Per-client, not server-lifetime: CONN's own in-flight `/`
-               ;; tree-filter query (or NIL when none is active).
-               :tree-filter (client-conn-tree-filter conn)
-               :refreshing-ids *workspace-refreshing-ids*
-               :stale-ids *workspace-stale-ids*
-               ;; FR-004b: how far the in-flight initial scan has gotten, and
-               ;; where to point a client whose catalog is empty. GHQ-ROOT-
-               ;; DIRECTORY is cached in nerimux/vcs (not re-run per frame,
-               ;; which this call site is) precisely because it is called
-               ;; from here on every dirty frame.
-               :scan-progress *workspace-scan-progress*
-               :catalog-empty-hint (nerimux/vcs:ghq-root-directory)
-               ;; NIL (not scanning) when no refresh was ever kicked off at
-               ;; all -- e.g. the VCS adapter is unavailable (%ADD-CLIENT's
-               ;; (nerimux/vcs:vcs-package-available-p) guard) -- so that
-               ;; case shows the ordinary empty tree/header/footer rather
-               ;; than getting stuck on "scanning..." forever.
-               :scanning-p (and *workspace-catalog-refresh-started-p*
-                                (not *workspace-catalog-loaded-p*))
-               :command-buffer (client-conn-command-buffer conn)))
-             (t
-              (render-session-to-tui-string
-               session
-               (client-conn-rows conn)
-               (client-conn-cols conn)
-               :focus-pane (client-conn-focus conn)
-               :viewport (client-conn-viewport conn)
-               :mode (client-conn-mode conn)
-               :command-buffer (client-conn-command-buffer conn)
-               :picker-items
-               (when (eq (client-conn-mode conn) :picker)
-                 (%client-picker-visible-items conn))
-               :picker-query (client-conn-picker-query conn)
-               :picker-index (client-conn-picker-index conn)
-               :picker-regex-p (client-conn-picker-regex-p conn)))))))
-    (setf (client-conn-frame conn) frame)
-    frame))
-
-(defun %send-client-frame (conn frame)
-  "Cache and send FRAME to one client connection."
-  (setf (client-conn-frame conn) frame)
-  (send-frame (client-conn-stream conn) frame))
-
-(defun %broadcast-frame (session)
-  "When *dirty* and at least one client is attached, render one frame per
-   client at that client's geometry, send it, and then clear *dirty*."
-  (when (and *dirty* *clients*)
-    (setf *dirty* nil)
-    (dolist (conn (copy-list *clients*))
-      (with-loop-safe-error (nil :on-error (%drop-client conn))
-        (%send-client-frame conn (%render-client-frame session conn))))))
-
-(defun %client-fds ()
-  "The socket fds of every attached client (for the select read-set)."
-  (mapcar #'client-conn-fd *clients*))
 
 ;;; ── Connection lifecycle ────────────────────────────────────────────────────
 
@@ -498,27 +300,11 @@ callbacks themselves run serially in the loop."
     conn))
 
 (defun %drop-client (conn &key bye)
-  "Remove CONN: optionally send a bye frame, close its socket, and
-   unregister it.  Safe to call more than once.
+  "Remove CONN, optionally send a bye frame, and close its socket.
 
-   MUST NOT SIGNAL: this runs as WITH-LOOP-SAFE-ERROR's on-error handler and
-   in %RUN-MULTI-SERVER-LOOP's unwind cleanup, and a handler/cleanup body has
-   no guard above it short of MAIN's process-exit net.  The dangerous case is
-   real, not theoretical: when a send to a dead peer fails mid-write, the
-   frame's tail stays in the fd-stream's Lisp buffer.  A plain CLOSE tries to
-   flush that tail before it will release the fd, hits BROKEN-PIPE a second
-   time, and — confirmed against SBCL 2.6.6's SB-BSD-SOCKETS:SOCKET-CLOSE,
-   which on that failure defers to (CLOSE stream) and never reaches its own
-   UNIX-CLOSE call — the file descriptor is NEVER ACTUALLY CLOSED, even
-   though the condition is caught here and CONN correctly leaves *CLIENTS*.
-   Every `attach` to a live server used to leak exactly one fd this way,
-   because %STALE-SOCKET-P's liveness probe is a connect-then-close that the
-   loop registers as a client, writes a frame to, and then drops.
-   CLOSE-SOCKET is called with :ABORT T for exactly this reason: :ABORT
-   skips the flush-before-close attempt, so a peer that is already gone
-   cannot make the close of ITS OWN fd fail.  Unregister first so a
-   signaling close can never leave the ghost conn in *CLIENTS* to be
-   re-dropped (and re-signal) by the cleanup pass."
+   This cleanup is idempotent and never propagates I/O errors: it runs from
+   error handlers and the server loop's unwind cleanup.  Unregister first,
+   then close with ABORT so a broken peer cannot prevent local fd release."
   (when (member conn *clients*)
     (setf *clients* (remove conn *clients*))
     (setf (client-conn-ui-prefix-p conn) nil)

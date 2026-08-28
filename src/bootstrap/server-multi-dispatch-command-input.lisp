@@ -1,26 +1,5 @@
 (in-package #:nerimux)
 
-(defun %client-single-byte (payload)
-  (cond
-    ((and (stringp payload) (= (length payload) 1))
-     (char-code (char payload 0)))
-    ((and (arrayp payload) (= (length payload) 1))
-     (aref payload 0))))
-
-(defun %client-byte-p (payload byte)
-  (eql (%client-single-byte payload) byte))
-
-(defun %client-key-p (payload character)
-  (%client-byte-p payload (char-code character)))
-
-(defun %client-payload-text (payload)
-  (cond
-    ((stringp payload) payload)
-    ((vectorp payload)
-     (handler-case
-         (cl-codec-kit:octets-to-string payload :encoding :utf-8)
-       (cl-codec-kit:decode-error () nil)))))
-
 (defun %client-enter-input-mode (conn)
   (%transition-client-ui-mode conn :enter-input)
   (%mark-dirty)
@@ -256,63 +235,6 @@
   (%mark-dirty)
   t)
 
-(define-key-rules %handle-client-normal-key-payload (session conn payload)
-  (:let ((view (client-conn-view conn))))
-  (#\k
-   (case view
-     (:overview (%select-client-tree-relative conn -1) t)
-     (:detail (%client-select-pane-direction session conn :up))
-     (otherwise nil)))
-  (#\j
-   (case view
-     (:overview (%select-client-tree-relative conn 1) t)
-     (:detail (%client-select-pane-direction session conn :down))
-     (otherwise nil)))
-  (#\l
-   (if (eq view :detail)
-       (%client-select-pane-direction session conn :right)
-       (%client-tree-expand-selected conn)))
-  (#\h
-   (if (eq view :detail)
-       (%client-select-pane-direction session conn :left)
-       (%client-tree-collapse-selected conn)))
-  ((and (eq view :overview) (%client-key-p payload #\J))
-   (%select-client-tree-repository-relative conn 1))
-  ((and (eq view :overview) (%client-key-p payload #\K))
-   (%select-client-tree-repository-relative conn -1))
-  ((and (eq view :overview) (%client-key-p payload #\/))
-   (%client-enter-tree-filter-mode conn))
-  ((or (%client-byte-p payload 13) (%client-byte-p payload 10))
-   (cond
-     ((eq view :overview)
-      (%focus-selected-client-worktree session conn))
-     (t t)))
-  ((and (eq view :overview) (%client-key-p payload #\n))
-   (%client-start-worktree-create session conn))
-  ((and (eq view :overview) (%client-key-p payload #\X))
-   (%client-start-worktree-delete conn))
-  ((and (eq view :overview) (%client-key-p payload #\L))
-   (%client-start-worktree-lock conn))
-  ((and (eq view :overview) (%client-key-p payload #\U))
-   (%client-start-worktree-unlock conn))
-  (#\d
-   (%set-client-view conn :detail)
-   t)
-  (#\o
-   (%set-client-view conn :overview)
-   t)
-  (#\r
-   (%client-refresh-workspace conn)
-   t)
-  (#\i
-   (%client-enter-input-mode conn))
-  (#\c
-   (%client-enter-copy-mode session conn)
-   t)
-  (#\:
-   (%client-enter-command-mode conn))
-  (t nil))
-
 (defun %handle-client-input-key-payload (session conn payload)
   "Every byte, ESC included, is forwarded to the focused pane: :input mode has
    no keyboard exit of its own (that returns with the C-q prefix, R4.4)."
@@ -499,72 +421,49 @@
    (%client-command-buffer-append conn payload)
    t))
 
-(defun %client-tree-filter-buffer-delete-character (conn)
-  "Backspace in :tree-filter mode. The tree scroll resets to 0 (item 4): a
-   shorter query can only widen the filtered row set, and a scroll offset
-   left over from the narrower set could point past its end."
-  (let ((query (client-conn-tree-filter conn)))
-    (when (and (stringp query) (plusp (length query)))
-      (setf (client-conn-tree-filter conn) (subseq query 0 (1- (length query)))
-            (client-conn-tree-scroll conn) 0)
-      (%mark-dirty)
-      t)))
-
-(defconstant +max-tree-filter-length+ 256
-  "Hard cap on CLIENT-CONN-TREE-FILTER's length (security review, medium):
-   a single +MSG-KEY+ frame's payload can be up to the transport's own
-   64MiB max, and with no cap here it would land in the filter query
-   verbatim in one %CLIENT-TREE-FILTER-BUFFER-APPEND call. Every dirty
-   frame re-filters the WHOLE tree against the current query
-   (%WORKSPACE-TREE-OBJECTS, called from the single-threaded dispatch/render
-   loop), so an unbounded query is an amplification path: one oversized
-   frame from a same-UID peer turns into a per-node, query-length-scaled
-   scan on every subsequent frame until the filter is cleared -- a
-   same-UID sender is still a peer sharing this loop with every other
-   attached client, not a reason to skip the bound.")
-
-(defun %client-tree-filter-buffer-append (conn payload)
-  "A printable character in :tree-filter mode. The tree scroll resets to 0
-   for the same reason as the delete case above -- a narrower query can only
-   shrink the filtered row set, so a scroll offset from before this keystroke
-   could now point past its end.
-
-   At +MAX-TREE-FILTER-LENGTH+, further characters are refused outright
-   rather than silently truncated: truncating would keep accepting (and
-   discarding) arbitrarily large payloads forever, while refusing once the
-   cap is hit gives the amplification path above a fixed ceiling."
-  (let ((text (%client-payload-text payload))
-        (query (or (client-conn-tree-filter conn) "")))
-    (when (and text
-               (every (lambda (character)
-                        (>= (char-code character) 32))
-                      text)
-               (< (length query) +max-tree-filter-length+))
-      (setf (client-conn-tree-filter conn)
-            (concatenate 'string query text)
-            (client-conn-tree-scroll conn) 0)
-      (%mark-dirty)
-      t)))
-
-(define-key-rules %handle-client-tree-filter-key-payload (session conn payload)
-  "The :tree-filter mode's key handler (item 4), modelled on
-   %HANDLE-CLIENT-COMMAND-KEY-PAYLOAD above: ESC cancels (clears the query,
-   via %TRANSITION-CLIENT-UI-MODE's :cancel handling), Enter accepts (keeps
-   the query, returns to :normal), backspace edits, everything else printable
-   is appended to the query."
-  (27
-   ;; R4.3: see the matching comment in %handle-client-picker-key-payload.
-   (%client-esc-swallow-start conn)
-   (%transition-client-ui-mode conn :cancel)
-   (%mark-dirty)
-   t)
+(define-key-rules %handle-client-normal-key-payload (session conn payload)
+  (:let ((view (client-conn-view conn))))
+  (#\k
+   (case view
+     (:overview (%select-client-tree-relative conn -1) t)
+     (:detail (%client-select-pane-direction session conn :up))
+     (otherwise nil)))
+  (#\j
+   (case view
+     (:overview (%select-client-tree-relative conn 1) t)
+     (:detail (%client-select-pane-direction session conn :down))
+     (otherwise nil)))
+  (#\l
+   (if (eq view :detail)
+       (%client-select-pane-direction session conn :right)
+       (%client-tree-expand-selected conn)))
+  (#\h
+   (if (eq view :detail)
+       (%client-select-pane-direction session conn :left)
+       (%client-tree-collapse-selected conn)))
+  ((and (eq view :overview) (%client-key-p payload #\J))
+   (%select-client-tree-repository-relative conn 1))
+  ((and (eq view :overview) (%client-key-p payload #\K))
+   (%select-client-tree-repository-relative conn -1))
+  ((and (eq view :overview) (%client-key-p payload #\/))
+   (%client-enter-tree-filter-mode conn))
   ((or (%client-byte-p payload 13) (%client-byte-p payload 10))
-   (%transition-client-ui-mode conn :accept)
-   (%mark-dirty)
-   t)
-  ((or (%client-byte-p payload 8) (%client-byte-p payload 127))
-   (%client-tree-filter-buffer-delete-character conn)
-   t)
-  (t
-   (%client-tree-filter-buffer-append conn payload)
-   t))
+   (cond
+     ((eq view :overview)
+      (%focus-selected-client-worktree session conn))
+     (t t)))
+  ((and (eq view :overview) (%client-key-p payload #\n))
+   (%client-start-worktree-create session conn))
+  ((and (eq view :overview) (%client-key-p payload #\X))
+   (%client-start-worktree-delete conn))
+  ((and (eq view :overview) (%client-key-p payload #\L))
+   (%client-start-worktree-lock conn))
+  ((and (eq view :overview) (%client-key-p payload #\U))
+   (%client-start-worktree-unlock conn))
+  (#\d (%set-client-view conn :detail) t)
+  (#\o (%set-client-view conn :overview) t)
+  (#\r (%client-refresh-workspace conn) t)
+  (#\i (%client-enter-input-mode conn))
+  (#\c (%client-enter-copy-mode session conn) t)
+  (#\: (%client-enter-command-mode conn))
+  (t nil))

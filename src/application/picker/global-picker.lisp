@@ -159,8 +159,14 @@
     (:pane (nerimux/model:pane-attention-p (picker-item-pane item)))
     (otherwise nil)))
 
-(defparameter *organization-search-fields*
-  (list #'nerimux/model:organization-id
+(defmacro define-picker-search-fields (name documentation &body fields)
+  "Define the ordered data fields folded into a picker search index."
+  `(defparameter ,name (list ,@fields) ,documentation))
+
+(define-picker-search-fields *organization-search-fields*
+  "Organization-level fields folded into a picker item's search text.
+   Each is a function of one ORGANIZATION, returning a string or NIL."
+  #'nerimux/model:organization-id
         #'nerimux/model:organization-host
         #'nerimux/model:organization-name
         (lambda (organization)
@@ -174,11 +180,11 @@
           (format nil "repositories ~D worktrees ~D"
                   (length (nerimux/model:organization-repositories organization))
                   (nerimux/model:organization-active-worktree-count organization))))
-  "Organization-level fields folded into a picker item's search text.
-   Each is a function of one ORGANIZATION, returning a string or NIL.")
 
-(defparameter *repository-search-fields*
-  (list #'nerimux/model:repository-id
+(define-picker-search-fields *repository-search-fields*
+  "Repository-level fields folded into a picker item's search text.
+   Each is a function of one REPOSITORY, returning a string or NIL."
+  #'nerimux/model:repository-id
         #'nerimux/model:repository-specification
         #'nerimux/model:repository-local-path
         #'nerimux/model:repository-remote
@@ -195,11 +201,11 @@
             (format nil "behind ~D" (nerimux/model:repository-behind repository))))
         (lambda (repository)
           (when (nerimux/model:repository-missing-p repository) "missing")))
-  "Repository-level fields folded into a picker item's search text.
-   Each is a function of one REPOSITORY, returning a string or NIL.")
 
-(defparameter *worktree-search-fields*
-  (list #'nerimux/model:worktree-id
+(define-picker-search-fields *worktree-search-fields*
+  "Worktree-level fields folded into a picker item's search text.
+   Each is a function of one WORKTREE, returning a string or NIL."
+  #'nerimux/model:worktree-id
         #'nerimux/model:worktree-branch
         #'nerimux/model:worktree-path
         #'nerimux/model:worktree-head
@@ -223,11 +229,11 @@
         (lambda (worktree)
           (when (nerimux/model:worktree-missing-p worktree) "missing"))
         #'nerimux/model:worktree-attention-reasons)
-  "Worktree-level fields folded into a picker item's search text.
-   Each is a function of one WORKTREE, returning a string or NIL.")
 
-(defparameter *pane-search-fields*
-  (list #'nerimux/model:pane-id
+(define-picker-search-fields *pane-search-fields*
+  "Pane-level fields folded into a picker item's search text.
+   Each is a function of one PANE, returning a string or NIL."
+  #'nerimux/model:pane-id
         #'nerimux/model:pane-title
         #'nerimux/model:pane-start-command
         #'nerimux/model:pane-start-path
@@ -236,8 +242,6 @@
         #'nerimux/model:pane-last-output-time
         #'nerimux/model:pane-last-focused-time
         #'nerimux/model:pane-attention-reasons)
-  "Pane-level fields folded into a picker item's search text.
-   Each is a function of one PANE, returning a string or NIL.")
 
 (defun %level-search-values (level-object field-fns)
   "Apply each of FIELD-FNS to LEVEL-OBJECT, or return NIL when LEVEL-OBJECT

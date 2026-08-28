@@ -101,20 +101,12 @@
 ;;; ── Initial-scan placeholder (R6.2) ─────────────────────────────────────────
 
 (defun %render-workspace-scanning-frame (terminal-rows terminal-cols &key scan-progress)
-  "The whole-frame placeholder shown while the initial ghq/worktree catalog
-   scan is still running (R6.2): an empty tree plus a centred \"scanning...\"
-   line, in place of the ordinary header/tree/detail/footer layout, which has
-   nothing to show yet.
-   SCAN-PROGRESS (FR-004b), when a positive integer, names how many
-   repositories the scan has found so far instead of the bare ellipsis -- a
-   scan that legitimately runs tens of seconds otherwise looks identical at
-   second 1 and second 30.  NIL or 0 keeps the plain ellipsis wording."
+  "Render the complete frame shown while the workspace catalog is scanning."
   (let* ((rows (max 1 terminal-rows))
          (cols (max 1 terminal-cols))
          (stream (make-string-output-stream))
          (message (if (and (integerp scan-progress) (plusp scan-progress))
-                      (format nil "scanning workspaces... ~D repositories"
-                              scan-progress)
+                      (format nil "scanning workspaces... ~D repositories" scan-progress)
                       "scanning workspaces..."))
          (text (%display-clip message cols)))
     (cursor-invisible stream)
@@ -126,20 +118,7 @@
     (get-output-stream-string stream)))
 
 (defun %render-workspace-empty-catalog-hint (stream rows cols ghq-root)
-  "Three centred lines shown over the (otherwise empty) interior when
-   ORGANIZATIONS is empty and no scan is running (FR-004c): the ghq catalog
-   genuinely has nothing in it, which needs to read differently from the
-   SCANNING-P placeholder above -- an empty tree because the scan has not
-   finished yet, versus an empty tree because there is nothing to find.
-   Callable only once the caller has confirmed ORGANIZATIONS is empty and
-   SCANNING-P is false, so it does not re-check either here.
-   Uses the same centred-line technique as
-   %RENDER-WORKSPACE-SCANNING-FRAME rather than the %CELL/%EMIT-STYLED-ROW
-   panel machinery: these lines float over the tree/detail panels' empty
-   interior instead of belonging to one of them, and the header/footer
-   drawn by the caller are left alone.  Each line is %DISPLAY-CLIP'd -- a
-   plain-text clip -- before it is wrapped in SGR, per this file's
-   clip-before-SGR ordering rule (%DISPLAY-CLIP must never see escapes)."
+  "Render centered guidance when the catalog is empty and scanning is done."
   (let ((top (max 0 (1- (floor rows 2))))
         (lines (list (cons "no repositories found" +sgr-muted-italic+)
                      (cons (format nil "ghq root: ~A" ghq-root) +sgr-muted+)
@@ -410,7 +389,7 @@
                               +sgr-muted-italic+))))
               (cell (min tree-top (max 0 (1- rows))) 0 cols
                     (cond
-                      ((and (not wide-enough-p) (not tall-enough-p))
+                      ((not (or wide-enough-p tall-enough-p))
                        "WORKSPACE OVERVIEW (terminal too small for panels)")
                       ((not wide-enough-p)
                        "WORKSPACE OVERVIEW (terminal too narrow for panels)")

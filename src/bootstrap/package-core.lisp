@@ -52,10 +52,11 @@
 (defpackage #:nerimux/vcs
   (:use #:cl)
   (:documentation
-   "INFRASTRUCTURE layer: the optional cl-vcs-kit adapter.  Translates ghq and
+   "INFRASTRUCTURE layer: the direct cl-vcs-kit integration.  Translates ghq and
     worktree observations into the pure repository hierarchy and installs the
-    corresponding domain ports.  The package is resolved at runtime so the core
-    system remains loadable when the optional sibling is not pinned.")
+    corresponding domain ports.  cl-vcs-kit is a required system dependency;
+    the availability predicate reports whether its package is currently loaded
+    for command-level error reporting.")
   (:export
    #:vcs-package-available-p
    #:scan-repositories

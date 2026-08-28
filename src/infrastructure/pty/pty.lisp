@@ -56,7 +56,7 @@
 
 ;;; ── Private: spawned PTY helpers ───────────────────────────────────────────
 
-(defvar *pty-processes* (make-hash-table :test #'eql :synchronized t)
+(defvar *pty-processes* (make-hash-table :synchronized t)
   "MASTER-FD -> cl-tty-kit PTY struct for PTYs spawned by forkpty-with-shell.
    :synchronized so the reader thread (pty-child-exit-status reads) and teardown
    (pty-close remhash) can touch it concurrently without a coarse external lock.
@@ -286,7 +286,7 @@
   ;; process handle it spawned and checks process-group ownership, whereas
   ;; nerimux holds a bare pid from a cl-tty-kit PTY. sb-posix ships with SBCL
   ;; and is not an external dependency.
-  (when (> child-pid 0)
+  (when (plusp child-pid)
     (handler-case
         (sb-posix:kill child-pid sb-posix:sighup)
       (sb-posix:syscall-error () nil)))
@@ -392,31 +392,13 @@
 
 ;;; ── Public: terminal geometry ──────────────────────────────────────────────
 
-(defconstant +max-sane-rows+ 1000
-  "Upper bound on terminal rows accepted from ioctl; values above this are clamped.")
-(defconstant +max-sane-cols+ 1000
-  "Upper bound on terminal columns accepted from ioctl; values above this are clamped.")
-
-(defconstant +default-term-rows+ 24
-  "Fallback terminal height in rows, used when ioctl fails or reports a
-   nonsensical size (e.g., a transient 0x0 read). Mirrors the *term-rows*
-   defvar default in runtime.lisp.")
-(defconstant +default-term-cols+ 80
-  "Fallback terminal width in columns, used when ioctl fails or reports a
-   nonsensical size (e.g., a transient 0x0 read). Mirrors the *term-cols*
-   defvar default in runtime.lisp.")
+(defconstant +max-sane-rows+ 1000)
+(defconstant +max-sane-cols+ 1000)
+(defconstant +default-term-rows+ 24)
+(defconstant +default-term-cols+ 80)
 
 (defun terminal-size ()
-  "Return (values rows cols) of the terminal attached to stdout.
-   Falls back to +default-term-rows+ x +default-term-cols+ if ioctl fails or
-   reports an out-of-range size (a transient 0x0 or garbage read must not
-   drive a resize).
-
-   The underlying TIOCGWINSZ query is delegated to cl-tty-kit:terminal-size,
-   which returns (values COLUMNS ROWS) — columns first.  We SWAP that to
-   nerimux's (values ROWS COLS) contract; a transpose here would corrupt every
-   pane's geometry.  cl-tty-kit returns (values NIL NIL) when the size is
-   unavailable, which fails the integerp/range check below and falls back."
+  "Return terminal dimensions as (values rows cols), with safe fallbacks."
   (multiple-value-bind (cols rows) (cl-tty-kit:terminal-size +stdout-fd+)
     (if (and (integerp rows) (integerp cols)
              (<= 1 rows +max-sane-rows+)

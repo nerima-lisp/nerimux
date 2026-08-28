@@ -498,6 +498,11 @@
             text = ''
               export NERIMUX_SIBLING_REGISTRY="${siblingRegistry system}"
               export NERIMUX_TEST_SYSTEM="nerimux/pty-test"
+              # The PTY suite must use a deterministic POSIX shell.  A caller's
+              # interactive SHELL can be fish (or another shell whose startup
+              # hooks are not suitable for a non-login test PTY), making the
+              # child exit before the test sends its command.
+              export SHELL=/bin/sh
               work="$(mktemp -d)"
               trap 'rm -rf "$work"' EXIT
               mkdir -p "$work/home"
@@ -601,6 +606,7 @@
             packages = [
               sbcl
               pkgs.coreutils
+              pkgs.python3Packages.mkdocs-material
             ];
             NERIMUX_SIBLING_REGISTRY = siblingRegistry system;
             shellHook = ''

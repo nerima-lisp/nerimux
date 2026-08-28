@@ -293,13 +293,15 @@
          (%workspace-find-repository token organizations)
          (%workspace-find-organization token organizations)))))
 
+(defun %client-context-object (conn target)
+  (or (%workspace-find-tree-object target)
+      (%client-tree-object conn)
+      (%workspace-find-tree-object (%client-selection-token conn))
+      (and (client-conn-focus conn)
+           (nerimux/model:pane-worktree (client-conn-focus conn)))))
+
 (defun %client-selected-repository (conn &optional target)
-  (let ((object
-          (or (%workspace-find-tree-object target)
-              (%client-tree-object conn)
-              (%workspace-find-tree-object (%client-selection-token conn))
-              (and (client-conn-focus conn)
-                   (nerimux/model:pane-worktree (client-conn-focus conn))))))
+  (let ((object (%client-context-object conn target)))
     (typecase object
       (nerimux/model:repository object)
       (nerimux/model:worktree
@@ -315,12 +317,7 @@
 itself, or the organization owning the selected repository or worktree.
 Mirrors %CLIENT-SELECTED-REPOSITORY's object-resolution chain, one level up
 the tree (R7.1)."
-  (let ((object
-          (or (%workspace-find-tree-object target)
-              (%client-tree-object conn)
-              (%workspace-find-tree-object (%client-selection-token conn))
-              (and (client-conn-focus conn)
-                   (nerimux/model:pane-worktree (client-conn-focus conn))))))
+  (let ((object (%client-context-object conn target)))
     (typecase object
       (nerimux/model:organization object)
       (nerimux/model:repository (nerimux/model:repository-organization object))

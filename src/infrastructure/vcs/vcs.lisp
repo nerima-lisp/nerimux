@@ -20,7 +20,7 @@
             do (setf start (1+ end))
           else
             do (return))
-    (remove-if (lambda (part) (zerop (length part))) (nreverse parts))))
+    (remove "" (nreverse parts) :test #'string=)))
 
 (defun %organization-and-name (specification)
   (let ((parts (%specification-parts specification)))
@@ -72,8 +72,8 @@
 
 (defun ghq-root-directory ()
   "The configured ghq root as a string, or NIL when ghq is unavailable or the
-   lookup fails. Bootstrap code must not call VCS-KIT directly -- this is the
-   sanctioned indirection through this package's runtime-optional boundary."
+   lookup fails. Bootstrap code uses this domain-facing query rather than
+   duplicating ghq-root lookup and failure handling."
   (when (eq *ghq-root-cache* :unresolved)
     (setf *ghq-root-cache*
           (and (vcs-package-available-p)
@@ -234,7 +234,8 @@ client's cursor while it is being looked at."
    so pane associations survive the merge the same way every other catalog
    mutation preserves them (%PRESERVE-PANE-ASSOCIATIONS)."
   (when organizations
-    (let ((merged (copy-list (workspace-organizations))))
+    (let ((merged (copy-list (workspace-organizations)))
+          (additions nil))
       (dolist (organization organizations)
         (let ((existing
                 (find (nerimux/model:organization-id organization) merged
@@ -245,7 +246,8 @@ client's cursor while it is being looked at."
                 (unless (%repository-already-present-p repository merged)
                   (nerimux/model:organization-add-repository
                    existing repository)))
-              (setf merged (append merged (list organization))))))
+              (push organization additions))))
+      (setf merged (nconc merged (nreverse additions)))
       (set-workspace-organizations merged)))
   (workspace-organizations))
 
@@ -332,155 +334,11 @@ client's cursor while it is being looked at."
 (defun %make-vcs-repository (directory)
   (vcs-kit:make-vcs-repository directory))
 
-(defvar *directory-resolve-timeout* 2.0d0
-  "Timeout (seconds) for the single git invocation FR-002's synchronous
-   attach-time resolve makes (%DIRECTORY-REPOSITORY-ROOT). Deliberately much
-   shorter than VCS-KIT's own 30s default, which every OTHER call in this file
-   keeps: this one path runs on the single-threaded dispatch loop, blocking
-   every attached client, before a client's cwd match is even resolved --
-   FR-002 requires that to happen synchronously, so the only lever left is how
-   long a hung mount can hold the loop hostage. 2s is generous for a live
-   disk (`git worktree list` normally completes in tens of milliseconds) and
-   still fails closed well before it could be mistaken for the server
-   itself hanging.")
-
-(defun %make-directory-vcs-repository (directory)
-  "A short-timeout VCS-KIT:VCS-REPOSITORY handle for
-   %DIRECTORY-REPOSITORY-ROOT only. Every other caller in this file keeps
-   %MAKE-VCS-REPOSITORY's ordinary (VCS-KIT default, 30s) timeout on purpose --
-   a background scan or a user-invoked refresh should wait out a slow disk
-   rather than fail closed early -- so this is a separate constructor, not a
-   change to %MAKE-VCS-REPOSITORY itself."
-  (vcs-kit:make-vcs-repository directory
-                                :default-timeout *directory-resolve-timeout*))
-
-(defun %path-missing-p (path)
-  (and (stringp path)
-       (plusp (length path))
-       (null (probe-file path))))
-
-;;; ── cwd-match auto-registration (FR-002) ────────────────────────────────
-
-(defun %directory-repository-root (directory)
-  "DIRECTORY's (VALUES ROOT RAW-WORKTREES) (FR-002): ROOT is the bare entry's
-   path when `git worktree list` reports one -- nerimux's usual bare
-   `<repo>.git` + `.worktrees/` layout, where the bare entry IS the repository
-   and is exactly the local-path a ghq entry would report for it -- else the
-   first entry's path (the main worktree of an ordinary non-bare clone).
-   VCS-KIT:VCS-LIST-WORKTREES works the same from any worktree of a
-   repository -- main, linked, or the bare entry itself -- which is why this
-   needs no separate pass to find \"the\" main worktree; it is the same
-   mechanism %READ-REPOSITORY-WORKTREES already relies on for exactly that
-   reason. Both values are NIL when DIRECTORY is not a git repository or the
-   list comes back empty.
-
-   RAW-WORKTREES is returned, not discarded, so RESOLVE-DIRECTORY-ORGANIZATIONS
-   can hand it straight to %APPLY-REPOSITORY-WORKTREES instead of calling
-   LIST-REPOSITORY-WORKTREES, which would run this same `git worktree list`
-   a second time against the same repository (F1: this whole path runs
-   synchronously on the single-threaded dispatch loop, so a second git
-   invocation is a second chance to block every attached client, not merely
-   redundant work). Uses %MAKE-DIRECTORY-VCS-REPOSITORY's short timeout for
-   the same reason -- this is the one and only git call this path makes.
-
-   This used to go through VCS-KIT:GIT-REV-PARSE-VALUE, one of the
-   %DEFINE-CHECKED-OPERATION family, which type-checks its first argument
-   against VCS-KIT:REPOSITORY -- a distinct, lower-level struct from the
-   backend-neutral VCS-KIT:VCS-REPOSITORY that %MAKE-VCS-REPOSITORY (and
-   every other call in this file) actually builds, so every call signalled
-   SIMPLE-TYPE-ERROR before it ran a single git command."
-  (let ((worktrees
-          (vcs-kit:vcs-list-worktrees
-           (%make-directory-vcs-repository directory))))
-    (when worktrees
-      (let ((bare (find-if #'vcs-kit:vcs-worktree-bare-p worktrees)))
-        (values (vcs-kit:vcs-worktree-path (or bare (first worktrees)))
-                worktrees)))))
-
-(defun %directory-under-p (root path)
-  (and (stringp root) (plusp (length root))
-       (stringp path) (plusp (length path))
-       (let ((prefix (if (char= (char root (1- (length root))) #\/)
-                         root
-                         (concatenate 'string root "/"))))
-         (and (>= (length path) (length prefix))
-              (string= prefix path :end2 (length prefix))))))
-
-(defun %directory-specification (repository-root)
-  "REPOSITORY-ROOT's specification (FR-002): its path relative to the ghq
-   root when it sits under one, so %ORGANIZATION-AND-NAME parses out the
-   same host/org/name a ghq-scanned entry's specification would; \"local\"
-   otherwise, matching %ORGANIZATION-AND-NAME's own fallback for anything it
-   cannot resolve to three parts."
-  (let ((ghq-root (ghq-root-directory)))
-    (if (and repository-root ghq-root
-             (%directory-under-p ghq-root repository-root))
-        (let ((prefix (if (char= (char ghq-root (1- (length ghq-root))) #\/)
-                          ghq-root
-                          (concatenate 'string ghq-root "/"))))
-          (if (>= (length repository-root) (length prefix))
-              (subseq repository-root (length prefix))
-              ""))
-        "local")))
-
-(defun resolve-directory-organizations (directory)
-  "Synchronously resolve the git repository DIRECTORY sits in to an
-   organization list of the same shape WORKSPACE-ORGANIZATIONS returns (0 or
-   1 entries).
-
-   FR-002 needs this to register, on the spot, a repository the background
-   catalog scan has not reached yet -- or never will, for a clone outside
-   ghq's root -- the moment a client attaches with a cwd matching nothing in
-   the catalog, rather than leaving that attach fall through to the ordinary
-   overview with nothing selected. Returns NIL, without signalling, for a
-   non-git DIRECTORY or any failure along the way: a directory that simply
-   is not a repository is the common case here, since this runs on every
-   attach whose cwd missed the catalog, not an error worth surfacing.
-
-   Makes exactly one git invocation (F1): %DIRECTORY-REPOSITORY-ROOT's, whose
-   RAW-WORKTREES value is applied directly via %APPLY-REPOSITORY-WORKTREES
-   below rather than re-fetched through LIST-REPOSITORY-WORKTREES."
-  (handler-case
-      (when (and (stringp directory) (plusp (length directory)))
-        (multiple-value-bind (repository-root raw-worktrees)
-            (%directory-repository-root directory)
-          (when (and repository-root (plusp (length repository-root)))
-            (let* ((specification (%directory-specification repository-root))
-                   (repository
-                     (nerimux/model:make-repository
-                      :specification specification
-                      :local-path repository-root
-                      :backend :git)))
-              (multiple-value-bind (host name)
-                  (%organization-and-name specification)
-                (let ((organization
-                        (nerimux/model:make-organization
-                         :id (nerimux/model:organization-key host name)
-                         :host host
-                         :name name)))
-                  (nerimux/model:organization-add-repository
-                   organization repository)
-                  (%apply-repository-worktrees
-                   repository raw-worktrees (%path-missing-p repository-root))
-                  (list organization)))))))
-    (error () nil)))
-
 (defun %read-repository-worktrees (repository)
   (let ((backend-repository
           (%make-vcs-repository (nerimux/model:repository-path repository))))
     (values (vcs-kit:vcs-list-worktrees backend-repository)
             (%path-missing-p (nerimux/model:repository-path repository)))))
-
-(defstruct (%worktree-status-update
-             (:constructor %make-worktree-status-update))
-  (path nil :read-only t)
-  (missing-p nil :read-only t)
-  (snapshot nil :read-only t)
-  (head nil :read-only t)
-  (dirty-p nil :read-only t)
-  (conflict-p nil :read-only t)
-  (ahead nil :read-only t)
-  (behind nil :read-only t))
 
 (defun %apply-repository-worktrees
     (repository raw-worktrees missing-p &optional status-updates)
@@ -538,9 +396,6 @@ client's cursor while it is being looked at."
   (multiple-value-call #'%apply-repository-worktrees
     repository
     (%read-repository-worktrees repository)))
-
-(defun %status-entry-conflict-p (entry)
-  (eq (vcs-kit:vcs-status-entry-kind entry) :unmerged))
 
 (defun %read-worktree-status-at (path fallback-head repository-path)
   (let* ((directory (if (plusp (length path)) path repository-path))
@@ -615,39 +470,6 @@ client's cursor while it is being looked at."
   (nerimux/model:repository-recompute-status repository)
   repository)
 
-(defstruct (%repository-refresh
-             (:constructor %make-repository-refresh))
-  (raw-worktrees nil :read-only t)
-  (missing-p nil :read-only t)
-  (status-updates nil :read-only t))
-
-(defun %read-repository-refresh (repository)
-  (multiple-value-bind (raw-worktrees missing-p)
-      (%read-repository-worktrees repository)
-    (%make-repository-refresh
-     :raw-worktrees raw-worktrees
-     :missing-p missing-p
-     :status-updates
-     (loop for raw in raw-worktrees
-           ;; Same reasoning as %read-repository-status: a bare root has no
-           ;; working tree, so status collection must skip it here too.
-           unless (vcs-kit:vcs-worktree-bare-p raw)
-             collect (%read-worktree-status-at
-                      (vcs-kit:vcs-worktree-path raw)
-                      (vcs-kit:vcs-worktree-head raw)
-                      (nerimux/model:repository-path repository))))))
-
-(defun %apply-repository-refresh (repository refresh)
-  (%apply-repository-worktrees
-   repository
-   (%repository-refresh-raw-worktrees refresh)
-   (%repository-refresh-missing-p refresh)
-   (%repository-refresh-status-updates refresh))
-  (%apply-repository-status
-   repository
-   (%repository-refresh-status-updates refresh)
-   (%repository-refresh-missing-p refresh)))
-
 (defun worktree-status (worktree)
   "Refresh WORKTREE status from vcs-status-structured."
   (let ((repository (nerimux/model:worktree-repository worktree)))
@@ -657,7 +479,3 @@ client's cursor while it is being looked at."
             (%path-missing-p (nerimux/model:repository-path repository)))
       (nerimux/model:repository-recompute-status repository))
     worktree))
-
-(defun refresh-repository-status (repository)
-  "Refresh all statuses for REPOSITORY synchronously."
-  (%apply-repository-status repository (%read-repository-status repository)))

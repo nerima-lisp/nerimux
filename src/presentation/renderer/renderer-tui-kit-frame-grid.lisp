@@ -389,47 +389,28 @@
   (aref grid row))
 
 (defun %frame-grid-text (grid)
-  "Flatten GRID to one newline-joined string. +FRAME-GRID-CONTINUATION+
-   cells are omitted rather than written as a space: the wide glyph to
-   their left already accounts for both columns once this text reaches
-   %SURFACE-DRAW-TEXT (display-width aware), so re-emitting the
-   continuation cell as a real character would double-count that column."
+  "Flatten GRID to one newline-joined string, omitting wide-glyph sentinels."
   (with-output-to-string (stream)
     (dotimes (row (length grid))
       (loop for character across (%frame-grid-row grid row)
             unless (char= character +frame-grid-continuation+)
               do (write-char character stream))
-      (unless (= row (1- (length grid)))
-        (terpri stream)))))
+      (unless (= row (1- (length grid))) (terpri stream)))))
 
 (defun %frame-grid-row-spans (chars-row styles-row)
-  "Group CHARS-ROW into CL-TUI-KIT/CORE:TEXT-SPANs of equal-style runs, for
-   CL-TUI-KIT/CORE:SURFACE-DRAW-STYLED-TEXT.
-
-   +FRAME-GRID-CONTINUATION+ cells are dropped exactly as %FRAME-GRID-TEXT
-   drops them: the wide glyph immediately to their left already carries
-   both columns once SURFACE-DRAW-STYLED-TEXT (display-width aware) sees
-   it, so re-emitting the continuation cell would double-count that
-   column.  Cells sharing one STYLE= style are folded into a single span
-   rather than one span per cell, so an unchanged run allocates one style
-   object rather than one per character."
-  (let ((spans nil)
-        (run-style nil)
-        (run nil))
+  "Group CHARS-ROW into styled text spans, omitting wide-glyph sentinels."
+  (let ((spans nil) (run-style nil) (run nil))
     (flet ((flush ()
              (when run
                (push (cl-tui-kit/core:make-text-span
-                      (coerce (nreverse run) 'string)
-                      :style run-style)
-                     spans)
+                      (coerce (nreverse run) 'string) :style run-style) spans)
                (setf run nil))))
       (loop for column from 0 below (length chars-row)
             for character = (char chars-row column)
             unless (char= character +frame-grid-continuation+)
               do (let ((style (aref styles-row column)))
                    (unless (and run-style (cl-tui-kit/core:style= run-style style))
-                     (flush)
-                     (setf run-style style))
+                     (flush) (setf run-style style))
                    (push character run)))
       (flush))
     (nreverse spans)))

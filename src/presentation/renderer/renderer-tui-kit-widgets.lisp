@@ -144,9 +144,6 @@
                   :key-at (lambda (entry index)
                             (declare (ignore index))
                             (%workspace-tree-node-key (third entry)))
-                  :label-at (lambda (entry index)
-                              (declare (ignore index))
-                              (%tree-entry-render-text entry cols))
                   :render-item
                   (lambda (entry index)
                     (declare (ignore index))

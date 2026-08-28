@@ -1,5 +1,28 @@
 (in-package #:nerimux/protocol)
 
+(defconstant +msg-attach+  1 "client→server: attach; payload = rows,cols (u16,u16)")
+(defconstant +msg-key+     2 "client→server: raw input bytes for the active pane")
+(defconstant +msg-resize+  3 "client→server: terminal resized; payload = rows,cols")
+(defconstant +msg-detach+  4 "client→server: detach (empty payload)")
+(defconstant +msg-frame+   5 "server→client: a rendered frame (UTF-8 payload)")
+(defconstant +msg-bye+     6 "server→client: server is closing (empty payload)")
+(defconstant +msg-command+ 7 "client→server: a named command")
+(defconstant +msg-reply+   8 "server→client: a forwarded command's text output")
+(defconstant +header-size+ 5 "1 type byte + 4 length bytes.")
+(defconstant +payload-length-offset+ 1 "Byte offset of the u32 payload length.")
+(defconstant +cols-offset-in-size-payload+ 2 "Byte offset of cols in a size payload.")
+
+(defmacro define-wire-messages (&rest specs)
+  "Build typed frame constructor functions from a declarative table."
+  `(progn
+     ,@(mapcar
+        (lambda (spec)
+          (destructuring-bind (name type-const lambda-list payload-expr docstring) spec
+            `(defun ,name ,lambda-list
+               ,docstring
+               (encode-frame ,type-const ,payload-expr))))
+        specs)))
+
 ;;;; +msg-command+ payload codec — NUL-delimited field encoding/decoding.
 ;;;;
 ;;;; This file is the pure, transport-agnostic codec for the command message

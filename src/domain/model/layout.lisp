@@ -32,91 +32,6 @@
   second
   (ratio 1/2))
 
-;;; ── Prolog-like tree visitor macro ─────────────────────────────────────────
-;;;
-;;; (define-layout-visitor NAME (NODE) null-form leaf-form split-form)
-;;; Each form is a Prolog-like clause:
-;;;   null-form  → process(nil)
-;;;   leaf-form  → process(leaf(pane))      — PANE is bound
-;;;   split-form → process(split(o,f,s,r))  — FIRST, SECOND, ORIENT, RATIO are bound
-;;; Replaces the repeated (etypecase node (null ..) (layout-leaf ..) (layout-split ..))
-;;; pattern with a single declarative definition.
-
-;;; ── Layout tree visitor macros ─────────────────────────────────────────────
-;;;
-;;; Two symmetric macros cover the two visitor shapes:
-;;;   define-layout-visitor  — NODE only (1-arg traversal)
-;;;   define-layout-fold     — NODE + extra args (2+-arg traversal)
-;;;
-;;; Prolog analogy:
-;;;   traverse(nil)          :- null_case.
-;;;   traverse(leaf(Pane))   :- leaf_case(Pane).
-;;;   traverse(split(O,F,S)) :- split_case(O, F, S).
-
-(defmacro define-layout-visitor (name (node-var) &key on-null on-leaf on-split
-                                                       docstring)
-  "Define a single-argument recursive layout-tree visitor NAME.
-   ON-NULL  — form evaluated when NODE is NIL.
-   ON-LEAF  — form with PANE bound to (layout-leaf-pane node).
-   ON-SPLIT — form with FIRST, SECOND, ORIENT, RATIO bound."
-  `(defun ,name (,node-var)
-     ,@(when docstring (list docstring))
-     (etypecase ,node-var
-       (null ,on-null)
-       (layout-leaf
-        (let ((pane (layout-leaf-pane ,node-var)))
-          (declare (ignorable pane))
-          ,on-leaf))
-       (layout-split
-        (let ((first  (layout-split-first       ,node-var))
-              (second (layout-split-second      ,node-var))
-              (orient (layout-split-orientation ,node-var))
-              (ratio  (layout-split-ratio       ,node-var)))
-          (declare (ignorable first second orient ratio))
-          ,on-split)))))
-
-(define-layout-visitor layout-leaves (node)
-  :docstring "Collect every pane in NODE's subtree, left/top-to-right/bottom."
-  :on-null  nil
-  :on-leaf  (list pane)
-  :on-split (append (layout-leaves first) (layout-leaves second)))
-
-;;; ── define-layout-fold — multi-argument traversal ────────────────────────────
-;;;
-;;; Like define-layout-visitor but supports extra arguments (beyond NODE).
-;;; Bindings in each clause use prefixed names to avoid shadowing caller args:
-;;;   leaf-pane   = (layout-leaf-pane node)
-;;;   split-first / split-second / split-orient / split-ratio
-
-(defmacro define-layout-fold (name (node-var &rest extra-vars) &key on-null on-leaf
-                                                                    on-split docstring)
-  "Define a multi-argument recursive layout-tree function NAME.
-   NODE-VAR is the tree node; EXTRA-VARS are additional parameters.
-   ON-LEAF has LEAF-PANE bound; ON-SPLIT has SPLIT-FIRST, SPLIT-SECOND,
-   SPLIT-ORIENT, SPLIT-RATIO bound."
-  `(defun ,name (,node-var ,@extra-vars)
-     ,@(when docstring (list docstring))
-     (etypecase ,node-var
-       (null ,on-null)
-       (layout-leaf
-        (let ((leaf-pane (layout-leaf-pane ,node-var)))
-          (declare (ignorable leaf-pane))
-          ,on-leaf))
-       (layout-split
-        (let ((split-first  (layout-split-first       ,node-var))
-              (split-second (layout-split-second      ,node-var))
-              (split-orient (layout-split-orientation ,node-var))
-              (split-ratio  (layout-split-ratio       ,node-var)))
-          (declare (ignorable split-first split-second split-orient split-ratio))
-          ,on-split)))))
-
-(define-layout-fold layout-find-leaf (node pane)
-  :docstring "Return the LAYOUT-LEAF in NODE that holds PANE, or NIL."
-  :on-null  nil
-  :on-leaf  (when (eq leaf-pane pane) node)
-  :on-split (or (layout-find-leaf split-first  pane)
-                (layout-find-leaf split-second pane)))
-
 (defun %direct-child-side (split child)
   "If CHILD is a direct child of SPLIT, return (values SPLIT :first or :second).
    Returns (values NIL NIL) when CHILD is not a direct child of SPLIT."
@@ -166,17 +81,6 @@
 (defun %axis-floor (orient)
   "Minimum pane extent (cells) along ORIENT's split axis: rows for :v, cols for :h."
   (orient-case orient :h +pane-min-width+ :v +pane-min-height+))
-
-(define-layout-fold layout-min-extent (node orient)
-  :docstring "Minimum cells NODE requires along ORIENT's axis (:v → rows, :h → cols),
-   including 1-cell separators at same-axis internal nodes."
-  :on-null  0
-  :on-leaf  (%axis-floor orient)
-  :on-split (let ((first-extent  (layout-min-extent split-first  orient))
-                  (second-extent (layout-min-extent split-second orient)))
-               (if (eq split-orient orient)
-                   (+ first-extent 1 second-extent) ; same-axis split: stack + 1-cell separator
-                   (max first-extent second-extent))))
 
 ;;; ── %build-flat-tree ─────────────────────────────────────────────────────────
 ;;;

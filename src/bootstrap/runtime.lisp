@@ -146,11 +146,6 @@
    deliver signals that were suppressed while the channel was locked."
   (%set-channel-locked name nil))
 
-(defun %cap-list (list limit)
-  "Return LIST truncated to at most LIMIT elements; returns LIST unchanged when
-   it already fits."
-  (if (> (length list) limit) (subseq list 0 limit) list))
-
 ;;; -- SIGWINCH ---------------------------------------------------------------
 
 (defun install-sigwinch-handler ()

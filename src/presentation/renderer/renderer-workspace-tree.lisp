@@ -236,8 +236,7 @@
           for plain = (format nil "~{~A~^ ~}" (mapcar #'car remaining))
           for styled = (format nil "~{~A~^ ~}" (mapcar #'cdr remaining))
           when (or (null (cdr remaining)) (<= (%display-width plain) width))
-            return (values (%display-clip plain width) styled)
-          finally (return (values "" "")))))
+            return (values (%display-clip plain width) styled))))
 
 ;;; ── Text filter (`/query`) ───────────────────────────────────────────────────
 ;;;

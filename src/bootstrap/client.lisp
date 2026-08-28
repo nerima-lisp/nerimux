@@ -40,13 +40,13 @@
       t)))
 
 (defun %decode-server-frame (stream)
-  "Pure step: read one frame from the server STREAM and classify it.
+  "Read one frame from server STREAM and return its pure classification.
    Returns (values disposition text) where:
      disposition  :exit    — server signalled end-of-session (+msg-bye+ or EOF);
                   :frame   — a rendered screen frame was received;
                   :ignore  — an unrecognised frame type (continue event loop).
      text         the decoded string payload for a :frame disposition, NIL otherwise.
-   No I/O side effects — the caller (%receive-server-frame) decides what to write."
+   The caller (%receive-server-frame) owns the output side effect."
   (with-incoming-frame (type payload stream)
     ((null type)        (values :exit nil))
     ((= type +msg-bye+) (values :exit nil))
@@ -56,7 +56,7 @@
 
 (defun %receive-server-frame (stream)
   "Effect boundary: read and dispatch one frame from the server STREAM.
-   Calls %decode-server-frame (pure), then writes any :frame text to
+   Uses %decode-server-frame's pure classification step, then writes any :frame text to
    *standard-output* (the only side-effecting step).
    Returns :exit when the server signals end-of-session (+msg-bye+ or EOF),
    NIL to continue the event loop."

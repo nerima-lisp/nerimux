@@ -1,5 +1,39 @@
 (in-package #:nerimux/protocol)
 
+(defmacro define-uint-codec (&rest specs)
+  "Build paired big-endian integer encoder and decoder functions.
+
+SPECS are declarative codec definitions of the form
+  (ENCODER DECODER BITS DOCSTRING).
+The declaration is checked while the macro is expanded so a malformed wire
+schema cannot silently generate a partial or non-byte-aligned codec."
+  (labels ((expand-spec (spec)
+             (destructuring-bind (encoder-name decoder-name bits docstring) spec
+               (unless (and (symbolp encoder-name) (symbolp decoder-name))
+                 (error "Codec names must be symbols: ~S" spec))
+               (unless (and (integerp bits) (plusp bits) (zerop (mod bits 8)))
+                 (error "Codec width must be a positive multiple of 8: ~S" spec))
+               (unless (stringp docstring)
+                 (error "Codec documentation must be a string: ~S" spec))
+               (let ((bytes (/ bits 8)))
+                 `(progn
+                    (defun ,encoder-name (n)
+                      ,(format nil "~A — ~D big-endian octets." docstring bytes)
+                      (vector ,@(loop for shift from (- bits 8) downto 0 by 8
+                                      collect `(ldb (byte 8 ,shift) n))))
+                    (defun ,decoder-name (buffer start)
+                      ,(format nil "~A — big-endian ~D-bit value." docstring bits)
+                      (logior ,@(loop for i from 0 below bytes
+                                      for shift from (- bits 8) downto 0 by 8
+                                      collect (if (zerop shift)
+                                                  `(aref buffer (+ start ,i))
+                                                  `(ash (aref buffer (+ start ,i)) ,shift))))))))))
+    `(progn ,@(mapcar #'expand-spec specs))))
+
+(define-uint-codec
+  (u16-octets read-u16 16 "Unsigned 16-bit integer codec")
+  (u32-octets read-u32 32 "Unsigned 32-bit integer codec"))
+
 ;;;; Wire protocol for client/server detach-attach.
 ;;;;
 ;;;; A multiplexer server holds the sessions/PTYs; a thin client attaches over a
@@ -17,66 +51,6 @@
 ;;;; encode-* return fresh octet vectors; decode-frame parses ONE frame from a
 ;;;; buffer and reports how many bytes it consumed, or NIL when the buffer does
 ;;;; not yet hold a complete frame (so a streaming reader can wait for more).
-
-;;; ── Message type tags ───────────────────────────────────────────────────────
-
-(defconstant +msg-attach+  1 "client→server: attach; payload = rows,cols (u16,u16)")
-(defconstant +msg-key+     2 "client→server: raw input bytes for the active pane")
-(defconstant +msg-resize+  3 "client→server: terminal resized; payload = rows,cols")
-(defconstant +msg-detach+  4 "client→server: detach (empty payload)")
-(defconstant +msg-frame+   5 "server→client: a rendered frame (UTF-8 payload)")
-(defconstant +msg-bye+     6 "server→client: server is closing (empty payload)")
-(defconstant +msg-command+ 7
-  "client→server: a named command with optional -t target; payload =
-   NUL-delimited [target NUL] command-name NUL [args...]")
-(defconstant +msg-reply+   8
-  "server→client: a forwarded command's text output (UTF-8 payload), for the
-   CLI command client (e.g. display-message -p).")
-
-(defconstant +header-size+ 5 "1 type byte + 4 length bytes.")
-
-;;; ── Frame layout constants ───────────────────────────────────────────────────
-
-(defconstant +payload-length-offset+ 1
-  "Byte offset of the u32-big-endian payload-length field inside a frame header.")
-
-(defconstant +cols-offset-in-size-payload+ 2
-  "Byte offset of the cols u16 within a rows,cols size payload.")
-
-;;; ── Octet helpers (data) ────────────────────────────────────────────────────
-;;;
-;;; define-uint-codec is a Prolog-like macro: each spec (encoder-name
-;;; decoder-name bits doc) is a fact that generates a paired big-endian encoder
-;;; and decoder defun.  The byte-extraction and shift forms are derived
-;;; mechanically from the bit-width at macro-expansion time.
-
-(defmacro define-uint-codec (&rest specs)
-  "Build paired big-endian integer encoder and decoder functions from a
-   declarative table.  Each SPEC is (encoder-name decoder-name bits docstring)."
-  `(progn
-     ,@(mapcar
-        (lambda (spec)
-          (destructuring-bind (encoder-name decoder-name bits docstring) spec
-            (let ((bytes (/ bits 8)))
-              `(progn
-                 (defun ,encoder-name (n)
-                   ,(format nil "~A — encoder: N (0..~D) as ~D big-endian octet~:P."
-                            docstring (1- (expt 2 bits)) bytes)
-                   (vector ,@(loop for shift from (- bits 8) downto 0 by 8
-                                   collect `(ldb (byte 8 ,shift) n))))
-                 (defun ,decoder-name (buffer start)
-                   ,(format nil "~A — decoder: big-endian ~D-bit value from BUFFER at START."
-                            docstring bits)
-                   (logior ,@(loop for i from 0 below bytes
-                                   for shift from (- bits 8) downto 0 by 8
-                                   collect (if (zerop shift)
-                                               `(aref buffer (+ start ,i))
-                                               `(ash (aref buffer (+ start ,i)) ,shift)))))))))
-        specs)))
-
-(define-uint-codec
-  (u16-octets read-u16 16 "Big-endian unsigned 16-bit integer codec")
-  (u32-octets read-u32 32 "Big-endian unsigned 32-bit integer codec"))
 
 (defun u16-octets-pair (a b)
   "A,B (each 0..65535) as four big-endian octets (two u16s)."
@@ -115,21 +89,6 @@
             (values type
                     (subseq buffer payload-start next)
                     next)))))
-
-;;; ── Wire message definition macro ────────────────────────────────────────────
-
-(defmacro define-wire-messages (&rest specs)
-  "Build typed frame constructor functions from a declarative table.
-   Each SPEC is (name type-constant lambda-list payload-expr docstring).
-   Generates one DEFUN per entry: (name lambda-list) → (encode-frame type payload)."
-  `(progn
-     ,@(mapcar
-        (lambda (spec)
-          (destructuring-bind (name type-const lambda-list payload-expr docstring) spec
-            `(defun ,name ,lambda-list
-               ,docstring
-               (encode-frame ,type-const ,payload-expr))))
-        specs)))
 
 ;;; ── Typed message constructors (data) ────────────────────────────────────────
 

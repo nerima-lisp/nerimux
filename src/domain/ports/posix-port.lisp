@@ -5,18 +5,7 @@
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (require :sb-posix))
 
-;;;; POSIX symbol lookup.
-;;;;
-;;;; Domain code must not reach up into the application layer to ask.  This
-;;;; resolves an SB-POSIX function by name at CALL time -- deferred, so a
-;;;; load-time defvar cannot capture NIL before the package exists -- and
-;;;; returns NIL when the implementation does not offer it, leaving the caller
-;;;; to decide what a missing syscall means.
-;;;;
-;;;; It lived in nerimux/config, which made every domain caller depend upward on
-;;;; application for a pure reflection helper.  Its application-side callers now
-;;;; depend downward on this package instead, which is the direction the layering
-;;;; rule allows.
+;;;; POSIX symbol lookup for optional symbols within the supported SBCL runtime.
 
 ;;; I/O tuning for the descriptor-level loops.
 ;;;
@@ -40,10 +29,10 @@
    Bounded so the reader loop observes *RUNNING* even when the shell is silent.")
 
 (defun find-posix-function (name)
-  "The SB-POSIX function named NAME, or NIL when SB-POSIX is absent or does not
-   export it.  NAME is a string, e.g. \"SETENV\"."
-  (let ((package (find-package "SB-POSIX")))
-    (and package (find-symbol name package))))
+  "The fbound SB-POSIX function named NAME, or NIL when unavailable."
+  (let ((symbol (find-symbol name "SB-POSIX")))
+    (when (and symbol (fboundp symbol))
+      symbol)))
 
 ;;; ── Process environment and working directory ────────────────────────────────
 ;;;
@@ -71,12 +60,5 @@
   (sb-ext:posix-environ))
 
 (defun working-directory ()
-  "This process's current working directory, or NIL when unavailable.
-
-   Resolved through FIND-POSIX-FUNCTION so only an exported implementation
-   function is called.  Syscall failures return NIL."
-  (let ((getcwd (find-posix-function "GETCWD")))
-    (and getcwd
-         (handler-case
-             (funcall getcwd)
-           (sb-posix:syscall-error () nil)))))
+  "This process's current working directory."
+  (sb-posix:getcwd))

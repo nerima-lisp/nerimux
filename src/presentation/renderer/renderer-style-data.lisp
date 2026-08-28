@@ -1,5 +1,7 @@
 (in-package #:nerimux/renderer)
 
+;;;; Declarative renderer style data.
+;;;;
 ;;;; This file held the style-string parser's declarative dispatch
 ;;;; tables (style tokens, SGR attribute codes, colour names).  R2.4 deleted
 ;;;; the parser: every style this renderer applies is now a fixed SGR
@@ -12,3 +14,11 @@
 ;;;;
 ;;;; Load order: renderer-format → renderer-style-data → renderer-style → pane and composition modules.
 ;;;; All files share the nerimux/renderer package (no defpackage here).
+
+(defvar +sgr-copy-mode-match+
+    "48;5;179;38;5;235"
+  "SGR for a copy-mode search match: amber background, dark text.")
+(defvar +sgr-copy-mode-current-match+
+    "48;5;117;38;5;235"
+  "SGR for the copy-mode search match under the cursor: accent background,
+   dark text.")
