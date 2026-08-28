@@ -178,6 +178,11 @@ set of declaration-only, FFI-constant, and static-style source files excluded
 from the report is listed explicitly in `scripts/coverage.lisp`; runtime code
 and the behavior of those declarations' consumers remain in scope.
 
+The ordinary suite currently passes. The coverage report is also available in
+report-only mode when investigating uncovered runtime paths; the thresholded
+derivation remains the acceptance gate and must not be weakened or made to
+pass by expanding the exclusion list.
+
 ## Testing
 
 `nix flake check` runs three derivations in parallel:
