@@ -54,6 +54,9 @@ coverage.dat
 
 # --- Repository-specific entries below this line ---
 
+# Generated documentation site; sources live under docs/src/.
+/docs/site/
+
 # SBCL image and standalone binary. The names match :build-pathname and the
 # save-lisp-and-die target in nerimux.asd / flake.nix, so a local
 # `asdf:make` or a hand-run build never lands in a commit.

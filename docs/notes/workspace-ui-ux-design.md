@@ -17,7 +17,7 @@
   `wt-create`/`wt-delete`コマンド）に加えて、**lock/unlock（第8.4節、`L`/`U`
   キー、`wt-lock`/`wt-unlock`コマンド）とdry-run-firstなprune（第8.6節、
   `:wt-prune` → `:wt-prune-confirm`）も実装済み**である
-  （`src/infrastructure/vcs/vcs.lisp`の`lock-worktree`/`unlock-worktree`/
+  （`src/infrastructure/vcs/vcs-worktree-operations.lisp`の`lock-worktree`/`unlock-worktree`/
   `prune-worktrees`と、`src/bootstrap/server-multi-dispatch.lisp`の
   `%client-lock-worktree`/`%client-unlock-worktree`/`%client-prune-worktrees`）。
   未統合として残るのは第4章の全画面overviewモードのみである。

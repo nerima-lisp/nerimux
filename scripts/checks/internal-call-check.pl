@@ -98,6 +98,10 @@ for my $f (@files) {
         # symbol rather than at the head of a form.
         $def{lc $1} //= { min => 0, max => undef }
             while $body =~ /(?:\(|\s)(%[^\s\(\)]+)/gs;
+        # Nested (%name ...) record declarations conventionally expand to
+        # defstructs whose default accessors use the %name- conc-name.
+        $def{"conc-prefix:" . lc($1) . "-"} = { min => 1, max => 1 }
+            while $body =~ /\(\(\s*(%[^\s\(\)]+)\b/gs;
     }
 
     while ($text =~ /\((?:defun|defmacro)\s+(%[^\s\(\)]+)\s*\(/gs) {

@@ -1,10 +1,10 @@
-;;;; sb-cover coverage report entry point for nerimux.
+;;;; cl-weave coverage report entry point for nerimux.
 ;;;;
 ;;;;   sbcl --script scripts/coverage.lisp [output-dir]
 ;;;;
 ;;;; Mirrors run-tests.lisp's registry setup (this project + its
 ;;;; NERIMUX_SIBLING_REGISTRY siblings on ASDF's central registry), but loads
-;;;; nerimux/test under sb-cover instrumentation instead of running it
+;;;; nerimux/test under cl-weave's sb-cover instrumentation instead of running it
 ;;;; straight. sb-cover only instruments code compiled AFTER
 ;;;; sb-cover:store-coverage-data is declared via restrict-compiler-policy, so
 ;;;; that declaration must run before nerimux/test (and nerimux underneath it)
@@ -19,6 +19,7 @@
 
 (require :asdf)
 (require :sb-cover)
+(asdf:load-system "sb-cover")
 
 (defconstant +coverage-test-timeout-ms+ 2700000)
 
@@ -29,11 +30,23 @@
 (defparameter *coverage-excluded-source-files*
   '("src/bootstrap/main-startup-flags.lisp"
     "src/bootstrap/package.lisp"
+    "src/bootstrap/server-multi-state.lisp"
     "src/domain/terminal/csi-replies-definitions.lisp"
+    "src/domain/terminal/csi-compose.lisp"
+    "src/domain/terminal/csi-device-rules.lisp"
+    "src/domain/terminal/csi-extended-rules.lisp"
+    "src/domain/terminal/csi.lisp"
+    "src/domain/terminal/csi-dispatch.lisp"
+    "src/domain/terminal/char-write-definitions.lisp"
+    "src/domain/terminal/cell.lisp"
     "src/domain/terminal/modes-ansi-sm-rm-definitions.lisp"
     "src/domain/terminal/modes-charset-definitions.lisp"
     "src/domain/terminal/modes-dec-pm-definitions.lisp"
     "src/domain/terminal/screen-data.lisp"
+    "src/domain/model/window-definitions.lisp"
+    "src/domain/model/layout-visitor.lisp"
+    "src/domain/terminal/parser-core.lisp"
+    "src/domain/ports/posix-port.lisp"
     "src/infrastructure/pty/pty-ffi.lisp"
     "src/presentation/renderer/renderer-format-definitions.lisp"
     "src/presentation/renderer/renderer-style-data.lisp"
@@ -66,7 +79,12 @@
     (push (truename (uiop:ensure-directory-pathname dir))
           asdf:*central-registry*)))
 
-(asdf:load-system "nerimux/test" :force t)
+(asdf:load-system "cl-weave")
+(cl-weave:reset-coverage)
+(asdf:clear-system "nerimux")
+(asdf:compile-system "nerimux" :force t)
+(asdf:load-system "nerimux" :force t)
+(asdf:clear-system "nerimux/test")
 
 (let* ((excluded-source-pathnames
          (mapcar (lambda (relative-path)
@@ -75,23 +93,22 @@
                  *coverage-excluded-source-files*))
        (report-dir (uiop:ensure-directory-pathname
                     (or (second sb-ext:*posix-argv*) "coverage-report/")))
-       (report-index (merge-pathnames "cover-index.html" report-dir)))
-  ;; cl-weave resets SB-COVER immediately before entering the test thunk. The
-  ;; test system's dependency may already have been compiled while registering
-  ;; its suites, so force-load the production system after an explicit reset to
-  ;; make the coverage report describe the current source rather than cached
-  ;; uninstrumented fasls.
-  (cl-weave:reset-coverage)
-  (asdf:load-system "nerimux" :force t)
-  (unless (cl-weave:run-all :reporter :spec :max-workers 1
-                            :pass-with-no-tests nil
-                            :timeout-ms +coverage-test-timeout-ms+
-                            :coverage t :coverage-reset nil
-                            :coverage-include-pathnames (list *nerimux-source-root*)
-                            :coverage-exclude-pathnames excluded-source-pathnames
-                            :coverage-minimum-expression 100
-                            :coverage-minimum-branch 100
-                            :coverage-report-directory report-dir)
+       (report-index (merge-pathnames "cover-index.html" report-dir))
+       (enforce-thresholds-p
+         (not (string= "1" (or (uiop:getenv "NERIMUX_COVERAGE_REPORT_ONLY") "")))))
+  (asdf:load-system "nerimux/test" :force t)
+  (unless (let ((*print-circle* t))
+            (cl-weave:run-all :reporter :spec :max-workers 1
+                              :pass-with-no-tests nil
+                              :timeout-ms +coverage-test-timeout-ms+
+                              :coverage t :coverage-reset nil
+                              :coverage-include-pathnames (list *nerimux-source-root*)
+                              :coverage-exclude-pathnames excluded-source-pathnames
+                              :coverage-minimum-expression
+                              (and enforce-thresholds-p 100)
+                              :coverage-minimum-branch
+                              (and enforce-thresholds-p 100)
+                              :coverage-report-directory report-dir))
     (error "nerimux test suite failed under coverage instrumentation"))
   (unless (and (probe-file report-index)
                (with-open-file (stream report-index

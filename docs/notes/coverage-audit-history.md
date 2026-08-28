@@ -1,14 +1,14 @@
-# nerimux Implementation Roadmap: 100% tmux Feature Coverage
+# nerimux Implementation Roadmap: historical feature coverage audit
 
 > **Historical document.** This was the working roadmap used while driving
 > nerimux from a minimal multiplexer to full tmux command coverage. Every
 > sprint item below has since been implemented; the file is kept as an audit
-> trail of the coverage-closing process. For the *current* compatibility
-> statement, see [the compatibility statement](../src/reference/compatibility.md).
+> trail of the coverage-closing process. For current behavior, see the
+> [architecture](../src/reference/architecture.md) and [security model](../src/reference/security-model.md).
 
 ## 1. Executive Summary
 
-**Current implementation coverage:** the old 12–15% estimate is no longer used. Several items that were previously tracked as blockers are already implemented in the current tree, so this roadmap focuses on confirmed gaps, regression coverage, and parity checks.
+**Historical scope:** the old 12–15% estimate is no longer used. Several items that were previously tracked as blockers are already implemented in the current tree. This file remains an audit trail; current behavior is documented by the architecture and security references.
 
 Implemented and working:
 - Single session with multiple windows and panes (binary split tree)
@@ -95,7 +95,7 @@ nerimux has no `-t` DSL left to route through. `%parse-target`,
 `find-session-by-target`, `find-window-by-target`, and `find-pane-by-target`
 remain live: `find-pane-by-target` still has a direct caller in
 `src/bootstrap/server-multi-dispatch.lisp`. See
-`docs/src/reference/compatibility.md#removed`.
+the historical compatibility audit's relevant section.
 
 ---
 
@@ -118,7 +118,7 @@ remain live: `find-pane-by-target` still has a direct caller in
 the rest of the tmux command surface. `src/bootstrap/session-registry.lisp`
 still holds the multi-session registry itself, but nothing in the current
 tree calls it from a live command; the surviving CLI is `attach`/`server`
-only. See `docs/src/reference/compatibility.md#removed`.
+only. See the historical compatibility audit's relevant section.
 
 ---
 
@@ -133,7 +133,7 @@ only. See `docs/src/reference/compatibility.md#removed`.
 **Since removed.** `:new-session` / `:kill-session` dispatch is gone — the
 files this entry cites (`dispatch-command-specs-core-session.lisp`,
 `dispatch-handlers.lisp`, `dispatch-commands-pane.lisp`) no longer exist.
-`docs/src/reference/compatibility.md#removed` lists `nerimux new-session` as
+The historical compatibility audit's “Removed” section lists `nerimux new-session` as
 one of the CLI entry points that no longer resolves; only `%ensure-server-running`
 (still used by the `attach` startup mode itself) survives.
 
@@ -199,7 +199,7 @@ definition, its package export, and a docstring mention in
 `set-option`/`show-options` typed-command route through
 `src/application/dispatch/`) is gone, so those names no longer resolve as
 commands. The `.tmux.conf` **directive** route is a separate, narrower story:
-`docs/src/reference/compatibility.md#config-file-what-still-runs` has the
+the historical compatibility audit's relevant section has the
 current, maintained breakdown of which `set`-family directives still have a
 live reader (`default-shell`, `status`, `escape-time`,
 `update-environment`) versus which now parse into state nothing reads
@@ -234,7 +234,7 @@ live reader (`default-shell`, `status`, `escape-time`,
 dispatch entry) is gone, but copy mode itself was not deleted: the files
 above moved into `src/application/commands/copy-mode/` (one file per concern,
 e.g. `commands-copy-mode-word.lisp`, `commands-copy-mode-clip.lisp`), and per
-`docs/src/reference/compatibility.md#what-still-works-the-way-tmux-works`,
+the historical compatibility audit's relevant section,
 copy mode is reachable today through the workspace wire protocol — client
 copy-mode messages are handled directly in
 `src/bootstrap/server-multi-dispatch.lisp` rather than the deleted keystroke
@@ -274,7 +274,7 @@ command name to effect, and that path's dispatch half is gone. Terminal
 emulation and Status bar below are unaffected — none of their cited files
 live under `src/application/dispatch/` or `src/presentation/events/`.
 Config/options below is a mixed case; see the note on that subsection. See
-`docs/src/reference/compatibility.md#removed`.
+the historical compatibility audit's relevant section.
 
 ### Session management
 - **Implemented**: `rename-session`, `list-sessions`, `switch-client`, `has-session`, `last-session`, `source-file`, and `display-message` already exist in the dispatch/runtime path. The current codebase also handles `attach-session` targets and the `-d` / `-r` attach flags.
@@ -302,7 +302,7 @@ Config/options below is a mixed case; see the note on that subsection. See
 - **Relevant code**: `src/application/config/config.lisp`, `src/application/config/config-directives.lisp`, `src/domain/options/options.lisp`.
 - **Since removed, partially.** `bind-key`/`unbind-key` still parse and
   populate `*key-tables*`, but per
-  `docs/src/reference/compatibility.md#config-file-what-still-runs` the only
+  the historical compatibility audit's relevant section; the only
   remaining reader of that table is a `list-keys`-style formatter that
   nothing calls from a live entry point — the keystroke pipeline that used to
   consult a key-table on every keypress is gone, so a `bind-key` line in
@@ -329,7 +329,7 @@ Config/options below is a mixed case; see the note on that subsection. See
 were dispatch commands; `src/application/dispatch/dispatch-command-specs-core-session.lisp`,
 `dispatch-handlers-b.lisp`, and `src/presentation/renderer/renderer-lock.lisp`
 no longer exist, so neither is reachable today. `update-environment` is
-unaffected — it is on `compatibility.md`'s "Still effective" list, since
+unaffected — it was on the historical compatibility audit's "Still effective" list, since
 `src/application/config/config-directives-set.lisp` and
 `src/domain/model/session.lisp` are config-directive/domain-model code, not
 dispatch.
@@ -409,12 +409,12 @@ assignment anywhere in the tree today, and `wait-for`/`display-popup`/
 **`run-shell`/`if-shell` are unaffected**: they are config-file directives
 (`src/application/config/config-directives-run-shell.lisp`,
 `config-directives-if-shell.lisp`, both present), not dispatch commands, and
-`docs/src/reference/compatibility.md#config-file-what-still-runs` confirms
+the historical compatibility audit's relevant section confirms
 they still execute.
 
 ### Control mode and advanced client/server
 - **control mode (tmux -C)**: implemented in `src/infrastructure/control-mode/control-mode.lisp`, `src/bootstrap/main.lisp`, and `src/application/dispatch/dispatch-control.lisp`; notifications are emitted as `%begin`/`%end`-delimited blocks and covered by the control-mode unit tests.
-  **Since removed.** This audit entry records what was true when it was written; the capability and all three files above no longer exist. See `git log -- src/infrastructure/control-mode/` and the "Removed" section of `docs/src/reference/compatibility.md`. The entry is left standing rather than rewritten, because this file is a dated record of past audits, not a description of the current tree.
+  **Since removed.** This audit entry records what was true when it was written; the capability and all three files above no longer exist. See `git log -- src/infrastructure/control-mode/` and the historical compatibility audit's “Removed” section. The entry is left standing rather than rewritten, because this file is a dated record of past audits, not a description of the current tree.
 - **concurrent multi-client**: implemented in `src/bootstrap/server-multi.lisp`; the server event loop already broadcasts frame diffs to connected clients, with integration coverage in `t/integration/server-multi-tests.lisp`.
 - **command protocol over socket**: implemented in `src/bootstrap/client.lisp` and `src/bootstrap/server-multi.lisp`; `run-command-client` is covered by `t/integration/client-tests.lisp` and `t/integration/server-multi-tests.lisp`.
 - **read-only client**: implemented via `*client-read-only*` in `src/bootstrap/runtime.lisp`, `src/presentation/events/events-loop.lisp`, `src/presentation/events/events-mouse.lisp`, `src/application/dispatch/dispatch-commands-auto.lisp`, and `src/application/dispatch/dispatch-handlers.lisp`; input forwarding is skipped for read-only clients.
@@ -429,7 +429,7 @@ actually gone is the CLI path that ever set the bit: `attach-session -r`
 was the only way to request it, and that flag parsing was removed with the
 rest of the command surface. `*client-read-only*` in
 `src/bootstrap/runtime.lisp` stays permanently `nil` today — see
-`docs/src/reference/compatibility.md#removed` and the fuller writeup in
+the historical compatibility audit's relevant section and the fuller writeup in
 `docs/notes/permissions-and-verification.md`.
 
 ### Additional terminal emulation

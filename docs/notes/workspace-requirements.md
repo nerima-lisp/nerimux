@@ -625,7 +625,7 @@ persistence / prompt が消える）。**さらなる統廃合は R1・R2 完了
 > 未確認。R10.1 が列挙した 6 ページに加え、現在 `docs/src/reference/security-model.md`
 > が存在する（この節が書かれた時点にはなかったページ）。個別項目は着手前に再確認すること。
 
-R10.1 **tmux への言及を全部落とす。** `docs/src/reference/compatibility.md` を削除し、
+R10.1 **tmux への言及を全部落とす。** the compatibility reference page を削除し、
 `docs/src/guide/configuration.md` を削除する。残るのは index / getting-started /
 architecture / sibling-libraries / development-rules / benchmarks の 6 つ。
 

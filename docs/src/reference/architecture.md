@@ -145,8 +145,9 @@ declarative rules into the common conditional dispatch form. The
 `define-multi-msg-dispatch` wrapper in `server.lisp` supplies the multi-client
 handler shape used by `server-multi.lisp`; the client connection data lives in
 the shared `server-multi-dispatch.lisp` module, while per-message helpers live in the
-`server-multi-dispatch-prefix.lisp`, `server-multi-dispatch-picker.lisp`, and
-`server-multi-dispatch-command.lisp` files. The terminal parser is a CPS state machine, with its data
+`server-multi-dispatch-prefix.lisp`, `server-multi-dispatch-picker.lisp`,
+`server-multi-dispatch-command-input.lisp`, and `server-multi-dispatch-command.lisp`
+files. The terminal parser is a CPS state machine, with its data
 structs kept apart from the `actions`, `csi`, and `sgr` logic. Character writing is split by role:
 `char-write-definitions.lisp` holds declarative charset and width facts,
 `char-write-cells.lisp` owns cell placement, and `char-write.lisp` coordinates

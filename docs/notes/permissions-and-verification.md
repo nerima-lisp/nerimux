@@ -29,8 +29,8 @@
 > permanently `nil`. (`src/bootstrap/client.lisp`'s comment there described the
 > old `attach-session -r` writer; it was corrected in the same change that added
 > this note.) See
-> [Compatibility: Removed](../src/reference/compatibility.md#removed) for the
-> current, maintained statement of this. The socket-directory boundary this
+> The compatibility statement was intentionally removed with the obsolete
+> command surface. The socket-directory boundary this
 > file also describes (mode `0700`, per-user directory) is unaffected and is
 > current — see [the published security model](../src/reference/security-model.md).
 >

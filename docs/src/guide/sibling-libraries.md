@@ -89,9 +89,10 @@ did by hand — not bolted on beside it.
 
 ## External dependencies
 
-nerimux has no external dependencies. Every entry in `nerimux.asd`'s
-`:depends-on` names a `nerima-lisp` sibling; SBCL supplies the implementation
-runtime and POSIX bindings.
+The runtime entries in `nerimux.asd` name `nerima-lisp` sibling libraries;
+SBCL supplies the implementation runtime and POSIX bindings. The test and
+coverage systems additionally depend on cl-weave 1.3.0 for declarative tests,
+parallel-capable orchestration, and coverage instrumentation.
 
 ### Threading and regex compatibility notes
 

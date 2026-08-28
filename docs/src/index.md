@@ -32,7 +32,7 @@ The workspace UI is the only entry point. It provides:
   screen, scroll regions, origin mode, G0–G3 charsets with line-drawing
   remap, DECDHL/DECDWL double-size lines, bracketed paste, SGR mouse,
   OSC 52 clipboard, OSC 133 prompt marks, and UTF-8 with wide (CJK) cells.
-- **Copy mode** — vi-style cursor movement (`hjkl`/arrows), scroll to top/
+- **Copy mode** — vi-style cursor movement (`hjkl`), scroll to top/
   bottom (`g`/`G`), begin selection and yank (`space`, `y`), and forward/
   backward search (`/`, `?`, then `n`/`N` to repeat).
 - **Client/server** — detach/attach over a per-user Unix socket under
@@ -48,12 +48,14 @@ ratios, pane limits — is a compiled-in constant.
 The runtime is built on SBCL and the `nerima-lisp` sibling libraries for CLI
 parsing, PTY and process access, deadlines and concurrency, UTF-8 and regex
 handling, terminal rendering, and VCS discovery. The complete dependency map
-and compatibility notes are in
+is in
 [Dogfooded sibling libraries](guide/sibling-libraries.md).
 
-There are no external ASDF dependencies. Runtime values such as the shell,
-`$TERM`, scrollback length, split ratios, and pane limits are compiled in; no
-configuration file is read.
+The runtime depends only on the nerima-lisp sibling libraries. The test and
+coverage systems additionally depend on
+[cl-weave](https://github.com/nerima-lisp/cl-weave) 1.3.0. Runtime values such
+as the shell, `$TERM`, scrollback length, split ratios, and pane limits are
+compiled in; no configuration file is read.
 
 ## Project
 
