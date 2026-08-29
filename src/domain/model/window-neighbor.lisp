@@ -1,4 +1,4 @@
-(in-package #:nerimux/model)
+(in-package #:nerimux/window)
 
 ;;;; Directional pane navigation — find the pane adjacent to a given pane.
 ;;;;

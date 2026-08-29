@@ -1,4 +1,4 @@
-(in-package #:nerimux/model)
+(in-package #:nerimux/pane)
 
 ;;; ── PTY-backed pane factory ─────────────────────────────────────────────────
 ;;;
@@ -53,7 +53,7 @@
    DEFAULT-COMMAND, when non-NIL, is run via sh -c instead of the shell
    (§1.4: NIL is the default everywhere — the pane always starts a shell).
    Returns (values fd pid slave-path)."
-  (let ((environment (session-child-environment session
+  (let ((environment (nerimux/session:session-child-environment session
                                                  :term +pane-term+
                                                  :extra-env (list* *pane-colorterm-env*
                                                                    (append extra-env

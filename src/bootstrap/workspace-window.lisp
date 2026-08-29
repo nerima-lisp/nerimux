@@ -22,7 +22,7 @@
    itself once the pane is fully built."
   (let* ((rows     (- *term-rows* +status-line-rows+))
          (cols     *term-cols*)
-         (win-name (or name (nerimux/model::%shell-basename)))
+         (win-name (or name (nerimux/session::%shell-basename)))
          (win      (session-new-window session win-name rows cols
                                        +first-window-index+ start-dir)))
     (when start-reader-p

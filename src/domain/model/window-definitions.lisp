@@ -1,4 +1,4 @@
-(in-package #:nerimux/model)
+(in-package #:nerimux/window)
 
 (defmacro define-window-records (&body records)
   "Define the record types that make up the window model."

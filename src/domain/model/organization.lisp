@@ -1,4 +1,4 @@
-(in-package #:nerimux/model)
+(in-package #:nerimux/workspace-model)
 
 (defun %model-string (value)
   (cond

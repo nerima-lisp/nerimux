@@ -1,4 +1,4 @@
-(in-package #:nerimux/model)
+(in-package #:nerimux/pane)
 
 ;;; ── Worktree/organization attention, composed from pane state ──────────────
 ;;;

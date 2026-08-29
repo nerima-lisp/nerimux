@@ -1,4 +1,4 @@
-(in-package #:nerimux/model)
+(in-package #:nerimux/window)
 
 (defun window-refresh-panes (window)
   "Recompute WINDOW's derived PANES list from its TREE (when present)."

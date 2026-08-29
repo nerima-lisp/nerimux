@@ -1,4 +1,4 @@
-(in-package #:nerimux/model)
+(in-package #:nerimux/layout)
 
 ;;; -- Layout persistence (layout string serialization) --------------------------
 ;;;
@@ -65,7 +65,7 @@
 (defun layout->string (window)
   "Serialize WINDOW's layout tree to a WxH,X,Y layout string with checksum.
    Returns NIL when the window has no tree."
-  (let ((tree (window-tree window)))
+  (let ((tree (nerimux/window:window-tree window)))
     (when tree
       (let* ((body     (%node->string tree))
              (checksum (%layout-checksum body)))

@@ -1,4 +1,4 @@
-(in-package #:nerimux/model)
+(in-package #:nerimux/workspace-model)
 
 (defstruct (worktree
             (:constructor %make-worktree
@@ -91,7 +91,10 @@
      :stashes-state stashes-state)))
 
 (defun worktree-attention-p (worktree)
-  (not (null (worktree-attention-reasons worktree))))
+  ;; worktree-attention-reasons composes pane state (attention.lisp), so it
+  ;; lives in nerimux/pane, not here -- see package-domain-model.lisp's
+  ;; header for why this is package-qualified rather than :USEd.
+  (not (null (nerimux/pane:worktree-attention-reasons worktree))))
 
 (defun %organization-counts-explicit-p (organization)
   (and (not (organization-counts-derived-p organization))
@@ -116,7 +119,7 @@
     (when (and (repository-organization repository)
                (not (%organization-counts-explicit-p
                      (repository-organization repository))))
-      (organization-recompute-counts (repository-organization repository))))
+      (nerimux/pane:organization-recompute-counts (repository-organization repository))))
   repository)
 
 (defun organization-add-repository (organization repository)
@@ -124,7 +127,7 @@
     (pushnew repository (organization-repositories organization) :test #'eq)
     (setf (repository-organization repository) organization)
     (when (organization-counts-derived-p organization)
-      (organization-recompute-counts organization)))
+      (nerimux/pane:organization-recompute-counts organization)))
   repository)
 
 (defun %repository-status-populated-p (repository)
@@ -145,7 +148,7 @@
       (let ((organization (repository-organization repository)))
         (when (and organization
                    (not (%organization-counts-explicit-p organization)))
-          (organization-recompute-counts organization)))))
+          (nerimux/pane:organization-recompute-counts organization)))))
   worktree)
 
 (defun repository-worktree-by-path (repository path)

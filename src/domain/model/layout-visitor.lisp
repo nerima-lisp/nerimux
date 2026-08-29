@@ -1,4 +1,4 @@
-(in-package #:nerimux/model)
+(in-package #:nerimux/layout)
 
 ;;; Declarative traversal macros for the binary layout tree.
 

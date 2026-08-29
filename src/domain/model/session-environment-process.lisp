@@ -1,4 +1,4 @@
-(in-package #:nerimux/model)
+(in-package #:nerimux/session)
 
 ;;; ── Process environment ─────────────────────────────────────────────────────
 ;;;
