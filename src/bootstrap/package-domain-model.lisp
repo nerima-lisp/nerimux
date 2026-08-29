@@ -2,10 +2,12 @@
 ;;;
 ;;; Split into five sub-packages by concern (workspace-model, pane, layout,
 ;;; window, session), each named after the future packages/<name>/ directory
-;;; it will become in Phase 2, with nerimux/model kept as a facade: it :USEs
-;;; all five and re-exports the exact same 207 symbols external callers
-;;; (picker, renderer, bootstrap) already use, so this split is invisible to
-;;; every caller outside domain/model (W4).
+;;; it will become in Phase 2 (W4). A facade package, nerimux/model, briefly
+;;; :USEd all five and re-exported their combined 207 symbols so every
+;;; external caller (picker, renderer, bootstrap) could keep working
+;;; unqualified while Wave B moved each of those callers onto the real
+;;; sub-package a symbol actually lives in; once that migration finished
+;;; (W5-z) the facade was deleted, since nothing referenced it anymore.
 ;;;
 ;;; Dependency direction between the five, verified by W4-prep's analysis and
 ;;; confirmed by compilation (no :USE cycle is possible in Common Lisp, so an
@@ -161,86 +163,3 @@
    #:session-window-index-map #:session-window-stack #:session-windows
    #:session-windows-in-index-order #:set-session-window-index))
 
-(defpackage #:nerimux/model
-  (:use #:cl
-        #:nerimux/workspace-model #:nerimux/pane #:nerimux/layout
-        #:nerimux/window #:nerimux/session)
-  (:documentation
-   "DOMAIN layer: facade over the five domain sub-packages above (W4). Every
-    caller outside domain/model — picker, renderer, bootstrap — keeps using
-    nerimux/model unqualified or via tests/package.lisp's :IMPORT-FROM
-    exactly as before the split; this package exists only to re-export the
-    same 207 symbols from wherever they now actually live.
-
-    %STATUS-TOP-OFFSET is exported here but is not defined anywhere in
-    src/ — an orphan export that predates this split (verified: grepping
-    the whole tree finds only this declaration). Preserved as-is; fixing
-    it is out of scope for a pure re-export split.")
-  (:export
-   #:%assign-window-tree #:%status-top-offset
-   #:*global-hidden-environment-names* #:*pane-extra-env*
-   #:*session-id-counter* #:*suppress-update-environment*
-   #:*update-environment* #:+default-update-environment+ #:+pane-min-height+
-   #:+pane-min-width+ #:all-panes #:create-initial-session
-   #:ensure-window-fits #:get-update-environment-vars #:layout->string
-   #:layout-assign #:layout-find-leaf #:layout-find-parent #:layout-leaf
-   #:layout-leaf-p #:layout-leaf-pane #:layout-leaves #:layout-min-extent
-   #:layout-node-bounding-box #:layout-split #:layout-split-axis-extent
-   #:layout-split-first #:layout-split-orientation #:layout-split-p
-   #:layout-split-ratio #:layout-split-second #:make-layout-leaf
-   #:make-layout-split #:make-organization #:make-pane #:make-repository
-   #:make-session #:make-window #:make-worktree #:next-pane-id #:organization
-   #:organization-active-worktree-count #:organization-add-repository
-   #:organization-attention-count #:organization-attention-worktrees
-   #:organization-host #:organization-id #:organization-key
-   #:organization-missing-p #:organization-name #:organization-p
-   #:organization-recompute-counts #:organization-repositories #:pane
-   #:pane-at-position #:pane-attention-p #:pane-attention-reasons
-   #:pane-bell-p #:pane-clear-unread-output #:pane-fd #:pane-feed
-   #:pane-height #:pane-id #:pane-input-disabled #:pane-last-focused-time
-   #:pane-last-output #:pane-last-output-time #:pane-live-p
-   #:pane-local-options #:pane-mark-bell #:pane-mark-focused
-   #:pane-mark-output #:pane-mark-process-exit #:pane-mark-startup-failure
-   #:pane-marked #:pane-neighbor #:pane-non-zero-exit-p #:pane-notification
-   #:pane-notify #:pane-pid #:pane-process-exited-p #:pane-reposition
-   #:pane-screen #:pane-start-command #:pane-start-path
-   #:pane-startup-failed-p #:pane-title #:pane-tty #:pane-unread-output-p
-   #:pane-width #:pane-window #:pane-worktree #:pane-x #:pane-y
-   #:process-environment-names #:process-environment-value
-   #:process-set-environment #:process-unset-environment #:repository
-   #:repository-add-worktree #:repository-ahead #:repository-backend
-   #:repository-behind #:repository-conflict-p #:repository-dirty-p
-   #:repository-id #:repository-key #:repository-local-path
-   #:repository-main-worktree #:repository-missing-p
-   #:repository-organization #:repository-p #:repository-path
-   #:repository-recompute-status #:repository-remote
-   #:repository-specification #:repository-worktree-by-path
-   #:repository-worktrees #:resize-direction-orientation #:resize-find-split
-   #:respawn-pane #:session-active #:session-active-pane
-   #:session-active-window #:session-child-environment #:session-clients
-   #:session-created #:session-environment #:session-environment-hidden
-   #:session-environment-names #:session-environment-value #:session-id
-   #:session-insert-window #:session-last-active #:session-last-window
-   #:session-move-window #:session-name #:session-new-window
-   #:session-remove-window #:session-select-window #:session-set-environment
-   #:session-start-directory #:session-swap-windows #:session-touch
-   #:session-unset-environment #:session-window-index
-   #:session-window-index-map #:session-window-stack #:session-windows
-   #:session-windows-in-index-order #:set-session-window-index
-   #:split-child-geometry #:window #:window-active #:window-active-pane
-   #:window-automatic-rename-p #:window-height #:window-id
-   #:window-last-active #:window-last-active-time #:window-layout-cycle-index
-   #:window-local-options #:window-lock #:window-name #:window-panes
-   #:window-refresh-panes #:window-relayout #:window-relayout-current
-   #:window-remove-pane #:window-resize-active #:window-select-pane
-   #:window-split #:window-tree #:window-width #:window-zoom-p
-   #:window-zoom-toggle #:window-zoom-tree #:worktree #:worktree-add-pane
-   #:worktree-ahead #:worktree-attention-p #:worktree-attention-reasons
-   #:worktree-bare-p #:worktree-behind #:worktree-branch
-   #:worktree-changed-files #:worktree-commits-state #:worktree-conflict-p
-   #:worktree-dirty-p #:worktree-head #:worktree-id #:worktree-key
-   #:worktree-locked-p #:worktree-missing-p #:worktree-p #:worktree-panes
-   #:worktree-path #:worktree-prunable-p #:worktree-recent-commits
-   #:worktree-repository #:worktree-staged-files #:worktree-stashes
-   #:worktree-stashes-state #:worktree-status #:worktree-unmerged-files
-   #:worktree-unstaged-files #:worktree-untracked-files))
