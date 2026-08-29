@@ -40,7 +40,7 @@ These are correctness defects that break existing functionality or make the mult
 
 **What:** SGR 3/23 already map italic on/off in `src/domain/terminal/sgr.lisp`. Conceal, strikethrough, and overline are also already implemented in the current tree.
 
-**Files:** `src/domain/terminal/sgr.lisp`, `src/presentation/renderer/renderer-format.lisp`, `t/unit/terminal/sgr-tests.lisp`, `t/unit/renderer-tests-d.lisp`
+**Files:** `src/domain/terminal/sgr.lisp`, `src/presentation/renderer/renderer-format.lisp`, `tests/unit/terminal/sgr-tests.lisp`, `tests/unit/renderer-tests-d.lisp`
 
 **Status:** implemented in the current codebase; keep this section as a parity reference only.
 
@@ -52,7 +52,7 @@ These are correctness defects that break existing functionality or make the mult
 
 **Implemented in:** `src/domain/terminal/sgr.lisp`, `src/presentation/renderer/renderer-format.lisp`, `src/domain/terminal/cell.lisp`, `src/domain/terminal/screen.lisp`
 
-**Tests:** `t/unit/terminal/sgr-tests.lisp`, `t/unit/terminal/sgr-tests-b.lisp`, `t/unit/renderer-format-tests.lisp`, `t/unit/renderer-format-tests-b.lisp`, `t/unit/commands-tests-m.lisp`, `t/unit/terminal/parser-tests.lisp`
+**Tests:** `tests/unit/terminal/sgr-tests.lisp`, `tests/unit/terminal/sgr-tests-b.lisp`, `tests/unit/renderer-format-tests.lisp`, `tests/unit/renderer-format-tests-b.lisp`, `tests/unit/commands-tests-m.lisp`, `tests/unit/terminal/parser-tests.lisp`
 
 **Notes:** `38;5;n` and `38;2;r;g;b` are already parsed and rendered. Keep this section only as a reminder to re-check tmux parity for any edge-case color sequences we have not yet mirrored.
 
@@ -62,7 +62,7 @@ These are correctness defects that break existing functionality or make the mult
 
 **What:** DECTCEM cursor visibility (`\e[?25l` / `\e[?25h`) is already tracked in terminal state and honored by the renderer.
 
-**Files:** `src/domain/terminal/csi.lisp`, `src/presentation/renderer/renderer-format.lisp`, `t/unit/renderer-tests-d.lisp`
+**Files:** `src/domain/terminal/csi.lisp`, `src/presentation/renderer/renderer-format.lisp`, `tests/unit/renderer-tests-d.lisp`
 
 **Status:** implemented in the current codebase; keep this section as a parity reference only.
 
@@ -76,21 +76,21 @@ These are the features needed to make nerimux useful as a daily driver. Implemen
 
 **Priority:** already implemented in the current tree; keep this section as the canonical reference for the target-resolution path and regression coverage.
 
-**Files:** `src/domain/model/target.lisp`, `src/application/dispatch/dispatch-core.lisp`, `src/application/dispatch/dispatch-commands*.lisp`, `src/bootstrap/package.lisp`, `t/unit/target-tests*.lisp`
+**Files:** `src/domain/model/target.lisp`, `src/application/dispatch/dispatch-core.lisp`, `src/application/dispatch/dispatch-commands*.lisp`, `src/bootstrap/package.lisp`, `tests/unit/target-tests*.lisp`
 
 **Current implementation notes:**
 - `resolve-target` and the helper lookups live in `src/domain/model/target.lisp`.
 - Dispatch handlers route through the target-resolution helpers before mutating sessions, windows, or panes.
 - The target tests already exercise name/id/index matching and the runtime paths that consume the resolution result.
 
-**Tests:** `t/unit/target-tests.lisp` and `t/unit/target-tests-b.lisp` already cover the target lookup and command-routing surfaces.
+**Tests:** `tests/unit/target-tests.lisp` and `tests/unit/target-tests-b.lisp` already cover the target lookup and command-routing surfaces.
 
 **Since removed.** The dispatch-routing half of this entry is gone:
 `dispatch-core.lisp` and every `dispatch-commands*.lisp` under
 `src/application/dispatch/` were deleted with the rest of the tmux command
 table. `resolve-target` and `resolve-target-context` have since been deleted
 too — they had no remaining call site outside their own definitions and
-their `t/unit/domain/model/target-tests*.lisp` coverage, and workspace-only
+their `tests/unit/domain/model/target-tests*.lisp` coverage, and workspace-only
 nerimux has no `-t` DSL left to route through. `%parse-target`,
 `find-session-by-target`, `find-window-by-target`, and `find-pane-by-target`
 remain live: `find-pane-by-target` still has a direct caller in
@@ -103,14 +103,14 @@ the historical compatibility audit's relevant section.
 
 **Priority:** already implemented in the current tree; keep this section as the canonical reference for session registry behavior and regression coverage.
 
-**Files:** `src/bootstrap/session-registry.lisp`, `src/application/dispatch/dispatch-commands-pane-session.lisp`, `src/bootstrap/runtime.lisp`, `src/bootstrap/main.lisp`, `src/bootstrap/package.lisp`, `t/unit/server-tests*.lisp`
+**Files:** `src/bootstrap/session-registry.lisp`, `src/application/dispatch/dispatch-commands-pane-session.lisp`, `src/bootstrap/runtime.lisp`, `src/bootstrap/main.lisp`, `src/bootstrap/package.lisp`, `tests/unit/server-tests*.lisp`
 
 **Current implementation notes:**
 - The runtime already maintains a multi-session registry and session lifecycle helpers.
 - `run-server` and the dispatch layer already consult the current session / registry state rather than assuming a single hard-coded session.
 - `new-session`, `kill-session`, `list-sessions`, and `switch-client` are already wired through the dispatch command tables.
 
-**Tests:** `t/unit/server-tests.lisp` and related dispatch tests already cover session registry and selection behavior.
+**Tests:** `tests/unit/server-tests.lisp` and related dispatch tests already cover session registry and selection behavior.
 
 **Since removed.** `new-session`, `kill-session`, `list-sessions`, and
 `switch-client` are no longer wired through any dispatch command table —
@@ -126,7 +126,7 @@ only. See the historical compatibility audit's relevant section.
 
 **Status:** implemented.
 
-**Implemented in:** `src/bootstrap/main-startup.lisp`, `src/application/dispatch/dispatch-command-specs-core-session.lisp`, `src/application/dispatch/dispatch-handlers.lisp`, `src/application/dispatch/dispatch-commands-pane.lisp`, `src/bootstrap/main.lisp`, `t/unit/main-tests.lisp`, `t/unit/server-tests.lisp`, `t/unit/dispatch-tests-session-f.lisp`, `t/unit/dispatch-tests-commands-e.lisp`, `t/integration/server-multi-tests.lisp`
+**Implemented in:** `src/bootstrap/main-startup.lisp`, `src/application/dispatch/dispatch-command-specs-core-session.lisp`, `src/application/dispatch/dispatch-handlers.lisp`, `src/application/dispatch/dispatch-commands-pane.lisp`, `src/bootstrap/main.lisp`, `tests/unit/main-tests.lisp`, `tests/unit/server-tests.lisp`, `tests/unit/dispatch-tests-session-f.lisp`, `tests/unit/dispatch-tests-commands-e.lisp`, `tests/integration/server-multi-tests.lisp`
 
 **Notes:** `run-new-session` already handles startup forwarding and `%ensure-server-running`; `:new-session` / `:kill-session` are wired in dispatch and covered by tests.
 
@@ -145,7 +145,7 @@ one of the CLI entry points that no longer resolves; only `%ensure-server-runnin
 
 **Implemented in:** `src/application/dispatch/dispatch-commands-option.lisp`, `src/application/dispatch/dispatch-handlers.lisp`, `src/application/dispatch/dispatch-core.lisp`, `src/domain/model/window-neighbor.lisp`, `src/application/config/config.lisp`
 
-**Tests:** `t/unit/dispatch-tests-c.lisp`, `t/unit/dispatch-tests-commands-d.lisp`, `t/unit/events-tests-b.lisp`, `t/unit/config-tests.lisp`
+**Tests:** `tests/unit/dispatch-tests-c.lisp`, `tests/unit/dispatch-tests-commands-d.lisp`, `tests/unit/events-tests-b.lisp`, `tests/unit/config-tests.lisp`
 
 **Notes:** `select-pane -L/-R/-U/-D` already routes through directional neighbor lookup and the prefix arrow-key bindings are already wired. Keep this section only for parity audits against tmux edge cases.
 
@@ -169,7 +169,7 @@ outright, leaving server-multi-dispatch as the sole caller.)
 
 **Status:** implemented.
 
-**Implemented in:** `src/presentation/events/events-loop.lisp`, `src/application/config/config.lisp`, `src/domain/model/window.lisp`, `src/application/dispatch/dispatch-commands.lisp`, `src/application/dispatch/dispatch-handlers.lisp`, `t/unit/events-tests-g.lisp`, `t/unit/dispatch-tests-c.lisp`, `t/unit/window-tests.lisp`, `t/unit/config-tests.lisp`
+**Implemented in:** `src/presentation/events/events-loop.lisp`, `src/application/config/config.lisp`, `src/domain/model/window.lisp`, `src/application/dispatch/dispatch-commands.lisp`, `src/application/dispatch/dispatch-handlers.lisp`, `tests/unit/events-tests-g.lisp`, `tests/unit/dispatch-tests-c.lisp`, `tests/unit/window-tests.lisp`, `tests/unit/config-tests.lisp`
 
 **Notes:** `C-b z` / `#\z` and the zoom-toggle command path already route through `window-zoom-toggle`.
 
@@ -186,14 +186,14 @@ definition, its package export, and a docstring mention in
 
 ### S1-6: General set-option infrastructure [implemented]
 
-**Files:** `src/domain/options/options-api.lisp`, `src/application/config/config-directives-set.lisp`, `src/application/dispatch/dispatch-commands-option.lisp`, `src/domain/model/session.lisp`, `src/domain/model/window.lisp`, `t/unit/config-tests.lisp`
+**Files:** `src/domain/options/options-api.lisp`, `src/application/config/config-directives-set.lisp`, `src/application/dispatch/dispatch-commands-option.lisp`, `src/domain/model/session.lisp`, `src/domain/model/window.lisp`, `tests/unit/config-tests.lisp`
 
 **Current implementation notes:**
 - `set-option`, `set-option-for-window`, and `set-option-for-pane` already exist in the options API.
 - The config directive layer already routes `set`, `set-window-option`, and related aliases to the option machinery.
 - `show-options` and `set-option` are already exposed through the dispatch command registry and exercised by tests.
 
-**Tests:** `t/unit/config-tests.lisp` already covers option lookup and directive behavior.
+**Tests:** `tests/unit/config-tests.lisp` already covers option lookup and directive behavior.
 
 **Since removed, partially.** `dispatch-commands-option.lisp` (the
 `set-option`/`show-options` typed-command route through
@@ -211,14 +211,14 @@ live reader (`default-shell`, `status`, `escape-time`,
 
 **Priority:** already implemented in the current tree; keep this section as the canonical reference for status-bar formatting and message expansion behavior.
 
-**Files:** `src/domain/format/format-engine.lisp`, `src/domain/format/format-context.lisp`, `src/presentation/renderer/renderer-statusbar.lisp`, `src/application/dispatch/dispatch-commands-buffer.lisp`, `src/application/dispatch/dispatch-commands-server.lisp`, `t/unit/format-tests*.lisp`
+**Files:** `src/domain/format/format-engine.lisp`, `src/domain/format/format-context.lisp`, `src/presentation/renderer/renderer-statusbar.lisp`, `src/application/dispatch/dispatch-commands-buffer.lisp`, `src/application/dispatch/dispatch-commands-server.lisp`, `tests/unit/format-tests*.lisp`
 
 **Current implementation notes:**
 - `expand-format` and `format-context-from-session` already exist and are used by the renderer and message paths.
 - Status bar rendering already builds its text from the session/window/pane context rather than hard-coded literals.
 - The format tests already exercise `#S`, `#{session_name}`, and conditional expansion paths.
 
-**Tests:** `t/unit/format-tests.lisp` and `t/unit/format-tests-f.lisp` already cover the format engine and context assembly.
+**Tests:** `tests/unit/format-tests.lisp` and `tests/unit/format-tests-f.lisp` already cover the format engine and context assembly.
 
 ---
 
@@ -226,7 +226,7 @@ live reader (`default-shell`, `status`, `escape-time`,
 
 **Status:** implemented.
 
-**Implemented in:** `src/application/commands/commands-copy-mode.lisp`, `src/application/commands/commands-copy-mode-clip.lisp`, `src/domain/buffer/buffer.lisp`, `src/presentation/events/events-mouse.lisp`, `src/application/dispatch/dispatch-commands-pane-x.lisp`, `t/unit/commands-tests-e.lisp`, `t/unit/commands-tests-n.lisp`, `t/unit/commands-tests-l.lisp`, `t/unit/dispatch-tests-commands-c.lisp`
+**Implemented in:** `src/application/commands/commands-copy-mode.lisp`, `src/application/commands/commands-copy-mode-clip.lisp`, `src/domain/buffer/buffer.lisp`, `src/presentation/events/events-mouse.lisp`, `src/application/dispatch/dispatch-commands-pane-x.lisp`, `tests/unit/commands-tests-e.lisp`, `tests/unit/commands-tests-n.lisp`, `tests/unit/commands-tests-l.lisp`, `tests/unit/dispatch-tests-commands-c.lisp`
 
 **Notes:** `copy-mode-select-word`, `copy-mode-yank`, and the paste-buffer plumbing already exist; this section is now a parity audit reference only.
 
@@ -246,7 +246,7 @@ pipeline.
 
 **Status:** implemented.
 
-**Implemented in:** `src/bootstrap/main-startup.lisp`, `src/bootstrap/client.lisp`, `src/bootstrap/main.lisp`, `t/unit/main-tests.lisp`, `t/integration/client-tests.lisp`
+**Implemented in:** `src/bootstrap/main-startup.lisp`, `src/bootstrap/client.lisp`, `src/bootstrap/main.lisp`, `tests/unit/main-tests.lisp`, `tests/integration/client-tests.lisp`
 
 **Notes:** startup auto-forwarding / `ensure-server-running` behavior is already wired; keep this section only for parity audits.
 
@@ -279,22 +279,22 @@ the historical compatibility audit's relevant section.
 ### Session management
 - **Implemented**: `rename-session`, `list-sessions`, `switch-client`, `has-session`, `last-session`, `source-file`, and `display-message` already exist in the dispatch/runtime path. The current codebase also handles `attach-session` targets and the `-d` / `-r` attach flags.
 - **Relevant code**: `src/bootstrap/main-startup.lisp`, `src/presentation/events/events-loop.lisp`, `src/bootstrap/session-registry.lisp`, `src/domain/model/session.lisp`, `src/application/dispatch/dispatch-commands-lifecycle.lisp`, `src/application/dispatch/dispatch-command-specs-core-session.lisp`, `src/application/dispatch/dispatch-handlers.lisp`, `src/bootstrap/main.lisp`, `src/bootstrap/client.lisp`.
-- **Tests**: session-management behavior is covered in `t/unit/dispatch-tests-session-e.lisp`, `t/unit/dispatch-tests-commands-c.lisp`, `t/unit/main-tests.lisp`, and `t/integration/server-multi-tests.lisp`.
+- **Tests**: session-management behavior is covered in `tests/unit/dispatch-tests-session-e.lisp`, `tests/unit/dispatch-tests-commands-c.lisp`, `tests/unit/main-tests.lisp`, and `tests/integration/server-multi-tests.lisp`.
 
 ### Window management
 - **Implemented**: `last-window`, `move-window`, `swap-window`, `list-windows` / `choose-window`, `find-window`, `rotate-window`, and automatic window renaming are already present.
 - **Relevant code**: `src/presentation/events/events-loop.lisp`, `src/application/dispatch/dispatch-command-specs-core-window.lisp`, `src/application/dispatch/dispatch-commands-window.lisp`, `src/domain/model/window.lisp`, `src/domain/terminal/parser.lisp`, `src/domain/options/options.lisp`, `src/presentation/renderer/renderer.lisp`.
-- **Tests**: window management is covered by `t/unit/window-tests*.lisp` and dispatch tests.
+- **Tests**: window management is covered by `tests/unit/window-tests*.lisp` and dispatch tests.
 
 ### Pane management
 - **Implemented**: `split-window -d`, `split-window -p/-l size`, `swap-pane`, `display-panes`, `capture-pane`, `last-pane`, `pane-border-style`, and `respawn-pane` are already wired through the dispatch/runtime path.
 - **Relevant code**: `src/application/dispatch/dispatch-core.lisp`, `src/application/dispatch/dispatch-commands-pane.lisp`, `src/domain/model/window.lisp`, `src/presentation/renderer/renderer.lisp`, `src/presentation/renderer/renderer-borders.lisp`, `src/domain/options/options.lisp`, `src/domain/terminal/screen.lisp`, `src/application/dispatch/dispatch-commands-buffer.lisp`.
-- **Tests**: pane management is covered by `t/unit/window-tests*.lisp`, `t/unit/dispatch-tests-commands-*.lisp`, and integration coverage for PTY-oriented behavior.
+- **Tests**: pane management is covered by `tests/unit/window-tests*.lisp`, `tests/unit/dispatch-tests-commands-*.lisp`, and integration coverage for PTY-oriented behavior.
 
 ### Terminal emulation
 - **Implemented**: cursor shape (`DECSCUSR`), bracketed paste, application cursor keys, auto-wrap, CBT/CHT, OSC title/clipboard handling, and combining characters are already present.
 - **Relevant code**: `src/domain/terminal/parser.lisp`, `src/domain/terminal/modes.lisp`, `src/domain/terminal/cursor.lisp`, `src/domain/terminal/csi.lisp`, `src/domain/terminal/parser-osc.lisp`, `src/domain/buffer/buffer.lisp`.
-- **Tests**: terminal emulation coverage lives under `t/unit/terminal/*.lisp`.
+- **Tests**: terminal emulation coverage lives under `tests/unit/terminal/*.lisp`.
 
 ### Config / options
 - **Implemented**: `bind-key -n`, `bind-key -r`, `bind-key -T`, `show-options`, and `server-options` are already implemented.
@@ -371,7 +371,7 @@ this sweep did not verify whether anything still calls them.
 - **Mouse wheel scrollback**: implemented in `src/presentation/events/events-mouse.lisp`; wheel events translate to copy-mode scroll up/down.
 - **Mouse text selection**: implemented in `src/presentation/events/events-mouse.lisp`; drag enters copy mode, updates the copy cursor, and yanks on button release.
 - **Mouse status bar click**: implemented in `src/presentation/events/events-mouse.lisp`; status-bar clicks map the column to a window and call `:select-window`.
-- All mouse features above are gated behind `(get-option session "mouse")` and exercised by `t/unit/mouse-tests.lisp`.
+- All mouse features above are gated behind `(get-option session "mouse")` and exercised by `tests/unit/mouse-tests.lisp`.
 
 **Since removed.** `src/presentation/events/events-mouse.lisp` — the file
 every bullet above cites — no longer exists, and (unlike copy mode) mouse
@@ -415,8 +415,8 @@ they still execute.
 ### Control mode and advanced client/server
 - **control mode (tmux -C)**: implemented in `src/infrastructure/control-mode/control-mode.lisp`, `src/bootstrap/main.lisp`, and `src/application/dispatch/dispatch-control.lisp`; notifications are emitted as `%begin`/`%end`-delimited blocks and covered by the control-mode unit tests.
   **Since removed.** This audit entry records what was true when it was written; the capability and all three files above no longer exist. See `git log -- src/infrastructure/control-mode/` and the historical compatibility audit's “Removed” section. The entry is left standing rather than rewritten, because this file is a dated record of past audits, not a description of the current tree.
-- **concurrent multi-client**: implemented in `src/bootstrap/server-multi.lisp`; the server event loop already broadcasts frame diffs to connected clients, with integration coverage in `t/integration/server-multi-tests.lisp`.
-- **command protocol over socket**: implemented in `src/bootstrap/client.lisp` and `src/bootstrap/server-multi.lisp`; `run-command-client` is covered by `t/integration/client-tests.lisp` and `t/integration/server-multi-tests.lisp`.
+- **concurrent multi-client**: implemented in `src/bootstrap/server-multi.lisp`; the server event loop already broadcasts frame diffs to connected clients, with integration coverage in `tests/integration/server-multi-tests.lisp`.
+- **command protocol over socket**: implemented in `src/bootstrap/client.lisp` and `src/bootstrap/server-multi.lisp`; `run-command-client` is covered by `tests/integration/client-tests.lisp` and `tests/integration/server-multi-tests.lisp`.
 - **read-only client**: implemented via `*client-read-only*` in `src/bootstrap/runtime.lisp`, `src/presentation/events/events-loop.lisp`, `src/presentation/events/events-mouse.lisp`, `src/application/dispatch/dispatch-commands-auto.lisp`, and `src/application/dispatch/dispatch-handlers.lisp`; input forwarding is skipped for read-only clients.
 
 **Since removed, partially — the enforcement moved, but nothing sets the
@@ -434,9 +434,9 @@ the historical compatibility audit's relevant section and the fuller writeup in
 
 ### Additional terminal emulation
 - **Line drawing / ACS**: ESC `(0` / ESC `(B` character set switching and ACS remapping are already implemented in `src/domain/terminal/parser.lisp`, `src/domain/terminal/modes.lisp`, and `src/domain/terminal/cursor.lisp`; keep the remaining coverage/docs aligned with that implementation.
-- **DCS sequences**: implemented in `src/domain/terminal/parser.lisp` as DCS passthrough / XTGETTCAP / DECRQSS handling, with parser coverage in `t/unit/terminal/parser-tests-b.lisp`.
+- **DCS sequences**: implemented in `src/domain/terminal/parser.lisp` as DCS passthrough / XTGETTCAP / DECRQSS handling, with parser coverage in `tests/unit/terminal/parser-tests-b.lisp`.
 - **Device Attributes (DA1/DA2)**: implemented in `src/domain/terminal/csi.lisp`; respond with `\e[?1;2c` (VT100 with AVO) and `\e[>1;10;0c` for DA2.
-- **SGR double-underline (21), rapid-blink (26), underline-color (58/59)**: implemented in `src/domain/terminal/sgr.lisp` with renderer support in `src/presentation/renderer/renderer-format.lisp` and unit coverage in `t/unit/terminal/sgr-tests-b.lisp`.
+- **SGR double-underline (21), rapid-blink (26), underline-color (58/59)**: implemented in `src/domain/terminal/sgr.lisp` with renderer support in `src/presentation/renderer/renderer-format.lisp` and unit coverage in `tests/unit/terminal/sgr-tests-b.lisp`.
 
 ---
 
@@ -491,15 +491,15 @@ The `layout.lisp` zoom-in operation (Sprint 1-5) replaces the window's layout tr
 
 The test suite is organized by scope:
 
-- `t/unit/`: fast in-process tests for parsing, dispatch, rendering helpers, options, and in-memory data structures.
-- `t/integration/`: PTY/socket/client-server tests that exercise runtime behavior across process boundaries.
-  - Current files: `t/integration/client-tests.lisp`, `t/integration/net-tests.lisp`, `t/integration/pty-tests.lisp`, `t/integration/server-multi-tests.lisp`
-- `t/e2e/`: end-to-end smoke checks that run against a built binary.
-  - Entry point: `t/e2e/e2e-smoke.lisp`, which dispatches to the scenario
+- `tests/unit/`: fast in-process tests for parsing, dispatch, rendering helpers, options, and in-memory data structures.
+- `tests/integration/`: PTY/socket/client-server tests that exercise runtime behavior across process boundaries.
+  - Current files: `tests/integration/client-tests.lisp`, `tests/integration/net-tests.lisp`, `tests/integration/pty-tests.lisp`, `tests/integration/server-multi-tests.lisp`
+- `tests/e2e/`: end-to-end smoke checks that run against a built binary.
+  - Entry point: `tests/e2e/e2e-smoke.lisp`, which dispatches to the scenario
     files it loads (`helpers.lisp`, `server-kill-scenario.lisp`,
     `attach-scenario.lisp`)
 
-Unit and integration tests are wired through `nerimux.asd` and `t/suite.lisp`. E2E checks are intentionally kept out of the ASDF `nerimux/test` system and run separately.
+Unit and integration tests are wired through `nerimux.asd` and `tests/suite.lisp`. E2E checks are intentionally kept out of the ASDF `nerimux/test` system and run separately.
 
 Run the full test suite with:
 
