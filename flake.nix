@@ -438,24 +438,60 @@
       # Granularity lives here, NOT in extra GitHub Actions jobs: `nix flake
       # check` evaluates each attribute as its own derivation, in parallel, with
       # build caching. Add a check here rather than a job in ci.yml.
-      checks = forAllSystems (system: {
-        # The full unit + integration suite. It spawns no pseudo-terminal: the
-        # cases that do live in nerimux/pty-test and run as `nix run .#test-pty`,
-        # because a sandbox has no /dev/ptmx and they would otherwise skip and be
-        # counted as passes (R9.2).
-        default = mkTestCheck system "nerimux-tests" "nerimux/test";
+      checks = forAllSystems (
+        system:
+        let
+          pkgs = pkgsFor system;
+          sbcl = pkgs.sbcl;
 
-        # Fails `nix flake check` when any tracked file is unformatted,
-        # turning the formatter into an enforced CI gate.
-        formatting = treefmtEval.${system}.config.build.check self;
+          # scripts/checks/*.lisp and *.pl (see scripts/checks/README.md) need
+          # neither ASDF nor a compile — each only reads the tree, so ${self}
+          # is used directly rather than copied to a writable directory the
+          # way mkTestCheck does for the suites that compile in place.
+          mkStaticCheck =
+            name: cmd:
+            pkgs.runCommand name
+              {
+                nativeBuildInputs = [
+                  sbcl
+                  pkgs.perl
+                ];
+              }
+              ''
+                cd ${self}
+                ${cmd}
+                touch "$out"
+              '';
+        in
+        {
+          # The full unit + integration suite. It spawns no pseudo-terminal: the
+          # cases that do live in nerimux/pty-test and run as `nix run .#test-pty`,
+          # because a sandbox has no /dev/ptmx and they would otherwise skip and be
+          # counted as passes (R9.2).
+          default = mkTestCheck system "nerimux-tests" "nerimux/test";
 
-        # The docs package builds with `mkdocs --strict`, so a broken link or
-        # a page missing from the nav fails here. Without this check the docs
-        # are only ever built by the publish workflow, which runs after a
-        # merge to main — so a break would surface as a failed deploy rather
-        # than as a failed pull request.
-        docs = self.packages.${system}.docs;
-      });
+          # Fails `nix flake check` when any tracked file is unformatted,
+          # turning the formatter into an enforced CI gate.
+          formatting = treefmtEval.${system}.config.build.check self;
+
+          # The docs package builds with `mkdocs --strict`, so a broken link or
+          # a page missing from the nav fails here. Without this check the docs
+          # are only ever built by the publish workflow, which runs after a
+          # merge to main — so a break would surface as a failed deploy rather
+          # than as a failed pull request.
+          docs = self.packages.${system}.docs;
+
+          read-check = mkStaticCheck "read-check" "${sbcl}/bin/sbcl --script scripts/checks/read-check.lisp";
+
+          manifest-check = mkStaticCheck "manifest-check" "${sbcl}/bin/sbcl --script scripts/checks/manifest-check.lisp";
+
+          export-check = mkStaticCheck "export-check" "perl scripts/checks/export-check.pl .";
+
+          internal-call-check = mkStaticCheck "internal-call-check" "perl scripts/checks/internal-call-check.pl .";
+
+          suite-structure-check = mkStaticCheck "suite-structure-check" "perl scripts/checks/suite-structure-check.pl .";
+        }
+      );
 
       apps = forAllSystems (
         system:
