@@ -22,7 +22,7 @@
   (it "applies a captured refresh without filesystem observation"
     (let* ((path (%vcs-operations-existing-path))
            (repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :specification "workspace-owner/project"
               :local-path path))
            (raw
@@ -45,10 +45,10 @@
          (eq repository
              (nerimux/vcs::%apply-repository-refresh repository refresh)))
         (let ((worktree
-                (nerimux/model:repository-worktree-by-path repository path)))
-          (expect (string= "new-head" (nerimux/model:worktree-head worktree)))
-          (expect (= 2 (nerimux/model:worktree-ahead worktree)))
-          (expect (= 1 (nerimux/model:worktree-behind worktree)))))))
+                (nerimux/workspace-model:repository-worktree-by-path repository path)))
+          (expect (string= "new-head" (nerimux/workspace-model:worktree-head worktree)))
+          (expect (= 2 (nerimux/workspace-model:worktree-ahead worktree)))
+          (expect (= 1 (nerimux/workspace-model:worktree-behind worktree)))))))
 
   (it "applies operation results only through the callback dispatcher"
     (let ((queued nil)
@@ -201,7 +201,7 @@
 (describe "vcs synchronous fetch"
   (it "fetches through the adapter and refreshes status"
     (let* ((repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :specification "workspace-owner/project"
               :local-path (%vcs-operations-existing-path)))
            (fetch-call nil)

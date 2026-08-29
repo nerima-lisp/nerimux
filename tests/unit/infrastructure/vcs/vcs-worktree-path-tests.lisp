@@ -104,7 +104,7 @@
   ;; third templated mode.
   (it "uses an explicit path verbatim, without touching the filesystem"
     (let* ((repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :specification "workspace-owner/explicit-path"
               :local-path (%fresh-fake-repo-git-dir))))
       (expect (string= "/explicit/override/path"
@@ -118,7 +118,7 @@
   (it "generates <repo>.worktrees/<timestamp>-<short-sha> with no explicit path"
     (let* ((git-dir (%fresh-fake-repo-git-dir))
            (repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :specification "workspace-owner/generated-path"
               :local-path git-dir))
            (path (nerimux/vcs::%resolve-worktree-path repository "def5678" nil)))

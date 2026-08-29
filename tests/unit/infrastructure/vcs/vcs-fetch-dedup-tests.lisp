@@ -53,7 +53,7 @@
   (it "does not start a second real fetch while one is already in flight for the same repository"
     (with-mocked-vcs-fetch (call-log :delay 0.3)
       (let* ((repository
-               (nerimux/model:make-repository
+               (nerimux/workspace-model:make-repository
                 :specification "workspace-owner/dedup-repo"
                 :local-path "/tmp/nerimux-fetch-dedup-repo"))
              (first-result :pending)
@@ -85,7 +85,7 @@
   (it "allows a fresh fetch for the same repository once the prior one has completed"
     (with-mocked-vcs-fetch (call-log :delay 0.05)
       (let* ((repository
-               (nerimux/model:make-repository
+               (nerimux/workspace-model:make-repository
                 :specification "workspace-owner/dedup-repo-recovery"
                 :local-path "/tmp/nerimux-fetch-dedup-recovery"))
              (first-done nil)
@@ -105,7 +105,7 @@
 
   (it "holds the repository key through error notification and releases it on completion"
     (let* ((repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :specification "workspace-owner/dedup-repo-failure"
               :local-path "/tmp/nerimux-fetch-dedup-repo-failure"))
            (first-error nil)
@@ -160,11 +160,11 @@
   (it "does not start a second organization-wide fetch while one is already in flight"
     (with-mocked-vcs-fetch (call-log :delay 0.3)
       (let* ((repository
-               (nerimux/model:make-repository
+               (nerimux/workspace-model:make-repository
                 :specification "workspace-owner/dedup-org-repo"
                 :local-path "/tmp/nerimux-fetch-dedup-org"))
              (organization
-               (nerimux/model:make-organization
+               (nerimux/workspace-model:make-organization
                 :host "workspace-owner" :name "dedup-org"
                 :repositories (list repository)))
              (first-result :pending)
@@ -184,11 +184,11 @@
 
   (it "releases the organization key after a repository fetch fails"
     (let* ((repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :specification "workspace-owner/dedup-org-failure"
               :local-path "/tmp/nerimux-fetch-dedup-org-failure"))
            (organization
-             (nerimux/model:make-organization
+             (nerimux/workspace-model:make-organization
               :host "workspace-owner" :name "dedup-org-failure"
               :repositories (list repository)))
            (first-error nil)

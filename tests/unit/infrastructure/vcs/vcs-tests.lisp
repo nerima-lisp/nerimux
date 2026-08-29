@@ -80,11 +80,11 @@
                (format nil "nerimux-missing-worktree-~D/" (random 1000000))
                (host-kit:temporary-directory))))
            (repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :specification "workspace-owner/project"
               :local-path path))
            (worktree
-             (nerimux/model:make-worktree
+             (nerimux/workspace-model:make-worktree
               :repository repository
               :path path
               :branch "feature/ui"
@@ -93,24 +93,24 @@
               :conflict-p t
               :ahead 3
               :behind 2)))
-      (nerimux/model:repository-add-worktree repository worktree)
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
       (expect (null (probe-file path)))
       (nerimux/vcs:worktree-status worktree)
-      (expect (nerimux/model:worktree-missing-p worktree))
-      (expect (null (nerimux/model:worktree-status worktree)))
-      (expect (not (nerimux/model:worktree-dirty-p worktree)))
-      (expect (not (nerimux/model:worktree-conflict-p worktree)))
-      (expect (zerop (nerimux/model:worktree-ahead worktree)))
-      (expect (zerop (nerimux/model:worktree-behind worktree)))
-      (expect (not (nerimux/model:repository-dirty-p repository)))
-      (expect (not (nerimux/model:repository-conflict-p repository))))))
+      (expect (nerimux/workspace-model:worktree-missing-p worktree))
+      (expect (null (nerimux/workspace-model:worktree-status worktree)))
+      (expect (not (nerimux/workspace-model:worktree-dirty-p worktree)))
+      (expect (not (nerimux/workspace-model:worktree-conflict-p worktree)))
+      (expect (zerop (nerimux/workspace-model:worktree-ahead worktree)))
+      (expect (zerop (nerimux/workspace-model:worktree-behind worktree)))
+      (expect (not (nerimux/workspace-model:repository-dirty-p repository)))
+      (expect (not (nerimux/workspace-model:repository-conflict-p repository))))))
 
 (describe "async vcs refresh"
   (it "returns before slow repository status workers complete"
     (let* ((repositories
              (loop for index from 1 to 3
                    collect
-                   (nerimux/model:make-repository
+                   (nerimux/workspace-model:make-repository
                     :specification (format nil "workspace-owner/project-~D" index)
                     :local-path (format nil "/tmp/project-~D" index))))
            (completed nil)
@@ -142,11 +142,11 @@
     (let* ((repositories
              (loop for index from 1 to 3
                    collect
-                   (nerimux/model:make-repository
+                   (nerimux/workspace-model:make-repository
                     :specification (format nil "workspace-owner/project-~D" index)
                     :local-path (format nil "/tmp/project-~D" index))))
            (organization
-             (nerimux/model:make-organization
+             (nerimux/workspace-model:make-organization
               :host "workspace-owner"
               :name "workspace"
               :repositories repositories))
@@ -180,11 +180,11 @@
     (let* ((repositories
              (loop for index from 1 to 3
                    collect
-                   (nerimux/model:make-repository
+                   (nerimux/workspace-model:make-repository
                     :specification (format nil "workspace-owner/project-~D" index)
                     :local-path (format nil "/tmp/project-~D" index))))
            (organization
-             (nerimux/model:make-organization
+             (nerimux/workspace-model:make-organization
               :host "workspace-owner"
               :name "workspace"
               :repositories repositories))
@@ -209,7 +209,7 @@
 (describe "async vcs status ownership"
   (it "applies worker results and completes only through the dispatcher"
     (let* ((repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :specification "workspace-owner/project"
               :local-path "/tmp/project"))
            (queued nil)
@@ -223,7 +223,7 @@
                                 :dirty)
                :status-applier (lambda (current update)
                                  (expect (eq :dirty update))
-                                 (setf (nerimux/model:repository-dirty-p current)
+                                 (setf (nerimux/workspace-model:repository-dirty-p current)
                                        t))
                :callback-dispatch (lambda (thunk) (push thunk queued))
                :on-complete (lambda (repositories)
@@ -231,10 +231,10 @@
                               (setf completed t))))))
       (sb-thread:join-thread thread :timeout 2)
       (expect (= 1 (length queued)))
-      (expect (not (nerimux/model:repository-dirty-p repository)))
+      (expect (not (nerimux/workspace-model:repository-dirty-p repository)))
       (expect (not completed))
       (funcall (pop queued))
-      (expect (nerimux/model:repository-dirty-p repository))
+      (expect (nerimux/workspace-model:repository-dirty-p repository))
       (expect completed))))
 
 (describe "async vcs batch edge cases"
@@ -251,7 +251,7 @@
 
   (it "reports a repository refresh error before completing the batch"
     (let* ((repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :specification "workspace-owner/project"
               :local-path "/tmp/project"))
            (error-repository nil)
@@ -313,34 +313,34 @@
   ;; re-bind the pane to the NEW struct — matching by id/path, not by identity.
   (it "re-binds a pane to the refreshed worktree with the same path"
     (let* ((previous (nerimux/vcs:workspace-organizations))
-           (pane (nerimux/model:make-pane :id 31 :title "editor"))
-           (old-organization (nerimux/model:make-organization
+           (pane (nerimux/pane:make-pane :id 31 :title "editor"))
+           (old-organization (nerimux/workspace-model:make-organization
                               :host "vcs-host" :name "workspace-owner"))
-           (old-repository (nerimux/model:make-repository
+           (old-repository (nerimux/workspace-model:make-repository
                             :specification "workspace-owner/project"
                             :local-path "work/project"))
-           (old-worktree (nerimux/model:make-worktree
+           (old-worktree (nerimux/workspace-model:make-worktree
                           :path "work/project/wt" :branch "feature/ui"
                           :head "old-head"))
-           (new-organization (nerimux/model:make-organization
+           (new-organization (nerimux/workspace-model:make-organization
                               :host "vcs-host" :name "workspace-owner"))
-           (new-repository (nerimux/model:make-repository
+           (new-repository (nerimux/workspace-model:make-repository
                             :specification "workspace-owner/project"
                             :local-path "work/project"))
-           (new-worktree (nerimux/model:make-worktree
+           (new-worktree (nerimux/workspace-model:make-worktree
                           :path "work/project/wt" :branch "feature/ui"
                           :head "new-head")))
       (unwind-protect
            (progn
-             (nerimux/model:organization-add-repository old-organization old-repository)
-             (nerimux/model:repository-add-worktree old-repository old-worktree)
-             (nerimux/model:worktree-add-pane old-worktree pane)
-             (nerimux/model:organization-add-repository new-organization new-repository)
-             (nerimux/model:repository-add-worktree new-repository new-worktree)
+             (nerimux/workspace-model:organization-add-repository old-organization old-repository)
+             (nerimux/workspace-model:repository-add-worktree old-repository old-worktree)
+             (nerimux/pane:worktree-add-pane old-worktree pane)
+             (nerimux/workspace-model:organization-add-repository new-organization new-repository)
+             (nerimux/workspace-model:repository-add-worktree new-repository new-worktree)
              (nerimux/vcs:set-workspace-organizations (list old-organization))
              (nerimux/vcs:set-workspace-organizations (list new-organization))
-             (expect (eq new-worktree (nerimux/model:pane-worktree pane)))
-             (expect (member pane (nerimux/model:worktree-panes new-worktree)
+             (expect (eq new-worktree (nerimux/pane:pane-worktree pane)))
+             (expect (member pane (nerimux/workspace-model:worktree-panes new-worktree)
                              :test #'eq)))
         (nerimux/vcs:set-workspace-organizations previous))))
 
@@ -349,35 +349,35 @@
   ;; dangling at a struct no longer reachable from the catalog.
   (it "clears the pane's worktree when the worktree vanishes from the catalog"
     (let* ((previous (nerimux/vcs:workspace-organizations))
-           (pane (nerimux/model:make-pane :id 32 :title "shell"))
-           (old-organization (nerimux/model:make-organization
+           (pane (nerimux/pane:make-pane :id 32 :title "shell"))
+           (old-organization (nerimux/workspace-model:make-organization
                               :host "vcs-host" :name "workspace-owner"))
-           (old-repository (nerimux/model:make-repository
+           (old-repository (nerimux/workspace-model:make-repository
                             :specification "workspace-owner/project"
                             :local-path "work/project"))
-           (old-worktree (nerimux/model:make-worktree
+           (old-worktree (nerimux/workspace-model:make-worktree
                           :path "work/project/removed" :branch "feature/gone"
                           :head "old-head"))
-           (new-organization (nerimux/model:make-organization
+           (new-organization (nerimux/workspace-model:make-organization
                               :host "vcs-host" :name "workspace-owner"))
-           (new-repository (nerimux/model:make-repository
+           (new-repository (nerimux/workspace-model:make-repository
                             :specification "workspace-owner/project"
                             :local-path "work/project"))
-           (surviving-worktree (nerimux/model:make-worktree
+           (surviving-worktree (nerimux/workspace-model:make-worktree
                                 :path "work/project/other" :branch "main"
                                 :head "new-head")))
       (unwind-protect
            (progn
-             (nerimux/model:organization-add-repository old-organization old-repository)
-             (nerimux/model:repository-add-worktree old-repository old-worktree)
-             (nerimux/model:worktree-add-pane old-worktree pane)
-             (nerimux/model:organization-add-repository new-organization new-repository)
-             (nerimux/model:repository-add-worktree new-repository surviving-worktree)
+             (nerimux/workspace-model:organization-add-repository old-organization old-repository)
+             (nerimux/workspace-model:repository-add-worktree old-repository old-worktree)
+             (nerimux/pane:worktree-add-pane old-worktree pane)
+             (nerimux/workspace-model:organization-add-repository new-organization new-repository)
+             (nerimux/workspace-model:repository-add-worktree new-repository surviving-worktree)
              (nerimux/vcs:set-workspace-organizations (list old-organization))
-             (expect (eq old-worktree (nerimux/model:pane-worktree pane)))
+             (expect (eq old-worktree (nerimux/pane:pane-worktree pane)))
              (nerimux/vcs:set-workspace-organizations (list new-organization))
-             (expect (null (nerimux/model:pane-worktree pane)))
-             (expect (not (member pane (nerimux/model:worktree-panes surviving-worktree)
+             (expect (null (nerimux/pane:pane-worktree pane)))
+             (expect (not (member pane (nerimux/workspace-model:worktree-panes surviving-worktree)
                                   :test #'eq))))
         (nerimux/vcs:set-workspace-organizations previous)))))
 
@@ -395,54 +395,54 @@
 (describe "vcs workspace catalog commit-state preservation (F1)"
   (it "carries id, commits-state and recent-commits across a full catalog rescan matched by path"
     (let* ((previous (nerimux/vcs:workspace-organizations))
-           (old-organization (nerimux/model:make-organization
+           (old-organization (nerimux/workspace-model:make-organization
                               :host "vcs-host" :name "f1-owner"))
-           (old-repository (nerimux/model:make-repository
+           (old-repository (nerimux/workspace-model:make-repository
                             :specification "f1-owner/project"
                             :local-path "work/f1-project"))
-           (old-worktree (nerimux/model:make-worktree
+           (old-worktree (nerimux/workspace-model:make-worktree
                           :path "work/f1-project/wt" :branch "feature/f1"
                           :head "old-head"))
            ;; A fresh scan never reuses a struct -- build entirely new
            ;; ORGANIZATION/REPOSITORY/WORKTREE structs sharing only the
            ;; worktree's PATH, exactly as SCAN-REPOSITORIES would.
-           (new-organization (nerimux/model:make-organization
+           (new-organization (nerimux/workspace-model:make-organization
                               :host "vcs-host" :name "f1-owner"))
-           (new-repository (nerimux/model:make-repository
+           (new-repository (nerimux/workspace-model:make-repository
                             :specification "f1-owner/project"
                             :local-path "work/f1-project"))
-           (new-worktree (nerimux/model:make-worktree
+           (new-worktree (nerimux/workspace-model:make-worktree
                           :path "work/f1-project/wt" :branch "feature/f1"
                           :head "new-head")))
       (unwind-protect
            (progn
-             (nerimux/model:organization-add-repository old-organization old-repository)
-             (nerimux/model:repository-add-worktree old-repository old-worktree)
+             (nerimux/workspace-model:organization-add-repository old-organization old-repository)
+             (nerimux/workspace-model:repository-add-worktree old-repository old-worktree)
              (nerimux/vcs:set-workspace-organizations (list old-organization))
              ;; Publish once, then simulate the async commit-log fetch
              ;; having already settled :READY on the published worktree --
              ;; the state a rescan must not drop.
-             (let ((published (nerimux/model:repository-worktree-by-path
-                               (first (nerimux/model:organization-repositories
+             (let ((published (nerimux/workspace-model:repository-worktree-by-path
+                               (first (nerimux/workspace-model:organization-repositories
                                        (first (nerimux/vcs:workspace-organizations))))
                                "work/f1-project/wt")))
-               (setf (nerimux/model:worktree-commits-state published) :ready
-                     (nerimux/model:worktree-recent-commits published)
+               (setf (nerimux/workspace-model:worktree-commits-state published) :ready
+                     (nerimux/workspace-model:worktree-recent-commits published)
                      (list (cons "abc1234" "a settled commit")))
-               (let ((first-id (nerimux/model:worktree-id published)))
-                 (nerimux/model:organization-add-repository
+               (let ((first-id (nerimux/workspace-model:worktree-id published)))
+                 (nerimux/workspace-model:organization-add-repository
                   new-organization new-repository)
-                 (nerimux/model:repository-add-worktree new-repository new-worktree)
+                 (nerimux/workspace-model:repository-add-worktree new-repository new-worktree)
                  (nerimux/vcs:set-workspace-organizations (list new-organization))
-                 (let ((rescanned (nerimux/model:repository-worktree-by-path
-                                   (first (nerimux/model:organization-repositories
+                 (let ((rescanned (nerimux/workspace-model:repository-worktree-by-path
+                                   (first (nerimux/workspace-model:organization-repositories
                                            (first (nerimux/vcs:workspace-organizations))))
                                    "work/f1-project/wt")))
                    (expect (not (eq published rescanned)))
-                   (expect (string= first-id (nerimux/model:worktree-id rescanned)))
-                   (expect (eq :ready (nerimux/model:worktree-commits-state rescanned)))
+                   (expect (string= first-id (nerimux/workspace-model:worktree-id rescanned)))
+                   (expect (eq :ready (nerimux/workspace-model:worktree-commits-state rescanned)))
                    (expect (equal (list (cons "abc1234" "a settled commit"))
-                                  (nerimux/model:worktree-recent-commits rescanned)))))))
+                                  (nerimux/workspace-model:worktree-recent-commits rescanned)))))))
         (nerimux/vcs:set-workspace-organizations previous)))))
 
 ;;; PR2 item 6 (activity order): SET-WORKSPACE-ORGANIZATIONS reorders
@@ -464,44 +464,44 @@
     (let ((previous (nerimux/vcs:workspace-organizations)))
       (unwind-protect
            (let* ((organization
-                    (nerimux/model:make-organization
+                    (nerimux/workspace-model:make-organization
                      :id "org-activity" :host "github.com" :name "team"))
                   ;; Added in reverse-of-expected order: repo-old first, then
                   ;; repo-new -- ORGANIZATION-ADD-REPOSITORY prepends, so the
                   ;; pre-sort order is (repo-new repo-old), the opposite of
                   ;; what activity order must produce.
                   (repo-old
-                    (nerimux/model:make-repository
+                    (nerimux/workspace-model:make-repository
                      :id "repo-old" :organization organization
                      :specification "github.com/team/old"))
                   (repo-new
-                    (nerimux/model:make-repository
+                    (nerimux/workspace-model:make-repository
                      :id "repo-new" :organization organization
                      :specification "github.com/team/new"))
                   (worktree-old
-                    (nerimux/model:make-worktree
+                    (nerimux/workspace-model:make-worktree
                      :id "wt-old" :repository repo-old
                      :path "/tmp/old" :branch "old"))
                   (worktree-new
-                    (nerimux/model:make-worktree
+                    (nerimux/workspace-model:make-worktree
                      :id "wt-new" :repository repo-new
                      :path "/tmp/new" :branch "new"))
-                  (pane-old (nerimux/model:make-pane :id 1 :fd -1))
-                  (pane-new (nerimux/model:make-pane :id 2 :fd -1)))
-             (nerimux/model:organization-add-repository organization repo-old)
-             (nerimux/model:organization-add-repository organization repo-new)
-             (nerimux/model:repository-add-worktree repo-old worktree-old)
-             (nerimux/model:repository-add-worktree repo-new worktree-new)
-             (nerimux/model:worktree-add-pane worktree-old pane-old)
-             (nerimux/model:worktree-add-pane worktree-new pane-new)
-             (setf (nerimux/model:pane-last-output-time pane-old)
+                  (pane-old (nerimux/pane:make-pane :id 1 :fd -1))
+                  (pane-new (nerimux/pane:make-pane :id 2 :fd -1)))
+             (nerimux/workspace-model:organization-add-repository organization repo-old)
+             (nerimux/workspace-model:organization-add-repository organization repo-new)
+             (nerimux/workspace-model:repository-add-worktree repo-old worktree-old)
+             (nerimux/workspace-model:repository-add-worktree repo-new worktree-new)
+             (nerimux/pane:worktree-add-pane worktree-old pane-old)
+             (nerimux/pane:worktree-add-pane worktree-new pane-new)
+             (setf (nerimux/pane:pane-last-output-time pane-old)
                    (- (get-universal-time) 600)
-                   (nerimux/model:pane-last-output-time pane-new)
+                   (nerimux/pane:pane-last-output-time pane-new)
                    (- (get-universal-time) 60))
              (nerimux/vcs:set-workspace-organizations (list organization))
              (let ((sorted-organization (first (nerimux/vcs:workspace-organizations))))
                (expect (equal (list repo-new repo-old)
-                              (nerimux/model:organization-repositories
+                              (nerimux/workspace-model:organization-repositories
                                sorted-organization)))))
         (nerimux/vcs:set-workspace-organizations previous))))
 
@@ -511,10 +511,10 @@
     (let ((previous (nerimux/vcs:workspace-organizations)))
       (unwind-protect
            (let* ((organization
-                    (nerimux/model:make-organization
+                    (nerimux/workspace-model:make-organization
                      :id "org-nil-time" :host "github.com" :name "team"))
                   (repository
-                    (nerimux/model:make-repository
+                    (nerimux/workspace-model:make-repository
                      :id "repo-nil-time" :organization organization
                      :specification "github.com/team/repo"))
                   ;; Added in reverse-of-expected order: worktree-active
@@ -522,25 +522,25 @@
                   ;; prepends, so pre-sort order is (worktree-idle
                   ;; worktree-active), the opposite of the expected result.
                   (worktree-active
-                    (nerimux/model:make-worktree
+                    (nerimux/workspace-model:make-worktree
                      :id "wt-active" :repository repository
                      :path "/tmp/active" :branch "active"))
                   (worktree-idle
-                    (nerimux/model:make-worktree
+                    (nerimux/workspace-model:make-worktree
                      :id "wt-idle" :repository repository
                      :path "/tmp/idle" :branch "idle"))
-                  (pane (nerimux/model:make-pane :id 3 :fd -1)))
-             (nerimux/model:organization-add-repository organization repository)
-             (nerimux/model:repository-add-worktree repository worktree-active)
-             (nerimux/model:repository-add-worktree repository worktree-idle)
-             (nerimux/model:worktree-add-pane worktree-active pane)
-             (setf (nerimux/model:pane-last-output-time pane)
+                  (pane (nerimux/pane:make-pane :id 3 :fd -1)))
+             (nerimux/workspace-model:organization-add-repository organization repository)
+             (nerimux/workspace-model:repository-add-worktree repository worktree-active)
+             (nerimux/workspace-model:repository-add-worktree repository worktree-idle)
+             (nerimux/pane:worktree-add-pane worktree-active pane)
+             (setf (nerimux/pane:pane-last-output-time pane)
                    (- (get-universal-time) 30))
              (nerimux/vcs:set-workspace-organizations (list organization))
              (let ((sorted-organization (first (nerimux/vcs:workspace-organizations))))
                (expect (equal (list worktree-active worktree-idle)
-                              (nerimux/model:repository-worktrees
-                               (first (nerimux/model:organization-repositories
+                              (nerimux/workspace-model:repository-worktrees
+                               (first (nerimux/workspace-model:organization-repositories
                                        sorted-organization)))))))
         (nerimux/vcs:set-workspace-organizations previous))))
 
@@ -551,31 +551,31 @@
     (let ((previous (nerimux/vcs:workspace-organizations)))
       (unwind-protect
            (let* ((organization
-                    (nerimux/model:make-organization
+                    (nerimux/workspace-model:make-organization
                      :id "org-tie" :host "github.com" :name "team"))
                   (repository
-                    (nerimux/model:make-repository
+                    (nerimux/workspace-model:make-repository
                      :id "repo-tie" :organization organization
                      :specification "github.com/team/repo"))
                   (worktree-first
-                    (nerimux/model:make-worktree
+                    (nerimux/workspace-model:make-worktree
                      :id "wt-first" :repository repository
                      :path "/tmp/first" :branch "first"))
                   (worktree-second
-                    (nerimux/model:make-worktree
+                    (nerimux/workspace-model:make-worktree
                      :id "wt-second" :repository repository
                      :path "/tmp/second" :branch "second")))
-             (nerimux/model:organization-add-repository organization repository)
+             (nerimux/workspace-model:organization-add-repository organization repository)
              ;; Added second-then-first so pushnew's prepend makes the
              ;; pre-sort (and, since both tie, expected post-sort) order
              ;; (worktree-first worktree-second).
-             (nerimux/model:repository-add-worktree repository worktree-second)
-             (nerimux/model:repository-add-worktree repository worktree-first)
+             (nerimux/workspace-model:repository-add-worktree repository worktree-second)
+             (nerimux/workspace-model:repository-add-worktree repository worktree-first)
              (nerimux/vcs:set-workspace-organizations (list organization))
              (let ((sorted-organization (first (nerimux/vcs:workspace-organizations))))
                (expect (equal (list worktree-first worktree-second)
-                              (nerimux/model:repository-worktrees
-                               (first (nerimux/model:organization-repositories
+                              (nerimux/workspace-model:repository-worktrees
+                               (first (nerimux/workspace-model:organization-repositories
                                        sorted-organization)))))))
         (nerimux/vcs:set-workspace-organizations previous)))))
 
@@ -596,10 +596,10 @@
   (it "adds-a-wholly-new-organization-by-id"
     (let ((previous (nerimux/vcs:workspace-organizations)))
       (unwind-protect
-           (let ((existing (nerimux/model:make-organization
+           (let ((existing (nerimux/workspace-model:make-organization
                             :id "org-existing" :host "github.com" :name "existing")))
              (nerimux/vcs:set-workspace-organizations (list existing))
-             (let* ((incoming (nerimux/model:make-organization
+             (let* ((incoming (nerimux/workspace-model:make-organization
                                :id "org-new" :host "github.com" :name "new"))
                     (merged (nerimux/vcs:merge-workspace-organizations
                              (list incoming))))
@@ -614,16 +614,16 @@
   (it "preserves-catalog-and-incoming-organization-order"
     (let ((previous (nerimux/vcs:workspace-organizations)))
       (unwind-protect
-           (let* ((existing-a (nerimux/model:make-organization
+           (let* ((existing-a (nerimux/workspace-model:make-organization
                                :id "org-existing-a" :host "host" :name "a"))
-                  (existing-b (nerimux/model:make-organization
+                  (existing-b (nerimux/workspace-model:make-organization
                                :id "org-existing-b" :host "host" :name "b"))
-                  (incoming-existing (nerimux/model:make-organization
+                  (incoming-existing (nerimux/workspace-model:make-organization
                                       :id "org-existing-a" :host "host"
                                       :name "a-refresh"))
-                  (incoming-new-a (nerimux/model:make-organization
+                  (incoming-new-a (nerimux/workspace-model:make-organization
                                    :id "org-new-a" :host "host" :name "new-a"))
-                  (incoming-new-b (nerimux/model:make-organization
+                  (incoming-new-b (nerimux/workspace-model:make-organization
                                    :id "org-new-b" :host "host" :name "new-b")))
              (nerimux/vcs:set-workspace-organizations
               (list existing-a existing-b))
@@ -631,7 +631,7 @@
                             (list incoming-existing incoming-new-a incoming-new-b))))
                (expect (equal '("org-existing-a" "org-existing-b"
                                 "org-new-a" "org-new-b")
-                              (mapcar #'nerimux/model:organization-id merged)))
+                              (mapcar #'nerimux/workspace-model:organization-id merged)))
                (expect (eq existing-a (first merged)))))
         (nerimux/vcs:set-workspace-organizations previous))))
 
@@ -642,33 +642,33 @@
   (it "adds-only-the-missing-repository-to-an-already-present-organization"
     (let ((previous (nerimux/vcs:workspace-organizations)))
       (unwind-protect
-           (let* ((organization (nerimux/model:make-organization
+           (let* ((organization (nerimux/workspace-model:make-organization
                                  :id "org" :host "github.com" :name "team"))
-                  (existing-repository (nerimux/model:make-repository
+                  (existing-repository (nerimux/workspace-model:make-repository
                                        :id "repo-existing"
                                        :specification "github.com/team/existing"
                                        :local-path "/workspace/existing")))
-             (nerimux/model:organization-add-repository
+             (nerimux/workspace-model:organization-add-repository
               organization existing-repository)
              (nerimux/vcs:set-workspace-organizations (list organization))
-             (let* ((incoming-organization (nerimux/model:make-organization
+             (let* ((incoming-organization (nerimux/workspace-model:make-organization
                                             :id "org" :host "github.com" :name "team"))
-                    (duplicate-repository (nerimux/model:make-repository
+                    (duplicate-repository (nerimux/workspace-model:make-repository
                                            :id "repo-duplicate"
                                            :specification "github.com/team/existing"
                                            :local-path "/workspace/existing"))
-                    (new-repository (nerimux/model:make-repository
+                    (new-repository (nerimux/workspace-model:make-repository
                                      :id "repo-new"
                                      :specification "github.com/team/new"
                                      :local-path "/workspace/new")))
-               (nerimux/model:organization-add-repository
+               (nerimux/workspace-model:organization-add-repository
                 incoming-organization duplicate-repository)
-               (nerimux/model:organization-add-repository
+               (nerimux/workspace-model:organization-add-repository
                 incoming-organization new-repository)
                (let* ((merged (nerimux/vcs:merge-workspace-organizations
                               (list incoming-organization)))
                       (merged-organization (first merged))
-                      (repositories (nerimux/model:organization-repositories
+                      (repositories (nerimux/workspace-model:organization-repositories
                                      merged-organization)))
                  (expect (= 1 (length merged)))
                  (expect (eq organization merged-organization))
@@ -789,7 +789,7 @@
     (let* ((bare-path (%bare-status-fixture-directory "refresh-bare"))
            (work-path (%bare-status-fixture-directory "refresh-work"))
            (repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :specification "workspace-owner/project"
               :local-path bare-path))
            (raw-worktrees
@@ -826,17 +826,17 @@
     (let* ((bare-path (%bare-status-fixture-directory "status-bare"))
            (work-path (%bare-status-fixture-directory "status-work"))
            (repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :specification "workspace-owner/project"
               :local-path bare-path))
            (bare-worktree
-             (nerimux/model:make-worktree
+             (nerimux/workspace-model:make-worktree
               :repository repository :path bare-path :bare-p t))
            (work-worktree
-             (nerimux/model:make-worktree
+             (nerimux/workspace-model:make-worktree
               :repository repository :path work-path :branch "main")))
-      (nerimux/model:repository-add-worktree repository bare-worktree)
-      (nerimux/model:repository-add-worktree repository work-worktree)
+      (nerimux/workspace-model:repository-add-worktree repository bare-worktree)
+      (nerimux/workspace-model:repository-add-worktree repository work-worktree)
       (with-stubbed-fdefinition
           ((vcs-kit:make-vcs-repository
              (lambda (directory &rest arguments)
@@ -865,7 +865,7 @@
   (it "defaults to a dry run when :dry-run is omitted entirely"
     (let ((captured-arguments nil)
           (repository
-            (nerimux/model:make-repository
+            (nerimux/workspace-model:make-repository
              :specification "workspace-owner/project"
              :local-path "/tmp/nerimux-prune-default-dry-run-test")))
       (with-stubbed-fdefinition
@@ -962,11 +962,11 @@
   (it "%apply-worktree-status writes changed-files from a stubbed status snapshot"
     (let* ((path (namestring (host-kit:temporary-directory)))
            (repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :specification "workspace-owner/project" :local-path path))
            (worktree
-             (nerimux/model:make-worktree :repository repository :path path)))
-      (nerimux/model:repository-add-worktree repository worktree)
+             (nerimux/workspace-model:make-worktree :repository repository :path path)))
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
       (with-stubbed-fdefinition
           ((vcs-kit:make-vcs-repository
              (lambda (directory &rest arguments)
@@ -984,7 +984,7 @@
         (nerimux/vcs::%apply-worktree-status
          repository (nerimux/vcs::%read-worktree-status-at path nil path))
         (expect (equal (list (cons " M" "src/foo.lisp"))
-                       (nerimux/model:worktree-changed-files worktree)))))))
+                       (nerimux/workspace-model:worktree-changed-files worktree)))))))
 
 (describe "vcs worktree status split (magit alignment, Unit MODEL)"
   (it "%worktree-status-untracked-files keeps only :untracked entries, code always \"??\""
@@ -1054,11 +1054,11 @@
   (it "%apply-worktree-status writes all four split lists from a stubbed status snapshot"
     (let* ((path (namestring (host-kit:temporary-directory)))
            (repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :specification "workspace-owner/project" :local-path path))
            (worktree
-             (nerimux/model:make-worktree :repository repository :path path)))
-      (nerimux/model:repository-add-worktree repository worktree)
+             (nerimux/workspace-model:make-worktree :repository repository :path path)))
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
       (with-stubbed-fdefinition
           ((vcs-kit:make-vcs-repository
              (lambda (directory &rest arguments)
@@ -1084,13 +1084,13 @@
         (nerimux/vcs::%apply-worktree-status
          repository (nerimux/vcs::%read-worktree-status-at path nil path))
         (expect (equal (list (cons "??" "new.txt"))
-                       (nerimux/model:worktree-untracked-files worktree)))
+                       (nerimux/workspace-model:worktree-untracked-files worktree)))
         (expect (equal (list (cons "UU" "conflict.lisp"))
-                       (nerimux/model:worktree-unmerged-files worktree)))
+                       (nerimux/workspace-model:worktree-unmerged-files worktree)))
         (expect (equal (list (cons "M" "staged.lisp"))
-                       (nerimux/model:worktree-staged-files worktree)))
+                       (nerimux/workspace-model:worktree-staged-files worktree)))
         (expect (equal (list (cons "M" "unstaged.lisp"))
-                       (nerimux/model:worktree-unstaged-files worktree)))))))
+                       (nerimux/workspace-model:worktree-unstaged-files worktree)))))))
 
 ;;; F4 (CWE-400): the bootstrap-side per-file diff cache
 ;;; (NERIMUX::*WORKSPACE-FILE-DIFFS*) has no per-entry expiry of its own --
@@ -1130,9 +1130,9 @@
     ;; which then saw non-empty items where it expected none.
     (let ((previous (nerimux/vcs:workspace-organizations)))
       (unwind-protect
-           (let* ((organization (nerimux/model:make-organization
+           (let* ((organization (nerimux/workspace-model:make-organization
                                  :id "org-bug2" :host "bug2-host" :name "team"))
-                  (repository (nerimux/model:make-repository
+                  (repository (nerimux/workspace-model:make-repository
                                :id "repo-bug2" :organization organization
                                :specification "bug2-host/team/repo"))
                   (synthetic-condition
@@ -1141,7 +1141,7 @@
                   (repository-error-calls nil)
                   (complete-calls nil)
                   (error-calls nil))
-             (nerimux/model:organization-add-repository organization repository)
+             (nerimux/workspace-model:organization-add-repository organization repository)
              (with-stubbed-fdefinition
                  ((nerimux/vcs:scan-repositories-async
                     (lambda (&key query on-complete on-error on-progress callback-dispatch)
