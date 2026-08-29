@@ -2,7 +2,8 @@
 
 (defpackage #:nerimux/renderer
   (:use #:cl
-        #:nerimux/model #:nerimux/terminal)
+        #:nerimux/workspace-model #:nerimux/pane #:nerimux/layout
+        #:nerimux/window #:nerimux/session #:nerimux/terminal)
   (:import-from #:cl-concurrent-kit #:with-lock-held)
   (:documentation
    "PRESENTATION layer: the only package that writes to the real terminal.  Composites

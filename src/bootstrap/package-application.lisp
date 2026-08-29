@@ -3,7 +3,7 @@
 (defpackage #:nerimux/commands
   (:use #:cl
         #:nerimux/terminal
-        #:nerimux/model)
+        #:nerimux/pane)
   ;; NOT #:nerimux/pty.  That is infrastructure, and this is application: the one
   ;; PTY operation left here (close on pane exit) goes through nerimux/ports
   ;; instead, the same indirection domain/model/pane-spawn already uses for the
@@ -37,7 +37,8 @@
         #:nerimux/ports
         #:nerimux/pty
         #:nerimux/terminal
-        #:nerimux/model
+        #:nerimux/workspace-model #:nerimux/pane
+        #:nerimux/window #:nerimux/session
         #:nerimux/renderer
         #:nerimux/input
         #:nerimux/commands
