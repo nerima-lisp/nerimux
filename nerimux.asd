@@ -156,6 +156,7 @@
        (:file "repository")        ; ghq repository aggregate
        (:file "worktree")           ; worktree aggregate and relationships
        (:file "pane-core")         ; leaf PTY data and feed helpers
+       (:file "attention")         ; worktree/organization attention composed from pane state (W3)
        (:file "pane-geometry")     ; geometry update + PTY/screen resize helpers
        (:file "layout")            ; tree structure (uses pane-reposition)
        (:file "layout-visitor")    ; declarative layout traversal macros
