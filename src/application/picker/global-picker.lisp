@@ -26,63 +26,63 @@
         finally (return "")))
 
 (defun %organization-label (organization)
-  (let ((host (%picker-string (nerimux/model:organization-host organization)))
-        (name (%picker-string (nerimux/model:organization-name organization))))
+  (let ((host (%picker-string (nerimux/workspace-model:organization-host organization)))
+        (name (%picker-string (nerimux/workspace-model:organization-name organization))))
     (cond
       ((and (plusp (length host)) (plusp (length name)))
        (format nil "~A/~A" host name))
       ((plusp (length host)) host)
       ((plusp (length name)) name)
-      (t (%picker-string (nerimux/model:organization-id organization))))))
+      (t (%picker-string (nerimux/workspace-model:organization-id organization))))))
 
 (defun %repository-label (repository)
   (%first-picker-string
-   (nerimux/model:repository-specification repository)
-   (nerimux/model:repository-local-path repository)
-   (nerimux/model:repository-id repository)))
+   (nerimux/workspace-model:repository-specification repository)
+   (nerimux/workspace-model:repository-local-path repository)
+   (nerimux/workspace-model:repository-id repository)))
 
 (defun %worktree-label (worktree)
-  (let ((branch (%picker-string (nerimux/model:worktree-branch worktree)))
-        (path (%picker-string (nerimux/model:worktree-path worktree))))
+  (let ((branch (%picker-string (nerimux/workspace-model:worktree-branch worktree)))
+        (path (%picker-string (nerimux/workspace-model:worktree-path worktree))))
     (cond
       ((and (plusp (length branch)) (plusp (length path)))
        (format nil "~A — ~A" branch path))
       ((plusp (length branch)) branch)
       ((plusp (length path)) path)
-      (t (%picker-string (nerimux/model:worktree-id worktree))))))
+      (t (%picker-string (nerimux/workspace-model:worktree-id worktree))))))
 
 (defun %organization-id (organization)
   (format nil "organization/~A"
           (%first-picker-string
-           (nerimux/model:organization-id organization)
+           (nerimux/workspace-model:organization-id organization)
            (%organization-label organization))))
 
 (defun %repository-id (organization repository)
   (format nil "~A/repository/~A"
           (%organization-id organization)
           (%first-picker-string
-           (nerimux/model:repository-id repository)
+           (nerimux/workspace-model:repository-id repository)
            (%repository-label repository))))
 
 (defun %worktree-id (organization repository worktree)
   (format nil "~A/worktree/~A"
           (%repository-id organization repository)
           (%first-picker-string
-           (nerimux/model:worktree-id worktree)
+           (nerimux/workspace-model:worktree-id worktree)
            (%worktree-label worktree))))
 
 (defun %pane-label (pane)
   (format nil "pane/~D ~A"
-          (nerimux/model:pane-id pane)
+          (nerimux/pane:pane-id pane)
           (%first-picker-string
-           (nerimux/model:pane-title pane)
-           (nerimux/model:pane-start-command pane)
+           (nerimux/pane:pane-title pane)
+           (nerimux/pane:pane-start-command pane)
            "shell")))
 
 (defun %pane-id (organization repository worktree pane)
   (format nil "~A/pane/~D"
           (%worktree-id organization repository worktree)
-          (nerimux/model:pane-id pane)))
+          (nerimux/pane:pane-id pane)))
 
 (defun %make-organization-item (organization)
   (%make-picker-item
@@ -123,10 +123,10 @@
   (let ((items nil))
     (dolist (organization (reverse organizations) items)
       (dolist (repository
-               (reverse (nerimux/model:organization-repositories organization)))
+               (reverse (nerimux/workspace-model:organization-repositories organization)))
         (dolist (worktree
-                 (reverse (nerimux/model:repository-worktrees repository)))
-          (dolist (pane (reverse (nerimux/model:worktree-panes worktree)))
+                 (reverse (nerimux/workspace-model:repository-worktrees repository)))
+          (dolist (pane (reverse (nerimux/workspace-model:worktree-panes worktree)))
             (push (%make-pane-item organization repository worktree pane)
                   items))
           (push (%make-worktree-item organization repository worktree) items))
@@ -134,29 +134,29 @@
       (push (%make-organization-item organization) items))))
 
 (defun %repository-attention-p (repository)
-  (or (nerimux/model:repository-dirty-p repository)
-      (nerimux/model:repository-conflict-p repository)
-      (plusp (nerimux/model:repository-ahead repository))
-      (plusp (nerimux/model:repository-behind repository))
-      (nerimux/model:repository-missing-p repository)
-      (some #'nerimux/model:worktree-attention-p
-            (nerimux/model:repository-worktrees repository))))
+  (or (nerimux/workspace-model:repository-dirty-p repository)
+      (nerimux/workspace-model:repository-conflict-p repository)
+      (plusp (nerimux/workspace-model:repository-ahead repository))
+      (plusp (nerimux/workspace-model:repository-behind repository))
+      (nerimux/workspace-model:repository-missing-p repository)
+      (some #'nerimux/workspace-model:worktree-attention-p
+            (nerimux/workspace-model:repository-worktrees repository))))
 
 (defun picker-item-attention-p (item)
   (check-type item picker-item)
   (case (picker-item-kind item)
     (:organization
-     (or (nerimux/model:organization-missing-p
+     (or (nerimux/workspace-model:organization-missing-p
           (picker-item-organization item))
-         (plusp (nerimux/model:organization-attention-count
+         (plusp (nerimux/workspace-model:organization-attention-count
                  (picker-item-organization item)))
          (some #'%repository-attention-p
-               (nerimux/model:organization-repositories
+               (nerimux/workspace-model:organization-repositories
                 (picker-item-organization item)))))
     (:repository (%repository-attention-p (picker-item-repository item)))
-    (:worktree (nerimux/model:worktree-attention-p
+    (:worktree (nerimux/workspace-model:worktree-attention-p
                 (picker-item-worktree item)))
-    (:pane (nerimux/model:pane-attention-p (picker-item-pane item)))
+    (:pane (nerimux/pane:pane-attention-p (picker-item-pane item)))
     (otherwise nil)))
 
 (defmacro define-picker-search-fields (name documentation &body fields)
@@ -166,82 +166,82 @@
 (define-picker-search-fields *organization-search-fields*
   "Organization-level fields folded into a picker item's search text.
    Each is a function of one ORGANIZATION, returning a string or NIL."
-  #'nerimux/model:organization-id
-        #'nerimux/model:organization-host
-        #'nerimux/model:organization-name
+  #'nerimux/workspace-model:organization-id
+        #'nerimux/workspace-model:organization-host
+        #'nerimux/workspace-model:organization-name
         (lambda (organization)
-          (when (nerimux/model:organization-missing-p organization)
+          (when (nerimux/workspace-model:organization-missing-p organization)
             "missing"))
         (lambda (organization)
-          (when (plusp (nerimux/model:organization-attention-count organization))
+          (when (plusp (nerimux/workspace-model:organization-attention-count organization))
             (format nil "attention ~D"
-                    (nerimux/model:organization-attention-count organization))))
+                    (nerimux/workspace-model:organization-attention-count organization))))
         (lambda (organization)
           (format nil "repositories ~D worktrees ~D"
-                  (length (nerimux/model:organization-repositories organization))
-                  (nerimux/model:organization-active-worktree-count organization))))
+                  (length (nerimux/workspace-model:organization-repositories organization))
+                  (nerimux/workspace-model:organization-active-worktree-count organization))))
 
 (define-picker-search-fields *repository-search-fields*
   "Repository-level fields folded into a picker item's search text.
    Each is a function of one REPOSITORY, returning a string or NIL."
-  #'nerimux/model:repository-id
-        #'nerimux/model:repository-specification
-        #'nerimux/model:repository-local-path
-        #'nerimux/model:repository-remote
-        #'nerimux/model:repository-backend
+  #'nerimux/workspace-model:repository-id
+        #'nerimux/workspace-model:repository-specification
+        #'nerimux/workspace-model:repository-local-path
+        #'nerimux/workspace-model:repository-remote
+        #'nerimux/workspace-model:repository-backend
         (lambda (repository)
-          (when (nerimux/model:repository-dirty-p repository) "dirty"))
+          (when (nerimux/workspace-model:repository-dirty-p repository) "dirty"))
         (lambda (repository)
-          (when (nerimux/model:repository-conflict-p repository) "conflict"))
+          (when (nerimux/workspace-model:repository-conflict-p repository) "conflict"))
         (lambda (repository)
-          (when (plusp (nerimux/model:repository-ahead repository))
-            (format nil "ahead ~D" (nerimux/model:repository-ahead repository))))
+          (when (plusp (nerimux/workspace-model:repository-ahead repository))
+            (format nil "ahead ~D" (nerimux/workspace-model:repository-ahead repository))))
         (lambda (repository)
-          (when (plusp (nerimux/model:repository-behind repository))
-            (format nil "behind ~D" (nerimux/model:repository-behind repository))))
+          (when (plusp (nerimux/workspace-model:repository-behind repository))
+            (format nil "behind ~D" (nerimux/workspace-model:repository-behind repository))))
         (lambda (repository)
-          (when (nerimux/model:repository-missing-p repository) "missing")))
+          (when (nerimux/workspace-model:repository-missing-p repository) "missing")))
 
 (define-picker-search-fields *worktree-search-fields*
   "Worktree-level fields folded into a picker item's search text.
    Each is a function of one WORKTREE, returning a string or NIL."
-  #'nerimux/model:worktree-id
-        #'nerimux/model:worktree-branch
-        #'nerimux/model:worktree-path
-        #'nerimux/model:worktree-head
-        #'nerimux/model:worktree-status
+  #'nerimux/workspace-model:worktree-id
+        #'nerimux/workspace-model:worktree-branch
+        #'nerimux/workspace-model:worktree-path
+        #'nerimux/workspace-model:worktree-head
+        #'nerimux/workspace-model:worktree-status
         (lambda (worktree)
-          (when (nerimux/model:worktree-dirty-p worktree) "dirty"))
+          (when (nerimux/workspace-model:worktree-dirty-p worktree) "dirty"))
         (lambda (worktree)
-          (when (nerimux/model:worktree-conflict-p worktree) "conflict"))
+          (when (nerimux/workspace-model:worktree-conflict-p worktree) "conflict"))
         (lambda (worktree)
-          (when (plusp (nerimux/model:worktree-ahead worktree))
-            (format nil "ahead ~D" (nerimux/model:worktree-ahead worktree))))
+          (when (plusp (nerimux/workspace-model:worktree-ahead worktree))
+            (format nil "ahead ~D" (nerimux/workspace-model:worktree-ahead worktree))))
         (lambda (worktree)
-          (when (plusp (nerimux/model:worktree-behind worktree))
-            (format nil "behind ~D" (nerimux/model:worktree-behind worktree))))
+          (when (plusp (nerimux/workspace-model:worktree-behind worktree))
+            (format nil "behind ~D" (nerimux/workspace-model:worktree-behind worktree))))
         (lambda (worktree)
-          (when (nerimux/model:worktree-bare-p worktree) "bare"))
+          (when (nerimux/workspace-model:worktree-bare-p worktree) "bare"))
         (lambda (worktree)
-          (when (nerimux/model:worktree-locked-p worktree) "locked"))
+          (when (nerimux/workspace-model:worktree-locked-p worktree) "locked"))
         (lambda (worktree)
-          (when (nerimux/model:worktree-prunable-p worktree) "prunable"))
+          (when (nerimux/workspace-model:worktree-prunable-p worktree) "prunable"))
         (lambda (worktree)
-          (when (nerimux/model:worktree-missing-p worktree) "missing"))
-        #'nerimux/model:worktree-attention-reasons)
+          (when (nerimux/workspace-model:worktree-missing-p worktree) "missing"))
+        #'nerimux/pane:worktree-attention-reasons)
 
 (define-picker-search-fields *pane-search-fields*
   "Pane-level fields folded into a picker item's search text.
    Each is a function of one PANE, returning a string or NIL."
-  #'nerimux/model:pane-id
-        #'nerimux/model:pane-title
-        #'nerimux/model:pane-start-command
-        #'nerimux/model:pane-start-path
-        #'nerimux/model:pane-last-output
-        #'nerimux/model:pane-notification
-        #'nerimux/model:pane-last-output-time
-        #'nerimux/model:pane-last-focused-time
-        #'nerimux/model:pane-attention-reasons)
+  #'nerimux/pane:pane-id
+        #'nerimux/pane:pane-title
+        #'nerimux/pane:pane-start-command
+        #'nerimux/pane:pane-start-path
+        #'nerimux/pane:pane-last-output
+        #'nerimux/pane:pane-notification
+        #'nerimux/pane:pane-last-output-time
+        #'nerimux/pane:pane-last-focused-time
+        #'nerimux/pane:pane-attention-reasons)
 
 (defun %level-search-values (level-object field-fns)
   "Apply each of FIELD-FNS to LEVEL-OBJECT, or return NIL when LEVEL-OBJECT
@@ -318,7 +318,7 @@
            (coerce
             (loop for organization-index below organization-count
                   collect
-                  (nerimux/model:make-organization
+                  (nerimux/workspace-model:make-organization
                    :id (format nil "org-~4,'0D" organization-index)
                    :host "github.com"
                    :name (format nil "org-~4,'0D" organization-index)))
@@ -339,7 +339,7 @@
                (+ worktree-base
                   (if (< repository-index worktree-remainder) 1 0)))
              (repository
-               (nerimux/model:make-repository
+               (nerimux/workspace-model:make-repository
                 :id (format nil "repo-~4,'0D" repository-index)
                 :organization organization
                 :specification
@@ -351,7 +351,7 @@
              (worktrees nil))
         (dotimes (worktree-index repository-worktree-count)
           (let ((worktree
-                  (nerimux/model:make-worktree
+                  (nerimux/workspace-model:make-worktree
                    :id (format nil "worktree-~4,'0D-~4,'0D"
                                repository-index worktree-index)
                    :repository repository
@@ -364,10 +364,10 @@
                                  repository-index worktree-index))))
             (push worktree worktrees)
             (push worktree all-worktrees)))
-        (setf (nerimux/model:repository-worktrees repository)
+        (setf (nerimux/workspace-model:repository-worktrees repository)
               (nreverse worktrees)
-              (nerimux/model:repository-main-worktree repository)
-              (first (nerimux/model:repository-worktrees repository)))
+              (nerimux/workspace-model:repository-main-worktree repository)
+              (first (nerimux/workspace-model:repository-worktrees repository)))
         (push repository (aref repositories-by-organization organization-index))))
     (setf all-worktrees (nreverse all-worktrees))
     (loop for organization across organizations
@@ -375,13 +375,13 @@
           do (let ((repositories
                      (nreverse (aref repositories-by-organization
                                      organization-index))))
-               (setf (nerimux/model:organization-repositories organization)
+               (setf (nerimux/workspace-model:organization-repositories organization)
                      repositories
-                     (nerimux/model:organization-active-worktree-count organization)
+                     (nerimux/workspace-model:organization-active-worktree-count organization)
                      (loop for repository in repositories
-                           sum (length (nerimux/model:repository-worktrees
+                           sum (length (nerimux/workspace-model:repository-worktrees
                                         repository)))
-                     (nerimux/model:organization-attention-count organization)
+                     (nerimux/workspace-model:organization-attention-count organization)
                      0)))
     (let* ((worktree-vector (coerce all-worktrees 'vector))
            (worktree-count (length worktree-vector)))
@@ -389,12 +389,12 @@
         (let* ((worktree (aref worktree-vector
                                (mod pane-index worktree-count)))
                (pane
-                 (nerimux/model:make-pane
+                 (nerimux/pane:make-pane
                   :id (1+ pane-index)
                   :title (format nil "pane-~4,'0D" pane-index)
                   :start-command "shell"
-                  :start-path (nerimux/model:worktree-path worktree))))
-          (nerimux/model:worktree-add-pane worktree pane))))
+                  :start-path (nerimux/workspace-model:worktree-path worktree))))
+          (nerimux/pane:worktree-add-pane worktree pane))))
     (coerce organizations 'list)))
 
 (defun benchmark-global-picker (&key (organization-count 1000)
