@@ -388,4 +388,3 @@
 
   ;; %forward-stdin-byte returns NIL without error when stdin has no
   ;; data ready (non-blocking read returns nil).
-
