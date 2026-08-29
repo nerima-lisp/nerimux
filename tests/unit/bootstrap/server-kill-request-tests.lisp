@@ -51,7 +51,7 @@
         (expect nerimux::*running* :to-be-truthy))))
 
   (it "r8-1-pane-kill-description-includes-worktree-path"
-    (let* ((worktree (nerimux/model:make-worktree
+    (let* ((worktree (nerimux/workspace-model:make-worktree
                        :id "wt" :path "/tmp/worktree" :branch "feature"))
            (pane (make-pane :id 7 :fd 9999 :pid 1234
                             :worktree worktree

@@ -90,15 +90,15 @@
               (lambda (fd buffer)
                 (declare (ignore fd buffer))
                 (pop payloads)))
-             (nerimux/model:pane-feed
+             (nerimux/pane:pane-feed
               (lambda (received-pane bytes)
                 (declare (ignore received-pane))
                 (push bytes fed)))
-             (nerimux/model:pane-mark-output
+             (nerimux/pane:pane-mark-output
               (lambda (received-pane bytes)
                 (declare (ignore received-pane))
                 (push bytes outputs)))
-             (nerimux/model:pane-mark-bell
+             (nerimux/pane:pane-mark-bell
               (lambda (received-pane)
                 (declare (ignore received-pane))
                 (incf bells)))
@@ -129,12 +129,12 @@
               (lambda (fd buffer)
                 (declare (ignore fd buffer))
                 (pop payloads)))
-             (nerimux/model:pane-feed
+             (nerimux/pane:pane-feed
               (lambda (received-pane bytes)
                 (declare (ignore received-pane bytes))
                 (incf feed-calls)
                 (error 'nerimux::peer-io-failure)))
-             (nerimux/model:pane-mark-output
+             (nerimux/pane:pane-mark-output
               (lambda (received-pane bytes)
                 (declare (ignore received-pane bytes))
                 (incf outputs)))

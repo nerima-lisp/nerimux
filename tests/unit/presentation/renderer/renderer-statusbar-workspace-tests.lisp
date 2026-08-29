@@ -13,23 +13,23 @@
   "A pane attached to a worktree/repository, with its window carrying a
    second pane so the middle block has more than one tab to show. Returns
    (VALUES FOCUS-PANE WORKTREE)."
-  (let* ((pane-1 (nerimux/model:make-pane :id 1 :fd -1
+  (let* ((pane-1 (nerimux/pane:make-pane :id 1 :fd -1
                                           :unread-output-p unread-1))
-         (pane-2 (nerimux/model:make-pane :id 2 :fd -1
+         (pane-2 (nerimux/pane:make-pane :id 2 :fd -1
                                           :unread-output-p unread-2))
-         (window (nerimux/model:make-window :id 1 :name (format nil "~A" branch)
+         (window (nerimux/window:make-window :id 1 :name (format nil "~A" branch)
                                             :panes (list pane-1 pane-2)))
-         (worktree (nerimux/model:make-worktree
+         (worktree (nerimux/workspace-model:make-worktree
                     :id "wt-status" :path "/repo/wt" :branch branch
                     :status :fetched :ahead ahead))
-         (repository (nerimux/model:make-repository
+         (repository (nerimux/workspace-model:make-repository
                       :id "repo-status" :specification "github.com/team/status"
                       :local-path "/repo" :worktrees (list worktree))))
-    (setf (nerimux/model:pane-window pane-1) window
-          (nerimux/model:pane-window pane-2) window)
-    (nerimux/model:worktree-add-pane worktree pane-1)
-    (nerimux/model:worktree-add-pane worktree pane-2)
-    (setf (nerimux/model:worktree-repository worktree) repository)
+    (setf (nerimux/pane:pane-window pane-1) window
+          (nerimux/pane:pane-window pane-2) window)
+    (nerimux/pane:worktree-add-pane worktree pane-1)
+    (nerimux/pane:worktree-add-pane worktree pane-2)
+    (setf (nerimux/workspace-model:worktree-repository worktree) repository)
     (values pane-1 worktree)))
 
 (describe "renderer-suite/statusbar-workspace-unselected"
@@ -93,10 +93,10 @@
   ;; pane also carries `*`. This is the exact "[w1: 1 2*!3]" shape from the
   ;; requirement, built from three panes so all three markers appear at once.
   (it "marks only the unread pane's tab with ! in [w1: 1 2*!3]"
-    (let* ((pane-1 (nerimux/model:make-pane :id 1 :fd -1))
-           (pane-2 (nerimux/model:make-pane :id 2 :fd -1))
-           (pane-3 (nerimux/model:make-pane :id 3 :fd -1 :unread-output-p t))
-           (window (nerimux/model:make-window
+    (let* ((pane-1 (nerimux/pane:make-pane :id 1 :fd -1))
+           (pane-2 (nerimux/pane:make-pane :id 2 :fd -1))
+           (pane-3 (nerimux/pane:make-pane :id 3 :fd -1 :unread-output-p t))
+           (window (nerimux/window:make-window
                     :id 1 :name "w" :panes (list pane-1 pane-2 pane-3)))
            (tab (nerimux/renderer::%status-window-tab window pane-2)))
       ;; The visible shape is the requirement's exact "[w1: 1 2*!3]"; the
@@ -109,8 +109,8 @@
   ;; The per-pane token in isolation, both branches: unread -> "!", read ->
   ;; " " as the leading marker; active -> trailing "*", inactive -> none.
   (it "composes each pane's own tab token from its unread/active state"
-    (let* ((pane-unread-active (nerimux/model:make-pane :id 5 :fd -1 :unread-output-p t))
-           (pane-read-inactive (nerimux/model:make-pane :id 6 :fd -1)))
+    (let* ((pane-unread-active (nerimux/pane:make-pane :id 5 :fd -1 :unread-output-p t))
+           (pane-read-inactive (nerimux/pane:make-pane :id 6 :fd -1)))
       (expect (string= "!5*"
                        (strip-sgr
                         (nerimux/renderer::%status-pane-tab-token
@@ -124,16 +124,16 @@
   ;; worktree (%WORKTREE-TREE-WINDOWS, R5.8 id order), not just the focused
   ;; pane's own window.
   (it "lists every window of the focused pane's worktree in the middle block, not just its own"
-    (let* ((pane-1 (nerimux/model:make-pane :id 1 :fd -1))
-           (pane-2 (nerimux/model:make-pane :id 2 :fd -1))
-           (window-1 (nerimux/model:make-window :id 1 :name "w1" :panes (list pane-1)))
-           (window-2 (nerimux/model:make-window :id 2 :name "w2" :panes (list pane-2)))
-           (worktree (nerimux/model:make-worktree
+    (let* ((pane-1 (nerimux/pane:make-pane :id 1 :fd -1))
+           (pane-2 (nerimux/pane:make-pane :id 2 :fd -1))
+           (window-1 (nerimux/window:make-window :id 1 :name "w1" :panes (list pane-1)))
+           (window-2 (nerimux/window:make-window :id 2 :name "w2" :panes (list pane-2)))
+           (worktree (nerimux/workspace-model:make-worktree
                       :id "wt-multi-window" :path "/repo/wt" :branch "main")))
-      (setf (nerimux/model:pane-window pane-1) window-1
-            (nerimux/model:pane-window pane-2) window-2)
-      (nerimux/model:worktree-add-pane worktree pane-1)
-      (nerimux/model:worktree-add-pane worktree pane-2)
+      (setf (nerimux/pane:pane-window pane-1) window-1
+            (nerimux/pane:pane-window pane-2) window-2)
+      (nerimux/pane:worktree-add-pane worktree pane-1)
+      (nerimux/pane:worktree-add-pane worktree pane-2)
       (expect (string= "[w1: 1*][w2: 2]"
                        (strip-sgr
                         (nerimux/renderer::%status-middle-text pane-1)))))))

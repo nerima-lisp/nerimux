@@ -4,31 +4,31 @@
 
 (defun %make-server-dispatch-helper-fixture ()
   (let* ((organization
-           (nerimux/model:make-organization
+           (nerimux/workspace-model:make-organization
             :id "org-id"
             :host "origin"
             :name "team"))
          (repository
-           (nerimux/model:make-repository
+           (nerimux/workspace-model:make-repository
             :id "repo-id"
             :organization organization
             :specification "origin/team/repo"
             :local-path "/workspace/repo"))
          (main-worktree
-           (nerimux/model:make-worktree
+           (nerimux/workspace-model:make-worktree
             :id "main-id"
             :repository repository
             :path "/workspace/repo"
             :branch "main"))
          (feature-worktree
-           (nerimux/model:make-worktree
+           (nerimux/workspace-model:make-worktree
             :id "feature-id"
             :repository repository
             :path "/workspace/repo/feature"
             :branch "feature")))
-    (nerimux/model:organization-add-repository organization repository)
-    (nerimux/model:repository-add-worktree repository main-worktree)
-    (nerimux/model:repository-add-worktree repository feature-worktree)
+    (nerimux/workspace-model:organization-add-repository organization repository)
+    (nerimux/workspace-model:repository-add-worktree repository main-worktree)
+    (nerimux/workspace-model:repository-add-worktree repository feature-worktree)
     (values (list organization)
             organization
             repository
@@ -174,7 +174,7 @@
             ;; expanded-by-default table used to give this fixture for free.
             (nerimux::*workspace-expanded-node-ids*
               (let ((table (make-hash-table :test #'equal)))
-                (setf (gethash (list :repository (nerimux/model:repository-id repository))
+                (setf (gethash (list :repository (nerimux/workspace-model:repository-id repository))
                                table)
                       t)
                 table))
@@ -446,7 +446,7 @@
                      conn (make-array '(1 1) :initial-element 65))))))
 
   (it "input-and-copy-dispatch-report-missing-focus"
-    (let ((session (nerimux/model:make-session :id 1 :name "test"))
+    (let ((session (nerimux/session:make-session :id 1 :name "test"))
           (conn (nerimux::%make-client-conn)))
       (expect (nerimux::%handle-client-input-key-payload
                session conn "x"))
@@ -467,7 +467,7 @@
   ;; one bound key with no stub above to record it -- the other 12 each
   ;; drive exactly one stubbed call.
   (it "copy-dispatches-every-bound-key-through-one-contract"
-    (let* ((session (nerimux/model:make-session :id 1 :name "test"))
+    (let* ((session (nerimux/session:make-session :id 1 :name "test"))
            (conn (nerimux::%make-client-conn))
            (pane (make-no-pty-pane 1 0 0 4 4))
            (calls nil))
@@ -509,7 +509,7 @@
   ;; modal dropped) rather than a call count through a function this helper
   ;; no longer touches.
   (it "search-submit-reports-invalid-input-and-restores-view"
-    (let* ((session (nerimux/model:make-session :id 1 :name "test"))
+    (let* ((session (nerimux/session:make-session :id 1 :name "test"))
            (conn (nerimux::%make-client-conn))
            (messages nil))
       (setf (nerimux::client-conn-command-return-view conn) :status
@@ -538,7 +538,7 @@
   ;; new binding, so striking any of them must be a pure no-op: no VIEW
   ;; change, no MODAL entered.
   (it "retired-view-switch-keys-d-o-i-are-unbound-in-the-ui-keymap"
-    (let ((session (nerimux/model:make-session :id 1 :name "test"))
+    (let ((session (nerimux/session:make-session :id 1 :name "test"))
           (conn (nerimux::%make-client-conn))
           (nerimux::*dirty* nil))
       (dolist (payload '("d" "o" "i"))
@@ -655,10 +655,10 @@
   ;; one's fallback had, by then, set up state for it.
   (it "first-enter-on-a-fresh-client-toggles-the-default-row-not-a-nil-selection"
     (let* ((organization
-             (nerimux/model:make-organization
+             (nerimux/workspace-model:make-organization
               :id "org" :host "github.com" :name "team"))
            (repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :id "repo" :organization organization
               :specification "github.com/team/repo"))
            (conn (nerimux::%make-client-conn))
@@ -672,7 +672,7 @@
              (make-hash-table :test #'equal))
            (nerimux::*clients* (list conn))
            (nerimux::*dirty* nil))
-      (nerimux/model:organization-add-repository organization repository)
+      (nerimux/workspace-model:organization-add-repository organization repository)
       (setf (nerimux::client-conn-view conn) :repolist)
       ;; Fresh conn: nothing selected, nothing focused.
       (expect (null (nerimux::%client-tree-object conn)))
@@ -745,23 +745,23 @@
   ;; path is never reached.
   (it "enter-on-a-repository-row-with-a-main-worktree-jumps-straight-to-its-shell"
     (with-fake-session (s)
-      (let* ((pane (nerimux/model:window-active-pane
-                    (nerimux/model:session-active-window s)))
+      (let* ((pane (nerimux/window:window-active-pane
+                    (nerimux/session:session-active-window s)))
              (organization
-               (nerimux/model:make-organization
+               (nerimux/workspace-model:make-organization
                 :id "org" :host "github.com" :name "team"))
              (repository
-               (nerimux/model:make-repository
+               (nerimux/workspace-model:make-repository
                 :id "repo" :organization organization
                 :specification "github.com/team/repo"))
              (worktree
-               (nerimux/model:make-worktree
+               (nerimux/workspace-model:make-worktree
                 :id "main" :repository repository :path "/tmp/main" :branch "main"))
              (conn (nerimux::%make-client-conn)))
-        (nerimux/model:organization-add-repository organization repository)
-        (nerimux/model:repository-add-worktree repository worktree)
-        (nerimux/model:worktree-add-pane worktree pane)
-        (setf (nerimux/model:pane-fd pane) 9999) ; "live" without a real PTY
+        (nerimux/workspace-model:organization-add-repository organization repository)
+        (nerimux/workspace-model:repository-add-worktree repository worktree)
+        (nerimux/pane:worktree-add-pane worktree pane)
+        (setf (nerimux/pane:pane-fd pane) 9999) ; "live" without a real PTY
         (setf (nerimux::client-conn-view conn) :repolist)
         (nerimux::%set-client-selected-tree-object conn repository)
         (expect (nerimux::%focus-selected-client-worktree s conn))
@@ -772,17 +772,17 @@
   ;; doing nothing or erroring.
   (it "enter-on-a-repository-row-with-no-worktrees-notifies-instead-of-crashing"
     (let* ((organization
-             (nerimux/model:make-organization
+             (nerimux/workspace-model:make-organization
               :id "org" :host "github.com" :name "team"))
            (repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :id "repo" :organization organization
               :specification "github.com/team/repo"))
            (conn (nerimux::%make-client-conn))
            ;; %CLIENT-NOTIFY only appends to the message log for a live
            ;; (registered) client -- see %CLIENT-LIVE-P.
            (nerimux::*clients* (list conn)))
-      (nerimux/model:organization-add-repository organization repository)
+      (nerimux/workspace-model:organization-add-repository organization repository)
       (setf (nerimux::client-conn-view conn) :repolist)
       (nerimux::%set-client-selected-tree-object conn repository)
       (expect (eq t (nerimux::%focus-selected-client-worktree nil conn)))
@@ -796,7 +796,7 @@
   ;; distinct from the fresh-client regression test above.
   (it "enter-on-an-organization-row-toggles-its-collapse-state"
     (let* ((organization
-             (nerimux/model:make-organization
+             (nerimux/workspace-model:make-organization
               :id "org-toggle" :host "github.com" :name "team"))
            (conn (nerimux::%make-client-conn))
            (nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
@@ -812,8 +812,8 @@
   (it "enter-on-a-pane-selects-the-pane-and-enters-pane-view"
     (with-fake-session (s)
       (let* ((nerimux::*dirty* nil)
-             (window (nerimux/model:session-active-window s))
-             (pane (nerimux/model:window-active-pane window))
+             (window (nerimux/session:session-active-window s))
+             (pane (nerimux/window:window-active-pane window))
              (conn (nerimux::%make-client-conn)))
         (setf (nerimux::client-conn-view conn) :repolist)
         (nerimux::%set-client-selected-tree-object conn pane)
@@ -825,8 +825,8 @@
   (it "enter-on-a-window-focuses-its-active-pane"
     (with-fake-session (s)
       (let* ((nerimux::*dirty* nil)
-             (window (nerimux/model:session-active-window s))
-             (pane (nerimux/model:window-active-pane window))
+             (window (nerimux/session:session-active-window s))
+             (pane (nerimux/window:window-active-pane window))
              (conn (nerimux::%make-client-conn)))
         (setf (nerimux::client-conn-view conn) :repolist)
         (nerimux::%set-client-selected-tree-object conn window)
@@ -868,7 +868,7 @@
       (let ((nerimux::*workspace-expanded-node-ids* (make-hash-table :test #'equal))
             (nerimux::*dirty* nil)
             (conn (nerimux::%make-client-conn))
-            (repo-key (list :repository (nerimux/model:repository-id repository))))
+            (repo-key (list :repository (nerimux/workspace-model:repository-id repository))))
         (nerimux::%set-client-selected-tree-object conn repository)
         ;; Never touched: absent, i.e. collapsed -- H is a no-op on the
         ;; table's contents but still reports handled.
@@ -885,7 +885,7 @@
     ;; it directly (e.g. picker/command-target resolution) -- unchanged from
     ;; before the section-based redesign.
     (let ((organization
-            (nerimux/model:make-organization
+            (nerimux/workspace-model:make-organization
              :id "org-direct" :host "github.com" :name "team"))
           (nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
           (nerimux::*dirty* nil)
@@ -951,19 +951,19 @@
   ;; every worktree/repository row in between.
   (it "J-jumps-the-selection-forward-to-the-next-section-header"
     (let* ((organization
-             (nerimux/model:make-organization
+             (nerimux/workspace-model:make-organization
               :id "org-jk" :host "github.com" :name "team"))
            (repo-a
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :id "repo-a" :organization organization
               :specification "github.com/team/repo-a"))
            (worktree-a
-             (nerimux/model:make-worktree
+             (nerimux/workspace-model:make-worktree
               :id "wt-a" :repository repo-a :path "/tmp/a" :branch "a"
               :dirty-p t))
            (conn (nerimux::%make-client-conn)))
-      (nerimux/model:organization-add-repository organization repo-a)
-      (nerimux/model:repository-add-worktree repo-a worktree-a)
+      (nerimux/workspace-model:organization-add-repository organization repo-a)
+      (nerimux/workspace-model:repository-add-worktree repo-a worktree-a)
       (let ((nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
             (nerimux::*dirty* nil)
             (nerimux/vcs::*workspace-organizations* (list organization)))
@@ -986,19 +986,19 @@
   ;; header).
   (it "K-jumps-the-selection-backward-to-the-previous-section-header"
     (let* ((organization
-             (nerimux/model:make-organization
+             (nerimux/workspace-model:make-organization
               :id "org-jk-back" :host "github.com" :name "team"))
            (repo-a
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :id "repo-a-back" :organization organization
               :specification "github.com/team/repo-a-back"))
            (worktree-a
-             (nerimux/model:make-worktree
+             (nerimux/workspace-model:make-worktree
               :id "wt-a-back" :repository repo-a :path "/tmp/a-back"
               :branch "a" :dirty-p t))
            (conn (nerimux::%make-client-conn)))
-      (nerimux/model:organization-add-repository organization repo-a)
-      (nerimux/model:repository-add-worktree repo-a worktree-a)
+      (nerimux/workspace-model:organization-add-repository organization repo-a)
+      (nerimux/workspace-model:repository-add-worktree repo-a worktree-a)
       (let ((nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
             (nerimux::*dirty* nil)
             (nerimux/vcs::*workspace-organizations* (list organization)))
@@ -1036,14 +1036,14 @@
 
 (describe "worktree-pane-memory"
   (it "ignores incomplete remembers and self-heals stale panes"
-    (let* ((worktree (nerimux/model:make-worktree :id "wt-memory"))
-           (pane (nerimux/model:make-pane :id 101))
-           (other-pane (nerimux/model:make-pane :id 102))
+    (let* ((worktree (nerimux/workspace-model:make-worktree :id "wt-memory"))
+           (pane (nerimux/pane:make-pane :id 101))
+           (other-pane (nerimux/pane:make-pane :id 102))
            (nerimux::*workspace-worktree-last-pane*
              (make-hash-table :test #'equal)))
       (expect (null (nerimux::%remember-worktree-pane nil pane)))
       (expect (null (nerimux::%remember-worktree-pane worktree nil)))
-      (nerimux/model:worktree-add-pane worktree pane)
+      (nerimux/pane:worktree-add-pane worktree pane)
       (nerimux::%remember-worktree-pane worktree pane)
       (expect (eq pane (nerimux::%worktree-remembered-pane worktree)))
       (nerimux::%remember-worktree-pane worktree other-pane)

@@ -26,9 +26,9 @@
   ;; false/0 value -- the same values a genuinely clean, fetched worktree has.
   (it "distinguishes an unfetched worktree (UNKNOWN) from a fetched clean one (CLEAN)"
     (let ((never-fetched
-            (nerimux/model:make-worktree :path "/repo/wt" :branch "main"))
+            (nerimux/workspace-model:make-worktree :path "/repo/wt" :branch "main"))
           (fetched-clean
-            (nerimux/model:make-worktree :path "/repo/wt" :branch "main"
+            (nerimux/workspace-model:make-worktree :path "/repo/wt" :branch "main"
                                          :status :fetched)))
       (expect (equal '("UNKNOWN")
                      (nerimux/renderer::%worktree-status-tokens never-fetched)))
@@ -48,7 +48,7 @@
   ;; the (if (worktree-status worktree) ...) branch.
   (it "ignores stale health flags when status was never fetched"
     (let ((worktree
-            (nerimux/model:make-worktree :path "/repo/wt" :branch "main"
+            (nerimux/workspace-model:make-worktree :path "/repo/wt" :branch "main"
                                          :dirty-p t :ahead 5)))
       (expect (equal '("UNKNOWN")
                      (nerimux/renderer::%worktree-status-tokens worktree)))))
@@ -57,7 +57,7 @@
   ;; CHANGED (design doc §6.2: "単なるCHANGEDへの丸めは行わない").
   (it "keeps the AHEAD/BEHIND counts instead of collapsing to a boolean"
     (let ((worktree
-            (nerimux/model:make-worktree :path "/repo/wt" :branch "main"
+            (nerimux/workspace-model:make-worktree :path "/repo/wt" :branch "main"
                                          :status :fetched :ahead 12 :behind 3)))
       (expect (equal '("AHEAD 12" "BEHIND 3")
                      (nerimux/renderer::%worktree-status-tokens worktree)))
@@ -69,7 +69,7 @@
   ;; than "AHEAD 0 BEHIND 0".
   (it "omits AHEAD 0 / BEHIND 0 rather than showing a zero count"
     (let ((worktree
-            (nerimux/model:make-worktree :path "/repo/wt" :branch "main"
+            (nerimux/workspace-model:make-worktree :path "/repo/wt" :branch "main"
                                          :status :fetched :ahead 0 :behind 0)))
       (expect (equal '("CLEAN")
                      (nerimux/renderer::%worktree-status-tokens worktree)))))
@@ -80,7 +80,7 @@
   ;; (DIRTY CONFLICT AHEAD BEHIND).
   (it "lists every applicable token together, in the documented order"
     (let ((worktree
-            (nerimux/model:make-worktree :path "/repo/wt" :branch "main"
+            (nerimux/workspace-model:make-worktree :path "/repo/wt" :branch "main"
                                          :status :fetched
                                          :missing-p t :bare-p t :locked-p t
                                          :prunable-p t :dirty-p t :conflict-p t
@@ -95,7 +95,7 @@
   ;; after them, not used in place of them.
   (it "reports structural tokens even without a fetched status, appending UNKNOWN"
     (let ((worktree
-            (nerimux/model:make-worktree :path "/repo/wt" :branch "main"
+            (nerimux/workspace-model:make-worktree :path "/repo/wt" :branch "main"
                                          :locked-p t :prunable-p t)))
       (expect (equal '("LOCKED" "PRUNABLE" "UNKNOWN")
                      (nerimux/renderer::%worktree-status-tokens worktree)))))
@@ -106,7 +106,7 @@
   ;; both apply to the same worktree row rather than suppressing one.
   (it "lists BARE alongside health tokens rather than replacing them"
     (let ((worktree
-            (nerimux/model:make-worktree :path "/repo/wt" :branch "main"
+            (nerimux/workspace-model:make-worktree :path "/repo/wt" :branch "main"
                                          :status :fetched :bare-p t :dirty-p t)))
       (expect (equal '("BARE" "DIRTY")
                      (nerimux/renderer::%worktree-status-tokens worktree))))))
@@ -115,26 +115,26 @@
 
   (it "uses stable repository and worktree title fallbacks"
     (let ((repository-cases
-            (list (list (nerimux/model:make-repository
+            (list (list (nerimux/workspace-model:make-repository
                          :id "repo-spec" :specification "team/project"
                          :local-path "/repo")
                         "team/project")
-                  (list (nerimux/model:make-repository
+                  (list (nerimux/workspace-model:make-repository
                          :id "repo-path" :specification ""
                          :local-path "/repo")
                         "/repo")
-                  (list (nerimux/model:make-repository
+                  (list (nerimux/workspace-model:make-repository
                          :id "repo-id" :specification "" :local-path "")
                         "repo-id")
                   (list nil "-")))
           (worktree-cases
-            (list (list (nerimux/model:make-worktree
+            (list (list (nerimux/workspace-model:make-worktree
                          :id "wt-branch" :path "/repo/wt" :branch "feature/x")
                         "feature/x")
-                  (list (nerimux/model:make-worktree
+                  (list (nerimux/workspace-model:make-worktree
                          :id "wt-path" :path "/repo/wt" :branch "")
                         "/repo/wt")
-                  (list (nerimux/model:make-worktree
+                  (list (nerimux/workspace-model:make-worktree
                          :id "wt-id" :path "" :branch "")
                         "wt-id")
                   (list nil "-"))))
@@ -148,8 +148,8 @@
                           (first case)))))))
 
   (it "selects repository directly or through the selected worktree"
-    (let* ((repository (nerimux/model:make-repository :id "repo"))
-           (worktree (nerimux/model:make-worktree :id "wt" :path "/wt"
+    (let* ((repository (nerimux/workspace-model:make-repository :id "repo"))
+           (worktree (nerimux/workspace-model:make-worktree :id "wt" :path "/wt"
                                                    :repository repository)))
       (multiple-value-bind (selected-repository selected-worktree)
           (nerimux/renderer::%workspace-title-selection nil repository nil)
@@ -161,10 +161,10 @@
         (expect (eq worktree selected-worktree)))))
 
   (it "falls back to the focused pane's worktree"
-    (let* ((repository (nerimux/model:make-repository :id "repo"))
-           (worktree (nerimux/model:make-worktree :id "wt" :path "/wt"
+    (let* ((repository (nerimux/workspace-model:make-repository :id "repo"))
+           (worktree (nerimux/workspace-model:make-worktree :id "wt" :path "/wt"
                                                    :repository repository))
-           (pane (nerimux/model:make-pane :id 1 :fd -1 :worktree worktree)))
+           (pane (nerimux/pane:make-pane :id 1 :fd -1 :worktree worktree)))
       (multiple-value-bind (selected-repository selected-worktree)
           (nerimux/renderer::%workspace-title-selection pane nil nil)
         (expect (eq repository selected-repository))
@@ -175,7 +175,7 @@
                      (nerimux/renderer::%workspace-em-dash)))
     (expect (search "nerimux: team/project — feature/x"
                     (nerimux/renderer::%client-title-osc
-                     (nerimux/model:make-repository
+                     (nerimux/workspace-model:make-repository
                       :specification "team/project")
-                     (nerimux/model:make-worktree :path "/wt"
+                     (nerimux/workspace-model:make-worktree :path "/wt"
                                                   :branch "feature/x"))))))

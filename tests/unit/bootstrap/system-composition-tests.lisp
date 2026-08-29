@@ -553,15 +553,15 @@
     (expect *print-circle*))
 
   (it "a-cyclic-model-object-renders-without-exhausting-the-stack"
-    (let ((organization (nerimux/model:make-organization :id "org" :name "org"))
-          (repository (nerimux/model:make-repository :id "repo")))
-      (nerimux/model:organization-add-repository organization repository)
+    (let ((organization (nerimux/workspace-model:make-organization :id "org" :name "org"))
+          (repository (nerimux/workspace-model:make-repository :id "repo")))
+      (nerimux/workspace-model:organization-add-repository organization repository)
       ;; Pin the cycle itself: without this the render below would prove
       ;; nothing, because a non-cyclic structure prints fine either way.
       (expect (eq organization
-                  (nerimux/model:repository-organization repository)))
+                  (nerimux/workspace-model:repository-organization repository)))
       (expect (member repository
-                      (nerimux/model:organization-repositories organization)
+                      (nerimux/workspace-model:organization-repositories organization)
                       :test #'eq))
       ;; ~S with the pretty printer on is exactly how a reporter renders a
       ;; failed assertion's value.

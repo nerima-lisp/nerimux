@@ -38,29 +38,29 @@
 
 (defun make-renderer-picker-items ()
   (let* ((organization
-           (nerimux/model:make-organization
+           (nerimux/workspace-model:make-organization
             :id "org" :host "github.com" :name "team"))
          (repository
-           (nerimux/model:make-repository
+           (nerimux/workspace-model:make-repository
             :id "repo"
             :organization organization
             :specification "github.com/team/repo"))
          (worktree
-           (nerimux/model:make-worktree
+           (nerimux/workspace-model:make-worktree
             :id "feature"
             :repository repository
             :path "/tmp/feature"
             :branch "feature/picker"
             :dirty-p t))
          (pane
-           (nerimux/model:make-pane
+           (nerimux/pane:make-pane
             :id 7
             :title "editor"
             :start-command "nvim"
             :start-path "/tmp/feature")))
-    (nerimux/model:organization-add-repository organization repository)
-    (nerimux/model:repository-add-worktree repository worktree)
-    (nerimux/model:worktree-add-pane worktree pane)
+    (nerimux/workspace-model:organization-add-repository organization repository)
+    (nerimux/workspace-model:repository-add-worktree repository worktree)
+    (nerimux/pane:worktree-add-pane worktree pane)
     (nerimux/picker:build-global-picker-items (list organization))))
 
 (describe "renderer-suite"

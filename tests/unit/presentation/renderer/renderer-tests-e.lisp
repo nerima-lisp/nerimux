@@ -127,16 +127,16 @@
   ;; but is still consumed so it does not ring later when that window becomes active.
   (it "render-session-background-bell-always-swallowed"
     (let* ((sess  (make-fake-session :nwindows 2))
-           (win2  (second (nerimux/model:session-windows sess)))
-           (pane2 (first (nerimux/model:window-panes win2))))
+           (win2  (second (nerimux/session:session-windows sess)))
+           (pane2 (first (nerimux/window:window-panes win2))))
       (setf (nerimux/terminal/types:screen-bell-pending
-             (nerimux/model:pane-screen pane2)) t)
+             (nerimux/pane:pane-screen pane2)) t)
       (let ((out (nerimux/renderer::render-session-to-string sess 5 20)))
         ;; %bel-before-title-osc: OUT's trailing OSC-0 title sequence is
         ;; BEL-terminated regardless of any pane's bell state (R6.11).
         (expect (null (find (code-char 7) (%bel-before-title-osc out))))
         (expect (null (nerimux/terminal/types:screen-bell-pending
-                       (nerimux/model:pane-screen pane2)))))))
+                       (nerimux/pane:pane-screen pane2)))))))
 
   ;; %emit-bell always writes the audible BEL — visual-bell's suppression
   ;; branch is gone with the rest of the alert machinery (§1.1).

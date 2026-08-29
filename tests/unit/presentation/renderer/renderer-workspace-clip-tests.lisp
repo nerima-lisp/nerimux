@@ -112,14 +112,14 @@
     (let* ((cols 20)
            (branch (make-string 20 :initial-element #\a))
            (worktree
-             (nerimux/model:make-worktree
+             (nerimux/workspace-model:make-worktree
               :id "wt-clip" :path "/repo/work" :branch branch))
            (repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :id "repo-clip" :specification "github.com/team/clip"
               :local-path "/repo" :worktrees (list worktree)))
            (organization
-             (nerimux/model:make-organization
+             (nerimux/workspace-model:make-organization
               :id "github.com/team-clip" :host "github.com" :name "team-clip"
               :repositories (list repository)))
            ;; A repository row under Repositories defaults COLLAPSED (the

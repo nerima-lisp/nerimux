@@ -30,7 +30,7 @@
          (tree  (%fake-window-tree panes)))
     (let ((win (make-window :id id :name name :width 20 :height 5
                             :panes panes :tree tree :active (first panes))))
-      (dolist (p panes) (setf (nerimux/model:pane-window p) win))
+      (dolist (p panes) (setf (nerimux/pane:pane-window p) win))
       win)))
 
 (defun %fake-window-tree (panes)

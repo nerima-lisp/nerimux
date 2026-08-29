@@ -3,31 +3,31 @@
 (describe "global picker"
   (it "builds a deterministic organization repository worktree hierarchy"
     (let* ((organization
-             (nerimux/model:make-organization
+             (nerimux/workspace-model:make-organization
               :id "org"
               :host "github.com"
               :name "team"))
            (repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :id "repo"
               :organization organization
               :specification "github.com/team/repo"))
            (clean
-             (nerimux/model:make-worktree
+             (nerimux/workspace-model:make-worktree
               :id "clean"
               :repository repository
               :path "/tmp/clean"
               :branch "main"))
            (attention
-             (nerimux/model:make-worktree
+             (nerimux/workspace-model:make-worktree
               :id "attention"
               :repository repository
               :path "/tmp/feature"
               :branch "feature/picker"
               :dirty-p t)))
-      (nerimux/model:organization-add-repository organization repository)
-      (nerimux/model:repository-add-worktree repository clean)
-      (nerimux/model:repository-add-worktree repository attention)
+      (nerimux/workspace-model:organization-add-repository organization repository)
+      (nerimux/workspace-model:repository-add-worktree repository clean)
+      (nerimux/workspace-model:repository-add-worktree repository attention)
       (let* ((items (nerimux/picker:build-global-picker-items
                      (list organization)))
              (attention-item
@@ -51,23 +51,23 @@
 
   (it "supports case-insensitive regex filtering across picker fields"
     (let* ((organization
-             (nerimux/model:make-organization
+             (nerimux/workspace-model:make-organization
               :id "org"
               :host "github.com"
               :name "team"))
            (repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :id "repo"
               :organization organization
               :specification "github.com/team/repo"))
            (worktree
-             (nerimux/model:make-worktree
+             (nerimux/workspace-model:make-worktree
               :id "feature"
               :repository repository
               :path "/tmp/feature"
               :branch "feature/picker")))
-      (nerimux/model:organization-add-repository organization repository)
-      (nerimux/model:repository-add-worktree repository worktree)
+      (nerimux/workspace-model:organization-add-repository organization repository)
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
       (let ((items (nerimux/picker:build-global-picker-items
                     (list organization))))
         (expect (= 1
@@ -80,37 +80,37 @@
 
   (it "uses fallback labels for incomplete hierarchy data"
     (let* ((host-only
-             (nerimux/model:make-organization
+             (nerimux/workspace-model:make-organization
               :id "host-only"
               :host "github.com"))
            (name-only
-             (nerimux/model:make-organization
+             (nerimux/workspace-model:make-organization
               :id "name-only"
               :name "team"))
            (id-only
-             (nerimux/model:make-organization :id "id-only"))
+             (nerimux/workspace-model:make-organization :id "id-only"))
            (specification-repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :id "specification-repository"
               :specification "github.com/team/repository"))
            (local-path-repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :id "local-path-repository"
               :local-path #P"local/repository"))
            (id-repository
-             (nerimux/model:make-repository :id "id-repository"))
+             (nerimux/workspace-model:make-repository :id "id-repository"))
            (branch-worktree
-             (nerimux/model:make-worktree
+             (nerimux/workspace-model:make-worktree
               :id "branch-worktree"
               :branch "feature"))
            (path-worktree
-             (nerimux/model:make-worktree
+             (nerimux/workspace-model:make-worktree
               :id "path-worktree"
               :path #P"worktree"))
            (id-worktree
-             (nerimux/model:make-worktree :id "id-worktree"))
+             (nerimux/workspace-model:make-worktree :id "id-worktree"))
            (pane
-             (nerimux/model:make-pane :id 8)))
+             (nerimux/pane:make-pane :id 8)))
       (expect (string= "" (nerimux/picker::%picker-string nil)))
       (expect (string= "text" (nerimux/picker::%picker-string "text")))
       (let ((pathname #P"picker-path"))
@@ -162,50 +162,50 @@
 
   (it "propagates repository, organization, worktree, and pane attention"
     (let* ((clean-repository
-             (nerimux/model:make-repository :id "clean"))
+             (nerimux/workspace-model:make-repository :id "clean"))
            (conflict-repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :id "conflict"
               :conflict-p t))
            (ahead-repository
-             (nerimux/model:make-repository :id "ahead" :ahead 1))
+             (nerimux/workspace-model:make-repository :id "ahead" :ahead 1))
            (behind-repository
-             (nerimux/model:make-repository :id "behind" :behind 1))
+             (nerimux/workspace-model:make-repository :id "behind" :behind 1))
            (missing-repository
-             (nerimux/model:make-repository :id "missing" :missing-p t))
+             (nerimux/workspace-model:make-repository :id "missing" :missing-p t))
            (worktree-repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :id "worktree-attention"
               :worktrees
-              (list (nerimux/model:make-worktree
+              (list (nerimux/workspace-model:make-worktree
                      :id "dirty"
                      :dirty-p t))))
            (missing-organization
-             (nerimux/model:make-organization
+             (nerimux/workspace-model:make-organization
               :id "missing-organization"
               :missing-p t))
            (counted-organization
-             (nerimux/model:make-organization
+             (nerimux/workspace-model:make-organization
               :id "counted-organization"
               :attention-count 1))
            (repository-organization
-             (nerimux/model:make-organization
+             (nerimux/workspace-model:make-organization
               :id "repository-organization"
               :repositories (list worktree-repository)))
            (clean-organization
-             (nerimux/model:make-organization :id "clean-organization"))
+             (nerimux/workspace-model:make-organization :id "clean-organization"))
            (clean-worktree
-             (nerimux/model:make-worktree :id "clean-worktree"))
+             (nerimux/workspace-model:make-worktree :id "clean-worktree"))
            (attention-worktree
-             (nerimux/model:make-worktree
+             (nerimux/workspace-model:make-worktree
               :id "attention-worktree"
               :conflict-p t
               :ahead 1
               :behind 1
               :missing-p t))
-           (clean-pane (nerimux/model:make-pane :id 1))
-           (attention-pane (nerimux/model:make-pane :id 2)))
-      (nerimux/model:pane-mark-bell attention-pane)
+           (clean-pane (nerimux/pane:make-pane :id 1))
+           (attention-pane (nerimux/pane:make-pane :id 2)))
+      (nerimux/pane:pane-mark-bell attention-pane)
       (dolist (repository (list conflict-repository
                                  ahead-repository
                                  behind-repository
@@ -214,7 +214,7 @@
         (expect
          (nerimux/picker:picker-item-attention-p
           (nerimux/picker::%make-picker-item
-           :id (nerimux/model:repository-id repository)
+           :id (nerimux/workspace-model:repository-id repository)
            :kind :repository
            :repository repository))))
       (expect (not
@@ -229,7 +229,7 @@
         (expect
          (nerimux/picker:picker-item-attention-p
           (nerimux/picker::%make-picker-item
-           :id (nerimux/model:organization-id organization)
+           :id (nerimux/workspace-model:organization-id organization)
            :kind :organization
            :organization organization))))
       (expect (not
@@ -270,7 +270,7 @@
 
   (it "indexes transient metadata in picker searches"
     (let* ((organization
-             (nerimux/model:make-organization
+             (nerimux/workspace-model:make-organization
               :id "metadata-organization"
               :host "github.com"
               :name "metadata"
@@ -278,7 +278,7 @@
               :attention-count 3
               :missing-p t))
            (repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :id "metadata-repository"
               :organization organization
               :specification "github.com/metadata/repository"
@@ -286,33 +286,33 @@
               :local-path #P"metadata/repository"
               :conflict-p t))
            (worktree
-             (nerimux/model:make-worktree
+             (nerimux/workspace-model:make-worktree
               :id "metadata-worktree"
               :repository repository
               :path #P"metadata/worktree"
               :branch "metadata-branch"
               :head "metadata-head"))
            (pane
-             (nerimux/model:make-pane
+             (nerimux/pane:make-pane
               :id 3
               :title "metadata-pane"
               :start-command "metadata-command"
               :start-path "metadata/worktree")))
-      (nerimux/model:organization-add-repository organization repository)
-      (nerimux/model:repository-add-worktree repository worktree)
-      (nerimux/model:pane-mark-focused pane)
-      (nerimux/model:pane-mark-output pane #(111 107))
-      (nerimux/model:pane-mark-bell pane)
-      (nerimux/model:pane-mark-process-exit pane :status 1)
-      (nerimux/model:pane-mark-startup-failure pane)
-      (nerimux/model:pane-notify pane "metadata-notification")
-      (nerimux/model:worktree-add-pane worktree pane)
+      (nerimux/workspace-model:organization-add-repository organization repository)
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
+      (nerimux/pane:pane-mark-focused pane)
+      (nerimux/pane:pane-mark-output pane #(111 107))
+      (nerimux/pane:pane-mark-bell pane)
+      (nerimux/pane:pane-mark-process-exit pane :status 1)
+      (nerimux/pane:pane-mark-startup-failure pane)
+      (nerimux/pane:pane-notify pane "metadata-notification")
+      (nerimux/pane:worktree-add-pane worktree pane)
       (let* ((items (nerimux/picker:build-global-picker-items
                      (list organization)))
              (focused-time
-               (nerimux/model:pane-last-focused-time pane))
+               (nerimux/pane:pane-last-focused-time pane))
              (output-time
-               (nerimux/model:pane-last-output-time pane)))
+               (nerimux/pane:pane-last-output-time pane)))
         (dolist (query '("missing" "attention 3" "repositories 1 worktrees 1"
                          "origin" "metadata-notification" "unread-output"
                          "bell" "process-exited" "non-zero-exit"
@@ -379,27 +379,27 @@
 
   (it "includes pane metadata and propagates pane attention"
     (let* ((organization
-             (nerimux/model:make-organization :id "org" :name "team"))
+             (nerimux/workspace-model:make-organization :id "org" :name "team"))
            (repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :id "repo"
               :organization organization
               :specification "github.com/team/repo"))
            (worktree
-             (nerimux/model:make-worktree
+             (nerimux/workspace-model:make-worktree
               :id "feature"
               :repository repository
               :path "/tmp/feature"
               :branch "feature/picker"))
            (pane
-             (nerimux/model:make-pane
+             (nerimux/pane:make-pane
               :id 7
               :title "editor"
               :start-command "nvim"
               :start-path "/tmp/feature")))
-      (nerimux/model:organization-add-repository organization repository)
-      (nerimux/model:repository-add-worktree repository worktree)
-      (nerimux/model:worktree-add-pane worktree pane)
+      (nerimux/workspace-model:organization-add-repository organization repository)
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
+      (nerimux/pane:worktree-add-pane worktree pane)
       (let* ((items (nerimux/picker:build-global-picker-items
                      (list organization)))
              (pane-item
@@ -411,17 +411,17 @@
                    (length
                     (nerimux/picker:filter-global-picker-items
                      items "editor"))))
-        (nerimux/model:pane-mark-output pane #(111 107))
+        (nerimux/pane:pane-mark-output pane #(111 107))
         (expect (nerimux/picker:picker-item-attention-p pane-item)))))
 
   (it "searches repository and worktree state fields"
     (let* ((organization
-             (nerimux/model:make-organization
+             (nerimux/workspace-model:make-organization
               :id "org"
               :name "team"
               :attention-count 7))
            (repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :id "repo"
               :organization organization
               :specification "host/team/repo"
@@ -432,7 +432,7 @@
               :conflict-p t
               :missing-p t))
            (worktree
-             (nerimux/model:make-worktree
+             (nerimux/workspace-model:make-worktree
               :id "feature"
               :repository repository
               :path "/tmp/feature"
@@ -445,8 +445,8 @@
               :conflict-p t
               :ahead 4
               :behind 5)))
-      (nerimux/model:organization-add-repository organization repository)
-      (nerimux/model:repository-add-worktree repository worktree)
+      (nerimux/workspace-model:organization-add-repository organization repository)
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
       (let ((items (nerimux/picker:build-global-picker-items
                     (list organization))))
         (dolist (query '("mercurial" "dirty" "ahead 2" "behind 3"
@@ -519,17 +519,17 @@
 
   (it "derives stable selection tokens from fallback model fields"
     (let ((organization
-            (nerimux/model:make-organization
+            (nerimux/workspace-model:make-organization
              :host "github.com"
              :name "team"))
           (repository
-            (nerimux/model:make-repository
+            (nerimux/workspace-model:make-repository
              :specification "github.com/team/repo"))
           (worktree
-            (nerimux/model:make-worktree
+            (nerimux/workspace-model:make-worktree
              :path "/tmp/worktree"))
           (branch-worktree
-            (nerimux/model:make-worktree :branch "feature")))
+            (nerimux/workspace-model:make-worktree :branch "feature")))
       (expect (equal "github.com/team"
                      (nerimux::%organization-selection-token organization)))
       (expect (equal "github.com/team/repo"

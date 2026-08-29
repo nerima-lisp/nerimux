@@ -47,13 +47,27 @@
                 #:screen-dirty-p
                 #:char-width
                 #:screen-p)
-  (:import-from #:nerimux/model
-                #:create-initial-session
-                #:session-windows
-                #:session-active-window
-                #:session-select-window
-                #:session-new-window
-                #:session-active-pane
+  (:import-from #:nerimux/pane
+                #:make-pane #:pane-feed #:pane-screen #:pane-id
+                #:pane-x #:pane-y #:pane-width #:pane-height #:pane-fd #:pane-pid
+                #:pane-live-p
+                #:respawn-pane
+                #:pane-window
+                #:pane-marked
+                #:pane-title
+                #:pane-local-options
+                #:pane-reposition
+                #:pane-live-p)
+  (:import-from #:nerimux/layout
+                #:make-layout-leaf
+                #:make-layout-split
+                #:layout-leaf-pane
+                #:layout-leaves
+                #:layout-find-leaf
+                #:layout-find-parent
+                #:layout-node-bounding-box
+                #:layout->string)
+  (:import-from #:nerimux/window
                 #:window-panes
                 #:window-active-pane
                 #:window-select-pane
@@ -63,70 +77,45 @@
                 #:window-remove-pane
                 #:window-resize-active
                 #:window-refresh-panes
+                #:window-tree
+                #:make-window
+                #:window-id
+                #:window-name
+                #:window-width #:window-height
+                #:pane-neighbor
+                #:pane-at-position
+                #:window-lock
+                #:window-last-active-time
+                #:window-automatic-rename-p
+                #:window-last-active
+                #:window-local-options
+                #:window-layout-cycle-index)
+  (:import-from #:nerimux/session
+                #:create-initial-session
+                #:session-windows
+                #:session-active-window
+                #:session-select-window
+                #:session-new-window
+                #:session-active-pane
                 #:session-environment
                 #:session-environment-value
                 #:session-environment-names
                 #:session-set-environment
                 #:session-unset-environment
                 #:session-child-environment
-                #:window-tree
-                #:make-layout-leaf
-                #:make-layout-split
-                #:layout-leaf-pane
-                #:layout-leaves
-                #:layout-node-bounding-box
-                #:layout-find-leaf
-                #:layout-find-parent
                 #:all-panes
-                #:make-pane
-                #:make-window
                 #:make-session
-                #:pane-feed
-                #:pane-screen
-                #:window-id
-                #:window-name
-                #:window-width #:window-height
                 #:session-name
-                #:pane-id
-                #:pane-x #:pane-y #:pane-width #:pane-height #:pane-fd #:pane-pid
-                #:pane-live-p
-                #:pane-neighbor
-                #:pane-at-position
-                #:window-lock
-                ;; New window management
-                #:window-last-active-time
-                #:window-automatic-rename-p
                 #:session-last-window
                 #:session-move-window
                 #:session-swap-windows
-                ;; Pane management
-                #:window-last-active
-                #:respawn-pane
-                #:pane-window
-                #:pane-marked
-                #:pane-title
-                #:pane-local-options
-                ;; Window options
-                #:window-local-options
-                ;; New session slots
                 #:session-clients
-                ;; Window layout-cycle-index slot
-                #:window-layout-cycle-index
-                ;; Layout persistence
-                #:layout->string
-                ;; update-environment
                 #:*update-environment*
                 #:get-update-environment-vars
-                ;; Session name / id
                 #:session-id
                 #:session-last-active
                 #:session-touch
-                ;; Pane geometry (direct reposition)
-                #:pane-reposition
-                ;; Session window management
-                #:session-insert-window
-                ;; Pane liveness check
-                #:pane-live-p)
+                #:session-insert-window)
   (:import-from #:nerimux
                 ;; Runtime state (needed by tests)
                 #:*server-sessions*)

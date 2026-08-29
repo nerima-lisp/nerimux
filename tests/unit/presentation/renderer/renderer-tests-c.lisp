@@ -36,9 +36,9 @@
            (win (tl-window (make-layout-split :h l0 l1) 24 81))
            (sess (make-session :id 1 :name "0" :windows (list win))))
       (session-select-window sess win)
-      (setf (nerimux/model:window-zoom-p win) t)
+      (setf (nerimux/window:window-zoom-p win) t)
       (let ((buf (make-string-output-stream)))
         (nerimux/renderer::%render-panes-and-borders
-         buf sess win (nerimux/model:window-panes win) (nerimux/model:window-active win) 81)
+         buf sess win (nerimux/window:window-panes win) (nerimux/window:window-active win) 81)
         (let ((out (get-output-stream-string buf)))
           (expect (null (find #\│ out))))))))

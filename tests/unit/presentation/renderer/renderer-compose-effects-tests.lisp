@@ -15,7 +15,7 @@
   ;; writing its contents to the frame.
   (it "render-passthrough-drains-without-emitting"
     (let* ((p (make-no-pty-pane 1 0 0 10 5))
-           (s (nerimux/model:pane-screen p)))
+           (s (nerimux/pane:pane-screen p)))
       (push (format nil "~C]1337;a" #\Escape)
             (nerimux/terminal/types:screen-passthrough-queue s))
       (let ((out (with-output-to-string (buf)
@@ -28,8 +28,8 @@
   (it "render-passthrough-multiple-panes-all-drained"
     (let* ((p1 (make-no-pty-pane 1 0 0 10 5))
            (p2 (make-no-pty-pane 2 0 0 10 5))
-           (s1 (nerimux/model:pane-screen p1))
-           (s2 (nerimux/model:pane-screen p2)))
+           (s1 (nerimux/pane:pane-screen p1))
+           (s2 (nerimux/pane:pane-screen p2)))
       (push "from-p1" (nerimux/terminal/types:screen-passthrough-queue s1))
       (push "from-p2" (nerimux/terminal/types:screen-passthrough-queue s2))
       (let ((out (with-output-to-string (buf)
@@ -42,7 +42,7 @@
   ;; frame in FIFO (oldest-first) order, then the queue is cleared.
   (it "render-clipboard-emits-in-fifo-order"
     (let* ((p (make-no-pty-pane 1 0 0 10 5))
-           (s (nerimux/model:pane-screen p)))
+           (s (nerimux/pane:pane-screen p)))
       ;; screen-clipboard-queue is push-accumulated (most-recent-first), so
       ;; pushing "first" before "second" means "first" was queued earliest.
       (push "first" (nerimux/terminal/types:screen-clipboard-queue s))

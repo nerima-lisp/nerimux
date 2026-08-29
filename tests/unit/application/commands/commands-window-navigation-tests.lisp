@@ -38,9 +38,9 @@
     (multiple-value-bind (sess wa wb wg) (%find-window-fixture)
       (declare (ignore wg))
       (session-select-window sess wb)
-      (setf (nerimux/model:window-last-active-time wb) 40
-            (nerimux/model:window-last-active-time wa) 30)
-      (session-select-window sess (nerimux/model:session-last-window sess))
+      (setf (nerimux/window:window-last-active-time wb) 40
+            (nerimux/window:window-last-active-time wa) 30)
+      (session-select-window sess (nerimux/session:session-last-window sess))
       (expect (eq wa (session-active-window sess)))))
 
   ;; last-window targeting a different session selects THAT session's previous
@@ -58,8 +58,8 @@
            (other (make-session :id 2 :name "other" :windows (list o-a o-b))))
       (session-select-window cur cur-win)
       (session-select-window other o-b)
-      (setf (nerimux/model:window-last-active-time o-b) 40
-            (nerimux/model:window-last-active-time o-a) 30)
-      (session-select-window other (nerimux/model:session-last-window other))
+      (setf (nerimux/window:window-last-active-time o-b) 40
+            (nerimux/window:window-last-active-time o-a) 30)
+      (session-select-window other (nerimux/session:session-last-window other))
       (expect (eq o-a (session-active-window other)))
       (expect (eq cur-win (session-active-window cur))))))

@@ -10,7 +10,7 @@
   (it "workspace-new-window-passes-geometry-and-starts-reader-by-default"
     (let ((arguments nil)
           (reader-pane nil)
-          (window (nerimux/model:make-window :id 1 :name "new"))
+          (window (nerimux/window:make-window :id 1 :name "new"))
           (pane :active-pane))
       (with-stubbed-fdefinition
           ((nerimux::session-new-window
@@ -50,7 +50,7 @@
   ;; The first window for a worktree is bare: just the branch name.
   (it "worktree-window-name-first-window-is-bare-branch-name"
     (let ((worktree
-            (nerimux/model:make-worktree
+            (nerimux/workspace-model:make-worktree
              :id "wt" :path "/tmp/wt" :branch "feat/phase3")))
       (expect (string= "feat/phase3" (nerimux::%worktree-window-name worktree)))))
 
@@ -59,41 +59,41 @@
   ;; %worktree-windows already finds among the worktree's panes.
   (it "worktree-window-name-numbers-subsequent-windows"
     (let* ((worktree
-             (nerimux/model:make-worktree
+             (nerimux/workspace-model:make-worktree
               :id "wt" :path "/tmp/wt" :branch "feat/phase3"))
            (win-1 (make-no-pty-pane 1 0 0 20 5))
            (win-2 (make-no-pty-pane 2 0 0 20 5)))
-      (setf (nerimux/model:pane-window win-1)
-            (nerimux/model:make-window :id 1 :name "feat/phase3" :panes (list win-1)))
-      (setf (nerimux/model:pane-window win-2)
-            (nerimux/model:make-window :id 2 :name "feat/phase3 (2)" :panes (list win-2)))
-      (nerimux/model:worktree-add-pane worktree win-1)
+      (setf (nerimux/pane:pane-window win-1)
+            (nerimux/window:make-window :id 1 :name "feat/phase3" :panes (list win-1)))
+      (setf (nerimux/pane:pane-window win-2)
+            (nerimux/window:make-window :id 2 :name "feat/phase3 (2)" :panes (list win-2)))
+      (nerimux/pane:worktree-add-pane worktree win-1)
       (expect (string= "feat/phase3 (2)" (nerimux::%worktree-window-name worktree)))
-      (nerimux/model:worktree-add-pane worktree win-2)
+      (nerimux/pane:worktree-add-pane worktree win-2)
       (expect (string= "feat/phase3 (3)" (nerimux::%worktree-window-name worktree)))))
 
   ;; A detached-HEAD worktree (no branch) falls back to its path, then its id.
   (it "worktree-window-name-falls-back-to-path-then-id-with-no-branch"
     (let ((by-path
-            (nerimux/model:make-worktree :id "wt-1" :path "/tmp/detached" :branch nil))
+            (nerimux/workspace-model:make-worktree :id "wt-1" :path "/tmp/detached" :branch nil))
           (by-id
-            (nerimux/model:make-worktree :id "wt-2" :path "" :branch nil)))
+            (nerimux/workspace-model:make-worktree :id "wt-2" :path "" :branch nil)))
       (expect (string= "/tmp/detached" (nerimux::%worktree-window-name by-path)))
       (expect (string= "wt-2" (nerimux::%worktree-window-name by-id)))))
 
   ;; %worktree-windows returns the DISTINCT windows holding the worktree's
   ;; panes, ordered by window id -- not one entry per pane.
   (it "worktree-windows-deduplicates-and-orders-by-window-id"
-    (let* ((worktree (nerimux/model:make-worktree :id "wt" :path "/tmp/wt"))
-           (window-a (nerimux/model:make-window :id 5 :name "a"))
-           (window-b (nerimux/model:make-window :id 2 :name "b"))
+    (let* ((worktree (nerimux/workspace-model:make-worktree :id "wt" :path "/tmp/wt"))
+           (window-a (nerimux/window:make-window :id 5 :name "a"))
+           (window-b (nerimux/window:make-window :id 2 :name "b"))
            (pane-1 (make-no-pty-pane 1 0 0 20 5))
            (pane-2 (make-no-pty-pane 2 0 0 20 5))
            (pane-3 (make-no-pty-pane 3 0 0 20 5)))
-      (setf (nerimux/model:pane-window pane-1) window-a
-            (nerimux/model:pane-window pane-2) window-a
-            (nerimux/model:pane-window pane-3) window-b)
-      (nerimux/model:worktree-add-pane worktree pane-1)
-      (nerimux/model:worktree-add-pane worktree pane-2)
-      (nerimux/model:worktree-add-pane worktree pane-3)
+      (setf (nerimux/pane:pane-window pane-1) window-a
+            (nerimux/pane:pane-window pane-2) window-a
+            (nerimux/pane:pane-window pane-3) window-b)
+      (nerimux/pane:worktree-add-pane worktree pane-1)
+      (nerimux/pane:worktree-add-pane worktree pane-2)
+      (nerimux/pane:worktree-add-pane worktree pane-3)
       (expect (equal (list window-b window-a) (nerimux::%worktree-windows worktree))))))

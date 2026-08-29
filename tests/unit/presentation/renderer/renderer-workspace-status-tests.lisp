@@ -23,7 +23,7 @@
    MAKE-REPOSITORY alone never sets a worktree's back-pointer). Returns
    (VALUES WORKTREE REPOSITORY SIBLING-OR-NIL)."
   (let* ((worktree
-           (nerimux/model:make-worktree
+           (nerimux/workspace-model:make-worktree
             :id "wt-status" :path "/repo/wt" :branch branch :head head
             :ahead (or ahead 0) :behind (or behind 0)
             :unmerged-files unmerged :untracked-files untracked
@@ -32,15 +32,15 @@
             :recent-commits commits :commits-state commits-state
             :panes panes))
          (repository
-           (nerimux/model:make-repository
+           (nerimux/workspace-model:make-repository
             :id "repo-status" :specification "github.com/team/status"
             :local-path "/repo"))
          (sibling
            (and sibling-p
-                (nerimux/model:make-worktree
+                (nerimux/workspace-model:make-worktree
                  :id "wt-sibling" :path "/repo/other" :branch "main"))))
-    (nerimux/model:repository-add-worktree repository worktree)
-    (when sibling (nerimux/model:repository-add-worktree repository sibling))
+    (nerimux/workspace-model:repository-add-worktree repository worktree)
+    (when sibling (nerimux/workspace-model:repository-add-worktree repository sibling))
     (values worktree repository sibling)))
 
 (defun %status-entry-kinds (entries)
@@ -65,7 +65,7 @@
          :stashes-state :ready
          :commits '(("abc1234" . "a commit"))
          :commits-state :ready
-         :panes (list (nerimux/model:make-pane :id 1 :fd -1 :title "shell"))
+         :panes (list (nerimux/pane:make-pane :id 1 :fd -1 :title "shell"))
          :sibling-p t)
       (let ((entries (nerimux/renderer:workspace-status-entries worktree)))
         (expect (eq :head (fourth (first entries))))

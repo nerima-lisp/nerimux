@@ -282,18 +282,18 @@
   ;; coverage of that contract.
   (it "renders the workspace hierarchy through the tree widget"
     (let* ((worktree
-             (nerimux/model:make-worktree
+             (nerimux/workspace-model:make-worktree
               :id "wt-tree"
               :path "/repo/work"
               :branch "feature/tree"))
            (repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :id "repo-tree"
               :specification "github.com/team/tree"
               :local-path "/repo"
               :worktrees (list worktree)))
            (organization
-             (nerimux/model:make-organization
+             (nerimux/workspace-model:make-organization
               :id "github.com/team"
               :host "github.com"
               :name "team"
@@ -322,18 +322,18 @@
 
   (it "renders the picker through input, list, form, and modal widgets"
     (let* ((worktree
-             (nerimux/model:make-worktree
+             (nerimux/workspace-model:make-worktree
               :id "wt-picker-widget"
               :path "/repo/work"
               :branch "feature/picker-widget"))
            (repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :id "repo-picker-widget"
               :specification "github.com/team/picker-widget"
               :local-path "/repo"
               :worktrees (list worktree)))
            (organization
-             (nerimux/model:make-organization
+             (nerimux/workspace-model:make-organization
               :id "github.com/team"
               :host "github.com"
               :name "team"
@@ -361,7 +361,7 @@
   (it "routes client picker mode through the public tui renderer"
     (let ((output
             (nerimux/renderer:render-session-to-tui-string
-             (nerimux/model:make-session :id 22 :name "picker")
+             (nerimux/session:make-session :id 22 :name "picker")
              16
              80
              :mode :picker
@@ -396,31 +396,31 @@
   ;; RENDER-WORKSPACE-OVERVIEW-TO-STRING's SELECTED-OBJECT) is what reaches
   ;; the pane branch of DETAIL-LINES rather than the worktree branch.
   (it "renders the bare repository overview with pane attention and detail"
-    (let* ((pane (nerimux/model:make-pane :id 7 :title "editor"))
-           (window (nerimux/model:make-window :id 1 :name "w" :panes (list pane)))
+    (let* ((pane (nerimux/pane:make-pane :id 7 :title "editor"))
+           (window (nerimux/window:make-window :id 1 :name "w" :panes (list pane)))
            (worktree
-             (nerimux/model:make-worktree
+             (nerimux/workspace-model:make-worktree
               :id "wt"
               :path "/repo/work"
               :branch "feature/ui"
               :panes (list pane)))
            (repository
-             (nerimux/model:make-repository
+             (nerimux/workspace-model:make-repository
               :id "repo"
               :specification "github.com/team/repo"
               :local-path "/repo"
               :worktrees (list worktree)))
            (organization
-             (nerimux/model:make-organization
+             (nerimux/workspace-model:make-organization
               :id "github.com/team"
               :host "github.com"
               :name "team"
               :repositories (list repository)))
            (output
              (progn
-               (setf (nerimux/model:pane-window pane) window)
-               (nerimux/model:worktree-add-pane worktree pane)
-               (nerimux/model:pane-mark-output
+               (setf (nerimux/pane:pane-window pane) window)
+               (nerimux/pane:worktree-add-pane worktree pane)
+               (nerimux/pane:pane-mark-output
                 pane (map 'vector #'char-code "hello-pane"))
                (nerimux/renderer:render-workspace-overview-to-string
                 (list organization)
