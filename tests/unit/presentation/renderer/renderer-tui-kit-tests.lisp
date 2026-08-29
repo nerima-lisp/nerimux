@@ -583,7 +583,7 @@
       (expect (not (search "line-0" (cl-tui-kit/core:surface-string scrolled))))
       (expect (cl-tui-kit/core:style=
                green (cl-tui-kit/core:cell-style
-               (cl-tui-kit/core:surface-cell scrolled 0 0)))))))
+               (cl-tui-kit/core:surface-cell scrolled 0 0))))))
 
   (it "handles SGR extended colors and erase-background style semantics"
     (let ((default (nerimux/renderer::%default-style)))
@@ -615,4 +615,4 @@
                  (cl-tui-kit/core:indexed-color 42)))
         (expect (cl-tui-kit/core:color=
                  (cl-tui-kit/core:style-background applied)
-                 (cl-tui-kit/core:rgb-color 1 2 3))))))
+                 (cl-tui-kit/core:rgb-color 1 2 3)))))))

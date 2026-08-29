@@ -146,7 +146,7 @@
   ;; safe-code-char falls back to the +unicode-replacement-char+ code point for invalid inputs.
   (it "safe-code-char-uses-replacement-char-for-invalid"
     (let ((result (nerimux/terminal/types:safe-code-char (+ char-code-limit 999))))
-      (expect (= nerimux/terminal/types:+unicode-replacement-char+ (char-code result))))))
+      (expect (= nerimux/terminal/types:+unicode-replacement-char+ (char-code result)))))
 
   ;; Keep the small Unicode and geometry helpers specified by boundary tables.
   (it "cell-helper-boundaries"
@@ -178,7 +178,7 @@
       (expect (zerop (nerimux/terminal/types:cell-attrs2 c)))
       (expect (zerop (nerimux/terminal/types:cell-ul-color c)))
       (expect (null (nerimux/terminal/types:cell-combining c)))
-      (expect (= 1 (nerimux/terminal/types:cell-width c)))))
+      (expect (= 1 (nerimux/terminal/types:cell-width c))))))
 
 ;;; ── SUITE: cell-hyperlink slot ───────────────────────────────────────────────
 
