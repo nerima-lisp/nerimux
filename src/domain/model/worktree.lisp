@@ -4,7 +4,9 @@
             (:constructor %make-worktree
                 (&key id repository path branch head status panes dirty-p
                       conflict-p ahead behind bare-p locked-p prunable-p
-                      missing-p changed-files recent-commits commits-state)))
+                      missing-p changed-files recent-commits commits-state
+                      staged-files unstaged-files untracked-files
+                      unmerged-files stashes stashes-state)))
   (id "" :type string)
   (repository nil)
   (path "" :type string)
@@ -31,7 +33,24 @@
   ;; refresh.
   (changed-files nil :type list)
   (recent-commits nil :type list)
-  (commits-state nil))
+  (commits-state nil)
+  ;; STAGED-FILES/UNSTAGED-FILES/UNTRACKED-FILES/UNMERGED-FILES: the same
+  ;; porcelain-v2 entries CHANGED-FILES already carries, re-partitioned by
+  ;; kind and by which XY column is set (magit alignment, Unit MODEL) --
+  ;; no separate fetch. A file with both the index (X) and worktree (Y)
+  ;; columns set appears in BOTH STAGED-FILES and UNSTAGED-FILES; that is
+  ;; magit's own display behaviour, not a bug. Each is (CODE . PATH), CODE
+  ;; the single X or Y character for the staged/unstaged lists, "??" for
+  ;; untracked, and the real two-character code for unmerged (conflict)
+  ;; entries. STASHES/STASHES-STATE follow RECENT-COMMITS/COMMITS-STATE's
+  ;; shape exactly -- fetched on demand, not from the status pass, so
+  ;; STASHES-STATE is NIL | :PENDING | :READY | :FAILED.
+  (staged-files nil :type list)
+  (unstaged-files nil :type list)
+  (untracked-files nil :type list)
+  (unmerged-files nil :type list)
+  (stashes nil :type list)
+  (stashes-state nil))
 
 (defun worktree-key (path branch head)
   (format nil "~A|~A|~A"
@@ -42,7 +61,8 @@
 (defun make-worktree (&key id repository path branch head status panes dirty-p
                          conflict-p (ahead 0) (behind 0) bare-p locked-p
                          prunable-p missing-p changed-files recent-commits
-                         commits-state)
+                         commits-state staged-files unstaged-files
+                         untracked-files unmerged-files stashes stashes-state)
   (let ((path-string (%model-string path)))
     (%make-worktree
      :id (or id (worktree-key path-string branch head))
@@ -62,7 +82,13 @@
      :missing-p (not (null missing-p))
      :changed-files (copy-list changed-files)
      :recent-commits (copy-list recent-commits)
-     :commits-state commits-state)))
+     :commits-state commits-state
+     :staged-files (copy-list staged-files)
+     :unstaged-files (copy-list unstaged-files)
+     :untracked-files (copy-list untracked-files)
+     :unmerged-files (copy-list unmerged-files)
+     :stashes (copy-list stashes)
+     :stashes-state stashes-state)))
 
 (defun worktree-attention-reasons (worktree)
   (when worktree

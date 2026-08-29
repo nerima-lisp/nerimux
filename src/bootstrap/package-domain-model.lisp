@@ -164,6 +164,14 @@
    #:worktree-ahead #:worktree-behind #:worktree-bare-p
    #:worktree-locked-p #:worktree-prunable-p #:worktree-missing-p
    #:worktree-changed-files #:worktree-recent-commits #:worktree-commits-state
+   ;; The magit status view's sections (FR-003). These four file lists are a
+   ;; partition of the same porcelain-v2 entries CHANGED-FILES above is built
+   ;; from, split on the X (index) and Y (worktree) status columns, so a file
+   ;; staged AND modified since appears in both STAGED-FILES and UNSTAGED-FILES
+   ;; -- which is what magit shows, not double counting.
+   #:worktree-staged-files #:worktree-unstaged-files
+   #:worktree-untracked-files #:worktree-unmerged-files
+   #:worktree-stashes #:worktree-stashes-state
    #:worktree-key #:worktree-attention-p #:worktree-attention-reasons
    #:organization-attention-worktrees
    #:worktree-add-pane))

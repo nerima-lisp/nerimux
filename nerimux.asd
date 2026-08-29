@@ -178,7 +178,14 @@
      (:file "vcs-async-operations")
      (:file "vcs-worktree-operations")
      (:file "vcs-fetch")
-     (:file "vcs-inspect")))
+     (:file "vcs-inspect")
+     ;; Last: the write operations need %REPOSITORY-CHECKED-HANDLE (the
+     ;; vcs-kit:make-repository construction extracted from
+     ;; vcs-worktree-operations.lisp's %REV-PARSE) and %SANITIZE-RETAINED-TEXT
+     ;; from vcs-inspect.lisp. Passing the other repository handle type fails
+     ;; SILENTLY here -- the type error is swallowed and the operation returns
+     ;; NIL forever -- so this is a load-order dependency, not a convenience.
+     (:file "vcs-git-write")))
      (:module "application/picker"
       :serial t
       :components

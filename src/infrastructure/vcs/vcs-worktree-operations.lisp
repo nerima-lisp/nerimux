@@ -118,14 +118,21 @@ PATH, when given, is used verbatim. Otherwise the path is fixed to
 (defun %repository-backend (repository)
   (%make-vcs-repository (nerimux/model:repository-path repository)))
 
+(defun %repository-checked-handle (repository)
+  ;; git-rev-parse-value, and every %DEFINE-CHECKED-OPERATION-generated git
+  ;; write function vcs-git-write.lisp calls, is a git-layer entry point:
+  ;; its %run-git check-types the handle as VCS-KIT:REPOSITORY
+  ;; (make-repository), not the backend-layer VCS-REPOSITORY that
+  ;; vcs-worktree/%repository-backend takes.  Passing %repository-backend's
+  ;; handle here type-errors before any git runs, which made worktree
+  ;; creation a no-op the first time this was gotten wrong -- see
+  ;; vcs-kit-two-repository-types-trap.
+  (vcs-kit:make-repository
+   (%string-value (nerimux/model:repository-path repository))))
+
 (defun %rev-parse (repository &rest arguments)
-  ;; git-rev-parse-value is a git-layer entry point: its %run-git check-types
-  ;; the handle as VCS-KIT:REPOSITORY (make-repository), not the backend-layer
-  ;; VCS-REPOSITORY that vcs-worktree takes.  Passing %repository-backend here
-  ;; type-errors before any git runs, which made worktree creation a no-op.
   (apply #'vcs-kit:git-rev-parse-value
-         (vcs-kit:make-repository
-          (%string-value (nerimux/model:repository-path repository)))
+         (%repository-checked-handle repository)
          arguments))
 
 (defun %default-branch-start-point (repository)

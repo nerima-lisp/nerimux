@@ -92,7 +92,14 @@
    ;; Inline tree-row expansion (Wave B): on-demand recent-commit history.
    #:refresh-worktree-commits-async
    ;; Inline tree-row expansion (Wave C): on-demand per-file diff.
-   #:refresh-worktree-file-diff-async))
+   #:refresh-worktree-file-diff-async
+   ;; Git write operations (FR-012). Every mutating subcommand goes through the
+   ;; one pair below rather than getting an entry point each: cl-vcs-kit
+   ;; generates them all with the same (repository &rest arguments) shape, so a
+   ;; per-command wrapper would be fifteen copies of one function.
+   #:git-write-operation
+   #:git-write-operation-async
+   #:list-worktree-stashes))
 
 (defpackage #:nerimux/picker
   (:use #:cl)

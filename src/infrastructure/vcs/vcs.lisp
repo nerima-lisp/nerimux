@@ -177,9 +177,15 @@ the same shape as %PRESERVE-PANE-ASSOCIATIONS above, run over the same
 PREVIOUS/CURRENT pair, but keyed on path alone since a worktree carries no
 stable identity of its own before its first publish.
 
-CHANGED-FILES is deliberately NOT carried here: it comes fresh from the
-status pass that follows every publish, and carrying a stale value would
-show a client files the working tree no longer actually has changed."
+CHANGED-FILES, and likewise its Unit MODEL partition -- STAGED-FILES,
+UNSTAGED-FILES, UNTRACKED-FILES, UNMERGED-FILES -- are deliberately NOT
+carried here: they come fresh from the status pass that follows every
+publish, and carrying a stale value would show a client files the working
+tree no longer actually has changed. STASHES/STASHES-STATE, like
+COMMITS-STATE/RECENT-COMMITS, ARE carried: nothing in the status pass
+repopulates them, they are only ever written by an explicit on-demand
+fetch, so without this they would be silently dropped by every full
+rescan exactly as commit history was before this function existed."
   (let ((previous-worktrees (%catalog-worktrees previous)))
     (dolist (worktree (%catalog-worktrees current))
       (let ((match (%worktree-by-path previous-worktrees
@@ -190,7 +196,11 @@ show a client files the working tree no longer actually has changed."
                 (nerimux/model:worktree-commits-state worktree)
                 (nerimux/model:worktree-commits-state match)
                 (nerimux/model:worktree-recent-commits worktree)
-                (nerimux/model:worktree-recent-commits match))))))
+                (nerimux/model:worktree-recent-commits match)
+                (nerimux/model:worktree-stashes-state worktree)
+                (nerimux/model:worktree-stashes-state match)
+                (nerimux/model:worktree-stashes worktree)
+                (nerimux/model:worktree-stashes match))))))
   current)
 
 (defun %worktree-recency (worktree)
@@ -481,11 +491,34 @@ which is what let a per-repository failure mark the ENTIRE catalog stale."
                 :changed-files (and old-worktree
                                     (nerimux/model:worktree-changed-files
                                      old-worktree))
+                ;; STAGED/UNSTAGED/UNTRACKED/UNMERGED-FILES are the same
+                ;; status-pass partition as CHANGED-FILES (Unit MODEL) and
+                ;; ride along with it for the same reason -- carried here
+                ;; only so a worktree-list-only rebuild (no status-updates,
+                ;; see LIST-REPOSITORY-WORKTREES) does not blank them until
+                ;; the next status pass runs.
+                :staged-files (and old-worktree
+                                   (nerimux/model:worktree-staged-files
+                                    old-worktree))
+                :unstaged-files (and old-worktree
+                                     (nerimux/model:worktree-unstaged-files
+                                      old-worktree))
+                :untracked-files (and old-worktree
+                                      (nerimux/model:worktree-untracked-files
+                                       old-worktree))
+                :unmerged-files (and old-worktree
+                                     (nerimux/model:worktree-unmerged-files
+                                      old-worktree))
                 :recent-commits (and old-worktree
                                      (nerimux/model:worktree-recent-commits
                                       old-worktree))
                 :commits-state (and old-worktree
                                     (nerimux/model:worktree-commits-state
+                                     old-worktree))
+                :stashes (and old-worktree
+                              (nerimux/model:worktree-stashes old-worktree))
+                :stashes-state (and old-worktree
+                                    (nerimux/model:worktree-stashes-state
                                      old-worktree))
                 :bare-p (vcs-kit:vcs-worktree-bare-p raw)
                 :locked-p (vcs-kit:vcs-worktree-locked-p raw)
@@ -543,6 +576,62 @@ presentation and the domain model never see a cl-vcs-kit struct."
                   (%changed-file-path entry)))
           entries))
 
+(defun %changed-file-column-set-p (status)
+  "T when STATUS -- a VCS-STATUS-ENTRY's INDEX-STATUS or WORKTREE-STATUS
+single-character field -- names a real change rather than an empty column.
+The porcelain-v2 parser defaults an unset column to a single space; \"?\"
+never actually reaches this field for any KIND parse-status.lisp produces
+(untracked/ignored entries are their own record shape, never a real XY
+pair), but is excluded anyway to mirror `git status --short`'s own
+definition of a set column (magit alignment, Unit MODEL)."
+  (not (or (string= status " ") (string= status "?"))))
+
+(defun %worktree-status-untracked-files (entries)
+  "ENTRIES of KIND :UNTRACKED as (\"??\" . PATH) conses (magit alignment,
+Unit MODEL) -- a partition of the same ENTRIES %WORKTREE-STATUS-CHANGED-
+FILES already covers, not a second fetch."
+  (let (result)
+    (dolist (entry entries (nreverse result))
+      (when (eq (vcs-kit:vcs-status-entry-kind entry) :untracked)
+        (push (cons "??" (%changed-file-path entry)) result)))))
+
+(defun %worktree-status-unmerged-files (entries)
+  "Conflict ENTRIES (%STATUS-ENTRY-CONFLICT-P) as (CODE . PATH) conses,
+CODE the same real XY pair %CHANGED-FILE-CODE already builds for them
+(magit alignment, Unit MODEL)."
+  (let (result)
+    (dolist (entry entries (nreverse result))
+      (when (%status-entry-conflict-p entry)
+        (push (cons (%changed-file-code entry) (%changed-file-path entry))
+              result)))))
+
+(defun %worktree-status-staged-files (entries)
+  "Non-conflict, non-untracked/ignored ENTRIES whose INDEX-STATUS (the X
+column, index side) is set, as (CODE . PATH) conses with CODE that single
+character -- magit's staged section (Unit MODEL). A rename-or-copy entry
+with both X and Y set also appears in %WORKTREE-STATUS-UNSTAGED-FILES:
+that duplication is magit's own display behaviour, not a bug."
+  (let (result)
+    (dolist (entry entries (nreverse result))
+      (let ((kind (vcs-kit:vcs-status-entry-kind entry)))
+        (unless (or (eq kind :untracked) (eq kind :ignored)
+                    (%status-entry-conflict-p entry))
+          (let ((status (vcs-kit:vcs-status-entry-index-status entry)))
+            (when (%changed-file-column-set-p status)
+              (push (cons status (%changed-file-path entry)) result))))))))
+
+(defun %worktree-status-unstaged-files (entries)
+  "As %WORKTREE-STATUS-STAGED-FILES, but for WORKTREE-STATUS (the Y
+column, worktree side) -- magit's unstaged section (Unit MODEL)."
+  (let (result)
+    (dolist (entry entries (nreverse result))
+      (let ((kind (vcs-kit:vcs-status-entry-kind entry)))
+        (unless (or (eq kind :untracked) (eq kind :ignored)
+                    (%status-entry-conflict-p entry))
+          (let ((status (vcs-kit:vcs-status-entry-worktree-status entry)))
+            (when (%changed-file-column-set-p status)
+              (push (cons status (%changed-file-path entry)) result))))))))
+
 (defun %read-worktree-status-at (path fallback-head repository-path)
   (let* ((directory (if (plusp (length path)) path repository-path))
          (missing-p (and (stringp directory)
@@ -576,9 +665,19 @@ presentation and the domain model never see a cl-vcs-kit struct."
      (and repository (nerimux/model:repository-path repository)))))
 
 (defun %apply-worktree-status (repository update)
-  (let ((worktree
-          (nerimux/model:repository-worktree-by-path
-           repository (%worktree-status-update-path update))))
+  (let* ((worktree
+           (nerimux/model:repository-worktree-by-path
+            repository (%worktree-status-update-path update)))
+         ;; The four-way split below re-reads UPDATE's own SNAPSHOT rather
+         ;; than threading new fields through %WORKTREE-STATUS-UPDATE (owned
+         ;; by another unit right now): the snapshot already carries every
+         ;; entry CHANGED-FILES was built from, so this is a repartition of
+         ;; data already fetched, never a second git call. NIL when UPDATE
+         ;; came from the missing-worktree branch of %READ-WORKTREE-STATUS-AT,
+         ;; which never stores a snapshot -- all four lists then default to
+         ;; empty via the loops below finding nothing to iterate.
+         (snapshot (%worktree-status-update-snapshot update))
+         (entries (and snapshot (vcs-kit:vcs-status-snapshot-entries snapshot))))
     (unless worktree
       (error "Status update refers to an unknown worktree: ~A"
              (%worktree-status-update-path update)))
@@ -597,7 +696,15 @@ presentation and the domain model never see a cl-vcs-kit struct."
           (nerimux/model:worktree-behind worktree)
           (%worktree-status-update-behind update)
           (nerimux/model:worktree-changed-files worktree)
-          (%worktree-status-update-changed-files update))
+          (%worktree-status-update-changed-files update)
+          (nerimux/model:worktree-untracked-files worktree)
+          (%worktree-status-untracked-files entries)
+          (nerimux/model:worktree-unmerged-files worktree)
+          (%worktree-status-unmerged-files entries)
+          (nerimux/model:worktree-staged-files worktree)
+          (%worktree-status-staged-files entries)
+          (nerimux/model:worktree-unstaged-files worktree)
+          (%worktree-status-unstaged-files entries))
     worktree))
 
 (defun %read-repository-status (repository)
