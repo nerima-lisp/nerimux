@@ -36,7 +36,7 @@
 
 A duplicate request made while the same repository is in flight completes
 with NIL without starting another worker."
-  (let ((key (list :repository (nerimux/model:repository-id repository))))
+  (let ((key (list :repository (nerimux/workspace-model:repository-id repository))))
     (if (%fetch-begin key)
         (first
          (refresh-repositories-async
@@ -62,10 +62,10 @@ with NIL without starting another worker."
 
 A duplicate request made while the same organization is in flight completes
 with NIL without starting another set of workers."
-  (let ((key (list :organization (nerimux/model:organization-id organization))))
+  (let ((key (list :organization (nerimux/workspace-model:organization-id organization))))
     (if (%fetch-begin key)
         (refresh-repositories-async
-         (nerimux/model:organization-repositories organization)
+         (nerimux/workspace-model:organization-repositories organization)
          :on-complete (lambda (repositories)
                         (%fetch-end key)
                         (when on-complete

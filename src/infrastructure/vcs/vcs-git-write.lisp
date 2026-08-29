@@ -139,7 +139,7 @@ ON-ERROR fires only for a framework-level failure (the worker thread itself
 erroring outside GIT-WRITE-OPERATION's own handler-case, e.g. it could not
 be launched); an ordinary git failure settles ON-COMPLETE with SUCCESS-P
 NIL, exactly as it does synchronously."
-  (let ((key (list :repository (nerimux/model:repository-id repository))))
+  (let ((key (list :repository (nerimux/workspace-model:repository-id repository))))
     (if (%write-begin key)
         (cl-concurrent-kit:make-thread
          (lambda ()
@@ -168,7 +168,7 @@ VCS-KIT:VCS-LIST-STASHES already returns them in that order (git stash
 list's own traversal). Never a VCS-KIT:VCS-STASH-ENTRY struct crosses this
 boundary (D1)."
   (let ((backend-repository
-          (%make-vcs-repository (nerimux/model:worktree-path worktree))))
+          (%make-vcs-repository (nerimux/workspace-model:worktree-path worktree))))
     (mapcar (lambda (entry)
               (cons (vcs-kit:vcs-stash-entry-reference entry)
                     (%sanitize-retained-text

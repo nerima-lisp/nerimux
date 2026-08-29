@@ -69,7 +69,7 @@ one -- never the git-layer MAKE-REPOSITORY object VCS-KIT:GIT-REV-PARSE-
 VALUE and friends take; a wrong-type handle there type-errors before any
 git runs."
   (let ((backend-repository
-          (%make-vcs-repository (nerimux/model:worktree-path worktree))))
+          (%make-vcs-repository (nerimux/workspace-model:worktree-path worktree))))
     (mapcar #'%worktree-commit-entry
             (vcs-kit:vcs-list-commits
              backend-repository
@@ -140,7 +140,7 @@ own unified +/- hunks with no ANSI escapes in them -- a configured external
 diff driver instead produces arbitrary side-by-side text with no +/- lines
 at all, which %SPLIT-DIFF-LINES then treats as ordinary diff content."
   (let* ((backend-repository
-           (%make-vcs-repository (nerimux/model:worktree-path worktree)))
+           (%make-vcs-repository (nerimux/workspace-model:worktree-path worktree)))
          (result (vcs-kit:vcs-diff
                   backend-repository "--no-ext-diff" "--no-color" "--" path
                   :execution-options
@@ -230,9 +230,9 @@ not wrong."
    (lambda (worker-result)
      (destructuring-bind (state . commits) worker-result
        (let ((target (%settle-target-worktree worktree)))
-         (setf (nerimux/model:worktree-recent-commits target)
+         (setf (nerimux/workspace-model:worktree-recent-commits target)
                (if (eq state :ready) commits nil)
-               (nerimux/model:worktree-commits-state target)
+               (nerimux/workspace-model:worktree-commits-state target)
                state)
          target)))
    on-complete

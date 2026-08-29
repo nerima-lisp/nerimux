@@ -84,7 +84,7 @@
                           (%dispatch-callback callback-dispatch #'apply-one current
                                               update))))
                   :name (format nil "nerimux-vcs-status-~A"
-                                (nerimux/model:repository-id current)))
+                                (nerimux/workspace-model:repository-id current)))
                  threads))))))))
 
 (defun refresh-workspace-status-async
@@ -99,7 +99,7 @@
    rebind), and handing it repositories type-errors on the first access."
   (refresh-repositories-async
    (loop for organization in organizations
-         append (nerimux/model:organization-repositories organization))
+         append (nerimux/workspace-model:organization-repositories organization))
    :on-repository on-repository
    :on-complete (and on-complete
                      (lambda (repositories)

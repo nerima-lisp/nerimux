@@ -69,11 +69,11 @@ reads it as CSI. Stripping C0 alone would block `ESC [` and pass its exact
     (multiple-value-setq (host name)
       (%organization-and-name specification))
     (values
-     (nerimux/model:make-organization
-      :id (nerimux/model:organization-key host name)
+     (nerimux/workspace-model:make-organization
+      :id (nerimux/workspace-model:organization-key host name)
       :host host
       :name name)
-     (nerimux/model:make-repository
+     (nerimux/workspace-model:make-repository
       :specification specification
       :local-path path
       :backend (or backend :git)))))
@@ -114,12 +114,12 @@ reads it as CSI. Stripping C0 alone would block `ESC [` and pass its exact
 (defun %catalog-worktrees (organizations)
   (loop for organization in organizations
         append (loop for repository in
-                         (nerimux/model:organization-repositories organization)
+                         (nerimux/workspace-model:organization-repositories organization)
                      append (copy-list
-                             (nerimux/model:repository-worktrees repository)))))
+                             (nerimux/workspace-model:repository-worktrees repository)))))
 
 (defun %worktree-by-id (worktrees id)
-  (find id worktrees :key #'nerimux/model:worktree-id :test #'string=))
+  (find id worktrees :key #'nerimux/workspace-model:worktree-id :test #'string=))
 
 (defun %settle-target-worktree (worktree)
   "Resolve WORKTREE to the struct an async settlement should actually write
@@ -135,22 +135,22 @@ vcs-inspect.lisp for the race this closes."
   (let ((live (%catalog-worktrees (workspace-organizations))))
     (if (member worktree live :test #'eq)
         worktree
-        (or (%worktree-by-id live (nerimux/model:worktree-id worktree))
+        (or (%worktree-by-id live (nerimux/workspace-model:worktree-id worktree))
             worktree))))
 
 (defun %worktree-association-match-p (id path worktree)
   (or (and (stringp id)
            (plusp (length id))
-           (string= id (nerimux/model:worktree-id worktree)))
+           (string= id (nerimux/workspace-model:worktree-id worktree)))
       (and (stringp path)
            (plusp (length path))
-           (string= path (nerimux/model:worktree-path worktree)))))
+           (string= path (nerimux/workspace-model:worktree-path worktree)))))
 
 (defun %remember-pane-associations (organizations)
   (loop for worktree in (%catalog-worktrees organizations)
-        append (loop for pane in (nerimux/model:worktree-panes worktree)
-                     collect (list (nerimux/model:worktree-id worktree)
-                                   (nerimux/model:worktree-path worktree)
+        append (loop for pane in (nerimux/workspace-model:worktree-panes worktree)
+                     collect (list (nerimux/workspace-model:worktree-id worktree)
+                                   (nerimux/workspace-model:worktree-path worktree)
                                    pane))))
 
 (defun %preserve-pane-associations (previous current)
@@ -162,12 +162,12 @@ vcs-inspect.lisp for the race this closes."
                            (%worktree-association-match-p id path candidate))
                          worktrees)))
           (if worktree
-              (nerimux/model:worktree-add-pane worktree pane)
-              (setf (nerimux/model:pane-worktree pane) nil))))))
+              (nerimux/pane:worktree-add-pane worktree pane)
+              (setf (nerimux/pane:pane-worktree pane) nil))))))
   current)
 
 (defun %worktree-by-path (worktrees path)
-  (find path worktrees :key #'nerimux/model:worktree-path :test #'string=))
+  (find path worktrees :key #'nerimux/workspace-model:worktree-path :test #'string=))
 
 (defun %preserve-worktree-commit-state (previous current)
   "Carry ID, COMMITS-STATE and RECENT-COMMITS from PREVIOUS's worktrees onto
@@ -195,18 +195,18 @@ rescan exactly as commit history was before this function existed."
   (let ((previous-worktrees (%catalog-worktrees previous)))
     (dolist (worktree (%catalog-worktrees current))
       (let ((match (%worktree-by-path previous-worktrees
-                                      (nerimux/model:worktree-path worktree))))
+                                      (nerimux/workspace-model:worktree-path worktree))))
         (when match
-          (setf (nerimux/model:worktree-id worktree)
-                (nerimux/model:worktree-id match)
-                (nerimux/model:worktree-commits-state worktree)
-                (nerimux/model:worktree-commits-state match)
-                (nerimux/model:worktree-recent-commits worktree)
-                (nerimux/model:worktree-recent-commits match)
-                (nerimux/model:worktree-stashes-state worktree)
-                (nerimux/model:worktree-stashes-state match)
-                (nerimux/model:worktree-stashes worktree)
-                (nerimux/model:worktree-stashes match))))))
+          (setf (nerimux/workspace-model:worktree-id worktree)
+                (nerimux/workspace-model:worktree-id match)
+                (nerimux/workspace-model:worktree-commits-state worktree)
+                (nerimux/workspace-model:worktree-commits-state match)
+                (nerimux/workspace-model:worktree-recent-commits worktree)
+                (nerimux/workspace-model:worktree-recent-commits match)
+                (nerimux/workspace-model:worktree-stashes-state worktree)
+                (nerimux/workspace-model:worktree-stashes-state match)
+                (nerimux/workspace-model:worktree-stashes worktree)
+                (nerimux/workspace-model:worktree-stashes match))))))
   current)
 
 (defun %worktree-recency (worktree)
@@ -219,21 +219,21 @@ rescan exactly as commit history was before this function existed."
    about the pane. A worktree with no panes, or only ever-idle ones, has no
    real timestamp to offer and sorts as least-recent (0)."
   (let ((times
-          (loop for pane in (nerimux/model:worktree-panes worktree)
-                for output = (nerimux/model:pane-last-output-time pane)
-                for focused = (nerimux/model:pane-last-focused-time pane)
+          (loop for pane in (nerimux/workspace-model:worktree-panes worktree)
+                for output = (nerimux/pane:pane-last-output-time pane)
+                for focused = (nerimux/pane:pane-last-focused-time pane)
                 when output collect output
                 when focused collect focused)))
     (if times (reduce #'max times) 0)))
 
 (defun %repository-recency (repository)
   (let ((times (mapcar #'%worktree-recency
-                       (nerimux/model:repository-worktrees repository))))
+                       (nerimux/workspace-model:repository-worktrees repository))))
     (if times (reduce #'max times) 0)))
 
 (defun %organization-recency (organization)
   (let ((times (mapcar #'%repository-recency
-                       (nerimux/model:organization-repositories organization))))
+                       (nerimux/workspace-model:organization-repositories organization))))
     (if times (reduce #'max times) 0)))
 
 (defun %sort-workspace-organizations-by-activity (organizations)
@@ -259,14 +259,14 @@ rescan exactly as commit history was before this function existed."
    destructive, so sorting the original list risks corrupting a structure
    another holder of the same list object still expects to see unmodified."
   (dolist (organization organizations)
-    (dolist (repository (nerimux/model:organization-repositories organization))
-      (setf (nerimux/model:repository-worktrees repository)
-            (stable-sort (copy-list (nerimux/model:repository-worktrees
+    (dolist (repository (nerimux/workspace-model:organization-repositories organization))
+      (setf (nerimux/workspace-model:repository-worktrees repository)
+            (stable-sort (copy-list (nerimux/workspace-model:repository-worktrees
                                      repository))
                         #'>
                         :key #'%worktree-recency)))
-    (setf (nerimux/model:organization-repositories organization)
-          (stable-sort (copy-list (nerimux/model:organization-repositories
+    (setf (nerimux/workspace-model:organization-repositories organization)
+          (stable-sort (copy-list (nerimux/workspace-model:organization-repositories
                                    organization))
                       #'>
                       :key #'%repository-recency)))
@@ -302,18 +302,18 @@ client's cursor while it is being looked at."
           (%sort-workspace-organizations-by-activity *workspace-organizations*))))
 
 (defun %repository-already-present-p (repository organizations)
-  (let ((local-path (nerimux/model:repository-local-path repository))
-        (specification (nerimux/model:repository-specification repository)))
+  (let ((local-path (nerimux/workspace-model:repository-local-path repository))
+        (specification (nerimux/workspace-model:repository-specification repository)))
     (some (lambda (organization)
             (find-if
              (lambda (candidate)
                (or (and local-path
                         (equal local-path
-                               (nerimux/model:repository-local-path candidate)))
+                               (nerimux/workspace-model:repository-local-path candidate)))
                    (and specification
                         (equal specification
-                               (nerimux/model:repository-specification candidate)))))
-             (nerimux/model:organization-repositories organization)))
+                               (nerimux/workspace-model:repository-specification candidate)))))
+             (nerimux/workspace-model:organization-repositories organization)))
           organizations)))
 
 (defun merge-workspace-organizations (organizations)
@@ -331,13 +331,13 @@ client's cursor while it is being looked at."
           (additions nil))
       (dolist (organization organizations)
         (let ((existing
-                (find (nerimux/model:organization-id organization) merged
-                      :key #'nerimux/model:organization-id :test #'equal)))
+                (find (nerimux/workspace-model:organization-id organization) merged
+                      :key #'nerimux/workspace-model:organization-id :test #'equal)))
           (if existing
               (dolist (repository
-                        (nerimux/model:organization-repositories organization))
+                        (nerimux/workspace-model:organization-repositories organization))
                 (unless (%repository-already-present-p repository merged)
-                  (nerimux/model:organization-add-repository
+                  (nerimux/workspace-model:organization-add-repository
                    existing repository)))
               (push organization additions))))
       (setf merged (nconc merged (nreverse additions)))
@@ -407,11 +407,11 @@ which is what let a per-repository failure mark the ENTIRE catalog stale."
         (dolist (entry (vcs-kit:ghq-list-repositories :query query))
           (multiple-value-bind (candidate repository)
               (%repository-from-entry entry)
-            (let* ((key (nerimux/model:organization-id candidate))
+            (let* ((key (nerimux/workspace-model:organization-id candidate))
                    (organization
                      (or (gethash key organizations)
                          (setf (gethash key organizations) candidate))))
-              (nerimux/model:organization-add-repository
+              (nerimux/workspace-model:organization-add-repository
                organization repository)
               ;; One unreadable repository (a broken or half-deleted clone in
               ;; the ghq root) must not abort the scan: the enclosing
@@ -420,14 +420,14 @@ which is what let a per-repository failure mark the ENTIRE catalog stale."
               (handler-case
                   (list-repository-worktrees repository)
                 (error ()
-                  (setf (nerimux/model:repository-missing-p repository) t)))))
+                  (setf (nerimux/workspace-model:repository-missing-p repository) t)))))
           (incf processed)
           (when on-progress (funcall on-progress processed)))
         (let ((result
                 (sort (loop for organization being the hash-values of organizations
                             collect organization)
                       #'string<
-                      :key #'nerimux/model:organization-id)))
+                      :key #'nerimux/workspace-model:organization-id)))
           (when on-complete
             (funcall on-complete result))
           result))
@@ -443,19 +443,19 @@ which is what let a per-repository failure mark the ENTIRE catalog stale."
 
 (defun %read-repository-worktrees (repository)
   (let ((backend-repository
-          (%make-vcs-repository (nerimux/model:repository-path repository))))
+          (%make-vcs-repository (nerimux/workspace-model:repository-path repository))))
     (values (vcs-kit:vcs-list-worktrees backend-repository)
-            (%path-missing-p (nerimux/model:repository-path repository)))))
+            (%path-missing-p (nerimux/workspace-model:repository-path repository)))))
 
 (defun %apply-repository-worktrees
     (repository raw-worktrees missing-p &optional status-updates)
-  (let ((previous (copy-list (nerimux/model:repository-worktrees repository))))
-    (setf (nerimux/model:repository-missing-p repository) missing-p)
+  (let ((previous (copy-list (nerimux/workspace-model:repository-worktrees repository))))
+    (setf (nerimux/workspace-model:repository-missing-p repository) missing-p)
     (dolist (old-worktree previous)
-      (dolist (pane (nerimux/model:worktree-panes old-worktree))
-        (setf (nerimux/model:pane-worktree pane) nil)))
-    (setf (nerimux/model:repository-worktrees repository) nil
-          (nerimux/model:repository-main-worktree repository) nil)
+      (dolist (pane (nerimux/workspace-model:worktree-panes old-worktree))
+        (setf (nerimux/pane:pane-worktree pane) nil)))
+    (setf (nerimux/workspace-model:repository-worktrees repository) nil
+          (nerimux/workspace-model:repository-main-worktree repository) nil)
     (dolist (raw raw-worktrees)
       (let* ((path (vcs-kit:vcs-worktree-path raw))
              (status-update
@@ -463,29 +463,29 @@ which is what let a per-repository failure mark the ENTIRE catalog stale."
                      :key #'%worktree-status-update-path
                      :test #'string=))
              (old-worktree (find path previous
-                                  :key #'nerimux/model:worktree-path
+                                  :key #'nerimux/workspace-model:worktree-path
                                   :test #'string=))
              (worktree
-               (nerimux/model:make-worktree
+               (nerimux/workspace-model:make-worktree
                 :id (and old-worktree
-                         (nerimux/model:worktree-id old-worktree))
+                         (nerimux/workspace-model:worktree-id old-worktree))
                 :repository repository
                 :path path
                 :branch (vcs-kit:vcs-worktree-branch raw)
                 :head (vcs-kit:vcs-worktree-head raw)
                 :status (and old-worktree
-                             (nerimux/model:worktree-status old-worktree))
+                             (nerimux/workspace-model:worktree-status old-worktree))
                 :panes (and old-worktree
-                            (nerimux/model:worktree-panes old-worktree))
+                            (nerimux/workspace-model:worktree-panes old-worktree))
                 :dirty-p (and old-worktree
-                              (nerimux/model:worktree-dirty-p old-worktree))
+                              (nerimux/workspace-model:worktree-dirty-p old-worktree))
                 :conflict-p (and old-worktree
-                                 (nerimux/model:worktree-conflict-p old-worktree))
+                                 (nerimux/workspace-model:worktree-conflict-p old-worktree))
                 :ahead (if old-worktree
-                           (nerimux/model:worktree-ahead old-worktree)
+                           (nerimux/workspace-model:worktree-ahead old-worktree)
                            0)
                 :behind (if old-worktree
-                            (nerimux/model:worktree-behind old-worktree)
+                            (nerimux/workspace-model:worktree-behind old-worktree)
                             0)
                 ;; Inline tree-row expansion data (Wave B) rides along with
                 ;; the rest of OLD-WORKTREE's carried-over status, the same
@@ -495,7 +495,7 @@ which is what let a per-repository failure mark the ENTIRE catalog stale."
                 ;; STATUS or REFRESH-WORKTREE-COMMITS-ASYNC repopulate it
                 ;; moments later.
                 :changed-files (and old-worktree
-                                    (nerimux/model:worktree-changed-files
+                                    (nerimux/workspace-model:worktree-changed-files
                                      old-worktree))
                 ;; STAGED/UNSTAGED/UNTRACKED/UNMERGED-FILES are the same
                 ;; status-pass partition as CHANGED-FILES (Unit MODEL) and
@@ -504,27 +504,27 @@ which is what let a per-repository failure mark the ENTIRE catalog stale."
                 ;; see LIST-REPOSITORY-WORKTREES) does not blank them until
                 ;; the next status pass runs.
                 :staged-files (and old-worktree
-                                   (nerimux/model:worktree-staged-files
+                                   (nerimux/workspace-model:worktree-staged-files
                                     old-worktree))
                 :unstaged-files (and old-worktree
-                                     (nerimux/model:worktree-unstaged-files
+                                     (nerimux/workspace-model:worktree-unstaged-files
                                       old-worktree))
                 :untracked-files (and old-worktree
-                                      (nerimux/model:worktree-untracked-files
+                                      (nerimux/workspace-model:worktree-untracked-files
                                        old-worktree))
                 :unmerged-files (and old-worktree
-                                     (nerimux/model:worktree-unmerged-files
+                                     (nerimux/workspace-model:worktree-unmerged-files
                                       old-worktree))
                 :recent-commits (and old-worktree
-                                     (nerimux/model:worktree-recent-commits
+                                     (nerimux/workspace-model:worktree-recent-commits
                                       old-worktree))
                 :commits-state (and old-worktree
-                                    (nerimux/model:worktree-commits-state
+                                    (nerimux/workspace-model:worktree-commits-state
                                      old-worktree))
                 :stashes (and old-worktree
-                              (nerimux/model:worktree-stashes old-worktree))
+                              (nerimux/workspace-model:worktree-stashes old-worktree))
                 :stashes-state (and old-worktree
-                                    (nerimux/model:worktree-stashes-state
+                                    (nerimux/workspace-model:worktree-stashes-state
                                      old-worktree))
                 :bare-p (vcs-kit:vcs-worktree-bare-p raw)
                 :locked-p (vcs-kit:vcs-worktree-locked-p raw)
@@ -532,9 +532,9 @@ which is what let a per-repository failure mark the ENTIRE catalog stale."
                 :missing-p (if status-update
                                (%worktree-status-update-missing-p status-update)
                                (%path-missing-p path)))))
-        (dolist (pane (nerimux/model:worktree-panes worktree))
-          (setf (nerimux/model:pane-worktree pane) worktree))
-        (nerimux/model:repository-add-worktree repository worktree)))
+        (dolist (pane (nerimux/workspace-model:worktree-panes worktree))
+          (setf (nerimux/pane:pane-worktree pane) worktree))
+        (nerimux/workspace-model:repository-add-worktree repository worktree)))
     repository))
 
 (defun list-repository-worktrees (repository)
@@ -664,15 +664,15 @@ column, worktree side) -- magit's unstaged section (Unit MODEL)."
            :changed-files (%worktree-status-changed-files entries))))))
 
 (defun %read-worktree-status (worktree)
-  (let ((repository (nerimux/model:worktree-repository worktree)))
+  (let ((repository (nerimux/workspace-model:worktree-repository worktree)))
     (%read-worktree-status-at
-     (nerimux/model:worktree-path worktree)
-     (nerimux/model:worktree-head worktree)
-     (and repository (nerimux/model:repository-path repository)))))
+     (nerimux/workspace-model:worktree-path worktree)
+     (nerimux/workspace-model:worktree-head worktree)
+     (and repository (nerimux/workspace-model:repository-path repository)))))
 
 (defun %apply-worktree-status (repository update)
   (let* ((worktree
-           (nerimux/model:repository-worktree-by-path
+           (nerimux/workspace-model:repository-worktree-by-path
             repository (%worktree-status-update-path update)))
          ;; The four-way split below re-reads UPDATE's own SNAPSHOT rather
          ;; than threading new fields through %WORKTREE-STATUS-UPDATE (owned
@@ -687,57 +687,57 @@ column, worktree side) -- magit's unstaged section (Unit MODEL)."
     (unless worktree
       (error "Status update refers to an unknown worktree: ~A"
              (%worktree-status-update-path update)))
-    (setf (nerimux/model:worktree-missing-p worktree)
+    (setf (nerimux/workspace-model:worktree-missing-p worktree)
           (%worktree-status-update-missing-p update)
-          (nerimux/model:worktree-status worktree)
+          (nerimux/workspace-model:worktree-status worktree)
           (%worktree-status-update-snapshot update)
-          (nerimux/model:worktree-head worktree)
+          (nerimux/workspace-model:worktree-head worktree)
           (%worktree-status-update-head update)
-          (nerimux/model:worktree-dirty-p worktree)
+          (nerimux/workspace-model:worktree-dirty-p worktree)
           (%worktree-status-update-dirty-p update)
-          (nerimux/model:worktree-conflict-p worktree)
+          (nerimux/workspace-model:worktree-conflict-p worktree)
           (%worktree-status-update-conflict-p update)
-          (nerimux/model:worktree-ahead worktree)
+          (nerimux/workspace-model:worktree-ahead worktree)
           (%worktree-status-update-ahead update)
-          (nerimux/model:worktree-behind worktree)
+          (nerimux/workspace-model:worktree-behind worktree)
           (%worktree-status-update-behind update)
-          (nerimux/model:worktree-changed-files worktree)
+          (nerimux/workspace-model:worktree-changed-files worktree)
           (%worktree-status-update-changed-files update)
-          (nerimux/model:worktree-untracked-files worktree)
+          (nerimux/workspace-model:worktree-untracked-files worktree)
           (%worktree-status-untracked-files entries)
-          (nerimux/model:worktree-unmerged-files worktree)
+          (nerimux/workspace-model:worktree-unmerged-files worktree)
           (%worktree-status-unmerged-files entries)
-          (nerimux/model:worktree-staged-files worktree)
+          (nerimux/workspace-model:worktree-staged-files worktree)
           (%worktree-status-staged-files entries)
-          (nerimux/model:worktree-unstaged-files worktree)
+          (nerimux/workspace-model:worktree-unstaged-files worktree)
           (%worktree-status-unstaged-files entries))
     worktree))
 
 (defun %read-repository-status (repository)
-  (loop for worktree in (nerimux/model:repository-worktrees repository)
+  (loop for worktree in (nerimux/workspace-model:repository-worktrees repository)
         ;; A bare root (ghq's `<repo>.git` layout) has no working tree of
         ;; its own, so running `git status` against it always fails; that
         ;; used to turn every successful worktree op into a false "failed"
         ;; notify once this ran during the async catalog status refresh.
-        unless (nerimux/model:worktree-bare-p worktree)
+        unless (nerimux/workspace-model:worktree-bare-p worktree)
           collect (%read-worktree-status worktree)))
 
 (defun %apply-repository-status
     (repository updates &optional (missing-p nil missing-p-p))
   (mapc (lambda (update) (%apply-worktree-status repository update)) updates)
-  (setf (nerimux/model:repository-missing-p repository)
+  (setf (nerimux/workspace-model:repository-missing-p repository)
         (if missing-p-p
             missing-p
-            (%path-missing-p (nerimux/model:repository-path repository))))
-  (nerimux/model:repository-recompute-status repository)
+            (%path-missing-p (nerimux/workspace-model:repository-path repository))))
+  (nerimux/workspace-model:repository-recompute-status repository)
   repository)
 
 (defun worktree-status (worktree)
   "Refresh WORKTREE status from vcs-status-structured."
-  (let ((repository (nerimux/model:worktree-repository worktree)))
+  (let ((repository (nerimux/workspace-model:worktree-repository worktree)))
     (%apply-worktree-status repository (%read-worktree-status worktree))
     (when repository
-      (setf (nerimux/model:repository-missing-p repository)
-            (%path-missing-p (nerimux/model:repository-path repository)))
-      (nerimux/model:repository-recompute-status repository))
+      (setf (nerimux/workspace-model:repository-missing-p repository)
+            (%path-missing-p (nerimux/workspace-model:repository-path repository)))
+      (nerimux/workspace-model:repository-recompute-status repository))
     worktree))

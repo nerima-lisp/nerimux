@@ -42,15 +42,15 @@
             (%directory-repository-root directory)
           (when (and repository-root (plusp (length repository-root)))
             (let* ((specification (%directory-specification repository-root))
-                   (repository (nerimux/model:make-repository
+                   (repository (nerimux/workspace-model:make-repository
                                 :specification specification
                                 :local-path repository-root :backend :git)))
               (multiple-value-bind (host name)
                   (%organization-and-name specification)
-                (let ((organization (nerimux/model:make-organization
-                                     :id (nerimux/model:organization-key host name)
+                (let ((organization (nerimux/workspace-model:make-organization
+                                     :id (nerimux/workspace-model:organization-key host name)
                                      :host host :name name)))
-                  (nerimux/model:organization-add-repository organization repository)
+                  (nerimux/workspace-model:organization-add-repository organization repository)
                   (%apply-repository-worktrees repository raw-worktrees
                                                (%path-missing-p repository-root))
                   (list organization)))))))
@@ -112,11 +112,11 @@ PATH, when given, is used verbatim. Otherwise the path is fixed to
   (or (and path (%string-value path))
       (%unique-worktree-path
        (%ensure-trailing-slash
-        (%string-value (nerimux/model:repository-path repository)))
+        (%string-value (nerimux/workspace-model:repository-path repository)))
        (format nil "~A-~A" (%timestamp-token) start-point-short-sha))))
 
 (defun %repository-backend (repository)
-  (%make-vcs-repository (nerimux/model:repository-path repository)))
+  (%make-vcs-repository (nerimux/workspace-model:repository-path repository)))
 
 (defun %repository-checked-handle (repository)
   ;; git-rev-parse-value, and every %DEFINE-CHECKED-OPERATION-generated git
@@ -128,7 +128,7 @@ PATH, when given, is used verbatim. Otherwise the path is fixed to
   ;; creation a no-op the first time this was gotten wrong -- see
   ;; vcs-kit-two-repository-types-trap.
   (vcs-kit:make-repository
-   (%string-value (nerimux/model:repository-path repository))))
+   (%string-value (nerimux/workspace-model:repository-path repository))))
 
 (defun %rev-parse (repository &rest arguments)
   (apply #'vcs-kit:git-rev-parse-value
@@ -185,7 +185,7 @@ REPOSITORY's default branch tip (R7.3) when not given."
     (apply #'vcs-kit:vcs-worktree backend-repository arguments)
     (list-repository-worktrees repository)
     (refresh-repository-status repository)
-    (or (nerimux/model:repository-worktree-by-path repository worktree-path)
+    (or (nerimux/workspace-model:repository-worktree-by-path repository worktree-path)
         (error "VCS created a worktree but it was not returned by list-worktrees: ~A"
                worktree-path))))
 
@@ -290,30 +290,30 @@ false DRY-RUN once a user has explicitly confirmed the operation."
 (defun %apply-created-worktree (repository operation-result)
   (let ((worktree-path
           (%apply-worktree-operation-result operation-result)))
-    (or (nerimux/model:repository-worktree-by-path repository worktree-path)
+    (or (nerimux/workspace-model:repository-worktree-by-path repository worktree-path)
         (error "VCS created a worktree but it was not returned by list-worktrees: ~A"
                worktree-path))))
 
 (defun %worktree-operation-command (worktree operation &rest options)
-  (let ((repository (and worktree (nerimux/model:worktree-repository worktree))))
+  (let ((repository (and worktree (nerimux/workspace-model:worktree-repository worktree))))
     (unless (and worktree repository)
       (error "A repository worktree is required for this operation."))
     (apply #'vcs-kit:vcs-worktree
            (%repository-backend repository)
            (append (apply #'%worktree-command-arguments operation options)
-                   (list (nerimux/model:worktree-path worktree))))
+                   (list (nerimux/workspace-model:worktree-path worktree))))
     repository))
 
 (defun %delete-worktree-command (worktree force)
-  (let* ((repository (and worktree (nerimux/model:worktree-repository worktree)))
+  (let* ((repository (and worktree (nerimux/workspace-model:worktree-repository worktree)))
          (main-worktree
-           (and repository (nerimux/model:repository-main-worktree repository))))
+           (and repository (nerimux/workspace-model:repository-main-worktree repository))))
     (unless (and worktree repository)
       (error "A repository worktree is required to delete a worktree."))
     (when (or (eq worktree main-worktree)
               (and main-worktree
-                   (string= (nerimux/model:worktree-path worktree)
-                            (nerimux/model:worktree-path main-worktree))))
+                   (string= (nerimux/workspace-model:worktree-path worktree)
+                            (nerimux/workspace-model:worktree-path main-worktree))))
       (error "The repository's primary worktree cannot be deleted."))
     (%worktree-operation-command
      worktree "remove" (when force "--force"))))
@@ -427,7 +427,7 @@ stays non-destructive instead of silently forwarding a false DRY-RUN."
              collect (%read-worktree-status-at
                       (vcs-kit:vcs-worktree-path raw)
                       (vcs-kit:vcs-worktree-head raw)
-                      (nerimux/model:repository-path repository))))))
+                      (nerimux/workspace-model:repository-path repository))))))
 
 (defun %apply-repository-refresh (repository refresh)
   (%apply-repository-worktrees
