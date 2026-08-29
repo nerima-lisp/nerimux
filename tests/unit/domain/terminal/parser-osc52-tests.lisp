@@ -71,7 +71,7 @@
              (decoded (cl-codec-kit:octets-to-string
                        (nerimux/terminal/parser::%base64-decode payload)
                        :encoding :utf-8)))
-        (expect (string= text decoded))))))
+        (expect (string= text decoded)))))
 
   (it "osc52-inbound-passthrough-enqueues-on-the-screen"
     (with-screen (s 20 5)
@@ -84,4 +84,4 @@
     (let ((nerimux/terminal/parser:*osc52-handler* nil))
       (nerimux/terminal/parser::initialize-osc52-handler)
       (expect (eq #'nerimux/terminal/parser::%osc52-inbound-passthrough
-                  nerimux/terminal/parser:*osc52-handler*))))
+                  nerimux/terminal/parser:*osc52-handler*)))))

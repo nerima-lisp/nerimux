@@ -706,7 +706,7 @@
       (nerimux/model:worktree-add-pane worktree pane)
       (expect (null (nerimux/renderer::%worktree-last-activity-time worktree)))
       (expect (nerimux/renderer::%worktree-tree-info-tokens worktree))
-      (expect (string= "" (nerimux/renderer::%workspace-tree-node-search-text :unknown worktree))))))
+      (expect (string= "" (nerimux/renderer::%workspace-tree-node-search-text :unknown worktree)))))
 
   (it "uses a readable fallback for non-letter prefix bindings"
     (expect (string= "key/999"
@@ -727,7 +727,7 @@
       (multiple-value-bind (plain styled)
           (nerimux/renderer::%worktree-tree-info-suffix worktree 80)
         (declare (ignore styled))
-        (expect (search "-2" plain)))))
+        (expect (search "-2" plain))))))
 
 ;;; PR2 tree row budget: the section-based redesign's key panel reserves 8
 ;;; rows around the tree at TERMINAL-ROWS >= 12 (a divider + 2 content lines
