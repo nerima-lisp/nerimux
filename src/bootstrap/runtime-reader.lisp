@@ -82,9 +82,9 @@
           ;; returning NIL.
           (handler-case (pane-feed pane bytes)
             (peer-io-failure () nil))
-          (nerimux/model:pane-mark-output pane bytes)
+          (nerimux/pane:pane-mark-output pane bytes)
           (when (find 7 bytes)
-            (nerimux/model:pane-mark-bell pane))
+            (nerimux/pane:pane-mark-bell pane))
           (%mark-dirty)
           #'reader-idle-state))))
 
@@ -104,7 +104,7 @@
   (when (> (pane-fd pane) 0)
     (multiple-value-bind (code kind)
         (nerimux/pty:pty-child-exit-status (pane-fd pane))
-      (nerimux/model:pane-mark-process-exit
+      (nerimux/pane:pane-mark-process-exit
        pane
        :status (and (eq kind :exited) code)
        :signal (and (eq kind :signaled) code)))

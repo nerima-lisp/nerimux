@@ -118,7 +118,7 @@
         conn
         (%transient-command-text operation args)
         (list (cons "repository"
-                    (princ-to-string (nerimux/model:repository-id repository))))
+                    (princ-to-string (nerimux/workspace-model:repository-id repository))))
         (lambda () (%run-transient-git-write conn repository operation args))))
       (t (%run-transient-git-write conn repository operation args)))))
 
@@ -281,7 +281,7 @@
 
 (defun %transient-branch (conn)
   (let ((worktree (%client-operation-worktree conn)))
-    (and worktree (nerimux/model:worktree-head worktree))))
+    (and worktree (nerimux/workspace-model:worktree-head worktree))))
 
 (defun %transient-subtitle (key conn)
   (let ((branch (%transient-branch conn)))

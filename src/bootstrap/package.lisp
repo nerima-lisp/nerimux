@@ -82,5 +82,5 @@
                                 (t pattern))
                          ,@body))) rules)))))
 
-(declaim (notinline nerimux/model:window-tree
-                    (setf nerimux/model:window-tree)))
+(declaim (notinline nerimux/window:window-tree
+                    (setf nerimux/window:window-tree)))

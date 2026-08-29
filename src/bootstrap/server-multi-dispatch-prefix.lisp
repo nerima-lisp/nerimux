@@ -272,7 +272,7 @@ FETCH-REPOSITORY-ASYNC)."
               (%client-notify
                conn
                (format nil "fetch failed for ~A: ~A"
-                       (nerimux/model:repository-id repository) condition))))
+                       (nerimux/workspace-model:repository-id repository) condition))))
          (error (condition)
            (%client-notify conn (format nil "fetch failed: ~A" condition)))))))
   nil)

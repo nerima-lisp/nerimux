@@ -128,12 +128,12 @@
                (:mark (%mark-workspace-refreshing kind id))
                (:settle (%clear-workspace-refreshing kind id :stale-p stale-p)))))
     (dolist (organization organizations)
-      (visit :organization (nerimux/model:organization-id organization))
+      (visit :organization (nerimux/workspace-model:organization-id organization))
       (dolist (repository
-                (nerimux/model:organization-repositories organization))
-        (visit :repository (nerimux/model:repository-id repository))
-        (dolist (worktree (nerimux/model:repository-worktrees repository))
-          (visit :worktree (nerimux/model:worktree-id worktree)))))
+                (nerimux/workspace-model:organization-repositories organization))
+        (visit :repository (nerimux/workspace-model:repository-id repository))
+        (dolist (worktree (nerimux/workspace-model:repository-worktrees repository))
+          (visit :worktree (nerimux/workspace-model:worktree-id worktree)))))
     ;; Wave C: no per-worktree status-refresh settle site exists (both
     ;; callers of this function -- %ADD-CLIENT's initial scan and
     ;; %REFRESH-CLIENT-PICKER's `r` -- are whole-catalog operations), so a
@@ -175,7 +175,7 @@
    skipped, matching %WORKSPACE-FIND-TREE-OBJECT's own not-found handling
    elsewhere in this file."
   (dolist (organization organizations)
-    (dolist (repository (nerimux/model:organization-repositories organization))
+    (dolist (repository (nerimux/workspace-model:organization-repositories organization))
       (when (member (repository-id repository) failed-repository-ids
                     :test #'equal)
         (%mark-repository-node-stale repository)))))

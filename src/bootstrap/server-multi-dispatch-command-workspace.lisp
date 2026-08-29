@@ -97,7 +97,7 @@
         (client-conn-viewport conn) 0
         (client-conn-view conn) :pane)
   (when pane
-    (nerimux/model:pane-mark-focused pane))
+    (nerimux/pane:pane-mark-focused pane))
   pane)
 
 (defun %set-client-view (conn view)
@@ -307,17 +307,17 @@
   (when token
     (dolist (organization organizations)
       (dolist (repository
-                (nerimux/model:organization-repositories organization))
+                (nerimux/workspace-model:organization-repositories organization))
         (when (or (eq repository token)
                   (and (stringp token)
                        (some (lambda (value)
                                (and value
                                     (string= token
                                              (princ-to-string value))))
-                             (list (nerimux/model:repository-id repository)
-                                   (nerimux/model:repository-specification repository)
-                                   (nerimux/model:repository-local-path repository)
-                                   (nerimux/model:repository-path repository)))))
+                             (list (nerimux/workspace-model:repository-id repository)
+                                   (nerimux/workspace-model:repository-specification repository)
+                                   (nerimux/workspace-model:repository-local-path repository)
+                                   (nerimux/workspace-model:repository-path repository)))))
           (return-from %workspace-find-repository repository))))))
 
 (defun %workspace-find-organization
@@ -330,18 +330,18 @@
                 (some (lambda (value)
                         (and value
                              (string= token (princ-to-string value))))
-                      (list (nerimux/model:organization-id organization)
-                            (nerimux/model:organization-host organization)
-                            (nerimux/model:organization-name organization)
+                      (list (nerimux/workspace-model:organization-id organization)
+                            (nerimux/workspace-model:organization-host organization)
+                            (nerimux/workspace-model:organization-name organization)
                             (%organization-selection-token organization))))))
      organizations)))
 
 (defun %workspace-find-tree-object
     (token &optional (organizations (nerimux/vcs:workspace-organizations)))
   (cond
-    ((typep token 'nerimux/model:organization) token)
-    ((typep token 'nerimux/model:repository) token)
-    ((typep token 'nerimux/model:worktree) token)
+    ((typep token 'nerimux/workspace-model:organization) token)
+    ((typep token 'nerimux/workspace-model:repository) token)
+    ((typep token 'nerimux/workspace-model:worktree) token)
     ((and (consp token) (keywordp (first token)))
      (case (first token)
        (:organization
@@ -362,17 +362,17 @@
       (%client-tree-object conn)
       (%workspace-find-tree-object (%client-selection-token conn))
       (and (client-conn-focus conn)
-           (nerimux/model:pane-worktree (client-conn-focus conn)))))
+           (nerimux/pane:pane-worktree (client-conn-focus conn)))))
 
 (defun %client-selected-repository (conn &optional target)
   (let ((object (%client-context-object conn target)))
     (typecase object
-      (nerimux/model:repository object)
-      (nerimux/model:worktree
-       (nerimux/model:worktree-repository object))
-      (nerimux/model:organization
+      (nerimux/workspace-model:repository object)
+      (nerimux/workspace-model:worktree
+       (nerimux/workspace-model:worktree-repository object))
+      (nerimux/workspace-model:organization
        (let ((repositories
-               (nerimux/model:organization-repositories object)))
+               (nerimux/workspace-model:organization-repositories object)))
          (and (= (length repositories) 1)
               (first repositories)))))))
 
@@ -383,18 +383,18 @@ Mirrors %CLIENT-SELECTED-REPOSITORY's object-resolution chain, one level up
 the tree (R7.1)."
   (let ((object (%client-context-object conn target)))
     (typecase object
-      (nerimux/model:organization object)
-      (nerimux/model:repository (nerimux/model:repository-organization object))
-      (nerimux/model:worktree
-       (let ((repository (nerimux/model:worktree-repository object)))
-         (and repository (nerimux/model:repository-organization repository)))))))
+      (nerimux/workspace-model:organization object)
+      (nerimux/workspace-model:repository (nerimux/workspace-model:repository-organization object))
+      (nerimux/workspace-model:worktree
+       (let ((repository (nerimux/workspace-model:worktree-repository object)))
+         (and repository (nerimux/workspace-model:repository-organization repository)))))))
 
 (defun %client-operation-worktree (conn &optional target)
   (or (%workspace-find-worktree target)
-      (and (typep (%client-tree-object conn) 'nerimux/model:worktree)
+      (and (typep (%client-tree-object conn) 'nerimux/workspace-model:worktree)
            (%client-tree-object conn))
       (and (client-conn-focus conn)
-           (nerimux/model:pane-worktree (client-conn-focus conn)))))
+           (nerimux/pane:pane-worktree (client-conn-focus conn)))))
 
 (defun %select-client-tree-relative (conn delta)
   (let* ((objects (%workspace-tree-objects

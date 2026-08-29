@@ -19,10 +19,10 @@
    the worktree is only selected, exactly as before this feature existed."
   (%client-notify conn (format nil "creating worktree ~A" branch))
   (%mark-workspace-refreshing
-   :repository (nerimux/model:repository-id repository))
+   :repository (nerimux/workspace-model:repository-id repository))
   (flet ((%on-error (condition)
            (%clear-workspace-refreshing
-            :repository (nerimux/model:repository-id repository)
+            :repository (nerimux/workspace-model:repository-id repository)
             :stale-p t)
            (%client-notify
             conn
@@ -38,7 +38,7 @@
          :on-complete
          (lambda (worktree)
            (%clear-workspace-refreshing
-            :repository (nerimux/model:repository-id repository))
+            :repository (nerimux/workspace-model:repository-id repository))
            (when (%client-live-p conn)
              (%set-client-selected-worktree conn worktree)
              (when session
@@ -100,12 +100,12 @@
            (%client-notify
             conn
             (format nil "deleting worktree ~A"
-                    (nerimux/model:worktree-path worktree)))
+                    (nerimux/workspace-model:worktree-path worktree)))
            (%mark-workspace-refreshing
-            :worktree (nerimux/model:worktree-id worktree))
+            :worktree (nerimux/workspace-model:worktree-id worktree))
            (flet ((%on-error (condition)
                     (%clear-workspace-refreshing
-                     :worktree (nerimux/model:worktree-id worktree)
+                     :worktree (nerimux/workspace-model:worktree-id worktree)
                      :stale-p t)
                     (%client-notify
                      conn
@@ -120,7 +120,7 @@
                   (lambda (ignored)
                     (declare (ignore ignored))
                     (%clear-workspace-refreshing
-                     :worktree (nerimux/model:worktree-id worktree))
+                     :worktree (nerimux/workspace-model:worktree-id worktree))
                     (when (and (%client-live-p conn)
                                (eq (client-conn-selected-worktree conn)
                                    worktree))
@@ -151,12 +151,12 @@
            (%client-notify
             conn
             (format nil "locking worktree ~A"
-                    (nerimux/model:worktree-path worktree)))
+                    (nerimux/workspace-model:worktree-path worktree)))
            (%mark-workspace-refreshing
-            :worktree (nerimux/model:worktree-id worktree))
+            :worktree (nerimux/workspace-model:worktree-id worktree))
            (flet ((%on-error (condition)
                     (%clear-workspace-refreshing
-                     :worktree (nerimux/model:worktree-id worktree)
+                     :worktree (nerimux/workspace-model:worktree-id worktree)
                      :stale-p t)
                     (%client-notify
                      conn
@@ -171,7 +171,7 @@
                   (lambda (ignored)
                     (declare (ignore ignored))
                     (%clear-workspace-refreshing
-                     :worktree (nerimux/model:worktree-id worktree))
+                     :worktree (nerimux/workspace-model:worktree-id worktree))
                     (%refresh-client-picker conn)
                     (%client-notify conn "worktree locked")
                     (%mark-dirty))
@@ -196,12 +196,12 @@
            (%client-notify
             conn
             (format nil "unlocking worktree ~A"
-                    (nerimux/model:worktree-path worktree)))
+                    (nerimux/workspace-model:worktree-path worktree)))
            (%mark-workspace-refreshing
-            :worktree (nerimux/model:worktree-id worktree))
+            :worktree (nerimux/workspace-model:worktree-id worktree))
            (flet ((%on-error (condition)
                     (%clear-workspace-refreshing
-                     :worktree (nerimux/model:worktree-id worktree)
+                     :worktree (nerimux/workspace-model:worktree-id worktree)
                      :stale-p t)
                     (%client-notify
                      conn
@@ -215,7 +215,7 @@
                   (lambda (ignored)
                     (declare (ignore ignored))
                     (%clear-workspace-refreshing
-                     :worktree (nerimux/model:worktree-id worktree))
+                     :worktree (nerimux/workspace-model:worktree-id worktree))
                     (%refresh-client-picker conn)
                     (%client-notify conn "worktree unlocked")
                     (%mark-dirty))
@@ -247,7 +247,7 @@ preview, or a preview of a different repository."
           ((and (not dry-run)
                 (not (equal (client-conn-pending-prune-preview-repository-id
                              conn)
-                            (nerimux/model:repository-id repository))))
+                            (nerimux/workspace-model:repository-id repository))))
            (%client-notify
             conn
             "worktree prune requires a preview first: run wt-prune, then wt-prune-confirm --confirm")
@@ -260,10 +260,10 @@ preview, or a preview of a different repository."
             conn
             (if dry-run "previewing worktree prune" "pruning worktrees"))
            (%mark-workspace-refreshing
-            :repository (nerimux/model:repository-id repository))
+            :repository (nerimux/workspace-model:repository-id repository))
            (flet ((%on-error (condition)
                     (%clear-workspace-refreshing
-                     :repository (nerimux/model:repository-id repository)
+                     :repository (nerimux/workspace-model:repository-id repository)
                      :stale-p t)
                     (%client-notify
                      conn
@@ -278,9 +278,9 @@ preview, or a preview of a different repository."
                   :on-complete
                   (lambda (output)
                     (%clear-workspace-refreshing
-                     :repository (nerimux/model:repository-id repository))
+                     :repository (nerimux/workspace-model:repository-id repository))
                     (setf (client-conn-pending-prune-preview-repository-id conn)
-                          (and dry-run (nerimux/model:repository-id repository)))
+                          (and dry-run (nerimux/workspace-model:repository-id repository)))
                     (%refresh-client-picker conn)
                     (%client-notify
                      conn

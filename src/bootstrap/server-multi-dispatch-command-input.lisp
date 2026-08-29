@@ -23,7 +23,7 @@
 
 (defun %client-select-pane-direction (session conn direction)
   (let* ((pane (%resolve-client-focus-pane session nil conn))
-         (window (and pane (nerimux/model:pane-window pane))))
+         (window (and pane (nerimux/pane:pane-window pane))))
     ;; R5.6: a zoomed window has no neighbours (pane-neighbor returns NIL by
     ;; design), so un-zoom before looking one up rather than reporting "no
     ;; pane <direction>" for a move that would otherwise have succeeded.
@@ -97,9 +97,9 @@
     (%select-client-tree-worktree conn nil))
   (let ((object (%client-tree-object conn)))
     (cond
-      ((typep object 'nerimux/model:organization)
+      ((typep object 'nerimux/workspace-model:organization)
        (%toggle-workspace-node-collapsed
-        :organization (nerimux/model:organization-id object))
+        :organization (nerimux/workspace-model:organization-id object))
        (%mark-dirty)
        t)
       ((keywordp object)
@@ -107,15 +107,15 @@
        ;; :ATTENTION/:ACTIVE/:REPOSITORIES): Enter toggles it exactly like
        ;; Tab (%CLIENT-TOGGLE-SELECTED-TREE-ROW).
        (%client-toggle-selected-tree-row conn))
-      ((typep object 'nerimux/model:repository)
+      ((typep object 'nerimux/workspace-model:repository)
        ;; Enter no longer toggles a repository row open/closed (user
        ;; decision, R6.3 pivot): it dives straight into the repository's
        ;; main worktree (or its first one, when there is no main) via the
        ;; SAME open/attach corridor as the (t) worktree branch below --
        ;; recursing after selecting the worktree reuses that branch instead
        ;; of duplicating its remembered-pane/open-pane logic here.
-       (let ((worktree (or (nerimux/model:repository-main-worktree object)
-                            (first (nerimux/model:repository-worktrees
+       (let ((worktree (or (nerimux/workspace-model:repository-main-worktree object)
+                            (first (nerimux/workspace-model:repository-worktrees
                                     object)))))
          (if worktree
              (progn
@@ -124,7 +124,7 @@
              (progn
                (%client-notify conn "repository has no worktrees")
                t))))
-      ((typep object 'nerimux/model:pane)
+      ((typep object 'nerimux/pane:pane)
        (%set-client-focus conn object)
        (%set-client-view conn :pane)
        (%mark-dirty)
@@ -140,8 +140,8 @@
       ;; their only action.
       ((and (consp object) (member (first object) '(:file :commit :diff-line :diff-more)))
        t)
-      ((typep object 'nerimux/model:window)
-       (let ((pane (nerimux/model:window-active-pane object)))
+      ((typep object 'nerimux/window:window)
+       (let ((pane (nerimux/window:window-active-pane object)))
          (when pane
            (%set-client-focus conn pane)
            (%set-client-view conn :pane)))
@@ -157,7 +157,7 @@
               (pane (or (%worktree-remembered-pane worktree)
                         (%client-worktree-pane session worktree))))
          (cond
-           ((and pane (nerimux/model:pane-live-p pane))
+           ((and pane (nerimux/pane:pane-live-p pane))
             (%set-client-focus conn pane)
             (%remember-worktree-pane worktree pane)
             (%mark-dirty)
@@ -179,7 +179,7 @@
    called when COMMITS-STATE was NIL or :FAILED."
   (handler-case
       (nerimux/vcs:refresh-worktree-commits-async
-       (nerimux/model:worktree-repository worktree) worktree
+       (nerimux/workspace-model:worktree-repository worktree) worktree
        :callback-dispatch #'%enqueue-main-thread-callback
        :on-complete (lambda (result) (declare (ignore result)) (%mark-dirty))
        :on-error (lambda (condition) (declare (ignore condition)) (%mark-dirty)))
@@ -188,7 +188,7 @@
     ;; launch: no callback is ever coming, so COMMITS-STATE must settle to
     ;; :FAILED here rather than being stuck at :PENDING forever.
     (error ()
-      (setf (nerimux/model:worktree-commits-state worktree) :failed)
+      (setf (nerimux/workspace-model:worktree-commits-state worktree) :failed)
       (%mark-dirty))))
 
 (defun %client-start-worktree-file-diff-refresh (worktree path)
@@ -202,14 +202,14 @@
    renderer reads. The caller sets the cache entry to :PENDING before
    calling this, which is also the dedup guard: this is only ever called
    when the entry was absent or :FAILED."
-  (let ((key (list (nerimux/model:worktree-id worktree) path)))
+  (let ((key (list (nerimux/workspace-model:worktree-id worktree) path)))
     (flet ((%on-error (condition)
              (declare (ignore condition))
              (%set-workspace-file-diff key (list :failed 0 nil))
              (%mark-dirty)))
       (handler-case
           (nerimux/vcs:refresh-worktree-file-diff-async
-           (nerimux/model:worktree-repository worktree) worktree path
+           (nerimux/workspace-model:worktree-repository worktree) worktree path
            :callback-dispatch #'%enqueue-main-thread-callback
            :on-complete
            (lambda (worker-result)
@@ -279,22 +279,22 @@
          (if (gethash key table) (remhash key table) (setf (gethash key table) t)))
        (%mark-dirty)
        t)
-      ((typep object 'nerimux/model:repository)
-       (let ((key (list :repository (nerimux/model:repository-id object)))
+      ((typep object 'nerimux/workspace-model:repository)
+       (let ((key (list :repository (nerimux/workspace-model:repository-id object)))
              (table (%workspace-expanded-nodes)))
          (if (gethash key table) (remhash key table) (setf (gethash key table) t)))
        (%mark-dirty)
        t)
-      ((typep object 'nerimux/model:worktree)
-       (let ((key (list :worktree (nerimux/model:worktree-id object)))
+      ((typep object 'nerimux/workspace-model:worktree)
+       (let ((key (list :worktree (nerimux/workspace-model:worktree-id object)))
              (table (%workspace-expanded-nodes)))
          (if (gethash key table)
              (remhash key table)
              (progn
                (setf (gethash key table) t)
-               (when (member (nerimux/model:worktree-commits-state object)
+               (when (member (nerimux/workspace-model:worktree-commits-state object)
                              '(nil :failed))
-                 (setf (nerimux/model:worktree-commits-state object) :pending)
+                 (setf (nerimux/workspace-model:worktree-commits-state object) :pending)
                  (%client-start-worktree-commits-refresh object)))))
        (%mark-dirty)
        t)
@@ -313,9 +313,9 @@
    in the section-based tree and is a no-op."
   (let ((object (%client-tree-object conn)))
     (cond
-      ((typep object 'nerimux/model:organization)
+      ((typep object 'nerimux/workspace-model:organization)
        (setf (gethash (list :organization
-                            (nerimux/model:organization-id object))
+                            (nerimux/workspace-model:organization-id object))
                       (%workspace-collapsed-nodes))
              t)
        (%mark-dirty)
@@ -324,8 +324,8 @@
        (setf (gethash (list :section object) (%workspace-collapsed-nodes)) t)
        (%mark-dirty)
        t)
-      ((typep object 'nerimux/model:repository)
-       (remhash (list :repository (nerimux/model:repository-id object))
+      ((typep object 'nerimux/workspace-model:repository)
+       (remhash (list :repository (nerimux/workspace-model:repository-id object))
                 (%workspace-expanded-nodes))
        (%mark-dirty)
        t)
@@ -335,8 +335,8 @@
   "L (item 3): expand the selected row -- the inverse of H above."
   (let ((object (%client-tree-object conn)))
     (cond
-      ((typep object 'nerimux/model:organization)
-       (remhash (list :organization (nerimux/model:organization-id object))
+      ((typep object 'nerimux/workspace-model:organization)
+       (remhash (list :organization (nerimux/workspace-model:organization-id object))
                 (%workspace-collapsed-nodes))
        (%mark-dirty)
        t)
@@ -344,8 +344,8 @@
        (remhash (list :section object) (%workspace-collapsed-nodes))
        (%mark-dirty)
        t)
-      ((typep object 'nerimux/model:repository)
-       (setf (gethash (list :repository (nerimux/model:repository-id object))
+      ((typep object 'nerimux/workspace-model:repository)
+       (setf (gethash (list :repository (nerimux/workspace-model:repository-id object))
                       (%workspace-expanded-nodes))
              t)
        (%mark-dirty)
@@ -766,7 +766,7 @@
     (if selection
         (destructuring-bind (worktree path) selection
           (%client-run-status-write
-           conn (nerimux/model:worktree-repository worktree)
+           conn (nerimux/workspace-model:worktree-repository worktree)
            :add (list "--" path)))
         (progn (%client-notify conn "select a file first") t))))
 
@@ -778,7 +778,7 @@
   (let ((worktree (client-conn-selected-worktree conn)))
     (if worktree
         (%client-run-status-write
-         conn (nerimux/model:worktree-repository worktree) :add (list "-A"))
+         conn (nerimux/workspace-model:worktree-repository worktree) :add (list "-A"))
         (progn (%client-notify conn "no worktree selected") t))))
 
 (defun %client-unstage-selection (conn)
@@ -788,7 +788,7 @@
     (if selection
         (destructuring-bind (worktree path) selection
           (%client-run-status-write
-           conn (nerimux/model:worktree-repository worktree)
+           conn (nerimux/workspace-model:worktree-repository worktree)
            :restore (list "--staged" "--" path)))
         (progn (%client-notify conn "select a file first") t))))
 
@@ -798,7 +798,7 @@
   (let ((worktree (client-conn-selected-worktree conn)))
     (if worktree
         (%client-run-status-write
-         conn (nerimux/model:worktree-repository worktree)
+         conn (nerimux/workspace-model:worktree-repository worktree)
          :restore (list "--staged" "--" "."))
         (progn (%client-notify conn "no worktree selected") t))))
 
@@ -812,11 +812,11 @@
   (let ((selection (%client-selected-status-file conn)))
     (if selection
         (destructuring-bind (worktree path) selection
-          (let ((repository (nerimux/model:worktree-repository worktree)))
+          (let ((repository (nerimux/workspace-model:worktree-repository worktree)))
             (%open-confirm-view
              conn
              (format nil "git restore -- ~A" path)
-             (list (cons "worktree" (nerimux/model:worktree-path worktree))
+             (list (cons "worktree" (nerimux/workspace-model:worktree-path worktree))
                    (cons "path" path))
              (lambda ()
                (%client-run-status-write

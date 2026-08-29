@@ -45,26 +45,26 @@
 
 (defun %worktree-selection-token (worktree)
   (and worktree
-       (or (nerimux/model:worktree-id worktree)
-           (nerimux/model:worktree-path worktree)
-           (and (nerimux/model:worktree-branch worktree)
-                (princ-to-string (nerimux/model:worktree-branch worktree))))))
+       (or (nerimux/workspace-model:worktree-id worktree)
+           (nerimux/workspace-model:worktree-path worktree)
+           (and (nerimux/workspace-model:worktree-branch worktree)
+                (princ-to-string (nerimux/workspace-model:worktree-branch worktree))))))
 
 (defun %organization-selection-token (organization)
   (and organization
-       (or (nerimux/model:organization-id organization)
-           (and (nerimux/model:organization-host organization)
-                (nerimux/model:organization-name organization)
+       (or (nerimux/workspace-model:organization-id organization)
+           (and (nerimux/workspace-model:organization-host organization)
+                (nerimux/workspace-model:organization-name organization)
                 (format nil "~A/~A"
-                        (nerimux/model:organization-host organization)
-                        (nerimux/model:organization-name organization))))))
+                        (nerimux/workspace-model:organization-host organization)
+                        (nerimux/workspace-model:organization-name organization))))))
 
 (defun %repository-selection-token (repository)
   (and repository
-       (or (nerimux/model:repository-id repository)
-           (nerimux/model:repository-specification repository)
-           (nerimux/model:repository-local-path repository)
-           (nerimux/model:repository-path repository))))
+       (or (nerimux/workspace-model:repository-id repository)
+           (nerimux/workspace-model:repository-specification repository)
+           (nerimux/workspace-model:repository-local-path repository)
+           (nerimux/workspace-model:repository-path repository))))
 
 (defun %tree-object-selection-token (object)
   "A refresh-stable token for OBJECT, resolvable back to the same row by
@@ -80,14 +80,14 @@
    as for an orphaned pane) falls through to %REBIND-CLIENT-SELECTION's own
    NIL-clears-selection behaviour, same as before this fix."
   (typecase object
-    (nerimux/model:organization
+    (nerimux/workspace-model:organization
      (list :organization (%organization-selection-token object)))
-    (nerimux/model:repository
+    (nerimux/workspace-model:repository
      (list :repository (%repository-selection-token object)))
-    (nerimux/model:worktree
+    (nerimux/workspace-model:worktree
      (list :worktree (%worktree-selection-token object)))
-    (nerimux/model:pane
-     (let ((worktree (nerimux/model:pane-worktree object)))
+    (nerimux/pane:pane
+     (let ((worktree (nerimux/pane:pane-worktree object)))
        (and worktree (list :worktree (%worktree-selection-token worktree)))))
     (t
      (cond
@@ -101,7 +101,7 @@
   (or (client-conn-selected-tree-object conn)
       (client-conn-selected-worktree conn)
       (and (client-conn-focus conn)
-           (nerimux/model:pane-worktree (client-conn-focus conn)))))
+           (nerimux/pane:pane-worktree (client-conn-focus conn)))))
 
 (defun %client-tree-selection-token (conn)
   (%tree-object-selection-token (%client-tree-object conn)))
@@ -109,7 +109,7 @@
 (defun %client-selection-token (conn)
   (let ((worktree (or (client-conn-selected-worktree conn)
                       (and (client-conn-focus conn)
-                           (nerimux/model:pane-worktree
+                           (nerimux/pane:pane-worktree
                             (client-conn-focus conn))))))
     (%worktree-selection-token worktree)))
 
@@ -183,7 +183,7 @@
         (%set-client-selected-tree-object conn object))))
 
 (defun %set-client-selected-tree-object (conn object)
-  (let ((worktree (and (typep object 'nerimux/model:worktree) object)))
+  (let ((worktree (and (typep object 'nerimux/workspace-model:worktree) object)))
     (setf (client-conn-selected-tree-object conn) object
           (client-conn-selected-worktree conn) worktree)
     (when worktree
@@ -328,7 +328,7 @@
   (and worktree
        (find worktree
              (all-panes session)
-             :key #'nerimux/model:pane-worktree
+             :key #'nerimux/pane:pane-worktree
              :test #'eq)))
 
 (defun %open-client-worktree-pane (session conn worktree)
@@ -393,11 +393,11 @@
                           (or (nerimux/picker:picker-item-repository item)
                               (nerimux/picker:picker-item-organization item)))))
          (pane (%client-worktree-pane session worktree))
-         (window (and pane (nerimux/model:pane-window pane))))
+         (window (and pane (nerimux/pane:pane-window pane))))
     (cond
       ((and pane window)
-       (nerimux/model:session-select-window session window)
-       (nerimux/model:window-select-pane window pane)
+       (nerimux/session:session-select-window session window)
+       (nerimux/window:window-select-pane window pane)
        (%set-client-selected-worktree conn worktree)
        (%set-client-focus conn pane)
        (%close-client-picker conn)
@@ -413,9 +413,9 @@
        (%client-notify
         conn
         (typecase object
-          (nerimux/model:repository
+          (nerimux/workspace-model:repository
            "repository selected; use :wt-create --branch <branch> --confirm")
-          (nerimux/model:organization
+          (nerimux/workspace-model:organization
            "organization selected; select a repository first")
           (t "picker item has no worktree")))
        t)
