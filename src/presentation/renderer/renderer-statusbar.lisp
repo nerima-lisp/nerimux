@@ -22,7 +22,7 @@
 ;;;;             → renderer-statusbar → renderer-compose
 
 ;;; The status line is one row at the bottom, always (requirements §1.4).
-;;; nerimux/options:status-line-count and +max-status-lines+ (the "status"
+;;; The old status-line-count option and +max-status-lines+ (the "status"
 ;;; option could pick 0..5 rows) are gone with domain/options (R2.2) — this
 ;;; is the one place that concept survives, as a fixed constant instead of a
 ;;; cross-package function call, so anything outside nerimux/renderer that

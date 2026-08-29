@@ -24,10 +24,10 @@
 
   ;; synchronize-panes never drove any behavior (the keystroke-forwarding
   ;; fanout it once gated was removed with presentation/events) and R2.2
-  ;; deleted nerimux/options wholesale.  A dead option with zero live callers
-  ;; leaves nothing to replace with a constant, so it is gone rather than
-  ;; hardcoded — there is no "synchronize-panes-sends-to-all" behavior to
-  ;; assert.
+  ;; deleted the domain-layer options package wholesale.  A dead option
+  ;; with zero live callers leaves nothing to replace with a constant, so
+  ;; it is gone rather than hardcoded — there is no
+  ;; "synchronize-panes-sends-to-all" behavior to assert.
 
   ;;; ── Layout persistence: round-trip ──────────────────────────────────────────
 

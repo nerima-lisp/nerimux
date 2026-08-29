@@ -113,7 +113,8 @@
           (:file "organization-tests")
           (:file "repository-tests")
           (:file "worktree-tests")
-          (:file "attention-tests")))
+          (:file "attention-tests")
+          (:file "advanced-tests"))) ; layout persistence round-trip and update-environment defaults; moved from tests/unit/feature/ (model-layer concern, not a cross-layer feature)
         (:module "domain/text"
          :serial t
          :components
@@ -233,11 +234,7 @@
           (:file "runtime-tests-c") ; stop-reader-threads, wait-for-channel - part III
           (:file "runtime-tests-b") ; wait-for-channel - part II
           (:file "main-tests")
-          (:file "main-entry-tests")))
-        (:module "feature"
-         :serial t
-         :components
-         ((:file "advanced-tests"))))) ; cross-layer acceptance suite (break/pipe/sync, layout, lock, session-groups)
+          (:file "main-entry-tests")))))
       (:module "integration"
        :serial t
        :components

@@ -15,8 +15,9 @@
 ;;;
 ;;; §1.4 / R2.5: every pane's child gets TERM=screen-256color and
 ;;; COLORTERM=truecolor.  Both used to come from the 'default-terminal' option
-;;; (TERM only; COLORTERM was never sent); now they are fixed, so there is
-;;; nothing left to read from nerimux/options.
+;;; (TERM only; COLORTERM was never sent); now they are fixed, and R2.2
+;;; deleted the domain-layer options package wholesale, so there is no
+;;; package left to read either value from.
 
 (defvar +pane-term+
     "screen-256color"
