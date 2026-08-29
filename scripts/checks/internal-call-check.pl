@@ -21,7 +21,7 @@ my $root = shift // '.';
 chdir $root or die "cannot chdir $root: $!";
 
 my @files;
-for my $dir ('src', 't') {
+for my $dir ('src', 'tests') {
     next unless -d $dir;
     open(my $find, '-|', 'find', $dir, '-name', '*.lisp') or die $!;
     while (my $l = <$find>) { chomp $l; push @files, $l }

@@ -41,7 +41,7 @@
 ;;; the fake is genuinely exercised.  "Read my own process's
 ;;; environment" has exactly one implementation and always will: the tests that
 ;;; cover these paths stub by mutating the REAL environment
-;;; (t/helpers-overlay-assertions.lisp's with-temporary-posix-environment-variable),
+;;; (tests/helpers-overlay-assertions.lisp's with-temporary-posix-environment-variable),
 ;;; not by installing a fake.  A *getenv* variable would be dead abstraction from
 ;;; the day it was written, and an uninstalled one would reproduce the failure
 ;;; mode this codebase keeps hitting: a port nobody binds, whose fallback

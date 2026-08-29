@@ -334,7 +334,7 @@
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
   :depends-on ("nerimux" (:version "cl-weave" "1.3.0"))
-  :pathname "t"
+  :pathname "tests"
   :serial t
   :components ((:file "package")
                (:file "suite")
@@ -371,7 +371,7 @@
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
   :depends-on ("nerimux" (:version "cl-weave" "1.3.0"))
-  :pathname "t/pty"
+  :pathname "tests/pty"
   :serial t
   :components ((:file "package")
                (:file "helpers")

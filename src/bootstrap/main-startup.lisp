@@ -65,7 +65,7 @@
   ;; "... failed: ~A" notifies, %DRAIN-MAIN-THREAD-CALLBACKS — otherwise
   ;; exhausts the control stack mid-report and lands in the debugger the
   ;; saved core exists to avoid.  Same rationale as WITH-CYCLE-SAFE-PRINTING
-  ;; (t/suite.lisp); a thread that reports conditions must rebind this itself.
+  ;; (tests/suite.lisp); a thread that reports conditions must rebind this itself.
   (let ((*print-circle* t)
         (invocation (%parse-global-cli-argv (%application-argv))))
     (if (null invocation)

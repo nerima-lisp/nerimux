@@ -84,7 +84,7 @@
     };
     cl-codec-kit = {
       # From-scratch, babel-API-compatible codec: the 71 string<->octet call
-      # sites in src/ and t/ name cl-codec-kit:string-to-octets /
+      # sites in src/ and tests/ name cl-codec-kit:string-to-octets /
       # octets-to-string directly. Briefly routed through cl-host-kit instead;
       # re-pointed here on 2026-08-02 so the codec is named at its own call
       # sites rather than through a host-ops package.
@@ -519,7 +519,7 @@
           };
 
           # End-to-end smoke: headless server/kill scenarios plus the
-          # real-PTY attach scenario (t/e2e/e2e-smoke.lisp), driven against
+          # real-PTY attach scenario (tests/e2e/e2e-smoke.lisp), driven against
           # the flake-built binary rather than a hand-run `nix build .`.
           # Runs read-only against ${self} in the store -- unlike test and
           # test-pty, e2e-smoke.lisp never compiles nerimux in place: the
@@ -541,7 +541,7 @@
               trap 'rm -rf "$home"' EXIT
               export HOME="$home"
               cd ${self}
-              sbcl --dynamic-space-size 4096 --script t/e2e/e2e-smoke.lisp \
+              sbcl --dynamic-space-size 4096 --script tests/e2e/e2e-smoke.lisp \
                 "${self.packages.${system}.nerimux}/bin/nerimux" "$@"
             '';
           };

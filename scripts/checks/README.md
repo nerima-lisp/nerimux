@@ -47,8 +47,8 @@ directory can disagree in two directions, and they fail in opposite ways:
 Checking only the first direction catches a deletion that went too far but not
 one that went unnoticed. The second is how a test file becomes decoration.
 
-`t/pty/` is excluded: it belongs to `nerimux/pty-test`, which has its own
-component list. Every file under `t/e2e/` is excluded by design — it runs
+`tests/pty/` is excluded: it belongs to `nerimux/pty-test`, which has its own
+component list. Every file under `tests/e2e/` is excluded by design — it runs
 against a built binary via `nix run .#e2e` (or by hand, see the
 getting-started guide), not through any ASDF system.
 
@@ -92,11 +92,11 @@ so that no package needs to exist.
 
 This collects every `(:export ...)` list from the `defpackage` forms in
 `src/bootstrap/package*.lisp` and checks every single-colon reference in `src/`
-and `t/` against them.
+and `tests/` against them.
 
 Double-colon (`PKG::SYM`) is deliberately not checked: it reaches internals on
 purpose and is legal whatever the export list says. The layering guard in
-`t/unit/bootstrap/system-composition-tests.lisp` is what watches those.
+`tests/unit/bootstrap/system-composition-tests.lisp` is what watches those.
 
 It parses Lisp with a regex, which is only sound because of what it skips:
 comments, and strings **across line boundaries**. Dropping the second gives a

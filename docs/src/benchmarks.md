@@ -89,7 +89,7 @@ time nix build .#checks.$(nix eval --raw --impure --expr builtins.currentSystem)
 
 ## Workspace-overview render cost (measured, not enforced)
 
-`benchmark-workspace-overview` (`t/helpers-renderer-benchmark.lisp`) measures
+`benchmark-workspace-overview` (`tests/helpers-renderer-benchmark.lisp`) measures
 frame cost at the mandatory workspace scale (1000 organizations, 1000
 repositories, 5000 worktrees, 5000 panes): both the initial frame and a
 fully-scrolled frame.

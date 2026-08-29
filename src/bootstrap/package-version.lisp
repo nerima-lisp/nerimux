@@ -28,6 +28,6 @@
    where ASDF's system definitions are not guaranteed to still be registered.
    nerimux.asd's :version is the single source of truth; the
    nerimux-version-string-matches-asdf-version test in
-   t/unit/bootstrap/package-version-tests.lisp pins this literal to it so the
+   tests/unit/bootstrap/package-version-tests.lisp pins this literal to it so the
    two cannot drift silently again."
   "0.3.0")

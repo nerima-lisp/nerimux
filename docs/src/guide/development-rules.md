@@ -85,7 +85,7 @@ you get a confusing "file not found" failure.
 
 Tests that mutate a special variable the runtime reads — the session registry,
 the dirty flag, the running flag — must wrap themselves in the isolation helpers
-in `t/helpers-*.lisp`. Otherwise they clobber that state for every test after
+in `tests/helpers-*.lisp`. Otherwise they clobber that state for every test after
 them.
 
 ## CI gates Linux; macOS is checked by hand
@@ -126,7 +126,7 @@ CL_WEAVE_TEST_FILTER=renderer nix run .#test
 ```
 
 Each test that spawns a background thread or server joins it itself (see
-`with-loop-state` in `t/helpers-loop-fixtures.lisp`), so isolation does not
+`with-loop-state` in `tests/helpers-loop-fixtures.lisp`), so isolation does not
 depend on suite boundaries or execution order.
 
 ## Behavior changes need a tmux reference

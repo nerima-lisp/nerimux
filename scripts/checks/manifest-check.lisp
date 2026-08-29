@@ -4,7 +4,7 @@
 ;;;; tests silently:
 ;;;;   MISSING  — the manifest names a component with no file behind it.  ASDF
 ;;;;              aborts loading nerimux/test, so every test disappears at once.
-;;;;   ORPHAN   — a .lisp file under t/ that no manifest entry names.  It is
+;;;;   ORPHAN   — a .lisp file under tests/ that no manifest entry names.  It is
 ;;;;              never loaded, so its tests silently stop running.
 ;;;;
 ;;;; The manifest is a plain DEFPARAMETER in CL-USER, so it loads without ASDF.
@@ -28,22 +28,23 @@
 (dolist (top (symbol-value (find-symbol "*NERIMUX-TEST-COMPONENTS*" :cl-user)))
   (walk top ""))
 
-(let* ((declared (sort (copy-list *declared*) #'string<))
+(let* ((root (namestring (truename ".")))
+       (declared (sort (copy-list *declared*) #'string<))
        (on-disk (sort (mapcar (lambda (p)
                                 (let ((s (namestring p)))
-                                  (subseq s (search "t/" s))))
-                              ;; t/pty belongs to nerimux/pty-test and t/e2e is run by hand against a
+                                  (subseq s (length root))))
+                              ;; tests/pty belongs to nerimux/pty-test and tests/e2e is run by hand against a
                               ;; built binary; neither is in this manifest by design, so
                               ;; neither should be reported as an accident.
                               (remove-if (lambda (p)
                                            (let ((s (namestring p)))
-                                             (or (search "/t/pty/" s)
-                                                 (search "/t/e2e/" s))))
-                                         (directory "t/**/*.lisp")))
+                                             (or (search "/tests/pty/" s)
+                                                 (search "/tests/e2e/" s))))
+                                         (directory "tests/**/*.lisp")))
                       #'string<))
        (missing (remove-if (lambda (d) (member d on-disk :test #'string=)) declared))
        (orphan  (remove-if (lambda (d) (member d declared :test #'string=)) on-disk)))
-  (format t "~&manifest entries: ~D~%files under t/: ~D~%" (length declared) (length on-disk))
+  (format t "~&manifest entries: ~D~%files under tests/: ~D~%" (length declared) (length on-disk))
   (when (zerop (length declared))
     (format t "~&MANIFEST PARSED TO NOTHING — the walker is wrong, not the tree~%")
     (finish-output)

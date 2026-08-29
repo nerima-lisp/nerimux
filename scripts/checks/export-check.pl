@@ -8,7 +8,7 @@
 #
 # This closes that gap without loading anything: collect every (:export ...)
 # list from the defpackage forms in src/bootstrap/package*.lisp, then check
-# every PKG:SYM reference in src/ and t/ against them.
+# every PKG:SYM reference in src/ and tests/ against them.
 #
 # Double-colon (PKG::SYM) is deliberately NOT checked — it reaches internals on
 # purpose and is legal regardless of the export list.
@@ -52,7 +52,7 @@ unless (keys %exports) {
 my @bad;
 my $refs = 0;
 my @files;
-for my $dir ('src', 't') {
+for my $dir ('src', 'tests') {
     next unless -d $dir;
     open(my $find, '-|', 'find', $dir, '-name', '*.lisp') or die $!;
     while (my $l = <$find>) { chomp $l; push @files, $l }

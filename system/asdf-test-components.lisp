@@ -1,7 +1,7 @@
 (in-package #:cl-user)
 
 (defparameter *nerimux-test-components*
-  '((:module "t"
+  '((:module "tests"
      :serial t
      :components
       ((:file "package")

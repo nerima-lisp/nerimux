@@ -32,7 +32,7 @@ did by hand — not bolted on beside it.
   `select-fds`/`wait-for-input`, the select(2) fd multiplexing behind the PTY
   reader loop's readiness poll (`select-fds` in
   `src/infrastructure/pty/pty.lisp`, called from `nerimux/pty:select-fds`
-  across ~45 sites in `src/` and `t/`). It replaced a hand-rolled select(2)
+  across ~45 sites in `src/` and `tests/`). It replaced a hand-rolled select(2)
   wrapper whose `fd-set!` wrote past the end of a 128-byte bitmap for any fd
   past `FD_SETSIZE`, and which read an `EINTR` mid-wait as "nothing ready,"
   silently truncating an infinite-timeout wait on every `SIGWINCH`/`SIGCHLD`.

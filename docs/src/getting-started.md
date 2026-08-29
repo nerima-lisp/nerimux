@@ -340,7 +340,7 @@ main suite so that `nix flake check` does not imply a result for host PTY work
 that cannot run in a sandbox without `/dev/ptmx`; run it yourself when touching
 PTY code, because the flake gate does not include it.
 
-There is also an end-to-end smoke script, `t/e2e/e2e-smoke.lisp`, kept out of
+There is also an end-to-end smoke script, `tests/e2e/e2e-smoke.lisp`, kept out of
 the ASDF test system because it needs a built binary and a real `/dev/ptmx`.
 Like `nerimux/pty-test`, it is not part of `nix flake check`; run it
 yourself. It runs headless `server`/`kill` scenarios against the binary as a
@@ -348,15 +348,15 @@ subprocess, then launches it with `attach`, sends a marker through the
 attached pane, verifies the rendered output, and detaches with `C-q d`:
 
 !!! warning
-    The `attach` scenario (`t/e2e/attach-scenario.lisp`) still sends a
+    The `attach` scenario (`tests/e2e/attach-scenario.lisp`) still sends a
     leading `i` keystroke before the marker command, a holdover from the
     retired `:normal`/`:input` keymap. Since a pane now takes typing
     directly, that `i` lands as a literal character in the shell instead of
     switching modes, and the marker never appears. Verified by running it
     against this branch's build: `nix build .` then `nerimux-sbcl --script
-    t/e2e/e2e-smoke.lisp result/bin/nerimux attach` reports `FAIL attach --
+    tests/e2e/e2e-smoke.lisp result/bin/nerimux attach` reports `FAIL attach --
     marker=MISSING`. This is a test-script regression from the keymap
-    change, not a rendering defect; fix it in `t/e2e/attach-scenario.lisp`
+    change, not a rendering defect; fix it in `tests/e2e/attach-scenario.lisp`
     before trusting this scenario's result again.
 
 ```bash
@@ -367,7 +367,7 @@ or, against a manual build:
 
 ```bash
 nix build .
-nerimux-sbcl --script t/e2e/e2e-smoke.lisp result/bin/nerimux
+nerimux-sbcl --script tests/e2e/e2e-smoke.lisp result/bin/nerimux
 ```
 
 Measured suite runtimes are recorded in [Benchmarks](benchmarks.md).

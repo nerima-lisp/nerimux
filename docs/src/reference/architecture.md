@@ -122,7 +122,7 @@ Below `domain` sits one thing that is not a layer so much as a floor:
 dependency at all. ASDF loads it first and anything may call it.
 
 That rule is enforced by two tests in
-`t/unit/bootstrap/system-composition-tests.lisp`, which exist because each
+`tests/unit/bootstrap/system-composition-tests.lisp`, which exist because each
 catches what the other cannot.
 
 `no-package-declares-an-upward-layer-dependency` reads every `defpackage` form
@@ -197,7 +197,7 @@ nerimux/
 │   ├── infrastructure/     # adapters: PTY, sockets, raw-mode stdin input, VCS
 │   └── presentation/       # renderers
 │       └── renderer/       #   pane compositor, workspace views, and cl-tui-kit
-└── t/
+└── tests/
     ├── unit/               # feature-focused spec files
     ├── integration/        # PTY/socket/runtime integration specs
     └── e2e/                # binary-level smoke scenarios

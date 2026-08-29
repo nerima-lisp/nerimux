@@ -23,9 +23,9 @@
    round-trip tests on a non-square size, both of which set the size and read it
    back with cl-tty-kit:terminal-size:
      * SET-PTY-SIZE-ROUND-TRIPS-NON-SQUARE-SIZE-ON-REAL-PTY
-       (t/unit/infrastructure/pty/pty-tests.lisp), and
+       (tests/unit/infrastructure/pty/pty-tests.lisp), and
      * SET-PTY-SIZE-APPLIES-NON-SQUARE-SIZE-WITHOUT-TRANSPOSITION
-       (t/integration/pty-tests.lisp).
+       (tests/integration/pty-tests.lisp).
    Both need a real PTY and skip without one, so neither is a CI guard on a host
    with no /dev/ptmx; that is why the duplication is deliberate rather than
    redundant — the unit suite is the one that runs in `nix develop`.
@@ -353,7 +353,7 @@
 
    A thin wrapper over process-kit:wait-for-input rather than a direct call at
    each site: nerimux's microsecond/-1 convention is used by ~45 call sites in
-   src/ and t/, and this one function is what the nerimux/ports layer and the
+   src/ and tests/, and this one function is what the nerimux/ports layer and the
    test suite name. Converting here keeps that surface unchanged.
 
    Two behaviors improve on the hand-rolled select(2) this replaces.

@@ -80,7 +80,7 @@ nix flake check      # tests + formatting + docs, the same gate CI uses
 nix fmt              # format Nix sources (treefmt)
 ```
 
-Tests live in `t/` and run under
+Tests live in `tests/` and run under
 [cl-weave](https://github.com/nerima-lisp/cl-weave), the org's test framework.
 `sbcl --script run-tests.lisp` is the entry point CI and the flake both use;
 `NERIMUX_TEST_SYSTEM` selects the system tested and defaults to `nerimux/test`.
@@ -114,7 +114,7 @@ guide and the [package standard](https://github.com/nerima-lisp/.github/blob/mai
 
 Two rules specific to this repository: the flake only sees git-tracked files,
 so a new test file must be `git add`ed before `nix flake check` will run it;
-and tests must use the isolation helpers in `t/helpers-isolation.lisp` rather
+and tests must use the isolation helpers in `tests/helpers-isolation.lisp` rather
 than touching global session state directly.
 
 ## Support

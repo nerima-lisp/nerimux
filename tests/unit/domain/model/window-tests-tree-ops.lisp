@@ -1,0 +1,49 @@
+(in-package #:nerimux/test)
+
+;;;; Window-level tests: tree refresh and tree surgery helpers.
+
+(describe "model-suite"
+
+  ;; ── window-refresh-panes ────────────────────────────────────────────────────
+
+  ;; window-refresh-panes recomputes (window-panes win) from the split tree.
+  (it "window-refresh-panes-derives-list-from-tree"
+    (let* ((p0   (make-pane :id 1 :fd -1 :pid -1 :width 40 :height 24
+                            :screen (make-screen 40 24)))
+           (p1   (make-pane :id 2 :fd -1 :pid -1 :width 40 :height 24
+                            :screen (make-screen 40 24)))
+           (tree (make-layout-split :h (make-layout-leaf p0) (make-layout-leaf p1)))
+           (win  (make-window :id 1 :name "w" :tree tree :panes nil)))
+      (window-refresh-panes win)
+      (expect (equal (list p0 p1) (window-panes win)))))
+
+  ;; ── Private helper tests ────────────────────────────────────────────────────
+
+  ;; %replace-in-tree splices a replacement in place of a leaf.
+  (it "replace-in-tree-updates-parent-link"
+    (let* ((l0   (tl-leaf 1 1 1))
+           (l1   (tl-leaf 2 1 1))
+           (tree (make-layout-split :h l0 l1))
+           (win  (make-window :id 1 :name "w" :tree tree :panes nil)))
+      (let ((new-leaf (tl-leaf 3 1 1)))
+        (nerimux/model::%replace-in-tree win l0 new-leaf)
+        (expect (eq new-leaf (nerimux/model::layout-split-first (window-tree win)))))))
+
+  ;; %collapse-parent replaces the parent split with the surviving sibling node.
+  (it "collapse-parent-promotes-sibling"
+    (let* ((l0   (tl-leaf 1 1 1))
+           (l1   (tl-leaf 2 1 1))
+           (tree (make-layout-split :h l0 l1))
+           (win  (make-window :id 1 :name "w" :tree tree :panes nil)))
+      ;; Collapse the :first child — l1 should become the new root
+      (let ((sibling (nerimux/model::%collapse-parent win tree :first)))
+        (expect (eq l1 sibling))
+        (expect (eq l1 (window-tree win)))))
+    ;; Collapse the :second child — l0 should become the new root
+    (let* ((l0   (tl-leaf 1 1 1))
+           (l1   (tl-leaf 2 1 1))
+           (tree (make-layout-split :h l0 l1))
+           (win  (make-window :id 1 :name "w" :tree tree :panes nil)))
+      (let ((sibling (nerimux/model::%collapse-parent win tree :second)))
+        (expect (eq l0 sibling))
+        (expect (eq l0 (window-tree win)))))))
