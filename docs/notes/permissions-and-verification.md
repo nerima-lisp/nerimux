@@ -97,17 +97,17 @@ server-access の :read-write / :read-only は command と config round-trip の
 
 | 観点 | テスト | 検証内容 |
 | --- | --- | --- |
-| ACL add | t/unit/application/commands/commands-tests-d.lisp:111-121 server-access-add-permission-table | default add が :read-write、-r add が :read-only になること |
-| ACL modify | t/unit/application/commands/commands-tests-d.lisp:124-139 | -w による既存 entry の変更と、未知 user を勝手に作らないこと |
-| ACL delete/list | t/unit/application/commands/commands-tests-d.lisp:142-163 | delete が対象だけを消し、list が overlay に name と permission を出すこと |
-| ACL reject | t/unit/application/commands/commands-tests-d.lisp:166-176 | 未実装 flag / extra positional を拒否し、ACL list を変更しないこと |
-| wire round-trip | t/unit/infrastructure/net/protocol-tests.lisp:83-100 | read-only attach flag の encode/decode と、flags 省略時の zero/default |
-| wire layout | t/unit/infrastructure/net/protocol-binary-layout-tests.lisp:105-120,159-171 | read-only bit が bit zero であること、4/5 byte payload の decode |
-| connection state | t/integration/server-multi-tests-message-dispatch.lisp:401-416 | attach flag が connection slot に入り、plain attach で解除されること |
-| connection input gate | t/integration/server-multi-tests-message-dispatch.lisp:418-430 | read-only connection の printable key が pane write にならないこと |
-| event forwarding | t/unit/presentation/events/events-tests-h.lisp:84-119 | read-only では synchronized forwarding が no-op、通常時は write 経路を通ること |
-| session/pane dispatch | t/unit/application/dispatch/dispatch-tests-session-d.lisp:165-187、t/unit/application/dispatch/dispatch-tests-pane-window-prefix.lisp | read-only client の prefix / pane-window input 抑止 |
-| startup parsing | t/unit/bootstrap/main-tests.lisp | attach startup flag が read-only client state になること |
+| ACL add | tests/unit/application/commands/commands-tests-d.lisp:111-121 server-access-add-permission-table | default add が :read-write、-r add が :read-only になること |
+| ACL modify | tests/unit/application/commands/commands-tests-d.lisp:124-139 | -w による既存 entry の変更と、未知 user を勝手に作らないこと |
+| ACL delete/list | tests/unit/application/commands/commands-tests-d.lisp:142-163 | delete が対象だけを消し、list が overlay に name と permission を出すこと |
+| ACL reject | tests/unit/application/commands/commands-tests-d.lisp:166-176 | 未実装 flag / extra positional を拒否し、ACL list を変更しないこと |
+| wire round-trip | tests/unit/infrastructure/net/protocol-tests.lisp:83-100 | read-only attach flag の encode/decode と、flags 省略時の zero/default |
+| wire layout | tests/unit/infrastructure/net/protocol-binary-layout-tests.lisp:105-120,159-171 | read-only bit が bit zero であること、4/5 byte payload の decode |
+| connection state | tests/integration/server-multi-tests-message-dispatch.lisp:401-416 | attach flag が connection slot に入り、plain attach で解除されること |
+| connection input gate | tests/integration/server-multi-tests-message-dispatch.lisp:418-430 | read-only connection の printable key が pane write にならないこと |
+| event forwarding | tests/unit/presentation/events/events-tests-h.lisp:84-119 | read-only では synchronized forwarding が no-op、通常時は write 経路を通ること |
+| session/pane dispatch | tests/unit/application/dispatch/dispatch-tests-session-d.lisp:165-187、tests/unit/application/dispatch/dispatch-tests-pane-window-prefix.lisp | read-only client の prefix / pane-window input 抑止 |
+| startup parsing | tests/unit/bootstrap/main-tests.lisp | attach startup flag が read-only client state になること |
 
 ## 実施したテストと結果
 

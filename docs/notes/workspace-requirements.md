@@ -113,7 +113,7 @@ attention view を削除するので `a` は解放される。
 
 ## 2. 現状の測定
 
-`find src -name '*.lisp' | wc -l` が 159、合計 24,683 行。パッケージ 28、`t/` は 226 ファイル。
+`find src -name '*.lisp' | wc -l` が 159、合計 24,683 行。パッケージ 28、`tests/` は 226 ファイル。
 
 ### 2.1 本番で壊れている経路
 
@@ -128,7 +128,7 @@ attention view を削除するので `a` は解放される。
 - `:copy` モードでも同様に ESC で抜ける（`:943`）。
 
 テストは緑である。3 バイト payload を `%handle-multi-key-message` へ直接渡しており
-（`t/integration/server-multi-tests-message-dispatch.lisp:773`）、唯一の本番プロデューサ
+（`tests/integration/server-multi-tests-message-dispatch.lisp:773`）、唯一の本番プロデューサ
 である `client.lisp` を経由していない。
 
 **server を停止する手段がない。** `%run-multi-server-loop`（`server-multi-loop.lisp:83-88`）
@@ -155,12 +155,12 @@ branch で桁がずれる。
 
 | 対象 | 位置 | 証拠 |
 | --- | --- | --- |
-| `window-split` | `domain/model/window-core.lisp:207` | `src/` 内の呼び出し元 0（`t/` に 17 件） |
-| `window-remove-pane` | `domain/model/window-tree.lisp:104` | 同 0（`t/` に 24 件） |
-| `window-zoom-toggle` | `domain/model/window-operations.lisp:125` | 同 0（`t/` に 12 件） |
-| `window-rotate` | `domain/model/window-operations.lisp:78` | 同 0（`t/` に 16 件） |
-| `window-resize-active` | `domain/model/window-operations.lisp:41` | 同 0（`t/` に 5 件） |
-| `apply-named-layout` | `domain/model/window-layout.lisp` | 同 0（`t/` に 54 件） |
+| `window-split` | `domain/model/window-core.lisp:207` | `src/` 内の呼び出し元 0（`tests/` に 17 件） |
+| `window-remove-pane` | `domain/model/window-tree.lisp:104` | 同 0（`tests/` に 24 件） |
+| `window-zoom-toggle` | `domain/model/window-operations.lisp:125` | 同 0（`tests/` に 12 件） |
+| `window-rotate` | `domain/model/window-operations.lisp:78` | 同 0（`tests/` に 16 件） |
+| `window-resize-active` | `domain/model/window-operations.lisp:41` | 同 0（`tests/` に 5 件） |
+| `apply-named-layout` | `domain/model/window-layout.lisp` | 同 0（`tests/` に 54 件） |
 | `pipe-pane-open` | `application/commands/commands-pipe-pane.lisp:57` | 自ファイル外 0 |
 | `prompt-start` | `presentation/prompt/prompt.lisp:54` | 呼び出し元 0 |
 | `show-popup` / `show-menu` | `presentation/prompt/overlay.lisp`（`define-singleton-overlay:85` が生成） | 呼び出し元 0。`make-popup` / `make-menu` はテストのみ |
@@ -333,7 +333,7 @@ R1.8 **状態の永続化を削除する。** `domain/persistence/runtime-state.
 `server.lisp:178` と `server-multi-loop.lisp:89` の呼び出し。
 **`%runtime-state-home` と `%runtime-log-path` は server log が使うので残す。**
 
-R1.9 **dataflow optional system を削除する。** `src/dataflow`、`t/dataflow`、
+R1.9 **dataflow optional system を削除する。** `src/dataflow`、`tests/dataflow`、
 `nerimux.asd` の `nerimux/dataflow-model` と `nerimux/dataflow`、`NERIMUX_TEST_SYSTEM` の
 分岐、README と `docs/src/guide/sibling-libraries.md` の cl-dataflow-kit に関する記述。
 
@@ -345,7 +345,7 @@ R1.11 **`runtime-history.lisp` を削除し、`cl-history-kit` の依存を外�
 `flake.nix` の input、`nerimux.asd` の `depends-on`、README の兄弟ライブラリ一覧
 （12 → 11）。3.2 の連鎖に従う。
 
-R1.12 **`benchmark-workspace-overview` の予算テストをやめる。** 計測関数は `t/` へ移し、
+R1.12 **`benchmark-workspace-overview` の予算テストをやめる。** 計測関数は `tests/` へ移し、
 製品パッケージからの export（`package-presentation.lisp:63`）を外す。回帰ゲートとしては
 使わない。
 
