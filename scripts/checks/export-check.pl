@@ -7,8 +7,11 @@
 # T precisely so that no package needs to exist.
 #
 # This closes that gap without loading anything: collect every (:export ...)
-# list from the defpackage forms in src/bootstrap/package*.lisp, then check
-# every PKG:SYM reference in src/ and tests/ against them.
+# list from every .lisp file under src/ or packages/ that contains a
+# defpackage form -- not a fixed glob on src/bootstrap/package*.lisp, since a
+# future packages/<name>/ layout can carry defpackage forms anywhere in the
+# tree -- then check every PKG:SYM reference in src/, tests/, and packages/
+# against them.
 #
 # Double-colon (PKG::SYM) is deliberately NOT checked — it reaches internals on
 # purpose and is legal regardless of the export list.
@@ -19,13 +22,24 @@ binmode(STDOUT, ":encoding(UTF-8)");
 my $root = shift // '.';
 chdir $root or die "cannot chdir $root: $!";
 
+# ---- collect every .lisp file under src/ and packages/ ---------------------
+my @source_files;
+for my $dir ('src', 'packages') {
+    next unless -d $dir;
+    open(my $find, '-|', 'find', $dir, '-name', '*.lisp') or die $!;
+    while (my $l = <$find>) { chomp $l; push @source_files, $l }
+    close $find;
+}
+
 # ---- collect export lists -------------------------------------------------
-my %exports;          # package name (lc) => { symbol (lc) => 1 }
-my @pkgfiles = glob("src/bootstrap/package*.lisp");
-for my $f (@pkgfiles) {
+my %exports;           # package name (lc) => { symbol (lc) => 1 }
+my %is_pkgfile;         # source file (path) => 1 if it declares a defpackage
+for my $f (@source_files) {
     open(my $fh, '<:encoding(UTF-8)', $f) or die "$f: $!";
     my $text = do { local $/; <$fh> };
     close $fh;
+    next unless $text =~ /\(defpackage\s+/;
+    $is_pkgfile{$f} = 1;
     # Split on defpackage; each chunk after the first belongs to one package.
     my @chunks = split /\(defpackage\s+/, $text;
     shift @chunks;
@@ -51,16 +65,15 @@ unless (keys %exports) {
 # ---- scan references ------------------------------------------------------
 my @bad;
 my $refs = 0;
-my @files;
-for my $dir ('src', 'tests') {
-    next unless -d $dir;
-    open(my $find, '-|', 'find', $dir, '-name', '*.lisp') or die $!;
+my @files = @source_files;
+if (-d 'tests') {
+    open(my $find, '-|', 'find', 'tests', '-name', '*.lisp') or die $!;
     while (my $l = <$find>) { chomp $l; push @files, $l }
     close $find;
 }
 
 for my $f (@files) {
-    next if $f =~ m{^src/bootstrap/package};   # the declarations themselves
+    next if $is_pkgfile{$f};   # the declarations themselves
     open(my $fh, '<:encoding(UTF-8)', $f) or next;
     my $ln = 0;
     my $in_string = 0;   # docstrings span lines; a mention inside one is prose

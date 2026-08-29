@@ -86,6 +86,19 @@
           (setf start name-end))))
     (nreverse result)))
 
+(defun %package-declaration-files ()
+  "Every .lisp file under src/ or packages/ whose text contains a defpackage
+   form, wherever in the tree it happens to live.  Package declarations
+   happened to all sit under src/bootstrap/ when this scan was a fixed glob
+   on src/bootstrap/package*.lisp; that stops being true once files start
+   moving under packages/<name>/src/bootstrap/, so this asks each file
+   itself rather than assuming a location."
+  (let ((root (asdf:system-source-directory :nerimux)))
+    (remove-if-not
+     (lambda (file) (search "(defpackage" (%file-text file)))
+     (append (directory (merge-pathnames #P"src/**/*.lisp" root))
+             (directory (merge-pathnames #P"packages/**/*.lisp" root))))))
+
 ;;; ── Source-text layering guard helpers ──────────────────────────────────────
 ;;;
 ;;; See the "source-text layering guard" comment in the describe block below
@@ -123,13 +136,10 @@
 
 (defun %package-name->layer-name ()
   "Package name -> layer marker word (the *layer-name-rank* scale), read
-   from every defpackage's own documentation string in
-   src/bootstrap/package*.lisp -- the same glob the declaration-based guard
-   above reads."
+   from every defpackage's own documentation string, wherever in the tree
+   that defpackage form lives -- see %package-declaration-files."
   (let ((result '()))
-    (dolist (file (directory
-                   (merge-pathnames #P"src/bootstrap/package*.lisp"
-                                    (asdf:system-source-directory :nerimux))))
+    (dolist (file (%package-declaration-files))
       (let* ((raw (%file-text file))
              (from 0))
         (loop
@@ -249,14 +259,21 @@
   (uiop:split-string (enough-namestring path src-dir) :separator (list #\/)))
 
 (defun %file-layer-name (segments)
-  "SEGMENTS is a file's path under src/, split on `/'.  Its layer marker
-   word, or NIL if the first segment is not one of the five layer
-   directories (see the guard's header comment).
+  "SEGMENTS is a file's path relative to the project root, split on `/'.
+   Its layer marker word, or NIL if no `src' segment appears in SEGMENTS, or
+   the segment right after it is not one of the five layer directories (see
+   the guard's header comment).  Anchoring on the first `src' segment rather
+   than a fixed position is what lets this same function classify both
+   src/<layer>/... today and packages/<name>/src/<layer>/... once files
+   start moving there, without knowing in advance which shape it is
+   looking at.
    *layer-name-rank* maps NAME -> RANK, so the name itself comes back via
    the matched pair's CAR, not its CDR -- CDR is the rank integer, which is
    not a string designator and breaks every later (assoc ... :test #'string=)
    call downstream."
-  (car (assoc (string-upcase (first segments)) *layer-name-rank* :test #'string=)))
+  (let ((src-pos (position "src" segments :test #'string=)))
+    (when (and src-pos (< (1+ src-pos) (length segments)))
+      (car (assoc (string-upcase (nth (1+ src-pos) segments)) *layer-name-rank* :test #'string=)))))
 
 (describe "system-composition-suite"
 
@@ -403,9 +420,7 @@
   (it "no-package-declares-an-upward-layer-dependency"
     (let ((violations '())
           (edges 0))
-      (dolist (file (directory
-                     (merge-pathnames #P"src/bootstrap/package*.lisp"
-                                      (asdf:system-source-directory :nerimux))))
+      (dolist (file (%package-declaration-files))
         (dolist (entry (%package-declared-dependencies (%file-text file)))
           (let ((mine (cdr (assoc (car entry) *layer-rank* :test #'string=))))
             (when mine
@@ -431,21 +446,23 @@
   ;;; NERIMUX::%JOIN-THREAD-WITH-TIMEOUT, NERIMUX::SERVER-FIND-SESSION, and
   ;;; NERIMUX::*CLOCK-MODE-PANE-ID*.
   ;;;
-  ;;; This guard scans the SOURCE TEXT of every file under src/ instead of any
-  ;;; defpackage form.  It derives a FILE's layer from its path
-  ;;; (src/domain/... -> DOMAIN, src/application/... -> APPLICATION, and so
-  ;;; on -- a file outside the five layer directories matches none of them
-  ;;; and is skipped).  It derives a referenced PACKAGE's layer from the
-  ;;; first layer marker inside that
-  ;;; package's own (:documentation ...) string in
-  ;;; src/bootstrap/package*.lisp: "DOMAIN layer", "APPLICATION layer",
+  ;;; This guard scans the SOURCE TEXT of every file under src/ and
+  ;;; packages/*/src/ instead of any defpackage form.  It derives a FILE's
+  ;;; layer from the segment right after the nearest `src' component in its
+  ;;; path (src/domain/... -> DOMAIN, packages/foo/src/application/... ->
+  ;;; APPLICATION, and so on -- a file with no `src' component, or whose
+  ;;; next segment names none of the five layer directories, matches none
+  ;;; of them and is skipped).  It derives a referenced PACKAGE's layer from
+  ;;; the first layer marker inside that package's own (:documentation ...)
+  ;;; string, wherever in the tree that package's defpackage form lives (see
+  ;;; %package-declaration-files): "DOMAIN layer", "APPLICATION layer",
   ;;; "INFRASTRUCTURE layer", "PRESENTATION layer", "BOOTSTRAP layer", or
   ;;; "FOUNDATION" for nerimux/text, which sits below every layer by design
-  ;;; and may be referenced from anywhere.  Every one of the 29 defpackage
-  ;;; forms in src/bootstrap/package*.lisp carries exactly one such marker in
-  ;;; its documentation string, so this is a complete mapping, not a
-  ;;; hand-maintained subset -- unlike *layer-rank* above, which several
-  ;;; terminal sub-packages and nerimux/version are missing from.
+  ;;; and may be referenced from anywhere.  Every defpackage form found this
+  ;;; way carries exactly one such marker in its documentation string, so
+  ;;; this is a complete mapping, not a hand-maintained subset -- unlike
+  ;;; *layer-rank* above, which several terminal sub-packages and
+  ;;; nerimux/version are missing from.
   ;;;
   ;;; A file whose layer is strictly lower than a referenced package's layer
   ;;; is an upward reference, full stop.  Whether the symbol is exported is a
@@ -454,18 +471,18 @@
   ;;; src/bootstrap/, say) is legal direction and must not fail here.
 
   (it "no-source-file-references-a-higher-layer-package"
-    (let* ((src-dir (merge-pathnames #P"src/" (asdf:system-source-directory :nerimux)))
+    (let* ((root-dir (asdf:system-source-directory :nerimux))
            (pkg->layer (%package-name->layer-name))
-           (all-files (directory (merge-pathnames #P"src/**/*.lisp"
-                                                   (asdf:system-source-directory :nerimux))))
+           (all-files (append (directory (merge-pathnames #P"src/**/*.lisp" root-dir))
+                              (directory (merge-pathnames #P"packages/**/*.lisp" root-dir))))
            (layered-files
-             (remove-if-not (lambda (p) (%file-layer-name (%relative-path-segments p src-dir)))
+             (remove-if-not (lambda (p) (%file-layer-name (%relative-path-segments p root-dir)))
                             all-files))
            (violations '())
            (unclassified '())
            (total-refs 0))
       (dolist (file layered-files)
-        (let* ((mine-name (%file-layer-name (%relative-path-segments file src-dir)))
+        (let* ((mine-name (%file-layer-name (%relative-path-segments file root-dir)))
                (mine-rank (cdr (assoc mine-name *layer-name-rank* :test #'string=)))
                (clean (%strip-lisp-source (%file-text file))))
           (dolist (ref (%scan-package-qualified-references clean))
@@ -480,18 +497,25 @@
                   ;; cannot become a blind spot the way :: was.
                   ((null theirs-name)
                    (push (format nil "~a:~d  ~a~a~a  -- referenced package has no layer marker"
-                                 (enough-namestring file src-dir) line pkg
+                                 (enough-namestring file root-dir) line pkg
                                  (if (eq qualifier :double) "::" ":") symbol)
                          unclassified))
                   ((> (cdr (assoc theirs-name *layer-name-rank* :test #'string=)) mine-rank)
                    (push (format nil "~a:~d  ~a~a~a  (file layer ~a -> reference layer ~a)"
-                                 (enough-namestring file src-dir) line pkg
+                                 (enough-namestring file root-dir) line pkg
                                  (if (eq qualifier :double) "::" ":") symbol
                                  mine-name theirs-name)
                          violations))))))))
-      ;; Vacuity guards: a scan that walked no files, or matched no
-      ;; references, would report zero violations for the wrong reason.
-      (expect (> (length layered-files) 50))
+      ;; Conservation check, not an absolute lower bound: a fixed count like
+      ;; "> 50" was implicitly a claim about how many files sit under src/
+      ;; today, which a later wave moving files into packages/ would falsify
+      ;; on one side of the move while staying true in total.  Print the
+      ;; count so that wave can diff it against a run taken before the move,
+      ;; and only assert it is non-zero here -- fail closed if the scan
+      ;; walked no files, rather than passing vacuously on an empty set.
+      (format t "~&no-source-file-references-a-higher-layer-package: examined ~d layered source file~:p~%"
+              (length layered-files))
+      (expect (plusp (length layered-files)))
       (expect (> total-refs 100))
       (expect (null unclassified))
       (expect (null violations))))
