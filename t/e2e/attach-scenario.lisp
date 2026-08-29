@@ -150,10 +150,20 @@
                (acc    (%make-accumulator)))
            ;; Let nerimux and its inner shell start up.
            (%wait-for-startup-render fd +e2e-startup-timeout-seconds+ acc)
-           ;; The workspace drops unbound normal-mode keys; enter :input before
-           ;; sending the command to the focused pane.
+           ;; `q`, not `i`. This used to send `i` to leave :normal for :input,
+           ;; because the workspace dropped unbound normal-mode keys and
+           ;; :input then typed into the focused pane from any view. The magit
+           ;; keymap retired that pair: a key reaches the shell only when the
+           ;; client's VIEW is :pane, and attaching from a cwd outside the
+           ;; catalog lands on :repolist. `q` is FR-006's step-back, which from
+           ;; :repolist goes to the focused pane.
+           ;;
+           ;; Leaving the `i` in did not fail loudly -- it was typed literally,
+           ;; the command became `iecho E2E_PROOF_4242`, and the marker never
+           ;; appeared. Nothing caught it because t/e2e/ sits outside
+           ;; `nix flake check`.
            (pty-write fd (make-array 1 :element-type '(unsigned-byte 8)
-                                      :initial-contents (list (char-code #\i))))
+                                      :initial-contents (list (char-code #\q))))
            (pty-write fd (format nil "echo ~A~%" marker))
            ;; Wait for the marker to appear in rendered output.
            (let ((found (%wait-for-marker fd marker +e2e-marker-timeout-seconds+ acc)))

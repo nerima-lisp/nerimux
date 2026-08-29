@@ -81,7 +81,7 @@ did by hand — not bolted on beside it.
   pattern.
 - [cl-tui-kit](https://github.com/nerima-lisp/cl-tui-kit) renders the
   per-client frames — headless surface/backend, layout and widgets behind the
-  workspace overview, detail and picker views
+  repolist, status, pane and picker views
   (`src/presentation/renderer/renderer-tui-kit.lisp`).
 - [cl-vcs-kit](https://github.com/nerima-lisp/cl-vcs-kit) discovers ghq
   organizations, repositories and worktrees behind the workspace tree

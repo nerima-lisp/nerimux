@@ -250,7 +250,25 @@
       ;; function (unlike a special variable), since by the time this ever
       ;; RUNS both files have loaded.
       (when (and session (eq source :cwd))
-        (%focus-selected-client-worktree session conn)))
+        (%focus-selected-client-worktree session conn))
+      ;; No cwd match: the client lands on the repolist, per the startup-UX
+      ;; decision that only a cwd match dives straight into a pane. But it must
+      ;; still be able to REACH the session's shell, and since FR-007 removed
+      ;; `i` -- which used to type into the focused pane from any view -- the
+      ;; only remaining route is FR-006's `q` rung, whose condition is CONN's
+      ;; own focus. A freshly attached client has none, so that rung was
+      ;; vacuously false and the running shell was unreachable by any key
+      ;; whenever the catalog had nothing to navigate to.
+      ;;
+      ;; Setting FOCUS without touching VIEW is the whole fix: the landing
+      ;; screen is unchanged, and `q` now has somewhere to go. Deliberately not
+      ;; %SET-CLIENT-FOCUS, which would also switch VIEW to :pane and turn
+      ;; every attach into a pane jump.
+      (when (and session (null (client-conn-focus conn)))
+        (let* ((window (session-active-window session))
+               (pane (and window (window-active-pane window))))
+          (when pane
+            (setf (client-conn-focus conn) pane)))))
     (%mark-dirty)
     t))
 
