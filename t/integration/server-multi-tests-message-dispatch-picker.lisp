@@ -23,16 +23,16 @@
         (nerimux/model:organization-add-repository organization repository)
         (nerimux/model:repository-add-worktree repository worktree-a)
         (nerimux/model:repository-add-worktree repository worktree-b)
-        (setf (nerimux::client-conn-mode conn) :picker
-              (nerimux::client-conn-picker-items conn)
+        (nerimux::%set-client-modal conn :picker)
+        (setf (nerimux::client-conn-picker-items conn)
               (nerimux/picker:build-global-picker-items (list organization))
               (nerimux::client-conn-picker-index conn) 0)
         (expect (< 1 (length (nerimux::%client-picker-visible-items conn))))
         (nerimux::%handle-multi-key-message s conn #(27)) ; ESC: closes the picker
-        (expect (eq :normal (nerimux::client-conn-mode conn)))
+        (expect (null (nerimux::client-conn-modal conn)))
         (nerimux::%handle-multi-key-message s conn #(91)) ; [: swallowed
         (nerimux::%handle-multi-key-message s conn #(66)) ; B: swallowed
-        (expect (eq :normal (nerimux::client-conn-mode conn))
+        (expect (null (nerimux::client-conn-modal conn))
                 ))))
 
   ;; The replacement for those arrow branches. C-p/C-n are used rather than j/k
@@ -57,14 +57,14 @@
         (nerimux/model:organization-add-repository organization repository)
         (nerimux/model:repository-add-worktree repository worktree-a)
         (nerimux/model:repository-add-worktree repository worktree-b)
-        (setf (nerimux::client-conn-mode conn) :picker
-              (nerimux::client-conn-picker-items conn)
+        (nerimux::%set-client-modal conn :picker)
+        (setf (nerimux::client-conn-picker-items conn)
               (nerimux/picker:build-global-picker-items (list organization))
               (nerimux::client-conn-picker-index conn) 0)
         (expect (< 1 (length (nerimux::%client-picker-visible-items conn))))
         (nerimux::%handle-multi-key-message s conn #(14)) ; C-n
         (expect (= 1 (nerimux::client-conn-picker-index conn)))
-        (expect (eq :picker (nerimux::client-conn-mode conn))
+        (expect (eq :picker (nerimux::client-conn-modal conn))
                 )
         (nerimux::%handle-multi-key-message s conn #(16)) ; C-p
         (expect (= 0 (nerimux::client-conn-picker-index conn)))
@@ -95,8 +95,8 @@
         (nerimux/model:organization-add-repository organization repository)
         (nerimux/model:repository-add-worktree repository worktree)
         (nerimux/model:worktree-add-pane worktree pane)
-        (setf (nerimux::client-conn-mode conn) :picker
-              (nerimux::client-conn-picker-items conn)
+        (nerimux::%set-client-modal conn :picker)
+        (setf (nerimux::client-conn-picker-items conn)
               (nerimux/picker:build-global-picker-items
                (list organization))
               (nerimux::client-conn-picker-query conn) "feature")
@@ -104,7 +104,7 @@
         (expect (eq inactive-window
                     (nerimux/model:session-active-window s)))
         (expect (eq pane (nerimux::client-conn-focus conn)))
-        (expect (eq :normal (nerimux::client-conn-mode conn))))))
+        (expect (null (nerimux::client-conn-modal conn))))))
 
   (it "multi-picker-new-window-uses-client-geometry"
     (with-fake-session (s)
@@ -129,8 +129,8 @@
              (original-new-window (fdefinition 'nerimux::%workspace-new-window)))
         (nerimux/model:organization-add-repository organization repository)
         (nerimux/model:repository-add-worktree repository worktree)
-        (setf (nerimux::client-conn-mode conn) :picker
-              (nerimux::client-conn-picker-items conn)
+        (nerimux::%set-client-modal conn :picker)
+        (setf (nerimux::client-conn-picker-items conn)
               (nerimux/picker:build-global-picker-items
                (list organization))
               (nerimux::client-conn-picker-query conn) "feature")

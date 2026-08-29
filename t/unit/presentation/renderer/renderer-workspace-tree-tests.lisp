@@ -552,20 +552,29 @@
       (expect (search "shell(main)" plain))
       (expect (not (search "fold" plain)))))
 
-  (it "shows the default worktree-row hints (including delete) for a worktree selection"
+  (it "shows the default worktree-row hints for a worktree selection"
     (let* ((worktree (nerimux/model:make-worktree :id "wt-panel" :path "/wt"))
            (plain (strip-sgr
                    (nerimux/renderer::%workspace-key-panel-content
                     worktree :normal #x11 nil))))
-      (expect (search "delete" plain))
-      (expect (not (search "shell(main)" plain)))))
+      ;; Destructive worktree actions moved behind the `w` menu when the magit
+      ;; keymap retired their single-key shortcuts, so the panel names the menu
+      ;; rather than an `X` that no longer does anything.
+      (expect (search "worktree menu" plain))
+      (expect (not (search "shell(main)" plain)))
+      ;; This panel is permanently on screen, so a retired key advertised here
+      ;; misleads on every frame -- worse than the help view, which the user
+      ;; has to ask for.
+      (expect (not (search "X delete" plain)))
+      (expect (not (search "L/U" plain)))))
 
-  (it "shows the diff hint for a :file row selection"
+  (it "shows the diff and stage hints for a :file row selection"
     (let ((plain (strip-sgr
                   (nerimux/renderer::%workspace-key-panel-content
                    (list :file "wt-panel" "src/foo.lisp" " M") :normal #x11 nil))))
       (expect (search "diff" plain))
-      (expect (not (search "delete" plain)))))
+      (expect (search "stage" plain))
+      (expect (not (search "worktree menu" plain)))))
 
   (it "shows the move-only hint for a :diff-line row selection, without :file's diff hint"
     (let ((plain (strip-sgr

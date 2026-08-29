@@ -30,10 +30,34 @@
   (workspace-prefix-code +default-workspace-prefix-key-code+ :type fixnum)
   (ui-prefix-p nil :type boolean)
   (viewport 0 :type fixnum)
-  (mode :normal)
+  ;; The two axes that replaced the old MODE x VIEW product (magit alignment,
+  ;; FR-001/FR-007). VIEW says which screen is up; MODAL says what, if anything,
+  ;; has taken the keyboard away from that screen.
+  ;;
+  ;; The product used to have unreachable cells -- (:detail . :normal) meant "a
+  ;; pane is focused but keystrokes go to the UI", which is precisely the state
+  ;; pressing `i` existed to leave. With panes now taking input directly, where
+  ;; a key goes is DERIVED from VIEW whenever MODAL is NIL (%CLIENT-UI-KEYS-P),
+  ;; so no such cell exists to be constructed, asserted about, or drifted into.
+  ;;
+  ;; MODAL is one slot rather than a flag per state on purpose: two flags set at
+  ;; once is exactly the unreachable-combination problem this change removes.
+  (view :repolist)
+  (modal nil)
+  ;; Per-client, per-session argument toggles for the transient menus (FR-010),
+  ;; as an alist of TRANSIENT-KEY -> list of active flag strings. Kept when the
+  ;; transient closes: magit remembers a `--force-with-lease` you set earlier in
+  ;; the session, and losing it every close would make the toggle useless.
+  (transient-arguments nil)
+  (transient-view nil)
+  ;; magit's 1/2/3/4 global visibility level (FR-005). 4 = everything expanded,
+  ;; 1 = section headings only. Per client rather than per section table: the
+  ;; level is a lens over whatever the per-row expand state says, so pressing 4
+  ;; then 2 returns to the same rows rather than to a flattened remembering of
+  ;; them.
+  (visibility-level 2 :type (integer 1 4))
   (command-buffer "" :type string)
   (command-return-view nil)
-  (view :detail)
   (attach-target nil)
   (attach-cwd nil)
   (picker-items nil)
@@ -54,11 +78,13 @@
   ;; arguments; NIL when no confirmation is up. Kept beside the view rather than
   ;; encoded in it so the renderer keeps taking plain data.
   (confirm-action nil)
-  ;; The full-screen `?` key-reference view (FR-005). Unlike CONFIRM-VIEW this
-  ;; carries no per-client data of its own (the content is static), so a
-  ;; boolean flag is enough; the renderer looks nothing up from it beyond
-  ;; whether it is up.
-  (help-view-p nil :type boolean)
+  ;; The `$` process log (FR-011): executed git command, exit status, output.
+  ;; Most recent first, capped -- see +MAX-PROCESS-LOG-ENTRIES+.
+  (process-log nil)
+  (process-log-scroll 0 :type fixnum)
+  ;; No HELP-VIEW-P flag: the help view carries no per-client data, so MODAL
+  ;; :help IS its whole state. A boolean beside MODAL would be a second place
+  ;; to say the same thing, and the two could disagree.
   (frame nil))
 
 ;; SERVER-MULTI.LISP initializes the registry after this dispatch file loads.
@@ -154,54 +180,68 @@ dropped connection's entry be reclaimed instead of leaking.")
   (%apply-effective-size session)
   nil)
 
+(defun %client-ui-keys-p (conn)
+  "T when CONN's keystrokes belong to the workspace UI rather than to a shell.
+
+   This is the whole of FR-007's rule, and it is a DERIVATION rather than a
+   stored flag: with no modal up, a key belongs to the UI exactly when the
+   screen in front of the user is a UI screen. There is no state in which a
+   pane is on screen and the UI is nonetheless eating keys, because there is
+   no slot in which to record one -- which is what retired `i` and the old
+   :normal/:input pair together."
+  (and (null (client-conn-modal conn))
+       (member (client-conn-view conn) '(:repolist :status) :test #'eq)))
+
+(defun %set-client-modal (conn modal)
+  "Put CONN into MODAL (NIL to return the keyboard to the current view)."
+  (setf (client-conn-modal conn) modal)
+  (%mark-dirty)
+  modal)
+
 (defun %handle-multi-key-message (session conn payload)
-  "Feed PAYLOAD through the stdin-target fast path or the shared key pipeline.
-   A byte consumed by CONN's pending ESC-swallow (R4.3) never reaches any of
-   this: it is discarded before the prefix key and mode dispatch even see it."
+  "Feed PAYLOAD to whatever currently owns CONN's keyboard.
+
+   Precedence, highest first: a pending ESC-swallow, the C-q prefix, an active
+   MODAL, then the view-derived default. The modal branch is a single ECASE
+   over one slot rather than a chain of flag tests, so two owners cannot both
+   claim a key -- the failure the old MODE x VIEW product allowed.
+
+   The default arm is where FR-007 lands: :repolist and :status route to the UI
+   keymap, and every other view (i.e. :pane) hands the byte straight to the
+   shell with no mode to leave first."
   (cond
     ;; Swallowed by a pending ESC sequence (R4.3): never reaches any dispatch.
     ((%client-esc-swallow-consume conn) nil)
-    ;; A confirmation owns every key while it is up (R6.4); it outranks the
-    ;; help view below because the confirm-view path is the only way this
-    ;; branch is even reachable while help-view-p is set (help swallows every
-    ;; key that would open a confirmation), but ordering it first keeps the
-    ;; precedence explicit rather than accidental.
-    ((client-conn-confirm-view conn)
-     (nth-value 1 (%handle-confirm-key session conn payload)))
-    ;; The `?` help view (FR-005) owns every key while it is up, the same
-    ;; shape as CONFIRM-VIEW above -- see %HANDLE-HELP-VIEW-KEY.
-    ((client-conn-help-view-p conn)
-     (%handle-help-view-key conn payload))
     (t
      (multiple-value-bind (prefix-handled prefix-result)
          (%handle-workspace-prefix-key session conn payload)
        (if prefix-handled
            prefix-result
-           (cond
-             ((and (eq (client-conn-mode conn) :normal)
-                   (%client-byte-p payload 16))
-              (%open-client-picker conn))
-             ((eq (client-conn-mode conn) :picker)
-              (%handle-client-picker-key-payload session conn payload))
-             ((eq (client-conn-mode conn) :input)
-              (%handle-client-input-key-payload session conn payload))
-             ((eq (client-conn-mode conn) :copy)
-              (%handle-client-copy-key-payload session conn payload))
-             ((eq (client-conn-mode conn) :command)
-              (%handle-client-command-key-payload session conn payload))
-             ((eq (client-conn-mode conn) :tree-filter)
-              (%handle-client-tree-filter-key-payload session conn payload))
-             ;; A key the workspace UI does not bind is dropped in :normal mode.
-             ;; It used to fall through to the prefix-key keystroke pipeline
-             ;; (prefix key + key tables) -- that fallthrough was the only
-             ;; thing making prefix bindings reachable from an attached
-             ;; client.  Typing into a pane is what :input mode is for; a
-             ;; stdin-target still gets fed.
-             ((eq (client-conn-mode conn) :normal)
-              (or (%handle-client-normal-key-payload session conn payload)
-                  (%feed-client-stdin-target conn payload)))
+           (case (client-conn-modal conn)
+             ;; A confirmation owns every key while it is up (R6.4) -- including
+             ;; the ones that would open another modal, so a question cannot be
+             ;; answered about one thing while the user changed another.
+             (:confirm (nth-value 1 (%handle-confirm-key session conn payload)))
+             (:help (%handle-help-view-key conn payload))
+             (:transient (%handle-client-transient-key-payload session conn payload))
+             (:process-log (%handle-process-log-key conn payload))
+             (:picker (%handle-client-picker-key-payload session conn payload))
+             (:scrollback (%handle-client-copy-key-payload session conn payload))
+             (:command (%handle-client-command-key-payload session conn payload))
+             (:filter (%handle-client-tree-filter-key-payload session conn payload))
              (t
-              (%feed-client-stdin-target conn payload))))))))
+              (cond
+                ((and (%client-ui-keys-p conn) (%client-byte-p payload 16))
+                 (%open-client-picker conn))
+                ((%client-ui-keys-p conn)
+                 ;; A key the UI does not bind is simply dropped here. It must
+                 ;; NOT fall through to the shell: the retired keys (j/k/i/c/r
+                 ;; and friends) would otherwise land in whatever program the
+                 ;; focused pane is running, which is worse than doing nothing.
+                 (or (%handle-client-ui-key-payload session conn payload) nil))
+                (t
+                 ;; :pane -- FR-007. Every byte goes to the shell, ESC included.
+                 (%handle-client-input-key-payload session conn payload))))))))))
 
 (defun %feed-client-stdin-target (conn payload)
   "Feed PAYLOAD to CONN's split-window -I stdin target, if it has one.
@@ -237,14 +277,14 @@ behavior (:96-107 pre-R4.4) is gone."
 ;;; ── `?` full-screen help view (FR-005) ──────────────────────────────────────
 
 (defun %client-open-help-view (conn)
-  "? in :normal mode, either view: put the static key-reference view up."
-  (setf (client-conn-help-view-p conn) t)
-  (%mark-dirty)
+  "Put the static key-reference view up. Reached from the `?` transient's `k`
+   entry (FR-010) rather than from `?` directly -- `?` now opens the dispatch
+   transient, matching magit."
+  (%set-client-modal conn :help)
   t)
 
 (defun %close-help-view (conn)
-  (setf (client-conn-help-view-p conn) nil)
-  (%mark-dirty))
+  (%set-client-modal conn nil))
 
 (defun %handle-help-view-key (conn payload)
   "Answer the help view CONN is looking at: q, ?, Enter, and ESC close it;

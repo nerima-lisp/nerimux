@@ -41,7 +41,7 @@
                        (setf call (list received-repository dry-run))
                        (funcall on-complete "")
                        t))
-               (setf (nerimux::client-conn-view conn) :overview)
+               (setf (nerimux::client-conn-view conn) :repolist)
                (nerimux::%set-client-selected-tree-object conn repository)
                (nerimux::%handle-multi-key-message s conn #(58))
                (nerimux::%handle-multi-key-message
@@ -54,7 +54,7 @@
                                 (first (nerimux::client-conn-message-log conn))))
                (expect (equal (list worktree)
                               (nerimux/model:repository-worktrees repository)))
-               (expect (eq :normal (nerimux::client-conn-mode conn))))
+               (expect (nerimux::%client-ui-keys-p conn)))
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:prune-worktrees-async) prune-fn)))))
 
@@ -106,7 +106,7 @@
                                nil))
                        (funcall on-complete "")
                        t))
-               (setf (nerimux::client-conn-view conn) :overview)
+               (setf (nerimux::client-conn-view conn) :repolist)
                (nerimux::%set-client-selected-tree-object conn repository)
                ;; No preceding wt-prune here -- straight to wt-prune-confirm
                ;; --confirm, which is exactly the skip-preview path the
@@ -124,7 +124,7 @@
                  (first (nerimux::client-conn-message-log conn))))
                (expect (equal (list worktree)
                               (nerimux/model:repository-worktrees repository)))
-               (expect (eq :normal (nerimux::client-conn-mode conn))))
+               (expect (nerimux::%client-ui-keys-p conn)))
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:prune-worktrees-async) prune-fn)))))
 
@@ -149,8 +149,8 @@
              (conn (%make-test-conn)))
         (nerimux/model:organization-add-repository organization repository)
         (nerimux/model:repository-add-worktree repository worktree)
-        (setf (nerimux::client-conn-mode conn) :picker
-              (nerimux::client-conn-picker-items conn)
+        (nerimux::%set-client-modal conn :picker)
+        (setf (nerimux::client-conn-picker-items conn)
               (nerimux/picker:build-global-picker-items
                (list organization))
               (nerimux::client-conn-picker-query conn) "feature/.+")
@@ -197,8 +197,8 @@
         (nerimux/model:organization-add-repository organization repository)
         (nerimux/model:repository-add-worktree repository worktree)
         (nerimux/model:worktree-add-pane worktree pane)
-        (setf (nerimux::client-conn-mode conn) :picker
-              (nerimux::client-conn-picker-items conn)
+        (nerimux::%set-client-modal conn :picker)
+        (setf (nerimux::client-conn-picker-items conn)
               (nerimux/picker:build-global-picker-items
                (list organization))
               (nerimux::client-conn-picker-index conn) 0)
@@ -209,7 +209,11 @@
         (expect (string= "feature" (nerimux::client-conn-picker-query conn)))
         (expect (= 1 (length (nerimux::%client-picker-visible-items conn))))
         (nerimux::%handle-multi-key-message s conn #(13))
-        (expect (eq :normal (nerimux::client-conn-mode conn)))
+        ;; Selecting a worktree pane sets VIEW :pane (%set-client-focus), so
+        ;; the invariant under test is "the picker modal closed", not "keys
+        ;; still route to the UI" -- %client-ui-keys-p would be false here
+        ;; precisely because the selection succeeded.
+        (expect (null (nerimux::client-conn-modal conn)))
         (expect (eq pane (nerimux::client-conn-focus conn))))))
 
   ;; Direct proof of the finding above: an arrow-escape sequence sent the way

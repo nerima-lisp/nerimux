@@ -295,8 +295,8 @@
   conn)
 
 (defun %open-client-picker (conn)
-  (setf (client-conn-mode conn) :picker
-        (client-conn-picker-query conn) ""
+  (%set-client-modal conn :picker)
+  (setf (client-conn-picker-query conn) ""
         (client-conn-picker-regex-p conn) nil
         (client-conn-picker-index conn) 0
         (client-conn-picker-items conn)
@@ -307,11 +307,9 @@
   conn)
 
 (defun %close-client-picker (conn)
-  (setf (client-conn-mode conn) :normal
-        (client-conn-view conn) (if (client-conn-focus conn)
-                                    :detail
-                                    :overview)
-        (client-conn-picker-query conn) ""
+  (%set-client-modal conn nil)
+  (%set-client-view conn (if (client-conn-focus conn) :pane :repolist))
+  (setf (client-conn-picker-query conn) ""
         (client-conn-picker-regex-p conn) nil
         (client-conn-picker-index conn) 0)
   (%mark-dirty)

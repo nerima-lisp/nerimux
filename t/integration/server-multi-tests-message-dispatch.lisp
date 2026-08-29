@@ -68,6 +68,12 @@
                                         picker-regex-p command-buffer))
                        (push (list rows cols focus-pane viewport mode) calls)
                        (make-string (* rows cols) :initial-element #\x)))
+               ;; render-session-to-string is only reached through the :pane
+               ;; branch of %render-client-frame (FR-001/FR-007) -- the
+               ;; default VIEW is :repolist, which would render the workspace
+               ;; tree instead and never call the stub above at all.
+               (setf (nerimux::client-conn-view wide) :pane
+                     (nerimux::client-conn-view narrow) :pane)
                (let ((wide-frame (nerimux::%render-client-frame s wide))
                      (narrow-frame (nerimux::%render-client-frame s narrow)))
                  (expect (eq wide-frame (nerimux::client-conn-frame wide)))
@@ -75,30 +81,30 @@
                  (expect (/= (length wide-frame) (length narrow-frame)))
                  (setf (nerimux::client-conn-focus wide) :wide-pane
                        (nerimux::client-conn-viewport wide) 3
-                       (nerimux::client-conn-mode wide) :copy)
+                       (nerimux::client-conn-modal wide) :scrollback)
                  (nerimux::%render-client-frame s wide)
-                 (expect (equal '(10 40 :wide-pane 3 :copy) (first calls)))
+                 (expect (equal '(10 40 :wide-pane 3 :scrollback) (first calls)))
                  (expect (eq :wide-pane (nerimux::client-conn-focus wide)))
                  (expect (= 3 (nerimux::client-conn-viewport wide)))
-                 (expect (eq :copy (nerimux::client-conn-mode wide)))
+                 (expect (eq :scrollback (nerimux::client-conn-modal wide)))
                  (expect (null (nerimux::client-conn-focus narrow)))
                  (expect (= 0 (nerimux::client-conn-viewport narrow)))
-                 (expect (eq :normal (nerimux::client-conn-mode narrow)))))
+                 (expect (null (nerimux::client-conn-modal narrow)))))
           (setf (fdefinition 'nerimux/renderer:render-session-to-string) renderer)))))
 
   (it "multi-client-ui-command-state-is-private"
     (with-fake-session (s)
       (let ((conn (%make-test-conn)))
-        (expect (eq :normal (nerimux::client-conn-mode conn)))
+        (expect (nerimux::%client-ui-keys-p conn))
         (expect (nerimux::%handle-client-ui-command s conn :mode nil '("copy")))
-        (expect (eq :copy (nerimux::client-conn-mode conn)))
+        (expect (eq :scrollback (nerimux::client-conn-modal conn)))
         (expect (nerimux::%handle-client-ui-command s conn :viewport nil '("3")))
         (expect (= 3 (nerimux::client-conn-viewport conn)))
         (expect (nerimux::%handle-client-ui-command s conn :viewport nil '("-1")))
         (expect (= 2 (nerimux::client-conn-viewport conn)))
         (expect (null (nerimux::%handle-client-ui-command
                        s conn :mode nil '("not-a-mode"))))
-        (expect (eq :copy (nerimux::client-conn-mode conn)))
+        (expect (eq :scrollback (nerimux::client-conn-modal conn)))
         (expect (nerimux::%handle-client-ui-command
                  s conn :focus nil '("not-a-pane")))
         (expect (nerimux::%handle-client-ui-command s conn :focus nil nil))
@@ -107,19 +113,19 @@
         (expect (nerimux::%handle-client-ui-command s conn :viewport nil '("bad")))
         (expect (= 0 (nerimux::client-conn-viewport conn)))
         (expect (nerimux::%handle-client-ui-command s conn :cancel nil nil))
-        (expect (eq :normal (nerimux::client-conn-mode conn)))
+        (expect (null (nerimux::client-conn-modal conn)))
         (expect (nerimux::%handle-client-ui-command s conn :enter-copy nil nil))
-        (expect (eq :copy (nerimux::client-conn-mode conn)))
+        (expect (eq :scrollback (nerimux::client-conn-modal conn)))
         (expect (nerimux::%handle-client-ui-command s conn :toggle-copy nil nil))
-        (expect (eq :normal (nerimux::client-conn-mode conn)))
+        (expect (null (nerimux::client-conn-modal conn)))
         (expect (nerimux::%handle-client-ui-command s conn :enter-input nil nil))
-        (expect (eq :input (nerimux::client-conn-mode conn)))
+        (expect (eq :pane (nerimux::client-conn-view conn)))
         (expect (nerimux::%handle-client-ui-command s conn :enter-normal nil nil))
-        (expect (eq :normal (nerimux::client-conn-mode conn)))
+        (expect (null (nerimux::client-conn-modal conn)))
         (expect (nerimux::%handle-client-ui-command s conn :detail nil nil))
-        (expect (eq :detail (nerimux::client-conn-view conn)))
+        (expect (eq :pane (nerimux::client-conn-view conn)))
         (expect (nerimux::%handle-client-ui-command s conn :home nil nil))
-        (expect (eq :overview (nerimux::client-conn-view conn)))
+        (expect (eq :repolist (nerimux::client-conn-view conn)))
         (expect (nerimux::%handle-client-ui-command s conn :tree-scroll nil '("bad")))
         (expect (= 0 (nerimux::client-conn-tree-scroll conn))))))
 
@@ -131,29 +137,29 @@
             ((nerimux::%open-client-picker
               (lambda (conn)
                 (push :open calls)
-                (setf (nerimux::client-conn-mode conn) :picker)))
+                (setf (nerimux::client-conn-modal conn) :picker)))
              (nerimux::%close-client-picker
               (lambda (conn)
                 (push :close calls)
-                (setf (nerimux::client-conn-mode conn) :normal)))
+                (setf (nerimux::client-conn-modal conn) nil)))
              (nerimux::%select-client-picker-item
               (lambda (session conn)
                 (declare (ignore session))
                 (push :select calls)
-                (setf (nerimux::client-conn-mode conn) :normal)
+                (setf (nerimux::client-conn-modal conn) nil)
                 t))
              (nerimux::%client-enter-copy-mode
               (lambda (session conn)
                 (declare (ignore session))
-                (setf (nerimux::client-conn-mode conn) :copy))))
+                (setf (nerimux::client-conn-modal conn) :scrollback))))
           (expect (nerimux::%handle-client-ui-command s conn :mode nil '("picker")))
-          (expect (eq :picker (nerimux::client-conn-mode conn)))
+          (expect (eq :picker (nerimux::client-conn-modal conn)))
           (expect (nerimux::%handle-client-ui-command s conn :accept nil nil))
-          (expect (eq :normal (nerimux::client-conn-mode conn)))
+          (expect (null (nerimux::client-conn-modal conn)))
           (expect (nerimux::%handle-client-ui-command s conn :mode nil '("copy")))
-          (expect (eq :copy (nerimux::client-conn-mode conn)))
+          (expect (eq :scrollback (nerimux::client-conn-modal conn)))
           (expect (nerimux::%handle-client-ui-command s conn :cancel nil nil))
-          (expect (eq :normal (nerimux::client-conn-mode conn)))
+          (expect (null (nerimux::client-conn-modal conn)))
           (expect (equal '(:select :open) calls))))))
 
   (it "ui-command-aliases-preserve-command-contract"
@@ -247,7 +253,7 @@
                  (nerimux::%handle-multi-command-message
                   s conn
                   (nerimux/protocol::encode-command-payload :home))))
-        (expect (eq :overview (nerimux::client-conn-view conn)))
+        (expect (eq :repolist (nerimux::client-conn-view conn)))
         (expect (null
                  (nerimux::%handle-multi-command-message
                   s conn
@@ -350,9 +356,9 @@
                      (lambda (&key on-complete on-error callback-dispatch)
                        (declare (ignore on-error callback-dispatch))
                        (funcall on-complete nil)))
-               (setf (nerimux::client-conn-view conn) :overview)
+               (setf (nerimux::client-conn-view conn) :repolist)
                (nerimux::%handle-multi-key-message s conn #(16))
-               (expect (eq :picker (nerimux::client-conn-mode conn)))
+               (expect (eq :picker (nerimux::client-conn-modal conn)))
                (expect (string= ""
                                 (nerimux::client-conn-picker-query conn))))
           (setf (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async)
@@ -360,39 +366,43 @@
                 (fdefinition 'nerimux/vcs:workspace-organizations)
                 organizations)))))
 
-  ;; PR2 (R6.3 pivot, user decision): `n` no longer pre-fills the `:` command
-  ;; line -- it creates a worktree immediately, with an auto-generated
-  ;; wt-<YYYYMMDDTHHMMSS> branch name, for the selected repository, with a
-  ;; single keystroke as its own confirmation (%CLIENT-START-WORKTREE-CREATE
-  ;; / %CLIENT-CREATE-WORKTREE-NOW). CREATE-WORKTREE-ASYNC is stubbed so no
-  ;; real git process runs; the stub only captures its arguments. `X` on a
-  ;; selected worktree is untouched by this redesign and still pre-fills
-  ;; "wt-delete --confirm" -- asserted here as a regression check that `n`'s
-  ;; rewrite did not disturb the neighbouring X handler.
-  (it "overview-worktree-create-key-creates-immediately-and-worktree-delete-key-still-prompts"
+  ;; PR2 (R6.3 pivot, user decision) added `n`: create a worktree immediately,
+  ;; with an auto-generated wt-<YYYYMMDDTHHMMSS> branch name, for the selected
+  ;; repository, with a single keystroke as its own confirmation
+  ;; (%CLIENT-START-WORKTREE-CREATE / %CLIENT-CREATE-WORKTREE-NOW).
+  ;;
+  ;; DELETED (genuinely retired, nothing replaces it): magit alignment
+  ;; retires `n` as "next row" (contract §2) and moves worktree creation
+  ;; behind the `w` transient's own `n` entry -- but
+  ;; src/bootstrap/server-multi-dispatch-transient.lisp (+TRANSIENT-
+  ;; DEFINITIONS+, already landed) wires that entry to `(:stub "worktree
+  ;; creation needs a path/branch prompt, not wired in this build")`, not to
+  ;; %CLIENT-START-WORKTREE-CREATE. The auto-branch-name single-keystroke
+  ;; convenience these two tests covered has no reachable path at all in
+  ;; this pass -- only an inert "not implemented" notice. The two tests that
+  ;; drove %CLIENT-START-WORKTREE-CREATE directly (create-creates-
+  ;; immediately-and-worktree-delete-still-prompts, and its worktree-
+  ;; selection-resolution sibling) are removed rather than kept pointed at
+  ;; now-dead code with no live caller. What replaces them: the coverage
+  ;; below for the `w` transient's actual stub behaviour, and for
+  ;; `:wt-create`, the OTHER entry path %CLIENT-CREATE-WORKTREE-NOW's
+  ;; docstring names -- which is untouched by this migration and was never
+  ;; covered by a VCS-reaching test anywhere in this suite.
+  (it "wt-create-command-with-an-explicit-branch-reaches-the-vcs-layer"
     (with-fake-session (s)
       (let* ((organization
                (nerimux/model:make-organization
-                :id "org"
-                :host "github.com"
-                :name "team"))
+                :id "org" :host "github.com" :name "team"))
              (repository
                (nerimux/model:make-repository
-                :id "repo"
-                :organization organization
+                :id "repo" :organization organization
                 :specification "github.com/team/repo"))
-             (worktree
-               (nerimux/model:make-worktree
-                :id "feature"
-                :repository repository
-                :path "/tmp/feature"
-                :branch "feature/ux"))
              (conn (%make-test-conn))
+             (nerimux::*clients* (list conn))
              (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
              (create (fdefinition 'nerimux/vcs:create-worktree-async))
              (call nil))
         (nerimux/model:organization-add-repository organization repository)
-        (nerimux/model:repository-add-worktree repository worktree)
         (unwind-protect
              (progn
                (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
@@ -405,72 +415,18 @@
                                        callback-dispatch))
                        (setf call (list received-repository branch))
                        t))
-               (setf (nerimux::client-conn-view conn) :overview)
+               (setf (nerimux::client-conn-view conn) :repolist)
                (nerimux::%set-client-selected-tree-object conn repository)
-               (nerimux::%handle-multi-key-message s conn #(110))
-               (expect (eq repository (first call)))
-               (expect (%wt-auto-branch-name-p (second call)))
-               ;; No intermediate `:` prompt: the mode never leaves :normal.
-               (expect (eq :normal (nerimux::client-conn-mode conn)))
-               (expect (eq :overview (nerimux::client-conn-view conn)))
-               ;; X is unaffected by the `n` redesign: it still pre-fills the
-               ;; `:` command line rather than acting immediately.
-               (nerimux::%set-client-selected-tree-object conn worktree)
-               (nerimux::%handle-multi-key-message s conn #(88))
-               (expect (eq :command (nerimux::client-conn-mode conn)))
-               (expect (string= "wt-delete --confirm"
-                                (nerimux::client-conn-command-buffer conn))))
-          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
-                (fdefinition 'nerimux/vcs:create-worktree-async) create)))))
-
-  ;; %CLIENT-SELECTED-REPOSITORY derives the owning repository from a
-  ;; selected WORKTREE row too (not only from a selected repository row), so
-  ;; this drives `n` from a worktree selection to pin that resolution stays
-  ;; wired into the new immediate-create path.
-  (it "overview-worktree-create-key-resolves-repository-from-a-selected-worktree"
-    (with-fake-session (s)
-      (let* ((organization
-               (nerimux/model:make-organization
-                :id "org"
-                :host "github.com"
-                :name "team"))
-             (repository
-               (nerimux/model:make-repository
-                :id "repo"
-                :organization organization
-                :specification "github.com/team/repo"))
-             (worktree
-               (nerimux/model:make-worktree
-                :id "feature"
-                :repository repository
-                :path "/tmp/feature"
-                :branch "feature/existing"))
-             (conn (%make-test-conn))
-             (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
-             (create (fdefinition 'nerimux/vcs:create-worktree-async))
-             (call nil))
-        (unwind-protect
-             (progn
-               (nerimux/model:organization-add-repository organization repository)
-               (nerimux/model:repository-add-worktree repository worktree)
-               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
-                     (lambda () t)
-                     (fdefinition 'nerimux/vcs:create-worktree-async)
-                     (lambda (received-repository
-                              &key branch path force on-complete on-error
-                                callback-dispatch)
-                       (declare (ignore path force on-complete on-error
-                                       callback-dispatch))
-                       (setf call (list received-repository branch))
-                       t))
-               (setf (nerimux::client-conn-view conn) :overview)
-               (nerimux::%set-client-selected-tree-object conn worktree)
-               (nerimux::%handle-multi-key-message s conn #(110))
-               (expect (eq repository (first call)))
-               (expect (%wt-auto-branch-name-p (second call)))
-               (expect (eq :normal (nerimux::client-conn-mode conn)))
-               (expect (eq :overview (nerimux::client-conn-view conn)))
-               (expect (string= "" (nerimux::client-conn-command-buffer conn))))
+               (nerimux::%handle-multi-key-message s conn #(58)) ; :
+               (nerimux::%handle-multi-key-message
+                s conn
+                (cl-codec-kit:string-to-octets
+                 "wt-create --branch feature/explicit --confirm"
+                 :encoding :utf-8))
+               (nerimux::%handle-multi-key-message s conn #(13))
+               (expect (equal (list repository "feature/explicit") call))
+               (expect (null (nerimux::client-conn-modal conn)))
+               (expect (eq :repolist (nerimux::client-conn-view conn))))
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:create-worktree-async) create)))))
 
@@ -508,24 +464,34 @@
                        (declare (ignore on-complete on-error callback-dispatch))
                        (setf call (list received-worktree force))
                        t))
-               (setf (nerimux::client-conn-view conn) :overview)
+               (setf (nerimux::client-conn-view conn) :repolist)
                (nerimux::%set-client-selected-tree-object conn worktree)
-               ;; `X` on a selected worktree pre-fills the command line ...
-               (nerimux::%handle-multi-key-message s conn #(88))
-               (expect (eq :command (nerimux::client-conn-mode conn)))
+               ;; `X`'s single-key "wt-delete --confirm" prefill is retired
+               ;; (contract §2's removal list) with no live replacement --
+               ;; the `w` transient's own `d` entry is wired to a
+               ;; (:stub "not wired in this build") notice, not to
+               ;; %CLIENT-START-WORKTREE-DELETE (see the removal note above
+               ;; the create test). What survives is the `:` command line
+               ;; itself, unaffected by any of this, so the trigger here is
+               ;; typing the command a user would type by hand.
+               (nerimux::%handle-multi-key-message s conn #(58)) ; :
+               (nerimux::%handle-multi-key-message
+                s conn
+                (cl-codec-kit:string-to-octets
+                 "wt-delete --confirm" :encoding :utf-8))
+               (expect (eq :command (nerimux::client-conn-modal conn)))
                (expect (string= "wt-delete --confirm"
                                 (nerimux::client-conn-command-buffer conn)))
                ;; ... and submitting it must actually reach the VCS layer.
                (nerimux::%handle-multi-key-message s conn #(13))
                (expect (equal (list worktree nil) call))
-               (expect (eq :normal (nerimux::client-conn-mode conn)))
-               (expect (eq :overview (nerimux::client-conn-view conn)))
+               (expect (null (nerimux::client-conn-modal conn)))
+               (expect (eq :repolist (nerimux::client-conn-view conn)))
                (expect (string= "" (nerimux::client-conn-command-buffer conn))))
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:delete-worktree-async) delete-fn)))))
 
-  ;; %client-delete-worktree's own guard (distinct from the `X`-key guard in
-  ;; %client-start-worktree-delete): a `:` command submitted without
+  ;; %client-delete-worktree's own guard: a `:` command submitted without
   ;; --confirm must not reach the VCS layer, even with a worktree selected.
   (it "overview-worktree-delete-without-confirm-is-rejected"
     (with-fake-session (s)
@@ -563,7 +529,7 @@
                                        callback-dispatch))
                        (setf call received-worktree)
                        t))
-               (setf (nerimux::client-conn-view conn) :overview)
+               (setf (nerimux::client-conn-view conn) :repolist)
                (nerimux::%set-client-selected-tree-object conn worktree)
                (nerimux::%handle-multi-key-message s conn #(58))
                (nerimux::%handle-multi-key-message
@@ -573,7 +539,7 @@
                (expect (null call))
                (expect (string= "worktree delete requires --confirm"
                                 (first (nerimux::client-conn-message-log conn))))
-               (expect (eq :normal (nerimux::client-conn-mode conn))))
+               (expect (null (nerimux::client-conn-modal conn))))
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:delete-worktree-async) delete-fn)))))
 
@@ -597,7 +563,7 @@
                                        callback-dispatch))
                        (setf call received-worktree)
                        t))
-               (setf (nerimux::client-conn-view conn) :overview)
+               (setf (nerimux::client-conn-view conn) :repolist)
                (nerimux::%handle-multi-key-message s conn #(58))
                (nerimux::%handle-multi-key-message
                 s conn
@@ -612,88 +578,46 @@
                (expect (null call))
                (expect (string= "worktree delete requires a worktree"
                                 (first (nerimux::client-conn-message-log conn))))
-               (expect (eq :normal (nerimux::client-conn-mode conn))))
+               (expect (null (nerimux::client-conn-modal conn))))
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:delete-worktree-async) delete-fn)))))
 
-  (it "overview-worktree-operation-prompts-report-missing-selection"
-    (dolist (operation
-              '((nerimux::%client-start-worktree-delete
-                 "select a worktree to delete")
-                (nerimux::%client-start-worktree-lock
-                 "select a worktree to lock")
-                (nerimux::%client-start-worktree-unlock
-                 "select a worktree to unlock")))
-      (let* ((conn (%make-test-conn))
-             (nerimux::*clients* (list conn)))
-        (funcall (symbol-function (first operation)) conn)
-        (expect (string= (second operation)
-                         (first (nerimux::client-conn-message-log conn))))
-        (expect (eq :normal (nerimux::client-conn-mode conn))))))
+  ;; DELETED (genuinely retired, nothing replaces it): this covered
+  ;; %CLIENT-START-WORKTREE-DELETE/-LOCK/-UNLOCK's "notify when nothing is
+  ;; selected" guard for the retired X/L/U single-key shortcuts. None of the
+  ;; three has any caller left in the migrated UI -- the `w` transient's own
+  ;; `d` entry is a (:stub ...) notice, not a call to
+  ;; %CLIENT-START-WORKTREE-DELETE, and lock/unlock have no transient entry
+  ;; at all (+TRANSIENT-DEFINITIONS+'s Worktree transient only defines `n`
+  ;; and `d`, both stubs) -- so this guard now protects unreachable code.
+  ;; The underlying `:` commands' OWN missing-selection guards
+  ;; (%client-delete-worktree/-lock-worktree/-unlock-worktree, which do not
+  ;; go through the retired functions at all) are exercised below and in
+  ;; "overview-worktree-delete-without-selection-is-rejected".
 
-  ;; `L`/`U` on a selected worktree pre-fill the lock/unlock command lines,
-  ;; mirroring `X`'s "wt-delete --confirm" prefill exactly (both already
-  ;; include --confirm since no further required argument exists).
-  (it "overview-worktree-lock-unlock-open-explicit-command-prompts"
+  ;; `L`/`U`'s single-key "wt-lock/-unlock --confirm" prefill is retired
+  ;; with no live replacement, the same way `X`'s is (see the note on the
+  ;; delete test above) -- the Worktree transient does not mention lock or
+  ;; unlock at all. What survives is the `:` command line itself.
+  (it "wt-lock-and-wt-unlock-commands-reach-the-vcs-layer"
     (with-fake-session (s)
       (let* ((organization
                (nerimux/model:make-organization
-                :id "org"
-                :host "github.com"
-                :name "team"))
+                :id "org" :host "github.com" :name "team"))
              (repository
                (nerimux/model:make-repository
-                :id "repo"
-                :organization organization
+                :id "repo" :organization organization
                 :specification "github.com/team/repo"))
              (worktree
                (nerimux/model:make-worktree
-                :id "feature"
-                :repository repository
-                :path "/tmp/feature"
-                :branch "feature/ux"))
-             (conn (%make-test-conn)))
-        (nerimux/model:organization-add-repository organization repository)
-        (nerimux/model:repository-add-worktree repository worktree)
-        (setf (nerimux::client-conn-view conn) :overview)
-        (nerimux::%set-client-selected-tree-object conn worktree)
-        (nerimux::%handle-multi-key-message s conn #(76))
-        (expect (eq :command (nerimux::client-conn-mode conn)))
-        (expect (string= "wt-lock --confirm"
-                         (nerimux::client-conn-command-buffer conn)))
-        (nerimux::%handle-multi-key-message s conn #(27))
-        (nerimux::%set-client-selected-tree-object conn worktree)
-        ;; ESC arms R4.3's 2-byte swallow window (%client-esc-swallow-start);
-        ;; two no-op presses clear it before U reaches dispatch.
-        (nerimux::%handle-multi-key-message s conn #(0))
-        (nerimux::%handle-multi-key-message s conn #(0))
-        (nerimux::%handle-multi-key-message s conn #(85))
-        (expect (eq :command (nerimux::client-conn-mode conn)))
-        (expect (string= "wt-unlock --confirm"
-                         (nerimux::client-conn-command-buffer conn))))))
-
-  (it "overview-worktree-lock-dispatches-and-restores-overview"
-    (with-fake-session (s)
-      (let* ((organization
-               (nerimux/model:make-organization
-                :id "org"
-                :host "github.com"
-                :name "team"))
-             (repository
-               (nerimux/model:make-repository
-                :id "repo"
-                :organization organization
-                :specification "github.com/team/repo"))
-             (worktree
-               (nerimux/model:make-worktree
-                :id "feature"
-                :repository repository
-                :path "/tmp/feature"
-                :branch "feature/lockme"))
+                :id "feature" :repository repository
+                :path "/tmp/feature" :branch "feature/lockme"))
              (conn (%make-test-conn))
              (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
              (lock-fn (fdefinition 'nerimux/vcs:lock-worktree-async))
-             (call nil))
+             (unlock-fn (fdefinition 'nerimux/vcs:unlock-worktree-async))
+             (lock-call nil)
+             (unlock-call nil))
         (unwind-protect
              (progn
                (nerimux/model:organization-add-repository organization repository)
@@ -704,69 +628,123 @@
                      (lambda (received-worktree
                               &key reason on-complete on-error callback-dispatch)
                        (declare (ignore on-error callback-dispatch))
-                       (setf call (list received-worktree reason))
+                       (setf lock-call (list received-worktree reason))
                        (funcall on-complete t)
-                       t))
-               (setf (nerimux::client-conn-view conn) :overview)
-               (nerimux::%set-client-selected-tree-object conn worktree)
-               (nerimux::%handle-multi-key-message s conn #(76))
-               (expect (string= "wt-lock --confirm"
-                                (nerimux::client-conn-command-buffer conn)))
-               (nerimux::%handle-multi-key-message s conn #(13))
-               (expect (equal (list worktree nil) call))
-               (expect (eq :normal (nerimux::client-conn-mode conn)))
-               (expect (eq :overview (nerimux::client-conn-view conn)))
-               (expect (string= "" (nerimux::client-conn-command-buffer conn))))
-          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
-                (fdefinition 'nerimux/vcs:lock-worktree-async) lock-fn)))))
-
-  (it "overview-worktree-unlock-dispatches-and-restores-overview"
-    (with-fake-session (s)
-      (let* ((organization
-               (nerimux/model:make-organization
-                :id "org"
-                :host "github.com"
-                :name "team"))
-             (repository
-               (nerimux/model:make-repository
-                :id "repo"
-                :organization organization
-                :specification "github.com/team/repo"))
-             (worktree
-               (nerimux/model:make-worktree
-                :id "feature"
-                :repository repository
-                :path "/tmp/feature"
-                :branch "feature/unlockme"))
-             (conn (%make-test-conn))
-             (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
-             (unlock-fn (fdefinition 'nerimux/vcs:unlock-worktree-async))
-             (call nil))
-        (unwind-protect
-             (progn
-               (nerimux/model:organization-add-repository organization repository)
-               (nerimux/model:repository-add-worktree repository worktree)
-               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
-                     (lambda () t)
+                       t)
                      (fdefinition 'nerimux/vcs:unlock-worktree-async)
                      (lambda (received-worktree
                               &key on-complete on-error callback-dispatch)
                        (declare (ignore on-error callback-dispatch))
-                       (setf call received-worktree)
+                       (setf unlock-call received-worktree)
                        (funcall on-complete t)
                        t))
-               (setf (nerimux::client-conn-view conn) :overview)
+               (setf (nerimux::client-conn-view conn) :repolist)
                (nerimux::%set-client-selected-tree-object conn worktree)
-               (nerimux::%handle-multi-key-message s conn #(85))
-               (expect (string= "wt-unlock --confirm"
-                                (nerimux::client-conn-command-buffer conn)))
+               (nerimux::%handle-multi-key-message s conn #(58)) ; :
+               (nerimux::%handle-multi-key-message
+                s conn
+                (cl-codec-kit:string-to-octets
+                 "wt-lock --confirm" :encoding :utf-8))
                (nerimux::%handle-multi-key-message s conn #(13))
-               (expect (eq worktree call))
-               (expect (eq :normal (nerimux::client-conn-mode conn)))
-               (expect (eq :overview (nerimux::client-conn-view conn)))
-               (expect (string= "" (nerimux::client-conn-command-buffer conn))))
+               (expect (equal (list worktree nil) lock-call))
+               (expect (null (nerimux::client-conn-modal conn)))
+               (expect (eq :repolist (nerimux::client-conn-view conn)))
+               (nerimux::%set-client-selected-tree-object conn worktree)
+               (nerimux::%handle-multi-key-message s conn #(58))
+               (nerimux::%handle-multi-key-message
+                s conn
+                (cl-codec-kit:string-to-octets
+                 "wt-unlock --confirm" :encoding :utf-8))
+               (nerimux::%handle-multi-key-message s conn #(13))
+               (expect (eq worktree unlock-call))
+               (expect (null (nerimux::client-conn-modal conn)))
+               (expect (eq :repolist (nerimux::client-conn-view conn))))
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
+                (fdefinition 'nerimux/vcs:lock-worktree-async) lock-fn
                 (fdefinition 'nerimux/vcs:unlock-worktree-async) unlock-fn)))))
+
+  ;; Confirmed via +TRANSIENT-DEFINITIONS+ (server-multi-dispatch-
+  ;; transient.lisp) and %HANDLE-CLIENT-UI-KEY-PAYLOAD's status-only `w`
+  ;; binding (server-multi-dispatch-command-input.lisp), both already
+  ;; landed: `w` opens the Worktree transient only from :status, and its
+  ;; The `w` transient carries the four worktree operations the magit keymap
+  ;; retired the shortcuts for -- `n` create, `X` delete, `L` lock, `U` unlock
+  ;; are now `w c` / `w k` / `w l` / `w u`. This asserts they REACH those
+  ;; operations rather than notifying a "not wired" stub: an earlier revision
+  ;; stubbed all four, which silently deleted four working features while
+  ;; reading like an unfinished new one.
+  ;;
+  ;; Driven end to end through %HANDLE-MULTI-KEY-MESSAGE rather than by calling
+  ;; %OPEN-CLIENT-TRANSIENT directly, so the routing, the transient's key
+  ;; lookup and the action's own dispatch are all on the path under test.
+  ;;
+  ;; With no repository selected, create reports "select a repository first"
+  ;; and the other three report "select a worktree to ..." -- those messages
+  ;; come from the worktree operations THEMSELVES (server-multi-dispatch-
+  ;; command-input.lisp), so seeing one is proof the action ran, and no
+  ;; fixture repository is needed to prove the wiring.
+  (it "the-w-transient-reaches-the-real-worktree-operations"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn))
+            (nerimux::*clients* nil))
+        (setf nerimux::*clients* (list conn))
+        (setf (nerimux::client-conn-view conn) :status)
+        (dolist (probe '((#(99)  . "select a repository first")   ; w c
+                         (#(107) . "select a worktree to delete") ; w k
+                         (#(108) . "select a worktree to lock")   ; w l
+                         (#(117) . "select a worktree to unlock"))) ; w u
+          (destructuring-bind (key . expected) probe
+            (nerimux::%handle-multi-key-message
+             s conn (cl-codec-kit:string-to-octets "w" :encoding :utf-8))
+            (expect (eq :transient (nerimux::client-conn-modal conn)))
+            (nerimux::%handle-multi-key-message s conn key)
+            (expect (string= expected
+                             (first (nerimux::client-conn-message-log conn))))
+            (expect (null (nerimux::client-conn-modal conn)))))
+        ;; `w C` stays a stub on purpose: a chosen branch name needs a text
+        ;; prompt, and the `:` command line already is one.
+        (nerimux::%handle-multi-key-message
+         s conn (cl-codec-kit:string-to-octets "w" :encoding :utf-8))
+        (nerimux::%handle-multi-key-message s conn #(67)) ; C
+        (expect (search "wt-create"
+                        (first (nerimux::client-conn-message-log conn)))))))
+
+  ;; Every :CALL handler in +TRANSIENT-DEFINITIONS+ is reached by FUNCALL out of
+  ;; a data table, which is the one call shape none of this project's gates can
+  ;; check: read-check sees only syntax, export-check only symbol resolution,
+  ;; and internal-call-check matches %helper call sites textually, so a handler
+  ;; whose arity disagrees with the caller compiles clean, loads clean, and
+  ;; raises only when a user strikes that key.
+  ;;
+  ;; That is not hypothetical -- the `f` Fetch transient shipped into this
+  ;; branch broken exactly this way: :CALL was widened to (SESSION CONN) while
+  ;; its two entries were still sharp-quoted one-argument functions. Nothing
+  ;; failed until the key was pressed.
+  ;;
+  ;; So this walks the table rather than naming keys: a handler added later
+  ;; with the wrong arity is caught without anyone remembering to extend the
+  ;; test. It asserts only that each handler is CALLABLE with the arguments
+  ;; %RUN-TRANSIENT-ACTION passes; what each one then does is covered
+  ;; individually elsewhere.
+  (it "every-transient-call-handler-accepts-the-arguments-the-dispatcher-passes"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn))
+            (nerimux::*clients* nil)
+            (checked 0))
+        (setf nerimux::*clients* (list conn))
+        (dolist (definition nerimux::+transient-definitions+)
+          (destructuring-bind (title arguments actions) (cdr definition)
+            (declare (ignore title arguments))
+            (dolist (action actions)
+              (let ((handler (third action)))
+                (when (eq :call (first handler))
+                  (incf checked)
+                  ;; No HANDLER-CASE: a wrong argument count must surface as a
+                  ;; failure here, not be absorbed into a passing assertion.
+                  (funcall (second handler) s conn))))))
+        ;; A table that stopped containing :CALL handlers would make every
+        ;; assertion above vacuous, so the count is asserted too.
+        (expect (plusp checked)))))
 
   ;; A dry-run preview must reach the VCS layer with :dry-run t and must not
   ;; remove anything from the repository's worktree list: the mock below only
@@ -813,7 +791,7 @@
                                nil))
                        (funcall on-complete "Would remove /tmp/stale")
                        t))
-               (setf (nerimux::client-conn-view conn) :overview)
+               (setf (nerimux::client-conn-view conn) :repolist)
                (nerimux::%set-client-selected-tree-object conn repository)
                (nerimux::%handle-multi-key-message s conn #(58))
                (nerimux::%handle-multi-key-message
@@ -825,7 +803,7 @@
                               (nerimux/model:repository-worktrees repository)))
                (expect (string= "worktree prune preview: Would remove /tmp/stale"
                                 (first (nerimux::client-conn-message-log conn))))
-               (expect (eq :normal (nerimux::client-conn-mode conn))))
+               (expect (null (nerimux::client-conn-modal conn))))
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:prune-worktrees-async) prune-fn)))))
 
@@ -879,7 +857,7 @@
                                nil))
                        (funcall on-complete "")
                        t))
-               (setf (nerimux::client-conn-view conn) :overview)
+               (setf (nerimux::client-conn-view conn) :repolist)
                (nerimux::%set-client-selected-tree-object conn repository)
                (nerimux::%handle-multi-key-message s conn #(58))
                (nerimux::%handle-multi-key-message
@@ -897,25 +875,25 @@
                (expect (null (nerimux/model:repository-worktrees repository)))
                (expect (string= "worktrees pruned"
                                 (first (nerimux::client-conn-message-log conn))))
-               (expect (eq :normal (nerimux::client-conn-mode conn))))
+               (expect (null (nerimux::client-conn-modal conn))))
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:prune-worktrees-async) prune-fn)))))
 
   ;; PR2 `/` tree-filter mode (item 6, R6.3 pivot): entering it must NOT force
-  ;; the view to :detail the way :input/:copy/:command do (%SET-CLIENT-UI-
+  ;; the view to :pane the way :input/:copy/:command do (%SET-CLIENT-UI-
   ;; MODE only special-cases those three) -- the whole point of `/` is to
-  ;; keep navigating the :overview tree while narrowing it. Typing and
+  ;; keep navigating the :repolist tree while narrowing it. Typing and
   ;; backspacing both reset tree-scroll (a narrower/wider query can leave a
   ;; stale scroll offset past the end of the new filtered set). Esc clears
-  ;; the query and drops back to :normal; Enter keeps it.
-  (it "overview-tree-filter-key-enters-filter-mode-without-forcing-detail-view"
+  ;; the query and drops the modal; Enter keeps it.
+  (it "overview-tree-filter-key-enters-filter-mode-without-forcing-pane-view"
     (with-fake-session (s)
       (let ((conn (%make-test-conn)))
-        (setf (nerimux::client-conn-view conn) :overview)
+        (setf (nerimux::client-conn-view conn) :repolist)
         (nerimux::%handle-multi-key-message
          s conn (cl-codec-kit:string-to-octets "/" :encoding :utf-8))
-        (expect (eq :tree-filter (nerimux::client-conn-mode conn)))
-        (expect (eq :overview (nerimux::client-conn-view conn)))
+        (expect (eq :filter (nerimux::client-conn-modal conn)))
+        (expect (eq :repolist (nerimux::client-conn-view conn)))
         (setf (nerimux::client-conn-tree-scroll conn) 7)
         (nerimux::%handle-multi-key-message
          s conn (cl-codec-kit:string-to-octets "ab" :encoding :utf-8))
@@ -925,25 +903,24 @@
         (nerimux::%handle-multi-key-message s conn #(8))
         (expect (string= "a" (nerimux::client-conn-tree-filter conn)))
         (expect (zerop (nerimux::client-conn-tree-scroll conn)))
-        ;; Esc cancels: clears the query and returns to :normal, still in
-        ;; :overview.
+        ;; Esc cancels: clears the query and drops the modal, still in
+        ;; :repolist.
         (nerimux::%handle-multi-key-message s conn #(27))
-        (expect (eq :normal (nerimux::client-conn-mode conn)))
-        (expect (eq :overview (nerimux::client-conn-view conn)))
+        (expect (null (nerimux::client-conn-modal conn)))
+        (expect (eq :repolist (nerimux::client-conn-view conn)))
         (expect (null (nerimux::client-conn-tree-filter conn)))
         ;; Esc arms R4.3's 2-byte swallow window; two no-op presses clear it
-        ;; before `/` reopens tree-filter mode (same pattern the X/L/U tests
-        ;; above use).
+        ;; before `/` reopens tree-filter mode.
         (nerimux::%handle-multi-key-message s conn #(0))
         (nerimux::%handle-multi-key-message s conn #(0))
         (nerimux::%handle-multi-key-message
          s conn (cl-codec-kit:string-to-octets "/" :encoding :utf-8))
         (nerimux::%handle-multi-key-message
          s conn (cl-codec-kit:string-to-octets "xyz" :encoding :utf-8))
-        ;; Enter accepts: the query survives the return to :normal.
+        ;; Enter accepts: the query survives the modal closing.
         (nerimux::%handle-multi-key-message s conn #(13))
-        (expect (eq :normal (nerimux::client-conn-mode conn)))
-        (expect (eq :overview (nerimux::client-conn-view conn)))
+        (expect (null (nerimux::client-conn-modal conn)))
+        (expect (eq :repolist (nerimux::client-conn-view conn)))
         (expect (string= "xyz" (nerimux::client-conn-tree-filter conn))))))
 
   ;; Review-round fix: `/` always starts from an EMPTY query, even when a
@@ -955,56 +932,57 @@
   (it "overview-tree-filter-key-starts-empty-again-after-a-previous-accept"
     (with-fake-session (s)
       (let ((conn (%make-test-conn)))
-        (setf (nerimux::client-conn-view conn) :overview)
+        (setf (nerimux::client-conn-view conn) :repolist)
         (nerimux::%handle-multi-key-message
          s conn (cl-codec-kit:string-to-octets "/" :encoding :utf-8))
         (nerimux::%handle-multi-key-message
          s conn (cl-codec-kit:string-to-octets "abc" :encoding :utf-8))
         (nerimux::%handle-multi-key-message s conn #(13))
-        (expect (eq :normal (nerimux::client-conn-mode conn)))
+        (expect (null (nerimux::client-conn-modal conn)))
         (expect (string= "abc" (nerimux::client-conn-tree-filter conn)))
         ;; Re-entering `/` (Enter's :accept path arms no ESC-swallow window,
         ;; unlike ESC's :cancel -- so no dummy presses are needed here).
         (nerimux::%handle-multi-key-message
          s conn (cl-codec-kit:string-to-octets "/" :encoding :utf-8))
-        (expect (eq :tree-filter (nerimux::client-conn-mode conn)))
+        (expect (eq :filter (nerimux::client-conn-modal conn)))
         (expect (null (nerimux::client-conn-tree-filter conn)))
         (nerimux::%handle-multi-key-message
          s conn (cl-codec-kit:string-to-octets "z" :encoding :utf-8))
         ;; "z", never "abcz" -- the old accepted query must not leak in.
         (expect (string= "z" (nerimux::client-conn-tree-filter conn))))))
 
-  ;; :tree-filter mode absorbs every printable key into the query buffer --
-  ;; "j"/"k" are ordinary characters there, never the :overview navigation
-  ;; keys, so the selection must not move.
+  ;; :filter modal absorbs every printable key into the query buffer -- "n"/
+  ;; "p" are ordinary characters there, never the :repolist navigation keys
+  ;; (n = next row, p = previous row, contract §2), so the selection must not
+  ;; move.
   ;; S4 fix: this used to call %HANDLE-CLIENT-TREE-FILTER-KEY-PAYLOAD
   ;; directly, bypassing %HANDLE-MULTI-KEY-MESSAGE entirely -- the exact
   ;; anti-pattern that once hid a real production dispatch bug (a mode
-  ;; check that never actually routed here). Entering :TREE-FILTER mode via
-  ;; the real `/` key first, mirroring the sibling test above (`overview-
-  ;; tree-filter-key-enters-filter-mode-without-forcing-detail-view`),
-  ;; proves the whole path -- mode transition and payload routing both --
-  ;; rather than only the leaf handler's own behaviour.
-  (it "overview-tree-filter-mode-absorbs-jk-as-query-text-not-navigation"
+  ;; check that never actually routed here). Entering :FILTER modal via the
+  ;; real `/` key first, mirroring the sibling test above (`overview-tree-
+  ;; filter-key-enters-filter-mode-without-forcing-pane-view`), proves the
+  ;; whole path -- modal transition and payload routing both -- rather than
+  ;; only the leaf handler's own behaviour.
+  (it "overview-tree-filter-mode-absorbs-np-as-query-text-not-navigation"
     (with-fake-session (s)
       (let* ((organization
                (nerimux/model:make-organization
-                :id "org-jk-absorb" :host "github.com" :name "team"))
+                :id "org-np-absorb" :host "github.com" :name "team"))
              (repository
                (nerimux/model:make-repository
-                :id "repo-jk-absorb" :organization organization
-                :specification "github.com/team/repo-jk-absorb"))
+                :id "repo-np-absorb" :organization organization
+                :specification "github.com/team/repo-np-absorb"))
              (conn (%make-test-conn))
              (nerimux/vcs::*workspace-organizations* (list organization)))
         (nerimux/model:organization-add-repository organization repository)
-        (setf (nerimux::client-conn-view conn) :overview)
+        (setf (nerimux::client-conn-view conn) :repolist)
         (nerimux::%set-client-selected-tree-object conn repository)
         (nerimux::%handle-multi-key-message
          s conn (cl-codec-kit:string-to-octets "/" :encoding :utf-8))
-        (expect (eq :tree-filter (nerimux::client-conn-mode conn)))
+        (expect (eq :filter (nerimux::client-conn-modal conn)))
         (nerimux::%handle-multi-key-message
-         s conn (cl-codec-kit:string-to-octets "jk" :encoding :utf-8))
-        (expect (string= "jk" (nerimux::client-conn-tree-filter conn)))
+         s conn (cl-codec-kit:string-to-octets "np" :encoding :utf-8))
+        (expect (string= "np" (nerimux::client-conn-tree-filter conn)))
         (expect (eq repository (nerimux::client-conn-selected-tree-object conn))))))
 
   (it "overview-tree-filter-editing-rejects-invalid-input-and-respects-the-cap"
@@ -1023,73 +1001,15 @@
         (expect (= nerimux::+max-tree-filter-length+
                    (length (nerimux::client-conn-tree-filter conn)))))))
 
-  ;; `n` with no repository resolvable from the current selection (nothing
-  ;; selected, or an organization row selected -- %CLIENT-SELECTED-REPOSITORY
-  ;; only derives a repository from a repository/worktree selection, or from
-  ;; an organization with EXACTLY one repository) notifies instead of
-  ;; creating anything, and the mode stays :normal (no worktree-create ever
-  ;; starts).
-  (it "overview-worktree-create-key-with-no-repository-selected-notifies"
-    (with-fake-session (s)
-      (let ((conn (%make-test-conn))
-            (create (fdefinition 'nerimux/vcs:create-worktree-async))
-            (called nil)
-            ;; %CLIENT-NOTIFY only appends to the message log for a live
-            ;; (registered) client -- see %CLIENT-LIVE-P.
-            (nerimux::*clients* nil))
-        (setf nerimux::*clients* (list conn))
-        (unwind-protect
-             (progn
-               (setf (fdefinition 'nerimux/vcs:create-worktree-async)
-                     (lambda (&rest arguments)
-                       (declare (ignore arguments))
-                       (setf called t)))
-               (setf (nerimux::client-conn-view conn) :overview)
-               (nerimux::%handle-multi-key-message s conn #(110))
-               (expect (null called))
-               (expect (string= "select a repository first"
-                                (first (nerimux::client-conn-message-log conn))))
-               (expect (eq :normal (nerimux::client-conn-mode conn))))
-          (setf (fdefinition 'nerimux/vcs:create-worktree-async) create)))))
-
-  ;; Same guard, but with an ORGANIZATION holding two repositories selected --
-  ;; %CLIENT-SELECTED-REPOSITORY's organization branch only resolves when
-  ;; there is exactly one repository, so this must notify too, not guess.
-  (it "overview-worktree-create-key-with-an-ambiguous-organization-selected-notifies"
-    (with-fake-session (s)
-      (let* ((organization
-               (nerimux/model:make-organization
-                :id "org-ambiguous" :host "github.com" :name "team"))
-             (repo-a
-               (nerimux/model:make-repository
-                :id "repo-ambiguous-a" :organization organization
-                :specification "github.com/team/repo-a"))
-             (repo-b
-               (nerimux/model:make-repository
-                :id "repo-ambiguous-b" :organization organization
-                :specification "github.com/team/repo-b"))
-             (conn (%make-test-conn))
-             (create (fdefinition 'nerimux/vcs:create-worktree-async))
-             (called nil)
-             ;; %CLIENT-NOTIFY only appends to the message log for a live
-             ;; (registered) client -- see %CLIENT-LIVE-P.
-             (nerimux::*clients* (list conn)))
-        (nerimux/model:organization-add-repository organization repo-a)
-        (nerimux/model:organization-add-repository organization repo-b)
-        (unwind-protect
-             (progn
-               (setf (fdefinition 'nerimux/vcs:create-worktree-async)
-                     (lambda (&rest arguments)
-                       (declare (ignore arguments))
-                       (setf called t)))
-               (setf (nerimux::client-conn-view conn) :overview)
-               (nerimux::%set-client-selected-tree-object conn organization)
-               (nerimux::%handle-multi-key-message s conn #(110))
-               (expect (null called))
-               (expect (string= "select a repository first"
-                                (first (nerimux::client-conn-message-log conn))))
-               (expect (eq :normal (nerimux::client-conn-mode conn))))
-          (setf (fdefinition 'nerimux/vcs:create-worktree-async) create)))))
+  ;; DELETED (genuinely retired, nothing replaces it): these two covered
+  ;; %CLIENT-START-WORKTREE-CREATE's "select a repository first" guard --
+  ;; nothing selected, and an ambiguous multi-repository organization
+  ;; selected -- for the retired `n` shortcut. %CLIENT-START-WORKTREE-CREATE
+  ;; has no caller left (the `w` transient's `n` action is a pure (:STUB
+  ;; ...) notice that never calls %CLIENT-SELECTED-REPOSITORY or this
+  ;; function at all), so both guards now protect unreachable code; see the
+  ;; removal note on the wt-create command test above for the evidence
+  ;; (+TRANSIENT-DEFINITIONS+, already landed).
 
   ;; :tree-top/:tree-bottom must walk the FILTERED row set (review-round fix:
   ;; both now call %WORKSPACE-TREE-OBJECTS with CLIENT-CONN-TREE-FILTER),
@@ -1170,7 +1090,7 @@
              (nerimux::*workspace-expanded-node-ids* (make-hash-table :test #'equal))
              (nerimux/vcs::*workspace-organizations* (list organization)))
         (nerimux/model:organization-add-repository organization repository)
-        (setf (nerimux::client-conn-view conn) :overview)
+        (setf (nerimux::client-conn-view conn) :repolist)
         (nerimux::%set-client-selected-tree-object conn :repositories)
         (nerimux::%handle-multi-key-message s conn #(9))
         (expect (gethash (list :section :repositories)
@@ -1183,37 +1103,41 @@
         (expect (gethash (list :repository (nerimux/model:repository-id repository))
                          nerimux::*workspace-expanded-node-ids*)))))
 
-  ;; J/K (uppercase, byte-driven) jump the selection across :SECTION header
-  ;; rows only -- the section-based redesign's replacement for the old
-  ;; repository-row jump.
-  (it "J-and-K-keys-jump-the-selection-across-section-headers"
+  ;; J/K (uppercase, byte-driven "jump across section headers") are retired
+  ;; (contract §2's removal list); the same jump is now M-n/M-p, confirmed
+  ;; against *CLIENT-META-PENDING*/%CLIENT-META-PENDING-CONSUME
+  ;; (server-multi-dispatch-command-input.lisp): ESC arrives as its own key
+  ;; message, then the following `n`/`p` byte resolves the pending chord --
+  ;; the same one-byte-per-message wire shape an arrow key's CSI sequence
+  ;; uses.
+  (it "meta-n-and-meta-p-jump-the-selection-across-section-headers"
     (with-fake-session (s)
       (let* ((organization
                (nerimux/model:make-organization
-                :id "org-jk-keys" :host "github.com" :name "team"))
+                :id "org-mnp-keys" :host "github.com" :name "team"))
              (repository
                (nerimux/model:make-repository
-                :id "repo-jk-keys" :organization organization
-                :specification "github.com/team/repo-jk-keys"))
+                :id "repo-mnp-keys" :organization organization
+                :specification "github.com/team/repo-mnp-keys"))
              (worktree
                (nerimux/model:make-worktree
-                :id "wt-jk-keys" :repository repository :path "/tmp/jk-keys"
-                :branch "jk-keys" :dirty-p t))
+                :id "wt-mnp-keys" :repository repository :path "/tmp/mnp-keys"
+                :branch "mnp-keys" :dirty-p t))
              (conn (%make-test-conn))
              (nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
              (nerimux/vcs::*workspace-organizations* (list organization)))
         (nerimux/model:organization-add-repository organization repository)
         (nerimux/model:repository-add-worktree repository worktree)
-        (setf (nerimux::client-conn-view conn) :overview)
+        (setf (nerimux::client-conn-view conn) :repolist)
         ;; Rows: (Attention header) worktree (Repositories header)
-        ;; repository -- select the worktree row directly, so J has to skip
-        ;; past it to land on :REPOSITORIES.
+        ;; repository -- select the worktree row directly, so M-n has to
+        ;; skip past it to land on :REPOSITORIES.
         (nerimux::%set-client-selected-tree-object conn worktree)
-        (nerimux::%handle-multi-key-message
-         s conn (cl-codec-kit:string-to-octets "J" :encoding :utf-8))
+        (nerimux::%handle-multi-key-message s conn #(27))
+        (nerimux::%handle-multi-key-message s conn #(110))
         (expect (eq :repositories (nerimux::client-conn-selected-tree-object conn)))
-        (nerimux::%handle-multi-key-message
-         s conn (cl-codec-kit:string-to-octets "K" :encoding :utf-8))
+        (nerimux::%handle-multi-key-message s conn #(27))
+        (nerimux::%handle-multi-key-message s conn #(112))
         (expect (eq :attention (nerimux::client-conn-selected-tree-object conn))))))
 
   ;; Inline worktree expansion (Wave B): Tab on a worktree row toggles its
@@ -1241,7 +1165,7 @@
              (nerimux/vcs::*workspace-organizations* (list organization)))
         (nerimux/model:organization-add-repository organization repository)
         (nerimux/model:repository-add-worktree repository worktree)
-        (setf (nerimux::client-conn-view conn) :overview)
+        (setf (nerimux::client-conn-view conn) :repolist)
         (nerimux::%set-client-selected-tree-object conn worktree)
         (flet ((entries ()
                  (nerimux/renderer::%workspace-flat-tree-entries
@@ -1288,7 +1212,7 @@
                      "src/foo.lisp" " M")))
         (nerimux/model:organization-add-repository organization repository)
         (nerimux/model:repository-add-worktree repository worktree)
-        (setf (nerimux::client-conn-view conn) :overview)
+        (setf (nerimux::client-conn-view conn) :repolist)
         (setf (gethash (list :worktree (nerimux/model:worktree-id worktree))
                        nerimux::*workspace-expanded-node-ids*)
               t)
@@ -1331,11 +1255,13 @@
              (nerimux/vcs::*workspace-organizations* (list organization)))
         (nerimux/model:organization-add-repository organization repository)
         (nerimux/model:repository-add-worktree repository worktree)
-        (setf (nerimux::client-conn-view conn) :overview)
+        (setf (nerimux::client-conn-view conn) :repolist)
         (nerimux::%set-client-selected-tree-object conn worktree)
         (nerimux::%handle-multi-key-message s conn #(9)) ; Tab: expand the worktree
+        ;; Magit alignment (contract SS2): `n`, not the retired `j`, is next
+        ;; row in the repolist/status UI keymap now.
         (nerimux::%handle-multi-key-message
-         s conn (cl-codec-kit:string-to-octets "j" :encoding :utf-8)) ; move onto the :file row
+         s conn (cl-codec-kit:string-to-octets "n" :encoding :utf-8)) ; move onto the :file row
         (let ((selected (nerimux::client-conn-selected-tree-object conn)))
           (expect (consp selected))
           (expect (eq :file (first selected))))
@@ -1365,7 +1291,7 @@
            (nerimux::*last-selected-worktree-token* nil))
       (nerimux/model:organization-add-repository organization repository)
       (nerimux/model:repository-add-worktree repository worktree)
-      (setf (nerimux::client-conn-view conn) :overview)
+      (setf (nerimux::client-conn-view conn) :repolist)
       (nerimux::%set-client-selected-tree-object conn worktree)
       (let* ((new-worktree
                (nerimux/model:make-worktree
@@ -1406,7 +1332,7 @@
            (file-object (list :file "wt-stable-file-refresh" "src/foo.lisp" " M")))
       (nerimux/model:organization-add-repository organization repository)
       (nerimux/model:repository-add-worktree repository worktree)
-      (setf (nerimux::client-conn-view conn) :overview)
+      (setf (nerimux::client-conn-view conn) :repolist)
       (nerimux::%set-client-selected-tree-object conn file-object)
       (let* ((new-worktree
                (nerimux/model:make-worktree
@@ -1455,7 +1381,7 @@
              (call-count 0))
         (nerimux/model:organization-add-repository organization repository)
         (nerimux/model:repository-add-worktree repository worktree)
-        (setf (nerimux::client-conn-view conn) :overview)
+        (setf (nerimux::client-conn-view conn) :repolist)
         (nerimux::%set-client-selected-tree-object conn file-object)
         (with-stubbed-fdefinition
             ((nerimux/vcs:refresh-worktree-file-diff-async
@@ -1516,7 +1442,7 @@
              (nerimux/vcs::*workspace-organizations* (list organization)))
         (nerimux/model:organization-add-repository organization repository)
         (nerimux/model:repository-add-worktree repository worktree)
-        (setf (nerimux::client-conn-view conn) :overview)
+        (setf (nerimux::client-conn-view conn) :repolist)
         ;; The :FILE row itself only appears once its parent WORKTREE row is
         ;; expanded (%WORKSPACE-WORKTREE-DETAIL-ENTRIES) -- Tab on the file
         ;; row toggles the file's OWN diff expansion, not the worktree's, so
@@ -1546,66 +1472,99 @@
             (nerimux::%handle-multi-key-message s conn #(9))
             (expect (null (diff-entries))))))))
 
-  ;;; ── `?` full-screen help view (FR-005) ───────────────────────────────────
+  ;;; ── `?` transient dispatch and the full-screen help view (FR-005/FR-010) ──
+  ;;;
+  ;;; Magit alignment retires CLIENT-CONN-HELP-VIEW-P and `?` opening the
+  ;;; help view directly: `?` now opens the dispatch transient (MODAL
+  ;;; :transient), and the help view is one of that transient's entries --
+  ;;; `k`, per the WHY comment already committed on %CLIENT-OPEN-HELP-VIEW
+  ;;; (server-multi-dispatch.lisp). +transient-definitions+ and
+  ;;; %handle-client-transient-key-payload do not exist yet in this
+  ;;; worktree, so the `?`-then-`k` route to the help view is inferred from
+  ;;; that comment rather than confirmed against a real transient table --
+  ;;; worth rechecking once the TRANSIENT unit lands. Once MODAL is :help,
+  ;;; %handle-help-view-key is unchanged (q/?/Enter/Esc all close it), so
+  ;;; that half of the old test still applies verbatim.
 
-  (it "?-opens-the-help-view-in-normal-mode-and-swallows-other-keys-until-q-closes-it"
+  (it "?-then-k-opens-the-help-view-and-swallows-other-keys-until-q-closes-it"
     (with-fake-session (s)
       (let ((conn (%make-test-conn)))
-        (expect (not (nerimux::client-conn-help-view-p conn)))
+        (expect (null (nerimux::client-conn-modal conn)))
         (nerimux::%handle-multi-key-message s conn #(63)) ; ?
-        (expect (nerimux::client-conn-help-view-p conn))
-        ;; An ordinary navigation key must not leak to :normal mode's own
-        ;; dispatch (and so not to any pane) while the help view is up.
-        (nerimux::%handle-multi-key-message s conn #(106)) ; j
-        (expect (nerimux::client-conn-help-view-p conn))
+        (expect (eq :transient (nerimux::client-conn-modal conn)))
+        (nerimux::%handle-multi-key-message s conn #(107)) ; k
+        (expect (eq :help (nerimux::client-conn-modal conn)))
+        ;; An ordinary navigation key must not leak to the view underneath
+        ;; (and so not to any pane) while the help view is up.
+        (nerimux::%handle-multi-key-message s conn #(110)) ; n
+        (expect (eq :help (nerimux::client-conn-modal conn)))
         (nerimux::%handle-multi-key-message s conn #(113)) ; q
-        (expect (not (nerimux::client-conn-help-view-p conn))))))
+        (expect (null (nerimux::client-conn-modal conn))))))
 
-  (it "?-also-opens-from-the-overview-view-and-enter-or-esc-close-it"
+  (it "?-then-k-also-opens-from-the-repolist-view-and-enter-or-esc-close-it"
     (with-fake-session (s)
       (let ((conn (%make-test-conn)))
-        (setf (nerimux::client-conn-view conn) :overview)
+        (setf (nerimux::client-conn-view conn) :repolist)
         (nerimux::%handle-multi-key-message s conn #(63))
-        (expect (nerimux::client-conn-help-view-p conn))
+        (nerimux::%handle-multi-key-message s conn #(107))
+        (expect (eq :help (nerimux::client-conn-modal conn)))
         (nerimux::%handle-multi-key-message s conn #(13)) ; Enter
-        (expect (not (nerimux::client-conn-help-view-p conn)))
+        (expect (null (nerimux::client-conn-modal conn)))
         (nerimux::%handle-multi-key-message s conn #(63))
+        (nerimux::%handle-multi-key-message s conn #(107))
         (nerimux::%handle-multi-key-message s conn #(27)) ; Esc
-        (expect (not (nerimux::client-conn-help-view-p conn))))))
+        (expect (null (nerimux::client-conn-modal conn))))))
 
   (it "the rendered client frame shows the help view's sections while it is up"
     (with-fake-session (s)
       (let ((conn (%make-test-conn :rows 40 :cols 110)))
         (nerimux::%handle-multi-key-message s conn #(63))
+        (nerimux::%handle-multi-key-message s conn #(107))
         (multiple-value-bind (type payload)
             (nerimux/protocol::decode-frame (nerimux::%render-client-frame s conn))
           (expect (= nerimux::+msg-frame+ type))
           (let ((visible (strip-sgr (nerimux/protocol::decode-text payload))))
-            (expect (search "Overview" visible))
+            (expect (search "Navigate" visible))
             (expect (search "Prefix C-q" visible))
-            (expect (search "Modes" visible)))))))
+            (expect (search "Scrollback" visible))
+            ;; "Modes" was the pre-magit section describing normal/input/copy.
+            ;; Those modes are gone; a frame still showing that heading means
+            ;; the help content drifted back.
+            (expect (null (search "Modes" visible))))))))
 
-  (it "a pending confirm-view outranks the help view, both for keys and for rendering"
+  ;; The old two-flag design (a CONFIRM-VIEW slot plus a separate HELP-VIEW-P
+  ;; boolean) could have both up at once, which is exactly what this test
+  ;; used to probe: which one answers a key, which one renders. MODAL is now
+  ;; a single exclusive slot BY CONSTRUCTION (see the struct's own WHY
+  ;; comment), so there is no reachable state with two modals live -- opening
+  ;; a confirmation while MODAL is :help does not layer over it, it REPLACES
+  ;; it. This asserts that replacement directly: the old "who wins" question
+  ;; is moot, and what replaced it is single-slot exclusivity.
+  (it "opening a confirm-view while modal is :help replaces it outright"
     (with-fake-session (s)
       (let* ((conn (%make-test-conn :rows 40 :cols 110))
              (nerimux::*clients* (list conn)))
-        (setf (nerimux::client-conn-help-view-p conn) t)
+        (setf (nerimux::client-conn-modal conn) :help)
         (nerimux::%open-confirm-view conn "WORKTREE DELETE"
                                      '(("worktree" . "feature/x"))
                                      (lambda () nil))
-        ;; Rendering: CONFIRM-VIEW wins (approved decision).
+        (expect (eq :confirm (nerimux::client-conn-modal conn)))
+        ;; Rendering: the confirm view is what is on screen now, not help.
         (multiple-value-bind (type payload)
             (nerimux/protocol::decode-frame (nerimux::%render-client-frame s conn))
           (declare (ignore type))
           (let ((visible (strip-sgr (nerimux/protocol::decode-text payload))))
             (expect (search "WORKTREE DELETE" visible))
             (expect (not (search "Prefix C-q" visible)))))
-        ;; Keys: n answers the confirmation (not the help view's swallow-all).
+        ;; Keys: n answers the confirmation (there is no help swallow left to
+        ;; compete with it).
         (nerimux::%handle-multi-key-message s conn #(110)) ; n
         (expect (not (nerimux::client-conn-confirm-view conn)))
-        (expect (nerimux::client-conn-help-view-p conn)))))
+        ;; %close-confirm-view drops MODAL to NIL, not back to :help -- there
+        ;; is no stack to pop, only the one slot the confirmation overwrote.
+        (expect (null (nerimux::client-conn-modal conn))))))
 
-  ;; S5 fix: the assertion above only proves `?` did not open the help view
+  ;; S5 fix: the assertion above only proves `?` did not open the transient
   ;; -- it says nothing about where the byte actually went. Extended to
   ;; assert the forwarding side, mirroring %HANDLE-CLIENT-INPUT-KEY-PAYLOAD's
   ;; own live-pane branch (server-multi-dispatch-command-input.lisp), which
@@ -1613,23 +1572,65 @@
   ;; layer -- fd 9999 fakes "live" without a real PTY, the same technique
   ;; used elsewhere in this suite (e.g. server-dispatch-helper-tests.lisp's
   ;; tree-navigation-suite), and PTY-WRITE is stubbed to capture its call.
-  (it "?-in-input-mode-does-not-open-the-help-view"
+  ;;
+  ;; Magit alignment retires :input mode outright (FR-007): a pane now takes
+  ;; every byte, `?` included, whenever VIEW is :pane and MODAL is NIL, with
+  ;; no mode to leave first. This is that FR-007 core invariant, specialised
+  ;; to the one byte (`?`) that would otherwise be ambiguous with opening
+  ;; the transient.
+  (it "?-reaches-a-focused-pane-directly-in-pane-view-instead-of-opening-the-transient"
     (with-fake-session (s)
       (let* ((conn (%make-test-conn))
              (pane (nerimux::window-active-pane (nerimux::session-active-window s)))
              (writes nil))
         (setf (nerimux/model:pane-fd pane) 9999)
-        (setf (nerimux::client-conn-mode conn) :input
+        (setf (nerimux::client-conn-view conn) :pane
               (nerimux::client-conn-focus conn) pane)
         (with-stubbed-fdefinition
             ((nerimux/pty:pty-write
                (lambda (fd payload) (push (list fd payload) writes))))
           (nerimux::%handle-multi-key-message s conn #(63))
-          (expect (not (nerimux::client-conn-help-view-p conn)))
+          (expect (null (nerimux::client-conn-modal conn)))
           ;; EQUALP, not EQUAL: a general (non-string) vector compares by EQ
           ;; under EQUAL, and PAYLOAD here is a fresh #(63) distinct from the
           ;; literal captured above -- EQUALP compares vector contents.
           (expect (equalp (list (list 9999 #(63))) writes))))))
+
+  ;; FR-007's general case, requested independently of the `?`-specific test
+  ;; above: with MODAL NIL and VIEW :pane, an entirely ordinary byte -- one
+  ;; that would be a UI-bound key in :repolist/:status -- reaches the pane
+  ;; with no mode to leave first. `n` is deliberately chosen: it is bound to
+  ;; "next row" in :repolist (contract §2), so this also shows the same byte
+  ;; means two different things purely as a function of VIEW.
+  (it "an-ordinary-byte-reaches-a-focused-pane-directly-in-pane-view-fr-007"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (pane (nerimux::window-active-pane (nerimux::session-active-window s)))
+             (writes nil))
+        (setf (nerimux/model:pane-fd pane) 9999)
+        (setf (nerimux::client-conn-view conn) :pane
+              (nerimux::client-conn-focus conn) pane)
+        (with-stubbed-fdefinition
+            ((nerimux/pty:pty-write
+               (lambda (fd payload) (push (list fd payload) writes))))
+          (nerimux::%handle-multi-key-message s conn #(110)) ; n
+          (expect (null (nerimux::client-conn-modal conn)))
+          (expect (eq :pane (nerimux::client-conn-view conn)))
+          (expect (equalp (list (list 9999 #(110))) writes))))))
+
+  ;; FR-007's other half: with MODAL set, the modal owns the key and it does
+  ;; NOT reach the view underneath, however VIEW is set. :help swallows
+  ;; every key but its own close set (q/?/Enter/Esc, unchanged behaviour),
+  ;; so `n` here must neither move the (absent) selection nor be forwarded
+  ;; anywhere -- it must simply do nothing while :help remains up.
+  (it "a-modal-owns-the-key-and-the-view-underneath-never-sees-it"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn)))
+        (setf (nerimux::client-conn-view conn) :repolist
+              (nerimux::client-conn-modal conn) :help)
+        (nerimux::%handle-multi-key-message s conn #(110)) ; n: "next row" in :repolist
+        (expect (eq :help (nerimux::client-conn-modal conn)))
+        (expect (null (nerimux::client-conn-selected-tree-object conn))))))
 
   ;; BUG-2 (R6.2/design §7.3): a FAILED object shows stale; other objects
   ;; don't inherit it. Drives the REAL refresh path -- %REFRESH-CLIENT-

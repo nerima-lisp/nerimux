@@ -42,7 +42,7 @@
       (let ((resolved (nerimux::%client-attach-selection conn organizations)))
         (expect (null resolved)
                 )
-        (expect (eq :picker (nerimux::client-conn-mode conn)))
+        (expect (eq :picker (nerimux::client-conn-modal conn)))
         (expect (string= selector (nerimux::client-conn-picker-query conn))
                 ))))
 
@@ -52,7 +52,7 @@
       (setf (nerimux::client-conn-attach-target conn) "/tmp/only-a-worktree")
       (let ((resolved (nerimux::%client-attach-selection conn organizations)))
         (expect resolved)
-        (expect (not (eq :picker (nerimux::client-conn-mode conn)))))))
+        (expect (not (eq :picker (nerimux::client-conn-modal conn)))))))
 
   ;; Before R7.6 this reported "attach target not found" -- the attach path
   ;; matched selectors against worktrees only, so a repository the workspace
@@ -66,7 +66,7 @@
                 )
         (expect (eq repository (nerimux::%client-tree-object conn))
                 )
-        (expect (not (eq :picker (nerimux::client-conn-mode conn)))
+        (expect (not (eq :picker (nerimux::client-conn-modal conn)))
                 ))))
 
   ;; cwd auto-selection (kept out of R7.6's scope, unchanged by it) has its own
@@ -222,7 +222,7 @@
             (let ((pane (first (nerimux/model:all-panes session))))
               ;; %focus-selected-client-worktree only takes the direct
               ;; %client-worktree-pane branch (%set-client-focus, which sets
-              ;; the :detail view) when the pane is PANE-LIVE-P (fd > 0); a
+              ;; the :pane view) when the pane is PANE-LIVE-P (fd > 0); a
               ;; not-live pane falls through to %open-client-worktree-pane,
               ;; which does a real WORKTREE-MISSING-P filesystem check this
               ;; fixture's path cannot pass. No PTY I/O happens on this path,
@@ -233,10 +233,10 @@
               (let ((conn (%make-test-conn))
                     (nerimux::*server-sessions* (list (cons "0" session)))
                     (nerimux/vcs::*workspace-organizations* organizations))
-                (setf (nerimux::client-conn-view conn) :overview)
+                (setf (nerimux::client-conn-view conn) :repolist)
                 (nerimux::%client-attach-target
                  conn (list nil "/tmp/nerimux-cwd-fixture/repo/.worktrees/wt-cwd/src"))
-                (expect (eq :detail (nerimux::client-conn-view conn))))))))))
+                (expect (eq :pane (nerimux::client-conn-view conn))))))))))
 
   ;; Coverage gap flagged by test/security review: when no session is
   ;; registered at all (*server-sessions* empty -- e.g. attach racing the
@@ -254,7 +254,7 @@
         (let ((conn (%make-test-conn))
               (nerimux::*server-sessions* nil)
               (nerimux/vcs::*workspace-organizations* organizations))
-          (setf (nerimux::client-conn-view conn) :overview)
+          (setf (nerimux::client-conn-view conn) :repolist)
           (nerimux::%client-attach-target
            conn (list nil "/tmp/nerimux-cwd-fixture/repo/.worktrees/wt-no-session/src"))
-          (expect (eq :overview (nerimux::client-conn-view conn))))))))
+          (expect (eq :repolist (nerimux::client-conn-view conn))))))))

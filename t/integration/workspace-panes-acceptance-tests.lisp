@@ -67,7 +67,7 @@
               (nerimux::*clients* (list ,conn-var)))
          (nerimux/model:organization-add-repository organization repository)
          (nerimux/model:repository-add-worktree repository ,worktree-var)
-         (setf (nerimux::client-conn-view ,conn-var) :overview)
+         (setf (nerimux::client-conn-view ,conn-var) :repolist)
          (nerimux::%set-client-selected-tree-object ,conn-var ,worktree-var)
          (nerimux::%handle-multi-key-message ,session-var ,conn-var #(13)) ; Enter
          (let ((,window-var (nerimux/model:session-active-window ,session-var)))
@@ -175,7 +175,7 @@
         (nerimux::%handle-multi-key-message session conn #(120))
         (expect (null (nerimux/model:worktree-panes worktree)))
         (expect (null (nerimux/model:session-windows session)))
-        (expect (eq :overview (nerimux::client-conn-view conn))))))
+        (expect (eq :repolist (nerimux::client-conn-view conn))))))
 
   ;; R5.6: zoom is auto-unzoomed before a split, so the +max-panes-per-window+
   ;; check sees the window's REAL pane count instead of the single collapsed
@@ -231,7 +231,7 @@
                (nerimux::*clients* (list conn)))
           (nerimux/model:organization-add-repository organization repository)
           (nerimux/model:repository-add-worktree repository worktree)
-          (setf (nerimux::client-conn-view conn) :overview)
+          (setf (nerimux::client-conn-view conn) :repolist)
           (nerimux::%set-client-selected-tree-object conn worktree)
           (nerimux::%handle-multi-key-message session conn #(13))
           (let ((pane (nerimux/model:window-active-pane

@@ -8,13 +8,24 @@
     (let* ((output (nerimux/renderer:render-help-view-to-tui-string 40 110))
            (visible (strip-sgr output)))
       ;; Section headings.
-      (expect (search "Overview" visible))
+      (expect (search "Navigate" visible))
+      (expect (search "Status" visible))
+      (expect (search "Menus" visible))
       (expect (search "Prefix C-q" visible))
-      (expect (search "Modes" visible))
+      (expect (search "Scrollback" visible))
+      (expect (search "Panes" visible))
       ;; A sample of keys from each section, and their descriptions.
-      (expect (search "new worktree" visible))
+      (expect (search "detail level" visible))
+      (expect (search "process log" visible))
       (expect (search "quit server" visible))
-      (expect (search "no key exit of its own" visible))
+      (expect (search "scrollback" visible))
+      (expect (search "half page" visible))
+      ;; The retired keymap must not come back. These are the descriptions the
+      ;; pre-magit help carried; each names a key that no longer exists, and a
+      ;; help screen advertising one is the specific bug this guards.
+      (expect (null (search "new worktree" visible)))
+      (expect (null (search "no key exit of its own" visible)))
+      (expect (null (search "enter: i" visible)))
       ;; The title chip and the close hint.
       (expect (search "HELP" visible))
       (expect (search "close" visible))
@@ -27,6 +38,22 @@
               (%expected-sgr-params (nerimux/renderer::%help-view-heading-style)))
       (expect output :to-contain-sgr
               (%expected-sgr-params (nerimux/renderer::%help-view-key-style)))))
+
+  ;; The help text is hand-written strings, so it drifts from the dispatch
+  ;; tables silently -- it already did once, surviving the whole magit keymap
+  ;; replacement while still advertising j/k, r, i, c and a "Modes" section.
+  ;; Only one of the tables it documents is machine-readable data rather than a
+  ;; COND over byte codes, so only this part can be checked mechanically; that
+  ;; makes it worth checking rather than not.
+  (it "every menu key the help advertises actually opens a transient"
+    (let* ((section (find "Menus (?)" nerimux/renderer::+help-view-sections+
+                          :key #'first :test #'string=))
+           (advertised (mapcar #'car (second section))))
+      (expect (plusp (length advertised)))
+      (dolist (key advertised)
+        ;; The help spells keys as strings, the table keys on characters.
+        (expect (assoc (char key 0) nerimux::+transient-definitions+
+                       :test #'char=)))))
 
   (it "clips rather than errors when the terminal is too short for every section"
     (let ((output (nerimux/renderer:render-help-view-to-tui-string 8 40)))

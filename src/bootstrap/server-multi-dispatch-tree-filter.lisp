@@ -31,11 +31,15 @@
   "Handle ESC, Enter, editing, and printable input in tree-filter mode."
   (27
    (%client-esc-swallow-start conn)
-   (%transition-client-ui-mode conn :cancel)
+   ;; ESC drops the in-progress query entirely; Enter below keeps it -- the
+   ;; user is happy with the filtered set and wants to keep navigating it
+   ;; with MODAL back to NIL, not have it silently reset to the full tree.
+   (%set-client-modal conn nil)
+   (setf (client-conn-tree-filter conn) nil)
    (%mark-dirty)
    t)
   ((or (%client-byte-p payload 13) (%client-byte-p payload 10))
-   (%transition-client-ui-mode conn :accept)
+   (%set-client-modal conn nil)
    (%mark-dirty)
    t)
   ((or (%client-byte-p payload 8) (%client-byte-p payload 127))

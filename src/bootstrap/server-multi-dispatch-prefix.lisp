@@ -68,8 +68,8 @@
 
 (defun %workspace-refocus-after-window-close (session conn worktree)
   "R5.4 fallback focus once a window closes because its last pane closed:
-   another window of the same WORKTREE (most recently active first), else
-   overview."
+   another window of the same WORKTREE (most recently active first), else the
+   repolist."
   (let* ((candidates (and worktree (worktree-panes worktree)))
          (best-pane
            (and candidates
@@ -81,7 +81,7 @@
                (active (window-active-pane window)))
           (session-select-window session window)
           (%set-client-focus conn active))
-        (%set-client-view conn :overview))))
+        (%set-client-view conn :repolist))))
 
 (defun %workspace-prefix-close-pane (session conn)
   "C-q x : close the focused pane (R5.4).  Kills its PTY, drops it from its
@@ -166,8 +166,40 @@
                (%mark-dirty)))))))
   nil)
 
+(defun %workspace-prefix-open-status (session conn)
+  "C-q w (FR-009): switch to the status view for the focused pane's
+   worktree.  With no pane focused -- or a focused pane with no worktree,
+   which the status view has nothing to render for either -- this falls
+   back to :repolist rather than notifying and leaving the screen as it
+   was, so the key is never a dead end."
+  (multiple-value-bind (pane window worktree)
+      (%workspace-prefix-context session conn)
+    (declare (ignore window))
+    (if (and pane worktree)
+        (progn
+          (setf (client-conn-selected-worktree conn) worktree)
+          (%set-client-view conn :status))
+        (%set-client-view conn :repolist)))
+  nil)
+
+(defun %workspace-prefix-open-scrollback (session conn)
+  "C-q [ (FR-008): enter scrollback on the focused pane -- the new entry
+   point for what was copy mode.  %CLIENT-ENTER-COPY-MODE
+   (server-multi-dispatch-command-workspace.lisp) already resolves the
+   focused pane, puts its screen into copy mode, and reports \"no focused
+   pane\" when there is none; this only layers the MODAL transition on top
+   of that success rather than duplicating its pane-resolution and
+   no-pane-reporting logic here."
+  (when (%client-enter-copy-mode session conn)
+    (%set-client-modal conn :scrollback))
+  nil)
+
 (defun %workspace-prefix-fetch-repository (conn)
-  "C-q F (R7.1): fetch the selected repository, then refresh status.
+  "Fetch the selected repository, then refresh status.  No longer bound to
+   C-q F (magit alignment, contract §2/§3: fetch moves to the `f`
+   transient) -- kept as a function because workspace-input-prefix-tests.lisp
+   still exercises it directly and the `f` transient is a separate unit's
+   call site for the same logic.
 
 A fetch already running for this repository is not started twice; the
 caller that finds one in flight is told so and the in-flight fetch's own
@@ -200,10 +232,11 @@ FETCH-REPOSITORY-ASYNC)."
   nil)
 
 (defun %workspace-prefix-fetch-organization (conn)
-  "C-q C-f (R7.1): fetch every repository in the selected organization
-concurrently, then refresh status. Duplicate suppression and the completion
-callback mirror %WORKSPACE-PREFIX-FETCH-REPOSITORY, one level up
-(nerimux/vcs:FETCH-ORGANIZATION-ASYNC)."
+  "Fetch every repository in the selected organization concurrently, then
+   refresh status.  No longer bound to C-q C-f -- same removal, and the same
+   reason to keep the function, as %WORKSPACE-PREFIX-FETCH-REPOSITORY above.
+   Duplicate suppression and the completion callback mirror that function,
+   one level up (nerimux/vcs:FETCH-ORGANIZATION-ASYNC)."
   (let ((organization (%client-selected-organization conn)))
     (cond
       ((not organization)
@@ -241,14 +274,17 @@ callback mirror %WORKSPACE-PREFIX-FETCH-REPOSITORY, one level up
                                             :fields fields
                                             :prompt-p t)
         (client-conn-confirm-action conn) action)
-  (%mark-dirty)
+  ;; MODAL :confirm alongside CONFIRM-VIEW (contract §5): %HANDLE-MULTI-KEY-
+  ;; MESSAGE routes purely on MODAL, so without this a confirmation would be
+  ;; drawn but never reached by the key dispatch that is supposed to answer it.
+  (%set-client-modal conn :confirm)
   nil)
 
 (defun %close-confirm-view (conn)
   "Take the confirmation down and forget its pending action."
   (setf (client-conn-confirm-view conn) nil
         (client-conn-confirm-action conn) nil)
-  (%mark-dirty))
+  (%set-client-modal conn nil))
 
 (defun %handle-confirm-key (session conn payload)
   "Answer the confirmation CONN is looking at.  Returns two values: whether the
@@ -307,15 +343,15 @@ callback mirror %WORKSPACE-PREFIX-FETCH-REPOSITORY, one level up
       ((= byte (char-code #\l)) (%workspace-prefix-move-focus session conn :right))
       ((= byte (char-code #\n)) (%workspace-prefix-cycle-window session conn 1))
       ((= byte (char-code #\p)) (%workspace-prefix-cycle-window session conn -1))
-      ((= byte (char-code #\F)) (%workspace-prefix-fetch-repository conn))
-      ((= byte #x06) (%workspace-prefix-fetch-organization conn)) ; C-f
+      ((= byte (char-code #\w)) (%workspace-prefix-open-status session conn))
+      ((= byte (char-code #\[)) (%workspace-prefix-open-scrollback session conn))
       ((= byte (char-code #\d)) :drop)
       ((= byte (char-code #\Q)) (%workspace-prefix-quit-server session conn))
       ((= byte (client-conn-workspace-prefix-code conn))
-       ;; C-q C-q: back to :normal — the only prefix action with no pane or
+       ;; C-q C-q: drop any MODAL and hand the keyboard back to whatever VIEW
+       ;; is on screen (FR-007) — the only prefix action with no pane or
        ;; worktree precondition, so it is handled inline rather than via a
        ;; one-line %workspace-prefix-* wrapper.
-       (%transition-client-ui-mode conn :enter-normal)
-       (%mark-dirty)
+       (%set-client-modal conn nil)
        nil)
       (t nil))))

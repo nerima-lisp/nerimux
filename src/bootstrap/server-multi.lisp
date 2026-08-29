@@ -281,8 +281,8 @@
                                  :fd     (socket-fd socket)
                                  :rows   *term-rows*
                                  :cols   *term-cols*
-                                 :mode   :normal
-                                 :view   :overview
+                                 :view   :repolist
+                                 :modal  nil
                                  :viewport 0)))
     (push conn *clients*)
     (when (and (not *workspace-catalog-refresh-started-p*)

@@ -1,14 +1,15 @@
 (in-package #:nerimux)
 
-(defun %client-enter-input-mode (conn)
-  (%transition-client-ui-mode conn :enter-input)
-  (%mark-dirty)
-  t)
+;; %client-enter-input-mode retired with the `i` key it existed to implement
+;; (magit alignment, FR-007): its only production caller was the old
+;; %handle-client-normal-key-payload's `#\i` clause, and with :pane keys now
+;; going straight to the shell (%client-ui-keys-p), there is no mode left to
+;; enter -- grepping the bare identifier turned up no other call site.
 
 (defun %client-enter-command-mode (conn &optional (initial-buffer ""))
   (setf (client-conn-command-return-view conn)
         (client-conn-view conn))
-  (%transition-client-ui-mode conn :enter-command)
+  (%set-client-modal conn :command)
   (setf (client-conn-command-buffer conn)
         (if (stringp initial-buffer) initial-buffer ""))
   (%mark-dirty)
@@ -16,7 +17,7 @@
 
 (defun %client-restore-command-view (conn)
   (let ((view (client-conn-command-return-view conn)))
-    (when (member view '(:overview :detail) :test #'eq)
+    (when (member view '(:repolist :status :pane) :test #'eq)
       (setf (client-conn-view conn) view))
     (setf (client-conn-command-return-view conn) nil)))
 
@@ -125,7 +126,7 @@
                t))))
       ((typep object 'nerimux/model:pane)
        (%set-client-focus conn object)
-       (%set-client-view conn :detail)
+       (%set-client-view conn :pane)
        (%mark-dirty)
        t)
       ;; Inline worktree expansion (Wave B): a :FILE or :COMMIT row's OBJECT
@@ -143,7 +144,7 @@
        (let ((pane (nerimux/model:window-active-pane object)))
          (when pane
            (%set-client-focus conn pane)
-           (%set-client-view conn :detail)))
+           (%set-client-view conn :pane)))
        (%mark-dirty)
        t)
       (t
@@ -354,18 +355,18 @@
 (defun %client-enter-tree-filter-mode (conn)
   "`/` always starts from an empty query (vim's `/` semantics), even when a
    previous filter session ended with Enter and left CONN-TREE-FILTER set
-   (%TRANSITION-CLIENT-UI-MODE's :ACCEPT path keeps it on exit, precisely so
-   the filtered view survives into :normal navigation) -- without resetting
-   it here, the next `/` silently prepended new keystrokes onto that old
-   query instead of starting fresh."
+   (the tree-filter modal's ESC/Enter asymmetry, contract SS5, keeps it on
+   exit, precisely so the filtered view survives into ordinary navigation)
+   -- without resetting it here, the next `/` silently prepended new
+   keystrokes onto that old query instead of starting fresh."
   (setf (client-conn-tree-filter conn) nil
         (client-conn-tree-scroll conn) 0)
-  (%transition-client-ui-mode conn :enter-tree-filter)
+  (%set-client-modal conn :filter)
   (%mark-dirty)
   t)
 
 (defun %handle-client-input-key-payload (session conn payload)
-  "Every byte, ESC included, is forwarded to the focused pane: :input mode has
+  "Every byte, ESC included, is forwarded to the focused pane: VIEW :pane has
    no keyboard exit of its own (that returns with the C-q prefix, R4.4)."
   (let ((pane (or (client-conn-stdin-target conn)
                   (%resolve-client-focus-pane session nil conn))))
@@ -386,29 +387,49 @@
     (%mark-dirty)
     t))
 
+(defun %copy-mode-half-page-delta (pane)
+  "Rows for C-u/C-d (contract SS2): half PANE's screen height, at least one
+   line so a one-row pane still moves. copy-mode-scroll's sign convention
+   (positive = older/up) makes C-u this value and C-d its negation."
+  (let ((screen (and pane (pane-screen pane))))
+    (max 1 (floor (if screen (screen-height screen) 24) 2))))
+
 (define-key-rules %copy-key-dispatch (session conn payload)
   (:let ((pane (%resolve-client-focus-pane session nil conn))
          (screen (and pane (pane-screen pane)))))
   ((null screen)
    (%client-notify conn "no focused pane")
-   (%transition-client-ui-mode conn :enter-normal))
+   (%set-client-modal conn nil))
   (#\k (copy-mode-move-cursor screen :up))
   (#\j (copy-mode-move-cursor screen :down))
-  (#\h (copy-mode-move-cursor screen :left))
-  (#\l (copy-mode-move-cursor screen :right))
+  (21 (copy-mode-scroll screen (%copy-mode-half-page-delta pane)))
+  (4 (copy-mode-scroll screen (- (%copy-mode-half-page-delta pane))))
   (#\g (copy-mode-scroll screen most-positive-fixnum))
   (#\G (copy-mode-scroll screen (- most-positive-fixnum)))
   (#\Space (copy-mode-begin-selection screen))
-  (#\y (copy-mode-yank screen))
+  (#\y (copy-mode-yank screen) (%set-client-modal conn nil))
   (#\n (copy-mode-search-next screen))
   (#\N (copy-mode-search-prev screen))
   (#\/ (%client-enter-command-mode conn "search-forward "))
   (#\? (%client-enter-command-mode conn "search-backward "))
-  (#\q (%client-exit-copy-mode session conn)))
+  (#\q
+   ;; Mirrors what %client-exit-copy-mode used to do to SCREEN before this
+   ;; unit was told (contract SS0) to stop calling it: q must still unfreeze
+   ;; the viewport, or live PTY output keeps appending underneath a frame
+   ;; anchored at the old scroll offset while the keyboard has already moved
+   ;; on to the view underneath.
+   (when (screen-copy-mode-p screen) (copy-mode-exit screen))
+   (%set-client-modal conn nil)))
 
 (defun %handle-client-copy-key-payload (session conn payload)
-  "Copy-mode exit is bound to q only; ESC is a plain, unbound byte here (it no
-   longer doubles as an exit key -- see R4.2)."
+  "Scrollback (contract SS2/FR-008) exit is bound to q, which clears MODAL
+   directly -- there is no %client-exit-copy-mode transition to call anymore,
+   just a modal to drop, so a caller cannot land back in an unreachable
+   (view, modal) pair. ESC is a plain, unbound byte here (it never doubled as
+   an exit key -- see R4.2), and h/l horizontal cursor movement is dropped:
+   SS2's scrollback table has no horizontal keys, and grep across src/ for
+   COPY-MODE-MOVE-CURSOR turns up only the :up/:down call sites left above --
+   no :left/:right caller survives removing these two clauses."
   (%copy-key-dispatch session conn payload)
   (%mark-dirty)
   t)
@@ -461,11 +482,11 @@
       ((eq direction :backward)
        (copy-mode-search-backward screen term)))
     (%client-restore-command-view conn)
-    (%transition-client-ui-mode
+    (%set-client-modal
      conn
      (if (and screen (screen-copy-mode-p screen))
-         :enter-copy
-         :enter-normal))
+         :scrollback
+         nil))
     (%mark-dirty)))
 
 (defun %submit-client-command (session conn)
@@ -475,7 +496,7 @@
     (if (zerop (length input))
         (progn
           (%client-restore-command-view conn)
-          (%transition-client-ui-mode conn :enter-normal)
+          (%set-client-modal conn nil)
           (%mark-dirty))
         (handler-case
             (let* ((tokens (tokenize-command-string input))
@@ -521,14 +542,14 @@
                           (%client-notify conn "empty command"))
                       (unless handled-p
                         (%client-restore-command-view conn)))
-                    (%transition-client-ui-mode conn :enter-normal)
+                    (%set-client-modal conn nil)
                     (%mark-dirty))))
           (error (condition)
             (%client-notify
              conn
              (format nil "command failed: ~A" condition))
             (%client-restore-command-view conn)
-            (%transition-client-ui-mode conn :enter-normal)
+            (%set-client-modal conn nil)
             (%mark-dirty)))))
   t)
 
@@ -538,7 +559,7 @@
    (%client-esc-swallow-start conn)
    (setf (client-conn-command-buffer conn) "")
    (%client-restore-command-view conn)
-   (%transition-client-ui-mode conn :enter-normal)
+   (%set-client-modal conn nil)
    (%mark-dirty)
    t)
   ((or (%client-byte-p payload 13) (%client-byte-p payload 10))
@@ -550,56 +571,196 @@
    (%client-command-buffer-append conn payload)
    t))
 
-(define-key-rules %handle-client-normal-key-payload (session conn payload)
+;;; ── ESC-prefixed multi-byte keys (M-n, M-p, S-TAB) ──────────────────────────
+;;;
+;;; The client forwards stdin one byte at a time (see *CLIENT-ESC-SWALLOW-
+;;; COUNTS* above), so Alt/Meta and shifted-function keys still arrive as a
+;;; multi-byte escape sequence split across separate key messages: M-n/M-p is
+;;; ESC then the letter (2 bytes), S-TAB is ESC [ Z (3 bytes), and a real
+;;; arrow key is ESC [ A/B/C/D (3 bytes, same CSI introducer as S-TAB).
+;;;
+;;; *CLIENT-ESC-SWALLOW-COUNTS* is the wrong tool here: it discards a fixed,
+;;; already-known number of trailing bytes after something else has already
+;;; acted on the ESC. Here nothing may act until the byte AFTER the ESC is
+;;; known, so this needs the opposite shape -- remember that an ESC is
+;;; in-flight and route only the byte(s) that follow it, keyed by CONN so one
+;;; client's pending sequence can never resolve against another's byte.
+
+(defvar *client-meta-pending* (make-hash-table :test #'eq :weakness :key)
+  "CONN -> :SECOND (just saw ESC, waiting for the byte that disambiguates
+   M-n/M-p from a CSI introducer) or :CSI-THIRD (that byte was `[`, waiting
+   for the third byte that disambiguates S-TAB's `Z` from an arrow key's
+   A/B/C/D). Absent means no ESC is in flight for CONN. :weakness :key for
+   the same reason as *CLIENT-ESC-SWALLOW-COUNTS*: a dropped connection's
+   entry must not linger.")
+
+(defun %client-meta-pending-consume (conn payload)
+  "Resolve the byte following a pending ESC. `n`/`p` while :SECOND completes
+   M-n/M-p (contract SS2's section jump); `[` while :SECOND is a CSI
+   introducer and advances to :CSI-THIRD instead of acting; `Z` while
+   :CSI-THIRD completes S-TAB (cycle visibility). Anything else -- most
+   importantly an arrow key's A/B/C/D at :CSI-THIRD -- is an unrecognised
+   sequence and is swallowed right here rather than replayed into
+   %HANDLE-CLIENT-UI-KEY-PAYLOAD's own per-key table, which is exactly the
+   'a sequence's trailing bytes must never land on the wrong handler' rule
+   the ESC clause in %HANDLE-HELP-VIEW-KEY documents for the same hazard.
+   This is also the reason an arrow key cannot mis-fire a bound letter: its
+   third byte only ever reaches this COND, never the table below, and A/B/C/D
+   match nothing in it."
+  (let ((state (gethash conn *client-meta-pending*)))
+    (remhash conn *client-meta-pending*)
+    (case state
+      (:second
+       (cond
+         ((%client-key-p payload #\n) (%select-client-tree-section-relative conn 1))
+         ((%client-key-p payload #\p) (%select-client-tree-section-relative conn -1))
+         ((%client-byte-p payload 91) ; `[`, the CSI introducer
+          (setf (gethash conn *client-meta-pending*) :csi-third))))
+      (:csi-third
+       (when (%client-byte-p payload 90) ; `Z`
+         (%client-cycle-visibility conn)))))
+  t)
+
+;;; ── FR-005 visibility levels ─────────────────────────────────────────────
+
+(defun %client-set-visibility-level (conn level)
+  "`1`-`4` (contract SS2): set CONN's global section-visibility preset.
+   Out-of-range LEVEL is a no-op rather than storing an unrenderable value --
+   defensive only, since every caller here already passes a literal 1-4 or a
+   value %CLIENT-CYCLE-VISIBILITY has already reduced into that range."
+  (when (<= 1 level 4)
+    (setf (client-conn-visibility-level conn) level)
+    (%mark-dirty))
+  t)
+
+(defun %client-cycle-visibility (conn)
+  "S-TAB: advance CONN's visibility level 1->2->3->4->1. A never-yet-set
+   level (NIL) is treated as 0 so the first press lands on 1 rather than
+   erroring out of MOD."
+  (%client-set-visibility-level
+   conn
+   (1+ (mod (or (client-conn-visibility-level conn) 0) 4))))
+
+;;; ── FR-006 `q` step-back ladder ──────────────────────────────────────────
+
+(defun %client-focused-live-pane (session conn)
+  "CONN's own remembered focus, still live in SESSION -- deliberately NOT
+   %RESOLVE-CLIENT-FOCUS-PANE's window-active-pane fallback, which always
+   finds SOME pane once a window exists and would make %CLIENT-STEP-BACK's
+   'if there is one' vacuously true, sending `q` into a pane the user never
+   actually left."
+  (and (client-conn-focus conn)
+       (find (client-conn-focus conn) (all-panes session) :test #'eq)))
+
+(defun %client-step-back (session conn)
+  "FR-006: `q` retreats exactly one level, first match wins, so a transient
+   sitting over a filtered status view backs out only the transient -- the
+   filter and the pane behind it are left exactly where the user put them.
+   The transient rung only fires when something else on this connection
+   calls this directly with MODAL already :TRANSIENT (contract SS3's
+   %HANDLE-CLIENT-TRANSIENT-KEY-PAYLOAD may delegate its own `q` here for
+   this reason): %HANDLE-MULTI-KEY-MESSAGE routes a :TRANSIENT modal to that
+   handler before this function is ever reached, so `q` on the UI keymap
+   itself always has MODAL NIL by the time it gets here."
+  (cond
+    ((eq (client-conn-modal conn) :transient)
+     (setf (client-conn-transient-view conn) nil)
+     (%set-client-modal conn nil))
+    ((client-conn-tree-filter conn)
+     (setf (client-conn-tree-filter conn) nil)
+     (%mark-dirty))
+    ((eq (client-conn-view conn) :status)
+     (if (%client-focused-live-pane session conn)
+         (%set-client-view conn :pane)
+         (%set-client-view conn :repolist)))
+    ((eq (client-conn-view conn) :repolist)
+     (when (%client-focused-live-pane session conn)
+       (%set-client-view conn :pane))))
+  t)
+
+;;; ── FR-011 `$` process log ───────────────────────────────────────────────
+
+(defun %scroll-client-process-log (conn delta)
+  (let* ((entries (client-conn-process-log conn))
+         (max-scroll (max 0 (1- (length entries)))))
+    (setf (client-conn-process-log-scroll conn)
+          (max 0 (min max-scroll (+ (client-conn-process-log-scroll conn) delta))))
+    (%mark-dirty)))
+
+(defun %handle-process-log-key (conn payload)
+  "Answer the `$` process log CONN is looking at: q/ESC close it (dropping
+   MODAL, the same shape %CLOSE-HELP-VIEW uses -- there is no separate
+   'process log mode' to leave, only a modal to drop); n/p scroll;
+   everything else is swallowed, mirroring %HANDLE-HELP-VIEW-KEY. ESC goes
+   through %CLIENT-ESC-SWALLOW-START first (R4.3) for the identical reason
+   documented there: a lone ESC byte here could be the first of a 3-byte
+   arrow-key sequence, and closing the view immediately would hand its
+   trailing 2 bytes to whatever key handler runs next as literal `[` and a
+   letter."
+  (cond
+    ((%client-byte-p payload 27)
+     (%client-esc-swallow-start conn)
+     (%set-client-modal conn nil))
+    ((%client-key-p payload #\q)
+     (%set-client-modal conn nil))
+    ((%client-key-p payload #\n)
+     (%scroll-client-process-log conn 1))
+    ((%client-key-p payload #\p)
+     (%scroll-client-process-log conn -1)))
+  nil)
+
+;;; ── The repolist/status UI keymap (contract SS2, FR-004) ─────────────────
+;;;
+;;; Reached only when MODAL is NIL and VIEW is :repolist or :status
+;;; (%CLIENT-UI-KEYS-P) -- every other modal has its own dispatcher in
+;;; %HANDLE-MULTI-KEY-MESSAGE's ECASE, and VIEW :pane goes straight to the
+;;; shell. A key this table does not bind is simply dropped by the caller;
+;;; it must never fall through to %HANDLE-CLIENT-INPUT-KEY-PAYLOAD, which
+;;; would hand a retired UI key like the old `j`/`c`/`i` to whatever program
+;;; the focused pane happens to be running.
+
+(define-key-rules %handle-client-ui-key-payload (session conn payload)
   (:let ((view (client-conn-view conn))))
-  (#\k
-   (case view
-     (:overview (%select-client-tree-relative conn -1) t)
-     (:detail (%client-select-pane-direction session conn :up))
-     (otherwise nil)))
-  (#\j
-   (case view
-     (:overview (%select-client-tree-relative conn 1) t)
-     (:detail (%client-select-pane-direction session conn :down))
-     (otherwise nil)))
-  (#\l
-   (if (eq view :detail)
-       (%client-select-pane-direction session conn :right)
-       (%client-tree-expand-selected conn)))
-  (#\h
-   (if (eq view :detail)
-       (%client-select-pane-direction session conn :left)
-       (%client-tree-collapse-selected conn)))
-  ((and (eq view :overview) (%client-key-p payload #\J))
-   (%select-client-tree-section-relative conn 1))
-  ((and (eq view :overview) (%client-key-p payload #\K))
-   (%select-client-tree-section-relative conn -1))
-  ((and (eq view :overview) (%client-byte-p payload 9))
-   ;; Tab (item 3, wave-A): toggle expand/collapse of the selected row -- a
-   ;; section header toggles its own section, a repository row toggles its
-   ;; worktrees. Worktree rows have no expand state of their own yet (a
-   ;; later wave adds inline detail), so this is a no-op there.
-   (%client-toggle-selected-tree-row conn))
-  ((and (eq view :overview) (%client-key-p payload #\/))
-   (%client-enter-tree-filter-mode conn))
+  ;; A pending ESC sequence takes priority over every ordinary key below --
+  ;; the byte that resolves it must never also be looked up in this table.
+  ((gethash conn *client-meta-pending*)
+   (%client-meta-pending-consume conn payload))
+  (27
+   (setf (gethash conn *client-meta-pending*) :second)
+   t)
+  (#\n (%select-client-tree-relative conn 1) t)
+  (#\p (%select-client-tree-relative conn -1) t)
+  (9 (%client-toggle-selected-tree-row conn))
+  (#\1 (%client-set-visibility-level conn 1))
+  (#\2 (%client-set-visibility-level conn 2))
+  (#\3 (%client-set-visibility-level conn 3))
+  (#\4 (%client-set-visibility-level conn 4))
   ((or (%client-byte-p payload 13) (%client-byte-p payload 10))
-   (cond
-     ((eq view :overview)
-      (%focus-selected-client-worktree session conn))
-     (t t)))
-  ((and (eq view :overview) (%client-key-p payload #\n))
-   (%client-start-worktree-create session conn))
-  ((and (eq view :overview) (%client-key-p payload #\X))
-   (%client-start-worktree-delete conn))
-  ((and (eq view :overview) (%client-key-p payload #\L))
-   (%client-start-worktree-lock conn))
-  ((and (eq view :overview) (%client-key-p payload #\U))
-   (%client-start-worktree-unlock conn))
-  (#\d (%set-client-view conn :detail) t)
-  (#\o (%set-client-view conn :overview) t)
-  (#\r (%client-refresh-workspace conn) t)
-  (#\i (%client-enter-input-mode conn))
-  (#\c (%client-enter-copy-mode session conn) t)
+   (%focus-selected-client-worktree session conn))
+  (#\g (%client-refresh-workspace conn))
+  (#\q (%client-step-back session conn))
+  (#\$ (%set-client-modal conn :process-log) t)
+  (#\/ (%client-enter-tree-filter-mode conn))
   (#\: (%client-enter-command-mode conn))
-  (#\? (%client-open-help-view conn))
+  (#\? (%open-client-transient conn #\?))
+  ;; ── status-only (contract SS2) ──────────────────────────────────────────
+  ((and (eq view :status) (%client-key-p payload #\s)) (%client-stage-selection conn))
+  ((and (eq view :status) (%client-key-p payload #\S)) (%client-stage-all conn))
+  ((and (eq view :status) (%client-key-p payload #\u)) (%client-unstage-selection conn))
+  ((and (eq view :status) (%client-key-p payload #\U)) (%client-unstage-all conn))
+  ((and (eq view :status) (%client-key-p payload #\k)) (%client-start-discard-selection conn))
+  ((and (eq view :status) (%client-key-p payload #\c)) (%open-client-transient conn #\c))
+  ((and (eq view :status) (%client-key-p payload #\P)) (%open-client-transient conn #\P))
+  ((and (eq view :status) (%client-key-p payload #\F)) (%open-client-transient conn #\F))
+  ((and (eq view :status) (%client-key-p payload #\b)) (%open-client-transient conn #\b))
+  ((and (eq view :status) (%client-key-p payload #\m)) (%open-client-transient conn #\m))
+  ((and (eq view :status) (%client-key-p payload #\r)) (%open-client-transient conn #\r))
+  ((and (eq view :status) (%client-key-p payload #\z)) (%open-client-transient conn #\z))
+  ((and (eq view :status) (%client-key-p payload #\l)) (%open-client-transient conn #\l))
+  ((and (eq view :status) (%client-key-p payload #\d)) (%open-client-transient conn #\d))
+  ((and (eq view :status) (%client-key-p payload #\f)) (%open-client-transient conn #\f))
+  ((and (eq view :status) (%client-key-p payload #\t)) (%open-client-transient conn #\t))
+  ((and (eq view :status) (%client-key-p payload #\X)) (%open-client-transient conn #\X))
+  ((and (eq view :status) (%client-key-p payload #\!)) (%open-client-transient conn #\!))
+  ((and (eq view :status) (%client-key-p payload #\w)) (%open-client-transient conn #\w))
   (t nil))

@@ -141,11 +141,11 @@
                    (when (and client1 client2 server1 server2 pane1 pane2)
                      (setf conn1 (nerimux::%add-client server1)
                            conn2 (nerimux::%add-client server2))
-                     (setf (nerimux::client-conn-view conn1) :detail
+                     (setf (nerimux::client-conn-view conn1) :pane
                            (nerimux::client-conn-focus conn1) pane1
                            (nerimux::client-conn-rows conn1) 24
                            (nerimux::client-conn-cols conn1) 80
-                           (nerimux::client-conn-view conn2) :detail
+                           (nerimux::client-conn-view conn2) :pane
                            (nerimux::client-conn-focus conn2) pane2
                            (nerimux::client-conn-rows conn2) 12
                            (nerimux::client-conn-cols conn2) 40)

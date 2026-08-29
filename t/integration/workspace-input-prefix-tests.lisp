@@ -8,70 +8,89 @@
 ;;;; bug this redesign fixes (§2.1) hid behind tests that fed a 3-byte
 ;;;; payload to the handler directly, bypassing the one-byte-at-a-time
 ;;;; framing no production client can bypass.
+;;;;
+;;;; Magit alignment (nerimux-magit-contract.md §1/§5): CLIENT-CONN's MODE and
+;;;; VIEW :overview/:detail are gone, replaced by VIEW :repolist/:status/:pane
+;;;; and MODAL. Where a key goes when MODAL is NIL is now DERIVED from VIEW
+;;;; (%CLIENT-UI-KEYS-P, FR-007) rather than tracked as a separate MODE slot,
+;;;; so the old ":detail view + :normal mode" cell this file used to drive
+;;;; pane-navigation keys through no longer exists to be constructed: VIEW
+;;;; :pane now forwards every byte straight to the shell, unconditionally,
+;;;; and pane navigation lives only behind the C-q prefix (§2).
 
 (describe "workspace-input-prefix-suite"
 
-  ;; R4.1: movement is j/k/h/l only. A 2-pane :h window gives l/h a real
-  ;; neighbour to move to; there is no vertical neighbour, so k/j exercise the
-  ;; "no pane <direction>" branch instead -- still proof the dispatch wiring
-  ;; for all four directions exists, without any 3-byte arrow-escape judgment.
-  (it "r4-1-normal-mode-detail-view-moves-with-j-k-h-l-only"
+  ;; FR-007 (contract §1): VIEW :pane has no navigation meaning of its own --
+  ;; there is no more "normal mode moves panes with bare j/k/h/l" cell; that
+  ;; behaviour now lives ONLY behind the C-q prefix (§2's C-q h/j/k/l). A bare
+  ;; j/k/h/l byte while a pane has focus must therefore reach the pane's
+  ;; screen exactly like any other keystroke, and focus must not move.
+  (it "r4-1-pane-view-forwards-bare-j-k-h-l-to-the-shell-instead-of-moving-focus"
     (with-fake-two-pane-session (s)
       (let* ((conn (%make-test-conn))
              (win (first (nerimux/model:session-windows s)))
              (left (first (nerimux/model:window-panes win)))
-             (right (second (nerimux/model:window-panes win))))
-        ;; make-fake-window gives every pane the same rectangle, so a direction
-        ;; lookup finds no neighbour until they are actually placed apart.
-        (setf (nerimux/model:pane-x left) 0 (nerimux/model:pane-width left) 10
-              (nerimux/model:pane-x right) 10 (nerimux/model:pane-width right) 10)
-        (setf (nerimux::client-conn-view conn) :detail)
+             (fed nil)
+             (orig (fdefinition 'nerimux/model:pane-feed)))
+        ;; make-fake-window gives every pane the same rectangle; that no
+        ;; longer matters here since no direction lookup is exercised, but a
+        ;; real neighbour would make a silent regression to the old move-
+        ;; focus behaviour observable too (focus would jump instead of
+        ;; staying put).
         (nerimux::%set-client-focus conn left)
-        (nerimux::%handle-multi-key-message s conn #(108)) ; l
-        (expect (eq right (nerimux::client-conn-focus conn)))
-        (nerimux::%handle-multi-key-message s conn #(104)) ; h
-        (expect (eq left (nerimux::client-conn-focus conn)))
-        ;; k/j have no vertical neighbour in this layout, so focus stays where
-        ;; it is. The notification the handler emits is not asserted here: it
-        ;; goes out to the client's stream, and this connection has none, so
-        ;; client-conn-message-log stays empty however the move is handled.
-        (nerimux::%handle-multi-key-message s conn #(107)) ; k
-        (expect (eq left (nerimux::client-conn-focus conn)))
-        (nerimux::%handle-multi-key-message s conn #(106)) ; j
+        (unwind-protect
+             (progn
+               (setf (fdefinition 'nerimux/model:pane-feed)
+                     (lambda (p bytes) (push (list p bytes) fed) (funcall orig p bytes)))
+               (dolist (byte '(108 104 107 106)) ; l h k j
+                 (nerimux::%handle-multi-key-message s conn (vector byte))))
+          (setf (fdefinition 'nerimux/model:pane-feed) orig))
+        (expect (= 4 (length fed)))
+        (expect (every (lambda (call) (eq left (first call))) fed))
         (expect (eq left (nerimux::client-conn-focus conn))))))
 
-  ;; R4.1: an arrow-escape sequence sent the way a real client actually sends
-  ;; it -- ESC, then `[`, then `A` as three SEPARATE one-byte messages -- must
-  ;; not move focus at all. ESC alone is unbound in :normal mode (dropped);
-  ;; `[` and `A` are likewise unbound. This is the direct byte-stream
-  ;; counterpart to %client-key-sequence-p's removal: there is no 3-byte
-  ;; judgment left anywhere on this path to accidentally re-trigger.
-  (it "r4-1-arrow-escape-sequence-one-byte-at-a-time-does-not-move-focus"
+  ;; R4.1's original guarantee, restated for the new state model: an arrow-
+  ;; escape sequence sent the way a real client actually sends it -- ESC,
+  ;; then `[`, then `A` as three SEPARATE one-byte messages -- must not be
+  ;; reassembled or reinterpreted partway through. Under FR-007 there is no
+  ;; (:pane, UI-owns-keys) cell left to leak into: every one of the three
+  ;; bytes goes straight to the shell, unconditionally, and no MODAL is
+  ;; entered by any of them.
+  (it "r4-1-arrow-escape-sequence-one-byte-at-a-time-forwards-every-byte-to-the-pane"
     (with-fake-two-pane-session (s)
       (let* ((conn (%make-test-conn))
              (win (first (nerimux/model:session-windows s)))
-             (left (first (nerimux/model:window-panes win))))
-        (setf (nerimux::client-conn-view conn) :detail)
+             (left (first (nerimux/model:window-panes win)))
+             (fed nil)
+             (orig (fdefinition 'nerimux/model:pane-feed)))
         (nerimux::%set-client-focus conn left)
-        (nerimux::%handle-multi-key-message s conn #(27)) ; ESC
-        (nerimux::%handle-multi-key-message s conn #(91)) ; [
-        (nerimux::%handle-multi-key-message s conn #(65)) ; A
+        (unwind-protect
+             (progn
+               (setf (fdefinition 'nerimux/model:pane-feed)
+                     (lambda (p bytes) (push (list p bytes) fed) (funcall orig p bytes)))
+               (nerimux::%handle-multi-key-message s conn #(27)) ; ESC
+               (nerimux::%handle-multi-key-message s conn #(91)) ; [
+               (nerimux::%handle-multi-key-message s conn #(65))) ; A
+          (setf (fdefinition 'nerimux/model:pane-feed) orig))
+        ;; PUSH is newest-first: A, then [, then ESC.
+        (expect (equalp (list (list left #(65)) (list left #(91)) (list left #(27)))
+                        fed))
         (expect (eq left (nerimux::client-conn-focus conn)))
-        (expect (eq :normal (nerimux::client-conn-mode conn))))))
+        (expect (null (nerimux::client-conn-modal conn))))))
 
-  ;; R4.2: :input mode has no keyboard exit of its own. ESC is forwarded to
-  ;; the focused pane's PTY like any other byte, and the client's mode stays
-  ;; :input -- this is the exact production path that used to kick the
-  ;; client out to :normal on the arrow key's leading ESC byte (§2.1).
-  (it "r4-2-esc-is-forwarded-to-the-pane-in-input-mode-and-mode-stays-input"
+  ;; R4.2: VIEW :pane has no keyboard exit of its own. ESC is forwarded to
+  ;; the focused pane's PTY like any other byte, and the client stays in
+  ;; :pane with no MODAL entered -- this is the exact production path that
+  ;; used to kick the client out to :normal on the arrow key's leading ESC
+  ;; byte (§2.1).
+  (it "r4-2-esc-is-forwarded-to-the-pane-in-pane-view-and-view-stays-pane"
     (with-minimal-session (pane win sess)
       (declare (ignore win))
       (setf (nerimux/model:pane-fd pane) 9999) ; "live" without a real PTY
       (let* ((conn (%make-test-conn))
              (writes nil)
              (orig (fdefinition 'nerimux::pty-write)))
-        (nerimux::%set-client-focus conn pane)
-        (setf (nerimux::client-conn-mode conn) :input)
+        (nerimux::%set-client-focus conn pane) ; also sets VIEW :pane
         (unwind-protect
              (progn
                (setf (fdefinition 'nerimux::pty-write)
@@ -79,62 +98,63 @@
                (nerimux::%handle-multi-key-message sess conn #(27)))
           (setf (fdefinition 'nerimux::pty-write) orig))
         (expect (equalp (list (list 9999 #(27))) writes))
-        (expect (eq :input (nerimux::client-conn-mode conn))))))
+        (expect (eq :pane (nerimux::client-conn-view conn)))
+        (expect (null (nerimux::client-conn-modal conn))))))
 
-  ;; R4.2: copy-mode exit is q only; ESC is a plain unbound byte inside
-  ;; copy-mode and must not exit it.
-  (it "r4-2-copy-mode-exits-only-on-q-not-esc"
+  ;; R4.2/FR-008: scrollback (copy-mode's successor) is entered only through
+  ;; the C-q [ prefix binding now -- the bare `c` key that used to reach it
+  ;; straight from a focused pane is retired (contract §2, "KEYS THAT NO
+  ;; LONGER EXIST"; VIEW :pane would just forward it to the shell like any
+  ;; other byte, per FR-007). Exit is q only; ESC is a plain unbound byte
+  ;; inside scrollback and must not leave it.
+  (it "r4-2-scrollback-exits-only-on-q-not-esc"
     (with-minimal-session (pane win sess)
       (declare (ignore win))
       (let* ((conn (%make-test-conn))
              (screen (nerimux/model:pane-screen pane)))
         (nerimux::%set-client-focus conn pane)
-        (nerimux::%handle-multi-key-message sess conn #(99)) ; c: enter copy-mode
-        (expect (eq :copy (nerimux::client-conn-mode conn)))
+        (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q
+        (nerimux::%handle-multi-key-message sess conn #(91)) ; [ : enter scrollback
+        (expect (eq :scrollback (nerimux::client-conn-modal conn)))
         (expect (nerimux/terminal:screen-copy-mode-p screen))
         (nerimux::%handle-multi-key-message sess conn #(27)) ; ESC: no-op
-        (expect (eq :copy (nerimux::client-conn-mode conn)))
+        (expect (eq :scrollback (nerimux::client-conn-modal conn)))
         (expect (nerimux/terminal:screen-copy-mode-p screen))
         (nerimux::%handle-multi-key-message sess conn #(113)) ; q: exits
-        (expect (eq :normal (nerimux::client-conn-mode conn)))
+        (expect (null (nerimux::client-conn-modal conn)))
         (expect (nerimux/terminal:screen-copy-mode-p screen) :to-be-falsy))))
 
-  ;; R4.3: in :command mode, ESC discards exactly the next two bytes -- even
-  ;; when those bytes would otherwise be live keys (h/j move focus in
-  ;; :detail/:normal) -- and a third byte after the swallow is dispatched
-  ;; normally again. This is the mechanism that keeps a real arrow key's
-  ;; trailing `[`/letter bytes out of whatever mode ESC leaves the client in.
-  (it "r4-3-esc-in-command-mode-swallows-exactly-the-next-two-bytes"
-    (with-fake-two-pane-session (s)
-      (let* ((conn (%make-test-conn))
-             (win (first (nerimux/model:session-windows s)))
-             (left (first (nerimux/model:window-panes win)))
-             (right (second (nerimux/model:window-panes win))))
-        ;; make-fake-window gives every pane the same rectangle, so a direction
-        ;; lookup finds no neighbour until they are actually placed apart.
-        (setf (nerimux/model:pane-x left) 0 (nerimux/model:pane-width left) 10
-              (nerimux/model:pane-x right) 10 (nerimux/model:pane-width right) 10)
-        (setf (nerimux::client-conn-view conn) :detail)
-        (nerimux::%set-client-focus conn left)
+  ;; R4.3, restated for the new state model (contract §5, MODAL replacing
+  ;; MODE): leaving :command modal via ESC still arms a 2-byte swallow,
+  ;; because the client forwards stdin one byte at a time and an arrow key's
+  ;; trailing `[`/letter bytes must not land on whatever comes next. 1/3/4
+  ;; (the visibility-level keys, contract §2/FR-005) stand in for "a key that
+  ;; would visibly do something if it reached dispatch" now that h/j/k/l have
+  ;; no meaning at all in :repolist to tell a swallowed byte apart from an
+  ;; unbound one.
+  (it "r4-3-esc-in-command-modal-swallows-exactly-the-next-two-bytes"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn)))
         (nerimux::%handle-multi-key-message s conn #(58)) ; :
-        (expect (eq :command (nerimux::client-conn-mode conn)))
+        (expect (eq :command (nerimux::client-conn-modal conn)))
         (nerimux::%handle-multi-key-message s conn #(27)) ; ESC: cancels + arms swallow(2)
-        (expect (eq :normal (nerimux::client-conn-mode conn)))
-        ;; Bytes 1 and 2 after ESC are swallowed: h/j would normally move
-        ;; focus in :detail/:normal, but neither reaches dispatch here.
-        (nerimux::%handle-multi-key-message s conn #(104)) ; h -- swallowed
-        (nerimux::%handle-multi-key-message s conn #(106)) ; j -- swallowed
-        (expect (eq left (nerimux::client-conn-focus conn)) )
-        ;; Byte 3 is no longer swallowed and dispatches normally.
-        (nerimux::%handle-multi-key-message s conn #(108)) ; l -- live again
-        (expect (eq right (nerimux::client-conn-focus conn))))))
+        (expect (null (nerimux::client-conn-modal conn)))
+        ;; The next two bytes -- "1" and "3", which would otherwise set the
+        ;; visibility level -- are swallowed rather than reaching dispatch.
+        (nerimux::%handle-multi-key-message s conn #(49)) ; "1" -- swallowed
+        (nerimux::%handle-multi-key-message s conn #(51)) ; "3" -- swallowed
+        (expect (= 2 (nerimux::client-conn-visibility-level conn))) ; default, unchanged
+        ;; The third byte is no longer swallowed and dispatches normally.
+        (nerimux::%handle-multi-key-message s conn #(52)) ; "4" -- live again
+        (expect (= 4 (nerimux::client-conn-visibility-level conn))))))
 
-  ;; R4.3: same swallow mechanism from :picker mode. ESC closes the picker
+  ;; R4.3: same swallow mechanism from :picker modal. ESC closes the picker
   ;; (and arms the swallow); the following two bytes are discarded before
-  ;; they can land in whatever mode the close left the client in -- proving
-  ;; the requirement's literal concern ("[A must not leak into the search
-  ;; term") even though ESC has already left :picker by the time they arrive.
-  (it "r4-3-esc-in-picker-mode-swallows-exactly-the-next-two-bytes"
+  ;; they can land in whatever MODAL/VIEW the close left the client in --
+  ;; proving the requirement's literal concern ("[A must not leak into the
+  ;; search term") even though ESC has already left :picker by the time they
+  ;; arrive.
+  (it "r4-3-esc-in-picker-modal-swallows-exactly-the-next-two-bytes"
     (with-fake-session (s)
       (let* ((organization
                (nerimux/model:make-organization
@@ -150,20 +170,19 @@
              (conn (%make-test-conn)))
         (nerimux/model:organization-add-repository organization repository)
         (nerimux/model:repository-add-worktree repository worktree)
-        (setf (nerimux::client-conn-mode conn) :picker
+        (setf (nerimux::client-conn-modal conn) :picker
               (nerimux::client-conn-picker-items conn)
               (nerimux/picker:build-global-picker-items (list organization)))
         (nerimux::%handle-multi-key-message s conn #(27)) ; ESC: closes + arms swallow(2)
-        (expect (eq :normal (nerimux::client-conn-mode conn)))
+        (expect (null (nerimux::client-conn-modal conn)))
         (expect (string= "" (nerimux::client-conn-picker-query conn)))
         ;; `[` and `A` -- what a real arrow key's trailing bytes look like --
-        ;; are swallowed rather than reopening the picker or reaching :normal.
+        ;; are swallowed rather than reopening the picker or reaching MODAL nil.
         (nerimux::%handle-multi-key-message s conn #(91))
         (nerimux::%handle-multi-key-message s conn #(65))
-        (expect (eq :normal (nerimux::client-conn-mode conn))
-                ))))
+        (expect (null (nerimux::client-conn-modal conn))))))
 
-  ;; R4.4: a byte struck right after C-q that the 1.5 table does not bind is
+  ;; R4.4: a byte struck right after C-q that the table does not bind is
   ;; discarded -- it must not fall through to the pane the way an unprefixed
   ;; key used to (the old tmux-keytable fallthrough, gone since R1). A
   ;; stdin-target is armed so a leak would be directly observable via
@@ -187,18 +206,112 @@
                (expect (null fed) ))
           (setf (fdefinition 'nerimux/model:pane-feed) orig)))))
 
-  ;; R4.4: C-q C-q returns to :normal -- the one prefix action with no pane
-  ;; or worktree precondition.
-  (it "r4-4-prefix-c-q-c-q-returns-to-normal-mode"
+  ;; contract §2: C-q F and C-q C-f are REMOVED -- fetch moves to the `f`
+  ;; transient, whose own coverage of %WORKSPACE-PREFIX-FETCH-REPOSITORY/
+  ;; -ORGANIZATION belongs to the TRANSIENT unit's test file, not here (those
+  ;; two functions are unaffected and still exercised directly below by
+  ;; r7-1-*). What belongs in THIS file is that the C-q BINDING is gone: both
+  ;; bytes must be discarded at the prefix like any other unbound key
+  ;; (R4.4's "no fallthrough" rule), routed through the full byte-stream
+  ;; entry point with a stdin-target armed so a fallthrough would be directly
+  ;; observable via pane-feed -- the same shape as the unbound-key case
+  ;; above, since %workspace-prefix-dispatch returning NIL alone cannot tell
+  ;; "unbound" apart from "bound to an action that happens to return NIL"
+  ;; (h/j/k/l/n/p all do).
+  (it "r4-4-prefix-F-and-C-f-are-unbound-now-not-forwarded-to-the-pane"
+    (with-minimal-session (pane win sess)
+      (declare (ignore win))
+      (dolist (byte (list (char-code #\F) 6)) ; F, C-f
+        (let* ((conn (%make-test-conn))
+               (fed nil)
+               (orig (fdefinition 'nerimux/model:pane-feed)))
+          (setf (nerimux::client-conn-stdin-target conn) pane)
+          (unwind-protect
+               (progn
+                 (setf (fdefinition 'nerimux/model:pane-feed)
+                       (lambda (p bytes) (push (list p bytes) fed) (funcall orig p bytes)))
+                 (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q
+                 (expect (nerimux::client-conn-ui-prefix-p conn))
+                 (nerimux::%handle-multi-key-message sess conn (vector byte))
+                 (expect (null (nerimux::client-conn-ui-prefix-p conn))))
+            (setf (fdefinition 'nerimux/model:pane-feed) orig))
+          (expect (null fed))))))
+
+  ;; R4.4: C-q C-q returns to no MODAL, handing the keyboard back to whatever
+  ;; VIEW is on screen (FR-007) -- the one prefix action with no pane or
+  ;; worktree precondition.
+  (it "r4-4-prefix-c-q-c-q-clears-modal"
     (with-minimal-session (pane win sess)
       (declare (ignore pane win))
       (let ((conn (%make-test-conn)))
-        (setf (nerimux::client-conn-mode conn) :copy)
+        (setf (nerimux::client-conn-modal conn) :scrollback)
         (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q
         (expect (nerimux::client-conn-ui-prefix-p conn))
         (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q again
         (expect (null (nerimux::client-conn-ui-prefix-p conn)))
-        (expect (eq :normal (nerimux::client-conn-mode conn))))))
+        (expect (null (nerimux::client-conn-modal conn))))))
+
+  ;; contract §2, ADDED: C-q w opens the status view for the focused pane's
+  ;; worktree, and remembers that worktree as CONN's selected one -- the
+  ;; status view (renderer-workspace-status.lisp) renders CLIENT-CONN-
+  ;; SELECTED-WORKTREE, not the focus pane directly.
+  (it "r4-4-prefix-w-opens-status-view-for-the-focused-worktree"
+    (with-minimal-session (pane win sess)
+      (declare (ignore win))
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org" :host "github.com" :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo" :organization organization
+                :specification "github.com/team/repo"))
+             (worktree
+               (nerimux/model:make-worktree
+                :id "wt" :repository repository
+                :path "/tmp/wt" :branch "main"))
+             (conn (%make-test-conn)))
+        (nerimux/model:organization-add-repository organization repository)
+        (nerimux/model:repository-add-worktree repository worktree)
+        (nerimux/model:worktree-add-pane worktree pane)
+        (nerimux::%set-client-focus conn pane)
+        (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q
+        (nerimux::%handle-multi-key-message sess conn #(119)) ; w
+        (expect (eq :status (nerimux::client-conn-view conn)))
+        (expect (eq worktree (nerimux::client-conn-selected-worktree conn))))))
+
+  ;; contract §2, ADDED: with no pane focused -- or a focused pane whose
+  ;; worktree the status view has nothing to render for -- C-q w falls back
+  ;; to :repolist instead of notifying and leaving the screen untouched, so
+  ;; the key is never a dead end.
+  (it "r4-4-prefix-w-with-no-focused-worktree-falls-back-to-repolist"
+    (with-minimal-session (pane win sess)
+      (declare (ignore pane win))
+      (let ((conn (%make-test-conn)))
+        (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q
+        (nerimux::%handle-multi-key-message sess conn #(119)) ; w
+        (expect (eq :repolist (nerimux::client-conn-view conn))))))
+
+  ;; contract §2, ADDED: C-q [ enters scrollback on the focused pane -- the
+  ;; success path; the exit/no-op-ESC behaviour is pinned above by
+  ;; r4-2-scrollback-exits-only-on-q-not-esc, so this only needs to cover
+  ;; entry and the no-focus report.
+  (it "r4-4-prefix-open-bracket-enters-scrollback-on-the-focused-pane"
+    (with-minimal-session (pane win sess)
+      (declare (ignore win))
+      (let ((conn (%make-test-conn)))
+        (nerimux::%set-client-focus conn pane)
+        (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q
+        (nerimux::%handle-multi-key-message sess conn #(91)) ; [
+        (expect (eq :scrollback (nerimux::client-conn-modal conn)))
+        (expect (nerimux/terminal:screen-copy-mode-p
+                 (nerimux/model:pane-screen pane))))))
+
+  (it "r4-4-prefix-open-bracket-with-no-focused-pane-reports-and-stays-unmodal"
+    (with-fake-session (s :nwindows 0)
+      (let ((conn (%make-test-conn)))
+        (nerimux::%handle-multi-key-message s conn #(17)) ; C-q
+        (nerimux::%handle-multi-key-message s conn #(91)) ; [
+        (expect (null (nerimux::client-conn-modal conn))))))
 
   (it "r4-4-prefix-dispatch-drops-only-the-explicit-detach-key"
     (with-fake-session (s)

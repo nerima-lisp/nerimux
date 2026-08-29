@@ -10,55 +10,99 @@
       (let ((mode (find-symbol (string-upcase name) :keyword)))
         (and (%client-ui-mode-p mode) mode)))))
 
+;; The magit-alignment change (FR-001/FR-007, see server-multi-dispatch.lisp)
+;; retired the MODE slot for VIEW/MODAL, but the wire vocabulary above -- a
+;; mode NAME decoded off a forwarded `:mode` command, or one of the
+;; :ENTER-*/:CANCEL/:ACCEPT/:TOGGLE-COPY events -- is still how this file's
+;; own forwarded-command rules (server-multi-dispatch-command.lisp) and the
+;; call sites outside this change's file set (server-multi-dispatch-
+;; command-input.lisp, server-multi-dispatch-prefix.lisp) name a transition.
+;; This table is the one place that vocabulary is translated, so the bare
+;; mode keyword and its :ENTER- event spelling of the same transition land
+;; on the same slot write.
+(defun %client-ui-mode-target-modal (target)
+  "The MODAL TARGET maps onto, :VIEW-PANE for the one transition that moves
+   VIEW instead of MODAL, or :UNCHANGED when TARGET names neither.
+
+   :CANCEL/:ACCEPT must land here as explicit entries, not fall through to
+   :UNCHANGED (contract SS5: both drop MODAL to NIL) -- %TRANSITION-CLIENT-
+   UI-MODE's own :COMMAND-buffer-clear and :FILTER-query-drop branches below
+   fire only when NEXT-MODAL differs from CURRENT-MODAL, so an :UNCHANGED
+   mapping for :CANCEL/:ACCEPT would silently keep MODAL wherever it was and
+   never trip either branch -- the wire's `:` accept/cancel commands
+   (server-multi-dispatch-command.lisp) would leave :COMMAND or :FILTER
+   modal stuck open forever."
+  (case target
+    ((:normal :enter-normal :cancel :accept) nil)
+    ((:input :enter-input) :view-pane)
+    ((:copy :enter-copy) :scrollback)
+    ((:command :enter-command) :command)
+    ((:picker :enter-picker) :picker)
+    ((:tree-filter :enter-tree-filter) :filter)
+    (t :unchanged)))
+
+(defun %apply-client-ui-mode-target (conn target)
+  "Apply TARGET (see %CLIENT-UI-MODE-TARGET-MODAL) to CONN, returning the
+   resulting MODAL."
+  (let ((mapped (%client-ui-mode-target-modal target)))
+    (cond
+      ((eq mapped :view-pane) (%set-client-view conn :pane))
+      ((eq mapped :unchanged) nil)
+      (t (%set-client-modal conn mapped))))
+  (client-conn-modal conn))
+
 (defun %set-client-ui-mode (conn mode)
+  "Legacy setter kept because server-dispatch-helper-tests.lisp calls it
+   directly; applies MODE through the same table %TRANSITION-CLIENT-UI-MODE
+   uses and returns MODE unchanged -- not the resulting MODAL, which can
+   spell the same transition differently (:COPY here becomes MODAL
+   :SCROLLBACK) -- so a caller checking 'did this take' still sees back the
+   vocabulary it passed in."
   (when (%client-ui-mode-p mode)
-    (setf (client-conn-mode conn) mode)
-    (when (member mode '(:input :copy :command) :test #'eq)
-      (setf (client-conn-view conn) :detail)))
-  (client-conn-mode conn))
+    (%apply-client-ui-mode-target conn mode))
+  mode)
 
 (defun %transition-client-ui-mode (conn event)
-  (let* ((current (client-conn-mode conn))
-         (next
-          (cond
-            ((%client-ui-mode-p event) event)
-            ((eq event :enter-normal) :normal)
-            ((eq event :enter-input) :input)
-            ((eq event :enter-copy) :copy)
-            ((eq event :enter-command) :command)
-            ((eq event :enter-picker) :picker)
-            ((eq event :enter-tree-filter) :tree-filter)
-            ((member event '(:cancel :accept) :test #'eq) :normal)
-            ((eq event :toggle-copy)
-             (if (eq current :copy) :normal :copy))
-            (t current))))
-    (%set-client-ui-mode conn next)
-    (when (and (eq next :command) (not (eq current :command)))
-      (setf (client-conn-command-buffer conn) ""))
-    (when (and (not (eq next :command)) (eq current :command))
-      (setf (client-conn-command-buffer conn) "")
-      (%client-restore-command-view conn))
-    ;; Symmetric with :command above: leaving :tree-filter via ESC (:cancel)
-    ;; drops the in-progress query entirely, while Enter (:accept) keeps it --
-    ;; the user is happy with the filtered set and wants to keep navigating
-    ;; it in :normal mode, not have it silently reset to the full tree.
-    (when (and (eq current :tree-filter) (not (eq next :tree-filter))
-               (eq event :cancel))
-      (setf (client-conn-tree-filter conn) nil))
-    next))
+  "Legacy transition entry point kept for the callers outside this change's
+   file set that still speak the old EVENT vocabulary (server-multi-
+   dispatch-command-input.lisp, server-multi-dispatch-prefix.lisp): the
+   state it transitions is VIEW/MODAL now, via %APPLY-CLIENT-UI-MODE-TARGET,
+   but the two real behaviours beyond a bare slot write are preserved here
+   as before -- the :COMMAND buffer clears on both entering and leaving it,
+   and the tree-filter query survives an :ACCEPT (Enter) but is dropped by
+   a :CANCEL (ESC)."
+  (let* ((current-modal (client-conn-modal conn))
+         (target (if (eq event :toggle-copy)
+                     (if (eq current-modal :scrollback) :enter-normal :copy)
+                     event)))
+    (%apply-client-ui-mode-target conn target)
+    (let ((next-modal (client-conn-modal conn)))
+      (when (and (eq next-modal :command) (not (eq current-modal :command)))
+        (setf (client-conn-command-buffer conn) ""))
+      (when (and (not (eq next-modal :command)) (eq current-modal :command))
+        (setf (client-conn-command-buffer conn) "")
+        (%client-restore-command-view conn))
+      ;; Symmetric with :command above: leaving :filter via ESC (:cancel)
+      ;; drops the in-progress query entirely, while Enter (:accept) keeps
+      ;; it -- the user is happy with the filtered set and wants to keep
+      ;; navigating it with MODAL back to NIL, not have it silently reset to
+      ;; the full tree.
+      (when (and (eq current-modal :filter) (not (eq next-modal :filter))
+                 (eq event :cancel))
+        (setf (client-conn-tree-filter conn) nil))
+      next-modal)))
 
 (defun %set-client-focus (conn pane)
   (setf (client-conn-focus conn) pane
         (client-conn-viewport conn) 0
-        (client-conn-view conn) :detail)
+        (client-conn-view conn) :pane)
   (when pane
     (nerimux/model:pane-mark-focused pane))
   pane)
 
 (defun %set-client-view (conn view)
-  (when (member view '(:overview :detail) :test #'eq)
-    (setf (client-conn-view conn) view
-          (client-conn-mode conn) :normal)
+  (when (member view '(:repolist :status :pane) :test #'eq)
+    (setf (client-conn-view conn) view)
     (%mark-dirty))
   (client-conn-view conn))
 

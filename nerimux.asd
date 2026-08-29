@@ -285,6 +285,12 @@
        (:file "server-multi-dispatch-command-workspace") ; workspace UI helpers
        (:file "server-multi-dispatch-command-worktree") ; worktree operations
        (:file "server-multi-command-input-primitives") ; payload predicates and decoding
+       ;; Before the keymap: %HANDLE-CLIENT-UI-KEY-PAYLOAD calls
+       ;; %OPEN-CLIENT-TRANSIENT for every transient key. A forward call would
+       ;; only warn at compile time, but a warning is not what catches a
+       ;; misspelled name here -- an undefined function fails at runtime, and a
+       ;; transient key that silently does nothing looks like an unbound key.
+       (:file "server-multi-dispatch-transient") ; magit transient state and key handling
        (:file "server-multi-dispatch-command-input") ; client input and command entry
        (:file "server-multi-dispatch-tree-filter") ; tree-filter input mode
        (:file "server-multi-dispatch-command") ; final command dispatcher

@@ -8,34 +8,53 @@
 ;;;; text-widget lines, since a single row here mixes both colours.
 ;;;;
 ;;;; Content is hardcoded (this project has no config to read it from, R2.4)
-;;;; and verified against the live dispatch tables it documents:
-;;;; %HANDLE-CLIENT-NORMAL-KEY-PAYLOAD (server-multi-dispatch-command-
-;;;; input.lisp) for Overview, %WORKSPACE-PREFIX-DISPATCH (server-multi-
-;;;; dispatch-prefix.lisp) for the C-q prefix table, and
-;;;; %TRANSITION-CLIENT-UI-MODE (server-multi-dispatch-command-workspace.lisp)
-;;;; for each mode's enter/leave key.
+;;;; and has to be re-read against the live dispatch tables whenever they move:
+;;;; %HANDLE-CLIENT-UI-KEY-PAYLOAD (server-multi-dispatch-command-input.lisp)
+;;;; for Navigate/Status, %WORKSPACE-PREFIX-DISPATCH (server-multi-dispatch-
+;;;; prefix.lisp) for the C-q table, %COPY-KEY-DISPATCH (same file as the
+;;;; keymap) for Scrollback, and +TRANSIENT-DEFINITIONS+ (server-multi-
+;;;; dispatch-transient.lisp) for the transient keys.
+;;;;
+;;;; Reached from the `?` transient's `k` entry, not from `?` directly -- `?`
+;;;; opens the dispatch transient, as in magit.
+;;;;
+;;;; This list went stale once already, through the magit alignment: it kept
+;;;; advertising j/k, r, i, c, o, d, X, L/U and a "Modes" section for modes
+;;;; that no longer exist, while claiming in this very comment to be verified.
+;;;; A help screen naming keys that do nothing is worse than no help screen,
+;;;; and nothing mechanical will catch it -- these are strings.
 
 (defparameter +help-view-sections+
-  '(("Overview"
-     (("j/k" . "move") ("J/K" . "section") ("Enter" . "open/dive")
-      ("Tab" . "expand") ("h/l" . "fold") ("/" . "filter")
-      ("n" . "new worktree") ("X" . "delete") ("L/U" . "lock/unlock")
-      ("r" . "refresh") ("o" . "overview") ("d" . "detail")
-      ("i" . "input") ("c" . "copy") (":" . "command")
-      ("C-p" . "picker") ("?" . "help")))
+  '(("Navigate"
+     (("n/p" . "move") ("M-n/M-p" . "section") ("Tab" . "expand")
+      ("S-Tab" . "cycle all") ("1-4" . "detail level") ("Enter" . "open")
+      ("q" . "back") ("g" . "refresh") ("/" . "filter")
+      (":" . "command") ("C-p" . "picker") ("$" . "process log")
+      ("?" . "menu")))
+    ("Status"
+     (("s/S" . "stage") ("u/U" . "unstage") ("k" . "discard")))
+    ("Menus (?)"
+     (("c" . "commit") ("P" . "push") ("F" . "pull")
+      ("b" . "branch") ("m" . "merge") ("r" . "rebase")
+      ("z" . "stash") ("l" . "log") ("d" . "diff")
+      ("f" . "fetch") ("t" . "tag") ("X" . "reset")
+      ("w" . "worktree")))
     ("Prefix C-q"
      (("-" . "split down") ("|" . "split right") ("x" . "close pane")
       ("z" . "zoom") ("h/j/k/l" . "focus") ("n/p" . "cycle window")
-      ("F" . "fetch repo") ("C-f" . "fetch org") ("d" . "detach")
+      ("w" . "status view") ("[" . "scrollback") ("d" . "detach")
       ("Q" . "quit server")))
-    ("Modes"
-     (("normal" . "default mode; i/c/:/C-p enter input/copy/command/picker")
-      ("input" . "enter: i -- leave: C-q C-q (no key exit of its own)")
-      ("copy" . "enter: c -- leave: q")
-      ("command" . "enter: : -- leave: Enter submits, Esc cancels")
-      ("picker" . "enter: C-p -- leave: Enter selects, Esc cancels"))))
+    ("Scrollback (C-q [)"
+     (("j/k" . "line") ("C-u/C-d" . "half page") ("g/G" . "top/bottom")
+      ("/" . "search") ("n/N" . "next/prev") ("Space" . "select")
+      ("y" . "yank+exit") ("q" . "exit")))
+    ("Panes"
+     (("" . "typing goes straight to the shell -- no mode to enter first")
+      ("" . "every nerimux key inside a pane starts with C-q"))))
   "The help view's static content: (SECTION-HEADING BINDINGS), BINDINGS a
-   list of (KEY . DESCRIPTION).")
+   list of (KEY . DESCRIPTION). An empty KEY is a prose line rather than a
+   binding; %HELP-VIEW-BINDING-TEXT formats it the same way, which just leaves
+   a leading space.")
 
 ;;; ── Styles ───────────────────────────────────────────────────────────────
 ;;;

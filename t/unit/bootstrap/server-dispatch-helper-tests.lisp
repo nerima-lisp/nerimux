@@ -311,8 +311,9 @@
                         (first (nerimux::client-conn-message-log conn))))
         (expect (eq :input
                     (nerimux::%set-client-ui-mode conn :input)))
-        (expect (eq :normal
-                    (nerimux::%transition-client-ui-mode conn :cancel)))
+        ;; Magit alignment (contract §5): :cancel now maps to MODAL nil
+        ;; rather than the old MODE vocabulary word :normal.
+        (expect (null (nerimux::%transition-client-ui-mode conn :cancel)))
         (expect (eq :picker
                     (nerimux::%client-ui-mode-value "picker")))
         (expect (null (nerimux::%client-ui-mode-value "invalid")))
@@ -390,29 +391,37 @@
       (expect (eq :copy (nerimux::%client-ui-mode-value 'copy)))
       (expect (eq :picker (nerimux::%client-ui-mode-value "PICKER")))
       (expect (null (nerimux::%client-ui-mode-value 42)))
-      (expect (nerimux::%client-enter-input-mode conn))
-      (expect (eq :input (nerimux::client-conn-mode conn)))
-      (expect (eq :detail (nerimux::client-conn-view conn)))
+      ;; %client-enter-input-mode retired with the `i` key it existed to
+      ;; implement (contract §5): VIEW :pane is now reached only by focusing
+      ;; a pane, never by an explicit "enter input" step. Confirm the
+      ;; replacement primitive lands there and that %client-ui-keys-p
+      ;; correctly derives "no" for it.
+      (expect (eq :pane (nerimux::%set-client-view conn :pane)))
+      (expect (null (nerimux::%client-ui-keys-p conn)))
       (expect (eq :copy (nerimux::%set-client-ui-mode conn :copy)))
-      (expect (eq :normal
+      ;; MODAL was :scrollback (from :copy above); :toggle-copy flips it to
+      ;; nil, then the second call flips it back -- %transition-client-ui-
+      ;; mode now returns the MODAL value itself, not the old MODE word.
+      (expect (null (nerimux::%transition-client-ui-mode
+                     conn :toggle-copy)))
+      (expect (eq :scrollback
                   (nerimux::%transition-client-ui-mode
                    conn :toggle-copy)))
-      (expect (eq :copy
-                  (nerimux::%transition-client-ui-mode
-                   conn :toggle-copy)))
-      (expect (eq :copy
+      (expect (eq :scrollback
                   (nerimux::%transition-client-ui-mode
                    conn :unrecognized-event)))
-      (expect (eq :overview (nerimux::%set-client-view conn :overview)))
-      (expect (eq :overview (nerimux::%set-client-view conn :invalid)))
+      (expect (eq :repolist (nerimux::%set-client-view conn :repolist)))
+      (expect (eq :repolist (nerimux::%set-client-view conn :invalid)))
       (expect (nerimux::%client-enter-command-mode conn "command"))
-      (expect (eq :command (nerimux::client-conn-mode conn)))
+      (expect (eq :command (nerimux::client-conn-modal conn)))
       (expect (string= "command"
                        (nerimux::client-conn-command-buffer conn)))
-      (expect (eq :overview
+      (expect (eq :repolist
                   (nerimux::client-conn-command-return-view conn)))
-      (expect (eq :normal
-                  (nerimux::%transition-client-ui-mode conn :accept)))
+      ;; :accept maps to MODAL nil (contract §5) -- leaving :command clears
+      ;; the buffer and the return-view, same as before under the old
+      ;; :normal spelling.
+      (expect (null (nerimux::%transition-client-ui-mode conn :accept)))
       (expect (string= "" (nerimux::client-conn-command-buffer conn)))
       (expect (null (nerimux::client-conn-command-return-view conn)))
       (expect (nerimux::%client-enter-command-mode conn 42))
@@ -443,8 +452,20 @@
                session conn "x"))
       (expect (nerimux::%handle-client-copy-key-payload
                session conn "q"))
-      (expect (eq :normal (nerimux::client-conn-mode conn)))))
+      ;; No focused pane -> %copy-key-dispatch's (null screen) clause fires,
+      ;; which transitions via :enter-normal -- MODAL nil under contract §5,
+      ;; not the old MODE word :normal.
+      (expect (null (nerimux::client-conn-modal conn)))))
 
+  ;; Magit alignment (contract SS2 "scrollback", FR-008): the scrollback
+  ;; table is j/k line, C-u/C-d (byte 21/4) half page, g/G top/bottom, /
+  ;; ? search, n/N search next/prev, Space begin selection, y yank, q leave
+  ;; -- 13 keys, replacing the old j/k/h/l/g/G/Space/y/n/N/[/?/q table (h/l
+  ;; horizontal movement dropped, C-u/C-d half-page added). q's own leave
+  ;; action no longer calls %CLIENT-EXIT-COPY-MODE (see the header comment
+  ;; on %HANDLE-CLIENT-COPY-KEY-PAYLOAD): it drops MODAL inline, so it is the
+  ;; one bound key with no stub above to record it -- the other 12 each
+  ;; drive exactly one stubbed call.
   (it "copy-dispatches-every-bound-key-through-one-contract"
     (let* ((session (nerimux/model:make-session :id 1 :name "test"))
            (conn (nerimux::%make-client-conn))
@@ -467,57 +488,65 @@
              (lambda (screen) (push (list :prev screen) calls)))
            (nerimux::%client-enter-command-mode
              (lambda (connection command)
-               (push (list :command connection command) calls)))
-           (nerimux::%client-exit-copy-mode
-             (lambda (current-session connection)
-               (push (list :exit current-session connection) calls))))
-        (dolist (key '(#\k #\j #\h #\l #\g #\G #\Space #\y #\n #\N #\/ #\? #\q))
-          (nerimux::%handle-client-copy-key-payload session conn (string key)))
-        (expect (= 13 (length calls)))
+               (push (list :command connection command) calls))))
+        (dolist (key (list #\k #\j (vector 21) (vector 4) #\g #\G #\Space
+                           #\y #\n #\N #\/ #\? #\q))
+          (nerimux::%handle-client-copy-key-payload
+           session conn (if (characterp key) (string key) key)))
+        (expect (= 12 (length calls)))
         (expect (search "search-backward "
                         (format nil "~S" calls)))
         (expect (search "search-forward "
                         (format nil "~S" calls)))
-        (expect (some (lambda (call) (eq :exit (first call))) calls)))))
+        ;; q's observable effect, since it has no stub call of its own.
+        (expect (null (nerimux::client-conn-modal conn))))))
 
+  ;; Magit alignment (contract SS5): %SUBMIT-CLIENT-SEARCH now closes MODAL
+  ;; and restores VIEW by calling %SET-CLIENT-MODAL / %CLIENT-RESTORE-
+  ;; COMMAND-VIEW directly, not by routing through the retired event
+  ;; vocabulary of %TRANSITION-CLIENT-UI-MODE -- so this asserts the
+  ;; OBSERVABLE result of both calls (view restored, return-view cleared,
+  ;; modal dropped) rather than a call count through a function this helper
+  ;; no longer touches.
   (it "search-submit-reports-invalid-input-and-restores-view"
     (let* ((session (nerimux/model:make-session :id 1 :name "test"))
            (conn (nerimux::%make-client-conn))
-           (messages nil)
-           (transitions nil))
+           (messages nil))
+      (setf (nerimux::client-conn-command-return-view conn) :status
+            (nerimux::client-conn-view conn) :repolist)
+      (nerimux::%set-client-modal conn :command)
       (with-stubbed-fdefinition
           ((nerimux::%resolve-client-focus-pane
              (lambda (&rest arguments) (declare (ignore arguments)) nil))
            (nerimux::%client-notify
              (lambda (connection message)
                (declare (ignore connection))
-               (push message messages)))
-           (nerimux::%client-restore-command-view
-             (lambda (connection) (declare (ignore connection))))
-           (nerimux::%transition-client-ui-mode
-             (lambda (connection event)
-               (declare (ignore connection))
-               (push event transitions))))
+               (push message messages))))
         (nerimux::%submit-client-search session conn :forward '("needle"))
-        (nerimux::%submit-client-search session conn :backward nil)
-        (expect (equal '("no focused pane" "no focused pane") messages))
-        (expect (= 2 (length transitions))))))
+        (nerimux::%submit-client-search session conn :backward nil))
+      (expect (equal '("no focused pane" "no focused pane") messages))
+      (expect (eq :status (nerimux::client-conn-view conn)))
+      (expect (null (nerimux::client-conn-command-return-view conn)))
+      (expect (null (nerimux::client-conn-modal conn)))))
 
-  (it "normal-dispatches-state-only-view-and-mode-keys"
+  ;; Magit alignment (contract §2, "KEYS THAT NO LONGER EXIST"): d, o, and i
+  ;; are all retired from the UI keymap -- d/o used to flip client-conn-view
+  ;; between :overview and :detail directly, and i (%client-enter-input-mode,
+  ;; now gone entirely) was the only way into what is now the VIEW derived
+  ;; by focusing a pane. %handle-client-normal-key-payload itself is REPLACED
+  ;; by %handle-client-ui-key-payload (contract §5). None of the three has a
+  ;; new binding, so striking any of them must be a pure no-op: no VIEW
+  ;; change, no MODAL entered.
+  (it "retired-view-switch-keys-d-o-i-are-unbound-in-the-ui-keymap"
     (let ((session (nerimux/model:make-session :id 1 :name "test"))
           (conn (nerimux::%make-client-conn))
           (nerimux::*dirty* nil))
-      (dolist (case '(("d" :normal :detail)
-                      ("o" :normal :overview)
-                      ("i" :input :detail)))
-        (destructuring-bind (payload expected-mode expected-view) case
-          (nerimux::%set-client-ui-mode conn :normal)
-          (nerimux::%set-client-view conn :overview)
-          (expect (nerimux::%handle-client-normal-key-payload
-                   session conn payload))
-          (expect (eq expected-mode (nerimux::client-conn-mode conn)))
-          (expect (eq expected-view (nerimux::client-conn-view conn)))))
-      (expect (eq :input (nerimux::client-conn-mode conn)))))
+      (dolist (payload '("d" "o" "i"))
+        (nerimux::%set-client-modal conn nil)
+        (nerimux::%set-client-view conn :repolist)
+        (expect (null (nerimux::%handle-client-ui-key-payload session conn payload)))
+        (expect (eq :repolist (nerimux::client-conn-view conn)))
+        (expect (null (nerimux::client-conn-modal conn))))))
 
   (it "command-target-and-search-helpers-preserve-argument-shape"
     (multiple-value-bind (target args)
@@ -644,7 +673,7 @@
            (nerimux::*clients* (list conn))
            (nerimux::*dirty* nil))
       (nerimux/model:organization-add-repository organization repository)
-      (setf (nerimux::client-conn-view conn) :overview)
+      (setf (nerimux::client-conn-view conn) :repolist)
       ;; Fresh conn: nothing selected, nothing focused.
       (expect (null (nerimux::%client-tree-object conn)))
       (expect (nerimux::%focus-selected-client-worktree nil conn))
@@ -709,7 +738,7 @@
 (describe "server-dispatch-helper-tree-navigation-suite"
 
   ;; Enter on a repository row with a live pane already attached to its main
-  ;; worktree jumps straight to that pane's shell (view :detail, focus set),
+  ;; worktree jumps straight to that pane's shell (view :pane, focus set),
   ;; with no intermediate expand/collapse step. FD 9999 fakes "live" without
   ;; a real PTY (the same technique used elsewhere in this suite, e.g.
   ;; confirm-view-quit-tests.lisp), so %OPEN-CLIENT-WORKTREE-PANE's spawn
@@ -733,10 +762,10 @@
         (nerimux/model:repository-add-worktree repository worktree)
         (nerimux/model:worktree-add-pane worktree pane)
         (setf (nerimux/model:pane-fd pane) 9999) ; "live" without a real PTY
-        (setf (nerimux::client-conn-view conn) :overview)
+        (setf (nerimux::client-conn-view conn) :repolist)
         (nerimux::%set-client-selected-tree-object conn repository)
         (expect (nerimux::%focus-selected-client-worktree s conn))
-        (expect (eq :detail (nerimux::client-conn-view conn)))
+        (expect (eq :pane (nerimux::client-conn-view conn)))
         (expect (eq pane (nerimux::client-conn-focus conn))))))
 
   ;; A repository with no worktrees at all reports it rather than silently
@@ -754,13 +783,13 @@
            ;; (registered) client -- see %CLIENT-LIVE-P.
            (nerimux::*clients* (list conn)))
       (nerimux/model:organization-add-repository organization repository)
-      (setf (nerimux::client-conn-view conn) :overview)
+      (setf (nerimux::client-conn-view conn) :repolist)
       (nerimux::%set-client-selected-tree-object conn repository)
       (expect (eq t (nerimux::%focus-selected-client-worktree nil conn)))
       (expect (string= "repository has no worktrees"
                        (first (nerimux::client-conn-message-log conn))))
       ;; No jump happened -- the view is untouched.
-      (expect (eq :overview (nerimux::client-conn-view conn)))))
+      (expect (eq :repolist (nerimux::client-conn-view conn)))))
 
   ;; Enter on an organization row still toggles its collapse state (unchanged
   ;; from the repository-row pivot above) -- a direct, non-edge-case check
@@ -780,17 +809,17 @@
       (expect (null (gethash (list :organization "org-toggle")
                              nerimux::*workspace-collapsed-node-ids*)))))
 
-  (it "enter-on-a-pane-selects-the-pane-and-enters-detail-view"
+  (it "enter-on-a-pane-selects-the-pane-and-enters-pane-view"
     (with-fake-session (s)
       (let* ((nerimux::*dirty* nil)
              (window (nerimux/model:session-active-window s))
              (pane (nerimux/model:window-active-pane window))
              (conn (nerimux::%make-client-conn)))
-        (setf (nerimux::client-conn-view conn) :overview)
+        (setf (nerimux::client-conn-view conn) :repolist)
         (nerimux::%set-client-selected-tree-object conn pane)
         (expect (nerimux::%focus-selected-client-worktree s conn))
         (expect (eq pane (nerimux::client-conn-focus conn)))
-        (expect (eq :detail (nerimux::client-conn-view conn)))
+        (expect (eq :pane (nerimux::client-conn-view conn)))
         (expect nerimux::*dirty*))))
 
   (it "enter-on-a-window-focuses-its-active-pane"
@@ -799,11 +828,11 @@
              (window (nerimux/model:session-active-window s))
              (pane (nerimux/model:window-active-pane window))
              (conn (nerimux::%make-client-conn)))
-        (setf (nerimux::client-conn-view conn) :overview)
+        (setf (nerimux::client-conn-view conn) :repolist)
         (nerimux::%set-client-selected-tree-object conn window)
         (expect (nerimux::%focus-selected-client-worktree s conn))
         (expect (eq pane (nerimux::client-conn-focus conn)))
-        (expect (eq :detail (nerimux::client-conn-view conn)))
+        (expect (eq :pane (nerimux::client-conn-view conn)))
         (expect nerimux::*dirty*))))
 
   ;; Section-based redesign: a worktree row has no expand state of its own
@@ -877,7 +906,8 @@
       (expect (nerimux::%client-enter-tree-filter-mode conn))
       (expect (null (nerimux::client-conn-tree-filter conn)))
       (expect (zerop (nerimux::client-conn-tree-scroll conn)))
-      (expect (eq :tree-filter (nerimux::client-conn-mode conn)))))
+      ;; :tree-filter -> MODAL :filter (contract §5).
+      (expect (eq :filter (nerimux::client-conn-modal conn)))))
 
   (it "tree-relative-selection-empty-workspace"
     (let ((conn (nerimux::%make-client-conn))
