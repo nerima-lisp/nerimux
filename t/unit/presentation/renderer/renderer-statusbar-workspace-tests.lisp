@@ -189,56 +189,76 @@
   ;; §11 already protects", but nothing exercised that claim with a non-
   ;; default MODE threaded through the same shrink-by-one-column ladder as
   ;; the drops-notification-then-tabs-then-repository-name test above, nor
-  ;; at the R6.10 40-column floor its own comment cites. :input is used
-  ;; (rather than the default :normal) so this cannot be satisfied by
-  ;; accident via some unrelated "NORMAL" substring appearing elsewhere in
-  ;; the assembled left/middle/right blocks.
-  (it "keeps the INPUT mode chip through every degradation stage, down to the 40-column floor"
+  ;; at the R6.10 40-column floor its own comment cites. :SCROLLBACK is used
+  ;; (rather than the default :normal) -- a real modal CLIENT-CONN-MODAL
+  ;; takes today (copy mode, server-multi-dispatch-command-input.lisp),
+  ;; unlike the retired :input/:normal command-name spellings -- so this
+  ;; cannot be satisfied by accident via some unrelated "NORMAL" substring
+  ;; appearing elsewhere in the assembled left/middle/right blocks.
+  (it "keeps the SCROLLBACK mode chip through every degradation stage, down to the 40-column floor"
     (multiple-value-bind (pane) (%fixture-pane-with-worktree :branch "feature/wide-enough-branch")
       (let* ((messages (list "a very long notification that will not fit once things get tight"))
              (full (nerimux/renderer::%compose-workspace-status-line
-                    pane messages 500 :mode :input))
+                    pane messages 500 :mode :scrollback))
              (full-width (nerimux/renderer::%visible-length full))
              (stage-1 (nerimux/renderer::%compose-workspace-status-line
-                       pane messages (1- full-width) :mode :input))
+                       pane messages (1- full-width) :mode :scrollback))
              (stage-1-width (nerimux/renderer::%visible-length stage-1)))
-        (expect (search "INPUT" (strip-sgr full)))
-        (expect (search "INPUT" (strip-sgr stage-1)))
+        (expect (search "SCROLLBACK" (strip-sgr full)))
+        (expect (search "SCROLLBACK" (strip-sgr stage-1)))
         (let* ((stage-2 (nerimux/renderer::%compose-workspace-status-line
-                          pane messages (1- stage-1-width) :mode :input))
+                          pane messages (1- stage-1-width) :mode :scrollback))
                (stage-2-width (nerimux/renderer::%visible-length stage-2)))
-          (expect (search "INPUT" (strip-sgr stage-2)))
+          (expect (search "SCROLLBACK" (strip-sgr stage-2)))
           (let ((stage-3 (nerimux/renderer::%compose-workspace-status-line
-                          pane messages (1- stage-2-width) :mode :input)))
-            (expect (search "INPUT" (strip-sgr stage-3)))
-            (expect (search "INPUT"
+                          pane messages (1- stage-2-width) :mode :scrollback)))
+            (expect (search "SCROLLBACK" (strip-sgr stage-3)))
+            (expect (search "SCROLLBACK"
                             (strip-sgr
                              (nerimux/renderer::%compose-workspace-status-line
-                              pane messages 40 :mode :input))))))))))
+                              pane messages 40 :mode :scrollback))))))))))
 
 (describe "renderer-suite/statusbar-workspace-mode-chip"
 
-  ;; FR-003: the mode chip is the status line's leftmost, always-kept
-  ;; segment -- a client landing in a freshly opened pane can tell at a
-  ;; glance whether a keystroke reaches the shell yet. :NORMAL is the mode
-  ;; that swallows keys (nerimux-normal-mode-swallows-nothing), so it alone
-  ;; adds the " i to type" hint after the chip; every other mode shows the
-  ;; chip alone.
-  (it "includes NORMAL and the i-to-type hint for :normal, and INPUT without the hint for :input"
+  ;; FR-003/FR-007: the mode chip is the status line's leftmost,
+  ;; always-kept segment, naming whatever modal has taken the keyboard away
+  ;; from the shell. MODE is NIL in the ordinary case -- %RENDER-PANE-FRAME
+  ;; (server-multi-render.lisp) passes CLIENT-CONN-MODAL straight through,
+  ;; and a pane with no modal takes typing directly since FR-007 -- and the
+  ;; chip must then render nothing at all, not the literal text "NIL" that
+  ;; (format nil "~:@(~A~)" nil) produces with no guard. This is the bug
+  ;; this test pins: %status-mode-chip used to compare MODE against the
+  ;; retired :NORMAL modal, which NIL never equals, so NIL fell through to
+  ;; the formatting branch unguarded.
+  (it "renders no chip and no literal NIL text when mode is nil"
+    (expect (null (nerimux/renderer::%status-mode-chip nil)))
+    (multiple-value-bind (pane) (%fixture-pane-with-worktree)
+      (let ((line (strip-sgr
+                   (nerimux/renderer::%compose-workspace-status-line
+                    pane (list "build ok") 200 :mode nil))))
+        (expect (not (search "NIL" line))))))
+
+  ;; A real modal value (:SCROLLBACK/:COMMAND, the current CLIENT-CONN-
+  ;; MODAL keywords a pane frame's status bar actually sees --
+  ;; server-multi-dispatch-command-input.lisp -- rather than the retired
+  ;; :NORMAL/:INPUT command-name spellings) shows the chip alone: there is
+  ;; no hint text for any modal now that FR-007 retired the old :NORMAL
+  ;; "swallows keys" distinction the " i to type" hint used to name.
+  (it "shows the chip alone for a real modal value, with no i-to-type hint"
     (multiple-value-bind (pane) (%fixture-pane-with-worktree)
       (let* ((messages (list "build ok"))
-             (normal-line
+             (scrollback-line
                (strip-sgr
                 (nerimux/renderer::%compose-workspace-status-line
-                 pane messages 200 :mode :normal)))
-             (input-line
+                 pane messages 200 :mode :scrollback)))
+             (command-line
                (strip-sgr
                 (nerimux/renderer::%compose-workspace-status-line
-                 pane messages 200 :mode :input))))
-        (expect (search "NORMAL" normal-line))
-        (expect (search "i to type" normal-line))
-        (expect (search "INPUT" input-line))
-        (expect (not (search "i to type" input-line))))))
+                 pane messages 200 :mode :command))))
+        (expect (search "SCROLLBACK" scrollback-line))
+        (expect (not (search "i to type" scrollback-line)))
+        (expect (search "COMMAND" command-line))
+        (expect (not (search "i to type" command-line))))))
 
   ;; The same contract holds through render-status-bar, the entry point
   ;; %compose-workspace-status-line's only production caller
@@ -251,6 +271,20 @@
                  (with-output-to-string (s)
                    (nerimux/renderer::render-status-bar
                     s session 24 200
-                    :focus-pane pane :messages (list "build ok") :mode :input)))))
-          (expect (search "INPUT" output))
-          (expect (not (search "i to type" output))))))))
+                    :focus-pane pane :messages (list "build ok") :mode :scrollback)))))
+          (expect (search "SCROLLBACK" output))
+          (expect (not (search "i to type" output)))))))
+
+  ;; The same NIL-mode contract holds through render-status-bar -- the
+  ;; production entry point %render-pane-frame actually calls -- not just
+  ;; through %compose-workspace-status-line directly.
+  (it "render-status-bar shows no literal NIL text when mode is nil"
+    (multiple-value-bind (pane) (%fixture-pane-with-worktree)
+      (multiple-value-bind (session) (make-single-pane-session)
+        (let ((output
+                (strip-sgr
+                 (with-output-to-string (s)
+                   (nerimux/renderer::render-status-bar
+                    s session 24 200
+                    :focus-pane pane :messages (list "build ok") :mode nil)))))
+          (expect (not (search "NIL" output))))))))

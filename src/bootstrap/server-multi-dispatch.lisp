@@ -198,13 +198,32 @@ dropped connection's entry be reclaimed instead of leaking.")
   (%mark-dirty)
   modal)
 
+(defparameter +keyboard-owning-modals+ '(:confirm :help :process-log :transient)
+  "Modals the C-q prefix must not reach past.
+
+   These four take over the frame and each claims, in its own handler's
+   docstring, to own every key while it is up. That claim is only true if the
+   prefix is checked AFTER them -- and getting it wrong is not a cosmetic
+   ordering issue. C-q merely ARMS the prefix and returns; the byte the user
+   types next, believing it answers the y/n question still on screen, is then
+   consumed as the chord's second byte instead. If that byte is `Q`, it opens a
+   second confirmation over the first, and the original pending destructive
+   action is silently dropped -- neither run nor cancelled.
+
+   The remaining modals (:picker :command :filter :scrollback) are deliberately
+   NOT here: the prefix reached past them before this refactor too, and
+   promoting them now would be an unrequested behaviour change rather than a
+   fix. The line is \"owns the screen and asks a question\" versus \"an input
+   line over a view that is still visible underneath\".")
+
 (defun %handle-multi-key-message (session conn payload)
   "Feed PAYLOAD to whatever currently owns CONN's keyboard.
 
-   Precedence, highest first: a pending ESC-swallow, the C-q prefix, an active
-   MODAL, then the view-derived default. The modal branch is a single ECASE
-   over one slot rather than a chain of flag tests, so two owners cannot both
-   claim a key -- the failure the old MODE x VIEW product allowed.
+   Precedence, highest first: a pending ESC-swallow, a keyboard-owning MODAL
+   (+KEYBOARD-OWNING-MODALS+), the C-q prefix, any remaining MODAL, then the
+   view-derived default. The modal branch is a single CASE over one slot rather
+   than a chain of flag tests, so two owners cannot both claim a key -- the
+   failure the old MODE x VIEW product allowed.
 
    The default arm is where FR-007 lands: :repolist and :status route to the UI
    keymap, and every other view (i.e. :pane) hands the byte straight to the
@@ -212,19 +231,19 @@ dropped connection's entry be reclaimed instead of leaking.")
   (cond
     ;; Swallowed by a pending ESC sequence (R4.3): never reaches any dispatch.
     ((%client-esc-swallow-consume conn) nil)
+    ;; Before the prefix, not after -- see +KEYBOARD-OWNING-MODALS+.
+    ((member (client-conn-modal conn) +keyboard-owning-modals+ :test #'eq)
+     (case (client-conn-modal conn)
+       (:confirm (nth-value 1 (%handle-confirm-key session conn payload)))
+       (:help (%handle-help-view-key conn payload))
+       (:transient (%handle-client-transient-key-payload session conn payload))
+       (:process-log (%handle-process-log-key conn payload))))
     (t
      (multiple-value-bind (prefix-handled prefix-result)
          (%handle-workspace-prefix-key session conn payload)
        (if prefix-handled
            prefix-result
            (case (client-conn-modal conn)
-             ;; A confirmation owns every key while it is up (R6.4) -- including
-             ;; the ones that would open another modal, so a question cannot be
-             ;; answered about one thing while the user changed another.
-             (:confirm (nth-value 1 (%handle-confirm-key session conn payload)))
-             (:help (%handle-help-view-key conn payload))
-             (:transient (%handle-client-transient-key-payload session conn payload))
-             (:process-log (%handle-process-log-key conn payload))
              (:picker (%handle-client-picker-key-payload session conn payload))
              (:scrollback (%handle-client-copy-key-payload session conn payload))
              (:command (%handle-client-command-key-payload session conn payload))

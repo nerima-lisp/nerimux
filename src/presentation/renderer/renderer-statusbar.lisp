@@ -139,19 +139,28 @@
 
 (defun %status-mode-chip (mode)
   "The status line's leftmost, always-kept segment (FR-003): a bold MODE-name
-   chip so a client landing in a freshly opened pane can tell at a glance
-   whether a keystroke reaches the shell yet. :NORMAL -- the mode that
-   swallows keys (nerimux-normal-mode-swallows-nothing) -- adds a muted
-   \" i to type\" hint after the chip; every other mode value that reaches
-   here (:input, :copy, :command, :picker, ...) shows the chip alone, the
-   mode name already being the whole message. Styled with %STATUS-WRAP (not
-   %SGR-WRAP) so it restores the status bar's own base style rather than a
-   plain reset; +sgr-mode-chip+ (renderer-style.lisp) is the same chip the
-   workspace footer uses (%workspace-footer-line, renderer-workspace.lisp)."
-  (let ((chip (%status-wrap (format nil " ~:@(~A~) " mode) +sgr-mode-chip+)))
-    (if (eq mode :normal)
-        (format nil "~A ~A" chip (%status-wrap "i to type" +sgr-muted-italic+))
-        chip)))
+   chip naming whatever has taken the keyboard away from the shell. Returns
+   NIL -- not an empty string -- when MODE is NIL: %RENDER-PANE-FRAME
+   (server-multi-render.lisp) passes CLIENT-CONN-MODAL straight through, and
+   NIL is the ordinary case since FR-007 gave a pane with no modal the
+   keyboard directly, with nothing for the chip to report.
+   %COMPOSE-WORKSPACE-STATUS-LINE's own (REMOVE NIL ...) then drops a NIL
+   chip from the assembled line with no separator artifact, the same
+   mechanism already used to drop the middle/right blocks when width
+   excludes them. Every non-NIL MODE (:view-pane, :scrollback, :command,
+   :filter, :picker, :transient, ...) shows the chip alone, the mode name
+   already being the whole message -- the old :NORMAL branch's muted
+   \" i to type\" hint was for a modal value FR-007 retired (no client-
+   visible modal is ever :NORMAL any more; the legacy :normal *command*
+   maps to modal NIL, server-multi-dispatch-command-workspace.lisp), so
+   comparing MODE against :NORMAL here was dead and always fell through to
+   this function formatting NIL itself, printing the literal text \"NIL\".
+   Styled with %STATUS-WRAP (not %SGR-WRAP) so it restores the status bar's
+   own base style rather than a plain reset; +sgr-mode-chip+
+   (renderer-style.lisp) is the same chip the workspace footer uses
+   (%workspace-footer-line, renderer-workspace.lisp)."
+  (when mode
+    (%status-wrap (format nil " ~:@(~A~) " mode) +sgr-mode-chip+)))
 
 ;;; ── Composition with width-driven degradation (R6.5) ───────────────────────
 
@@ -160,12 +169,16 @@
    too narrow: the notification first, then the window/pane tabs, then the
    repository name — branch and state token are never dropped (design doc
    §11). The MODE chip (FR-003, %STATUS-MODE-CHIP) is placed ahead of all
-   three and is never dropped either: it is a safety feature (whether a
-   keystroke reaches the shell), not a display convenience, so it must
-   survive as far into a narrow terminal as the fields design doc §11 already
-   protects. Being first also means the final %VISIBLE-TRUNCATE safety net
-   below the terminal's 40-column floor (R6.10 already refuses anything
-   narrower) keeps it, since that truncation keeps a string's prefix."
+   three and is never dropped by width degradation: it is a safety feature
+   (whether a keystroke reaches the shell), not a display convenience, so it
+   must survive as far into a narrow terminal as the fields design doc §11
+   already protects. Being first also means the final %VISIBLE-TRUNCATE
+   safety net below the terminal's 40-column floor (R6.10 already refuses
+   anything narrower) keeps it, since that truncation keeps a string's
+   prefix. Separately from width, MODE-CHIP itself is NIL when MODE is NIL
+   (%STATUS-MODE-CHIP), and the REMOVE NIL below drops a NIL entry from the
+   assembled list with no gap -- that is MODE having nothing to report, not
+   a degradation step, so it happens identically at every COLS width."
   (let ((middle (%status-middle-text focus-pane))
         (right (%status-right-text messages))
         (mode-chip (%status-mode-chip mode)))

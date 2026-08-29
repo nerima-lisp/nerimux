@@ -46,6 +46,24 @@
                     (not *workspace-catalog-loaded-p*))
    :command-buffer (client-conn-command-buffer conn)))
 
+(defun %render-status-frame (conn)
+  "The magit status frame (FR-003). Split out because two arms of
+   %RENDER-CLIENT-FRAME reach it -- the ordinary :status view and a :transient
+   opened while in that view, which the status frame hosts in place by growing
+   its own key panel rather than by replacing the screen."
+  (render-workspace-status-to-tui-string
+   (client-conn-selected-worktree conn)
+   (client-conn-rows conn)
+   (client-conn-cols conn)
+   :selected-object (client-conn-selected-tree-object conn)
+   :scroll (client-conn-tree-scroll conn)
+   :expanded-node-ids *workspace-expanded-node-ids*
+   :file-diffs *workspace-file-diffs*
+   :visibility-level (client-conn-visibility-level conn)
+   :messages (client-conn-message-log conn)
+   :transient (client-conn-transient-view conn)
+   :prefix-code (client-conn-workspace-prefix-code conn)))
+
 (defun %render-pane-frame (session conn)
   "The pane frame. The :MODE it passes down is CONN's MODAL, not a mode of its
    own: with FR-007 there is no longer a modeless-vs-input distinction to show,
@@ -90,26 +108,36 @@
                (client-conn-rows conn)
                (client-conn-cols conn)
                :scroll (client-conn-process-log-scroll conn)))
-             ;; :picker draws over whichever view is underneath rather than
-             ;; replacing it, so it falls through to the view dispatch below --
-             ;; the same reason the old code excluded :picker from its overview
-             ;; branch instead of giving it a branch of its own.
+             ;; The picker needs its OWN arm, not a fallthrough. It is only ever
+             ;; opened from :repolist or :status (%CLIENT-UI-KEYS-P gates C-p,
+             ;; and from :pane every byte goes to the shell), and neither of
+             ;; those two renderers takes picker arguments at all -- only the
+             ;; pane renderer does. An earlier revision of this function let
+             ;; :picker fall through to the view dispatch below on the theory
+             ;; that it "draws over whichever view is underneath"; the result
+             ;; was a picker that opened, captured the keyboard, and never
+             ;; appeared on screen.
+             (:picker (%render-pane-frame session conn))
+             ;; A transient opened from :repolist has nowhere to go in the
+             ;; repolist frame -- %RENDER-WORKSPACE-FRAME has no transient
+             ;; parameter and RENDER-WORKSPACE-OVERVIEW-TO-TUI-STRING accepts
+             ;; none. Only the status frame can host the panel in place, so the
+             ;; repolist case takes the same full-screen fallback the status
+             ;; view uses when it is too short to grow its key panel. Without
+             ;; this, `?` from the repolist captures every key while the screen
+             ;; still shows an ordinary repolist -- and the dispatch transient's
+             ;; actions include running git.
+             (:transient
+              (if (eq (client-conn-view conn) :status)
+                  (%render-status-frame conn)
+                  (render-transient-full-screen-to-tui-string
+                   (client-conn-transient-view conn)
+                   (client-conn-rows conn)
+                   (client-conn-cols conn))))
              (t
               (case (client-conn-view conn)
                 (:repolist (%render-workspace-frame conn))
-                (:status
-                 (render-workspace-status-to-tui-string
-                  (client-conn-selected-worktree conn)
-                  (client-conn-rows conn)
-                  (client-conn-cols conn)
-                  :selected-object (client-conn-selected-tree-object conn)
-                  :scroll (client-conn-tree-scroll conn)
-                  :expanded-node-ids *workspace-expanded-node-ids*
-                  :file-diffs *workspace-file-diffs*
-                  :visibility-level (client-conn-visibility-level conn)
-                  :messages (client-conn-message-log conn)
-                  :transient (client-conn-transient-view conn)
-                  :prefix-code (client-conn-workspace-prefix-code conn)))
+                (:status (%render-status-frame conn))
                 (t (%render-pane-frame session conn))))))))
     (setf (client-conn-frame conn) frame)
     frame))

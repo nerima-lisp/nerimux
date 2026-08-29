@@ -167,19 +167,30 @@
   nil)
 
 (defun %workspace-prefix-open-status (session conn)
-  "C-q w (FR-009): switch to the status view for the focused pane's
-   worktree.  With no pane focused -- or a focused pane with no worktree,
-   which the status view has nothing to render for either -- this falls
-   back to :repolist rather than notifying and leaving the screen as it
-   was, so the key is never a dead end."
+  "C-q w (FR-009): step out of a pane towards the workspace views, one level
+   per press -- :pane to :status, and :status on to :repolist.
+
+   The second step is what makes the repolist reachable at all. FR-006's `q`
+   ladder returns :status to the focused pane whenever one is live, which is
+   the ordinary case, so `q` alone can never walk OUT to the flat multi-repo
+   list; and the magit keymap retired `o`, which was the only key that did
+   that before. Without this, a user with any live pane could reach :repolist
+   only by closing every pane in the window.
+
+   With no pane focused -- or a focused pane with no worktree, which the
+   status view has nothing to render for either -- this goes straight to
+   :repolist rather than notifying and leaving the screen as it was, so the
+   key is never a dead end."
   (multiple-value-bind (pane window worktree)
       (%workspace-prefix-context session conn)
     (declare (ignore window))
-    (if (and pane worktree)
-        (progn
-          (setf (client-conn-selected-worktree conn) worktree)
-          (%set-client-view conn :status))
-        (%set-client-view conn :repolist)))
+    (cond
+      ((eq (client-conn-view conn) :status)
+       (%set-client-view conn :repolist))
+      ((and pane worktree)
+       (setf (client-conn-selected-worktree conn) worktree)
+       (%set-client-view conn :status))
+      (t (%set-client-view conn :repolist))))
   nil)
 
 (defun %workspace-prefix-open-scrollback (session conn)

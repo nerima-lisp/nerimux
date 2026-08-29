@@ -385,6 +385,39 @@
         (expect (member other-worktree objects :test #'eq))
         (expect (member other-repo objects :test #'eq))))))
 
+;;; Bug fix: RENDER-WORKSPACE-OVERVIEW-TO-STRING used to compare MODE
+;;; against the retired :TREE-FILTER modal (the legacy *command* name in
+;;; server-multi-dispatch-command-workspace.lisp's mapping table) instead
+;;; of the live :FILTER modal %CLIENT-ENTER-TREE-FILTER-MODE actually sets
+;;; (server-multi-dispatch-command-input.lisp) -- so pressing `/` fell
+;;; through to the ordinary key-panel branch and the query the user was
+;;; typing never appeared on screen.
+
+(describe "renderer-suite/workspace-tree-filter-prompt"
+
+  (it "shows the /query prompt at the footer row when mode is :filter, and no ordinary key hints"
+    (multiple-value-bind (organization) (%build-five-level-tree)
+      (let* ((frame
+               (nerimux/renderer:render-workspace-overview-to-string
+                (list organization) 24 100
+                :mode :filter :tree-filter "abc"))
+             (plain (strip-sgr frame)))
+        (expect (search "/abc" plain))
+        (expect (not (search "refresh" plain)))
+        (expect (not (search "detach" plain))))))
+
+  ;; An empty (but non-NIL) tree-filter still draws the bare `/` prompt --
+  ;; the moment the user presses `/` and has typed nothing yet.
+  (it "shows a bare / prompt when mode is :filter and tree-filter is empty"
+    (multiple-value-bind (organization) (%build-five-level-tree)
+      (let* ((frame
+               (nerimux/renderer:render-workspace-overview-to-string
+                (list organization) 24 100
+                :mode :filter :tree-filter ""))
+             (plain (strip-sgr frame)))
+        (expect (search "/" plain))
+        (expect (not (search "detach" plain)))))))
+
 ;;; PR2 worktree-row info cluster: state tag, ahead/behind, pane count, and a
 ;;; relative last-activity time, in that priority order. Unaffected by the
 ;;; section-based redesign: a :WORKTREE row's info cluster is built the same
