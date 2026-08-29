@@ -73,38 +73,42 @@
   ((:module "src"
     :serial t
      :components
-     ((:module "bootstrap-packages"
-       :pathname "bootstrap"
-       :serial t
-       :components ((:file "package")))  ; loads package-* fragments; defines all packages
      ;; Foundation: depends on nothing, so it loads before every layer that calls
      ;; it.  Placement is load-bearing -- domain/terminal calls
      ;; parse-integer-or-nil and used to be compiled before the file defining it.
-     (:module "domain/text"
+     ((:module "domain/text"
       :serial t
-      :components ((:file "text-parse")))
+      :components ((:file "package") (:file "text-parse")))
+     (:module "domain/version"
+      :serial t
+      :components ((:file "version")))  ; package + the one function together (W6)
      (:module "domain/ports"
       :serial t
       :components
-      ((:file "posix-port")
+      ((:file "package")
+       (:file "posix-port")
        (:file "pty-port")))   ; port abstractions (load before infrastructure adapters)
      (:module "infrastructure/pty"
       :serial t
       :components
-       ((:file "pty-ffi")       ; FFI declarations and platform constants
+       ((:file "package")
+       (:file "pty-ffi")       ; FFI declarations and platform constants
        (:file "pty-rawmode")   ; terminal raw mode management
        (:file "pty")))         ; PTY lifecycle + install-pty-port adapter (references nerimux/ports vars)
      (:module "infrastructure/net"
       :serial t
       :components
-      ((:file "protocol-command")  ; wire constants and command payload codec
+      ((:file "package")  ; nerimux/protocol, nerimux/transport, nerimux/net
+       (:file "protocol-command")  ; wire constants and command payload codec
        (:file "protocol")
        (:file "transport")
        (:file "net")))
      (:module "domain/terminal"
       :serial t
       :components
-      ((:file "cell")         ; immutable cell type, char-width table
+      ((:file "package-types")  ; nerimux/terminal/types
+       (:file "package")        ; nerimux/terminal/actions, sgr, csi, parser, emulator, terminal
+       (:file "cell")         ; immutable cell type, char-width table
        (:file "screen-data")  ; declarative screen slots and defaults
        (:file "screen")       ; screen construction and grid helpers
        (:file "screen-metadata") ; screen capture/palette metadata mutation helpers
@@ -152,7 +156,8 @@
      (:module "domain/model"
       :serial t
       :components
-      ((:file "organization")      ; ghq organization aggregate
+      ((:file "package")           ; nerimux/workspace-model, pane, layout, window, session
+       (:file "organization")      ; ghq organization aggregate
        (:file "repository")        ; ghq repository aggregate
        (:file "worktree")           ; worktree aggregate and relationships
        (:file "pane-core")         ; leaf PTY data and feed helpers
@@ -175,7 +180,8 @@
      (:module "infrastructure/vcs"
      :serial t
      :components
-       ((:file "vcs")
+       ((:file "package")
+     (:file "vcs")
      (:file "vcs-async-operations")
      (:file "vcs-worktree-operations")
      (:file "vcs-fetch")
@@ -190,15 +196,9 @@
      (:module "application/picker"
       :serial t
       :components
-      ((:file "global-picker")
+      ((:file "package")
+       (:file "global-picker")
        ))       ; pure picker + measurement fixture
-     ;; target resolution is a domain/model service; placed in the model directory
-     ;; via :pathname so its load slot (after format) stays byte-identical.
-     (:module "domain-model-target"
-      :pathname "domain/model"
-      :serial t
-      :components
-      ((:file "target")))   ; session/window/pane target resolution (-t flag)
      ;; commands context: what is left of the pane/window operations, plus the
      ;; copy-mode cluster.  commands-core loads first, then copy-mode, then the
      ;; two survivors split back to root via :pathname.  The tmux command
@@ -208,7 +208,8 @@
      (:module "application/commands"
       :serial t
       :components
-      ((:file "commands-core")))
+      ((:file "package")
+       (:file "commands-core")))
      (:module "application/commands/copy-mode"
       :serial t
       :components
@@ -226,7 +227,8 @@
      (:module "presentation/renderer"
       :serial t
       :components
-      ((:file "renderer-format-definitions") ; compile-time ANSI fact-table constructors
+      ((:file "package")
+       (:file "renderer-format-definitions") ; compile-time ANSI fact-table constructors
        (:file "renderer-format")     ; ANSI primitives (shared by both paths below)
        ;; The theme palette loads right after the ANSI primitives so both the
        ;; workspace frame and the pane compositor can reference its constants.
@@ -265,18 +267,27 @@
      (:module "infrastructure/input"
       :serial t
       :components
-      ((:file "input")))
-     (:module "bootstrap-runtime"
-      :pathname "bootstrap"
+      ((:file "package")
+       (:file "input")))
+     ;; Everything left in src/bootstrap/ now shares one real ASDF module,
+     ;; matching the directory name exactly -- no :pathname override needed
+     ;; (W6). It loads last because "nerimux" needs every other package
+     ;; declared first (renderer, input, and commands included), which used
+     ;; to be true only because package.lisp loaded all nine package
+     ;; fragments upfront regardless of where their own code lived.
+     (:module "bootstrap"
       :serial t
       :components
-      ((:file "runtime")              ; shared state + channel sync + SIGWINCH
-       (:file "runtime-reader")))     ; PTY reader CPS state machine
-     (:module "bootstrap-server"
-      :pathname "bootstrap"
-      :serial t
-      :components
-      ((:file "session-registry")  ; lookup for the one session the server owns
+      ((:file "package")             ; nerimux (BOOTSTRAP layer, needs everything)
+       ;; target resolution is a "nerimux"-package service (W4-prep found it was
+       ;; never really part of nerimux/model despite living in that directory);
+       ;; moved here from domain/model now that its true package's declaration
+       ;; also lives here.
+       (:file "target")              ; session/window/pane target resolution (-t flag)
+       (:file "server-dispatch-macros") ; declarative rule-table macros (moved out of package.lisp, W6)
+       (:file "runtime")              ; shared state + channel sync + SIGWINCH
+       (:file "runtime-reader")       ; PTY reader CPS state machine
+       (:file "session-registry")  ; lookup for the one session the server owns
        (:file "server")
        (:file "workspace-window") ; workspace window creation
        (:file "server-multi-dispatch") ; shared multi-client handlers

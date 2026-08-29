@@ -40,3 +40,8 @@ kept in tree order via window-refresh-panes."
    (full nil)
    (input-only nil)
    (input-bytes nil)))
+
+;; Moved from bootstrap/package.lisp (W6): this accessor is called from a
+;; setf place inside a tight server-multi loop often enough that the
+;; compiler's inlining heuristic was worth overriding explicitly.
+(declaim (notinline window-tree (setf window-tree)))
