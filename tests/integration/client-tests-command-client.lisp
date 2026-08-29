@@ -38,9 +38,7 @@
           (lambda (stream)
             (declare (ignore stream))
             (values :exit nil))))
-      (expect (eq :exit (nerimux::%receive-server-frame :stream))))))
-
-  (it "receive-if-ready-dispatches-only-when-fd-is-ready"
+      (expect (eq :exit (nerimux::%receive-server-frame :stream))))) (it "receive-if-ready-dispatches-only-when-fd-is-ready"
     (let ((calls 0))
       (with-stubbed-fdefinition
           ((nerimux::%receive-server-frame
@@ -50,17 +48,7 @@
               :exit)))
         (expect (null (nerimux::%receive-if-ready :stream 7 '(8))))
         (expect (eq :exit (nerimux::%receive-if-ready :stream 7 '(7 8)))))
-      (expect (= 1 calls))))
-
-  ;;; ── %maybe-send-resize behavior ──────────────────────────────────────────────
-  ;;;
-  ;;; %maybe-send-resize encapsulates the resize-pending check that was inline in
-  ;;; run-client.  It is tested here using a socket pair so the msg-resize frame
-  ;;; can be observed without a live terminal.
-
-  ;; %maybe-send-resize sends a +msg-resize+ frame and clears *resize-pending*
-  ;; when *resize-pending* is T — verifies the resize-dispatch path extracted from run-client.
-  (it "maybe-send-resize-sends-frame-when-pending"
+      (expect (= 1 calls)))) (it "maybe-send-resize-sends-frame-when-pending"
     (with-guarded-socket-test
       ;; Set resize-pending and known dimensions.
       (let ((nerimux::*resize-pending* t)
@@ -78,14 +66,9 @@
            (multiple-value-bind (rows cols) (decode-size payload)
              (expect (= nerimux::*term-rows* rows))
              (expect (= nerimux::*term-cols* cols))))
-          (t (fail "%maybe-send-resize: unexpected frame type ~D" type))))))
-
-  ;; %maybe-send-resize is a no-op when *resize-pending* is NIL.
-  (it "maybe-send-resize-does-nothing-when-not-pending"
+          (t (fail "%maybe-send-resize: unexpected frame type ~D" type)))))) (it "maybe-send-resize-does-nothing-when-not-pending"
     (let ((nerimux::*resize-pending* nil))
-      (expect (nerimux::%maybe-send-resize nil) :to-be-falsy)))
-
-  (it "maybe-send-resize-samples-size-and-sends-through-the-effect-boundary"
+      (expect (nerimux::%maybe-send-resize nil) :to-be-falsy))) (it "maybe-send-resize-samples-size-and-sends-through-the-effect-boundary"
     (let ((nerimux::*resize-pending* t)
           (nerimux::*term-rows* 1)
           (nerimux::*term-cols* 2)
@@ -99,27 +82,14 @@
       (expect (null nerimux::*resize-pending*))
       (expect (= 40 nerimux::*term-rows*))
       (expect (= 120 nerimux::*term-cols*))
-      (expect (eq :stream (first sent)))))
-
-  ;;; ── %forward-stdin-byte behavior ─────────────────────────────────────────────
-  ;;;
-  ;;; %forward-stdin-byte reads one non-blocking byte from fd 0 (stdin) and
-  ;;; forwards it as a +msg-key+ frame.  We test the "nothing ready" branch
-  ;;; (returns NIL without I/O) — the "byte forwarded" branch requires a real
-  ;;; non-blocking stdin fd, which is unavailable in a sandboxed test runner.
-
-  ;; %forward-stdin-byte returns NIL without error when stdin has no
-  ;; data ready (non-blocking read returns nil).
-  (it "forward-stdin-byte-returns-nil-when-nothing-ready"
+      (expect (eq :stream (first sent))))) (it "forward-stdin-byte-returns-nil-when-nothing-ready"
     ;; read-byte-nonblock(0) on a non-blocking terminal returns NIL when no data
     ;; is ready.  In the test runner stdin is either /dev/null or a pipe with no
     ;; pending data — either way the function must return NIL without signalling.
     ;; Pass NIL as the stream so no socket write can happen even if the byte test
     ;; were to incorrectly find data.
     (let ((result (ignore-errors (nerimux::%forward-stdin-byte nil))))
-      (expect (null result))))
-
-  (it "forward-stdin-byte-sends-available-byte"
+      (expect (null result)))) (it "forward-stdin-byte-sends-available-byte"
     (let (sent)
       (with-stubbed-fdefinition
           ((nerimux::read-byte-nonblock (lambda (fd)
@@ -133,18 +103,12 @@
           (decode-frame (second sent))
         (declare (ignore next))
         (expect (= +msg-key+ type))
-        (expect (equal (list 65) (coerce payload 'list))))))
-
-  (it "client-working-directory-returns-a-string"
-    (expect (stringp (nerimux::%client-working-directory))))
-
-  (it "client-working-directory-falls-back-when-default-directory-is-unresolvable"
+        (expect (equal (list 65) (coerce payload 'list)))))) (it "client-working-directory-returns-a-string"
+    (expect (stringp (nerimux::%client-working-directory)))) (it "client-working-directory-falls-back-when-default-directory-is-unresolvable"
     (let ((fallback (make-pathname :directory '(:absolute "path-that-does-not-exist"))))
       (let ((nerimux::*default-pathname-defaults* fallback))
         (expect (equal "/path-that-does-not-exist/"
-                       (nerimux::%client-working-directory))))))
-
-  (it "run-client-owns-terminal-and-socket-lifecycle"
+                       (nerimux::%client-working-directory)))))) (it "run-client-owns-terminal-and-socket-lifecycle"
     (let ((events nil) (socket-path-name nil))
       (with-stubbed-fdefinition
           ((nerimux::socket-path
@@ -199,9 +163,7 @@
       (expect (member '(:raw-disable 0) events :test #'equal) :to-be-truthy)
       (expect (member '(:attach :stream 99 "target") events :test #'equal)
               :to-be-truthy)
-      (expect (member '(:close :socket) events :test #'equal) :to-be-truthy)))
-
-  (it "send-client-attach-target-sends-command"
+      (expect (member '(:close :socket) events :test #'equal) :to-be-truthy))) (it "send-client-attach-target-sends-command"
     (with-guarded-socket-test
       (nerimux::%send-client-attach-target server-side "target")
       (force-output server-side)
@@ -402,4 +364,28 @@
             (decode-command-payload payload)
           (expect (eq :kill command))
           (expect (null target))
-          (expect (equal '("--force") args)))))))
+          (expect (equal '("--force") args))))))))
+
+  ;;; ── %maybe-send-resize behavior ──────────────────────────────────────────────
+  ;;;
+  ;;; %maybe-send-resize encapsulates the resize-pending check that was inline in
+  ;;; run-client.  It is tested here using a socket pair so the msg-resize frame
+  ;;; can be observed without a live terminal.
+
+  ;; %maybe-send-resize sends a +msg-resize+ frame and clears *resize-pending*
+  ;; when *resize-pending* is T — verifies the resize-dispatch path extracted from run-client.
+
+
+  ;; %maybe-send-resize is a no-op when *resize-pending* is NIL.
+
+
+  ;;; ── %forward-stdin-byte behavior ─────────────────────────────────────────────
+  ;;;
+  ;;; %forward-stdin-byte reads one non-blocking byte from fd 0 (stdin) and
+  ;;; forwards it as a +msg-key+ frame.  We test the "nothing ready" branch
+  ;;; (returns NIL without I/O) — the "byte forwarded" branch requires a real
+  ;;; non-blocking stdin fd, which is unavailable in a sandboxed test runner.
+
+  ;; %forward-stdin-byte returns NIL without error when stdin has no
+  ;; data ready (non-blocking read returns nil).
+

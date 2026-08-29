@@ -332,9 +332,7 @@
         (expect (null (nerimux::%workspace-prefix-toggle-zoom s conn)))
         (expect (null (nerimux::%workspace-prefix-move-focus s conn :right)))
         (expect (null (nerimux::%workspace-prefix-cycle-window s conn 1)))
-        (expect (null (nerimux::client-conn-focus conn)))))))
-
-  (it "r5-6-prefix-unzoom-restores-a-zoomed-window-before-action"
+        (expect (null (nerimux::client-conn-focus conn)))))) (it "r5-6-prefix-unzoom-restores-a-zoomed-window-before-action"
     (with-fake-two-pane-session (s)
       (let* ((conn (%make-test-conn))
              (window (first (nerimux/model:session-windows s))))
@@ -342,9 +340,7 @@
         (nerimux/model:window-zoom-toggle window)
         (expect (nerimux/model:window-zoom-p window))
         (nerimux::%workspace-prefix-unzoom window)
-        (expect (not (nerimux/model:window-zoom-p window))))))
-
-  (it "r7-1-repository-fetch-reports-preconditions-and-completion"
+        (expect (not (nerimux/model:window-zoom-p window)))))) (it "r7-1-repository-fetch-reports-preconditions-and-completion"
     (with-fake-session (s)
       (expect s)
       (let ((conn (%make-test-conn))
@@ -397,9 +393,7 @@
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:fetch-repository-async) fetch
                 (fdefinition 'nerimux::%refresh-client-picker) refresh
-                (fdefinition 'nerimux::%client-notify) notify)))))
-
-  (it "r7-1-organization-fetch-reports-unavailable-and-in-progress"
+                (fdefinition 'nerimux::%client-notify) notify))))) (it "r7-1-organization-fetch-reports-unavailable-and-in-progress"
     (with-fake-session (s)
       (expect s)
       (let ((conn (%make-test-conn))
@@ -431,4 +425,4 @@
                  (expect (search "already in progress" (first messages)))))
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:fetch-organization-async) fetch
-                (fdefinition 'nerimux::%client-notify) notify)))))
+                (fdefinition 'nerimux::%client-notify) notify))))))

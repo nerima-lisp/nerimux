@@ -56,9 +56,7 @@
                 (nerimux/net:close-socket client)
                 (let ((ready (list (nerimux::client-conn-fd conn))))
                   (expect (null (nerimux::%dispatch-ready-clients s ready)))
-                  (expect (null nerimux::*clients*)))))))))))
-
-  (it "dispatch-buffered-client-messages-stops-on-quit"
+                  (expect (null nerimux::*clients*)))))))))) (it "dispatch-buffered-client-messages-stops-on-quit"
     (let ((conn (%make-test-conn)))
       (with-stubbed-fdefinition
           ((nerimux::%read-and-dispatch-client-message
@@ -67,9 +65,7 @@
               :quit)))
         (expect (eq :quit
                     (nerimux::%dispatch-buffered-client-messages
-                     :session conn))))))
-
-  (it "dispatch-buffered-client-messages-stops-when-stream-has-no-buffered-input"
+                     :session conn)))))) (it "dispatch-buffered-client-messages-stops-when-stream-has-no-buffered-input"
     (let ((conn (%make-test-conn)))
       (with-stubbed-fdefinition
           ((nerimux::%read-and-dispatch-client-message
@@ -78,9 +74,7 @@
               :handled)))
         (expect (null
                  (nerimux::%dispatch-buffered-client-messages
-                  :session conn))))))
-
-  (it "dispatch-ready-clients-returns-quit-when-a-client-requests-shutdown"
+                  :session conn)))))) (it "dispatch-ready-clients-returns-quit-when-a-client-requests-shutdown"
     (let* ((conn (%make-test-conn))
            (nerimux::*clients* (list conn)))
       (setf (nerimux::client-conn-fd conn) 4242)
@@ -90,9 +84,7 @@
               (declare (ignore session client))
               :quit)))
         (expect (eq :quit
-                    (nerimux::%dispatch-ready-clients :session '(4242)))))))
-
-  (it "dispatch-buffered-client-messages-treats-listen-error-as-no-buffered-input"
+                    (nerimux::%dispatch-ready-clients :session '(4242))))))) (it "dispatch-buffered-client-messages-treats-listen-error-as-no-buffered-input"
     (let* ((conn (%make-test-conn))
            (stream (make-string-input-stream "")))
       (close stream)
@@ -104,9 +96,7 @@
               :handled)))
         (expect (null
                  (nerimux::%dispatch-buffered-client-messages
-                  :session conn))))))
-
-  (it "multi-serve-iteration-dispatches-ready-listener-and-client"
+                  :session conn)))))) (it "multi-serve-iteration-dispatches-ready-listener-and-client"
     (let ((events nil))
       (with-stubbed-fdefinition
           ((nerimux::%drain-main-thread-callbacks (lambda () nil))
@@ -129,9 +119,7 @@
               (push :dispatch events)
               nil)))
         (expect (null (nerimux::%multi-serve-iteration :listener :session)))
-        (expect (equal '(:dispatch :accept (:select (7 8))) events)))))
-
-  (it "multi-serve-iteration-returns-nil-when-select-has-no-ready-fds"
+        (expect (equal '(:dispatch :accept (:select (7 8))) events))))) (it "multi-serve-iteration-returns-nil-when-select-has-no-ready-fds"
     (let ((events nil))
       (with-stubbed-fdefinition
           ((nerimux::%drain-main-thread-callbacks
@@ -148,9 +136,7 @@
         (expect (equal '((:select (7) 50000)
                          (:broadcast :session)
                          :drain)
-                       events)))))
-
-  (it "run-multi-server-loop-stops-on-quit-and-drops-all-clients"
+                       events))))) (it "run-multi-server-loop-stops-on-quit-and-drops-all-clients"
     (let ((events nil)
           (first-call t)
           (conn-a (%make-test-conn))
@@ -182,4 +168,4 @@
                                     (and (consp event)
                                          (eq :drop (first event))
                                          (eq conn-b (second event))))
-                                  events)))))))
+                                  events))))))))
