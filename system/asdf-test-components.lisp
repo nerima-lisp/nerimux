@@ -166,7 +166,9 @@
       (:file "renderer-copy-mode-position-tests") ; R6.8
       (:file "renderer-tui-kit-min-size-tests") ; R6.10
          (:file "renderer-tui-kit-tests") ; headless cl-tui-kit surface/backend adapter
-         (:file "renderer-tui-kit-help-tests"))) ; `?` full-screen key-reference view (FR-005)
+         (:file "renderer-tui-kit-help-tests") ; full-screen key reference, reached from the `?` transient
+         (:file "renderer-transient-tests") ; magit transient panel + `$` process log (FR-010/FR-011)
+         (:file "renderer-workspace-status-tests"))) ; magit-style per-worktree status view (FR-003)
  ; wait-for command channel state and argument validation
         (:module "application/commands"
          :serial t

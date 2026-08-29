@@ -252,7 +252,15 @@
        (:file "renderer-tui-kit-widgets") ; workspace tree and picker widgets
        (:file "renderer-tui-kit")       ; headless surface conversion and entry points
        (:file "renderer-tui-kit-confirm-view") ; confirmation data and rendering
-       (:file "renderer-tui-kit-help"))) ; `?` full-screen key-reference view (FR-005)
+       (:file "renderer-tui-kit-help") ; full-screen key reference, now reached from the `?` transient
+       ;; The three magit-alignment views. All three need the tui-kit surface
+       ;; helpers (%SURFACE-TO-ANSI-FRAME, %BOX-WIDGET-INNER-RECTANGLE), so they
+       ;; load after renderer-tui-kit; transient comes before the status view
+       ;; because the status frame draws the transient panel into its own
+       ;; bottom region.
+       (:file "renderer-tui-kit-transient") ; magit transient, drawn as an expanded key panel
+       (:file "renderer-process-log")       ; `$` full-screen git process log (FR-011)
+       (:file "renderer-workspace-status"))) ; magit-style per-worktree status view (FR-003)
      (:module "infrastructure/input"
       :serial t
       :components
