@@ -35,7 +35,7 @@
   (it "layout-to-string-not-nil-for-window-with-tree"
     (multiple-value-bind (sess win p0 p1) (%two-pane-session)
       (declare (ignore sess p0 p1))
-      (let ((str (nerimux/model:layout->string win)))
+      (let ((str (nerimux/layout:layout->string win)))
         (expect str :to-be-truthy)
         (expect (stringp str))
         (expect (plusp (length str))))))
@@ -44,13 +44,13 @@
   (it "layout-to-string-nil-for-empty-window"
     (let ((win (make-window :id 1 :name "w" :width 80 :height 24
                             :tree nil)))
-      (expect (null (nerimux/model:layout->string win)))))
+      (expect (null (nerimux/layout:layout->string win)))))
 
   ;; layout->string result starts with a 4-character hex checksum.
   (it "layout-checksum-4-hex-chars"
     (multiple-value-bind (_sess win p0 p1) (%two-pane-session)
       (declare (ignore _sess p0 p1))
-      (let* ((str     (nerimux/model:layout->string win))
+      (let* ((str     (nerimux/layout:layout->string win))
              (comma   (position #\, str))
              (csum    (and comma (subseq str 0 comma))))
         (expect (and csum (= 4 (length csum))))

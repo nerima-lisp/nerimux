@@ -8,13 +8,13 @@
 
   ;; *suppress-update-environment* is a special variable that can be rebound.
   (it "suppress-update-environment-is-variable"
-    (let ((nerimux/model:*suppress-update-environment* t))
-      (expect nerimux/model:*suppress-update-environment* :to-be-truthy))
-    (expect (null nerimux/model:*suppress-update-environment*)))
+    (let ((nerimux/session:*suppress-update-environment* t))
+      (expect nerimux/session:*suppress-update-environment* :to-be-truthy))
+    (expect (null nerimux/session:*suppress-update-environment*)))
 
   ;; +default-update-environment+ is a non-empty list of strings.
   (it "default-update-environment-is-list-of-strings"
-    (let ((val nerimux/model:+default-update-environment+))
+    (let ((val nerimux/session:+default-update-environment+))
       (expect (listp val))
       (expect (plusp (length val)))
       (dolist (item val)
@@ -22,10 +22,10 @@
 
   ;; *update-environment* is a special variable that can be dynamically rebound.
   (it "update-environment-dynamic-variable-rebindable"
-    (let ((orig nerimux/model:*update-environment*))
-      (let ((nerimux/model:*update-environment* (list "CUSTOM_VAR")))
-        (expect (equal (list "CUSTOM_VAR") nerimux/model:*update-environment*)))
-      (expect (equal orig nerimux/model:*update-environment*))))
+    (let ((orig nerimux/session:*update-environment*))
+      (let ((nerimux/session:*update-environment* (list "CUSTOM_VAR")))
+        (expect (equal (list "CUSTOM_VAR") nerimux/session:*update-environment*)))
+      (expect (equal orig nerimux/session:*update-environment*))))
 
   ;; get-update-environment-vars returns an alist of (name . value) pairs.
   (it "get-update-environment-vars-returns-alist"
@@ -171,14 +171,14 @@
   ;; process environment, and NIL for one that has never been set.
   (it "process-environment-value-reads-live-process-environment"
     (with-process-env-var (name "NERIMUX_TEST_PROC_ENV_VAL" "hello")
-      (expect (string= "hello" (nerimux/model:process-environment-value "NERIMUX_TEST_PROC_ENV_VAL"))))
-    (expect (null (nerimux/model:process-environment-value "__NERIMUX_DEFINITELY_UNSET_VAR__"))))
+      (expect (string= "hello" (nerimux/session:process-environment-value "NERIMUX_TEST_PROC_ENV_VAL"))))
+    (expect (null (nerimux/session:process-environment-value "__NERIMUX_DEFINITELY_UNSET_VAR__"))))
 
   ;; process-environment-names returns a sorted list of names that includes a
   ;; variable known to be set in the current process environment.
   (it "process-environment-names-includes-known-set-variable"
     (with-process-env-var (name "NERIMUX_TEST_PROC_ENV_NAMES" "x")
-      (let ((names (nerimux/model:process-environment-names)))
+      (let ((names (nerimux/session:process-environment-names)))
         (expect (listp names))
         (expect (member "NERIMUX_TEST_PROC_ENV_NAMES" names :test #'string=) :to-be-truthy)
         (expect (equal (sort (copy-list names) #'string<) names)))))
@@ -187,19 +187,19 @@
   ;; (readable back via process-environment-value) and returns VALUE.
   (it "process-set-environment-writes-and-returns-value"
     (with-process-env-var (name "NERIMUX_TEST_PROC_SET_ENV" nil)
-      (let ((result (nerimux/model:process-set-environment
+      (let ((result (nerimux/session:process-set-environment
                      "NERIMUX_TEST_PROC_SET_ENV" "written-value")))
         (expect (string= "written-value" result))
         (expect (string= "written-value"
-                     (nerimux/model:process-environment-value "NERIMUX_TEST_PROC_SET_ENV"))))))
+                     (nerimux/session:process-environment-value "NERIMUX_TEST_PROC_SET_ENV"))))))
 
   ;; process-unset-environment removes a previously-set variable from the real
   ;; process environment and returns NAME.
   (it "process-unset-environment-removes-value-and-returns-name"
     (with-process-env-var (name "NERIMUX_TEST_PROC_UNSET_ENV" "present")
-      (let ((result (nerimux/model:process-unset-environment "NERIMUX_TEST_PROC_UNSET_ENV")))
+      (let ((result (nerimux/session:process-unset-environment "NERIMUX_TEST_PROC_UNSET_ENV")))
         (expect (string= "NERIMUX_TEST_PROC_UNSET_ENV" result))
-        (expect (null (nerimux/model:process-environment-value "NERIMUX_TEST_PROC_UNSET_ENV"))))))
+        (expect (null (nerimux/session:process-environment-value "NERIMUX_TEST_PROC_UNSET_ENV"))))))
 
   ;;; ── %apply-session-overlay ─────────────────────────────────────────────────
 

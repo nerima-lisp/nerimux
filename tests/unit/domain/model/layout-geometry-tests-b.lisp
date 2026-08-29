@@ -116,9 +116,9 @@
   (it "pane-at-position-out-of-bounds-returns-nil"
     (with-h-split-81-24 (p0 p1 win)
       ;; Row 24 is one past the bottom of all 24-row panes.
-      (expect (null (nerimux/model:pane-at-position win 0 24)))
+      (expect (null (nerimux/window:pane-at-position win 0 24)))
       ;; Column 81 is one past the right edge of the 81-column window.
-      (expect (null (nerimux/model:pane-at-position win 81 0)))))
+      (expect (null (nerimux/window:pane-at-position win 81 0)))))
 
   ;;; ── orient-case with non-keyword signals ecase error ────────────────────────
 

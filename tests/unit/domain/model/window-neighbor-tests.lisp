@@ -48,6 +48,6 @@
     (multiple-value-bind (win p0 p1) (make-two-pane-h-window)
       (declare (ignore p1))
       (window-select-pane win p0)
-      (nerimux/model:window-zoom-toggle win)
+      (nerimux/window:window-zoom-toggle win)
       (dolist (dir '(:right :left :up :down))
         (expect (null (nerimux/window::pane-neighbor win p0 dir)))))))

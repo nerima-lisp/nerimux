@@ -136,7 +136,7 @@
                            (list 80 23 p1  "bottom-right of p1 → p1")))
         (destructuring-bind (col row expected desc) entry
           (declare (ignore desc))
-          (expect (equal expected (nerimux/model:pane-at-position win col row)))))))
+          (expect (equal expected (nerimux/window:pane-at-position win col row)))))))
 
   ;; pane-at-position with a single full-screen pane returns it for any in-bounds coord.
   (it "pane-at-position-single-pane"
@@ -151,7 +151,7 @@
                            (list 80  0 nil "out-of-bounds col")))
         (destructuring-bind (col row expected desc) entry
           (declare (ignore desc))
-          (expect (equal expected (nerimux/model:pane-at-position win col row)))))))
+          (expect (equal expected (nerimux/window:pane-at-position win col row)))))))
 
   ;; ── orient-case macro ────────────────────────────────────────────────────────
 

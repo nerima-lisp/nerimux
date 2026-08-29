@@ -70,8 +70,8 @@
 
   ;; Freshly created window slots have expected defaults: zoom-p=nil, zoom-tree=nil, last-active=nil, automatic-rename-p=t.
   (it "window-slot-defaults-table"
-    (dolist (c '((nerimux/model:window-zoom-p      nil "window-zoom-p defaults nil")
-                 (nerimux/model:window-zoom-tree    nil "window-zoom-tree defaults nil")
+    (dolist (c '((nerimux/window:window-zoom-p      nil "window-zoom-p defaults nil")
+                 (nerimux/window:window-zoom-tree    nil "window-zoom-tree defaults nil")
                  (window-last-active                nil "window-last-active defaults nil")
                  (window-automatic-rename-p          t  "window-automatic-rename-p defaults t")))
       (destructuring-bind (accessor expected desc) c
