@@ -11,20 +11,26 @@
     (t (princ-to-string value))))
 
 (defun %strip-control-characters (text)
-  "TEXT with every C0 control character (code < 32) and DEL (127) removed
--- Tab (9) becomes a single space, everything else in that range is
-dropped outright (F5, CWE-150-adjacent). Applies to any text this module
-retains from an untrusted VCS invocation before it reaches a renderer:
-safety there currently rests only on cl-tui-kit's incidental zero-width-
-glyph skip, which does not cover every render path (e.g. the exported
-plain-ANSI path). Non-string TEXT passes through unchanged."
+  "TEXT with every control character removed -- C0 (code < 32), DEL (127) and
+C1 (128-159) -- except Tab (9), which becomes a single space (F5,
+CWE-150-adjacent). Applies to any text this module retains from an untrusted
+VCS invocation before it reaches a renderer: safety there currently rests only
+on cl-tui-kit's incidental zero-width-glyph skip, which does not cover every
+render path (e.g. the exported plain-ANSI path). Non-string TEXT passes
+through unchanged.
+
+C1 is included because the client wire is UTF-8, so a branch name or commit
+subject carrying U+009B arrives here as one character rather than a raw byte,
+and a terminal decoding UTF-8 then treating C1 as 8-bit control introducers
+reads it as CSI. Stripping C0 alone would block `ESC [` and pass its exact
+8-bit equivalent."
   (if (stringp text)
       (with-output-to-string (out)
         (loop for character across text
               for code = (char-code character)
               do (cond
                    ((= code 9) (write-char #\Space out))
-                   ((or (< code 32) (= code 127)))
+                   ((or (< code 32) (<= 127 code 159)))
                    (t (write-char character out)))))
       text))
 

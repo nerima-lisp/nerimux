@@ -25,15 +25,25 @@
    against one pathological entry pushing every older entry below the fold.")
 
 (defun %process-log-strip-control-characters (text)
-  "TEXT with every ASCII C0 control character removed except newline, which
+  "TEXT with every control character removed except newline, which
    %PROCESS-LOG-OUTPUT-LINES splits on afterwards.  An unstripped ESC or other
-   C0 byte here would let git's own untrusted output inject further escape
+   control code here would let git's own untrusted output inject further escape
    sequences into the frame this file builds -- the same hazard a crafted
    branch name poses elsewhere in this codebase, just arriving through a new
-   door (git's stdout/stderr rather than a ref name)."
+   door (git's stdout/stderr rather than a ref name).
+
+   The range is C0 (below 32) plus DEL (127) plus C1 (128-159), not C0 alone.
+   C1 matters because the wire is UTF-8 (INFRASTRUCTURE/NET/PROTOCOL encodes
+   with :UTF-8), so U+009B survives transport as its two-byte form and arrives
+   here as a single character -- and a terminal that treats decoded C1 as
+   8-bit control introducers reads U+009B as CSI, U+009D as OSC and U+0090 as
+   DCS. Stripping only C0 blocks the 7-bit `ESC [` spelling of an injection
+   while leaving its 8-bit spelling intact, which is the whole attack with one
+   byte changed."
   (remove-if (lambda (character)
-               (and (< (char-code character) 32)
-                    (char/= character #\Newline)))
+               (let ((code (char-code character)))
+                 (and (or (< code 32) (<= 127 code 159))
+                      (char/= character #\Newline))))
              text))
 
 (defun %process-log-sanitize-text (text)
