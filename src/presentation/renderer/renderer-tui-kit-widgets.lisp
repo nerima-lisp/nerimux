@@ -4,10 +4,12 @@
 ;;;
 ;;; cl-tui-kit widgets resolve their colours through theme roles
 ;;; (:foreground, :selected, :border, …).  These two themes translate the
-;;; renderer's SGR palette (renderer-style.lisp) into cl-tui-kit styles: the
-;;; tree theme is transparent (list rows sit on the frame's own background),
-;;; the panel theme carries a raised dark background for the picker modal so
-;;; the dialog reads as a surface above the frame.
+;;; renderer's Dracula truecolour palette (renderer-style.lisp) into
+;;; cl-tui-kit styles via RGB-COLOR: the tree theme is transparent (list rows
+;;; sit on the frame's own background), the panel theme carries a raised
+;;; Dracula-bg background for the picker modal so the dialog reads as a
+;;; surface above the frame.  Selection highlights use the Dracula
+;;; current-line colour in both themes.
 
 (defun %make-workspace-tree-theme ()
   (cl-tui-kit/core:make-theme
@@ -15,36 +17,36 @@
     (cons :foreground (cl-tui-kit/core:make-style))
     (cons :selected (cl-tui-kit/core:make-style
                      :bold t
-                     :background (cl-tui-kit/core:indexed-color 237)))
+                     :background (cl-tui-kit/core:rgb-color 68 71 90)))
     (cons :accent (cl-tui-kit/core:make-style
                    :bold t
-                   :foreground (cl-tui-kit/core:indexed-color 117)))
+                   :foreground (cl-tui-kit/core:rgb-color 139 233 253)))
     (cons :muted (cl-tui-kit/core:make-style
-                  :foreground (cl-tui-kit/core:indexed-color 245))))))
+                  :foreground (cl-tui-kit/core:rgb-color 98 114 164))))))
 
 (defun %make-picker-panel-theme ()
   (flet ((panel (&rest arguments)
            (apply #'cl-tui-kit/core:make-style
-                  :background (cl-tui-kit/core:indexed-color 235)
+                  :background (cl-tui-kit/core:rgb-color 40 42 54)
                   arguments)))
     (cl-tui-kit/core:make-theme
      (list
       (cons :background (panel))
       (cons :foreground (panel))
-      (cons :muted (panel :foreground (cl-tui-kit/core:indexed-color 245)))
+      (cons :muted (panel :foreground (cl-tui-kit/core:rgb-color 98 114 164)))
       (cons :accent (panel :bold t
-                           :foreground (cl-tui-kit/core:indexed-color 117)))
+                           :foreground (cl-tui-kit/core:rgb-color 139 233 253)))
       (cons :selected (cl-tui-kit/core:make-style
                        :bold t
-                       :background (cl-tui-kit/core:indexed-color 237)))
-      (cons :border (panel :foreground (cl-tui-kit/core:indexed-color 111)))
+                       :background (cl-tui-kit/core:rgb-color 68 71 90)))
+      (cons :border (panel :foreground (cl-tui-kit/core:rgb-color 189 147 249)))
       (cons :title (panel :bold t
-                          :foreground (cl-tui-kit/core:indexed-color 117)))
+                          :foreground (cl-tui-kit/core:rgb-color 139 233 253)))
       (cons :warning (panel :bold t
-                            :foreground (cl-tui-kit/core:indexed-color 179)))
+                            :foreground (cl-tui-kit/core:rgb-color 241 250 140)))
       (cons :error (panel :bold t
-                          :foreground (cl-tui-kit/core:indexed-color 203)))
-      (cons :success (panel :foreground (cl-tui-kit/core:indexed-color 114)))))))
+                          :foreground (cl-tui-kit/core:rgb-color 255 85 85)))
+      (cons :success (panel :foreground (cl-tui-kit/core:rgb-color 80 250 123)))))))
 
 (defvar *workspace-tree-theme* (%make-workspace-tree-theme)
   "Theme for the workspace overview's tree list widget.")
@@ -94,7 +96,8 @@
 
 (defun %render-workspace-tree-widget
     (surface organizations rows cols selected-tree-object tree-scroll
-     &key collapsed-node-ids refreshing-ids stale-ids filter precomputed-entries)
+     &key collapsed-node-ids expanded-node-ids refreshing-ids stale-ids
+       filter file-diffs precomputed-entries)
   "Draw the workspace tree as the overview's only panel (one-column
    redesign, PR2): full terminal width, TERMINAL-ROWS-derived height via
    WORKSPACE-TREE-VIEW-ROWS so this can't disagree with the ANSI pass's own
@@ -132,7 +135,8 @@
                      (%workspace-flat-tree-entries
                       organizations collapsed-node-ids
                       :refreshing-ids refreshing-ids :stale-ids stale-ids
-                      :filter filter)))
+                      :filter filter :expanded-node-ids expanded-node-ids
+                      :file-diffs file-diffs)))
                (entry-count (length all-entries))
                (entries (subseq all-entries
                                 (min tree-scroll entry-count)

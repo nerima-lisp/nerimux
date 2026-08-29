@@ -65,7 +65,10 @@
   (dirty-p nil :read-only t)
   (conflict-p nil :read-only t)
   (ahead nil :read-only t)
-  (behind nil :read-only t))
+  (behind nil :read-only t)
+  ;; Plain (CODE . PATH) conses derived from the snapshot's entries (D1) --
+  ;; never a vcs-kit struct; see %WORKTREE-STATUS-CHANGED-FILES in vcs.lisp.
+  (changed-files nil :read-only t))
 
 (defun %status-entry-conflict-p (entry)
   (eq (vcs-kit:vcs-status-entry-kind entry) :unmerged))

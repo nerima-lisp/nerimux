@@ -287,7 +287,9 @@
        (:repository
         (%workspace-find-repository (second token) organizations))
        (:worktree
-        (%workspace-find-worktree (second token) organizations))))
+        (%workspace-find-worktree (second token) organizations))
+       (:section
+        (second token))))
     ((stringp token)
      (or (%workspace-find-worktree token organizations)
          (%workspace-find-repository token organizations)
@@ -339,8 +341,17 @@ the tree (R7.1)."
          (count (length objects)))
     (when (plusp count)
       (let* ((current (%client-tree-object conn))
+             ;; EQUAL, not EQ: a :FILE/:COMMIT row's OBJECT is a freshly
+             ;; consed list rebuilt on every %WORKSPACE-TREE-OBJECTS call
+             ;; (D3, inline worktree expansion) rather than a persistent
+             ;; struct, so CURRENT -- captured on the PREVIOUS keystroke's
+             ;; flatten -- is never EQ to this call's re-consed OBJECTS
+             ;; entry even when it names the same row. EQUAL degrades to EQ
+             ;; for every struct/keyword-backed kind (structures compare by
+             ;; identity under EQUAL, same as EQL), so this changes nothing
+             ;; for any row kind that existed before this wave.
              (index (or (and current
-                             (position current objects :test #'eq))
+                             (position current objects :test #'equal))
                         (if (minusp delta) 0 -1)))
              (next (max 0 (min (1- count) (+ index delta))))
              (visible (max 1 (nerimux/renderer:workspace-tree-view-rows
@@ -354,12 +365,16 @@ the tree (R7.1)."
         (%mark-dirty)
         (nth next objects)))))
 
-(defun %select-client-tree-repository-relative (conn direction)
-  "J/K (item 3): move the selection to the next/previous REPOSITORY row,
-   skipping organization/worktree/window/pane rows in between. Walks the same
-   filtered row set %SELECT-CLIENT-TREE-RELATIVE (j/k) uses, so a repository
-   hidden by an active tree-filter is skipped exactly as j/k already skips
-   any filtered-out row."
+(defun %select-client-tree-section-relative (conn direction)
+  "J/K (section-based overview redesign, replacing the old repository-row
+   jump): move the selection to the next/previous :SECTION header row --
+   Attention, Active, or Repositories, identified by its OBJECT being a
+   section keyword rather than a model object -- skipping every worktree/
+   repository row in between. Walks the same filtered row set %SELECT-
+   CLIENT-TREE-RELATIVE (j/k) uses, so a section hidden by an active
+   tree-filter (an empty section is omitted entirely, see %WORKSPACE-
+   SECTION-ENTRIES) is skipped exactly as j/k already skips any filtered-out
+   row."
   (let* ((objects (%workspace-tree-objects
                    (nerimux/vcs:workspace-organizations)
                    (client-conn-tree-filter conn)))
@@ -372,7 +387,9 @@ the tree (R7.1)."
              ;; backward -- starting at 0 would step to -1 on the very first
              ;; iteration and find nothing, unlike J, which correctly starts
              ;; one before the first row.
-             (start (or (and current (position current objects :test #'eq))
+             ;; EQUAL, not EQ -- same D3 rationale as %SELECT-CLIENT-TREE-
+             ;; RELATIVE above.
+             (start (or (and current (position current objects :test #'equal))
                         (if (minusp direction) count -1)))
              (visible (max 1 (nerimux/renderer:workspace-tree-view-rows
                               (client-conn-rows conn)))))
@@ -384,7 +401,7 @@ the tree (R7.1)."
               for index = (+ start (* direction step))
               while (<= 0 index (1- count))
               for candidate = (nth index objects)
-              when (typep candidate 'nerimux/model:repository)
+              when (keywordp candidate)
                 do (%set-client-selected-tree-object conn candidate)
                    (when (< index (client-conn-tree-scroll conn))
                      (setf (client-conn-tree-scroll conn) index))

@@ -222,7 +222,12 @@
               failure 10 40)))
       (expect (search "terminal too small" warning-text))
       (expect (search "WORKTREE DELETE" confirm-text))
-      (expect (search "repository: team/repo" confirm-text))
+      ;; The label and value are drawn as separate styled spans (Dracula
+      ;; accent label, default-style value) since the recolor wave, so an SGR
+      ;; change now sits between them in the raw frame -- strip it first.
+      (expect (search "repository: team/repo" (strip-sgr confirm-text)))
+      (expect confirm-text :to-contain-sgr
+              (%expected-sgr-params (nerimux/renderer::%confirm-view-key-style)))
       (expect (search "y execute" confirm-text))
       (expect (search "OPERATION FAILED" failure-text))
       (expect (search "press any key to continue" failure-text))))
@@ -269,12 +274,12 @@
       (expect (search "hello" output))
       (expect (search (string (code-char 27)) output))))
 
-  ;; PR2 default-expanded polarity: the tree's default state shows the WHOLE
-  ;; depth (see renderer-workspace-tree-tests.lisp for the direct unit
-  ;; coverage of that contract), so this widget-level smoke test needs no
-  ;; COLLAPSED-NODE-IDS entries at all to see the worktree's branch label --
-  ;; the opposite of the pre-PR2 collapse-by-default contract, which needed
-  ;; the organization and repository rows explicitly marked expanded.
+  ;; Section-based overview redesign: a repository row under Repositories
+  ;; defaults COLLAPSED (the opposite polarity from every other row, which
+  ;; defaults expanded), so this widget-level smoke test needs REPOSITORY's
+  ;; id marked in EXPANDED-NODE-IDS to see the worktree's branch label at
+  ;; all -- see renderer-workspace-tree-tests.lisp for the direct unit
+  ;; coverage of that contract.
   (it "renders the workspace hierarchy through the tree widget"
     (let* ((worktree
              (nerimux/model:make-worktree
@@ -292,21 +297,27 @@
               :id "github.com/team"
               :host "github.com"
               :name "team"
-              :repositories (list repository))))
+              :repositories (list repository)))
+           (expanded-node-ids
+             (let ((table (make-hash-table :test #'equal)))
+               (setf (gethash (list :repository "repo-tree") table) t)
+               table)))
       (let ((output
               (nerimux/renderer:render-workspace-overview-to-tui-string
                (list organization)
                12
                100
                :selected-tree-object worktree
-               :collapsed-node-ids nil)))
+               :collapsed-node-ids nil
+               :expanded-node-ids expanded-node-ids)))
         (expect (search "org" output))
         (expect (search "repo" output))
         (expect (search "feature/tree" output)))
       (let ((surface (nerimux/renderer::%surface-from-ansi-frame "" 12 100)))
         (nerimux/renderer::%render-workspace-tree-widget
          surface (list organization) 12 100 worktree 0
-         :collapsed-node-ids nil)
+         :collapsed-node-ids nil
+         :expanded-node-ids expanded-node-ids)
         (expect (search "feature/tree" (cl-tui-kit/core:surface-string surface))))))
 
   (it "renders the picker through input, list, form, and modal widgets"
@@ -419,12 +430,13 @@
                 :focus-pane pane))))
       (expect (search " nerimux " output))
       (expect (search "github.com/team" output))
-      (expect (search "feature/ui" output))
-      ;; The tree row carries the `!` attention mark right before the label
-      ;; (PANE-MARK-OUTPUT set UNREAD-OUTPUT-P, which PANE-ATTENTION-P
-      ;; reports) regardless of whether the row is also selected -- the `!`-
-      ;; then-space-then-label sequence is the same either way.
-      (expect (search "! pane/7 editor" (strip-sgr output)))
+      ;; The overview tree no longer emits pane rows at all (a later wave
+      ;; adds inline pane detail); WORKTREE's own row carries the `!`
+      ;; attention mark instead -- PANE-MARK-OUTPUT set UNREAD-OUTPUT-P,
+      ;; which WORKTREE-ATTENTION-REASONS rolls up via PANE-ATTENTION-P, so
+      ;; the worktree itself needs attention and shows under the Attention
+      ;; section with its "org/repo · branch" label, "feature/ui" included.
+      (expect (search "! github.com/team/repo · feature/ui" (strip-sgr output)))
       ;; The detail strip shows the selected pane's label and its last
       ;; output text verbatim, not the old "output: " status-bar phrasing.
       (expect (search "pane: pane/7 editor" (strip-sgr output)))

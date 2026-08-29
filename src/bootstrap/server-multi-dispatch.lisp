@@ -54,6 +54,11 @@
   ;; arguments; NIL when no confirmation is up. Kept beside the view rather than
   ;; encoded in it so the renderer keeps taking plain data.
   (confirm-action nil)
+  ;; The full-screen `?` key-reference view (FR-005). Unlike CONFIRM-VIEW this
+  ;; carries no per-client data of its own (the content is static), so a
+  ;; boolean flag is enough; the renderer looks nothing up from it beyond
+  ;; whether it is up.
+  (help-view-p nil :type boolean)
   (frame nil))
 
 ;; SERVER-MULTI.LISP initializes the registry after this dispatch file loads.
@@ -156,9 +161,17 @@ dropped connection's entry be reclaimed instead of leaking.")
   (cond
     ;; Swallowed by a pending ESC sequence (R4.3): never reaches any dispatch.
     ((%client-esc-swallow-consume conn) nil)
-    ;; A confirmation owns every key while it is up (R6.4).
+    ;; A confirmation owns every key while it is up (R6.4); it outranks the
+    ;; help view below because the confirm-view path is the only way this
+    ;; branch is even reachable while help-view-p is set (help swallows every
+    ;; key that would open a confirmation), but ordering it first keeps the
+    ;; precedence explicit rather than accidental.
     ((client-conn-confirm-view conn)
      (nth-value 1 (%handle-confirm-key session conn payload)))
+    ;; The `?` help view (FR-005) owns every key while it is up, the same
+    ;; shape as CONFIRM-VIEW above -- see %HANDLE-HELP-VIEW-KEY.
+    ((client-conn-help-view-p conn)
+     (%handle-help-view-key conn payload))
     (t
      (multiple-value-bind (prefix-handled prefix-result)
          (%handle-workspace-prefix-key session conn payload)
@@ -220,3 +233,33 @@ behavior (:96-107 pre-R4.4) is gone."
        (values t nil))
       (t
        (values nil nil)))))
+
+;;; ── `?` full-screen help view (FR-005) ──────────────────────────────────────
+
+(defun %client-open-help-view (conn)
+  "? in :normal mode, either view: put the static key-reference view up."
+  (setf (client-conn-help-view-p conn) t)
+  (%mark-dirty)
+  t)
+
+(defun %close-help-view (conn)
+  (setf (client-conn-help-view-p conn) nil)
+  (%mark-dirty))
+
+(defun %handle-help-view-key (conn payload)
+  "Answer the help view CONN is looking at: q, ?, Enter, and ESC close it;
+   every other key is swallowed, the same shape as %HANDLE-CONFIRM-KEY, just
+   with no y/n answer to route.  ESC goes through %CLIENT-ESC-SWALLOW-START
+   first (R4.3): a lone ESC byte here could be the first byte of a 3-byte
+   arrow-key sequence, and closing the view immediately would hand its
+   trailing 2 bytes to :normal mode's key pipeline as literal `[` and a
+   letter, same hazard %HANDLE-CLIENT-PICKER-KEY-PAYLOAD's ESC clause guards
+   against."
+  (cond
+    ((%client-byte-p payload 27)
+     (%client-esc-swallow-start conn)
+     (%close-help-view conn))
+    ((or (%client-key-p payload #\q) (%client-key-p payload #\?)
+         (%client-byte-p payload 13) (%client-byte-p payload 10))
+     (%close-help-view conn)))
+  nil)

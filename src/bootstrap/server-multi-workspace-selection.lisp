@@ -24,7 +24,8 @@
                              (nerimux/model:repository-worktrees repository)))))
 
 (defun %workspace-tree-objects
-    (&optional (organizations (nerimux/vcs:workspace-organizations)) filter)
+    (&optional (organizations (nerimux/vcs:workspace-organizations)) filter
+               (file-diffs (%workspace-file-diffs)))
   "The tree rows a client can currently select, in display order.
 
    Delegates to the renderer rather than walking the model itself. It used to
@@ -38,10 +39,15 @@
    was rendered with (CLIENT-CONN-TREE-FILTER) -- callers that move the
    cursor or resolve a selection have to walk the SAME filtered row set the
    client is actually looking at, or j/k and Enter would land on a row the
-   filter had hidden from the drawn frame."
+   filter had hidden from the drawn frame. FILE-DIFFS (Wave C) is the same
+   cache the frame's own render pass reads, so an expanded :FILE row's
+   :DIFF-LINE child rows are selectable rows here too, not just pixels on
+   screen."
   (nerimux/renderer:workspace-tree-objects organizations
                                            (%workspace-collapsed-nodes)
-                                           :filter filter))
+                                           :filter filter
+                                           :expanded-node-ids (%workspace-expanded-nodes)
+                                           :file-diffs file-diffs))
 
 (defun %workspace-worktree-matches-token-p (worktree token)
   (or (eq worktree token)

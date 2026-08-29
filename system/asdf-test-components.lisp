@@ -129,7 +129,8 @@
           (:file "vcs-fetch-dedup-tests") ; R7.1: one fetch in flight per target
           (:file "vcs-worktree-path-tests") ; R7.2: timestamp-sha path, -2/-3 on collision
           (:file "vcs-operations-tests")
-          (:file "vcs-async-operations-tests")))
+          (:file "vcs-async-operations-tests")
+          (:file "vcs-inspect-tests"))) ; Wave B: recent-commit fetch for the inline expansion
         (:module "application/picker"
          :serial t
          :components
@@ -159,12 +160,13 @@
          (:file "renderer-pane-search-tests") ; direct unit tests for %render-copy-search-matches's current-vs-plain match style branch
       (:file "renderer-workspace-status-tokens-tests") ; R6.1: tokens combine; CLEAN vs UNKNOWN
       (:file "renderer-workspace-clip-tests") ; R6.9: clipping measures cells, not characters
-      (:file "renderer-workspace-tree-tests") ; R6.3: five levels, collapsed by default
+      (:file "renderer-workspace-tree-tests") ; Attention/Active/Repositories sections; Repositories collapsed by default
       (:file "renderer-workspace-command-completion-tests") ; R6.12
       (:file "renderer-statusbar-workspace-tests") ; R6.5/R6.7: three blocks, truncation order
       (:file "renderer-copy-mode-position-tests") ; R6.8
       (:file "renderer-tui-kit-min-size-tests") ; R6.10
-         (:file "renderer-tui-kit-tests"))) ; headless cl-tui-kit surface/backend adapter
+         (:file "renderer-tui-kit-tests") ; headless cl-tui-kit surface/backend adapter
+         (:file "renderer-tui-kit-help-tests"))) ; `?` full-screen key-reference view (FR-005)
  ; wait-for command channel state and argument validation
         (:module "application/commands"
          :serial t

@@ -4,17 +4,24 @@
 ;;;;
 ;;;; R2.4 deleted the style-string parser along with the option system it
 ;;;; existed to read; every style the renderer applies is a fixed constant
-;;;; declared here.  The UI modernisation pass replaced the original
-;;;; hand-resolved option values (blue-on-white status bar, green active
-;;;; border) with a coherent xterm-256 palette: indexed colours only, so the
-;;;; frame renders identically on 256-colour and truecolour terminals and
-;;;; never leaks a 24-bit SGR that -2 downsampling would have to rewrite.
+;;;; declared here.  The overview redesign (section-based tree, magit-style)
+;;;; replaced the earlier xterm-256 palette with Dracula truecolour (38;2;
+;;;; R;G;B / 48;2;R;G;B): the old "indexed colours only" rationale here
+;;;; referenced a -2 downsampling flag that R2.4-era work deleted along with
+;;;; the option system that set it, so there is no longer a downsampling
+;;;; consumer to protect from a 24-bit SGR -- %FRAME-GRID-APPLY-SGR
+;;;; (renderer-tui-kit-frame-grid.lisp) already parses the 38/48;2 extended
+;;;; form the ANSI/tui-kit round trip depends on.
 ;;;;
 ;;;; Load order: renderer-format → renderer-style-data → renderer-style →
 ;;;; workspace and pane composition modules (all of which reference these
 ;;;; constants).  All files share the nerimux/renderer package.
 
-;;; ── Palette (xterm-256 indices) ─────────────────────────────────────────────
+;;; ── Palette (Dracula, truecolour) ────────────────────────────────────────────
+;;;
+;;; bg 40,42,54 · current-line 68,71,90 · fg 248,248,242 · comment 98,114,164
+;;; · cyan 139,233,253 · green 80,250,123 · orange 255,184,108 · pink
+;;; 255,121,198 · purple 189,147,249 · red 255,85,85 · yellow 241,250,140.
 
 (defmacro %define-sgr-constant (name value documentation)
   "DEFCONSTANT with the boundp guard this codebase uses for string constants."
@@ -22,41 +29,47 @@
        (if (boundp ',name) (symbol-value ',name) ,value)
      ,documentation))
 
-(%define-sgr-constant +sgr-accent+ "38;5;117"
-  "Accent foreground (sky blue): focused items, key hints, panel titles.")
-(%define-sgr-constant +sgr-accent-bold+ "1;38;5;117"
-  "Bold accent foreground.")
-(%define-sgr-constant +sgr-branch+ "1;38;5;183"
-  "Branch/worktree names: bold lavender.")
-(%define-sgr-constant +sgr-ok+ "38;5;114"
-  "Healthy state (CLEAN): soft green.")
-(%define-sgr-constant +sgr-warn+ "38;5;179"
-  "Needs-attention state (DIRTY, PRUNABLE, unread output): amber.")
-(%define-sgr-constant +sgr-alert+ "1;38;5;203"
-  "Broken state (CONFLICT, MISSING, exited pane): bold coral red.")
-(%define-sgr-constant +sgr-ahead+ "38;5;116"
-  "AHEAD n: teal.")
-(%define-sgr-constant +sgr-behind+ "38;5;215"
-  "BEHIND n: orange.")
-(%define-sgr-constant +sgr-locked+ "38;5;111"
-  "LOCKED: periwinkle.")
-(%define-sgr-constant +sgr-muted+ "38;5;245"
-  "Secondary text: labels, legends, notifications.")
-(%define-sgr-constant +sgr-muted-italic+ "3;38;5;245"
+(%define-sgr-constant +sgr-accent+ "38;2;139;233;253"
+  "Accent foreground (Dracula cyan): focused items, key hints, panel titles.")
+(%define-sgr-constant +sgr-accent-bold+ "1;38;2;139;233;253"
+  "Bold accent foreground -- +SGR-ACCENT+, bolded.")
+(%define-sgr-constant +sgr-branch+ "1;38;2;139;233;253"
+  "Branch/worktree names: bold Dracula cyan.")
+(%define-sgr-constant +sgr-ok+ "38;2;80;250;123"
+  "Healthy state (CLEAN): Dracula green.")
+(%define-sgr-constant +sgr-warn+ "38;2;241;250;140"
+  "Needs-attention state (DIRTY, PRUNABLE, unread output): Dracula yellow.")
+(%define-sgr-constant +sgr-alert+ "1;38;2;255;85;85"
+  "Broken state (CONFLICT, MISSING, exited pane): bold Dracula red.")
+(%define-sgr-constant +sgr-ahead+ "38;2;80;250;123"
+  "AHEAD n: Dracula green.")
+(%define-sgr-constant +sgr-behind+ "38;2;255;184;108"
+  "BEHIND n: Dracula orange.")
+(%define-sgr-constant +sgr-locked+ "38;2;255;184;108"
+  "LOCKED: Dracula orange.")
+(%define-sgr-constant +sgr-muted+ "38;2;98;114;164"
+  "Secondary text: labels, legends, notifications -- Dracula comment.")
+(%define-sgr-constant +sgr-muted-italic+ "3;38;2;98;114;164"
   "Secondary text, italic: transient notifications, placeholders.")
-(%define-sgr-constant +sgr-faint+ "38;5;240"
-  "Tertiary text: scroll positions, UNKNOWN state, disabled hints.")
-(%define-sgr-constant +sgr-line+ "38;5;238"
-  "Panel separators and inactive pane borders: near-background gray.")
-(%define-sgr-constant +sgr-header-chip+ "1;38;5;235;48;5;117"
-  "The `nerimux` header chip: dark text on the accent colour.")
-(%define-sgr-constant +sgr-mode-chip+ "1;38;5;117;48;5;237"
-  "The footer mode chip: accent text on a raised gray.")
+(%define-sgr-constant +sgr-faint+ "2;38;2;98;114;164"
+  "Tertiary text: scroll positions, UNKNOWN state, disabled hints -- dimmed
+   Dracula comment.")
+(%define-sgr-constant +sgr-line+ "38;2;68;71;90"
+  "Panel separators and inactive pane borders: Dracula current-line, as a
+   foreground colour.")
+(%define-sgr-constant +sgr-header-chip+ "1;38;2;40;42;54;48;2;189;147;249"
+  "The `nerimux` header chip: dark (Dracula bg) text on Dracula purple.")
+(%define-sgr-constant +sgr-mode-chip+ "1;38;2;189;147;249;48;2;68;71;90"
+  "The footer/key-panel mode chip: Dracula purple text on the current-line
+   background.")
+(%define-sgr-constant +sgr-section+ "1;38;2;189;147;249"
+  "Section headings (Attention/Active/Repositories) in the overview tree:
+   bold Dracula purple.")
 
 ;;; ── Status bar ──────────────────────────────────────────────────────────────
 
-(%define-sgr-constant +sgr-default-status+ "48;5;235;38;5;250"
-  "Status-bar base SGR: near-black bar (bg 235) with soft white text.
+(%define-sgr-constant +sgr-default-status+ "48;2;40;42;54;38;2;248;248;242"
+  "Status-bar base SGR: Dracula bg with Dracula fg text.
    Replaces the pre-theme \"44;97\" (blue background + bright white) that the
    deleted `status-style` option used to resolve to.")
 

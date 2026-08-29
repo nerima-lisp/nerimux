@@ -67,13 +67,35 @@
            (nerimux/model:repository-path repository))))
 
 (defun %tree-object-selection-token (object)
+  "A refresh-stable token for OBJECT, resolvable back to the same row by
+   %WORKSPACE-FIND-TREE-OBJECT after a catalog rebuild (S1 fix).  A
+   :FILE/:COMMIT/:DIFF-LINE/:DIFF-MORE row's OBJECT is a fresh cons every
+   flatten call (D3) carrying its owning worktree's id in its second
+   element already, so its token IS the worktree's own -- the cursor
+   re-anchors on the parent worktree rather than staying on a row shape
+   that no longer exists post-refresh.  A PANE row resolves the same way
+   through its owning worktree.  A :SECTION row's OBJECT is a bare keyword
+   (:ATTENTION/:ACTIVE/:REPOSITORIES); its token round-trips through the
+   same keyword.  Any of these returning NIL (no owning worktree resolvable,
+   as for an orphaned pane) falls through to %REBIND-CLIENT-SELECTION's own
+   NIL-clears-selection behaviour, same as before this fix."
   (typecase object
     (nerimux/model:organization
      (list :organization (%organization-selection-token object)))
     (nerimux/model:repository
      (list :repository (%repository-selection-token object)))
     (nerimux/model:worktree
-     (list :worktree (%worktree-selection-token object)))))
+     (list :worktree (%worktree-selection-token object)))
+    (nerimux/model:pane
+     (let ((worktree (nerimux/model:pane-worktree object)))
+       (and worktree (list :worktree (%worktree-selection-token worktree)))))
+    (t
+     (cond
+       ((and (consp object) (keywordp (first object))
+             (member (first object) '(:file :commit :diff-line :diff-more)))
+        (list :worktree (second object)))
+       ((keywordp object)
+        (list :section object))))))
 
 (defun %client-tree-object (conn)
   (or (client-conn-selected-tree-object conn)
@@ -200,7 +222,7 @@
 
 (defun %refresh-client-picker (conn &key on-complete on-error)
   (if (nerimux/vcs:vcs-package-available-p)
-      (let ((refresh-failed-p nil))
+      (let ((failed-repository-ids nil))
         ;; :MARK: this refresh is starting (see the matching call and
         ;; rationale in %ADD-CLIENT, server-multi.lisp -- FR-005).
         (%set-workspace-catalog-refresh-state
@@ -214,11 +236,25 @@
              (lambda (organizations)
                (%set-workspace-catalog-refresh-state organizations :mark)
                (%mark-dirty))
+             ;; R6.2/design §7.3 (mirrors %ADD-CLIENT's own wiring, server-
+             ;; multi.lisp): a FAILED object shows stale; other objects
+             ;; don't inherit it.
+             :on-repository-error
+             (lambda (repository condition)
+               (declare (ignore condition))
+               (pushnew (repository-id repository) failed-repository-ids
+                        :test #'equal)
+               (%mark-repository-node-stale repository)
+               (%mark-dirty))
              :on-complete
              (lambda (organizations)
-               ;; :SETTLE: this refresh has actually finished.
+               ;; :SETTLE :STALE-P NIL: this refresh has actually finished --
+               ;; every visible node goes fresh; any repository that failed
+               ;; its own status fetch is re-marked stale immediately below
+               ;; instead of via a blanket STALE-P over the whole catalog.
                (%set-workspace-catalog-refresh-state
-                organizations :settle :stale-p refresh-failed-p)
+                organizations :settle :stale-p nil)
+               (%reapply-stale-repository-marks organizations failed-repository-ids)
                (dolist (client
                          (remove-duplicates
                           (remove-if-not #'%client-live-p
@@ -232,9 +268,10 @@
                (when (and on-complete (%client-live-p conn))
                  (funcall on-complete organizations))
                (%mark-dirty))
+             ;; :ON-ERROR now covers only a terminal scan failure -- see the
+             ;; matching rationale in %ADD-CLIENT.
              :on-error
              (lambda (condition)
-               (setf refresh-failed-p t)
                ;; :SETTLE + stale: the refresh terminated in error; no
                ;; on-complete is coming to clear the in-flight mark.
                (%set-workspace-catalog-refresh-state
@@ -243,7 +280,6 @@
                  (funcall on-error condition))
                (%mark-dirty)))
           (error (condition)
-            (setf refresh-failed-p t)
             ;; :SETTLE + stale: kicking the refresh off failed synchronously,
             ;; so no callback above will run to clear the :mark set above.
             (%set-workspace-catalog-refresh-state

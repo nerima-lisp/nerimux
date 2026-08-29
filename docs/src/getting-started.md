@@ -89,25 +89,37 @@ and panes.
 | `C-p` | Open the global picker |
 | `o` / `d` | Overview / detail view |
 | `j` / `k` | Move the selection one row |
-| `J` / `K` | Jump to the next / previous repository row |
-| `h` / `l` | Collapse / expand the selected organization or repository (in detail view: move focus to an adjacent pane) |
-| `Enter` | Dive in: toggle an organization row open or closed; on a repository row, jump straight into its main worktree; on a worktree, window, or pane row, open its shell (or create one if none is open yet) |
+| `J` / `K` | Jump to the next / previous section header |
+| `h` / `l` | Fold / expand the selected section header or repository row (in detail view: move focus to an adjacent pane) |
+| `Tab` | Expand or collapse inline detail: a repository row's worktrees, a worktree row's panes/changed files/recent commits, or a changed-file row's diff |
+| `Enter` | Dive in: on a worktree row, open its shell (or create one if none is open yet); on a repository row, jump straight into its main worktree's shell; on a section header, toggle it open or closed |
 | `n` | Create a worktree for the selected repository and jump straight into its shell |
 | `X` | Delete the selected worktree (asks for confirmation) |
 | `L` / `U` | Lock / unlock the selected worktree (asks for confirmation) |
 | `/` | Filter the tree incrementally |
 | `r` | Refresh the workspace catalog and VCS state |
 | `i` / `c` / `:` | Input / copy / command mode |
+| `?` | Open the full-screen help view |
 | `Esc` | Close or cancel the active modal or mode |
 
 ### The overview tree
 
-The overview is a single full-width tree — organization → repository →
-worktree → window → pane — with no side panels. It opens **fully expanded
-down to the pane level**: a window row is only shown when a worktree has more
-than one window, since with exactly one window its panes attach directly
-under the worktree row instead. Rows are ordered by activity rather than by
-catalog order: whichever organization, repository, or worktree had output or
+The overview is a single full-width tree, with no side panels, built from
+three fixed sections in this order:
+
+- **Attention** — every worktree that needs attention (dirty, conflict,
+  ahead/behind, or missing) or is holding an exited pane.
+- **Active** — every other worktree that holds at least one open pane.
+- **Repositories** — every repository, always shown, whether or not any of
+  its worktrees appear above. A repository row is **collapsed by default**;
+  `l` or `Tab` expands it to list its worktrees.
+
+A worktree appears in at most one of Attention or Active, never both; a
+clean, pane-less worktree shows only once its repository is expanded. An
+Attention or Active worktree row reads `org/repo · branch`; a worktree row
+under an expanded repository shows just its own branch, since the repository
+row above it already names the org and repo. Rows are ordered by activity
+rather than by catalog order: whichever repository or worktree had output or
 focus most recently sorts first among its siblings. Re-sorting only happens
 when the catalog itself changes — a scan landing, a merge, a worktree
 create/delete — never while a client is just moving the selection, so a row
@@ -116,20 +128,34 @@ never jumps out from under the cursor mid-navigation.
 Each worktree row also carries a compact status cluster to the right of its
 label: a state tag (`CLEAN`, `DIRTY`, `CONFLICT`, ...), ahead/behind counts
 (`+N`/`-N`) when nonzero, a pane count (`Np`, or `Np!` once any pane has
-exited), and a relative last-activity time (`now`, `Nm`, `Nh`, `Nd`). Below
-the tree, a separator line, a 2-line detail panel describing whatever row is
-selected, and a 1-line strip for the most recent message fill the rest of the
-frame above the footer.
+exited), and a relative last-activity time (`now`, `Nm`, `Nh`, `Nd`).
+
+`Tab` on a worktree row inline-expands it one level deeper, in a fixed
+order: its panes, its changed files, and its recent commits, skipping any
+group that is empty. `Tab` on a changed-file row within that expansion
+inline-expands its own diff, capped at 200 cached lines with a trailing
+`... N more lines` row when the diff is longer. Below the tree, a separator
+line, a 2-line detail panel describing whatever row is selected, and a
+1-line strip for the most recent message fill the rest of the frame above
+the footer — which itself is a 2-3 line contextual key panel, collapsing to
+a single line when the terminal is shorter than 12 rows.
 
 `/` starts an incremental, case-insensitive substring filter over the tree:
 a row stays visible when its own text matches or any of its descendants'
-does (so a matching pane keeps its worktree, repository, and organization
-ancestors on screen). While typing the query the footer shows a `/query`
-input prompt; `Enter` accepts the query and returns to normal navigation,
-keeping it applied and shown thereafter as a muted `/query` chip in the
-footer, while `Esc` cancels and clears it. A query that matches nothing
-replaces the row list with a centered `no matches: /query` notice, so an
-empty tree always reads as "filtered to zero", never as a broken screen.
+does (so a matching pane or file keeps its worktree and repository ancestors
+on screen, and penetrates a collapsed repository or folded section). While
+typing the query the footer shows a `/query` input prompt; `Enter` accepts
+the query and returns to normal navigation, keeping it applied and shown
+thereafter as a muted `/query` chip in the footer, while `Esc` cancels and
+clears it. A query that matches nothing replaces the row list with a
+centered `no matches: /query` notice, so an empty tree always reads as
+"filtered to zero", never as a broken screen.
+
+Press `?` at any time to open a full-screen help view listing every binding
+— the overview keymap, the `C-q` prefix table, and each UI mode's enter/leave
+key. `q`, `Esc`, or `Enter` closes it; a pending confirmation view (such as
+the worktree-delete or server-quit prompt) takes priority and stays on top
+of it.
 
 ### Creating a worktree
 

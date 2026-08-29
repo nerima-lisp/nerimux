@@ -46,6 +46,38 @@
    only a forward reference, which resolves at call time."
   *workspace-collapsed-node-ids*)
 
+(defun %workspace-expanded-nodes ()
+  "The expanded-row set for Repositories-section repository rows (default
+   COLLAPSED; see *WORKSPACE-EXPANDED-NODE-IDS*), for callers that load
+   before its DEFVAR -- same forward-reference rationale as
+   %WORKSPACE-COLLAPSED-NODES above."
+  *workspace-expanded-node-ids*)
+
+(defun %workspace-file-diffs ()
+  "The per-file diff cache (Wave C; see *WORKSPACE-FILE-DIFFS*), for callers
+   that load before its DEFVAR -- same forward-reference rationale as
+   %WORKSPACE-COLLAPSED-NODES/%WORKSPACE-EXPANDED-NODES above."
+  *workspace-file-diffs*)
+
+(defun %set-workspace-file-diff (key value)
+  "Write VALUE into *WORKSPACE-FILE-DIFFS* under KEY, the only path any
+   caller should use (F4, CWE-400): a genuinely new KEY that would push the
+   cache past *WORKSPACE-FILE-DIFFS-CACHE-LIMIT* evicts the oldest entry
+   first (*WORKSPACE-FILE-DIFFS-ORDER*, insertion order). Updating an
+   already-cached key -- the common :PENDING settling to :READY/:FAILED --
+   never evicts, since it does not grow the table."
+  (let* ((table (%workspace-file-diffs))
+         (new-key-p (not (nth-value 1 (gethash key table)))))
+    (when (and new-key-p
+               (>= (hash-table-count table) *workspace-file-diffs-cache-limit*))
+      (let ((oldest (pop *workspace-file-diffs-order*)))
+        (when oldest (remhash oldest table))))
+    (setf (gethash key table) value)
+    (when new-key-p
+      (setf *workspace-file-diffs-order*
+            (nconc *workspace-file-diffs-order* (list key))))
+    value))
+
 (defun %toggle-workspace-node-collapsed (kind id)
   "Flip the KIND (:ORGANIZATION or :REPOSITORY) / ID row's collapse state
    (R6.3's Enter-toggles-collapse behaviour)."
@@ -102,7 +134,51 @@
         (visit :repository (nerimux/model:repository-id repository))
         (dolist (worktree (nerimux/model:repository-worktrees repository))
           (visit :worktree (nerimux/model:worktree-id worktree)))))
+    ;; Wave C: no per-worktree status-refresh settle site exists (both
+    ;; callers of this function -- %ADD-CLIENT's initial scan and
+    ;; %REFRESH-CLIENT-PICKER's `r` -- are whole-catalog operations), so a
+    ;; cached diff is invalidated the coarse way, wholesale, at the same
+    ;; :SETTLE this function already uses to close out a status refresh. A
+    ;; :MARK call (a refresh only just starting) leaves the cache alone.
+    (when (eq mode :settle)
+      (clrhash *workspace-file-diffs*)
+      ;; F4: the order list must be cleared alongside the table it indexes --
+      ;; otherwise every entry CLRHASH just removed stays recorded in
+      ;; *WORKSPACE-FILE-DIFFS-ORDER* forever, so the list itself grows
+      ;; unbounded across catalog refreshes even though the table it backs
+      ;; stays small.
+      (setf *workspace-file-diffs-order* nil))
     nil))
+
+(defun %mark-repository-node-stale (repository)
+  "Immediately settle REPOSITORY's own tree row -- and each of its worktree
+   rows -- to :stale-p t (R6.2/design §7.3: a FAILED object shows stale;
+   other objects don't inherit it). Called from a catalog refresh's
+   PER-REPOSITORY error channel (NERIMUX/VCS:REFRESH-WORKSPACE-
+   ORGANIZATIONS-ASYNC's :ON-REPOSITORY-ERROR) as soon as that one
+   repository's own failure is known, rather than waiting for the
+   whole-catalog :ON-COMPLETE that follows once every other repository has
+   also settled -- and again from %REAPPLY-STALE-REPOSITORY-MARKS below, to
+   restore the mark after that :ON-COMPLETE settles the whole catalog fresh."
+  (%clear-workspace-refreshing :repository (repository-id repository) :stale-p t)
+  (dolist (worktree (repository-worktrees repository))
+    (%clear-workspace-refreshing :worktree (worktree-id worktree) :stale-p t)))
+
+(defun %reapply-stale-repository-marks (organizations failed-repository-ids)
+  "After a whole-catalog :SETTLE (%SET-WORKSPACE-CATALOG-REFRESH-STATE ...
+   :SETTLE :STALE-P NIL, which marks every visible node fresh), re-apply the
+   stale mark to each repository in FAILED-REPOSITORY-IDS -- and its
+   worktrees -- so a per-repository failure collected during the refresh
+   survives that settle instead of being overwritten back to fresh. A
+   failed id no longer present in ORGANIZATIONS (the repository vanished
+   from the catalog between the failure and this settle) is simply
+   skipped, matching %WORKSPACE-FIND-TREE-OBJECT's own not-found handling
+   elsewhere in this file."
+  (dolist (organization organizations)
+    (dolist (repository (nerimux/model:organization-repositories organization))
+      (when (member (repository-id repository) failed-repository-ids
+                    :test #'equal)
+        (%mark-repository-node-stale repository)))))
 
 (defun %remember-worktree-pane (worktree pane)
   "Record PANE as the one to return to next time Enter lands on WORKTREE's
@@ -220,7 +296,7 @@
       ;; kicking the async refresh off (e.g. thread creation) must still
       ;; flip *workspace-catalog-loaded-p*, or R6.2's scanning-p is stuck
       ;; true forever with no on-error callback ever going to run.
-      (let ((refresh-failed-p nil))
+      (let ((failed-repository-ids nil))
         (handler-case
             (nerimux/vcs:refresh-workspace-organizations-async
              :callback-dispatch #'%enqueue-main-thread-callback
@@ -246,20 +322,34 @@
              (lambda (organizations)
                (%set-workspace-catalog-refresh-state organizations :mark)
                (%mark-dirty))
+             ;; R6.2/design §7.3: a FAILED object shows stale; other objects
+             ;; don't inherit it. One repository's `git status` failing must
+             ;; not make every OTHER repository's already-successful row
+             ;; look stale too -- mark only this one, immediately, rather
+             ;; than waiting for the whole-catalog :ON-COMPLETE below.
+             :on-repository-error
+             (lambda (repository condition)
+               (declare (ignore condition))
+               (pushnew (repository-id repository) failed-repository-ids
+                        :test #'equal)
+               (%mark-repository-node-stale repository)
+               (%mark-dirty))
              :on-complete
              (lambda (organizations)
                ;; R6.2: flips scanning-p false for every client from here on,
                ;; regardless of whether ORGANIZATIONS turned out empty.
                (setf *workspace-catalog-loaded-p* t
                      *workspace-scan-progress* nil)
-               ;; :SETTLE: the refresh this callback closes out has actually
-               ;; finished (successfully unless a per-repository status
-               ;; fetch failed along the way, tracked in REFRESH-FAILED-P) --
-               ;; the case the old single-mode function got backwards, since
-               ;; a successful on-complete used to re-mark every node
-               ;; refreshing instead of clearing the mark (FR-005).
+               ;; :SETTLE :STALE-P NIL: this refresh has actually finished --
+               ;; every visible node goes fresh, including any repository
+               ;; whose own status fetch failed along the way; that failure
+               ;; is re-applied immediately below rather than left to the
+               ;; blanket STALE-P this whole-catalog settle used to take
+               ;; (which is what made ANY per-repository failure mark the
+               ;; ENTIRE catalog stale, not just the repository that failed).
                (%set-workspace-catalog-refresh-state
-                organizations :settle :stale-p refresh-failed-p)
+                organizations :settle :stale-p nil)
+               (%reapply-stale-repository-marks organizations failed-repository-ids)
                (dolist (client (remove-duplicates
                                 (remove-if-not #'%client-live-p
                                                (copy-list *clients*))
@@ -270,10 +360,14 @@
                  (%picker-clamp-index client
                                       (%client-picker-visible-items client)))
                (%mark-dirty))
+             ;; :ON-ERROR now covers only a terminal scan failure (e.g. `ghq
+             ;; list` itself failing) -- there is no catalog and no further
+             ;; on-complete coming, unlike :ON-REPOSITORY-ERROR above, whose
+             ;; failures are only ever ONE repository among many that still
+             ;; settle normally.
              :on-error
              (lambda (condition)
                (declare (ignore condition))
-               (setf refresh-failed-p t)
                ;; R6.2: a failed initial scan must still stop showing
                ;; "scanning..." -- otherwise a client attached before the
                ;; error is stuck on the placeholder forever.
@@ -287,8 +381,7 @@
                (%mark-dirty)))
           (error (condition)
             (declare (ignore condition))
-            (setf refresh-failed-p t
-                  *workspace-catalog-loaded-p* t
+            (setf *workspace-catalog-loaded-p* t
                   *workspace-scan-progress* nil)
             ;; :SETTLE + stale: kicking the refresh off itself failed
             ;; synchronously, so no callback above will ever run to clear

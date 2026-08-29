@@ -38,6 +38,25 @@
 含め、実装済みかどうかは本文中の記述ではなく、上記の現状注記と `EXECUTION.md` を
 優先する。
 
+**2026-08-29 追記**: 第4章の全画面overviewは、この文書とも上記の
+workspace-overview branchとも異なる第3の設計（state-basedな section
+分割 + inline展開、magit風）で実装され、mainに反映済みである。org → repo →
+worktree → window → paneの5階層treeは、Attention / Active / Repositoriesの
+3固定sectionに置き換わった。worktreeはAttention（要注意状態、または
+exited paneを保持）かActive（paneを1つ以上保持）のいずれか一方にのみ現れ、
+Repositoriesは常に全repositoryを表示するがrepository行はcollapsedが既定で
+`l`/`Tab`が展開する。さらにworktree行の`Tab`でpane/changed files/recent
+commitsをinline展開し、changed file行の`Tab`でその差分をinline展開する
+（`?`で全画面helpビューも追加された）。これにより、第4章
+§4.1のレイアウト図とtree構成、および§9.2のkeymap表のうち`J`/`K`
+（section jump）・`Tab`（inline展開）・`?`（help）に関する記述はsupersede
+された。したがって上記「未統合として残るのは第4章の全画面overviewモード
+のみである」という記述はもはや正確ではない — 全画面overviewは実装済みだが、
+第4章が描く5階層tree契約とは異なる契約で実装されている。詳細は
+`docs/notes/workspace-requirements.md`のR6.3への追記と、
+`src/presentation/renderer/renderer-workspace-tree.lisp`のヘッダコメントを
+参照。
+
 ---
 
 # Bare repository + worktree execution UI/UX

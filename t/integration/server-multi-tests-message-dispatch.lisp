@@ -834,8 +834,10 @@
   ;; confirm now also requires a preview to have run first for this same
   ;; repository (CLIENT-CONN-PENDING-PRUNE-PREVIEW-REPOSITORY-ID), so this
   ;; drives wt-prune before wt-prune-confirm --confirm to match the legitimate
-  ;; flow; see overview-worktree-prune-confirm-without-preview-is-rejected
-  ;; below for the case where that preview step is skipped.
+  ;; flow; see overview-worktree-prune-confirm-without-confirm-is-rejected in
+  ;; server-multi-tests-message-dispatch-worktree.lisp for the case where
+  ;; --confirm itself is missing (S7 fix: this comment used to name a test
+  ;; that never existed anywhere under that name).
   (it "overview-worktree-prune-confirm-mutates"
     (with-fake-session (s)
       (let* ((organization
@@ -975,24 +977,35 @@
   ;; :tree-filter mode absorbs every printable key into the query buffer --
   ;; "j"/"k" are ordinary characters there, never the :overview navigation
   ;; keys, so the selection must not move.
+  ;; S4 fix: this used to call %HANDLE-CLIENT-TREE-FILTER-KEY-PAYLOAD
+  ;; directly, bypassing %HANDLE-MULTI-KEY-MESSAGE entirely -- the exact
+  ;; anti-pattern that once hid a real production dispatch bug (a mode
+  ;; check that never actually routed here). Entering :TREE-FILTER mode via
+  ;; the real `/` key first, mirroring the sibling test above (`overview-
+  ;; tree-filter-key-enters-filter-mode-without-forcing-detail-view`),
+  ;; proves the whole path -- mode transition and payload routing both --
+  ;; rather than only the leaf handler's own behaviour.
   (it "overview-tree-filter-mode-absorbs-jk-as-query-text-not-navigation"
-    (let* ((organization
-             (nerimux/model:make-organization
-              :id "org-jk-absorb" :host "github.com" :name "team"))
-           (repository
-             (nerimux/model:make-repository
-              :id "repo-jk-absorb" :organization organization
-              :specification "github.com/team/repo-jk-absorb"))
-           (conn (%make-test-conn))
-           (nerimux/vcs::*workspace-organizations* (list organization)))
-      (nerimux/model:organization-add-repository organization repository)
-      (setf (nerimux::client-conn-view conn) :overview)
-      (nerimux::%set-client-selected-tree-object conn repository)
-      (nerimux::%set-client-ui-mode conn :tree-filter)
-      (nerimux::%handle-client-tree-filter-key-payload
-       nil conn (cl-codec-kit:string-to-octets "jk" :encoding :utf-8))
-      (expect (string= "jk" (nerimux::client-conn-tree-filter conn)))
-      (expect (eq repository (nerimux::client-conn-selected-tree-object conn)))))
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org-jk-absorb" :host "github.com" :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo-jk-absorb" :organization organization
+                :specification "github.com/team/repo-jk-absorb"))
+             (conn (%make-test-conn))
+             (nerimux/vcs::*workspace-organizations* (list organization)))
+        (nerimux/model:organization-add-repository organization repository)
+        (setf (nerimux::client-conn-view conn) :overview)
+        (nerimux::%set-client-selected-tree-object conn repository)
+        (nerimux::%handle-multi-key-message
+         s conn (cl-codec-kit:string-to-octets "/" :encoding :utf-8))
+        (expect (eq :tree-filter (nerimux::client-conn-mode conn)))
+        (nerimux::%handle-multi-key-message
+         s conn (cl-codec-kit:string-to-octets "jk" :encoding :utf-8))
+        (expect (string= "jk" (nerimux::client-conn-tree-filter conn)))
+        (expect (eq repository (nerimux::client-conn-selected-tree-object conn))))))
 
   (it "overview-tree-filter-editing-rejects-invalid-input-and-respects-the-cap"
     (with-fake-session (s)
@@ -1080,73 +1093,682 @@
 
   ;; :tree-top/:tree-bottom must walk the FILTERED row set (review-round fix:
   ;; both now call %WORKSPACE-TREE-OBJECTS with CLIENT-CONN-TREE-FILTER),
-  ;; not the whole unfiltered catalog. 3 organizations, only the MIDDLE one
-  ;; matching the filter: unfiltered, :tree-top would land on org-none-1 (the
-  ;; first row) and :tree-bottom on worktree-none-3 (the last row) -- with
-  ;; the filter active, both must instead land on the filtered set's own
-  ;; first/last row (org-match itself, and its one matching worktree),
-  ;; proving the command genuinely reads the filtered set rather than
-  ;; coincidentally landing on the same answer either way.
+  ;; not the whole unfiltered catalog.
+  ;;
+  ;; Section-based redesign: ORG-NOISE holds a dirty (Attention) worktree
+  ;; that never matches the filter, so Attention exists unfiltered but is
+  ;; pruned away entirely once the filter is active -- REPO-BURIED's own
+  ;; worktree is clean and pane-less (reachable only via its repository's
+  ;; own, default-collapsed, Repositories-section expansion), so unfiltered
+  ;; it never surfaces as its own row at all. This makes both :tree-top and
+  ;; :tree-bottom differ between the unfiltered and filtered cases, proving
+  ;; the command genuinely reads the filtered set rather than coincidentally
+  ;; landing on the same answer either way.
   (it "tree-top-and-tree-bottom-commands-use-the-filtered-row-set"
     (with-fake-session (s)
-      (let* ((org-none-1
+      (let* ((org-noise
                (nerimux/model:make-organization
-                :id "org-top-bottom-none-1" :host "github.com" :name "none-1"))
-             (org-match
+                :id "org-top-bottom-noise" :host "github.com" :name "noise"))
+             (org-buried
                (nerimux/model:make-organization
-                :id "org-top-bottom-match" :host "github.com" :name "match"))
-             (org-none-3
-               (nerimux/model:make-organization
-                :id "org-top-bottom-none-3" :host "github.com" :name "none-3"))
-             (repo-none-1
+                :id "org-top-bottom-buried" :host "github.com" :name "buried"))
+             (repo-noise
                (nerimux/model:make-repository
-                :id "repo-top-bottom-none-1" :organization org-none-1
-                :specification "github.com/none-1/repo"))
-             (repo-match
+                :id "repo-top-bottom-noise" :organization org-noise
+                :specification "github.com/noise/repo"))
+             (repo-buried
                (nerimux/model:make-repository
-                :id "repo-top-bottom-match" :organization org-match
-                :specification "github.com/match/repo"))
-             (repo-none-3
-               (nerimux/model:make-repository
-                :id "repo-top-bottom-none-3" :organization org-none-3
-                :specification "github.com/none-3/repo"))
-             (worktree-none-1
+                :id "repo-top-bottom-buried" :organization org-buried
+                :specification "github.com/buried/repo"))
+             (worktree-noise
                (nerimux/model:make-worktree
-                :id "wt-top-bottom-none-1" :repository repo-none-1
-                :path "/tmp/top-bottom-none-1" :branch "no-match-here-1"))
-             (worktree-match
+                :id "wt-top-bottom-noise" :repository repo-noise
+                :path "/tmp/top-bottom-noise" :branch "attention-noise"
+                :dirty-p t))
+             (worktree-buried
                (nerimux/model:make-worktree
-                :id "wt-top-bottom-match" :repository repo-match
-                :path "/tmp/top-bottom-match" :branch "only-match"))
-             (worktree-none-3
-               (nerimux/model:make-worktree
-                :id "wt-top-bottom-none-3" :repository repo-none-3
-                :path "/tmp/top-bottom-none-3" :branch "no-match-here-3"))
+                :id "wt-top-bottom-buried" :repository repo-buried
+                :path "/tmp/top-bottom-buried" :branch "only-match"))
              (conn (%make-test-conn))
              (nerimux/vcs::*workspace-organizations*
-               (list org-none-1 org-match org-none-3)))
-        (nerimux/model:organization-add-repository org-none-1 repo-none-1)
-        (nerimux/model:organization-add-repository org-match repo-match)
-        (nerimux/model:organization-add-repository org-none-3 repo-none-3)
-        (nerimux/model:repository-add-worktree repo-none-1 worktree-none-1)
-        (nerimux/model:repository-add-worktree repo-match worktree-match)
-        (nerimux/model:repository-add-worktree repo-none-3 worktree-none-3)
-        ;; Sanity check: unfiltered, tree-top/bottom would NOT be org-match /
-        ;; worktree-match -- if this failed the test below would prove
-        ;; nothing about filtering.
+               (list org-noise org-buried)))
+        (nerimux/model:organization-add-repository org-noise repo-noise)
+        (nerimux/model:organization-add-repository org-buried repo-buried)
+        (nerimux/model:repository-add-worktree repo-noise worktree-noise)
+        (nerimux/model:repository-add-worktree repo-buried worktree-buried)
+        ;; Sanity check: unfiltered, tree-top is the Attention section header
+        ;; (WORKTREE-NOISE is dirty) and tree-bottom is REPO-BURIED's own row
+        ;; (its worktree is collapsed by default) -- neither is what the
+        ;; filtered case below lands on, so that case proves something.
         (expect (nerimux::%handle-client-ui-command s conn :tree-top nil nil))
-        (expect (eq org-none-1 (nerimux::client-conn-selected-tree-object conn)))
+        (expect (eq :attention (nerimux::client-conn-selected-tree-object conn)))
         (expect (nerimux::%handle-client-ui-command s conn :tree-bottom nil nil))
-        (expect (eq worktree-none-3 (nerimux::client-conn-selected-tree-object conn)))
+        (expect (eq repo-buried (nerimux::client-conn-selected-tree-object conn)))
         (setf (nerimux::client-conn-tree-filter conn) "only-match")
         (expect (nerimux::%handle-client-ui-command s conn :tree-top nil nil))
-        (expect (eq org-match (nerimux::client-conn-selected-tree-object conn)))
+        (expect (eq :repositories (nerimux::client-conn-selected-tree-object conn)))
         (expect (nerimux::%handle-client-ui-command s conn :tree-bottom nil nil))
-        (expect (eq worktree-match (nerimux::client-conn-selected-tree-object conn))))))
+        (expect (eq worktree-buried (nerimux::client-conn-selected-tree-object conn))))))
 
-  ;; wt-prune-confirm without --confirm must not reach the VCS layer, even
-  ;; though the preview path (wt-prune) never requires it. Per the test
-  ;; review finding, this now also carries a worktree in the fixture and
-  ;; asserts it survives untouched, so a rejected confirm is verified against
-  ;; actual repository state rather than only against the mock not firing.
+  ;; Section-based overview redesign: Tab (byte 9) toggles the selected
+  ;; row's own expand/collapse state -- a :SECTION row toggles that section
+  ;; (*WORKSPACE-COLLAPSED-NODE-IDS*, default-expanded), a REPOSITORY row
+  ;; toggles its worktree listing (*WORKSPACE-EXPANDED-NODE-IDS*, default-
+  ;; collapsed) -- driven through the same one-byte-per-message framing a
+  ;; real client uses.
+  (it "tab-key-toggles-the-selected-section-header-and-repository-row"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org-tab" :host "github.com" :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo-tab" :organization organization
+                :specification "github.com/team/repo-tab"))
+             (conn (%make-test-conn))
+             (nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
+             (nerimux::*workspace-expanded-node-ids* (make-hash-table :test #'equal))
+             (nerimux/vcs::*workspace-organizations* (list organization)))
+        (nerimux/model:organization-add-repository organization repository)
+        (setf (nerimux::client-conn-view conn) :overview)
+        (nerimux::%set-client-selected-tree-object conn :repositories)
+        (nerimux::%handle-multi-key-message s conn #(9))
+        (expect (gethash (list :section :repositories)
+                         nerimux::*workspace-collapsed-node-ids*))
+        (nerimux::%handle-multi-key-message s conn #(9))
+        (expect (null (gethash (list :section :repositories)
+                               nerimux::*workspace-collapsed-node-ids*)))
+        (nerimux::%set-client-selected-tree-object conn repository)
+        (nerimux::%handle-multi-key-message s conn #(9))
+        (expect (gethash (list :repository (nerimux/model:repository-id repository))
+                         nerimux::*workspace-expanded-node-ids*)))))
+
+  ;; J/K (uppercase, byte-driven) jump the selection across :SECTION header
+  ;; rows only -- the section-based redesign's replacement for the old
+  ;; repository-row jump.
+  (it "J-and-K-keys-jump-the-selection-across-section-headers"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org-jk-keys" :host "github.com" :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo-jk-keys" :organization organization
+                :specification "github.com/team/repo-jk-keys"))
+             (worktree
+               (nerimux/model:make-worktree
+                :id "wt-jk-keys" :repository repository :path "/tmp/jk-keys"
+                :branch "jk-keys" :dirty-p t))
+             (conn (%make-test-conn))
+             (nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
+             (nerimux/vcs::*workspace-organizations* (list organization)))
+        (nerimux/model:organization-add-repository organization repository)
+        (nerimux/model:repository-add-worktree repository worktree)
+        (setf (nerimux::client-conn-view conn) :overview)
+        ;; Rows: (Attention header) worktree (Repositories header)
+        ;; repository -- select the worktree row directly, so J has to skip
+        ;; past it to land on :REPOSITORIES.
+        (nerimux::%set-client-selected-tree-object conn worktree)
+        (nerimux::%handle-multi-key-message
+         s conn (cl-codec-kit:string-to-octets "J" :encoding :utf-8))
+        (expect (eq :repositories (nerimux::client-conn-selected-tree-object conn)))
+        (nerimux::%handle-multi-key-message
+         s conn (cl-codec-kit:string-to-octets "K" :encoding :utf-8))
+        (expect (eq :attention (nerimux::client-conn-selected-tree-object conn))))))
+
+  ;; Inline worktree expansion (Wave B): Tab on a worktree row toggles its
+  ;; own child rows (panes/files/commits, D3) into *WORKSPACE-EXPANDED-
+  ;; NODE-IDS* the same way it already toggles a repository row's worktree
+  ;; listing -- driven through the same one-byte-per-message framing as the
+  ;; section/repository Tab test above.
+  (it "tab-key-expands-and-collapses-a-worktree-rows-inline-detail"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org-tab-wt" :host "github.com" :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo-tab-wt" :organization organization
+                :specification "github.com/team/repo-tab-wt"))
+             (worktree
+               (nerimux/model:make-worktree
+                :id "wt-tab-wt" :repository repository :path "/tmp/tab-wt"
+                :branch "tab-wt" :dirty-p t
+                :changed-files (list (cons " M" "src/foo.lisp"))))
+             (conn (%make-test-conn))
+             (nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
+             (nerimux::*workspace-expanded-node-ids* (make-hash-table :test #'equal))
+             (nerimux/vcs::*workspace-organizations* (list organization)))
+        (nerimux/model:organization-add-repository organization repository)
+        (nerimux/model:repository-add-worktree repository worktree)
+        (setf (nerimux::client-conn-view conn) :overview)
+        (nerimux::%set-client-selected-tree-object conn worktree)
+        (flet ((entries ()
+                 (nerimux/renderer::%workspace-flat-tree-entries
+                  (list organization) nerimux::*workspace-collapsed-node-ids*
+                  :expanded-node-ids nerimux::*workspace-expanded-node-ids*)))
+          (expect (null (find :file (entries) :key #'fourth)))
+          (nerimux::%handle-multi-key-message s conn #(9))
+          (expect (gethash (list :worktree (nerimux/model:worktree-id worktree))
+                           nerimux::*workspace-expanded-node-ids*))
+          (let ((file-entry (find :file (entries) :key #'fourth)))
+            (expect file-entry)
+            (expect (equal (list :file (nerimux/model:worktree-id worktree)
+                                 "src/foo.lisp" " M")
+                           (third file-entry))))
+          (nerimux::%handle-multi-key-message s conn #(9))
+          (expect (null (gethash (list :worktree (nerimux/model:worktree-id worktree))
+                                 nerimux::*workspace-expanded-node-ids*)))
+          (expect (null (find :file (entries) :key #'fourth)))))))
+
+  ;; A :FILE row's OBJECT is a fresh cons every flatten call (D3): selection
+  ;; must re-anchor on it across a j/k move via EQUAL, not EQ, or the
+  ;; cursor silently jumps back to the top/bottom of the tree the moment a
+  ;; file row is the current selection.
+  (it "selection-survives-re-flatten-on-a-file-row"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org-file-reflatten" :host "github.com" :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo-file-reflatten" :organization organization
+                :specification "github.com/team/repo-file-reflatten"))
+             (worktree
+               (nerimux/model:make-worktree
+                :id "wt-file-reflatten" :repository repository
+                :path "/tmp/file-reflatten" :branch "file-reflatten" :dirty-p t
+                :changed-files (list (cons " M" "src/foo.lisp"))))
+             (conn (%make-test-conn))
+             (nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
+             (nerimux::*workspace-expanded-node-ids* (make-hash-table :test #'equal))
+             (nerimux/vcs::*workspace-organizations* (list organization))
+             (file-identity
+               (list :file (nerimux/model:worktree-id worktree)
+                     "src/foo.lisp" " M")))
+        (nerimux/model:organization-add-repository organization repository)
+        (nerimux/model:repository-add-worktree repository worktree)
+        (setf (nerimux::client-conn-view conn) :overview)
+        (setf (gethash (list :worktree (nerimux/model:worktree-id worktree))
+                       nerimux::*workspace-expanded-node-ids*)
+              t)
+        ;; A freshly-consed but EQUAL identity, standing in for a selection
+        ;; captured on an earlier frame's flatten -- never EQ to whatever
+        ;; %SELECT-CLIENT-TREE-RELATIVE flattens THIS call.
+        (nerimux::%set-client-selected-tree-object conn (copy-list file-identity))
+        (nerimux::%select-client-tree-relative conn 0)
+        (expect (equal file-identity
+                       (nerimux::client-conn-selected-tree-object conn))))))
+
+  ;; S1 fix: a catalog refresh's rebind (%REBIND-CLIENT-SELECTION, run for
+  ;; every live client from %REFRESH-CLIENT-PICKER's :ON-COMPLETE) must not
+  ;; drop the selection to NIL just because the cursor sits on a cons-based
+  ;; inline-expansion row (:FILE here) -- %TREE-OBJECT-SELECTION-TOKEN used
+  ;; to have no typecase clause for those rows at all, so the fallback
+  ;; lookup in %REBIND-CLIENT-SELECTION resolved a NIL token to NIL and
+  ;; cleared the selection outright. *LAST-SELECTED-WORKTREE-TOKEN* is bound
+  ;; to NIL so %CLIENT-ATTACH-SELECTION's own "previous selection" fallback
+  ;; (a separate mechanism, unaffected by this fix) cannot coincidentally
+  ;; restore the worktree and mask the bug under test.
+  (it "a-file-row-selection-survives-a-catalog-refresh-rebind-by-re-anchoring-on-its-worktree"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org-file-rebind" :host "github.com" :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo-file-rebind" :organization organization
+                :specification "github.com/team/repo-file-rebind"))
+             (worktree
+               (nerimux/model:make-worktree
+                :id "wt-file-rebind" :repository repository
+                :path "/tmp/file-rebind" :branch "file-rebind" :dirty-p t
+                :changed-files (list (cons " M" "src/foo.lisp"))))
+             (conn (%make-test-conn))
+             (nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
+             (nerimux::*workspace-expanded-node-ids* (make-hash-table :test #'equal))
+             (nerimux::*last-selected-worktree-token* nil)
+             (nerimux/vcs::*workspace-organizations* (list organization)))
+        (nerimux/model:organization-add-repository organization repository)
+        (nerimux/model:repository-add-worktree repository worktree)
+        (setf (nerimux::client-conn-view conn) :overview)
+        (nerimux::%set-client-selected-tree-object conn worktree)
+        (nerimux::%handle-multi-key-message s conn #(9)) ; Tab: expand the worktree
+        (nerimux::%handle-multi-key-message
+         s conn (cl-codec-kit:string-to-octets "j" :encoding :utf-8)) ; move onto the :file row
+        (let ((selected (nerimux::client-conn-selected-tree-object conn)))
+          (expect (consp selected))
+          (expect (eq :file (first selected))))
+        (nerimux::%rebind-client-selection conn (list organization))
+        (expect (eq worktree (nerimux::client-conn-selected-tree-object conn)))
+        (expect (eq worktree (nerimux::client-conn-selected-worktree conn))))))
+
+  ;; S6: no test exercised SELECTION surviving a catalog refresh that
+  ;; rebuilds every organization/repository/worktree struct from scratch --
+  ;; same stable ids, but no struct EQ to its predecessor, exactly what a
+  ;; real background scan produces. %REBIND-CLIENT-SELECTION re-resolves by
+  ;; TOKEN (stable id), not by object identity, so this must re-select the
+  ;; NEW worktree rather than clearing the selection.
+  (it "a-worktree-selection-survives-a-stable-id-catalog-refresh-with-fresh-structs"
+    (let* ((organization
+             (nerimux/model:make-organization
+              :id "org-stable-refresh" :host "github.com" :name "team"))
+           (repository
+             (nerimux/model:make-repository
+              :id "repo-stable-refresh" :organization organization
+              :specification "github.com/team/repo-stable-refresh"))
+           (worktree
+             (nerimux/model:make-worktree
+              :id "wt-stable-refresh" :repository repository
+              :path "/tmp/stable-refresh" :branch "stable-refresh"))
+           (conn (%make-test-conn))
+           (nerimux::*last-selected-worktree-token* nil))
+      (nerimux/model:organization-add-repository organization repository)
+      (nerimux/model:repository-add-worktree repository worktree)
+      (setf (nerimux::client-conn-view conn) :overview)
+      (nerimux::%set-client-selected-tree-object conn worktree)
+      (let* ((new-worktree
+               (nerimux/model:make-worktree
+                :id "wt-stable-refresh" :path "/tmp/stable-refresh"
+                :branch "stable-refresh"))
+             (new-repository
+               (nerimux/model:make-repository
+                :id "repo-stable-refresh"
+                :specification "github.com/team/repo-stable-refresh"))
+             (new-organization
+               (nerimux/model:make-organization
+                :id "org-stable-refresh" :host "github.com" :name "team")))
+        (nerimux/model:organization-add-repository new-organization new-repository)
+        (nerimux/model:repository-add-worktree new-repository new-worktree)
+        (expect (not (eq new-worktree worktree)))
+        (nerimux::%rebind-client-selection conn (list new-organization))
+        (expect (eq new-worktree (nerimux::client-conn-selected-tree-object conn)))
+        (expect (eq new-worktree (nerimux::client-conn-selected-worktree conn))))))
+
+  ;; S6's :FILE-row variant, exercising S1's fix together with the stable-id
+  ;; refresh: the selection at refresh time is a :FILE row naming the OLD
+  ;; worktree's id -- the fix must re-anchor onto the NEW worktree carrying
+  ;; that same id, not onto the stale struct or NIL.
+  (it "a-file-row-selection-re-anchors-onto-the-new-worktree-across-a-stable-id-refresh"
+    (let* ((organization
+             (nerimux/model:make-organization
+              :id "org-stable-file-refresh" :host "github.com" :name "team"))
+           (repository
+             (nerimux/model:make-repository
+              :id "repo-stable-file-refresh" :organization organization
+              :specification "github.com/team/repo-stable-file-refresh"))
+           (worktree
+             (nerimux/model:make-worktree
+              :id "wt-stable-file-refresh" :repository repository
+              :path "/tmp/stable-file-refresh" :branch "stable-file-refresh"))
+           (conn (%make-test-conn))
+           (nerimux::*last-selected-worktree-token* nil)
+           (file-object (list :file "wt-stable-file-refresh" "src/foo.lisp" " M")))
+      (nerimux/model:organization-add-repository organization repository)
+      (nerimux/model:repository-add-worktree repository worktree)
+      (setf (nerimux::client-conn-view conn) :overview)
+      (nerimux::%set-client-selected-tree-object conn file-object)
+      (let* ((new-worktree
+               (nerimux/model:make-worktree
+                :id "wt-stable-file-refresh" :path "/tmp/stable-file-refresh"
+                :branch "stable-file-refresh"))
+             (new-repository
+               (nerimux/model:make-repository
+                :id "repo-stable-file-refresh"
+                :specification "github.com/team/repo-stable-file-refresh"))
+             (new-organization
+               (nerimux/model:make-organization
+                :id "org-stable-file-refresh" :host "github.com" :name "team")))
+        (nerimux/model:organization-add-repository new-organization new-repository)
+        (nerimux/model:repository-add-worktree new-repository new-worktree)
+        (nerimux::%rebind-client-selection conn (list new-organization))
+        (expect (eq new-worktree (nerimux::client-conn-selected-tree-object conn)))
+        (expect (eq new-worktree (nerimux::client-conn-selected-worktree conn))))))
+
+  ;; Wave C: Tab on a :FILE row toggles its own inline-diff expansion the
+  ;; same way Tab on a worktree row toggles pane/file/commit (Wave B) --
+  ;; driven through the same one-byte-per-message framing. REFRESH-
+  ;; WORKTREE-FILE-DIFF-ASYNC is stubbed to a call counter rather than run
+  ;; for real, so the dedup assertion below is about %CLIENT-TOGGLE-
+  ;; SELECTED-FILE-DIFF's own guard, not about process/thread timing.
+  (it "tab-key-on-a-file-row-expands-to-pending-and-dedups-the-fetch-across-collapse-reexpand"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org-diff-tab" :host "github.com" :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo-diff-tab" :organization organization
+                :specification "github.com/team/repo-diff-tab"))
+             (worktree
+               (nerimux/model:make-worktree
+                :id "wt-diff-tab" :repository repository :path "/tmp/diff-tab"
+                :branch "diff-tab" :dirty-p t
+                :changed-files (list (cons " M" "src/foo.lisp"))))
+             (conn (%make-test-conn))
+             (wt-id (nerimux/model:worktree-id worktree))
+             (file-object (list :file wt-id "src/foo.lisp" " M"))
+             (nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
+             (nerimux::*workspace-expanded-node-ids* (make-hash-table :test #'equal))
+             (nerimux::*workspace-file-diffs* (make-hash-table :test #'equal))
+             (nerimux/vcs::*workspace-organizations* (list organization))
+             (call-count 0))
+        (nerimux/model:organization-add-repository organization repository)
+        (nerimux/model:repository-add-worktree repository worktree)
+        (setf (nerimux::client-conn-view conn) :overview)
+        (nerimux::%set-client-selected-tree-object conn file-object)
+        (with-stubbed-fdefinition
+            ((nerimux/vcs:refresh-worktree-file-diff-async
+               (lambda (repository worktree path &key on-complete on-error
+                                                        callback-dispatch)
+                 (declare (ignore repository worktree path on-complete on-error
+                                  callback-dispatch))
+                 (incf call-count)
+                 nil)))
+          ;; First Tab: expands, launches exactly one fetch, sets :pending.
+          (nerimux::%handle-multi-key-message s conn #(9))
+          (expect (gethash (list :file-diff wt-id "src/foo.lisp")
+                           nerimux::*workspace-expanded-node-ids*))
+          (expect (equal (list :pending 0 nil)
+                         (gethash (list wt-id "src/foo.lisp")
+                                  nerimux::*workspace-file-diffs*)))
+          (expect (= 1 call-count))
+          ;; Second Tab: collapses. The cache entry survives the collapse --
+          ;; Wave C never clears the cache on collapse, only on the next
+          ;; whole-catalog refresh settle.
+          (nerimux::%handle-multi-key-message s conn #(9))
+          (expect (null (gethash (list :file-diff wt-id "src/foo.lisp")
+                                 nerimux::*workspace-expanded-node-ids*)))
+          (expect (equal (list :pending 0 nil)
+                         (gethash (list wt-id "src/foo.lisp")
+                                  nerimux::*workspace-file-diffs*)))
+          ;; Third Tab: re-expands while the entry is still :PENDING --
+          ;; dedup holds, no second fetch launches.
+          (nerimux::%handle-multi-key-message s conn #(9))
+          (expect (gethash (list :file-diff wt-id "src/foo.lisp")
+                           nerimux::*workspace-expanded-node-ids*))
+          (expect (= 1 call-count))))))
+
+  ;; With a :READY cache entry already in place, Tab must show the cached
+  ;; diff lines without launching a fetch at all (the dedup guard's other
+  ;; branch), and a second Tab collapses them back out of the flattened
+  ;; tree.
+  (it "tab-key-on-a-file-row-shows-cached-diff-lines-without-fetching-and-collapses-on-second-tab"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org-diff-cached" :host "github.com" :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo-diff-cached" :organization organization
+                :specification "github.com/team/repo-diff-cached"))
+             (worktree
+               (nerimux/model:make-worktree
+                :id "wt-diff-cached" :repository repository :path "/tmp/diff-cached"
+                :branch "diff-cached" :dirty-p t
+                :changed-files (list (cons " M" "src/foo.lisp"))))
+             (conn (%make-test-conn))
+             (wt-id (nerimux/model:worktree-id worktree))
+             (file-object (list :file wt-id "src/foo.lisp" " M"))
+             (nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
+             (nerimux::*workspace-expanded-node-ids* (make-hash-table :test #'equal))
+             (nerimux::*workspace-file-diffs* (make-hash-table :test #'equal))
+             (nerimux/vcs::*workspace-organizations* (list organization)))
+        (nerimux/model:organization-add-repository organization repository)
+        (nerimux/model:repository-add-worktree repository worktree)
+        (setf (nerimux::client-conn-view conn) :overview)
+        ;; The :FILE row itself only appears once its parent WORKTREE row is
+        ;; expanded (%WORKSPACE-WORKTREE-DETAIL-ENTRIES) -- Tab on the file
+        ;; row toggles the file's OWN diff expansion, not the worktree's, so
+        ;; the fixture has to expand the worktree separately to see the file
+        ;; row (and its diff children) in the flattened tree at all.
+        (setf (gethash (list :worktree wt-id) nerimux::*workspace-expanded-node-ids*) t)
+        (setf (gethash (list wt-id "src/foo.lisp") nerimux::*workspace-file-diffs*)
+              (list :ready 1 (list "+only line")))
+        (nerimux::%set-client-selected-tree-object conn file-object)
+        (with-stubbed-fdefinition
+            ((nerimux/vcs:refresh-worktree-file-diff-async
+               (lambda (&rest arguments)
+                 (declare (ignore arguments))
+                 (error "must not be reached: a :ready cache entry must not refetch"))))
+          (flet ((diff-entries ()
+                   (remove-if-not
+                    (lambda (entry) (eq (fourth entry) :diff-line))
+                    (nerimux/renderer::%workspace-flat-tree-entries
+                     (list organization) nerimux::*workspace-collapsed-node-ids*
+                     :expanded-node-ids nerimux::*workspace-expanded-node-ids*
+                     :file-diffs nerimux::*workspace-file-diffs*))))
+            (expect (null (diff-entries)))
+            (nerimux::%handle-multi-key-message s conn #(9))
+            (let ((entries (diff-entries)))
+              (expect (= 1 (length entries)))
+              (expect (string= "+only line" (second (first entries)))))
+            (nerimux::%handle-multi-key-message s conn #(9))
+            (expect (null (diff-entries))))))))
+
+  ;;; ── `?` full-screen help view (FR-005) ───────────────────────────────────
+
+  (it "?-opens-the-help-view-in-normal-mode-and-swallows-other-keys-until-q-closes-it"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn)))
+        (expect (not (nerimux::client-conn-help-view-p conn)))
+        (nerimux::%handle-multi-key-message s conn #(63)) ; ?
+        (expect (nerimux::client-conn-help-view-p conn))
+        ;; An ordinary navigation key must not leak to :normal mode's own
+        ;; dispatch (and so not to any pane) while the help view is up.
+        (nerimux::%handle-multi-key-message s conn #(106)) ; j
+        (expect (nerimux::client-conn-help-view-p conn))
+        (nerimux::%handle-multi-key-message s conn #(113)) ; q
+        (expect (not (nerimux::client-conn-help-view-p conn))))))
+
+  (it "?-also-opens-from-the-overview-view-and-enter-or-esc-close-it"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn)))
+        (setf (nerimux::client-conn-view conn) :overview)
+        (nerimux::%handle-multi-key-message s conn #(63))
+        (expect (nerimux::client-conn-help-view-p conn))
+        (nerimux::%handle-multi-key-message s conn #(13)) ; Enter
+        (expect (not (nerimux::client-conn-help-view-p conn)))
+        (nerimux::%handle-multi-key-message s conn #(63))
+        (nerimux::%handle-multi-key-message s conn #(27)) ; Esc
+        (expect (not (nerimux::client-conn-help-view-p conn))))))
+
+  (it "the rendered client frame shows the help view's sections while it is up"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn :rows 40 :cols 110)))
+        (nerimux::%handle-multi-key-message s conn #(63))
+        (multiple-value-bind (type payload)
+            (nerimux/protocol::decode-frame (nerimux::%render-client-frame s conn))
+          (expect (= nerimux::+msg-frame+ type))
+          (let ((visible (strip-sgr (nerimux/protocol::decode-text payload))))
+            (expect (search "Overview" visible))
+            (expect (search "Prefix C-q" visible))
+            (expect (search "Modes" visible)))))))
+
+  (it "a pending confirm-view outranks the help view, both for keys and for rendering"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn :rows 40 :cols 110))
+             (nerimux::*clients* (list conn)))
+        (setf (nerimux::client-conn-help-view-p conn) t)
+        (nerimux::%open-confirm-view conn "WORKTREE DELETE"
+                                     '(("worktree" . "feature/x"))
+                                     (lambda () nil))
+        ;; Rendering: CONFIRM-VIEW wins (approved decision).
+        (multiple-value-bind (type payload)
+            (nerimux/protocol::decode-frame (nerimux::%render-client-frame s conn))
+          (declare (ignore type))
+          (let ((visible (strip-sgr (nerimux/protocol::decode-text payload))))
+            (expect (search "WORKTREE DELETE" visible))
+            (expect (not (search "Prefix C-q" visible)))))
+        ;; Keys: n answers the confirmation (not the help view's swallow-all).
+        (nerimux::%handle-multi-key-message s conn #(110)) ; n
+        (expect (not (nerimux::client-conn-confirm-view conn)))
+        (expect (nerimux::client-conn-help-view-p conn)))))
+
+  ;; S5 fix: the assertion above only proves `?` did not open the help view
+  ;; -- it says nothing about where the byte actually went. Extended to
+  ;; assert the forwarding side, mirroring %HANDLE-CLIENT-INPUT-KEY-PAYLOAD's
+  ;; own live-pane branch (server-multi-dispatch-command-input.lisp), which
+  ;; calls NERIMUX/PTY:PTY-WRITE directly rather than through any indirection
+  ;; layer -- fd 9999 fakes "live" without a real PTY, the same technique
+  ;; used elsewhere in this suite (e.g. server-dispatch-helper-tests.lisp's
+  ;; tree-navigation-suite), and PTY-WRITE is stubbed to capture its call.
+  (it "?-in-input-mode-does-not-open-the-help-view"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (pane (nerimux::window-active-pane (nerimux::session-active-window s)))
+             (writes nil))
+        (setf (nerimux/model:pane-fd pane) 9999)
+        (setf (nerimux::client-conn-mode conn) :input
+              (nerimux::client-conn-focus conn) pane)
+        (with-stubbed-fdefinition
+            ((nerimux/pty:pty-write
+               (lambda (fd payload) (push (list fd payload) writes))))
+          (nerimux::%handle-multi-key-message s conn #(63))
+          (expect (not (nerimux::client-conn-help-view-p conn)))
+          ;; EQUALP, not EQUAL: a general (non-string) vector compares by EQ
+          ;; under EQUAL, and PAYLOAD here is a fresh #(63) distinct from the
+          ;; literal captured above -- EQUALP compares vector contents.
+          (expect (equalp (list (list 9999 #(63))) writes))))))
+
+  ;; BUG-2 (R6.2/design §7.3): a FAILED object shows stale; other objects
+  ;; don't inherit it. Drives the REAL refresh path -- %REFRESH-CLIENT-
+  ;; PICKER -> NERIMUX/VCS:REFRESH-WORKSPACE-ORGANIZATIONS-ASYNC ->
+  ;; SCAN-REPOSITORIES-ASYNC -> REFRESH-WORKSPACE-STATUS-ASYNC ->
+  ;; REFRESH-REPOSITORIES-ASYNC -- stubbed only at cl-vcs-kit's own outer
+  ;; seams (GHQ-LIST-REPOSITORIES, MAKE-VCS-REPOSITORY, VCS-LIST-WORKTREES,
+  ;; VCS-STATUS-STRUCTURED), with two ghq entries under one organization:
+  ;; one repository whose `git status` fails, one whose succeeds. Before
+  ;; this fix, the failing repository's blanket :SETTLE :STALE-P T marked
+  ;; every node in the catalog stale, including the healthy repository's
+  ;; own row -- despite "+N DIRTY" (or here, a clean status) already having
+  ;; resolved successfully for it.
+  (it "a single repository's status failure marks only that repository stale, not the whole catalog"
+    (let* ((healthy-path (%vcs-operations-existing-path))
+           (failing-path
+             (namestring
+              (merge-pathnames "nerimux-bug2-failing-status/"
+                               (host-kit:temporary-directory))))
+           (healthy-entry
+             (vcs-kit:make-ghq-repository-entry
+              :specification "bug2-host/team/healthy" :path healthy-path))
+           (failing-entry
+             (vcs-kit:make-ghq-repository-entry
+              :specification "bug2-host/team/failing" :path failing-path))
+           (available (fdefinition 'nerimux/vcs:vcs-package-available-p)))
+      (ensure-directories-exist failing-path)
+      (let ((nerimux::*workspace-refreshing-ids* (make-hash-table :test #'equal))
+            (nerimux::*workspace-stale-ids* (make-hash-table :test #'equal))
+            (nerimux::*clients* nil)
+            (nerimux::*dirty* nil)
+            (nerimux/vcs::*workspace-organizations* nil)
+            ;; %SET-WORKSPACE-CATALOG-REFRESH-STATE's :SETTLE branch
+            ;; unconditionally CLRHASHes *WORKSPACE-FILE-DIFFS* and resets
+            ;; *WORKSPACE-FILE-DIFFS-ORDER* (F4's wholesale-invalidate-on-
+            ;; settle behavior) -- this test's refresh reaches that branch,
+            ;; so both are isolated here too rather than clearing whatever
+            ;; another test left cached.
+            (nerimux::*workspace-file-diffs* (make-hash-table :test #'equal))
+            (nerimux::*workspace-file-diffs-order* nil)
+            (conn (nerimux::%make-client-conn)))
+        (unwind-protect
+             (progn
+               ;; NOT let-bound: *MAIN-THREAD-CALLBACKS* is pushed onto by
+               ;; the scan/status worker threads this test spawns for real
+               ;; (unlike every OTHER variable in this LET, which only the
+               ;; drained callback -- running back on THIS thread -- ever
+               ;; touches). A LET rebinding is only visible on the thread
+               ;; that established it; SBCL does not propagate a parent
+               ;; thread's dynamic bindings into a freshly spawned one, so a
+               ;; worker thread's push would land on the untouched GLOBAL
+               ;; value while this thread's %DRAIN-MAIN-THREAD-CALLBACKS
+               ;; kept draining its own empty LET-local one -- silently
+               ;; never seeing anything the workers queued.
+               (setf nerimux::*main-thread-callbacks* nil)
+               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                     (lambda () t))
+               (with-stubbed-fdefinition
+                   ((vcs-kit:ghq-list-repositories
+                      (lambda (&key query)
+                        (declare (ignore query))
+                        (list healthy-entry failing-entry)))
+                    (vcs-kit:make-vcs-repository
+                      (lambda (directory &rest arguments)
+                        (declare (ignore arguments))
+                        directory))
+                    (vcs-kit:vcs-list-worktrees
+                      (lambda (directory)
+                        (list (%vcs-operations-fake-worktree
+                               directory :branch "main" :head "head"))))
+                    (vcs-kit:vcs-status-structured
+                      (lambda (directory &rest arguments)
+                        (declare (ignore arguments))
+                        (if (string= directory failing-path)
+                            (error "synthetic status failure for BUG-2")
+                            (%vcs-operations-status-snapshot
+                             :branch-head "head" :ahead 0 :behind 0)))))
+                 (nerimux::%refresh-client-picker conn)
+                 ;; %REFRESH-CLIENT-PICKER (unlike %ADD-CLIENT) never touches
+                 ;; *WORKSPACE-CATALOG-LOADED-P* -- that flag is exclusive to
+                 ;; the initial-attach scan. The refresh's own completion
+                 ;; signal here is *WORKSPACE-REFRESHING-IDS* draining back
+                 ;; to empty: :MARK populates it once the scan lands
+                 ;; (on-catalog), and :SETTLE (on-complete) clears it for
+                 ;; good. Waiting on catalog non-emptiness first rules out
+                 ;; the vacuous t=0 state, where the table is ALSO empty
+                 ;; because nothing has run yet.
+                 (let ((deadline (+ (get-internal-real-time)
+                                    (* 2 internal-time-units-per-second))))
+                   (loop until (and (plusp (length (nerimux/vcs:workspace-organizations)))
+                                    (zerop (hash-table-count
+                                            nerimux::*workspace-refreshing-ids*)))
+                         while (< (get-internal-real-time) deadline)
+                         do (nerimux::%drain-main-thread-callbacks)
+                            (sleep 0.01))
+                   (nerimux::%drain-main-thread-callbacks))
+                 (expect (plusp (length (nerimux/vcs:workspace-organizations))))
+                 (expect (zerop (hash-table-count nerimux::*workspace-refreshing-ids*)))
+                 (let* ((organizations (nerimux/vcs:workspace-organizations))
+                        (repositories
+                          (and organizations
+                               (nerimux/model:organization-repositories
+                                (first organizations))))
+                        (healthy-repository
+                          (find healthy-path repositories
+                                :key #'nerimux/model:repository-local-path
+                                :test #'string=))
+                        (failing-repository
+                          (find failing-path repositories
+                                :key #'nerimux/model:repository-local-path
+                                :test #'string=)))
+                   (expect healthy-repository)
+                   (expect failing-repository)
+                   ;; The failing repository, and each of its worktrees, is
+                   ;; stale.
+                   (expect (gethash (list :repository
+                                          (nerimux/model:repository-id
+                                           failing-repository))
+                                    nerimux::*workspace-stale-ids*))
+                   (dolist (worktree (nerimux/model:repository-worktrees
+                                      failing-repository))
+                     (expect (gethash (list :worktree
+                                            (nerimux/model:worktree-id worktree))
+                                      nerimux::*workspace-stale-ids*)))
+                   ;; The healthy repository, and each of its worktrees, is
+                   ;; NOT stale -- the core BUG-2 regression check: before
+                   ;; the fix, the whole-catalog :SETTLE :STALE-P T marked
+                   ;; this repository stale too, despite its own status
+                   ;; fetch having already succeeded.
+                   (expect (not (gethash (list :repository
+                                               (nerimux/model:repository-id
+                                                healthy-repository))
+                                         nerimux::*workspace-stale-ids*)))
+                   (dolist (worktree (nerimux/model:repository-worktrees
+                                      healthy-repository))
+                     (expect (not (gethash (list :worktree
+                                                 (nerimux/model:worktree-id worktree))
+                                           nerimux::*workspace-stale-ids*)))))))
+          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available)
+          (setf nerimux::*main-thread-callbacks* nil)
+          (ignore-errors (sb-posix:rmdir failing-path))))))
 )

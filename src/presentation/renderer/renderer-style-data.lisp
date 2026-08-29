@@ -16,9 +16,9 @@
 ;;;; All files share the nerimux/renderer package (no defpackage here).
 
 (defvar +sgr-copy-mode-match+
-    "48;5;179;38;5;235"
-  "SGR for a copy-mode search match: amber background, dark text.")
+    "48;2;241;250;140;38;2;40;42;54"
+  "SGR for a copy-mode search match: Dracula yellow background, dark text.")
 (defvar +sgr-copy-mode-current-match+
-    "48;5;117;38;5;235"
-  "SGR for the copy-mode search match under the cursor: accent background,
-   dark text.")
+    "48;2;139;233;253;38;2;40;42;54"
+  "SGR for the copy-mode search match under the cursor: Dracula cyan
+   background, dark text.")

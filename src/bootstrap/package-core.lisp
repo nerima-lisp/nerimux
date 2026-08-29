@@ -88,7 +88,11 @@
    ;; Explicit fetch (R7.1). AHEAD/BEHIND read the local remote-tracking ref, so
    ;; they only move when someone fetches; these are how that is asked for.
    #:fetch-repository-async
-   #:fetch-organization-async))
+   #:fetch-organization-async
+   ;; Inline tree-row expansion (Wave B): on-demand recent-commit history.
+   #:refresh-worktree-commits-async
+   ;; Inline tree-row expansion (Wave C): on-demand per-file diff.
+   #:refresh-worktree-file-diff-async))
 
 (defpackage #:nerimux/picker
   (:use #:cl)

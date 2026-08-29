@@ -494,6 +494,17 @@ R6.3 tree を org → repo → worktree → **window → pane** の 5 階層に�
   フォーカスした pane を覚える）。無ければ新しい pane を作る。
 - window / pane 行の Enter はそこへフォーカスして detail へ移る。
 
+> **2026-08-29 追記**: 上記の5階層（org → repo → worktree → window → pane、
+> Enterでの開閉）という形は、section-based overview redesignにより
+> Attention / Active / Repositoriesの3固定sectionモデルへ置き換わった
+> （実装済み・main反映済み）。repository行はcollapsedが既定で`l`/`Tab`が
+> 展開し、worktree行の`Tab`はpane/changed files/recent commitsをinline展開
+> する。R6.3が要求した「5階層」というtree構造そのものは、もはや現在の
+> 実装が従う契約ではない。詳細は`docs/notes/workspace-ui-ux-design.md`の
+> 「現状との関係」への同日追記、および
+> `src/presentation/renderer/renderer-workspace-tree.lisp`のヘッダコメント
+> を参照。
+
 R6.4 破壊操作（worktree の delete / prune、server の終了）と**操作の失敗**は
 全画面の確認ビューを経由する。**描画は cl-tui-kit の widget で行う**（popup / menu の
 枠描画は R1.10 で削除するため）。worktree 削除では repository、worktree path、branch、

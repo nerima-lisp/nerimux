@@ -30,6 +30,12 @@
                (client-conn-confirm-view conn)
                (client-conn-rows conn)
                (client-conn-cols conn)))
+             ;; A pending y/n confirmation outranks a passive help screen
+             ;; (approved decision): CONFIRM-VIEW is checked first above.
+             ((client-conn-help-view-p conn)
+              (render-help-view-to-tui-string
+               (client-conn-rows conn)
+               (client-conn-cols conn)))
              ((and (eq (client-conn-view conn) :overview)
                    (not (eq (client-conn-mode conn) :picker)))
               (render-workspace-overview-to-tui-string
@@ -44,9 +50,11 @@
                :mode (client-conn-mode conn)
                :prefix-code (client-conn-workspace-prefix-code conn)
                :collapsed-node-ids *workspace-collapsed-node-ids*
+               :expanded-node-ids *workspace-expanded-node-ids*
                :tree-filter (client-conn-tree-filter conn)
                :refreshing-ids *workspace-refreshing-ids*
                :stale-ids *workspace-stale-ids*
+               :file-diffs *workspace-file-diffs*
                :scan-progress *workspace-scan-progress*
                :catalog-empty-hint (nerimux/vcs:ghq-root-directory)
                :scanning-p (and *workspace-catalog-refresh-started-p*

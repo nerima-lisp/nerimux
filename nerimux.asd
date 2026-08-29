@@ -177,7 +177,8 @@
        ((:file "vcs")
      (:file "vcs-async-operations")
      (:file "vcs-worktree-operations")
-     (:file "vcs-fetch")))
+     (:file "vcs-fetch")
+     (:file "vcs-inspect")))
      (:module "application/picker"
       :serial t
       :components
@@ -243,7 +244,8 @@
        (:file "renderer-tui-kit-frame-grid") ; ANSI frame decoding into a fixed grid
        (:file "renderer-tui-kit-widgets") ; workspace tree and picker widgets
        (:file "renderer-tui-kit")       ; headless surface conversion and entry points
-       (:file "renderer-tui-kit-confirm-view"))) ; confirmation data and rendering
+       (:file "renderer-tui-kit-confirm-view") ; confirmation data and rendering
+       (:file "renderer-tui-kit-help"))) ; `?` full-screen key-reference view (FR-005)
      (:module "infrastructure/input"
       :serial t
       :components
@@ -322,7 +324,8 @@
                              (:file "vcs-fetch-dedup-tests")
                              (:file "vcs-worktree-path-tests")
                              (:file "vcs-operations-tests")
-                             (:file "vcs-async-operations-tests"))))
+                             (:file "vcs-async-operations-tests")
+                             (:file "vcs-inspect-tests"))))
   :perform (test-op (op c)
              (declare (ignore op c))
              (funcall (find-symbol "RUN-TESTS" (find-package "NERIMUX/TEST")))))

@@ -1,5 +1,21 @@
 (in-package #:nerimux/renderer)
 
+(defun %box-widget-inner-rectangle (rectangle)
+  "The content rectangle CL-TUI-KIT/WIDGETS:BOX-WIDGET gives its child for
+   RECTANGLE, with the default single-cell border and single-cell padding
+   (BOX-WIDGET's WIDGET-RENDER, cl-tui-kit's src/widgets.lisp): inset by 1
+   for the border, then by another 1 for the padding slot's own default --
+   2 columns/rows total on every side. The confirm view and the help view
+   both draw their content directly onto the surface instead of through a
+   BOX-WIDGET child (a per-line TEXT-WIDGET can only take one style for its
+   whole line, and both views need more than one colour per line), so both
+   replicate the inset BOX-WIDGET would have given a child by calling the
+   library's own geometry functions here, rather than each hand-computing it
+   and risking the two disagreeing."
+  (cl-tui-kit/core:rectangle-inset
+   (cl-tui-kit/core:rectangle-inset rectangle (cl-tui-kit/core:make-padding :all 1))
+   (cl-tui-kit/core:make-padding :all 1)))
+
 (defun %surface-from-ansi-frame (frame rows cols &key (viewport 0))
   "Parse FRAME into a headless CL-TUI-KIT/CORE surface, preserving SGR
    styling (R-style-preservation).
@@ -150,20 +166,22 @@
                                                (mode :normal)
                                                (prefix-code #x11)
                                                collapsed-node-ids
+                                               expanded-node-ids
                                                refreshing-ids
                                                stale-ids
+                                               file-diffs
                                                (scanning-p nil)
                                                (scan-progress nil)
                                                (catalog-empty-hint nil)
                                                (command-buffer "")
                                                (tree-filter nil))
   "Render the workspace overview through cl-tui-kit's headless backend.
-   COLLAPSED-NODE-IDS / REFRESHING-IDS / STALE-IDS / SCANNING-P /
-   SCAN-PROGRESS / CATALOG-EMPTY-HINT / COMMAND-BUFFER / TREE-FILTER are
-   forwarded to RENDER-WORKSPACE-OVERVIEW-TO-STRING and, for the tree, to
-   %RENDER-WORKSPACE-TREE-WIDGET -- see that function and
-   %WORKSPACE-FLAT-TREE-ENTRIES (renderer-workspace-tree.lisp) for what each one
-   means.
+   COLLAPSED-NODE-IDS / EXPANDED-NODE-IDS / REFRESHING-IDS / STALE-IDS /
+   FILE-DIFFS / SCANNING-P / SCAN-PROGRESS / CATALOG-EMPTY-HINT /
+   COMMAND-BUFFER / TREE-FILTER are forwarded to RENDER-WORKSPACE-OVERVIEW-
+   TO-STRING and, for the tree, to %RENDER-WORKSPACE-TREE-WIDGET -- see that
+   function and %WORKSPACE-FLAT-TREE-ENTRIES (renderer-workspace-tree.lisp)
+   for what each one means.
    The tree is flattened/filtered exactly ONCE per frame, right here, and
    the result threaded through to both RENDER-WORKSPACE-OVERVIEW-TO-STRING
    (:PRECOMPUTED-TREE-ENTRIES) and %RENDER-WORKSPACE-TREE-WIDGET
@@ -179,7 +197,9 @@
            organizations collapsed-node-ids
            :refreshing-ids refreshing-ids
            :stale-ids stale-ids
-           :filter tree-filter)))
+           :filter tree-filter
+           :expanded-node-ids expanded-node-ids
+           :file-diffs file-diffs)))
     (multiple-value-bind (title-repository title-worktree)
         (%workspace-title-selection focus-pane selected-tree-object
                                     selected-worktree)
@@ -212,8 +232,10 @@
            :prefix-code prefix-code
            :render-tree-p nil
            :collapsed-node-ids collapsed-node-ids
+           :expanded-node-ids expanded-node-ids
            :refreshing-ids refreshing-ids
            :stale-ids stale-ids
+           :file-diffs file-diffs
            :scanning-p scanning-p
            :scan-progress scan-progress
            :catalog-empty-hint catalog-empty-hint
@@ -238,8 +260,10 @@
                  surface organizations terminal-rows terminal-cols
                  selected-tree-object tree-scroll
                  :collapsed-node-ids collapsed-node-ids
+                 :expanded-node-ids expanded-node-ids
                  :refreshing-ids refreshing-ids
                  :stale-ids stale-ids
                  :filter tree-filter
+                 :file-diffs file-diffs
                  :precomputed-entries all-tree-entries)))))
          (%client-title-osc title-repository title-worktree))))))

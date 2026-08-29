@@ -163,6 +163,7 @@
    #:worktree-panes #:worktree-dirty-p #:worktree-conflict-p
    #:worktree-ahead #:worktree-behind #:worktree-bare-p
    #:worktree-locked-p #:worktree-prunable-p #:worktree-missing-p
+   #:worktree-changed-files #:worktree-recent-commits #:worktree-commits-state
    #:worktree-key #:worktree-attention-p #:worktree-attention-reasons
    #:organization-attention-worktrees
    #:worktree-add-pane))

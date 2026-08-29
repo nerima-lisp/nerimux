@@ -62,9 +62,10 @@
                (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
                      (lambda () t)
                      (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async)
-                     (lambda (&key query on-catalog on-complete on-error on-progress
-                                callback-dispatch)
-                       (declare (ignore query on-error on-progress callback-dispatch))
+                     (lambda (&key query on-catalog on-complete on-error
+                                on-repository-error on-progress callback-dispatch)
+                       (declare (ignore query on-error on-repository-error
+                                        on-progress callback-dispatch))
                        (setf captured-on-complete on-complete)
                        (when on-catalog (funcall on-catalog organizations))))
                (nerimux::%refresh-client-picker conn)
@@ -116,9 +117,9 @@
                             (lambda () t)
                             (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async)
                             (lambda (&key query on-catalog on-complete on-error
-                                       on-progress callback-dispatch)
+                                       on-repository-error on-progress callback-dispatch)
                               (declare (ignore query on-catalog on-complete on-error
-                                               callback-dispatch))
+                                               on-repository-error callback-dispatch))
                               (setf captured-on-progress on-progress)))
                       (when server-sock
                         (nerimux::%add-client server-sock)))

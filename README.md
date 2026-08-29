@@ -5,8 +5,8 @@
 [![Documentation](https://img.shields.io/badge/docs-MkDocs%20Material-0a7a5a)](https://nerima-lisp.github.io/nerimux/)
 
 A workspace-oriented terminal multiplexer written entirely in Common Lisp.
-The primary UI navigates an organization → repository → worktree → pane
-workspace, with a thin client attached to a headless runtime. The entry
+The primary UI is a three-section overview — Attention, Active, and
+Repositories — with a thin client attached to a headless runtime. The entry
 surface is workspace-only — `attach`, `server`, and `kill` are the only
 commands. The core regression suite runs hermetically through Nix; live PTY
 integration is an explicit host-side check.

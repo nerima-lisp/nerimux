@@ -10,6 +10,24 @@
     ((pathnamep value) (namestring value))
     (t (princ-to-string value))))
 
+(defun %strip-control-characters (text)
+  "TEXT with every C0 control character (code < 32) and DEL (127) removed
+-- Tab (9) becomes a single space, everything else in that range is
+dropped outright (F5, CWE-150-adjacent). Applies to any text this module
+retains from an untrusted VCS invocation before it reaches a renderer:
+safety there currently rests only on cl-tui-kit's incidental zero-width-
+glyph skip, which does not cover every render path (e.g. the exported
+plain-ANSI path). Non-string TEXT passes through unchanged."
+  (if (stringp text)
+      (with-output-to-string (out)
+        (loop for character across text
+              for code = (char-code character)
+              do (cond
+                   ((= code 9) (write-char #\Space out))
+                   ((or (< code 32) (= code 127)))
+                   (t (write-char character out)))))
+      text))
+
 (defun %specification-parts (specification)
   (let ((parts nil)
         (start 0)
@@ -94,6 +112,26 @@
                      append (copy-list
                              (nerimux/model:repository-worktrees repository)))))
 
+(defun %worktree-by-id (worktrees id)
+  (find id worktrees :key #'nerimux/model:worktree-id :test #'string=))
+
+(defun %settle-target-worktree (worktree)
+  "Resolve WORKTREE to the struct an async settlement should actually write
+onto (F2): WORKTREE itself when it is still reachable from the live
+catalog, else the struct in the live catalog now sharing its id (a
+LIST-REPOSITORY-WORKTREES rebuild always allocates a fresh struct, even for
+an otherwise-unchanged worktree), else WORKTREE itself again when its id is
+not present in the catalog at all -- covering a fetch launched before any
+catalog was ever published as well as a worktree since deleted, where
+WORKTREE is unreachable from the render tree either way and writing onto it
+is inert rather than wrong. See REFRESH-WORKTREE-COMMITS-ASYNC's caller in
+vcs-inspect.lisp for the race this closes."
+  (let ((live (%catalog-worktrees (workspace-organizations))))
+    (if (member worktree live :test #'eq)
+        worktree
+        (or (%worktree-by-id live (nerimux/model:worktree-id worktree))
+            worktree))))
+
 (defun %worktree-association-match-p (id path worktree)
   (or (and (stringp id)
            (plusp (length id))
@@ -120,6 +158,39 @@
           (if worktree
               (nerimux/model:worktree-add-pane worktree pane)
               (setf (nerimux/model:pane-worktree pane) nil))))))
+  current)
+
+(defun %worktree-by-path (worktrees path)
+  (find path worktrees :key #'nerimux/model:worktree-path :test #'string=))
+
+(defun %preserve-worktree-commit-state (previous current)
+  "Carry ID, COMMITS-STATE and RECENT-COMMITS from PREVIOUS's worktrees onto
+CURRENT's, matched by path (F1). A full catalog rescan (SCAN-REPOSITORIES)
+builds an entirely fresh ORGANIZATION/REPOSITORY/WORKTREE struct per ghq
+entry, so %APPLY-REPOSITORY-WORKTREES's own old-worktree lookup -- which
+only ever sees worktrees already attached to the SAME repository struct --
+never finds a match there, and every full rescan silently dropped any
+already-fetched commit history, and let a fresh WORKTREE-KEY-derived id
+(which embeds HEAD, see worktree.lisp) replace the one a client, or a
+diff/expansion cache keyed on it, may already be holding (F1b). This is
+the same shape as %PRESERVE-PANE-ASSOCIATIONS above, run over the same
+PREVIOUS/CURRENT pair, but keyed on path alone since a worktree carries no
+stable identity of its own before its first publish.
+
+CHANGED-FILES is deliberately NOT carried here: it comes fresh from the
+status pass that follows every publish, and carrying a stale value would
+show a client files the working tree no longer actually has changed."
+  (let ((previous-worktrees (%catalog-worktrees previous)))
+    (dolist (worktree (%catalog-worktrees current))
+      (let ((match (%worktree-by-path previous-worktrees
+                                      (nerimux/model:worktree-path worktree))))
+        (when match
+          (setf (nerimux/model:worktree-id worktree)
+                (nerimux/model:worktree-id match)
+                (nerimux/model:worktree-commits-state worktree)
+                (nerimux/model:worktree-commits-state match)
+                (nerimux/model:worktree-recent-commits worktree)
+                (nerimux/model:worktree-recent-commits match))))))
   current)
 
 (defun %worktree-recency (worktree)
@@ -199,6 +270,12 @@ client's cursor while it is being looked at."
         (current (copy-list organizations)))
     (setf *workspace-organizations* current)
     (%preserve-pane-associations previous current)
+    ;; F1: carry id/commits-state/recent-commits across a full catalog
+    ;; rescan, matched by path -- see %PRESERVE-WORKTREE-COMMIT-STATE.
+    ;; Order relative to %PRESERVE-PANE-ASSOCIATIONS above does not matter:
+    ;; that function matches a remembered pane by id OR path, and path
+    ;; alone already identifies the right worktree before this runs.
+    (%preserve-worktree-commit-state previous current)
     ;; Activity order (item 6) is applied here, after pane associations are
     ;; re-established above -- not before -- because a worktree's recency
     ;; comes from its panes' last-output/last-focused times, and those panes
@@ -259,7 +336,8 @@ client's cursor while it is being looked at."
         (apply callback arguments))))
 
 (defun refresh-workspace-organizations-async
-    (&key query on-catalog on-complete on-error on-progress callback-dispatch)
+    (&key query on-catalog on-complete on-error on-repository-error on-progress
+       callback-dispatch)
   "Refresh and store the workspace catalog on a worker thread.
    ON-CATALOG, when given, is called with the organizations as soon as the
    scan itself completes — before the per-repository status refresh, which
@@ -269,7 +347,20 @@ client's cursor while it is being looked at."
    \"scanning...\" placeholder until every status has arrived. ON-PROGRESS
    (FR-004b), when given, is called with the running repository count as the
    scan discovers each ghq entry -- before ON-CATALOG, and well before
-   ON-COMPLETE's status pass."
+   ON-COMPLETE's status pass.
+
+ON-ERROR and ON-REPOSITORY-ERROR are two distinct failure channels, not one
+(R6.2/design §7.3, FAILED-object-only staleness): ON-ERROR fires only for a
+terminal scan failure (SCAN-REPOSITORIES-ASYNC's own ON-ERROR below, e.g.
+`ghq list` itself failing) -- there is no catalog and no further callback
+coming, so the whole refresh has failed. ON-REPOSITORY-ERROR fires once per
+repository whose own `git status` failed during REFRESH-WORKSPACE-STATUS-
+ASYNC below, called with (REPOSITORY CONDITION) exactly as REFRESH-
+REPOSITORIES-ASYNC's own ON-ERROR is -- ON-COMPLETE still fires afterward
+for the batch as a whole, since one repository's failure does not stop the
+others from settling. Conflating the two used to mean a single repository's
+status failure looked identical to a scan-wide failure to every caller,
+which is what let a per-repository failure mark the ENTIRE catalog stale."
   (scan-repositories-async
    :query query
    :callback-dispatch callback-dispatch
@@ -283,9 +374,9 @@ client's cursor while it is being looked at."
                    :callback-dispatch callback-dispatch
                    :on-complete on-complete
                    :on-error (lambda (repository condition)
-                               (declare (ignore repository))
-                               (when on-error
-                                 (funcall on-error condition)))))
+                               (when on-repository-error
+                                 (funcall on-repository-error repository
+                                          condition)))))
    :on-error on-error))
 
 (defun scan-repositories (&key query on-complete on-error on-progress)
@@ -380,6 +471,22 @@ client's cursor while it is being looked at."
                 :behind (if old-worktree
                             (nerimux/model:worktree-behind old-worktree)
                             0)
+                ;; Inline tree-row expansion data (Wave B) rides along with
+                ;; the rest of OLD-WORKTREE's carried-over status, the same
+                ;; way DIRTY-P/CONFLICT-P/AHEAD/BEHIND already do above: a
+                ;; worktree-list rebuild must not blank an already-fetched
+                ;; commit history or file list only to have %APPLY-WORKTREE-
+                ;; STATUS or REFRESH-WORKTREE-COMMITS-ASYNC repopulate it
+                ;; moments later.
+                :changed-files (and old-worktree
+                                    (nerimux/model:worktree-changed-files
+                                     old-worktree))
+                :recent-commits (and old-worktree
+                                     (nerimux/model:worktree-recent-commits
+                                      old-worktree))
+                :commits-state (and old-worktree
+                                    (nerimux/model:worktree-commits-state
+                                     old-worktree))
                 :bare-p (vcs-kit:vcs-worktree-bare-p raw)
                 :locked-p (vcs-kit:vcs-worktree-locked-p raw)
                 :prunable-p (vcs-kit:vcs-worktree-prunable-p raw)
@@ -396,6 +503,45 @@ client's cursor while it is being looked at."
   (multiple-value-call #'%apply-repository-worktrees
     repository
     (%read-repository-worktrees repository)))
+
+(defun %changed-file-code (entry)
+  "The 2-char git-status---short-style code for ENTRY (D1). :ORDINARY,
+:RENAME-OR-COPY and :UNMERGED entries already carry real index/worktree
+status characters from the porcelain XY field; :UNTRACKED and :IGNORED
+entries do not (the git-layer parser leaves them at the VCS-STATUS-ENTRY
+default of two spaces -- see vcs-kit's parse-status.lisp), so those two
+kinds are mapped explicitly to the \"??\"/\"!!\" codes `git status --short`
+itself would show."
+  (case (vcs-kit:vcs-status-entry-kind entry)
+    (:untracked "??")
+    (:ignored "!!")
+    (t (format nil "~A~A"
+               (vcs-kit:vcs-status-entry-index-status entry)
+               (vcs-kit:vcs-status-entry-worktree-status entry)))))
+
+(defun %changed-file-path (entry)
+  "ENTRY's path part for the (CODE . PATH) cons (F5/F6): control characters
+stripped (%STRIP-CONTROL-CHARACTERS -- a path from git status is as
+untrusted as a diff line or commit subject), and for a :RENAME-OR-COPY
+entry, the source and destination joined as \"old -> new\" (a plain ASCII
+arrow, never a Unicode glyph) so the rename's source path is not silently
+dropped the way a bare VCS-STATUS-ENTRY-PATH would drop it. Every other
+kind uses PATH alone, as before."
+  (let ((path (%strip-control-characters (vcs-kit:vcs-status-entry-path entry)))
+        (original (and (eq (vcs-kit:vcs-status-entry-kind entry) :rename-or-copy)
+                       (vcs-kit:vcs-status-entry-original-path entry))))
+    (if original
+        (format nil "~A -> ~A" (%strip-control-characters original) path)
+        path)))
+
+(defun %worktree-status-changed-files (entries)
+  "ENTRIES (a VCS-STATUS-SNAPSHOT's VCS-STATUS-ENTRY list) as plain
+(CODE . PATH) conses -- the infrastructure-to-domain boundary D1 requires:
+presentation and the domain model never see a cl-vcs-kit struct."
+  (mapcar (lambda (entry)
+            (cons (%changed-file-code entry)
+                  (%changed-file-path entry)))
+          entries))
 
 (defun %read-worktree-status-at (path fallback-head repository-path)
   (let* ((directory (if (plusp (length path)) path repository-path))
@@ -419,7 +565,8 @@ client's cursor while it is being looked at."
            :dirty-p (not (null entries))
            :conflict-p (not (null (some #'%status-entry-conflict-p entries)))
            :ahead (or (vcs-kit:vcs-status-snapshot-ahead snapshot) 0)
-           :behind (or (vcs-kit:vcs-status-snapshot-behind snapshot) 0))))))
+           :behind (or (vcs-kit:vcs-status-snapshot-behind snapshot) 0)
+           :changed-files (%worktree-status-changed-files entries))))))
 
 (defun %read-worktree-status (worktree)
   (let ((repository (nerimux/model:worktree-repository worktree)))
@@ -448,7 +595,9 @@ client's cursor while it is being looked at."
           (nerimux/model:worktree-ahead worktree)
           (%worktree-status-update-ahead update)
           (nerimux/model:worktree-behind worktree)
-          (%worktree-status-update-behind update))
+          (%worktree-status-update-behind update)
+          (nerimux/model:worktree-changed-files worktree)
+          (%worktree-status-update-changed-files update))
     worktree))
 
 (defun %read-repository-status (repository)

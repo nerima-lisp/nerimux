@@ -198,8 +198,11 @@ The renderer has two independent first passes, and the split is deliberate:
 - **The workspace view** — `renderer-workspace-status-title.lisp` owns status
   labels and terminal titles shared by both views, while
   `renderer-workspace-command-line.lisp` owns workspace command completion.
-  `renderer-workspace-tree.lisp` projects the organization → repository →
-  worktree → window → pane rows, including attention and refresh state.
+  `renderer-workspace-tree.lisp` projects the overview's three fixed
+  sections — Attention, Active, Repositories — flattening each worktree's
+  optional inline expansion (panes, changed files, recent commits, and a
+  changed file's own diff) into the same row list, including attention and
+  refresh state.
   `render-workspace-overview-to-string` (`renderer-workspace.lisp`) draws those
   presentation values and that projection into the ANSI frame.
 

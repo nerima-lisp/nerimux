@@ -4,7 +4,7 @@
             (:constructor %make-worktree
                 (&key id repository path branch head status panes dirty-p
                       conflict-p ahead behind bare-p locked-p prunable-p
-                      missing-p)))
+                      missing-p changed-files recent-commits commits-state)))
   (id "" :type string)
   (repository nil)
   (path "" :type string)
@@ -19,7 +19,19 @@
   (bare-p nil :type boolean)
   (locked-p nil :type boolean)
   (prunable-p nil :type boolean)
-  (missing-p nil :type boolean))
+  (missing-p nil :type boolean)
+  ;; Inline tree-row expansion (Tab on a worktree row, Wave B).
+  ;; CHANGED-FILES: plain (CODE . PATH) conses, CODE a 2-char git-status-
+  ;; --short-style string -- never a cl-vcs-kit struct; populated by
+  ;; %APPLY-WORKTREE-STATUS alongside DIRTY-P/CONFLICT-P (vcs.lisp).
+  ;; RECENT-COMMITS: plain (HASH . SUBJECT) conses, HASH already shortened to
+  ;; 7 characters; COMMITS-STATE is NIL (never fetched) | :PENDING | :READY |
+  ;; :FAILED, both written only by REFRESH-WORKTREE-COMMITS-ASYNC
+  ;; (vcs-inspect.lisp), fetched on demand rather than with every status
+  ;; refresh.
+  (changed-files nil :type list)
+  (recent-commits nil :type list)
+  (commits-state nil))
 
 (defun worktree-key (path branch head)
   (format nil "~A|~A|~A"
@@ -29,7 +41,8 @@
 
 (defun make-worktree (&key id repository path branch head status panes dirty-p
                          conflict-p (ahead 0) (behind 0) bare-p locked-p
-                         prunable-p missing-p)
+                         prunable-p missing-p changed-files recent-commits
+                         commits-state)
   (let ((path-string (%model-string path)))
     (%make-worktree
      :id (or id (worktree-key path-string branch head))
@@ -46,7 +59,10 @@
      :bare-p (not (null bare-p))
      :locked-p (not (null locked-p))
      :prunable-p (not (null prunable-p))
-     :missing-p (not (null missing-p)))))
+     :missing-p (not (null missing-p))
+     :changed-files (copy-list changed-files)
+     :recent-commits (copy-list recent-commits)
+     :commits-state commits-state)))
 
 (defun worktree-attention-reasons (worktree)
   (when worktree

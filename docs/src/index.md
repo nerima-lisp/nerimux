@@ -2,8 +2,9 @@
 
 A workspace-oriented terminal multiplexer written entirely in Common Lisp.
 
-The primary UI navigates an organization → repository → worktree → pane
-workspace. A thin client attaches to a headless runtime over a Unix socket;
+The primary UI is a three-section overview — Attention, Active, and
+Repositories — over the organization/repository/worktree catalog. A thin
+client attaches to a headless runtime over a Unix socket;
 all key handling, layout, and rendering happen server-side, so the client
 itself carries no session state. There is no standalone in-process mode —
 `nerimux attach` and `nerimux server` are the only ways in. Every verified
@@ -15,8 +16,11 @@ default key bindings.
 
 ## Workspace UI
 
-- **Overview** — navigate the organization → repository → worktree tree and
-  inspect pane state in the selected worktree.
+- **Overview** — three sections, Attention (worktrees needing attention or
+  holding an exited pane), Active (every other worktree with an open pane),
+  and Repositories (collapsed by default; `l`/`Tab` expands one). `Tab` on a
+  worktree row inline-expands its panes, changed files, and recent commits;
+  `?` opens a full-screen help view listing every binding.
 - **Detail view** — focus a worktree. Unread, bell, exit, dirty, and conflict
   signals surface as `!` marks on the Overview tree and Global picker.
 - **Global picker** — press `C-p` to search organizations, repositories,

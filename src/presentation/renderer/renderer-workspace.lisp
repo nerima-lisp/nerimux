@@ -15,10 +15,17 @@
 ;;;; ("worktrees column hard to read", "Enter floods the screen with a
 ;;;; branch list") is gone. The frame is now one column, top to bottom:
 ;;;; header (1 row, unchanged) / tree (WORKSPACE-TREE-VIEW-ROWS rows, full
-;;;; width, defaulting to fully expanded -- see renderer-workspace-tree.lisp)
-;;;; / a horizontal separator (1 row) / a 2-line detail panel for whatever
-;;;; tree row is selected / a 1-line most-recent-message strip / the footer
-;;;; (unchanged, except it now also carries the tree-filter prompt/chip).
+;;;; width, section-based -- see renderer-workspace-tree.lisp) / a horizontal
+;;;; separator (1 row) / a 2-line detail panel for whatever tree row is
+;;;; selected / a 1-line most-recent-message strip / a bottom key panel.
+;;;;
+;;;; The section-based overview redesign replaced the old single-line footer
+;;;; with a 2-line key panel (plus its own divider) whose content switches on
+;;;; the selected row's KIND -- section, repository, or worktree -- so the
+;;;; hints on screen always name keys that do something on the current
+;;;; selection (see %WORKSPACE-KEY-PANEL-CONTENT). Below TERMINAL-ROWS = 12
+;;;; there is no room for 3 extra rows over the pre-redesign layout, so the
+;;;; panel collapses back to the original single %WORKSPACE-FOOTER-LINE.
 ;;;;
 ;;;; These functions used to live in renderer-compose.lisp, the pane-frame
 ;;;; compositor.  They were the workspace views' ONLY reason to reach into that
@@ -98,6 +105,69 @@
                 (%workspace-hint (format nil "~A d" (%workspace-prefix-label prefix-code))
                                  "detach"))))
 
+(defun %workspace-key-panel-content (selected-object mode prefix-code tree-filter)
+  "Two values -- the key panel's two content lines -- switching on
+   SELECTED-OBJECT's row kind: a section keyword (:ATTENTION/:ACTIVE/
+   :REPOSITORIES, the section headers' OBJECT), a REPOSITORY, or anything
+   else (a WORKTREE, or no selection at all, which shares the worktree-row
+   hints as the common default). Line 2 carries the mode chip and the
+   tree-filter's `/query` chip, mirroring %WORKSPACE-FOOTER-LINE -- the
+   single-line footer this panel replaces at TERMINAL-ROWS >= 12."
+  (values
+   (format nil " ~{~A~^  ~}"
+           (cond
+             ((keywordp selected-object)
+              (list (%workspace-hint "Enter/Tab" "fold")
+                    (%workspace-hint "J/K" "section")
+                    (%workspace-hint "/" "filter")
+                    (%workspace-hint "C-p" "picker")
+                    (%workspace-hint "r" "refresh")
+                    (%workspace-hint "?" "help")))
+             ((typep selected-object 'repository)
+              (list (%workspace-hint "Enter" "shell(main)")
+                    (%workspace-hint "Tab" "expand")
+                    (%workspace-hint "n" "new worktree")
+                    (%workspace-hint
+                     (format nil "~A F" (%workspace-prefix-label prefix-code))
+                     "fetch")))
+             ;; Inline worktree expansion (Wave B): a :COMMIT row has no
+             ;; action of its own -- Enter genuinely does nothing, shown
+             ;; honestly rather than hidden or faked as working.
+             ;; Wave C gave :FILE its Tab action (inline diff); :DIFF-LINE/
+             ;; :DIFF-MORE (the diff's own child rows) are navigation-only,
+             ;; same rationale as :COMMIT.
+             ((and (consp selected-object) (eq (first selected-object) :file))
+              (list (%workspace-hint "Tab" "diff")
+                    (%workspace-hint "j/k" "move")))
+             ((and (consp selected-object)
+                   (member (first selected-object) '(:diff-line :diff-more)))
+              (list (%workspace-hint "j/k" "move")))
+             ((and (consp selected-object) (eq (first selected-object) :commit))
+              (list (%workspace-hint "j/k" "select")
+                    (%workspace-hint "Enter" "—")))
+             ((typep selected-object 'pane)
+              (list (%workspace-hint "Enter" "focus")
+                    (%workspace-hint "j/k" "select")))
+             (t
+              (list (%workspace-hint "Enter" "shell")
+                    (%workspace-hint "Tab" "detail")
+                    (%workspace-hint "n" "new")
+                    (%workspace-hint "X" "delete")
+                    (%workspace-hint "L/U" "lock")
+                    (%workspace-hint "r" "refresh")))))
+   (format nil " ~A~A  ~{~A~^  ~}"
+           (if (plusp (length (or tree-filter "")))
+               (format nil "~A  " (%sgr-wrap (format nil "/~A" tree-filter) +sgr-muted+))
+               "")
+           (%sgr-wrap (format nil " ~:@(~A~) " mode) +sgr-mode-chip+)
+           (list (%workspace-hint "o" "overview")
+                 (%workspace-hint "d" "detail")
+                 (%workspace-hint "i" "input")
+                 (%workspace-hint "c" "copy")
+                 (%workspace-hint ":" "command")
+                 (%workspace-hint (format nil "~A d" (%workspace-prefix-label prefix-code))
+                                  "detach")))))
+
 ;;; ── Initial-scan placeholder (R6.2) ─────────────────────────────────────────
 
 (defun %render-workspace-scanning-frame (terminal-rows terminal-cols &key scan-progress)
@@ -141,8 +211,10 @@
                                             (prefix-code #x11)
                                             (render-tree-p t)
                                             collapsed-node-ids
+                                            expanded-node-ids
                                             refreshing-ids
                                             stale-ids
+                                            file-diffs
                                             (scanning-p nil)
                                             (scan-progress nil)
                                             (catalog-empty-hint nil)
@@ -152,7 +224,9 @@
   "Render the bare-repository/worktree overview used by an attached client:
    a header, the tree (its only panel now -- PR2's one-column redesign), a
    separator, a 2-line detail panel for the current selection, a
-   most-recent-message strip, and the footer. The output is intentionally a
+   most-recent-message strip, and a bottom key panel (2 content lines plus
+   its own divider at TERMINAL-ROWS >= 12, else the single-line
+   %WORKSPACE-FOOTER-LINE it collapses to). The output is intentionally a
    complete ANSI frame so it can share the headless cl-tui-kit backend with
    the detail view.
    SCANNING-P (R6.2), when true and ORGANIZATIONS is still empty, replaces
@@ -166,8 +240,12 @@
    blank -- see %RENDER-WORKSPACE-EMPTY-CATALOG-HINT.
    TREE-FILTER, when a non-empty string, narrows the tree to matching rows
    and their ancestors (see %WORKSPACE-FILTER-TREE-ENTRIES) regardless of
-   MODE; MODE = :TREE-FILTER additionally swaps the footer for the
-   `/query` input prompt (see %RENDER-WORKSPACE-TREE-FILTER-LINE).
+   MODE; MODE = :TREE-FILTER additionally replaces the WHOLE key panel with
+   the `/query` input prompt at the bottom row (see %RENDER-WORKSPACE-TREE-
+   FILTER-LINE), the same way MODE = :COMMAND replaces it with the command
+   line -- neither mode's ordinary key hints or divider draw at all while
+   the prompt is active, matching the single-line footer's own pre-key-
+   panel behaviour.
    PRECOMPUTED-TREE-ENTRIES, when non-NIL, is used verbatim instead of
    calling %WORKSPACE-FLAT-TREE-ENTRIES again -- RENDER-WORKSPACE-OVERVIEW-
    TO-TUI-STRING (renderer-tui-kit.lisp) flattens the tree once per frame
@@ -193,6 +271,12 @@
              ;; rows instead of below them, and some rows compute past the
              ;; terminal's actual height entirely.
              (tall-enough-p (>= rows 7))
+             ;; The key panel (a divider + 2 content lines, replacing the old
+             ;; single footer line) needs 2 more rows than that floor allows
+             ;; for; below TERMINAL-ROWS = 12 it collapses back to the single
+             ;; %WORKSPACE-FOOTER-LINE row instead (see WORKSPACE-TREE-VIEW-
+             ;; ROWS, which reserves the matching 8 vs. 6 rows of overhead).
+             (key-panel-p (>= rows 12))
              (view-rows (workspace-tree-view-rows rows))
              (tree-top 1)
              (tree-bottom (+ tree-top view-rows))
@@ -201,6 +285,8 @@
              (detail-row-2 (1+ detail-row-1))
              (message-row (1+ detail-row-2))
              (footer-row (max 0 (1- rows)))
+             (key-panel-line-1 (1- footer-row))
+             (key-panel-separator-row (1- key-panel-line-1))
              (selected-object
                (or selected-tree-object
                    selected-worktree
@@ -257,9 +343,78 @@
                  ((repository-dirty-p repository) "DIRTY")
                  ((null (repository-worktrees repository)) "NO-WORKTREE")
                  (t "ready")))
+             (detail-row-styled-label (label object kind)
+               ;; Inline worktree expansion (Wave B): file rows colour their
+               ;; 2-char status code (+SGR-ALERT+ for a "UU" conflict,
+               ;; +SGR-WARN+ otherwise); commit rows colour their hash, or
+               ;; the whole label faint/italic for the :PENDING/:FAILED
+               ;; placeholder rows (HASH holds the state keyword there);
+               ;; pane rows go +SGR-ALERT+ once their process has exited,
+               ;; the same alert colour every other exited-pane marker in
+               ;; this tree already uses (%WORKTREE-PANE-COUNT-TEXT's "!").
+               (case kind
+                 (:file
+                  (let ((code (fourth object)) (path (third object)))
+                    (format nil "~A ~A"
+                            (%sgr-wrap code (if (string= code "UU")
+                                                +sgr-alert+ +sgr-warn+))
+                            path)))
+                 (:commit
+                  (let ((hash (third object)) (subject (fourth object)))
+                    (if (stringp hash)
+                        (format nil "~A ~A"
+                                (%sgr-wrap hash +sgr-accent+)
+                                (%sgr-wrap subject +sgr-faint+))
+                        (%sgr-wrap label +sgr-faint+))))
+                 (:pane
+                  (if (pane-process-exited-p object)
+                      (%sgr-wrap label +sgr-alert+)
+                      label))
+                 ;; Wave C: a :FILE row's own inline-diff child rows, ALL
+                 ;; carrying entry KIND = :DIFF-LINE -- including the
+                 ;; truncation row, whose OBJECT head is :DIFF-MORE but
+                 ;; whose KIND (dispatched on here) is still :DIFF-LINE, so
+                 ;; a separate (:DIFF-MORE ...) case clause above this one
+                 ;; was dead: KIND never takes that value. The check on
+                 ;; (FIRST OBJECT) below makes that dispatch explicit rather
+                 ;; than relying on the truncation label happening not to
+                 ;; start with +/-/@@ and falling into the same plain-muted
+                 ;; default by accident.
+                 ;; The sentinel (:PENDING/:FAILED/:UNTRACKED) sits in a real
+                 ;; line's OBJECT's INDEX slot (fourth object) exactly where
+                 ;; its integer index would be -- same sentinel-in-place-of-
+                 ;; data convention :COMMIT's HASH slot already uses above.
+                 (:diff-line
+                  (cond
+                    ((eq (first object) :diff-more)
+                     (%sgr-wrap label +sgr-muted+))
+                    (t
+                     (case (fourth object)
+                       (:pending (%sgr-wrap label +sgr-muted+))
+                       (:failed (%sgr-wrap label +sgr-faint+))
+                       (:untracked (%sgr-wrap label +sgr-muted+))
+                       (t
+                        (cond
+                          ((and (plusp (length label)) (char= (char label 0) #\+))
+                           (%sgr-wrap label +sgr-ok+))
+                          ((and (plusp (length label)) (char= (char label 0) #\-))
+                           (%sgr-wrap label +sgr-alert+))
+                          ((and (>= (length label) 2) (string= label "@@" :end1 2))
+                           (%sgr-wrap label +sgr-accent+))
+                          (t (%sgr-wrap label +sgr-muted+))))))))
+                 (t label)))
              (tree-row-text (entry)
                (destructuring-bind (level label object kind) entry
-                 (let* ((selected (eq object selected-object))
+                 (let* ((selected
+                          ;; A :FILE/:COMMIT row's OBJECT is a fresh cons
+                          ;; every flatten call (D3), so EQ never matches it
+                          ;; against a SELECTED-OBJECT captured on an earlier
+                          ;; frame -- fall back to EQUAL for that case only;
+                          ;; every struct/keyword-backed kind keeps its
+                          ;; original EQ behaviour unchanged.
+                          (or (eq object selected-object)
+                              (and (consp object) (consp selected-object)
+                                   (equal object selected-object))))
                         (attention (%workspace-tree-node-attention-p object kind))
                         (indent (make-string (* 2 level) :initial-element #\Space))
                         (plain-prefix
@@ -271,7 +426,13 @@
                                   indent
                                   (if selected (%sgr-wrap ">" +sgr-accent-bold+) " ")
                                   (if attention (%sgr-wrap "!" +sgr-alert+) " ")))
-                        (base-styled (format nil "~A~A" styled-prefix label)))
+                        (base-styled
+                          (format nil "~A~A" styled-prefix
+                                  (cond
+                                    ((eq kind :section) (%sgr-wrap label +sgr-section+))
+                                    ((member kind '(:file :commit :pane :diff-line :diff-more))
+                                     (detail-row-styled-label label object kind))
+                                    (t label)))))
                    (if (eq kind :worktree)
                        (multiple-value-bind (plain styled)
                            (%worktree-tree-info-suffix
@@ -349,7 +510,9 @@
                             organizations collapsed-node-ids
                             :refreshing-ids refreshing-ids
                             :stale-ids stale-ids
-                            :filter tree-filter)))
+                            :filter tree-filter
+                            :expanded-node-ids expanded-node-ids
+                            :file-diffs file-diffs)))
                      (tree-count (length all-tree-entries))
                      (no-matches-p (and (plusp (length (or tree-filter "")))
                                         (plusp (length organizations))
@@ -402,11 +565,26 @@
             (%render-workspace-empty-catalog-hint stream rows cols
                                                   catalog-empty-hint))
           (reset-attrs stream)
+          ;; :COMMAND/:TREE-FILTER replace the WHOLE panel with the prompt at
+          ;; FOOTER-ROW alone, exactly as they replaced the single-line
+          ;; footer before the key panel existed -- "no ordinary key hints
+          ;; while the user is actively typing" holds regardless of
+          ;; KEY-PANEL-P, so the divider and first content line only draw in
+          ;; the third, ordinary-navigation branch below.
           (cond
             ((eq mode :command)
              (%render-workspace-command-line stream footer-row cols command-buffer))
             ((eq mode :tree-filter)
              (%render-workspace-tree-filter-line stream footer-row cols tree-filter))
+            (key-panel-p
+             (%emit-styled-row
+              stream key-panel-separator-row 0 cols
+              (%sgr-wrap (make-string cols :initial-element #\─) +sgr-line+))
+             (multiple-value-bind (line-1 line-2)
+                 (%workspace-key-panel-content
+                  selected-object mode prefix-code tree-filter)
+               (%emit-styled-row stream key-panel-line-1 0 cols line-1)
+               (%emit-styled-row stream footer-row 0 cols line-2)))
             (t
              (%emit-styled-row stream footer-row 0 cols
                                (%workspace-footer-line mode prefix-code tree-filter))))

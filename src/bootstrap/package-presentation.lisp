@@ -27,6 +27,7 @@
    #:confirm-view #:make-confirm-view #:confirm-view-p
    #:confirm-view-operation #:confirm-view-fields #:confirm-view-prompt-p
    #:render-confirm-view-to-tui-string
+   #:render-help-view-to-tui-string
    #:clear-display
    ;; Terminal colour-capability downsampling hook; see renderer-format.lisp.
    ;; Nothing installs it now that the startup flag that did was removed, so it

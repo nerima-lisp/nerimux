@@ -1,19 +1,28 @@
 (in-package #:nerimux/test)
 
 ;;;; Direct unit tests for %WORKSPACE-FLAT-TREE-ENTRIES / %WORKSPACE-NODE-
-;;;; EXPANDED-P / %WORKSPACE-NODE-REFRESH-TAG (renderer-workspace-tree.lisp), the
-;;;; R6.2/R6.3 tree contract:
+;;;; EXPANDED-P / %WORKSPACE-NODE-REFRESH-TAG (renderer-workspace-tree.lisp).
 ;;;;
-;;;;   - 5 levels: organization -> repository -> worktree -> window -> pane.
-;;;;   - Initial state is fully collapsed: only organization rows show.
-;;;;   - Enter on an organization/repository row toggles that row's expansion
-;;;;     (worktree/window/pane rows have no collapse state of their own; once
-;;;;     both ancestors are expanded, everything under a worktree shows).
+;;;; The section-based overview redesign (magit-style) replaced the old
+;;;; org -> repo -> worktree -> window -> pane hierarchy with three fixed
+;;;; sections -- Attention, Active, Repositories -- so most of this file's
+;;;; describe blocks below are section-shaped rather than level-shaped:
+;;;;
+;;;;   - A worktree needing attention (or holding an exited pane) shows
+;;;;     under Attention; any other worktree with at least one pane shows
+;;;;     under Active; every repository always has a row under Repositories,
+;;;;     collapsed by default. A worktree never appears twice.
+;;;;   - Window and pane rows are no longer part of the overview tree at all.
 ;;;;   - Expansion is keyed by (KIND . stable ID) in an external hash table
 ;;;;     the caller owns, not by object identity, so it survives being handed
-;;;;     a freshly-scanned tree after a refresh (R6.3: "開閉状態はrefreshを
-;;;;     またいで保つ").
+;;;;     a freshly-scanned tree after a refresh.
 ;;;;   - Refresh state (R6.2) is a second, independent per-row tag.
+;;;;
+;;;; %BUILD-FIVE-LEVEL-TREE still builds the underlying MODEL fixture --
+;;;; organization -> repository -> worktree -> 2 windows -> 3 panes -- for
+;;;; tests of label/info-cluster/activity helpers that operate on those
+;;;; objects directly rather than on the flattened overview tree, where
+;;;; window/pane rows no longer appear.
 
 (defun %build-five-level-tree ()
   "One organization -> one repository -> one worktree -> two windows (one
@@ -42,174 +51,197 @@
     (nerimux/model:worktree-add-pane worktree pane-3)
     (values organization repository worktree window-1 window-2)))
 
+(defun %build-section-fixture (&key attention-p pane-p)
+  "One organization -> one repository -> one worktree, WORKTREE optionally
+   dirty (ATTENTION-P, so it needs attention) and optionally holding one
+   pane (PANE-P). Returns (VALUES ORGANIZATION REPOSITORY WORKTREE)."
+  (let* ((worktree (nerimux/model:make-worktree
+                    :id "wt-section" :path "/repo/wt" :branch "feature/section"
+                    :dirty-p attention-p))
+         (repository (nerimux/model:make-repository
+                      :id "repo-section" :specification "github.com/team/section"
+                      :local-path "/repo" :worktrees (list worktree)))
+         (organization (nerimux/model:make-organization
+                        :id "github.com/team-section" :host "github.com"
+                        :name "team-section" :repositories (list repository))))
+    (when pane-p
+      (let* ((pane (nerimux/model:make-pane :id 1 :fd -1))
+             (window (nerimux/model:make-window :id 1 :name "w" :panes (list pane))))
+        (setf (nerimux/model:pane-window pane) window)
+        (nerimux/model:worktree-add-pane worktree pane)))
+    (values organization repository worktree)))
+
+(defun %build-filter-fixture ()
+  "One organization holding two repositories: MATCH-REPO with a dirty
+   (Attention) worktree branch \"only-match\", and OTHER-REPO with a clean,
+   pane-less worktree branch \"buried-worktree\" reachable only by expanding
+   its (default-collapsed) Repositories row. Returns (VALUES ORGANIZATION
+   MATCH-REPO MATCH-WORKTREE OTHER-REPO OTHER-WORKTREE)."
+  (let* ((match-worktree
+           (nerimux/model:make-worktree
+            :id "wt-match" :path "/repo/match" :branch "only-match" :dirty-p t))
+         (match-repo
+           (nerimux/model:make-repository
+            :id "repo-match" :specification "github.com/team/match"
+            :local-path "/repo/match" :worktrees (list match-worktree)))
+         (other-worktree
+           (nerimux/model:make-worktree
+            :id "wt-other" :path "/repo/other" :branch "buried-worktree"))
+         (other-repo
+           (nerimux/model:make-repository
+            :id "repo-other" :specification "github.com/team/other"
+            :local-path "/repo/other" :worktrees (list other-worktree)))
+         (organization
+           (nerimux/model:make-organization
+            :id "github.com/team-filter" :host "github.com" :name "team-filter"
+            :repositories (list match-repo other-repo))))
+    (values organization match-repo match-worktree other-repo other-worktree)))
+
 (defun %tree-entry-kinds (entries)
   (mapcar #'fourth entries))
 
-(describe "renderer-suite/workspace-tree-collapse"
+(describe "renderer-suite/workspace-tree-sections"
 
-  ;; PR2 polarity inversion: the tree's default state (no COLLAPSED-NODE-IDS
-  ;; at all, the NIL a freshly-attached client starts with) shows the WHOLE
-  ;; depth -- organization -> repository -> worktree -> window -> pane --
-  ;; the opposite of the pre-PR2 collapsed-by-default contract this replaces.
-  (it "shows the full tree depth when nothing is collapsed"
-    (multiple-value-bind (organization) (%build-five-level-tree)
-      (let ((entries
+  (it "classifies a dirty worktree under Attention"
+    (multiple-value-bind (organization repository worktree)
+        (%build-section-fixture :attention-p t :pane-p t)
+      (declare (ignore repository))
+      (let ((entries (nerimux/renderer::%workspace-flat-tree-entries
+                      (list organization) nil)))
+        (expect (equal '(:section :worktree :section :repository)
+                       (%tree-entry-kinds entries)))
+        (expect (search "Attention (1)" (second (first entries))))
+        (expect (eq worktree (third (second entries))))
+        (expect (search "Repositories (1)" (second (third entries)))))))
+
+  (it "classifies a clean worktree with panes under Active"
+    (multiple-value-bind (organization repository worktree)
+        (%build-section-fixture :attention-p nil :pane-p t)
+      (declare (ignore repository))
+      (let ((entries (nerimux/renderer::%workspace-flat-tree-entries
+                      (list organization) nil)))
+        (expect (equal '(:section :worktree :section :repository)
+                       (%tree-entry-kinds entries)))
+        (expect (search "Active (1)" (second (first entries))))
+        (expect (eq worktree (third (second entries)))))))
+
+  (it "omits Attention and Active entirely for a clean, pane-less worktree"
+    (multiple-value-bind (organization) (%build-section-fixture)
+      (let* ((entries (nerimux/renderer::%workspace-flat-tree-entries
+                       (list organization) nil))
+             (kinds (%tree-entry-kinds entries)))
+        ;; Only the Repositories section (header + its always-visible
+        ;; repository row) shows -- the worktree itself stays hidden behind
+        ;; that repository row's own default collapse.
+        (expect (equal '(:section :repository) kinds))
+        (expect (search "Repositories (1)" (second (first entries)))))))
+
+  (it "shows a repository row's worktrees only once expanded, default collapsed"
+    (multiple-value-bind (organization repository worktree)
+        (%build-section-fixture)
+      (let ((collapsed-entries
               (nerimux/renderer::%workspace-flat-tree-entries
                (list organization) nil)))
-        (expect (equal '(:organization :repository :worktree
-                         :window :pane :pane :window :pane)
-                       (%tree-entry-kinds entries))))))
-
-  ;; Collapsing the organization hides everything under it -- its repository
-  ;; row included, since a repository row is only ever emitted when its
-  ;; owning organization is not collapsed.
-  (it "collapsing the organization hides its repository and everything under it"
-    (multiple-value-bind (organization) (%build-five-level-tree)
-      (let* ((collapsed (make-hash-table :test #'equal)))
-        (setf (gethash (list :organization (nerimux/model:organization-id organization))
-                       collapsed)
+        (expect (equal '(:section :repository) (%tree-entry-kinds collapsed-entries))))
+      (let ((expanded (make-hash-table :test #'equal)))
+        (setf (gethash (list :repository (nerimux/model:repository-id repository))
+                       expanded)
               t)
-        (let ((entries
+        (let ((expanded-entries
                 (nerimux/renderer::%workspace-flat-tree-entries
-                 (list organization) collapsed)))
-          (expect (equal '(:organization) (%tree-entry-kinds entries)))))))
+                 (list organization) nil :expanded-node-ids expanded)))
+          (expect (equal '(:section :repository :worktree)
+                         (%tree-entry-kinds expanded-entries)))
+          (expect (eq worktree (third (third expanded-entries))))))))
 
-  ;; Collapsing only the repository keeps the organization and repository
-  ;; rows (the organization is not collapsed) but hides the worktree/window/
-  ;; pane rows beneath the repository.
-  (it "collapsing the repository hides worktree, window, and pane rows"
-    (multiple-value-bind (organization repository) (%build-five-level-tree)
-      (let* ((collapsed (make-hash-table :test #'equal)))
+  (it "excludes an Attention worktree from its own repository's expansion"
+    (multiple-value-bind (organization repository worktree)
+        (%build-section-fixture :attention-p t)
+      (let ((expanded (make-hash-table :test #'equal)))
         (setf (gethash (list :repository (nerimux/model:repository-id repository))
-                       collapsed)
+                       expanded)
               t)
-        (let* ((entries
-                 (nerimux/renderer::%workspace-flat-tree-entries
-                  (list organization) collapsed))
+        (let* ((entries (nerimux/renderer::%workspace-flat-tree-entries
+                         (list organization) nil :expanded-node-ids expanded))
+               (worktree-entries
+                 (remove-if-not (lambda (e) (eq (fourth e) :worktree)) entries)))
+          ;; WORKTREE shows once, under Attention -- not a second time nested
+          ;; under the (now expanded) Repositories > repository row.
+          (expect (= 1 (length worktree-entries)))
+          (expect (eq worktree (third (first worktree-entries))))))))
+
+  (it "folds a section's rows behind its header when the section itself is collapsed"
+    (multiple-value-bind (organization) (%build-section-fixture :pane-p t)
+      (let ((collapsed (make-hash-table :test #'equal)))
+        (setf (gethash (list :section :active) collapsed) t)
+        (let* ((entries (nerimux/renderer::%workspace-flat-tree-entries
+                         (list organization) collapsed))
                (kinds (%tree-entry-kinds entries)))
-          (expect (equal '(:organization :repository) kinds))
-          (expect (null (find :window entries :key #'fourth)))))))
+          (expect (equal '(:section :section :repository) kinds))
+          (expect (search "Active (1)" (second (first entries))))))))
 
-  ;; Round trip: removing a collapse entry (Enter's toggle, from the caller's
-  ;; side) restores the full depth the same table showed before the entry
-  ;; was added.
-  (it "restores full depth when a collapse entry is removed"
-    (multiple-value-bind (organization) (%build-five-level-tree)
-      (let* ((key (list :organization (nerimux/model:organization-id organization)))
-             (collapsed (make-hash-table :test #'equal)))
-        (setf (gethash key collapsed) t)
-        (expect (equal '(:organization)
-                       (%tree-entry-kinds
-                        (nerimux/renderer::%workspace-flat-tree-entries
-                         (list organization) collapsed))))
-        (remhash key collapsed)
-        (expect (equal '(:organization :repository :worktree
-                         :window :pane :pane :window :pane)
-                       (%tree-entry-kinds
-                        (nerimux/renderer::%workspace-flat-tree-entries
-                         (list organization) collapsed)))))))
-
-  ;; R6.3: collapse state is keyed by stable ID, not by EQ object identity, so
-  ;; it survives a refresh that hands the renderer a brand-new organization/
-  ;; repository struct sharing the same IDs -- the same hash table, reused
-  ;; across "generations" of the scanned catalog, still finds its entries.
   (it "keeps collapse state across a refresh that rebuilds the tree with the same IDs"
-    (multiple-value-bind (organization repository worktree) (%build-five-level-tree)
-      (declare (ignore worktree))
-      (let* ((collapsed (make-hash-table :test #'equal)))
+    (multiple-value-bind (organization repository)
+        (%build-section-fixture)
+      (let ((collapsed (make-hash-table :test #'equal))
+            (expanded (make-hash-table :test #'equal)))
         (setf (gethash (list :repository (nerimux/model:repository-id repository))
-                       collapsed)
+                       expanded)
               t)
         ;; Simulate a refresh: a new organization/repository/worktree tree
-        ;; with the SAME stable IDs as before, but different (non-EQ) structs
-        ;; -- exactly what NERIMUX/VCS:LIST-REPOSITORY-WORKTREES produces
-        ;; each scan (see vcs.lisp:227-292, which never reuses the old
-        ;; worktree struct).
+        ;; with the SAME stable IDs as before, but different (non-EQ) structs.
         (let* ((new-worktree
                  (nerimux/model:make-worktree
-                  :id "wt-1" :path "/repo/wt" :branch "feature/tree"))
+                  :id "wt-section" :path "/repo/wt" :branch "feature/tree-2"))
                (new-repository
                  (nerimux/model:make-repository
-                  :id "repo-1" :specification "github.com/team/tree"
+                  :id "repo-section" :specification "github.com/team/section"
                   :local-path "/repo" :worktrees (list new-worktree)))
                (new-organization
                  (nerimux/model:make-organization
-                  :id "github.com/team" :host "github.com" :name "team"
-                  :repositories (list new-repository))))
+                  :id "github.com/team-section" :host "github.com"
+                  :name "team-section" :repositories (list new-repository))))
           (expect (not (eq new-repository repository)))
           (let ((kinds
                   (%tree-entry-kinds
                    (nerimux/renderer::%workspace-flat-tree-entries
-                    (list new-organization) collapsed))))
-            (expect (equal '(:organization :repository) kinds))))))))
+                    (list new-organization) collapsed :expanded-node-ids expanded))))
+            (expect (equal '(:section :repository :worktree) kinds))))))))
 
 (describe "renderer-suite/workspace-tree-refresh-tags"
 
   ;; R6.2: a row being refreshed carries a " refreshing" suffix; a row whose
   ;; last refresh failed carries " stale" instead. Neither tag is present
   ;; when the row is in neither table.
-  (it "appends refreshing/stale suffixes to organization and repository labels"
-    (multiple-value-bind (organization repository) (%build-five-level-tree)
-      (let* ((org-id (nerimux/model:organization-id organization))
-             (repo-id (nerimux/model:repository-id repository))
+  (it "appends refreshing/stale suffixes to worktree and repository labels"
+    (multiple-value-bind (organization repository worktree)
+        (%build-section-fixture :attention-p t)
+      (let* ((repo-id (nerimux/model:repository-id repository))
+             (wt-id (nerimux/model:worktree-id worktree))
              (refreshing (make-hash-table :test #'equal))
-             (stale (make-hash-table :test #'equal))
-             ;; Nothing collapsed here (PR2 default-expanded polarity): the
-             ;; organization and repository rows must both stay visible for
-             ;; the assertions below to check anything real.
-             (collapsed-node-ids (make-hash-table :test #'equal)))
-        (setf (gethash (list :organization org-id) refreshing) t)
+             (stale (make-hash-table :test #'equal)))
+        (setf (gethash (list :worktree wt-id) refreshing) t)
         (setf (gethash (list :repository repo-id) stale) t)
         (let ((entries
                 (nerimux/renderer::%workspace-flat-tree-entries
-                 (list organization) collapsed-node-ids
+                 (list organization) nil
                  :refreshing-ids refreshing :stale-ids stale)))
-          ;; Each entry is (LEVEL LABEL OBJECT KIND) -- LABEL is SECOND.
-          (expect (search " refreshing" (second (first entries))))
-          (expect (search " stale" (second (second entries))))))))
+          ;; entries: (Attention header) (worktree, refreshing)
+          ;;          (Repositories header) (repository, stale)
+          (expect (search " refreshing" (second (second entries))))
+          (expect (search " stale" (second (fourth entries))))))))
 
   ;; Refreshing wins over stale when a row is (transiently) in both tables.
+  ;; %WORKSPACE-NODE-REFRESH-TAG is a generic (KIND ID) lookup, independent
+  ;; of whether that KIND currently has any row in the tree.
   (it "prefers refreshing over stale when both apply to the same row"
-    (multiple-value-bind (organization) (%build-five-level-tree)
-      (let* ((org-id (nerimux/model:organization-id organization))
-             (refreshing (make-hash-table :test #'equal))
-             (stale (make-hash-table :test #'equal)))
-        (setf (gethash (list :organization org-id) refreshing) t)
-        (setf (gethash (list :organization org-id) stale) t)
-        (expect (string= " refreshing"
-                         (nerimux/renderer::%workspace-node-refresh-tag
-                          :organization org-id refreshing stale))))))
-
-  ;; Window/pane rows never carry a refresh tag -- a VCS refresh has no
-  ;; notion of a window or pane, only organization/repository/worktree.
-  ;; PR2 note: under the old EXPANDED-NODE-IDS polarity, marking organization
-  ;; and repository "expanded" (as this test used to) revealed the window
-  ;; row. Under the new COLLAPSED-NODE-IDS polarity, marking those SAME two
-  ;; keys present in the argument this function now takes as its collapse
-  ;; table COLLAPSES them instead -- the org row's children (repository,
-  ;; worktree, window, pane) never get emitted at all, WINDOW-ENTRY comes
-  ;; back NIL, and (search " refreshing" (second nil)) is (search ... nil),
-  ;; which returns NIL unconditionally -- so (not ...) is always true and the
-  ;; assertion passed whether or not the tag logic worked. Nothing must be
-  ;; collapsed here for the window row to exist to test against in the first
-  ;; place; the explicit WINDOW-ENTRY precondition check below is what turns
-  ;; that silent vacuity into a hard failure if it recurs.
-  (it "never tags window or pane rows even when everything is refreshing"
-    (multiple-value-bind (organization repository worktree window-1)
-        (%build-five-level-tree)
-      (declare (ignore repository worktree))
-      (let* ((refreshing (make-hash-table :test #'equal))
-             (collapsed-node-ids (make-hash-table :test #'equal)))
-        (dolist (kind '(:organization :repository :worktree :window :pane))
-          (setf (gethash (list kind "anything") refreshing) t))
-        (let* ((entries
-                 (nerimux/renderer::%workspace-flat-tree-entries
-                  (list organization) collapsed-node-ids :refreshing-ids refreshing))
-               (window-entry (find window-1 entries :key #'third)))
-          ;; Precondition: the window row must actually be present, or the
-          ;; assertion below would vacuously pass against a NIL WINDOW-ENTRY.
-          (expect window-entry)
-          (expect (not (search " refreshing" (second window-entry)))))))))
+    (let ((refreshing (make-hash-table :test #'equal))
+          (stale (make-hash-table :test #'equal)))
+      (setf (gethash (list :worktree "wt-both") refreshing) t)
+      (setf (gethash (list :worktree "wt-both") stale) t)
+      (expect (string= " refreshing"
+                       (nerimux/renderer::%workspace-node-refresh-tag
+                        :worktree "wt-both" refreshing stale))))))
 
 (describe "renderer-suite/workspace-scanning-placeholder"
 
@@ -280,37 +312,38 @@
 ;;; own node matches, or any descendant does -- which, read the other way,
 ;;; keeps every ancestor of a match too. Siblings of a match that do not
 ;;; themselves match must NOT survive, which is the precise thing a filter
-;;; is for.
+;;; is for. The section-based redesign adds a second collapse layer (a
+;;; repository row's own default-collapsed worktree list) that filter must
+;;; also penetrate.
 
 (describe "renderer-suite/workspace-tree-filter"
 
-  ;; A filter matching one pane's title keeps that pane, its owning window
-  ;; (ancestor), worktree, repository, and organization -- but prunes the
-  ;; sibling window/pane that do not match.
-  (it "keeps a matching pane and its ancestors, prunes non-matching siblings"
-    (multiple-value-bind (organization repository worktree window-1 window-2)
-        (%build-five-level-tree)
-      (declare (ignore repository worktree window-2))
+  ;; A filter matching one worktree's branch keeps that worktree and its
+  ;; Attention section header (ancestor) -- but prunes the sibling
+  ;; repository/worktree that do not match at all.
+  (it "keeps a matching worktree and its section header, prunes the non-matching sibling"
+    (multiple-value-bind (organization match-repo match-worktree)
+        (%build-filter-fixture)
+      (declare (ignore match-repo))
       (let* ((entries
                (nerimux/renderer::%workspace-flat-tree-entries
-                (list organization) nil :filter "test"))
+                (list organization) nil :filter "only-match"))
              (kinds (%tree-entry-kinds entries))
              (objects (mapcar #'third entries)))
-        (expect (equal '(:organization :repository :worktree :window :pane) kinds))
-        (expect (member window-1 objects :test #'eq))
-        (expect (string= "pane/2 test" (second (find :pane entries :key #'fourth)))))))
+        (expect (equal '(:section :worktree) kinds))
+        (expect (member match-worktree objects :test #'eq)))))
 
-  ;; Case-insensitive: an uppercase query matches a lowercase pane title.
+  ;; Case-insensitive: an uppercase query matches a lowercase branch.
   (it "matches case-insensitively"
-    (multiple-value-bind (organization) (%build-five-level-tree)
+    (multiple-value-bind (organization) (%build-filter-fixture)
       (let ((entries
               (nerimux/renderer::%workspace-flat-tree-entries
-               (list organization) nil :filter "TEST")))
-        (expect (find :pane entries :key #'fourth)))))
+               (list organization) nil :filter "ONLY-MATCH")))
+        (expect (find :worktree entries :key #'fourth)))))
 
   ;; NIL or an all-blank filter is treated as "no filter": every row survives.
   (it "returns every row unchanged for a NIL or all-blank filter"
-    (multiple-value-bind (organization) (%build-five-level-tree)
+    (multiple-value-bind (organization) (%build-filter-fixture)
       (let ((unfiltered
               (nerimux/renderer::%workspace-flat-tree-entries
                (list organization) nil))
@@ -326,86 +359,36 @@
   ;; A filter matching nothing at all leaves an empty tree, not an error and
   ;; not the unfiltered tree.
   (it "returns no rows for a filter matching nothing"
-    (multiple-value-bind (organization) (%build-five-level-tree)
+    (multiple-value-bind (organization) (%build-filter-fixture)
       (let ((entries
               (nerimux/renderer::%workspace-flat-tree-entries
                (list organization) nil :filter "no-such-match-anywhere")))
         (expect (null entries)))))
 
-  ;; Review-round fix: search penetrates collapse. Collapsing the repository
-  ;; hides everything under it when no filter is active (confirmed first, so
-  ;; the second half actually proves something) -- but once a filter matches
-  ;; a descendant pane, that pane and every ancestor down to the collapsed
-  ;; repository must reappear regardless of the collapse entry.
-  (it "search penetrates a collapsed repository -- a matching descendant and its ancestors still appear"
-    (multiple-value-bind (organization repository worktree window-1)
-        (%build-five-level-tree)
-      (declare (ignore worktree))
-      (let ((collapsed (make-hash-table :test #'equal)))
-        (setf (gethash (list :repository (nerimux/model:repository-id repository))
-                       collapsed)
-              t)
-        (expect (equal '(:organization :repository)
-                       (%tree-entry-kinds
-                        (nerimux/renderer::%workspace-flat-tree-entries
-                         (list organization) collapsed))))
-        (let* ((entries
-                 (nerimux/renderer::%workspace-flat-tree-entries
-                  (list organization) collapsed :filter "test"))
-               (kinds (%tree-entry-kinds entries))
-               (objects (mapcar #'third entries)))
-          (expect (equal '(:organization :repository :worktree :window :pane) kinds))
-          (expect (member window-1 objects :test #'eq)))))))
-
-;;; PR2 window-row omission: a worktree's window row (level 3) is only drawn
-;;; when it holds 2 or more distinct windows; with exactly one window, that
-;;; window contributes no row of its own and its panes attach directly under
-;;; the worktree at level 3 instead of level 4.
-
-(describe "renderer-suite/workspace-tree-window-row-omission"
-
-  (it "omits the window row and attaches panes at level 3 when a worktree has one window"
-    (let* ((pane-1 (nerimux/model:make-pane :id 1 :fd -1 :title "solo-a"))
-           (pane-2 (nerimux/model:make-pane :id 2 :fd -1 :title "solo-b"))
-           (window (nerimux/model:make-window
-                    :id 1 :name "solo" :panes (list pane-1 pane-2)))
-           (worktree
-             (nerimux/model:make-worktree
-              :id "wt-solo" :path "/repo/solo" :branch "solo"))
-           (repository
-             (nerimux/model:make-repository
-              :id "repo-solo" :specification "github.com/team/solo"
-              :local-path "/repo" :worktrees (list worktree)))
-           (organization
-             (nerimux/model:make-organization
-              :id "github.com/team-solo" :host "github.com" :name "team-solo"
-              :repositories (list repository))))
-      (setf (nerimux/model:pane-window pane-1) window
-            (nerimux/model:pane-window pane-2) window)
-      (nerimux/model:worktree-add-pane worktree pane-1)
-      (nerimux/model:worktree-add-pane worktree pane-2)
+  ;; Search penetrates a repository row's own default collapse: OTHER-
+  ;; WORKTREE is clean and pane-less (no Attention/Active row of its own),
+  ;; reachable unfiltered only by expanding OTHER-REPO's Repositories row --
+  ;; which is collapsed by default (no EXPANDED-NODE-IDS entry at all). A
+  ;; filter matching its branch must still surface it and its repository.
+  (it "search penetrates a repository row's default-collapsed worktree list"
+    (multiple-value-bind (organization match-repo match-worktree other-repo other-worktree)
+        (%build-filter-fixture)
+      (declare (ignore match-repo match-worktree))
+      (expect (null (find other-worktree
+                         (nerimux/renderer::%workspace-flat-tree-entries
+                          (list organization) nil)
+                         :key #'third)))
       (let* ((entries
                (nerimux/renderer::%workspace-flat-tree-entries
-                (list organization) nil))
-             (pane-entries (remove-if-not (lambda (e) (eq (fourth e) :pane)) entries)))
-        (expect (null (find :window entries :key #'fourth)))
-        (expect (= 2 (length pane-entries)))
-        (expect (every (lambda (e) (= 3 (first e))) pane-entries)))))
-
-  (it "draws the window row and attaches panes at level 4 when a worktree has two windows"
-    (multiple-value-bind (organization) (%build-five-level-tree)
-      (let* ((entries
-               (nerimux/renderer::%workspace-flat-tree-entries
-                (list organization) nil))
-             (window-entries (remove-if-not (lambda (e) (eq (fourth e) :window)) entries))
-             (pane-entries (remove-if-not (lambda (e) (eq (fourth e) :pane)) entries)))
-        (expect (= 2 (length window-entries)))
-        (expect (every (lambda (e) (= 3 (first e))) window-entries))
-        (expect (= 3 (length pane-entries)))
-        (expect (every (lambda (e) (= 4 (first e))) pane-entries))))))
+                (list organization) nil :filter "buried"))
+             (objects (mapcar #'third entries)))
+        (expect (member other-worktree objects :test #'eq))
+        (expect (member other-repo objects :test #'eq))))))
 
 ;;; PR2 worktree-row info cluster: state tag, ahead/behind, pane count, and a
-;;; relative last-activity time, in that priority order.
+;;; relative last-activity time, in that priority order. Unaffected by the
+;;; section-based redesign: a :WORKTREE row's info cluster is built the same
+;;; way regardless of which section it appears under.
 
 (describe "renderer-suite/workspace-tree-info-cluster"
 
@@ -469,21 +452,25 @@
   (it "returns NIL for a worktree with no pane activity at all"
     (expect (null (nerimux/renderer::%worktree-relative-time-text nil)))))
 
-;;; PR2 tree row budget: WORKSPACE-TREE-VIEW-ROWS reserves 6 rows around the
-;;; tree (header/separator/detail x2/message/footer), floored at 1.
+;;; Section-based redesign: the Dracula truecolour palette (renderer-
+;;; style.lisp) and the new +SGR-SECTION+ constant reach an actual rendered
+;;; frame through the plain-ANSI tree row path (TREE-ROW-TEXT in
+;;; renderer-workspace.lisp) -- the only render path that emits inline SGR
+;;; for tree rows at all (see renderer-workspace-tree.lisp's file header on
+;;; why the real cl-tui-kit client path does not).
 
-(describe "renderer-suite/workspace-tree-view-rows"
+(describe "renderer-suite/workspace-tree-dracula-colors"
 
-  (it "reserves exactly 6 rows around the tree"
-    (expect (= 1 (nerimux/renderer:workspace-tree-view-rows 7)))
-    (expect (= 24 (nerimux/renderer:workspace-tree-view-rows 30))))
-
-  ;; The floor at 1 kicks in for any terminal too short to spare the full 6
-  ;; rows, rather than going negative or zero.
-  (it "floors at 1 row for a terminal shorter than the reserved 6 rows"
-    (expect (= 1 (nerimux/renderer:workspace-tree-view-rows 6)))
-    (expect (= 1 (nerimux/renderer:workspace-tree-view-rows 1)))
-    (expect (= 1 (nerimux/renderer:workspace-tree-view-rows 0)))))
+  (it "renders a section header in +sgr-section+ and a worktree's ahead count in Dracula truecolour"
+    (multiple-value-bind (organization repository worktree)
+        (%build-section-fixture :attention-p t :pane-p t)
+      (declare (ignore repository))
+      (setf (nerimux/model:worktree-ahead worktree) 1)
+      (let ((frame
+              (nerimux/renderer:render-workspace-overview-to-string
+               (list organization) 24 100)))
+        (expect frame :to-contain-sgr nerimux/renderer::+sgr-section+)
+        (expect frame :to-contain-sgr nerimux/renderer::+sgr-ahead+)))))
 
 ;;; Review-round fix: a "no matches: /query" placeholder replaces the empty
 ;;; tree box when a non-empty filter narrows a non-empty catalog to zero
@@ -539,6 +526,68 @@
         (expect (not (search "feature/tree" plain)))
         (expect (not (search "(no selection)" plain)))
         (expect (not (search "organization:" plain)))))))
+
+;;; S3: %WORKSPACE-KEY-PANEL-CONTENT switches its first line's hints on the
+;;; selected row's KIND with no test coverage of any branch -- collapsing
+;;; every branch to the same default would have gone unnoticed. Each case
+;;; below asserts a hint substring unique to that branch is present, and a
+;;; substring unique to a neighbouring, easily-confused branch is absent, so
+;;; a dispatch that quietly falls through to the wrong branch fails loudly
+;;; rather than passing on a coincidental substring match.
+
+(describe "renderer-suite/workspace-key-panel-content"
+
+  (it "shows the fold/section hints for a :section-keyword selection"
+    (let ((plain (strip-sgr
+                  (nerimux/renderer::%workspace-key-panel-content
+                   :repositories :normal #x11 nil))))
+      (expect (search "fold" plain))
+      (expect (not (search "shell(main)" plain)))))
+
+  (it "shows the shell(main)/fetch hints for a repository selection"
+    (let* ((repository (nerimux/model:make-repository :id "repo-panel" :specification "s"))
+           (plain (strip-sgr
+                   (nerimux/renderer::%workspace-key-panel-content
+                    repository :normal #x11 nil))))
+      (expect (search "shell(main)" plain))
+      (expect (not (search "fold" plain)))))
+
+  (it "shows the default worktree-row hints (including delete) for a worktree selection"
+    (let* ((worktree (nerimux/model:make-worktree :id "wt-panel" :path "/wt"))
+           (plain (strip-sgr
+                   (nerimux/renderer::%workspace-key-panel-content
+                    worktree :normal #x11 nil))))
+      (expect (search "delete" plain))
+      (expect (not (search "shell(main)" plain)))))
+
+  (it "shows the diff hint for a :file row selection"
+    (let ((plain (strip-sgr
+                  (nerimux/renderer::%workspace-key-panel-content
+                   (list :file "wt-panel" "src/foo.lisp" " M") :normal #x11 nil))))
+      (expect (search "diff" plain))
+      (expect (not (search "delete" plain)))))
+
+  (it "shows the move-only hint for a :diff-line row selection, without :file's diff hint"
+    (let ((plain (strip-sgr
+                  (nerimux/renderer::%workspace-key-panel-content
+                   (list :diff-line "wt-panel" "src/foo.lisp" 0) :normal #x11 nil))))
+      (expect (search "move" plain))
+      (expect (not (search "diff" plain)))))
+
+  (it "shows the select hint with no Enter action for a :commit row selection"
+    (let ((plain (strip-sgr
+                  (nerimux/renderer::%workspace-key-panel-content
+                   (list :commit "wt-panel" "abc1234" "subject") :normal #x11 nil))))
+      (expect (search "select" plain))
+      (expect (not (search "focus" plain)))))
+
+  (it "shows the focus hint for a pane selection"
+    (let* ((pane (nerimux/model:make-pane :id 1 :fd -1))
+           (plain (strip-sgr
+                   (nerimux/renderer::%workspace-key-panel-content
+                    pane :normal #x11 nil))))
+      (expect (search "focus" plain))
+      (expect (not (search "delete" plain))))))
 
 (describe "renderer-suite/workspace-repository-state"
 
@@ -637,3 +686,288 @@
           (nerimux/renderer::%worktree-tree-info-suffix worktree 80)
         (declare (ignore styled))
         (expect (search "-2" plain)))))
+
+;;; PR2 tree row budget: the section-based redesign's key panel reserves 8
+;;; rows around the tree at TERMINAL-ROWS >= 12 (a divider + 2 content lines
+;;; instead of the single-line footer), collapsing back to the original 6
+;;; rows below that height. Floored at 1.
+
+(describe "renderer-suite/workspace-tree-view-rows"
+
+  (it "reserves 6 rows around the tree below the key-panel height threshold"
+    (expect (= 1 (nerimux/renderer:workspace-tree-view-rows 7)))
+    (expect (= 5 (nerimux/renderer:workspace-tree-view-rows 11))))
+
+  (it "reserves 8 rows around the tree at and above the key-panel height threshold"
+    (expect (= 4 (nerimux/renderer:workspace-tree-view-rows 12)))
+    (expect (= 22 (nerimux/renderer:workspace-tree-view-rows 30))))
+
+  ;; The floor at 1 kicks in for any terminal too short to spare the
+  ;; reserved rows, rather than going negative or zero.
+  (it "floors at 1 row for a terminal shorter than the reserved rows"
+    (expect (= 1 (nerimux/renderer:workspace-tree-view-rows 6)))
+    (expect (= 1 (nerimux/renderer:workspace-tree-view-rows 1)))
+    (expect (= 1 (nerimux/renderer:workspace-tree-view-rows 0)))))
+
+;;; Inline worktree expansion (Wave B): Tab on a worktree row emits pane/
+;;; file/commit child rows one level deeper, in that fixed order, when
+;;; expanded via *WORKSPACE-EXPANDED-NODE-IDS* keyed (:WORKTREE ID) -- the
+;;; same table and default-COLLAPSED polarity a Repositories-section
+;;; repository row already uses for its own expansion.
+
+(describe "renderer-suite/workspace-tree-worktree-expansion"
+
+  (it "emits pane, file, and commit child rows in order when expanded"
+    (let* ((pane (nerimux/model:make-pane :id 1 :fd -1 :title "shell"))
+           (window (nerimux/model:make-window :id 1 :name "w" :panes (list pane)))
+           (worktree
+             (nerimux/model:make-worktree
+              :id "wt-expand" :path "/repo/wt" :branch "expand" :dirty-p t
+              :changed-files (list (cons " M" "src/foo.lisp"))
+              :recent-commits (list (cons "abc1234" "fix a bug"))
+              :commits-state :ready))
+           (repository
+             (nerimux/model:make-repository
+              :id "repo-expand" :specification "github.com/team/expand"
+              :local-path "/repo" :worktrees (list worktree)))
+           (organization
+             (nerimux/model:make-organization
+              :id "github.com/team-expand" :host "github.com" :name "team-expand"
+              :repositories (list repository))))
+      (setf (nerimux/model:pane-window pane) window)
+      (nerimux/model:worktree-add-pane worktree pane)
+      (let ((expanded (make-hash-table :test #'equal)))
+        (setf (gethash (list :worktree "wt-expand") expanded) t)
+        (let* ((entries
+                 (nerimux/renderer::%workspace-flat-tree-entries
+                  (list organization) nil :expanded-node-ids expanded))
+               (kinds (%tree-entry-kinds entries)))
+          ;; (Attention header) worktree pane file commit (Repositories header) repository
+          (expect (equal '(:section :worktree :pane :file :commit :section :repository)
+                         kinds))
+          (expect (eq pane (third (third entries))))
+          (expect (equal (list :file "wt-expand" "src/foo.lisp" " M")
+                         (third (fourth entries))))
+          (expect (equal (list :commit "wt-expand" "abc1234" "fix a bug")
+                         (third (fifth entries))))))))
+
+  (it "omits empty groups and stays collapsed by default"
+    (multiple-value-bind (organization repository worktree)
+        (%build-section-fixture :attention-p t)
+      (declare (ignore repository))
+      ;; Collapsed by default: no expansion-table entry at all.
+      (let ((collapsed-entries
+              (nerimux/renderer::%workspace-flat-tree-entries
+               (list organization) nil)))
+        (expect (equal '(:section :worktree :section :repository)
+                       (%tree-entry-kinds collapsed-entries))))
+      ;; Expanded, but with no panes/changed-files/commits at all: still no
+      ;; child rows -- an empty group contributes nothing, not a blank row.
+      (let ((expanded (make-hash-table :test #'equal)))
+        (setf (gethash (list :worktree (nerimux/model:worktree-id worktree))
+                       expanded)
+              t)
+        (let ((entries
+                (nerimux/renderer::%workspace-flat-tree-entries
+                 (list organization) nil :expanded-node-ids expanded)))
+          (expect (equal '(:section :worktree :section :repository)
+                         (%tree-entry-kinds entries)))))))
+
+  (it "shows a placeholder row while commits-state is :pending or :failed, none while NIL"
+    (multiple-value-bind (organization repository worktree)
+        (%build-section-fixture :attention-p t)
+      (declare (ignore repository))
+      (let ((expanded (make-hash-table :test #'equal)))
+        (setf (gethash (list :worktree (nerimux/model:worktree-id worktree))
+                       expanded)
+              t)
+        (setf (nerimux/model:worktree-commits-state worktree) :pending)
+        (let ((entries
+                (nerimux/renderer::%workspace-flat-tree-entries
+                 (list organization) nil :expanded-node-ids expanded)))
+          (expect (equal '(:section :worktree :commit :section :repository)
+                         (%tree-entry-kinds entries)))
+          (expect (search "refreshing" (second (third entries)))))
+        (setf (nerimux/model:worktree-commits-state worktree) :failed)
+        (let ((entries
+                (nerimux/renderer::%workspace-flat-tree-entries
+                 (list organization) nil :expanded-node-ids expanded)))
+          (expect (search "UNKNOWN" (second (third entries)))))
+        ;; NIL (never fetched): no placeholder row at all, not even a blank
+        ;; one -- distinct from :FAILED, which always shows "UNKNOWN".
+        (setf (nerimux/model:worktree-commits-state worktree) nil)
+        (let ((entries
+                (nerimux/renderer::%workspace-flat-tree-entries
+                 (list organization) nil :expanded-node-ids expanded)))
+          (expect (equal '(:section :worktree :section :repository)
+                         (%tree-entry-kinds entries)))))))
+
+  (it "keeps a cons node's own list as its node key, EQUAL-stable across two flatten calls"
+    (let ((first-key
+            (nerimux/renderer::%workspace-tree-node-key
+             (list :file "wt-1" "src/foo.lisp" " M")))
+          (second-key
+            (nerimux/renderer::%workspace-tree-node-key
+             (list :file "wt-1" "src/foo.lisp" " M"))))
+      (expect (equal first-key second-key))
+      (expect (not (eq first-key second-key)))))
+
+  ;; Wave C: a :FILE row's own inline-diff expansion, one level deeper than
+  ;; the :FILE row itself, gated by *WORKSPACE-EXPANDED-NODE-IDS* under
+  ;; (:FILE-DIFF WORKTREE-ID PATH) -- NOT the file row's own node key -- and
+  ;; sourced from the *WORKSPACE-FILE-DIFFS* cache passed in as :FILE-DIFFS.
+  (it "keeps a diff-line cons node's own list EQUAL-stable across two flatten calls"
+    (let ((first-key
+            (nerimux/renderer::%workspace-tree-node-key
+             (list :diff-line "wt-1" "src/foo.lisp" 0)))
+          (second-key
+            (nerimux/renderer::%workspace-tree-node-key
+             (list :diff-line "wt-1" "src/foo.lisp" 0))))
+      (expect (equal first-key second-key))
+      (expect (not (eq first-key second-key))))))
+
+(describe "renderer-suite/workspace-tree-file-diff-expansion"
+
+  (flet ((%build-diff-fixture (&key (code " M") (path "src/foo.lisp"))
+           (let* ((worktree
+                    (nerimux/model:make-worktree
+                     :id "wt-diff" :path "/repo/wt" :branch "diff" :dirty-p t
+                     :changed-files (list (cons code path))))
+                  (repository
+                    (nerimux/model:make-repository
+                     :id "repo-diff" :specification "github.com/team/diff"
+                     :local-path "/repo" :worktrees (list worktree)))
+                  (organization
+                    (nerimux/model:make-organization
+                     :id "github.com/team-diff" :host "github.com" :name "team-diff"
+                     :repositories (list repository))))
+             (values organization repository worktree))))
+
+    (it "emits one :diff-line row per cached line, in order, when a file's diff is expanded"
+      (multiple-value-bind (organization repository worktree)
+          (%build-diff-fixture)
+        (declare (ignore repository))
+        (let ((expanded (make-hash-table :test #'equal))
+              (file-diffs (make-hash-table :test #'equal))
+              (wt-id (nerimux/model:worktree-id worktree)))
+          (setf (gethash (list :worktree wt-id) expanded) t)
+          (setf (gethash (list :file-diff wt-id "src/foo.lisp") expanded) t)
+          (setf (gethash (list wt-id "src/foo.lisp") file-diffs)
+                (list :ready 3 (list "@@ -1,2 +1,2 @@" "-old line" "+new line")))
+          (let* ((entries
+                   (nerimux/renderer::%workspace-flat-tree-entries
+                    (list organization) nil
+                    :expanded-node-ids expanded :file-diffs file-diffs))
+                 (diff-entries (remove-if-not (lambda (e) (eq (fourth e) :diff-line)) entries)))
+            (expect (= 3 (length diff-entries)))
+            (expect (equal (list "@@ -1,2 +1,2 @@" "-old line" "+new line")
+                           (mapcar #'second diff-entries)))
+            (expect (equal (list :diff-line wt-id "src/foo.lisp" 0)
+                           (third (first diff-entries))))
+            (expect (equal (list :diff-line wt-id "src/foo.lisp" 2)
+                           (third (third diff-entries))))))))
+
+    (it "appends a truncation row naming the remaining count when total exceeds the cached lines"
+      (multiple-value-bind (organization repository worktree)
+          (%build-diff-fixture)
+        (declare (ignore repository))
+        (let ((expanded (make-hash-table :test #'equal))
+              (file-diffs (make-hash-table :test #'equal))
+              (wt-id (nerimux/model:worktree-id worktree))
+              (lines (loop for i from 1 to 200 collect (format nil "line ~D" i))))
+          (setf (gethash (list :worktree wt-id) expanded) t)
+          (setf (gethash (list :file-diff wt-id "src/foo.lisp") expanded) t)
+          (setf (gethash (list wt-id "src/foo.lisp") file-diffs)
+                (list :ready 250 lines))
+          (let* ((entries
+                   (nerimux/renderer::%workspace-flat-tree-entries
+                    (list organization) nil
+                    :expanded-node-ids expanded :file-diffs file-diffs))
+                 (diff-entries (remove-if-not (lambda (e) (eq (fourth e) :diff-line)) entries)))
+            ;; 200 real lines + 1 trailing "more" row.
+            (expect (= 201 (length diff-entries)))
+            (expect (search "more lines" (second (car (last diff-entries)))))
+            (expect (search "50" (second (car (last diff-entries)))))
+            (expect (equal (list :diff-more wt-id "src/foo.lisp")
+                           (third (car (last diff-entries)))))))))
+
+    (it "shows a refreshing placeholder while :pending and UNKNOWN while :failed"
+      (multiple-value-bind (organization repository worktree)
+          (%build-diff-fixture)
+        (declare (ignore repository))
+        (let ((expanded (make-hash-table :test #'equal))
+              (file-diffs (make-hash-table :test #'equal))
+              (wt-id (nerimux/model:worktree-id worktree)))
+          (setf (gethash (list :worktree wt-id) expanded) t)
+          (setf (gethash (list :file-diff wt-id "src/foo.lisp") expanded) t)
+          (setf (gethash (list wt-id "src/foo.lisp") file-diffs) (list :pending 0 nil))
+          (let ((entries
+                  (nerimux/renderer::%workspace-flat-tree-entries
+                   (list organization) nil
+                   :expanded-node-ids expanded :file-diffs file-diffs)))
+            (expect (search "diff: refreshing"
+                            (second (find :diff-line entries :key #'fourth)))))
+          (setf (gethash (list wt-id "src/foo.lisp") file-diffs) (list :failed 0 nil))
+          (let ((entries
+                  (nerimux/renderer::%workspace-flat-tree-entries
+                   (list organization) nil
+                   :expanded-node-ids expanded :file-diffs file-diffs)))
+            (expect (search "diff: UNKNOWN"
+                            (second (find :diff-line entries :key #'fourth))))))))
+
+    (it "shows an untracked placeholder instead of a cache lookup for a ?? file, even with no cache entry"
+      (multiple-value-bind (organization repository worktree)
+          (%build-diff-fixture :code "??" :path "new.txt")
+        (declare (ignore repository))
+        (let ((expanded (make-hash-table :test #'equal))
+              (wt-id (nerimux/model:worktree-id worktree)))
+          (setf (gethash (list :worktree wt-id) expanded) t)
+          (setf (gethash (list :file-diff wt-id "new.txt") expanded) t)
+          (let* ((entries
+                   (nerimux/renderer::%workspace-flat-tree-entries
+                    (list organization) nil :expanded-node-ids expanded))
+                 (diff-entries (remove-if-not (lambda (e) (eq (fourth e) :diff-line)) entries)))
+            (expect (= 1 (length diff-entries)))
+            (expect (string= "(untracked file)" (second (first diff-entries))))
+            (expect (equal (list :diff-line wt-id "new.txt" :untracked)
+                           (third (first diff-entries))))))))
+
+    (it "shows no diff rows at all while the file itself is not expanded"
+      (multiple-value-bind (organization repository worktree)
+          (%build-diff-fixture)
+        (declare (ignore repository))
+        (let ((expanded (make-hash-table :test #'equal))
+              (file-diffs (make-hash-table :test #'equal))
+              (wt-id (nerimux/model:worktree-id worktree)))
+          (setf (gethash (list :worktree wt-id) expanded) t)
+          (setf (gethash (list wt-id "src/foo.lisp") file-diffs)
+                (list :ready 1 (list "+a line")))
+          (let ((entries
+                  (nerimux/renderer::%workspace-flat-tree-entries
+                   (list organization) nil
+                   :expanded-node-ids expanded :file-diffs file-diffs)))
+            (expect (null (find :diff-line entries :key #'fourth)))))))
+
+    ;; The ANSI render path (renderer-workspace.lisp's TREE-ROW-TEXT) is the
+    ;; only one that colours tree rows at all (see renderer-workspace-tree's
+    ;; own file header on why the cl-tui-kit widget path does not) -- same
+    ;; rationale the Dracula-colour test above uses for +SGR-SECTION+.
+    (it "colours diff lines by their leading character: + ok, - alert, @@ accent"
+      (multiple-value-bind (organization repository worktree)
+          (%build-diff-fixture)
+        (declare (ignore repository))
+        (let ((expanded (make-hash-table :test #'equal))
+              (file-diffs (make-hash-table :test #'equal))
+              (wt-id (nerimux/model:worktree-id worktree)))
+          (setf (gethash (list :worktree wt-id) expanded) t)
+          (setf (gethash (list :file-diff wt-id "src/foo.lisp") expanded) t)
+          (setf (gethash (list wt-id "src/foo.lisp") file-diffs)
+                (list :ready 3
+                      (list "@@ -1,2 +1,2 @@" "-removed line" "+added line")))
+          (let ((frame
+                  (nerimux/renderer:render-workspace-overview-to-string
+                   (list organization) 24 100
+                   :expanded-node-ids expanded :file-diffs file-diffs)))
+            (expect frame :to-contain-sgr nerimux/renderer::+sgr-ok+)
+            (expect frame :to-contain-sgr nerimux/renderer::+sgr-alert+)
+            (expect frame :to-contain-sgr nerimux/renderer::+sgr-accent+)))))))

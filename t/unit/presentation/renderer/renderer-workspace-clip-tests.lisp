@@ -96,18 +96,18 @@
 
 (describe "renderer-suite/workspace-clip-tree-integration"
 
-  ;; End to end through the actual PR2 call site: a tree row (organization ->
-  ;; repository -> worktree, all full width now that the WORKTREES/PANES/
-  ;; PREVIEW columns are gone) reaches the frame through %VISIBLE-TRUNCATE
-  ;; inside %EMIT-STYLED-ROW (renderer-workspace.lisp), not through
-  ;; %DISPLAY-CLIP's fixed-left-width column anymore -- render-workspace.lisp
-  ;; builds the whole row (indent + markers + label [+ worktree info suffix])
-  ;; and clips THAT to the full terminal width. This computes the expected
-  ;; truncated text with the SAME %WORKTREE-TREE-INFO-SUFFIX and
-  ;; %VISIBLE-TRUNCATE the production code calls, rather than re-deriving the
-  ;; truncation arithmetic by hand (already exercised directly above), and
-  ;; confirms that exact truncated text -- not the unclipped original --
-  ;; appears verbatim in the rendered frame.
+  ;; End to end through the actual overview call site: a tree row (the
+  ;; Repositories section, one repository, its worktree expanded -- level 2,
+  ;; full width) reaches the frame through %VISIBLE-TRUNCATE inside
+  ;; %EMIT-STYLED-ROW (renderer-workspace.lisp), not through %DISPLAY-CLIP's
+  ;; fixed-left-width column anymore -- render-workspace.lisp builds the
+  ;; whole row (indent + markers + label [+ worktree info suffix]) and clips
+  ;; THAT to the full terminal width. This computes the expected truncated
+  ;; text with the SAME %WORKTREE-TREE-INFO-SUFFIX and %VISIBLE-TRUNCATE the
+  ;; production code calls, rather than re-deriving the truncation
+  ;; arithmetic by hand (already exercised directly above), and confirms
+  ;; that exact truncated text -- not the unclipped original -- appears
+  ;; verbatim in the rendered frame.
   (it "renders the tree row with the same visible-truncated text %visible-truncate itself produces"
     (let* ((cols 20)
            (branch (make-string 20 :initial-element #\a))
@@ -121,11 +121,20 @@
            (organization
              (nerimux/model:make-organization
               :id "github.com/team-clip" :host "github.com" :name "team-clip"
-              :repositories (list repository))))
+              :repositories (list repository)))
+           ;; A repository row under Repositories defaults COLLAPSED (the
+           ;; section-based redesign's decision) -- expand it explicitly so
+           ;; WORKTREE's own row (level 2, branch-only label) is the one
+           ;; under test here, not the Attention/Active "org/repo · branch"
+           ;; row shape.
+           (expanded-node-ids
+             (let ((table (make-hash-table :test #'equal)))
+               (setf (gethash (list :repository "repo-clip") table) t)
+               table)))
       (let* ((frame
                (nerimux/renderer:render-workspace-overview-to-string
-                (list organization) 24 cols))
-             ;; Level 2 (organization -> repository -> worktree): a 4-space
+                (list organization) 24 cols :expanded-node-ids expanded-node-ids))
+             ;; Level 2 (Repositories -> repository -> worktree): a 4-space
              ;; indent, then the selected-marker and attention-marker slots
              ;; (both a literal space here -- neither applies to this
              ;; worktree), then the branch label -- matching RENDER-WORKSPACE-
