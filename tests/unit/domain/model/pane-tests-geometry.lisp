@@ -106,7 +106,7 @@
   ;; via window-core.lisp's +pane-base-index+, no longer a config option).
   (it "next-pane-id-returns-one-for-empty-window"
     (let ((win (make-window :id 1 :name "w" :panes nil)))
-      (expect (= 1 (nerimux/model::next-pane-id win)))))
+      (expect (= 1 (nerimux/window::next-pane-id win)))))
 
   ;; next-pane-id returns the lowest id >= 1 not already in use.
   (it "next-pane-id-fills-lowest-gap"
@@ -114,7 +114,7 @@
            (p3  (make-no-pty-pane 3 0 0 10 5))
            (win (make-window :id 1 :name "w" :panes (list p2 p3))))
       ;; id 1 is the lowest free id (below the used 2 and 3).
-      (expect (= 1 (nerimux/model::next-pane-id win)))))
+      (expect (= 1 (nerimux/window::next-pane-id win)))))
 
   ;; split-window-no-focus and split-window-size-hint-percentage (window-split
   ;; -d / -l, real PTY spawns via WITH-SESSION) moved to

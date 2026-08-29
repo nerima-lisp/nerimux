@@ -42,7 +42,7 @@
                                         (declare (ignore fd pid))
                                         nil)))
        (with-stubbed-fdefinition
-           ((nerimux/model::%fork-pane
+           ((nerimux/pane::%fork-pane
              (lambda (session id x y cols rows &key start-dir)
                (declare (ignore session))
                (let ((pane (make-no-pty-pane id x y cols rows)))
@@ -210,7 +210,7 @@
   (it "r5-7-worktree-pane-startup-failure-is-recorded-as-durable-state"
     (with-loop-state
       (with-stubbed-fdefinition
-          ((nerimux/model::%fork-pane
+          ((nerimux/pane::%fork-pane
             (lambda (session id x y cols rows &key start-dir)
               (declare (ignore session start-dir))
               (make-no-pty-pane id x y cols rows)))) ; fd stays -1: not live

@@ -99,10 +99,10 @@
   (it "create-initial-session-increments-id-counter"
     (unless (pty-available-p)
       (skip "no PTY available (sandboxed environment)"))
-    (let ((before nerimux/model::*session-id-counter*))
+    (let ((before nerimux/session::*session-id-counter*))
       (with-session (sess1 24 80)
         (expect (= (1+ before) (session-id sess1)))
-        (expect (= (1+ before) nerimux/model::*session-id-counter*)))))
+        (expect (= (1+ before) nerimux/session::*session-id-counter*)))))
 
   ;; create-initial-session sets session-last-active to a non-zero universal time.
   (it "create-initial-session-session-touch-called"

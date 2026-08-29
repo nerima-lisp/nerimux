@@ -133,37 +133,37 @@
                    ("NOEQUALS"   nil   nil   "no '=' yields NIL for both")))
       (destructuring-bind (entry expected-name expected-value desc) row
         (declare (ignore desc))
-        (expect (equal expected-name  (nerimux/model::%environment-entry-name  entry)))
-        (expect (equal expected-value (nerimux/model::%environment-entry-value entry))))))
+        (expect (equal expected-name  (nerimux/session::%environment-entry-name  entry)))
+        (expect (equal expected-value (nerimux/session::%environment-entry-value entry))))))
 
   ;; %environment-strings-to-table builds a hash-table from NAME=VALUE strings;
   ;; %environment-table-to-list converts it back to a sorted list of NAME=VALUE.
   (it "environment-strings-to-table-and-back"
     (let* ((entries '("B=2" "A=1" "C=3"))
-           (table   (nerimux/model::%environment-strings-to-table entries)))
+           (table   (nerimux/session::%environment-strings-to-table entries)))
       (expect (hash-table-p table))
       (expect (string= "1" (gethash "A" table)))
       (expect (string= "2" (gethash "B" table)))
       (expect (string= "3" (gethash "C" table)))
       (expect (equal '("A=1" "B=2" "C=3")
-                 (nerimux/model::%environment-table-to-list table)))))
+                 (nerimux/session::%environment-table-to-list table)))))
 
   ;; %environment-strings-to-table silently skips entries with no '=' separator.
   (it "environment-strings-to-table-skips-entries-without-equals"
-    (let ((table (nerimux/model::%environment-strings-to-table '("GOOD=1" "BADENTRY"))))
+    (let ((table (nerimux/session::%environment-strings-to-table '("GOOD=1" "BADENTRY"))))
       (expect (= 1 (hash-table-count table)))
       (expect (string= "1" (gethash "GOOD" table)))))
 
   ;; %assert-environment-variable-name does not signal for valid names.
   (it "assert-environment-variable-name-accepts-valid-names"
     (dolist (name '("HOME" "PATH" "MY_VAR_1"))
-      (finishes (nerimux/model::%assert-environment-variable-name name))))
+      (finishes (nerimux/session::%assert-environment-variable-name name))))
 
   ;; %assert-environment-variable-name signals an error for NIL, empty, non-string,
   ;; or names containing '='.
   (it "assert-environment-variable-name-rejects-invalid-names"
     (dolist (bad (list nil "" "HAS=EQUALS" 42))
-      (signals error (nerimux/model::%assert-environment-variable-name bad))))
+      (signals error (nerimux/session::%assert-environment-variable-name bad))))
 
   ;;; ── process-environment helpers ────────────────────────────────────────────
 
@@ -212,7 +212,7 @@
             (gethash "REMOVE" table) "process-value")
       (session-set-environment sess "KEEP" "overlay-value")
       (session-unset-environment sess "REMOVE")
-      (nerimux/model::%apply-session-overlay sess table)
+      (nerimux/session::%apply-session-overlay sess table)
       (expect (string= "overlay-value" (gethash "KEEP" table)))
       (expect (null (gethash "REMOVE" table)))))
 
@@ -220,7 +220,7 @@
   (it "apply-session-overlay-nil-session-is-noop"
     (let ((table (make-hash-table :test #'equal)))
       (setf (gethash "UNTOUCHED" table) "value")
-      (finishes (nerimux/model::%apply-session-overlay nil table))
+      (finishes (nerimux/session::%apply-session-overlay nil table))
       (expect (string= "value" (gethash "UNTOUCHED" table)))))
 
   ;;; ── %apply-extra-env ───────────────────────────────────────────────────────
@@ -228,13 +228,13 @@
   ;; %apply-extra-env merges (NAME . VALUE) string conses into TABLE.
   (it "apply-extra-env-merges-valid-pairs"
     (let ((table (make-hash-table :test #'equal)))
-      (nerimux/model::%apply-extra-env '(("A" . "1") ("B" . "2")) table)
+      (nerimux/session::%apply-extra-env '(("A" . "1") ("B" . "2")) table)
       (expect (string= "1" (gethash "A" table)))
       (expect (string= "2" (gethash "B" table)))))
 
   ;; %apply-extra-env silently skips entries that are not (string . string) conses.
   (it "apply-extra-env-skips-malformed-pairs"
     (let ((table (make-hash-table :test #'equal)))
-      (nerimux/model::%apply-extra-env (list '("OK" . "yes") 42 '(1 . 2) '("BAD" . 7)) table)
+      (nerimux/session::%apply-extra-env (list '("OK" . "yes") 42 '(1 . 2) '("BAD" . 7)) table)
       (expect (= 1 (hash-table-count table)))
       (expect (string= "yes" (gethash "OK" table))))))

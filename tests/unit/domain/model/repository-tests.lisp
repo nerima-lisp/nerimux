@@ -26,7 +26,7 @@
 
 (describe "repository-values"
   (it "keeps the raw model constructor defaults available"
-    (let ((repository (nerimux/model::%make-repository)))
+    (let ((repository (nerimux/workspace-model::%make-repository)))
       (expect (equal "" (nerimux/model:repository-id repository)))
       (expect (equal "" (nerimux/model:repository-specification repository)))
       (expect (equal "" (nerimux/model:repository-local-path repository)))

@@ -62,7 +62,7 @@
                              :panes (list p0) :active p0)))
       (let ((x0-before (pane-x p0))
             (y0-before (pane-y p0)))
-        (nerimux/model::ensure-window-fits win 24 80)
+        (nerimux/window::ensure-window-fits win 24 80)
         (expect (= x0-before (pane-x p0)))
         (expect (= y0-before (pane-y p0))))))
 
@@ -134,7 +134,7 @@
                (:h 60  2/3  1 nil 39/60  "shrink :h from 2/3 ratio")))
       (destructuring-bind (orient avail cur-ratio delta grow-first expected desc) entry
         (declare (ignore desc))
-        (let ((result (nerimux/model::%new-split-ratio orient avail cur-ratio delta grow-first)))
+        (let ((result (nerimux/window::%new-split-ratio orient avail cur-ratio delta grow-first)))
           (expect (equal expected result))))))
 
   ;; ── window-id and window-name accessors ─────────────────────────────────────

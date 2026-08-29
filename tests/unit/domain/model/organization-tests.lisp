@@ -31,7 +31,7 @@
       (expect (= 0 (nerimux/model:organization-attention-count organization)))
       (expect (not (nerimux/model:organization-missing-p organization)))))
   (it "keeps raw constructor defaults explicit"
-    (let ((organization (nerimux/model::%make-organization)))
+    (let ((organization (nerimux/workspace-model::%make-organization)))
       (expect (equal "" (nerimux/model:organization-id organization)))
       (expect (equal "" (nerimux/model:organization-host organization)))
       (expect (equal "" (nerimux/model:organization-name organization)))
@@ -39,7 +39,7 @@
       (expect (= 0 (nerimux/model:organization-active-worktree-count organization)))
       (expect (= 0 (nerimux/model:organization-attention-count organization)))
       (expect (null (nerimux/model:organization-missing-p organization)))
-      (expect (null (nerimux/model::organization-counts-derived-p organization))))))
+      (expect (null (nerimux/workspace-model::organization-counts-derived-p organization))))))
 
 (describe "organization-hierarchy"
   (it "links repositories and counts worktree attention"

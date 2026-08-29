@@ -16,7 +16,7 @@
         (let* ((l0   (tl-leaf 1 1 1))
                (l1   (tl-leaf 2 1 1))
                (tree (make-layout-split orient l0 l1)))
-          (nerimux/model::layout-assign tree x y w h)
+          (nerimux/layout::layout-assign tree x y w h)
           (multiple-value-bind (min-x min-y width height)
               (layout-node-bounding-box tree)
             (expect (= exp-x min-x))
@@ -36,7 +36,7 @@
            (l2    (tl-leaf 3 1 1))
            (inner (make-layout-split :v l1 l2))
            (outer (make-layout-split :h l0 inner)))
-      (nerimux/model::layout-assign outer 0 0 81 21)
+      (nerimux/layout::layout-assign outer 0 0 81 21)
       ;; Sanity: outer's own bounding box does equal the top-level assign rectangle.
       (multiple-value-bind (ox oy ow oh) (layout-node-bounding-box outer)
         (expect (= 0  ox))
@@ -57,13 +57,13 @@
   (it "node-to-string-leaf-and-nil"
     (let* ((p    (tl-pane 7 20 10))
            (leaf (make-layout-leaf p)))
-      (nerimux/model::layout-assign leaf 3 5 20 10)
-      (let ((s (nerimux/model::%node->string leaf)))
+      (nerimux/layout::layout-assign leaf 3 5 20 10)
+      (let ((s (nerimux/layout::%node->string leaf)))
         (expect (stringp s))
         (expect (search "20x10" s))
         (expect (search ",3,5," s))
         (expect (search "7" s))))
-    (expect (string= "" (nerimux/model::%node->string nil))))
+    (expect (string= "" (nerimux/layout::%node->string nil))))
 
   ;;; ── layout-find-parent deep tree ─────────────────────────────────────────────
 
@@ -109,7 +109,7 @@
         (declare (ignore desc))
         (let ((pane (make-pane :id 1 :fd -1 :pid -1 :width width :height height
                                :screen (make-screen width height))))
-          (expect (eq expected (nerimux/model::%split-fits-p pane orient)))))))
+          (expect (eq expected (nerimux/window::%split-fits-p pane orient)))))))
 
   ;;; ── Table-driven: %layout-checksum known-value tests ─────────────────────────
 
@@ -118,10 +118,10 @@
     (dolist (c (list (list ""           "0000" "empty string checksum must be 0000")
                      (list "a"         "0061" "single-char 'a' (97 decimal = 0x61)")
                      (let ((s "1x1,0,0,1"))
-                       (list s (nerimux/model::%layout-checksum s) "checksum must be deterministic"))))
+                       (list s (nerimux/layout::%layout-checksum s) "checksum must be deterministic"))))
       (destructuring-bind (input expected desc) c
         (declare (ignore desc))
-        (expect (string= expected (nerimux/model::%layout-checksum input))))))
+        (expect (string= expected (nerimux/layout::%layout-checksum input))))))
 
   ; resize-direction-orientation-all-directions-table removed.
   ; The identical 4-case mapping is already tested in layout-geometry-tests.lisp

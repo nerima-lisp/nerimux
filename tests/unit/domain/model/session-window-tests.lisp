@@ -9,13 +9,13 @@
   ;; session-start-directory defaults to NIL for a freshly created session.
   (it "session-start-directory-defaults-nil"
     (let ((sess (make-session :id 1 :name "s")))
-      (expect (null (nerimux/model::session-start-directory sess)))))
+      (expect (null (nerimux/session::session-start-directory sess)))))
 
   ;; session-start-directory can be set to a path string and read back.
   (it "session-start-directory-settable"
     (let ((sess (make-session :id 1 :name "s")))
-      (setf (nerimux/model::session-start-directory sess) "/home/user")
-      (expect (string= "/home/user" (nerimux/model::session-start-directory sess)))))
+      (setf (nerimux/session::session-start-directory sess) "/home/user")
+      (expect (string= "/home/user" (nerimux/session::session-start-directory sess)))))
 
   ;;; ── all-panes ordering ───────────────────────────────────────────────────────
 
@@ -49,20 +49,20 @@
   (it "session-window-index-uses-overrides-and-clears-defaults"
     (let* ((window (make-window :id 2 :name "w"))
            (session (make-session :id 1 :name "s" :windows (list window))))
-      (expect (= 2 (nerimux/model::session-window-index session window)))
-      (nerimux/model::set-session-window-index session window 7)
-      (expect (= 7 (nerimux/model::session-window-index session window)))
-      (nerimux/model::set-session-window-index session window 2)
-      (expect (= 2 (nerimux/model::session-window-index session window)))
-      (expect (= 0 (hash-table-count (nerimux/model::session-window-index-map session))))))
+      (expect (= 2 (nerimux/session::session-window-index session window)))
+      (nerimux/session::set-session-window-index session window 7)
+      (expect (= 7 (nerimux/session::session-window-index session window)))
+      (nerimux/session::set-session-window-index session window 2)
+      (expect (= 2 (nerimux/session::session-window-index session window)))
+      (expect (= 0 (hash-table-count (nerimux/session::session-window-index-map session))))))
 
   (it "session-windows-in-index-order-is-non-destructive"
     (let* ((w0 (make-window :id 0 :name "w0"))
            (w1 (make-window :id 1 :name "w1"))
            (session (make-session :id 1 :name "s" :windows (list w0 w1))))
-      (nerimux/model::set-session-window-index session w0 3)
-      (nerimux/model::set-session-window-index session w1 1)
-      (let ((ordered (nerimux/model::session-windows-in-index-order session)))
+      (nerimux/session::set-session-window-index session w0 3)
+      (nerimux/session::set-session-window-index session w1 1)
+      (let ((ordered (nerimux/session::session-windows-in-index-order session)))
         (expect (eq w1 (first ordered)))
         (expect (eq w0 (second ordered)))
         (expect (eq w0 (first (session-windows session)))))))
@@ -71,9 +71,9 @@
     (let* ((window (make-window :id 1 :name "w"))
            (session (make-session :id 1 :name "s" :windows (list window)
                                   :active window :window-stack (list window))))
-      (nerimux/model::set-session-window-index session window 9)
-      (nerimux/model::session-remove-window session window)
-      (expect (null (nerimux/model::session-windows session)))
-      (expect (null (nerimux/model::session-active session)))
-      (expect (null (nerimux/model::session-window-stack session)))
-      (expect (= 0 (hash-table-count (nerimux/model::session-window-index-map session)))))))
+      (nerimux/session::set-session-window-index session window 9)
+      (nerimux/session::session-remove-window session window)
+      (expect (null (nerimux/session::session-windows session)))
+      (expect (null (nerimux/session::session-active session)))
+      (expect (null (nerimux/session::session-window-stack session)))
+      (expect (= 0 (hash-table-count (nerimux/session::session-window-index-map session)))))))

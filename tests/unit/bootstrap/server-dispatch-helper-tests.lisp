@@ -137,14 +137,14 @@
 
   (it "builds-selection-tokens-from-model-identities"
     (let* ((organization
-             (nerimux/model::%make-organization
+             (nerimux/workspace-model::%make-organization
               :id "org-id" :host "origin" :name "team"))
            (repository
-             (nerimux/model::%make-repository
+             (nerimux/workspace-model::%make-repository
               :id "repo-id" :organization organization :specification "spec"
               :local-path "/workspace/repo"))
            (worktree
-             (nerimux/model::%make-worktree
+             (nerimux/workspace-model::%make-worktree
               :id "worktree-id" :path "/workspace/repo/feature" :branch 'feature)))
       (expect (string= "org-id"
                        (nerimux::%organization-selection-token organization)))

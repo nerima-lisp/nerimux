@@ -20,7 +20,7 @@
       (expect (= 0 (nerimux/model:worktree-behind worktree)))
       (expect (not (nerimux/model:worktree-dirty-p worktree)))))
   (it "keeps raw constructor defaults explicit"
-    (let ((worktree (nerimux/model::%make-worktree)))
+    (let ((worktree (nerimux/workspace-model::%make-worktree)))
       (expect (equal "" (nerimux/model:worktree-id worktree)))
       (expect (null (nerimux/model:worktree-repository worktree)))
       (expect (equal "" (nerimux/model:worktree-path worktree)))
@@ -50,4 +50,4 @@
         (expect (equal panes (nerimux/model:worktree-panes worktree)))
         (expect (not (eq panes (nerimux/model:worktree-panes worktree)))))))
   (it "uses empty components when generating a key from absent values"
-    (expect (equal "||" (nerimux/model::worktree-key nil nil nil)))))
+    (expect (equal "||" (nerimux/workspace-model::worktree-key nil nil nil)))))

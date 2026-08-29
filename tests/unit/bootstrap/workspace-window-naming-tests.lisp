@@ -23,7 +23,7 @@
             (lambda (active-window)
               (declare (ignore active-window))
               pane))
-           (nerimux/model::%shell-basename
+           (nerimux/session::%shell-basename
             (lambda () "shell")))
         (let ((nerimux::*term-rows* 30)
               (nerimux::*term-cols* 100))

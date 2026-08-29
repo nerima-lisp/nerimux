@@ -14,30 +14,30 @@
     (let* ((l0    (tl-leaf 1 1 1))
            (l1    (tl-leaf 2 1 1))
            (split (make-layout-split :h l0 l1)))
-      (expect (= 1/2 (nerimux/model::layout-split-ratio split)))))
+      (expect (= 1/2 (nerimux/layout::layout-split-ratio split)))))
 
   ;; make-layout-split with an explicit ratio stores it verbatim.
   (it "layout-split-explicit-ratio-is-stored"
     (let* ((l0    (tl-leaf 1 1 1))
            (l1    (tl-leaf 2 1 1))
            (split (make-layout-split :h l0 l1 3/4)))
-      (expect (= 3/4 (nerimux/model::layout-split-ratio split)))))
+      (expect (= 3/4 (nerimux/layout::layout-split-ratio split)))))
 
   ;; layout-leaf-p and layout-split-p correctly identify node types.
   (it "layout-leaf-p-and-layout-split-p-predicates"
     (let* ((leaf  (tl-leaf 1 1 1))
            (split (make-layout-split :h leaf (tl-leaf 2 1 1))))
-      (expect (nerimux/model::layout-leaf-p  leaf))
-      (expect (not (nerimux/model::layout-split-p leaf)))
-      (expect (nerimux/model::layout-split-p split))
-      (expect (not (nerimux/model::layout-leaf-p  split)))))
+      (expect (nerimux/layout::layout-leaf-p  leaf))
+      (expect (not (nerimux/layout::layout-split-p leaf)))
+      (expect (nerimux/layout::layout-split-p split))
+      (expect (not (nerimux/layout::layout-leaf-p  split)))))
 
   ;;; ── Persistence: checksum constants ────────────────────────────────────────────
 
   ;; Layout persistence constants have the canonical checksum values.
   (it "checksum-constants-values"
-    (expect (= 61    nerimux/model::+checksum-multiplier+))
-    (expect (= #xFFFF nerimux/model::+checksum-mask+)))
+    (expect (= 61    nerimux/layout::+checksum-multiplier+))
+    (expect (= #xFFFF nerimux/layout::+checksum-mask+)))
 
   ;;; ── pane-neighbor: zoomed window guard ──────────────────────────────────────────
 
@@ -46,11 +46,11 @@
     ;; Build a 2-pane window and toggle zoom; pane-neighbor must not find any neighbor.
     (with-h-split-window (win p0 p1)
       ;; Manually set the zoom flag (without a real PTY resize).
-      (setf (nerimux/model::window-zoom-p win) t)
+      (setf (nerimux/window::window-zoom-p win) t)
       (expect (null (pane-neighbor win p0 :right)))
       (expect (null (pane-neighbor win p1 :left)))
       ;; Cleanup: restore zoom flag so state does not leak.
-      (setf (nerimux/model::window-zoom-p win) nil)))
+      (setf (nerimux/window::window-zoom-p win) nil)))
 
   ;;; ── pane-neighbor: up/down symmetry ─────────────────────────────────────────
 
@@ -65,7 +65,7 @@
 
   ;; +neighbor-edge-tolerance+ must be 2 to account for the 1-cell separator.
   (it "neighbor-edge-tolerance-value"
-    (expect (= 2 nerimux/model::+neighbor-edge-tolerance+)))
+    (expect (= 2 nerimux/window::+neighbor-edge-tolerance+)))
 
   ;;; ── layout-split-axis-extent: nested tree ────────────────────────────────────
 
@@ -76,8 +76,8 @@
            (top  (tl-leaf 2 1 1))
            (bot  (tl-leaf 3 1 1))
            (outer (make-layout-split :h left (make-layout-split :v top bot))))
-      (nerimux/model::layout-assign outer 0 0 81 25)
+      (nerimux/layout::layout-assign outer 0 0 81 25)
       ;; :h extent of the outer split = full width = 81.
-      (expect (= 81 (nerimux/model::layout-split-axis-extent outer :h)))
+      (expect (= 81 (nerimux/layout::layout-split-axis-extent outer :h)))
       ;; :v extent = full height = 25.
-      (expect (= 25 (nerimux/model::layout-split-axis-extent outer :v))))))
+      (expect (= 25 (nerimux/layout::layout-split-axis-extent outer :v))))))

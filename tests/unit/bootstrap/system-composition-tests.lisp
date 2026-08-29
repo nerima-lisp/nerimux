@@ -467,7 +467,7 @@
   ;;; A file whose layer is strictly lower than a referenced package's layer
   ;;; is an upward reference, full stop.  Whether the symbol is exported is a
   ;;; separate, unrelated concern this guard does not check: a downward or
-  ;;; same-layer double-colon reference (nerimux/model::%shell-basename from
+  ;;; same-layer double-colon reference (nerimux/session::%shell-basename from
   ;;; src/bootstrap/, say) is legal direction and must not fail here.
 
   (it "no-source-file-references-a-higher-layer-package"

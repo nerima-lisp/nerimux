@@ -40,37 +40,37 @@
   ;; %layout-checksum returns the same 4-char hex string for the same input.
   (it "layout-checksum-is-reproducible"
     (let ((s "%layout-checksum determinism check"))
-      (expect (string= (nerimux/model::%layout-checksum s)
-                       (nerimux/model::%layout-checksum s)))
-      (expect (= 4 (length (nerimux/model::%layout-checksum s))))))
+      (expect (string= (nerimux/layout::%layout-checksum s)
+                       (nerimux/layout::%layout-checksum s)))
+      (expect (= 4 (length (nerimux/layout::%layout-checksum s))))))
 
   ;; %layout-checksum on the empty string returns a 4-digit hex string.
   (it "layout-checksum-empty-string"
-    (let ((cs (nerimux/model::%layout-checksum "")))
+    (let ((cs (nerimux/layout::%layout-checksum "")))
       (expect (= 4 (length cs)))
       (expect (every (lambda (c) (digit-char-p c 16)) cs))))
 
   ;; %build-flat-tree with one pane returns a bare layout-leaf.
   (it "build-flat-tree-single-pane"
     (let* ((p    (tl-pane 1 10 5))
-           (tree (nerimux/model::%build-flat-tree (list p) :h)))
-      (expect (nerimux/model::layout-leaf-p tree))
+           (tree (nerimux/layout::%build-flat-tree (list p) :h)))
+      (expect (nerimux/layout::layout-leaf-p tree))
       (expect (eq p (layout-leaf-pane tree)))))
 
   ;; %build-flat-tree with two panes returns a layout-split.
   (it "build-flat-tree-two-panes"
     (let* ((p0   (tl-pane 1 10 5))
            (p1   (tl-pane 2 10 5))
-           (tree (nerimux/model::%build-flat-tree (list p0 p1) :h)))
-      (expect (nerimux/model::layout-split-p tree))
-      (expect (eq :h (nerimux/model::layout-split-orientation tree)))
-      (expect (eq p0 (layout-leaf-pane (nerimux/model::layout-split-first tree))))
-      (expect (nerimux/model::layout-leaf-p (nerimux/model::layout-split-second tree)))))
+           (tree (nerimux/layout::%build-flat-tree (list p0 p1) :h)))
+      (expect (nerimux/layout::layout-split-p tree))
+      (expect (eq :h (nerimux/layout::layout-split-orientation tree)))
+      (expect (eq p0 (layout-leaf-pane (nerimux/layout::layout-split-first tree))))
+      (expect (nerimux/layout::layout-leaf-p (nerimux/layout::layout-split-second tree)))))
 
   ;; %build-flat-tree with three panes produces a right-leaning chain.
   (it "build-flat-tree-three-panes-is-right-leaning"
     (let* ((panes (loop for i from 1 to 3 collect (tl-pane i 10 5)))
-           (tree  (nerimux/model::%build-flat-tree panes :v)))
-      (expect (nerimux/model::layout-split-p tree))
-      (expect (nerimux/model::layout-split-p (nerimux/model::layout-split-second tree)))
-      (expect (nerimux/model::layout-leaf-p (nerimux/model::layout-split-first tree))))))
+           (tree  (nerimux/layout::%build-flat-tree panes :v)))
+      (expect (nerimux/layout::layout-split-p tree))
+      (expect (nerimux/layout::layout-split-p (nerimux/layout::layout-split-second tree)))
+      (expect (nerimux/layout::layout-leaf-p (nerimux/layout::layout-split-first tree))))))

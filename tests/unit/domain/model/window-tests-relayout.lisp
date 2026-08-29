@@ -125,7 +125,7 @@
                               :panes (list pane) :active pane)))
       ;; Deliberately leave the window's stored size inconsistent with the
       ;; requested target so ensure-window-fits must act.
-      (nerimux/model::ensure-window-fits win 30 100)
+      (nerimux/window::ensure-window-fits win 30 100)
       (check-table (list (list (window-width  win)              100 "window width")
                          (list (window-height win)              30  "window height")
                          (list (pane-width  pane)               100 "pane width")
@@ -145,7 +145,7 @@
                                 :tree (make-layout-leaf pane)
                                 :panes (list pane) :active pane)))
       ;; Same size as stored → nothing should happen.
-      (nerimux/model::ensure-window-fits win 24 80)
+      (nerimux/window::ensure-window-fits win 24 80)
       (check-table (list (list (window-width  win)              80 "window width")
                          (list (window-height win)              24 "window height")
                          (list (pane-x      pane)              0  "pane x")

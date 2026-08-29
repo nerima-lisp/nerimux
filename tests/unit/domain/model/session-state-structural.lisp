@@ -81,7 +81,7 @@
   ;; %next-window-id with base-index=5 returns at least 5.
   (it "next-window-id-respects-base-index"
     (let* ((sess (make-session :id 1 :name "s" :windows nil)))
-      (expect (>= (nerimux/model::%next-window-id sess 5) 5))))
+      (expect (>= (nerimux/session::%next-window-id sess 5) 5))))
 
   ;;; ── Table-driven session struct defaults ─────────────────────────────────────
 

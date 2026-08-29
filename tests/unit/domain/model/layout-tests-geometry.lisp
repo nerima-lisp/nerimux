@@ -175,7 +175,7 @@
           (expect (= 81 (pane-width p1)))
           (expect (= 24 (pane-height p1)))
           ;; The tree collapsed to a single leaf.
-          (expect (nerimux/model::layout-leaf-p (window-tree win)))))))
+          (expect (nerimux/layout::layout-leaf-p (window-tree win)))))))
 
   ;; Removing the sole pane leaves an empty window with a NIL tree.
   (it "remove-last-pane-empties-window"
@@ -209,8 +209,8 @@
                             :screen (make-screen 10 5)))
            (leaf (make-layout-leaf p)))
       ;; For a leaf: min :v extent = +pane-min-height+ (1), :h extent = +pane-min-width+ (2)
-      (expect (= nerimux/model::+pane-min-height+ (nerimux/model::layout-min-extent leaf :v)))
-      (expect (= nerimux/model::+pane-min-width+  (nerimux/model::layout-min-extent leaf :h)))))
+      (expect (= nerimux/layout::+pane-min-height+ (nerimux/layout::layout-min-extent leaf :v)))
+      (expect (= nerimux/layout::+pane-min-width+  (nerimux/layout::layout-min-extent leaf :h)))))
 
   ;; A split along :h adds both children's :h extents plus 1 for the separator.
   (it "layout-min-extent-same-axis-split"
@@ -218,9 +218,9 @@
            (l1 (tl-leaf 2 1 1))
            (split (make-layout-split :h l0 l1)))
       ;; min :h extent = pane-min-width + 1 + pane-min-width = 2+1+2 = 5
-      (expect (= 5 (nerimux/model::layout-min-extent split :h)))
+      (expect (= 5 (nerimux/layout::layout-min-extent split :h)))
       ;; min :v extent = max(pane-min-height, pane-min-height) = 1
-      (expect (= 1 (nerimux/model::layout-min-extent split :v)))))
+      (expect (= 1 (nerimux/layout::layout-min-extent split :v)))))
 
   ;; A split along one axis takes the max of children's extents on the other axis.
   (it "layout-min-extent-cross-axis-split"
@@ -228,9 +228,9 @@
            (l1 (tl-leaf 2 1 1))
            (split (make-layout-split :v l0 l1)))
       ;; min :v extent = pane-min-height + 1 + pane-min-height = 1+1+1 = 3
-      (expect (= 3 (nerimux/model::layout-min-extent split :v)))
+      (expect (= 3 (nerimux/layout::layout-min-extent split :v)))
       ;; min :h extent = max(pane-min-width, pane-min-width) = 2
-      (expect (= 2 (nerimux/model::layout-min-extent split :h)))))
+      (expect (= 2 (nerimux/layout::layout-min-extent split :h)))))
 
   ;;; ── layout-find-leaf direct ─────────────────────────────────────────────────
 

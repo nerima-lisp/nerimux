@@ -35,12 +35,12 @@
       (destructuring-bind (shell expected desc) entry
         (declare (ignore desc))
         (with-temporary-posix-environment-variable ("SHELL" shell)
-          (expect (string= expected (nerimux/model::%shell-basename)))))))
+          (expect (string= expected (nerimux/session::%shell-basename)))))))
 
   ;; %shell-basename returns a string even for a trailing-slash path.
   (it "shell-basename-trailing-slash-is-string"
     (with-temporary-posix-environment-variable ("SHELL" "/usr/bin/")
-      (expect (stringp (nerimux/model::%shell-basename)))))
+      (expect (stringp (nerimux/session::%shell-basename)))))
 
   ;;; ── session-insert-window ────────────────────────────────────────────────────
 
@@ -119,4 +119,4 @@
     (let* ((w0   (make-window :id 0 :name "a"))
            (w2   (make-window :id 2 :name "c"))
            (sess (make-session :id 1 :name "s" :windows (list w0 w2))))
-      (expect (= 1 (nerimux/model::%next-window-id sess 0))))))
+      (expect (= 1 (nerimux/session::%next-window-id sess 0))))))

@@ -4,7 +4,7 @@
   (it "expands records in declaration order without evaluating them"
     (let* ((expansion
              (macroexpand-1
-              '(nerimux/model::define-window-records
+              '(nerimux/window::define-window-records
                 (first-record "first" (value 1))
                 ((second-record (:constructor make-second-record))
                  "second"

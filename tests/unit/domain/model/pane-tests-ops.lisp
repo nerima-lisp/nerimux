@@ -40,7 +40,7 @@
               (values 17 23 "/dev/pts/fake"))))
       (let ((nerimux/model:*pane-extra-env* '(("GLOBAL" . "value"))))
         (multiple-value-bind (fd pid tty)
-            (nerimux/model::%spawn-shell-for-pane
+            (nerimux/pane::%spawn-shell-for-pane
              nil 24 80
              :start-dir "/tmp/start"
              :default-command "echo ready"
@@ -64,7 +64,7 @@
             (lambda (rows cols &key start-dir default-command environment)
               (declare (ignore rows cols start-dir default-command environment))
               (values 31 41 "/dev/pts/fork"))))
-      (let ((pane (nerimux/model::%fork-pane
+      (let ((pane (nerimux/pane::%fork-pane
                    nil 9 2 3 20 6 :start-dir "/tmp/fork")))
         (expect (= 9 (pane-id pane)))
         (expect (= 2 (pane-x pane)))
@@ -79,7 +79,7 @@
         (expect (nerimux/model:pane-screen pane)))))
 
   (it "make-input-pane-uses-dead-pty-sentinels"
-    (let ((pane (nerimux/model::%make-input-pane 4 5 6 30 7)))
+    (let ((pane (nerimux/pane::%make-input-pane 4 5 6 30 7)))
       (expect (= 4 (pane-id pane)))
       (expect (= 5 (pane-x pane)))
       (expect (= 6 (pane-y pane)))
