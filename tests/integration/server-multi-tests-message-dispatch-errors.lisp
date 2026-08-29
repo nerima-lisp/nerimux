@@ -216,9 +216,7 @@
                   (%worktree-message-seen-p conn "worktree deleted")))
             (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                   (fdefinition 'nerimux/vcs:create-worktree-async) create-fn
-                 (fdefinition 'nerimux/vcs:delete-worktree-async) delete-fn)))))))
-
-  (it "worktree-operations-reject-unconfirmed-and-unavailable-requests"
+                 (fdefinition 'nerimux/vcs:delete-worktree-async) delete-fn)))))) (it "worktree-operations-reject-unconfirmed-and-unavailable-requests"
     (with-fake-session (s)
       (multiple-value-bind (repository worktree conn)
           (%make-worktree-operation-fixture)
@@ -264,4 +262,4 @@
                  (expect (%worktree-message-seen-p
                           conn "VCS adapter unavailable")))
             (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
-                  available))))))
+                  available)))))))
