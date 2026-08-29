@@ -61,4 +61,35 @@
       (expect (integerp (nerimux/model:pane-last-focused-time pane)))
       (nerimux/model:pane-mark-startup-failure pane)
       (expect (member :startup-failed
-                      (nerimux/model:pane-attention-reasons pane))))))
+                      (nerimux/model:pane-attention-reasons pane)))))
+
+  (it "includes :pane in worktree attention reasons when an attached pane needs attention"
+    (let ((worktree (nerimux/model:make-worktree :id "has-pane"))
+          (pane (nerimux/model:make-pane :id 1 :title "editor")))
+      (nerimux/model:worktree-add-pane worktree pane)
+      (nerimux/model:pane-mark-bell pane)
+      (expect (member :pane (nerimux/model:worktree-attention-reasons worktree)))
+      (expect (nerimux/model:worktree-attention-p worktree))))
+
+  (it "projects pane-driven worktree attention up to the organization count"
+    (let* ((organization
+             (nerimux/model:make-organization :id "org"))
+           (repository
+             (nerimux/model:make-repository
+              :id "repo"
+              :organization organization))
+           (worktree
+             (nerimux/model:make-worktree :id "has-pane" :repository repository))
+           (pane (nerimux/model:make-pane :id 1 :title "editor")))
+      (nerimux/model:worktree-add-pane worktree pane)
+      (nerimux/model:pane-mark-bell pane)
+      (nerimux/model:organization-add-repository organization repository)
+      (nerimux/model:repository-add-worktree repository worktree)
+      (expect (= 1 (nerimux/model:organization-attention-count organization)))))
+
+  (it "does not report :pane when the attached pane needs no attention"
+    (let ((worktree (nerimux/model:make-worktree :id "quiet-pane"))
+          (pane (nerimux/model:make-pane :id 1 :title "editor")))
+      (nerimux/model:worktree-add-pane worktree pane)
+      (expect (null (member :pane (nerimux/model:worktree-attention-reasons worktree))))
+      (expect (null (nerimux/model:worktree-attention-p worktree))))))
