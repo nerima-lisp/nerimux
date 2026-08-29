@@ -405,3 +405,41 @@ renderer の作業を `c67d920` としてコミットし、`main` へ merge comm
   0 errored。
 - `git status --short --branch` は clean。未 push のため `main` は
   `origin/main` より 2 commit 先行している。
+
+## 2026-08-29 worktree/branch の棚卸しと削除
+
+### 統合した作業単位
+
+無し。棚卸しの結果、main に反映すべき作業単位は存在しなかった。
+
+- `.worktrees/20260829T213039-7adcf6d`、`221725-7adcf6d`、`221819-7adcf6d`、
+  `222139-7adcf6d` の 4 件は、いずれも `main` の HEAD (`7adcf6d`) から作られた
+  detached HEAD の worktree で、`git status --short` が完全に空(未コミット・
+  未追跡ファイル無し)。固有の作業は入っていなかった。
+- `update_flake_lock_action` branch (`2f6a6ca chore: update flake.lock`) は
+  2026-08-24 作成で、`nixpkgs`/`treefmt-nix` を現行 main よりやや新しい
+  リビジョンへ固定する内容だった。ただし `origin` には既に存在せず
+  (`git ls-remote --heads origin` に出てこない。ローカルの
+  `remotes/origin/update_flake_lock_action` は fetch prune されていない古い
+  キャッシュ)、`gh pr list` にも対応する PR が無かった。定期実行される
+  flake-lock 更新 workflow の使い捨てブランチと判断し、依頼者の判断で
+  main へは反映せず削除のみとした。2026-08-21 節にも同名 branch の陳腐化
+  記録があり、今回のものはその後の workflow 実行で再生成された別コミット。
+
+### 削除した worktree / branch
+
+| 対象 | 種別 | 削除理由 |
+| --- | --- | --- |
+| `.worktrees/20260829T213039-7adcf6d` | worktree | 変更なし、main の HEAD と同一 commit |
+| `.worktrees/20260829T221725-7adcf6d` | worktree | 変更なし、main の HEAD と同一 commit |
+| `.worktrees/20260829T221819-7adcf6d` | worktree | 変更なし、main の HEAD と同一 commit |
+| `.worktrees/20260829T222139-7adcf6d` | worktree | 変更なし、main の HEAD と同一 commit |
+| `update_flake_lock_action` (local, `2f6a6ca`) | local branch | main へ反映しない方針。未マージのため `-D` で強制削除 |
+| `refs/remotes/origin/update_flake_lock_action` | remote-tracking ref | 対応する remote branch は既に無く、ローカルの古いキャッシュのみだった |
+
+### 検証
+
+- `git worktree list` は bare 本体のみ。
+- `git branch -a` は `main` と `remotes/origin/main` のみ。
+- `git ls-remote --heads origin` は `main` 1 本のみで、削除前から
+  `update_flake_lock_action` は含まれていなかったことを確認済み。
