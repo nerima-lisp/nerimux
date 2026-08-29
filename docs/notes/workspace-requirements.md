@@ -1,5 +1,13 @@
 # Workspace 縮約フェーズ 3 の要件
 
+> **【キーバインドは supersede 済み】** 本書のキー表（`C-q F` / `C-q C-f` / `i` /
+> `j/k` / `r` / `X` / `L` / `U` ほか）は magit 準拠への全面置換で無効になった。
+> 現行のキーは `+HELP-VIEW-SECTIONS+`（`src/presentation/renderer/renderer-tui-kit-help.lisp`）
+> と、それが記述する 3 つの実表 — `%HANDLE-CLIENT-UI-KEY-PAYLOAD`、
+> `%WORKSPACE-PREFIX-DISPATCH`、`+TRANSIENT-DEFINITIONS+` — を正とする。
+> 本書のキー表は「当時何を決めたか」の記録として残す。**現行仕様として読まないこと。**
+> R5/R6/R7 の pane・fetch・worktree の**振る舞い**は今も有効で、変わったのは入口のキーだけ。
+
 このファイルは、`docs/notes/workspace-ui-ux-design.md` が定義した UI/UX 契約と現在の
 実装との差分を測り、21 巡のヒアリングで決めた作業要件である。`docs/notes/` にあるため
 公開サイトには含まれない（`flake.nix:403` の docs fileset は `docs/mkdocs.yml` と

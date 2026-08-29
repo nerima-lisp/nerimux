@@ -4,12 +4,13 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Documentation](https://img.shields.io/badge/docs-MkDocs%20Material-0a7a5a)](https://nerima-lisp.github.io/nerimux/)
 
-A workspace-oriented terminal multiplexer written entirely in Common Lisp.
-The primary UI is a three-section overview — Attention, Active, and
-Repositories — with a thin client attached to a headless runtime. The entry
-surface is workspace-only — `attach`, `server`, and `kill` are the only
-commands. The core regression suite runs hermetically through Nix; live PTY
-integration is an explicit host-side check.
+A workspace-oriented terminal multiplexer written entirely in Common Lisp,
+with a [magit](https://magit.vc/)-style keymap. The primary UI is a
+three-section repolist — Attention, Active, and Repositories — with a thin
+client attached to a headless runtime. The entry surface is workspace-only —
+`attach`, `server`, and `kill` are the only commands. The core regression
+suite runs hermetically through Nix; live PTY integration is an explicit
+host-side check.
 
 Full documentation is published at <https://nerima-lisp.github.io/nerimux/>.
 The source for that site lives in [docs/src/](docs/src/).
@@ -33,7 +34,7 @@ commands with `./result/bin/nerimux`.
 unrecognized command word prints the usage summary and exits non-zero. If the
 current directory sits inside a worktree ghq already tracks (a subdirectory
 counts too), `attach` opens straight into that worktree's pane instead of the
-overview. Use `C-q d` to detach and `C-p` to open the global picker. A
+repolist. Use `C-q d` to detach and `C-p` to open the global picker. A
 selector containing a slash is resolved against the ghq catalog — the full
 specification, `host/organization/repository` — or against a local worktree
 path. `server` runs the headless runtime without attaching a client, and

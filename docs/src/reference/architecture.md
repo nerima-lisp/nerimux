@@ -23,15 +23,15 @@ SIGWINCH ──► %maybe-send-resize                     from each ready client
    length-prefixed frame, Unix socket ───────────────────────► ▼
                                               %handle-multi-client-message
                                               (per-client CLIENT-CONN: its own
-                                               rows/cols, view, mode, focus)
+                                               rows/cols, view, modal, focus)
                                                             │
                        ┌────────────────────────────────────┼───────────────────────┐
                        ▼                                    ▼                        ▼
-              workspace UI handlers                 focused pane's PTY      +msg-command+ payload
-              (per-CLIENT-CONN mode:                 (:input mode only —    → %handle-client-ui-command
-               :normal/:picker/:command/:copy —        pty-write via the      (workspace UI vocabulary:
-               overview/detail nav, wt-create/          *write-pty* port)      wt-create, tree-*, picker-*,
-               wt-delete, copy-mode nav)                                       mode, focus …)
+              repolist/status keymap,              focused pane's PTY       +msg-command+ payload
+              C-q prefix, transients               (VIEW :pane, MODAL nil   → %handle-client-ui-command
+              (per-CLIENT-CONN VIEW × MODAL          — pty-write via the      (workspace UI vocabulary:
+               — %client-ui-keys-p derives            *write-pty* port)        wt-create, tree-*, picker-*,
+               which of these three a key hits)                                view, modal …)
                                                             ▲
                                                             │ pane-feed, screen update, *dirty* = T
                                               ┌─────────────┴──────────────┐
@@ -51,20 +51,34 @@ SIGWINCH ──► %maybe-send-resize                     from each ready client
 
 The client side of the diagram is `src/bootstrap/client.lisp`; everything on
 the server side is keyed off the per-connection `CLIENT-CONN` struct in
-`src/bootstrap/server-multi.lisp`.
+`src/bootstrap/server-multi-dispatch.lisp`.
+
+`CLIENT-CONN` holds two independent axes rather than one mode×view product:
+`VIEW` (`:repolist` / `:status` / `:pane`) says which screen is up, and
+`MODAL` (`NIL` / `:transient` / `:confirm` / `:help` / `:process-log` /
+`:command` / `:picker` / `:filter` / `:scrollback`) says what, if anything,
+has taken the keyboard away from that screen. With `MODAL` `NIL`, where a key
+goes is *derived* from `VIEW` (`%client-ui-keys-p`,
+`src/bootstrap/server-multi-dispatch.lisp`) rather than stored: there is no
+state in which a pane is on screen and the workspace UI is nonetheless eating
+keys, because there is no slot in which to record one. That is what replaced
+the old `:normal`/`:input` mode pair — see [Getting
+started](../getting-started.md#default-key-bindings) for the resulting
+keymap.
 
 The server renders **per client**, not once for the whole session: each
-attached `CLIENT-CONN` can be at a different view (overview/detail), a
-different UI mode, and a different terminal size, so `%render-client-frame`
-(`src/bootstrap/server-multi.lisp`) picks the matching renderer and the
-client's own `rows`/`cols` on every broadcast. The shared pane/PTY layout
-underneath is still sized once, from the smallest attached client's geometry
-(`%effective-client-size`).
+attached `CLIENT-CONN` can be at a different view (`repolist`/`status`/
+`pane`), a different modal, and a different terminal size, so
+`%render-client-frame` (`src/bootstrap/server-multi.lisp`) picks the matching
+renderer and the client's own `rows`/`cols` on every broadcast. The shared
+pane/PTY layout underneath is still sized once, from the smallest attached
+client's geometry (`%effective-client-size`).
 
-A key an attached client sends only reaches a pane's PTY through `:input`
-mode (`i` from `:normal`). Other keys are handled by the per-client workspace
-dispatcher; bindings are compiled into that dispatcher and no configuration
-file is read.
+A key an attached client sends reaches a pane's PTY whenever `VIEW` is
+`:pane` and `MODAL` is `NIL` — no mode to enter first. Every other key is
+handled by the per-client workspace dispatcher (`%handle-multi-key-message`,
+`src/bootstrap/server-multi-dispatch.lisp`); bindings are compiled into that
+dispatcher and no configuration file is read.
 
 ## Layering
 
@@ -175,8 +189,9 @@ nerimux/
 │   │   ├── model/          #   session → window → pane tree, layouts
 │   │   └── ports/          #   the PTY port variables, plus the posix wrappers
 │   ├── application/        # use cases over the domain model
-│   │   ├── commands/       #   copy-mode and the command-line tokenizer —
-│   │   │   └── copy-mode/  #     what outlived the command table
+│   │   ├── commands/       #   scrollback (still named copy-mode internally)
+│   │   │   └── copy-mode/  #     and the command-line tokenizer — what
+│   │   │                   #     outlived the command table
 │   │   └── picker/         #   global picker item model (build/filter across
 │   │                       #   the workspace catalog)
 │   ├── infrastructure/     # adapters: PTY, sockets, raw-mode stdin input, VCS
@@ -193,12 +208,12 @@ The renderer has two independent first passes, and the split is deliberate:
 - **The pane view** — `render-session-to-string` (`renderer-compose.lisp`),
   drawing the fixed one-row status line, laying out panes and emitting escape
   codes. This is the VT100 machinery: pane and border rendering, status-line
-  composition, style/SGR emission, copy-mode overlays. Exercised on every
-  frame that shows terminal content.
+  composition, style/SGR emission, scrollback overlays (still `copy-mode` in
+  source). Exercised on every frame that shows terminal content.
 - **The workspace view** — `renderer-workspace-status-title.lisp` owns status
   labels and terminal titles shared by both views, while
   `renderer-workspace-command-line.lisp` owns workspace command completion.
-  `renderer-workspace-tree.lisp` projects the overview's three fixed
+  `renderer-workspace-tree.lisp` projects the repolist view's three fixed
   sections — Attention, Active, Repositories — flattening each worktree's
   optional inline expansion (panes, changed files, recent commits, and a
   changed file's own diff) into the same row list, including attention and

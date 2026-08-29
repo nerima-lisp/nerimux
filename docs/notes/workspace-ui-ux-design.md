@@ -1,5 +1,14 @@
 # Workspace UI/UX 設計メモ（未統合）
 
+> **【キーバインドと画面構成は supersede 済み】** 本書のフッター図・キー表・モード表
+> （`j/k` / `o` overview / `d` detail / `i` input / `C-q F` / `C-q C-f` ほか）は
+> magit 準拠への全面置換で無効になった。`overview` と `detail` の 2 画面は
+> `repolist` / `status` / `pane` の 3 画面に、`normal`/`input`/`copy` のモード軸は
+> `view` × `modal` の 2 スロットに置き換わり、pane はモード無しで直接入力を受ける。
+> 現行のキーは `+HELP-VIEW-SECTIONS+`
+> （`src/presentation/renderer/renderer-tui-kit-help.lisp`）を正とする。
+> 本書は「当時どう設計したか」の記録として残す。**現行仕様として読まないこと。**
+
 このファイルは、未追跡のまま別 worktree に残っていた設計草稿を保存したものである。
 `docs/notes/` にあるため公開サイトには含まれない（`mkdocs.yml` の `not_in_nav`）。
 

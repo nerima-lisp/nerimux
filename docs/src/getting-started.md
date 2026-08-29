@@ -20,7 +20,7 @@ nix build .                           # → ./result/bin/nerimux
 
 ```bash
 nerimux                                # same as `attach` with no selector
-nerimux attach                         # open the workspace overview
+nerimux attach                         # open the repolist view
 nerimux attach github.com/org/repo     # focus a repository by its ghq spec
 nerimux attach /path/to/worktree       # open a local worktree
 nerimux kill                           # stop the server (--force closes panes)
@@ -40,14 +40,15 @@ worktree path; a selector that matches both readings at once opens the
 global picker with the selector pre-typed instead of guessing.
 
 If the current directory is inside a worktree ghq already tracks — a
-subdirectory of one counts too — `attach` skips the overview and opens
+subdirectory of one counts too — `attach` skips the repolist and opens
 straight into that worktree's pane: the one last focused there, or a new
 shell if none was open yet. This resolves against the running server's
 catalog even before the initial scan has finished, by resolving and merging
-just that directory's repository synchronously. The pane opens in normal
-mode, with a mode chip (`NORMAL`, plus an `i to type` hint) at the left edge
-of the status bar. An explicit selector (`attach github.com/org/repo`, `attach
-/path/to/worktree`) still opens the overview with that item selected, not the
+just that directory's repository synchronously. The pane takes typing
+directly — there is no mode to leave first; every nerimux key inside a pane
+starts with `C-q` (see [Default key bindings](#default-key-bindings) below).
+An explicit selector (`attach github.com/org/repo`, `attach
+/path/to/worktree`) still opens the repolist with that item selected, not the
 pane directly.
 
 The overview tree appears as soon as the repository scan finishes; the
@@ -58,7 +59,7 @@ tree flagged `!` rather than aborting the scan. While the initial scan is
 still running, attaching shows a placeholder screen (`scanning workspaces...`,
 with a running repository count once the scan has found any) instead of an
 empty tree; if the ghq root has no repositories at all once the scan
-finishes, the overview shows that directly, with the ghq root path and a
+finishes, the repolist view shows that directly, with the ghq root path and a
 `ghq get <owner>/<repo>` hint, rather than a permanently empty tree.
 
 If `nerimux` has to auto-start the server — no server was already running for
@@ -78,33 +79,141 @@ The log directory is created `0700`. See `%runtime-log-path` and
 
 ## Default key bindings
 
-The workspace UI uses **`C-q`** as its prefix. The initial view is the
-overview, unless the cwd-match above jumps straight to a worktree's pane;
-`C-p` opens the global picker across organizations, repositories, worktrees,
-and panes.
+The workspace UI follows [magit](https://magit.vc/)'s keymap. A client is
+always at one of three **views** — `repolist`, `status`, or `pane` — and,
+independently, may have a **modal** on top of that view (a transient menu,
+a confirmation, the help view, the process log, the picker, an incremental
+filter, the command line, or scrollback). With no modal up, where a keystroke
+goes is derived entirely from the current view: `repolist` and `status` route
+to the workspace keymap below, and `pane` sends every byte straight to the
+shell. There is no `:normal`/`:input` distinction and no key to press before
+typing into a pane — every nerimux-level key inside a pane starts with
+**`C-q`** instead. The initial view is `repolist`, unless the cwd-match above
+jumps straight into a worktree's pane; `C-p` opens the global picker across
+organizations, repositories, worktrees, and panes from either `repolist` or
+`status`.
+
+(`CLIENT-CONN-VIEW` and `CLIENT-CONN-MODAL`, `src/bootstrap/server-multi-dispatch.lisp`,
+are the two slots this model is built from; `%client-ui-keys-p` in the same
+file is the one-line derivation described above.)
+
+### The `repolist`/`status` keymap
 
 | Key | Action |
 |---|---|
-| `C-q d` | Detach while keeping the runtime session resident |
-| `C-p` | Open the global picker |
-| `o` / `d` | Overview / detail view |
-| `j` / `k` | Move the selection one row |
-| `J` / `K` | Jump to the next / previous section header |
-| `h` / `l` | Fold / expand the selected section header or repository row (in detail view: move focus to an adjacent pane) |
-| `Tab` | Expand or collapse inline detail: a repository row's worktrees, a worktree row's panes/changed files/recent commits, or a changed-file row's diff |
-| `Enter` | Dive in: on a worktree row, open its shell (or create one if none is open yet); on a repository row, jump straight into its main worktree's shell; on a section header, toggle it open or closed |
-| `n` | Create a worktree for the selected repository and jump straight into its shell |
-| `X` | Delete the selected worktree (asks for confirmation) |
-| `L` / `U` | Lock / unlock the selected worktree (asks for confirmation) |
+| `n` / `p` | Move the selection one row |
+| `M-n` / `M-p` | Jump to the next / previous section header |
+| `Tab` | Expand or collapse the selected row: a repository's worktrees, a worktree's panes/changed files/recent commits, or a changed file's diff |
+| `Shift-Tab` | Cycle the global visibility level (same as pressing `1`…`4` in sequence) |
+| `1`–`4` | Set the global visibility level directly (`4` expands everything, `1` shows section headings only) |
+| `Enter` | Dive in: open/create a worktree's shell, jump into a repository's main worktree, or toggle a section header |
+| `q` | Step back one rung — closes an open transient, then clears an active filter, then leaves `status` for the focused pane (or `repolist` if none), in that order |
+| `g` | Refresh the workspace catalog and VCS state |
+| `$` | Open the process log of recent git writes |
 | `/` | Filter the tree incrementally |
-| `r` | Refresh the workspace catalog and VCS state |
-| `i` / `c` / `:` | Input / copy / command mode |
-| `?` | Open the full-screen help view |
-| `Esc` | Close or cancel the active modal or mode |
+| `:` | Open the command line |
+| `C-p` | Open the global picker |
+| `?` | Open the dispatch menu (a transient listing every other transient) |
+| `Esc` | Close or cancel the active modal |
 
-### The overview tree
+`status` view only, once a worktree is selected:
 
-The overview is a single full-width tree, with no side panels, built from
+| Key | Action |
+|---|---|
+| `s` / `S` | Stage the selected change / stage everything |
+| `u` / `U` | Unstage the selected change / unstage everything |
+| `k` | Discard the selected change — asks for confirmation first |
+| `c` `P` `F` `b` `m` `r` `z` `l` `d` `f` `t` `X` `!` `w` | Open the matching transient directly — see below. From `repolist`, the same transients are reachable only through `?` |
+
+Selecting a row that is not a file — a section header, a commit, a stash — and
+pressing one of these reports that there is nothing to stage rather than acting
+on something else. Paths are passed after `--`, so a file whose name begins
+with a dash is never read as a git option.
+
+### Transient menus
+
+`?` opens the dispatch menu, magit-style: a panel of one-letter keys, each
+opening a further menu of arguments (toggled with their own letter) and
+actions. From `status`, most of these also have a direct single-key shortcut
+(the table above). The full set, and which actions actually run something
+versus report that they are not wired yet (source: `+transient-definitions+`,
+`src/bootstrap/server-multi-dispatch-transient.lisp`):
+
+| Key | Menu | Wired actions | Not wired in this build |
+|---|---|---|---|
+| `c` | Commit | amend, keep message (`git commit --amend --no-edit`) | commit with a new message — no text prompt exists |
+| `P` | Push | push to `origin/<branch>`, toggling `-f`/`--force-with-lease`/`-F`/`--force` (confirms first when either is active) | push to another remote — no text prompt |
+| `F` | Pull | pull from `origin/<branch>`, toggling `--rebase` | — |
+| `b` | Branch | list branches; switch to the previous branch (`git switch -`) | create/delete a branch — no text prompt |
+| `m` | Merge | merge upstream (`@{u}`) | merge another branch — no text prompt |
+| `r` | Rebase | rebase onto upstream (`@{u}`, confirms first); abort rebase | — |
+| `z` | Stash | stash changes; pop the latest stash | — |
+| `l` | Log | — | show log — no pager exists in this build |
+| `d` | Diff | — | show diff — no pager exists in this build |
+| `f` | Fetch | fetch this repository; fetch the whole organization | — |
+| `t` | Tag | list tags | create a tag — no text prompt |
+| `X` | Reset | `reset --soft HEAD`; `reset --hard HEAD` (confirms first); clean untracked files `-fd` (confirms first) | — |
+| `!` | Shell command | — | arbitrary shell execution — deliberately never wired; it is its own trust-boundary decision |
+| `w` | Worktree | create a worktree and open its shell; delete/lock/unlock the selected worktree (each pre-fills the command line with e.g. `wt-delete --confirm` — press `Enter` to run it or `Esc` to cancel) | create with a chosen branch name — use `: wt-create --branch <name> --confirm` instead |
+| `?` | Dispatch | opens any of the above; `k` opens the full-screen help view | — |
+
+A "not wired" action reports so on screen (`"... not wired in this build"`)
+and does nothing. Every one of them is blocked on the same missing piece: this
+build has no free-text prompt, so anything needing a commit message, a branch
+name, a tag name or a remote name has nowhere to read it from. The `:` command
+line is the workaround where one exists, and the table names it.
+
+### The `C-q` prefix
+
+| Key | Action |
+|---|---|
+| `C-q -` / `C-q \|` | Split the focused pane's window down / right |
+| `C-q x` | Close the focused pane |
+| `C-q z` | Toggle zoom on the focused pane's window |
+| `C-q h` / `j` / `k` / `l` | Move focus to the neighbouring pane |
+| `C-q n` / `p` | Cycle through the current worktree's windows |
+| `C-q w` | Switch to the `status` view for the focused pane's worktree (falls back to `repolist` if nothing is focused) |
+| `C-q [` | Enter scrollback on the focused pane |
+| `C-q d` | Detach while keeping the runtime session resident |
+| `C-q Q` | Quit the server (asks for confirmation, showing how many panes are still open) |
+| `C-q C-q` | Escape: drop any modal and hand the keyboard back to the current view |
+
+`C-q F` and `C-q C-f` (fetch repository / fetch organization) are gone —
+fetch is the `f` transient now, reachable from `status` directly or from
+`repolist` via `?` f.
+
+### Scrollback (`C-q [`)
+
+This is the only place vi-style motion survives; it replaces what used to be
+called copy mode.
+
+| Key | Action |
+|---|---|
+| `j` / `k` | Move the cursor one line |
+| `C-u` / `C-d` | Scroll half a page up / down |
+| `g` / `G` | Jump to the top / bottom of scrollback |
+| `/` / `?` | Search forward / backward |
+| `n` / `N` | Repeat the last search forward / backward |
+| `Space` | Begin a selection at the cursor |
+| `y` | Yank the selection and leave scrollback |
+| `q` | Leave scrollback without yanking |
+
+### Retired — do not reintroduce
+
+The overview/detail keymap this replaced bound `j` `k` `J` `K` `h` `l` `i`
+`o` `d` (view switch) `r` (refresh) `X` (worktree delete) `L` `U` `n`
+(worktree create) and `c` (copy mode), plus the `:normal`/`:input`/`:copy`
+mode vocabulary itself. None of that survives: `j`/`k` are now `n`/`p`,
+`o`/`d` no longer switch views (`C-q w` and `q` do), worktree create/delete/
+lock/unlock moved under the `w` transient, refresh is `g`, and copy mode is
+scrollback (`C-q [`). Two working key bindings (`C-q F`, `C-q C-f`) were also
+retired outright, folded into the `f` transient. `1`–`4`, `Tab`,
+`Shift-Tab`, and the transient menus are new; they have no old-keymap
+equivalent to confuse them with.
+
+### The repolist tree
+
+The repolist view is a single full-width tree, with no side panels, built from
 three fixed sections in this order:
 
 - **Attention** — every worktree that needs attention (dirty, conflict,
@@ -112,7 +221,7 @@ three fixed sections in this order:
 - **Active** — every other worktree that holds at least one open pane.
 - **Repositories** — every repository, always shown, whether or not any of
   its worktrees appear above. A repository row is **collapsed by default**;
-  `l` or `Tab` expands it to list its worktrees.
+  `Tab` expands it to list its worktrees.
 
 A worktree appears in at most one of Attention or Active, never both; a
 clean, pane-less worktree shows only once its repository is expanded. An
@@ -151,18 +260,20 @@ clears it. A query that matches nothing replaces the row list with a
 centered `no matches: /query` notice, so an empty tree always reads as
 "filtered to zero", never as a broken screen.
 
-Press `?` at any time to open a full-screen help view listing every binding
-— the overview keymap, the `C-q` prefix table, and each UI mode's enter/leave
-key. `q`, `Esc`, or `Enter` closes it; a pending confirmation view (such as
-the worktree-delete or server-quit prompt) takes priority and stays on top
-of it.
+`?` opens the dispatch transient (see [Transient menus](#transient-menus)
+above); its `k` entry opens a full-screen help view listing every binding —
+Navigate, `status`-only staging, the transient menus, the `C-q` prefix, and
+scrollback. `q`, `Esc`, or `Enter` closes the help view; a pending
+confirmation (such as `C-q Q`'s server-quit prompt) takes priority over
+every other modal and stays on top of it.
 
 ### Creating a worktree
 
-Press `n` on a selected repository to create a worktree right away: nerimux
-generates a branch name (`wt-<timestamp>`), creates the worktree, and jumps
-straight into its shell — there is no branch-name prompt in between. To pick
-the branch name yourself, use the command line instead:
+With a repository selected, open the Worktree transient (`w` from `status`,
+or `?` then `w` from either view) and press `c` to create a worktree right
+away: nerimux generates a branch name (`wt-<timestamp>`), creates the
+worktree, and jumps straight into its shell — there is no branch-name prompt
+in between. To pick the branch name yourself, use the command line instead:
 
 ```
 : wt-create --branch <name> --confirm
@@ -172,7 +283,7 @@ Both paths land you in the new worktree's shell as soon as it is ready —
 selecting and creating both mean "enter it," not "select it and stop."
 
 Inside the picker, every printable key is a character of the search query, so
-the selection moves with **`C-p`** and **`C-n`** rather than `j` and `k`.
+the selection moves with **`C-p`** and **`C-n`** rather than `n` and `p`.
 `C-r` toggles regex matching, `Enter` selects, `Esc` closes.
 
 nerimux reads no configuration file; every key binding and layout value above
@@ -233,9 +344,20 @@ There is also an end-to-end smoke script, `t/e2e/e2e-smoke.lisp`, kept out of
 the ASDF test system because it needs a built binary and a real `/dev/ptmx`.
 Like `nerimux/pty-test`, it is not part of `nix flake check`; run it
 yourself. It runs headless `server`/`kill` scenarios against the binary as a
-subprocess, then launches it with `attach`, enters `:input` mode with `i`,
-sends a marker through the attached pane, verifies the rendered output, and
-detaches with `C-q d`:
+subprocess, then launches it with `attach`, sends a marker through the
+attached pane, verifies the rendered output, and detaches with `C-q d`:
+
+!!! warning
+    The `attach` scenario (`t/e2e/attach-scenario.lisp`) still sends a
+    leading `i` keystroke before the marker command, a holdover from the
+    retired `:normal`/`:input` keymap. Since a pane now takes typing
+    directly, that `i` lands as a literal character in the shell instead of
+    switching modes, and the marker never appears. Verified by running it
+    against this branch's build: `nix build .` then `nerimux-sbcl --script
+    t/e2e/e2e-smoke.lisp result/bin/nerimux attach` reports `FAIL attach --
+    marker=MISSING`. This is a test-script regression from the keymap
+    change, not a rendering defect; fix it in `t/e2e/attach-scenario.lisp`
+    before trusting this scenario's result again.
 
 ```bash
 nix run .#e2e
