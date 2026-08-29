@@ -709,6 +709,121 @@
      (%scroll-client-process-log conn -1)))
   nil)
 
+;;; ── FR-003 stage/unstage/discard (magit-style status actions) ────────────
+;;;
+;;; s/S/u/U/k below are reached straight from %HANDLE-CLIENT-UI-KEY-PAYLOAD's
+;;; NIL-modal keymap (see the status-only clauses further down), which has no
+;;; error boundary of its own above it: %HANDLE-MULTI-KEY-MESSAGE's only
+;;; handler-case is PEER-IO-FAILURE, not ERROR (server-multi-dispatch.lisp),
+;;; so an unhandled condition from any of these five would propagate out of
+;;; the single select(2) loop shared by every client and kill the server.
+;;; Every path through these five functions must therefore end in either a
+;;; %CLIENT-NOTIFY or a %RUN-TRANSIENT-GIT-WRITE dispatch, never a bare
+;;; ERROR -- %CLIENT-RUN-STATUS-WRITE's HANDLER-CASE is the actual guard;
+;;; the rest of this section is just making sure every branch reaches it or
+;;; a no-op notify instead of a bare struct-slot access on NIL.
+
+(defun %client-selected-status-file (conn)
+  "The (WORKTREE PATH) pair for CONN's selected status-view row, or NIL when
+   there is no selection, the selection is not a :FILE row (its OBJECT is
+   (:FILE WORKTREE-ID PATH CODE) -- see WORKSPACE-STATUS-ENTRIES /
+   %WORKSPACE-STATUS-FILE-ENTRIES, renderer-workspace-status.lisp, and the
+   existing :FILE handling in %CLIENT-TOGGLE-SELECTED-TREE-ROW above), or the
+   row's own WORKTREE-ID no longer resolves in the live catalog. Resolving
+   the worktree from the row's OWN embedded id, rather than from CLIENT-CONN-
+   SELECTED-WORKTREE, keeps this correct even for a :FILE row reached via the
+   repolist tree's inline expansion (Wave B/C), which need not agree with
+   whichever worktree CLIENT-CONN-SELECTED-WORKTREE currently names."
+  (let ((object (%client-tree-object conn)))
+    (when (and (consp object) (eq (first object) :file))
+      (destructuring-bind (worktree-id path code) (rest object)
+        (declare (ignore code))
+        (let ((worktree (%workspace-find-worktree worktree-id)))
+          (and worktree (list worktree path)))))))
+
+(defun %client-run-status-write (conn repository operation args)
+  "Run one stage/unstage/discard write through the same async path and
+   process log the transient menu's own writes use (%RUN-TRANSIENT-GIT-
+   WRITE) -- not the synchronous GIT-WRITE-OPERATION, both for consistency
+   with every other write this server issues and so a slow `git add` on a
+   large index cannot stall the one event loop every attached client shares.
+   REPOSITORY nil (no repository resolved for the selected worktree) is
+   reported rather than attempted. HANDLER-CASE is the actual crash fix this
+   whole section exists for -- see the header comment above."
+  (if (null repository)
+      (%client-notify conn "no repository selected")
+      (handler-case
+          (%run-transient-git-write conn repository operation args)
+        (error (condition)
+          (%client-notify
+           conn
+           (format nil "git ~(~A~): failed: ~A" operation condition)))))
+  t)
+
+(defun %client-stage-selection (conn)
+  "s (contract SS3): `git add -- PATH` for the selected :FILE row."
+  (let ((selection (%client-selected-status-file conn)))
+    (if selection
+        (destructuring-bind (worktree path) selection
+          (%client-run-status-write
+           conn (nerimux/model:worktree-repository worktree)
+           :add (list "--" path)))
+        (progn (%client-notify conn "select a file first") t))))
+
+(defun %client-stage-all (conn)
+  "S (contract SS3): `git add -A` for the status view's own worktree
+   (CLIENT-CONN-SELECTED-WORKTREE, the worktree %RENDER-STATUS-FRAME is
+   currently drawing -- there is no per-file selection to key this one off
+   of)."
+  (let ((worktree (client-conn-selected-worktree conn)))
+    (if worktree
+        (%client-run-status-write
+         conn (nerimux/model:worktree-repository worktree) :add (list "-A"))
+        (progn (%client-notify conn "no worktree selected") t))))
+
+(defun %client-unstage-selection (conn)
+  "u (contract SS3): `git restore --staged -- PATH` for the selected :FILE
+   row."
+  (let ((selection (%client-selected-status-file conn)))
+    (if selection
+        (destructuring-bind (worktree path) selection
+          (%client-run-status-write
+           conn (nerimux/model:worktree-repository worktree)
+           :restore (list "--staged" "--" path)))
+        (progn (%client-notify conn "select a file first") t))))
+
+(defun %client-unstage-all (conn)
+  "U (contract SS3): `git restore --staged -- .` for the status view's own
+   worktree, mirroring %CLIENT-STAGE-ALL's worktree resolution."
+  (let ((worktree (client-conn-selected-worktree conn)))
+    (if worktree
+        (%client-run-status-write
+         conn (nerimux/model:worktree-repository worktree)
+         :restore (list "--staged" "--" "."))
+        (progn (%client-notify conn "no worktree selected") t))))
+
+(defun %client-start-discard-selection (conn)
+  "k (contract SS3): `git restore -- PATH` for the selected :FILE row --
+   destructive (it throws away uncommitted worktree changes with no undo),
+   so unlike stage/unstage above it never runs immediately: it always
+   confirms first via %OPEN-CONFIRM-VIEW, the same gate %RUN-TRANSIENT-GIT-
+   ACTION's own CONFIRM-P branch uses for force-push/reset --hard/branch
+   -D/clean (server-multi-dispatch-transient.lisp)."
+  (let ((selection (%client-selected-status-file conn)))
+    (if selection
+        (destructuring-bind (worktree path) selection
+          (let ((repository (nerimux/model:worktree-repository worktree)))
+            (%open-confirm-view
+             conn
+             (format nil "git restore -- ~A" path)
+             (list (cons "worktree" (nerimux/model:worktree-path worktree))
+                   (cons "path" path))
+             (lambda ()
+               (%client-run-status-write
+                conn repository :restore (list "--" path))))
+            t))
+        (progn (%client-notify conn "select a file first") t))))
+
 ;;; ── The repolist/status UI keymap (contract SS2, FR-004) ─────────────────
 ;;;
 ;;; Reached only when MODAL is NIL and VIEW is :repolist or :status

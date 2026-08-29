@@ -1772,4 +1772,125 @@
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available)
           (setf nerimux::*main-thread-callbacks* nil)
           (ignore-errors (sb-posix:rmdir failing-path))))))
-)
+
+  ;;; ── FR-003 status-view stage/unstage/discard: crash regression ───────────
+  ;;
+  ;; %HANDLE-CLIENT-UI-KEY-PAYLOAD's :status clauses bound s/S/u/U/k to five
+  ;; functions with no DEFUN anywhere in src/ (%CLIENT-STAGE-SELECTION,
+  ;; %CLIENT-STAGE-ALL, %CLIENT-UNSTAGE-SELECTION, %CLIENT-UNSTAGE-ALL,
+  ;; %CLIENT-START-DISCARD-SELECTION). Pressing any of them raised UNDEFINED-
+  ;; FUNCTION, which escapes %HANDLE-MULTI-KEY-MESSAGE (its only error
+  ;; boundary is PEER-IO-FAILURE, not ERROR -- server-multi-dispatch.lisp)
+  ;; and kills the single select(2) loop shared by every attached client.
+
+  ;; FINISHES asserts the dispatch call itself never signals, which is the
+  ;; exact shape of the crash this guards against: comment out any one of the
+  ;; five DEFUNs above and this test's DOLIST goes red with an UNBOUND-
+  ;; FUNCTION condition on that key, proving the guard is not vacuous.
+  (it "status-view-stage-unstage-and-discard-keys-do-not-crash-the-dispatcher"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org" :host "github.com" :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo" :organization organization
+                :specification "github.com/team/repo"))
+             (worktree
+               (nerimux/model:make-worktree
+                :id "wt-crash-guard" :repository repository
+                :path "/tmp/wt-crash-guard" :branch "main"))
+             (conn (%make-test-conn))
+             (nerimux::*clients* (list conn))
+             ;; %CLIENT-SELECTED-STATUS-FILE resolves a :FILE row's worktree
+             ;; via %WORKSPACE-FIND-WORKTREE against the live catalog (the
+             ;; same lookup %CLIENT-TOGGLE-SELECTED-FILE-DIFF already uses),
+             ;; not via this CONN's own selection state -- WORKTREE must
+             ;; therefore actually be reachable through the catalog, exactly
+             ;; as the section-based-overview tests above register theirs.
+             (nerimux/vcs::*workspace-organizations* (list organization))
+             (calls nil))
+        (nerimux/model:organization-add-repository organization repository)
+        (nerimux/model:repository-add-worktree repository worktree)
+        (setf (nerimux::client-conn-view conn) :status
+              (nerimux::client-conn-selected-worktree conn) worktree)
+        (with-stubbed-fdefinition
+            ;; VCS-PACKAGE-AVAILABLE-P NIL keeps a successful write's
+            ;; %RUN-TRANSIENT-GIT-WRITE on-complete from calling
+            ;; %REFRESH-CLIENT-PICKER's real (network/filesystem-reaching)
+            ;; catalog rescan -- irrelevant to what this test is pinning.
+            ((nerimux/vcs:vcs-package-available-p (lambda () nil))
+             (nerimux/vcs:git-write-operation-async
+               (lambda (received-repository operation arguments
+                        &key callback-dispatch on-complete on-error)
+                 (declare (ignore callback-dispatch on-error))
+                 (push (list received-repository operation arguments) calls)
+                 (when on-complete (funcall on-complete t ""))
+                 t)))
+          ;; S (stage all) and U (unstage all) key off CLIENT-CONN-SELECTED-
+          ;; WORKTREE directly, pressed first while that slot still holds
+          ;; WORKTREE -- %SET-CLIENT-SELECTED-TREE-OBJECT below (needed for
+          ;; s/u/k's own :FILE selection) clobbers CLIENT-CONN-SELECTED-
+          ;; WORKTREE back to NIL for any object that is not itself a
+          ;; worktree struct (%SET-CLIENT-SELECTED-TREE-OBJECT's own
+          ;; coupling of the two slots), so S/U would otherwise see no
+          ;; worktree selected.
+          (dolist (key '("S" "U"))
+            (finishes (nerimux::%handle-multi-key-message s conn key)))
+          ;; s (stage), u (unstage), k (discard) each need a selected :FILE
+          ;; row.
+          (dolist (key '("s" "u" "k"))
+            (nerimux::%set-client-selected-tree-object
+             conn (list :file "wt-crash-guard" "src/foo.lisp" " M"))
+            (finishes (nerimux::%handle-multi-key-message s conn key))))
+        ;; k only opens a confirmation (pinned more precisely by the next
+        ;; test); s/u/S/U each ran a write -- four writes, not five.
+        (expect (= 4 (length calls)))
+        (expect (every (lambda (call) (eq repository (first call))) calls))
+        (expect (eq :confirm (nerimux::client-conn-modal conn))))))
+
+  ;; Second required test: k (discard) is destructive, so it must open
+  ;; %OPEN-CONFIRM-VIEW's y/n gate instead of writing immediately -- unlike
+  ;; s/S/u/U above, which run straight away. Confirming with `y` is what
+  ;; actually reaches the VCS layer.
+  (it "status-view-discard-key-confirms-before-writing"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/model:make-organization
+                :id "org" :host "github.com" :name "team"))
+             (repository
+               (nerimux/model:make-repository
+                :id "repo" :organization organization
+                :specification "github.com/team/repo"))
+             (worktree
+               (nerimux/model:make-worktree
+                :id "wt-discard-confirm" :repository repository
+                :path "/tmp/wt-discard-confirm" :branch "main"))
+             (conn (%make-test-conn))
+             (nerimux::*clients* (list conn))
+             (nerimux/vcs::*workspace-organizations* (list organization))
+             (calls nil))
+        (nerimux/model:organization-add-repository organization repository)
+        (nerimux/model:repository-add-worktree repository worktree)
+        (setf (nerimux::client-conn-view conn) :status
+              (nerimux::client-conn-selected-worktree conn) worktree)
+        (nerimux::%set-client-selected-tree-object
+         conn (list :file "wt-discard-confirm" "src/foo.lisp" " M"))
+        (with-stubbed-fdefinition
+            ((nerimux/vcs:vcs-package-available-p (lambda () nil))
+             (nerimux/vcs:git-write-operation-async
+               (lambda (received-repository operation arguments
+                        &key callback-dispatch on-complete on-error)
+                 (declare (ignore callback-dispatch on-error))
+                 (push (list received-repository operation arguments) calls)
+                 (when on-complete (funcall on-complete t ""))
+                 t)))
+          (nerimux::%handle-multi-key-message s conn "k")
+          (expect (null calls))
+          (expect (eq :confirm (nerimux::client-conn-modal conn)))
+          (expect (nerimux::client-conn-confirm-action conn))
+          (nerimux::%handle-multi-key-message s conn "y")
+          (expect (null (nerimux::client-conn-modal conn)))
+          (expect (equal (list (list repository :restore (list "--" "src/foo.lisp")))
+                         calls)))))))
+
