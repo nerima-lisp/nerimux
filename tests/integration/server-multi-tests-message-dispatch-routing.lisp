@@ -94,10 +94,10 @@
       (let* ((conn (%make-test-conn))
              (pane (nerimux::window-active-pane
                     (nerimux::session-active-window s)))
-             (screen (nerimux/model:pane-screen pane))
+             (screen (nerimux/pane:pane-screen pane))
              (nerimux::*clients* (list conn)))
         (setf (nerimux::client-conn-focus conn) pane)
-        (nerimux/model:pane-feed
+        (nerimux/pane:pane-feed
          pane
          (cl-codec-kit:string-to-octets "needle" :encoding :utf-8))
         (nerimux::%set-client-view conn :pane)

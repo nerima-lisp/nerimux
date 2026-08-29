@@ -18,9 +18,9 @@
       (let* ((conn (%make-test-conn))
              ;; %client-notify no-ops unless CONN is in *clients* (%client-live-p).
              (nerimux::*clients* (list conn))
-             (win (first (nerimux/model:session-windows s)))
-             (panes (nerimux/model:window-panes win)))
-        (setf (nerimux/model:pane-fd (first panes)) 9999) ; one live pane
+             (win (first (nerimux/session:session-windows s)))
+             (panes (nerimux/window:window-panes win)))
+        (setf (nerimux/pane:pane-fd (first panes)) 9999) ; one live pane
         (nerimux::%handle-multi-key-message s conn #(17)) ; C-q
         (nerimux::%handle-multi-key-message s conn #(81)) ; Q
         (let ((view (nerimux::client-conn-confirm-view conn)))
@@ -60,11 +60,11 @@
   (it "r8-3-detaching-the-last-client-leaves-running-true-and-panes-untouched"
     (with-fake-session (s :nwindows 1 :npanes 1)
       (let* ((conn (%make-test-conn))
-             (pane (nerimux/model:window-active-pane
-                    (nerimux/model:session-active-window s)))
+             (pane (nerimux/window:window-active-pane
+                    (nerimux/session:session-active-window s)))
              (nerimux::*clients* (list conn)))
-        (setf (nerimux/model:pane-fd pane) 9999)
+        (setf (nerimux/pane:pane-fd pane) 9999)
         (expect (eq :drop (nerimux::%handle-multi-client-message
                            nerimux::+msg-detach+ #() s conn)))
         (expect nerimux::*running* :to-be-truthy)
-        (expect (nerimux/model:pane-live-p pane))))))
+        (expect (nerimux/pane:pane-live-p pane))))))

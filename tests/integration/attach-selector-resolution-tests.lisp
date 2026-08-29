@@ -12,17 +12,17 @@
 (defun %attach-fixture (&key (specification "github.com/team/widget")
                              worktree-path)
   "An organization holding one repository, and a worktree when PATH is given."
-  (let* ((organization (nerimux/model:make-organization
+  (let* ((organization (nerimux/workspace-model:make-organization
                         :id "org" :host "github.com" :name "team"))
-         (repository (nerimux/model:make-repository
+         (repository (nerimux/workspace-model:make-repository
                       :id "repo"
                       :organization organization
                       :specification specification)))
-    (nerimux/model:organization-add-repository organization repository)
+    (nerimux/workspace-model:organization-add-repository organization repository)
     (when worktree-path
-      (nerimux/model:repository-add-worktree
+      (nerimux/workspace-model:repository-add-worktree
        repository
-       (nerimux/model:make-worktree :id "wt"
+       (nerimux/workspace-model:make-worktree :id "wt"
                                     :repository repository
                                     :path worktree-path
                                     :branch "main")))
@@ -83,7 +83,7 @@
       (let ((resolved (nerimux::%client-attach-selection conn organizations)))
         (expect resolved)
         (expect (string= "/tmp/nerimux-cwd-fixture/repo/.worktrees/wt1"
-                         (nerimux/model:worktree-path resolved))))))
+                         (nerimux/workspace-model:worktree-path resolved))))))
 
   ;; The regression this fixes: testing the prefix in the attach-target
   ;; direction (worktree path as the shorter, cwd-as-token as the prefix
@@ -118,26 +118,26 @@
   ;; whichever the scan happens to reach first.
   (it "cwd-inside-a-nested-worktree-selects-the-most-specific-one"
     (let* ((nerimux::*last-selected-worktree-token* nil)
-           (organization (nerimux/model:make-organization
+           (organization (nerimux/workspace-model:make-organization
                           :id "org" :host "github.com" :name "team"))
-           (repository (nerimux/model:make-repository
+           (repository (nerimux/workspace-model:make-repository
                         :id "repo"
                         :organization organization
                         :specification "github.com/team/widget"))
-           (outer (nerimux/model:make-worktree
+           (outer (nerimux/workspace-model:make-worktree
                    :id "outer"
                    :repository repository
                    :path "/tmp/nerimux-cwd-fixture/repo/.worktrees/outer"
                    :branch "main"))
-           (inner (nerimux/model:make-worktree
+           (inner (nerimux/workspace-model:make-worktree
                    :id "inner"
                    :repository repository
                    :path "/tmp/nerimux-cwd-fixture/repo/.worktrees/outer/nested"
                    :branch "nested"))
            (conn (%make-test-conn)))
-      (nerimux/model:organization-add-repository organization repository)
-      (nerimux/model:repository-add-worktree repository outer)
-      (nerimux/model:repository-add-worktree repository inner)
+      (nerimux/workspace-model:organization-add-repository organization repository)
+      (nerimux/workspace-model:repository-add-worktree repository outer)
+      (nerimux/workspace-model:repository-add-worktree repository inner)
       (setf (nerimux::client-conn-attach-cwd conn)
             "/tmp/nerimux-cwd-fixture/repo/.worktrees/outer/nested/deep")
       (let ((resolved
@@ -214,12 +214,12 @@
           (%attach-fixture
            :worktree-path "/tmp/nerimux-cwd-fixture/repo/.worktrees/wt-cwd")
         (let ((worktree
-                (first (nerimux/model:repository-worktrees
-                        (first (nerimux/model:organization-repositories
+                (first (nerimux/workspace-model:repository-worktrees
+                        (first (nerimux/workspace-model:organization-repositories
                                 (first organizations)))))))
           (multiple-value-bind (session)
               (make-single-pane-session)
-            (let ((pane (first (nerimux/model:all-panes session))))
+            (let ((pane (first (nerimux/session:all-panes session))))
               ;; %focus-selected-client-worktree only takes the direct
               ;; %client-worktree-pane branch (%set-client-focus, which sets
               ;; the :pane view) when the pane is PANE-LIVE-P (fd > 0); a
@@ -228,8 +228,8 @@
               ;; fixture's path cannot pass. No PTY I/O happens on this path,
               ;; so a fake positive fd is enough to select the branch under
               ;; test without spawning a real process.
-              (setf (nerimux/model:pane-fd pane) 999)
-              (nerimux/model:worktree-add-pane worktree pane)
+              (setf (nerimux/pane:pane-fd pane) 999)
+              (nerimux/pane:worktree-add-pane worktree pane)
               (let ((conn (%make-test-conn))
                     (nerimux::*server-sessions* (list (cons "0" session)))
                     (nerimux/vcs::*workspace-organizations* organizations))

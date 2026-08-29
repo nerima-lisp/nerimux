@@ -7,22 +7,22 @@
   (it "picker-arrow-key-bytes-one-at-a-time-do-not-move-the-index"
     (with-fake-session (s)
       (let* ((organization
-               (nerimux/model:make-organization
+               (nerimux/workspace-model:make-organization
                 :id "org" :host "github.com" :name "team"))
              (repository
-               (nerimux/model:make-repository
+               (nerimux/workspace-model:make-repository
                 :id "repo" :organization organization
                 :specification "github.com/team/repo"))
              (worktree-a
-               (nerimux/model:make-worktree
+               (nerimux/workspace-model:make-worktree
                 :id "a" :repository repository :path "/tmp/a" :branch "a"))
              (worktree-b
-               (nerimux/model:make-worktree
+               (nerimux/workspace-model:make-worktree
                 :id "b" :repository repository :path "/tmp/b" :branch "b"))
              (conn (%make-test-conn)))
-        (nerimux/model:organization-add-repository organization repository)
-        (nerimux/model:repository-add-worktree repository worktree-a)
-        (nerimux/model:repository-add-worktree repository worktree-b)
+        (nerimux/workspace-model:organization-add-repository organization repository)
+        (nerimux/workspace-model:repository-add-worktree repository worktree-a)
+        (nerimux/workspace-model:repository-add-worktree repository worktree-b)
         (nerimux::%set-client-modal conn :picker)
         (setf (nerimux::client-conn-picker-items conn)
               (nerimux/picker:build-global-picker-items (list organization))
@@ -41,22 +41,22 @@
   (it "multi-picker-c-p-c-n-move-the-selection"
     (with-fake-session (s)
       (let* ((organization
-               (nerimux/model:make-organization
+               (nerimux/workspace-model:make-organization
                 :id "org" :host "github.com" :name "team"))
              (repository
-               (nerimux/model:make-repository
+               (nerimux/workspace-model:make-repository
                 :id "repo" :organization organization
                 :specification "github.com/team/repo"))
              (worktree-a
-               (nerimux/model:make-worktree
+               (nerimux/workspace-model:make-worktree
                 :id "a" :repository repository :path "/tmp/a" :branch "a"))
              (worktree-b
-               (nerimux/model:make-worktree
+               (nerimux/workspace-model:make-worktree
                 :id "b" :repository repository :path "/tmp/b" :branch "b"))
              (conn (%make-test-conn)))
-        (nerimux/model:organization-add-repository organization repository)
-        (nerimux/model:repository-add-worktree repository worktree-a)
-        (nerimux/model:repository-add-worktree repository worktree-b)
+        (nerimux/workspace-model:organization-add-repository organization repository)
+        (nerimux/workspace-model:repository-add-worktree repository worktree-a)
+        (nerimux/workspace-model:repository-add-worktree repository worktree-b)
         (nerimux::%set-client-modal conn :picker)
         (setf (nerimux::client-conn-picker-items conn)
               (nerimux/picker:build-global-picker-items (list organization))
@@ -74,27 +74,27 @@
   (it "multi-picker-selects-a-worktree-pane-in-an-inactive-window"
     (with-fake-session (s :nwindows 2)
       (let* ((organization
-               (nerimux/model:make-organization
+               (nerimux/workspace-model:make-organization
                 :id "org"
                 :host "github.com"
                 :name "team"))
              (repository
-               (nerimux/model:make-repository
+               (nerimux/workspace-model:make-repository
                 :id "repo"
                 :organization organization
                 :specification "github.com/team/repo"))
              (worktree
-               (nerimux/model:make-worktree
+               (nerimux/workspace-model:make-worktree
                 :id "feature"
                 :repository repository
                 :path "/tmp/feature"
                 :branch "feature/inactive"))
              (conn (%make-test-conn))
-             (inactive-window (second (nerimux/model:session-windows s)))
-             (pane (nerimux/model:window-active-pane inactive-window)))
-        (nerimux/model:organization-add-repository organization repository)
-        (nerimux/model:repository-add-worktree repository worktree)
-        (nerimux/model:worktree-add-pane worktree pane)
+             (inactive-window (second (nerimux/session:session-windows s)))
+             (pane (nerimux/window:window-active-pane inactive-window)))
+        (nerimux/workspace-model:organization-add-repository organization repository)
+        (nerimux/workspace-model:repository-add-worktree repository worktree)
+        (nerimux/pane:worktree-add-pane worktree pane)
         (nerimux::%set-client-modal conn :picker)
         (setf (nerimux::client-conn-picker-items conn)
               (nerimux/picker:build-global-picker-items
@@ -102,24 +102,24 @@
               (nerimux::client-conn-picker-query conn) "feature")
         (expect (nerimux::%select-client-picker-item s conn))
         (expect (eq inactive-window
-                    (nerimux/model:session-active-window s)))
+                    (nerimux/session:session-active-window s)))
         (expect (eq pane (nerimux::client-conn-focus conn)))
         (expect (null (nerimux::client-conn-modal conn))))))
 
   (it "multi-picker-new-window-uses-client-geometry"
     (with-fake-session (s)
       (let* ((organization
-               (nerimux/model:make-organization
+               (nerimux/workspace-model:make-organization
                 :id "org"
                 :host "github.com"
                 :name "team"))
              (repository
-               (nerimux/model:make-repository
+               (nerimux/workspace-model:make-repository
                 :id "repo"
                 :organization organization
                 :specification "github.com/team/repo"))
              (worktree
-               (nerimux/model:make-worktree
+               (nerimux/workspace-model:make-worktree
                 :id "feature"
                 :repository repository
                 :path "/tmp/feature"
@@ -127,8 +127,8 @@
              (conn (%make-test-conn :rows 17 :cols 63))
              (captured-geometry nil)
              (original-new-window (fdefinition 'nerimux::%workspace-new-window)))
-        (nerimux/model:organization-add-repository organization repository)
-        (nerimux/model:repository-add-worktree repository worktree)
+        (nerimux/workspace-model:organization-add-repository organization repository)
+        (nerimux/workspace-model:repository-add-worktree repository worktree)
         (nerimux::%set-client-modal conn :picker)
         (setf (nerimux::client-conn-picker-items conn)
               (nerimux/picker:build-global-picker-items
@@ -141,7 +141,7 @@
                        (declare (ignore args))
                        (setf captured-geometry
                              (list nerimux::*term-rows* nerimux::*term-cols*))
-                       (nerimux/model:session-active-window session)))
+                       (nerimux/session:session-active-window session)))
                (expect (nerimux::%select-client-picker-item s conn))
                (expect (equal '(17 63) captured-geometry)))
           (setf (fdefinition 'nerimux::%workspace-new-window)
@@ -179,7 +179,7 @@
 
   (it "picker-visible-items-deduplicate-worktrees-and-clamp-selection"
     (with-fake-session (s)
-      (let* ((worktree (nerimux/model:make-worktree :id "shared" :path "/tmp/shared"))
+      (let* ((worktree (nerimux/workspace-model:make-worktree :id "shared" :path "/tmp/shared"))
              (first-item (nerimux/picker::%make-picker-item
                           :id "first" :kind :worktree :label "first"
                           :worktree worktree))

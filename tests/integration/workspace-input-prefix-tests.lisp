@@ -28,10 +28,10 @@
   (it "r4-1-pane-view-forwards-bare-j-k-h-l-to-the-shell-instead-of-moving-focus"
     (with-fake-two-pane-session (s)
       (let* ((conn (%make-test-conn))
-             (win (first (nerimux/model:session-windows s)))
-             (left (first (nerimux/model:window-panes win)))
+             (win (first (nerimux/session:session-windows s)))
+             (left (first (nerimux/window:window-panes win)))
              (fed nil)
-             (orig (fdefinition 'nerimux/model:pane-feed)))
+             (orig (fdefinition 'nerimux/pane:pane-feed)))
         ;; make-fake-window gives every pane the same rectangle; that no
         ;; longer matters here since no direction lookup is exercised, but a
         ;; real neighbour would make a silent regression to the old move-
@@ -40,11 +40,11 @@
         (nerimux::%set-client-focus conn left)
         (unwind-protect
              (progn
-               (setf (fdefinition 'nerimux/model:pane-feed)
+               (setf (fdefinition 'nerimux/pane:pane-feed)
                      (lambda (p bytes) (push (list p bytes) fed) (funcall orig p bytes)))
                (dolist (byte '(108 104 107 106)) ; l h k j
                  (nerimux::%handle-multi-key-message s conn (vector byte))))
-          (setf (fdefinition 'nerimux/model:pane-feed) orig))
+          (setf (fdefinition 'nerimux/pane:pane-feed) orig))
         (expect (= 4 (length fed)))
         (expect (every (lambda (call) (eq left (first call))) fed))
         (expect (eq left (nerimux::client-conn-focus conn))))))
@@ -59,19 +59,19 @@
   (it "r4-1-arrow-escape-sequence-one-byte-at-a-time-forwards-every-byte-to-the-pane"
     (with-fake-two-pane-session (s)
       (let* ((conn (%make-test-conn))
-             (win (first (nerimux/model:session-windows s)))
-             (left (first (nerimux/model:window-panes win)))
+             (win (first (nerimux/session:session-windows s)))
+             (left (first (nerimux/window:window-panes win)))
              (fed nil)
-             (orig (fdefinition 'nerimux/model:pane-feed)))
+             (orig (fdefinition 'nerimux/pane:pane-feed)))
         (nerimux::%set-client-focus conn left)
         (unwind-protect
              (progn
-               (setf (fdefinition 'nerimux/model:pane-feed)
+               (setf (fdefinition 'nerimux/pane:pane-feed)
                      (lambda (p bytes) (push (list p bytes) fed) (funcall orig p bytes)))
                (nerimux::%handle-multi-key-message s conn #(27)) ; ESC
                (nerimux::%handle-multi-key-message s conn #(91)) ; [
                (nerimux::%handle-multi-key-message s conn #(65))) ; A
-          (setf (fdefinition 'nerimux/model:pane-feed) orig))
+          (setf (fdefinition 'nerimux/pane:pane-feed) orig))
         ;; PUSH is newest-first: A, then [, then ESC.
         (expect (equalp (list (list left #(65)) (list left #(91)) (list left #(27)))
                         fed))
@@ -86,7 +86,7 @@
   (it "r4-2-esc-is-forwarded-to-the-pane-in-pane-view-and-view-stays-pane"
     (with-minimal-session (pane win sess)
       (declare (ignore win))
-      (setf (nerimux/model:pane-fd pane) 9999) ; "live" without a real PTY
+      (setf (nerimux/pane:pane-fd pane) 9999) ; "live" without a real PTY
       (let* ((conn (%make-test-conn))
              (writes nil)
              (orig (fdefinition 'nerimux::pty-write)))
@@ -111,7 +111,7 @@
     (with-minimal-session (pane win sess)
       (declare (ignore win))
       (let* ((conn (%make-test-conn))
-             (screen (nerimux/model:pane-screen pane)))
+             (screen (nerimux/pane:pane-screen pane)))
         (nerimux::%set-client-focus conn pane)
         (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q
         (nerimux::%handle-multi-key-message sess conn #(91)) ; [ : enter scrollback
@@ -157,19 +157,19 @@
   (it "r4-3-esc-in-picker-modal-swallows-exactly-the-next-two-bytes"
     (with-fake-session (s)
       (let* ((organization
-               (nerimux/model:make-organization
+               (nerimux/workspace-model:make-organization
                 :id "org" :host "github.com" :name "team"))
              (repository
-               (nerimux/model:make-repository
+               (nerimux/workspace-model:make-repository
                 :id "repo" :organization organization
                 :specification "github.com/team/repo"))
              (worktree
-               (nerimux/model:make-worktree
+               (nerimux/workspace-model:make-worktree
                 :id "feature" :repository repository
                 :path "/tmp/feature" :branch "feature/ux"))
              (conn (%make-test-conn)))
-        (nerimux/model:organization-add-repository organization repository)
-        (nerimux/model:repository-add-worktree repository worktree)
+        (nerimux/workspace-model:organization-add-repository organization repository)
+        (nerimux/workspace-model:repository-add-worktree repository worktree)
         (setf (nerimux::client-conn-modal conn) :picker
               (nerimux::client-conn-picker-items conn)
               (nerimux/picker:build-global-picker-items (list organization)))
@@ -192,11 +192,11 @@
       (declare (ignore win))
       (let* ((conn (%make-test-conn))
              (fed nil)
-             (orig (fdefinition 'nerimux/model:pane-feed)))
+             (orig (fdefinition 'nerimux/pane:pane-feed)))
         (setf (nerimux::client-conn-stdin-target conn) pane)
         (unwind-protect
              (progn
-               (setf (fdefinition 'nerimux/model:pane-feed)
+               (setf (fdefinition 'nerimux/pane:pane-feed)
                      (lambda (p bytes) (push (list p bytes) fed) (funcall orig p bytes)))
                (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q
                (expect (nerimux::client-conn-ui-prefix-p conn))
@@ -204,7 +204,7 @@
                (expect (null (nerimux::client-conn-ui-prefix-p conn))
                        )
                (expect (null fed) ))
-          (setf (fdefinition 'nerimux/model:pane-feed) orig)))))
+          (setf (fdefinition 'nerimux/pane:pane-feed) orig)))))
 
   ;; contract §2: C-q F and C-q C-f are REMOVED -- fetch moves to the `f`
   ;; transient, whose own coverage of %WORKSPACE-PREFIX-FETCH-REPOSITORY/
@@ -224,17 +224,17 @@
       (dolist (byte (list (char-code #\F) 6)) ; F, C-f
         (let* ((conn (%make-test-conn))
                (fed nil)
-               (orig (fdefinition 'nerimux/model:pane-feed)))
+               (orig (fdefinition 'nerimux/pane:pane-feed)))
           (setf (nerimux::client-conn-stdin-target conn) pane)
           (unwind-protect
                (progn
-                 (setf (fdefinition 'nerimux/model:pane-feed)
+                 (setf (fdefinition 'nerimux/pane:pane-feed)
                        (lambda (p bytes) (push (list p bytes) fed) (funcall orig p bytes)))
                  (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q
                  (expect (nerimux::client-conn-ui-prefix-p conn))
                  (nerimux::%handle-multi-key-message sess conn (vector byte))
                  (expect (null (nerimux::client-conn-ui-prefix-p conn))))
-            (setf (fdefinition 'nerimux/model:pane-feed) orig))
+            (setf (fdefinition 'nerimux/pane:pane-feed) orig))
           (expect (null fed))))))
 
   ;; R4.4: C-q C-q returns to no MODAL, handing the keyboard back to whatever
@@ -259,20 +259,20 @@
     (with-minimal-session (pane win sess)
       (declare (ignore win))
       (let* ((organization
-               (nerimux/model:make-organization
+               (nerimux/workspace-model:make-organization
                 :id "org" :host "github.com" :name "team"))
              (repository
-               (nerimux/model:make-repository
+               (nerimux/workspace-model:make-repository
                 :id "repo" :organization organization
                 :specification "github.com/team/repo"))
              (worktree
-               (nerimux/model:make-worktree
+               (nerimux/workspace-model:make-worktree
                 :id "wt" :repository repository
                 :path "/tmp/wt" :branch "main"))
              (conn (%make-test-conn)))
-        (nerimux/model:organization-add-repository organization repository)
-        (nerimux/model:repository-add-worktree repository worktree)
-        (nerimux/model:worktree-add-pane worktree pane)
+        (nerimux/workspace-model:organization-add-repository organization repository)
+        (nerimux/workspace-model:repository-add-worktree repository worktree)
+        (nerimux/pane:worktree-add-pane worktree pane)
         (nerimux::%set-client-focus conn pane)
         (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q
         (nerimux::%handle-multi-key-message sess conn #(119)) ; w
@@ -304,7 +304,7 @@
         (nerimux::%handle-multi-key-message sess conn #(91)) ; [
         (expect (eq :scrollback (nerimux::client-conn-modal conn)))
         (expect (nerimux/terminal:screen-copy-mode-p
-                 (nerimux/model:pane-screen pane))))))
+                 (nerimux/pane:pane-screen pane))))))
 
   (it "r4-4-prefix-open-bracket-with-no-focused-pane-reports-and-stays-unmodal"
     (with-fake-session (s :nwindows 0)
@@ -335,12 +335,12 @@
         (expect (null (nerimux::client-conn-focus conn)))))) (it "r5-6-prefix-unzoom-restores-a-zoomed-window-before-action"
     (with-fake-two-pane-session (s)
       (let* ((conn (%make-test-conn))
-             (window (first (nerimux/model:session-windows s))))
-        (nerimux::%set-client-focus conn (nerimux/model:window-active-pane window))
-        (nerimux/model:window-zoom-toggle window)
-        (expect (nerimux/model:window-zoom-p window))
+             (window (first (nerimux/session:session-windows s))))
+        (nerimux::%set-client-focus conn (nerimux/window:window-active-pane window))
+        (nerimux/window:window-zoom-toggle window)
+        (expect (nerimux/window:window-zoom-p window))
         (nerimux::%workspace-prefix-unzoom window)
-        (expect (not (nerimux/model:window-zoom-p window)))))) (it "r7-1-repository-fetch-reports-preconditions-and-completion"
+        (expect (not (nerimux/window:window-zoom-p window)))))) (it "r7-1-repository-fetch-reports-preconditions-and-completion"
     (with-fake-session (s)
       (expect s)
       (let ((conn (%make-test-conn))
@@ -376,10 +376,10 @@
                      (lambda (connection message)
                        (declare (ignore connection))
                        (push message messages)))
-               (let ((organization (nerimux/model:make-organization
+               (let ((organization (nerimux/workspace-model:make-organization
                                     :id "org" :host "github.com" :name "team"))
                      (repository nil))
-                 (setf repository (nerimux/model:make-repository
+                 (setf repository (nerimux/workspace-model:make-repository
                                    :id "repo" :organization organization
                                    :specification "github.com/team/repo"))
                  (nerimux::%set-client-selected-tree-object conn repository)
@@ -418,7 +418,7 @@
                                         callback-dispatch)
                        (declare (ignore organization on-error callback-dispatch))
                        (funcall on-complete nil)))
-               (let ((organization (nerimux/model:make-organization
+               (let ((organization (nerimux/workspace-model:make-organization
                                     :id "org" :host "github.com" :name "team")))
                  (nerimux::%set-client-selected-tree-object conn organization)
                  (nerimux::%workspace-prefix-fetch-organization conn)

@@ -2,24 +2,24 @@
 
 (defun %make-worktree-operation-fixture ()
   (let* ((organization
-           (nerimux/model:make-organization
+           (nerimux/workspace-model:make-organization
             :id "org-errors"
             :host "github.com"
             :name "team-errors"))
          (repository
-           (nerimux/model:make-repository
+           (nerimux/workspace-model:make-repository
             :id "repo-errors"
             :organization organization
             :specification "github.com/team-errors/repo-errors"))
          (worktree
-           (nerimux/model:make-worktree
+           (nerimux/workspace-model:make-worktree
             :id "worktree-errors"
             :repository repository
             :path "/tmp/worktree-errors"
             :branch "feature/errors"))
          (conn (%make-test-conn)))
-    (nerimux/model:organization-add-repository organization repository)
-    (nerimux/model:repository-add-worktree repository worktree)
+    (nerimux/workspace-model:organization-add-repository organization repository)
+    (nerimux/workspace-model:repository-add-worktree repository worktree)
     (values repository worktree conn)))
 
 (defun %worktree-message-seen-p (conn message)
