@@ -824,6 +824,19 @@
             t))
         (progn (%client-notify conn "select a file first") t))))
 
+(defun %client-open-selected-worktree-command (session conn command)
+  "Open a new pane for the selected worktree running COMMAND.
+   A NIL command deliberately starts the user's ordinary shell."
+  (let ((worktree (client-conn-selected-worktree conn)))
+    (unless worktree
+      (%select-client-tree-worktree conn nil)
+      (setf worktree (client-conn-selected-worktree conn)))
+    (if (and worktree
+             (%open-client-worktree-pane session conn worktree
+                                         :default-command command))
+        t
+        (%client-notify conn "no worktree selected"))))
+
 ;;; ── The repolist/status UI keymap (contract SS2, FR-004) ─────────────────
 ;;;
 ;;; Reached only when MODAL is NIL and VIEW is :repolist or :status
@@ -854,6 +867,14 @@
    (%focus-selected-client-worktree session conn))
   (#\g (%client-refresh-workspace conn))
   (#\q (%client-step-back session conn))
+  ((and (eq view :repolist) (%client-key-p payload #\t))
+   (%client-open-selected-worktree-command session conn nil))
+  ((and (eq view :repolist) (%client-key-p payload #\c))
+   (%client-open-selected-worktree-command
+    session conn +workspace-claude-command+))
+  ((and (eq view :repolist) (%client-key-p payload #\x))
+   (%client-open-selected-worktree-command
+    session conn +workspace-codex-command+))
   (#\$ (%set-client-modal conn :process-log) t)
   (#\/ (%client-enter-tree-filter-mode conn))
   (#\: (%client-enter-command-mode conn))

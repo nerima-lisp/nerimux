@@ -324,6 +324,12 @@
 ;;; (which loads before this file), next to the other worktree-window
 ;;; creation logic they serve.
 
+(defparameter +workspace-claude-command+
+  "claude --dangerously-skip-permissions")
+
+(defparameter +workspace-codex-command+
+  "codex --dangerously-bypass-approvals-and-sandbox")
+
 (defun %client-worktree-pane (session worktree)
   (and worktree
        (find worktree
@@ -331,7 +337,7 @@
              :key #'nerimux/pane:pane-worktree
              :test #'eq)))
 
-(defun %open-client-worktree-pane (session conn worktree)
+(defun %open-client-worktree-pane (session conn worktree &key default-command)
   (let ((path (and worktree (worktree-path worktree))))
     (cond
       ((null worktree)
@@ -350,6 +356,7 @@
                              session
                              :name (%worktree-window-name worktree)
                              :start-dir path
+                             :default-command default-command
                              :start-reader-p nil))
                     (pane (window-active-pane window)))
                (cond

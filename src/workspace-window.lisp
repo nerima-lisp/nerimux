@@ -15,7 +15,8 @@
 (defconstant +first-window-index+ 1
   "Index the first window in a session takes.")
 
-(defun %workspace-new-window (session &key name start-dir (start-reader-p t))
+(defun %workspace-new-window (session &key name start-dir default-command
+                                          (start-reader-p t))
   "Create a window in SESSION and return it.
    NAME defaults to the shell basename.  START-DIR is the new pane's working
    directory.  START-READER-P is NIL when the caller starts the reader thread
@@ -23,8 +24,12 @@
   (let* ((rows     (- *term-rows* +status-line-rows+))
          (cols     *term-cols*)
          (win-name (or name (nerimux/session::%shell-basename)))
-         (win      (session-new-window session win-name rows cols
-                                       +first-window-index+ start-dir)))
+         (win      (if default-command
+                       (session-new-window session win-name rows cols
+                                           +first-window-index+ start-dir
+                                           default-command)
+                       (session-new-window session win-name rows cols
+                                           +first-window-index+ start-dir))))
     (when start-reader-p
       (start-reader-thread (window-active-pane win)))
     win))

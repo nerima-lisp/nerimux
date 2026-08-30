@@ -58,11 +58,13 @@
 ;;;   %attach-full-screen-pane  — window data setup (PTY pane → tree leaf)
 ;;;   session-new-window        — session attachment (window → session list)
 
-(defun %attach-full-screen-pane (window rows cols &key start-dir)
+(defun %attach-full-screen-pane (window rows cols &key start-dir default-command)
   "Fork a shell and install it as WINDOW's sole full-screen leaf pane.
    START-DIR: when non-NIL, the shell starts in that directory.
    The initial pane gets +PANE-BASE-INDEX+."
-  (let* ((pane (%fork-pane nil +pane-base-index+ 0 0 cols rows :start-dir start-dir)))
+  (let* ((pane (%fork-pane nil +pane-base-index+ 0 0 cols rows
+                           :start-dir start-dir
+                           :default-command default-command)))
     (setf (window-panes  window) (list pane)
           (window-active window) pane
           (window-tree   window) (make-layout-leaf pane)
@@ -106,7 +108,8 @@
   (session-windows session))
 
 (defun session-new-window (session name rows cols &optional (base-index 0)
-                                                            start-dir)
+                                                            start-dir
+                                                            default-command)
   "Create a new window with one full-screen pane, attach it to SESSION, and
    make it the active window.
    The new window receives the lowest free id >= BASE-INDEX (default 0).
@@ -117,7 +120,9 @@
    is a separate named step so callers can see the two concerns distinctly."
   (let* ((new-id (%next-window-id session base-index))
          (win (make-window :id new-id :name name :width cols :height rows)))
-    (%attach-full-screen-pane win rows cols :start-dir start-dir)
+    (%attach-full-screen-pane win rows cols
+                              :start-dir start-dir
+                              :default-command default-command)
     (session-insert-window session win)
     ;; Focus assignment is logic — kept as an explicit named call so callers
     ;; can opt out by using session-insert-window directly if no focus switch
