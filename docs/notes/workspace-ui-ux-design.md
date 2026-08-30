@@ -35,8 +35,9 @@
   `render-session-to-string` を session 単位の `workspace-mode-p` 分岐で
   上書きするもので、main の client 単位の view 方式と同じ入口を奪い合い、
   ドメインモデルも `nerimux/workspace` として独自に重複していた。そのため
-  main への統合は保留した（`EXECUTION.md` の「2026-08-18 追加反映」
-  セクションを参照）。**当時の記述は「branchとworktreeは削除せず保持している」
+  main への統合は保留した（当時の `EXECUTION.md`「2026-08-18 追加反映」
+  セクション。同ファイルは 2026-08-31 に削除済みで、`git show 9742b8e:EXECUTION.md`
+  で読める）。**当時の記述は「branchとworktreeは削除せず保持している」
   だったが、現在の tree にはこの branch も worktree も存在しない**
   （`git branch -a` にも `git log --all` にもコミット `97ebf05` /
   `workspace-overview` は見当たらない）。保留の判断根拠は記録として残すが、
@@ -44,8 +45,8 @@
 
 この文書は、第4章の全画面overviewが最終的にどちらの契約に従うべきかの参照として
 残す。第5章の picker 経路については、lock/unlock/pruneまで実装済みであることを
-含め、実装済みかどうかは本文中の記述ではなく、上記の現状注記と `EXECUTION.md` を
-優先する。
+含め、実装済みかどうかは本文中の記述ではなく、上記の現状注記と
+`docs/notes/integration-provenance.md` を優先する。
 
 **2026-08-29 追記**: 第4章の全画面overviewは、この文書とも上記の
 workspace-overview branchとも異なる第3の設計（state-basedな section

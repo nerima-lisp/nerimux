@@ -7,9 +7,14 @@
 > what git history alone cannot reconstruct: why specific worktrees and
 > branches were deleted, work that was deliberately deferred and why,
 > authorization/verification checks that were actually performed, and the
-> fact and scope of baselines that were red at integration time. `EXECUTION.md`
-> itself now holds the parallel-execution runbook for the ongoing refactor,
-> not a work journal.
+> fact and scope of baselines that were red at integration time.
+>
+> **`EXECUTION.md` is gone as of 2026-08-31.** It held the parallel-execution
+> runbook for the `packages/` reorganisation — W0 through W6 and the Phase 2
+> preview. Every wave it directed is on main, so it had stopped being an
+> instruction and started reading as an unstarted plan. Recover it with
+> `git show 9742b8e:EXECUTION.md`; the repository standard also wants only
+> `README.md` and `LICENSE` at the root.
 
 ## 1. 削除した worktree / branch とその由来
 
@@ -36,6 +41,10 @@
 | `.worktrees/20260829T233033-106ba3a-w1-a` + `wave-a-w1-a`、`-w1-b1` + `wave-a-w1-b1`、`-w1-b2` + `wave-a-w1-b2`、`-w1-c` + `wave-a-w1-c`、`-w1-d` + `wave-a-w1-d`、`-w2-a` + `wave-a-w2-a`、`-w2-b` + `wave-a-w2-b`、`-w4-prep` + `wave-a-w4-prep`、`.worktrees/20260830T000401-wave-a-integration` + `wave-a-integration`、`.worktrees/20260830T011436-w3` + `w3-worktree-pane-decoupling`、`.worktrees/20260830T020916-0ee3dcb-w5-d` + `wave-b-w5-d`、`-w5-e` + `w6-bootstrap-separation`、`.worktrees/20260830T103130-bca1797`（detached、branch 無し） | worktree（+ branch） | `EXECUTION.md`（packages/ 再編・波計画）向けに割り当てられていたが、`git log origin/main` で確認したところ commit・未コミット変更のいずれも無く、割り当て後に着手されなかった。origin/main に対する固有 commit 0 件（`git rev-list --left-right --count origin/main...<branch>` で確認）。 |
 | `.worktrees/20260829T223027-7adcf6d` + `w0-tests-rename-manifest-fix`、`.worktrees/20260830T020916-0ee3dcb-w5-c` + `wave-b-w5-c` | worktree + branch | 未コミットの変更が残っていたが、内容（`EXECUTION.md` および `src/application/picker/global-picker.lisp`）は origin/main の該当ファイルとバイト単位で同一だった。固有の未反映内容は無かった。 |
 | `.worktrees/20260830T020916-0ee3dcb-w5-a` + `wave-b-w5-a`、`-w5-b` + `wave-b-w5-b`、`-w5-f` + `wave-b-w5-f`、`-w5-g` + `wave-b-w5-g`、`-w5-h` + `wave-b-w5-h` | worktree + branch | `EXECUTION.md` の Wave B / W5（facade 経由の `nerimux/model:` 参照をサブパッケージ参照へ置き換える作業）に対応する未コミット変更が残っていたが、`git log 0ee3dcb..origin/main` で確認した別経路（W5-a〜h 相当 + W5-z + W6 のコミット群）により、同じ作業が origin/main へ既に統合済みだった。差分の内容も同種の機械的シンボル置換に限られ（w5-a/b/f は 100%、w5-g/h も残りは同一種の `:use`/`:import-from` 再配分）、origin/main 側の版より粗い（例: w5-g の `package-application.lisp` diff は `:import-from` 節を重複記載していた）ことを確認した上で、固有の反映対象は無いと判断した。 |
+| `.worktrees/20260830T110503-bca1797` + `feat/packages-reorg-phase2` | worktree + branch | packages/ 再編 Phase 2 の作業場所。PR #20 (`6d53a35`) として main へ merge 済み。 |
+| `docs/2026-08-30-worktree-branch-cleanup` (local + origin) | branch | 上の 3 行を追記した作業単位そのもの。PR #21 (`89a98d5`) として main へ merge 済み。 |
+| `/private/tmp/nerimux-perf-scratch/baseline-bca1797` | worktree (detached, `bca1797`) | Phase 2 のレビューで build/test 時間を移行前後で比較するために作った比較用。担当エージェントがセッション上限で中断し測定は未完。`git status` は空で、固有の作業は無かった。 |
+| `docs/2026-08-29-worktree-branch-cleanup` (local + origin, `49ff67d`) | branch | **内容は main へ反映せず破棄した。** 2026-08-29 の棚卸し記録（detached worktree 4 件と `update_flake_lock_action` の削除理由）を `EXECUTION.md` の末尾へ追記する 38 行だったが、その `EXECUTION.md` は `1476d34` で作業日誌から packages/ 再編の手順書へ全面差し替えされており、追記先が別の文書になっていた。同種の記録は本ファイルが引き継いでいるため、手順書へ日誌を混ぜるより破棄が妥当と判断した。記録していた事実は「4 件の worktree はいずれも `7adcf6d` と同一で未コミット変更なし」「`update_flake_lock_action` は origin に存在せず対応 PR も無い使い捨てブランチ」の 2 点で、どちらも当時 main へ反映すべき作業を含んでいない。 |
 
 ## 2. 保留にした作業単位とその理由
 
