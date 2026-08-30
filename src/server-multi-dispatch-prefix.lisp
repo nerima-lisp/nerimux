@@ -355,6 +355,8 @@ FETCH-REPOSITORY-ASYNC)."
       ((= byte (char-code #\n)) (%workspace-prefix-cycle-window session conn 1))
       ((= byte (char-code #\p)) (%workspace-prefix-cycle-window session conn -1))
       ((= byte (char-code #\w)) (%workspace-prefix-open-status session conn))
+      ((= byte (char-code #\t))
+       (%client-open-selected-worktree-command session conn nil))
       ((= byte (char-code #\[)) (%workspace-prefix-open-scrollback session conn))
       ((= byte (char-code #\d)) :drop)
       ((= byte (char-code #\Q)) (%workspace-prefix-quit-server session conn))

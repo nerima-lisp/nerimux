@@ -65,7 +65,7 @@
                                      :default-command default-command
                                      :environment environment)))
 
-(defun %fork-pane (session id x y cols rows &key start-dir)
+(defun %fork-pane (session id x y cols rows &key start-dir default-command)
   "Spawn a shell and build a PTY-backed pane at position (X,Y) sized COLS x ROWS.
    COLS is the number of terminal columns; ROWS is the number of terminal rows.
    START-DIR: when non-NIL, the child shell is started in that directory.
@@ -77,10 +77,12 @@
    Returns the new pane.  The PTY file descriptor and child PID are embedded
    in the pane struct; callers should call close-pty on them at teardown."
   (multiple-value-bind (fd pid slave-path)
-      (%spawn-shell-for-pane session rows cols :start-dir start-dir)
+      (%spawn-shell-for-pane session rows cols
+                             :start-dir start-dir
+                             :default-command default-command)
     (make-pane :id id :x x :y y :width cols :height rows
                :fd fd :pid pid :tty (or slave-path "")
-               :start-command ""
+               :start-command (or default-command "")
                :start-path (or start-dir
                                (nerimux/ports:working-directory)
                                "")
