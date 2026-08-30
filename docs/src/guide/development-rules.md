@@ -56,11 +56,11 @@ as a single unresolvable frame no matter where it is.
 The static checks in `scripts/checks/` are what remains available when this
 happens. They are not a substitute for the suite and do not claim to be.
 
-## Three failures the suite cannot report
+## Four failures the suite cannot report
 
 A test suite reports on tests that ran. It says nothing when it could not load —
-and the three ways this tree stops loading all look like silence rather than a
-red test:
+and the ways this tree stops loading all look like silence rather than a red
+test:
 
 - a file that no longer reads (a deleted line took a parent form's closing paren
   with it);
@@ -68,11 +68,22 @@ red test:
   disappears at once), or a file with no manifest entry (it is simply never
   loaded, and its tests quietly stop running);
 - a `PKG:SYM` reference to a symbol `PKG` does not export, which is a *read-time*
-  error, so the file is unreadable rather than merely broken.
+  error, so the file is unreadable rather than merely broken;
+- a unit whose `.asd` omits a dependency it uses directly. The full suite loads
+  the umbrella, which supplies every sibling kit and loads bootstrap first, so a
+  unit missing `:cl-tty-kit` — or a unit test reaching `nerimux::` — resolves
+  anyway and the suite stays green. Only loading the unit on its own finds it.
 
-`scripts/checks/` covers all three without ASDF and without a compile. Run them
-before you trust a green, and especially before you trust a green after a
-deletion. See that directory's README for what each one does and does not cover.
+`scripts/checks/` covers the first three without ASDF and without a compile. The
+fourth is not covered by any check; run the unit alone:
+
+```sh
+NERIMUX_TEST_SYSTEM=nerimux-<unit>/test nix run 'path:.#test'
+```
+
+Run these before you trust a green, and especially before you trust a green after
+a deletion. See that directory's README for what each one does and does not
+cover.
 
 ## The flake only sees git-tracked files
 

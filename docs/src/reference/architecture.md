@@ -206,6 +206,30 @@ own. A fixture shared by several units lives in the lowest unit all of them
 depend on and is exported from there; a spec that needs two units with no edge
 between them lives in `tests/integration/` instead.
 
+### Adding a unit
+
+The system is named `nerimux-<name>`, never `nerimux/<name>`: ASDF resolves a
+slash-qualified secondary system from the *primary* system's `.asd`, so
+`packages/<name>/*.asd` would never be read. The same constraint is why
+`nerimux/test` and `nerimux/pty-test` cannot leave the root `.asd`.
+
+1. `packages/<name>/nerimux-<name>.asd` holding both `nerimux-<name>` and
+   `nerimux-<name>/test`, a flat `src/`, and `tests/`.
+2. **Declare every external kit the unit uses directly.** Do not rely on the
+   umbrella: it supplies all of them, so an omission stays green in the full
+   suite. Declare a kit that only the *fixtures* need on the test system, not on
+   the unit.
+3. Add the unit to `nerimux.asd` — both `:depends-on` and the list in the
+   `eval-when` that pre-loads each unit's `.asd`. That list is deliberately
+   explicit rather than a glob: loading an `.asd` is executing it.
+4. Add `nerimux-<name>/test` to `nerimux/test`'s `:depends-on`, so its suites
+   register in the same image and the totals stay comparable.
+5. Verify it loads alone, which is the check the full suite cannot give you:
+
+   ```sh
+   NERIMUX_TEST_SYSTEM=nerimux-<name>/test nix run 'path:.#test'
+   ```
+
 The renderer has two independent first passes, and the split is deliberate:
 
 - **The pane view** — `render-session-to-string` (`renderer-compose.lisp`),
