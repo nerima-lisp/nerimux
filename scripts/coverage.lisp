@@ -28,29 +28,29 @@
 ;; forms as executable behavior would make the percentage measure source
 ;; representation instead of product behavior.
 (defparameter *coverage-excluded-source-files*
-  '("src/bootstrap/main-startup-flags.lisp"
-    "src/bootstrap/package.lisp"
-    "src/bootstrap/server-multi-state.lisp"
-    "src/domain/terminal/csi-replies-definitions.lisp"
-    "src/domain/terminal/csi-compose.lisp"
-    "src/domain/terminal/csi-device-rules.lisp"
-    "src/domain/terminal/csi-extended-rules.lisp"
-    "src/domain/terminal/csi.lisp"
-    "src/domain/terminal/csi-dispatch.lisp"
-    "src/domain/terminal/char-write-definitions.lisp"
-    "src/domain/terminal/cell.lisp"
-    "src/domain/terminal/modes-ansi-sm-rm-definitions.lisp"
-    "src/domain/terminal/modes-charset-definitions.lisp"
-    "src/domain/terminal/modes-dec-pm-definitions.lisp"
-    "src/domain/terminal/screen-data.lisp"
-    "src/domain/model/window-definitions.lisp"
-    "src/domain/model/layout-visitor.lisp"
-    "src/domain/terminal/parser-core.lisp"
-    "src/domain/ports/posix-port.lisp"
-    "src/infrastructure/pty/pty-ffi.lisp"
-    "src/presentation/renderer/renderer-format-definitions.lisp"
-    "src/presentation/renderer/renderer-style-data.lisp"
-    "src/presentation/renderer/renderer-style.lisp"))
+  '("src/main-startup-flags.lisp"
+    "src/package.lisp"
+    "src/server-multi-state.lisp"
+    "packages/terminal/src/csi-replies-definitions.lisp"
+    "packages/terminal/src/csi-compose.lisp"
+    "packages/terminal/src/csi-device-rules.lisp"
+    "packages/terminal/src/csi-extended-rules.lisp"
+    "packages/terminal/src/csi.lisp"
+    "packages/terminal/src/csi-dispatch.lisp"
+    "packages/terminal/src/char-write-definitions.lisp"
+    "packages/terminal/src/cell.lisp"
+    "packages/terminal/src/modes-ansi-sm-rm-definitions.lisp"
+    "packages/terminal/src/modes-charset-definitions.lisp"
+    "packages/terminal/src/modes-dec-pm-definitions.lisp"
+    "packages/terminal/src/screen-data.lisp"
+    "packages/model/src/window-definitions.lisp"
+    "packages/model/src/layout-visitor.lisp"
+    "packages/terminal/src/parser-core.lisp"
+    "packages/ports/src/posix-port.lisp"
+    "packages/pty/src/pty-ffi.lisp"
+    "packages/renderer/src/renderer-format-definitions.lisp"
+    "packages/renderer/src/renderer-style-data.lisp"
+    "packages/renderer/src/renderer-style.lisp"))
 
 (sb-ext:restrict-compiler-policy 'sb-cover:store-coverage-data 3)
 
@@ -87,9 +87,20 @@
 (asdf:clear-system "nerimux/test")
 
 (let* ((excluded-source-pathnames
+         ;; TRUENAME on a path that no longer exists signals a file-error naming
+         ;; only the pathname, with nothing to say it came from the list above.
+         ;; That list went stale for the whole packages/ extraction without
+         ;; anyone noticing, because this script is the one gate the workflow
+         ;; never runs (nix build .#coverage-report deadlocks for 45 minutes),
+         ;; so the error has to say what to edit.
          (mapcar (lambda (relative-path)
-                   (truename (merge-pathnames (pathname relative-path)
-                                              *nerimux-project-root*)))
+                   (let ((absolute (merge-pathnames (pathname relative-path)
+                                                    *nerimux-project-root*)))
+                     (or (probe-file absolute)
+                         (error "~S names ~A, which does not exist. ~
+                                 Update *coverage-excluded-source-files*."
+                                '*coverage-excluded-source-files*
+                                relative-path))))
                  *coverage-excluded-source-files*))
        (report-dir (uiop:ensure-directory-pathname
                     (or (second sb-ext:*posix-argv*) "coverage-report/")))

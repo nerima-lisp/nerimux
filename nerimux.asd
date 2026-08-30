@@ -29,13 +29,27 @@
 ;;; run-tests.lisp and flake.nix do. The two are different entry points, not two
 ;;; spellings of one.
 (eval-when (:compile-toplevel :load-toplevel :execute)
+  ;; The glob finds the files; this list decides which of them may run. Without
+  ;; it, dropping a directory into packages/ is enough to get its .asd LOADED --
+  ;; that is, evaluated -- at build time without being named anywhere a reviewer
+  ;; diffing :depends-on would look. Naming the units here keeps the set of code
+  ;; that executes equal to the set that is declared.
+  (defparameter cl-user::*nerimux-units*
+    '("nerimux-text" "nerimux-version" "nerimux-ports" "nerimux-pty"
+      "nerimux-net" "nerimux-input" "nerimux-terminal" "nerimux-model"
+      "nerimux-picker" "nerimux-vcs" "nerimux-commands" "nerimux-renderer"))
   (let ((here (uiop:pathname-directory-pathname
                (or *load-truename*
                    *load-pathname*
                    (error "Cannot locate nerimux.asd while registering packages/.")))))
-    (dolist (asd (directory (merge-pathnames "packages/*/nerimux-*.asd" here)))
-      (let ((name (pathname-name asd)))
-        (unless (asdf:find-system name nil)
+    (dolist (name cl-user::*nerimux-units*)
+      (unless (asdf:find-system name nil)
+        (let ((asd (merge-pathnames (format nil "packages/~A/~A.asd"
+                                            (subseq name (length "nerimux-"))
+                                            name)
+                                    here)))
+          (unless (probe-file asd)
+            (error "Unit ~A is named in nerimux.asd but ~A does not exist." name asd))
           (load asd))))))
 
 (defsystem "nerimux"

@@ -16,7 +16,7 @@
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
   ;; No nerimux dependency at all: this unit speaks bytes on a socket and knows
   ;; nothing about the domain it carries.
-  :depends-on (:cl-codec-kit :cl-host-kit :cl-process-kit)
+  :depends-on (:cl-codec-kit)
   :pathname "src"
   :serial t
   :components ((:file "package")  ; nerimux/protocol, nerimux/transport, nerimux/net
@@ -38,7 +38,10 @@
   ;; Only its own unit. nerimux-net depends on nothing, so its test system may
   ;; depend on no other unit's test system either -- which is why
   ;; helpers-fdefinition.lisp below is a copy rather than a shared file.
-  :depends-on ("nerimux-net" (:version "cl-weave" "1.3.0"))
+  ;; cl-host-kit is the fixtures' own dependency, not the unit's: the socket
+  ;; fixtures build temporary paths with host-kit:temporary-directory. The unit
+  ;; itself speaks only bytes and sockets.
+  :depends-on ("nerimux-net" :cl-host-kit (:version "cl-weave" "1.3.0"))
   :pathname "tests"
   :serial t
   :components ((:file "package")

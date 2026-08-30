@@ -144,12 +144,17 @@ message.
 
 ## Keep the data/logic layering
 
-`src/` follows a layered layout (`domain` / `application` / `infrastructure` /
-`presentation` / `bootstrap`), described in
-[Architecture](../reference/architecture.md). Terminal code further separates
-data structs (`types`) from logic (`actions`, `csi`, `sgr`). New code should
-land in the matching layer, and new public accessors must also be re-exported
-from its unit's own `packages/<name>/src/package.lisp`.
+The codebase follows a layered layout (`domain` / `application` /
+`infrastructure` / `presentation` / `bootstrap`), described in
+[Architecture](../reference/architecture.md). Each layer is its own ASDF system
+under `packages/<name>/`; `src/` holds the bootstrap core alone. Terminal code
+further separates data structs (`types`) from logic (`actions`, `csi`, `sgr`).
+
+New code should land in the matching layer, and new public accessors must also be
+re-exported from that unit's package declaration — usually
+`packages/<name>/src/package.lisp`, but `nerimux-terminal` splits its own across
+`package.lisp` and `package-types.lisp`, and `nerimux-version` declares its
+package in `version.lisp` because the unit is one function.
 
 ## Two timeout vocabularies, and which takes which
 

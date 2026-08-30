@@ -31,7 +31,10 @@
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  :depends-on ("nerimux-ports" (:version "cl-weave" "1.3.0"))
+  ;; cl-tty-kit is the pipe fixtures' own dependency, not nerimux-ports': they
+  ;; go through cl-tty-kit:fd-write-octets, the same call production pty-write
+  ;; uses. The unit itself does not need it.
+  :depends-on ("nerimux-ports" :cl-tty-kit (:version "cl-weave" "1.3.0"))
   :pathname "tests"
   :serial t
   :components ((:file "package")

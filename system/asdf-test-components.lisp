@@ -63,6 +63,8 @@
          (:file "renderer-copy-search-highlight-tests") ; renderer highlight over a commands-built copy-mode screen
          (:file "renderer-copy-mode-frame-tests") ; same, through a full rendered frame
          (:file "renderer-help-transient-tests") ; renderer help sections against the bootstrap transient table
+         (:file "picker-selection-token-tests") ; picker tokens are bootstrap internals, not picker ones
+         (:file "workspace-file-diff-cache-tests") ; the cache is bootstrap state, keyed by worktree and file
          (:file "net-tests")
          (:file "server-multi-tests-support")
          (:file "server-multi-tests-size")

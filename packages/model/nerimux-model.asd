@@ -17,7 +17,7 @@
   ;; nerimux/pane :uses both: nerimux/ports for the PTY spawn hooks, and
   ;; nerimux/terminal for the screen a pane owns.
   :depends-on ("nerimux-ports" "nerimux-terminal"
-               :cl-concurrent-kit :cl-host-kit :cl-tty-kit)
+               :cl-concurrent-kit :cl-tty-kit)
   :pathname "src"
   ;; Five packages share this system because they are mutually recursive:
   ;; workspace-model<->pane, pane<->session and layout<->window each close a
@@ -58,7 +58,7 @@
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
   ;; Both edges mirror nerimux-model's own :depends-on.
   :depends-on ("nerimux-model" "nerimux-ports/test" "nerimux-terminal/test"
-               (:version "cl-weave" "1.3.0"))
+               :cl-codec-kit (:version "cl-weave" "1.3.0"))
   :pathname "tests"
   :serial t
   :components ((:file "package")

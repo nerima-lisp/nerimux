@@ -83,7 +83,7 @@
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  :depends-on ("nerimux-terminal" (:version "cl-weave" "1.3.0"))
+  :depends-on ("nerimux-terminal" :cl-host-kit (:version "cl-weave" "1.3.0"))
   :pathname "tests"
   :serial t
   :components ((:file "package")

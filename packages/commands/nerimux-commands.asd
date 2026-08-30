@@ -47,7 +47,7 @@
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
   ;; Both edges mirror nerimux-commands' own :depends-on.
   :depends-on ("nerimux-commands" "nerimux-model/test" "nerimux-terminal/test"
-               (:version "cl-weave" "1.3.0"))
+               :cl-concurrent-kit :cl-date-kit (:version "cl-weave" "1.3.0"))
   :pathname "tests"
   :serial t
   :components ((:file "package")

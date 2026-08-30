@@ -30,7 +30,14 @@
   (let ((deadline (+ (get-internal-real-time)
                      (* deadline-seconds internal-time-units-per-second))))
     (loop
-      (unless (nerimux::%process-alive-p pid)
+      ;; The signal-zero probe, spelled out here rather than calling
+      ;; nerimux::%PROCESS-ALIVE-P. That function is a BOOTSTRAP internal
+      ;; (src/server-multi-loop.lisp), and reaching it made this unit's test
+      ;; system fail to compile on its own -- it only resolved because the full
+      ;; suite loads bootstrap first. Same syscall, same semantics.
+      (unless (and (integerp pid) (plusp pid)
+                   (handler-case (progn (sb-posix:kill pid 0) t)
+                     (sb-posix:syscall-error () nil)))
         (return t))
       (when (>= (get-internal-real-time) deadline)
         (return nil))

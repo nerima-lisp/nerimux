@@ -45,7 +45,9 @@
   ;; nerimux-ports/test carries the fdefinition-swap fixture; the edge is legal
   ;; because nerimux-vcs depends on nerimux-model, which depends on
   ;; nerimux-ports.
-  :depends-on ("nerimux-vcs" "nerimux-ports/test" (:version "cl-weave" "1.3.0"))
+  :depends-on ("nerimux-vcs" "nerimux-ports/test"
+               :cl-host-kit :cl-process-kit
+               (:version "cl-weave" "1.3.0"))
   :pathname "tests"
   :serial t
   :components ((:file "package")

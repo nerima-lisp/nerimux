@@ -61,7 +61,7 @@
 
   ;; *update-environment* is a list of environment variable names.
   (it "update-environment-default-list"
-    (let ((vars nerimux::*update-environment*))
+    (let ((vars nerimux/session:*update-environment*))
       (expect (listp vars))
       (expect (> (length vars) 0))
       (expect (every #'stringp vars)))))

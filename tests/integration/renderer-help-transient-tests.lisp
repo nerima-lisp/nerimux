@@ -9,6 +9,8 @@
 
 (describe "renderer-help-transient-agreement-suite"
 
+  ;; The help text is hand-written strings, so it drifts from the dispatch
+  ;; tables silently -- it already did once, surviving the whole magit keymap
   ;; replacement while still advertising j/k, r, i, c and a "Modes" section.
   ;; Only one of the tables it documents is machine-readable data rather than a
   ;; COND over byte codes, so only this part can be checked mechanically; that
