@@ -246,8 +246,7 @@
       # name resolves to nothing. Kept in one binding for the same reason
       # siblingRegistry is: the build phase and the devShell cannot drift apart
       # on which units they can see.
-      packagesRegistryPushEval =
-        ''--eval "(dolist (d (directory \"packages/*/\")) (push d asdf:*central-registry*))"'';
+      packagesRegistryPushEval = ''--eval "(dolist (d (directory \"packages/*/\")) (push d asdf:*central-registry*))"'';
 
       # Plain SBCL, with NO Quicklisp-packaged libraries wrapped around it.
       #
