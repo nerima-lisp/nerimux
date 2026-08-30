@@ -6,84 +6,25 @@
      :components
       ((:file "package")
        (:file "suite")
-       (:file "helpers-isolation")
-      (:file "helpers-terminal-builders")
       (:file "helpers-render-output")
-      (:file "helpers-events-cps")
       (:file "helpers-key-bindings")
-      ;; Named for overlays, but the contents are POSIX-env and config-directive
-      ;; assertion macros used by 36 call sites across config, bootstrap and the
-      ;; other helper files. The name is the only thing about it that is stale.
-      (:file "helpers-overlay-assertions")
       (:file "helpers-session-naming")
       (:file "helpers-pane-fixtures")
-      (:file "helpers-network-listener")
-      (:file "helpers-net-protocol")
       (:file "helpers-process-fixtures")
-      (:file "helpers-screen-assertions")
       (:file "helpers-loop-fixtures")
       (:file "helpers-layout-fixtures")
       (:file "helpers-renderer-fixtures")
-      (:file "helpers-renderer-benchmark")
       (:file "helpers-session-fixtures")
       (:file "helpers-input-fixtures")
-      (:file "helpers-pipe-fixtures")
+      ;; Split out of the terminal helpers when domain/terminal became
+      ;; nerimux-terminal: one reaches nerimux/commands, the other binds
+      ;; nerimux:: server state, so neither can live in a DOMAIN unit.
+      (:file "helpers-copy-mode-fixtures")
+      (:file "helpers-command-state")
       (:module "unit"
        :serial t
        :components
-       ((:module "domain/terminal"
-         :serial t
-         :components
-         ((:file "cell-tests") ; declares terminal-suite parent; cell data, width, combining
-          (:file "cell-display-tests") ; DEC graphics, BCE, constants, hyperlink
-          (:file "screen-tests") ; construction/p/cell-access/cursor/resize/dirty/sgr-pen/bell - part I
-          (:file "screen-tests-b") ; copy-mode slots, alt-screen, mouse-sgr, response-queue, origin-mode, tab-stops, lock, cells/parser - part II
-          (:file "screen-tests-c") ; screen-clear-dirty, reset-sgr-pen, bell-pending, screen-consume-bell, slots, copy-mode extra slots - part III
-          (:file "screen-tests-d") ; title-stack, cwd, pending-wrap, focus-events, g0/g1/active-g, boolean-slot macro - part IV
-          (:file "screen-queue-palette-tests") ; passthrough/clipboard queues and palette override storage
-          (:file "screen-wrap-copy-tests") ; wrapped rows, ANSI boolean modes, copy-search-dir, rect-select
-          (:file "cursor-tests") ; scroll-region-clamp, set-cursor, direct-action, tab-stops, ri, nel, wide-char, advance - part I
-          (:file "cursor-tests-b") ; %place-wide-char, table-driven, combining-char-p, write-char combining, DEC graphics - part II
-          (:file "cursor-tests-c") ; cursor-ri, cursor-nel, write-char-at-cursor wide, %advance-cursor no-wrap, movement behavioral - part III
-          (:file "cursor-tests-d") ; cursor-lf direct, cursor-nl newline-mode, %materialize-tab-stops, BCE background, boundary table - part IV
-          (:file "cursor-tests-e") ; custom multi-stop %next-tab-stop/%prev-tab-stop via HTS/TBC, table-driven regression - part V
-          (:file "char-write-tests") ; combining-char-p = char-width; kana marks, ZWJ, controls
-          (:file "scroll-tests") ; scroll-ops - part I
-          (:file "scroll-erase-tests") ; ED/EL parser-path and direct erase coverage
-          (:file "scroll-region-tests") ; DECSTBM, RI, IL/DL parser-path scroll-region coverage
-          (:file "scroll-line-edit-tests") ; DCH/ICH parser-path line-edit coverage
-          (:file "scroll-tests-b") ; direct-row-primitives, direct-action-erase, constrained-scroll, history-limit - part II
-          (:file "scroll-tests-c") ; direct-line-edit (il/dl), scroll-screen-to-history, DEC-rect (DECERA/DECFRA/DECCRA) - part III
-          (:file "scroll-tests-d") ; clear-scrollback, BCE background via %erase-cell, *scroll-on-clear-function* edge cases - part IV
-          (:file "modes-tests") ; RIS/alt-screen/DECSC/mouse/bracketed-paste/focus - part I
-          (:file "modes-tests-b") ; set-cursor-shape/bell-pending/set-charset/set-screen-title/reset-modes/alt-screen-direct - part II
-          (:file "modes-tests-c") ; screen-invoked-charset/G0-G1, set-screen-cwd, erase-display-mode-3, IRM, LNM, DECSCNM, DECSTR - part III
-          (:file "modes-tests-d") ; mouse DEC private modes, bracketed paste, focus events, app-cursor, auto-wrap, reset-sgr-pen, display-cell - part IV
-          (:file "modes-tests-e") ; decstr-action/decaln-action direct calls, set-ansi-mode/reset-ansi-mode direct calls - part V
-          (:file "sgr-tests") ; sgr suite: fg/bg tables, truecolor, colon SGR, pen-to-sgr-params - part I
-          (:file "sgr-tests-b") ; direct-action-sgr, sgr-extended, extra codes, define-sgr-rules, consume-256-color - part II
-          (:file "csi-composition-tests") ; declarative CSI rule-set composition
-          (:file "csi-tests") ; cursor-movement/DECSCUSR/CBT/SU-SD - part I
-          (:file "csi-tests-d") ; REP/da-response/DECRQM/XTWINOPS/CPR/DA-table/REP-count-zero - part IV
-          (:file "csi-tests-b") ; ECH/DSR/ich-dch/decstbm/execute-csi-direct/%csi-decstbm-params - part II
-          (:file "csi-tests-c") ; csi-unknown-sequences/DECOM/cup-row/enqueue/XTPUSHTITLE/DEC-rect - part III
-          (:file "parser-utf8-tests") ; utf8
-          (:file "parser-osc-tests") ; special / OSC
-          (:file "parser-escape-tests") ; special / ESC / CSI
-          (:file "parser-tests-b") ; combining-chars/ACS/dcs-parsing/xtgettcap/decrqss - part II
-          (:file "parser-control-state-tests") ; ground-state/escape-state/direct-dcs/G2-G3 shifts
-          (:file "parser-osc-continuations-tests") ; direct OSC continuation bridge tests
-          (:file "parser-osc-dispatch-tests") ; OSC payload edge cases
-          (:file "parser-osc52-tests") ; OSC 52 clipboard coverage
-          (:file "parser-osc7-tests") ; OSC 7 cwd parsing, percent decode, macro coverage
-          (:file "parser-dcs-tests") ; direct DCS bridge and tmux passthrough
-          (:file "parser-parser-utils-tests") ; helpers, parser-suite, base64, parse-osc-command, csi-colon
-          (:file "parser-basic-text-tests") ; printable characters, CR/LF, wrap, BS, TAB - part IIIa
-          (:file "parser-inline-predicate-tests") ; inline predicate helpers - part IIIb
-          (:file "parser-state-cps-tests") ; direct CPS parser state functions + define-state - part IIIc
-          (:file "emulator-tests")
-          (:file "parser-fuzz-tests"))) ; it-fuzz coverage of screen-process-bytes
-        (:module "domain/model"
+       ((:module "domain/model"
          :serial t
          :components
          ((:file "layout-tests-geometry") ; layout-tree geometry: leaves/split/resize/remove/min-extent - part I
@@ -115,14 +56,6 @@
           (:file "worktree-tests")
           (:file "attention-tests")
           (:file "advanced-tests"))) ; layout persistence round-trip and update-environment defaults; moved from tests/unit/feature/ (model-layer concern, not a cross-layer feature)
-        (:module "domain/text"
-         :serial t
-         :components
-         ((:file "text-parse-tests"))) ; parse-integer-or-nil / non-empty-string; moved out of target-suite with the functions
-        (:module "domain/ports"
-         :serial t
-         :components
-         ((:file "posix-port-tests")))
         (:module "infrastructure/vcs"
          :serial t
          :components
@@ -190,16 +123,6 @@
           (:file "commands-tests-l") ; copy-mode exit resets rect-select, yank-rectangle fixed columns - part XII
           (:file "commands-tests-i") ; rectangle selection-text, run-copy-command, copy-mode set-cursor - part IX
           (:file "commands-copy-navigation-tests"))) ; copy-mode search next/prev/forward/backward guards
-        (:module "infrastructure/net"
-         :serial t
-         :components
-         ((:file "protocol-tests") ; octets/frame-header/round-trips/msg-command - part I
-          (:file "protocol-tests-b") ; field/text codecs and basic command payload round-trips - part II
-          (:file "protocol-binary-layout-tests") ; integer encoders, frame layout, attach payload boundaries
-          (:file "protocol-command-payload-tests") ; target detection and encode-command-payload ordering
-          (:file "protocol-command-malformed-utf8-tests") ; strict command decode + drop guard
-          (:file "transport-tests") ; round-trips, with-incoming-frame, %read-exact - part I
-          (:file "transport-tests-b"))) ; validation, security boundaries, CPS-phase direct coverage - part II
         (:module "bootstrap"
          :serial t
          :components
@@ -214,16 +137,6 @@
       (:file "workspace-window-naming-tests") ; R5.8
       (:file "workspace-catalog-refresh-state-tests") ; FR-005: mark/settle, not re-mark
           (:file "system-composition-tests"))) ; layering guard; core declares no optional kit
-        (:module "infrastructure/pty"
-         :serial t
-         :components
-         ((:file "pty-ffi-tests")
-          (:file "pty-rawmode-tests")
-          (:file "pty-tests"))) ; PTY argument-assembly unit tests (spawn helpers)
-        (:module "infrastructure/input"
-         :serial t
-         :components
-         ((:file "input-tests")))
         (:module "bootstrap-2"
          :pathname "bootstrap"
          :serial t
@@ -238,7 +151,8 @@
       (:module "integration"
        :serial t
        :components
-        ((:file "net-tests")
+        ((:file "net-malformed-utf8-dispatch-tests") ; spans nerimux-net and the bootstrap event loop
+         (:file "net-tests")
          (:file "server-multi-tests-support")
          (:file "server-multi-tests-size")
          (:file "server-multi-tests-message-dispatch")

@@ -16,6 +16,29 @@
                 #:it-property #:it-fuzz #:gen-integer #:gen-list #:gen-boolean #:gen-string
                 #:gen-vector #:gen-member #:gen-one-of
                 #:defmatcher)
+  ;; Fixtures that moved out with their unit. The root suite is above every
+  ;; unit, so it may reach down into one; naming the source package here is
+  ;; what keeps that reach a declaration rather than an accident of one shared
+  ;; test package.
+  (:import-from #:nerimux/test/ports
+                #:with-temporary-posix-environment-variable
+                #:with-pipe-fds
+                #:write-byte-to-fd
+                #:read-octets-from-fd)
+  (:import-from #:nerimux/test/net
+                #:%test-socket-path
+                #:with-test-listener
+                #:with-temp-octet-file
+                #:write-frames-to-file
+                #:with-temp-socket-path
+                #:with-connected-sockets)
+  (:import-from #:nerimux/test/terminal
+                #:feed
+                #:feed-lines
+                #:esc
+                #:check-table
+                #:display-row-string
+                #:utf8-feed)
   (:import-from #:nerimux/terminal
                 #:make-screen
                 #:screen-resize

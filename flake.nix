@@ -239,6 +239,16 @@
           repo: ''--eval "(push (truename \"${repo}/\") asdf:*central-registry*)"''
         ) (siblingRepos system);
 
+      # Each in-repo unit lives in packages/<name>/ and carries its own .asd.
+      # ASDF's central registry finds a .asd only in a directory registered
+      # directly -- it does not recurse -- and the line above deliberately
+      # empties the source registry, so without this a unit asked for by its own
+      # name resolves to nothing. Kept in one binding for the same reason
+      # siblingRegistry is: the build phase and the devShell cannot drift apart
+      # on which units they can see.
+      packagesRegistryPushEval =
+        ''--eval "(dolist (d (directory \"packages/*/\")) (push d asdf:*central-registry*))"'';
+
       # Plain SBCL, with NO Quicklisp-packaged libraries wrapped around it.
       #
       # There is nothing left to wrap: nerimux has no external (non-org)
@@ -336,6 +346,7 @@
                 --eval "(setf asdf/source-registry:*source-registry* (make-hash-table :test (function equal)))" \
                 --eval "(push (truename \".\") asdf:*central-registry*)" \
                 ${siblingRegistryPushEvals system} \
+                ${packagesRegistryPushEval} \
                 --eval "(asdf:load-system \"nerimux\")" \
                 --eval "(sb-ext:save-lisp-and-die \"nerimux.core\"
                            :toplevel #'nerimux:main
@@ -661,6 +672,7 @@
                      --eval "(setf asdf/source-registry:*source-registry* (make-hash-table :test (function equal)))" \
                      --eval "(push (truename \".\") asdf:*central-registry*)" \
                      ${siblingRegistryPushEvals system} \
+                     ${packagesRegistryPushEval} \
                      "$@"
               }
 

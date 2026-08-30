@@ -19,9 +19,14 @@ binmode(STDOUT, ":encoding(UTF-8)");
 my $root = shift // '.';
 chdir $root or die "cannot chdir $root: $!";
 
-open(my $find, '-|', 'find', 'tests', '-name', '*.lisp') or die $!;
-my @files = grep { !m{/pty/} && !m{/e2e/} } map { chomp; $_ } <$find>;
-close $find;
+my @files;
+for my $dir ('tests', 'packages') {
+    next unless -d $dir;
+    open(my $find, '-|', 'find', $dir, '-name', '*.lisp') or die $!;
+    while (my $l = <$find>) { chomp $l; push @files, $l }
+    close $find;
+}
+@files = grep { !m{/pty/} && !m{/e2e/} } @files;
 unless (@files) { print "NO TEST FILES SCANNED\n"; exit 2 }
 
 my @problems;

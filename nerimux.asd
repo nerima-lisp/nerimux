@@ -14,6 +14,30 @@
               *load-pathname*
               (error "Cannot locate nerimux.asd while loading test components."))))))
 
+;;; Register every packages/<name>/nerimux-<name>.asd before the systems below
+;;; name them in :depends-on.
+;;;
+;;; ASDF's :central-registry finds a .asd only in a directory registered
+;;; directly; it does not recurse, and run-tests.lisp deliberately empties the
+;;; source registry so no machine-global tree is scanned. Without this, every
+;;; unit below resolves to "system not found".
+;;;
+;;; This covers the `nerimux' entry point only. Loading a unit directly --
+;;; (asdf:load-system "nerimux-terminal") -- never reads this file, because ASDF
+;;; resolves a primary system from the .asd named after it. That path is served
+;;; by pushing each packages/<name>/ onto the central registry, which
+;;; run-tests.lisp and flake.nix do. The two are different entry points, not two
+;;; spellings of one.
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (let ((here (uiop:pathname-directory-pathname
+               (or *load-truename*
+                   *load-pathname*
+                   (error "Cannot locate nerimux.asd while registering packages/.")))))
+    (dolist (asd (directory (merge-pathnames "packages/*/nerimux-*.asd" here)))
+      (let ((name (pathname-name asd)))
+        (unless (asdf:find-system name nil)
+          (load asd))))))
+
 (defsystem "nerimux"
   :description "A git-worktree workspace multiplexer in Common Lisp"
   :author "takeokunn <bararararatty@gmail.com>"
@@ -68,92 +92,23 @@
                :cl-tui-kit/ansi  ; headless surface/backend rendering for per-client frames
                :cl-tui-kit/layout ; geometry and viewport layout for client frames
                :cl-tui-kit/widgets ; widget rendering for client frames
-               :cl-vcs-kit)      ; ghq/repository/worktree discovery
+               :cl-vcs-kit       ; ghq/repository/worktree discovery
+               ;; In-repo units, one ASDF system per packages/<name>/. Each
+               ;; declares its own dependencies, so a reference that crosses a
+               ;; unit boundary without an edge here fails to load rather than
+               ;; failing a test.
+               "nerimux-text"
+               "nerimux-version"
+               "nerimux-ports"
+               "nerimux-pty"
+               "nerimux-net"
+               "nerimux-input"
+               "nerimux-terminal")
   :components
   ((:module "src"
     :serial t
      :components
-     ;; Foundation: depends on nothing, so it loads before every layer that calls
-     ;; it.  Placement is load-bearing -- domain/terminal calls
-     ;; parse-integer-or-nil and used to be compiled before the file defining it.
-     ((:module "domain/text"
-      :serial t
-      :components ((:file "package") (:file "text-parse")))
-     (:module "domain/version"
-      :serial t
-      :components ((:file "version")))  ; package + the one function together (W6)
-     (:module "domain/ports"
-      :serial t
-      :components
-      ((:file "package")
-       (:file "posix-port")
-       (:file "pty-port")))   ; port abstractions (load before infrastructure adapters)
-     (:module "infrastructure/pty"
-      :serial t
-      :components
-       ((:file "package")
-       (:file "pty-ffi")       ; FFI declarations and platform constants
-       (:file "pty-rawmode")   ; terminal raw mode management
-       (:file "pty")))         ; PTY lifecycle + install-pty-port adapter (references nerimux/ports vars)
-     (:module "infrastructure/net"
-      :serial t
-      :components
-      ((:file "package")  ; nerimux/protocol, nerimux/transport, nerimux/net
-       (:file "protocol-command")  ; wire constants and command payload codec
-       (:file "protocol")
-       (:file "transport")
-       (:file "net")))
-     (:module "domain/terminal"
-      :serial t
-      :components
-      ((:file "package-types")  ; nerimux/terminal/types
-       (:file "package")        ; nerimux/terminal/actions, sgr, csi, parser, emulator, terminal
-       (:file "cell")         ; immutable cell type, char-width table
-       (:file "screen-data")  ; declarative screen slots and defaults
-       (:file "screen")       ; screen construction and grid helpers
-       (:file "screen-metadata") ; screen capture/palette metadata mutation helpers
-       (:file "screen-resize") ; screen resize logic; depends on metadata reset helpers
-       (:file "screen-logic") ; screen mutation helpers (LOGIC layer): screen-clear-dirty, screen-consume-bell, screen-drain-queue, reset-sgr-pen
-       (:file "scroll")    ; row helpers + scroll-up/down + decstbm (loads before cursor/erase/edit)
-       (:file "erase")     ; erase-region, erase-display, erase-line rule tables
-       (:file "edit")      ; delete/insert chars+lines (uses %copy-row, %clear-row from scroll)
-       (:file "cursor")    ; cursor movement (uses scroll-up-one)
-       (:file "char-write-definitions") ; DEC graphics facts and character-width classification
-       (:file "char-write-cells") ; combining and wide/normal cell placement
-       (:file "char-write") ; charset, wrap, and insert-mode writing flow
-       (:file "modes-alt-screen") ; DEC modes — alt-screen enter/exit helpers (part I)
-       (:file "modes-dec-pm-definitions") ; compile-time DEC PM rule table
-       (:file "modes-cursor-save") ; DECSC/DECRC cursor save-restore + DECSCUSR shape
-       (:file "modes-reset")       ; reset-terminal-modes + RIS/DECSTR/DECALN
-       (:file "modes-charset-definitions") ; compile-time G0..G3 slot fact table
-       (:file "modes-charset")     ; G0..G3 charset designation/invocation logic
-       (:file "modes-ansi-sm-rm-definitions") ; compile-time ANSI SM/RM rule table
-       (:file "screen-projection") ; copy-mode scrollback viewport cell projection
-       (:file "screen-osc-state")  ; focus reports, BEL, title stack, OSC title/colour state
-       (:file "sgr-definitions") ; attribute helpers and compile-time SGR rule table
-       (:file "sgr-colors")      ; extended-colour parameter decoding
-       (:file "sgr")             ; SGR application flow
-       (:file "sgr-report")      ; pen-to-SGR status-report encoding
-       (:file "csi-replies-definitions") ; compile-time reply fact-table constructors
-       (:file "csi-replies")    ; CSI reply-queue helpers (DSR/DA/CPR/DECRQM/XTWINOPS); loads before csi
-       (:file "csi-parameters") ; CSI parameter-to-domain-value translation
-       (:file "csi-dispatch")   ; DEFINE-CSI-RULES macro that emits EXECUTE-CSI
-       (:file "csi")            ; cursor, screen-edit, and SGR rules
-       (:file "csi-device-rules") ; reports, tabulation, and private-mode rules
-       (:file "csi-extended-rules") ; rectangular and extended-control rules
-       (:file "csi-compose")    ; compose rule sets into EXECUTE-CSI
-       (:file "parser-dcs")    ; DCS passthrough/XTGETTCAP/DECRQSS helpers (loads before parser)
-       (:file "parser-core")   ; parser byte predicates + Prolog-like DEFINE-STATE macro
-       (:file "parser-csi")    ; CSI continuation builder and byte-class predicates
-       (:file "parser-utf8")   ; UTF-8 continuation builder and byte predicates
-       (:file "parser")        ; named CPS state-machine skeleton
-       (:file "parser-osc-clipboard") ; OSC 52 Base64 helpers + clipboard callback
-       (:file "parser-osc-uri")       ; OSC 7/8 URI decoding helpers
-       (:file "parser-osc-color")      ; OSC color and palette helpers
-       (:file "parser-osc-dispatch")   ; OSC command parsing + dispatch rules
-       (:file "parser-osc")            ; OSC accumulator + dispatcher state machine
-       (:file "emulator")))
-     (:module "domain/model"
+     ((:module "domain/model"
       :serial t
       :components
       ((:file "package")           ; nerimux/workspace-model, pane, layout, window, session
@@ -264,11 +219,6 @@
        (:file "renderer-tui-kit-transient") ; magit transient, drawn as an expanded key panel
        (:file "renderer-process-log")       ; `$` full-screen git process log (FR-011)
        (:file "renderer-workspace-status"))) ; magit-style per-worktree status view (FR-003)
-     (:module "infrastructure/input"
-      :serial t
-      :components
-      ((:file "package")
-       (:file "input")))
      ;; Everything left in src/bootstrap/ now shares one real ASDF module,
      ;; matching the directory name exactly -- no :pathname override needed
      ;; (W6). It loads last because "nerimux" needs every other package
@@ -331,7 +281,17 @@
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  :depends-on ("nerimux" (:version "cl-weave" "1.3.0"))
+  ;; Each unit's test system is named here so loading "nerimux/test" registers
+  ;; every unit's suites in the same image. cl-weave's registry is global, so
+  ;; RUN-TESTS then reports one total across the root suites and the units --
+  ;; the split changes where a test file lives, not how many run.
+  :depends-on ("nerimux" (:version "cl-weave" "1.3.0")
+               "nerimux-text/test"
+               "nerimux-ports/test"
+               "nerimux-pty/test"
+               "nerimux-net/test"
+               "nerimux-input/test"
+               "nerimux-terminal/test")
   :perform (test-op (op c)
              (declare (ignore op c))
              (funcall (find-symbol "RUN-TESTS" (find-package "NERIMUX/TEST")))))
