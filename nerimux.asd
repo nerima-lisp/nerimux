@@ -103,36 +103,13 @@
                "nerimux-pty"
                "nerimux-net"
                "nerimux-input"
-               "nerimux-terminal")
+               "nerimux-terminal"
+               "nerimux-model")
   :components
   ((:module "src"
     :serial t
      :components
-     ((:module "domain/model"
-      :serial t
-      :components
-      ((:file "package")           ; nerimux/workspace-model, pane, layout, window, session
-       (:file "organization")      ; ghq organization aggregate
-       (:file "repository")        ; ghq repository aggregate
-       (:file "worktree")           ; worktree aggregate and relationships
-       (:file "pane-core")         ; leaf PTY data and feed helpers
-       (:file "attention")         ; worktree/organization attention composed from pane state (W3)
-       (:file "pane-geometry")     ; geometry update + PTY/screen resize helpers
-       (:file "layout")            ; tree structure (uses pane-reposition)
-       (:file "layout-visitor")    ; declarative layout traversal macros
-       (:file "layout-persistence") ; layout string serialization
-       (:file "layout-geometry")    ; rectangle assignment + resize helpers (uses pane-id, pane-x/y/w/h)
-       (:file "window-definitions") ; window records and pane-numbering constants
-       (:file "window-core")        ; window selection and split behavior
-       (:file "window-tree")        ; tree mutation + relayout/remove helpers
-       (:file "window-operations")  ; window resize/rotate/zoom (uses window + layout helpers)
-       (:file "window-neighbor") ; directional pane navigation (uses window-panes)
-       (:file "session")             ; session lifecycle: struct + windows + touch + all-panes
-       (:file "session-environment-process")   ; update-env defaults + process env helpers
-       (:file "session-environment-overlay")    ; session overlay tables and env access
-       (:file "session-environment-child")      ; child env snapshot assembly
-       (:file "pane-spawn")))                   ; PTY-backed pane factory + respawn
-     (:module "infrastructure/vcs"
+     ((:module "infrastructure/vcs"
      :serial t
      :components
        ((:file "package")
@@ -291,7 +268,8 @@
                "nerimux-pty/test"
                "nerimux-net/test"
                "nerimux-input/test"
-               "nerimux-terminal/test")
+               "nerimux-terminal/test"
+               "nerimux-model/test")
   :perform (test-op (op c)
              (declare (ignore op c))
              (funcall (find-symbol "RUN-TESTS" (find-package "NERIMUX/TEST")))))

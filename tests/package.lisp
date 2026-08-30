@@ -39,6 +39,19 @@
                 #:check-table
                 #:display-row-string
                 #:utf8-feed)
+  (:import-from #:nerimux/test/model
+                #:tl-pane
+                #:tl-leaf
+                #:tl-window
+                #:with-center-test-panes
+                #:with-two-1x1-panes
+                #:with-h-split-window
+                #:make-two-pane-h-window
+                #:with-h-split-81-24
+                #:with-v-split-window
+                #:make-no-pty-pane
+                #:make-fake-window
+                #:make-fake-session)
   (:import-from #:nerimux/terminal
                 #:make-screen
                 #:screen-resize

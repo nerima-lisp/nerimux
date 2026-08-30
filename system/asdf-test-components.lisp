@@ -9,13 +9,15 @@
       (:file "helpers-render-output")
       (:file "helpers-key-bindings")
       (:file "helpers-session-naming")
-      (:file "helpers-pane-fixtures")
       (:file "helpers-process-fixtures")
       (:file "helpers-loop-fixtures")
-      (:file "helpers-layout-fixtures")
       (:file "helpers-renderer-fixtures")
       (:file "helpers-session-fixtures")
       (:file "helpers-input-fixtures")
+      ;; Split out of helpers-layout-fixtures.lisp when domain/model became
+      ;; nerimux-model: this one wraps its body in WITH-LOOP-STATE, which binds
+      ;; nerimux:: server state, so a DOMAIN unit cannot carry it.
+      (:file "helpers-layout-loop-fixtures")
       ;; Split out of the terminal helpers when domain/terminal became
       ;; nerimux-terminal: one reaches nerimux/commands, the other binds
       ;; nerimux:: server state, so neither can live in a DOMAIN unit.
@@ -24,39 +26,7 @@
       (:module "unit"
        :serial t
        :components
-       ((:module "domain/model"
-         :serial t
-         :components
-         ((:file "layout-tests-geometry") ; layout-tree geometry: leaves/split/resize/remove/min-extent - part I
-          (:file "layout-tests-macros") ; layout-tree helpers and macros - part II
-          (:file "layout-tests-persistence") ; layout-tree persistence and string/flat-tree round-trips - part III
-          (:file "layout-tests-b") ; named-layout helpers, apply-named-layout - part IV
-          (:file "layout-tests-c") ; layout persistence internals: split-bounding-box, node-to-string, read-digits, round-trips - part V
-          (:file "layout-tests-d") ; main-pane-extent table, layout-split defaults, checksum constants, zoomed pane-neighbor guard - part VI
-          (:file "layout-geometry-tests") ; orientation helpers, layout-assign, resize-find-split, pane-at-position, split-child - part I
-          (:file "layout-geometry-tests-b") ; %ranges-overlap-p, pane-center, closest-to-center, define-axis-rules, nested min-extent - part II
-          (:file "pane-tests-geometry") ; pane feed/reposition, next-id, split-window
-          (:file "pane-tests-ops") ; swap/capture/last/display/respawn
-          (:file "pane-tests-accessors") ; pane defaults, accessors, feed dirty/empty
-          (:file "pane-tests-predicates") ; hit-testing, live, pipe
-          (:file "window-definition-tests") ; declarative record expansion
-          (:file "window-tests-relayout")
-          (:file "window-tests-split-math")
-          (:file "window-tests-tree-ops")
-          (:file "window-neighbor-tests") ; pane-neighbor directional lookup
-          (:file "window-zoom-tests") ; even-layout, zoom toggle, lock slot
-          (:file "window-tests-b") ; apply-named-layout (5 layouts), last-window/move/swap/rotate - part II
-          (:file "window-tests-c") ; find-window-by-name, list-windows-format, auto-rename-from-osc - part III
-          (:file "session-state-core")
-          (:file "session-state-structural")
-          (:file "session-window-tests") ; start-directory, all-panes ordering, window flags
-          (:file "session-environment-tests") ; environment overlay, process helpers, child env merge
-          (:file "organization-tests")
-          (:file "repository-tests")
-          (:file "worktree-tests")
-          (:file "attention-tests")
-          (:file "advanced-tests"))) ; layout persistence round-trip and update-environment defaults; moved from tests/unit/feature/ (model-layer concern, not a cross-layer feature)
-        (:module "infrastructure/vcs"
+        ((:module "infrastructure/vcs"
          :serial t
          :components
          ((:file "vcs-tests")
@@ -69,12 +39,6 @@
          :serial t
          :components
          ((:file "global-picker-tests")))
-        (:module "domain/model-2"
-         :pathname "domain/model"
-         :serial t
-         :components
-         ((:file "target-tests") ; parse-session/window/pane/target, find-by-target - part I
-          (:file "target-tests-b"))) ; %sigil-id, %name-prefix-p, edge cases, table-driven parse-target, multi-digit ids - part II
         (:module "presentation/renderer"
          :serial t
          :components
@@ -136,7 +100,13 @@
       (:file "server-kill-request-tests") ; R8.1/R8.3
       (:file "workspace-window-naming-tests") ; R5.8
       (:file "workspace-catalog-refresh-state-tests") ; FR-005: mark/settle, not re-mark
-          (:file "system-composition-tests"))) ; layering guard; core declares no optional kit
+          (:file "system-composition-tests") ; layering guard; core declares no optional kit
+          ;; Moved from tests/unit/domain/model/ with the extraction of
+          ;; nerimux-model. target.lisp itself moved to src/bootstrap/ earlier;
+          ;; these reference nerimux:: internals and were never model tests, only
+          ;; tests that had not followed their subject.
+          (:file "target-tests") ; parse-session/window/pane/target, find-by-target - part I
+          (:file "target-tests-b"))) ; %sigil-id, %name-prefix-p, edge cases, table-driven parse-target, multi-digit ids - part II
         (:module "bootstrap-2"
          :pathname "bootstrap"
          :serial t
@@ -151,7 +121,8 @@
       (:module "integration"
        :serial t
        :components
-        ((:file "net-malformed-utf8-dispatch-tests") ; spans nerimux-net and the bootstrap event loop
+        ((:file "pane-response-queue-pty-tests") ; spans nerimux-model and the real nerimux-pty adapter
+         (:file "net-malformed-utf8-dispatch-tests") ; spans nerimux-net and the bootstrap event loop
          (:file "net-tests")
          (:file "server-multi-tests-support")
          (:file "server-multi-tests-size")
