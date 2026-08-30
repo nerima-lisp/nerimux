@@ -117,10 +117,7 @@
      ;; itself, the server, the client and startup. Everything it composes now
      ;; lives in packages/<name>/ and is named in :depends-on above, so this
      ;; module loads after all of them without having to say so.
-     ((:module "bootstrap"
-      :serial t
-      :components
-      ((:file "package")             ; nerimux (BOOTSTRAP layer, needs everything)
+     ((:file "package")             ; nerimux (BOOTSTRAP layer, needs everything)
        ;; target resolution is a "nerimux"-package service (W4-prep found it was
        ;; never really part of nerimux/model despite living in that directory);
        ;; moved here from domain/model now that its true package's declaration
@@ -157,7 +154,7 @@
        (:file "main-startup-flags") ; global cl-cli flag definitions
        (:file "main-startup-socket") ; socket discovery + server auto-start helpers
        (:file "main-startup-commands") ; attach/version/usage handlers + mode table
-       (:file "main-startup"))))))
+       (:file "main-startup"))))
   ;; Build a standalone binary: (asdf:make :nerimux)
   :build-operation "program-op"
   :build-pathname "nerimux"

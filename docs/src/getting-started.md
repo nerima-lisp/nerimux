@@ -75,7 +75,7 @@ rather than discarded, so a crash leaves a forensic trail. The path is
 that's set — the same state-home resolution the runtime-state snapshot file
 uses, so the two files always land in the same directory but never collide.
 The log directory is created `0700`. See `%runtime-log-path` and
-`%runtime-state-home` in `src/bootstrap/runtime-lifecycle.lisp`.
+`%runtime-state-home` in `src/runtime-lifecycle.lisp`.
 
 ## Default key bindings
 
@@ -93,7 +93,7 @@ jumps straight into a worktree's pane; `C-p` opens the global picker across
 organizations, repositories, worktrees, and panes from either `repolist` or
 `status`.
 
-(`CLIENT-CONN-VIEW` and `CLIENT-CONN-MODAL`, `src/bootstrap/server-multi-dispatch.lisp`,
+(`CLIENT-CONN-VIEW` and `CLIENT-CONN-MODAL`, `src/server-multi-dispatch.lisp`,
 are the two slots this model is built from; `%client-ui-keys-p` in the same
 file is the one-line derivation described above.)
 
@@ -137,7 +137,7 @@ opening a further menu of arguments (toggled with their own letter) and
 actions. From `status`, most of these also have a direct single-key shortcut
 (the table above). The full set, and which actions actually run something
 versus report that they are not wired yet (source: `+transient-definitions+`,
-`src/bootstrap/server-multi-dispatch-transient.lisp`):
+`src/server-multi-dispatch-transient.lisp`):
 
 | Key | Menu | Wired actions | Not wired in this build |
 |---|---|---|---|

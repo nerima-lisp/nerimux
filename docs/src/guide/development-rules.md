@@ -149,7 +149,7 @@ message.
 [Architecture](../reference/architecture.md). Terminal code further separates
 data structs (`types`) from logic (`actions`, `csi`, `sgr`). New code should
 land in the matching layer, and new public accessors must also be re-exported
-from the umbrella packages in `src/bootstrap/package*.lisp`.
+from its unit's own `packages/<name>/src/package.lisp`.
 
 ## Two timeout vocabularies, and which takes which
 
@@ -166,7 +166,7 @@ and `+pty-write-timeout-seconds+` are both plain integers for that reason. It
 signals `sb-ext:timeout`, which is a `serious-condition` and deliberately
 **not** an `error` — so an `(error ...)` clause silently misses it and the
 condition escapes. On a non-main thread that is fatal to the whole process,
-not just the thread. Use the `peer-io-failure` type (`src/bootstrap/runtime.lisp`),
+not just the thread. Use the `peer-io-failure` type (`src/runtime.lisp`),
 which is `(or error sb-ext:timeout)`, wherever you contain either one.
 
 Prefer bounding a wait at all over picking the prettier vocabulary: an
