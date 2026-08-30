@@ -1,6 +1,6 @@
-;;;; Test package for nerimux-model.
+;;;; Test package for nerimux-commands.
 
-(defpackage #:nerimux/test/model
+(defpackage #:nerimux/test/commands
   ;; The test framework is cl-weave, used natively: every file registers its own
   ;; top-level (describe "name" (it "case" ...) ...) block.
   (:use #:cl)
@@ -16,8 +16,8 @@
                 #:it-property #:it-fuzz #:gen-integer #:gen-list #:gen-boolean #:gen-string
                 #:gen-vector #:gen-member #:gen-one-of
                 #:defmatcher)
-  ;; The unit under test. These were in tests/package.lisp's one shared import
-  ;; list; they move with the tests that use them.
+  ;; The model and terminal surfaces these commands operate on. Both mirror
+  ;; nerimux-commands' own :depends-on.
 (:import-from #:nerimux/pane
                 #:make-pane #:pane-feed #:pane-screen #:pane-id
                 #:pane-x #:pane-y #:pane-width #:pane-height #:pane-fd #:pane-pid
@@ -86,40 +86,50 @@
                 #:session-id
                 #:session-last-active
                 #:session-touch
-                #:session-insert-window)
-  ;; Both edges mirror nerimux-model's own :depends-on: ports for the POSIX
-  ;; environment fixture, terminal for the screen builders.
-  (:import-from #:nerimux/terminal
+                #:session-insert-window)(:import-from #:nerimux/terminal
                 #:make-screen
                 #:screen-resize
+                #:screen-process-bytes
                 #:screen-cell
+                #:screen-display-cell
                 #:screen-cursor-x
                 #:screen-cursor-y
                 #:screen-width
                 #:screen-height
                 #:screen-clear-dirty
-                #:cell-char)
-  (:import-from #:nerimux/terminal/types
-                #:screen-dirty-p)
-  (:import-from #:nerimux/test/ports
-                #:with-temporary-posix-environment-variable
-                #:with-pipe-fds)
+                #:cell-char
+                #:cell-fg
+                #:cell-bg
+                #:cell-attrs
+                #:cell-width)
+(:import-from #:nerimux/terminal/types
+                #:screen-copy-mode-p
+                #:screen-copy-offset
+                #:screen-scrollback
+                #:screen-copy-selecting
+                #:screen-copy-mark
+                #:screen-copy-mark-offset
+                #:screen-copy-cursor
+                #:screen-title
+                #:screen-copy-line-selection-p
+                #:screen-copy-rect-select-p
+                #:screen-app-cursor-keys
+                #:screen-dirty-p
+                #:char-width
+                #:screen-p)  (:import-from #:nerimux/commands
+                #:close-pane-pty)
   (:import-from #:nerimux/test/terminal
                 #:feed
-                #:check-table)
-  ;; Fixtures the units above model, and the root suite, reach for.
-  (:export #:tl-pane
-           #:tl-leaf
-           #:tl-window
-           #:with-center-test-panes
-           #:with-two-1x1-panes
-           #:with-h-split-window
-           #:make-two-pane-h-window
-           #:with-h-split-81-24
-           #:with-v-split-window
-           #:make-no-pty-pane
-           #:make-fake-window
-           #:make-fake-session
-           #:make-single-pane-session
-           #:with-session-and-env-var
-           #:with-process-env-var))
+                #:feed-lines
+                #:esc
+                #:csi
+                #:row-string
+                #:check-cursor
+                #:check-table
+                #:check-row
+                #:check-cell
+                #:display-row-string)
+  ;; Reached by the root suite: two cases that also touch bootstrap state moved
+  ;; to tests/integration/ but still build their screens with this fixture.
+  (:export #:copy-mode-screen
+           #:with-copy-mode-cursor))

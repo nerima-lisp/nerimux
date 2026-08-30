@@ -6,75 +6,23 @@
      :components
       ((:file "package")
        (:file "suite")
-      (:file "helpers-render-output")
       (:file "helpers-key-bindings")
       (:file "helpers-session-naming")
       (:file "helpers-process-fixtures")
       (:file "helpers-loop-fixtures")
-      (:file "helpers-renderer-fixtures")
       (:file "helpers-session-fixtures")
       (:file "helpers-input-fixtures")
       ;; Split out of helpers-layout-fixtures.lisp when domain/model became
       ;; nerimux-model: this one wraps its body in WITH-LOOP-STATE, which binds
       ;; nerimux:: server state, so a DOMAIN unit cannot carry it.
       (:file "helpers-layout-loop-fixtures")
-      ;; Split out of the terminal helpers when domain/terminal became
-      ;; nerimux-terminal: one reaches nerimux/commands, the other binds
-      ;; nerimux:: server state, so neither can live in a DOMAIN unit.
-      (:file "helpers-copy-mode-fixtures")
+      ;; Binds nerimux::*server-sessions*, so no unit test system can see it
+      ;; when run on its own.
       (:file "helpers-command-state")
       (:module "unit"
        :serial t
        :components
-        ((:module "presentation/renderer"
-         :serial t
-         :components
-         ((:file "renderer-format-tests") ; SGR codes, style tokens, border-color, cursor-shape, palette bounds - part I
-          (:file "renderer-format-tests-b") ; all-attrs table, attrs2, ul-color, style-token/emit remaining, parse-style, border-charset - part II
-          (:file "renderer-pane-tests") ; render-pane content/borders/window-style - part I
-          (:file "renderer-pane-tests-b") ; %clock-digit-rows, %render-v-separator, border/pane edge cases - part II
-          (:file "renderer-pane-tests-c") ; %apply-border-style branches, draw-clock, render-pane-clock-mode, draw-pane-number, in-sel-branch - part III
-          (:file "renderer-tests") ; renderer - part I (status-bar, render-session, clear-display)
-          (:file "renderer-tests-b") ; renderer - part II (status-bar, status-position, BEL rendering, status-left-expanded)
-          (:file "renderer-tests-c") ; renderer - part III (mouse/focus/keys, lock-screen, cursor-shape, zoom-suppression)
-          (:file "renderer-tests-e") ; renderer - part V (%clamp-status-segment, cursor-shape in output, status-bar-line gap, inline-style, bell relay)
-          (:file "renderer-tests-g") ; renderer - part VII (%split-align-attr, %status-align-buckets, %status-bar-default-segments, %content-search-match-p flag matrix)
-         (:file "renderer-statusbar-layout-tests") ; direct unit tests for the previously-untested statusbar-layout helpers
-         (:file "renderer-pane-selection-tests") ; direct unit tests for %compute-selection-bounds
-         (:file "renderer-compose-effects-tests") ; direct unit tests for %render-passthrough/%render-clipboard drain gating
-         (:file "renderer-pane-search-tests") ; direct unit tests for %render-copy-search-matches's current-vs-plain match style branch
-      (:file "renderer-workspace-status-tokens-tests") ; R6.1: tokens combine; CLEAN vs UNKNOWN
-      (:file "renderer-workspace-clip-tests") ; R6.9: clipping measures cells, not characters
-      (:file "renderer-workspace-tree-tests") ; Attention/Active/Repositories sections; Repositories collapsed by default
-      (:file "renderer-workspace-command-completion-tests") ; R6.12
-      (:file "renderer-statusbar-workspace-tests") ; R6.5/R6.7: three blocks, truncation order
-      (:file "renderer-copy-mode-position-tests") ; R6.8
-      (:file "renderer-tui-kit-min-size-tests") ; R6.10
-         (:file "renderer-tui-kit-tests") ; headless cl-tui-kit surface/backend adapter
-         (:file "renderer-tui-kit-help-tests") ; full-screen key reference, reached from the `?` transient
-         (:file "renderer-transient-tests") ; magit transient panel + `$` process log (FR-010/FR-011)
-         (:file "renderer-workspace-status-tests"))) ; magit-style per-worktree status view (FR-003)
- ; wait-for command channel state and argument validation
-        (:module "application/commands"
-         :serial t
-         :components
-         ((:file "commands-tests") ; resize-pane, scroll, select/rename - part I
-          (:file "commands-pane-lifecycle-tests") ; close-pane-pty: fd/pid order, error swallowing
-          (:file "commands-tests-e") ; copy-mode WORD-motion and cursor movement - part II
-          (:file "commands-tests-f") ; rename-window, kill-window, linear selection-text - part III
-          (:file "commands-tests-m") ; shift-line-wrapped, line-wrapped flag on erase - part XIII
-          (:file "commands-tests-n") ; copy-mode-begin-selection multi-row, yank, other-end - part XIV
-          (:file "commands-tests-k") ; begin-line-selection, copy-end-of-line (D), copy-line (Y), search-forward/backward, wrap-search - part XI
-          (:file "commands-tests-g") ; tokenize-command-string, message-log append/cap/order - part V
-          (:file "commands-tests-h") ; copy-mode exit and half-page scroll, clear-history, rotate - part VI
-          (:file "commands-window-navigation-tests") ; find-window and next/previous/last-window command behavior
-          (:file "commands-tests-c") ; pipe-pane, virtual-row, timeout, scroll helpers, word/paragraph nav - part VII
-          (:file "commands-tests-o") ; selection-bounds scrollback, word/paragraph nav, scroll-middle - part XV
-          (:file "commands-tests-j") ; resize up, copy-mode search/scroll/word-bounds, row extraction - part X
-          (:file "commands-tests-l") ; copy-mode exit resets rect-select, yank-rectangle fixed columns - part XII
-          (:file "commands-tests-i") ; rectangle selection-text, run-copy-command, copy-mode set-cursor - part IX
-          (:file "commands-copy-navigation-tests"))) ; copy-mode search next/prev/forward/backward guards
-        (:module "bootstrap"
+        ((:module "bootstrap"
          :serial t
          :components
          ((:file "server-registry-tests")
@@ -110,6 +58,11 @@
        :components
         ((:file "pane-response-queue-pty-tests") ; spans nerimux-model and the real nerimux-pty adapter
          (:file "net-malformed-utf8-dispatch-tests") ; spans nerimux-net and the bootstrap event loop
+         (:file "commands-clear-history-tests") ; binds nerimux:: server state around a commands case
+         (:file "renderer-selection-copy-mode-tests") ; renderer bounds over a commands-built copy-mode screen
+         (:file "renderer-copy-search-highlight-tests") ; renderer highlight over a commands-built copy-mode screen
+         (:file "renderer-copy-mode-frame-tests") ; same, through a full rendered frame
+         (:file "renderer-help-transient-tests") ; renderer help sections against the bootstrap transient table
          (:file "net-tests")
          (:file "server-multi-tests-support")
          (:file "server-multi-tests-size")

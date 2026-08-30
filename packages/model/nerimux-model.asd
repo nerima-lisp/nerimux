@@ -16,7 +16,8 @@
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
   ;; nerimux/pane :uses both: nerimux/ports for the PTY spawn hooks, and
   ;; nerimux/terminal for the screen a pane owns.
-  :depends-on ("nerimux-ports" "nerimux-terminal" :cl-concurrent-kit :cl-host-kit)
+  :depends-on ("nerimux-ports" "nerimux-terminal"
+               :cl-concurrent-kit :cl-host-kit :cl-tty-kit)
   :pathname "src"
   ;; Five packages share this system because they are mutually recursive:
   ;; workspace-model<->pane, pane<->session and layout<->window each close a

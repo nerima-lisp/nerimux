@@ -106,83 +106,18 @@
                "nerimux-terminal"
                "nerimux-model"
                "nerimux-picker"
-               "nerimux-vcs")
+               "nerimux-vcs"
+               "nerimux-commands"
+               "nerimux-renderer")
   :components
   ((:module "src"
     :serial t
      :components
-     ;; commands context: what is left of the pane/window operations, plus the
-     ;; copy-mode cluster.  commands-core loads first, then copy-mode, then the
-     ;; two survivors split back to root via :pathname.  The tmux command
-     ;; implementations this directory was built for (commands.lisp,
-     ;; commands-shell, commands-keys, commands-keys-data, commands-capture-pane)
-     ;; went with the command table that called them.
-     ((:module "application/commands"
-      :serial t
-      :components
-      ((:file "package")
-       (:file "commands-core")))
-     (:module "application/commands/copy-mode"
-      :serial t
-      :components
-      ((:file "commands-copy-mode")      ; copy-mode core: enter/exit, scroll, prompts, selection state
-       (:file "commands-copy-mode-cursor") ; cursor movement and viewport edge scrolling
-       (:file "commands-copy-mode-selection") ; selection bounds and text extraction helpers
-       (:file "commands-copy-mode-clip") ; rectangle selection text, yank, copy-pipe, append-selection
-       (:file "commands-copy-mode-virtual") ; virtual-row helpers shared by search and selection
-       (:file "commands-copy-mode-search"))) ; search-forward/backward, search-next/prev
-     (:module "application-commands-2"
-      :pathname "application/commands"
-      :serial t
-      :components
-       ((:file "commands-tokenizer")))   ; shell-style command-string tokeniser
-     (:module "presentation/renderer"
-      :serial t
-      :components
-      ((:file "package")
-       (:file "renderer-format-definitions") ; compile-time ANSI fact-table constructors
-       (:file "renderer-format")     ; ANSI primitives (shared by both paths below)
-       ;; The theme palette loads right after the ANSI primitives so both the
-       ;; workspace frame and the pane compositor can reference its constants.
-       (:file "renderer-style-data") ; declarative style/SGR/border-charset dispatch tables
-       (:file "renderer-style")     ; theme palette + fixed SGR constants
-       ;; Workspace presentation helpers and tree projection depend on no pane
-       ;; compositor; their order here states that boundary.
-       (:file "renderer-workspace-status-title") ; shared status/title labels
-       (:file "renderer-workspace-command-line") ; command completion footer
-       (:file "renderer-workspace-tree") ; shared tree data projection
-       (:file "renderer-workspace")  ; workspace frame (plain ANSI)
-       (:file "renderer-pane-selection") ; selection bounds helpers
-       (:file "renderer-statusbar-layout"); status bar layout helpers (needed by renderer-pane-copy-mode-overlay below)
-       (:file "renderer-pane-search")    ; pane content search match ranges
-       (:file "renderer-pane-copy-mode-overlay")      ; copy-mode position-banner overlay rendering
-       (:file "renderer-pane")           ; pane cell rendering (selection, copy-mode highlights)
-       (:file "renderer-borders")        ; split-tree separators + pane border rendering
-       (:file "renderer-statusbar")      ; status bar composition
-       (:file "renderer-compose-protocols") ; terminal protocol toggles
-       (:file "renderer-compose-overlay")   ; cursor placement for the active pane
-       (:file "renderer-compose-effects")   ; bell / cursor / queue drain effects
-       (:file "renderer-compose")        ; PANE frame compositing + entry points
-       (:file "renderer-tui-kit-frame-grid") ; ANSI frame decoding into a fixed grid
-       (:file "renderer-tui-kit-widgets") ; workspace tree and picker widgets
-       (:file "renderer-tui-kit")       ; headless surface conversion and entry points
-       (:file "renderer-tui-kit-confirm-view") ; confirmation data and rendering
-       (:file "renderer-tui-kit-help") ; full-screen key reference, now reached from the `?` transient
-       ;; The three magit-alignment views. All three need the tui-kit surface
-       ;; helpers (%SURFACE-TO-ANSI-FRAME, %BOX-WIDGET-INNER-RECTANGLE), so they
-       ;; load after renderer-tui-kit; transient comes before the status view
-       ;; because the status frame draws the transient panel into its own
-       ;; bottom region.
-       (:file "renderer-tui-kit-transient") ; magit transient, drawn as an expanded key panel
-       (:file "renderer-process-log")       ; `$` full-screen git process log (FR-011)
-       (:file "renderer-workspace-status"))) ; magit-style per-worktree status view (FR-003)
-     ;; Everything left in src/bootstrap/ now shares one real ASDF module,
-     ;; matching the directory name exactly -- no :pathname override needed
-     ;; (W6). It loads last because "nerimux" needs every other package
-     ;; declared first (renderer, input, and commands included), which used
-     ;; to be true only because package.lisp loaded all nine package
-     ;; fragments upfront regardless of where their own code lived.
-     (:module "bootstrap"
+     ;; All that is left in src/ is the bootstrap core: the "nerimux" package
+     ;; itself, the server, the client and startup. Everything it composes now
+     ;; lives in packages/<name>/ and is named in :depends-on above, so this
+     ;; module loads after all of them without having to say so.
+     ((:module "bootstrap"
       :serial t
       :components
       ((:file "package")             ; nerimux (BOOTSTRAP layer, needs everything)
@@ -251,7 +186,9 @@
                "nerimux-terminal/test"
                "nerimux-model/test"
                "nerimux-picker/test"
-               "nerimux-vcs/test")
+               "nerimux-vcs/test"
+               "nerimux-commands/test"
+               "nerimux-renderer/test")
   :perform (test-op (op c)
              (declare (ignore op c))
              (funcall (find-symbol "RUN-TESTS" (find-package "NERIMUX/TEST")))))

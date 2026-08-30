@@ -40,6 +40,14 @@
                 #:check-table
                 #:display-row-string
                 #:utf8-feed)
+  (:import-from #:nerimux/test/commands
+                #:copy-mode-screen
+                #:with-copy-mode-cursor)
+  (:import-from #:nerimux/test/renderer
+                #:strip-sgr
+                #:render-pane-output
+                #:make-test-pane
+                #:make-renderer-test-session)
   (:import-from #:nerimux/test/vcs
                 #:%vcs-operations-existing-path
                 #:%vcs-operations-fake-worktree
@@ -56,7 +64,8 @@
                 #:with-v-split-window
                 #:make-no-pty-pane
                 #:make-fake-window
-                #:make-fake-session)
+                #:make-fake-session
+                #:make-single-pane-session)
   (:import-from #:nerimux/terminal
                 #:make-screen
                 #:screen-resize

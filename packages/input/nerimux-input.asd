@@ -14,7 +14,7 @@
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  :depends-on ("nerimux-ports" "nerimux-pty")
+  :depends-on ("nerimux-ports" "nerimux-pty" :cl-tty-kit)
   :pathname "src"
   :serial t
   :components ((:file "package")

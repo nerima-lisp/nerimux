@@ -16,7 +16,8 @@
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
   ;; parser-osc-color calls nerimux/text:parse-integer-or-nil; csi-replies calls
   ;; nerimux/version:version-string for the XTVERSION reply.
-  :depends-on ("nerimux-text" "nerimux-version" :cl-codec-kit :cl-host-kit :cl-concurrent-kit)
+  :depends-on ("nerimux-text" "nerimux-version"
+               :cl-codec-kit :cl-host-kit :cl-concurrent-kit :cl-tty-kit :cl-regex-kit)
   :pathname "src"
   ;; The file order below is load-bearing and was carried over verbatim from
   ;; nerimux.asd's domain/terminal module: scroll before cursor/erase/edit,

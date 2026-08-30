@@ -16,7 +16,9 @@
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
   ;; pty.lisp writes into nerimux/ports' port variables; the adapter depends on
   ;; the abstraction, never the other way round.
-  :depends-on ("nerimux-ports" :cl-tty-kit :cl-process-kit :cl-codec-kit :cl-host-kit)
+  :depends-on ("nerimux-ports"
+               :cl-tty-kit :cl-process-kit :cl-codec-kit :cl-host-kit
+               :cl-concurrent-kit :cl-date-kit)
   :pathname "src"
   :serial t
   :components ((:file "package")
