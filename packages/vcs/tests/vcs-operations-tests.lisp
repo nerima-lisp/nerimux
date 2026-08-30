@@ -1,4 +1,4 @@
-(in-package #:nerimux/test)
+(in-package #:nerimux/test/vcs)
 
 (defun %vcs-operations-existing-path ()
   (namestring (host-kit:temporary-directory)))

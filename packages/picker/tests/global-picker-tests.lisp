@@ -1,4 +1,4 @@
-(in-package #:nerimux/test)
+(in-package #:nerimux/test/picker)
 
 (describe "global picker"
   (it "builds a deterministic organization repository worktree hierarchy"

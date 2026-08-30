@@ -1,4 +1,4 @@
-(in-package #:nerimux/test)
+(in-package #:nerimux/test/vcs)
 
 (describe "vcs value helpers"
   (it "reports whether the VCS package is loaded"

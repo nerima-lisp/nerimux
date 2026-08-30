@@ -104,40 +104,20 @@
                "nerimux-net"
                "nerimux-input"
                "nerimux-terminal"
-               "nerimux-model")
+               "nerimux-model"
+               "nerimux-picker"
+               "nerimux-vcs")
   :components
   ((:module "src"
     :serial t
      :components
-     ((:module "infrastructure/vcs"
-     :serial t
-     :components
-       ((:file "package")
-     (:file "vcs")
-     (:file "vcs-async-operations")
-     (:file "vcs-worktree-operations")
-     (:file "vcs-fetch")
-     (:file "vcs-inspect")
-     ;; Last: the write operations need %REPOSITORY-CHECKED-HANDLE (the
-     ;; vcs-kit:make-repository construction extracted from
-     ;; vcs-worktree-operations.lisp's %REV-PARSE) and %SANITIZE-RETAINED-TEXT
-     ;; from vcs-inspect.lisp. Passing the other repository handle type fails
-     ;; SILENTLY here -- the type error is swallowed and the operation returns
-     ;; NIL forever -- so this is a load-order dependency, not a convenience.
-     (:file "vcs-git-write")))
-     (:module "application/picker"
-      :serial t
-      :components
-      ((:file "package")
-       (:file "global-picker")
-       ))       ; pure picker + measurement fixture
      ;; commands context: what is left of the pane/window operations, plus the
      ;; copy-mode cluster.  commands-core loads first, then copy-mode, then the
      ;; two survivors split back to root via :pathname.  The tmux command
      ;; implementations this directory was built for (commands.lisp,
      ;; commands-shell, commands-keys, commands-keys-data, commands-capture-pane)
      ;; went with the command table that called them.
-     (:module "application/commands"
+     ((:module "application/commands"
       :serial t
       :components
       ((:file "package")
@@ -269,34 +249,9 @@
                "nerimux-net/test"
                "nerimux-input/test"
                "nerimux-terminal/test"
-               "nerimux-model/test")
-  :perform (test-op (op c)
-             (declare (ignore op c))
-             (funcall (find-symbol "RUN-TESTS" (find-package "NERIMUX/TEST")))))
-
-(defsystem "nerimux/vcs-test"
-  :description "Focused VCS infrastructure tests for nerimux"
-  :author "takeokunn <bararararatty@gmail.com>"
-  :maintainer "takeokunn <bararararatty@gmail.com>"
-  :license "MIT"
-  :version "0.3.0"
-  :homepage "https://github.com/nerima-lisp/nerimux"
-  :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
-  :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  :depends-on ("nerimux" (:version "cl-weave" "1.3.0"))
-  :pathname "tests"
-  :serial t
-  :components ((:file "package")
-               (:file "suite")
-               (:file "helpers-process-fixtures")
-               (:module "unit/infrastructure/vcs"
-                :serial t
-                :components ((:file "vcs-tests")
-                             (:file "vcs-fetch-dedup-tests")
-                             (:file "vcs-worktree-path-tests")
-                             (:file "vcs-operations-tests")
-                             (:file "vcs-async-operations-tests")
-                             (:file "vcs-inspect-tests"))))
+               "nerimux-model/test"
+               "nerimux-picker/test"
+               "nerimux-vcs/test")
   :perform (test-op (op c)
              (declare (ignore op c))
              (funcall (find-symbol "RUN-TESTS" (find-package "NERIMUX/TEST")))))

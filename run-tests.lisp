@@ -11,7 +11,7 @@
 ;;;; suite:
 ;;;;
 ;;;;   nerimux/test      the full unit + integration suite (checks.default)
-;;;;   nerimux/vcs-test  focused VCS infrastructure suite
+;;;;   nerimux-vcs/test  focused VCS infrastructure suite, from packages/vcs/
 ;;;;   nerimux/pty-test  the real-PTY suite; needs /dev/ptmx, so it is an app
 ;;;;                     (nix run .#test-pty) and deliberately not a check
 ;;;;

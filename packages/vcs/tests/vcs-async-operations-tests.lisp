@@ -1,4 +1,4 @@
-(in-package #:nerimux/test)
+(in-package #:nerimux/test/vcs)
 
 (describe "vcs asynchronous operation callbacks"
   (it "completes an empty repository refresh synchronously"

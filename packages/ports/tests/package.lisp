@@ -27,6 +27,7 @@
   ;; Neither fixture uses nerimux-ports itself; the placement is about
   ;; reachability, not about subject matter.
   (:export #:with-temporary-posix-environment-variable
+           #:with-stubbed-fdefinition
            #:with-pipe-fds
            #:write-octets-to-fd
            #:write-byte-to-fd

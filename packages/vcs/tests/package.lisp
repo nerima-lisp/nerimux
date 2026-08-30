@@ -1,6 +1,6 @@
-;;;; Test package for nerimux-pty.
+;;;; Test package for nerimux-vcs.
 
-(defpackage #:nerimux/test/pty
+(defpackage #:nerimux/test/vcs
   ;; The test framework is cl-weave, used natively: every file registers its own
   ;; top-level (describe "name" (it "case" ...) ...) block.
   (:use #:cl)
@@ -16,18 +16,16 @@
                 #:it-property #:it-fuzz #:gen-integer #:gen-list #:gen-boolean #:gen-string
                 #:gen-vector #:gen-member #:gen-one-of
                 #:defmatcher)
-  ;; The unit under test. These were in tests/package.lisp's one shared import
-  ;; list; they move with the tests that use them.
-  (:import-from #:nerimux/pty
-                #:forkpty-with-shell
-                #:pty-write
-                #:pty-read-blocking-into
-                #:pty-close
-                #:select-fds)
-  ;; Legal because nerimux-pty depends on nerimux-ports: a test package may
-  ;; reach only where its own unit could.
+  ;; Legal because nerimux-vcs depends on nerimux-model, which depends on
+  ;; nerimux-ports.
   (:import-from #:nerimux/test/ports
-                #:with-temporary-posix-environment-variable
-                #:with-pipe-fds
-                #:write-byte-to-fd
-                #:with-stubbed-fdefinition))
+                #:with-stubbed-fdefinition)
+  ;; The workspace model the adapter reads and writes. Legal because
+  ;; nerimux-vcs depends on nerimux-model.
+  (:import-from #:nerimux/pane
+                #:make-pane
+                #:pane-worktree)
+  ;; Reached by a root integration test that drives a real repository path.
+  (:export #:%vcs-operations-existing-path
+           #:%vcs-operations-fake-worktree
+           #:%vcs-operations-status-snapshot))

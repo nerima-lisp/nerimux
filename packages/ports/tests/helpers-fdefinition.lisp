@@ -1,13 +1,12 @@
-(in-package #:nerimux/test/pty)
+(in-package #:nerimux/test/ports)
 
 ;;;; Function-cell swap fixture.
 ;;;;
-;;;; Copied into each unit that needs it rather than shared. nerimux-net depends
-;;;; on no other unit, so there is no unit below both it and nerimux-pty that
-;;;; could host the definition, and giving either test system an edge its own
-;;;; unit does not have would defeat the point of the split. The same trade is
-;;;; already recorded in tests/pty/helpers.lisp, which duplicates its fixtures
-;;;; for the same reason. The macro touches no nerimux code.
+;;;; Lives with nerimux-ports because every consumer except nerimux-net can
+;;;; reach it: pty, model and vcs all depend on ports, and the root suite sits
+;;;; above everything. nerimux-net depends on no unit at all, so it keeps a copy
+;;;; of its own -- the one duplication the placement rule cannot avoid. The macro
+;;;; touches no nerimux code.
 
 (defmacro with-stubbed-fdefinition ((&rest bindings) &body body)
   "Replace each function cell in BINDINGS with its STUB-FORM for BODY.

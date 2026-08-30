@@ -26,7 +26,7 @@
    The deadline is the point.  Every wait in this file must be able to fail;
    an unbounded one here cannot even be interrupted, because PROCESS-WAIT
    parks in select(2) where SBCL cannot deliver a timeout.  Shape follows the
-   deadline loop already used in tests/unit/infrastructure/vcs/vcs-tests.lisp."
+   deadline loop already used in packages/vcs/tests/vcs-tests.lisp."
   (let ((deadline (+ (get-internal-real-time)
                      (* deadline-seconds internal-time-units-per-second))))
     (loop

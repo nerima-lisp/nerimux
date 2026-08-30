@@ -24,7 +24,8 @@
                 #:with-temporary-posix-environment-variable
                 #:with-pipe-fds
                 #:write-byte-to-fd
-                #:read-octets-from-fd)
+                #:read-octets-from-fd
+                #:with-stubbed-fdefinition)
   (:import-from #:nerimux/test/net
                 #:%test-socket-path
                 #:with-test-listener
@@ -39,6 +40,10 @@
                 #:check-table
                 #:display-row-string
                 #:utf8-feed)
+  (:import-from #:nerimux/test/vcs
+                #:%vcs-operations-existing-path
+                #:%vcs-operations-fake-worktree
+                #:%vcs-operations-status-snapshot)
   (:import-from #:nerimux/test/model
                 #:tl-pane
                 #:tl-leaf

@@ -1,4 +1,4 @@
-(in-package #:nerimux/test)
+(in-package #:nerimux/test/vcs)
 
 ;;;; REFRESH-WORKTREE-COMMITS-ASYNC (vcs-inspect.lisp, Wave B / D2): recent-
 ;;;; commit history for a worktree's inline tree-row expansion.

@@ -1,4 +1,4 @@
-(in-package #:nerimux/test)
+(in-package #:nerimux/test/vcs)
 
 ;;;; Direct unit tests for FETCH-REPOSITORY-ASYNC / FETCH-ORGANIZATION-ASYNC's
 ;;;; duplicate-fetch suppression in vcs-fetch.lisp, the R7.1 requirement:

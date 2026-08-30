@@ -26,20 +26,7 @@
       (:module "unit"
        :serial t
        :components
-        ((:module "infrastructure/vcs"
-         :serial t
-         :components
-         ((:file "vcs-tests")
-          (:file "vcs-fetch-dedup-tests") ; R7.1: one fetch in flight per target
-          (:file "vcs-worktree-path-tests") ; R7.2: timestamp-sha path, -2/-3 on collision
-          (:file "vcs-operations-tests")
-          (:file "vcs-async-operations-tests")
-          (:file "vcs-inspect-tests"))) ; Wave B: recent-commit fetch for the inline expansion
-        (:module "application/picker"
-         :serial t
-         :components
-         ((:file "global-picker-tests")))
-        (:module "presentation/renderer"
+        ((:module "presentation/renderer"
          :serial t
          :components
          ((:file "renderer-format-tests") ; SGR codes, style tokens, border-color, cursor-shape, palette bounds - part I

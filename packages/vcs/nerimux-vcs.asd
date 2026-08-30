@@ -5,8 +5,8 @@
 ;;; read at all. See PACKAGE_STANDARD.md "asd の書き方".
 (in-package #:asdf-user)
 
-(defsystem "nerimux-pty"
-  :description "INFRASTRUCTURE pseudo-terminal adapter for nerimux: spawn, raw mode, fd IO"
+(defsystem "nerimux-vcs"
+  :description "INFRASTRUCTURE git adapter for nerimux: ghq discovery, worktree operations, status inspection"
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
@@ -14,19 +14,27 @@
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  ;; pty.lisp writes into nerimux/ports' port variables; the adapter depends on
-  ;; the abstraction, never the other way round.
-  :depends-on ("nerimux-ports" :cl-tty-kit :cl-process-kit :cl-codec-kit :cl-host-kit)
+  :depends-on ("nerimux-model" :cl-vcs-kit :cl-concurrent-kit)
   :pathname "src"
   :serial t
   :components ((:file "package")
-               (:file "pty-ffi")       ; FFI declarations and platform constants
-               (:file "pty-rawmode")   ; terminal raw mode management
-               (:file "pty"))          ; PTY lifecycle + install-pty-port adapter
-  :in-order-to ((test-op (test-op "nerimux-pty/test"))))
+               (:file "vcs")
+               (:file "vcs-async-operations")
+               (:file "vcs-worktree-operations")
+               (:file "vcs-fetch")
+               (:file "vcs-inspect")
+               ;; Last: the write operations need %REPOSITORY-CHECKED-HANDLE (the
+               ;; vcs-kit:make-repository construction extracted from
+               ;; vcs-worktree-operations.lisp's %REV-PARSE) and
+               ;; %SANITIZE-RETAINED-TEXT from vcs-inspect.lisp. Passing the
+               ;; other repository handle type fails SILENTLY here -- the type
+               ;; error is swallowed and the operation returns NIL forever -- so
+               ;; this is a load-order dependency, not a convenience.
+               (:file "vcs-git-write"))
+  :in-order-to ((test-op (test-op "nerimux-vcs/test"))))
 
-(defsystem "nerimux-pty/test"
-  :description "Test suite for nerimux-pty"
+(defsystem "nerimux-vcs/test"
+  :description "Test suite for nerimux-vcs"
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
@@ -34,16 +42,19 @@
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  ;; nerimux-ports/test supplies the POSIX-environment and pipe fixtures. That
-  ;; edge is legal precisely because nerimux-pty depends on nerimux-ports: a
-  ;; unit's test system may only reach a test system its own unit could reach.
-  :depends-on ("nerimux-pty" "nerimux-ports/test" (:version "cl-weave" "1.3.0"))
+  ;; nerimux-ports/test carries the fdefinition-swap fixture; the edge is legal
+  ;; because nerimux-vcs depends on nerimux-model, which depends on
+  ;; nerimux-ports.
+  :depends-on ("nerimux-vcs" "nerimux-ports/test" (:version "cl-weave" "1.3.0"))
   :pathname "tests"
   :serial t
   :components ((:file "package")
-               (:file "pty-ffi-tests")
-               (:file "pty-rawmode-tests")
-               (:file "pty-tests"))
+               (:file "vcs-tests")
+               (:file "vcs-fetch-dedup-tests") ; R7.1: one fetch in flight per target
+               (:file "vcs-worktree-path-tests") ; R7.2: timestamp-sha path, -2/-3 on collision
+               (:file "vcs-operations-tests")
+               (:file "vcs-async-operations-tests")
+               (:file "vcs-inspect-tests"))
   ;; See packages/text/nerimux-text.asd for why this form is repeated per unit
   ;; rather than shared, and why *PRINT-CIRCLE* is load-bearing.
   :perform (test-op (op c)
@@ -56,4 +67,4 @@
                         :name-filter (when (and filter (plusp (length filter))) filter)
                         :max-workers 1
                         :pass-with-no-tests nil)
-                 (error "nerimux-pty test suite failed")))))
+                 (error "nerimux-vcs test suite failed")))))

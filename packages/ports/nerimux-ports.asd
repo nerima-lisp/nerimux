@@ -36,6 +36,7 @@
   :serial t
   :components ((:file "package")
                (:file "helpers-posix-environment")
+               (:file "helpers-fdefinition")
                (:file "helpers-pipe-fixtures")
                (:file "posix-port-tests"))
   ;; See packages/text/nerimux-text.asd for why this form is repeated per unit

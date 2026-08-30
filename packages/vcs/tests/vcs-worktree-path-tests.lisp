@@ -1,4 +1,4 @@
-(in-package #:nerimux/test)
+(in-package #:nerimux/test/vcs)
 
 ;;;; Direct unit tests for %UNIQUE-WORKTREE-PATH / %RESOLVE-WORKTREE-PATH /
 ;;;; %TIMESTAMP-TOKEN (vcs.lisp:439-479), the R7.2 requirement: a new
