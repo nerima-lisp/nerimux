@@ -15,7 +15,7 @@ did by hand — not bolted on beside it.
 - [cl-tty-kit](https://github.com/nerima-lisp/cl-tty-kit) backs the PTY layer:
   pane spawn, byte-transparent master-fd read/write, raw mode, and
   terminal-size queries — including the `TIOCSWINSZ` ioctl itself — all
-  delegate to it (`src/infrastructure/pty/`). It also contributes
+  delegate to it (`packages/pty/src/`). It also contributes
   `rgb-to-256` for true-colour downsampling in `renderer-format.lisp`.
   nerimux keeps its own SIGHUP-based `pty-close` teardown on top, deliberately
   not cl-tty-kit's SIGTERM→SIGKILL escalation, and its own `set-pty-size`
@@ -31,7 +31,7 @@ did by hand — not bolted on beside it.
 - [cl-process-kit](https://github.com/nerima-lisp/cl-process-kit) backs
   `select-fds`/`wait-for-input`, the select(2) fd multiplexing behind the PTY
   reader loop's readiness poll (`select-fds` in
-  `src/infrastructure/pty/pty.lisp`, called from `nerimux/pty:select-fds`
+  `packages/pty/src/pty.lisp`, called from `nerimux/pty:select-fds`
   across ~45 sites in `src/` and `tests/`). It replaced a hand-rolled select(2)
   wrapper whose `fd-set!` wrote past the end of a 128-byte bitmap for any fd
   past `FD_SETSIZE`, and which read an `EINTR` mid-wait as "nothing ready,"
@@ -53,7 +53,7 @@ did by hand — not bolted on beside it.
 - [cl-date-kit](https://github.com/nerima-lisp/cl-date-kit) supplies the one
   typed elapsed-time value nerimux currently constructs,
   `duration-of-seconds`, for `+pty-child-wait-timeout+`
-  (`src/infrastructure/pty/pty.lisp`), the deadline
+  (`packages/pty/src/pty.lisp`), the deadline
   `cl-concurrent-kit:with-timeout` bounds `pty-child-exit-status` with.
 - [cl-regex-kit](https://github.com/nerima-lisp/cl-regex-kit) replaced
   `cl-ppcre` behind every regular expression nerimux exposes: copy-mode
@@ -76,16 +76,16 @@ did by hand — not bolted on beside it.
 - [cl-host-kit](https://github.com/nerima-lisp/cl-host-kit) supplies
   pathname/string host operations; nerimux's one live call site is
   `host-kit:split-string`, splitting an OSC `rgb:R/G/B` colour spec on `/`
-  in `%parse-rgb-color` (`src/domain/terminal/parser-osc-color.lisp`) — a
+  in `%parse-rgb-color` (`packages/terminal/src/parser-osc-color.lisp`) — a
   fixed single-character delimiter, not a job that needs a compiled
   pattern.
 - [cl-tui-kit](https://github.com/nerima-lisp/cl-tui-kit) renders the
   per-client frames — headless surface/backend, layout and widgets behind the
   repolist, status, pane and picker views
-  (`src/presentation/renderer/renderer-tui-kit.lisp`).
+  (`packages/renderer/src/renderer-tui-kit.lisp`).
 - [cl-vcs-kit](https://github.com/nerima-lisp/cl-vcs-kit) discovers ghq
   organizations, repositories and worktrees behind the workspace tree
-  (`src/infrastructure/vcs/`).
+  (`packages/vcs/src/`).
 
 ## External dependencies
 

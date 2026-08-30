@@ -11,7 +11,7 @@
 ;;;; suite:
 ;;;;
 ;;;;   nerimux/test      the full unit + integration suite (checks.default)
-;;;;   nerimux/vcs-test  focused VCS infrastructure suite
+;;;;   nerimux-vcs/test  focused VCS infrastructure suite, from packages/vcs/
 ;;;;   nerimux/pty-test  the real-PTY suite; needs /dev/ptmx, so it is an app
 ;;;;                     (nix run .#test-pty) and deliberately not a check
 ;;;;
@@ -34,6 +34,16 @@
 ;;; registered by the invoking image, without scanning machine-global trees.
 (push (uiop:pathname-directory-pathname *load-truename*)
       asdf:*central-registry*)
+
+;;; Each in-repo unit lives in packages/<name>/ and carries its own .asd. The
+;;; central registry does not recurse, so registering the repository root alone
+;;; leaves every unit unresolvable when it is asked for by its own name --
+;;; (asdf:load-system "nerimux-terminal") never reads nerimux.asd, because ASDF
+;;; resolves a primary system from the .asd named after it.
+(dolist (dir (directory (merge-pathnames
+                         "packages/*/"
+                         (uiop:pathname-directory-pathname *load-truename*))))
+  (push dir asdf:*central-registry*))
 
 (dolist (dir (uiop:split-string (or (uiop:getenv "NERIMUX_SIBLING_REGISTRY") "")
                                 :separator ":"))

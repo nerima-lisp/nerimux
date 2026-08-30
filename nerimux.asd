@@ -14,6 +14,44 @@
               *load-pathname*
               (error "Cannot locate nerimux.asd while loading test components."))))))
 
+;;; Register every packages/<name>/nerimux-<name>.asd before the systems below
+;;; name them in :depends-on.
+;;;
+;;; ASDF's :central-registry finds a .asd only in a directory registered
+;;; directly; it does not recurse, and run-tests.lisp deliberately empties the
+;;; source registry so no machine-global tree is scanned. Without this, every
+;;; unit below resolves to "system not found".
+;;;
+;;; This covers the `nerimux' entry point only. Loading a unit directly --
+;;; (asdf:load-system "nerimux-terminal") -- never reads this file, because ASDF
+;;; resolves a primary system from the .asd named after it. That path is served
+;;; by pushing each packages/<name>/ onto the central registry, which
+;;; run-tests.lisp and flake.nix do. The two are different entry points, not two
+;;; spellings of one.
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  ;; The glob finds the files; this list decides which of them may run. Without
+  ;; it, dropping a directory into packages/ is enough to get its .asd LOADED --
+  ;; that is, evaluated -- at build time without being named anywhere a reviewer
+  ;; diffing :depends-on would look. Naming the units here keeps the set of code
+  ;; that executes equal to the set that is declared.
+  (defparameter cl-user::*nerimux-units*
+    '("nerimux-text" "nerimux-version" "nerimux-ports" "nerimux-pty"
+      "nerimux-net" "nerimux-input" "nerimux-terminal" "nerimux-model"
+      "nerimux-picker" "nerimux-vcs" "nerimux-commands" "nerimux-renderer"))
+  (let ((here (uiop:pathname-directory-pathname
+               (or *load-truename*
+                   *load-pathname*
+                   (error "Cannot locate nerimux.asd while registering packages/.")))))
+    (dolist (name cl-user::*nerimux-units*)
+      (unless (asdf:find-system name nil)
+        (let ((asd (merge-pathnames (format nil "packages/~A/~A.asd"
+                                            (subseq name (length "nerimux-"))
+                                            name)
+                                    here)))
+          (unless (probe-file asd)
+            (error "Unit ~A is named in nerimux.asd but ~A does not exist." name asd))
+          (load asd))))))
+
 (defsystem "nerimux"
   :description "A git-worktree workspace multiplexer in Common Lisp"
   :author "takeokunn <bararararatty@gmail.com>"
@@ -68,217 +106,32 @@
                :cl-tui-kit/ansi  ; headless surface/backend rendering for per-client frames
                :cl-tui-kit/layout ; geometry and viewport layout for client frames
                :cl-tui-kit/widgets ; widget rendering for client frames
-               :cl-vcs-kit)      ; ghq/repository/worktree discovery
+               :cl-vcs-kit       ; ghq/repository/worktree discovery
+               ;; In-repo units, one ASDF system per packages/<name>/. Each
+               ;; declares its own dependencies, so a reference that crosses a
+               ;; unit boundary without an edge here fails to load rather than
+               ;; failing a test.
+               "nerimux-text"
+               "nerimux-version"
+               "nerimux-ports"
+               "nerimux-pty"
+               "nerimux-net"
+               "nerimux-input"
+               "nerimux-terminal"
+               "nerimux-model"
+               "nerimux-picker"
+               "nerimux-vcs"
+               "nerimux-commands"
+               "nerimux-renderer")
   :components
   ((:module "src"
     :serial t
      :components
-     ;; Foundation: depends on nothing, so it loads before every layer that calls
-     ;; it.  Placement is load-bearing -- domain/terminal calls
-     ;; parse-integer-or-nil and used to be compiled before the file defining it.
-     ((:module "domain/text"
-      :serial t
-      :components ((:file "package") (:file "text-parse")))
-     (:module "domain/version"
-      :serial t
-      :components ((:file "version")))  ; package + the one function together (W6)
-     (:module "domain/ports"
-      :serial t
-      :components
-      ((:file "package")
-       (:file "posix-port")
-       (:file "pty-port")))   ; port abstractions (load before infrastructure adapters)
-     (:module "infrastructure/pty"
-      :serial t
-      :components
-       ((:file "package")
-       (:file "pty-ffi")       ; FFI declarations and platform constants
-       (:file "pty-rawmode")   ; terminal raw mode management
-       (:file "pty")))         ; PTY lifecycle + install-pty-port adapter (references nerimux/ports vars)
-     (:module "infrastructure/net"
-      :serial t
-      :components
-      ((:file "package")  ; nerimux/protocol, nerimux/transport, nerimux/net
-       (:file "protocol-command")  ; wire constants and command payload codec
-       (:file "protocol")
-       (:file "transport")
-       (:file "net")))
-     (:module "domain/terminal"
-      :serial t
-      :components
-      ((:file "package-types")  ; nerimux/terminal/types
-       (:file "package")        ; nerimux/terminal/actions, sgr, csi, parser, emulator, terminal
-       (:file "cell")         ; immutable cell type, char-width table
-       (:file "screen-data")  ; declarative screen slots and defaults
-       (:file "screen")       ; screen construction and grid helpers
-       (:file "screen-metadata") ; screen capture/palette metadata mutation helpers
-       (:file "screen-resize") ; screen resize logic; depends on metadata reset helpers
-       (:file "screen-logic") ; screen mutation helpers (LOGIC layer): screen-clear-dirty, screen-consume-bell, screen-drain-queue, reset-sgr-pen
-       (:file "scroll")    ; row helpers + scroll-up/down + decstbm (loads before cursor/erase/edit)
-       (:file "erase")     ; erase-region, erase-display, erase-line rule tables
-       (:file "edit")      ; delete/insert chars+lines (uses %copy-row, %clear-row from scroll)
-       (:file "cursor")    ; cursor movement (uses scroll-up-one)
-       (:file "char-write-definitions") ; DEC graphics facts and character-width classification
-       (:file "char-write-cells") ; combining and wide/normal cell placement
-       (:file "char-write") ; charset, wrap, and insert-mode writing flow
-       (:file "modes-alt-screen") ; DEC modes — alt-screen enter/exit helpers (part I)
-       (:file "modes-dec-pm-definitions") ; compile-time DEC PM rule table
-       (:file "modes-cursor-save") ; DECSC/DECRC cursor save-restore + DECSCUSR shape
-       (:file "modes-reset")       ; reset-terminal-modes + RIS/DECSTR/DECALN
-       (:file "modes-charset-definitions") ; compile-time G0..G3 slot fact table
-       (:file "modes-charset")     ; G0..G3 charset designation/invocation logic
-       (:file "modes-ansi-sm-rm-definitions") ; compile-time ANSI SM/RM rule table
-       (:file "screen-projection") ; copy-mode scrollback viewport cell projection
-       (:file "screen-osc-state")  ; focus reports, BEL, title stack, OSC title/colour state
-       (:file "sgr-definitions") ; attribute helpers and compile-time SGR rule table
-       (:file "sgr-colors")      ; extended-colour parameter decoding
-       (:file "sgr")             ; SGR application flow
-       (:file "sgr-report")      ; pen-to-SGR status-report encoding
-       (:file "csi-replies-definitions") ; compile-time reply fact-table constructors
-       (:file "csi-replies")    ; CSI reply-queue helpers (DSR/DA/CPR/DECRQM/XTWINOPS); loads before csi
-       (:file "csi-parameters") ; CSI parameter-to-domain-value translation
-       (:file "csi-dispatch")   ; DEFINE-CSI-RULES macro that emits EXECUTE-CSI
-       (:file "csi")            ; cursor, screen-edit, and SGR rules
-       (:file "csi-device-rules") ; reports, tabulation, and private-mode rules
-       (:file "csi-extended-rules") ; rectangular and extended-control rules
-       (:file "csi-compose")    ; compose rule sets into EXECUTE-CSI
-       (:file "parser-dcs")    ; DCS passthrough/XTGETTCAP/DECRQSS helpers (loads before parser)
-       (:file "parser-core")   ; parser byte predicates + Prolog-like DEFINE-STATE macro
-       (:file "parser-csi")    ; CSI continuation builder and byte-class predicates
-       (:file "parser-utf8")   ; UTF-8 continuation builder and byte predicates
-       (:file "parser")        ; named CPS state-machine skeleton
-       (:file "parser-osc-clipboard") ; OSC 52 Base64 helpers + clipboard callback
-       (:file "parser-osc-uri")       ; OSC 7/8 URI decoding helpers
-       (:file "parser-osc-color")      ; OSC color and palette helpers
-       (:file "parser-osc-dispatch")   ; OSC command parsing + dispatch rules
-       (:file "parser-osc")            ; OSC accumulator + dispatcher state machine
-       (:file "emulator")))
-     (:module "domain/model"
-      :serial t
-      :components
-      ((:file "package")           ; nerimux/workspace-model, pane, layout, window, session
-       (:file "organization")      ; ghq organization aggregate
-       (:file "repository")        ; ghq repository aggregate
-       (:file "worktree")           ; worktree aggregate and relationships
-       (:file "pane-core")         ; leaf PTY data and feed helpers
-       (:file "attention")         ; worktree/organization attention composed from pane state (W3)
-       (:file "pane-geometry")     ; geometry update + PTY/screen resize helpers
-       (:file "layout")            ; tree structure (uses pane-reposition)
-       (:file "layout-visitor")    ; declarative layout traversal macros
-       (:file "layout-persistence") ; layout string serialization
-       (:file "layout-geometry")    ; rectangle assignment + resize helpers (uses pane-id, pane-x/y/w/h)
-       (:file "window-definitions") ; window records and pane-numbering constants
-       (:file "window-core")        ; window selection and split behavior
-       (:file "window-tree")        ; tree mutation + relayout/remove helpers
-       (:file "window-operations")  ; window resize/rotate/zoom (uses window + layout helpers)
-       (:file "window-neighbor") ; directional pane navigation (uses window-panes)
-       (:file "session")             ; session lifecycle: struct + windows + touch + all-panes
-       (:file "session-environment-process")   ; update-env defaults + process env helpers
-       (:file "session-environment-overlay")    ; session overlay tables and env access
-       (:file "session-environment-child")      ; child env snapshot assembly
-       (:file "pane-spawn")))                   ; PTY-backed pane factory + respawn
-     (:module "infrastructure/vcs"
-     :serial t
-     :components
-       ((:file "package")
-     (:file "vcs")
-     (:file "vcs-async-operations")
-     (:file "vcs-worktree-operations")
-     (:file "vcs-fetch")
-     (:file "vcs-inspect")
-     ;; Last: the write operations need %REPOSITORY-CHECKED-HANDLE (the
-     ;; vcs-kit:make-repository construction extracted from
-     ;; vcs-worktree-operations.lisp's %REV-PARSE) and %SANITIZE-RETAINED-TEXT
-     ;; from vcs-inspect.lisp. Passing the other repository handle type fails
-     ;; SILENTLY here -- the type error is swallowed and the operation returns
-     ;; NIL forever -- so this is a load-order dependency, not a convenience.
-     (:file "vcs-git-write")))
-     (:module "application/picker"
-      :serial t
-      :components
-      ((:file "package")
-       (:file "global-picker")
-       ))       ; pure picker + measurement fixture
-     ;; commands context: what is left of the pane/window operations, plus the
-     ;; copy-mode cluster.  commands-core loads first, then copy-mode, then the
-     ;; two survivors split back to root via :pathname.  The tmux command
-     ;; implementations this directory was built for (commands.lisp,
-     ;; commands-shell, commands-keys, commands-keys-data, commands-capture-pane)
-     ;; went with the command table that called them.
-     (:module "application/commands"
-      :serial t
-      :components
-      ((:file "package")
-       (:file "commands-core")))
-     (:module "application/commands/copy-mode"
-      :serial t
-      :components
-      ((:file "commands-copy-mode")      ; copy-mode core: enter/exit, scroll, prompts, selection state
-       (:file "commands-copy-mode-cursor") ; cursor movement and viewport edge scrolling
-       (:file "commands-copy-mode-selection") ; selection bounds and text extraction helpers
-       (:file "commands-copy-mode-clip") ; rectangle selection text, yank, copy-pipe, append-selection
-       (:file "commands-copy-mode-virtual") ; virtual-row helpers shared by search and selection
-       (:file "commands-copy-mode-search"))) ; search-forward/backward, search-next/prev
-     (:module "application-commands-2"
-      :pathname "application/commands"
-      :serial t
-      :components
-       ((:file "commands-tokenizer")))   ; shell-style command-string tokeniser
-     (:module "presentation/renderer"
-      :serial t
-      :components
-      ((:file "package")
-       (:file "renderer-format-definitions") ; compile-time ANSI fact-table constructors
-       (:file "renderer-format")     ; ANSI primitives (shared by both paths below)
-       ;; The theme palette loads right after the ANSI primitives so both the
-       ;; workspace frame and the pane compositor can reference its constants.
-       (:file "renderer-style-data") ; declarative style/SGR/border-charset dispatch tables
-       (:file "renderer-style")     ; theme palette + fixed SGR constants
-       ;; Workspace presentation helpers and tree projection depend on no pane
-       ;; compositor; their order here states that boundary.
-       (:file "renderer-workspace-status-title") ; shared status/title labels
-       (:file "renderer-workspace-command-line") ; command completion footer
-       (:file "renderer-workspace-tree") ; shared tree data projection
-       (:file "renderer-workspace")  ; workspace frame (plain ANSI)
-       (:file "renderer-pane-selection") ; selection bounds helpers
-       (:file "renderer-statusbar-layout"); status bar layout helpers (needed by renderer-pane-copy-mode-overlay below)
-       (:file "renderer-pane-search")    ; pane content search match ranges
-       (:file "renderer-pane-copy-mode-overlay")      ; copy-mode position-banner overlay rendering
-       (:file "renderer-pane")           ; pane cell rendering (selection, copy-mode highlights)
-       (:file "renderer-borders")        ; split-tree separators + pane border rendering
-       (:file "renderer-statusbar")      ; status bar composition
-       (:file "renderer-compose-protocols") ; terminal protocol toggles
-       (:file "renderer-compose-overlay")   ; cursor placement for the active pane
-       (:file "renderer-compose-effects")   ; bell / cursor / queue drain effects
-       (:file "renderer-compose")        ; PANE frame compositing + entry points
-       (:file "renderer-tui-kit-frame-grid") ; ANSI frame decoding into a fixed grid
-       (:file "renderer-tui-kit-widgets") ; workspace tree and picker widgets
-       (:file "renderer-tui-kit")       ; headless surface conversion and entry points
-       (:file "renderer-tui-kit-confirm-view") ; confirmation data and rendering
-       (:file "renderer-tui-kit-help") ; full-screen key reference, now reached from the `?` transient
-       ;; The three magit-alignment views. All three need the tui-kit surface
-       ;; helpers (%SURFACE-TO-ANSI-FRAME, %BOX-WIDGET-INNER-RECTANGLE), so they
-       ;; load after renderer-tui-kit; transient comes before the status view
-       ;; because the status frame draws the transient panel into its own
-       ;; bottom region.
-       (:file "renderer-tui-kit-transient") ; magit transient, drawn as an expanded key panel
-       (:file "renderer-process-log")       ; `$` full-screen git process log (FR-011)
-       (:file "renderer-workspace-status"))) ; magit-style per-worktree status view (FR-003)
-     (:module "infrastructure/input"
-      :serial t
-      :components
-      ((:file "package")
-       (:file "input")))
-     ;; Everything left in src/bootstrap/ now shares one real ASDF module,
-     ;; matching the directory name exactly -- no :pathname override needed
-     ;; (W6). It loads last because "nerimux" needs every other package
-     ;; declared first (renderer, input, and commands included), which used
-     ;; to be true only because package.lisp loaded all nine package
-     ;; fragments upfront regardless of where their own code lived.
-     (:module "bootstrap"
-      :serial t
-      :components
-      ((:file "package")             ; nerimux (BOOTSTRAP layer, needs everything)
+     ;; All that is left in src/ is the bootstrap core: the "nerimux" package
+     ;; itself, the server, the client and startup. Everything it composes now
+     ;; lives in packages/<name>/ and is named in :depends-on above, so this
+     ;; module loads after all of them without having to say so.
+     ((:file "package")             ; nerimux (BOOTSTRAP layer, needs everything)
        ;; target resolution is a "nerimux"-package service (W4-prep found it was
        ;; never really part of nerimux/model despite living in that directory);
        ;; moved here from domain/model now that its true package's declaration
@@ -315,7 +168,7 @@
        (:file "main-startup-flags") ; global cl-cli flag definitions
        (:file "main-startup-socket") ; socket discovery + server auto-start helpers
        (:file "main-startup-commands") ; attach/version/usage handlers + mode table
-       (:file "main-startup"))))))
+       (:file "main-startup"))))
   ;; Build a standalone binary: (asdf:make :nerimux)
   :build-operation "program-op"
   :build-pathname "nerimux"
@@ -331,34 +184,22 @@
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  :depends-on ("nerimux" (:version "cl-weave" "1.3.0"))
-  :perform (test-op (op c)
-             (declare (ignore op c))
-             (funcall (find-symbol "RUN-TESTS" (find-package "NERIMUX/TEST")))))
-
-(defsystem "nerimux/vcs-test"
-  :description "Focused VCS infrastructure tests for nerimux"
-  :author "takeokunn <bararararatty@gmail.com>"
-  :maintainer "takeokunn <bararararatty@gmail.com>"
-  :license "MIT"
-  :version "0.3.0"
-  :homepage "https://github.com/nerima-lisp/nerimux"
-  :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
-  :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  :depends-on ("nerimux" (:version "cl-weave" "1.3.0"))
-  :pathname "tests"
-  :serial t
-  :components ((:file "package")
-               (:file "suite")
-               (:file "helpers-process-fixtures")
-               (:module "unit/infrastructure/vcs"
-                :serial t
-                :components ((:file "vcs-tests")
-                             (:file "vcs-fetch-dedup-tests")
-                             (:file "vcs-worktree-path-tests")
-                             (:file "vcs-operations-tests")
-                             (:file "vcs-async-operations-tests")
-                             (:file "vcs-inspect-tests"))))
+  ;; Each unit's test system is named here so loading "nerimux/test" registers
+  ;; every unit's suites in the same image. cl-weave's registry is global, so
+  ;; RUN-TESTS then reports one total across the root suites and the units --
+  ;; the split changes where a test file lives, not how many run.
+  :depends-on ("nerimux" (:version "cl-weave" "1.3.0")
+               "nerimux-text/test"
+               "nerimux-ports/test"
+               "nerimux-pty/test"
+               "nerimux-net/test"
+               "nerimux-input/test"
+               "nerimux-terminal/test"
+               "nerimux-model/test"
+               "nerimux-picker/test"
+               "nerimux-vcs/test"
+               "nerimux-commands/test"
+               "nerimux-renderer/test")
   :perform (test-op (op c)
              (declare (ignore op c))
              (funcall (find-symbol "RUN-TESTS" (find-package "NERIMUX/TEST")))))

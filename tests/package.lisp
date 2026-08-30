@@ -16,6 +16,56 @@
                 #:it-property #:it-fuzz #:gen-integer #:gen-list #:gen-boolean #:gen-string
                 #:gen-vector #:gen-member #:gen-one-of
                 #:defmatcher)
+  ;; Fixtures that moved out with their unit. The root suite is above every
+  ;; unit, so it may reach down into one; naming the source package here is
+  ;; what keeps that reach a declaration rather than an accident of one shared
+  ;; test package.
+  (:import-from #:nerimux/test/ports
+                #:with-temporary-posix-environment-variable
+                #:with-pipe-fds
+                #:write-byte-to-fd
+                #:read-octets-from-fd
+                #:with-stubbed-fdefinition)
+  (:import-from #:nerimux/test/net
+                #:%test-socket-path
+                #:with-test-listener
+                #:with-temp-octet-file
+                #:write-frames-to-file
+                #:with-temp-socket-path
+                #:with-connected-sockets)
+  (:import-from #:nerimux/test/terminal
+                #:feed
+                #:feed-lines
+                #:esc
+                #:check-table
+                #:display-row-string
+                #:utf8-feed)
+  (:import-from #:nerimux/test/commands
+                #:copy-mode-screen
+                #:with-copy-mode-cursor)
+  (:import-from #:nerimux/test/renderer
+                #:strip-sgr
+                #:render-pane-output
+                #:make-test-pane
+                #:make-renderer-test-session)
+  (:import-from #:nerimux/test/vcs
+                #:%vcs-operations-existing-path
+                #:%vcs-operations-fake-worktree
+                #:%vcs-operations-status-snapshot)
+  (:import-from #:nerimux/test/model
+                #:tl-pane
+                #:tl-leaf
+                #:tl-window
+                #:with-center-test-panes
+                #:with-two-1x1-panes
+                #:with-h-split-window
+                #:make-two-pane-h-window
+                #:with-h-split-81-24
+                #:with-v-split-window
+                #:make-no-pty-pane
+                #:make-fake-window
+                #:make-fake-session
+                #:make-single-pane-session)
   (:import-from #:nerimux/terminal
                 #:make-screen
                 #:screen-resize

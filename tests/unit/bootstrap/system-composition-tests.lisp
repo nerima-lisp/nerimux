@@ -29,22 +29,6 @@
     (let ((buffer (make-string (file-length in))))
       (subseq buffer 0 (read-sequence buffer in)))))
 
-(defparameter *layer-rank*
-  '(("nerimux/model" . 0) ("nerimux/terminal" . 0) ("nerimux/terminal/actions" . 0)
-    ("nerimux/terminal/parser" . 0) ("nerimux/ports" . 0)
-    ("nerimux/commands" . 1) ("nerimux/picker" . 1)
-    ("nerimux/pty" . 2) ("nerimux/net" . 2) ("nerimux/protocol" . 2)
-    ("nerimux/transport" . 2) ("nerimux/vcs" . 2)
-    ("nerimux/renderer" . 3) ("nerimux/input" . 3)
-    ("nerimux" . 4)
-    ;; Below every layer, not above one: nothing declaring :use or
-    ;; :import-from of nerimux/text can ever be an upward violation, so -1
-    ;; is safe at any position in the comparison below.
-    ("nerimux/text" . -1))
-  "Package name -> layer index, lowest first.  Encodes the layer order stated in
-   docs/src/reference/architecture.md: domain -> application -> infrastructure ->
-   presentation -> bootstrap.")
-
 (defun %strip-lisp-comments (text)
   "TEXT with `;' comments blanked, so a package name mentioned in prose is not
    read as a declared dependency.  This matters: the very comment explaining why
@@ -86,18 +70,28 @@
           (setf start name-end))))
     (nreverse result)))
 
-(defun %package-declaration-files ()
-  "Every .lisp file under src/ or packages/ whose text contains a defpackage
-   form, wherever in the tree it happens to live.  Package declarations
-   happened to all sit under src/bootstrap/ when this scan was a fixed glob
-   on src/bootstrap/package*.lisp; that stops being true once files start
-   moving under packages/<name>/src/bootstrap/, so this asks each file
-   itself rather than assuming a location."
+(defun %layered-source-files ()
+  "Every .lisp file that participates in the layering: src/ plus each unit's
+   packages/<name>/src/.
+
+   packages/<name>/tests/ is deliberately excluded.  A unit's test package
+   declares no layer and legitimately reaches whatever it exercises, so
+   including it would either force a meaningless marker onto every test package
+   or report every test file as unplaceable.  This matches the pre-extraction
+   behaviour, where tests/ was outside the scan for the same reason."
   (let ((root (asdf:system-source-directory :nerimux)))
-    (remove-if-not
-     (lambda (file) (search "(defpackage" (%file-text file)))
-     (append (directory (merge-pathnames #P"src/**/*.lisp" root))
-             (directory (merge-pathnames #P"packages/**/*.lisp" root))))))
+    (append (directory (merge-pathnames #P"src/**/*.lisp" root))
+            (directory (merge-pathnames #P"packages/*/src/**/*.lisp" root)))))
+
+(defun %package-declaration-files ()
+  "Every layered source file whose text contains a defpackage form, wherever in
+   the tree it happens to live.  Package declarations happened to all sit under
+   src/bootstrap/ when this scan was a fixed glob on src/bootstrap/package*.lisp;
+   that stops being true once files start moving under packages/<name>/src/, so
+   this asks each file itself rather than assuming a location."
+  (remove-if-not
+   (lambda (file) (search "(defpackage" (%file-text file)))
+   (%layered-source-files)))
 
 ;;; ── Source-text layering guard helpers ──────────────────────────────────────
 ;;;
@@ -107,8 +101,9 @@
 (defparameter *layer-name-rank*
   '(("FOUNDATION" . -1) ("DOMAIN" . 0) ("APPLICATION" . 1)
     ("INFRASTRUCTURE" . 2) ("PRESENTATION" . 3) ("BOOTSTRAP" . 4))
-  "Layer marker word -> the same 0..4 scale *layer-rank* uses for domain..
-   bootstrap, extended with -1 for FOUNDATION so a foundation package can
+  "Layer marker word -> a 0..4 scale for domain..bootstrap (see
+   %package-name->layer-rank, which projects a package name onto this same
+   scale), extended with -1 for FOUNDATION so a foundation package can
    never rank above anything it is compared against.")
 
 (defun %extract-documentation-string (defpackage-body)
@@ -159,6 +154,30 @@
               (push (cons name marker) result)
               (setf from name-end))))))
     result))
+
+(defun %package-name->layer-rank ()
+  "Package name -> the same 0..4 scale (-1 for FOUNDATION) *layer-rank* used
+   to hardcode, but read from every defpackage's own documentation string
+   via %package-name->layer-name instead of a maintained list.
+
+   *layer-rank* was a fixed 16-entry table nobody kept in sync with the
+   packages that exist: one entry (nerimux/model) named a package deleted
+   outright in 3e00db6, and ten live packages -- nerimux/version and every
+   nerimux/terminal/* sub-package, nerimux/workspace-model, nerimux/pane,
+   nerimux/layout, nerimux/window, nerimux/session -- were simply absent.
+   'no-package-declares-an-upward-layer-dependency' read it through
+   `(when mine ...)' / `(when theirs ...)' guards, so a package missing from
+   the table was skipped on BOTH sides of every edge it took part in: not
+   under-tested, silently unreachable.  Today, nerimux/pane declaring
+   `:use #:nerimux/renderer' would not be detected.
+
+   This function makes that class of gap structurally impossible: every
+   name it returns comes from a defpackage this build actually found, so
+   there is no second, hand-maintained list to fall out of sync with the
+   packages that exist."
+  (mapcar (lambda (entry)
+            (cons (car entry) (cdr (assoc (cdr entry) *layer-name-rank* :test #'string=))))
+          (%package-name->layer-name)))
 
 (defun %strip-lisp-source (text)
   "TEXT with `;' comments, `#| |#' nested block comments, string literals,
@@ -255,25 +274,84 @@
           (incf i)))
     (nreverse refs)))
 
-(defun %relative-path-segments (path src-dir)
-  (uiop:split-string (enough-namestring path src-dir) :separator (list #\/)))
+(defun %file-in-package-name (text)
+  "The package name TEXT's first (in-package ...) form switches into, or NIL
+   if TEXT has no in-package form.  Handles both `#:' and bare `:' package
+   designators: every ordinary source file in the tree writes
+   (in-package #:nerimux/foo), but src/bootstrap/main-startup*.lisp writes
+   the bare (in-package :nerimux) instead, and both forms put the name
+   right after the first `:' following `(in-package' either way."
+  (let ((hit (search "(in-package" text)))
+    (when hit
+      (let ((colon (position #\: text :start hit)))
+        (when colon
+          (let* ((name-start (1+ colon))
+                 (name-end (position-if (lambda (c) (member c '(#\Space #\Newline #\) #\Tab)))
+                                        text :start name-start)))
+            (subseq text name-start name-end)))))))
 
-(defun %file-layer-name (segments)
-  "SEGMENTS is a file's path relative to the project root, split on `/'.
-   Its layer marker word, or NIL if no `src' segment appears in SEGMENTS, or
-   the segment right after it is not one of the five layer directories (see
-   the guard's header comment).  Anchoring on the first `src' segment rather
-   than a fixed position is what lets this same function classify both
-   src/<layer>/... today and packages/<name>/src/<layer>/... once files
-   start moving there, without knowing in advance which shape it is
-   looking at.
-   *layer-name-rank* maps NAME -> RANK, so the name itself comes back via
-   the matched pair's CAR, not its CDR -- CDR is the rank integer, which is
-   not a string designator and breaks every later (assoc ... :test #'string=)
-   call downstream."
-  (let ((src-pos (position "src" segments :test #'string=)))
-    (when (and src-pos (< (1+ src-pos) (length segments)))
-      (car (assoc (string-upcase (nth (1+ src-pos) segments)) *layer-name-rank* :test #'string=)))))
+(defun %file-layer-name (file pkg->layer)
+  "FILE's layer marker word, derived from what FILE itself declares -- never
+   from its path.  The previous implementation read the segment right after
+   the nearest `src' path component (src/domain/... -> DOMAIN), which
+   depended on every source file living under a layer-named directory.
+   That stopped holding the moment a layer flattens to
+   packages/<name>/src/*.lisp with no layer segment at all: the segment
+   right after `src' becomes the bare filename, which matches none of the
+   five layer directories, so every such file returned NIL here and was
+   silently dropped by the caller's remove-if-not.  Nothing failed loudly;
+   the guard just stopped looking at 131 of 160 files without saying so.
+
+   FILE says what it is regardless of where it sits, so read that instead
+   of the path:
+   - An ordinary source file opens with (in-package ...); look up the
+     package it switches into in PKG->LAYER, the same name -> marker table
+     %package-name->layer-name builds from every defpackage's own
+     documentation string.
+   - A package-declaration file (bootstrap/package.lisp and its dozen
+     siblings) has no in-package form of its own -- it defines the package,
+     it does not enter it -- so fall back to the name its own defpackage
+     form declares, and look THAT up in PKG->LAYER instead.  PKG->LAYER
+     already carries a marker for it: %package-declaration-files finds this
+     same file, and %package-name->layer-name reads the marker straight out
+     of its documentation string.
+
+   NIL only when FILE has neither form: not a layer directory it happens to
+   fall outside of, but a source file this guard has no way to place at
+   all.  The caller below treats that as a hard failure, not a silent
+   omission -- see the conservation check there."
+  (let* ((text (%file-text file))
+         (own-package
+           (or (%file-in-package-name text)
+               (let ((hit (search "(defpackage #:" text)))
+                 (when hit
+                   (let* ((name-start (+ hit (length "(defpackage #:")))
+                          (name-end (position-if (lambda (c) (member c '(#\Space #\Newline #\) #\Tab)))
+                                                 text :start name-start)))
+                     (subseq text name-start name-end)))))))
+    (and own-package (cdr (assoc own-package pkg->layer :test #'string=)))))
+
+(defun %find-module-components (legacy-module-name flat-system-name)
+  "Every ordering test below needs this module's ASDF children, located
+   wherever the module currently lives.  Two shapes, resolved identically:
+
+   TODAY, `nerimux' nests every module under one \"src\" component, so the
+   module sits at (\"src\" LEGACY-MODULE-NAME) inside system \"nerimux\" --
+   e.g. (\"src\" \"presentation/renderer\").
+
+   AFTER packages/<name> extraction, LEGACY-MODULE-NAME's files become their
+   own system FLAT-SYSTEM-NAME (e.g. \"nerimux-renderer\"), and its children
+   sit flat at that system's top level with no \"src\" wrapper at all.
+
+   Returns NIL when neither shape resolves; every caller already has its own
+   vacuity guard for that, so this stays silent rather than erroring."
+  (let* ((nerimux (asdf:find-system "nerimux" nil))
+         (legacy (and nerimux
+                      (ignore-errors
+                        (asdf:find-component nerimux (list "src" legacy-module-name)))))
+         (flat (and (not legacy) (asdf:find-system flat-system-name nil)))
+         (module (or legacy flat)))
+    (and module (mapcar #'asdf:component-name (asdf:component-children module)))))
 
 (describe "system-composition-suite"
 
@@ -326,12 +404,10 @@
   ;;; analysis rather than something a unit test can hold.
 
   (it "renderer-workspace-loads-before-the-pane-compositor"
-    ;; The module path is ("src" "presentation/renderer"): nerimux.asd nests every
-    ;; module under a single "src" module, so the one-element path returns NIL.
-    (let* ((module (asdf:find-component (asdf:find-system "nerimux")
-                                        '("src" "presentation/renderer")))
-           (names  (mapcar #'asdf:component-name
-                           (asdf:component-children module)))
+    ;; %find-module-components locates "presentation/renderer" wherever it
+    ;; currently lives -- inside nerimux's single "src" module today, or as
+    ;; its own flat nerimux-renderer system once the module is extracted.
+    (let* ((names (%find-module-components "presentation/renderer" "nerimux-renderer"))
            (format-pos (position "renderer-format" names :test #'string=))
            (status-title-pos
              (position "renderer-workspace-status-title" names :test #'string=))
@@ -340,8 +416,9 @@
            (tree-pos (position "renderer-workspace-tree" names :test #'string=))
            (workspace-pos (position "renderer-workspace" names :test #'string=))
            (compose-pos (position "renderer-compose" names :test #'string=)))
-      ;; Vacuity guard: a typo'd module path returns NIL children, and every
-      ;; position below would then be NIL rather than wrong.
+      ;; Vacuity guard: a module %find-module-components could not locate
+      ;; returns NIL children, and every position below would then be NIL
+      ;; rather than wrong.
       (expect (plusp (length names)))
       (expect format-pos)
       (expect status-title-pos)
@@ -353,10 +430,7 @@
       (expect (< workspace-pos compose-pos))))
 
   (it "renderer-tui-kit-modules-load-in-dependency-order"
-    (let* ((module (asdf:find-component (asdf:find-system "nerimux")
-                                        '("src" "presentation/renderer")))
-           (names (mapcar #'asdf:component-name
-                          (asdf:component-children module)))
+    (let* ((names (%find-module-components "presentation/renderer" "nerimux-renderer"))
            (compose-pos (position "renderer-compose" names :test #'string=))
            (frame-grid-pos
              (position "renderer-tui-kit-frame-grid" names :test #'string=))
@@ -374,10 +448,7 @@
       (expect (< compose-pos frame-grid-pos widgets-pos tui-kit-pos confirm-pos))))
 
   (it "terminal-character-writing-modules-load-in-dependency-order"
-    (let* ((module (asdf:find-component (asdf:find-system "nerimux")
-                                        '("src" "domain/terminal")))
-           (names (mapcar #'asdf:component-name
-                          (asdf:component-children module)))
+    (let* ((names (%find-module-components "domain/terminal" "nerimux-terminal"))
            (definitions-pos
              (position "char-write-definitions" names :test #'string=))
            (cells-pos (position "char-write-cells" names :test #'string=))
@@ -389,10 +460,7 @@
       (expect (< definitions-pos cells-pos flow-pos))))
 
   (it "terminal-sgr-modules-load-in-dependency-order"
-    (let* ((module (asdf:find-component (asdf:find-system "nerimux")
-                                        '("src" "domain/terminal")))
-           (names (mapcar #'asdf:component-name
-                          (asdf:component-children module)))
+    (let* ((names (%find-module-components "domain/terminal" "nerimux-terminal"))
            (definitions-pos (position "sgr-definitions" names :test #'string=))
            (colors-pos (position "sgr-colors" names :test #'string=))
            (flow-pos (position "sgr" names :test #'string=))
@@ -418,19 +486,32 @@
   ;;; qualified upward reference inside a function body -- that stays a
   ;;; review-time check, and is at least greppable.
   (it "no-package-declares-an-upward-layer-dependency"
-    (let ((violations '())
-          (edges 0))
+    (let* ((pkg->rank (%package-name->layer-rank))
+           (violations '())
+           (edges 0))
       (dolist (file (%package-declaration-files))
         (dolist (entry (%package-declared-dependencies (%file-text file)))
-          (let ((mine (cdr (assoc (car entry) *layer-rank* :test #'string=))))
+          (let ((mine (cdr (assoc (car entry) pkg->rank :test #'string=))))
             (when mine
               (dolist (dep (cdr entry))
-                (let ((theirs (cdr (assoc dep *layer-rank* :test #'string=))))
+                (let ((theirs (cdr (assoc dep pkg->rank :test #'string=))))
                   (when theirs
                     (incf edges)
                     (when (> theirs mine)
                       (push (list (car entry) "->" dep) violations)))))))))
-      ;; Vacuity guard: a parser that matched nothing reports no violations.
+      ;; Conservation check: every LIVE package -- one %package-name->layer-rank
+      ;; found a defpackage for -- must also carry a RANK, i.e. its
+      ;; documentation string must have a recognized layer marker.  This is
+      ;; what makes a package silently missing a marker a hard failure
+      ;; instead of a package quietly skipped on both sides of every edge it
+      ;; takes part in, which is exactly how the retired *layer-rank* let ten
+      ;; live packages (and one already-deleted one) go unchecked for as
+      ;; long as it did.  No maintained threshold: it holds at any package
+      ;; count, so it never needs editing when a package is added.
+      (format t "~&no-package-declares-an-upward-layer-dependency: ranked ~d of ~d live package~:p~%"
+              (length (remove-if-not #'cdr pkg->rank)) (length pkg->rank))
+      (expect (plusp (length pkg->rank)))
+      (expect (= (length pkg->rank) (length (remove-if-not #'cdr pkg->rank))))
       (expect (> edges 10))
       (expect (null violations))))
 
@@ -448,11 +529,14 @@
   ;;;
   ;;; This guard scans the SOURCE TEXT of every file under src/ and
   ;;; packages/*/src/ instead of any defpackage form.  It derives a FILE's
-  ;;; layer from the segment right after the nearest `src' component in its
-  ;;; path (src/domain/... -> DOMAIN, packages/foo/src/application/... ->
-  ;;; APPLICATION, and so on -- a file with no `src' component, or whose
-  ;;; next segment names none of the five layer directories, matches none
-  ;;; of them and is skipped).  It derives a referenced PACKAGE's layer from
+  ;;; layer from what the file itself declares, not from its path -- see
+  ;;; %file-layer-name for the two shapes it recognizes (an ordinary file's
+  ;;; own (in-package ...) package, or a package*.lisp file's own defpackage
+  ;;; name) and why a path-segment lookup stopped working the moment a layer
+  ;;; flattens to packages/<name>/src/*.lisp with no layer-named directory
+  ;;; left to read.  A file with neither form cannot be classified at all,
+  ;;; and the conservation check below fails closed on that rather than
+  ;;; silently skipping it.  It derives a referenced PACKAGE's layer from
   ;;; the first layer marker inside that package's own (:documentation ...)
   ;;; string, wherever in the tree that package's defpackage form lives (see
   ;;; %package-declaration-files): "DOMAIN layer", "APPLICATION layer",
@@ -460,9 +544,11 @@
   ;;; "FOUNDATION" for nerimux/text, which sits below every layer by design
   ;;; and may be referenced from anywhere.  Every defpackage form found this
   ;;; way carries exactly one such marker in its documentation string, so
-  ;;; this is a complete mapping, not a hand-maintained subset -- unlike
-  ;;; *layer-rank* above, which several terminal sub-packages and
-  ;;; nerimux/version are missing from.
+  ;;; this is a complete mapping, not a hand-maintained subset -- unlike the
+  ;;; fixed table 'no-package-declares-an-upward-layer-dependency' used to
+  ;;; hardcode as *layer-rank*, which several terminal sub-packages and
+  ;;; nerimux/version were missing from (see %package-name->layer-rank,
+  ;;; which now derives that guard's ranking the same way this one does).
   ;;;
   ;;; A file whose layer is strictly lower than a referenced package's layer
   ;;; is an upward reference, full stop.  Whether the symbol is exported is a
@@ -473,16 +559,16 @@
   (it "no-source-file-references-a-higher-layer-package"
     (let* ((root-dir (asdf:system-source-directory :nerimux))
            (pkg->layer (%package-name->layer-name))
-           (all-files (append (directory (merge-pathnames #P"src/**/*.lisp" root-dir))
-                              (directory (merge-pathnames #P"packages/**/*.lisp" root-dir))))
+           (all-files (%layered-source-files))
            (layered-files
-             (remove-if-not (lambda (p) (%file-layer-name (%relative-path-segments p root-dir)))
-                            all-files))
+             (remove-if-not (lambda (p) (%file-layer-name p pkg->layer)) all-files))
+           (unplaceable-files
+             (remove-if (lambda (p) (%file-layer-name p pkg->layer)) all-files))
            (violations '())
            (unclassified '())
            (total-refs 0))
       (dolist (file layered-files)
-        (let* ((mine-name (%file-layer-name (%relative-path-segments file root-dir)))
+        (let* ((mine-name (%file-layer-name file pkg->layer))
                (mine-rank (cdr (assoc mine-name *layer-name-rank* :test #'string=)))
                (clean (%strip-lisp-source (%file-text file))))
           (dolist (ref (%scan-package-qualified-references clean))
@@ -506,16 +592,22 @@
                                  (if (eq qualifier :double) "::" ":") symbol
                                  mine-name theirs-name)
                          violations))))))))
-      ;; Conservation check, not an absolute lower bound: a fixed count like
-      ;; "> 50" was implicitly a claim about how many files sit under src/
-      ;; today, which a later wave moving files into packages/ would falsify
-      ;; on one side of the move while staying true in total.  Print the
-      ;; count so that wave can diff it against a run taken before the move,
-      ;; and only assert it is non-zero here -- fail closed if the scan
-      ;; walked no files, rather than passing vacuously on an empty set.
-      (format t "~&no-source-file-references-a-higher-layer-package: examined ~d layered source file~:p~%"
-              (length layered-files))
-      (expect (plusp (length layered-files)))
+      ;; Conservation check, replacing the old absolute lower bound.  The
+      ;; prior guard here was `(expect (plusp (length layered-files)))',
+      ;; which tolerated 159 of 160 files vanishing from the scan as long as
+      ;; ONE remained classifiable -- exactly the failure mode
+      ;; %file-layer-name's path-based predecessor produced silently the
+      ;; moment a layer stopped living under a layer-named directory
+      ;; (src/bootstrap/*'s 29 files kept passing on their own, masking the
+      ;; other 131).  Asserting the two counts are EQUAL instead makes any
+      ;; unclassifiable file a hard failure rather than a silent omission,
+      ;; and it needs no maintained threshold: the property holds at any
+      ;; file count, so it never needs editing when a file is added or moved.
+      (format t "~&no-source-file-references-a-higher-layer-package: examined ~d of ~d source file~:p~%"
+              (length layered-files) (length all-files))
+      (expect (plusp (length all-files)))
+      (expect (null unplaceable-files))
+      (expect (= (length layered-files) (length all-files)))
       (expect (> total-refs 100))
       (expect (null unclassified))
       (expect (null violations))))

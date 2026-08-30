@@ -4,7 +4,7 @@ nerimux is workspace-only: there is no in-process standalone multiplexer.
 Every session is owned by a headless `nerimux server`, and a thin
 `nerimux attach` client renders whatever the server sends it. The two talk
 over a length-prefixed frame protocol on a Unix socket
-(`src/infrastructure/net/protocol.lisp`, `transport.lisp`).
+(`packages/net/src/protocol.lisp`, `transport.lisp`).
 
 ## Event flow
 
@@ -49,9 +49,9 @@ SIGWINCH ──► %maybe-send-resize                     from each ready client
                                                 → +msg-frame+ frame back to that client
 ```
 
-The client side of the diagram is `src/bootstrap/client.lisp`; everything on
+The client side of the diagram is `src/client.lisp`; everything on
 the server side is keyed off the per-connection `CLIENT-CONN` struct in
-`src/bootstrap/server-multi-dispatch.lisp`.
+`src/server-multi-dispatch.lisp`.
 
 `CLIENT-CONN` holds two independent axes rather than one mode×view product:
 `VIEW` (`:repolist` / `:status` / `:pane`) says which screen is up, and
@@ -59,7 +59,7 @@ the server side is keyed off the per-connection `CLIENT-CONN` struct in
 `:command` / `:picker` / `:filter` / `:scrollback`) says what, if anything,
 has taken the keyboard away from that screen. With `MODAL` `NIL`, where a key
 goes is *derived* from `VIEW` (`%client-ui-keys-p`,
-`src/bootstrap/server-multi-dispatch.lisp`) rather than stored: there is no
+`src/server-multi-dispatch.lisp`) rather than stored: there is no
 state in which a pane is on screen and the workspace UI is nonetheless eating
 keys, because there is no slot in which to record one. That is what replaced
 the old `:normal`/`:input` mode pair — see [Getting
@@ -69,7 +69,7 @@ keymap.
 The server renders **per client**, not once for the whole session: each
 attached `CLIENT-CONN` can be at a different view (`repolist`/`status`/
 `pane`), a different modal, and a different terminal size, so
-`%render-client-frame` (`src/bootstrap/server-multi.lisp`) picks the matching
+`%render-client-frame` (`src/server-multi.lisp`) picks the matching
 renderer and the client's own `rows`/`cols` on every broadcast. The shared
 pane/PTY layout underneath is still sized once, from the smallest attached
 client's geometry (`%effective-client-size`).
@@ -77,20 +77,20 @@ client's geometry (`%effective-client-size`).
 A key an attached client sends reaches a pane's PTY whenever `VIEW` is
 `:pane` and `MODAL` is `NIL` — no mode to enter first. Every other key is
 handled by the per-client workspace dispatcher (`%handle-multi-key-message`,
-`src/bootstrap/server-multi-dispatch.lisp`); bindings are compiled into that
+`src/server-multi-dispatch.lisp`); bindings are compiled into that
 dispatcher and no configuration file is read.
 
 ## Layering
 
 The layering rule is:
 
-- `domain` defines the session/window/pane model and, in `domain/ports/`, the
+- `domain` defines the session/window/pane model and, in `packages/ports/`, the
   capabilities it needs from outside itself. The model stays independent of
   concrete I/O while its ports name the required capabilities.
 
   A capability with a second implementation that tests genuinely exercise is a
   port **variable**: `nerimux/ports:*spawn-pty*`, `*write-pty*` and friends,
-  bound at server startup by `install-pty-port` (`src/bootstrap/server.lisp`)
+  bound at server startup by `install-pty-port` (`src/server.lisp`)
   and bound to a fake by the PTY tests.
 
   A capability with exactly one implementation is a plain **wrapper**:
@@ -106,8 +106,8 @@ The layering rule is:
   `nerimux/vcs` infrastructure package directly (`workspace-organizations`,
   `refresh-workspace-organizations-async`, …), which is legal because bootstrap
   sits above every layer.
-- `application` holds use cases over the domain model: `commands/` (copy
-  mode, the command-line tokenizer, and pane PTY teardown) and `picker/` (the
+- `application` holds use cases over the domain model: `packages/commands/` (copy
+  mode, the command-line tokenizer, and pane PTY teardown) and `packages/picker/` (the
   global picker item model).
 - `infrastructure` provides the real PTY/socket/VCS adapters and binds the
   domain's port variables to them.
@@ -118,7 +118,7 @@ The layering rule is:
   together. Nothing below it may depend on it.
 
 Below `domain` sits one thing that is not a layer so much as a floor:
-`nerimux/text` (`src/domain/text/`), string-to-value coercions with no nerimux
+`nerimux/text` (`packages/text/src/`), string-to-value coercions with no nerimux
 dependency at all. ASDF loads it first and anything may call it.
 
 That rule is enforced by two tests in
@@ -154,7 +154,7 @@ Terminal code separates data (`types`) from logic (`actions`, `csi`, `sgr`, the
 CPS parser) one level further down.
 
 The bootstrap dispatch layer follows the same separation. The shared
-`define-message-dispatch-fn` macro in `src/bootstrap/server.lisp` expands
+`define-message-dispatch-fn` macro in `src/server.lisp` expands
 declarative rules into the common conditional dispatch form. The
 `define-multi-msg-dispatch` wrapper in `server.lisp` supplies the multi-client
 handler shape used by `server-multi.lisp`; the client connection data lives in
@@ -172,36 +172,39 @@ coordinates application, and `sgr-report.lisp` encodes status reports.
 
 ## Source layout
 
-`src/` is nested rather than flat so package boundaries remain discoverable.
-Package definitions are correspondingly split across several
-`src/bootstrap/package-*.lisp` fragments loaded by `src/bootstrap/package.lisp`.
+Each layer is its own ASDF system under `packages/<name>/`, and `src/` holds only
+the bootstrap core. A unit declares what it depends on in its own `.asd`, so a
+reference that crosses a unit boundary without a declared edge fails to load
+rather than failing a test — the layer order below is enforced by the build, not
+only by the guards in `tests/unit/bootstrap/system-composition-tests.lisp`.
 
 ```
 nerimux/
 ├── flake.nix               # Nix build + checks (pure Lisp, no C compilation)
-├── nerimux.asd             # ASDF systems: nerimux, /test, /pty-test
+├── nerimux.asd             # umbrella: the bootstrap core plus the twelve units
 ├── run-tests.lisp          # single Lisp-level test entry point
-├── src/
-│   ├── bootstrap/          # packages, entry point (`attach`/`server`), the
-│   │                       #   client and server event loops, session registry
-│   ├── domain/             # model, terminal logic, and capability ports
-│   │   ├── terminal/       #   VT100/ANSI emulator (data structs ⁄ logic split)
-│   │   ├── model/          #   session → window → pane tree, layouts
-│   │   └── ports/          #   the PTY port variables, plus the posix wrappers
-│   ├── application/        # use cases over the domain model
-│   │   ├── commands/       #   scrollback (still named copy-mode internally)
-│   │   │   └── copy-mode/  #     and the command-line tokenizer — what
-│   │   │                   #     outlived the command table
-│   │   └── picker/         #   global picker item model (build/filter across
-│   │                       #   the workspace catalog)
-│   ├── infrastructure/     # adapters: PTY, sockets, raw-mode stdin input, VCS
-│   └── presentation/       # renderers
-│       └── renderer/       #   pane compositor, workspace views, and cl-tui-kit
+├── src/                    # bootstrap only: entry point (`attach`/`server`),
+│                           #   client and server event loops, session registry
+├── packages/               # one ASDF system each, `nerimux-<name>`
+│   ├── text/  version/     # FOUNDATION: coercions and the release version
+│   ├── ports/              # DOMAIN: the PTY port variables and posix wrappers
+│   ├── terminal/           # DOMAIN: VT100/ANSI emulator
+│   ├── model/              # DOMAIN: session → window → pane tree, layouts
+│   ├── picker/             # APPLICATION: global picker over the catalog
+│   ├── commands/           # APPLICATION: pane/window commands and copy-mode
+│   ├── pty/  net/  input/  # INFRASTRUCTURE: pseudo-terminal, sockets, stdin
+│   ├── vcs/                # INFRASTRUCTURE: git and ghq
+│   └── renderer/           # PRESENTATION: pane compositor and workspace views
 └── tests/
-    ├── unit/               # feature-focused spec files
-    ├── integration/        # PTY/socket/runtime integration specs
+    ├── unit/bootstrap/     # the bootstrap core's own specs
+    ├── integration/        # specs that span two units or reach bootstrap state
     └── e2e/                # binary-level smoke scenarios
 ```
+
+Each unit keeps its own specs in `packages/<name>/tests/`, in a package of its
+own. A fixture shared by several units lives in the lowest unit all of them
+depend on and is exported from there; a spec that needs two units with no edge
+between them lives in `tests/integration/` instead.
 
 The renderer has two independent first passes, and the split is deliberate:
 

@@ -87,35 +87,6 @@ For a single suite:
 time nix build .#checks.$(nix eval --raw --impure --expr builtins.currentSystem).default
 ```
 
-## Workspace-overview render cost (measured, not enforced)
-
-`benchmark-workspace-overview` (`tests/helpers-renderer-benchmark.lisp`) measures
-frame cost at the mandatory workspace scale (1000 organizations, 1000
-repositories, 5000 worktrees, 5000 panes): both the initial frame and a
-fully-scrolled frame.
-
-This used to back a test asserting a **100 ms** budget on that figure. The
-assertion is gone. It used to be a single `get-internal-real-time` sample per
-frame with no warm-up — on a shared machine that measures machine
-availability as much as render cost: the same binary on the same tree
-measured **67–75 ms idle and 102–112 ms under load**, so the check inverted
-depending on what else was running, and failed repeatedly against changes
-that could not have affected rendering. The measurement itself is still
-useful when someone is deliberately looking at render cost, so it was kept —
-moved out of the product package and off any regression gate. Nothing calls
-it and no test checks its output.
-
-Run it by hand from a REPL with the test system loaded:
-
-```lisp
-(nerimux/test::benchmark-workspace-overview)
-(nerimux/test::benchmark-workspace-overview :organization-count 100 :samples 9)
-```
-
-It discards a warm-up render of each frame and reports the median of five
-measured runs by default, which removes single-sample noise without making
-the number immune to a saturated machine.
-
 ## Not yet measured
 
 `PERFORMANCE_STANDARD.md` also asks for a startup-time measurement, because

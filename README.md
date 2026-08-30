@@ -114,8 +114,8 @@ guide and the [package standard](https://github.com/nerima-lisp/.github/blob/mai
 
 Two rules specific to this repository: the flake only sees git-tracked files,
 so a new test file must be `git add`ed before `nix flake check` will run it;
-and tests must use the isolation helpers in `tests/helpers-isolation.lisp` rather
-than touching global session state directly.
+and tests must use the isolation helpers in `tests/helpers-*.lisp` rather than
+touching global session state directly.
 
 ## Support
 
