@@ -889,6 +889,38 @@
                                 nerimux::*workspace-file-diffs*)))
         (expect (= 2 dirty-count)))))
 
+  (it "settles asynchronous refreshes when workers report errors through CPS"
+    (let* ((worktree (nerimux/workspace-model:make-worktree
+                      :id "callback-refresh" :path "/tmp/callback-refresh"
+                      :branch "main"))
+           (dirty-count 0)
+           (nerimux::*workspace-file-diffs* (make-hash-table :test #'equal)))
+      (with-stubbed-fdefinition
+          ((nerimux/vcs:refresh-worktree-commits-async
+           (lambda (&rest arguments)
+               (funcall (getf (cddr arguments) :callback-dispatch)
+                        (lambda ()
+                          (funcall (getf (cddr arguments) :on-error)
+                                   (make-condition 'simple-error
+                                                   :format-control "commit worker failed"))))))
+           (nerimux/vcs:refresh-worktree-file-diff-async
+             (lambda (&rest arguments)
+               (funcall (getf (cdddr arguments) :callback-dispatch)
+                        (lambda ()
+                          (funcall (getf (cdddr arguments) :on-error)
+                                   (make-condition 'simple-error
+                                                   :format-control "diff worker failed"))))))
+           (nerimux::%enqueue-main-thread-callback
+             (lambda (thunk) (funcall thunk)))
+           (nerimux::%mark-dirty (lambda () (incf dirty-count))))
+        (nerimux::%client-start-worktree-commits-refresh worktree)
+        (nerimux::%client-start-worktree-file-diff-refresh
+         worktree "README.md")
+        (expect (= 2 dirty-count))
+        (expect (equal (list :failed 0 nil)
+                       (gethash (list "callback-refresh" "README.md")
+                                nerimux::*workspace-file-diffs*))))))
+
   )
 
 ;;; PR2 tree-navigation redesign (R6.3 pivot): Enter on a repository row dives
