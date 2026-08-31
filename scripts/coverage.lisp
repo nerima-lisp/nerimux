@@ -23,6 +23,12 @@
 
 (defconstant +coverage-test-timeout-ms+ 2700000)
 
+(defun %coverage-test-name-filter ()
+  (let ((filter (uiop:getenv "CL_WEAVE_TEST_FILTER")))
+    (and filter
+         (plusp (length filter))
+         filter)))
+
 ;; These files contain declarations, compile-time fact constructors, or static
 ;; lookup values only. Their consumers remain covered; counting the definition
 ;; forms as executable behavior would make the percentage measure source
@@ -118,6 +124,7 @@
   (unless (let ((*print-circle* t))
             (cl-weave:run-all :reporter :spec :max-workers 1
                               :pass-with-no-tests nil
+                              :name-filter (%coverage-test-name-filter)
                               :timeout-ms +coverage-test-timeout-ms+
                               :coverage t :coverage-reset nil
                               :coverage-include-pathnames (list *nerimux-source-root*)
