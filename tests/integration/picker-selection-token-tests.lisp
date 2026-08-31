@@ -33,7 +33,7 @@
                      (nerimux::%worktree-selection-token branch-worktree)))
       (expect (equal '(:organization "github.com/team")
                      (nerimux::%tree-object-selection-token organization)))
-      (expect (null (nerimux::%tree-object-selection-token nil))))))
+      (expect (null (nerimux::%tree-object-selection-token nil)))))
 
   (it "uses the first stable identity available for every selectable model"
     (let ((cases
@@ -62,3 +62,4 @@
               (expected (second case)))
           (expect (equal expected
                          (nerimux::%tree-object-selection-token object)))))))
+  )
