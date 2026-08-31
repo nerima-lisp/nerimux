@@ -7,14 +7,9 @@
 ;;;;
 ;;;; ── Action handler shapes ────────────────────────────────────────────────
 ;;;;
-;;;; Each action in +TRANSIENT-DEFINITIONS+ carries a HANDLER, one of:
-;;;;   (:git TRANSIENT-KEY OPERATION STATIC-ARGS CONFIRM-P CONFIRM-IF-ARGS)
-;;;;     Run via nerimux/vcs:git-write-operation-async. The final argument
-;;;;     list is STATIC-ARGS followed by whatever flags are currently active
-;;;;     for TRANSIENT-KEY (%CLIENT-TRANSIENT-ACTIVE-FLAGS) -- magit's own
-;;;;     rule that a transient's toggled arguments apply to every one of its
-;;;;     actions. Confirmed via %OPEN-CONFIRM-VIEW when CONFIRM-P, or when any
-;;;;     flag in CONFIRM-IF-ARGS is active (Push's force flags).
+;;;; Each action in +TRANSIENT-DEFINITIONS+ carries a HANDLER. Git actions use
+;;;; nerimux/vcs:git-write-operation-async with the active flags for their
+;;;; transient. Confirmation is handled by %OPEN-CONFIRM-VIEW when required.
 ;;;;   (:call FUNCTION)   Call (FUNCALL FUNCTION SESSION CONN) -- reuses an
 ;;;;     action that already exists elsewhere. SESSION is passed because
 ;;;;     worktree creation opens a pane and needs it; actions that do not want
