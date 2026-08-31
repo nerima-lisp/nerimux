@@ -199,3 +199,5 @@
                 #:select-fds)
   (:export #:run-tests
            #:nerimux-suite))
+
+(declaim (special nerimux::+transient-definitions+))

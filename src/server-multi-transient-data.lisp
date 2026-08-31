@@ -13,7 +13,8 @@
 ;;; only use of it, to show "push to origin/<branch>" without a separate
 ;;; per-render templating slot.
 
-(defparameter +transient-definitions+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defparameter +transient-definitions+
   (list
    (cons #\c
          (list "Commit" nil
@@ -154,4 +155,4 @@
                      (list #\! "Shell command" (list :open-transient #\!))
                      (list #\w "Worktree" (list :open-transient #\w))
                      (list #\k "help" (list :help))))))
-  "KEY -> (TITLE ARGUMENTS ACTIONS); see the section comment above.")
+    "KEY -> (TITLE ARGUMENTS ACTIONS); see the section comment above."))

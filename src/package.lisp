@@ -53,3 +53,5 @@
    #:lock-channel
    #:unlock-channel
    #:stop-reader-threads))
+
+(declaim (special +transient-definitions+))
