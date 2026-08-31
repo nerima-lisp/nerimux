@@ -1928,3 +1928,47 @@
         (nerimux::%open-client-transient conn #\P)
         (nerimux::%handle-client-transient-key-payload s conn #(27))
         (expect (null (nerimux::client-conn-transient-view conn)))))))
+
+  (it "transient-actions-cover-preconditions-confirmation-and-direct-execution"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn))
+            (nerimux::*clients* nil))
+        (setf nerimux::*clients* (list conn))
+        (nerimux::%run-transient-git-action conn #\P :push nil nil nil)
+        (expect (equal "no repository selected"
+                       (first (nerimux::client-conn-message-log conn))))
+        (let* ((organization
+                 (nerimux/workspace-model:make-organization
+                  :id "org-transient" :host "github.com" :name "team"))
+               (repository
+                 (nerimux/workspace-model:make-repository
+                  :id "repo-transient" :organization organization
+                  :specification "github.com/team/repo-transient"))
+               (calls nil))
+          (nerimux/workspace-model:organization-add-repository organization repository)
+          (nerimux::%set-client-selected-tree-object conn repository)
+          (with-stubbed-fdefinition
+              ((nerimux/vcs:vcs-package-available-p (lambda () nil)))
+            (nerimux::%run-transient-git-action conn #\P :push nil nil nil)
+            (expect (equal "VCS adapter unavailable"
+                           (first (nerimux::client-conn-message-log conn)))))
+          (with-stubbed-fdefinition
+              ((nerimux/vcs:vcs-package-available-p (lambda () t))
+               (nerimux::%refresh-client-picker
+                 (lambda (ignored-connection)
+                   (declare (ignore ignored-connection))))
+               (nerimux/vcs:git-write-operation-async
+                 (lambda (received operation args &key on-complete on-error
+                                                callback-dispatch)
+                   (declare (ignore callback-dispatch on-error))
+                   (push (list received operation args) calls)
+                   (funcall on-complete t "done")
+                   t)))
+            (nerimux::%run-transient-git-action
+            conn #\P :push '("--force") t nil)
+            (expect (eq :confirm (nerimux::client-conn-modal conn)))
+            (funcall (nerimux::client-conn-confirm-action conn))
+            (expect (equal (list (list repository :push '("--force"))) calls))
+            (nerimux::%run-transient-git-action conn #\P :push nil nil nil)
+            (expect (= 2 (length calls)))))
+        (expect (null (nerimux::%transient-subtitle #\P conn))))))
