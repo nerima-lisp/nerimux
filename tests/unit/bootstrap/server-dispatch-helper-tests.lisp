@@ -528,6 +528,46 @@
         ;; q's observable effect, since it has no stub call of its own.
         (expect (null (nerimux::client-conn-modal conn))))))
 
+  (it "ui-key-dispatch-covers-common-and-status-contracts"
+    (let* ((session (nerimux/session:make-session :id 1 :name "test"))
+           (conn (nerimux::%make-client-conn))
+           (calls 0)
+           (record (lambda (&rest arguments)
+                     (declare (ignore arguments))
+                     (incf calls))))
+      (with-stubbed-fdefinition
+          ((nerimux::%client-meta-pending-consume record)
+           (nerimux::%select-client-tree-relative record)
+           (nerimux::%client-toggle-selected-tree-row record)
+           (nerimux::%client-set-visibility-level record)
+           (nerimux::%focus-selected-client-worktree record)
+           (nerimux::%client-refresh-workspace record)
+           (nerimux::%client-step-back record)
+           (nerimux::%client-open-selected-worktree-command record)
+           (nerimux::%set-client-modal record)
+           (nerimux::%client-enter-tree-filter-mode record)
+           (nerimux::%client-enter-command-mode record)
+           (nerimux::%open-client-transient record)
+           (nerimux::%client-stage-selection record)
+           (nerimux::%client-stage-all record)
+           (nerimux::%client-unstage-selection record)
+           (nerimux::%client-unstage-all record)
+           (nerimux::%client-start-discard-selection record))
+        (dolist (payload '("n" "p" #(9) "1" "2" "3" "4"
+                           #(13) #(10) "g" "q" "$" "/" ":" "?"))
+          (nerimux::%handle-client-ui-key-payload session conn payload))
+        (setf (nerimux::client-conn-view conn) :repolist)
+        (dolist (payload '("t" "c" "x"))
+          (nerimux::%handle-client-ui-key-payload session conn payload))
+        (setf (nerimux::client-conn-view conn) :status)
+        (dolist (payload '("s" "S" "u" "U" "k" "c" "P" "F" "b"
+                           "m" "r" "z" "l" "d" "f" "t" "X" "!" "w"))
+          (nerimux::%handle-client-ui-key-payload session conn payload))
+        (setf (gethash conn nerimux::*client-meta-pending*) :second)
+        (nerimux::%handle-client-ui-key-payload session conn "x")
+        (remhash conn nerimux::*client-meta-pending*)
+        (expect (= 38 calls)))))
+
   ;; Magit alignment (contract SS5): %SUBMIT-CLIENT-SEARCH now closes MODAL
   ;; and restores VIEW by calling %SET-CLIENT-MODAL / %CLIENT-RESTORE-
   ;; COMMAND-VIEW directly, not by routing through the retired event
