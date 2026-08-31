@@ -1924,6 +1924,14 @@
       (let ((conn (%make-test-conn)))
         (expect (string= "git push --force"
                          (nerimux::%transient-command-text :push '("--force"))))
+        (expect (null (nerimux::%transient-branch conn)))
+        (expect (null (nerimux::%transient-subtitle #\P conn)))
+        (expect (string= "on ?"
+                         (nerimux::%transient-action-display-description
+                          conn "on ~A")))
+        (expect (equal '((#\f "--force" "--force" nil #\P))
+                       (nerimux::%transient-render-arguments
+                        #\P conn '((#\f . "--force")))))
         (nerimux::%client-transient-toggle-flag conn #\P "--force")
         (expect (equal '("--force")
                        (nerimux::%client-transient-active-flags conn #\P)))
