@@ -34,3 +34,27 @@
       (expect (equal '(:organization "github.com/team")
                      (nerimux::%tree-object-selection-token organization)))
       (expect (null (nerimux::%tree-object-selection-token nil))))))
+
+  (it "uses the first stable identity available for every selectable model"
+    (let ((cases
+            (list
+             (list (nerimux/workspace-model:make-worktree :id "wt-id"
+                                                           :path "/ignored")
+                   '(:worktree "wt-id"))
+             (list (nerimux/workspace-model:make-organization :id "org-id"
+                                                               :host "ignored"
+                                                               :name "ignored")
+                   '(:organization "org-id"))
+             (list (nerimux/workspace-model:make-repository :id "repo-id"
+                                                             :specification "ignored")
+                   '(:repository "repo-id"))
+             (list (nerimux/workspace-model:make-repository :local-path "/local")
+                   '(:repository "/local"))
+             (list '(:diff-line "worktree-id")
+                   '(:worktree "worktree-id"))
+             (list :active '(:section :active)))))
+      (dolist (case cases)
+        (let ((object (first case))
+              (expected (second case)))
+          (expect (equal expected
+                         (nerimux::%tree-object-selection-token object)))))))
