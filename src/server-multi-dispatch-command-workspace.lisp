@@ -52,8 +52,7 @@
   (client-conn-modal conn))
 
 (defun %set-client-ui-mode (conn mode)
-  "Legacy setter kept because server-dispatch-helper-tests.lisp calls it
-   directly; applies MODE through the same table %TRANSITION-CLIENT-UI-MODE
+  "Apply MODE through the same table %TRANSITION-CLIENT-UI-MODE
    uses and returns MODE unchanged -- not the resulting MODAL, which can
    spell the same transition differently (:COPY here becomes MODAL
    :SCROLLBACK) -- so a caller checking 'did this take' still sees back the
@@ -63,9 +62,8 @@
   mode)
 
 (defun %transition-client-ui-mode (conn event)
-  "Legacy transition entry point kept for the callers outside this change's
-   file set that still speak the old EVENT vocabulary (server-multi-
-   dispatch-command-input.lisp, server-multi-dispatch-prefix.lisp): the
+  "Transition CONN for the EVENT vocabulary used by command dispatch:
+   the
    state it transitions is VIEW/MODAL now, via %APPLY-CLIENT-UI-MODE-TARGET,
    but the two real behaviours beyond a bare slot write are preserved here
    as before -- the :COMMAND buffer clears on both entering and leaving it,
