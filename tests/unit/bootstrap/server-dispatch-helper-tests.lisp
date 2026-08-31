@@ -865,6 +865,30 @@
                  session conn direction)))
         (expect (= 4 (length (nerimux::client-conn-message-log conn)))))))
 
+  (it "settles asynchronous refreshes when startup fails synchronously"
+    (let* ((worktree (nerimux/workspace-model:make-worktree
+                      :id "refresh" :path "/tmp/refresh" :branch "main"))
+           (dirty-count 0)
+           (nerimux::*workspace-file-diffs* (make-hash-table :test #'equal)))
+      (with-stubbed-fdefinition
+          ((nerimux/vcs:refresh-worktree-commits-async
+             (lambda (&rest arguments)
+               (declare (ignore arguments))
+               (error "thread unavailable")))
+           (nerimux/vcs:refresh-worktree-file-diff-async
+             (lambda (&rest arguments)
+               (declare (ignore arguments))
+               (error "thread unavailable")))
+           (nerimux::%mark-dirty (lambda () (incf dirty-count))))
+        (nerimux::%client-start-worktree-commits-refresh worktree)
+        (nerimux::%client-start-worktree-file-diff-refresh worktree "README.md")
+        (expect (eq :failed
+                    (nerimux/workspace-model:worktree-commits-state worktree)))
+        (expect (equal (list :failed 0 nil)
+                       (gethash (list "refresh" "README.md")
+                                nerimux::*workspace-file-diffs*)))
+        (expect (= 2 dirty-count)))))
+
   )
 
 ;;; PR2 tree-navigation redesign (R6.3 pivot): Enter on a repository row dives
