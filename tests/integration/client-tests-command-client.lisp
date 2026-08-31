@@ -68,7 +68,25 @@
              (expect (= nerimux::*term-cols* cols))))
           (t (fail "%maybe-send-resize: unexpected frame type ~D" type)))))) (it "maybe-send-resize-does-nothing-when-not-pending"
     (let ((nerimux::*resize-pending* nil))
-      (expect (nerimux::%maybe-send-resize nil) :to-be-falsy))) (it "maybe-send-resize-samples-size-and-sends-through-the-effect-boundary"
+      (expect (nerimux::%maybe-send-resize nil) :to-be-falsy)))
+
+  (it "install-sigwinch-handler-flags-resize-and-dirty"
+    (let ((captured-handler nil)
+          (nerimux::*resize-pending* nil)
+          (nerimux::*dirty* nil))
+      (sb-ext:without-package-locks
+        (with-stubbed-fdefinition
+            ((sb-sys:enable-interrupt
+              (lambda (signal handler)
+                (declare (ignore signal))
+                (setf captured-handler handler)
+                :installed)))
+          (expect (nerimux::install-sigwinch-handler) :to-be :installed)))
+      (funcall captured-handler)
+      (expect nerimux::*resize-pending* :to-be-truthy)
+      (expect nerimux::*dirty* :to-be-truthy)))
+
+  (it "maybe-send-resize-samples-size-and-sends-through-the-effect-boundary"
     (let ((nerimux::*resize-pending* t)
           (nerimux::*term-rows* 1)
           (nerimux::*term-cols* 2)
