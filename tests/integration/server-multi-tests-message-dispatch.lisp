@@ -1910,4 +1910,21 @@
         (expect (= nerimux::+max-process-log-entries+
                   (length (nerimux::client-conn-process-log conn))))
         (expect (equal '("git 20" "0" "")
-                       (first (nerimux::client-conn-process-log conn))))))))
+                       (first (nerimux::client-conn-process-log conn)))))))
+
+  (it "transient-rendering-and-dismissal-cover-the-modal-contract"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn)))
+        (expect (null (nerimux::%open-client-transient conn #\~)))
+        (expect (nerimux::%open-client-transient conn #\P))
+        (let ((view (nerimux::client-conn-transient-view conn)))
+          (expect (eq :transient (nerimux::client-conn-modal conn)))
+          (expect (string= "Push" (nerimux/renderer:transient-view-title view)))
+          (expect (equal '(#\p #\e)
+                         (mapcar #'first
+                                 (nerimux/renderer:transient-view-actions view)))))
+        (nerimux::%handle-client-transient-key-payload s conn #(113))
+        (expect (null (nerimux::client-conn-modal conn)))
+        (nerimux::%open-client-transient conn #\P)
+        (nerimux::%handle-client-transient-key-payload s conn #(27))
+        (expect (null (nerimux::client-conn-transient-view conn)))))))
