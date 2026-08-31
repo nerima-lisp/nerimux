@@ -155,6 +155,7 @@
        ;; only warn at compile time, but a warning is not what catches a
        ;; misspelled name here -- an undefined function fails at runtime, and a
        ;; transient key that silently does nothing looks like an unbound key.
+       (:file "server-multi-transient-data") ; declarative transient menus
        (:file "server-multi-dispatch-transient") ; magit transient state and key handling
        (:file "server-multi-dispatch-command-input") ; client input and command entry
        (:file "server-multi-dispatch-tree-filter") ; tree-filter input mode

@@ -31,6 +31,9 @@
   '("src/main-startup-flags.lisp"
     "src/package.lisp"
     "src/server-multi-state.lisp"
+    ;; Static transient menu declarations are data; their handlers are
+    ;; exercised through server-multi-dispatch-transient.lisp.
+    "src/server-multi-transient-data.lisp"
     ;; These macros generate the executable dispatch functions below.  SB-COVER
     ;; instruments the macro definition forms themselves, although they are
     ;; compile-time logic and can never be reached by the running server.
