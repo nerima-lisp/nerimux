@@ -1969,7 +1969,7 @@
         (expect (null (nerimux::client-conn-modal conn)))
         (nerimux::%open-client-transient conn #\P)
         (nerimux::%handle-client-transient-key-payload s conn #(27))
-        (expect (null (nerimux::client-conn-transient-view conn)))))))
+        (expect (null (nerimux::client-conn-transient-view conn))))))
 
   (it "transient-actions-cover-preconditions-confirmation-and-direct-execution"
     (with-fake-session (s)
@@ -2013,4 +2013,4 @@
             (expect (equal (list (list repository :push '("--force"))) calls))
             (nerimux::%run-transient-git-action conn #\P :push nil nil nil)
             (expect (= 2 (length calls)))))
-        (expect (null (nerimux::%transient-subtitle #\P conn))))))
+        (expect (null (nerimux::%transient-subtitle #\P conn)))))))
