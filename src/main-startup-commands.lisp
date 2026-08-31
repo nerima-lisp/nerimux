@@ -121,10 +121,10 @@
   (sb-ext:exit :code 0))
 
 (defmacro %startup-mode (mode-name handler &key raw-args-p)
-  `(cons ,mode-name
-         (list ',handler
-               ,@(when raw-args-p
-                   '(:raw-args-p t)))))
+  `(list ,mode-name
+         ',handler
+         ,@(when raw-args-p
+             '(:raw-args-p t))))
 
 ;;; ── Startup mode dispatch (data / logic separation) ─────────────────────────
 ;;;
