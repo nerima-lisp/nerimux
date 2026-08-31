@@ -20,7 +20,7 @@
       # pre-migration owner; pin it to the org (and to a tag) so no takeokunn/*
       # rev survives in our lock. paredit-cli is a transitive dev tool only and
       # is never linked into nerimux.
-      inputs.paredit-cli.url = "github:nerima-lisp/paredit-cli/v1.6.0";
+      inputs.paredit-cli.url = "github:nerima-lisp/paredit-cli/v1.6.2";
     };
 
     # `flake = false`: consumed as a plain source checkout, pushed onto ASDF's
