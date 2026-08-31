@@ -2012,5 +2012,22 @@
             (funcall (nerimux::client-conn-confirm-action conn))
             (expect (equal (list (list repository :push '("--force"))) calls))
             (nerimux::%run-transient-git-action conn #\P :push nil nil nil)
-            (expect (= 2 (length calls)))))
+        (expect (= 2 (length calls)))))
         (expect (null (nerimux::%transient-subtitle #\P conn)))))))
+
+(describe "client frame dispatch contract suite"
+  (it "renders every modal and base view through one frame boundary"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn :rows 40 :cols 110)))
+        (dolist (modal '(:help :process-log :picker))
+          (setf (nerimux::client-conn-modal conn) modal)
+          (when (eq modal :process-log)
+            (setf (nerimux::client-conn-process-log conn)
+                  '(("git status" 0 ""))))
+          (expect (nerimux::%render-client-frame s conn) :to-be-truthy))
+        (nerimux::%open-client-transient conn #\P)
+        (expect (nerimux::%render-client-frame s conn) :to-be-truthy)
+        (setf (nerimux::client-conn-modal conn) nil)
+        (dolist (view '(:repolist :status :pane))
+          (setf (nerimux::client-conn-view conn) view)
+          (expect (nerimux::%render-client-frame s conn) :to-be-truthy))))))
