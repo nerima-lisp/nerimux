@@ -68,9 +68,9 @@
 
 (defun %workspace-directory-prefix-p (directory path)
   (and (stringp directory)
-       (plusp (length directory))
+       (string/= directory "")
        (stringp path)
-       (let ((prefix (if (and (plusp (length directory))
+       (let ((prefix (if (and (string/= directory "")
                               (char= (char directory (1- (length directory)))
                                      #\/))
                          directory
