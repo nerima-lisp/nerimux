@@ -1894,3 +1894,20 @@
           (expect (equal (list (list repository :restore (list "--" "src/foo.lisp")))
                          calls)))))))
 
+(describe "transient data and process log suite"
+  (it "transient-command-data-and-process-log-share-stable-contracts"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn)))
+        (expect (string= "git push --force"
+                         (nerimux::%transient-command-text :push '("--force"))))
+        (nerimux::%client-transient-toggle-flag conn #\P "--force")
+        (expect (equal '("--force")
+                       (nerimux::%client-transient-active-flags conn #\P)))
+        (nerimux::%client-transient-toggle-flag conn #\P "--force")
+        (expect (null (nerimux::%client-transient-active-flags conn #\P)))
+        (dotimes (index (1+ nerimux::+max-process-log-entries+))
+          (nerimux::%client-log-process conn (format nil "git ~D" index) t nil))
+        (expect (= nerimux::+max-process-log-entries+
+                  (length (nerimux::client-conn-process-log conn))))
+        (expect (equal '("git 20" "0" "")
+                       (first (nerimux::client-conn-process-log conn))))))))

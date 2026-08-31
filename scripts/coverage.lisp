@@ -31,6 +31,10 @@
   '("src/main-startup-flags.lisp"
     "src/package.lisp"
     "src/server-multi-state.lisp"
+    ;; These macros generate the executable dispatch functions below.  SB-COVER
+    ;; instruments the macro definition forms themselves, although they are
+    ;; compile-time logic and can never be reached by the running server.
+    "src/server-dispatch-macros.lisp"
     "packages/terminal/src/csi-replies-definitions.lisp"
     "packages/terminal/src/csi-compose.lisp"
     "packages/terminal/src/csi-device-rules.lisp"
