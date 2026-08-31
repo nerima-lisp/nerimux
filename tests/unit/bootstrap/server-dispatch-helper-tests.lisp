@@ -445,6 +445,15 @@
       (expect (null (nerimux::%client-command-buffer-append
                      conn (make-array '(1 1) :initial-element 65))))))
 
+  (it "computes-copy-mode-half-page-with-a-one-row-minimum"
+    (let ((one-row-pane (nerimux/pane:make-pane
+                         :id 1 :screen (make-screen 10 1)))
+          (four-row-pane (nerimux/pane:make-pane
+                          :id 2 :screen (make-screen 10 4))))
+      (expect (= 1 (nerimux::%copy-mode-half-page-delta one-row-pane)))
+      (expect (= 2 (nerimux::%copy-mode-half-page-delta four-row-pane)))
+      (expect (= 12 (nerimux::%copy-mode-half-page-delta nil)))))
+
   (it "command-state-projections-preserve-valid-views-and-generate-worktree-names"
     (let ((conn (nerimux::%make-client-conn)))
       (setf (nerimux::client-conn-view conn) :status)
