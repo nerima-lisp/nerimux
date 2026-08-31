@@ -48,7 +48,7 @@ did by hand — not bolted on beside it.
   VCS worktree-scan thread pool and its fetch lock (`vcs.lisp`), and the
   preemptive `with-timeout` that bounds the PTY child-exit wait
   (`pty-child-exit-status`). Timeout deadlines are
-  `cl-date-kit:DURATION` values; the compatibility notes below describe the
+  `cl-date-kit:DURATION` values; the integration notes below describe the
   public API.
 - [cl-date-kit](https://github.com/nerima-lisp/cl-date-kit) supplies the one
   typed elapsed-time value nerimux currently constructs,
@@ -67,11 +67,11 @@ did by hand — not bolted on beside it.
   the configuration system and the word-search commands in the
   workspace-only reduction (`67fe5dc`), so search and the picker are the
   only callers left. This is the one adoption that changed behaviour rather
-  than only moving it; the compatibility notes below state the deliberate
+  than only moving it; the integration notes below state the deliberate
   pattern differences from cl-ppcre.
 - [cl-codec-kit](https://github.com/nerima-lisp/cl-codec-kit) replaced `babel`
   as the UTF-8 string↔octet codec for protocol frames, PTY output and OSC
-  payloads (`string-to-octets` / `octets-to-string`). The compatibility notes
+  payloads (`string-to-octets` / `octets-to-string`). The integration notes
   below describe the two decode-behavior differences from babel.
 - [cl-host-kit](https://github.com/nerima-lisp/cl-host-kit) supplies
   pathname/string host operations; nerimux's one live call site is
@@ -94,7 +94,7 @@ SBCL supplies the implementation runtime and POSIX bindings. The test and
 coverage systems additionally depend on cl-weave 1.3.0 for declarative tests,
 parallel-capable orchestration, and coverage instrumentation.
 
-### Threading and regex compatibility notes
+### Threading and regex integration notes
 
 cl-concurrent-kit's
 `with-timeout` takes its deadline as a **CL-DATE-KIT:DURATION**, for example
@@ -138,7 +138,7 @@ trailing empty fields, so that string split into exactly three parts and parsed;
 the plain character split that replaced it keeps them, and xterm's `rgb:` syntax
 is exactly three channels.
 
-### Host and codec compatibility notes
+### Host and codec integration notes
 
 `select(2)` and raw descriptor operations are provided by cl-process-kit
 (`select-fds` / `wait-for-input`) and cl-tty-kit (`set-terminal-size`,
