@@ -586,6 +586,27 @@
         (expect (= 1 selections))
         (expect (equal '("no worktree selected") notifications)))))
 
+  (it "open-worktree-pane-reports-invalid-paths"
+    (let ((conn (nerimux::%make-client-conn))
+          (notifications nil))
+      (with-stubbed-fdefinition
+          ((nerimux::%client-notify
+             (lambda (connection message)
+               (declare (ignore connection))
+               (push message notifications))))
+        (dolist (case '(("" nil "worktree has no path")
+                        ("/workspace/missing" t "worktree is missing")))
+          (destructuring-bind (path missing-p message) case
+            (let ((worktree
+                    (nerimux/workspace-model:make-worktree
+                     :id "invalid-worktree"
+                     :path path
+                     :missing-p missing-p)))
+              (expect (null (nerimux::%open-client-worktree-pane
+                             nil conn worktree)))
+              (expect (equal (list message) notifications))
+              (setf notifications nil)))))))
+
   ;; Magit alignment (contract SS5): %SUBMIT-CLIENT-SEARCH now closes MODAL
   ;; and restores VIEW by calling %SET-CLIENT-MODAL / %CLIENT-RESTORE-
   ;; COMMAND-VIEW directly, not by routing through the retired event
