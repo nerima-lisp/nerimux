@@ -22,6 +22,13 @@
       # is never linked into nerimux.
       inputs.paredit-cli.url = "github:nerima-lisp/paredit-cli/v1.6.2";
     };
+    # Keep the structural editor available as a first-class project tool.
+    # cl-weave consumes the same release transitively, but exposing it here
+    # makes the documented editing workflow reproducible in the dev shell.
+    paredit-cli = {
+      url = "github:nerima-lisp/paredit-cli/v1.6.2";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
 
     # `flake = false`: consumed as a plain source checkout, pushed onto ASDF's
     # central registry below rather than through each repo's own flake outputs.
@@ -127,6 +134,7 @@
       self,
       nixpkgs,
       cl-weave,
+      paredit-cli,
       cl-cli,
       cl-date-kit,
       cl-parser-kit,
@@ -651,6 +659,7 @@
           default = pkgs.mkShell {
             packages = [
               sbcl
+              paredit-cli.packages.${system}.default
               pkgs.coreutils
               pkgs.python3Packages.mkdocs-material
             ];
