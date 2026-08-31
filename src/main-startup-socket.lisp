@@ -94,8 +94,7 @@
                                     (%server-log-if-output-exists-action log-path)
                                     :error :output))
             (file-error () (%launch-server-without-log exe args))
-            (stream-error () (%launch-server-without-log exe args))
-            (error () (%launch-server-without-log exe args)))))
+            (stream-error () (%launch-server-without-log exe args)))))
     ;; Poll only when we actually attempted a launch.  This avoids the
     ;; unconditional 3-second dead-time when run-program silently failed.
     (when launched

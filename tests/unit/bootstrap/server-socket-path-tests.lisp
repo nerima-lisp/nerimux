@@ -459,21 +459,6 @@
                             "nerimux" nil)))
             (setf (fdefinition 'sb-ext:run-program) orig))))))
 
-  (it "launch-server-falls-back-after-a-non-filesystem-log-error"
-    (let ((calls nil))
-      (with-stubbed-locked-fdefinitions
-          ((sb-ext:run-program
-             (lambda (&rest args) (push args calls) nil)))
-        (finishes
-          (nerimux::%launch-server-and-poll-when-live
-           "/synthetic/socket" "nerimux" nil nil)))
-      (expect (= 1 (length calls)))
-      (destructuring-bind (exe args &rest keys) (first calls)
-        (declare (ignore args))
-        (expect (string= "nerimux" exe))
-        (expect (null (getf keys :output :missing)))
-        (expect (null (getf keys :error :missing))))))
-
   ;;; -- server log rotation (R2.8) ------------------------------------------
 
   ;; %server-log-if-output-exists-action returns :append when LOG-PATH does
