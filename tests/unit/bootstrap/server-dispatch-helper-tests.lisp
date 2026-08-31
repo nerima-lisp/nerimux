@@ -865,6 +865,27 @@
                  session conn direction)))
         (expect (= 4 (length (nerimux::client-conn-message-log conn)))))))
 
+  (it "starts worktree creation with an automatic branch for a selected repository"
+    (let ((session (nerimux/session:make-session :id 1 :name "test"))
+          (conn (nerimux::%make-client-conn))
+          (repository (nerimux/workspace-model:make-repository
+                       :id "repo" :specification "github.com/team/repo"))
+          (arguments nil))
+      (with-stubbed-fdefinition
+          ((nerimux::%client-selected-repository
+             (lambda (connection)
+               (declare (ignore connection))
+               repository))
+           (nerimux::%client-create-worktree-now
+             (lambda (selected branch connection current-session)
+               (setf arguments (list selected branch connection current-session))))
+           (nerimux::%mark-dirty (lambda () t)))
+        (expect (nerimux::%client-start-worktree-create session conn))
+        (expect (eq repository (first arguments)))
+        (expect (uiop:string-prefix-p "wt-" (second arguments)))
+        (expect (eq conn (third arguments)))
+        (expect (eq session (fourth arguments))))))
+
   (it "settles asynchronous refreshes when startup fails synchronously"
     (let* ((worktree (nerimux/workspace-model:make-worktree
                       :id "refresh" :path "/tmp/refresh" :branch "main"))
