@@ -391,6 +391,23 @@
       (expect (eq :copy (nerimux::%client-ui-mode-value 'copy)))
       (expect (eq :picker (nerimux::%client-ui-mode-value "PICKER")))
       (expect (null (nerimux::%client-ui-mode-value 42)))
+      (dolist (mapping '((:normal nil)
+                         (:enter-normal nil)
+                         (:cancel nil)
+                         (:accept nil)
+                         (:input :view-pane)
+                         (:enter-input :view-pane)
+                         (:copy :scrollback)
+                         (:enter-copy :scrollback)
+                         (:command :command)
+                         (:enter-command :command)
+                         (:picker :picker)
+                         (:enter-picker :picker)
+                         (:tree-filter :filter)
+                         (:enter-tree-filter :filter)
+                         (:unknown :unchanged)))
+        (expect (eq (second mapping)
+                    (nerimux::%client-ui-mode-target-modal (first mapping)))))
       ;; %client-enter-input-mode retired with the `i` key it existed to
       ;; implement (contract §5): VIEW :pane is now reached only by focusing
       ;; a pane, never by an explicit "enter input" step. Confirm the
