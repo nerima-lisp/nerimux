@@ -755,7 +755,7 @@
       (expect (null (nerimux::%parse-client-key-code "")))
       (expect (nerimux::%client-kill-force-p '("--force")))
       (expect (null (nerimux::%client-kill-force-p '("--FORCE"))))
-      (expect (null (nerimux::%client-kill-force-p nil))))))
+      (expect (null (nerimux::%client-kill-force-p nil)))))
 
   (it "dispatches worktree command entries through the shared command-mode contract"
     (let ((conn (nerimux::%make-client-conn)))
@@ -785,6 +785,8 @@
         (expect (nerimux::%client-select-pane-direction
                  session conn direction)))
         (expect (= 4 (length (nerimux::client-conn-message-log conn)))))))
+
+  )
 
 ;;; PR2 tree-navigation redesign (R6.3 pivot): Enter on a repository row dives
 ;;; straight into its main worktree's shell instead of toggling it
