@@ -1895,6 +1895,30 @@
                          calls)))))))
 
 (describe "transient data and process log suite"
+  (it "covers-visibility-and-process-log-state-machines"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn)))
+        (expect (nerimux::%client-set-visibility-level conn 0))
+        (expect (= 2 (nerimux::client-conn-visibility-level conn)))
+        (dolist (expected '(3 4 1 2))
+          (nerimux::%client-cycle-visibility conn)
+          (expect (= expected
+                     (nerimux::client-conn-visibility-level conn))))
+        (nerimux::%client-cycle-visibility conn)
+        (expect (= 3 (nerimux::client-conn-visibility-level conn)))
+        (setf (nerimux::client-conn-process-log conn)
+              (list "first" "second" "third"))
+        (nerimux::%handle-process-log-key conn "n")
+        (expect (= 1 (nerimux::client-conn-process-log-scroll conn)))
+        (nerimux::%handle-process-log-key conn "p")
+        (expect (= 0 (nerimux::client-conn-process-log-scroll conn)))
+        (setf (nerimux::client-conn-modal conn) :process-log)
+        (nerimux::%handle-process-log-key conn "q")
+        (expect (null (nerimux::client-conn-modal conn)))
+        (setf (nerimux::client-conn-view conn) :status)
+        (nerimux::%client-step-back s conn)
+        (expect (eq :repolist (nerimux::client-conn-view conn))))))
+
   (it "transient-command-data-and-process-log-share-stable-contracts"
     (with-fake-session (s)
       (let ((conn (%make-test-conn)))
