@@ -2013,7 +2013,14 @@
             (expect (equal (list (list repository :push '("--force"))) calls))
             (nerimux::%run-transient-git-action conn #\P :push nil nil nil)
         (expect (= 2 (length calls)))))
-        (expect (null (nerimux::%transient-subtitle #\P conn)))))))
+        (multiple-value-bind (repository worktree ignored-conn)
+            (%make-worktree-operation-fixture)
+          (declare (ignore repository ignored-conn))
+          (nerimux::%set-client-selected-tree-object conn worktree)
+          (expect (string= "feature/errors -> origin/feature/errors"
+                           (nerimux::%transient-subtitle #\P conn)))
+          (expect (string= "on feature/errors"
+                           (nerimux::%transient-subtitle #\x conn))))))))
 
 (describe "client frame dispatch contract suite"
   (it "renders every modal and base view through one frame boundary"

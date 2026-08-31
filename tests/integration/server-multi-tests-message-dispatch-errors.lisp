@@ -16,7 +16,8 @@
             :id "worktree-errors"
             :repository repository
             :path "/tmp/worktree-errors"
-            :branch "feature/errors"))
+            :branch "feature/errors"
+            :head "feature/errors"))
          (conn (%make-test-conn)))
     (nerimux/workspace-model:organization-add-repository organization repository)
     (nerimux/workspace-model:repository-add-worktree repository worktree)
