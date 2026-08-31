@@ -76,6 +76,8 @@ so a build either reproduces exactly or fails loudly. From a checkout,
 nix develop          # SBCL with every dependency on the ASDF registry
 nix run .#test       # run the test suite
 CL_WEAVE_TEST_FILTER=renderer nix run .#test  # run matching cl-weave tests
+nix build .#coverage-report --no-link --print-build-logs  # strict 100% gate
+nix develop --command nerimux-coverage-report  # report-only investigation
 nix flake check      # tests + formatting + docs, the same gate CI uses
 nix fmt              # format Nix sources (treefmt)
 ```
@@ -104,7 +106,8 @@ sibling libraries — [cl-cli](https://github.com/nerima-lisp/cl-cli),
 [cl-host-kit](https://github.com/nerima-lisp/cl-host-kit),
 [cl-tui-kit](https://github.com/nerima-lisp/cl-tui-kit) and
 [cl-vcs-kit](https://github.com/nerima-lisp/cl-vcs-kit).
-It has **no external dependencies**. See
+All runtime dependencies are pinned in `flake.nix` and declared explicitly in
+`nerimux.asd`; there are no undeclared runtime dependencies. See
 [Dogfooded sibling libraries](https://nerima-lisp.github.io/nerimux/guide/sibling-libraries/).
 
 ## Contributing
