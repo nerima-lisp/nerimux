@@ -193,7 +193,7 @@
            (expect (null target))
            (expect (equal "target" (first args)))
            (expect (stringp (second args)))))
-        (t (fail "unexpected frame type"))))
+        (t (fail "unexpected frame type")))))
 
   ;;; ── %run-attach-session peer-io-failure containment ──────────────────────────
   ;;;
@@ -382,7 +382,7 @@
             (decode-command-payload payload)
           (expect (eq :kill command))
           (expect (null target))
-          (expect (equal '("--force") args))))))))
+          (expect (equal '("--force") args)))))))
 
   ;;; ── %maybe-send-resize behavior ──────────────────────────────────────────────
   ;;;
