@@ -24,7 +24,7 @@
 
 (defun %workspace-attach-target-p (name)
   (and (stringp name)
-       (plusp (length name))
+       (string/= name "")
        (or (char= (char name 0) #\/) (find #\/ name))))
 
 (defun run-attach-simple (name)
