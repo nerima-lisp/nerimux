@@ -568,6 +568,24 @@
         (remhash conn nerimux::*client-meta-pending*)
         (expect (= 38 calls)))))
 
+  (it "open-selected-worktree-command-reports-missing-selection"
+    (let ((conn (nerimux::%make-client-conn))
+          (notifications nil)
+          (selections 0))
+      (with-stubbed-fdefinition
+          ((nerimux::%select-client-tree-worktree
+             (lambda (&rest arguments)
+               (declare (ignore arguments))
+               (incf selections)))
+           (nerimux::%client-notify
+             (lambda (connection message)
+               (declare (ignore connection))
+               (push message notifications))))
+        (expect (nerimux::%client-open-selected-worktree-command
+                 nil conn nil))
+        (expect (= 1 selections))
+        (expect (equal '("no worktree selected") notifications)))))
+
   ;; Magit alignment (contract SS5): %SUBMIT-CLIENT-SEARCH now closes MODAL
   ;; and restores VIEW by calling %SET-CLIENT-MODAL / %CLIENT-RESTORE-
   ;; COMMAND-VIEW directly, not by routing through the retired event
