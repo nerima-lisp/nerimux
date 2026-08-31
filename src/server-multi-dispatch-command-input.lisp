@@ -62,23 +62,25 @@
         (%client-notify conn "select a repository first")))
   t)
 
-(defun %client-start-worktree-delete (conn)
-  (if (%client-operation-worktree conn)
-      (%client-enter-command-mode conn "wt-delete --confirm")
-      (%client-notify conn "select a worktree to delete"))
-  t)
+(defmacro define-worktree-command-entry (name command description)
+  `(defun ,name (conn)
+     ,(format nil "Enter command mode for the ~A worktree operation." description)
+     (if (%client-operation-worktree conn)
+         (%client-enter-command-mode conn ,command)
+         (%client-notify conn ,(format nil "select a worktree to ~A" description)))
+     t))
 
-(defun %client-start-worktree-lock (conn)
-  (if (%client-operation-worktree conn)
-      (%client-enter-command-mode conn "wt-lock --confirm")
-      (%client-notify conn "select a worktree to lock"))
-  t)
+(define-worktree-command-entry %client-start-worktree-delete
+  "wt-delete --confirm"
+  "delete")
 
-(defun %client-start-worktree-unlock (conn)
-  (if (%client-operation-worktree conn)
-      (%client-enter-command-mode conn "wt-unlock --confirm")
-      (%client-notify conn "select a worktree to unlock"))
-  t)
+(define-worktree-command-entry %client-start-worktree-lock
+  "wt-lock --confirm"
+  "lock")
+
+(define-worktree-command-entry %client-start-worktree-unlock
+  "wt-unlock --confirm"
+  "unlock")
 
 (defun %focus-selected-client-worktree (session conn)
   "Enter on the selected tree row (R6.3).

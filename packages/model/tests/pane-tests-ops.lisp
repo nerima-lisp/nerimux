@@ -79,18 +79,17 @@
         (expect (nerimux/pane:pane-screen pane)))))
 
   (it "fork-pane-forwards-the-default-command"
-    (let ((spawn-command nil)
-          (nerimux/ports:*spawn-pty*
+    (let ((nerimux/ports:*spawn-pty*
             (lambda (rows cols &key start-dir default-command environment)
               (declare (ignore rows cols start-dir environment))
-              (setf spawn-command default-command)
+              (declare (ignore default-command))
               (values 31 41 "/dev/pts/agent"))))
-    (let ((pane (nerimux/pane::%fork-pane
-                 nil 9 2 3 20 6
-                 :start-dir "/tmp/workspace"
-                 :default-command "claude --dangerously-skip-permissions")))
+      (let ((pane (nerimux/pane::%fork-pane
+                   nil 9 2 3 20 6
+                   :start-dir "/tmp/workspace"
+                   :default-command "claude --dangerously-skip-permissions")))
         (expect (string= "claude --dangerously-skip-permissions"
-                         (nerimux/pane:pane-start-command pane))))))
+                         (nerimux/pane:pane-start-command pane)))))
 
   (it "make-input-pane-uses-dead-pty-sentinels"
     (let ((pane (nerimux/pane::%make-input-pane 4 5 6 30 7)))
@@ -145,5 +144,5 @@
       (expect (null (nerimux/pane:pane-bell-p pane)))
       (expect (null (nerimux/pane:pane-process-exited-p pane)))
       (expect (null (nerimux/pane:pane-non-zero-exit-p pane)))
-      (expect (null (nerimux/pane:pane-startup-failed-p pane)))))
-  )
+      (expect (null (nerimux/pane:pane-startup-failed-p pane))))))
+)
