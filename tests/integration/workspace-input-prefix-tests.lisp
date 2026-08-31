@@ -85,7 +85,7 @@
   ;; byte (§2.1).
   (it "r4-2-esc-is-forwarded-to-the-pane-in-pane-view-and-view-stays-pane"
     (with-minimal-session (pane win sess)
-      (declare (ignore win))
+      (declare (ignorable win))
       (setf (nerimux/pane:pane-fd pane) 9999) ; "live" without a real PTY
       (let* ((conn (%make-test-conn))
              (writes nil)
@@ -109,7 +109,7 @@
   ;; inside scrollback and must not leave it.
   (it "r4-2-scrollback-exits-only-on-q-not-esc"
     (with-minimal-session (pane win sess)
-      (declare (ignore win))
+      (declare (ignorable win))
       (let* ((conn (%make-test-conn))
              (screen (nerimux/pane:pane-screen pane)))
         (nerimux::%set-client-focus conn pane)
@@ -189,7 +189,7 @@
   ;; pane-feed.
   (it "r4-4-prefix-unbound-key-is-discarded-not-forwarded-to-the-pane"
     (with-minimal-session (pane win sess)
-      (declare (ignore win))
+      (declare (ignorable win))
       (let* ((conn (%make-test-conn))
              (fed nil)
              (orig (fdefinition 'nerimux/pane:pane-feed)))
@@ -220,7 +220,7 @@
   ;; (h/j/k/l/n/p all do).
   (it "r4-4-prefix-F-and-C-f-are-unbound-now-not-forwarded-to-the-pane"
     (with-minimal-session (pane win sess)
-      (declare (ignore win))
+      (declare (ignorable win))
       (dolist (byte (list (char-code #\F) 6)) ; F, C-f
         (let* ((conn (%make-test-conn))
                (fed nil)
@@ -242,7 +242,7 @@
   ;; worktree precondition.
   (it "r4-4-prefix-c-q-c-q-clears-modal"
     (with-minimal-session (pane win sess)
-      (declare (ignore pane win))
+      (declare (ignorable pane win))
       (let ((conn (%make-test-conn)))
         (setf (nerimux::client-conn-modal conn) :scrollback)
         (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q
@@ -257,7 +257,7 @@
   ;; SELECTED-WORKTREE, not the focus pane directly.
   (it "r4-4-prefix-w-opens-status-view-for-the-focused-worktree"
     (with-minimal-session (pane win sess)
-      (declare (ignore win))
+      (declare (ignorable win))
       (let* ((organization
                (nerimux/workspace-model:make-organization
                 :id "org" :host "github.com" :name "team"))
@@ -285,7 +285,7 @@
   ;; the key is never a dead end.
   (it "r4-4-prefix-w-with-no-focused-worktree-falls-back-to-repolist"
     (with-minimal-session (pane win sess)
-      (declare (ignore pane win))
+      (declare (ignorable pane win))
       (let ((conn (%make-test-conn)))
         (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q
         (nerimux::%handle-multi-key-message sess conn #(119)) ; w
@@ -297,7 +297,7 @@
   ;; entry and the no-focus report.
   (it "r4-4-prefix-open-bracket-enters-scrollback-on-the-focused-pane"
     (with-minimal-session (pane win sess)
-      (declare (ignore win))
+      (declare (ignorable win))
       (let ((conn (%make-test-conn)))
         (nerimux::%set-client-focus conn pane)
         (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q

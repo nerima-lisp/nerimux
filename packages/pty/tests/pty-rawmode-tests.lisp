@@ -37,7 +37,7 @@
   ;; wrapper signals an error — confirming the delegation path is exercised.
   (it "enable-raw-mode-signals-on-non-tty"
     (with-pipe-fds (rfd wfd)
-      (declare (ignore wfd))
+      (declare (ignorable wfd))
       (signals error (nerimux/pty:enable-raw-mode! rfd))))
 
   ;; enable-raw-mode! inherits cl-tty-kit's fd validation: a negative fd is

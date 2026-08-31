@@ -715,7 +715,7 @@
   (it "selects the newest output or focus timestamp"
     (multiple-value-bind (organization repository worktree window-1)
         (%build-five-level-tree)
-      (declare (ignore organization repository))
+      (declare (ignorable organization repository))
       (let ((pane-1 (first (nerimux/window:window-panes window-1)))
             (pane-2 (second (nerimux/window:window-panes window-1))))
         (setf (nerimux/pane:pane-last-output-time pane-1) 10

@@ -123,7 +123,7 @@
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
         (%make-server-dispatch-helper-fixture)
-      (declare (ignore organization repository))
+      (declare (ignorable organization repository))
       (expect (eq feature-worktree
                   (nerimux::%workspace-find-worktree-for-cwd
                    "/workspace/repo/feature/src" organizations)))
@@ -160,7 +160,7 @@
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
         (%make-server-dispatch-helper-fixture)
-      (declare (ignore organization))
+      (declare (ignorable organization))
       (let ((nerimux::*dirty* nil)
             (nerimux::*last-selected-worktree-token* nil)
             (nerimux::*workspace-collapsed-node-ids*
@@ -215,7 +215,7 @@
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
         (%make-server-dispatch-helper-fixture)
-      (declare (ignore organization main-worktree feature-worktree))
+      (declare (ignorable organization main-worktree feature-worktree))
       (let ((conn (nerimux::%make-client-conn)))
         (setf (nerimux::client-conn-picker-items conn)
               (nerimux/picker:build-global-picker-items organizations))
@@ -341,7 +341,7 @@
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
         (%make-server-dispatch-helper-fixture)
-      (declare (ignore main-worktree))
+      (declare (ignorable main-worktree))
       (let ((conn (nerimux::%make-client-conn)))
         (expect (null (nerimux::%workspace-find-tree-object nil organizations)))
         (expect (eq organization
@@ -1074,7 +1074,7 @@
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
         (%make-server-dispatch-helper-fixture)
-      (declare (ignore organizations organization repository main-worktree))
+      (declare (ignorable organizations organization repository main-worktree))
       (let ((nerimux::*dirty* nil)
             (conn (nerimux::%make-client-conn)))
         (nerimux::%set-client-selected-tree-object conn feature-worktree)
@@ -1095,7 +1095,7 @@
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
         (%make-server-dispatch-helper-fixture)
-      (declare (ignore organizations organization main-worktree feature-worktree))
+      (declare (ignorable organizations organization main-worktree feature-worktree))
       (let ((nerimux::*workspace-expanded-node-ids* (make-hash-table :test #'equal))
             (nerimux::*dirty* nil)
             (conn (nerimux::%make-client-conn))
@@ -1151,7 +1151,7 @@
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
         (%make-server-dispatch-helper-fixture)
-      (declare (ignore organization repository main-worktree feature-worktree))
+      (declare (ignorable organization repository main-worktree feature-worktree))
       (let ((conn (nerimux::%make-client-conn))
             (nerimux/vcs::*workspace-organizations* organizations)
             (nerimux::*dirty* nil))
@@ -1166,7 +1166,7 @@
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
         (%make-server-dispatch-helper-fixture)
-      (declare (ignore organization main-worktree feature-worktree))
+      (declare (ignorable organization main-worktree feature-worktree))
       (let ((conn (nerimux::%make-client-conn))
             (nerimux/vcs::*workspace-organizations* organizations)
             (nerimux::*dirty* nil))

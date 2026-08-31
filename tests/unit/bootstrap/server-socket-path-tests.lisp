@@ -179,7 +179,7 @@
       (unwind-protect
            (progn
              (with-open-file (s path :direction :output :if-does-not-exist :create)
-               (declare (ignore s)))
+               nil)
              (signals error
                (nerimux::%verify-socket-directory-private path (sb-posix:getuid))
                "must refuse a socket directory path that is a plain file"))
@@ -266,7 +266,7 @@
       (unwind-protect
            (progn
              (with-open-file (s path :direction :output :if-does-not-exist :create)
-               (declare (ignore s)))
+               nil)
              (expect (eq t (and (nerimux::%stale-socket-p path) t))))
         (ignore-errors (delete-file path)))))
 
@@ -346,7 +346,7 @@
       (unwind-protect
            (progn
              (with-open-file (s blocker :direction :output :if-does-not-exist :create)
-               (declare (ignore s)))
+               nil)
              (with-stubbed-locked-fdefinitions
                  ((sb-ext:run-program
                     (lambda (&rest args) (push args calls) nil)))

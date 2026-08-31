@@ -257,7 +257,7 @@
 
   (it "pty-close-closes-an-unregistered-fd-without-signalling"
     (with-pipe-fds (read-fd write-fd)
-      (declare (ignore write-fd))
+      (declare (ignorable write-fd))
       (nerimux/pty:pty-close read-fd 0)
       (expect (null (gethash read-fd nerimux/pty::*pty-processes*)))
       (signals sb-posix:syscall-error (sb-posix:close read-fd))))
