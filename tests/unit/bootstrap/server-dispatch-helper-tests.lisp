@@ -603,6 +603,32 @@
         (expect (= 1 selections))
         (expect (equal '("no worktree selected") notifications)))))
 
+  (it "workspace-refresh-command-wires-completion-and-error-notifications"
+    (let ((conn (nerimux::%make-client-conn))
+          (notifications nil)
+          (completion-callback nil)
+          (error-callback nil))
+      (with-stubbed-fdefinition
+          ((nerimux::%refresh-client-picker
+             (lambda (connection &key on-complete on-error)
+               (declare (ignore connection))
+               (setf completion-callback on-complete
+                     error-callback on-error)))
+           (nerimux::%client-notify
+             (lambda (connection message)
+               (declare (ignore connection))
+               (push message notifications))))
+        (expect (nerimux::%client-refresh-workspace conn))
+        (expect (functionp completion-callback))
+        (expect (functionp error-callback))
+        (funcall completion-callback nil)
+        (funcall error-callback (make-condition 'simple-error
+                                                :format-control "boom"))
+        (expect (equal '("workspace refresh failed: boom"
+                         "workspace refresh complete"
+                         "workspace refresh started")
+                       notifications)))))
+
   (it "open-worktree-pane-reports-invalid-paths"
     (let ((conn (nerimux::%make-client-conn))
           (notifications nil))
