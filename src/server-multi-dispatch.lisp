@@ -262,15 +262,6 @@ dropped connection's entry be reclaimed instead of leaking.")
                  ;; :pane -- FR-007. Every byte goes to the shell, ESC included.
                  (%handle-client-input-key-payload session conn payload))))))))))
 
-(defun %feed-client-stdin-target (conn payload)
-  "Feed PAYLOAD to CONN's split-window -I stdin target, if it has one.
-   Returns NIL either way: an unbound key is a no-op, not a loop disposition."
-  (let ((stdin-target (client-conn-stdin-target conn)))
-    (when stdin-target
-      (pane-feed stdin-target payload)
-      (%mark-dirty))
-    nil))
-
 (defun %handle-workspace-prefix-key (session conn payload)
   "Handle the client-local prefix (C-q, R4.4) and the key it introduces.
 
