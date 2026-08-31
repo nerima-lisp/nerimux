@@ -74,12 +74,13 @@ so a build either reproduces exactly or fails loudly. From a checkout,
 
 ```sh
 nix develop          # SBCL with every dependency on the ASDF registry
-nix run .#test       # run the test suite
+nix run .#test       # run the test suite (bounded timeout)
 CL_WEAVE_TEST_FILTER=renderer nix run .#test  # run matching cl-weave tests
 nix build .#coverage-report --no-link --print-build-logs  # strict 100% gate
 nix develop --command nerimux-coverage-report  # report-only investigation
 nix flake check      # tests + formatting + docs, the same gate CI uses
 nix fmt              # format Nix sources (treefmt)
+paredit-cli --help   # structural Common Lisp editing in the dev shell
 ```
 
 Tests live in `tests/` and run under
@@ -88,6 +89,9 @@ Tests live in `tests/` and run under
 `NERIMUX_TEST_SYSTEM` selects the system tested and defaults to `nerimux/test`.
 Set `CL_WEAVE_TEST_FILTER` to a case-insensitive substring of the cl-weave test
 path when iterating on one area of the suite.
+The development shell includes `paredit-cli` for syntax-aware editing; use it
+for structural transformations before resorting to textual changes. Test and
+coverage entry points enforce bounded execution timeouts.
 Real-PTY integration cases live in a second suite, `nerimux/pty-test`, run
 separately with `nix run .#test-pty` because the hermetic flake gate has no
 `/dev/ptmx`. A separate end-to-end smoke script drives the real built binary
