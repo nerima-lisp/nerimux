@@ -1922,6 +1922,16 @@
   (it "transient-command-data-and-process-log-share-stable-contracts"
     (with-fake-session (s)
       (let ((conn (%make-test-conn)))
+        (dolist (definition nerimux::+transient-definitions+)
+          (let ((menu (cdr definition)))
+            (expect (characterp (car definition)))
+            (expect (stringp (first menu)))
+            (expect (listp (second menu)))
+            (dolist (action (third menu))
+              (expect (characterp (first action)))
+              (expect (stringp (second action)))
+              (expect (member (first (third action))
+                              '(:git :call :open-transient :help :stub))))))
         (expect (string= "git push --force"
                          (nerimux::%transient-command-text :push '("--force"))))
         (expect (null (nerimux::%transient-branch conn)))
