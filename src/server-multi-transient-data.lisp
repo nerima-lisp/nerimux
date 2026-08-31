@@ -1,6 +1,8 @@
 ;;;; Declarative transient menu data.
 ;;;; Handlers are lambdas where load order requires deferred function lookup.
 
+(in-package #:nerimux)
+
 ;;; ── +TRANSIENT-DEFINITIONS+ (contract §2/§3) ─────────────────────────────
 ;;;
 ;;; KEY -> (TITLE ARGUMENTS ACTIONS).  ARGUMENTS is a list of (ARG-KEY . FLAG);
