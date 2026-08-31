@@ -243,9 +243,8 @@
    TREE-FILTER, when a non-empty string, narrows the tree to matching rows
    and their ancestors (see %WORKSPACE-FILTER-TREE-ENTRIES) regardless of
    MODE; MODE = :FILTER (the live modal set by %CLIENT-ENTER-TREE-FILTER-
-   MODE, server-multi-dispatch-command-input.lisp -- :TREE-FILTER is only
-   the retired legacy command name that maps to it, server-multi-dispatch-
-   command-workspace.lisp) additionally replaces the WHOLE key panel with
+   MODE, server-multi-dispatch-command-input.lisp) additionally replaces the
+   WHOLE key panel with
    the `/query` input prompt at the bottom row (see %RENDER-WORKSPACE-TREE-
    FILTER-LINE), the same way MODE = :COMMAND replaces it with the command
    line -- neither mode's ordinary key hints or divider draw at all while
