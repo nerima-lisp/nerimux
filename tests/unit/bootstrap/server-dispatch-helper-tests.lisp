@@ -445,6 +445,24 @@
       (expect (null (nerimux::%client-command-buffer-append
                      conn (make-array '(1 1) :initial-element 65))))))
 
+  (it "command-state-projections-preserve-valid-views-and-generate-worktree-names"
+    (let ((conn (nerimux::%make-client-conn)))
+      (setf (nerimux::client-conn-view conn) :status)
+      (nerimux::%client-enter-command-mode conn "git status")
+      (expect (eq :status
+                  (nerimux::client-conn-command-return-view conn)))
+      (nerimux::%client-restore-command-view conn)
+      (expect (eq :status (nerimux::client-conn-view conn)))
+      (expect (null (nerimux::client-conn-command-return-view conn)))
+      (setf (nerimux::client-conn-command-return-view conn) :unknown)
+      (nerimux::%client-restore-command-view conn)
+      (expect (eq :status (nerimux::client-conn-view conn)))
+      (expect (null (nerimux::client-conn-command-return-view conn)))
+      (let ((name (nerimux::%client-worktree-create-branch-name)))
+        (expect (and (stringp name)
+                     (uiop:string-prefix-p "wt-" name)))
+        (expect (= 18 (length name))))))
+
   (it "input-and-copy-dispatch-report-missing-focus"
     (let ((session (nerimux/session:make-session :id 1 :name "test"))
           (conn (nerimux::%make-client-conn)))
