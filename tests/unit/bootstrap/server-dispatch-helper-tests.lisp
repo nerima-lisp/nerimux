@@ -757,6 +757,35 @@
       (expect (null (nerimux::%client-kill-force-p '("--FORCE"))))
       (expect (null (nerimux::%client-kill-force-p nil))))))
 
+  (it "dispatches worktree command entries through the shared command-mode contract"
+    (let ((conn (nerimux::%make-client-conn)))
+      (let ((nerimux::*clients* (list conn)))
+      (dolist (entry '(nerimux::%client-start-worktree-delete
+                       nerimux::%client-start-worktree-lock
+                       nerimux::%client-start-worktree-unlock))
+        (expect (funcall entry conn)))
+        (expect (= 3 (length (nerimux::client-conn-message-log conn))))))
+    (let ((conn (nerimux::%make-client-conn))
+          (worktree (nerimux/workspace-model:make-worktree
+                     :id "entry" :path "/tmp/entry" :branch "main")))
+      (nerimux::%set-client-selected-tree-object conn worktree)
+      (dolist (entry '(nerimux::%client-start-worktree-delete
+                       nerimux::%client-start-worktree-lock
+                       nerimux::%client-start-worktree-unlock))
+        (expect (funcall entry conn)))
+      (expect (eq :command (nerimux::client-conn-modal conn)))
+      (expect (string= "wt-unlock --confirm"
+                       (nerimux::client-conn-command-buffer conn)))))
+
+  (it "reports a missing pane for every directional selection request"
+    (let ((session (nerimux/session:make-session :id 1 :name "test"))
+          (conn (nerimux::%make-client-conn)))
+      (let ((nerimux::*clients* (list conn)))
+      (dolist (direction '(:up :down :left :right))
+        (expect (nerimux::%client-select-pane-direction
+                 session conn direction)))
+        (expect (= 4 (length (nerimux::client-conn-message-log conn)))))))
+
 ;;; PR2 tree-navigation redesign (R6.3 pivot): Enter on a repository row dives
 ;;; straight into its main worktree's shell instead of toggling it
 ;;; open/closed; h/l collapse/expand the owning repository from any row
