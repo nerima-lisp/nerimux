@@ -1913,7 +1913,7 @@
         (nerimux::%handle-process-log-key conn "p")
         (expect (= 0 (nerimux::client-conn-process-log-scroll conn)))
         (setf (nerimux::client-conn-modal conn) :process-log)
-        (nerimux::%handle-process-log-key conn "q")
+        (nerimux::%handle-multi-key-message s conn "q")
         (expect (null (nerimux::client-conn-modal conn)))
         (setf (nerimux::client-conn-view conn) :status)
         (nerimux::%client-step-back s conn)
