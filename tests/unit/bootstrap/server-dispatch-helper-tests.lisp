@@ -335,7 +335,12 @@
          (expect (= #x02
                     (progn
                       (nerimux::%client-rebind-prefix conn "c-b")
-                      (nerimux::client-conn-workspace-prefix-code conn)))))))
+                      (nerimux::client-conn-workspace-prefix-code conn))))
+         (expect (nerimux::%client-rebind-prefix conn "not-a-key"))
+         (expect (find "invalid workspace prefix key"
+                       (nerimux::client-conn-message-log conn)
+                       :test #'string=)
+                :to-be-truthy)))))
 
   (it "resolves-workspace-tokens-by-kind-and-ignores-option-values"
     (multiple-value-bind (organizations organization repository main-worktree
@@ -361,8 +366,6 @@
                     (nerimux::%client-selected-organization conn organization)))
         (expect (eq repository
                     (nerimux::%client-selected-repository conn repository))))))
-  )
-
 (describe "server-dispatch-helper-edge-suite"
 
   (it "parses-payloads-and-transitions-client-modes"
