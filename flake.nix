@@ -90,7 +90,7 @@
       flake = false;
     };
     cl-codec-kit = {
-      # From-scratch, babel-API-compatible codec: the 71 string<->octet call
+      # Independent from-scratch codec: the string<->octet call
       # sites in src/ and tests/ name cl-codec-kit:string-to-octets /
       # octets-to-string directly. Briefly routed through cl-host-kit instead;
       # re-pointed here on 2026-08-02 so the codec is named at its own call

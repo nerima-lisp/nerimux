@@ -158,10 +158,10 @@ is exactly three channels.
 
 UTF-8 string↔octet conversion uses
 [cl-codec-kit](https://github.com/nerima-lisp/cl-codec-kit)'s
-`string-to-octets` / `octets-to-string` — a from-scratch, babel-API-compatible
-codec with `:depends-on ()`, which cl-tty-kit and cl-process-kit already use.
-The API keeps the same keyword shape (`:encoding`, `:start`, `:end`, `:errorp`)
-where callers need it; cl-host-kit remains limited to host/pathname helpers.
+`string-to-octets` / `octets-to-string` — an independent from-scratch codec
+with `:depends-on ()`. cl-tty-kit and cl-process-kit use it directly; callers
+pass the explicit keywords (`:encoding`, `:start`, `:end`, `:errorp`) they need.
+cl-host-kit remains limited to host/pathname helpers.
 
 Two behaviors are worth knowing:
 

@@ -77,7 +77,7 @@
   ;;                          fixed cffi prototype, which misfires on the arm64
   ;;                          variadic ABI, so pane resize was a silent no-op on
   ;;                          Apple Silicon.
-  ;;   * babel             -> cl-codec-kit, a from-scratch, babel-API-compatible
+  ;;   * babel             -> cl-codec-kit, an independent from-scratch
   ;;                          codec with no dependencies of its own, which
   ;;                          cl-tty-kit and cl-process-kit already use. Call
   ;;                          sites went through cl-host-kit for one day before
