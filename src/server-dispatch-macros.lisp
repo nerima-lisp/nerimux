@@ -7,6 +7,14 @@
 
 (in-package #:nerimux)
 
+(defmacro define-worktree-command-entry (name command description)
+  `(defun ,name (conn)
+     ,(format nil "Enter command mode for the ~A worktree operation." description)
+     (if (%client-operation-worktree conn)
+         (%client-enter-command-mode conn ,command)
+         (%client-notify conn ,(format nil "select a worktree to ~A" description)))
+     t))
+
 (defmacro define-message-dispatch-fn (fn-name lambda-list docstring &rest rules)
   "Build a named message-dispatch function from a declarative rule table."
   `(defun ,fn-name ,lambda-list ,docstring

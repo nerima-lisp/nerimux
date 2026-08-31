@@ -62,14 +62,6 @@
         (%client-notify conn "select a repository first")))
   t)
 
-(defmacro define-worktree-command-entry (name command description)
-  `(defun ,name (conn)
-     ,(format nil "Enter command mode for the ~A worktree operation." description)
-     (if (%client-operation-worktree conn)
-         (%client-enter-command-mode conn ,command)
-         (%client-notify conn ,(format nil "select a worktree to ~A" description)))
-     t))
-
 (define-worktree-command-entry %client-start-worktree-delete
   "wt-delete --confirm"
   "delete")
