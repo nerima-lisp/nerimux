@@ -1745,7 +1745,7 @@
                    (3 3 5 3)
                    (2 3 5 2)))
       (destructuring-bind (next scroll visible expected) case
-                   (expect (= expected
+        (expect (= expected
                    (nerimux::%tree-selection-scroll next scroll visible))))))
 
   (it "tree-selection-logic-covers-unselected-directional-fallbacks"
