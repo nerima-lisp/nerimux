@@ -83,9 +83,6 @@
   ;; to say the same thing, and the two could disagree.
   (frame nil))
 
-;; SERVER-MULTI.LISP initializes the registry after this dispatch file loads.
-(declaim (special *clients*))
-
 ;;;; Multi-client message handlers extracted from server-multi.lisp.
 ;;;;
 ;;;; The event loop keeps the dispatch table, while these helpers own the
