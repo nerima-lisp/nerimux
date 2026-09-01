@@ -131,6 +131,28 @@
                   (nerimux::%workspace-find-tree-object
                    '(:worktree "feature-id") organizations)))))
 
+  (it "uses-the-live-catalog-for-default-workspace-selection"
+    (multiple-value-bind (organizations organization repository main-worktree
+                          feature-worktree)
+        (%make-server-dispatch-helper-fixture)
+      (declare (ignore organization repository main-worktree))
+      (let ((nerimux/vcs::*workspace-organizations* organizations))
+        (expect (= 2 (length (nerimux::%workspace-worktrees))))
+        (expect (eq feature-worktree
+                    (nerimux::%workspace-find-worktree "feature-id"))))))
+
+  (it "resolves-picker-organization-through-its-first-available-worktree"
+    (let* ((organization (nerimux/workspace-model:make-organization :id "org"))
+           (repository (nerimux/workspace-model:make-repository :id "repo"))
+           (worktree (nerimux/workspace-model:make-worktree
+                      :id "tree" :repository repository :path "/tmp/tree"))
+           (item (nerimux/picker::%make-picker-item
+                  :id "org" :kind :organization :label "org"
+                  :organization organization)))
+      (nerimux/workspace-model:organization-add-repository organization repository)
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
+      (expect (eq worktree (nerimux::%picker-item-worktree item)))))
+
   (it "resolves-the-most-specific-worktree-containing-a-cwd"
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
