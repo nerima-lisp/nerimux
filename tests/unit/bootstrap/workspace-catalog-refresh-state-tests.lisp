@@ -172,6 +172,53 @@
                 (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async)
                 refresh-fn)))))
 
+  (it "add-client-terminal-refresh-error-settles-the-catalog-as-stale"
+    (multiple-value-bind (organizations) (%make-server-dispatch-helper-fixture)
+      (let ((nerimux::*workspace-catalog-refresh-started-p* nil)
+            (nerimux::*workspace-catalog-loaded-p* nil)
+            (nerimux::*workspace-scan-progress* 4)
+            (nerimux::*workspace-refreshing-ids* (make-hash-table :test #'equal))
+            (nerimux::*workspace-stale-ids* (make-hash-table :test #'equal))
+            (nerimux::*clients* nil)
+            (nerimux::*dirty* nil)
+            (nerimux/vcs::*workspace-organizations* organizations)
+            (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
+            (refresh-fn (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async))
+            (captured-on-error nil))
+        (unwind-protect
+             (progn
+               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                     (lambda () t)
+                     (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async)
+                     (lambda (&key on-error)
+                       (setf captured-on-error on-error)))
+               (with-stubbed-fdefinition
+                   ((nerimux/net:socket-stream
+                      (lambda (socket)
+                        (declare (ignore socket))
+                        (make-two-way-stream
+                         (make-string-input-stream "")
+                         (make-string-output-stream))))
+                    (nerimux/net:socket-fd
+                      (lambda (socket)
+                        (declare (ignore socket))
+                        1))
+                    (nerimux/net:close-socket
+                      (lambda (&rest args)
+                        (declare (ignore args)))))
+                 (let ((conn (nerimux::%add-client :socket)))
+                   (expect conn)
+                   (expect captured-on-error)
+                   (expect (plusp (hash-table-count nerimux::*workspace-refreshing-ids*)))
+                   (funcall captured-on-error (make-condition 'error))
+                   (expect nerimux::*workspace-catalog-loaded-p*)
+                   (expect (null nerimux::*workspace-scan-progress*))
+                   (expect (zerop (hash-table-count nerimux::*workspace-refreshing-ids*)))
+                   (expect (plusp (hash-table-count nerimux::*workspace-stale-ids*)))))
+          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
+                (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async)
+                refresh-fn))))))
+
   (it "drop-client-ignores-stream-errors-while-sending-bye"
     (let* ((stream (make-two-way-stream
                     (make-string-input-stream "")
