@@ -987,6 +987,12 @@
                        (nerimux/workspace-model:worktree-changed-files worktree)))))))
 
 (describe "vcs worktree status split (magit alignment, Unit MODEL)"
+  (it "%changed-file-column-set-p recognizes only real porcelain columns"
+    (dolist (case '(("M" . t) ("A" . t) ("R" . t) ("U" . t)
+                    (" " . nil) ("?" . nil) ("" . t)))
+      (expect (eql (cdr case)
+                   (nerimux/vcs::%changed-file-column-set-p (car case))))))
+
   (it "%worktree-status-untracked-files keeps only :untracked entries, code always \"??\""
     (expect (equal (list (cons "??" "new.txt"))
                    (nerimux/vcs::%worktree-status-untracked-files
