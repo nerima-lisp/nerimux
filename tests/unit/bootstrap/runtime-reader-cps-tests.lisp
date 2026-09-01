@@ -148,6 +148,37 @@
         (expect (= 1 outputs))
         (expect (= 1 dirty)))))
 
+  (it "reader-eof-state-records-child-exit-status"
+    (dolist (case '((17 :exited 17 nil)
+                    (9 :signaled nil 9)))
+      (destructuring-bind (code kind expected-status expected-signal) case
+        (let ((pane (make-pane :id 1 :fd 7 :pid 4321
+                               :screen (make-screen 10 3)))
+            (observed-status :unset)
+            (observed-signal :unset)
+            (dirty 0))
+        (with-stubbed-fdefinition
+            ((nerimux/pty:pty-child-exit-status
+              (lambda (fd)
+                (declare (ignore fd))
+                (values code kind)))
+             (nerimux/pane:pane-mark-process-exit
+              (lambda (received-pane &key status signal)
+                (declare (ignore received-pane))
+                (setf (values observed-status observed-signal)
+                      (values status signal))))
+             (nerimux::close-pane-pty
+              (lambda (received-pane)
+                (declare (ignore received-pane))
+                nil))
+             (nerimux::%mark-dirty
+              (lambda ()
+                (incf dirty))))
+          (nerimux::reader-eof-state pane))
+        (expect (eql expected-status observed-status))
+        (expect (eql expected-signal observed-signal))
+          (expect (= 1 dirty))))))
+
   (it "run-reader-states-executes-the-current-state-before-stopping"
     (with-dead-pane (pane)
       (let ((calls 0)
