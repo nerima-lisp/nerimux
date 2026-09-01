@@ -395,9 +395,19 @@
                  (funcall callback t)
                  (expect refreshed)
                  (expect (search "fetch complete" (first messages)))
+                 (funcall callback nil)
+                 (expect (search "already in progress" (first messages)))
                  (funcall error-callback (make-condition 'simple-error
                                                           :format-control "offline"))
-                 (expect (search "fetch failed" (first messages)))))
+                 (expect (search "fetch failed" (first messages)))
+                 (setf (fdefinition 'nerimux/vcs:fetch-repository-async)
+                       (lambda (repository &key on-complete on-error
+                                        callback-dispatch)
+                         (declare (ignore repository on-complete on-error
+                                             callback-dispatch))
+                         (error "sync failure")))
+                 (nerimux::%workspace-prefix-fetch-repository conn)
+                 (expect (search "sync failure" (first messages)))))
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:fetch-repository-async) fetch
                 (fdefinition 'nerimux::%refresh-client-picker) refresh
