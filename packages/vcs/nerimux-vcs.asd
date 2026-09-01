@@ -19,8 +19,9 @@
   :serial t
   :components ((:file "package")
                (:file "vcs")
-               (:file "vcs-async-operations")
                (:file "vcs-worktree-operations")
+               (:file "vcs-status")
+               (:file "vcs-async-operations")
                (:file "vcs-fetch")
                (:file "vcs-inspect")
                ;; Last: the write operations need %REPOSITORY-CHECKED-HANDLE (the
