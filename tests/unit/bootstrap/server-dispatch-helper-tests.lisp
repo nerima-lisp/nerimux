@@ -350,6 +350,8 @@
                           '("--branch" "main" "feature"))))
         (expect (null (nerimux::%client-positional-branch
                        '("--confirm"))))
+        (expect (null (nerimux::%client-positional-branch
+                       '("confirm" "force"))))
         (expect (nerimux::%client-create-worktree
                  conn "repo-id" '("--confirm")))
         (expect (search "worktree create requires a branch"
