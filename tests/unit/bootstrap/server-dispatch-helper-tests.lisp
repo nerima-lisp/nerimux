@@ -850,7 +850,7 @@
                t)))
         (expect (nerimux::%client-open-selected-worktree-command
                  :session conn :shell))
-        (expect (equal '(:session :worktree :default-command :shell)
+        (expect (equal (list :session conn :worktree :default-command :shell)
                        calls)))))
 
   (it "status-write-reports-transient-write-errors"
