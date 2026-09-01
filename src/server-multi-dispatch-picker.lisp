@@ -45,26 +45,33 @@
 
 (defun %worktree-selection-token (worktree)
   (and worktree
-       (or (nerimux/workspace-model:worktree-id worktree)
-           (nerimux/workspace-model:worktree-path worktree)
+       (or (and (plusp (length (nerimux/workspace-model:worktree-id worktree)))
+                (nerimux/workspace-model:worktree-id worktree))
+           (and (plusp (length (nerimux/workspace-model:worktree-path worktree)))
+                (nerimux/workspace-model:worktree-path worktree))
            (and (nerimux/workspace-model:worktree-branch worktree)
                 (princ-to-string (nerimux/workspace-model:worktree-branch worktree))))))
 
 (defun %organization-selection-token (organization)
   (and organization
-       (or (nerimux/workspace-model:organization-id organization)
-           (and (nerimux/workspace-model:organization-host organization)
-                (nerimux/workspace-model:organization-name organization)
+       (or (and (plusp (length (nerimux/workspace-model:organization-id organization)))
+                (nerimux/workspace-model:organization-id organization))
+           (and (plusp (length (nerimux/workspace-model:organization-host organization)))
+                (plusp (length (nerimux/workspace-model:organization-name organization)))
                 (format nil "~A/~A"
                         (nerimux/workspace-model:organization-host organization)
                         (nerimux/workspace-model:organization-name organization))))))
 
 (defun %repository-selection-token (repository)
   (and repository
-       (or (nerimux/workspace-model:repository-id repository)
-           (nerimux/workspace-model:repository-specification repository)
-           (nerimux/workspace-model:repository-local-path repository)
-           (nerimux/workspace-model:repository-path repository))))
+       (or (and (plusp (length (nerimux/workspace-model:repository-id repository)))
+                (nerimux/workspace-model:repository-id repository))
+           (and (plusp (length (nerimux/workspace-model:repository-specification repository)))
+                (nerimux/workspace-model:repository-specification repository))
+           (and (plusp (length (nerimux/workspace-model:repository-local-path repository)))
+                (nerimux/workspace-model:repository-local-path repository))
+           (and (plusp (length (nerimux/workspace-model:repository-path repository)))
+                (nerimux/workspace-model:repository-path repository)))))
 
 (defun %tree-object-selection-token (object)
   "A refresh-stable token for OBJECT, resolvable back to the same row by

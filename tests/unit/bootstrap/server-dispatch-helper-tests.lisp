@@ -156,6 +156,38 @@
       (expect (null (nerimux::%repository-selection-token nil)))
       (expect (null (nerimux::%worktree-selection-token nil)))))
 
+  (it "selection-tokens-fall-back-to-stable-model-fields"
+    (let* ((organization
+             (nerimux/workspace-model::%make-organization
+              :host "origin" :name "team"))
+           (repository
+             (nerimux/workspace-model::%make-repository
+              :organization organization :specification "origin/team/repo"))
+           (path-worktree
+             (nerimux/workspace-model::%make-worktree
+              :path "/workspace/repo"))
+           (branch-worktree
+             (nerimux/workspace-model::%make-worktree
+              :branch 'feature))
+           (pane (nerimux/pane:make-pane :id 1)))
+      (nerimux/pane:worktree-add-pane path-worktree pane)
+      (expect (string= "origin/team"
+                       (nerimux::%organization-selection-token organization)))
+      (expect (string= "origin/team/repo"
+                       (nerimux::%repository-selection-token repository)))
+      (expect (string= "/workspace/repo"
+                       (nerimux::%worktree-selection-token path-worktree)))
+      (expect (string= "FEATURE"
+                       (nerimux::%worktree-selection-token branch-worktree)))
+      (expect (equal '(:worktree "/workspace/repo")
+                     (nerimux::%tree-object-selection-token pane)))
+      (expect (equal '(:worktree "owner")
+                     (nerimux::%tree-object-selection-token
+                      '(:diff-line "owner" "file"))))
+      (expect (equal '(:section :active)
+                     (nerimux::%tree-object-selection-token :active)))
+      (expect (null (nerimux::%tree-object-selection-token 42)))))
+
   (it "tracks-tree-objects-selection-and-scroll"
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
