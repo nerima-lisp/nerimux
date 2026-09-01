@@ -205,6 +205,43 @@
         (nerimux::%client-picker-visible-items conn)
         (expect (= 0 (nerimux::client-conn-picker-index conn))))))
 
+  (it "picker-selects-repository-and-organization-without-opening-a-pane"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/workspace-model:make-organization
+                :id "org" :host "github.com" :name "team"))
+             (repository
+               (nerimux/workspace-model:make-repository
+                :id "repo" :organization organization
+                :specification "github.com/team/repo"))
+             (conn (%make-test-conn))
+             (notifications nil))
+        (nerimux::%set-client-modal conn :picker)
+        (with-stubbed-fdefinition
+            ((nerimux::%client-notify
+               (lambda (connection message)
+                 (declare (ignore connection))
+                 (push message notifications))))
+          (dolist (item-and-message
+                    (list
+                     (list (nerimux/picker::%make-picker-item
+                            :id "repo" :kind :repository :label "repo"
+                            :repository repository)
+                           "repository selected; use :wt-create --branch <branch> --confirm")
+                     (list (nerimux/picker::%make-picker-item
+                            :id "org" :kind :organization :label "team"
+                            :organization organization)
+                           "organization selected; select a repository first")))
+            (destructuring-bind (item message) item-and-message
+              (setf (nerimux::client-conn-picker-items conn) (list item)
+                    (nerimux::client-conn-picker-index conn) 0)
+              (expect (nerimux::%select-client-picker-item s conn))
+              (expect (null (nerimux::client-conn-modal conn)))
+              (expect (equal message (first notifications)))
+              (setf notifications nil)))
+          (setf (nerimux::client-conn-picker-items conn) nil)
+          (expect (null (nerimux::%select-client-picker-item s conn)))))))
+
   ;; The workspace->tmux command vocabulary translation
   ;; (%canonical-client-command: :close -> :kill-pane, :split -> :split-window,
   ;; and so on) was deleted with the tmux command table it fed.  Its only
