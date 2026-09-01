@@ -82,7 +82,7 @@
   (let ((defaults *default-pathname-defaults*))
     (or (handler-case (namestring (truename defaults))
           (file-error () nil))
-        (and (pathnamep defaults) (namestring defaults))
+        (namestring defaults)
         "")))
 
 (defun %send-client-attach-target (stream target)
