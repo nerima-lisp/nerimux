@@ -180,6 +180,43 @@
       (funcall captured-on-progress 7)
       (expect (eql 7 nerimux::*workspace-scan-progress*))))
 
+  (it "add-client-does-not-start-refresh-without-vcs"
+    (let ((nerimux::*workspace-catalog-refresh-started-p* nil)
+          (nerimux::*workspace-catalog-loaded-p* nil)
+          (nerimux::*clients* nil)
+          (nerimux::*dirty* nil)
+          (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
+          (refresh-fn (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async))
+          (refresh-started nil))
+      (unwind-protect
+           (progn
+             (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                   (lambda () nil)
+                   (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async)
+                   (lambda (&rest arguments)
+                     (declare (ignore arguments))
+                     (setf refresh-started t)))
+             (with-stubbed-fdefinition
+                 ((nerimux/net:socket-stream
+                    (lambda (socket)
+                      (declare (ignore socket))
+                      (make-two-way-stream
+                       (make-string-input-stream "")
+                       (make-string-output-stream))))
+                  (nerimux/net:socket-fd
+                    (lambda (socket)
+                      (declare (ignore socket))
+                      1)))
+               (let ((conn (nerimux::%add-client :socket)))
+                 (expect conn)
+                 (expect (null refresh-started))
+                 (expect (null nerimux::*workspace-catalog-refresh-started-p*))
+                 (expect (null nerimux::*workspace-catalog-loaded-p*))
+                 (expect (member conn nerimux::*clients*)))))
+        (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
+              (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async)
+              refresh-fn))))
+
   (it "add-client-synchronous-refresh-failure-settles-the-catalog-as-stale"
     (multiple-value-bind (organizations) (%make-server-dispatch-helper-fixture)
       (let ((nerimux::*workspace-catalog-refresh-started-p* nil)
