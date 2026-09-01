@@ -1634,14 +1634,17 @@
   (it "tree-selection-logic-resolves-direction-and-scroll-bounds"
     (dolist (case '((nil (a b) 1 -1)
                    (nil (a b) -1 0)
+                   (stale (a b) -1 0)
+                   (stale (a b) 1 -1)
                    (b (a b) 1 1)))
       (destructuring-bind (current objects delta expected) case
         (expect (= expected
                    (nerimux::%tree-selection-index current objects delta)))))
     (dolist (case '((2 3 5 2)
                    (8 3 5 3)
-                   (4 3 5 3)
-                   (0 3 5 0)))
+                   (10 0 5 6)
+                   (0 3 5 0)
+                   (2 3 5 2)))
       (destructuring-bind (next scroll visible expected) case
         (expect (= expected
                    (nerimux::%tree-selection-scroll next scroll visible))))))
