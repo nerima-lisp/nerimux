@@ -429,6 +429,23 @@
                     (nerimux::%client-selected-organization conn repository)))
         (expect (eq organization
                     (nerimux::%client-selected-organization conn feature-worktree)))
+        (let ((second-repository
+                (nerimux/workspace-model:make-repository
+                 :id "second-repo-id"
+                 :organization organization
+                 :specification "origin/team/second-repo")))
+          (push second-repository
+                (nerimux/workspace-model:organization-repositories
+                 organization))
+          (expect (null (nerimux::%client-selected-repository
+                         conn organization))))
+        (let ((orphan-worktree
+                (nerimux/workspace-model:make-worktree
+                 :id "orphan-worktree-id")))
+          (expect (null (nerimux::%client-selected-repository
+                         conn orphan-worktree)))
+          (expect (null (nerimux::%client-selected-organization
+                         conn orphan-worktree))))
         )))
 
   (it "keeps-empty-selection-without-focus"
