@@ -1018,6 +1018,8 @@
       (expect (= 42 (nerimux::%parse-client-integer "42")))
       (expect (null (nerimux::%parse-client-integer "not-an-integer")))
       (expect (null (nerimux::%parse-client-integer nil)))
+      (expect (null (nerimux::%parse-client-key-code nil)))
+      (expect (= #x11 (nerimux::%parse-client-key-code "c-q")))
       (setf (nerimux::client-conn-viewport conn) 2)
       (expect (= 5 (nerimux::%move-client-viewport conn 3)))
       (expect (zerop (nerimux::%move-client-viewport conn -99)))
@@ -1037,6 +1039,21 @@
       (expect (nerimux::%client-kill-force-p '("--force")))
       (expect (null (nerimux::%client-kill-force-p '("--FORCE"))))
       (expect (null (nerimux::%client-kill-force-p nil)))))
+
+  (it "clears modal buffers and filter state on explicit transitions"
+    (let ((conn (nerimux::%make-client-conn)))
+      (setf (nerimux::client-conn-command-buffer conn) "stale")
+      (expect (eq :command
+                  (nerimux::%transition-client-ui-mode conn :enter-command)))
+      (expect (string= "" (nerimux::client-conn-command-buffer conn)))
+      (setf (nerimux::client-conn-modal conn) :filter
+            (nerimux::client-conn-tree-filter conn) "query")
+      (expect (null (nerimux::%transition-client-ui-mode conn :cancel)))
+      (expect (null (nerimux::client-conn-tree-filter conn)))
+      (setf (nerimux::client-conn-modal conn) :command
+            (nerimux::client-conn-command-buffer conn) "stale")
+      (expect (null (nerimux::%transition-client-ui-mode conn :enter-normal)))
+      (expect (string= "" (nerimux::client-conn-command-buffer conn)))))
 
   (it "dispatches worktree command entries through the shared command-mode contract"
     (let ((conn (nerimux::%make-client-conn)))
