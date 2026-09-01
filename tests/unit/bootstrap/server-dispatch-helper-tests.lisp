@@ -358,6 +358,18 @@
         (expect (eq feature-worktree
                     (nerimux::%workspace-find-tree-object
                      (list :worktree "feature-id") organizations)))
+        (expect (eq organization
+                    (nerimux::%workspace-find-tree-object
+                     organization organizations)))
+        (expect (eq repository
+                    (nerimux::%workspace-find-tree-object
+                     repository organizations)))
+        (expect (eq feature-worktree
+                    (nerimux::%workspace-find-tree-object
+                     feature-worktree organizations)))
+        (expect (eq "section-value"
+                    (nerimux::%workspace-find-tree-object
+                     '(:section "section-value") organizations)))
         (expect (null (nerimux::%workspace-find-tree-object
                        (list :unknown "value") organizations)))
         (expect (null (nerimux::%client-positional-branch
@@ -365,7 +377,15 @@
         (expect (eq organization
                     (nerimux::%client-selected-organization conn organization)))
         (expect (eq repository
-                    (nerimux::%client-selected-repository conn repository))))))
+                    (nerimux::%client-selected-repository conn repository)))
+        (expect (eq repository
+                    (nerimux::%client-selected-repository conn feature-worktree)))
+        (expect (eq organization
+                    (nerimux::%client-selected-organization conn repository)))
+        (expect (eq organization
+                    (nerimux::%client-selected-organization conn feature-worktree)))
+        (expect (eq feature-worktree
+                    (nerimux::%client-operation-worktree conn feature-worktree))))))
 
   (it "keeps-empty-selection-without-focus"
     (let ((conn (nerimux::%make-client-conn)))
