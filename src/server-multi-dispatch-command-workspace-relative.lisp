@@ -2,8 +2,7 @@
 
 (defun %tree-selection-index (current objects delta)
   (let ((selected (and current (position current objects :test #'equal))))
-    (if selected
-        selected
+    (or selected
         (if (minusp delta) 0 -1))))
 
 (defun %tree-selection-scroll (next scroll visible)

@@ -6,7 +6,7 @@
 (in-package #:asdf-user)
 
 (defsystem "nerimux-ports"
-  :description "DOMAIN port abstractions for nerimux: the boundary infrastructure adapters install into"
+  :description "Direct POSIX and PTY boundary operations used by nerimux"
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"

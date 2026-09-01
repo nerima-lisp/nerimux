@@ -109,16 +109,14 @@
       flake = false;
     };
     cl-tui-kit = {
-      # The headless surface/layout/backend boundary used by nerimux's
-      # per-client renderer. Pin the API that exposes make-surface and the
-      # ANSI backend used by the deterministic frame adapter.
+      # The headless surface/layout/backend API used by nerimux's per-client
+      # renderer. Pin the API that exposes make-surface and the ANSI backend.
       url = "github:nerima-lisp/cl-tui-kit/v4.1.3";
       flake = false;
     };
     cl-vcs-kit = {
-      # ghq/repository/worktree discovery for the global picker. The adapter
-      # keeps discovery off the UI thread while this source provides the
-      # stable VCS observation API.
+      # ghq/repository/worktree discovery for the global picker. The source
+      # provides the stable VCS observation API used by the picker.
       url = "github:nerima-lisp/cl-vcs-kit/v0.2.0";
       flake = false;
     };
