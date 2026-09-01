@@ -1,5 +1,9 @@
 (in-package #:nerimux)
 
+(defparameter +default-workspace-prefix-key-code+
+  #x11
+  "Control-Q, the workspace UI prefix used by the multi-client overview.")
+
 ;;;; Shared multi-client connection data.
 (defstruct (client-conn (:constructor %make-client-conn))
   "One attached client: its socket, a cached binary STREAM and FD, a private
@@ -82,9 +86,6 @@
   ;; :help IS its whole state. A boolean beside MODAL would be a second place
   ;; to say the same thing, and the two could disagree.
   (frame nil))
-(defparameter +default-workspace-prefix-key-code+
-  #x11
-  "Control-Q, the workspace UI prefix used by the multi-client overview.")
 (declaim (special *clients*))
 (defvar *last-selected-worktree-token* nil)
 (defvar *client-esc-swallow-counts*
