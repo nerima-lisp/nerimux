@@ -138,6 +138,7 @@
       (declare (ignore organization repository main-worktree))
       (let ((nerimux/vcs::*workspace-organizations* organizations))
         (expect (= 2 (length (nerimux::%workspace-worktrees))))
+        (expect (listp (nerimux::%workspace-tree-objects)))
         (expect (eq feature-worktree
                     (nerimux::%workspace-find-worktree "feature-id"))))))
 
