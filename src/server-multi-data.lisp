@@ -1,5 +1,7 @@
 (in-package #:nerimux)
 
+(defconstant +kill-sighup-grace-seconds+ 3)
+
 (defconstant +max-clients+ 32)
 
 (defparameter +client-ui-modes+

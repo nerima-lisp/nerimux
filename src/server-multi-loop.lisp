@@ -104,8 +104,6 @@
       (%drop-client conn :bye t))))
 
 ;;; ── Server termination ─────────────────────────────────────────────────────
-(defconstant +kill-sighup-grace-seconds+
-  3)
 
 (defun %session-live-panes (session)
   "Return the live panes in SESSION."
