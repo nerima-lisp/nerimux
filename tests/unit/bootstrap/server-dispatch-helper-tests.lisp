@@ -1597,12 +1597,19 @@
       (expect (null nerimux::*dirty*))))
 
   (it "tree-selection-logic-resolves-direction-and-scroll-bounds"
-    (expect (= -1 (nerimux::%tree-selection-index nil '(a b) 1)))
-    (expect (= 0 (nerimux::%tree-selection-index nil '(a b) -1)))
-    (expect (= 1 (nerimux::%tree-selection-index 'b '(a b) 1)))
-    (expect (= 2 (nerimux::%tree-selection-scroll 2 3 5)))
-    (expect (= 3 (nerimux::%tree-selection-scroll 8 3 5)))
-    (expect (= 3 (nerimux::%tree-selection-scroll 4 3 5))))
+    (dolist (case '((nil (a b) 1 -1)
+                   (nil (a b) -1 0)
+                   (b (a b) 1 1)))
+      (destructuring-bind (current objects delta expected) case
+        (expect (= expected
+                   (nerimux::%tree-selection-index current objects delta)))))
+    (dolist (case '((2 3 5 2)
+                   (8 3 5 3)
+                   (4 3 5 3)
+                   (0 3 5 0)))
+      (destructuring-bind (next scroll visible expected) case
+        (expect (= expected
+                   (nerimux::%tree-selection-scroll next scroll visible))))))
 
   (it "tree-relative-selection-clamps-backward-movement-without-selection"
     (multiple-value-bind (organizations organization repository main-worktree
