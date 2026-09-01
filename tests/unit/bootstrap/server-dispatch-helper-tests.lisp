@@ -366,6 +366,14 @@
                     (nerimux::%client-selected-organization conn organization)))
         (expect (eq repository
                     (nerimux::%client-selected-repository conn repository))))))
+
+  (it "keeps-empty-selection-without-focus"
+    (let ((conn (nerimux::%make-client-conn)))
+      (expect (null (nerimux::%client-context-object conn nil)))
+      (expect (null (nerimux::%client-selected-repository conn)))
+      (expect (null (nerimux::%client-selected-organization conn)))
+      (expect (null (nerimux::%client-operation-worktree conn)))))
+
   (it "parses-payloads-and-transitions-client-modes"
     (let ((conn (nerimux::%make-client-conn))
           (nerimux::*dirty* nil))
