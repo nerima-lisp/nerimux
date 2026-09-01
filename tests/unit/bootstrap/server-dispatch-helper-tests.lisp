@@ -482,6 +482,17 @@
       (expect (null (nerimux::%client-command-buffer-append
                      conn (make-array '(1 1) :initial-element 65))))))
 
+  (it "submitting-an-empty-command-clears-command-state"
+    (let ((session (nerimux/session:make-session :id 1 :name "test"))
+          (conn (nerimux::%make-client-conn)))
+      (setf (nerimux::client-conn-command-buffer conn) "  ")
+      (nerimux::%set-client-view conn :command)
+      (nerimux::%set-client-modal conn :command)
+      (expect (nerimux::%submit-client-command session conn))
+      (expect (string= "" (nerimux::client-conn-command-buffer conn)))
+      (expect (eq :repolist (nerimux::client-conn-view conn)))
+      (expect (null (nerimux::client-conn-modal conn)))))
+
   (it "computes-copy-mode-half-page-with-a-one-row-minimum"
     (let ((one-row-pane (nerimux/pane:make-pane
                          :id 1 :screen (make-screen 10 1)))
