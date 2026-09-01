@@ -1632,6 +1632,15 @@
         (expect (eq :repositories
                     (nerimux::%select-client-tree-relative conn -1))))))
 
+  (it "tree-relative-selection-uses-forward-fallback-for-stale-selection"
+    (multiple-value-bind (organizations) (%make-server-dispatch-helper-fixture)
+      (let ((conn (nerimux::%make-client-conn))
+            (nerimux/vcs::*workspace-organizations* organizations)
+            (nerimux::*dirty* nil))
+        (nerimux::%set-client-selected-tree-object conn :stale)
+        (expect (eq :repositories
+                    (nerimux::%select-client-tree-relative conn 1))))))
+
   (it "tree-relative-selection-adjusts-scroll-for-a-narrow-view"
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
