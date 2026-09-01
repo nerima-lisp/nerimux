@@ -482,6 +482,12 @@
                (expect (eq :command (nerimux::client-conn-modal conn)))
                (expect (string= "wt-delete --confirm"
                                 (nerimux::client-conn-command-buffer conn)))
+               (nerimux::%handle-multi-key-message s conn #(127))
+               (expect (string= "wt-delete --confir"
+                                (nerimux::client-conn-command-buffer conn)))
+               (nerimux::%handle-multi-key-message
+                s conn
+                (cl-codec-kit:string-to-octets "m" :encoding :utf-8))
                ;; ... and submitting it must actually reach the VCS layer.
                (nerimux::%handle-multi-key-message s conn #(13))
                (expect (equal (list worktree nil) call))
