@@ -2317,7 +2317,7 @@
                                 (expect
                                  (string= "on feature/errors"
                                           (nerimux::%transient-subtitle #\x
-                                                                        conn))))))))
+                                                                        conn)))))))
           (it "records transient write failures through the shared process log"
               (with-fake-session (s)
                 (let ((conn (%make-test-conn))
@@ -2340,7 +2340,7 @@
                       (expect (equal '("git push" "1" "boom")
                                      (first (nerimux::client-conn-process-log conn))))
                       (expect (string= "git push: failed: boom"
-                                       (first (nerimux::client-conn-message-log conn)))))))))
+                                       (first (nerimux::client-conn-message-log conn))))))))))
 
 (describe "client frame dispatch contract suite"
           (it "renders every modal and base view through one frame boundary"
