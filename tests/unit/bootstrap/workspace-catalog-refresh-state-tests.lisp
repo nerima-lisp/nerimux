@@ -56,6 +56,7 @@
             (refresh-fn (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async))
             (conn (nerimux::%make-client-conn))
             (captured-on-complete nil))
+        (setf nerimux::*clients* (list conn))
         (unwind-protect
              (progn
                (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
