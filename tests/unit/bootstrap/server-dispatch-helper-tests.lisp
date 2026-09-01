@@ -966,6 +966,30 @@
               (expect (equal (list message) notifications))
               (setf notifications nil)))))))
 
+  (it "open-worktree-pane-reports-a-window-without-an-active-pane"
+    (let* ((conn (nerimux::%make-client-conn))
+           (worktree
+             (nerimux/workspace-model:make-worktree
+              :id "pane-less-worktree"
+              :path "/workspace/pane-less"
+              :branch "main"))
+           (notifications nil)
+           (window (nerimux/window:make-window
+                    :id 1 :name "pane-less" :width 80 :height 24
+                    :panes nil)))
+      (with-stubbed-fdefinition
+          ((nerimux::%workspace-new-window
+             (lambda (&rest arguments)
+               (declare (ignore arguments))
+               window))
+           (nerimux::%client-notify
+             (lambda (connection message)
+               (declare (ignore connection))
+               (push message notifications))))
+        (expect (null (nerimux::%open-client-worktree-pane
+                       nil conn worktree)))
+        (expect (equal (list "worktree pane unavailable") notifications)))))
+
   ;; Magit alignment (contract SS5): %SUBMIT-CLIENT-SEARCH now closes MODAL
   ;; and restores VIEW by calling %SET-CLIENT-MODAL / %CLIENT-RESTORE-
   ;; COMMAND-VIEW directly, not by routing through the retired event
