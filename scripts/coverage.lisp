@@ -27,7 +27,7 @@
 
 (defun %coverage-test-name-filter ()
   (let ((filter (uiop:getenv "CL_WEAVE_TEST_FILTER")))
-    (and filter (plusp (length filter)) filter)))
+    (and (plusp (length filter)) filter)))
 
 (defun %ensure-full-coverage (statistics)
   (loop for (kind covered-key total-key) in '((:expression :expression-covered
