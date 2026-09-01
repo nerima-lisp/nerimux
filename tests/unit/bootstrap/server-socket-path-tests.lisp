@@ -554,6 +554,26 @@
                (expect (null (nerimux::%stale-socket-p "/synthetic/socket"))))
           (setf (fdefinition 'probe-file) original-probe-file)))))
 
+  (it "stale-socket-p-treats-connection-file-errors-as-not-stale"
+    (with-stubbed-locked-fdefinitions
+        ((probe-file (lambda (path)
+                       (declare (ignore path))
+                       t))
+         (nerimux/net:connect-to (lambda (path)
+                                   (declare (ignore path))
+                                   (error 'file-error))))
+      (expect (null (nerimux::%stale-socket-p "/synthetic/socket")))))
+
+  (it "stale-socket-p-treats-connection-stream-errors-as-not-stale"
+    (with-stubbed-locked-fdefinitions
+        ((probe-file (lambda (path)
+                       (declare (ignore path))
+                       t))
+         (nerimux/net:connect-to (lambda (path)
+                                   (declare (ignore path))
+                                   (error 'stream-error))))
+      (expect (null (nerimux::%stale-socket-p "/synthetic/socket")))))
+
   (it "stale-socket-p-returns-nil-after-probe-stream-error"
     (sb-ext:without-package-locks
       (let ((original-probe-file (fdefinition 'probe-file)))

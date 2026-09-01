@@ -2,6 +2,8 @@
 
 (in-package :nerimux)
 
+(declaim (notinline nerimux/net:connect-to nerimux/net:close-socket))
+
 (defconstant +server-socket-poll-interval-seconds+ 0.1
   "Seconds between socket-existence probes while waiting for a server to start.")
 
