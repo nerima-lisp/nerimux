@@ -306,6 +306,7 @@
                           feature-worktree)
         (%make-server-dispatch-helper-fixture)
       (let ((conn (nerimux::%make-client-conn))
+            (inactive (nerimux::%make-client-conn))
             (other-conn (nerimux::%make-client-conn))
             (nerimux::*clients* nil)
             (nerimux::*dirty* nil)
@@ -436,6 +437,57 @@
       (expect (null (nerimux::%client-selected-repository conn)))
       (expect (null (nerimux::%client-selected-organization conn)))
       (expect (null (nerimux::%client-operation-worktree conn)))))
+
+  (it "resolves-workspace-identifiers-and-guards-inactive-notifications"
+    (multiple-value-bind (organizations organization repository main-worktree
+                          feature-worktree)
+        (%make-server-dispatch-helper-fixture)
+      (let ((conn (nerimux::%make-client-conn))
+            (inactive (nerimux::%make-client-conn))
+            (anonymous-organization
+              (nerimux/workspace-model:make-organization
+               :host "origin" :name "team"))
+            (nerimux::*clients* nil)
+            (nerimux::*dirty* nil)
+            (nerimux/vcs::*workspace-organizations* organizations))
+        (expect (eq repository
+                    (nerimux::%workspace-find-repository
+                     "origin/team/repo" organizations)))
+        (expect (eq repository
+                    (nerimux::%workspace-find-repository
+                     "/workspace/repo" organizations)))
+        (expect (eq repository
+                    (nerimux::%workspace-find-repository
+                     repository organizations)))
+        (expect (eq organization
+                    (nerimux::%workspace-find-organization
+                     "team" organizations)))
+        (expect (eq anonymous-organization
+                    (nerimux::%workspace-find-organization
+                     "origin/team" (list anonymous-organization))))
+        (expect (eq organization
+                    (nerimux::%workspace-find-organization
+                     organization organizations)))
+        (expect (eq main-worktree
+                    (nerimux::%workspace-find-tree-object
+                     "main-id" organizations)))
+        (expect (eq repository
+                    (nerimux::%workspace-find-tree-object
+                     "repo-id" organizations)))
+        (expect (string= "feature-value"
+                         (nerimux::%client-positional-branch
+                          '("--branch" "main" "feature-value"))))
+        (expect (string= "path-value"
+                         (nerimux::%client-positional-branch
+                          '("--path" "/tmp/path" "path-value"))))
+        (setf nerimux::*clients* (list conn))
+        (expect (string= "inactive"
+                         (nerimux::%client-notify inactive "inactive")))
+        (expect (null (nerimux::client-conn-message-log inactive)))
+        (expect (null nerimux::*dirty*))
+        (expect (eq feature-worktree
+                    (nerimux::%client-operation-worktree conn
+                                                          "feature-id"))))))
 
   (it "parses-payloads-and-transitions-client-modes"
     (let ((conn (nerimux::%make-client-conn))
