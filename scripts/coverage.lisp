@@ -140,7 +140,7 @@
                                 relative-path))))
                  *coverage-excluded-source-files*))
        (report-dir (uiop:ensure-directory-pathname
-                    (or (second sb-ext:*posix-argv*) "coverage-report/")))
+                    (or (third sb-ext:*posix-argv*) "coverage-report/")))
        (report-index (merge-pathnames "cover-index.html" report-dir))
        (enforce-thresholds-p
          (not (string= "1" (or (uiop:getenv "NERIMUX_COVERAGE_REPORT_ONLY") "")))))
