@@ -1641,6 +1641,22 @@
                     (nerimux::%select-client-tree-relative conn 1)))
         (expect (= 1 (nerimux::client-conn-tree-scroll conn))))))
 
+  (it "tree-relative-selection-keeps-narrow-view-scroll-in-range"
+    (multiple-value-bind (organizations organization repository main-worktree
+                          feature-worktree)
+        (%make-server-dispatch-helper-fixture)
+      (declare (ignorable organization repository main-worktree feature-worktree))
+      (let ((conn (nerimux::%make-client-conn))
+            (nerimux/vcs::*workspace-organizations* organizations)
+            (nerimux::*dirty* nil))
+        (setf (nerimux::client-conn-rows conn) 1
+              (nerimux::client-conn-tree-scroll conn) 3)
+        (nerimux::%set-client-selected-tree-object conn :repositories)
+        (nerimux::%select-client-tree-relative conn -1)
+        (expect (zerop (nerimux::client-conn-tree-scroll conn)))
+        (nerimux::%select-client-tree-relative conn 3)
+        (expect (= 3 (nerimux::client-conn-tree-scroll conn))))))
+
   ;; J moves the selection to the next :SECTION header row only, skipping
   ;; every worktree/repository row in between.
   (it "J-jumps-the-selection-forward-to-the-next-section-header"
