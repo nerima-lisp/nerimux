@@ -139,12 +139,12 @@
              (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
              (refresh-fn (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async))
              (conn (nerimux::%make-client-conn))
+             (nerimux::*clients* (list conn))
              (captured-on-error nil)
              (received-error nil))
         (unwind-protect
              (progn
-               (setf nerimux::*clients* (list conn)
-                     (fdefinition 'nerimux/vcs:vcs-package-available-p)
+               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
                      (lambda () t)
                      (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async)
                      (lambda (&key on-error &allow-other-keys)
