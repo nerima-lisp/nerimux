@@ -1,13 +1,5 @@
 (in-package #:nerimux)
 
-(defvar *bound-socket-path*
-  nil
-  "The socket path this server actually bound, or NIL in standalone mode.")
-
-(defvar *runtime-server-name*
-  "default"
-  "Name used to select the server's persistent runtime snapshot.")
-
 ;;;; Detach-attach server: socket serve-loop.
 ;;;;
 ;;;; The server owns the session, PTYs, and per-pane reader threads, and serves
@@ -137,10 +129,6 @@
    inside the per-UID socket directory (§1.4). No -L/-S override exists —
    R1.17 removed the CLI flags that could set one."
   (format nil "~A/nerimux-~A.sock" (%socket-directory) name))
-
-(defconstant +status-line-rows+
-  1
-  "Rows the status bar occupies. Fixed at 1 (§1.4 — no `status' option).")
 
 (defun %relayout-active-window (session rows cols)
   "Relayout SESSION's active window for ROWS and COLS, if any."

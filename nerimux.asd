@@ -148,6 +148,7 @@
        (:file "runtime-reader-data")  ; PTY reader shared state
        (:file "runtime-reader")       ; PTY reader CPS state machine
        (:file "session-registry")  ; lookup for the one session the server owns
+       (:file "server-data")
        (:file "server")
        (:file "workspace-window") ; workspace window creation
        (:file "server-multi-data") ; multi-client data declarations
@@ -170,6 +171,7 @@
        (:file "server-multi-dispatch-command-input-mode") ; command mode and tree navigation
        (:file "server-multi-dispatch-command-input") ; client input and command entry
        (:file "server-multi-dispatch-command-input-keymap") ; NIL-modal UI keymap
+       (:file "server-multi-dispatch-tree-filter-data") ; tree-filter declarations
        (:file "server-multi-dispatch-tree-filter") ; tree-filter input mode
        (:file "server-multi-dispatch-command") ; final command dispatcher
        (:file "server-multi-state") ; mutable multi-client and workspace state

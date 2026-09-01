@@ -9,10 +9,6 @@
       (%mark-dirty)
       t)))
 
-(defconstant +max-tree-filter-length+
-  256
-  "Hard cap on the tree-filter query length.")
-
 (defun %client-tree-filter-buffer-append (conn payload)
   "Append printable input to the tree filter, within its fixed cap."
   (let ((text (%client-payload-text payload))
