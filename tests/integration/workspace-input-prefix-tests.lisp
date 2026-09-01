@@ -341,6 +341,25 @@
         (nerimux::%workspace-prefix-unzoom window)
         (expect (not (nerimux/window:window-zoom-p window))))))
 
+  (it "r5-6-prefix-cycle-reports-a-single-worktree-window"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (message nil)
+             (window (first (nerimux/session:session-windows s)))
+             (pane (nerimux/window:window-active-pane window))
+             (worktree
+               (nerimux/workspace-model:make-worktree
+                :id "wt" :path "/tmp/wt" :branch "main")))
+        (nerimux/pane:worktree-add-pane worktree pane)
+        (nerimux::%set-client-focus conn pane)
+        (with-stubbed-fdefinition
+            ((nerimux::%client-notify
+              (lambda (connection text)
+                (declare (ignore connection))
+                (setf message text))))
+          (expect (null (nerimux::%workspace-prefix-cycle-window s conn 1))))
+        (expect (search "no other window" message)))))
+
   (it "r5-7-prefix-open-status-steps-out-from-the-status-view"
     (with-fake-session (s :nwindows 0)
       (let ((conn (%make-test-conn)))
