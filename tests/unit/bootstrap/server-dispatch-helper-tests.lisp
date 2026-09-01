@@ -1534,4 +1534,19 @@
         (expect (nerimux::%handle-client-input-key-payload session conn "x")))
       (expect (search "input failed:"
                       (first (nerimux::client-conn-message-log conn))))
+      (expect nerimux::*dirty*)))
+
+  (it "feeds-input-to-the-screen-after-pane-exit"
+    (let* ((session (nerimux/session:make-session :id 1 :name "test"))
+           (conn (nerimux::%make-client-conn))
+           (screen (nerimux/terminal:make-screen 5 2))
+           (pane (nerimux/pane:make-pane :fd -1 :screen screen))
+           (nerimux::*clients* (list conn))
+           (nerimux::*dirty* nil))
+      (setf (nerimux::client-conn-stdin-target conn) pane)
+      (expect (nerimux::%handle-client-input-key-payload
+               session conn (vector (char-code #\A))))
+      (expect (char= #\A (nerimux/terminal:cell-char
+                          (nerimux/terminal:screen-cell screen 0 0))))
+      (expect (null (nerimux::client-conn-message-log conn)))
       (expect nerimux::*dirty*))))
