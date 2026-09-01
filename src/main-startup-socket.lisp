@@ -3,19 +3,6 @@
 
 (declaim (notinline nerimux/net:connect-to nerimux/net:close-socket))
 
-(defconstant +server-socket-poll-interval-seconds+
-  0.1
-  "Seconds between socket-existence probes while waiting for a server to start.")
-
-(defconstant +server-socket-poll-max-iterations+
-  30
-  "Maximum number of socket-existence probes (30 x 0.1 s = 3 s total wait).")
-
-(defconstant +server-log-rotate-bytes+
-  (* 1024 1024)
-  "Server log rotation threshold (§1.4 / R2.8): a log at or above this size is
-   replaced with a fresh file at startup instead of appended to.")
-
 (defun %server-log-if-output-exists-action (log-path)
   "The SB-EXT:RUN-PROGRAM :if-output-exists action for LOG-PATH: :supersede
    (start a fresh file) when the existing log is at least
@@ -31,14 +18,6 @@
       :append)
     (stream-error ()
       :append)))
-
-(defmacro %with-unavailable-socket-as-nil (&body body)
-  "Evaluate BODY as NIL when the socket cannot be inspected or reached."
-  `(handler-case (progn ,@body)
-     (sb-ext:timeout () nil)
-     (sb-bsd-sockets:socket-error () nil)
-     (file-error () nil)
-     (stream-error () nil)))
 
 (defun %stale-socket-p (socket-path)
   "True when SOCKET-PATH exists but no server accepts connections on it.

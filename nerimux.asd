@@ -177,6 +177,8 @@
        (:file "runtime-lifecycle") ; per-server state directory and log path
        (:file "client")
        (:file "main-startup-flags") ; global cl-cli flag definitions
+       (:file "main-startup-socket-data") ; startup timing and log policy
+       (:file "main-startup-socket-macros") ; startup socket error boundary
        (:file "main-startup-socket") ; socket discovery + server auto-start helpers
        (:file "main-startup-data") ; startup mode metadata
        (:file "main-startup-commands") ; attach/version/usage handlers
