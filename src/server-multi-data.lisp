@@ -1,5 +1,7 @@
 (in-package #:nerimux)
 
+(defconstant +max-clients+ 32)
+
 (defparameter +client-ui-modes+
   '(:normal :input :copy :command :picker :tree-filter))
 

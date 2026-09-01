@@ -231,50 +231,6 @@
   (t :drop))
 
 ;;; ── Connection lifecycle ────────────────────────────────────────────────────
-(defconstant +max-clients+
-  32
-  "Hard cap on the number of simultaneously registered *CLIENTS* entries.
-
-   Bounds *CLIENTS* growth against a same-uid runaway loop that opens
-   connections and never closes them, so unbounded fd consumption cannot take
-   down the shared select(2) serve loop.  %ADD-CLIENT refuses the newest
-   connection at the cap rather than closing the eldest registered one:
-   close-eldest could evict a live attached client to make room for a probe.
-
-   Recovery is no longer partial the way it once was.  A connection that
-   CLOSES -- with or without ever sending a byte first, e.g. %STALE-SOCKET-P's
-   connect-then-close liveness probe (main-startup-socket.lisp) run on every
-   `nerimux attach` -- is reclaimed promptly: either SELECT-FDS reports its fd
-   ready (the peer's EOF is itself a readiness event) and READ-FRAME's EOF
-   drops it, or the next dirty-frame broadcast's write to it fails and
-   %DROP-CLIENT does.  %DROP-CLIENT now closes with :ABORT T
-   (NERIMUX/NET:CLOSE-SOCKET), which matters here because a broadcast write
-   failing mid-frame leaves the tail of that frame buffered in the fd-stream:
-   an ordinary (non-abort) close tries to flush that tail before releasing the
-   fd, hits BROKEN-PIPE a second time against the same dead peer, and --
-   confirmed on SBCL 2.6.6 -- never reaches its own UNIX-CLOSE, so the fd
-   leaked forever even though *CLIENTS* bookkeeping looked perfectly clean.
-   :ABORT T skips that flush, so a peer that is already gone cannot make the
-   close of THIS end's own fd fail.
-
-   One narrower case still holds a slot past the cap's help: a connection
-   that is accepted and then neither closes NOR ever sends anything AND is
-   never written to, because *DIRTY* never turns true again (no keystroke, no
-   pane output, on any client, session-wide) after it was registered.  With
-   no EOF to make it SELECT-ready and no broadcast to time out against, its
-   slot is held until either some other activity marks the session dirty
-   (which then reclaims it exactly as above) or the server restarts.  Reaching
-   that state needs a connection that is opened and then left hanging open on
-   an otherwise completely idle session -- narrower than a client that simply
-   disconnects, and not what %STALE-SOCKET-P or a normal attach/detach cycle
-   does.  If that residual trade stops being acceptable, the fix is an
-   idle-registration timer that drops a conn N seconds after %ADD-CLIENT
-   unless a first frame completed.
-
-   A `nerimux kill` arriving while capped is refused like any other
-   connection -- it cannot be told apart at accept time -- and reports
-   \"no reply from server\" promptly rather than hanging.")
-
 (defun %add-client (socket)
   "Register SOCKET as a new client: build its CLIENT-CONN and mark
    the screen dirty so the new client gets an immediate paint.  Returns the
