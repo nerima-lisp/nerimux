@@ -1100,6 +1100,24 @@
         (expect (gethash (list :repository (nerimux/workspace-model:repository-id repository))
                          nerimux::*workspace-expanded-node-ids*)))))
 
+  (it "h-and-l-toggle-the-selected-organization-row"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/workspace-model:make-organization
+                :id "org-hl" :host "github.com" :name "team"))
+             (conn (%make-test-conn))
+             (nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal)))
+        (setf (nerimux::client-conn-view conn) :repolist)
+        (nerimux::%set-client-selected-tree-object conn organization)
+        (nerimux::%client-tree-collapse-selected conn)
+        (expect (gethash (list :organization
+                               (nerimux/workspace-model:organization-id organization))
+                         nerimux::*workspace-collapsed-node-ids*))
+        (nerimux::%client-tree-expand-selected conn)
+        (expect (null (gethash (list :organization
+                                     (nerimux/workspace-model:organization-id organization))
+                               nerimux::*workspace-collapsed-node-ids*))))))
+
   ;; J/K (uppercase, byte-driven "jump across section headers") are retired
   ;; (contract §2's removal list); the same jump is now M-n/M-p, confirmed
   ;; against *CLIENT-META-PENDING*/%CLIENT-META-PENDING-CONSUME
