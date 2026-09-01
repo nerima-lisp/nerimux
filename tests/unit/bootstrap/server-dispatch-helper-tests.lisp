@@ -731,6 +731,30 @@
       (expect (null (nerimux::client-conn-command-return-view conn)))
       (expect (null (nerimux::client-conn-modal conn)))))
 
+  (it "search-submit-reports-empty-terms-before-searching"
+    (let* ((session (nerimux/session:make-session :id 1 :name "test"))
+           (conn (nerimux::%make-client-conn))
+           (pane (make-no-pty-pane 1 0 0 4 4))
+           (messages nil)
+           (searches 0))
+      (nerimux::%set-client-view conn :status)
+      (nerimux::%set-client-modal conn :command)
+      (with-stubbed-fdefinition
+          ((nerimux::%resolve-client-focus-pane
+             (lambda (&rest arguments) (declare (ignore arguments)) pane))
+           (nerimux::copy-mode-search-forward
+             (lambda (&rest arguments) (declare (ignore arguments))
+               (incf searches)))
+           (nerimux::%client-notify
+             (lambda (connection message)
+               (declare (ignore connection))
+               (push message messages))))
+        (nerimux::%submit-client-search session conn :forward '("  ")))
+      (expect (equal '("search term is empty") messages))
+      (expect (= 0 searches))
+      (expect (eq :status (nerimux::client-conn-view conn)))
+      (expect (null (nerimux::client-conn-modal conn)))))
+
   ;; Magit alignment (contract §2, "KEYS THAT NO LONGER EXIST"): d, o, and i
   ;; are all retired from the UI keymap -- d/o used to flip client-conn-view
   ;; between :overview and :detail directly, and i (%client-enter-input-mode,
