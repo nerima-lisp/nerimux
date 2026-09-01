@@ -47,6 +47,15 @@
             main-worktree
             feature-worktree)))
 
+(defmacro with-server-dispatch-helper-fixture ((organizations organization
+                                                repository main-worktree
+                                                feature-worktree)
+                                               &body body)
+  `(multiple-value-bind (,organizations ,organization ,repository
+                        ,main-worktree ,feature-worktree)
+       (%make-server-dispatch-helper-fixture)
+     ,@body))
+
 (describe "server-dispatch-helper-suite"
 
   ;;; -- with-loop-safe-error containment ---------------------------------------
@@ -1694,9 +1703,8 @@
                    (nerimux::%tree-selection-scroll next scroll visible))))))
 
   (it "tree-relative-selection-clamps-backward-movement-without-selection"
-    (multiple-value-bind (organizations organization repository main-worktree
-                          feature-worktree)
-        (%make-server-dispatch-helper-fixture)
+    (with-server-dispatch-helper-fixture
+        (organizations organization repository main-worktree feature-worktree)
       (declare (ignorable organization repository main-worktree feature-worktree))
       (let ((conn (nerimux::%make-client-conn))
             (nerimux/vcs::*workspace-organizations* organizations)
@@ -1709,9 +1717,8 @@
         (expect (zerop (nerimux::client-conn-tree-scroll conn))))))
 
   (it "tree-relative-selection-starts-at-the-first-row-for-forward-movement"
-    (multiple-value-bind (organizations organization repository main-worktree
-                          feature-worktree)
-        (%make-server-dispatch-helper-fixture)
+    (with-server-dispatch-helper-fixture
+        (organizations organization repository main-worktree feature-worktree)
       (declare (ignorable organization repository main-worktree feature-worktree))
       (let ((conn (nerimux::%make-client-conn))
             (nerimux/vcs::*workspace-organizations* organizations)
