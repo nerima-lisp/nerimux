@@ -1340,6 +1340,18 @@
         (expect (eq :pane (nerimux::client-conn-view conn)))
         (expect nerimux::*dirty*))))
 
+  (it "enter-on-an-inline-diff-row-is-a-no-op"
+    (let ((conn (nerimux::%make-client-conn))
+          (nerimux::*dirty* nil))
+      (dolist (object '((:file "README.md")
+                        (:commit "abc123")
+                        (:diff-line 12)
+                        (:diff-more)))
+        (nerimux::%set-client-selected-tree-object conn object)
+        (setf nerimux::*dirty* nil)
+        (expect (nerimux::%focus-selected-client-worktree nil conn))
+        (expect (null nerimux::*dirty*)))))
+
   ;; Section-based redesign: a worktree row has no expand state of its own
   ;; any more (a later wave adds inline detail) -- h/l on one is a no-op,
   ;; not a jump to its owning repository the way the pre-redesign collapse
