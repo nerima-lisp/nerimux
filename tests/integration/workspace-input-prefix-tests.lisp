@@ -449,6 +449,7 @@
             (fetch (fdefinition 'nerimux/vcs:fetch-organization-async))
             (refresh (fdefinition 'nerimux::%refresh-client-picker))
             (notify (fdefinition 'nerimux::%client-notify))
+            (completion-callback nil)
             (error-callback nil)
             (refreshed nil)
             (messages nil))
@@ -477,12 +478,16 @@
                      (lambda (organization &key on-complete on-error
                                         callback-dispatch)
                        (declare (ignore organization callback-dispatch))
-                       (funcall on-complete nil)
+                       (setf completion-callback on-complete)
+                       (funcall on-complete (list :repository))
                        (setf error-callback on-error)))
                (let ((organization (nerimux/workspace-model:make-organization
                                     :id "org" :host "github.com" :name "team")))
                  (nerimux::%set-client-selected-tree-object conn organization)
                  (nerimux::%workspace-prefix-fetch-organization conn)
+                 (expect refreshed)
+                 (expect (search "fetch complete" (first messages)))
+                 (funcall completion-callback nil)
                  (expect (search "already in progress" (first messages)))
                  (funcall error-callback
                           (nerimux/workspace-model:make-repository
