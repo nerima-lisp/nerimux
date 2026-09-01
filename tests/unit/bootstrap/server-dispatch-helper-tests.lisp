@@ -1709,6 +1709,7 @@
                    (nil (a b) -1 0)
                    (stale (a b) -1 0)
                    (stale (a b) 1 -1)
+                   (a (a b) 1 1)
                    (b (a b) 1 1)))
       (destructuring-bind (current objects delta expected) case
         (expect (= expected
@@ -1717,6 +1718,7 @@
                    (8 3 5 3)
                    (10 0 5 6)
                    (0 3 5 0)
+                   (3 3 5 3)
                    (2 3 5 2)))
       (destructuring-bind (next scroll visible expected) case
         (expect (= expected
