@@ -493,6 +493,28 @@
       (expect (eq :repolist (nerimux::client-conn-view conn)))
       (expect (null (nerimux::client-conn-modal conn)))))
 
+  (it "submitting-a-command-reports-tokenizer-failures-and-cleans-up"
+    (let ((session (nerimux/session:make-session :id 1 :name "test"))
+          (conn (nerimux::%make-client-conn))
+          (messages nil))
+      (setf (nerimux::client-conn-command-buffer conn) "broken input")
+      (nerimux::%set-client-view conn :command)
+      (nerimux::%set-client-modal conn :command)
+      (with-stubbed-fdefinition
+          ((nerimux/commands:tokenize-command-string
+             (lambda (input)
+               (declare (ignore input))
+               (error "tokenizer failure")))
+           (nerimux::%client-notify
+             (lambda (connection message)
+               (declare (ignore connection))
+               (push message messages))))
+        (expect (nerimux::%submit-client-command session conn)))
+      (expect (equal '("command failed: tokenizer failure") messages))
+      (expect (string= "" (nerimux::client-conn-command-buffer conn)))
+      (expect (eq :repolist (nerimux::client-conn-view conn)))
+      (expect (null (nerimux::client-conn-modal conn)))))
+
   (it "computes-copy-mode-half-page-with-a-one-row-minimum"
     (let ((one-row-pane (nerimux/pane:make-pane
                          :id 1 :screen (make-screen 10 1)))
