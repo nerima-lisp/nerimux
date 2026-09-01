@@ -715,6 +715,28 @@
         (expect (= 1 selections))
         (expect (equal '("no worktree selected") notifications)))))
 
+  (it "status-commands-report-missing-selection-through-one-contract"
+    (let ((conn (nerimux::%make-client-conn))
+          (notifications nil))
+      (with-stubbed-fdefinition
+          ((nerimux::%client-notify
+             (lambda (connection message)
+               (declare (ignore connection))
+               (push message notifications)))
+           (nerimux::%client-selected-status-file
+             (lambda (connection)
+               (declare (ignore connection))
+               nil)))
+        (dolist (command (list #'nerimux::%client-stage-selection
+                               #'nerimux::%client-stage-all
+                               #'nerimux::%client-unstage-selection
+                               #'nerimux::%client-unstage-all
+                               #'nerimux::%client-start-discard-selection))
+          (funcall command conn))
+        (expect (= 5 (length notifications)))
+        (expect (= 3 (count "select a file first" notifications :test #'string=)))
+        (expect (= 2 (count "no worktree selected" notifications :test #'string=))))))
+
   (it "workspace-refresh-command-wires-completion-and-error-notifications"
     (let ((conn (nerimux::%make-client-conn))
           (notifications nil)
