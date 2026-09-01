@@ -2297,10 +2297,33 @@
                                    (string=
                                     "feature/errors -> origin/feature/errors"
                                     (nerimux::%transient-subtitle #\P conn)))
-                                  (expect
-                                   (string= "on feature/errors"
-                                            (nerimux::%transient-subtitle #\x
-                                                                          conn))))))))
+                                (expect
+                                 (string= "on feature/errors"
+                                          (nerimux::%transient-subtitle #\x
+                                                                        conn))))))))
+          (it "records transient write failures through the shared process log"
+              (with-fake-session (s)
+                (let ((conn (%make-test-conn))
+                      (nerimux::*clients* nil))
+                  (setf nerimux::*clients* (list conn))
+                  (multiple-value-bind (repository ignored-worktree ignored-conn)
+                      (%make-worktree-operation-fixture)
+                    (declare (ignore ignored-worktree ignored-conn))
+                    (nerimux::%set-client-selected-tree-object conn repository)
+                    (with-stubbed-fdefinition
+                        ((nerimux/vcs:vcs-package-available-p (lambda () t))
+                         (nerimux/vcs:git-write-operation-async
+                           (lambda (received operation args &key on-complete on-error
+                                            callback-dispatch)
+                             (declare (ignore received operation args on-complete
+                                                     callback-dispatch))
+                             (funcall on-error (make-condition 'simple-error
+                                                               :format-control "boom")))))
+                      (nerimux::%run-transient-git-action conn #\P :push nil nil nil)
+                      (expect (equal '("git push" "1" "boom")
+                                     (first (nerimux::client-conn-process-log conn))))
+                      (expect (string= "git push: failed: boom"
+                                       (first (nerimux::client-conn-message-log conn)))))))))
 
 (describe "client frame dispatch contract suite"
           (it "renders every modal and base view through one frame boundary"
