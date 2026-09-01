@@ -76,7 +76,6 @@
                      #:repository-missing-p
                      #:repository-organization
                      #:repository-p
-                     #:repository-path
                      #:repository-recompute-status
                      #:repository-remote
                      #:repository-specification

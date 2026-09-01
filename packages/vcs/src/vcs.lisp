@@ -505,10 +505,10 @@ which is what let a per-repository failure mark the ENTIRE catalog stale."
 (defun %read-repository-worktrees (repository)
   (let ((backend-repository
          (%make-vcs-repository
-          (nerimux/workspace-model:repository-path repository))))
+          (nerimux/workspace-model:repository-local-path repository))))
     (values (vcs-kit:vcs-list-worktrees backend-repository)
             (%path-missing-p
-             (nerimux/workspace-model:repository-path repository)))))
+             (nerimux/workspace-model:repository-local-path repository)))))
 
 (defun %apply-repository-worktrees
     (repository raw-worktrees missing-p &optional status-updates)
@@ -622,7 +622,7 @@ which is what let a per-repository failure mark the ENTIRE catalog stale."
   (setf (nerimux/workspace-model:repository-missing-p repository) (if missing-p-p
                                                                       missing-p
                                                                       (%path-missing-p
-                                                                       (nerimux/workspace-model:repository-path
+                                                                       (nerimux/workspace-model:repository-local-path
                                                                         repository))))
   (nerimux/workspace-model:repository-recompute-status repository)
   repository)
@@ -633,7 +633,7 @@ which is what let a per-repository failure mark the ENTIRE catalog stale."
     (%apply-worktree-status repository (%read-worktree-status worktree))
     (when repository
       (setf (nerimux/workspace-model:repository-missing-p repository) (%path-missing-p
-                                                                       (nerimux/workspace-model:repository-path
+                                                                       (nerimux/workspace-model:repository-local-path
                                                                         repository)))
       (nerimux/workspace-model:repository-recompute-status repository))
     worktree))

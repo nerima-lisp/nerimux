@@ -133,7 +133,7 @@ column, worktree side) -- magit's unstaged section (Unit MODEL)."
     (%read-worktree-status-at (nerimux/workspace-model:worktree-path worktree)
                               (nerimux/workspace-model:worktree-head worktree)
                               (and repository
-                                   (nerimux/workspace-model:repository-path
+                                   (nerimux/workspace-model:repository-local-path
                                     repository)))))
 
 (defun %apply-worktree-status (repository update)

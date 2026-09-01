@@ -150,11 +150,11 @@ PATH, when given, is used verbatim. Otherwise the path is fixed to
   (or (and path (%string-value path))
       (%unique-worktree-path
        (%ensure-trailing-slash
-        (%string-value (nerimux/workspace-model:repository-path repository)))
+        (%string-value (nerimux/workspace-model:repository-local-path repository)))
        (format nil "~A-~A" (%timestamp-token) start-point-short-sha))))
 
 (defun %repository-backend (repository)
-  (%make-vcs-repository (nerimux/workspace-model:repository-path repository)))
+  (%make-vcs-repository (nerimux/workspace-model:repository-local-path repository)))
 
 (defun %repository-checked-handle (repository)
   ;; git-rev-parse-value, and every %DEFINE-CHECKED-OPERATION-generated git
@@ -166,7 +166,7 @@ PATH, when given, is used verbatim. Otherwise the path is fixed to
   ;; creation a no-op the first time this was gotten wrong -- see
   ;; vcs-kit-two-repository-types-trap.
   (vcs-kit:make-repository
-   (%string-value (nerimux/workspace-model:repository-path repository))))
+   (%string-value (nerimux/workspace-model:repository-local-path repository))))
 
 (defun %rev-parse (repository &rest arguments)
   (apply #'vcs-kit:git-rev-parse-value
@@ -525,7 +525,7 @@ stays non-destructive instead of silently forwarding a false DRY-RUN."
                                       collect (%read-worktree-status-at
                                                (vcs-kit:vcs-worktree-path raw)
                                                (vcs-kit:vcs-worktree-head raw)
-                                               (nerimux/workspace-model:repository-path
+                                               (nerimux/workspace-model:repository-local-path
                                                 repository))))))
 
 (defun %apply-repository-refresh (repository refresh)

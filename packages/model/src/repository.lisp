@@ -78,6 +78,3 @@
                       behind
                       :missing-p
                       (not (null missing-p)))))
-
-(defun repository-path (repository)
-  (repository-local-path repository))
