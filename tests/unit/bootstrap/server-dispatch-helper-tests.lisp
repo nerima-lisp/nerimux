@@ -1476,3 +1476,33 @@
     (expect (null (nerimux::%client-search-direction "unknown")))
     (expect (string= "needle with spaces"
                      (nerimux::%client-search-term '("  needle" "with" "spaces  "))))))
+
+(describe "client-dispatch-boundaries"
+  (it "consumes exactly the requested escape suffix"
+    (let ((conn (nerimux::%make-client-conn)))
+      (nerimux::%client-esc-swallow-start conn 1)
+      (expect (nerimux::%client-esc-swallow-consume conn))
+      (expect (null (nerimux::%client-esc-swallow-consume conn)))
+      (nerimux::%client-esc-swallow-start conn 2)
+      (expect (nerimux::%client-esc-swallow-consume conn))
+      (expect (nerimux::%client-esc-swallow-consume conn))
+      (expect (null (nerimux::%client-esc-swallow-consume conn)))))
+
+  (it "only claims one-byte workspace prefix payloads"
+    (let ((session (nerimux/session:make-session :id 1 :name "test"))
+          (conn (nerimux::%make-client-conn)))
+      (multiple-value-bind (handled result)
+          (nerimux::%handle-workspace-prefix-key session conn #(17 18))
+        (expect (null handled))
+        (expect (null result)))
+      (multiple-value-bind (handled result)
+          (nerimux::%handle-workspace-prefix-key session conn "Q")
+        (expect (null handled))
+        (expect (null result)))
+      (multiple-value-bind (handled result)
+          (nerimux::%handle-workspace-prefix-key
+           session conn
+           (vector (nerimux::client-conn-workspace-prefix-code conn)))
+        (expect handled)
+        (expect (null result))
+        (expect (nerimux::client-conn-ui-prefix-p conn))))))
