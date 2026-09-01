@@ -1664,11 +1664,13 @@
       (let ((nerimux/vcs::*workspace-organizations* (list organization))
             (nerimux::*dirty* nil))
         (setf (nerimux::client-conn-rows conn) 1)
-        (expect (eq first-worktree
-                    (nerimux::%select-client-tree-relative conn 1)))
+        (nerimux::%set-client-selected-tree-object conn first-worktree)
         (expect (eq second-worktree
                     (nerimux::%select-client-tree-relative conn 1)))
-        (expect (= 2 (nerimux::client-conn-tree-scroll conn))))))
+        (setf (nerimux::client-conn-tree-scroll conn) 3)
+        (expect (eq first-worktree
+                    (nerimux::%select-client-tree-relative conn -1)))
+        (expect (= 1 (nerimux::client-conn-tree-scroll conn))))))
 
   (it "tree-relative-selection-adjusts-scroll-for-a-narrow-view"
     (multiple-value-bind (organizations organization repository main-worktree
