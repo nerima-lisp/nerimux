@@ -80,6 +80,21 @@
       (expect (eq :drop (nerimux::%handle-multi-client-message nil #() s (%make-test-conn))))
       (expect (eq :drop (nerimux::%handle-multi-client-message 99 #() s (%make-test-conn))))))
 
+  (it "workspace-prefix-dispatch-has-total-input-contract"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn)))
+        (setf (nerimux::client-conn-modal conn) :command)
+        (expect (null (nerimux::%workspace-prefix-dispatch s conn :not-a-byte)))
+        (expect (null (nerimux::%workspace-prefix-dispatch s conn 255)))
+        (expect (eq :command (nerimux::client-conn-modal conn)))
+        (expect (null
+                 (nerimux::%workspace-prefix-dispatch
+                  s conn (nerimux::client-conn-workspace-prefix-code conn))))
+        (expect (null (nerimux::client-conn-modal conn)))
+        (expect (eq :drop
+                    (nerimux::%workspace-prefix-dispatch
+                     s conn (char-code #\d)))))))
+
   ;; Rewritten for the magit-alignment key model (contract §1/§2/§5): `i`/
   ;; :input/:normal and the bare `c` -> copy-mode are retired, so this test
   ;; no longer walks through them. Getting a pane focused with keys already
