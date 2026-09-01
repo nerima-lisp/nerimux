@@ -1384,6 +1384,19 @@
         (expect (nerimux::%client-tree-collapse-selected conn))
         (expect (null (gethash repo-key nerimux::*workspace-expanded-node-ids*))))))
 
+  (it "h-and-l-toggle-a-section-row"
+    (let ((nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
+          (nerimux::*dirty* nil)
+          (conn (nerimux::%make-client-conn)))
+      (nerimux::%set-client-selected-tree-object conn :repositories)
+      (expect (nerimux::%client-tree-collapse-selected conn))
+      (expect (gethash (list :section :repositories)
+                       nerimux::*workspace-collapsed-node-ids*))
+      (expect (nerimux::%client-tree-expand-selected conn))
+      (expect (null (gethash (list :section :repositories)
+                             nerimux::*workspace-collapsed-node-ids*)))
+      (expect nerimux::*dirty*))
+
   (it "h-and-l-still-toggle-a-directly-selected-organization-row"
     ;; Organizations no longer appear in the overview tree itself, but the
     ;; collapse/expand handlers still special-case one if a caller selects
@@ -1679,4 +1692,4 @@
                         (nerimux/terminal:cell-char
                          (nerimux/terminal:screen-cell screen 0 0))))
                 (expect (null (nerimux::client-conn-message-log conn)))
-                (expect nerimux::*dirty*))))
+                (expect nerimux::*dirty*)))))
