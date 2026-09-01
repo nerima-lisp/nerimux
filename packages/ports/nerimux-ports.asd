@@ -17,9 +17,7 @@
   :depends-on ()
   :pathname "src"
   :serial t
-  :components ((:file "package")
-               (:file "posix-port")
-               (:file "pty-port"))
+  :components ((:file "package") (:file "posix-port") (:file "pty-port"))
   :in-order-to ((test-op (test-op "nerimux-ports/test"))))
 
 (defsystem "nerimux-ports/test"

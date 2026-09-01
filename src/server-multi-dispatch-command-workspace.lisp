@@ -4,8 +4,10 @@
   (member mode +client-ui-modes+ :test #'eq))
 
 (defun %client-ui-mode-value (value)
-  (let ((name (cond ((stringp value) value)
-                    ((symbolp value) (symbol-name value)))))
+  (let ((name
+         (cond
+           ((stringp value) value)
+           ((symbolp value) (symbol-name value)))))
     (when name
       (let ((mode (find-symbol (string-upcase name) :keyword)))
         (and (%client-ui-mode-p mode) mode)))))
@@ -108,12 +110,11 @@
   (let ((window (session-active-window session)))
     (if token
         (and window (find-pane-by-target window token))
-        (or (and conn
-                 (client-conn-focus conn)
-                 (find (client-conn-focus conn)
-                       (all-panes session)
-                       :test #'eq))
-            (and window (window-active-pane window))))))
+        (or
+         (and conn
+              (client-conn-focus conn)
+              (find (client-conn-focus conn) (all-panes session) :test #'eq))
+         (and window (window-active-pane window))))))
 
 (defun %client-enter-copy-mode (session conn)
   (let ((pane (%resolve-client-focus-pane session nil conn)))
@@ -130,8 +131,7 @@
 
 (defun %client-exit-copy-mode (session conn)
   (let ((pane (%resolve-client-focus-pane session nil conn)))
-    (when (and pane (pane-screen pane)
-               (screen-copy-mode-p (pane-screen pane)))
+    (when (and pane (pane-screen pane) (screen-copy-mode-p (pane-screen pane)))
       (copy-mode-exit (pane-screen pane)))
     (%transition-client-ui-mode conn :enter-normal)
     (%mark-dirty)
@@ -140,12 +140,13 @@
 (defun %parse-client-integer (value)
   (and (stringp value)
        (handler-case (parse-integer value)
-         (parse-error () nil))))
+         (parse-error ()
+           nil))))
 
 (defun %move-client-viewport (conn delta)
   (when (integerp delta)
-    (setf (client-conn-viewport conn)
-          (max 0 (+ (client-conn-viewport conn) delta))))
+    (setf (client-conn-viewport conn) (max 0
+                                           (+ (client-conn-viewport conn) delta))))
   (client-conn-viewport conn))
 
 (defun %client-option-value (args names)
@@ -154,18 +155,24 @@
         when (stringp arg)
           do (dolist (name names)
                (when (string-equal arg name)
-                 (return-from %client-option-value (second tail)))
-               (when (and (> (length arg) (length name))
-                          (string-equal name arg :end2 (length name))
-                          (char= (char arg (length name)) #\=))
+                 (return-from %client-option-value
+                   (second tail)))
+               (when 
+                   (and (> (length arg) (length name))
+                        (string-equal name arg :end2 (length name))
+                        (char= (char arg (length name)) #\=))
                  (return-from %client-option-value
                    (subseq arg (1+ (length name))))))))
 
 (defun %client-boolean-option-p (args names)
-  (some (lambda (arg)
-          (and (stringp arg)
-               (some (lambda (name) (string-equal arg name)) names)))
-        args))
+  (some
+   (lambda (arg)
+     (and (stringp arg)
+          (some
+           (lambda (name)
+             (string-equal arg name))
+           names)))
+   args))
 
 (defun %parse-client-key-code (value)
   (cond
@@ -173,13 +180,12 @@
     ((stringp value)
      (let ((text (string-downcase value)))
        (cond
-         ((member text '("c-q" "control-q" "control q") :test #'string=)
-          #x11)
-         ((member text '("c-b" "control-b" "control b") :test #'string=)
-          #x02)
+         ((member text '("c-q" "control-q" "control q") :test #'string=) #x11)
+         ((member text '("c-b" "control-b" "control b") :test #'string=) #x02)
          ((= (length text) 1) (char-code (char text 0)))
          ((handler-case (parse-integer text)
-            (parse-error () nil)))
+            (parse-error ()
+              nil)))
          (t nil))))
     (t nil)))
 
@@ -271,11 +277,15 @@
     t))
 
 (defun %client-notify (conn message)
-  (let ((text (if (stringp message) message (princ-to-string message))))
+  (let ((text
+         (if (stringp message)
+             message
+             (princ-to-string message))))
     (when (%client-live-p conn)
       (let ((log (cons text (client-conn-message-log conn))))
-        (setf (client-conn-message-log conn)
-              (subseq log 0 (min 64 (length log))))
+        (setf (client-conn-message-log conn) (subseq log
+                                                     0
+                                                     (min 64 (length log))))
         (when (client-conn-focus conn)
           (pane-notify (client-conn-focus conn) text))
         (%mark-dirty)))
@@ -289,53 +299,60 @@
          (setf skip-next nil))
         ((and (stringp arg)
               (member arg
-                      '("--branch" "-b" "branch"
-                        "--path" "path")
-                      :test #'string-equal))
+                      '("--branch" "-b" "branch" "--path" "path")
+                      :test
+                      #'string-equal))
          (setf skip-next t))
         ((and (stringp arg)
               (plusp (length arg))
               (char/= (char arg 0) #\-)
-              (not (member arg '("confirm" "force")
-                             :test #'string-equal)))
-         (return-from %client-positional-branch arg))))))
+              (not (member arg '("confirm" "force") :test #'string-equal)))
+         (return-from %client-positional-branch
+           arg))))))
 
-(defun %workspace-find-repository
-    (token &optional (organizations (nerimux/vcs:workspace-organizations)))
+(defun %workspace-find-repository (token &optional
+                                         (organizations
+                                          (nerimux/vcs:workspace-organizations)))
   (when token
     (dolist (organization organizations)
-      (dolist (repository
-                (nerimux/workspace-model:organization-repositories organization))
-        (when (or (eq repository token)
-                  (and (stringp token)
-                       (some (lambda (value)
-                               (and value
-                                    (string= token
-                                             (princ-to-string value))))
-                             (list (nerimux/workspace-model:repository-id repository)
-                                   (nerimux/workspace-model:repository-specification repository)
-                                   (nerimux/workspace-model:repository-local-path repository)
-                                   (nerimux/workspace-model:repository-path repository)))))
-          (return-from %workspace-find-repository repository))))))
+      (dolist 
+          (repository
+           (nerimux/workspace-model:organization-repositories organization))
+        (when 
+            (or (eq repository token)
+                (and (stringp token)
+                     (some
+                      (lambda (value)
+                        (and value (string= token (princ-to-string value))))
+                      (list (nerimux/workspace-model:repository-id repository)
+                            (nerimux/workspace-model:repository-specification
+                             repository)
+                            (nerimux/workspace-model:repository-local-path
+                             repository)
+                            (nerimux/workspace-model:repository-path repository)))))
+          (return-from %workspace-find-repository
+            repository))))))
 
-(defun %workspace-find-organization
-    (token &optional (organizations (nerimux/vcs:workspace-organizations)))
+(defun %workspace-find-organization (token &optional
+                                           (organizations
+                                            (nerimux/vcs:workspace-organizations)))
   (when token
     (find-if
      (lambda (organization)
        (or (eq organization token)
            (and (stringp token)
-                (some (lambda (value)
-                        (and value
-                             (string= token (princ-to-string value))))
-                      (list (nerimux/workspace-model:organization-id organization)
-                            (nerimux/workspace-model:organization-host organization)
-                            (nerimux/workspace-model:organization-name organization)
-                            (%organization-selection-token organization))))))
+                (some
+                 (lambda (value)
+                   (and value (string= token (princ-to-string value))))
+                 (list (nerimux/workspace-model:organization-id organization)
+                       (nerimux/workspace-model:organization-host organization)
+                       (nerimux/workspace-model:organization-name organization)
+                       (%organization-selection-token organization))))))
      organizations)))
 
-(defun %workspace-find-tree-object
-    (token &optional (organizations (nerimux/vcs:workspace-organizations)))
+(defun %workspace-find-tree-object (token &optional
+                                          (organizations
+                                           (nerimux/vcs:workspace-organizations)))
   (cond
     ((typep token 'nerimux/workspace-model:organization) token)
     ((typep token 'nerimux/workspace-model:repository) token)
@@ -344,12 +361,9 @@
      (case (first token)
        (:organization
         (%workspace-find-organization (second token) organizations))
-       (:repository
-        (%workspace-find-repository (second token) organizations))
-       (:worktree
-        (%workspace-find-worktree (second token) organizations))
-       (:section
-        (second token))))
+       (:repository (%workspace-find-repository (second token) organizations))
+       (:worktree (%workspace-find-worktree (second token) organizations))
+       (:section (second token))))
     ((stringp token)
      (or (%workspace-find-worktree token organizations)
          (%workspace-find-repository token organizations)
@@ -370,9 +384,8 @@
        (nerimux/workspace-model:worktree-repository object))
       (nerimux/workspace-model:organization
        (let ((repositories
-               (nerimux/workspace-model:organization-repositories object)))
-         (and (= (length repositories) 1)
-              (first repositories)))))))
+              (nerimux/workspace-model:organization-repositories object)))
+         (and (= (length repositories) 1) (first repositories)))))))
 
 (defun %client-selected-organization (conn &optional target)
   "Resolve the organization C-q C-f should fetch: the selected organization
@@ -382,10 +395,12 @@ the tree (R7.1)."
   (let ((object (%client-context-object conn target)))
     (typecase object
       (nerimux/workspace-model:organization object)
-      (nerimux/workspace-model:repository (nerimux/workspace-model:repository-organization object))
+      (nerimux/workspace-model:repository
+       (nerimux/workspace-model:repository-organization object))
       (nerimux/workspace-model:worktree
        (let ((repository (nerimux/workspace-model:worktree-repository object)))
-         (and repository (nerimux/workspace-model:repository-organization repository)))))))
+         (and repository
+              (nerimux/workspace-model:repository-organization repository)))))))
 
 (defun %client-operation-worktree (conn &optional target)
   (or (%workspace-find-worktree target)
@@ -473,15 +488,17 @@ the tree (R7.1)."
 
 (defun %client-refresh-workspace (conn)
   (%client-notify conn "workspace refresh started")
-  (%refresh-client-picker
-   conn
-   :on-complete (lambda (organizations)
-                  (declare (ignore organizations))
-                  (%client-notify conn "workspace refresh complete"))
-   :on-error (lambda (condition)
-               (%client-notify
-                conn
-                (format nil "workspace refresh failed: ~A" condition))))
+  (%refresh-client-picker conn
+                          :on-complete
+                          (lambda (organizations)
+                            (declare (ignore organizations))
+                            (%client-notify conn "workspace refresh complete"))
+                          :on-error
+                          (lambda (condition)
+                            (%client-notify conn
+                                            (format nil
+                                                    "workspace refresh failed: ~A"
+                                                    condition))))
   t)
 
 (defun %client-rebind-prefix (conn value)
@@ -490,9 +507,7 @@ the tree (R7.1)."
         (progn
           (setf (client-conn-workspace-prefix-code conn) code
                 (client-conn-ui-prefix-p conn) nil)
-          (%client-notify
-           conn
-           (format nil "workspace prefix set to ~D" code))
+          (%client-notify conn (format nil "workspace prefix set to ~D" code))
           t)
         (progn
           (%client-notify conn "invalid workspace prefix key")

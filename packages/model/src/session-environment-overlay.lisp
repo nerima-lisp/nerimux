@@ -4,13 +4,11 @@
 ;;;
 ;;; This file owns the in-session environment overlay: parsing NAME=VALUE
 ;;; strings, validating names, and reading/writing the session's overlay tables.
-
 ;;; ── NAME=VALUE string pair helpers ──────────────────────────────────────────
 ;;;
 ;;; %ENVIRONMENT-ENTRY-NAME lives in session-environment-process.lisp (loaded
 ;;; before this file, and itself a caller) rather than here, to avoid the two
 ;;; files each defining an identical name-parsing helper.
-
 (defun %environment-entry-value (entry)
   "Return the VALUE component of a NAME=VALUE environment ENTRY string, or NIL."
   (let ((eq-pos (position #\= entry)))
@@ -22,7 +20,7 @@
    Entries without '=' are silently skipped."
   (let ((table (make-hash-table :test #'equal)))
     (dolist (entry entries table)
-      (let ((name  (%environment-entry-name  entry))
+      (let ((name (%environment-entry-name entry))
             (value (%environment-entry-value entry)))
         (when (and name value)
           (setf (gethash name table) value))))))
@@ -30,23 +28,20 @@
 (defun %environment-table-to-list (table)
   "Convert TABLE into a sorted list of NAME=VALUE strings (sorted by name)."
   (let (entries)
-    (maphash (lambda (name value)
-               (push (format nil "~A=~A" name value) entries))
-             table)
+    (maphash
+     (lambda (name value)
+       (push (format nil "~A=~A" name value) entries))
+     table)
     (sort entries #'string< :key #'%environment-entry-name)))
 
 ;;; ── %assert-environment-variable-name ───────────────────────────────────────
-
 (defun %assert-environment-variable-name (name)
   "Signal an error when NAME is not a valid POSIX environment variable name.
    A valid name is a non-empty string containing no '=' character."
-  (unless (and (stringp name)
-               (plusp (length name))
-               (not (find #\= name)))
+  (unless (and (stringp name) (plusp (length name)) (not (find #\= name)))
     (error "Invalid environment variable name: ~S" name)))
 
 ;;; ── Session overlay access ───────────────────────────────────────────────────
-
 (defun session-environment-value (session name)
   "Return SESSION's effective value for NAME.
    Returns two values: (value source-keyword) where source-keyword is one of:
@@ -76,10 +71,11 @@
    Includes: update-environment vars that are currently set in the process,
    all names in the session overlay (set and explicitly unset)."
   (let ((names (mapcar #'car (get-update-environment-vars))))
-    (maphash (lambda (name value)
-               (declare (ignore value))
-               (pushnew name names :test #'string=))
-             (session-environment session))
+    (maphash
+     (lambda (name value)
+       (declare (ignore value))
+       (pushnew name names :test #'string=))
+     (session-environment session))
     (dolist (name (session-environment-unsets session))
       (pushnew name names :test #'string=))
     (sort names #'string<)))
@@ -91,12 +87,18 @@
    plain show-environment and from child environments); a plain set (HIDDEN
    not given) clears an existing hidden mark rather than preserving it.
    Returns SESSION."
-  (setf (session-environment-unsets session)
-        (delete name (session-environment-unsets session) :test #'string=))
+  (setf (session-environment-unsets session) (delete name
+                                                     (session-environment-unsets
+                                                      session)
+                                                     :test
+                                                     #'string=))
   (if hidden
       (pushnew name (session-environment-hidden session) :test #'string=)
-      (setf (session-environment-hidden session)
-            (delete name (session-environment-hidden session) :test #'string=)))
+      (setf (session-environment-hidden session) (delete name
+                                                         (session-environment-hidden
+                                                          session)
+                                                         :test
+                                                         #'string=)))
   (setf (gethash name (session-environment session)) value)
   session)
 
@@ -105,12 +107,16 @@
    Removes NAME from the set table (and the hidden list) and adds it to the
    unset list.  Returns SESSION."
   (remhash name (session-environment session))
-  (setf (session-environment-hidden session)
-        (delete name (session-environment-hidden session) :test #'string=))
+  (setf (session-environment-hidden session) (delete name
+                                                     (session-environment-hidden
+                                                      session)
+                                                     :test
+                                                     #'string=))
   (pushnew name (session-environment-unsets session) :test #'string=)
   session)
 
-(defvar *global-hidden-environment-names* nil
+(defvar *global-hidden-environment-names*
+  nil
   "Names marked hidden via set-environment -hg (the hidden flag applied to
    the global environment).  nerimux maps the global environment onto the real
    process environment, so hidden globals are tracked here and stripped from

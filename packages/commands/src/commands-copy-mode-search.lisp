@@ -14,9 +14,7 @@
 ;;;
 ;;; Mapping from (copy-offset, viewport-row) to virtual row:
 ;;;   vrow = sb-count + viewport-row - copy-offset
-
 ;;; ── Matcher factory ──────────────────────────────────────────────────────────
-
 (defun %copy-mode-make-matcher (term)
   "Return a matcher closure (row-string start) → match-start-column (or NIL).
    TERM is compiled as a cl-regex-kit regex; on compile failure falls back to
@@ -35,27 +33,31 @@
    SCAN returns a MATCH-RESULT struct, not cl-ppcre's four values, so the start
    column is read back with MATCH-START rather than taken as the first value."
   (let ((scanner
-          (handler-case (cl-regex-kit:compile-regex term :octal nil)
-            (cl-regex-kit:regex-syntax-error () nil))))
+         (handler-case (cl-regex-kit:compile-regex term :octal nil)
+           (cl-regex-kit:regex-syntax-error ()
+             nil))))
     (if scanner
         (lambda (str start)
           (let ((match (cl-regex-kit:scan scanner str :start start)))
             (and match (cl-regex-kit:match-start match))))
-        (lambda (str start) (search term str :start2 start)))))
+        (lambda (str start)
+          (search term str :start2 start)))))
 
 ;;; ── Full-buffer directional search ──────────────────────────────────────────
-
 (defun %copy-mode-find-forward (screen term start-vrow start-col)
   "Scan forward through the full virtual buffer from (START-VROW, START-COL).
    Returns (values vrow col) of the first match, or (values nil nil) when absent."
   (let ((total (%copy-mode-total-rows screen))
         (match (%copy-mode-make-matcher term)))
     (loop for vrow from start-vrow below total
-          for row-str  = (%copy-mode-virtual-row-string screen vrow)
-          for from-col = (if (= vrow start-vrow) start-col 0)
-          for pos      = (and (<= from-col (length row-str))
-                              (funcall match row-str from-col))
-          when pos return (values vrow pos)
+          for row-str = (%copy-mode-virtual-row-string screen vrow)
+          for from-col = (if (= vrow start-vrow)
+                             start-col
+                             0)
+          for pos = (and (<= from-col (length row-str))
+                         (funcall match row-str from-col))
+          when pos
+            return (values vrow pos)
           finally (return (values nil nil)))))
 
 (defun %copy-mode-find-backward (screen term start-vrow start-col)
@@ -79,7 +81,6 @@
 ;;;
 ;;; Search always wraps around the buffer ends (§1.4 of
 ;;; docs/notes/workspace-requirements.md: "検索は折り返す").
-
 (defun %copy-mode-wrap-start (forwardp screen)
   "The (vrow col) a wrapped search restarts from: the top-left corner when
    searching FORWARDP, otherwise the bottom-right corner of the virtual buffer."
@@ -87,7 +88,12 @@
       (values 0 0)
       (values (1- (%copy-mode-total-rows screen)) (screen-width screen))))
 
-(defun %search-with-wrap (finder screen term start-vrow start-col wrap-start-fn found-k)
+(defun %search-with-wrap (finder screen
+                                 term
+                                 start-vrow
+                                 start-col
+                                 wrap-start-fn
+                                 found-k)
   "Continuation-passing search engine shared by every copy-mode search.
    Run FINDER at (START-VROW, START-COL); on a miss, retry once from the
    position (funcall WRAP-START-FN) returns.  Invoke the success continuation
@@ -95,15 +101,17 @@
    NIL on a total miss.  The caller supplies FOUND-K, so this engine never
    touches screen cursor state itself."
   (flet ((attempt (vrow col)
-           (multiple-value-bind (found-vrow found-col)
+           (multiple-value-bind (found-vrow found-col) 
                (funcall finder screen term vrow col)
-             (and found-vrow (progn (funcall found-k found-vrow found-col) t)))))
+             (and found-vrow
+                  (progn
+                    (funcall found-k found-vrow found-col)
+                    t)))))
     (or (attempt start-vrow start-col)
         (multiple-value-bind (wrap-vrow wrap-col) (funcall wrap-start-fn)
           (attempt wrap-vrow wrap-col)))))
 
 ;;; ── Match census (R6.8's "2/7") ─────────────────────────────────────────────
-
 (defun %copy-mode-all-matches (screen term)
   "Every match for TERM in the virtual buffer, as (VROW . COL) in buffer order.
 
@@ -128,9 +136,11 @@
 (defun %copy-mode-record-search-position (screen term vrow col)
   "Record which match of TERM the cursor now sits on, and how many exist."
   (let* ((matches (%copy-mode-all-matches screen term))
-         (index   (position-if (lambda (m)
-                                 (and (= (car m) vrow) (= (cdr m) col)))
-                               matches)))
+         (index
+          (position-if
+           (lambda (m)
+             (and (= (car m) vrow) (= (cdr m) col)))
+           matches)))
     (setf (screen-copy-search-total screen) (length matches)
           (screen-copy-search-index screen) (and index (1+ index)))))
 
@@ -140,7 +150,6 @@
         (screen-copy-search-total screen) 0))
 
 ;;; ── Public search commands ───────────────────────────────────────────────────
-
 (defun %copy-mode-search-direction (screen term direction &optional (save-direction-p t))
   "Shared search engine for copy-mode-search-{forward,backward}.
    DIRECTION is :forward or :backward.  Saves TERM; always wraps around the
@@ -186,10 +195,11 @@
   (when (screen-copy-mode-p screen)
     (let ((term (screen-copy-search-term screen)))
       (when term
-        (%copy-mode-search-direction
-         screen term
-         (or (screen-copy-search-direction screen) :forward)
-         nil)))))
+        (%copy-mode-search-direction screen
+                                     term
+                                     (or (screen-copy-search-direction screen)
+                                         :forward)
+                                     nil)))))
 
 (defun copy-mode-search-prev (screen)
   "Repeat the last search in the OPPOSITE of its original direction (vi N).
@@ -198,12 +208,16 @@
   (when (screen-copy-mode-p screen)
     (let ((term (screen-copy-search-term screen)))
       (when term
-        (%copy-mode-search-direction
-         screen term
-         (if (eq (or (screen-copy-search-direction screen) :forward) :forward)
-             :backward
-             :forward)
-         nil)))))
+        (%copy-mode-search-direction screen
+                                     term
+                                     (if (eq
+                                          (or
+                                           (screen-copy-search-direction screen)
+                                           :forward)
+                                          :forward)
+                                         :backward
+                                         :forward)
+                                     nil)))))
 
 ;;; Incremental search (C-s / C-r) was removed: copy-mode-search-forward-
 ;;; incremental, copy-mode-search-backward-incremental, %copy-mode-isearch-

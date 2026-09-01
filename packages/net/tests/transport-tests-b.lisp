@@ -8,15 +8,14 @@
 ;;;; read side (read-frame's %read-header-k / %read-payload-k phases).  These
 ;;;; tests pin those boundaries directly, independent of the happy-path
 ;;;; round-trips covered in transport-tests.lisp.
-
 ;;; ── Shared frame-construction helper ────────────────────────────────────────
 ;;;
 ;;; %make-frame-with-declared-length covers both the mismatch case (declared ≠
 ;;; actual) and the oversized case (declared > +max-frame-payload-bytes+).
 ;;; Having one constructor removes the two one-off flets that previously
 ;;; duplicated the exact same byte-patching pattern.
-
-(defun %make-frame-with-declared-length (declared-payload-length actual-payload-bytes)
+(defun %make-frame-with-declared-length (declared-payload-length
+                                         actual-payload-bytes)
   "Build a frame whose 4-byte length field claims DECLARED-PAYLOAD-LENGTH bytes
    but whose actual body contains ACTUAL-PAYLOAD-BYTES bytes of (zero-filled) payload.
    Byte 0 carries the +msg-frame+ type tag; bytes 1-4 are the overwritten length
@@ -24,9 +23,13 @@
    Used to construct both mismatched-length frames (declared != actual) and
    oversized-declared frames (declared > +max-frame-payload-bytes+)."
   (let* ((total (+ +header-size+ actual-payload-bytes))
-         (frame (make-array total :element-type '(unsigned-byte 8) :initial-element 0)))
+         (frame
+          (make-array total :element-type '(unsigned-byte 8) :initial-element 0)))
     (setf (aref frame 0) +msg-frame+)
-    (replace frame (nerimux/protocol:u32-octets declared-payload-length) :start1 1)
+    (replace frame
+             (nerimux/protocol:u32-octets declared-payload-length)
+             :start1
+             1)
     frame))
 
 (describe "transport-suite"
@@ -317,17 +320,21 @@
             (expect (null result))
             (expect (null called))))))))
 
-  ;; read-frame converts a transport timeout into the same NIL result as EOF.
-  ;; Stub the first CPS phase so this test remains deterministic and does not
-  ;; wait for the production timeout.
-  (describe "transport-timeout-suite"
-    (it "read-frame-returns-nil-on-transport-timeout"
-      (with-stubbed-fdefinition
-          ((nerimux/transport::%read-header-k
-             (lambda (stream continuation)
-               (declare (ignore stream continuation))
-               (error 'sb-ext:timeout))))
-        (with-temp-octet-file (path)
-          (with-open-file (in path :element-type '(unsigned-byte 8)
-                                   :if-does-not-exist :create)
-            (expect (null (read-frame in))))))))
+;; read-frame converts a transport timeout into the same NIL result as EOF.
+;; Stub the first CPS phase so this test remains deterministic and does not
+;; wait for the production timeout.
+(describe "transport-timeout-suite"
+          (it "read-frame-returns-nil-on-transport-timeout"
+              (with-stubbed-fdefinition
+               ((nerimux/transport::%read-header-k
+                 (lambda (stream continuation)
+                   (declare (ignore stream continuation))
+                   (error 'sb-ext:timeout))))
+               (with-temp-octet-file (path)
+                                     (with-open-file 
+                                         (in path
+                                             :element-type
+                                             '(unsigned-byte 8)
+                                             :if-does-not-exist
+                                             :create)
+                                       (expect (null (read-frame in))))))))

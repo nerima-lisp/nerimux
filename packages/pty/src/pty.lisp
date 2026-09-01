@@ -9,9 +9,7 @@
 ;;;;   • sb-posix      — signal delivery and fallback fd close
 ;;;;
 ;;;; Platform constants live in pty-ffi.lisp.
-
 ;;; ── Public: PTY creation ───────────────────────────────────────────────────
-
 (defun set-pty-size (master-fd rows cols)
   "Notify the kernel PTY driver of a new ROWS×COLS window size.
 
@@ -55,8 +53,8 @@
   (cl-tty-kit:set-terminal-size cols rows master-fd))
 
 ;;; ── Private: spawned PTY helpers ───────────────────────────────────────────
-
-(defvar *pty-processes* (make-hash-table :synchronized t)
+(defvar *pty-processes*
+  (make-hash-table :synchronized t)
   "MASTER-FD -> cl-tty-kit PTY struct for PTYs spawned by forkpty-with-shell.
    :synchronized so the reader thread (pty-child-exit-status reads) and teardown
    (pty-close remhash) can touch it concurrently without a coarse external lock.
@@ -75,13 +73,16 @@
    by letting the child inherit the current directory."
   (when (%string-non-empty-p start-dir)
     (handler-case (truename start-dir)
-      (file-error () nil))))
+      (file-error ()
+        nil))))
 
 (defun %default-shell ()
   "Shell to spawn for a pane's child process: $SHELL, or \"/bin/sh\" when unset
    (§1.4 — the shell is no longer configurable, so this is the whole rule)."
   (let ((shell (sb-ext:posix-getenv "SHELL")))
-    (if (%string-non-empty-p shell) shell "/bin/sh")))
+    (if (%string-non-empty-p shell)
+        shell
+        "/bin/sh")))
 
 (defun %target-program-and-args (default-command)
   "Return (values PROGRAM ARGS SEARCH-P) for SB-EXT:RUN-PROGRAM.
@@ -104,14 +105,16 @@
     (remhash master-fd *pty-processes*)
     pty))
 
-(defparameter +pty-child-wait-timeout+ (cl-date-kit:duration-of-seconds 5)
+(defparameter +pty-child-wait-timeout+
+  (cl-date-kit:duration-of-seconds 5)
   "Wall-clock timeout, as a CL-DATE-KIT:DURATION, for PTY-CHILD-EXIT-STATUS's
    wait on a child that has already closed its PTY slave.  The child should
    already be exiting by then; this bounds the rare case where it lingers (e.g.
    a daemonizing grandchild still holding the PTY open) so the reader thread
    that calls this at EOF cannot block forever.")
 
-(defconstant +pty-write-timeout-seconds+ 2
+(defconstant +pty-write-timeout-seconds+
+  2
   "Wall-clock timeout, in bare seconds, for PTY-WRITE's write to a PTY master
    fd.  Bare seconds rather than a CL-DATE-KIT:DURATION: this bounds an
    SB-EXT:WITH-TIMEOUT call, not a CL-CONCURRENT-KIT:WITH-TIMEOUT one (see
@@ -232,7 +235,6 @@
 ;;; unix-read/unix-write calls nerimux formerly issued via CFFI.  nerimux keeps
 ;;; its own type-guarding and empty-noop conventions here so callers and tests
 ;;; observe unchanged behavior.
-
 (defun pty-write (fd data)
   "Write DATA (octet vector or UTF-8 string) to the PTY master fd, within
    +PTY-WRITE-TIMEOUT-SECONDS+.  Signals SB-EXT:TIMEOUT when the write does
@@ -303,8 +305,8 @@
             (sb-posix:syscall-error () nil))))))
 
 ;;; ── Public: select-based I/O multiplexing ─────────────────────────────────
-
-(defconstant +microseconds-per-second+ 1000000
+(defconstant +microseconds-per-second+
+  1000000
   "Number of microseconds in one second; used in struct timeval decomposition.")
 
 (defun %timeout-us-to-seconds (timeout-us)
@@ -344,7 +346,10 @@
    descriptor select(2) cannot watch is a caller bug — the old code met it with
    silence, and past FD_SETSIZE with memory corruption (see SELECT-FDS below) —
    not a sentinel to be swallowed."
-  (remove-if-not (lambda (fd) (typep fd '(integer 0))) fds))
+  (remove-if-not
+   (lambda (fd)
+     (typep fd '(integer 0)))
+   fds))
 
 (defun select-fds (fds timeout-us)
   "Poll FDS for readability with a TIMEOUT-US microsecond timeout.
@@ -387,21 +392,31 @@
    the server down where it previously just iterated again."
   (let ((fds (%selectable-fds fds)))
     (when fds
-      (handler-case
-          (process-kit:wait-for-input fds :timeout (%timeout-us-to-seconds timeout-us))
-        (process-kit:fd-wait-failed () nil)))))
+      (handler-case (process-kit:wait-for-input fds
+                                                :timeout
+                                                (%timeout-us-to-seconds
+                                                 timeout-us))
+        (process-kit:fd-wait-failed ()
+          nil)))))
 
 ;;; ── Public: terminal geometry ──────────────────────────────────────────────
+(defconstant +max-sane-rows+
+  1000)
 
-(defconstant +max-sane-rows+ 1000)
-(defconstant +max-sane-cols+ 1000)
-(defconstant +default-term-rows+ 24)
-(defconstant +default-term-cols+ 80)
+(defconstant +max-sane-cols+
+  1000)
+
+(defconstant +default-term-rows+
+  24)
+
+(defconstant +default-term-cols+
+  80)
 
 (defun terminal-size ()
   "Return terminal dimensions as (values rows cols), with safe fallbacks."
   (multiple-value-bind (cols rows) (cl-tty-kit:terminal-size +stdout-fd+)
-    (if (and (integerp rows) (integerp cols)
+    (if (and (integerp rows)
+             (integerp cols)
              (<= 1 rows +max-sane-rows+)
              (<= 1 cols +max-sane-cols+))
         (values rows cols)
@@ -413,7 +428,6 @@
 ;;; nerimux/ports abstraction layer so that domain code (nerimux/model) calls
 ;;; through the port rather than referencing nerimux/pty symbols directly.
 ;;; Must be called before any pane is created (server startup or test setup).
-
 (defun install-pty-port ()
   "Register this module as the active nerimux/ports PTY adapter."
   (setf nerimux/ports:*spawn-pty* #'forkpty-with-shell

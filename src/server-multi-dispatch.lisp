@@ -1,8 +1,8 @@
 (in-package #:nerimux)
 
 ;;;; Shared multi-client connection data.
-
-(defparameter +default-workspace-prefix-key-code+ #x11
+(defparameter +default-workspace-prefix-key-code+
+  #x11
   "Control-Q, the workspace UI prefix used by the multi-client overview.")
 
 (defstruct (client-conn (:constructor %make-client-conn))
@@ -90,14 +90,14 @@
 ;; SERVER-MULTI.LISP initializes the registry after this dispatch file loads.
 (declaim (special *clients*))
 
-(defvar *last-selected-worktree-token* nil
+(defvar *last-selected-worktree-token*
+  nil
   "Stable selector for the most recently selected worktree across clients.")
 
 ;;;; Multi-client message handlers extracted from server-multi.lisp.
 ;;;;
 ;;;; The event loop keeps the dispatch table, while these helpers own the
 ;;;; per-message policy for attach/resize, keys, and forwarded commands.
-
 ;;; WITH-LOOP-SAFE-ERROR is defined here because this file owns the per-client
 ;;; handler policy and every handler below uses the same error boundary.  The
 ;;; message-dispatch macro itself lives in server.lisp, which ASDF loads before
@@ -138,11 +138,15 @@
    it fatal."
   (let ((condition-var (first binding))
         (on-error (getf (rest binding) :on-error)))
-    `(handler-case (progn ,@body)
-       (peer-io-failure ,(if condition-var (list condition-var) '())
+    `(handler-case (progn
+                     ,@body)
+       (peer-io-failure ,(if condition-var
+                             (list condition-var)
+                             '())
          ,on-error))))
 
-(defvar *client-esc-swallow-counts* (make-hash-table :test #'eq :weakness :key)
+(defvar *client-esc-swallow-counts*
+  (make-hash-table :test #'eq :weakness :key)
   "CONN -> count of upcoming key bytes to discard unconditionally.
 
 Set by ESC in a text-input UI mode (:picker / :command, R4.3): the client
@@ -198,7 +202,8 @@ dropped connection's entry be reclaimed instead of leaking.")
   (%mark-dirty)
   modal)
 
-(defparameter +keyboard-owning-modals+ '(:confirm :help :process-log :transient)
+(defparameter +keyboard-owning-modals+
+  '(:confirm :help :process-log :transient)
   "Modals the C-q prefix must not reach past.
 
    These four take over the frame and each claims, in its own handler's
@@ -270,22 +275,19 @@ byte is resolved against 1.5's binding table by %workspace-prefix-dispatch;
 a byte the table does not recognize is discarded there instead of falling
 through to the normal key pipeline — the old 'unbound means pass through'
 behavior (:96-107 pre-R4.4) is gone."
-  (let ((single-byte (and (arrayp payload)
-                          (= (length payload) 1)
-                          (aref payload 0))))
+  (let ((single-byte
+         (and (arrayp payload) (= (length payload) 1) (aref payload 0))))
     (cond
       ((client-conn-ui-prefix-p conn)
-       (setf (client-conn-ui-prefix-p conn) nil)
-       (values t (%workspace-prefix-dispatch session conn single-byte)))
+        (setf (client-conn-ui-prefix-p conn) nil)
+        (values t (%workspace-prefix-dispatch session conn single-byte)))
       ((and (integerp single-byte)
             (= single-byte (client-conn-workspace-prefix-code conn)))
-       (setf (client-conn-ui-prefix-p conn) t)
-       (values t nil))
-      (t
-       (values nil nil)))))
+        (setf (client-conn-ui-prefix-p conn) t)
+        (values t nil))
+      (t (values nil nil)))))
 
 ;;; ── `?` full-screen help view (FR-005) ──────────────────────────────────────
-
 (defun %client-open-help-view (conn)
   "Put the static key-reference view up. Reached from the `?` transient's `k`
    entry (FR-010) rather than from `?` directly -- `?` now opens the dispatch
@@ -307,9 +309,10 @@ behavior (:96-107 pre-R4.4) is gone."
    against."
   (cond
     ((%client-byte-p payload 27)
-     (%client-esc-swallow-start conn)
-     (%close-help-view conn))
-    ((or (%client-key-p payload #\q) (%client-key-p payload #\?)
-         (%client-byte-p payload 13) (%client-byte-p payload 10))
-     (%close-help-view conn)))
+      (%client-esc-swallow-start conn)
+      (%close-help-view conn))
+    ((or (%client-key-p payload #\q)
+         (%client-key-p payload #\?)
+         (%client-byte-p payload 13)
+         (%client-byte-p payload 10)) (%close-help-view conn)))
   nil)

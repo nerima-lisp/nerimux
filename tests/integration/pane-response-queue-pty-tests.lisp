@@ -8,7 +8,6 @@
 ;;;; but this case installs the real pty adapter into *write-pty* and reads the
 ;;;; bytes back with pty-read-blocking-into, so it exercises both units at once
 ;;;; and belongs to neither.
-
 (describe "pane-response-queue-pty-suite"
 
   ;; %drain-response-queue's write-back branch (pane-fd > 0) was previously only

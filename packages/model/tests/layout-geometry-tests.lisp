@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/model)
 
 ;;;; Tests for layout-geometry.lisp — rectangle assignment and resize helpers.
-
 (describe "layout-geometry-suite"
 
   ;; ── Orientation helpers (%axis-floor) ──────────────────────────────────────

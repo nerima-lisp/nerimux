@@ -13,7 +13,8 @@
    library's own geometry functions here, rather than each hand-computing it
    and risking the two disagreeing."
   (cl-tui-kit/core:rectangle-inset
-   (cl-tui-kit/core:rectangle-inset rectangle (cl-tui-kit/core:make-padding :all 1))
+   (cl-tui-kit/core:rectangle-inset rectangle
+                                    (cl-tui-kit/core:make-padding :all 1))
    (cl-tui-kit/core:make-padding :all 1)))
 
 (defun %surface-from-ansi-frame (frame rows cols &key (viewport 0))
@@ -34,15 +35,21 @@
          (viewport (max 0 viewport))
          (content-height (+ rows viewport))
          (surface (cl-tui-kit/core:make-surface cols rows)))
-    (multiple-value-bind (grid style-grid)
+    (multiple-value-bind (grid style-grid) 
         (%ansi-frame-grid frame content-height cols)
       (dotimes (surface-row rows surface)
         (let ((content-row (+ surface-row viewport)))
-          (cl-tui-kit/core:surface-draw-styled-text
-           surface 0 surface-row
-           (%frame-grid-row-spans (%frame-grid-row grid content-row)
-                                  (%frame-grid-style-row style-grid content-row))
-           :max-width cols))))))
+          (cl-tui-kit/core:surface-draw-styled-text surface
+                                                    0
+                                                    surface-row
+                                                    (%frame-grid-row-spans
+                                                     (%frame-grid-row grid
+                                                                      content-row)
+                                                     (%frame-grid-style-row
+                                                      style-grid
+                                                      content-row))
+                                                    :max-width
+                                                    cols))))))
 
 (defun %surface-to-ansi-frame (surface)
   (let ((escape (code-char 27))
@@ -87,9 +94,11 @@
 ;;; the client's current size each frame, not stored state), so recovery on
 ;;; resize falls out of that per-frame re-evaluation rather than needing any
 ;;; dedicated "was too small" flag.
+(defconstant +min-terminal-cols+
+  40)
 
-(defconstant +min-terminal-cols+ 40)
-(defconstant +min-terminal-rows+ 10)
+(defconstant +min-terminal-rows+
+  10)
 
 (defun %terminal-too-small-p (rows cols)
   (or (< rows +min-terminal-rows+) (< cols +min-terminal-cols+)))
@@ -99,21 +108,27 @@
   (let* ((rows (max 1 rows))
          (cols (max 1 cols))
          (surface (cl-tui-kit/core:make-surface cols rows))
-         (message (format nil "terminal too small (need ~Dx~D)"
-                          +min-terminal-cols+ +min-terminal-rows+))
+         (message
+          (format nil
+                  "terminal too small (need ~Dx~D)"
+                  +min-terminal-cols+
+                  +min-terminal-rows+))
          (text (%display-clip message cols))
          (row (floor rows 2))
          (col (%center-coord cols (%display-width text))))
     (cl-tui-kit/core:surface-draw-text surface col row text :max-width cols)
     surface))
 
-(defun %render-ansi-frame-with-tui-kit
-    (frame rows cols &key (viewport 0) widget-renderer)
+(defun %render-ansi-frame-with-tui-kit (frame rows
+                                              cols
+                                              &key
+                                              (viewport 0)
+                                              widget-renderer)
   (let* ((too-small-p (%terminal-too-small-p rows cols))
-         (surface (if too-small-p
-                      (%render-terminal-too-small-surface rows cols)
-                      (%surface-from-ansi-frame frame rows cols
-                                                :viewport viewport))))
+         (surface
+          (if too-small-p
+              (%render-terminal-too-small-surface rows cols)
+              (%surface-from-ansi-frame frame rows cols :viewport viewport))))
     (when (and widget-renderer (not too-small-p))
       (funcall widget-renderer surface))
     (%surface-to-ansi-frame surface)))

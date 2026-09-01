@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/renderer)
 
 ;;;; The `?` full-screen help view (FR-005).
-
 (describe "renderer-suite/tui-kit-help"
 
   (it "renders every section heading and a sample of keys, Dracula-styled"

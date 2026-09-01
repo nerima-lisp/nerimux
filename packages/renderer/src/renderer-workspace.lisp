@@ -42,14 +42,12 @@
 ;;;; Load order (declared in nerimux.asd): renderer-format -> workspace
 ;;;; status/title and command-line helpers -> renderer-workspace-tree ->
 ;;;; renderer-workspace, ahead of the pane-compositor chain.
-
 (defun %workspace-prefix-label (code)
   (if (and (integerp code) (<= 1 code) (<= code 26))
       (format nil "C-~A" (code-char (+ (char-code #\a) (1- code))))
       (format nil "key/~D" code)))
 
 ;;; ── Styled row emission ─────────────────────────────────────────────────────
-
 (defun %emit-styled-row (stream row col width text)
   "MOVE-TO (ROW, COL) and write TEXT — which may embed SGR escapes — clipped
    SGR-aware to WIDTH display columns and padded with spaces to exactly WIDTH,
@@ -69,15 +67,20 @@
   "WORKTREE's status tokens, palette-coloured with a plain reset after each
    token (unlike %STATUS-STATE-TEXT, which restores the status bar's base
    background and would leak it into a default-background panel)."
-  (format nil "~{~A~^ ~}"
-          (mapcar (lambda (token)
-                    (let ((sgr (%worktree-state-token-sgr token)))
-                      (if sgr (%sgr-wrap token sgr) token)))
-                  (%worktree-status-tokens worktree))))
+  (format nil
+          "~{~A~^ ~}"
+          (mapcar
+           (lambda (token)
+             (let ((sgr (%worktree-state-token-sgr token)))
+               (if sgr
+                   (%sgr-wrap token sgr)
+                   token)))
+           (%worktree-status-tokens worktree))))
 
 (defun %workspace-hint (key description)
   "One footer hint: KEY in bold accent, DESCRIPTION muted."
-  (format nil "~A ~A"
+  (format nil
+          "~A ~A"
           (%sgr-wrap key +sgr-accent-bold+)
           (%sgr-wrap description +sgr-muted+)))
 
@@ -89,9 +92,12 @@
    `/query` chip is prepended so an active filter stays visible after the
    user leaves tree-filter input mode and returns to ordinary navigation
    (R... one-column redesign, PR2)."
-  (format nil " ~A~A  ~{~A~^  ~}"
+  (format nil
+          " ~A~A  ~{~A~^  ~}"
           (if (plusp (length (or tree-filter "")))
-              (format nil "~A  " (%sgr-wrap (format nil "/~A" tree-filter) +sgr-muted+))
+              (format nil
+                      "~A  "
+                      (%sgr-wrap (format nil "/~A" tree-filter) +sgr-muted+))
               "")
           (%sgr-wrap (format nil " ~:@(~A~) " mode) +sgr-mode-chip+)
           (list (%workspace-hint "n/p" "select")
@@ -101,8 +107,9 @@
                 (%workspace-hint "/" "filter")
                 (%workspace-hint ":" "command")
                 (%workspace-hint "?" "menu")
-                (%workspace-hint (format nil "~A d" (%workspace-prefix-label prefix-code))
-                                 "detach"))))
+                (%workspace-hint
+                 (format nil "~A d" (%workspace-prefix-label prefix-code))
+                 "detach"))))
 
 (defun %workspace-key-panel-content (selected-object mode prefix-code tree-filter)
   "Two values -- the key panel's two content lines -- switching on
@@ -171,15 +178,19 @@
                                   "detach")))))
 
 ;;; ── Initial-scan placeholder (R6.2) ─────────────────────────────────────────
-
-(defun %render-workspace-scanning-frame (terminal-rows terminal-cols &key scan-progress)
+(defun %render-workspace-scanning-frame (terminal-rows terminal-cols
+                                                       &key
+                                                       scan-progress)
   "Render the complete frame shown while the workspace catalog is scanning."
   (let* ((rows (max 1 terminal-rows))
          (cols (max 1 terminal-cols))
          (stream (make-string-output-stream))
-         (message (if (and (integerp scan-progress) (plusp scan-progress))
-                      (format nil "scanning workspaces... ~D repositories" scan-progress)
-                      "scanning workspaces..."))
+         (message
+          (if (and (integerp scan-progress) (plusp scan-progress))
+              (format nil
+                      "scanning workspaces... ~D repositories"
+                      scan-progress)
+              "scanning workspaces..."))
          (text (%display-clip message cols)))
     (cursor-invisible stream)
     (move-to stream (floor rows 2) (%center-coord cols (%display-width text)))
@@ -192,16 +203,19 @@
 (defun %render-workspace-empty-catalog-hint (stream rows cols ghq-root)
   "Render centered guidance when the catalog is empty and scanning is done."
   (let ((top (max 0 (1- (floor rows 2))))
-        (lines (list (cons "no repositories found" +sgr-muted-italic+)
-                     (cons (format nil "ghq root: ~A" ghq-root) +sgr-muted+)
-                     (cons "get one: ghq get <owner>/<repo>" +sgr-muted+))))
+        (lines
+         (list (cons "no repositories found" +sgr-muted-italic+)
+               (cons (format nil "ghq root: ~A" ghq-root) +sgr-muted+)
+               (cons "get one: ghq get <owner>/<repo>" +sgr-muted+))))
     (loop for (text . sgr) in lines
           for row from top
           for clipped = (%display-clip text cols)
-          do (move-to stream row (%center-coord cols (%display-width clipped)))
-             (%emit-sgr stream sgr)
-             (write-string clipped stream)
-             (reset-attrs stream))))
+          do (move-to stream row (%center-coord cols (%display-width clipped))) (%emit-sgr
+                                                                                 stream
+                                                                                 sgr) (write-string
+                                                                                       clipped
+                                                                                       stream) (reset-attrs
+                                                                                                stream))))
 
 (defun render-workspace-overview-to-string
     (organizations terminal-rows terminal-cols &key focus-pane

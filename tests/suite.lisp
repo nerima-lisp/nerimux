@@ -5,14 +5,12 @@
 ;;;; Every file registers its own top-level (describe ...) block directly with
 ;;;; cl-weave.  RUN-TESTS walks the whole suite tree with cl-weave's runner in
 ;;;; single-worker (sequential) mode and fails on any failure.
-
 ;;; Sequential execution is REQUIRED — not a performance choice.  Integration
 ;;; suites share global session, runtime, socket, and PTY state; running them
 ;;; concurrently would leave reader/status/background threads from one test
 ;;; visible to another.  Each test that spawns a background thread/server
 ;;; joins it itself (see WITH-LOOP-STATE in helpers-loop-fixtures.lisp), so
 ;;; isolation does not depend on suite boundaries or execution order.
-
 (defun %test-name-filter-from-environment ()
   (let ((filter (uiop:getenv "CL_WEAVE_TEST_FILTER")))
     (when (and filter (plusp (length filter)))
@@ -57,11 +55,15 @@
   "Run every registered suite SEQUENTIALLY (single worker) through cl-weave,
 report the results, and signal an error (non-zero exit under Nix) on any
 failure or empty suite."
-  (unless (with-cycle-safe-printing
-            (cl-weave:run-all
-             :reporter :spec
-             :name-filter (%test-name-filter-from-environment)
-             :max-workers 1
-             :pass-with-no-tests nil))
+  (unless 
+      (with-cycle-safe-printing
+       (cl-weave:run-all :reporter
+                         :spec
+                         :name-filter
+                         (%test-name-filter-from-environment)
+                         :max-workers
+                         1
+                         :pass-with-no-tests
+                         nil))
     (error "nerimux test suite failed"))
   t)

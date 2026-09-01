@@ -8,7 +8,6 @@
 ;;;; %set-workspace-file-diff -- is a BOOTSTRAP internal defined in
 ;;;; src/server-multi-state.lisp. The cache is keyed by worktree and file, which
 ;;;; is why it sat beside the vcs tests, but nothing in it belongs to the unit.
-
 (describe "vcs workspace file-diff cache eviction (F4)"
   (it "evicts the oldest entry once a new key would push the cache past its limit"
     (let ((previous-table nerimux::*workspace-file-diffs*)

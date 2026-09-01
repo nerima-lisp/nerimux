@@ -25,7 +25,6 @@
 ;;;; %SORT-WORKSPACE-ORGANIZATIONS-BY-ACTIVITY's activity sort (vcs.lisp),
 ;;;; which runs once per catalog publish/refresh -- never here, and never
 ;;;; per-frame -- so a row does not move under the cursor mid-navigation.
-
 (defun %repository-attention-p (repository)
   "T when REPOSITORY itself, or any worktree under it, needs attention."
   (or (repository-dirty-p repository)
@@ -38,9 +37,13 @@
 (defun %worktree-tree-windows (worktree)
   "Distinct windows holding at least one of WORKTREE's panes, ordered by
    window id -- the order the tree and status line show them in (R5.8)."
-  (sort (remove-duplicates (mapcar #'pane-window (worktree-panes worktree))
-                           :test #'eq)
-        #'< :key #'window-id))
+  (sort
+   (remove-duplicates (mapcar #'pane-window (worktree-panes worktree))
+                      :test
+                      #'eq)
+   #'<
+   :key
+   #'window-id))
 
 (defun %workspace-tree-node-key (node)
   "Stable, EQUAL-comparable identity for a tree row. Covers a struct-backed
@@ -104,10 +107,13 @@
     (if (plusp (length specification))
         (let ((slash (position #\/ specification :from-end t)))
           (%strip-dot-git-suffix
-           (if slash (subseq specification (1+ slash)) specification)))
-        (or (and (plusp (length (repository-local-path repository)))
-                 (repository-local-path repository))
-            (repository-id repository)))))
+           (if slash
+               (subseq specification (1+ slash))
+               specification)))
+        (or
+         (and (plusp (length (repository-local-path repository)))
+              (repository-local-path repository))
+         (repository-id repository)))))
 
 (defun %worktree-tree-label (worktree)
   "WORKTREE's tree-row label: BRANCH when set; otherwise \"(bare)\" for a
@@ -131,7 +137,8 @@
   (format nil "win ~D:~A" (window-id window) (window-name window)))
 
 (defun %pane-tree-label (pane)
-  (format nil "pane/~D ~A"
+  (format nil
+          "pane/~D ~A"
           (pane-id pane)
           (or (and (plusp (length (pane-title pane))) (pane-title pane))
               (and (plusp (length (pane-start-command pane)))
@@ -169,7 +176,6 @@
 ;;; one uniform per-row style (list.lisp:WIDGET-RENDER in cl-tui-kit), so it
 ;;; cannot honour embedded SGR the way %EMIT-STYLED-ROW can; only the plain
 ;;; ANSI render path (render-tree-p T) gets the coloured STYLED half.
-
 (defun %worktree-relative-time-text (universal-time)
   "ASCII relative-time label for UNIVERSAL-TIME (a GET-UNIVERSAL-TIME
    integer, or NIL for \"never\"): \"now\" under a minute, then Nm/Nh/Nd.
@@ -191,7 +197,9 @@
    of them has ever fired."
   (let (latest)
     (dolist (pane (worktree-panes worktree) latest)
-      (dolist (time (list (pane-last-output-time pane) (pane-last-focused-time pane)))
+      (dolist 
+          (time
+           (list (pane-last-output-time pane) (pane-last-focused-time pane)))
         (when (and time (or (null latest) (> time latest)))
           (setf latest time))))))
 
@@ -210,7 +218,10 @@
    when WORKTREE has no panes at all (nothing to show)."
   (let ((panes (worktree-panes worktree)))
     (and panes
-         (format nil "~Dp~:[~;!~]" (length panes) (some #'pane-process-exited-p panes)))))
+         (format nil
+                 "~Dp~:[~;!~]"
+                 (length panes)
+                 (some #'pane-process-exited-p panes)))))
 
 (defun %worktree-state-tag (worktree)
   "The single most salient %WORKTREE-STATUS-TOKENS entry for the info
@@ -218,36 +229,47 @@
    would otherwise show twice). Falls back to \"CLEAN\" when every token
    present is an AHEAD/BEHIND count, matching %WORKTREE-STATUS-TOKENS'S own
    CLEAN-when-nothing-else-applies default."
-  (or (find-if (lambda (token)
-                 (not (or (and (>= (length token) 5) (string= (subseq token 0 5) "AHEAD"))
-                          (and (>= (length token) 6) (string= (subseq token 0 6) "BEHIND")))))
-               (%worktree-status-tokens worktree))
-      "CLEAN"))
+  (or
+   (find-if
+    (lambda (token)
+      (not
+       (or (and (>= (length token) 5) (string= (subseq token 0 5) "AHEAD"))
+           (and (>= (length token) 6) (string= (subseq token 0 6) "BEHIND")))))
+    (%worktree-status-tokens worktree))
+   "CLEAN"))
 
 (defun %worktree-tree-info-tokens (worktree)
   "Ordered (PLAIN . STYLED) token pairs for WORKTREE's tree-row info
    cluster, lowest priority first -- the order %WORKTREE-TREE-INFO-SUFFIX
    drops from when the row does not fit: relative time, then ahead/behind,
    then pane count; the state tag is never dropped."
-  (let* ((time (%worktree-relative-time-text (%worktree-last-activity-time worktree)))
+  (let* ((time
+          (%worktree-relative-time-text (%worktree-last-activity-time worktree)))
          (ahead-behind (%worktree-ahead-behind-parts worktree))
          (pane-count (%worktree-pane-count-text worktree))
          (state (%worktree-state-tag worktree))
          (state-sgr (%worktree-state-token-sgr state)))
-    (remove
-     nil
-     (list
-      (and time (cons time (%sgr-wrap time +sgr-faint+)))
-      (and ahead-behind
-           (cons (format nil "~{~A~^/~}" (mapcar #'car ahead-behind))
-                 (format nil "~{~A~^/~}"
-                         (mapcar (lambda (part) (%sgr-wrap (car part) (cdr part)))
+    (remove nil
+            (list (and time (cons time (%sgr-wrap time +sgr-faint+)))
+                  (and ahead-behind
+                       (cons
+                        (format nil "~{~A~^/~}" (mapcar #'car ahead-behind))
+                        (format nil
+                                "~{~A~^/~}"
+                                (mapcar
+                                 (lambda (part)
+                                   (%sgr-wrap (car part) (cdr part)))
                                  ahead-behind))))
-      (and pane-count
-           (cons pane-count
-                 (%sgr-wrap pane-count
-                            (if (find #\! pane-count) +sgr-alert+ +sgr-faint+))))
-      (cons state (if state-sgr (%sgr-wrap state state-sgr) state))))))
+                  (and pane-count
+                       (cons pane-count
+                             (%sgr-wrap pane-count
+                                        (if (find #\! pane-count)
+                                            +sgr-alert+
+                                            +sgr-faint+))))
+                  (cons state
+                        (if state-sgr
+                            (%sgr-wrap state state-sgr)
+                            state))))))
 
 (defun %worktree-tree-info-suffix (worktree width)
   "Two values -- PLAIN and STYLED text for WORKTREE's tree-row info cluster
@@ -270,7 +292,6 @@
 ;;; does -- which, read the other way, means every ancestor of a match
 ;;; survives too. Both directions fall out of one predicate: "this row's
 ;;; whole subtree, itself included, contains a match".
-
 (defun %workspace-tree-node-search-text (kind object &optional label)
   "Lowercased text FILTER is matched against for one tree row: label for an
    organization, specification+name for a repository, branch+path for a
@@ -296,22 +317,34 @@
   (string-downcase
    (case kind
      (:organization (%organization-tree-label object))
-     (:repository (format nil "~A ~A"
-                          (repository-specification object)
-                          (%repository-tree-label object)))
-     (:worktree (format nil "~A ~A"
-                        (or (worktree-branch object) "")
-                        (worktree-path object)))
+     (:repository
+      (format nil
+              "~A ~A"
+              (repository-specification object)
+              (%repository-tree-label object)))
+     (:worktree
+      (format nil
+              "~A ~A"
+              (or (worktree-branch object) "")
+              (worktree-path object)))
      (:window (%window-tree-label object))
-     (:pane (format nil "~A ~A" (pane-title object) (pane-start-command object)))
+     (:pane
+      (format nil "~A ~A" (pane-title object) (pane-start-command object)))
      (:file (format nil "~A ~A" (third object) (fourth object)))
-     (:commit (format nil "~A ~A"
-                      (if (stringp (third object)) (third object) "")
-                      (or (fourth object) "")))
+     (:commit
+      (format nil
+              "~A ~A"
+              (if (stringp (third object))
+                  (third object)
+                  "")
+              (or (fourth object) "")))
      ((:diff-line :diff-more) (or label ""))
      (t ""))))
 
-(defun %workspace-tree-node-matches-filter-p (kind object downcased-filter &optional label)
+(defun %workspace-tree-node-matches-filter-p (kind object
+                                                   downcased-filter
+                                                   &optional
+                                                   label)
   "T when OBJECT's search text contains DOWNCASED-FILTER. DOWNCASED-FILTER
    is expected already lower-cased by the caller
    (%WORKSPACE-FILTER-TREE-ENTRIES downcases FILTER once per call rather
@@ -320,7 +353,8 @@
    :DIFF-LINE/:DIFF-MORE kinds it needs it for; every other kind ignores it."
   (and downcased-filter
        (plusp (length downcased-filter))
-       (search downcased-filter (%workspace-tree-node-search-text kind object label))
+       (search downcased-filter
+               (%workspace-tree-node-search-text kind object label))
        t))
 
 (defun %workspace-filter-tree-entries (entries filter)
@@ -342,14 +376,20 @@
         (dotimes (index count)
           (let* ((entry (aref vector index))
                  (level (first entry)))
-            (loop while (and ancestors (>= (first (aref vector (car ancestors))) level))
+            (loop while (and ancestors
+                             (>= (first (aref vector (car ancestors))) level))
                   do (pop ancestors))
-            (when (%workspace-tree-node-matches-filter-p
-                   (fourth entry) (third entry) downcased-filter (second entry))
+            (when 
+                (%workspace-tree-node-matches-filter-p (fourth entry)
+                                                       (third entry)
+                                                       downcased-filter
+                                                       (second entry))
               (setf (aref keep index) t)
-              (dolist (ancestor-index ancestors) (setf (aref keep ancestor-index) t)))
+              (dolist (ancestor-index ancestors)
+                (setf (aref keep ancestor-index) t)))
             (push index ancestors)))
-        (loop for index below count
+        (loop for index below
+              count
               when (aref keep index)
                 collect (aref vector index)))))
 
@@ -375,7 +415,6 @@
 ;;; OBJECT (KIND :PANE) -- identity-stable across a frame exactly like every
 ;;; other struct-backed row in this tree, so no such branch was needed for
 ;;; them.
-
 (defun %workspace-worktree-node-expanded-p (worktree expanded-node-ids)
   (and expanded-node-ids
        (gethash (%workspace-tree-node-key worktree) expanded-node-ids)
@@ -385,7 +424,10 @@
   "One LEVEL entry per WORKTREE pane, ordered by PANE-ID for a stable,
    deterministic row order -- WORKTREE-PANES itself is insertion order
    (WORKTREE-ADD-PANE pushes), which would otherwise read newest-first."
-  (loop for pane in (sort (copy-list (worktree-panes worktree)) #'< :key #'pane-id)
+  (loop for pane in (sort (copy-list (worktree-panes worktree))
+                          #'<
+                          :key
+                          #'pane-id)
         collect (list level (%pane-tree-label pane) pane :pane)))
 
 (defun %workspace-file-diff-line-entries (worktree-id path level cache-entry)
@@ -401,26 +443,38 @@
   (destructuring-bind (&optional state total lines) cache-entry
     (case state
       (:pending
-       (list (list level "diff: refreshing..."
-                   (list :diff-line worktree-id path :pending) :diff-line)))
+       (list
+        (list level
+              "diff: refreshing..."
+              (list :diff-line worktree-id path :pending)
+              :diff-line)))
       (:failed
-       (list (list level "diff: UNKNOWN"
-                   (list :diff-line worktree-id path :failed) :diff-line)))
+       (list
+        (list level
+              "diff: UNKNOWN"
+              (list :diff-line worktree-id path :failed)
+              :diff-line)))
       (:ready
        (append
         (loop for line in lines
               for index from 0
-              collect (list level line
+              collect (list level
+                            line
                             (list :diff-line worktree-id path index)
                             :diff-line))
         (when (and total (> total (length lines)))
-          (list (list level (format nil "... ~D more lines"
-                                    (- total (length lines)))
-                      (list :diff-more worktree-id path) :diff-line)))))
+          (list
+           (list level
+                 (format nil "... ~D more lines" (- total (length lines)))
+                 (list :diff-more worktree-id path)
+                 :diff-line)))))
       (t nil))))
 
-(defun %workspace-worktree-file-diff-entries
-    (worktree-id path code level expanded-node-ids file-diffs)
+(defun %workspace-worktree-file-diff-entries (worktree-id path
+                                                          code
+                                                          level
+                                                          expanded-node-ids
+                                                          file-diffs)
   "The inline-diff child rows for one :FILE row (Wave C), when that file's
    own (:FILE-DIFF WORKTREE-ID PATH) key is expanded in EXPANDED-NODE-IDS --
    deliberately NOT the :FILE row's own %WORKSPACE-TREE-NODE-KEY, which
@@ -428,29 +482,42 @@
    moment the file's status changes. An untracked file (CODE \"??\") has
    nothing to diff against HEAD -- a single muted placeholder row, not a
    cache lookup that will never resolve for it."
-  (when (and expanded-node-ids
-             (gethash (list :file-diff worktree-id path) expanded-node-ids))
+  (when 
+      (and expanded-node-ids
+           (gethash (list :file-diff worktree-id path) expanded-node-ids))
     (if (string= code "??")
-        (list (list level "(untracked file)"
-                    (list :diff-line worktree-id path :untracked) :diff-line))
-        (%workspace-file-diff-line-entries
-         worktree-id path level
-         (and file-diffs (gethash (list worktree-id path) file-diffs))))))
+        (list
+         (list level
+               "(untracked file)"
+               (list :diff-line worktree-id path :untracked)
+               :diff-line))
+        (%workspace-file-diff-line-entries worktree-id
+                                           path
+                                           level
+                                           (and file-diffs
+                                                (gethash (list worktree-id path)
+                                                         file-diffs))))))
 
-(defun %workspace-worktree-file-child-entries
-    (worktree level &key expanded-node-ids file-diffs)
+(defun %workspace-worktree-file-child-entries (worktree level
+                                                        &key
+                                                        expanded-node-ids
+                                                        file-diffs)
   "One LEVEL entry per WORKTREE-CHANGED-FILES entry (D1's plain (CODE . PATH)
    conses), labelled \"XY path\" the way `git status --short` shows it,
    followed by that file's own inline-diff child rows (Wave C, LEVEL+1)."
   (let ((worktree-id (worktree-id worktree)))
     (loop for (code . path) in (worktree-changed-files worktree)
-          append
-          (cons
-           (list level (format nil "~A ~A" code path)
-                 (list :file worktree-id path code)
-                 :file)
-           (%workspace-worktree-file-diff-entries
-            worktree-id path code (1+ level) expanded-node-ids file-diffs)))))
+          append (cons
+                  (list level
+                        (format nil "~A ~A" code path)
+                        (list :file worktree-id path code)
+                        :file)
+                  (%workspace-worktree-file-diff-entries worktree-id
+                                                         path
+                                                         code
+                                                         (1+ level)
+                                                         expanded-node-ids
+                                                         file-diffs)))))
 
 (defun %workspace-worktree-commit-child-entries (worktree level)
   "LEVEL entries for WORKTREE's recent-commit group: one placeholder row
@@ -460,20 +527,29 @@
    been requested, so there is nothing yet to say about it."
   (case (worktree-commits-state worktree)
     (:pending
-     (list (list level "commits: refreshing..."
-                 (list :commit (worktree-id worktree) :pending nil) :commit)))
+     (list
+      (list level
+            "commits: refreshing..."
+            (list :commit (worktree-id worktree) :pending nil)
+            :commit)))
     (:failed
-     (list (list level "commits: UNKNOWN"
-                 (list :commit (worktree-id worktree) :failed nil) :commit)))
+     (list
+      (list level
+            "commits: UNKNOWN"
+            (list :commit (worktree-id worktree) :failed nil)
+            :commit)))
     (:ready
      (loop for (hash . subject) in (worktree-recent-commits worktree)
-           collect (list level (format nil "~A ~A" hash subject)
+           collect (list level
+                         (format nil "~A ~A" hash subject)
                          (list :commit (worktree-id worktree) hash subject)
                          :commit)))
     (t nil)))
 
-(defun %workspace-worktree-detail-entries
-    (worktree level expanded-node-ids &key file-diffs)
+(defun %workspace-worktree-detail-entries (worktree level
+                                                    expanded-node-ids
+                                                    &key
+                                                    file-diffs)
   "Child rows for WORKTREE's inline expansion, one LEVEL deeper than
    WORKTREE's own row -- NIL when WORKTREE is not expanded
    (%WORKSPACE-WORKTREE-NODE-EXPANDED-P). FILE-DIFFS (Wave C) is forwarded
@@ -481,9 +557,12 @@
    of their own."
   (when (%workspace-worktree-node-expanded-p worktree expanded-node-ids)
     (append (%workspace-worktree-pane-child-entries worktree level)
-            (%workspace-worktree-file-child-entries
-             worktree level :expanded-node-ids expanded-node-ids
-                            :file-diffs file-diffs)
+            (%workspace-worktree-file-child-entries worktree
+                                                    level
+                                                    :expanded-node-ids
+                                                    expanded-node-ids
+                                                    :file-diffs
+                                                    file-diffs)
             (%workspace-worktree-commit-child-entries worktree level))))
 
 ;;; ── Sections ─────────────────────────────────────────────────────────────────
@@ -492,7 +571,6 @@
 ;;; Active, Repositories. A worktree lands in Attention or Active by its own
 ;;; state, never both; every repository always has a row under Repositories,
 ;;; whether or not any of its worktrees appear above.
-
 (defun %workspace-worktree-needs-attention-p (worktree)
   "T when WORKTREE itself belongs under the Attention section: WORKTREE-
    ATTENTION-P (dirty/conflict/ahead/behind/missing -- the existing model
@@ -518,30 +596,38 @@
    repositories, and worktrees into activity order once, at catalog publish
    time -- this walk never re-sorts, so a row does not move under the cursor
    between refreshes."
-  (let (attention active repositories (shown (make-hash-table :test #'eq)))
+  (let (attention
+        active
+        repositories
+        (shown (make-hash-table :test #'eq)))
     (dolist (organization organizations)
       (dolist (repository (organization-repositories organization))
         (push (list organization repository) repositories)
         (dolist (worktree (repository-worktrees repository))
           (cond
             ((%workspace-worktree-needs-attention-p worktree)
-             (push (list organization repository worktree) attention)
-             (setf (gethash worktree shown) t))
+              (push (list organization repository worktree) attention)
+              (setf (gethash worktree shown) t))
             ((worktree-panes worktree)
-             (push (list organization repository worktree) active)
-             (setf (gethash worktree shown) t))))))
-    (values (nreverse attention) (nreverse active) (nreverse repositories) shown)))
+              (push (list organization repository worktree) active)
+              (setf (gethash worktree shown) t))))))
+    (values (nreverse attention)
+            (nreverse active)
+            (nreverse repositories)
+            shown)))
 
 (defun %workspace-section-worktree-label (organization repository worktree)
   "\"org/repo · branch\" row label for a worktree under Attention or Active."
-  (format nil "~A/~A · ~A"
+  (format nil
+          "~A/~A · ~A"
           (%organization-tree-label organization)
           (%repository-tree-label repository)
           (%worktree-tree-label worktree)))
 
 (defun %workspace-repository-row-label (organization repository)
   "\"org/name\" row label for a repository under the Repositories section."
-  (format nil "~A/~A"
+  (format nil
+          "~A/~A"
           (%organization-tree-label organization)
           (%repository-tree-label repository)))
 
@@ -553,30 +639,44 @@
    so this checks presence in EXPANDED-NODE-IDS rather than absence."
   (and expanded-node-ids (gethash (list :repository id) expanded-node-ids) t))
 
-(defun %workspace-worktree-section-entries
-    (triples refreshing-ids stale-ids expanded-node-ids &key file-diffs)
+(defun %workspace-worktree-section-entries (triples refreshing-ids
+                                                    stale-ids
+                                                    expanded-node-ids
+                                                    &key
+                                                    file-diffs)
   "One level-1 (LEVEL LABEL OBJECT :WORKTREE) entry per (ORGANIZATION
    REPOSITORY WORKTREE) in TRIPLES, for the Attention/Active sections,
    followed by that worktree's own inline-expansion child rows (Wave B,
    level 2) when it is expanded."
   (loop for (organization repository worktree) in triples
-        append
-        (cons
-         (list 1
-               (concatenate
-                'string
-                (%workspace-section-worktree-label
-                 organization repository worktree)
-                (%workspace-node-refresh-tag
-                 :worktree (worktree-id worktree)
-                 refreshing-ids stale-ids))
-               worktree :worktree)
-         (%workspace-worktree-detail-entries
-          worktree 2 expanded-node-ids :file-diffs file-diffs))))
+        append (cons
+                (list 1
+                      (concatenate 'string
+                                   (%workspace-section-worktree-label
+                                    organization
+                                    repository
+                                    worktree)
+                                   (%workspace-node-refresh-tag :worktree
+                                                                (worktree-id
+                                                                 worktree)
+                                                                refreshing-ids
+                                                                stale-ids))
+                      worktree
+                      :worktree)
+                (%workspace-worktree-detail-entries worktree
+                                                    2
+                                                    expanded-node-ids
+                                                    :file-diffs
+                                                    file-diffs))))
 
-(defun %workspace-repositories-section-entries
-    (repository-tuples shown-worktrees expanded-node-ids
-     filter-active-p refreshing-ids stale-ids &key file-diffs)
+(defun %workspace-repositories-section-entries (repository-tuples
+                                                shown-worktrees
+                                                expanded-node-ids
+                                                filter-active-p
+                                                refreshing-ids
+                                                stale-ids
+                                                &key
+                                                file-diffs)
   "One level-1 (LEVEL LABEL OBJECT :REPOSITORY) entry per (ORGANIZATION
    REPOSITORY) in REPOSITORY-TUPLES, followed -- when that repository row is
    expanded (%WORKSPACE-REPOSITORY-NODE-EXPANDED-P, or FILTER-ACTIVE-P
@@ -589,36 +689,48 @@
    the wrapping %WORKSPACE-SECTION-ENTRIES call folds the whole
    Repositories section, including its repository rows, as one unit."
   (loop for (organization repository) in repository-tuples
-        append
-        (cons
-         (list 1
-               (concatenate
-                'string
-                (%workspace-repository-row-label organization repository)
-                (%workspace-node-refresh-tag
-                 :repository (repository-id repository)
-                 refreshing-ids stale-ids))
-               repository :repository)
-         (when (or filter-active-p
-                   (%workspace-repository-node-expanded-p
-                    (repository-id repository) expanded-node-ids))
-           (loop for worktree in (repository-worktrees repository)
-                 unless (gethash worktree shown-worktrees)
-                   append
-                   (cons
-                    (list 2
-                          (concatenate
-                           'string
-                           (%worktree-tree-label worktree)
-                           (%workspace-node-refresh-tag
-                            :worktree (worktree-id worktree)
-                            refreshing-ids stale-ids))
-                          worktree :worktree)
-                    (%workspace-worktree-detail-entries
-                     worktree 3 expanded-node-ids :file-diffs file-diffs)))))))
+        append (cons
+                (list 1
+                      (concatenate 'string
+                                   (%workspace-repository-row-label organization
+                                                                    repository)
+                                   (%workspace-node-refresh-tag :repository
+                                                                (repository-id
+                                                                 repository)
+                                                                refreshing-ids
+                                                                stale-ids))
+                      repository
+                      :repository)
+                (when 
+                    (or filter-active-p
+                        (%workspace-repository-node-expanded-p
+                         (repository-id repository)
+                         expanded-node-ids))
+                  (loop for worktree in (repository-worktrees repository)
+                        unless (gethash worktree shown-worktrees)
+                          append (cons
+                                  (list 2
+                                        (concatenate 'string
+                                                     (%worktree-tree-label
+                                                      worktree)
+                                                     (%workspace-node-refresh-tag
+                                                      :worktree
+                                                      (worktree-id worktree)
+                                                      refreshing-ids
+                                                      stale-ids))
+                                        worktree
+                                        :worktree)
+                                  (%workspace-worktree-detail-entries worktree
+                                                                      3
+                                                                      expanded-node-ids
+                                                                      :file-diffs
+                                                                      file-diffs)))))))
 
-(defun %workspace-section-entries
-    (key label count row-entries collapsed-node-ids filter-active-p)
+(defun %workspace-section-entries (key label
+                                       count
+                                       row-entries
+                                       collapsed-node-ids
+                                       filter-active-p)
   "One level-0 (LEVEL LABEL OBJECT :SECTION) header entry for KEY (one of
    :ATTENTION/:ACTIVE/:REPOSITORIES) carrying a live \"LABEL (COUNT)\", plus
    ROW-ENTRIES beneath it when the section itself is expanded -- absent from
@@ -629,24 +741,35 @@
    zero (empty sections are omitted from the tree)."
   (when (plusp count)
     (cons (list 0 (format nil "~A (~D)" label count) key :section)
-          (when (or filter-active-p
-                    (%workspace-node-expanded-p :section key collapsed-node-ids))
+          (when 
+              (or filter-active-p
+                  (%workspace-node-expanded-p :section key collapsed-node-ids))
             row-entries))))
 
 ;;; ── Flattening ───────────────────────────────────────────────────────────────
-
-(defun workspace-tree-objects
-    (organizations collapsed-node-ids &key filter expanded-node-ids file-diffs)
+(defun workspace-tree-objects (organizations collapsed-node-ids
+                                             &key
+                                             filter
+                                             expanded-node-ids
+                                             file-diffs)
   "The objects the tree currently shows, in display order."
   (mapcar #'third
-          (%workspace-flat-tree-entries organizations collapsed-node-ids
-                                        :filter filter
-                                        :expanded-node-ids expanded-node-ids
-                                        :file-diffs file-diffs)))
+          (%workspace-flat-tree-entries organizations
+                                        collapsed-node-ids
+                                        :filter
+                                        filter
+                                        :expanded-node-ids
+                                        expanded-node-ids
+                                        :file-diffs
+                                        file-diffs)))
 
-(defun %workspace-flat-tree-entries
-    (organizations collapsed-node-ids
-     &key refreshing-ids stale-ids filter expanded-node-ids file-diffs)
+(defun %workspace-flat-tree-entries (organizations collapsed-node-ids
+                                                   &key
+                                                   refreshing-ids
+                                                   stale-ids
+                                                   filter
+                                                   expanded-node-ids
+                                                   file-diffs)
   "Flatten ORGANIZATIONS into (LEVEL LABEL OBJECT KIND) display tuples, in
    three fixed sections -- Attention, Active, Repositories (see
    %WORKSPACE-CLASSIFY-WORKTREES) -- optionally narrowed to FILTER (see
@@ -664,35 +787,52 @@
    function's name is \"search the whole tree\", not \"search whatever
    happens to be expanded\". %WORKSPACE-FILTER-TREE-ENTRIES alone decides
    what is actually visible from the (now fully descended) raw entries."
-  (let ((filter-active-p
-          (and filter (plusp (length (string-trim " " filter))))))
-    (multiple-value-bind (attention active repositories shown)
+  (let ((filter-active-p (and filter (plusp (length (string-trim " " filter))))))
+    (multiple-value-bind (attention active repositories shown) 
         (%workspace-classify-worktrees organizations)
       (let ((entries
-              (append
-               (%workspace-section-entries
-                :attention "Attention" (length attention)
-                (%workspace-worktree-section-entries
-                 attention refreshing-ids stale-ids expanded-node-ids
-                 :file-diffs file-diffs)
-                collapsed-node-ids filter-active-p)
-               (%workspace-section-entries
-                :active "Active" (length active)
-                (%workspace-worktree-section-entries
-                 active refreshing-ids stale-ids expanded-node-ids
-                 :file-diffs file-diffs)
-                collapsed-node-ids filter-active-p)
-               (%workspace-section-entries
-                :repositories "Repositories" (length repositories)
-                (%workspace-repositories-section-entries
-                 repositories shown expanded-node-ids
-                 filter-active-p refreshing-ids stale-ids
-                 :file-diffs file-diffs)
-                collapsed-node-ids filter-active-p))))
+             (append
+              (%workspace-section-entries :attention
+                                          "Attention"
+                                          (length attention)
+                                          (%workspace-worktree-section-entries
+                                           attention
+                                           refreshing-ids
+                                           stale-ids
+                                           expanded-node-ids
+                                           :file-diffs
+                                           file-diffs)
+                                          collapsed-node-ids
+                                          filter-active-p)
+              (%workspace-section-entries :active
+                                          "Active"
+                                          (length active)
+                                          (%workspace-worktree-section-entries
+                                           active
+                                           refreshing-ids
+                                           stale-ids
+                                           expanded-node-ids
+                                           :file-diffs
+                                           file-diffs)
+                                          collapsed-node-ids
+                                          filter-active-p)
+              (%workspace-section-entries :repositories
+                                          "Repositories"
+                                          (length repositories)
+                                          (%workspace-repositories-section-entries
+                                           repositories
+                                           shown
+                                           expanded-node-ids
+                                           filter-active-p
+                                           refreshing-ids
+                                           stale-ids
+                                           :file-diffs
+                                           file-diffs)
+                                          collapsed-node-ids
+                                          filter-active-p))))
         (%workspace-filter-tree-entries entries filter)))))
 
 ;;; ── Tree view-row budget ─────────────────────────────────────────────────────
-
 (defun workspace-tree-view-rows (terminal-rows)
   "Rows available for the tree in the one-column overview layout:
    TERMINAL-ROWS minus header(1) + separator(1) + detail(2) + message(1) +
@@ -702,4 +842,8 @@
    with the bootstrap scroll-clamping math for the same reason
    %WORKSPACE-LEFT-WIDTH used to be shared: two layers computing this
    independently can silently disagree about where the tree ends."
-  (max 1 (- terminal-rows (if (< terminal-rows 12) 6 8))))
+  (max 1
+       (- terminal-rows
+          (if (< terminal-rows 12)
+              6
+              8))))

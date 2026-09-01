@@ -1,9 +1,7 @@
 (in-package #:nerimux/test/terminal)
 
 ;;;; parser tests — part C3: direct CPS state functions and define-state.
-
 ;;; ── CPS parser state function tests (direct) ─────────────────────────────────
-
 (describe "terminal-suite/direct-parser-cps-suite"
 
   ;; ground-state ─────────────────────────────────────────────────────────────────

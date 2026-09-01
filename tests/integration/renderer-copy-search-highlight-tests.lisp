@@ -8,7 +8,6 @@
 ;;;; the constants +sgr-copy-mode-match+ / +sgr-copy-mode-current-match+
 ;;;; (R2.4 deleted parse-style-string/style-to-sgr, the parser that used to
 ;;;; resolve those option strings to these same codes).
-
 (describe "renderer-suite/pane-search"
 
   ;; When the copy-mode cursor sits inside a match span, that span uses

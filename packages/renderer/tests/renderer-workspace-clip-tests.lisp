@@ -16,7 +16,6 @@
 ;;;; format.lisp:228-252): a width >= 4 keeps a 3-column "..." suffix, a
 ;;;; character that would straddle the WIDTH boundary is dropped whole rather
 ;;;; than split, and the result is padded to exactly WIDTH.
-
 (describe "renderer-suite/workspace-clip-display-width"
 
   ;; %DISPLAY-WIDTH itself: the basic desync %WORKTREE-STATUS-TOKENS'

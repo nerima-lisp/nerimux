@@ -4,11 +4,10 @@
 ;;;;
 ;;;; All functions here write escape sequences to a stream; they do not touch
 ;;;; any model or terminal state.
-
-(defconstant +esc+ #\Escape)
+(defconstant +esc+
+  #\Escape)
 
 ;;; ── Cursor positioning ──────────────────────────────────────────────────────
-
 (defun move-to (stream row col)
   "ESC[row;colH — cursor absolute position, 1-based."
   (format stream "~C[~D;~DH" +esc+ (1+ row) (1+ col)))
@@ -25,7 +24,6 @@
 ;;; emit_colour(fg/bg, 8-15)      :- bright_colour_code(fg/bg, n).
 ;;; emit_colour(fg/bg, 16-255)    :- palette_256(fg/bg, n).
 ;;; emit_colour(fg/bg, 0x1RRGGBB) :- true_colour(fg/bg, r, g, b).
-
 ;;; ── Terminal colour-capability downsampling (cl-tty-kit) ────────────────────
 ;;;
 ;;; A -2 flag ("force 256-colour") exists because not every outer terminal
@@ -34,8 +32,8 @@
 ;;; %apply-global-cli-invocation (main-startup-flags.lisp), routes true-colour
 ;;; cell values through cl-tty-kit:rgb-to-256 before classification so -2
 ;;; sessions degrade gracefully instead of leaking raw 24-bit escapes.
-
-(defvar *color-downsample-fn* nil
+(defvar *color-downsample-fn*
+  nil
   "Optional function (packed-rgb-int) -> palette-index, applied to TRUE-COLOR
    values (bit 24 set) before %EMIT-FG/%EMIT-BG classify them.  NIL (the
    default) emits true-colour unchanged, so the hot per-cell path pays only a
@@ -45,9 +43,12 @@
   "Downsample packed true-colour int N (bit 24 set; RGB in bits 16-0) to the
    nearest xterm 256-palette index via cl-tty-kit:rgb-to-256."
   (let ((rgb (logand n #xFFFFFF)))
-    (cl-tty-kit:rgb-to-256 (ash rgb -16) (logand (ash rgb -8) #xFF) (logand rgb #xFF))))
+    (cl-tty-kit:rgb-to-256 (ash rgb -16)
+                           (logand (ash rgb -8) #xFF)
+                           (logand rgb #xFF))))
 
 (declaim (inline %maybe-downsample-color))
+
 (defun %maybe-downsample-color (n)
   "Return N, or its *color-downsample-fn* projection when N is true-colour."
   (if (and *color-downsample-fn* (logbitp 24 n))
@@ -68,15 +69,16 @@
 ;;; Unlike fg/bg, the underline colour has no 30-37/40-47 "standard" short-form:
 ;;; all indices use the 58;5;N 256-colour form or 58;2;R;G;B for true-colour.
 ;;; 0 means "default" (inherit from fg) and is never emitted.
-
 (declaim (inline %emit-ul-color))
+
 (defun %emit-ul-color (stream n)
   "Emit the SGR underline-colour fragment for N: ';58;5;N' for palette, ';58;2;R;G;B'
    for true-colour (bit 24 set).  Skips emission when N is zero (default = inherit fg)."
   (when (plusp n)
     (if (logbitp 24 n)
         (let ((rgb (logand n #xFFFFFF)))
-          (format stream ";58;2;~D;~D;~D"
+          (format stream
+                  ";58;2;~D;~D;~D"
                   (ash rgb -16)
                   (logand (ash rgb -8) #xFF)
                   (logand rgb #xFF)))
@@ -91,7 +93,6 @@
 ;;;
 ;;; ATTRS2 extended attributes (double-underline SGR 21, overline SGR 53) and
 ;;; UL-COLOR (SGR 58) are optional; zero means "not set / default".
-
 (define-cell-attr-renderer
   (0 1)    ; bold          → SGR 1
   (1 2)    ; dim           → SGR 2
@@ -100,10 +101,9 @@
   (4 5)    ; blink         → SGR 5
   (5 3)    ; italic        → SGR 3
   (6 8)    ; conceal       → SGR 8
-  (7 9))   ; strikethrough → SGR 9
+  (7 9)) ; strikethrough → SGR 9
 
 ;;; ── Cursor visibility ───────────────────────────────────────────────────────
-
 (defun cursor-invisible (stream)
   "Emit DECTCEM hide-cursor sequence ESC[?25l to STREAM."
   (write-string (cl-tty-kit:ansi-hide-cursor) stream))
@@ -117,19 +117,18 @@
   (format stream "~C[~D q" +esc+ shape))
 
 ;;; ── Attribute reset ─────────────────────────────────────────────────────────
-
 (defun %emit-sgr (stream code)
   "Emit an ANSI SGR escape sequence (ESC[CODEm) to STREAM.
    CODE may be an integer or a string (e.g. \"44;96\" for compound SGR parameters).
    A no-op when CODE is NIL — allows callers to pass optional style codes directly."
-  (when code (format stream "~C[~Am" +esc+ code)))
+  (when code
+    (format stream "~C[~Am" +esc+ code)))
 
 (defun reset-attrs (stream)
   "Emit SGR reset sequence ESC[0m to STREAM, clearing all attributes and colours."
   (write-string (cl-tty-kit:ansi-reset-style) stream))
 
 ;;; ── Layout helpers ──────────────────────────────────────────────────────────
-
 (defun %center-coord (total size)
   "Return the column/row offset to center SIZE within TOTAL (clamped to 0)."
   (max 0 (floor (- total size) 2)))
@@ -153,11 +152,11 @@
 ;;; (DOMAIN -> DOMAIN, both PRESENTATION's dependency direction), so it does
 ;;; not trip the layering guard, but it does bypass the facade's stated
 ;;; purpose of keeping callers off individual sub-packages.
-
 (defun %display-width (text)
   "Sum of NERIMUX/TERMINAL/TYPES:CHAR-WIDTH across TEXT's characters: the
    number of terminal columns TEXT occupies, as opposed to (LENGTH TEXT)."
-  (loop for ch across text sum (nerimux/terminal/types:char-width ch)))
+  (loop for ch across text
+        sum (nerimux/terminal/types:char-width ch)))
 
 (defun %display-clip (value width)
   "Clip VALUE (coerced to a string) to fit within WIDTH display columns,
@@ -168,12 +167,18 @@
    pre-R6.9 length-based clip did); a narrower WIDTH truncates without one.
    The returned string's display width always equals WIDTH once VALUE
    exceeds it."
-  (let* ((text (if (stringp value) value (princ-to-string value)))
+  (let* ((text
+          (if (stringp value)
+              value
+              (princ-to-string value)))
          (width (max 0 width)))
     (if (<= (%display-width text) width)
         text
         (let* ((ellipsis-p (>= width 4))
-               (budget (if ellipsis-p (- width 3) width))
+               (budget
+                (if ellipsis-p
+                    (- width 3)
+                    width))
                (taken 0)
                (end 0))
           (loop for index from 0 below (length text)
@@ -183,14 +188,15 @@
           (concatenate 'string
                        (subseq text 0 end)
                        (make-string (- budget taken) :initial-element #\Space)
-                       (if ellipsis-p "..." ""))))))
+                       (if ellipsis-p
+                           "..."
+                           ""))))))
 
 ;;; ── SGR-aware width math ────────────────────────────────────────────────────
 ;;;
 ;;; Moved here from renderer-statusbar-layout.lisp: the workspace frame's
 ;;; styled header/footer rows need the same escape-skipping clip math the
 ;;; status bar uses, and this file loads ahead of both consumers.
-
 (defun %sgr-sequence-end (str start)
   "If STR has a CSI escape starting at START, return the index just past its final byte.
    Otherwise returns NIL.
@@ -202,14 +208,17 @@
    unterminated.  Callers should treat an unterminated sequence as consuming
    the rest of the string."
   (let ((len (length str)))
-    (when (and (< (1+ start) len)
-               (char= (char str start) +esc+)
-               (char= (char str (1+ start)) #\[))
+    (when 
+        (and (< (1+ start) len)
+             (char= (char str start) +esc+)
+             (char= (char str (1+ start)) #\[))
       (let ((j (+ start 2)))
         (loop while (and (< j len)
                          (not (<= #x40 (char-code (char str j)) #x7e)))
               do (incf j))
-        (if (< j len) (1+ j) len)))))
+        (if (< j len)
+            (1+ j)
+            len)))))
 
 (defun %visible-length (str)
   "Display-column width of STR, skipping CSI SGR escape sequences and
@@ -217,13 +226,16 @@
    (0/1/2 — R6.9) rather than by character count, so a fullwidth window or
    session name (CJK, kana, hangul) does not desync status-bar column math
    the way (LENGTH STR) would.  Equals (LENGTH STR) for escape-free ASCII."
-  (let ((n 0) (i 0) (len (length str)))
+  (let ((n 0)
+        (i 0)
+        (len (length str)))
     (loop while (< i len)
           for esc-end = (%sgr-sequence-end str i)
           do (if esc-end
                  (setf i esc-end)
-                 (progn (incf n (nerimux/terminal/types:char-width (char str i)))
-                        (incf i))))
+                 (progn
+                   (incf n (nerimux/terminal/types:char-width (char str i)))
+                   (incf i))))
     n))
 
 (defun %visible-truncate (str n)
@@ -237,17 +249,22 @@
   (if (>= n (%visible-length str))
       str
       (with-output-to-string (out)
-        (let ((seen 0) (i 0) (len (length str)))
+        (let ((seen 0)
+              (i 0)
+              (len (length str)))
           (loop while (and (< i len) (< seen n))
                 for esc-end = (%sgr-sequence-end str i)
                 do (if esc-end
-                       (progn (write-string str out :start i :end esc-end)
-                              (setf i esc-end))
-                       (let ((w (nerimux/terminal/types:char-width (char str i))))
+                       (progn
+                         (write-string str out :start i :end esc-end)
+                         (setf i esc-end))
+                       (let ((w
+                              (nerimux/terminal/types:char-width (char str i))))
                          (if (<= (+ seen w) n)
-                             (progn (write-char (char str i) out)
-                                    (incf seen w)
-                                    (incf i))
+                             (progn
+                               (write-char (char str i) out)
+                               (incf seen w)
+                               (incf i))
                              (setf i len)))))))))
 
 (defun %display-clip-tail (text width)
@@ -261,7 +278,8 @@
         (length (length text)))
     (if (<= (%display-width text) width)
         text
-        (let ((taken 0) (start length))
+        (let ((taken 0)
+              (start length))
           (loop for index from (1- length) downto 0
                 for w = (nerimux/terminal/types:char-width (char text index))
                 while (<= (+ taken w) width)

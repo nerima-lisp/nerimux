@@ -8,7 +8,6 @@
 ;;;; %emit-style-attrs, parse-style-string, style-to-sgr,
 ;;;; %color-name-to-sgr-number, %border-color-sgr, %classify-color-name) —
 ;;;; see renderer-format-tests.lisp's header for the full list and why.
-
 (describe "renderer-suite"
 
   ;; Table-driven test: each attribute bit produces the expected SGR code.

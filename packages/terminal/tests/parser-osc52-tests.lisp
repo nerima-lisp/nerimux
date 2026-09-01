@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/terminal)
 
 ;;;; parser tests - OSC 52 clipboard coverage.
-
 (describe "terminal-suite/osc52-coverage"
 
   ;; When *osc52-handler* is set, OSC 52 with a valid Base64 payload invokes it

@@ -1,7 +1,6 @@
 (in-package #:nerimux/test)
 
 ;;;; Event-loop isolation fixtures.
-
 (defmacro with-global-running (value &body body)
   "Run BODY with the GLOBAL value of nerimux::*running* set to VALUE, restoring
    the prior global value afterward.
@@ -18,7 +17,9 @@
   (let ((saved (gensym "SAVED-RUNNING")))
     `(let ((,saved nerimux::*running*))
        (setf nerimux::*running* ,value)
-       (unwind-protect (progn ,@body)
+       (unwind-protect 
+           (progn
+             ,@body)
          (setf nerimux::*running* ,saved)))))
 
 (defun stop-nerimux-threads ()
@@ -68,5 +69,7 @@
    read-only attach flag; both went with the deletions in R1."
   `(let ((nerimux::*dirty* nil))
      (with-global-running t
-       (unwind-protect (progn ,@body)
-         (stop-nerimux-threads)))))
+                          (unwind-protect 
+                              (progn
+                                ,@body)
+                            (stop-nerimux-threads)))))

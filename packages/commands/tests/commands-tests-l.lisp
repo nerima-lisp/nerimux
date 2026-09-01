@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/commands)
 
 ;;;; commands tests — part L: copy-mode-exit rect-select reset, rectangle-text.
-
 (describe "commands-suite"
 
   ;; copy-mode-exit clears screen-copy-rect-select-p.

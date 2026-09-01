@@ -2,12 +2,10 @@
 
 ;;;; modes tests — part C: screen-invoked-charset / charset G0/G1, set-screen-cwd,
 ;;;; erase-display mode-3, IRM insert/replace, LNM line-feed, DECSCNM, DECSTR.
-
 ;;; ── SUITE: screen-invoked-charset and charset G0/G1 ─────────────────────────
 ;;;
 ;;; screen-invoked-charset is exported but previously had zero unit test coverage.
 ;;; designate-charset G1 path (ESC ) X) was also untested directly.
-
 (describe "terminal-suite/charset-invoke-suite"
 
   ;; screen-invoked-charset :g0 returns the G0 designation.
@@ -73,7 +71,6 @@
 ;;; ── SUITE: set-screen-cwd ────────────────────────────────────────────────────
 ;;;
 ;;; set-screen-cwd is exported but previously had no direct unit test.
-
 (describe "terminal-suite/set-screen-cwd-suite"
 
   ;; set-screen-cwd stores the given path string in screen-cwd.
@@ -94,7 +91,6 @@
 ;;; The existing test only checks that the scrollback is cleared.  This suite
 ;;; also asserts that the visible display grid is erased (the two-step nature
 ;;; of ED mode 3 must be fully covered).
-
 (describe "terminal-suite/erase-display-mode3-suite"
 
   ;; erase-display mode 3 also erases the visible display grid (not just scrollback).

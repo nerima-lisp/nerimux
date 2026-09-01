@@ -199,32 +199,33 @@
           (%vcs-operations-join threads))))))
 
 (describe "vcs synchronous fetch"
-  (it "fetches through the adapter and refreshes status"
-    (let* ((repository
-             (nerimux/workspace-model:make-repository
-              :specification "workspace-owner/project"
-              :local-path (%vcs-operations-existing-path)))
-           (fetch-call nil)
-           (refresh-call nil))
-      (with-stubbed-fdefinition
-          ((vcs-kit:make-vcs-repository
-             (lambda (&rest arguments)
-               (declare (ignore arguments))
-               :fetch-backend))
-           (vcs-kit:vcs-fetch
-             (lambda (backend &rest arguments)
-               (setf fetch-call (list backend arguments))
-               :fetched))
-           (nerimux/vcs:refresh-repository-status
-             (lambda (current)
-               (setf refresh-call current)
-               current)))
-        (expect (eq repository (nerimux/vcs::fetch-repository repository)))
-        (expect (equal '(:fetch-backend nil) fetch-call))
-        (expect (eq repository refresh-call))
-        (let ((condition-seen nil))
-          (handler-case
-              (nerimux/vcs::fetch-repository nil)
-            (error (condition)
-              (setf condition-seen condition)))
-          (expect (typep condition-seen 'error)))))))
+          (it "fetches through the adapter and refreshes status"
+              (let* ((repository
+                      (nerimux/workspace-model:make-repository :specification
+                                                               "workspace-owner/project"
+                                                               :local-path
+                                                               (%vcs-operations-existing-path)))
+                     (fetch-call nil)
+                     (refresh-call nil))
+                (with-stubbed-fdefinition
+                 ((vcs-kit:make-vcs-repository
+                   (lambda (&rest arguments)
+                     (declare (ignore arguments))
+                     :fetch-backend))
+                  (vcs-kit:vcs-fetch
+                   (lambda (backend &rest arguments)
+                     (setf fetch-call (list backend arguments))
+                     :fetched))
+                  (nerimux/vcs:refresh-repository-status
+                   (lambda (current)
+                     (setf refresh-call current)
+                     current)))
+                 (expect
+                  (eq repository (nerimux/vcs::fetch-repository repository)))
+                 (expect (equal '(:fetch-backend nil) fetch-call))
+                 (expect (eq repository refresh-call))
+                 (let ((condition-seen nil))
+                   (handler-case (nerimux/vcs::fetch-repository nil)
+                     (error (condition)
+                       (setf condition-seen condition)))
+                   (expect (typep condition-seen 'error)))))))

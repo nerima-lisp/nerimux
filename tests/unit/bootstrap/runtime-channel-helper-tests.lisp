@@ -1,7 +1,6 @@
 (in-package #:nerimux/test)
 
 ;;;; channel helper and list capping contracts
-
 (describe "runtime-suite"
 
   ;;; ── with-channel-plist macro ──────────────────────────────────────────────────

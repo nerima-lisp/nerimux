@@ -1,7 +1,6 @@
 (in-package #:nerimux/test)
 
 ;;;; reader CPS state machine contracts
-
 (describe "runtime-suite"
 
   ;; All CPS reader state machine functions are defined.  R2.6 removed the

@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/renderer)
 
 ;;;; The magit transient panel (FR-010) and the `$` process log (FR-011).
-
 (defun %render-transient-panel-output (view cols rows)
   "Draw VIEW into a fresh COLS x ROWS surface and return the plain ANSI
    frame -- RENDER-TRANSIENT-PANEL itself draws onto a caller-owned surface

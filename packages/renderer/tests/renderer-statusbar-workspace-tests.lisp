@@ -7,24 +7,44 @@
 ;;;; forward, width-driven degradation drops notification -> tabs ->
 ;;;; repository name in that order while branch and state token are never
 ;;;; dropped, and no clock is ever composed in.
-
-(defun %fixture-pane-with-worktree (&key (branch "feature/x") (ahead 0)
-                                          (unread-1 nil) (unread-2 nil))
+(defun %fixture-pane-with-worktree (&key (branch "feature/x")
+                                         (ahead 0)
+                                         (unread-1 nil)
+                                         (unread-2 nil))
   "A pane attached to a worktree/repository, with its window carrying a
    second pane so the middle block has more than one tab to show. Returns
    (VALUES FOCUS-PANE WORKTREE)."
-  (let* ((pane-1 (nerimux/pane:make-pane :id 1 :fd -1
-                                          :unread-output-p unread-1))
-         (pane-2 (nerimux/pane:make-pane :id 2 :fd -1
-                                          :unread-output-p unread-2))
-         (window (nerimux/window:make-window :id 1 :name (format nil "~A" branch)
-                                            :panes (list pane-1 pane-2)))
-         (worktree (nerimux/workspace-model:make-worktree
-                    :id "wt-status" :path "/repo/wt" :branch branch
-                    :status :fetched :ahead ahead))
-         (repository (nerimux/workspace-model:make-repository
-                      :id "repo-status" :specification "github.com/team/status"
-                      :local-path "/repo" :worktrees (list worktree))))
+  (let* ((pane-1
+          (nerimux/pane:make-pane :id 1 :fd -1 :unread-output-p unread-1))
+         (pane-2
+          (nerimux/pane:make-pane :id 2 :fd -1 :unread-output-p unread-2))
+         (window
+          (nerimux/window:make-window :id
+                                      1
+                                      :name
+                                      (format nil "~A" branch)
+                                      :panes
+                                      (list pane-1 pane-2)))
+         (worktree
+          (nerimux/workspace-model:make-worktree :id
+                                                 "wt-status"
+                                                 :path
+                                                 "/repo/wt"
+                                                 :branch
+                                                 branch
+                                                 :status
+                                                 :fetched
+                                                 :ahead
+                                                 ahead))
+         (repository
+          (nerimux/workspace-model:make-repository :id
+                                                   "repo-status"
+                                                   :specification
+                                                   "github.com/team/status"
+                                                   :local-path
+                                                   "/repo"
+                                                   :worktrees
+                                                   (list worktree))))
     (setf (nerimux/pane:pane-window pane-1) window
           (nerimux/pane:pane-window pane-2) window)
     (nerimux/pane:worktree-add-pane worktree pane-1)

@@ -5,7 +5,12 @@
    line so a one-row pane still moves. copy-mode-scroll's sign convention
    (positive = older/up) makes C-u this value and C-d its negation."
   (let ((screen (and pane (pane-screen pane))))
-    (max 1 (floor (if screen (screen-height screen) 24) 2))))
+    (max 1
+         (floor
+          (if screen
+              (screen-height screen)
+              24)
+          2))))
 
 (define-key-rules %copy-key-dispatch (session conn payload)
   (:let ((pane (%resolve-client-focus-pane session nil conn))
@@ -50,19 +55,24 @@
 (defun %client-command-buffer-delete-character (conn)
   (let ((buffer (client-conn-command-buffer conn)))
     (when (plusp (length buffer))
-      (setf (client-conn-command-buffer conn)
-            (subseq buffer 0 (1- (length buffer))))
+      (setf (client-conn-command-buffer conn) (subseq buffer
+                                                      0
+                                                      (1- (length buffer))))
       (%mark-dirty)
       t)))
 
 (defun %client-command-buffer-append (conn payload)
   (let ((text (%client-payload-text payload)))
-    (when (and text
-               (every (lambda (character)
-                        (>= (char-code character) 32))
-                      text))
-      (setf (client-conn-command-buffer conn)
-            (concatenate 'string (client-conn-command-buffer conn) text))
+    (when 
+        (and text
+             (every
+              (lambda (character)
+                (>= (char-code character) 32))
+              text))
+      (setf (client-conn-command-buffer conn) (concatenate 'string
+                                                           (client-conn-command-buffer
+                                                            conn)
+                                                           text))
       (%mark-dirty)
       t)))
 
@@ -78,28 +88,22 @@
     ((member name '("search-backward" "?") :test #'string-equal) :backward)))
 
 (defun %client-search-term (args)
-  (string-trim '(#\Space #\Tab)
-               (format nil "~{~A~^ ~}" args)))
+  (string-trim '(#\Space #\Tab) (format nil "~{~A~^ ~}" args)))
 
 (defun %submit-client-search (session conn direction args)
   (let* ((pane (%resolve-client-focus-pane session nil conn))
          (screen (and pane (pane-screen pane)))
          (term (%client-search-term args)))
     (cond
-      ((null screen)
-       (%client-notify conn "no focused pane"))
-      ((zerop (length term))
-       (%client-notify conn "search term is empty"))
-      ((eq direction :forward)
-       (copy-mode-search-forward screen term))
-      ((eq direction :backward)
-       (copy-mode-search-backward screen term)))
+      ((null screen) (%client-notify conn "no focused pane"))
+      ((zerop (length term)) (%client-notify conn "search term is empty"))
+      ((eq direction :forward) (copy-mode-search-forward screen term))
+      ((eq direction :backward) (copy-mode-search-backward screen term)))
     (%client-restore-command-view conn)
-    (%set-client-modal
-     conn
-     (if (and screen (screen-copy-mode-p screen))
-         :scrollback
-         nil))
+    (%set-client-modal conn
+                       (if (and screen (screen-copy-mode-p screen))
+                           :scrollback
+                           nil))
     (%mark-dirty)))
 
 (defun %submit-client-command (session conn)
@@ -197,8 +201,8 @@
 ;;; known, so this needs the opposite shape -- remember that an ESC is
 ;;; in-flight and route only the byte(s) that follow it, keyed by CONN so one
 ;;; client's pending sequence can never resolve against another's byte.
-
-(defvar *client-meta-pending* (make-hash-table :test #'eq :weakness :key)
+(defvar *client-meta-pending*
+  (make-hash-table :test #'eq :weakness :key)
   "CONN -> :SECOND (just saw ESC, waiting for the byte that disambiguates
    M-n/M-p from a CSI introducer) or :CSI-THIRD (that byte was `[`, waiting
    for the third byte that disambiguates S-TAB's `Z` from an arrow key's
@@ -234,7 +238,6 @@
   t)
 
 ;;; ── FR-005 visibility levels ─────────────────────────────────────────────
-
 (defun %client-set-visibility-level (conn level)
   "`1`-`4` (contract SS2): set CONN's global section-visibility preset.
    Out-of-range LEVEL is a no-op rather than storing an unrenderable value --
@@ -247,12 +250,10 @@
 
 (defun %client-cycle-visibility (conn)
   "S-TAB: advance CONN's visibility level 1->2->3->4->1."
-  (%client-set-visibility-level
-   conn
-   (1+ (mod (client-conn-visibility-level conn) 4))))
+  (%client-set-visibility-level conn
+                                (1+ (mod (client-conn-visibility-level conn) 4))))
 
 ;;; ── FR-006 `q` step-back ladder ──────────────────────────────────────────
-
 (defun %client-focused-live-pane (session conn)
   "CONN's own remembered focus, still live in SESSION -- deliberately NOT
    %RESOLVE-CLIENT-FOCUS-PANE's window-active-pane fallback, which always
@@ -274,11 +275,11 @@
    itself always has MODAL NIL by the time it gets here."
   (cond
     ((eq (client-conn-modal conn) :transient)
-     (setf (client-conn-transient-view conn) nil)
-     (%set-client-modal conn nil))
+      (setf (client-conn-transient-view conn) nil)
+      (%set-client-modal conn nil))
     ((client-conn-tree-filter conn)
-     (setf (client-conn-tree-filter conn) nil)
-     (%mark-dirty))
+      (setf (client-conn-tree-filter conn) nil)
+      (%mark-dirty))
     ((eq (client-conn-view conn) :status)
      (if (%client-focused-live-pane session conn)
          (%set-client-view conn :pane)
@@ -289,12 +290,15 @@
   t)
 
 ;;; ── FR-011 `$` process log ───────────────────────────────────────────────
-
 (defun %scroll-client-process-log (conn delta)
   (let* ((entries (client-conn-process-log conn))
          (max-scroll (max 0 (1- (length entries)))))
-    (setf (client-conn-process-log-scroll conn)
-          (max 0 (min max-scroll (+ (client-conn-process-log-scroll conn) delta))))
+    (setf (client-conn-process-log-scroll conn) (max 0
+                                                     (min max-scroll
+                                                          (+
+                                                           (client-conn-process-log-scroll
+                                                            conn)
+                                                           delta))))
     (%mark-dirty)))
 
 (defun %handle-process-log-key (conn payload)
@@ -309,14 +313,11 @@
    letter."
   (cond
     ((%client-byte-p payload 27)
-     (%client-esc-swallow-start conn)
-     (%set-client-modal conn nil))
-    ((%client-key-p payload #\q)
-     (%set-client-modal conn nil))
-    ((%client-key-p payload #\n)
-     (%scroll-client-process-log conn 1))
-    ((%client-key-p payload #\p)
-     (%scroll-client-process-log conn -1)))
+      (%client-esc-swallow-start conn)
+      (%set-client-modal conn nil))
+    ((%client-key-p payload #\q) (%set-client-modal conn nil))
+    ((%client-key-p payload #\n) (%scroll-client-process-log conn 1))
+    ((%client-key-p payload #\p) (%scroll-client-process-log conn -1)))
   nil)
 
 ;;; ── FR-003 stage/unstage/discard (magit-style status actions) ────────────
@@ -332,7 +333,6 @@
 ;;; ERROR -- %CLIENT-RUN-STATUS-WRITE's HANDLER-CASE is the actual guard;
 ;;; the rest of this section is just making sure every branch reaches it or
 ;;; a no-op notify instead of a bare struct-slot access on NIL.
-
 (defun %client-selected-status-file (conn)
   "The (WORKTREE PATH) pair for CONN's selected status-view row, or NIL when
    there is no selection, the selection is not a :FILE row (its OBJECT is
@@ -362,12 +362,13 @@
    whole section exists for -- see the header comment above."
   (if (null repository)
       (%client-notify conn "no repository selected")
-      (handler-case
-          (%run-transient-git-write conn repository operation args)
+      (handler-case (%run-transient-git-write conn repository operation args)
         (error (condition)
-          (%client-notify
-           conn
-           (format nil "git ~(~A~): failed: ~A" operation condition)))))
+          (%client-notify conn
+                          (format nil
+                                  "git ~(~A~): failed: ~A"
+                                  operation
+                                  condition)))))
   t)
 
 (defun %client-stage-selection (conn)
@@ -375,10 +376,14 @@
   (let ((selection (%client-selected-status-file conn)))
     (if selection
         (destructuring-bind (worktree path) selection
-          (%client-run-status-write
-           conn (nerimux/workspace-model:worktree-repository worktree)
-           :add (list "--" path)))
-        (progn (%client-notify conn "select a file first") t))))
+          (%client-run-status-write conn
+                                    (nerimux/workspace-model:worktree-repository
+                                     worktree)
+                                    :add
+                                    (list "--" path)))
+        (progn
+          (%client-notify conn "select a file first")
+          t))))
 
 (defun %client-stage-all (conn)
   "S (contract SS3): `git add -A` for the status view's own worktree
@@ -387,9 +392,14 @@
    of)."
   (let ((worktree (client-conn-selected-worktree conn)))
     (if worktree
-        (%client-run-status-write
-         conn (nerimux/workspace-model:worktree-repository worktree) :add (list "-A"))
-        (progn (%client-notify conn "no worktree selected") t))))
+        (%client-run-status-write conn
+                                  (nerimux/workspace-model:worktree-repository
+                                   worktree)
+                                  :add
+                                  (list "-A"))
+        (progn
+          (%client-notify conn "no worktree selected")
+          t))))
 
 (defun %client-unstage-selection (conn)
   "u (contract SS3): `git restore --staged -- PATH` for the selected :FILE
@@ -397,20 +407,28 @@
   (let ((selection (%client-selected-status-file conn)))
     (if selection
         (destructuring-bind (worktree path) selection
-          (%client-run-status-write
-           conn (nerimux/workspace-model:worktree-repository worktree)
-           :restore (list "--staged" "--" path)))
-        (progn (%client-notify conn "select a file first") t))))
+          (%client-run-status-write conn
+                                    (nerimux/workspace-model:worktree-repository
+                                     worktree)
+                                    :restore
+                                    (list "--staged" "--" path)))
+        (progn
+          (%client-notify conn "select a file first")
+          t))))
 
 (defun %client-unstage-all (conn)
   "U (contract SS3): `git restore --staged -- .` for the status view's own
    worktree, mirroring %CLIENT-STAGE-ALL's worktree resolution."
   (let ((worktree (client-conn-selected-worktree conn)))
     (if worktree
-        (%client-run-status-write
-         conn (nerimux/workspace-model:worktree-repository worktree)
-         :restore (list "--staged" "--" "."))
-        (progn (%client-notify conn "no worktree selected") t))))
+        (%client-run-status-write conn
+                                  (nerimux/workspace-model:worktree-repository
+                                   worktree)
+                                  :restore
+                                  (list "--staged" "--" "."))
+        (progn
+          (%client-notify conn "no worktree selected")
+          t))))
 
 (defun %client-start-discard-selection (conn)
   "k (contract SS3): `git restore -- PATH` for the selected :FILE row --
@@ -422,17 +440,24 @@
   (let ((selection (%client-selected-status-file conn)))
     (if selection
         (destructuring-bind (worktree path) selection
-          (let ((repository (nerimux/workspace-model:worktree-repository worktree)))
-            (%open-confirm-view
-             conn
-             (format nil "git restore -- ~A" path)
-             (list (cons "worktree" (nerimux/workspace-model:worktree-path worktree))
-                   (cons "path" path))
-             (lambda ()
-               (%client-run-status-write
-                conn repository :restore (list "--" path))))
+          (let ((repository
+                 (nerimux/workspace-model:worktree-repository worktree)))
+            (%open-confirm-view conn
+                                (format nil "git restore -- ~A" path)
+                                (list
+                                 (cons "worktree"
+                                       (nerimux/workspace-model:worktree-path
+                                        worktree))
+                                 (cons "path" path))
+                                (lambda ()
+                                  (%client-run-status-write conn
+                                                            repository
+                                                            :restore
+                                                            (list "--" path))))
             t))
-        (progn (%client-notify conn "select a file first") t))))
+        (progn
+          (%client-notify conn "select a file first")
+          t))))
 
 (defun %client-open-selected-worktree-command (session conn command)
   "Open a new pane for the selected worktree running COMMAND.
@@ -442,7 +467,10 @@
       (%select-client-tree-worktree conn nil)
       (setf worktree (client-conn-selected-worktree conn)))
     (if (and worktree
-             (%open-client-worktree-pane session conn worktree
-                                         :default-command command))
+             (%open-client-worktree-pane session
+                                         conn
+                                         worktree
+                                         :default-command
+                                         command))
         t
         (%client-notify conn "no worktree selected"))))

@@ -4,9 +4,7 @@
 ;;;;
 ;;;; Covers passthrough/clipboard queue slots, atomic queue draining, and
 ;;;; palette override storage/get/set/clear behavior.
-
 ;;; ── SUITE: screen-passthrough-queue and screen-clipboard-queue ───────────────
-
 (describe "terminal-suite/queue-slots-suite"
 
   ;; screen-passthrough-queue is NIL on a fresh screen.
@@ -61,7 +59,6 @@
                        (setf (nerimux/terminal/types:screen-clipboard-queue screen) value))))))))
 
 ;;; ── SUITE: screen-palette-overrides direct slot ──────────────────────────────
-
 (describe "terminal-suite/palette-overrides-slot-suite"
 
   ;; screen-palette-overrides is NIL on a fresh screen.
@@ -81,7 +78,6 @@
 ;;;
 ;;; Single-index round-trip and boundary behaviour, distinct from the
 ;;; %palette-override-clear-all bulk-reset suite below.
-
 (describe "terminal-suite/palette-override-get-set-clear-suite"
 
   ;; %palette-override-get returns NIL for any index on a fresh screen (no vector allocated).
@@ -148,7 +144,6 @@
       (expect (= #xFFFFFF (nerimux/terminal/types:%palette-override-get s 0))))))
 
 ;;; ── SUITE: %palette-override-clear-all ──────────────────────────────────────
-
 (describe "terminal-suite/palette-clear-all-suite"
 
   ;; %palette-override-clear-all sets palette-overrides back to NIL.

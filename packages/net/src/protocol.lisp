@@ -19,20 +19,26 @@ schema cannot silently generate a partial or non-byte-aligned codec."
                  `(progn
                     (defun ,encoder-name (n)
                       ,(format nil "~A — ~D big-endian octets." docstring bytes)
-                      (vector ,@(loop for shift from (- bits 8) downto 0 by 8
-                                      collect `(ldb (byte 8 ,shift) n))))
+                      (vector
+                       ,@(loop for shift from (- bits 8) downto 0 by 8
+                               collect `(ldb (byte 8 ,shift) n))))
                     (defun ,decoder-name (buffer start)
-                      ,(format nil "~A — big-endian ~D-bit value." docstring bits)
-                      (logior ,@(loop for i from 0 below bytes
-                                      for shift from (- bits 8) downto 0 by 8
-                                      collect (if (zerop shift)
-                                                  `(aref buffer (+ start ,i))
-                                                  `(ash (aref buffer (+ start ,i)) ,shift))))))))))
-    `(progn ,@(mapcar #'expand-spec specs))))
+                      ,(format nil
+                               "~A — big-endian ~D-bit value."
+                               docstring
+                               bits)
+                      (logior
+                       ,@(loop for i from 0 below bytes
+                               for shift from (- bits 8) downto 0 by 8
+                               collect (if (zerop shift)
+                                           `(aref buffer (+ start ,i))
+                                           `(ash (aref buffer (+ start ,i))
+                                                 ,shift))))))))))
+    `(progn
+       ,@(mapcar #'expand-spec specs))))
 
-(define-uint-codec
-  (u16-octets read-u16 16 "Unsigned 16-bit integer codec")
-  (u32-octets read-u32 32 "Unsigned 32-bit integer codec"))
+(define-uint-codec (u16-octets read-u16 16 "Unsigned 16-bit integer codec")
+                   (u32-octets read-u32 32 "Unsigned 32-bit integer codec"))
 
 ;;;; Wire protocol for client/server detach-attach.
 ;;;;
@@ -51,27 +57,28 @@ schema cannot silently generate a partial or non-byte-aligned codec."
 ;;;; encode-* return fresh octet vectors; decode-frame parses ONE frame from a
 ;;;; buffer and reports how many bytes it consumed, or NIL when the buffer does
 ;;;; not yet hold a complete frame (so a streaming reader can wait for more).
-
 (defun u16-octets-pair (a b)
   "A,B (each 0..65535) as four big-endian octets (two u16s)."
   (concatenate '(simple-array (unsigned-byte 8) (*))
-               (u16-octets a) (u16-octets b)))
+               (u16-octets a)
+               (u16-octets b)))
 
 (defun to-octets (sequence)
   "Coerce SEQUENCE of (unsigned-byte 8) into a simple octet vector."
   (coerce sequence '(simple-array (unsigned-byte 8) (*))))
 
 ;;; ── Frame codec (logic) ─────────────────────────────────────────────────────
-
 (defun encode-frame (type payload)
   "Encode one frame of TYPE carrying PAYLOAD into a fresh octet vector:
    [TYPE][LENGTH u32-be][PAYLOAD].  The vector is assembled declaratively
    via CONCATENATE — no mutable setf/replace calls."
   (let* ((payload-length (length payload))
-         (length-bytes   (u32-octets payload-length))
+         (length-bytes (u32-octets payload-length))
          (payload-vector (to-octets payload)))
     (concatenate '(simple-array (unsigned-byte 8) (*))
-                 (vector type) length-bytes payload-vector)))
+                 (vector type)
+                 length-bytes
+                 payload-vector)))
 
 (defun decode-frame (buffer &optional (start 0) (end (length buffer)))
   "Parse one frame from BUFFER[START..END).
@@ -91,23 +98,30 @@ schema cannot silently generate a partial or non-byte-aligned codec."
                     next)))))
 
 ;;; ── Typed message constructors (data) ────────────────────────────────────────
-
 (define-wire-messages
-  (msg-key     +msg-key+     (octets)     (to-octets octets)
-   "client→server frame carrying raw input OCTETS for the active pane.")
-  (msg-resize  +msg-resize+  (rows cols)  (u16-octets-pair rows cols)
-   "client→server frame announcing a new terminal size.")
-  (msg-detach  +msg-detach+  ()           #()
-   "client→server detach frame.")
-  (msg-frame   +msg-frame+   (string)     (cl-codec-kit:string-to-octets string :encoding :utf-8)
-   "server→client frame carrying a rendered screen STRING (UTF-8 encoded).")
-  (msg-bye     +msg-bye+     ()           #()
-   "server→client frame announcing the server is closing.")
-  (msg-reply   +msg-reply+   (string)     (cl-codec-kit:string-to-octets string :encoding :utf-8)
-   "server→client frame carrying a forwarded command's text output (UTF-8)."))
+ (msg-key +msg-key+
+          (octets)
+          (to-octets octets)
+          "client→server frame carrying raw input OCTETS for the active pane.")
+ (msg-resize +msg-resize+
+             (rows cols)
+             (u16-octets-pair rows cols)
+             "client→server frame announcing a new terminal size.")
+ (msg-detach +msg-detach+ () #() "client→server detach frame.")
+ (msg-frame +msg-frame+
+            (string)
+            (cl-codec-kit:string-to-octets string :encoding :utf-8)
+            "server→client frame carrying a rendered screen STRING (UTF-8 encoded).")
+ (msg-bye +msg-bye+
+          ()
+          #()
+          "server→client frame announcing the server is closing.")
+ (msg-reply +msg-reply+
+            (string)
+            (cl-codec-kit:string-to-octets string :encoding :utf-8)
+            "server→client frame carrying a forwarded command's text output (UTF-8)."))
 
 ;;; ── Typed command message constructor ────────────────────────────────────────
-
 (defun msg-attach (rows cols)
   "Build a +msg-attach+ frame carrying the initial terminal size.
    Payload is [rows u16][cols u16]."
@@ -121,7 +135,6 @@ schema cannot silently generate a partial or non-byte-aligned codec."
                 (encode-command-payload command-name :target target :args args)))
 
 ;;; ── Payload decoders (logic) ────────────────────────────────────────────────
-
 (defun decode-size (payload)
   "Decode a rows,cols payload (u16,u16) into (values ROWS COLS)."
   (values (read-u16 payload 0) (read-u16 payload +cols-offset-in-size-payload+)))
@@ -153,6 +166,9 @@ schema cannot silently generate a partial or non-byte-aligned codec."
    passed explicitly rather than relying on the encoding's own default, matching
    PARSER-OSC-DISPATCH.LISP and SAFE-CODE-CHAR."
   (cl-codec-kit:octets-to-string (to-octets payload)
-                                 :encoding :utf-8
-                                 :errorp nil
-                                 :replacement #\REPLACEMENT_CHARACTER))
+                                 :encoding
+                                 :utf-8
+                                 :errorp
+                                 nil
+                                 :replacement
+                                 #\REPLACEMENT_CHARACTER))

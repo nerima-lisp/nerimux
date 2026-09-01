@@ -5,8 +5,8 @@
 ;;; Data/logic separation: %fork-pane encapsulates the "how to allocate a pane
 ;;; with a live shell behind it" into one named step, keeping callers free to
 ;;; express the "where to attach it" concern independently.
-
-(defvar *pane-extra-env* nil
+(defvar *pane-extra-env*
+  nil
   "Dynamic variable: alist of (NAME . VALUE) pairs to set in the NEXT pane's
    child environment.  Bound by callers that need per-pane env vars (e.g.
    new-window -e VAR=val).  Consumed by %fork-pane and reset to NIL after use.")
@@ -18,25 +18,33 @@
 ;;; (TERM only; COLORTERM was never sent); now they are fixed, and R2.2
 ;;; deleted the domain-layer options package wholesale, so there is no
 ;;; package left to read either value from.
-
 (defvar +pane-term+
-    "screen-256color"
+  "screen-256color"
   "TERM given to every pane's child process (§1.4: names the emulator's
    truecolor-capable screen entry; sgr.lisp:134-181 implements the 38/48/58;2
    sequences this advertises).")
 
-(defparameter *pane-colorterm-env* (cons "COLORTERM" "truecolor")
+(defparameter *pane-colorterm-env*
+  (cons "COLORTERM" "truecolor")
   "COLORTERM entry merged into every pane's child environment (§1.4 / R2.5).")
 
-(defun %spawn-pty-with-default-options (rows cols &key start-dir default-command environment)
+(defun %spawn-pty-with-default-options (rows cols
+                                             &key
+                                             start-dir
+                                             default-command
+                                             environment)
   "Spawn a PTY shell at ROWS x COLS running DEFAULT-COMMAND (or the configured
    shell when NIL) with ENVIRONMENT as its child environment.
    Returns (values fd pid slave-path).  Shared by %fork-pane and respawn-pane.
    Calls the nerimux/ports:spawn-pty port (installed by install-pty-port)."
-  (spawn-pty rows cols
-             :start-dir start-dir
-             :default-command default-command
-             :environment environment))
+  (spawn-pty rows
+             cols
+             :start-dir
+             start-dir
+             :default-command
+             default-command
+             :environment
+             environment))
 
 ;;; ── %spawn-shell-for-pane — shared spawn skeleton ───────────────────────────
 ;;;
@@ -46,7 +54,6 @@
 ;;; the caller's DEFAULT-COMMAND (or NIL, meaning "run the shell").
 ;;; %spawn-shell-for-pane captures that shared skeleton; callers differ only in
 ;;; what they do with the resulting (fd pid slave-path).
-
 (defun %spawn-shell-for-pane (session rows cols &key start-dir default-command extra-env)
   "Spawn a shell for a pane at COLS x ROWS, merging SESSION's environment overlay
    with *PANE-COLORTERM-ENV*, EXTRA-ENV, and the consumed *PANE-EXTRA-ENV*.
@@ -76,23 +83,57 @@
    variable (alist of (NAME . VALUE)), which is consumed once and reset.
    Returns the new pane.  The PTY file descriptor and child PID are embedded
    in the pane struct; callers should call close-pty on them at teardown."
-  (multiple-value-bind (fd pid slave-path)
-      (%spawn-shell-for-pane session rows cols
-                             :start-dir start-dir
-                             :default-command default-command)
-    (make-pane :id id :x x :y y :width cols :height rows
-               :fd fd :pid pid :tty (or slave-path "")
-               :start-command (or default-command "")
-               :start-path (or start-dir
-                               (nerimux/ports:working-directory)
-                               "")
-               :screen (make-screen cols rows))))
+  (multiple-value-bind (fd pid slave-path) 
+      (%spawn-shell-for-pane session
+                             rows
+                             cols
+                             :start-dir
+                             start-dir
+                             :default-command
+                             default-command)
+    (make-pane :id
+               id
+               :x
+               x
+               :y
+               y
+               :width
+               cols
+               :height
+               rows
+               :fd
+               fd
+               :pid
+               pid
+               :tty
+               (or slave-path "")
+               :start-command
+               (or default-command "")
+               :start-path
+               (or start-dir (nerimux/ports:working-directory) "")
+               :screen
+               (make-screen cols rows))))
 
 (defun %make-input-pane (id x y w h)
   "Build a pane without a backing PTY, used by split-window -I."
-  (make-pane :id id :x x :y y :width w :height h
-             :fd -1 :pid -1 :tty ""
-             :screen (make-screen w h)))
+  (make-pane :id
+             id
+             :x
+             x
+             :y
+             y
+             :width
+             w
+             :height
+             h
+             :fd
+             -1
+             :pid
+             -1
+             :tty
+             ""
+             :screen
+             (make-screen w h)))
 
 (defun respawn-pane (session pane &key start-dir default-command extra-env)
   "Restart PANE's PTY process, keeping geometry and screen intact.

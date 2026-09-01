@@ -26,7 +26,6 @@
 ;;;; window-relayout and pane close call those ports while this suite uses
 ;;;; synthetic panes. Outside a running server they are nil because
 ;;;; install-pty-port only runs at server startup.
-
 (defmacro %with-r5-fixture ((session-var conn-var worktree-var window-var) &body body)
   "Stub %fork-pane and start-reader-thread, bind PTY resize and close ports to
    no-ops,

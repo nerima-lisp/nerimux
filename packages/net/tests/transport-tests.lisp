@@ -13,7 +13,6 @@
 ;;;;
 ;;;; Validation, security-boundary, and CPS-phase-direct coverage lives in
 ;;;; transport-tests-b.lisp (same transport-suite).
-
 (describe "transport-suite"
 
   ;; A single frame written with send-frame reads back intact via read-frame.

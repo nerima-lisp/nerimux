@@ -18,17 +18,16 @@
 ;;;;   * kill(2)            -> sb-posix:kill.
 ;;;;   * read(2)/write(2)   -> cl-tty-kit:fd-read-octets / fd-write-octets
 ;;;;                           (delegated in an earlier change).
-
 ;;; ── Load sb-posix ──────────────────────────────────────────────────────────
 ;;;
 ;;; Loaded here, in the first file of the module, because pty.lisp calls
 ;;; sb-posix:kill and sb-posix:close. sb-posix ships with SBCL and is not an
 ;;; external dependency (DEPENDENCY_POLICY.md).
-
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (require :sb-posix))
 
 ;;; ── Platform constants ─────────────────────────────────────────────────────
-
 ;;; Standard file descriptor numbers
-(defconstant +stdout-fd+ 1 "Standard output.")
+(defconstant +stdout-fd+
+  1
+  "Standard output.")

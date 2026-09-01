@@ -5,9 +5,7 @@
 ;;;;        cursor accessors, saved cursor, bell-pending, reset-sgr-pen,
 ;;;;        alt-cells resize, screen-consume-bell, %make-blank-cells,
 ;;;;        %make-screen, screen-p, and all screen slot defaults.
-
 ;;; ── Shared helpers ───────────────────────────────────────────────────────────
-
 (defmacro assert-all-cells-blank (screen)
   "Assert that every cell in SCREEN is a space with default fg/bg attributes.
    Expands to one EXPECT form per cell position."
@@ -21,7 +19,6 @@
              (expect (= nerimux/terminal/types:+default-color+ (cell-bg c)))))))))
 
 ;;; ── SUITE: screen construction ───────────────────────────────────────────────
-
 (describe "terminal-suite/screen-construction"
 
   ;; make-screen stores the requested width and height.
@@ -79,7 +76,6 @@
       (expect (null (screen-scrollback s))))))
 
 ;;; ── SUITE: screen-p predicate ────────────────────────────────────────────────
-
 (describe "terminal-suite/screen-p-suite"
 
   ;; screen-p returns T for an object created by make-screen.
@@ -95,7 +91,6 @@
     (expect (nerimux/terminal/types:screen-p (nerimux/terminal/types:make-cell)) :to-be-falsy)))
 
 ;;; ── SUITE: %make-screen direct constructor ───────────────────────────────────
-
 (describe "terminal-suite/make-screen-direct"
 
   ;; %make-screen with explicit :width/:height/:cells produces the right geometry.
@@ -109,7 +104,6 @@
       (expect (nerimux/terminal/types:screen-p s)))))
 
 ;;; ── SUITE: screen-cell and setf screen-cell ──────────────────────────────────
-
 (describe "terminal-suite/screen-cell-access"
 
   ;; screen-cell returns the cell at the specified (x, y) coordinate.
@@ -149,7 +143,6 @@
           (expect (char= ch (char-at s x y))))))))
 
 ;;; ── SUITE: cursor accessors ──────────────────────────────────────────────────
-
 (describe "terminal-suite/screen-cursor-accessors"
 
   ;; screen-cursor-x reflects cursor column after writing characters.
@@ -175,7 +168,6 @@
       (expect (= 0 (screen-cursor-y s))))))
 
 ;;; ── SUITE: resize ───────────────────────────────────────────────────────────
-
 (describe "terminal-suite/resize"
 
   ;; Resizing to a larger screen preserves existing content and updates dimensions.

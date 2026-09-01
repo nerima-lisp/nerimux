@@ -1,9 +1,11 @@
 (in-package #:nerimux)
 
-(defvar *bound-socket-path* nil
+(defvar *bound-socket-path*
+  nil
   "The socket path this server actually bound, or NIL in standalone mode.")
 
-(defvar *runtime-server-name* "default"
+(defvar *runtime-server-name*
+  "default"
   "Name used to select the server's persistent runtime snapshot.")
 
 ;;;; Detach-attach server: socket serve-loop.
@@ -21,15 +23,15 @@
 ;;;;
 ;;;; with-incoming-frame is defined in nerimux/transport so both server and
 ;;;; client can use it without creating a circular dependency.
-
 (defun %socket-tmp-base ()
   "The socket base directory: $TMPDIR, else /tmp (§1.4 — no -L/-S override,
    and no legacy temp-dir env var override: R1.17 removed the CLI flags
    that could reach one, and R2.7 dropped the env var alongside them)."
   (let ((tmpdir (sb-ext:posix-getenv "TMPDIR")))
-    (string-right-trim
-     "/"
-     (if (and tmpdir (plusp (length tmpdir))) tmpdir "/tmp"))))
+    (string-right-trim "/"
+                       (if (and tmpdir (plusp (length tmpdir)))
+                           tmpdir
+                           "/tmp"))))
 
 (defun %verify-socket-directory-private (dir uid)
   "Refuse to trust DIR as the socket boundary unless LSTAT shows it is,
@@ -42,33 +44,43 @@
    Uses LSTAT, never STAT: STAT follows a symlink and would report the
    permissions of whatever DIR points to rather than of DIR itself, which
    is exactly the check a symlinked DIR needs to fail."
-  (let ((stat (handler-case (sb-posix:lstat dir)
-                (sb-posix:syscall-error (c)
-                  (error "nerimux: refusing to start: cannot verify socket ~
+  (let ((stat
+         (handler-case (sb-posix:lstat dir)
+           (sb-posix:syscall-error (c)
+             (error
+              "nerimux: refusing to start: cannot verify socket ~
                           directory ~A is private (~A)"
-                         dir c)))))
+              dir
+              c)))))
     (when (sb-posix:s-islnk (sb-posix:stat-mode stat))
-      (error "nerimux: refusing to start: socket directory ~A is a ~
+      (error
+       "nerimux: refusing to start: socket directory ~A is a ~
               symlink, not a real directory -- the socket boundary ~
               (docs/src/reference/security-model.md) cannot be trusted ~
               through a link another user may have created"
-             dir))
+       dir))
     (unless (sb-posix:s-isdir (sb-posix:stat-mode stat))
-      (error "nerimux: refusing to start: socket directory ~A is not a ~
+      (error
+       "nerimux: refusing to start: socket directory ~A is not a ~
               directory"
-             dir))
+       dir))
     (unless (= (sb-posix:stat-uid stat) uid)
-      (error "nerimux: refusing to start: socket directory ~A is owned by ~
+      (error
+       "nerimux: refusing to start: socket directory ~A is owned by ~
               uid ~D, not the current uid ~D -- another user could control ~
               the socket boundary"
-             dir (sb-posix:stat-uid stat) uid))
+       dir
+       (sb-posix:stat-uid stat)
+       uid))
     (let ((mode (logand (sb-posix:stat-mode stat) #o777)))
       (unless (= mode #o700)
-        (error "nerimux: refusing to start: socket directory ~A has mode ~
+        (error
+         "nerimux: refusing to start: socket directory ~A has mode ~
                 ~3,'0O, not the required 0700 -- a group- or ~
                 world-accessible directory would let another local user ~
                 reach the socket"
-               dir mode)))
+         dir
+         mode)))
     stat))
 
 (defun %socket-directory ()
@@ -126,21 +138,19 @@
    R1.17 removed the CLI flags that could set one."
   (format nil "~A/nerimux-~A.sock" (%socket-directory) name))
 
-(defconstant +status-line-rows+ 1
+(defconstant +status-line-rows+
+  1
   "Rows the status bar occupies. Fixed at 1 (§1.4 — no `status' option).")
 
 (defun %relayout-active-window (session rows cols)
   "Relayout SESSION's active window for ROWS and COLS, if any."
   (let ((active-window (session-active-window session)))
     (when active-window
-      (window-relayout active-window
-                       (- rows +status-line-rows+)
-                       cols))))
+      (window-relayout active-window (- rows +status-line-rows+) cols))))
 
 ;;; PEER-IO-FAILURE, which several handlers in this file's dispatch path use,
 ;;; is defined in runtime.lisp -- nerimux.asd loads BOOTSTRAP-RUNTIME before
 ;;; BOOTSTRAP-SERVER, and runtime-reader.lisp needs the type too.
-
 (defun %start-session-reader-threads (session)
   (mapcar #'start-reader-thread (all-panes session)))
 

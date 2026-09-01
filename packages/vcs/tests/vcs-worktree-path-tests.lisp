@@ -16,8 +16,8 @@
 ;;;; "vcs worktree status" suite already uses for a missing-worktree path.
 ;;;; No PTY, no real git repository -- plain directory creation to simulate
 ;;;; "a worktree with this name already exists".
-
-(defvar *fake-repo-counter* 0)
+(defvar *fake-repo-counter*
+  0)
 
 (defun %fresh-fake-repo-git-dir ()
   "A repository.git/-shaped directory path (with a trailing slash, as
@@ -34,7 +34,8 @@
   (nerimux/vcs::%ensure-trailing-slash
    (namestring
     (merge-pathnames
-     (format nil "nerimux-worktree-path-test-~D-~D-~D.git/"
+     (format nil
+             "nerimux-worktree-path-test-~D-~D-~D.git/"
              (get-universal-time)
              (sb-posix:getpid)
              (incf *fake-repo-counter*))
@@ -52,12 +53,13 @@
       (expect (every #'digit-char-p (remove #\T token))))))
 
 (describe "renderer-suite/vcs-worktree-path-trailing-slash"
-
-  (it "adds a trailing slash only when the directory name lacks one"
-    (expect (string= "repository/"
-                     (nerimux/vcs::%ensure-trailing-slash "repository")))
-    (expect (string= "repository/"
-                     (nerimux/vcs::%ensure-trailing-slash "repository/")))))
+          (it "adds a trailing slash only when the directory name lacks one"
+              (expect
+               (string= "repository/"
+                        (nerimux/vcs::%ensure-trailing-slash "repository")))
+              (expect
+               (string= "repository/"
+                        (nerimux/vcs::%ensure-trailing-slash "repository/")))))
 
 (describe "renderer-suite/vcs-worktree-path-no-collision"
 

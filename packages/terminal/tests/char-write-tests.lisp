@@ -11,13 +11,11 @@
 ;;;; The predicate's five-range era is also covered by cursor-tests-b.lisp
 ;;;; (terminal-suite/combining-char-p-suite); this file adds the cases the range
 ;;;; list got wrong and the decisions the new definition makes.
-
 ;;; ── SUITE: combining-char-p agrees with char-width ──────────────────────────
 ;;;
 ;;; The invariant, stated once: for every NON-CONTROL code point,
 ;;;   (combining-char-p ch)  <=>  (zerop (char-width ch))
 ;;; Control codes are the one deliberate exception and get their own suite.
-
 (describe "terminal-suite/combining-char-p-agrees-with-char-width"
 
   ;; Every non-control code point: predicate and width must not contradict.
@@ -59,7 +57,6 @@
 ;;; different answers to one question, worth up to three cells of drift.
 ;;;
 ;;; か + U+3099 must land on exactly the cells が lands on.
-
 (describe "terminal-suite/kana-sound-mark-combining"
 
   ;; The marks contribute no columns: the cursor does not move past the base.
@@ -118,7 +115,6 @@
 ;;; U+0301 was already handled by the old range list.  Widening the definition
 ;;; must not disturb it: it still attaches to the single-width cell on its left
 ;;; and still leaves the cursor alone.
-
 (describe "terminal-suite/plain-combining-mark-unchanged"
 
   ;; e + U+0301 stays on one cell and one column.
@@ -148,7 +144,6 @@
 ;;; would push every emoji ZWJ sequence one cell to the right.
 ;;;
 ;;; If this is ever reversed, these tests are the place it must be argued.
-
 (describe "terminal-suite/format-characters-combine"
 
   ;; ZWJ takes no column and attaches to the character before it.
@@ -203,7 +198,6 @@
 ;;; decoder: the byte pair C2 80 assembles into U+0080 and reaches
 ;;; WRITE-CODEPOINT.  So this is a guard in COMBINING-CHAR-P, not an accident
 ;;; of the call graph.
-
 (describe "terminal-suite/control-codes-not-combining"
 
   ;; Control codes are zero-width to CHAR-WIDTH and still not combining.

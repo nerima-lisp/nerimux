@@ -384,25 +384,19 @@
           (expect (null target))
           (expect (equal '("--force") args)))))))
 
-  ;;; ── %maybe-send-resize behavior ──────────────────────────────────────────────
-  ;;;
-  ;;; %maybe-send-resize encapsulates the resize-pending check that was inline in
-  ;;; run-client.  It is tested here using a socket pair so the msg-resize frame
-  ;;; can be observed without a live terminal.
-
-  ;; %maybe-send-resize sends a +msg-resize+ frame and clears *resize-pending*
-  ;; when *resize-pending* is T — verifies the resize-dispatch path extracted from run-client.
-
-
-  ;; %maybe-send-resize is a no-op when *resize-pending* is NIL.
-
-
-  ;;; ── %forward-stdin-byte behavior ─────────────────────────────────────────────
-  ;;;
-  ;;; %forward-stdin-byte reads one non-blocking byte from fd 0 (stdin) and
-  ;;; forwards it as a +msg-key+ frame.  We test the "nothing ready" branch
-  ;;; (returns NIL without I/O) — the "byte forwarded" branch requires a real
-  ;;; non-blocking stdin fd, which is unavailable in a sandboxed test runner.
-
-  ;; %forward-stdin-byte returns NIL without error when stdin has no
-  ;; data ready (non-blocking read returns nil).
+;;; ── %maybe-send-resize behavior ──────────────────────────────────────────────
+;;;
+;;; %maybe-send-resize encapsulates the resize-pending check that was inline in
+;;; run-client.  It is tested here using a socket pair so the msg-resize frame
+;;; can be observed without a live terminal.
+;; %maybe-send-resize sends a +msg-resize+ frame and clears *resize-pending*
+;; when *resize-pending* is T — verifies the resize-dispatch path extracted from run-client.
+;; %maybe-send-resize is a no-op when *resize-pending* is NIL.
+;;; ── %forward-stdin-byte behavior ─────────────────────────────────────────────
+;;;
+;;; %forward-stdin-byte reads one non-blocking byte from fd 0 (stdin) and
+;;; forwards it as a +msg-key+ frame.  We test the "nothing ready" branch
+;;; (returns NIL without I/O) — the "byte forwarded" branch requires a real
+;;; non-blocking stdin fd, which is unavailable in a sandboxed test runner.
+;; %forward-stdin-byte returns NIL without error when stdin has no
+;; data ready (non-blocking read returns nil).

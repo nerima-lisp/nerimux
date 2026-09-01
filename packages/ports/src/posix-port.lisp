@@ -6,7 +6,6 @@
   (require :sb-posix))
 
 ;;;; POSIX symbol lookup for optional symbols within the supported SBCL runtime.
-
 ;;; I/O tuning for the descriptor-level loops.
 ;;;
 ;;; These were defined in nerimux/config, next to the config-file loader, which
@@ -16,15 +15,17 @@
 ;;;
 ;;; A fourth, +accept-timeout-us+, went with the move: it had no caller left once
 ;;; the accept loop became part of the select-multiplexed iteration.
-
-(defconstant +pty-buf-size+ 4096
+(defconstant +pty-buf-size+
+  4096
   "Byte buffer size for PTY reads.")
 
-(defconstant +poll-timeout-us+ 50000
+(defconstant +poll-timeout-us+
+  50000
   "Select timeout in microseconds for stdin/socket polling (50 ms, so roughly a
    20 fps ceiling on how fast a keystroke can be noticed).")
 
-(defconstant +pty-poll-timeout-us+ 50000
+(defconstant +pty-poll-timeout-us+
+  50000
   "Select timeout in microseconds for per-pane PTY reader threads (50 ms).
    Bounded so the reader loop observes *RUNNING* even when the shell is silent.")
 
@@ -50,7 +51,6 @@
 ;;; What these DO buy is one place that names the dependency, so a reader of
 ;;; domain/model and domain/format sees a named capability rather than a raw
 ;;; SB-EXT call scattered across six files.
-
 (defun environment-value (name)
   "Value of environment variable NAME in this process, or NIL when unset."
   (sb-ext:posix-getenv name))

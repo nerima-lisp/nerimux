@@ -8,7 +8,6 @@
 ;;;; with WITH-FAKE-SESSION, which binds nerimux:: server state -- neither is
 ;;;; reachable from a renderer test system, because nerimux-renderer depends on
 ;;;; neither nerimux-commands nor the bootstrap core.
-
 (describe "renderer-copy-mode-frame-suite"
 
   ;; When copy mode has a search term, render-session-to-string overdraws matches in

@@ -2,9 +2,7 @@
 
 ;;;; csi tests — part D: rep (REP), da-response, DECRQM, XTWINOPS, CPR,
 ;;;; DA-response table, REP-count-zero.
-
 ;;; ── SUITE: rep ───────────────────────────────────────────────────────────────
-
 (describe "terminal-suite/rep"
 
   ;; CSI 3 b repeats the last printed character 3 times.
@@ -38,7 +36,6 @@
       (expect (char= #\B (char-at s 3 0))))))
 
 ;;; ── SUITE: da-response ───────────────────────────────────────────────────────
-
 (describe "terminal-suite/da-response"
 
   ;; CSI c (DA1) queues the VT100 response string ESC[?1;2c.
@@ -158,7 +155,6 @@
                     (nerimux/terminal/types:screen-response-queue s))))))
 
 ;;; ── XTWINOPS size reports (CSI Ps t) ─────────────────────────────────────────
-
 (describe "terminal-suite/xtwinops"
 
   ;; CSI 18 t reports the text-area size in characters: ESC [ 8 ; rows ; cols t.
@@ -250,7 +246,6 @@
 ;;; Audit finding: %decrqm-flag-code (formerly %decrqm-boolean) and
 ;;; %decrqm-ansi-mode-state have no direct unit tests — they are reachable
 ;;; only through the end-to-end CSI path.
-
 (describe "terminal-suite/decrqm-internal"
 
   ;; %decrqm-flag-code returns 1 for T (set, wire code) and 2 for NIL (reset).
@@ -282,7 +277,6 @@
 ;;; ── Coverage gap: enqueue-da3-reply and enqueue-xtversion-reply ─────────────
 ;;;
 ;;; Audit finding: DA3 and XTVERSION reply enqueuers were never directly tested.
-
 (describe "terminal-suite/da3-xtversion-direct"
 
   ;; enqueue-da3-reply contains '!|00000000'; enqueue-xtversion-reply contains 'nerimux'.
@@ -299,7 +293,6 @@
 ;;; ── Coverage gap: enqueue-xtwinops-reply direct tests ───────────────────────
 ;;;
 ;;; Audit finding: the enqueue-xtwinops-reply function was only tested end-to-end.
-
 (describe "terminal-suite/xtwinops-direct"
 
   ;; enqueue-xtwinops-reply op 18 reports text-area ([8;…]) and op 19 reports screen ([9;…]).

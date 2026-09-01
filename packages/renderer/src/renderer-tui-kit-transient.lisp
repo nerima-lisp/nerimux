@@ -13,7 +13,6 @@
 ;;;; the in-place panel, the caller reaches for this instead, which wraps the
 ;;;; identical content in a full-screen bordered box (confirm-view/help-view's
 ;;;; shape) rather than drawing anything different.
-
 (defstruct transient-view
   "One open transient menu. ARGUMENTS is a list of (KEY FLAG DESCRIPTION
    ACTIVE-P TRANSIENT-KEY) and ACTIONS a list of (KEY DESCRIPTION HANDLER) --
@@ -31,35 +30,35 @@
   (actions nil :type list))
 
 ;;; ── Styles (Dracula) ─────────────────────────────────────────────────────
-
 (defun %transient-title-style ()
-  (cl-tui-kit/core:make-style
-   :bold t
-   :foreground (cl-tui-kit/core:rgb-color 139 233 253)))
+  (cl-tui-kit/core:make-style :bold
+                              t
+                              :foreground
+                              (cl-tui-kit/core:rgb-color 139 233 253)))
 
 (defun %transient-subtitle-style ()
-  (cl-tui-kit/core:make-style
-   :foreground (cl-tui-kit/core:rgb-color 98 114 164)))
+  (cl-tui-kit/core:make-style :foreground
+                              (cl-tui-kit/core:rgb-color 98 114 164)))
 
 (defun %transient-section-style ()
-  (cl-tui-kit/core:make-style
-   :bold t
-   :foreground (cl-tui-kit/core:rgb-color 189 147 249)))
+  (cl-tui-kit/core:make-style :bold
+                              t
+                              :foreground
+                              (cl-tui-kit/core:rgb-color 189 147 249)))
 
 (defun %transient-key-style ()
-  (cl-tui-kit/core:make-style
-   :foreground (cl-tui-kit/core:rgb-color 139 233 253)))
+  (cl-tui-kit/core:make-style :foreground
+                              (cl-tui-kit/core:rgb-color 139 233 253)))
 
 (defun %transient-argument-active-style ()
-  (cl-tui-kit/core:make-style
-   :foreground (cl-tui-kit/core:rgb-color 80 250 123)))
+  (cl-tui-kit/core:make-style :foreground
+                              (cl-tui-kit/core:rgb-color 80 250 123)))
 
 (defun %transient-argument-inactive-style ()
-  (cl-tui-kit/core:make-style
-   :foreground (cl-tui-kit/core:rgb-color 98 114 164)))
+  (cl-tui-kit/core:make-style :foreground
+                              (cl-tui-kit/core:rgb-color 98 114 164)))
 
 ;;; ── Layout ───────────────────────────────────────────────────────────────
-
 (defun %transient-pad (text width)
   "TEXT padded with spaces to WIDTH display columns.  Never truncates -- every
    text this is called on is already sized into WIDTH by the column-width
@@ -77,24 +76,43 @@
   (format nil "-~C" (first entry)))
 
 (defun %transient-draw-title-line (surface row col width view)
-  (let ((spans (list (cl-tui-kit/core:make-text-span
-                       (transient-view-title view)
-                       :style (%transient-title-style)))))
+  (let ((spans
+         (list
+          (cl-tui-kit/core:make-text-span (transient-view-title view)
+                                          :style
+                                          (%transient-title-style)))))
     (when (transient-view-subtitle view)
-      (setf spans
-            (append spans
-                    (list (cl-tui-kit/core:make-text-span
-                           (format nil "  ~A" (transient-view-subtitle view))
-                           :style (%transient-subtitle-style))))))
-    (cl-tui-kit/core:surface-draw-styled-text surface col row spans :max-width width)))
+      (setf spans (append spans
+                          (list
+                           (cl-tui-kit/core:make-text-span
+                            (format nil "  ~A" (transient-view-subtitle view))
+                            :style
+                            (%transient-subtitle-style))))))
+    (cl-tui-kit/core:surface-draw-styled-text surface
+                                              col
+                                              row
+                                              spans
+                                              :max-width
+                                              width)))
 
 (defun %transient-draw-section-heading (surface row col width text)
-  (cl-tui-kit/core:surface-draw-styled-text
-   surface col row
-   (list (cl-tui-kit/core:make-text-span text :style (%transient-section-style)))
-   :max-width width))
+  (cl-tui-kit/core:surface-draw-styled-text surface
+                                            col
+                                            row
+                                            (list
+                                             (cl-tui-kit/core:make-text-span
+                                              text
+                                              :style
+                                              (%transient-section-style)))
+                                            :max-width
+                                            width))
 
-(defun %transient-draw-argument-row (surface row col width entry key-width desc-width)
+(defun %transient-draw-argument-row (surface row
+                                             col
+                                             width
+                                             entry
+                                             key-width
+                                             desc-width)
   "ENTRY is (KEY FLAG DESCRIPTION ACTIVE-P . REST) -- see TRANSIENT-VIEW's
    docstring for why a longer list is fine here: DESCRIPTION (third) is what
    is shown, FLAG (second) is what server-multi-dispatch-transient.lisp
@@ -102,28 +120,47 @@
   (let* ((key-text (%transient-argument-key-text entry))
          (description (third entry))
          (active-p (fourth entry)))
-    (cl-tui-kit/core:surface-draw-styled-text
-     surface col row
-     (list (cl-tui-kit/core:make-text-span
-            (%transient-pad key-text key-width) :style (%transient-key-style))
-           (cl-tui-kit/core:make-text-span (%transient-pad description desc-width))
-           (cl-tui-kit/core:make-text-span
-            (if active-p "[x]" "[ ]")
-            :style (if active-p (%transient-argument-active-style)
-                       (%transient-argument-inactive-style))))
-     :max-width width)))
+    (cl-tui-kit/core:surface-draw-styled-text surface
+                                              col
+                                              row
+                                              (list
+                                               (cl-tui-kit/core:make-text-span
+                                                (%transient-pad key-text
+                                                                key-width)
+                                                :style
+                                                (%transient-key-style))
+                                               (cl-tui-kit/core:make-text-span
+                                                (%transient-pad description
+                                                                desc-width))
+                                               (cl-tui-kit/core:make-text-span
+                                                (if active-p
+                                                    "[x]"
+                                                    "[ ]")
+                                                :style
+                                                (if active-p
+                                                    (%transient-argument-active-style)
+                                                    (%transient-argument-inactive-style))))
+                                              :max-width
+                                              width)))
 
 (defun %transient-draw-action-row (surface row col width entry key-width)
   "ENTRY is (KEY DESCRIPTION . REST) -- REST is the dispatch HANDLER, unread
    here; see TRANSIENT-VIEW's docstring."
   (let ((key-text (string (first entry)))
         (description (second entry)))
-    (cl-tui-kit/core:surface-draw-styled-text
-     surface col row
-     (list (cl-tui-kit/core:make-text-span
-            (%transient-pad key-text key-width) :style (%transient-key-style))
-           (cl-tui-kit/core:make-text-span description))
-     :max-width width)))
+    (cl-tui-kit/core:surface-draw-styled-text surface
+                                              col
+                                              row
+                                              (list
+                                               (cl-tui-kit/core:make-text-span
+                                                (%transient-pad key-text
+                                                                key-width)
+                                                :style
+                                                (%transient-key-style))
+                                               (cl-tui-kit/core:make-text-span
+                                                description))
+                                              :max-width
+                                              width)))
 
 (defun transient-view-height (transient-view)
   "Rows TRANSIENT-VIEW wants: the title/subtitle line, an optional Arguments
@@ -153,56 +190,100 @@
          (arguments (transient-view-arguments transient-view))
          (actions (transient-view-actions transient-view))
          (row y))
-    (flet ((room-p () (<= row max-row))
-           (heading-width () (max 0 (- width 1)))
-           (item-width () (max 0 (- width 2))))
+    (flet ((room-p ()
+             (<= row max-row))
+           (heading-width ()
+             (max 0 (- width 1)))
+           (item-width ()
+             (max 0 (- width 2))))
       (when (room-p)
-        (%transient-draw-title-line surface row (1+ x) (heading-width) transient-view)
+        (%transient-draw-title-line surface
+                                    row
+                                    (1+ x)
+                                    (heading-width)
+                                    transient-view)
         (incf row))
       (when arguments
         (when (room-p)
-          (%transient-draw-section-heading surface row (1+ x) (heading-width) "Arguments")
+          (%transient-draw-section-heading surface
+                                           row
+                                           (1+ x)
+                                           (heading-width)
+                                           "Arguments")
           (incf row))
-        (let ((key-width (%transient-column-width
-                           (mapcar #'%transient-argument-key-text arguments) 2))
-              (desc-width (%transient-column-width (mapcar #'third arguments) 3)))
+        (let ((key-width
+               (%transient-column-width
+                (mapcar #'%transient-argument-key-text arguments)
+                2))
+              (desc-width
+               (%transient-column-width (mapcar #'third arguments) 3)))
           (dolist (entry arguments)
             (when (room-p)
-              (%transient-draw-argument-row surface row (+ x 2) (item-width)
-                                             entry key-width desc-width)
+              (%transient-draw-argument-row surface
+                                            row
+                                            (+ x 2)
+                                            (item-width)
+                                            entry
+                                            key-width
+                                            desc-width)
               (incf row)))))
       (when (room-p)
-        (%transient-draw-section-heading surface row (1+ x) (heading-width) "Actions")
+        (%transient-draw-section-heading surface
+                                         row
+                                         (1+ x)
+                                         (heading-width)
+                                         "Actions")
         (incf row))
-      (let ((key-width (%transient-column-width
-                         (mapcar (lambda (entry) (string (first entry))) actions) 3)))
+      (let ((key-width
+             (%transient-column-width
+              (mapcar
+               (lambda (entry)
+                 (string (first entry)))
+               actions)
+              3)))
         (dolist (entry actions)
           (when (room-p)
-            (%transient-draw-action-row surface row (+ x 2) (item-width) entry key-width)
+            (%transient-draw-action-row surface
+                                        row
+                                        (+ x 2)
+                                        (item-width)
+                                        entry
+                                        key-width)
             (incf row))))
       (when (room-p)
-        (cl-tui-kit/core:surface-draw-styled-text
-         surface (1+ x) row
-         (list (cl-tui-kit/core:make-text-span "q" :style (%transient-key-style))
-               (cl-tui-kit/core:make-text-span " back"))
-         :max-width (heading-width))))))
+        (cl-tui-kit/core:surface-draw-styled-text surface
+                                                  (1+ x)
+                                                  row
+                                                  (list
+                                                   (cl-tui-kit/core:make-text-span
+                                                    "q"
+                                                    :style
+                                                    (%transient-key-style))
+                                                   (cl-tui-kit/core:make-text-span
+                                                    " back"))
+                                                  :max-width
+                                                  (heading-width))))))
 
 ;;; ── Full-screen height fallback ──────────────────────────────────────────
-
 (defun %render-transient-view-box (surface rectangle)
-  (let ((box (cl-tui-kit/widgets:make-box-widget
-              (cl-tui-kit/widgets:make-text-widget "" :id :nerimux-transient-body)
-              :id :nerimux-transient-box :border-kind :single)))
+  (let ((box
+         (cl-tui-kit/widgets:make-box-widget
+          (cl-tui-kit/widgets:make-text-widget "" :id :nerimux-transient-body)
+          :id
+          :nerimux-transient-box
+          :border-kind
+          :single)))
     (cl-tui-kit/widgets:render-widget box surface rectangle)))
 
 (defun %stamp-transient-view-title (surface rectangle title)
   (let* ((inner-width (max 0 (- (cl-tui-kit/core:rectangle-width rectangle) 4)))
          (text (%display-clip (format nil " ~A " title) inner-width)))
-    (cl-tui-kit/core:surface-draw-text
-     surface
-     (+ (cl-tui-kit/core:rectangle-x rectangle) 2)
-     (cl-tui-kit/core:rectangle-y rectangle)
-     text)))
+    (cl-tui-kit/core:surface-draw-text surface
+                                       (+
+                                        (cl-tui-kit/core:rectangle-x rectangle)
+                                        2)
+                                       (cl-tui-kit/core:rectangle-y rectangle)
+                                       text)))
 
 (defun render-transient-full-screen-to-tui-string (transient-view rows cols)
   "Height-fallback path only (contract §3): the exact content
@@ -215,5 +296,7 @@
          (rectangle (cl-tui-kit/core:make-rectangle 0 0 cols rows)))
     (%render-transient-view-box surface rectangle)
     (%stamp-transient-view-title surface rectangle "TRANSIENT")
-    (render-transient-panel surface (%box-widget-inner-rectangle rectangle) transient-view)
+    (render-transient-panel surface
+                            (%box-widget-inner-rectangle rectangle)
+                            transient-view)
     (%surface-to-ansi-frame surface)))

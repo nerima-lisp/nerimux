@@ -17,7 +17,6 @@
 ;;;; pane-navigation keys through no longer exists to be constructed: VIEW
 ;;;; :pane now forwards every byte straight to the shell, unconditionally,
 ;;;; and pane navigation lives only behind the C-q prefix (§2).
-
 (describe "workspace-input-prefix-suite"
 
   ;; FR-007 (contract §1): VIEW :pane has no navigation meaning of its own --

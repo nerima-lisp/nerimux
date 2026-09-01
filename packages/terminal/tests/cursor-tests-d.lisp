@@ -3,13 +3,11 @@
 ;;;; cursor tests — part D: cursor-lf direct, cursor-nl newline-mode,
 ;;;; %materialize-tab-stops, BCE erase-cell background propagation,
 ;;;; and table-driven cursor-up/down/left/right at boundaries.
-
 ;;; ── cursor-lf direct behaviour ───────────────────────────────────────────────
 ;;;
 ;;; cursor-lf is distinct from cursor-nl: it performs a bare line feed (moves
 ;;; down / scrolls) without a carriage return even when LNM is on.  IND (ESC D)
 ;;; calls cursor-lf directly.
-
 ;; The "terminal-suite/direct-action-cursor" group is also opened by
 ;; tests/unit/domain/terminal/cursor-tests.lisp; cl-weave merges same-named
 ;; describe blocks, so this file just contributes the cursor tests that live
@@ -45,7 +43,6 @@
 ;;; it performs a carriage return after the line feed so 'a' LF 'b' stacks at
 ;;; column 0.  When LNM is off it behaves identically to cursor-lf (the column
 ;;; is preserved).
-
 (describe "terminal-suite/cursor-nl-mode-suite"
 
   ;; cursor-nl with LNM off (default) performs a bare line feed, keeping the column.
@@ -89,7 +86,6 @@
 ;;; ── cursor-lf via IND (ESC D) through the parser ─────────────────────────────
 ;;;
 ;;; ESC D calls cursor-lf directly (not cursor-nl), so LNM mode must not affect it.
-
 (describe "terminal-suite/ind-esc-d-suite"
 
   ;; ESC D (IND) moves the cursor down one row without a carriage return, even if LNM is on.
@@ -115,7 +111,6 @@
 ;;; Cells cleared by erase-display/erase-line/scroll must carry the current
 ;;; SGR background (BCE — background colour erase).  These tests verify that
 ;;; the current background is picked up, not the default.
-
 (describe "terminal-suite/bce-background-suite"
 
   ;; erase-region fills cells with the current background via %erase-cell.
@@ -158,7 +153,6 @@
 ;;;
 ;;; These tests verify clamping at both 0 and width-1 / height-1 for all four
 ;;; directions, consolidating the boundary assertions into one table.
-
 (describe "terminal-suite/cursor-boundary-table-suite"
 
   ;; Each cursor direction clamps correctly at both the lower and upper boundary.

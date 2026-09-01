@@ -1,14 +1,13 @@
 (in-package #:nerimux/test/terminal)
 
 ;;;; Screen assertion DSL and command-state fixtures.
-
 ;;; These macros raise the abstraction level for common screen assertions,
 ;;; making test intent visible and reducing boilerplate IS calls.
-
 (defmacro check-row (screen y expected-string)
   "Assert that row Y of SCREEN starts with EXPECTED-STRING."
-  `(expect (string= ,expected-string
-                    (row-string ,screen ,y :end (length ,expected-string)))))
+  `(expect
+    (string= ,expected-string
+             (row-string ,screen ,y :end (length ,expected-string)))))
 
 (defmacro check-cell (screen x y &key char fg bg attrs)
   "Assert cell attributes at column X, row Y of SCREEN.
@@ -22,7 +21,8 @@
       (push `(expect (= ,bg (bg-at ,screen ,x ,y))) forms))
     (when attrs
       (push `(expect (= ,attrs (attrs-at ,screen ,x ,y))) forms))
-    `(progn ,@(nreverse forms))))
+    `(progn
+       ,@(nreverse forms))))
 
 (defmacro check-sgr-state (screen &key (fg 7) (bg 0) (attrs 0))
   "Assert the current SGR pen state (foreground, background, attribute bitmask)."

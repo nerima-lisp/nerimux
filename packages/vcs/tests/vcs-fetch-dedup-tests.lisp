@@ -25,21 +25,22 @@
   "Replace the direct cl-vcs-kit fetch boundary for BODY."
   `(let ((,call-log (list :log)))
      (with-stubbed-fdefinition
-         ((vcs-kit:make-vcs-repository
-            (lambda (&rest arguments)
-              (declare (ignore arguments))
-              :fake-backend-repository))
-          (vcs-kit:vcs-fetch
-            (%delayed-vcs-fetch ,call-log ,delay)))
-       ,@body)))
+      ((vcs-kit:make-vcs-repository
+        (lambda (&rest arguments)
+          (declare (ignore arguments))
+          :fake-backend-repository))
+       (vcs-kit:vcs-fetch (%delayed-vcs-fetch ,call-log ,delay)))
+      ,@body)))
 
 (defun %poll-until (predicate &key (timeout-seconds 2.0))
   "Poll PREDICATE every 10ms until it returns true or TIMEOUT-SECONDS elapses.
    Returns the predicate's final value."
-  (let ((deadline (+ (get-internal-real-time)
-                     (round (* timeout-seconds internal-time-units-per-second)))))
+  (let ((deadline
+         (+ (get-internal-real-time)
+            (round (* timeout-seconds internal-time-units-per-second)))))
     (loop for result = (funcall predicate)
-          when result return result
+          when result
+            return result
           while (< (get-internal-real-time) deadline)
           do (sleep 0.01)
           finally (return (funcall predicate)))))
@@ -102,53 +103,65 @@
         (expect (= 2 (length (cdr call-log))))))))
 
 (describe "renderer-suite/vcs-fetch-dedup-repository-error-lifecycle"
-
-  (it "holds the repository key through error notification and releases it on completion"
-    (let* ((repository
-             (nerimux/workspace-model:make-repository
-              :specification "workspace-owner/dedup-repo-failure"
-              :local-path "/tmp/nerimux-fetch-dedup-repo-failure"))
-           (first-error nil)
-           (first-complete nil)
-           (duplicate-error nil)
-           (duplicate-result :pending)
-           (second-error nil)
-           (second-complete nil)
-           (attempts 0))
-      (with-stubbed-fdefinition
-          ((vcs-kit:vcs-fetch
-             (lambda (backend &rest arguments)
-               (declare (ignore backend arguments))
-               (incf attempts)
-               (error "synthetic repository fetch failure"))))
-        (nerimux/vcs:fetch-repository-async
-         repository
-         :on-error (lambda (condition)
-                     (setf first-error condition)
-                     (nerimux/vcs:fetch-repository-async
-                      repository
-                      :on-error (lambda (duplicate-condition)
-                                  (setf duplicate-error duplicate-condition))
-                      :on-complete (lambda (result)
-                                     (setf duplicate-result result))))
-         :on-complete (lambda (result)
-                        (declare (ignore result))
-                        (setf first-complete t)))
-        (expect (%poll-until (lambda () first-complete)))
-        (expect first-error)
-        (expect (null duplicate-result))
-        (expect (null duplicate-error))
-        (expect (= 1 attempts))
-        (nerimux/vcs:fetch-repository-async
-         repository
-         :on-error (lambda (condition)
-                     (setf second-error condition))
-         :on-complete (lambda (result)
-                        (declare (ignore result))
-                        (setf second-complete t)))
-        (expect (%poll-until (lambda () second-complete)))
-        (expect second-error)
-        (expect (= 2 attempts))))))
+          (it
+           "holds the repository key through error notification and releases it on completion"
+           (let* ((repository
+                   (nerimux/workspace-model:make-repository :specification
+                                                            "workspace-owner/dedup-repo-failure"
+                                                            :local-path
+                                                            "/tmp/nerimux-fetch-dedup-repo-failure"))
+                  (first-error nil)
+                  (first-complete nil)
+                  (duplicate-error nil)
+                  (duplicate-result :pending)
+                  (second-error nil)
+                  (second-complete nil)
+                  (attempts 0))
+             (with-stubbed-fdefinition
+              ((vcs-kit:vcs-fetch
+                (lambda (backend &rest arguments)
+                  (declare (ignore backend arguments))
+                  (incf attempts)
+                  (error "synthetic repository fetch failure"))))
+              (nerimux/vcs:fetch-repository-async repository
+                                                  :on-error
+                                                  (lambda (condition)
+                                                    (setf first-error condition)
+                                                    (nerimux/vcs:fetch-repository-async
+                                                     repository
+                                                     :on-error
+                                                     (lambda 
+                                                         (duplicate-condition)
+                                                       (setf duplicate-error duplicate-condition))
+                                                     :on-complete
+                                                     (lambda (result)
+                                                       (setf duplicate-result result))))
+                                                  :on-complete
+                                                  (lambda (result)
+                                                    (declare (ignore result))
+                                                    (setf first-complete t)))
+              (expect
+               (%poll-until
+                (lambda ()
+                  first-complete)))
+              (expect first-error)
+              (expect (null duplicate-result))
+              (expect (null duplicate-error))
+              (expect (= 1 attempts))
+              (nerimux/vcs:fetch-repository-async repository
+                                                  :on-error
+                                                  (lambda (condition)
+                                                    (setf second-error condition))
+                                                  :on-complete
+                                                  (lambda (result)
+                                                    (declare (ignore result))
+                                                    (setf second-complete t)))
+              (expect
+               (%poll-until
+                (lambda ()
+                  second-complete)))
+              (expect second-error)
+              (expect (= 2 attempts))))))
 
 (describe "renderer-suite/vcs-fetch-dedup-organization"
 
@@ -181,45 +194,65 @@
         (expect (= 1 (length (cdr call-log))))))))
 
 (describe "renderer-suite/vcs-fetch-dedup-organization-recovery"
-
-  (it "releases the organization key after a repository fetch fails"
-    (let* ((repository
-             (nerimux/workspace-model:make-repository
-              :specification "workspace-owner/dedup-org-failure"
-              :local-path "/tmp/nerimux-fetch-dedup-org-failure"))
-           (organization
-             (nerimux/workspace-model:make-organization
-              :host "workspace-owner" :name "dedup-org-failure"
-              :repositories (list repository)))
-           (first-error nil)
-           (first-complete nil)
-           (second-error nil)
-           (second-complete nil)
-           (attempts 0))
-      (with-stubbed-fdefinition
-          ((vcs-kit:vcs-fetch
-             (lambda (backend &rest arguments)
-               (declare (ignore backend arguments))
-               (incf attempts)
-               (error "synthetic organization fetch failure"))))
-        (nerimux/vcs:fetch-organization-async
-         organization
-         :on-error (lambda (failed-repository condition)
-                     (declare (ignore failed-repository))
-                     (setf first-error condition))
-         :on-complete (lambda (repositories)
-                        (declare (ignore repositories))
-                        (setf first-complete t)))
-        (expect (%poll-until (lambda () first-complete)))
-        (expect first-error)
-        (nerimux/vcs:fetch-organization-async
-         organization
-         :on-error (lambda (failed-repository condition)
-                     (declare (ignore failed-repository))
-                     (setf second-error condition))
-         :on-complete (lambda (repositories)
-                        (declare (ignore repositories))
-                        (setf second-complete t)))
-        (expect (%poll-until (lambda () second-complete)))
-        (expect second-error)
-        (expect (= 2 attempts))))))
+          (it "releases the organization key after a repository fetch fails"
+              (let* ((repository
+                      (nerimux/workspace-model:make-repository :specification
+                                                               "workspace-owner/dedup-org-failure"
+                                                               :local-path
+                                                               "/tmp/nerimux-fetch-dedup-org-failure"))
+                     (organization
+                      (nerimux/workspace-model:make-organization :host
+                                                                 "workspace-owner"
+                                                                 :name
+                                                                 "dedup-org-failure"
+                                                                 :repositories
+                                                                 (list
+                                                                  repository)))
+                     (first-error nil)
+                     (first-complete nil)
+                     (second-error nil)
+                     (second-complete nil)
+                     (attempts 0))
+                (with-stubbed-fdefinition
+                 ((vcs-kit:vcs-fetch
+                   (lambda (backend &rest arguments)
+                     (declare (ignore backend arguments))
+                     (incf attempts)
+                     (error "synthetic organization fetch failure"))))
+                 (nerimux/vcs:fetch-organization-async organization
+                                                       :on-error
+                                                       (lambda 
+                                                           (failed-repository
+                                                            condition)
+                                                         (declare (ignore
+                                                                   failed-repository))
+                                                         (setf first-error condition))
+                                                       :on-complete
+                                                       (lambda (repositories)
+                                                         (declare (ignore
+                                                                   repositories))
+                                                         (setf first-complete t)))
+                 (expect
+                  (%poll-until
+                   (lambda ()
+                     first-complete)))
+                 (expect first-error)
+                 (nerimux/vcs:fetch-organization-async organization
+                                                       :on-error
+                                                       (lambda 
+                                                           (failed-repository
+                                                            condition)
+                                                         (declare (ignore
+                                                                   failed-repository))
+                                                         (setf second-error condition))
+                                                       :on-complete
+                                                       (lambda (repositories)
+                                                         (declare (ignore
+                                                                   repositories))
+                                                         (setf second-complete t)))
+                 (expect
+                  (%poll-until
+                   (lambda ()
+                     second-complete)))
+                 (expect second-error)
+                 (expect (= 2 attempts))))))

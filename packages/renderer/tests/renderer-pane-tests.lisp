@@ -18,17 +18,14 @@
 ;;;; ever drawn on a border), and window-style/window-active-style are
 ;;;; always "" (a pane's default-bg cells are never recoloured) — see
 ;;;; renderer-borders.lisp and renderer-pane.lisp.
-
 ;;; -- Local fixture ----------------------------------------------------------
 ;;;
 ;;; make-renderer-test-session (defined in tests/helpers-renderer-fixtures.lisp) is the canonical
 ;;; shared fixture.  The old local %make-pane-test-session has been removed in
 ;;; favour of the shared version.
-
 (defun %snippet-around (text needle &optional (radius 24))
   (let ((pos (position needle text)))
-    (and pos
-         (subseq text pos (min (length text) (+ pos radius))))))
+    (and pos (subseq text pos (min (length text) (+ pos radius))))))
 
 (describe "renderer-suite"
 

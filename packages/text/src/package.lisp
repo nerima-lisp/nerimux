@@ -1,7 +1,7 @@
 (defpackage #:nerimux/text
-  (:use #:cl)
-  (:documentation
-   "FOUNDATION: string-to-value coercions with no nerimux dependency of any kind.
+            (:use #:cl)
+            (:documentation
+             "FOUNDATION: string-to-value coercions with no nerimux dependency of any kind.
     Deliberately the first module ASDF loads after the package declarations, so
     every later layer may call it and it can call none of them.
 
@@ -11,6 +11,4 @@
     both the export list and the DEFPACKAGE form, so no declaration recorded the
     dependency and the layering test could not see it.  Three of those callers
     were also compiled before the file that defined it.")
-  (:export
-   #:parse-integer-or-nil
-   #:non-empty-string))
+            (:export #:parse-integer-or-nil #:non-empty-string))

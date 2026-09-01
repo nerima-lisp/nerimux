@@ -21,7 +21,6 @@
 ;;;; one server process spawned by server-starts (see
 ;;;; server-kill-scenario.lisp), so selecting them apart from that group
 ;;;; produces a FAIL, not a skip -- they are not independent tests.
-
 (defparameter *e2e-dir*
   (make-pathname :name nil :type nil :defaults *load-truename*)
   "Directory this file was loaded from, used to locate the sibling scenario
@@ -34,6 +33,7 @@
    ASDF's central registry.")
 
 (load (merge-pathnames "helpers.lisp" *e2e-dir*))
+
 (load (merge-pathnames "server-kill-scenario.lisp" *e2e-dir*))
 
 ;;; ── Scenario table ────────────────────────────────────────────────────────
@@ -41,33 +41,30 @@
 ;;; :ATTACH is special-cased: its file is loaded lazily, only when selected,
 ;;; so a load failure (missing system, missing /dev/ptmx, ...) cannot take
 ;;; down the headless scenario results that ran before it.
-
 (defparameter *scenarios*
-  (list (cons "kill-without-server"    'scenario-kill-without-server)
-        (cons "server-starts"          'scenario-server-starts)
+  (list (cons "kill-without-server" 'scenario-kill-without-server)
+        (cons "server-starts" 'scenario-server-starts)
         (cons "kill-refuses-with-pane" 'scenario-kill-refuses-with-pane)
-        (cons "kill-force-cleans"      'scenario-kill-force-cleans)
-        (cons "attach"                 :attach))
+        (cons "kill-force-cleans" 'scenario-kill-force-cleans)
+        (cons "attach" :attach))
   "Mode-name -> handler-symbol (or :ATTACH), in the fixed run order.")
 
 (defun %run-attach-scenario-lazily (binary)
   "Load attach-scenario.lisp and run RUN-ATTACH-SCENARIO, catching any error
    -- including a load failure -- so it reports as a FAIL for this one
    scenario rather than aborting the whole run."
-  (handler-case
-      (progn
-        (load (merge-pathnames "attach-scenario.lisp" *e2e-dir*))
-        (funcall (find-symbol "RUN-ATTACH-SCENARIO") binary))
+  (handler-case (progn
+                  (load (merge-pathnames "attach-scenario.lisp" *e2e-dir*))
+                  (funcall (find-symbol "RUN-ATTACH-SCENARIO") binary))
     ((or error sb-ext:timeout) (c)
       (let ((*print-circle* t))
         (values nil (format nil "attach scenario failed to load or run: ~A" c))))))
 
 (defun %run-one-scenario (name binary)
   (let ((entry (cdr (assoc name *scenarios* :test #'string=))))
-    (handler-case
-        (if (eq entry :attach)
-            (%run-attach-scenario-lazily binary)
-            (funcall entry binary))
+    (handler-case (if (eq entry :attach)
+                      (%run-attach-scenario-lazily binary)
+                      (funcall entry binary))
       ((or error sb-ext:timeout) (c)
         (let ((*print-circle* t))
           (values nil (format nil "signalled ~A" c)))))))
@@ -77,10 +74,13 @@
    *SCENARIOS* named in FILTER-ARGS, still in *SCENARIOS*'s fixed order."
   (if (null filter-args)
       (mapcar #'car *scenarios*)
-      (remove-if-not (lambda (n) (member n filter-args :test #'string=))
-                      (mapcar #'car *scenarios*))))
+      (remove-if-not
+       (lambda (n)
+         (member n filter-args :test #'string=))
+       (mapcar #'car *scenarios*))))
 
-(defparameter +ksc-reap-timeout-seconds+ 5
+(defparameter +ksc-reap-timeout-seconds+
+  5
   "Bound for confirming *KSC-SERVER-PROCESS* has exited during RUN-E2E's
    unconditional post-loop reap.")
 
@@ -93,10 +93,13 @@
    no-op when the process is nil or already exited."
   (when (and *ksc-server-process* (sb-ext:process-alive-p *ksc-server-process*))
     (ignore-errors (sb-ext:process-kill *ksc-server-process* 9))
-    (poll-until (lambda () (not (sb-ext:process-alive-p *ksc-server-process*)))
-                +ksc-reap-timeout-seconds+)))
+    (poll-until
+     (lambda ()
+       (not (sb-ext:process-alive-p *ksc-server-process*)))
+     +ksc-reap-timeout-seconds+)))
 
-(defparameter +ksc-attach-kill-timeout-seconds+ 10
+(defparameter +ksc-attach-kill-timeout-seconds+
+  10
   "Bound for the `kill --force' RUN-E2E issues to clean up whatever server
    the attach scenario auto-started and left running.")
 
@@ -112,8 +115,10 @@
    a server, or something else already cleaned it up."
   (when (member "attach" names :test #'string=)
     (ignore-errors
-      (run-program-bounded binary '("kill" "--force")
-                            :timeout-seconds +ksc-attach-kill-timeout-seconds+))))
+     (run-program-bounded binary
+                          '("kill" "--force")
+                          :timeout-seconds
+                          +ksc-attach-kill-timeout-seconds+))))
 
 (defun run-e2e (binary filter-args)
   "Run the selected scenarios against BINARY in order, printing one PASS/FAIL
@@ -127,14 +132,22 @@
       (multiple-value-bind (ok detail) (%run-one-scenario name binary)
         (format t "~&[e2e] ~:[FAIL~;PASS~] ~A -- ~A~%" ok name detail)
         (finish-output)
-        (if ok (incf passed) (incf failed))))
+        (if ok
+            (incf passed)
+            (incf failed))))
     (%reap-server-process)
     (%reap-attach-server binary names)
-    (format t "~&[e2e] ~D selected, ~D passed, ~D failed~%"
-            (length names) passed failed)
+    (format t
+            "~&[e2e] ~D selected, ~D passed, ~D failed~%"
+            (length names)
+            passed
+            failed)
     (finish-output)
-    (sb-ext:exit :code (if (and (plusp (length names)) (zerop failed)) 0 1))))
+    (sb-ext:exit :code
+                 (if (and (plusp (length names)) (zerop failed))
+                     0
+                     1))))
 
-(let ((binary  (or (second sb-ext:*posix-argv*) "result/bin/nerimux"))
+(let ((binary (or (second sb-ext:*posix-argv*) "result/bin/nerimux"))
       (filters (nthcdr 2 sb-ext:*posix-argv*)))
   (run-e2e binary filters))

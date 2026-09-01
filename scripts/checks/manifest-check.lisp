@@ -18,12 +18,12 @@
 ;;;; The .asd files are READ, never evaluated.  ASDF is required first only so
 ;;;; the reader can resolve the package-qualified symbols inside a :perform
 ;;;; form; nothing here calls into ASDF.
-
 (require :asdf)
 
 (load "system/asdf-test-components.lisp")
 
-(defvar *declared* '())
+(defvar *declared*
+  '())
 
 (defun walk (node dir)
   (cond
@@ -33,7 +33,8 @@
             (pathname (getf plist :pathname))
             (sub (or pathname name))
             (components (getf plist :components)))
-       (dolist (c components) (walk c (concatenate 'string dir sub "/")))))
+       (dolist (c components)
+         (walk c (concatenate 'string dir sub "/")))))
     ((and (consp node) (eq (first node) :file))
      (push (concatenate 'string dir (second node) ".lisp") *declared*))))
 

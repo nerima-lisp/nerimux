@@ -5,7 +5,6 @@
 ;;;; %layout-tiled, %build-grid-tree, apply-named-layout) was removed along
 ;;;; with its tests; layout-find-leaf-nil-node-arm-returns-nil survives here
 ;;;; because it exercises the unrelated define-layout-fold NIL arm.
-
 (describe "layout-tree-suite"
 
   ;; layout-find-leaf on a NIL node returns NIL — exercises the NIL etypecase arm

@@ -5,13 +5,12 @@
 ;;; Data/logic separation mirrors the zoom helpers in window-core.lisp:
 ;;;   %update-pane-geometry — pure slot mutation (data)
 ;;;   pane-reposition       — geometry update then PTY/screen resize (effects)
-
 (defun %update-pane-geometry (pane x y width height)
   "Update PANE's position and dimension slots to X, Y, WIDTH, HEIGHT.
    Pure data mutation — no I/O side effects."
-  (setf (pane-x pane)      x
-        (pane-y pane)      y
-        (pane-width  pane) width
+  (setf (pane-x pane) x
+        (pane-y pane) y
+        (pane-width pane) width
         (pane-height pane) height))
 
 (defun pane-reposition (pane x y width height)
@@ -36,5 +35,4 @@
   (when (and (> (pane-fd pane) 0) (plusp width) (plusp height))
     (resize-pty (pane-fd pane) height width))
   (let ((screen (pane-screen pane)))
-    (with-lock-held ((screen-lock screen))
-      (screen-resize screen width height))))
+    (with-lock-held ((screen-lock screen)) (screen-resize screen width height))))

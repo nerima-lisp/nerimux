@@ -7,18 +7,20 @@
 ;;;; defaults-NIL / enable-sequence / disable-sequence triple for boolean
 ;;;; screen slots. Later screen test files may depend on this macro, so this
 ;;;; file must remain before those files in the ASDF load order.
-
 ;;; ── Boolean-slot test macro ───────────────────────────────────────────────
 ;;;
 ;;; Each generated triple tests:
 ;;;   1. The slot defaults to NIL on a fresh screen.
 ;;;   2. A specific escape sequence sets it to T.
 ;;;   3. A complementary sequence clears it to NIL.
-
-(defmacro define-boolean-slot-tests
-    (slot-accessor suite-name enable-sequence disable-sequence
-     &key (suite-description (symbol-name suite-name))
-          (parent-suite 'terminal-suite))
+(defmacro define-boolean-slot-tests (slot-accessor suite-name
+                                                   enable-sequence
+                                                   disable-sequence
+                                                   &key
+                                                   (suite-description
+                                                    (symbol-name suite-name))
+                                                   (parent-suite
+                                                    'terminal-suite))
   "Generate a describe block with three cl-weave tests for a boolean screen slot.
 
    SLOT-ACCESSOR    — accessor symbol (e.g. nerimux/terminal/types:screen-insert-mode)
@@ -27,29 +29,32 @@
    DISABLE-SEQUENCE — form that feeds the disabling sequence to screen variable S"
   (declare (ignore suite-description))
   (let* ((name (symbol-name slot-accessor))
-         (default-test  (string-downcase (format nil "~A-DEFAULTS-FALSE" name)))
-         (enabled-test  (string-downcase (format nil "~A-ENABLED-BY-SEQUENCE" name)))
-         (disabled-test (string-downcase (format nil "~A-DISABLED-BY-SEQUENCE" name))))
-    `(describe ,(format nil "~A/~A" (string-downcase (symbol-name parent-suite))
-                                    (string-downcase (symbol-name suite-name)))
-       (it ,default-test
-         (with-screen (s 10 5)
-           (expect (,slot-accessor s) :to-be-falsy)))
-       (it ,enabled-test
-         (with-screen (s 10 5)
-           ,enable-sequence
-           (expect (,slot-accessor s) :to-be-truthy)))
-       (it ,disabled-test
-         (with-screen (s 10 5)
-           ,enable-sequence
-           ,disable-sequence
-           (expect (,slot-accessor s) :to-be-falsy))))))
+         (default-test (string-downcase (format nil "~A-DEFAULTS-FALSE" name)))
+         (enabled-test
+          (string-downcase (format nil "~A-ENABLED-BY-SEQUENCE" name)))
+         (disabled-test
+          (string-downcase (format nil "~A-DISABLED-BY-SEQUENCE" name))))
+    `(describe
+      ,(format nil
+               "~A/~A"
+               (string-downcase (symbol-name parent-suite))
+               (string-downcase (symbol-name suite-name)))
+      (it ,default-test
+          (with-screen (s 10 5) (expect (,slot-accessor s) :to-be-falsy)))
+      (it ,enabled-test
+          (with-screen (s 10 5)
+                       ,enable-sequence
+                       (expect (,slot-accessor s) :to-be-truthy)))
+      (it ,disabled-test
+          (with-screen (s 10 5)
+                       ,enable-sequence
+                       ,disable-sequence
+                       (expect (,slot-accessor s) :to-be-falsy))))))
 
 ;;; ── SUITE: screen-title-stack ────────────────────────────────────────────────
 ;;;
 ;;; XTPUSHTITLE / XTPOPTITLE: a stack of saved title strings, bounded to
 ;;; +title-stack-max-depth+ = 8 entries.
-
 (describe "terminal-suite/title-stack-suite"
 
   ;; screen-title-stack is NIL on a fresh screen.
@@ -78,7 +83,6 @@
                   nerimux/terminal/types:+title-stack-max-depth+)))))
 
 ;;; ── SUITE: screen-cwd ────────────────────────────────────────────────────────
-
 (describe "terminal-suite/screen-cwd-suite"
 
   ;; screen-cwd is the empty string on a fresh screen.
@@ -99,7 +103,6 @@
       (expect (string/= "" (nerimux/terminal/types:screen-cwd s))))))
 
 ;;; ── SUITE: screen-pending-wrap ───────────────────────────────────────────────
-
 (describe "terminal-suite/pending-wrap-suite"
 
   ;; screen-pending-wrap is NIL on a fresh screen.
@@ -129,7 +132,6 @@
       (expect (nerimux/terminal/types:screen-pending-wrap s) :to-be-falsy))))
 
 ;;; ── SUITE: screen-focus-events (using define-boolean-slot-tests) ─────────────
-
 (define-boolean-slot-tests
   nerimux/terminal/types:screen-focus-events
   focus-events-suite
@@ -138,7 +140,6 @@
   :suite-description "screen-focus-events: defaults NIL, ?1004h enables, ?1004l disables")
 
 ;;; ── SUITE: G0/G1 charset designation and SO/SI ───────────────────────────────
-
 (describe "terminal-suite/g0-g1-charset-suite"
 
   ;; screen-g0-charset defaults to :ascii on a fresh screen.

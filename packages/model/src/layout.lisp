@@ -13,18 +13,22 @@
 ;;;         horizontally)
 ;;;   :h  — left/right split  (children side by side; the divider runs
 ;;;         vertically)
-
-(defconstant +pane-min-width+  2
+(defconstant +pane-min-width+
+  2
   "Smallest interior width (columns) a pane may occupy.")
-(defconstant +pane-min-height+ 1
+
+(defconstant +pane-min-height+
+  1
   "Smallest interior height (rows) a pane may occupy.")
 
 (defstruct (layout-leaf (:constructor make-layout-leaf (pane)))
   "Tree leaf: owns one PANE."
   pane)
 
-(defstruct (layout-split (:constructor make-layout-split (orientation first second
-                                                          &optional (ratio 1/2))))
+(defstruct 
+    (layout-split
+     (:constructor make-layout-split
+                   (orientation first second &optional (ratio 1/2))))
   "Internal node: split ORIENTATION (:v top/bottom, :h left/right) between two
    children FIRST and SECOND, giving FIRST the fraction RATIO of the split axis."
   orientation
@@ -35,9 +39,10 @@
 (defun %direct-child-side (split child)
   "If CHILD is a direct child of SPLIT, return (values SPLIT :first or :second).
    Returns (values NIL NIL) when CHILD is not a direct child of SPLIT."
-  (cond ((eq (layout-split-first  split) child) (values split :first))
-        ((eq (layout-split-second split) child) (values split :second))
-        (t (values nil nil))))
+  (cond
+    ((eq (layout-split-first split) child) (values split :first))
+    ((eq (layout-split-second split) child) (values split :second))
+    (t (values nil nil))))
 
 (defun layout-find-parent (node child)
   "Return (values PARENT WHICH) for CHILD's immediate parent LAYOUT-SPLIT,
@@ -63,21 +68,19 @@
 ;;;   orient_case(:v, V-form).
 ;;;
 ;;; Expands to: (ecase ORIENT-VAR (:h H-FORM) (:v V-FORM))
-
 (defmacro orient-case (orient-var &key h v)
   "Dispatch on ORIENT-VAR (:h or :v), evaluating H or V respectively.
    A concise replacement for repeated (ecase orient (:h ...) (:v ...))."
   `(ecase ,orient-var
      (:h ,h)
      (:v ,v)))
-;;; ── Tree geometry: assign rectangles ───────────────────────────────────────
 
+;;; ── Tree geometry: assign rectangles ───────────────────────────────────────
 ;;; ── %axis-floor: pure data lookup ───────────────────────────────────────────
 ;;;
 ;;; A Prolog-like fact:
 ;;;   axis_floor(:v) :- +pane-min-height+.
 ;;;   axis_floor(:h) :- +pane-min-width+.
-
 (defun %axis-floor (orient)
   "Minimum pane extent (cells) along ORIENT's split axis: rows for :v, cols for :h."
   (orient-case orient :h +pane-min-width+ :v +pane-min-height+))
@@ -87,7 +90,6 @@
 ;;; A pure tree-construction helper that only needs layout types
 ;;; (make-layout-leaf, make-layout-split), so it belongs here rather than in a
 ;;; file that pulls in WINDOW struct accessors.
-
 (defun %build-flat-tree (panes orientation)
   "Build a right-leaning binary split chain from PANES using ORIENTATION.
    Single pane: return a layout-leaf.  Two or more: first pane is the

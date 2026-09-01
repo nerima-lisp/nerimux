@@ -5,7 +5,6 @@
 ;;;; Command parsing and OSC handlers live in parser-osc-dispatch.lisp.
 ;;;; Shared helpers are split across parser-osc-clipboard.lisp,
 ;;;; parser-osc-uri.lisp and parser-osc-color.lisp.
-
 ;;; ── CPS OSC accumulator continuations ──────────────────────────────────────
 ;;;
 ;;; make-osc-k builds the accumulator closure that collects raw OSC payload
@@ -14,14 +13,14 @@
 ;;;
 ;;; Both continuations receive (screen byte) and return the next state function,
 ;;; matching the CPS state machine contract defined by define-state.
-
 (defun make-osc-st-k (buffer)
   "Return a continuation waiting for the backslash of ESC \\ (String Terminator).
    BUFFER is the accumulated OSC payload so far.
    On backslash: dispatch the payload and return ground-state.
    On any other byte: return ground-state without dispatching (malformed ST)."
   (lambda (screen-arg byte)
-    (declare (type screen screen-arg) (type (unsigned-byte 8) byte))
+    (declare (type screen screen-arg)
+             (type (unsigned-byte 8) byte))
     (when (= byte #x5C)
       (%dispatch-osc screen-arg buffer))
     #'ground-state))

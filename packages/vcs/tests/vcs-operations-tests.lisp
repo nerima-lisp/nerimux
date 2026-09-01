@@ -5,276 +5,371 @@
 
 (defun %vcs-operations-missing-path ()
   (namestring
-   (make-pathname
-    :name (format nil "nerimux-vcs-operations-missing-~A" (gensym))
-    :defaults (host-kit:temporary-directory))))
+   (make-pathname :name
+                  (format nil "nerimux-vcs-operations-missing-~A" (gensym))
+                  :defaults
+                  (host-kit:temporary-directory))))
 
 (defun %vcs-operations-poll-until (predicate &key (timeout-seconds 2.0))
-  (let ((deadline (+ (get-internal-real-time)
-                     (round (* timeout-seconds internal-time-units-per-second)))))
-    (loop
-      (when (funcall predicate)
-        (return t))
-      (when (>= (get-internal-real-time) deadline)
-        (return))
-      (sleep 0.01))))
+  (let ((deadline
+         (+ (get-internal-real-time)
+            (round (* timeout-seconds internal-time-units-per-second)))))
+    (loop (when (funcall predicate)
+            (return t)) (when (>= (get-internal-real-time) deadline)
+                          (return)) (sleep 0.01))))
 
 (defun %vcs-operations-join (threads)
   (dolist (thread threads)
     (ignore-errors (sb-thread:join-thread thread :timeout 2))))
 
-(defun %vcs-operations-fake-worktree
-    (path &key branch head bare-p locked-p prunable-p)
-  (vcs-kit::%make-vcs-worktree
-   :path path
-   :branch branch
-   :head head
-   :bare-p bare-p
-   :locked-p locked-p
-   :prunable-p prunable-p))
+(defun %vcs-operations-fake-worktree (path &key
+                                           branch
+                                           head
+                                           bare-p
+                                           locked-p
+                                           prunable-p)
+  (vcs-kit::%make-vcs-worktree :path
+                               path
+                               :branch
+                               branch
+                               :head
+                               head
+                               :bare-p
+                               bare-p
+                               :locked-p
+                               locked-p
+                               :prunable-p
+                               prunable-p))
 
 (defun %vcs-operations-status-entry (kind)
   (vcs-kit::%make-vcs-status-entry :kind kind))
 
-(defun %vcs-operations-status-snapshot
-    (&key entries branch-head ahead behind)
-  (vcs-kit::%make-vcs-status-snapshot
-   :entries entries
-   :branch-head branch-head
-   :ahead ahead
-   :behind behind))
+(defun %vcs-operations-status-snapshot (&key entries branch-head ahead behind)
+  (vcs-kit::%make-vcs-status-snapshot :entries
+                                      entries
+                                      :branch-head
+                                      branch-head
+                                      :ahead
+                                      ahead
+                                      :behind
+                                      behind))
 
-(defmacro with-vcs-operations-observations
-    ((raw-worktrees &key status-snapshot status-entries status-branch-head
-                    status-ahead status-behind)
-     &body body)
+(defmacro with-vcs-operations-observations ((raw-worktrees &key
+                                                           status-snapshot
+                                                           status-entries
+                                                           status-branch-head
+                                                           status-ahead
+                                                           status-behind) &body
+                                                                          body)
   `(with-stubbed-fdefinition
-       ((vcs-kit:make-vcs-repository
-          (lambda (&rest arguments)
-            (declare (ignore arguments))
-            :vcs-operations-backend))
-        (vcs-kit:vcs-list-worktrees
-          (lambda (&rest arguments)
-            (declare (ignore arguments))
-            ,raw-worktrees))
-        (vcs-kit:vcs-status-structured
-          (lambda (&rest arguments)
-            (declare (ignore arguments))
-            (or ,status-snapshot
-                (%vcs-operations-status-snapshot
-                 :entries ,status-entries
-                 :branch-head ,status-branch-head
-                 :ahead ,status-ahead
-                 :behind ,status-behind)))))
-     ,@body))
+    ((vcs-kit:make-vcs-repository
+      (lambda (&rest arguments)
+        (declare (ignore arguments))
+        :vcs-operations-backend))
+     (vcs-kit:vcs-list-worktrees
+      (lambda (&rest arguments)
+        (declare (ignore arguments))
+        ,raw-worktrees))
+     (vcs-kit:vcs-status-structured
+      (lambda (&rest arguments)
+        (declare (ignore arguments))
+        (or ,status-snapshot
+            (%vcs-operations-status-snapshot :entries
+                                             ,status-entries
+                                             :branch-head
+                                             ,status-branch-head
+                                             :ahead
+                                             ,status-ahead
+                                             :behind
+                                             ,status-behind)))))
+    ,@body))
 
 (describe "vcs worktree observation boundaries"
-  (it "rebuilds worktrees while retaining model state and pane bindings"
-    (let* ((path (%vcs-operations-existing-path))
-           (missing-path (%vcs-operations-missing-path))
-           (repository
-             (nerimux/workspace-model:make-repository
-              :specification "workspace-owner/project"
-              :local-path path))
-           (pane (make-pane :id 41))
-           (old-worktree
-             (nerimux/workspace-model:make-worktree
-              :id "preserved-id"
-              :repository repository
-              :path path
-              :branch "feature/ui"
-              :head "old-head"
-              :status :old
-              :dirty-p t
-              :conflict-p t
-              :ahead 2
-              :behind 3))
-           (raw-worktrees
-             (list (%vcs-operations-fake-worktree
-                    path
-                    :branch "feature/ui"
-                    :head "new-head")
-                   (%vcs-operations-fake-worktree
-                    missing-path
-                    :branch "feature/missing"
-                    :head "missing-head"))))
-      (nerimux/workspace-model:repository-add-worktree repository old-worktree)
-      (nerimux/pane:worktree-add-pane old-worktree pane)
-      (with-vcs-operations-observations
-          (raw-worktrees
-           :status-snapshot nil
-           :status-entries nil
-           :status-branch-head nil
-           :status-ahead nil
-           :status-behind nil)
-        (let ((result (nerimux/vcs:list-repository-worktrees repository)))
-          (let ((current (nerimux/workspace-model:repository-worktree-by-path
-                          repository path))
-                (missing (nerimux/workspace-model:repository-worktree-by-path
-                          repository missing-path)))
-            (expect (eq repository result))
-            (expect (= 2 (length (nerimux/workspace-model:repository-worktrees repository))))
-            (expect (string= "preserved-id"
-                             (nerimux/workspace-model:worktree-id current)))
-            (expect (eq :old (nerimux/workspace-model:worktree-status current)))
-            (expect (nerimux/workspace-model:worktree-dirty-p current))
-            (expect (nerimux/workspace-model:worktree-conflict-p current))
-            (expect (= 2 (nerimux/workspace-model:worktree-ahead current)))
-            (expect (= 3 (nerimux/workspace-model:worktree-behind current)))
-            (expect (eq current (nerimux/pane:pane-worktree pane)))
-            (expect (nerimux/workspace-model:worktree-missing-p missing))
-            (expect (null (nerimux/workspace-model:worktree-panes missing)))
-            (expect (eq current
-                       (nerimux/workspace-model:repository-main-worktree repository))))))))
-
-  (it "maps structured status into worktree and repository state"
-    (let* ((path (%vcs-operations-existing-path))
-           (repository
-             (nerimux/workspace-model:make-repository
-              :specification "workspace-owner/project"
-              :local-path path))
-           (worktree
-             (nerimux/workspace-model:make-worktree
-              :repository repository
-              :path path
-              :branch "feature/ui"
-              :head "old-head"))
-           (status-entries
-             (list (%vcs-operations-status-entry :ordinary)
-                   (%vcs-operations-status-entry :unmerged)))
-           (status-snapshot
-             (%vcs-operations-status-snapshot
-              :entries status-entries
-              :branch-head "new-head"
-              :ahead 4
-              :behind 2))
-           (status-branch-head "new-head")
-           (status-ahead 4)
-           (status-behind 2))
-      (nerimux/workspace-model:repository-add-worktree repository worktree)
-      (with-vcs-operations-observations
-          (nil
-           :status-snapshot status-snapshot
-           :status-entries status-entries
-           :status-branch-head status-branch-head
-           :status-ahead status-ahead
-           :status-behind status-behind)
-        (nerimux/vcs:worktree-status worktree)
-        (expect (eq status-snapshot
-                    (nerimux/workspace-model:worktree-status worktree)))
-        (expect (string= "new-head"
-                         (nerimux/workspace-model:worktree-head worktree)))
-        (expect (nerimux/workspace-model:worktree-dirty-p worktree))
-        (expect (nerimux/workspace-model:worktree-conflict-p worktree))
-        (expect (= 4 (nerimux/workspace-model:worktree-ahead worktree)))
-        (expect (= 2 (nerimux/workspace-model:worktree-behind worktree)))
-        (expect (nerimux/workspace-model:repository-dirty-p repository))
-        (expect (nerimux/workspace-model:repository-conflict-p repository))
-        (setf status-snapshot (%vcs-operations-status-snapshot))
-        (nerimux/vcs:worktree-status worktree)
-        (expect (eq status-snapshot
-                    (nerimux/workspace-model:worktree-status worktree)))
-        (expect (string= "new-head"
-                         (nerimux/workspace-model:worktree-head worktree)))
-        (expect (not (nerimux/workspace-model:worktree-dirty-p worktree)))
-        (expect (not (nerimux/workspace-model:worktree-conflict-p worktree)))
-        (expect (zerop (nerimux/workspace-model:worktree-ahead worktree)))
-        (expect (zerop (nerimux/workspace-model:worktree-behind worktree)))
-        (expect (not (nerimux/workspace-model:repository-dirty-p repository)))
-        (expect (not (nerimux/workspace-model:repository-conflict-p repository))))))
-
-(describe "vcs repository scanning"
-  (it "groups repositories and sorts organizations while forwarding query"
-    (let* ((path (%vcs-operations-existing-path))
-           (entries
-             (list
-              (vcs-kit:make-ghq-repository-entry
-               :specification "b-host/team/project-a"
-               :path path)
-              (vcs-kit:make-ghq-repository-entry
-               :specification "a-host/team/project-b"
-               :path path)))
-           (raw-worktrees
-             (list (%vcs-operations-fake-worktree
-                    path
-                    :branch "main"
-                    :head "head")))
-           (query-seen nil)
-           (callback-result nil))
-      (with-stubbed-fdefinition
-          ((vcs-kit:ghq-list-repositories
-             (lambda (&key query)
-               (setf query-seen query)
-               entries)))
-        (with-vcs-operations-observations
-            (raw-worktrees
-             :status-snapshot nil
-             :status-entries nil
-             :status-branch-head nil
-             :status-ahead nil
-             :status-behind nil)
-          (let ((result
-                  (nerimux/vcs:scan-repositories
-                   :query "workspace"
-                   :on-complete (lambda (organizations)
-                                  (setf callback-result organizations)))))
-            (expect (string= "workspace" query-seen))
-            (expect (eq result callback-result))
-            (expect (= 2 (length result)))
-            (expect (string<
-                     (nerimux/workspace-model:organization-id (first result))
-                     (nerimux/workspace-model:organization-id (second result))))
-            (dolist (organization result)
-              (expect (= 1
-                         (length
-                          (nerimux/workspace-model:organization-repositories
-                           organization))))
-              (expect (= 1
+          (it "rebuilds worktrees while retaining model state and pane bindings"
+              (let* ((path (%vcs-operations-existing-path))
+                     (missing-path (%vcs-operations-missing-path))
+                     (repository
+                      (nerimux/workspace-model:make-repository :specification
+                                                               "workspace-owner/project"
+                                                               :local-path
+                                                               path))
+                     (pane (make-pane :id 41))
+                     (old-worktree
+                      (nerimux/workspace-model:make-worktree :id
+                                                             "preserved-id"
+                                                             :repository
+                                                             repository
+                                                             :path
+                                                             path
+                                                             :branch
+                                                             "feature/ui"
+                                                             :head
+                                                             "old-head"
+                                                             :status
+                                                             :old
+                                                             :dirty-p
+                                                             t
+                                                             :conflict-p
+                                                             t
+                                                             :ahead
+                                                             2
+                                                             :behind
+                                                             3))
+                     (raw-worktrees
+                      (list
+                       (%vcs-operations-fake-worktree path
+                                                      :branch
+                                                      "feature/ui"
+                                                      :head
+                                                      "new-head")
+                       (%vcs-operations-fake-worktree missing-path
+                                                      :branch
+                                                      "feature/missing"
+                                                      :head
+                                                      "missing-head"))))
+                (nerimux/workspace-model:repository-add-worktree repository
+                                                                 old-worktree)
+                (nerimux/pane:worktree-add-pane old-worktree pane)
+                (with-vcs-operations-observations
+                 (raw-worktrees :status-snapshot
+                                nil
+                                :status-entries
+                                nil
+                                :status-branch-head
+                                nil
+                                :status-ahead
+                                nil
+                                :status-behind
+                                nil)
+                 (let ((result
+                        (nerimux/vcs:list-repository-worktrees repository)))
+                   (let ((current
+                          (nerimux/workspace-model:repository-worktree-by-path
+                           repository
+                           path))
+                         (missing
+                          (nerimux/workspace-model:repository-worktree-by-path
+                           repository
+                           missing-path)))
+                     (expect (eq repository result))
+                     (expect
+                      (= 2
                          (length
                           (nerimux/workspace-model:repository-worktrees
-                           (first (nerimux/workspace-model:organization-repositories
-                                   organization)))))))))))))
-
-  (it "keeps an unreadable repository in the catalog as missing"
-    (let* ((path (%vcs-operations-existing-path))
-           (entry
-             (vcs-kit:make-ghq-repository-entry
-              :specification "workspace-owner/project"
-              :path path)))
-      (with-stubbed-fdefinition
-          ((vcs-kit:ghq-list-repositories
-             (lambda (&key query)
-               (declare (ignore query))
-               (list entry)))
-           (vcs-kit:make-vcs-repository
-             (lambda (&rest arguments)
-               (declare (ignore arguments))
-               :unreadable-backend))
-           (vcs-kit:vcs-list-worktrees
-             (lambda (&rest arguments)
-               (declare (ignore arguments))
-               (error "unreadable worktree metadata"))))
-        (let* ((organizations (nerimux/vcs:scan-repositories))
-               (repository
-                 (first
-                  (nerimux/workspace-model:organization-repositories
-                   (first organizations)))))
-          (expect (= 1 (length organizations)))
-          (expect (nerimux/workspace-model:repository-missing-p repository))))))
-
-  (it "reports a top-level repository scan failure"
-    (let ((condition-seen nil))
-      (with-stubbed-fdefinition
-          ((vcs-kit:ghq-list-repositories
-             (lambda (&key query)
-               (declare (ignore query))
-               (error "ghq unavailable"))))
-        (expect
-         (null
-          (nerimux/vcs:scan-repositories
-           :on-error (lambda (condition)
-                       (setf condition-seen condition)))))
-        (expect (typep condition-seen 'error))))))
+                           repository))))
+                     (expect
+                      (string= "preserved-id"
+                               (nerimux/workspace-model:worktree-id current)))
+                     (expect
+                      (eq :old
+                          (nerimux/workspace-model:worktree-status current)))
+                     (expect (nerimux/workspace-model:worktree-dirty-p current))
+                     (expect
+                      (nerimux/workspace-model:worktree-conflict-p current))
+                     (expect
+                      (= 2 (nerimux/workspace-model:worktree-ahead current)))
+                     (expect
+                      (= 3 (nerimux/workspace-model:worktree-behind current)))
+                     (expect (eq current (nerimux/pane:pane-worktree pane)))
+                     (expect
+                      (nerimux/workspace-model:worktree-missing-p missing))
+                     (expect
+                      (null (nerimux/workspace-model:worktree-panes missing)))
+                     (expect
+                      (eq current
+                          (nerimux/workspace-model:repository-main-worktree
+                           repository))))))))
+          (it "maps structured status into worktree and repository state"
+              (let* ((path (%vcs-operations-existing-path))
+                     (repository
+                      (nerimux/workspace-model:make-repository :specification
+                                                               "workspace-owner/project"
+                                                               :local-path
+                                                               path))
+                     (worktree
+                      (nerimux/workspace-model:make-worktree :repository
+                                                             repository
+                                                             :path
+                                                             path
+                                                             :branch
+                                                             "feature/ui"
+                                                             :head
+                                                             "old-head"))
+                     (status-entries
+                      (list (%vcs-operations-status-entry :ordinary)
+                            (%vcs-operations-status-entry :unmerged)))
+                     (status-snapshot
+                      (%vcs-operations-status-snapshot :entries
+                                                       status-entries
+                                                       :branch-head
+                                                       "new-head"
+                                                       :ahead
+                                                       4
+                                                       :behind
+                                                       2))
+                     (status-branch-head "new-head")
+                     (status-ahead 4)
+                     (status-behind 2))
+                (nerimux/workspace-model:repository-add-worktree repository
+                                                                 worktree)
+                (with-vcs-operations-observations
+                 (nil :status-snapshot
+                      status-snapshot
+                      :status-entries
+                      status-entries
+                      :status-branch-head
+                      status-branch-head
+                      :status-ahead
+                      status-ahead
+                      :status-behind
+                      status-behind)
+                 (nerimux/vcs:worktree-status worktree)
+                 (expect
+                  (eq status-snapshot
+                      (nerimux/workspace-model:worktree-status worktree)))
+                 (expect
+                  (string= "new-head"
+                           (nerimux/workspace-model:worktree-head worktree)))
+                 (expect (nerimux/workspace-model:worktree-dirty-p worktree))
+                 (expect (nerimux/workspace-model:worktree-conflict-p worktree))
+                 (expect
+                  (= 4 (nerimux/workspace-model:worktree-ahead worktree)))
+                 (expect
+                  (= 2 (nerimux/workspace-model:worktree-behind worktree)))
+                 (expect
+                  (nerimux/workspace-model:repository-dirty-p repository))
+                 (expect
+                  (nerimux/workspace-model:repository-conflict-p repository))
+                 (setf status-snapshot (%vcs-operations-status-snapshot))
+                 (nerimux/vcs:worktree-status worktree)
+                 (expect
+                  (eq status-snapshot
+                      (nerimux/workspace-model:worktree-status worktree)))
+                 (expect
+                  (string= "new-head"
+                           (nerimux/workspace-model:worktree-head worktree)))
+                 (expect
+                  (not (nerimux/workspace-model:worktree-dirty-p worktree)))
+                 (expect
+                  (not (nerimux/workspace-model:worktree-conflict-p worktree)))
+                 (expect
+                  (zerop (nerimux/workspace-model:worktree-ahead worktree)))
+                 (expect
+                  (zerop (nerimux/workspace-model:worktree-behind worktree)))
+                 (expect
+                  (not (nerimux/workspace-model:repository-dirty-p repository)))
+                 (expect
+                  (not
+                   (nerimux/workspace-model:repository-conflict-p repository))))))
+          (describe "vcs repository scanning"
+                    (it
+                     "groups repositories and sorts organizations while forwarding query"
+                     (let* ((path (%vcs-operations-existing-path))
+                            (entries
+                             (list
+                              (vcs-kit:make-ghq-repository-entry :specification
+                                                                 "b-host/team/project-a"
+                                                                 :path
+                                                                 path)
+                              (vcs-kit:make-ghq-repository-entry :specification
+                                                                 "a-host/team/project-b"
+                                                                 :path
+                                                                 path)))
+                            (raw-worktrees
+                             (list
+                              (%vcs-operations-fake-worktree path
+                                                             :branch
+                                                             "main"
+                                                             :head
+                                                             "head")))
+                            (query-seen nil)
+                            (callback-result nil))
+                       (with-stubbed-fdefinition
+                        ((vcs-kit:ghq-list-repositories
+                          (lambda (&key query)
+                            (setf query-seen query)
+                            entries)))
+                        (with-vcs-operations-observations
+                         (raw-worktrees :status-snapshot
+                                        nil
+                                        :status-entries
+                                        nil
+                                        :status-branch-head
+                                        nil
+                                        :status-ahead
+                                        nil
+                                        :status-behind
+                                        nil)
+                         (let ((result
+                                (nerimux/vcs:scan-repositories :query
+                                                               "workspace"
+                                                               :on-complete
+                                                               (lambda 
+                                                                   (organizations)
+                                                                 (setf callback-result organizations)))))
+                           (expect (string= "workspace" query-seen))
+                           (expect (eq result callback-result))
+                           (expect (= 2 (length result)))
+                           (expect
+                            (string<
+                             (nerimux/workspace-model:organization-id
+                              (first result))
+                             (nerimux/workspace-model:organization-id
+                              (second result))))
+                           (dolist (organization result)
+                             (expect
+                              (= 1
+                                 (length
+                                  (nerimux/workspace-model:organization-repositories
+                                   organization))))
+                             (expect
+                              (= 1
+                                 (length
+                                  (nerimux/workspace-model:repository-worktrees
+                                   (first
+                                    (nerimux/workspace-model:organization-repositories
+                                     organization)))))))))))))
+          (it "keeps an unreadable repository in the catalog as missing"
+              (let* ((path (%vcs-operations-existing-path))
+                     (entry
+                      (vcs-kit:make-ghq-repository-entry :specification
+                                                         "workspace-owner/project"
+                                                         :path
+                                                         path)))
+                (with-stubbed-fdefinition
+                 ((vcs-kit:ghq-list-repositories
+                   (lambda (&key query)
+                     (declare (ignore query))
+                     (list entry)))
+                  (vcs-kit:make-vcs-repository
+                   (lambda (&rest arguments)
+                     (declare (ignore arguments))
+                     :unreadable-backend))
+                  (vcs-kit:vcs-list-worktrees
+                   (lambda (&rest arguments)
+                     (declare (ignore arguments))
+                     (error "unreadable worktree metadata"))))
+                 (let* ((organizations (nerimux/vcs:scan-repositories))
+                        (repository
+                         (first
+                          (nerimux/workspace-model:organization-repositories
+                           (first organizations)))))
+                   (expect (= 1 (length organizations)))
+                   (expect
+                    (nerimux/workspace-model:repository-missing-p repository))))))
+          (it "reports a top-level repository scan failure"
+              (let ((condition-seen nil))
+                (with-stubbed-fdefinition
+                 ((vcs-kit:ghq-list-repositories
+                   (lambda (&key query)
+                     (declare (ignore query))
+                     (error "ghq unavailable"))))
+                 (expect
+                  (null
+                   (nerimux/vcs:scan-repositories :on-error
+                                                  (lambda (condition)
+                                                    (setf condition-seen condition)))))
+                 (expect (typep condition-seen 'error))))))
 
 (describe "vcs worktree commands"
   (it "emits exact synchronous worktree operation commands"

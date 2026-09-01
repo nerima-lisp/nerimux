@@ -1,9 +1,7 @@
 (in-package #:nerimux/test)
 
 ;;;; global variables, pane-reader-loop, reader EOF, and alert actions
-
 ;;; ── Test fixture macros ──────────────────────────────────────────────────────
-
 (defmacro with-dead-pane ((pane-var) &body body)
   "Bind PANE-VAR to a standard dead pane (fd=-1, pid=-1, 5×3 screen) for BODY.
    Eliminates the repeated (make-pane :id 1 :fd -1 :pid -1 :screen (make-screen 5 3))

@@ -1,7 +1,6 @@
 (in-package #:nerimux/test)
 
 ;;;; Server multi-client message dispatch tests.
-
 (describe "server-multi-suite"
 
   (it "picker-arrow-key-bytes-one-at-a-time-do-not-move-the-index"

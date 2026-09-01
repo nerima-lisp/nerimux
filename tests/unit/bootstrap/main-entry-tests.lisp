@@ -1,30 +1,33 @@
 (in-package #:nerimux/test)
 
 ;;;; Tests for CLI entry point reachability and command forwarding.
-
 ;;; ── Coverage: stub handler functions ─────────────────────────────────────────
 ;;;
 ;;; sb-ext:exit terminates the process rather than signalling a condition.
 ;;; We stub it to capture the exit code for testing.
-
 (defmacro with-stubbed-exit (code-var &body body)
   "Stub sb-ext:exit so it captures the :code argument in the existing variable
    CODE-VAR and non-locally exits the body via THROW (matching sb-ext:exit's
    declared return type of NIL — a returning stub triggers SIMPLE-CONTROL-ERROR).
    Assertions should follow the macro form, where CODE-VAR holds the captured
    value.  Uses WITHOUT-PACKAGE-LOCKS because SB-EXT is a locked package."
-  (let ((tag     (gensym "EXIT-TAG"))
-        (orig    (gensym "ORIG-EXIT")))
+  (let ((tag (gensym "EXIT-TAG"))
+        (orig (gensym "ORIG-EXIT")))
     `(sb-ext:without-package-locks
-       (let ((,orig (fdefinition 'sb-ext:exit)))
-         (setf (fdefinition 'sb-ext:exit)
-               (lambda (&rest args &key (code 0) &allow-other-keys)
-                 (declare (ignore args))
-                 (setf ,code-var code)
-                 (throw ',tag nil)))
-         (unwind-protect
-              (catch ',tag ,@body)
-           (setf (fdefinition 'sb-ext:exit) ,orig))))))
+      (let ((,orig (fdefinition 'sb-ext:exit)))
+        (setf (fdefinition 'sb-ext:exit) (lambda 
+                                             (&rest args
+                                                    &key
+                                                    (code 0)
+                                                    &allow-other-keys)
+                                           (declare (ignore args))
+                                           (setf ,code-var code)
+                                           (throw ',tag
+                                             nil)))
+        (unwind-protect 
+            (catch ',tag
+              ,@body)
+          (setf (fdefinition 'sb-ext:exit) ,orig))))))
 
 (describe "main-suite"
 

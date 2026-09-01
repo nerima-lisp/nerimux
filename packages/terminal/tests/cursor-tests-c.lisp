@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/terminal)
 
 ;;;; Cursor tests — part III: cursor-ri (reverse index), cursor-nel (next-line), write-char-at-cursor wide, %advance-cursor no-wrap, cursor movement behavioral.
-
 (describe "terminal-suite/direct-action-cursor"
 
   ;;; ── cursor-ri (ESC M — reverse index) ───────────────────────────────────────
@@ -36,7 +35,6 @@
 ;;; cursor-nel is exported from nerimux/terminal/actions and used by the parser
 ;;; (ESC E handler).  It performs CR then LF: moves the cursor to column 0 of
 ;;; the next row, scrolling at the bottom margin exactly like LF.
-
 (describe "terminal-suite/cursor-nel-suite"
 
   ;; cursor-nel from an interior column moves to col 0 of the next row.

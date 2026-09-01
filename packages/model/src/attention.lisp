@@ -7,15 +7,19 @@
 ;;; worktree- and organization-level attention. worktree.lisp keeps only ghq
 ;;; facts (conflict/dirty/ahead/behind/missing); it must never regain a
 ;;; reference to pane-attention-p or any other pane symbol (W3).
-
 (defun worktree-attention-reasons (worktree)
   (when worktree
     (let ((reasons nil))
-      (when (worktree-conflict-p worktree) (push :conflict reasons))
-      (when (worktree-dirty-p worktree) (push :dirty reasons))
-      (when (plusp (worktree-ahead worktree)) (push :ahead reasons))
-      (when (plusp (worktree-behind worktree)) (push :behind reasons))
-      (when (worktree-missing-p worktree) (push :missing reasons))
+      (when (worktree-conflict-p worktree)
+        (push :conflict reasons))
+      (when (worktree-dirty-p worktree)
+        (push :dirty reasons))
+      (when (plusp (worktree-ahead worktree))
+        (push :ahead reasons))
+      (when (plusp (worktree-behind worktree))
+        (push :behind reasons))
+      (when (worktree-missing-p worktree)
+        (push :missing reasons))
       (when (some #'pane-attention-p (worktree-panes worktree))
         (push :pane reasons))
       (nreverse reasons))))

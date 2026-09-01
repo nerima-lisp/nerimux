@@ -15,7 +15,6 @@
 ;;; copy_mode(cancel, Screen) :- set(mark, nil), set(cursor, nil), set(selecting, false).
 ;;; copy_mode(yank, Screen)   :- selection_text(Screen, T), add_paste_buffer(T),
 ;;;                               copy_mode(cancel, Screen), copy_mode(exit, Screen).
-
 (defun copy-mode-enter (screen &key scroll-to-top exit-on-bottom)
   "Enter copy/scroll mode on SCREEN: freeze the viewport at the live position.
    The copy-mode cursor is placed at the bottom-left of the viewport so that
@@ -59,7 +58,7 @@
 (defun %clamp-row-col (screen row col)
   "Return (cons clamped-row clamped-col) with row in [0, height-1] and col in [0, width-1]."
   (cons (max 0 (min (1- (screen-height screen)) row))
-        (max 0 (min (1- (screen-width  screen)) col))))
+        (max 0 (min (1- (screen-width screen)) col))))
 
 (defun %copy-mode-clamp-cursor (screen)
   "Clamp the copy-mode cursor row into [0, height-1] and col into [0, width-1].
@@ -67,8 +66,9 @@
    Operates on the cursor cons directly; no-op when cursor is NIL."
   (let ((cursor (screen-copy-cursor screen)))
     (when cursor
-      (setf (screen-copy-cursor screen)
-            (%clamp-row-col screen (car cursor) (cdr cursor))))))
+      (setf (screen-copy-cursor screen) (%clamp-row-col screen
+                                                        (car cursor)
+                                                        (cdr cursor))))))
 
 (defun copy-mode-scroll (screen delta)
   "Scroll SCREEN's viewport by DELTA lines (positive = older, negative = newer).
@@ -98,30 +98,28 @@
 ;;; commands-copy-mode-clip.lisp was also gone), stop-selection, and
 ;;; scroll-to-mouse were removed: none is reachable from
 ;;; %handle-client-copy-key-payload or any other live call site.
-
 (defun copy-mode-begin-selection (screen)
   "Begin a text selection at the current copy-mode cursor position."
   (when (screen-copy-mode-p screen)
     (let ((cur (or (screen-copy-cursor screen) (cons 0 0))))
-      (setf (screen-copy-mark        screen) cur
+      (setf (screen-copy-mark screen) cur
             (screen-copy-mark-offset screen) (screen-copy-offset screen)
-            (screen-copy-cursor      screen) cur
-            (screen-copy-selecting   screen) t
-            (screen-dirty-p          screen) t))))
+            (screen-copy-cursor screen) cur
+            (screen-copy-selecting screen) t
+            (screen-dirty-p screen) t))))
 
 ;;; copy-mode-set-mark, copy-mode-other-end, and copy-mode-jump-to-mark were
 ;;; removed: unreachable from %handle-client-copy-key-payload or any other
 ;;; live call site.
-
 (defun %reset-selection-fields (screen)
   "Clear all selection state fields on SCREEN (selecting, mark, line/rect flags) and
    mark dirty.  Does NOT clear the cursor — callers that need that do so separately."
-  (setf (screen-copy-selecting        screen) nil
-        (screen-copy-mark             screen) nil
-        (screen-copy-mark-offset      screen) 0
+  (setf (screen-copy-selecting screen) nil
+        (screen-copy-mark screen) nil
+        (screen-copy-mark-offset screen) 0
         (screen-copy-line-selection-p screen) nil
-        (screen-copy-rect-select-p    screen) nil
-        (screen-dirty-p               screen) t))
+        (screen-copy-rect-select-p screen) nil
+        (screen-dirty-p screen) t))
 
 ;;; copy-mode-clear-selection (the clear-selection copy-mode command) was removed: its only two
 ;;; callers, copy-mode-copy-selection-no-cancel and the :clear finish branch of
@@ -129,7 +127,6 @@
 ;;; dead and were deleted first; re-grepped for zero remaining callers before
 ;;; removing this one, per the caution that it looked dead on an earlier pass
 ;;; but was in fact still called at that time.
-
 (defun copy-mode-cancel-selection (screen)
   "Cancel any active copy-mode selection."
   (setf (screen-copy-cursor screen) nil)

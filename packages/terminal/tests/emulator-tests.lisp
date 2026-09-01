@@ -3,9 +3,7 @@
 ;;;; Emulator tests (src/terminal/emulator.lisp and scroll helpers).
 ;;;; Tests: copy-mode scrollback projection, screen-display-cell OOB,
 ;;;;        screen-process-bytes keyword arguments, and trim-scroll-history.
-
 ;;; ── SUITE: copy-mode scrollback projection ──────────────────────────────────
-
 (describe "terminal-suite/copy-mode"
 
   ;; Auto-scrolling a full screen pushes displaced top rows into the scrollback.
@@ -51,7 +49,6 @@
 ;;;   1. col exceeds the length of a scrollback row-vector
 ;;;   2. live-row exceeds screen-height (i.e. offset > scrollback depth)
 ;;; These paths were previously uncovered by any test.
-
 (describe "copy-mode/display-cell-oob"
 
   ;; screen-display-cell returns the blank-cell fallback when COL exceeds the
@@ -92,7 +89,6 @@
         (expect (char= #\Space (nerimux/terminal/types:cell-char cell)))))))
 
 ;;; ── SUITE: screen-process-bytes keyword arguments ────────────────────────────
-
 (describe "terminal-suite/screen-process-bytes-suite"
 
   ;; screen-process-bytes :start/:end process only the specified byte slice.
@@ -124,7 +120,6 @@
       (expect (string= "HELLO" (row-string s 0 :end 5))))))
 
 ;;; ── SUITE: trim-scroll-history ───────────────────────────────────────────────
-
 (describe "terminal-suite/trim-scroll-history-suite"
 
   ;; trim-scroll-history truncates the scrollback list when it exceeds the
@@ -169,7 +164,6 @@
         (expect (<= (length (nerimux/terminal/types:screen-scrollback s)) cap))))))
 
 ;;; ── SUITE: decstbm (set scroll region) ──────────────────────────────────────
-
 (describe "terminal-suite/decstbm-suite"
 
   ;; decstbm installs the specified scroll region (0-based).
@@ -206,7 +200,6 @@
       (expect (= 9 (nerimux/terminal/types:screen-scroll-bottom s))))))
 
 ;;; ── SUITE: screen-consume-bell ───────────────────────────────────────────────
-
 (describe "terminal-suite/screen-consume-bell-suite"
 
   ;; screen-consume-bell: returns T and clears bell-pending; a second call returns NIL.
@@ -220,7 +213,6 @@
       (expect (nerimux/terminal/types:screen-consume-bell s) :to-be-falsy))))
 
 ;;; ── SUITE: screen-resize emulator integration ────────────────────────────────
-
 (describe "terminal-suite/screen-resize-suite"
 
   ;; screen-resize updates width and height for both growing and shrinking.

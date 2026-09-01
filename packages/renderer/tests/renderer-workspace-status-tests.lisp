@@ -10,12 +10,20 @@
 ;;;; renderer-tui-kit-help-tests.lisp already applies to the sibling
 ;;;; full-screen help view -- this file's ASDF registration must load after
 ;;;; both of those (see the orchestrator report).
-
-(defun %build-status-fixture
-    (&key (branch "feature/status") head ahead behind
-          unmerged untracked unstaged staged
-          stashes stashes-state commits commits-state
-          panes sibling-p)
+(defun %build-status-fixture (&key (branch "feature/status")
+                                   head
+                                   ahead
+                                   behind
+                                   unmerged
+                                   untracked
+                                   unstaged
+                                   staged
+                                   stashes
+                                   stashes-state
+                                   commits
+                                   commits-state
+                                   panes
+                                   sibling-p)
   "One worktree under one repository, optionally with a sibling worktree
    (SIBLING-P) -- REPOSITORY-ADD-WORKTREE, not a bare MAKE-REPOSITORY
    :WORKTREES list, so WORKTREE-REPOSITORY is actually wired (Unit
@@ -23,24 +31,54 @@
    MAKE-REPOSITORY alone never sets a worktree's back-pointer). Returns
    (VALUES WORKTREE REPOSITORY SIBLING-OR-NIL)."
   (let* ((worktree
-           (nerimux/workspace-model:make-worktree
-            :id "wt-status" :path "/repo/wt" :branch branch :head head
-            :ahead (or ahead 0) :behind (or behind 0)
-            :unmerged-files unmerged :untracked-files untracked
-            :unstaged-files unstaged :staged-files staged
-            :stashes stashes :stashes-state stashes-state
-            :recent-commits commits :commits-state commits-state
-            :panes panes))
+          (nerimux/workspace-model:make-worktree :id
+                                                 "wt-status"
+                                                 :path
+                                                 "/repo/wt"
+                                                 :branch
+                                                 branch
+                                                 :head
+                                                 head
+                                                 :ahead
+                                                 (or ahead 0)
+                                                 :behind
+                                                 (or behind 0)
+                                                 :unmerged-files
+                                                 unmerged
+                                                 :untracked-files
+                                                 untracked
+                                                 :unstaged-files
+                                                 unstaged
+                                                 :staged-files
+                                                 staged
+                                                 :stashes
+                                                 stashes
+                                                 :stashes-state
+                                                 stashes-state
+                                                 :recent-commits
+                                                 commits
+                                                 :commits-state
+                                                 commits-state
+                                                 :panes
+                                                 panes))
          (repository
-           (nerimux/workspace-model:make-repository
-            :id "repo-status" :specification "github.com/team/status"
-            :local-path "/repo"))
+          (nerimux/workspace-model:make-repository :id
+                                                   "repo-status"
+                                                   :specification
+                                                   "github.com/team/status"
+                                                   :local-path
+                                                   "/repo"))
          (sibling
-           (and sibling-p
-                (nerimux/workspace-model:make-worktree
-                 :id "wt-sibling" :path "/repo/other" :branch "main"))))
+          (and sibling-p
+               (nerimux/workspace-model:make-worktree :id
+                                                      "wt-sibling"
+                                                      :path
+                                                      "/repo/other"
+                                                      :branch
+                                                      "main"))))
     (nerimux/workspace-model:repository-add-worktree repository worktree)
-    (when sibling (nerimux/workspace-model:repository-add-worktree repository sibling))
+    (when sibling
+      (nerimux/workspace-model:repository-add-worktree repository sibling))
     (values worktree repository sibling)))
 
 (defun %status-entry-kinds (entries)
@@ -50,7 +88,11 @@
   "The OBJECT of every :SECTION-kind entry, in order -- the section identity
    contract §3 fixes: :UNMERGED :UNTRACKED :UNSTAGED :STAGED :STASHES
    :COMMITS :PANES :WORKTREES."
-  (mapcar #'third (remove-if-not (lambda (e) (eq (fourth e) :section)) entries)))
+  (mapcar #'third
+          (remove-if-not
+           (lambda (e)
+             (eq (fourth e) :section))
+           entries)))
 
 (describe "renderer-suite/workspace-status-entries"
 

@@ -3,7 +3,6 @@
 ;;;; csi tests — part C: csi-unknown-sequences, DECOM/origin-mode,
 ;;;; cup-row-direct, enqueue-* helpers, XTPUSHTITLE/XTPOPTITLE,
 ;;;; DEC Rectangle operations (DECERA/DECFRA/DECCRA).
-
 (describe "terminal-suite/csi-unknown-sequences"
 
   ;; A CSI sequence with an unrecognized final byte is consumed without error.
@@ -38,7 +37,6 @@
       (check-row s 0 "startend"))))
 
 ;;; ── SUITE: decom ──────────────────────────────────────────────────────────────
-
 (describe "terminal-suite/decom"
 
   ;; With DECOM (?6h) set, CUP rows are relative to the scroll-region top.
@@ -75,7 +73,6 @@
 ;;; Audit finding: %cup-row's non-DECOM branch and the DECOM clamping case were
 ;;; not separately asserted.  The DECOM tests above exercise the origin-mode path
 ;;; indirectly; these tests assert %cup-row directly.
-
 (describe "terminal-suite/cup-row-direct"
 
   ;; %cup-row without DECOM converts a 1-based row to a 0-based row.
@@ -108,7 +105,6 @@
 ;;;
 ;;; Audit finding: the extracted enqueue-dsr-reply, enqueue-cpr-reply,
 ;;; enqueue-da1-reply, and enqueue-da2-reply helpers are not tested directly.
-
 (describe "terminal-suite/enqueue-helpers"
 
   ;; enqueue-dsr/da1/da2-reply each push a string with the expected fixed signature.
@@ -132,7 +128,6 @@
                 (nerimux/terminal/types:screen-response-queue s))))))
 
 ;;; ── XTPUSHTITLE / XTPOPTITLE (CSI > Ps t / CSI < Ps t) ─────────────────────
-
 (describe "terminal-suite/xtpushtitle-xtpoptitle"
 
   ;; CSI > t (XTPUSHTITLE) pushes the current title onto the title stack.
@@ -169,7 +164,6 @@
       (expect (<= (length (nerimux/terminal/types:screen-title-stack s)) 8)))))
 
 ;;; ── DEC Rectangle operations (DECERA / DECFRA / DECCRA) ─────────────────────
-
 (describe "terminal-suite/dec-rect-ops"
 
   ;; ── DECERA ───────────────────────────────────────────────────────────────────

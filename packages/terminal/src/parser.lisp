@@ -10,13 +10,11 @@
 ;;;; macro that maps byte patterns to actions and their continuation.
 ;;;; Parameterized CSI and UTF-8 continuations live in parser-csi.lisp and
 ;;;; parser-utf8.lisp so this file remains the state-machine skeleton.
-
 ;;; ── Named (non-parameterized) state functions ──────────────────────────────
 ;;;
 ;;; Each define-state call reads like Prolog clauses:
 ;;;   ground-state(Screen, 0x1B) :- next_state(escape_state).
 ;;;   ground-state(Screen, 0x0D) :- cursor_cr(Screen), next_state(ground_state).
-
 (define-state ground-state (screen byte)
   ;; ── Escape and control ──────────────────────────────────────────────────
   (#x1B  #'escape-state)
@@ -86,7 +84,6 @@
 ;;;   %dispatch-osc   — payload parser and side-effect applier
 ;;;   make-osc-st-k   — bridge continuation waiting for ESC \ backslash
 ;;;   make-osc-k      — accumulator continuation for OSC payload bytes
-
 (define-state osc-state (screen byte)
   ;; OSC payload: start accumulating into a fresh buffer.
   ;; Bare BEL and bare ESC with empty payload are handled as no-ops.

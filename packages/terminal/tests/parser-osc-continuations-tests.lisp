@@ -1,16 +1,19 @@
 (in-package #:nerimux/test/terminal)
 
 ;;;; parser tests - OSC bridge continuations.
-
 ;;; Helper: build an adjustable byte vector pre-filled with STRING.
 ;;; Eliminates the repeated 3-line buffer-construction pattern.
 (defun make-osc-payload-buf (string)
   "Return a fresh adjustable (unsigned-byte 8) buffer pre-filled with the
    bytes of STRING (one byte per character, Latin-1 encoded)."
-  (let ((buf (make-array (length string)
-                         :element-type '(unsigned-byte 8)
-                         :fill-pointer 0
-                         :adjustable   t)))
+  (let ((buf
+         (make-array (length string)
+                     :element-type
+                     '(unsigned-byte 8)
+                     :fill-pointer
+                     0
+                     :adjustable
+                     t)))
     (loop for ch across string
           do (vector-push-extend (char-code ch) buf))
     buf))

@@ -1,7 +1,6 @@
 (in-package #:nerimux/test)
 
 ;;;; Server multi-client message dispatch tests.
-
 (describe "server-multi-suite"
 
   (it "overview-worktree-prune-confirm-without-confirm-is-rejected"

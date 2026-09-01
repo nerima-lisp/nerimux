@@ -2,9 +2,7 @@
 
 ;;;; Erase tests for erase.lisp through parser and direct action paths.
 ;;;; Suite: erase.
-
 ;;; ── SUITE: erase ────────────────────────────────────────────────────────────
-
 (defun fill-screen (screen)
   "Fill every cell of SCREEN with 'X' and return SCREEN."
   (dotimes (y (screen-height screen) screen)
@@ -43,21 +41,25 @@
                (declare (ignore description))
                (destructuring-bind (width height) (case-option options :screen)
                  `(it ,(string-downcase (symbol-name name))
-                    (with-screen (s ,width ,height)
-                      ,@(mapcar #'expand-setup (case-option options :setup))
-                      ,@(when (case-option options :cursor)
-                          `((feed s (esc ,(case-option options :cursor)))))
-                      (feed s (esc ,(case-option options :command)))
-                      ,@(mapcar #'expand-assertion
-                                (case-option options :assertions))))))))
-    `(progn ,@(mapcar #'expand-case cases))))
+                      (with-screen (s ,width ,height)
+                                   ,@(mapcar #'expand-setup
+                                             (case-option options :setup))
+                                   ,@(when (case-option options :cursor)
+                                       `((feed s
+                                               (esc
+                                                ,(case-option options :cursor)))))
+                                   (feed s
+                                         (esc ,(case-option options :command)))
+                                   ,@(mapcar #'expand-assertion
+                                             (case-option options :assertions))))))))
+    `(progn
+       ,@(mapcar #'expand-case cases))))
 
 ;;; ── Direct erase-display tests covering guarded edge cases ──────────────────
 ;;;
 ;;; These call erase-display directly to exercise the edge at cy=0 for mode 1
 ;;; (the when guard in erase.lisp) and other paths not clearly covered by the
 ;;; high-level CSI path above.
-
 (defmacro define-direct-erase-cases (&body cases)
   "Define direct erase-display/erase-line cases from declarative rows."
   (labels ((case-option (options key)
@@ -92,14 +94,18 @@
                (destructuring-bind (width height) (case-option options :screen)
                  (destructuring-bind (x y) (case-option options :cursor)
                    `(it ,(string-downcase (symbol-name name))
-                      (with-screen (s ,width ,height)
-                        ,@(mapcar #'expand-setup (case-option options :setup))
-                        (setf (nerimux/terminal/types:screen-cursor-x s) ,x
-                              (nerimux/terminal/types:screen-cursor-y s) ,y)
-                        ,(expand-call (case-option options :call))
-                        ,@(mapcar #'expand-assertion
-                                  (case-option options :assertions)))))))))
-    `(progn ,@(mapcar #'expand-case cases))))
+                        (with-screen (s ,width ,height)
+                                     ,@(mapcar #'expand-setup
+                                               (case-option options :setup))
+                                     (setf (nerimux/terminal/types:screen-cursor-x
+                                            s) ,x
+                                           (nerimux/terminal/types:screen-cursor-y
+                                            s) ,y)
+                                     ,(expand-call (case-option options :call))
+                                     ,@(mapcar #'expand-assertion
+                                               (case-option options :assertions)))))))))
+    `(progn
+       ,@(mapcar #'expand-case cases))))
 
 (describe "terminal-suite/erase"
 

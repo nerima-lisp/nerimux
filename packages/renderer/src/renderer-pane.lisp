@@ -5,42 +5,51 @@
 ;;;; Depends on the ANSI escape-code primitives from renderer-format.lisp
 ;;;; (loaded first in the same package) and the layout/model structures from
 ;;;; nerimux/model.
-
 ;;; ── Per-row cell rendering ───────────────────────────────────────────────────
-
 (defstruct (sgr-register (:conc-name sgr-reg-))
   "Mutable SGR state registers threaded across cells (and rows for hyperlinks).
    Tracks the last-emitted attribute values so redundant SGR sequences are suppressed."
-  (fg        -1  :type fixnum)
-  (bg        -1  :type fixnum)
-  (attrs     -1  :type fixnum)
-  (attrs2    -1  :type fixnum)
-  (ul-color  -1  :type fixnum)
+  (fg -1 :type fixnum)
+  (bg -1 :type fixnum)
+  (attrs -1 :type fixnum)
+  (attrs2 -1 :type fixnum)
+  (ul-color -1 :type fixnum)
   (hyperlink nil))
 
-(defun %pane-cell-in-selection-p (row col sel-active sel-start-row sel-end-row
-                                  sel-start-col sel-end-col sel-rect-p)
+(defun %pane-cell-in-selection-p (row col
+                                      sel-active
+                                      sel-start-row
+                                      sel-end-row
+                                      sel-start-col
+                                      sel-end-col
+                                      sel-rect-p)
   "True when cell (ROW, COL) falls inside the active copy-mode selection.
    Always false when SEL-ACTIVE is NIL."
   (and sel-active
-       (in-selection-p row col sel-start-row sel-end-row
-                       sel-start-col sel-end-col sel-rect-p)))
+       (in-selection-p row
+                       col
+                       sel-start-row
+                       sel-end-row
+                       sel-start-col
+                       sel-end-col
+                       sel-rect-p)))
 
 (defun %emit-cell-sgr-if-changed (stream sgr-reg fg bg attrs attrs2 ul-color)
   "Emit an SGR sequence for FG/BG/ATTRS/ATTRS2/UL-COLOR to STREAM, but only when
    they differ from the last-emitted values recorded in SGR-REG.  Updates SGR-REG
    to the new values as a side-effect.  Suppressing redundant SGR sequences keeps
    the per-frame output small when neighbouring cells share the same style."
-  (unless (and (= fg       (sgr-reg-fg       sgr-reg))
-               (= bg       (sgr-reg-bg       sgr-reg))
-               (= attrs    (sgr-reg-attrs    sgr-reg))
-               (= attrs2   (sgr-reg-attrs2   sgr-reg))
-               (= ul-color (sgr-reg-ul-color sgr-reg)))
+  (unless 
+      (and (= fg (sgr-reg-fg sgr-reg))
+           (= bg (sgr-reg-bg sgr-reg))
+           (= attrs (sgr-reg-attrs sgr-reg))
+           (= attrs2 (sgr-reg-attrs2 sgr-reg))
+           (= ul-color (sgr-reg-ul-color sgr-reg)))
     (render-cell-attrs stream fg bg attrs attrs2 ul-color)
-    (setf (sgr-reg-fg       sgr-reg) fg
-          (sgr-reg-bg       sgr-reg) bg
-          (sgr-reg-attrs    sgr-reg) attrs
-          (sgr-reg-attrs2   sgr-reg) attrs2
+    (setf (sgr-reg-fg sgr-reg) fg
+          (sgr-reg-bg sgr-reg) bg
+          (sgr-reg-attrs sgr-reg) attrs
+          (sgr-reg-attrs2 sgr-reg) attrs2
           (sgr-reg-ul-color sgr-reg) ul-color)))
 
 (defun %emit-cell-hyperlink-if-changed (stream sgr-reg hyperlink)
@@ -48,7 +57,8 @@
    from the link recorded in SGR-REG (entering, leaving, or switching a link
    span).  Updates SGR-REG to the new value as a side-effect."
   (unless (equal hyperlink (sgr-reg-hyperlink sgr-reg))
-    (write-string (format nil "~C]8;;~@[~A~]~C\\" #\Escape hyperlink #\Escape) stream)
+    (write-string (format nil "~C]8;;~@[~A~]~C\\" #\Escape hyperlink #\Escape)
+                  stream)
     (setf (sgr-reg-hyperlink sgr-reg) hyperlink)))
 
 (defstruct (selection-bounds (:conc-name sel-bounds-))
@@ -56,7 +66,14 @@
    per-cell renderers take a single value instead of eight positional arguments.
    Built once per frame from %compute-selection-bounds's eight return values
    (which its direct unit tests still consume positionally)."
-  active start-row end-row start-col end-col rect-p mark-row mark-col)
+  active
+  start-row
+  end-row
+  start-col
+  end-col
+  rect-p
+  mark-row
+  mark-col)
 
 (defun %render-cell (stream cell row col sgr-reg rev-screen
                      def-fg def-bg selection-style-fg selection-style-bg
@@ -136,36 +153,59 @@
    are eligible for window-style recolour."
   (let ((raw-fg (cell-fg cell))
         (raw-bg (cell-bg cell)))
-    (values (if (and def-fg (= raw-fg nerimux/terminal/types:+default-color+)) def-fg raw-fg)
-            (if (and def-bg (= raw-bg nerimux/terminal/types:+default-color+)) def-bg raw-bg))))
+    (values
+     (if (and def-fg (= raw-fg nerimux/terminal/types:+default-color+))
+         def-fg
+         raw-fg)
+     (if (and def-bg (= raw-bg nerimux/terminal/types:+default-color+))
+         def-bg
+         raw-bg))))
 
-(defun %pane-cell-mark-colors (row col sel-mark-row sel-mark-col
-                               mark-style-fg mark-style-bg
-                               base-fg base-bg)
+(defun %pane-cell-mark-colors (row col
+                                   sel-mark-row
+                                   sel-mark-col
+                                   mark-style-fg
+                                   mark-style-bg
+                                   base-fg
+                                   base-bg)
   (let* ((mark-row-p (and sel-mark-row (= row sel-mark-row)))
          (mark-col-p (and mark-row-p sel-mark-col (= col sel-mark-col)))
          (mark-style-active (and mark-row-p (or mark-style-fg mark-style-bg)))
-         (mark-fg (if mark-style-active (or mark-style-fg base-fg) base-fg))
-         (mark-bg (if mark-style-active (or mark-style-bg base-bg) base-bg)))
+         (mark-fg
+          (if mark-style-active
+              (or mark-style-fg base-fg)
+              base-fg))
+         (mark-bg
+          (if mark-style-active
+              (or mark-style-bg base-bg)
+              base-bg)))
     (values mark-col-p mark-fg mark-bg)))
 
-(defun %pane-cell-selection-colors (in-sel selection-style-fg selection-style-bg
-                                    base-fg base-bg)
-  (let ((selection-style-colour (and in-sel
-                                     (or selection-style-fg selection-style-bg))))
-    (values (if selection-style-colour
-                (or selection-style-fg base-fg)
-                base-fg)
-            (if selection-style-colour
-                (or selection-style-bg base-bg)
-                base-bg)
-            selection-style-colour)))
+(defun %pane-cell-selection-colors (in-sel selection-style-fg
+                                           selection-style-bg
+                                           base-fg
+                                           base-bg)
+  (let ((selection-style-colour
+         (and in-sel (or selection-style-fg selection-style-bg))))
+    (values
+     (if selection-style-colour
+         (or selection-style-fg base-fg)
+         base-fg)
+     (if selection-style-colour
+         (or selection-style-bg base-bg)
+         base-bg)
+     selection-style-colour)))
 
-(defun %pane-cell-attrs (cell in-sel selection-style-colour mark-col-p rev-screen)
-  (let ((attrs (logxor (cell-attrs cell)
-                       (if (and in-sel (not selection-style-colour) (not mark-col-p))
-                           nerimux/terminal/types:+attr-reverse+ 0)
-                       (or rev-screen 0))))
+(defun %pane-cell-attrs (cell in-sel
+                              selection-style-colour
+                              mark-col-p
+                              rev-screen)
+  (let ((attrs
+         (logxor (cell-attrs cell)
+                 (if (and in-sel (not selection-style-colour) (not mark-col-p))
+                     nerimux/terminal/types:+attr-reverse+
+                     0)
+                 (or rev-screen 0))))
     (if mark-col-p
         (logior attrs nerimux/terminal/types:+attr-reverse+)
         attrs)))
@@ -174,9 +214,12 @@
   "Resolved fg/bg cell-colour numbers (each NIL or a cell-colour integer)
    consumed by %render-pane-body, bundled so render-pane can pass them around
    as one value instead of six."
-  def-fg def-bg
-  selection-fg selection-bg
-  mark-fg mark-bg)
+  def-fg
+  def-bg
+  selection-fg
+  selection-bg
+  mark-fg
+  mark-bg)
 
 ;;; window-style / window-active-style (the pane-background recolour hook)
 ;;; defaulted to "" — no override — and nothing could ever set them once
@@ -195,11 +238,13 @@
 ;;; the reverse-video XOR in %pane-cell-attrs (below), never from a colour
 ;;; substitution here.  Deleting the dead colour path leaves that XOR as the
 ;;; only mechanism, matching the fixed decision exactly.
-
-(defconstant +copy-mode-mark-fg+ 0
+(defconstant +copy-mode-mark-fg+
+  0
   "Cell-colour index for the copy-mode mark row's foreground (black).
    copy-mode-mark-style's fixed value is \"bg=red,fg=black\"; see the note above.")
-(defconstant +copy-mode-mark-bg+ 1
+
+(defconstant +copy-mode-mark-bg+
+  1
   "Cell-colour index for the copy-mode mark row's background (red).")
 
 (defun %resolve-pane-style-colours (pane)
@@ -207,10 +252,18 @@
    DEF-FG/DEF-BG and SELECTION-FG/-BG are always NIL (see the note above this
    function); only MARK-FG/MARK-BG carry a real colour."
   (declare (ignore pane))
-  (make-pane-style-colours
-   :def-fg nil :def-bg nil
-   :selection-fg nil :selection-bg nil
-   :mark-fg +copy-mode-mark-fg+ :mark-bg +copy-mode-mark-bg+))
+  (make-pane-style-colours :def-fg
+                           nil
+                           :def-bg
+                           nil
+                           :selection-fg
+                           nil
+                           :selection-bg
+                           nil
+                           :mark-fg
+                           +copy-mode-mark-fg+
+                           :mark-bg
+                           +copy-mode-mark-bg+))
 
 (defun %render-pane-body (stream screen pane-height pane-width
                           origin-x origin-y

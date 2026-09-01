@@ -1,8 +1,13 @@
 (in-package #:nerimux/renderer)
 
 ;;; Selection bounds and hit-testing for pane rendering.
-
-(defun in-selection-p (row col sel-start-r sel-end-r sel-start-c sel-end-c &optional rect-p)
+(defun in-selection-p (row col
+                           sel-start-r
+                           sel-end-r
+                           sel-start-c
+                           sel-end-c
+                           &optional
+                           rect-p)
   "Return T when (ROW, COL) falls within the selection.
    RECT-P non-nil: rectangle mode — any cell in [start-r..end-r] x [start-c..end-c).
    Default (character mode): the standard stream-of-characters selection logic."
@@ -14,7 +19,7 @@
         ((= sel-start-r sel-end-r row)
          (and (<= sel-start-c col) (< col sel-end-c)))
         ((= row sel-start-r) (>= col sel-start-c))
-        ((= row sel-end-r)   (< col sel-end-c))
+        ((= row sel-end-r) (< col sel-end-c))
         (t (and (> row sel-start-r) (< row sel-end-r))))))
 
 (defun %compute-selection-bounds (screen)

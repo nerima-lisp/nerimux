@@ -1,7 +1,6 @@
 (in-package #:nerimux/test)
 
 ;;;; Session registry and lookup behavior.
-
 (describe "server-suite"
 
   ;; server-add-session registers a session; server-find-session retrieves it.

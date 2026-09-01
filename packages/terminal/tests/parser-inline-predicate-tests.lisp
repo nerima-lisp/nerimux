@@ -1,17 +1,15 @@
 (in-package #:nerimux/test/terminal)
 
 (declaim (notinline nerimux/terminal/parser::printable-ascii-p
-                   nerimux/terminal/parser::utf8-lead-p
-                   nerimux/terminal/parser::utf8-continuation-p))
+                    nerimux/terminal/parser::utf8-lead-p
+                    nerimux/terminal/parser::utf8-continuation-p))
 
 ;;;; parser tests — part C2: parser-inline-predicates.
-
 ;;; ── SUITE: parser-inline-predicates ─────────────────────────────────────────
 ;;;
 ;;; These tests call the inline predicate helpers in nerimux/terminal/parser
 ;;; directly, verifying boundary conditions that the parser integration tests
 ;;; do not assert explicitly.
-
 (describe "terminal-suite/parser-inline-predicates"
 
   ;; printable-ascii-p is T for #x20-#x7E and NIL outside that range.

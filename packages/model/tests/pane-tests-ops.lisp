@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/model)
 
 ;;;; Pane tests - pane/window operations.
-
 (describe "model-suite"
 
   ;;; ── last-pane cycles ─────────────────────────────────────────────────────────

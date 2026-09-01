@@ -4,7 +4,6 @@
 ;;;;
 ;;;; Keep server-frame receive/decode behavior separate from outbound client
 ;;;; tests so cl-weave registers both suites independently.
-
 (describe "client-receive-suite"
 
   ;; ── %decode-server-frame pure behavior ──────────────────────────────────────

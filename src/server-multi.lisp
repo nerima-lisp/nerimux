@@ -18,9 +18,7 @@
 ;;;; Reuses the shared pieces from server.lisp / protocol / transport:
 ;;;;   process-client-keys, decode-size, decode-command-payload, render-…,
 ;;;;   send-frame/read-frame, msg-frame/msg-bye, socket-fd/-stream/close-socket.
-
 ;;; ── Client connection registry ──────────────────────────────────────────────
-
 ;;; ── Workspace tree UI state (R6.2/R6.3) ─────────────────────────────────────
 ;;;
 ;;; Global, not per-CLIENT-CONN: R6.3 requires collapse state, and R6.2 the
@@ -37,7 +35,6 @@
 ;;; (Enter on an org/repo row, a VCS fetch/refresh starting and settling, a
 ;;; pane gaining focus within a worktree) -- see the R6 report for exactly
 ;;; which handler calls which function.
-
 (defun %workspace-collapsed-nodes ()
   "The collapsed-row set, for callers that load before its DEFVAR.
 
@@ -68,14 +65,16 @@
    never evicts, since it does not grow the table."
   (let* ((table (%workspace-file-diffs))
          (new-key-p (not (nth-value 1 (gethash key table)))))
-    (when (and new-key-p
-               (>= (hash-table-count table) *workspace-file-diffs-cache-limit*))
+    (when 
+        (and new-key-p
+             (>= (hash-table-count table) *workspace-file-diffs-cache-limit*))
       (let ((oldest (pop *workspace-file-diffs-order*)))
-        (when oldest (remhash oldest table))))
+        (when oldest
+          (remhash oldest table))))
     (setf (gethash key table) value)
     (when new-key-p
-      (setf *workspace-file-diffs-order*
-            (nconc *workspace-file-diffs-order* (list key))))
+      (setf *workspace-file-diffs-order* (nconc *workspace-file-diffs-order*
+                                                (list key))))
     value))
 
 (defun %toggle-workspace-node-collapsed (kind id)
@@ -160,7 +159,10 @@
    whole-catalog :ON-COMPLETE that follows once every other repository has
    also settled -- and again from %REAPPLY-STALE-REPOSITORY-MARKS below, to
    restore the mark after that :ON-COMPLETE settles the whole catalog fresh."
-  (%clear-workspace-refreshing :repository (repository-id repository) :stale-p t)
+  (%clear-workspace-refreshing :repository
+                               (repository-id repository)
+                               :stale-p
+                               t)
   (dolist (worktree (repository-worktrees repository))
     (%clear-workspace-refreshing :worktree (worktree-id worktree) :stale-p t)))
 
@@ -175,9 +177,14 @@
    skipped, matching %WORKSPACE-FIND-TREE-OBJECT's own not-found handling
    elsewhere in this file."
   (dolist (organization organizations)
-    (dolist (repository (nerimux/workspace-model:organization-repositories organization))
-      (when (member (repository-id repository) failed-repository-ids
-                    :test #'equal)
+    (dolist 
+        (repository
+         (nerimux/workspace-model:organization-repositories organization))
+      (when 
+          (member (repository-id repository)
+                  failed-repository-ids
+                  :test
+                  #'equal)
         (%mark-repository-node-stale repository)))))
 
 (defun %remember-worktree-pane (worktree pane)
@@ -199,12 +206,12 @@
       (cond
         ((null pane) nil)
         ((member pane (worktree-panes worktree) :test #'eq) pane)
-        (t (remhash (worktree-id worktree) *workspace-worktree-last-pane*)
-           nil)))))
+        (t
+          (remhash (worktree-id worktree) *workspace-worktree-last-pane*)
+          nil)))))
 
 ;;; with-loop-safe-error is defined in server-multi-dispatch.lisp (which loads
 ;;; first) so it is available at compile time to every user, including here.
-
 (define-multi-msg-dispatch
   ;; EOF: peer closed the connection.
   ((null type) :drop)
@@ -224,8 +231,8 @@
   (t :drop))
 
 ;;; ── Connection lifecycle ────────────────────────────────────────────────────
-
-(defconstant +max-clients+ 32
+(defconstant +max-clients+
+  32
   "Hard cap on the number of simultaneously registered *CLIENTS* entries.
 
    Bounds *CLIENTS* growth against a same-uid runaway loop that opens

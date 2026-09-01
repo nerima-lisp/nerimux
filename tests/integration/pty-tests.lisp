@@ -12,7 +12,6 @@
 ;;;; pty-read-blocking-into / select-fds through an ordinary pipe (with-pipe-fds),
 ;;;; which needs no /dev/ptmx -- so they stayed here and keep running under
 ;;;; `nix flake check`'s sandboxed nerimux/test.
-
 (describe "pty-suite"
 
   ;; pty-close must never kill(-1)/kill(0): a non-positive pid and a negative

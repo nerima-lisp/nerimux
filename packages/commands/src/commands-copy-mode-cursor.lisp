@@ -2,7 +2,6 @@
 
 ;;; These top-level helpers are called from copy-mode-move-cursor for :up / :down.
 ;;; Keeping them at top level makes each path independently readable.
-
 (defun %scroll-up-one-line (screen row col max-offset)
   "Move cursor up one line in copy-mode viewport for SCREEN.
    ROW/COL is the current cursor position; MAX-OFFSET is the scrollback length.
@@ -60,17 +59,18 @@
    adjusted instead so the cursor stays at the top or bottom edge.
    Marks the screen dirty."
   (when (screen-copy-mode-p screen)
-    (let* ((h          (screen-height screen))
-           (w          (screen-width  screen))
-           (cur        (or (screen-copy-cursor screen) (cons (1- h) 0)))
-           (row        (car cur))
-           (col        (cdr cur))
+    (let* ((h (screen-height screen))
+           (w (screen-width screen))
+           (cur (or (screen-copy-cursor screen) (cons (1- h) 0)))
+           (row (car cur))
+           (col (cdr cur))
            (max-offset (length (screen-scrollback screen))))
       (ecase direction
-        (:left  (%copy-mode-move-left screen row col))
-        (:right (%copy-mode-move-right screen row col w (screen-copy-selecting screen)))
-        (:up    (%scroll-up-one-line   screen row col max-offset))
-        (:down  (%scroll-down-one-line screen row col h)))
+        (:left (%copy-mode-move-left screen row col))
+        (:right
+         (%copy-mode-move-right screen row col w (screen-copy-selecting screen)))
+        (:up (%scroll-up-one-line screen row col max-offset))
+        (:down (%scroll-down-one-line screen row col h)))
       (%copy-mode-ensure-selection-mark screen)
       (setf (screen-dirty-p screen) t))))
 

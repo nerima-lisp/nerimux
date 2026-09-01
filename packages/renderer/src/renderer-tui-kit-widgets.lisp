@@ -10,64 +10,94 @@
 ;;; Dracula-bg background for the picker modal so the dialog reads as a
 ;;; surface above the frame.  Selection highlights use the Dracula
 ;;; current-line colour in both themes.
-
 (defun %make-workspace-tree-theme ()
   (cl-tui-kit/core:make-theme
-   (list
-    (cons :foreground (cl-tui-kit/core:make-style))
-    (cons :selected (cl-tui-kit/core:make-style
-                     :bold t
-                     :background (cl-tui-kit/core:rgb-color 68 71 90)))
-    (cons :accent (cl-tui-kit/core:make-style
-                   :bold t
-                   :foreground (cl-tui-kit/core:rgb-color 139 233 253)))
-    (cons :muted (cl-tui-kit/core:make-style
-                  :foreground (cl-tui-kit/core:rgb-color 98 114 164))))))
+   (list (cons :foreground (cl-tui-kit/core:make-style))
+         (cons :selected
+               (cl-tui-kit/core:make-style :bold
+                                           t
+                                           :background
+                                           (cl-tui-kit/core:rgb-color 68 71 90)))
+         (cons :accent
+               (cl-tui-kit/core:make-style :bold
+                                           t
+                                           :foreground
+                                           (cl-tui-kit/core:rgb-color 139
+                                                                      233
+                                                                      253)))
+         (cons :muted
+               (cl-tui-kit/core:make-style :foreground
+                                           (cl-tui-kit/core:rgb-color 98
+                                                                      114
+                                                                      164))))))
 
 (defun %make-picker-panel-theme ()
   (flet ((panel (&rest arguments)
            (apply #'cl-tui-kit/core:make-style
-                  :background (cl-tui-kit/core:rgb-color 40 42 54)
+                  :background
+                  (cl-tui-kit/core:rgb-color 40 42 54)
                   arguments)))
     (cl-tui-kit/core:make-theme
-     (list
-      (cons :background (panel))
-      (cons :foreground (panel))
-      (cons :muted (panel :foreground (cl-tui-kit/core:rgb-color 98 114 164)))
-      (cons :accent (panel :bold t
-                           :foreground (cl-tui-kit/core:rgb-color 139 233 253)))
-      (cons :selected (cl-tui-kit/core:make-style
-                       :bold t
-                       :background (cl-tui-kit/core:rgb-color 68 71 90)))
-      (cons :border (panel :foreground (cl-tui-kit/core:rgb-color 189 147 249)))
-      (cons :title (panel :bold t
-                          :foreground (cl-tui-kit/core:rgb-color 139 233 253)))
-      (cons :warning (panel :bold t
-                            :foreground (cl-tui-kit/core:rgb-color 241 250 140)))
-      (cons :error (panel :bold t
-                          :foreground (cl-tui-kit/core:rgb-color 255 85 85)))
-      (cons :success (panel :foreground (cl-tui-kit/core:rgb-color 80 250 123)))))))
+     (list (cons :background (panel))
+           (cons :foreground (panel))
+           (cons :muted
+                 (panel :foreground (cl-tui-kit/core:rgb-color 98 114 164)))
+           (cons :accent
+                 (panel :bold
+                        t
+                        :foreground
+                        (cl-tui-kit/core:rgb-color 139 233 253)))
+           (cons :selected
+                 (cl-tui-kit/core:make-style :bold
+                                             t
+                                             :background
+                                             (cl-tui-kit/core:rgb-color 68
+                                                                        71
+                                                                        90)))
+           (cons :border
+                 (panel :foreground (cl-tui-kit/core:rgb-color 189 147 249)))
+           (cons :title
+                 (panel :bold
+                        t
+                        :foreground
+                        (cl-tui-kit/core:rgb-color 139 233 253)))
+           (cons :warning
+                 (panel :bold
+                        t
+                        :foreground
+                        (cl-tui-kit/core:rgb-color 241 250 140)))
+           (cons :error
+                 (panel :bold
+                        t
+                        :foreground
+                        (cl-tui-kit/core:rgb-color 255 85 85)))
+           (cons :success
+                 (panel :foreground (cl-tui-kit/core:rgb-color 80 250 123)))))))
 
-(defvar *workspace-tree-theme* (%make-workspace-tree-theme)
+(defvar *workspace-tree-theme*
+  (%make-workspace-tree-theme)
   "Theme for the workspace overview's tree list widget.")
 
-(defvar *picker-panel-theme* (%make-picker-panel-theme)
+(defvar *picker-panel-theme*
+  (%make-picker-panel-theme)
   "Theme for the global picker's modal, input, list, and text widgets.")
 
 (defun %frame-area (rows cols)
   (let* ((bounds (cl-tui-kit/core:make-rectangle 0 0 cols rows))
          (layout
-           (cl-tui-kit/layout:make-viewport-layout
-            (cl-tui-kit/layout:make-layout-item
-             :nerimux-frame
-             :constraints
-             (cl-tui-kit/core:make-constraints
-              :min-width cols
-              :preferred-width cols
-              :min-height rows
-              :preferred-height rows)))))
-    (cl-tui-kit/layout:layout-child-rectangle
-     layout :nerimux-frame bounds)))
+          (cl-tui-kit/layout:make-viewport-layout
+           (cl-tui-kit/layout:make-layout-item :nerimux-frame
+                                               :constraints
+                                               (cl-tui-kit/core:make-constraints
+                                                :min-width
+                                                cols
+                                                :preferred-width
+                                                cols
+                                                :min-height
+                                                rows
+                                                :preferred-height
+                                                rows)))))
+    (cl-tui-kit/layout:layout-child-rectangle layout :nerimux-frame bounds)))
 
 (defun %tree-entry-render-text (entry width)
   "One tree row's display text: 2 spaces per LEVEL of indent, the `!`
@@ -82,9 +112,11 @@
    coloured STYLED half is for the plain-ANSI render path
    (renderer-workspace.lisp) only."
   (destructuring-bind (level label object kind) entry
-    (let* ((prefix (format nil "~A~:[ ~;!~] "
-                           (make-string (* 2 level) :initial-element #\Space)
-                           (%workspace-tree-node-attention-p object kind)))
+    (let* ((prefix
+            (format nil
+                    "~A~:[ ~;!~] "
+                    (make-string (* 2 level) :initial-element #\Space)
+                    (%workspace-tree-node-attention-p object kind)))
            (base (format nil "~A~A" prefix label)))
       (if (eq kind :worktree)
           (let* ((suffix-width (max 0 (- width (%display-width base) 2)))

@@ -5,10 +5,9 @@
 ;;;; (defined there) without a forward-reference.
 ;;;; Character writing (combining chars, DEC graphics, wide/normal cells) lives
 ;;;; in char-write.lisp, which loads after this file.
-
 ;;; ── Constants ──────────────────────────────────────────────────────────────
-
-(defconstant +tab-width+ 8
+(defconstant +tab-width+
+  8
   "Standard terminal tab column interval: tab stops every 8 columns by default.")
 
 ;;; ── Cursor movement ────────────────────────────────────────────────────────
@@ -20,8 +19,8 @@
 ;;;   cursor_move(left,  Screen, N) :- cursor-x(Screen) := clamp(cursor-x - N, 0).
 ;;;
 ;;; Each spec: (name docstring accessor clamped-expression)
-
 (declaim (inline %cancel-wrap))
+
 (defun %cancel-wrap (screen)
   "Cancel any pending (deferred) wrap.  Called by every explicit cursor movement:
    moving the cursor discards the VT100 last-column flag, so a subsequent write
@@ -52,14 +51,19 @@
   (%clear-line-wrapped screen (screen-cursor-y screen)))
 
 (define-cursor-movements
-  (cursor-up    "Move the cursor up N rows, clamping to the scroll-top boundary."
-   screen-cursor-y  (max (screen-scroll-top    screen) (- (screen-cursor-y screen) n)))
-  (cursor-down  "Move the cursor down N rows, clamping to the scroll-bottom boundary."
-   screen-cursor-y  (min (screen-scroll-bottom screen) (+ (screen-cursor-y screen) n)))
-  (cursor-right "Move the cursor right N columns, clamping to width-1."
-   screen-cursor-x  (min (1- (screen-width     screen)) (+ (screen-cursor-x screen) n)))
-  (cursor-left  "Move the cursor left N columns, clamping to column 0."
-   screen-cursor-x  (max 0                              (- (screen-cursor-x screen) n))))
+ (cursor-up "Move the cursor up N rows, clamping to the scroll-top boundary."
+            screen-cursor-y
+            (max (screen-scroll-top screen) (- (screen-cursor-y screen) n)))
+ (cursor-down
+  "Move the cursor down N rows, clamping to the scroll-bottom boundary."
+  screen-cursor-y
+  (min (screen-scroll-bottom screen) (+ (screen-cursor-y screen) n)))
+ (cursor-right "Move the cursor right N columns, clamping to width-1."
+               screen-cursor-x
+               (min (1- (screen-width screen)) (+ (screen-cursor-x screen) n)))
+ (cursor-left "Move the cursor left N columns, clamping to column 0."
+              screen-cursor-x
+              (max 0 (- (screen-cursor-x screen) n))))
 
 (defun cursor-down/scroll (screen)
   "Move cursor down one line, scrolling when at the bottom of the scroll region.
@@ -86,21 +90,24 @@
    :DEFAULT sentinel into the standard every-8-columns stops for the width."
   (let ((stops (screen-tab-stops screen)))
     (if (eq stops :default)
-        (loop for c from 8 below (screen-width screen) by 8 collect c)
+        (loop for c from 8 below (screen-width screen) by 8
+              collect c)
         stops)))
 
 (defun set-tab-stop (screen)
   "HTS (ESC H) — set a horizontal tab stop at the current cursor column."
-  (setf (screen-tab-stops screen)
-        (sort (adjoin (screen-cursor-x screen) (%materialize-tab-stops screen)) #'<)))
+  (setf (screen-tab-stops screen) (sort
+                                   (adjoin (screen-cursor-x screen)
+                                           (%materialize-tab-stops screen))
+                                   #'<)))
 
 (defun clear-tab-stops (screen mode)
   "TBC (CSI N g) — clear tab stops.  MODE 3 clears ALL stops; any other value
    (including 0) clears the stop at the current cursor column."
-  (setf (screen-tab-stops screen)
-        (if (= mode 3)
-            '()
-            (remove (screen-cursor-x screen) (%materialize-tab-stops screen)))))
+  (setf (screen-tab-stops screen) (if (= mode 3)
+                                      '()
+                                      (remove (screen-cursor-x screen)
+                                              (%materialize-tab-stops screen)))))
 
 (defun %next-tab-stop (stops x max-x)
   "Return the column of the next tab stop after X.
@@ -108,8 +115,12 @@
    otherwise STOPS is a custom sorted list.  The result is clamped to MAX-X."
   (if (eq stops :default)
       (min (* +tab-width+ (ceiling (1+ x) +tab-width+)) max-x)
-      (or (find-if (lambda (c) (> c x)) (sort (copy-list stops) #'<))
-          max-x)))
+      (or
+       (find-if
+        (lambda (c)
+          (> c x))
+        (sort (copy-list stops) #'<))
+       max-x)))
 
 (defun %prev-tab-stop (stops x)
   "Return the column of the previous tab stop before X.
@@ -117,17 +128,20 @@
    otherwise STOPS is a custom sorted list.  The result is clamped to 0."
   (if (eq stops :default)
       (* +tab-width+ (floor (max 0 (1- x)) +tab-width+))
-      (or (find-if (lambda (c) (< c x)) (sort (copy-list stops) #'>))
-          0)))
+      (or
+       (find-if
+        (lambda (c)
+          (< c x))
+        (sort (copy-list stops) #'>))
+       0)))
 
 (defun cursor-ht (screen)
   "Horizontal tab: advance the cursor to the next tab stop (default: every
    +TAB-WIDTH+ columns; HTS/TBC can customise the stops), clamping to the last column."
   (%cancel-wrap screen)
-  (setf (screen-cursor-x screen)
-        (%next-tab-stop (screen-tab-stops screen)
-                        (screen-cursor-x screen)
-                        (1- (screen-width screen)))))
+  (setf (screen-cursor-x screen) (%next-tab-stop (screen-tab-stops screen)
+                                                 (screen-cursor-x screen)
+                                                 (1- (screen-width screen)))))
 
 (defun cursor-cht (screen n)
   "CHT — cursor forward N tab stops (CSI N I).
@@ -140,9 +154,8 @@
    Move the cursor back to the Nth previous tab stop, stopping at column 0."
   (%cancel-wrap screen)
   (dotimes (_ (max 1 n))
-    (setf (screen-cursor-x screen)
-          (%prev-tab-stop (screen-tab-stops screen)
-                          (screen-cursor-x screen)))))
+    (setf (screen-cursor-x screen) (%prev-tab-stop (screen-tab-stops screen)
+                                                   (screen-cursor-x screen)))))
 
 (defun cursor-bs (screen)
   "Backspace: move cursor left one column if not already at column 0."

@@ -4,9 +4,7 @@
 ;;;; decaln-action, set-ansi-mode, and reset-ansi-mode.  These functions were
 ;;;; previously exercised only indirectly through the CSI/ESC parser path
 ;;;; (modes-tests-c.lisp, parser-tests.lisp); this file calls them directly.
-
 ;;; ── SUITE: decstr-action direct calls ───────────────────────────────────────
-
 (describe "terminal-suite/decstr-action-direct-suite"
 
   ;; decstr-action called directly restores modes/SGR to defaults but does not
@@ -49,7 +47,6 @@
       (expect (null (nerimux/terminal/types:screen-saved-cursor s))))))
 
 ;;; ── SUITE: decaln-action direct calls ───────────────────────────────────────
-
 (describe "terminal-suite/decaln-action-direct-suite"
 
   ;; decaln-action fills every cell of the grid with the character 'E'.
@@ -88,7 +85,6 @@
 ;;; back the non-private CSI Ps h / CSI Ps l sequences (IRM mode 4, LNM mode 20).
 ;;; The CSI-parser path is covered by irm-*/lnm-* tests in modes-tests-c.lisp;
 ;;; these tests call the action functions directly.
-
 (describe "terminal-suite/ansi-mode-direct-suite"
 
   ;; set-ansi-mode with param 4 (IRM) sets screen-insert-mode to T.
@@ -139,7 +135,6 @@
 ;;; These back XTPUSHTITLE / XTPOPTITLE (CSI > Ps t / CSI < Ps t); the
 ;;; CSI-parser path is covered by xtpushtitle-*/xtpoptitle-* tests in
 ;;; csi-tests-c.lisp.  These tests call the action functions directly.
-
 (describe "terminal-suite/title-stack-direct-suite"
 
   ;; push-title-stack conses the current title onto the (initially empty) stack.
@@ -192,7 +187,6 @@
 ;;; These back OSC 110 / OSC 111 (reset default fg/bg colour to xterm defaults).
 ;;; The OSC-parser dispatch path is covered by parser-tests.lisp; these tests
 ;;; call the action functions directly.
-
 (describe "terminal-suite/osc-default-color-reset-direct-suite"
 
   ;; reset-osc-default-fg sets screen-osc-default-fg back to +osc-default-fg+,

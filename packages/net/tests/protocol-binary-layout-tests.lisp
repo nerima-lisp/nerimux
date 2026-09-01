@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/net)
 
 ;;;; Protocol binary integer, frame layout, and attach payload tests.
-
 (describe "protocol-suite"
 
   ;;; ── Message type tag constant values ─────────────────────────────────────────

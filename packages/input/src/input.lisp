@@ -7,9 +7,7 @@
 ;;;; readiness poll goes through nerimux/pty:select-fds (cl-process-kit) and the
 ;;;; read itself through cl-tty-kit:fd-read-octets, the same function
 ;;;; pty-read-blocking-into already uses for the PTY master side.
-
 ;;; ── Raw-mode convenience macro ─────────────────────────────────────────────
-
 (defmacro with-raw-mode (&body body)
   "Execute BODY with stdin in raw mode, restoring the terminal on exit.
    ENABLE-RAW-MODE! runs OUTSIDE the unwind-protect deliberately: cl-tty-kit's
@@ -32,7 +30,6 @@
        (force-output))))
 
 ;;; ── Non-blocking byte read ─────────────────────────────────────────────────
-
 (defun read-byte-nonblock (&optional (timeout-us +poll-timeout-us+))
   "Return a byte (0–255) from stdin within TIMEOUT-US microseconds, or NIL.
    NIL means the timeout elapsed with no data — it does NOT mean EOF.

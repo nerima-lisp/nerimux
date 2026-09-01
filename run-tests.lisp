@@ -18,16 +18,17 @@
 ;;;; It defines its own ASDF :perform (test-op ...) that signals
 ;;;; an error on failure, so dispatching through ASDF:TEST-SYSTEM keeps the
 ;;;; pass/fail contract in the .asd rather than duplicating a runner per suite.
-
 (require :asdf)
+
 (sb-impl::module-provide-contrib :sb-posix)
+
 (asdf:register-preloaded-system "sb-posix")
 
 ;;; ASDF has to be told where this checkout and its sibling libraries are.
 ;;; Sibling packages are consumed purely as source (see flake.nix), so they go
 ;;; on the central registry rather than through nixpkgs Lisp packaging.
-(setf asdf/source-registry:*source-registry*
-      (make-hash-table :test (function equal)))
+(setf asdf/source-registry:*source-registry* (make-hash-table :test
+                                                              (function equal)))
 
 ;;; NERIMUX_SIBLING_REGISTRY is a colon-separated list of sibling source roots
 ;;; supplied by flake.nix. An unset value still permits dependencies explicitly
@@ -40,13 +41,18 @@
 ;;; leaves every unit unresolvable when it is asked for by its own name --
 ;;; (asdf:load-system "nerimux-terminal") never reads nerimux.asd, because ASDF
 ;;; resolves a primary system from the .asd named after it.
-(dolist (dir (directory (merge-pathnames
-                         "packages/*/"
-                         (uiop:pathname-directory-pathname *load-truename*))))
+(dolist 
+    (dir
+     (directory
+      (merge-pathnames "packages/*/"
+                       (uiop:pathname-directory-pathname *load-truename*))))
   (push dir asdf:*central-registry*))
 
-(dolist (dir (uiop:split-string (or (uiop:getenv "NERIMUX_SIBLING_REGISTRY") "")
-                                :separator ":"))
+(dolist 
+    (dir
+     (uiop:split-string (or (uiop:getenv "NERIMUX_SIBLING_REGISTRY") "")
+                        :separator
+                        ":"))
   (unless (string= dir "")
     (push (truename (uiop:ensure-directory-pathname dir))
           asdf:*central-registry*)))

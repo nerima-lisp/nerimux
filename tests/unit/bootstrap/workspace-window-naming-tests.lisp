@@ -4,7 +4,6 @@
 ;;;; (workspace-window.lisp), unit-tested directly against %worktree-window-name
 ;;;; / %worktree-windows -- no session/dispatch machinery needed for the naming
 ;;;; rule itself.
-
 (describe "workspace-window-naming-suite"
 
   (it "workspace-new-window-passes-geometry-and-starts-reader-by-default"

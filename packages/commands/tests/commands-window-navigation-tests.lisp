@@ -11,19 +11,51 @@
 ;;;; second-highest last-active-time -- survives as SESSION-LAST-WINDOW, a pure
 ;;;; query the format layer already relies on; combined with the surviving
 ;;;; SESSION-SELECT-WINDOW it reproduces the old command's effect directly.
-
 (defun %find-window-fixture ()
   "Session \"0\" with three named windows alpha/beta/gamma (alpha current).
    Returns (values sess wa wb wg)."
   (let* ((pa (%make-test-pane :id 1))
          (pb (%make-test-pane :id 2))
          (pg (%make-test-pane :id 3))
-         (wa (make-window :id 1 :name "alpha" :width 20 :height 5
-                          :tree (make-layout-leaf pa) :panes (list pa)))
-         (wb (make-window :id 2 :name "beta" :width 20 :height 5
-                          :tree (make-layout-leaf pb) :panes (list pb)))
-         (wg (make-window :id 3 :name "gamma" :width 20 :height 5
-                          :tree (make-layout-leaf pg) :panes (list pg)))
+         (wa
+          (make-window :id
+                       1
+                       :name
+                       "alpha"
+                       :width
+                       20
+                       :height
+                       5
+                       :tree
+                       (make-layout-leaf pa)
+                       :panes
+                       (list pa)))
+         (wb
+          (make-window :id
+                       2
+                       :name
+                       "beta"
+                       :width
+                       20
+                       :height
+                       5
+                       :tree
+                       (make-layout-leaf pb)
+                       :panes
+                       (list pb)))
+         (wg
+          (make-window :id
+                       3
+                       :name
+                       "gamma"
+                       :width
+                       20
+                       :height
+                       5
+                       :tree
+                       (make-layout-leaf pg)
+                       :panes
+                       (list pg)))
          (sess (make-session :id 1 :name "0" :windows (list wa wb wg))))
     (session-select-window sess wa)
     (values sess wa wb wg)))

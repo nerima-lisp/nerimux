@@ -7,12 +7,13 @@
 (in-package #:asdf-user)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (load (merge-pathnames
-         "system/asdf-test-components.lisp"
-         (uiop:pathname-directory-pathname
-          (or *load-truename*
-              *load-pathname*
-              (error "Cannot locate nerimux.asd while loading test components."))))))
+  (load
+   (merge-pathnames "system/asdf-test-components.lisp"
+                    (uiop:pathname-directory-pathname
+                     (or *load-truename*
+                         *load-pathname*
+                         (error
+                          "Cannot locate nerimux.asd while loading test components."))))))
 
 ;;; Register every packages/<name>/nerimux-<name>.asd before the systems below
 ;;; name them in :depends-on.
@@ -208,7 +209,6 @@
              (declare (ignore op c))
              (funcall (find-symbol "RUN-TESTS" (find-package "NERIMUX/TEST")))))
 
-
 ;; The real-PTY suite, split out of nerimux/test by R9.2.
 ;;
 ;; `nix flake check` builds in a sandbox with no /dev/ptmx, so every case that
@@ -230,20 +230,21 @@
   :depends-on ("nerimux" (:version "cl-weave" "1.3.0"))
   :pathname "tests/pty"
   :serial t
-  :components ((:file "package")
-               (:file "helpers")
-               (:file "pty-unit-tests")
-               (:file "pty-integration-tests")
-               (:file "pane-tests-geometry-pty")
-               (:file "pane-tests-ops-pty")
-               (:file "window-tests-c-pty")
-               (:file "window-tests-pane-ops")
-               (:file "window-tests-split-math-pty")
-               (:file "session-lifecycle-tests")
-               (:file "server-command-tests")
-               (:file "server-client-cps-pty-tests")
-               (:file "server-multi-command-client-pty-tests")
-               (:file "entry"))
+  :components ((:file "package") (:file "helpers")
+                                 (:file "pty-unit-tests")
+                                 (:file "pty-integration-tests")
+                                 (:file "pane-tests-geometry-pty")
+                                 (:file "pane-tests-ops-pty")
+                                 (:file "window-tests-c-pty")
+                                 (:file "window-tests-pane-ops")
+                                 (:file "window-tests-split-math-pty")
+                                 (:file "session-lifecycle-tests")
+                                 (:file "server-command-tests")
+                                 (:file "server-client-cps-pty-tests")
+                                 (:file "server-multi-command-client-pty-tests")
+                                 (:file "entry"))
   :perform (test-op (op c)
-             (declare (ignore op c))
-             (funcall (find-symbol "RUN-PTY-TESTS" (find-package "NERIMUX/PTY-TEST")))))
+                    (declare (ignore op c))
+                    (funcall
+                     (find-symbol "RUN-PTY-TESTS"
+                                  (find-package "NERIMUX/PTY-TEST")))))

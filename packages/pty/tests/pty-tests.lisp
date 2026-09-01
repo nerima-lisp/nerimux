@@ -13,7 +13,6 @@
 ;;;;
 ;;;; (The child-environment assignment logic now lives in
 ;;;; session-environment-tests.lisp.)
-
 (defun %wait-until-process-gone (pid &optional (deadline-seconds 5))
   "Poll until PID is no longer a live process, bounded by DEADLINE-SECONDS.
    Returns T when it went away, NIL when the deadline passed first.
@@ -44,16 +43,17 @@
       (sleep 0.01))))
 
 (describe "pty process table"
-  (it "remembers-and-takes-processes-atomically"
-    (let* ((master-fd (gensym "synthetic-master-"))
-           (pty (list :synthetic)))
-      (unwind-protect
-           (progn
-             (expect (null (nerimux/pty::%take-pty-process master-fd)))
-             (nerimux/pty::%remember-pty-process master-fd pty)
-             (expect (eq pty (nerimux/pty::%take-pty-process master-fd)))
-             (expect (null (nerimux/pty::%take-pty-process master-fd))))
-        (nerimux/pty::%take-pty-process master-fd)))))
+          (it "remembers-and-takes-processes-atomically"
+              (let* ((master-fd (gensym "synthetic-master-"))
+                     (pty (list :synthetic)))
+                (unwind-protect 
+                    (progn
+                      (expect (null (nerimux/pty::%take-pty-process master-fd)))
+                      (nerimux/pty::%remember-pty-process master-fd pty)
+                      (expect
+                       (eq pty (nerimux/pty::%take-pty-process master-fd)))
+                      (expect (null (nerimux/pty::%take-pty-process master-fd))))
+                  (nerimux/pty::%take-pty-process master-fd)))))
 
 (describe "pty-unit-suite"
 

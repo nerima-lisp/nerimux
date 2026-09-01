@@ -8,7 +8,6 @@
 ;;;; here with the functions.  Nothing about them is target-resolution specific;
 ;;;; the numeric-index lookups in find-window-by-target / find-pane-by-target are
 ;;;; one consumer of many.
-
 (describe "text-parse-suite"
 
   ;;; ── non-empty-string ─────────────────────────────────────────────────────────

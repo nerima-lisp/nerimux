@@ -11,7 +11,6 @@
 ;;;; /dev/ptmx is unavailable, so this suite also runs clean in a sandboxed
 ;;;; `nix build`/`nix run .#test-pty` -- it just proves nothing there, same as
 ;;;; before the split.
-
 (describe "pty-suite"
 
   (it "shell-echoes-command-output"

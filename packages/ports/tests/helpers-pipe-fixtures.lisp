@@ -1,13 +1,13 @@
 (in-package #:nerimux/test/ports)
 
 ;;;; POSIX pipe fixtures.
-
 (defun write-octets-to-fd (fd octets)
   "Write OCTETS, a sequence of (unsigned-byte 8), to file descriptor FD.
    Returns the number of bytes written.  Goes through cl-tty-kit:fd-write-octets,
    the same call production pty-write uses, now that nerimux has no cffi."
-  (cl-tty-kit:fd-write-octets
-   fd (coerce octets '(simple-array (unsigned-byte 8) (*)))))
+  (cl-tty-kit:fd-write-octets fd
+                              (coerce octets
+                                      '(simple-array (unsigned-byte 8) (*)))))
 
 (defun write-byte-to-fd (fd byte-value)
   "Write a single BYTE-VALUE (0–255) to file descriptor FD.
@@ -33,9 +33,10 @@
    Shared by input-tests.lisp, pty-tests.lisp, and pty-rawmode-tests.lisp."
   (let ((pair-sym (gensym "PAIR")))
     `(let* ((,pair-sym (multiple-value-list (sb-posix:pipe)))
-            (,read-fd  (first  ,pair-sym))
+            (,read-fd (first ,pair-sym))
             (,write-fd (second ,pair-sym)))
-       (unwind-protect
-            (locally ,@body)
+       (unwind-protect 
+           (locally
+             ,@body)
          (ignore-errors (sb-posix:close ,read-fd))
          (ignore-errors (sb-posix:close ,write-fd))))))

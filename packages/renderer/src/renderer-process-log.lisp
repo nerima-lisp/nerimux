@@ -12,14 +12,15 @@
 ;;;; and caps length before a single character reaches the surface, exactly
 ;;;; the trust posture the diff/log ingestion caps elsewhere in this codebase
 ;;;; already hold their own inputs to.
-
-(defconstant +process-log-max-render-characters+ 4000
+(defconstant +process-log-max-render-characters+
+  4000
   "Hard cap on one entry's OUTPUT before it is even split into lines, applied
    independently of whatever cap the producer (nerimux/vcs:git-write-operation,
    *write-operation-output-max-length*) already used -- this file must not
    assume its caller already bounded the string.")
 
-(defconstant +process-log-max-output-lines+ 20
+(defconstant +process-log-max-output-lines+
+  20
   "Output lines shown per entry before the remainder is elided.  An ordinary
    git command's output is a handful of lines; this only guards the screen
    against one pathological entry pushing every older entry below the fold.")
@@ -40,11 +41,11 @@
    DCS. Stripping only C0 blocks the 7-bit `ESC [` spelling of an injection
    while leaving its 8-bit spelling intact, which is the whole attack with one
    byte changed."
-  (remove-if (lambda (character)
-               (let ((code (char-code character)))
-                 (and (or (< code 32) (<= 127 code 159))
-                      (char/= character #\Newline))))
-             text))
+  (remove-if
+   (lambda (character)
+     (let ((code (char-code character)))
+       (and (or (< code 32) (<= 127 code 159)) (char/= character #\Newline))))
+   text))
 
 (defun %process-log-sanitize-text (text)
   (%process-log-strip-control-characters
@@ -71,36 +72,37 @@
          (lines (%process-log-split-lines clean)))
     (if (> (length lines) +process-log-max-output-lines+)
         (append (subseq lines 0 +process-log-max-output-lines+)
-                (list (format nil "... ~D more line~:P elided"
-                              (- (length lines) +process-log-max-output-lines+))))
+                (list
+                 (format nil
+                         "... ~D more line~:P elided"
+                         (- (length lines) +process-log-max-output-lines+))))
         lines)))
 
 ;;; ── Styles (Dracula) ─────────────────────────────────────────────────────
-
 (defun %process-log-exit-ok-style ()
-  (cl-tui-kit/core:make-style
-   :bold t
-   :foreground (cl-tui-kit/core:rgb-color 80 250 123)))
+  (cl-tui-kit/core:make-style :bold
+                              t
+                              :foreground
+                              (cl-tui-kit/core:rgb-color 80 250 123)))
 
 (defun %process-log-exit-fail-style ()
-  (cl-tui-kit/core:make-style
-   :bold t
-   :foreground (cl-tui-kit/core:rgb-color 255 85 85)))
+  (cl-tui-kit/core:make-style :bold
+                              t
+                              :foreground
+                              (cl-tui-kit/core:rgb-color 255 85 85)))
 
 (defun %process-log-command-style ()
-  (cl-tui-kit/core:make-style
-   :foreground (cl-tui-kit/core:rgb-color 139 233 253)))
+  (cl-tui-kit/core:make-style :foreground
+                              (cl-tui-kit/core:rgb-color 139 233 253)))
 
 (defun %process-log-output-style ()
-  (cl-tui-kit/core:make-style
-   :foreground (cl-tui-kit/core:rgb-color 98 114 164)))
+  (cl-tui-kit/core:make-style :foreground
+                              (cl-tui-kit/core:rgb-color 98 114 164)))
 
 (defun %process-log-separator-style ()
-  (cl-tui-kit/core:make-style
-   :foreground (cl-tui-kit/core:rgb-color 68 71 90)))
+  (cl-tui-kit/core:make-style :foreground (cl-tui-kit/core:rgb-color 68 71 90)))
 
 ;;; ── Layout ───────────────────────────────────────────────────────────────
-
 (defun %process-log-exit-ok-p (exit-status)
   (and (stringp exit-status) (string= exit-status "0")))
 
@@ -108,31 +110,53 @@
   (destructuring-bind (command exit-status output) entry
     (declare (ignore output))
     (let ((ok-p (%process-log-exit-ok-p exit-status)))
-      (cl-tui-kit/core:surface-draw-styled-text
-       surface col row
-       (list (cl-tui-kit/core:make-text-span
-              (format nil "[~A] " (%process-log-sanitize-text
-                                    (princ-to-string exit-status)))
-              :style (if ok-p (%process-log-exit-ok-style)
-                         (%process-log-exit-fail-style)))
-             (cl-tui-kit/core:make-text-span
-              (%process-log-sanitize-text (princ-to-string command))
-              :style (%process-log-command-style)))
-       :max-width width))))
+      (cl-tui-kit/core:surface-draw-styled-text surface
+                                                col
+                                                row
+                                                (list
+                                                 (cl-tui-kit/core:make-text-span
+                                                  (format nil
+                                                          "[~A] "
+                                                          (%process-log-sanitize-text
+                                                           (princ-to-string
+                                                            exit-status)))
+                                                  :style
+                                                  (if ok-p
+                                                      (%process-log-exit-ok-style)
+                                                      (%process-log-exit-fail-style)))
+                                                 (cl-tui-kit/core:make-text-span
+                                                  (%process-log-sanitize-text
+                                                   (princ-to-string command))
+                                                  :style
+                                                  (%process-log-command-style)))
+                                                :max-width
+                                                width))))
 
 (defun %process-log-draw-output-line (surface row col width line)
-  (cl-tui-kit/core:surface-draw-styled-text
-   surface col row
-   (list (cl-tui-kit/core:make-text-span (format nil "  ~A" line)
-                                          :style (%process-log-output-style)))
-   :max-width width))
+  (cl-tui-kit/core:surface-draw-styled-text surface
+                                            col
+                                            row
+                                            (list
+                                             (cl-tui-kit/core:make-text-span
+                                              (format nil "  ~A" line)
+                                              :style
+                                              (%process-log-output-style)))
+                                            :max-width
+                                            width))
 
 (defun %process-log-draw-separator (surface row col width)
-  (cl-tui-kit/core:surface-draw-styled-text
-   surface col row
-   (list (cl-tui-kit/core:make-text-span (make-string width :initial-element #\─)
-                                          :style (%process-log-separator-style)))
-   :max-width width))
+  (cl-tui-kit/core:surface-draw-styled-text surface
+                                            col
+                                            row
+                                            (list
+                                             (cl-tui-kit/core:make-text-span
+                                              (make-string width
+                                                           :initial-element
+                                                           #\─)
+                                              :style
+                                              (%process-log-separator-style)))
+                                            :max-width
+                                            width))
 
 (defun %process-log-visible-entries (entries scroll)
   (let* ((count (length entries))
@@ -140,9 +164,13 @@
     (nthcdr scroll entries)))
 
 (defun %render-process-log-box (surface rectangle)
-  (let ((box (cl-tui-kit/widgets:make-box-widget
-              (cl-tui-kit/widgets:make-text-widget "" :id :nerimux-process-log-body)
-              :id :nerimux-process-log-box :border-kind :single)))
+  (let ((box
+         (cl-tui-kit/widgets:make-box-widget
+          (cl-tui-kit/widgets:make-text-widget "" :id :nerimux-process-log-body)
+          :id
+          :nerimux-process-log-box
+          :border-kind
+          :single)))
     (cl-tui-kit/widgets:render-widget box surface rectangle)))
 
 (defun render-process-log-to-tui-string (entries rows cols &key scroll)
@@ -157,18 +185,26 @@
          (inner (%box-widget-inner-rectangle rectangle))
          (col (cl-tui-kit/core:rectangle-x inner))
          (width (cl-tui-kit/core:rectangle-width inner))
-         (max-row (max (cl-tui-kit/core:rectangle-y inner)
-                       (1- (+ (cl-tui-kit/core:rectangle-y inner)
-                              (cl-tui-kit/core:rectangle-height inner))))))
+         (max-row
+          (max (cl-tui-kit/core:rectangle-y inner)
+               (1-
+                (+ (cl-tui-kit/core:rectangle-y inner)
+                   (cl-tui-kit/core:rectangle-height inner))))))
     (%render-process-log-box surface rectangle)
     (%stamp-help-view-title surface rectangle "PROCESS LOG")
     (%stamp-help-view-footer surface rectangle "q / Esc close")
     (if (null entries)
-        (cl-tui-kit/core:surface-draw-styled-text
-         surface col (cl-tui-kit/core:rectangle-y inner)
-         (list (cl-tui-kit/core:make-text-span "no commands run yet"
-                                                :style (%process-log-output-style)))
-         :max-width width)
+        (cl-tui-kit/core:surface-draw-styled-text surface
+                                                  col
+                                                  (cl-tui-kit/core:rectangle-y
+                                                   inner)
+                                                  (list
+                                                   (cl-tui-kit/core:make-text-span
+                                                    "no commands run yet"
+                                                    :style
+                                                    (%process-log-output-style)))
+                                                  :max-width
+                                                  width)
         (let ((row (cl-tui-kit/core:rectangle-y inner)))
           (dolist (entry (%process-log-visible-entries entries scroll))
             (when (<= row max-row)

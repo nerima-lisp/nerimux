@@ -22,7 +22,6 @@
 ;;;; SET-PTY-SIZE-APPLIES-NON-SQUARE-SIZE-WITHOUT-TRANSPOSITION in
 ;;;; tests/integration/pty-tests.lisp.  (There has never been a test named
 ;;;; `set-pty-size-transposition`; this comment used to point at one.)
-
 (describe "pty-ffi-suite"
 
   ;;; ── Platform constants ───────────────────────────────────────────────────

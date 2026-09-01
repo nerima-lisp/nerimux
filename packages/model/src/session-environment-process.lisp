@@ -4,9 +4,7 @@
 ;;;
 ;;; Process-level environment access is separated from the session overlay and
 ;;; child-environment assembly concerns so each step stays independently testable.
-
 ;;; ── update-environment defaults ─────────────────────────────────────────────
-
 (defparameter +default-update-environment+
   '("DISPLAY" "SSH_AUTH_SOCK" "SSH_CONNECTION" "XAUTHORITY")
   "Default update-environment variable names used for new sessions and
@@ -19,7 +17,6 @@
    has not been set.")
 
 ;;; ── Process-level POSIX environment helpers ──────────────────────────────────
-
 (defun process-environment-value (name)
   "Return NAME's value from the live process environment, or NIL when unset."
   (%assert-environment-variable-name name)
@@ -47,14 +44,14 @@
    option that is set in the current process environment.  Unset vars are omitted."
   (loop for name in *update-environment*
         for value = (nerimux/ports:environment-value name)
-        when value collect (cons name value)))
+        when value
+          collect (cons name value)))
 
 ;;; ── %with-posix-env-op — shared skeleton for set/unset ──────────────────────
 ;;;
 ;;; Both process-set-environment and process-unset-environment share an identical
 ;;; three-step skeleton: (1) validate name, (2) call the SB-POSIX function,
 ;;; (3) update the hidden-names tracking list.  The macro captures this once.
-
 (defmacro %with-posix-env-op ((name posix-fn-name) &body call-args)
   "Assert NAME is a non-empty string, then call the SB-POSIX function named
    POSIX-FN-NAME (looked up lazily) with CALL-ARGS, ignoring syscall failures.
@@ -63,9 +60,9 @@
      (%assert-environment-variable-name ,name)
      (let ((%posix-fn (find-posix-function ,posix-fn-name)))
        (when %posix-fn
-         (handler-case
-             (funcall %posix-fn ,@call-args)
-           (sb-posix:syscall-error () nil))))))
+         (handler-case (funcall %posix-fn ,@call-args)
+           (sb-posix:syscall-error ()
+             nil))))))
 
 (defun process-set-environment (name value)
   "Set NAME=VALUE in the current process environment when SB-POSIX is available.

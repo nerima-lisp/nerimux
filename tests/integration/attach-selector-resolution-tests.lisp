@@ -8,24 +8,36 @@
 ;;;; filtered to the candidates rather than silently picking one -- attaching to
 ;;;; the wrong worktree looks exactly like attaching to the right one until the
 ;;;; user runs a command in it.
-
 (defun %attach-fixture (&key (specification "github.com/team/widget")
                              worktree-path)
   "An organization holding one repository, and a worktree when PATH is given."
-  (let* ((organization (nerimux/workspace-model:make-organization
-                        :id "org" :host "github.com" :name "team"))
-         (repository (nerimux/workspace-model:make-repository
-                      :id "repo"
-                      :organization organization
-                      :specification specification)))
-    (nerimux/workspace-model:organization-add-repository organization repository)
+  (let* ((organization
+          (nerimux/workspace-model:make-organization :id
+                                                     "org"
+                                                     :host
+                                                     "github.com"
+                                                     :name
+                                                     "team"))
+         (repository
+          (nerimux/workspace-model:make-repository :id
+                                                   "repo"
+                                                   :organization
+                                                   organization
+                                                   :specification
+                                                   specification)))
+    (nerimux/workspace-model:organization-add-repository organization
+                                                         repository)
     (when worktree-path
-      (nerimux/workspace-model:repository-add-worktree
-       repository
-       (nerimux/workspace-model:make-worktree :id "wt"
-                                    :repository repository
-                                    :path worktree-path
-                                    :branch "main")))
+      (nerimux/workspace-model:repository-add-worktree repository
+                                                       (nerimux/workspace-model:make-worktree
+                                                        :id
+                                                        "wt"
+                                                        :repository
+                                                        repository
+                                                        :path
+                                                        worktree-path
+                                                        :branch
+                                                        "main")))
     (values (list organization) repository)))
 
 (describe "attach-selector-suite"
@@ -151,7 +163,6 @@
 ;;;; client straight to the worktree's detail pane only in that case -- an
 ;;;; :explicit selector or a :previous selection lands on the overview
 ;;;; instead, per spec.
-
 (describe "attach-selector-source-suite"
 
   (it "r7-2-source-is-explicit-for-an-explicit-selector-match"

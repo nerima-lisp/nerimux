@@ -2,9 +2,7 @@
 
 ;;;; parser tests — part B: combining-chars, ACS line-drawing, DCS passthrough,
 ;;;; XTGETTCAP, and DECRQSS helpers.
-
 ;;; ── SUITE: combining-chars ───────────────────────────────────────────────────
-
 (describe "terminal-suite/combining-chars"
 
   ;; combining-char-p is T for code points in combining ranges, NIL otherwise.
@@ -31,17 +29,16 @@
           (expect (member (code-char #x0301) (nerimux/terminal/types:cell-combining cell))))))))
 
 ;;; ── SUITE: acs-line-drawing ──────────────────────────────────────────────────
-
 ;;; ── Coverage: %dec-graphics-char corner cases ────────────────────────────────
 ;;;
 ;;; The existing tests cover only 'q' and 'x'.  These tests add coverage for
 ;;; the corner characters, junctions, the catch-all unmapped branch, and the
 ;;; macro itself (define-dec-graphics-table).
-
 (defmacro check-dec-graphics (char expected-char description)
   "Assert that %dec-graphics-char maps CHAR to EXPECTED-CHAR with DESCRIPTION."
   (declare (ignore description))
-  `(expect (char= ,expected-char (nerimux/terminal/actions::%dec-graphics-char ,char))))
+  `(expect
+    (char= ,expected-char (nerimux/terminal/actions::%dec-graphics-char ,char))))
 
 (describe "terminal-suite/acs-line-drawing"
 
@@ -136,12 +133,13 @@
     (expect (macro-function 'nerimux/terminal/actions::define-dec-graphics-table))))
 
 ;;; ── SUITE: dcs-parsing ───────────────────────────────────────────────────────
-
 (defun %feed-dcs (s payload)
   "Feed a DCS sequence (ESC P PAYLOAD ST) to screen S via screen-process-bytes."
   (screen-process-bytes s
-    (cl-codec-kit:string-to-octets (format nil "~CP~A~C\\" #\Escape payload #\Escape)
-                            :encoding :utf-8)))
+                        (cl-codec-kit:string-to-octets
+                         (format nil "~CP~A~C\\" #\Escape payload #\Escape)
+                         :encoding
+                         :utf-8)))
 
 (describe "terminal-suite/dcs-parsing"
 

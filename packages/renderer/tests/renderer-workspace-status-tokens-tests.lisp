@@ -17,7 +17,6 @@
 ;;;; never touch the VCS adapter, so :status here is a bare truthy marker
 ;;;; (e.g. :fetched) standing in for whatever VCS-STATUS-STRUCTURED snapshot
 ;;;; a real fetch would store there.
-
 (describe "renderer-suite/workspace-status-tokens"
 
   ;; The single most important case per the R6 report: a worktree whose
@@ -112,70 +111,121 @@
                      (nerimux/renderer::%worktree-status-tokens worktree))))))
 
 (describe "renderer-suite/workspace-status-title-selection"
-
-  (it "uses stable repository and worktree title fallbacks"
-    (let ((repository-cases
-            (list (list (nerimux/workspace-model:make-repository
-                         :id "repo-spec" :specification "team/project"
-                         :local-path "/repo")
-                        "team/project")
-                  (list (nerimux/workspace-model:make-repository
-                         :id "repo-path" :specification ""
-                         :local-path "/repo")
-                        "/repo")
-                  (list (nerimux/workspace-model:make-repository
-                         :id "repo-id" :specification "" :local-path "")
-                        "repo-id")
-                  (list nil "-")))
-          (worktree-cases
-            (list (list (nerimux/workspace-model:make-worktree
-                         :id "wt-branch" :path "/repo/wt" :branch "feature/x")
-                        "feature/x")
-                  (list (nerimux/workspace-model:make-worktree
-                         :id "wt-path" :path "/repo/wt" :branch "")
-                        "/repo/wt")
-                  (list (nerimux/workspace-model:make-worktree
-                         :id "wt-id" :path "" :branch "")
-                        "wt-id")
-                  (list nil "-"))))
-      (dolist (case repository-cases)
-        (expect (string= (second case)
-                         (nerimux/renderer::%repository-title-text
-                          (first case)))))
-      (dolist (case worktree-cases)
-        (expect (string= (second case)
-                         (nerimux/renderer::%worktree-title-text
-                          (first case)))))))
-
-  (it "selects repository directly or through the selected worktree"
-    (let* ((repository (nerimux/workspace-model:make-repository :id "repo"))
-           (worktree (nerimux/workspace-model:make-worktree :id "wt" :path "/wt"
-                                                   :repository repository)))
-      (multiple-value-bind (selected-repository selected-worktree)
-          (nerimux/renderer::%workspace-title-selection nil repository nil)
-        (expect (eq repository selected-repository))
-        (expect (null selected-worktree)))
-      (multiple-value-bind (selected-repository selected-worktree)
-          (nerimux/renderer::%workspace-title-selection nil nil worktree)
-        (expect (eq repository selected-repository))
-        (expect (eq worktree selected-worktree)))))
-
-  (it "falls back to the focused pane's worktree"
-    (let* ((repository (nerimux/workspace-model:make-repository :id "repo"))
-           (worktree (nerimux/workspace-model:make-worktree :id "wt" :path "/wt"
-                                                   :repository repository))
-           (pane (nerimux/pane:make-pane :id 1 :fd -1 :worktree worktree)))
-      (multiple-value-bind (selected-repository selected-worktree)
-          (nerimux/renderer::%workspace-title-selection pane nil nil)
-        (expect (eq repository selected-repository))
-        (expect (eq worktree selected-worktree)))))
-
-  (it "builds the terminal title with the em-dash separator"
-    (expect (string= (string (code-char #x2014))
-                     (nerimux/renderer::%workspace-em-dash)))
-    (expect (search "nerimux: team/project — feature/x"
-                    (nerimux/renderer::%client-title-osc
-                     (nerimux/workspace-model:make-repository
-                      :specification "team/project")
-                     (nerimux/workspace-model:make-worktree :path "/wt"
-                                                  :branch "feature/x"))))))
+          (it "uses stable repository and worktree title fallbacks"
+              (let ((repository-cases
+                     (list
+                      (list
+                       (nerimux/workspace-model:make-repository :id
+                                                                "repo-spec"
+                                                                :specification
+                                                                "team/project"
+                                                                :local-path
+                                                                "/repo")
+                       "team/project")
+                      (list
+                       (nerimux/workspace-model:make-repository :id
+                                                                "repo-path"
+                                                                :specification
+                                                                ""
+                                                                :local-path
+                                                                "/repo")
+                       "/repo")
+                      (list
+                       (nerimux/workspace-model:make-repository :id
+                                                                "repo-id"
+                                                                :specification
+                                                                ""
+                                                                :local-path
+                                                                "")
+                       "repo-id")
+                      (list nil "-")))
+                    (worktree-cases
+                     (list
+                      (list
+                       (nerimux/workspace-model:make-worktree :id
+                                                              "wt-branch"
+                                                              :path
+                                                              "/repo/wt"
+                                                              :branch
+                                                              "feature/x")
+                       "feature/x")
+                      (list
+                       (nerimux/workspace-model:make-worktree :id
+                                                              "wt-path"
+                                                              :path
+                                                              "/repo/wt"
+                                                              :branch
+                                                              "")
+                       "/repo/wt")
+                      (list
+                       (nerimux/workspace-model:make-worktree :id
+                                                              "wt-id"
+                                                              :path
+                                                              ""
+                                                              :branch
+                                                              "")
+                       "wt-id")
+                      (list nil "-"))))
+                (dolist 
+                    (case repository-cases)
+                  (expect
+                   (string= (second case)
+                            (nerimux/renderer::%repository-title-text
+                             (first case)))))
+                (dolist 
+                    (case worktree-cases)
+                  (expect
+                   (string= (second case)
+                            (nerimux/renderer::%worktree-title-text
+                             (first case)))))))
+          (it "selects repository directly or through the selected worktree"
+              (let* ((repository
+                      (nerimux/workspace-model:make-repository :id "repo"))
+                     (worktree
+                      (nerimux/workspace-model:make-worktree :id
+                                                             "wt"
+                                                             :path
+                                                             "/wt"
+                                                             :repository
+                                                             repository)))
+                (multiple-value-bind (selected-repository selected-worktree) 
+                    (nerimux/renderer::%workspace-title-selection nil
+                                                                  repository
+                                                                  nil)
+                  (expect (eq repository selected-repository))
+                  (expect (null selected-worktree)))
+                (multiple-value-bind (selected-repository selected-worktree) 
+                    (nerimux/renderer::%workspace-title-selection nil
+                                                                  nil
+                                                                  worktree)
+                  (expect (eq repository selected-repository))
+                  (expect (eq worktree selected-worktree)))))
+          (it "falls back to the focused pane's worktree"
+              (let* ((repository
+                      (nerimux/workspace-model:make-repository :id "repo"))
+                     (worktree
+                      (nerimux/workspace-model:make-worktree :id
+                                                             "wt"
+                                                             :path
+                                                             "/wt"
+                                                             :repository
+                                                             repository))
+                     (pane
+                      (nerimux/pane:make-pane :id 1 :fd -1 :worktree worktree)))
+                (multiple-value-bind (selected-repository selected-worktree) 
+                    (nerimux/renderer::%workspace-title-selection pane nil nil)
+                  (expect (eq repository selected-repository))
+                  (expect (eq worktree selected-worktree)))))
+          (it "builds the terminal title with the em-dash separator"
+              (expect
+               (string= (string (code-char #x2014))
+                        (nerimux/renderer::%workspace-em-dash)))
+              (expect
+               (search "nerimux: team/project — feature/x"
+                       (nerimux/renderer::%client-title-osc
+                        (nerimux/workspace-model:make-repository :specification
+                                                                 "team/project")
+                        (nerimux/workspace-model:make-worktree :path
+                                                               "/wt"
+                                                               :branch
+                                                               "feature/x"))))))

@@ -2,13 +2,11 @@
 
 ;;;; scroll tests — part D: clear-scrollback, BCE background via %erase-cell,
 ;;;; and scroll-on-clear (ED 2 → scrollback) edge-cases.
-
 ;;; ── SUITE: clear-scrollback ──────────────────────────────────────────────────
 ;;;
 ;;; clear-scrollback is exported from nerimux/terminal/actions but was previously
 ;;; only called indirectly (via the clear-history command integration path).
 ;;; These tests verify it directly.
-
 (describe "terminal-suite/clear-scrollback-suite"
 
   ;; clear-scrollback sets the screen-scrollback slot to NIL.
@@ -51,7 +49,6 @@
 ;;; visible screen to scrollback (erase.lisp mode 2), so only the ON case
 ;;; survives as a reachable state — the OFF-path tests are deleted, not
 ;;; rewritten.
-
 (describe "terminal-suite/scroll-on-clear-edge-cases"
 
   ;; ED 2 (ESC[2J) unconditionally pushes the visible rows to scrollback before
@@ -66,7 +63,6 @@
 ;;;
 ;;; Direct tests for decstbm edge cases not covered by the existing
 ;;; constrained-scroll and scroll-region suites.
-
 (describe "terminal-suite/decstbm-edge-cases"
 
   ;; Calling decstbm twice with different valid regions updates the scroll region
@@ -101,7 +97,6 @@
 ;;;
 ;;; scroll-up-one and scroll-down-one must mark the screen dirty even when the
 ;;; scroll region is restricted (non-default decstbm).
-
 (describe "terminal-suite/scroll-dirty-restricted-region"
 
   ;; scroll-up-one marks the screen dirty even when scrolling a sub-region.
@@ -124,7 +119,6 @@
 ;;; ── SUITE: scroll-up-one with pre-filled content ────────────────────────────
 ;;;
 ;;; Verify that scroll-up-one moves content as expected (row content shifts).
-
 (describe "terminal-suite/scroll-content-verification"
 
   ;; scroll-up-one moves row N to row N-1 within the scroll region.
@@ -152,49 +146,59 @@
       (check-row s 2 "ROW1"))))
 
 ;;; ── SUITE: scroll metadata and resize refill ───────────────────────────────
-
 (describe "terminal-suite/scroll-metadata-and-resize"
-
-  (it "scroll-up-one-shifts-line-size-metadata"
-    (with-screen (s 5 3)
-      (let ((sizes (nerimux/terminal/types:screen-line-sizes s)))
-        (setf (gethash 1 sizes) :double-width)
-        (nerimux/terminal/actions:scroll-up-one s)
-        (multiple-value-bind (value present-p) (gethash 0 sizes)
-          (expect present-p)
-          (expect (eq :double-width value)))
-        (expect (not (nth-value 1 (gethash 1 sizes)))))))
-
-  (it "trim-below-cursor-refills-visible-rows-from-history"
-    (with-screen (s 5 4)
-      (setf (nerimux/terminal/types:screen-cursor-y s) 0
-            (nerimux/terminal/types:screen-scrollback s)
-            (list (make-array 2 :initial-element
-                              (nerimux/terminal/types:blank-cell)))
-            (nerimux/terminal/types:screen-scrollback-wrapped s)
-            (list nil nil nil))
-      (nerimux/terminal/actions:trim-below-cursor s)
-      (expect (= 3 (nerimux/terminal/types:screen-cursor-y s)))
-      (expect (null (nerimux/terminal/types:screen-scrollback s)))
-      (expect (null (nerimux/terminal/types:screen-scrollback-wrapped s)))))
-
-  (it "trim-below-cursor-is-noop-on-alt-screen"
-    (with-screen (s 5 4)
-      (nerimux/terminal/actions:enter-alt-screen s)
-      (setf (nerimux/terminal/types:screen-cursor-y s) 0
-            (nerimux/terminal/types:screen-scrollback s)
-            (list (make-array 5 :initial-element
-                              (nerimux/terminal/types:blank-cell))))
-      (nerimux/terminal/actions:trim-below-cursor s)
-      (expect (= 0 (nerimux/terminal/types:screen-cursor-y s)))
-      (expect (= 1 (length (nerimux/terminal/types:screen-scrollback s)))))))
+          (it "scroll-up-one-shifts-line-size-metadata"
+              (with-screen (s 5 3)
+                           (let ((sizes
+                                  (nerimux/terminal/types:screen-line-sizes s)))
+                             (setf (gethash 1 sizes) :double-width)
+                             (nerimux/terminal/actions:scroll-up-one s)
+                             (multiple-value-bind (value present-p) 
+                                 (gethash 0 sizes)
+                               (expect present-p)
+                               (expect (eq :double-width value)))
+                             (expect (not (nth-value 1 (gethash 1 sizes)))))))
+          (it "trim-below-cursor-refills-visible-rows-from-history"
+              (with-screen (s 5 4)
+                           (setf (nerimux/terminal/types:screen-cursor-y s) 0
+                                 (nerimux/terminal/types:screen-scrollback s) (list
+                                                                               (make-array
+                                                                                2
+                                                                                :initial-element
+                                                                                (nerimux/terminal/types:blank-cell)))
+                                 (nerimux/terminal/types:screen-scrollback-wrapped
+                                  s) (list nil nil nil))
+                           (nerimux/terminal/actions:trim-below-cursor s)
+                           (expect
+                            (= 3 (nerimux/terminal/types:screen-cursor-y s)))
+                           (expect
+                            (null (nerimux/terminal/types:screen-scrollback s)))
+                           (expect
+                            (null
+                             (nerimux/terminal/types:screen-scrollback-wrapped
+                              s)))))
+          (it "trim-below-cursor-is-noop-on-alt-screen"
+              (with-screen (s 5 4)
+                           (nerimux/terminal/actions:enter-alt-screen s)
+                           (setf (nerimux/terminal/types:screen-cursor-y s) 0
+                                 (nerimux/terminal/types:screen-scrollback s) (list
+                                                                               (make-array
+                                                                                5
+                                                                                :initial-element
+                                                                                (nerimux/terminal/types:blank-cell))))
+                           (nerimux/terminal/actions:trim-below-cursor s)
+                           (expect
+                            (= 0 (nerimux/terminal/types:screen-cursor-y s)))
+                           (expect
+                            (= 1
+                               (length
+                                (nerimux/terminal/types:screen-scrollback s)))))))
 
 ;;; ── SUITE: push-row-to-scrollback internals ──────────────────────────────────
 ;;;
 ;;; %push-row-to-scrollback is private but its effect (prepend row to scrollback
 ;;; and enforce history cap) is exercised here via scroll-up-one and
 ;;; scroll-screen-to-history.
-
 (describe "terminal-suite/push-row-to-scrollback-suite"
 
   ;; After three scroll-up-one calls, the scrollback is newest-first: the last

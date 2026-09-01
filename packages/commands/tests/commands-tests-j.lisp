@@ -3,7 +3,6 @@
 ;;;; commands tests — part J: resize-pane directions,
 ;;;; copy-mode word/bottom noop, search helpers, scroll helpers,
 ;;;; extract-chars, copy-row-range, rename-session hooks.
-
 (describe "commands-suite"
 
   ;;; ── copy-mode-search-backward: saves term ────────────────────────────────────

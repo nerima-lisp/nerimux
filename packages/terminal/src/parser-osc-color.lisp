@@ -1,7 +1,6 @@
 (in-package #:nerimux/terminal/parser)
 
 ;;;; OSC color and palette helpers.
-
 (defun %scale-hex-channel (channel)
   "Scale a 4-bit or 8-bit hex channel to 8-bit integer."
   (if (< channel 16)
@@ -12,13 +11,14 @@
   "Parse a #RGB or #RRGGBB hex string (without the leading #) to 0xRRGGBB, or NIL."
   (case (length hex)
     (6 (nerimux/text:parse-integer-or-nil hex :radix 16))
-    (3 (let ((r (nerimux/text:parse-integer-or-nil (subseq hex 0 1) :radix 16))
-             (g (nerimux/text:parse-integer-or-nil (subseq hex 1 2) :radix 16))
-             (b (nerimux/text:parse-integer-or-nil (subseq hex 2 3) :radix 16)))
-         (when (and r g b)
-           (logior (ash (%scale-hex-channel r) 16)
-                   (ash (%scale-hex-channel g) 8)
-                   (%scale-hex-channel b)))))
+    (3
+     (let ((r (nerimux/text:parse-integer-or-nil (subseq hex 0 1) :radix 16))
+           (g (nerimux/text:parse-integer-or-nil (subseq hex 1 2) :radix 16))
+           (b (nerimux/text:parse-integer-or-nil (subseq hex 2 3) :radix 16)))
+       (when (and r g b)
+         (logior (ash (%scale-hex-channel r) 16)
+                 (ash (%scale-hex-channel g) 8)
+                 (%scale-hex-channel b)))))
     (otherwise nil)))
 
 (defun %scale-rgb-channel (value digits)
@@ -44,11 +44,12 @@
          (valid (= (length parts) 3)))
     (when valid
       (let ((channels
-             (mapcar (lambda (s)
-                       (and (> (length s) 0)
-                            (<= (length s) 4)
-                            (nerimux/text:parse-integer-or-nil s :radix 16)))
-                     parts)))
+             (mapcar
+              (lambda (s)
+                (and (> (length s) 0)
+                     (<= (length s) 4)
+                     (nerimux/text:parse-integer-or-nil s :radix 16)))
+              parts)))
         (when (every #'integerp channels)
           (destructuring-bind (r g b) channels
             (let ((r (%scale-rgb-channel r (length (first parts))))
@@ -60,10 +61,8 @@
   "Parse an X11/xterm colour SPEC to a 24-bit 0xRRGGBB integer, or NIL."
   (when (and (stringp spec) (> (length spec) 0))
     (cond
-      ((char= (char spec 0) #\#)
-       (%parse-hash-color (subseq spec 1)))
-      ((and (>= (length spec) 4)
-            (string-equal (subseq spec 0 4) "rgb:"))
+      ((char= (char spec 0) #\#) (%parse-hash-color (subseq spec 1)))
+      ((and (>= (length spec) 4) (string-equal (subseq spec 0 4) "rgb:"))
        (%parse-rgb-color (subseq spec 4)))
       (t nil))))
 
@@ -73,15 +72,15 @@
 
 (defun %osc-rgb-components (rgb)
   "Return the 8-bit R, G and B components of RGB (0xRRGGBB)."
-  (values (ldb (byte 8 16) rgb)
-          (ldb (byte 8 8) rgb)
-          (ldb (byte 8 0) rgb)))
+  (values (ldb (byte 8 16) rgb) (ldb (byte 8 8) rgb) (ldb (byte 8 0) rgb)))
 
 (defun %osc-rgb-reply (prefix rgb)
   "Build an OSC reply with PREFIX followed by rgb:RRRR/GGGG/BBBB data."
   (multiple-value-bind (r g b) (%osc-rgb-components rgb)
-    (format nil "~C~A~A/~A/~A~C\\"
-            #\Escape prefix
+    (format nil
+            "~C~A~A/~A/~A~C\\"
+            #\Escape
+            prefix
             (%osc-hex-channel r)
             (%osc-hex-channel g)
             (%osc-hex-channel b)
@@ -97,26 +96,37 @@
       (push (%osc-color-reply command current-rgb)
             (screen-response-queue screen))
       (let ((rgb (%parse-osc-color body)))
-        (when rgb (funcall set-fn rgb)))))
+        (when rgb
+          (funcall set-fn rgb)))))
 
 (defparameter +xterm-base16+
-  #(#x000000 #x800000 #x008000 #x808000 #x000080 #x800080 #x008080 #xC0C0C0
-    #x808080 #xFF0000 #x00FF00 #xFFFF00 #x0000FF #xFF00FF #x00FFFF #xFFFFFF))
+  #(#x000000 #x800000
+             #x008000
+             #x808000
+             #x000080
+             #x800080
+             #x008080
+             #xC0C0C0
+             #x808080
+             #xFF0000
+             #x00FF00
+             #xFFFF00
+             #x0000FF
+             #xFF00FF
+             #x00FFFF
+             #xFFFFFF))
 
 (defun %xterm-palette-rgb (index)
   "Return the RGB colour for xterm palette INDEX as 0xRRGGBB, or NIL."
   (cond
-    ((and (<= 0 index) (< index 16))
-     (aref +xterm-base16+ index))
+    ((and (<= 0 index) (< index 16)) (aref +xterm-base16+ index))
     ((and (<= 16 index) (< index 232))
      (let* ((i (- index 16))
             (r (floor i 36))
             (g (floor (mod i 36) 6))
             (b (mod i 6))
             (levels #(0 95 135 175 215 255)))
-       (logior (ash (aref levels r) 16)
-               (ash (aref levels g) 8)
-               (aref levels b))))
+       (logior (ash (aref levels r) 16) (ash (aref levels g) 8) (aref levels b))))
     ((and (<= 232 index) (<= index 255))
      (let ((gray (+ 8 (* (- index 232) 10))))
        (logior (ash gray 16) (ash gray 8) gray)))
@@ -136,20 +146,22 @@
 
 (defun %palette-effective-rgb (screen index)
   "Return the effective 0xRRGGBB colour for palette INDEX."
-  (or (%palette-override-get screen index)
-      (%xterm-palette-rgb index)))
+  (or (%palette-override-get screen index) (%xterm-palette-rgb index)))
 
 (defun %handle-osc-4 (screen body)
   "Handle OSC 4 (set/query palette colours)."
   (let ((fields (%osc-split-fields body)))
     (loop for (index-spec spec) on fields by #'cddr
           while spec
-          for index = (nerimux/text:parse-integer-or-nil index-spec :junk-allowed t)
+          for index = (nerimux/text:parse-integer-or-nil index-spec
+                                                         :junk-allowed
+                                                         t)
           when index
             do (if (string= spec "?")
                    (let ((rgb (%palette-effective-rgb screen index)))
                      (when rgb
-                       (push (%osc4-reply index rgb) (screen-response-queue screen))))
+                       (push (%osc4-reply index rgb)
+                             (screen-response-queue screen))))
                    (let ((rgb (%parse-osc-color spec)))
                      (when rgb
                        (%palette-override-set screen index rgb)))))))
@@ -161,6 +173,7 @@
             (and (= (length fields) 1) (string= (first fields) "")))
         (%palette-override-clear-all screen)
         (dolist (index-spec fields)
-          (let ((index (nerimux/text:parse-integer-or-nil index-spec :junk-allowed t)))
+          (let ((index
+                 (nerimux/text:parse-integer-or-nil index-spec :junk-allowed t)))
             (when index
               (%palette-override-clear screen index)))))))

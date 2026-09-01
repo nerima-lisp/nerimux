@@ -5,13 +5,12 @@
 ;; %handle-client-normal-key-payload's `#\i` clause, and with :pane keys now
 ;; going straight to the shell (%client-ui-keys-p), there is no mode left to
 ;; enter -- grepping the bare identifier turned up no other call site.
-
 (defun %client-enter-command-mode (conn &optional (initial-buffer ""))
-  (setf (client-conn-command-return-view conn)
-        (client-conn-view conn))
+  (setf (client-conn-command-return-view conn) (client-conn-view conn))
   (%set-client-modal conn :command)
-  (setf (client-conn-command-buffer conn)
-        (if (stringp initial-buffer) initial-buffer ""))
+  (setf (client-conn-command-buffer conn) (if (stringp initial-buffer)
+                                              initial-buffer
+                                              ""))
   (%mark-dirty)
   t)
 
@@ -43,10 +42,16 @@
    from DECODE-UNIVERSAL-TIME rather than a date-formatting library -- this
    codebase has no such dependency, and adding one for a single timestamp
    string would be disproportionate."
-  (multiple-value-bind (second minute hour date month year)
+  (multiple-value-bind (second minute hour date month year) 
       (decode-universal-time (get-universal-time))
-    (format nil "wt-~4,'0D~2,'0D~2,'0DT~2,'0D~2,'0D~2,'0D"
-            year month date hour minute second)))
+    (format nil
+            "wt-~4,'0D~2,'0D~2,'0DT~2,'0D~2,'0D~2,'0D"
+            year
+            month
+            date
+            hour
+            minute
+            second)))
 
 (defun %client-start-worktree-create (session conn)
   "n (item 5, user decision): create a worktree immediately, with an
@@ -57,22 +62,24 @@
    branch name and still requires --confirm (%CLIENT-CREATE-WORKTREE)."
   (let ((repository (%client-selected-repository conn)))
     (if repository
-        (%client-create-worktree-now
-         repository (%client-worktree-create-branch-name) conn session)
+        (%client-create-worktree-now repository
+                                     (%client-worktree-create-branch-name)
+                                     conn
+                                     session)
         (%client-notify conn "select a repository first")))
   t)
 
 (define-worktree-command-entry %client-start-worktree-delete
-  "wt-delete --confirm"
-  "delete")
+                               "wt-delete --confirm"
+                               "delete")
 
 (define-worktree-command-entry %client-start-worktree-lock
-  "wt-lock --confirm"
-  "lock")
+                               "wt-lock --confirm"
+                               "lock")
 
 (define-worktree-command-entry %client-start-worktree-unlock
-  "wt-unlock --confirm"
-  "unlock")
+                               "wt-unlock --confirm"
+                               "unlock")
 
 (defun %focus-selected-client-worktree (session conn)
   "Enter on the selected tree row (R6.3).
@@ -246,8 +253,7 @@
                 (let ((worktree (%workspace-find-worktree worktree-id)))
                   (when worktree
                     (%set-workspace-file-diff cache-key (list :pending 0 nil))
-                    (%client-start-worktree-file-diff-refresh
-                     worktree path)))))))))
+                    (%client-start-worktree-file-diff-refresh worktree path)))))))))
   (%mark-dirty)
   t)
 
@@ -268,30 +274,38 @@
   (let ((object (%client-tree-object conn)))
     (cond
       ((keywordp object)
-       (let ((key (list :section object))
-             (table (%workspace-collapsed-nodes)))
-         (if (gethash key table) (remhash key table) (setf (gethash key table) t)))
-       (%mark-dirty)
-       t)
+        (let ((key (list :section object))
+              (table (%workspace-collapsed-nodes)))
+          (if (gethash key table)
+              (remhash key table)
+              (setf (gethash key table) t)))
+        (%mark-dirty)
+        t)
       ((typep object 'nerimux/workspace-model:repository)
-       (let ((key (list :repository (nerimux/workspace-model:repository-id object)))
-             (table (%workspace-expanded-nodes)))
-         (if (gethash key table) (remhash key table) (setf (gethash key table) t)))
-       (%mark-dirty)
-       t)
+        (let ((key
+               (list :repository (nerimux/workspace-model:repository-id object)))
+              (table (%workspace-expanded-nodes)))
+          (if (gethash key table)
+              (remhash key table)
+              (setf (gethash key table) t)))
+        (%mark-dirty)
+        t)
       ((typep object 'nerimux/workspace-model:worktree)
-       (let ((key (list :worktree (nerimux/workspace-model:worktree-id object)))
-             (table (%workspace-expanded-nodes)))
-         (if (gethash key table)
-             (remhash key table)
-             (progn
-               (setf (gethash key table) t)
-               (when (member (nerimux/workspace-model:worktree-commits-state object)
-                             '(nil :failed))
-                 (setf (nerimux/workspace-model:worktree-commits-state object) :pending)
-                 (%client-start-worktree-commits-refresh object)))))
-       (%mark-dirty)
-       t)
+        (let ((key
+               (list :worktree (nerimux/workspace-model:worktree-id object)))
+              (table (%workspace-expanded-nodes)))
+          (if (gethash key table)
+              (remhash key table)
+              (progn
+                (setf (gethash key table) t)
+                (when 
+                    (member
+                     (nerimux/workspace-model:worktree-commits-state object)
+                     '(nil :failed))
+                  (setf (nerimux/workspace-model:worktree-commits-state object) :pending)
+                  (%client-start-worktree-commits-refresh object)))))
+        (%mark-dirty)
+        t)
       ((and (consp object) (eq (first object) :file))
        (destructuring-bind (worktree-id path code) (rest object)
          (%client-toggle-selected-file-diff worktree-id path code)))
@@ -308,21 +322,22 @@
   (let ((object (%client-tree-object conn)))
     (cond
       ((typep object 'nerimux/workspace-model:organization)
-       (setf (gethash (list :organization
-                            (nerimux/workspace-model:organization-id object))
-                      (%workspace-collapsed-nodes))
-             t)
-       (%mark-dirty)
-       t)
+        (setf (gethash
+               (list :organization
+                     (nerimux/workspace-model:organization-id object))
+               (%workspace-collapsed-nodes)) t)
+        (%mark-dirty)
+        t)
       ((keywordp object)
-       (setf (gethash (list :section object) (%workspace-collapsed-nodes)) t)
-       (%mark-dirty)
-       t)
+        (setf (gethash (list :section object) (%workspace-collapsed-nodes)) t)
+        (%mark-dirty)
+        t)
       ((typep object 'nerimux/workspace-model:repository)
-       (remhash (list :repository (nerimux/workspace-model:repository-id object))
-                (%workspace-expanded-nodes))
-       (%mark-dirty)
-       t)
+        (remhash
+         (list :repository (nerimux/workspace-model:repository-id object))
+         (%workspace-expanded-nodes))
+        (%mark-dirty)
+        t)
       (t nil))))
 
 (defun %client-tree-expand-selected (conn)
@@ -330,20 +345,21 @@
   (let ((object (%client-tree-object conn)))
     (cond
       ((typep object 'nerimux/workspace-model:organization)
-       (remhash (list :organization (nerimux/workspace-model:organization-id object))
-                (%workspace-collapsed-nodes))
-       (%mark-dirty)
-       t)
+        (remhash
+         (list :organization (nerimux/workspace-model:organization-id object))
+         (%workspace-collapsed-nodes))
+        (%mark-dirty)
+        t)
       ((keywordp object)
-       (remhash (list :section object) (%workspace-collapsed-nodes))
-       (%mark-dirty)
-       t)
+        (remhash (list :section object) (%workspace-collapsed-nodes))
+        (%mark-dirty)
+        t)
       ((typep object 'nerimux/workspace-model:repository)
-       (setf (gethash (list :repository (nerimux/workspace-model:repository-id object))
-                      (%workspace-expanded-nodes))
-             t)
-       (%mark-dirty)
-       t)
+        (setf (gethash
+               (list :repository (nerimux/workspace-model:repository-id object))
+               (%workspace-expanded-nodes)) t)
+        (%mark-dirty)
+        t)
       (t nil))))
 
 (defun %client-enter-tree-filter-mode (conn)
@@ -362,21 +378,16 @@
 (defun %handle-client-input-key-payload (session conn payload)
   "Every byte, ESC included, is forwarded to the focused pane: VIEW :pane has
    no keyboard exit of its own (that returns with the C-q prefix, R4.4)."
-  (let ((pane (or (client-conn-stdin-target conn)
-                  (%resolve-client-focus-pane session nil conn))))
+  (let ((pane
+         (or (client-conn-stdin-target conn)
+             (%resolve-client-focus-pane session nil conn))))
     (cond
-      ((null pane)
-       (%client-notify conn "no focused pane"))
+      ((null pane) (%client-notify conn "no focused pane"))
       ((pane-live-p pane)
-       (handler-case
-           (nerimux/pty:pty-write (pane-fd pane) payload)
+       (handler-case (nerimux/pty:pty-write (pane-fd pane) payload)
          (peer-io-failure (condition)
-           (%client-notify
-            conn
-            (format nil "input failed: ~A" condition)))))
-      ((pane-screen pane)
-       (pane-feed pane payload))
-      (t
-       (%client-notify conn "focused pane is unavailable")))
+           (%client-notify conn (format nil "input failed: ~A" condition)))))
+      ((pane-screen pane) (pane-feed pane payload))
+      (t (%client-notify conn "focused pane is unavailable")))
     (%mark-dirty)
     t))

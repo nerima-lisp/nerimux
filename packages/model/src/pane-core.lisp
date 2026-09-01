@@ -1,7 +1,6 @@
 (in-package #:nerimux/pane)
 
 ;;; ── Pane ───────────────────────────────────────────────────────────────────
-
 (defstruct pane
   "One terminal pane: a PTY fd + virtual screen + position within its window."
   ;; ── Identity ──────────────────────────────────────────────────────────────
@@ -76,9 +75,10 @@
 (defun pane-mark-process-exit (pane &key status signal)
   (when pane
     (setf (pane-process-exited-p pane) t
-          (pane-non-zero-exit-p pane)
-          (or (and (integerp status) (not (zerop status)))
-              (and (integerp signal) (plusp signal)))
+          (pane-non-zero-exit-p pane) (or
+                                       (and (integerp status)
+                                            (not (zerop status)))
+                                       (and (integerp signal) (plusp signal)))
           (pane-unread-output-p pane) t
           (pane-last-output-time pane) (get-universal-time)))
   pane)
@@ -94,8 +94,9 @@
 
 (defun pane-notify (pane message)
   (when pane
-    (setf (pane-notification pane)
-          (if (stringp message) message (princ-to-string message))
+    (setf (pane-notification pane) (if (stringp message)
+                                       message
+                                       (princ-to-string message))
           (pane-unread-output-p pane) t
           (pane-last-output-time pane) (get-universal-time)))
   pane)
@@ -114,11 +115,16 @@
 (defun pane-attention-reasons (pane)
   (when pane
     (let ((reasons nil))
-      (when (pane-unread-output-p pane) (push :unread-output reasons))
-      (when (pane-bell-p pane) (push :bell reasons))
-      (when (pane-process-exited-p pane) (push :process-exited reasons))
-      (when (pane-non-zero-exit-p pane) (push :non-zero-exit reasons))
-      (when (pane-startup-failed-p pane) (push :startup-failed reasons))
+      (when (pane-unread-output-p pane)
+        (push :unread-output reasons))
+      (when (pane-bell-p pane)
+        (push :bell reasons))
+      (when (pane-process-exited-p pane)
+        (push :process-exited reasons))
+      (when (pane-non-zero-exit-p pane)
+        (push :non-zero-exit reasons))
+      (when (pane-startup-failed-p pane)
+        (push :startup-failed reasons))
       (when (plusp (length (pane-notification pane)))
         (push :notification reasons))
       (nreverse reasons))))
@@ -136,7 +142,6 @@
 ;;; pane-feed can express the "drain" concern independently of the "process" concern.
 ;;; The queue is populated by the CPS parser under the screen lock; it is drained
 ;;; outside the lock so pty-write never blocks while holding the screen lock.
-
 (defun %drain-response-queue (pane screen)
   "Drain SCREEN's response queue, writing each reply to PANE's PTY fd.
    Replies are reversed from newest-first to arrival order before writing.
@@ -155,8 +160,7 @@
    The response queue is populated by the CPS parser under the screen lock;
    it is drained outside the lock so write-pty never blocks while holding it."
   (let ((screen (pane-screen pane)))
-    (with-lock-held ((screen-lock screen))
-      (screen-process-bytes screen bytes))
+    (with-lock-held ((screen-lock screen)) (screen-process-bytes screen bytes))
     (%drain-response-queue pane screen)))
 
 ;;; Pane spawn and geometry helpers were split into:

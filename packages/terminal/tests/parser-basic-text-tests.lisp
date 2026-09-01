@@ -1,9 +1,7 @@
 (in-package #:nerimux/test/terminal)
 
 ;;;; parser tests — part C1: basic-text.
-
 ;;; ── SUITE: basic-text ───────────────────────────────────────────────────────
-
 (describe "terminal-suite/basic-text"
 
   ;; Printing five ASCII characters places them in row 0 and advances cursor.

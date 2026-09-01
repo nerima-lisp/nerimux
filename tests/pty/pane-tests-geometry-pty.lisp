@@ -7,7 +7,6 @@
 ;;;; creates a real pane on success).  The geometry-only cases in that file
 ;;;; (pane-feed, pane-reposition, next-pane-id) build panes with fd -1 and
 ;;;; stayed in nerimux/test.
-
 (describe "model-suite"
 
   ;; ── split-window -d flag (no-focus) ─────────────────────────────────────────

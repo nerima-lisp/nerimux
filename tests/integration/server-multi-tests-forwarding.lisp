@@ -1,7 +1,6 @@
 (in-package #:nerimux/test)
 
 ;;;; Command dispatch and client-output tests for the multi-client server.
-
 (describe "server-multi-suite"
 
   ;;; ── Command dispatch ──────────────────────────────────────────────────────

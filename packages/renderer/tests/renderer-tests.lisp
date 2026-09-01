@@ -5,12 +5,10 @@
 ;;;; status-format[0] (domain/options + domain/format, deleted R2.2/R2.3) is
 ;;;; gone: the status bar is now always composed procedurally (left/window-
 ;;;; list/right), never expanded from a template — see renderer-statusbar.lisp.
-
 ;;; ── Test fixtures ───────────────────────────────────────────────────────────
 ;;;
 ;;; make-renderer-test-session is defined in tests/helpers-renderer-fixtures.lisp
 ;;; and shared across renderer-tests.lisp and renderer-pane-tests.lisp.
-
 (defun make-split-session (w h orient)
   "A 1-window session split into two panes (fd -1, no PTY).
    ORIENT is :h (side-by-side left|right) or :v (stacked top/bottom).
@@ -18,19 +16,60 @@
   (let* ((s0 (make-screen w h))
          (s1 (make-screen w h))
          (p0 (make-pane :id 1 :x 0 :y 0 :width w :height h :fd -1 :screen s0))
-         (p1 (if (eq orient :h)
-                 (make-pane :id 2 :x (1+ w) :y 0     :width w :height h :fd -1 :screen s1)
-                 (make-pane :id 2 :x 0       :y (1+ h) :width w :height h :fd -1 :screen s1)))
-         (total-w (if (eq orient :h) (+ (* 2 w) 1) w))
-         (total-h (if (eq orient :h) h (+ (* 2 h) 1)))
-         (win (make-window :id 1 :name "1"
-                           :width  total-w
-                           :height total-h
-                           :tree (make-layout-split orient
-                                    (make-layout-leaf p0)
-                                    (make-layout-leaf p1)
-                                    1/2)
-                           :panes (list p0 p1)))
+         (p1
+          (if (eq orient :h)
+              (make-pane :id
+                         2
+                         :x
+                         (1+ w)
+                         :y
+                         0
+                         :width
+                         w
+                         :height
+                         h
+                         :fd
+                         -1
+                         :screen
+                         s1)
+              (make-pane :id
+                         2
+                         :x
+                         0
+                         :y
+                         (1+ h)
+                         :width
+                         w
+                         :height
+                         h
+                         :fd
+                         -1
+                         :screen
+                         s1)))
+         (total-w
+          (if (eq orient :h)
+              (+ (* 2 w) 1)
+              w))
+         (total-h
+          (if (eq orient :h)
+              h
+              (+ (* 2 h) 1)))
+         (win
+          (make-window :id
+                       1
+                       :name
+                       "1"
+                       :width
+                       total-w
+                       :height
+                       total-h
+                       :tree
+                       (make-layout-split orient
+                                          (make-layout-leaf p0)
+                                          (make-layout-leaf p1)
+                                          1/2)
+                       :panes
+                       (list p0 p1)))
          (sess (make-session :id 1 :name "0" :windows (list win))))
     (window-select-pane win p0)
     (session-select-window sess win)
@@ -38,27 +77,41 @@
 
 (defun make-renderer-picker-items ()
   (let* ((organization
-           (nerimux/workspace-model:make-organization
-            :id "org" :host "github.com" :name "team"))
+          (nerimux/workspace-model:make-organization :id
+                                                     "org"
+                                                     :host
+                                                     "github.com"
+                                                     :name
+                                                     "team"))
          (repository
-           (nerimux/workspace-model:make-repository
-            :id "repo"
-            :organization organization
-            :specification "github.com/team/repo"))
+          (nerimux/workspace-model:make-repository :id
+                                                   "repo"
+                                                   :organization
+                                                   organization
+                                                   :specification
+                                                   "github.com/team/repo"))
          (worktree
-           (nerimux/workspace-model:make-worktree
-            :id "feature"
-            :repository repository
-            :path "/tmp/feature"
-            :branch "feature/picker"
-            :dirty-p t))
+          (nerimux/workspace-model:make-worktree :id
+                                                 "feature"
+                                                 :repository
+                                                 repository
+                                                 :path
+                                                 "/tmp/feature"
+                                                 :branch
+                                                 "feature/picker"
+                                                 :dirty-p
+                                                 t))
          (pane
-           (nerimux/pane:make-pane
-            :id 7
-            :title "editor"
-            :start-command "nvim"
-            :start-path "/tmp/feature")))
-    (nerimux/workspace-model:organization-add-repository organization repository)
+          (nerimux/pane:make-pane :id
+                                  7
+                                  :title
+                                  "editor"
+                                  :start-command
+                                  "nvim"
+                                  :start-path
+                                  "/tmp/feature")))
+    (nerimux/workspace-model:organization-add-repository organization
+                                                         repository)
     (nerimux/workspace-model:repository-add-worktree repository worktree)
     (nerimux/pane:worktree-add-pane worktree pane)
     (nerimux/picker:build-global-picker-items (list organization))))

@@ -5,16 +5,17 @@
 ;;;; *server-sessions* is the authoritative registry of all live sessions
 ;;;; (defvar lives in runtime.lisp so dispatch.lisp can reference it before
 ;;;; server loads).  run-server initialises it with the single initial session.
-
 ;;; ── Session registry ──────────────────────────────────────────────────────────
-
 (defun server-add-session (session)
   "Register SESSION in *server-sessions* keyed by (session-name session).
    If a session with the same name already exists it is replaced."
-  (setf *server-sessions*
-        (cons (cons (session-name session) session)
-              (remove (session-name session) *server-sessions*
-                      :key #'car :test #'string=))))
+  (setf *server-sessions* (cons (cons (session-name session) session)
+                                (remove (session-name session)
+                                        *server-sessions*
+                                        :key
+                                        #'car
+                                        :test
+                                        #'string=))))
 
 (defun %find-session-by-exact-name (name)
   "Return the session whose registry key exactly matches NAME, or NIL."
@@ -43,7 +44,6 @@
      3. Name prefix match (first matching session wins)
    Returns the session or NIL."
   (when (and name (plusp (length name)))
-    (or
-     (%find-session-by-exact-name name)
-     (%find-session-by-id-notation name)
-     (%find-session-by-prefix name))))
+    (or (%find-session-by-exact-name name)
+        (%find-session-by-id-notation name)
+        (%find-session-by-prefix name))))

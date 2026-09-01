@@ -11,9 +11,11 @@ itself would show."
   (case (vcs-kit:vcs-status-entry-kind entry)
     (:untracked "??")
     (:ignored "!!")
-    (t (format nil "~A~A"
-               (vcs-kit:vcs-status-entry-index-status entry)
-               (vcs-kit:vcs-status-entry-worktree-status entry)))))
+    (t
+     (format nil
+             "~A~A"
+             (vcs-kit:vcs-status-entry-index-status entry)
+             (vcs-kit:vcs-status-entry-worktree-status entry)))))
 
 (defun %changed-file-path (entry)
   "ENTRY's path part for the (CODE . PATH) cons (F5/F6): control characters
@@ -24,8 +26,9 @@ arrow, never a Unicode glyph) so the rename's source path is not silently
 dropped the way a bare VCS-STATUS-ENTRY-PATH would drop it. Every other
 kind uses PATH alone, as before."
   (let ((path (%strip-control-characters (vcs-kit:vcs-status-entry-path entry)))
-        (original (and (eq (vcs-kit:vcs-status-entry-kind entry) :rename-or-copy)
-                       (vcs-kit:vcs-status-entry-original-path entry))))
+        (original
+         (and (eq (vcs-kit:vcs-status-entry-kind entry) :rename-or-copy)
+              (vcs-kit:vcs-status-entry-original-path entry))))
     (if original
         (format nil "~A -> ~A" (%strip-control-characters original) path)
         path)))
@@ -34,10 +37,10 @@ kind uses PATH alone, as before."
   "ENTRIES (a VCS-STATUS-SNAPSHOT's VCS-STATUS-ENTRY list) as plain
 (CODE . PATH) conses -- the infrastructure-to-domain boundary D1 requires:
 presentation and the domain model never see a cl-vcs-kit struct."
-  (mapcar (lambda (entry)
-            (cons (%changed-file-code entry)
-                  (%changed-file-path entry)))
-          entries))
+  (mapcar
+   (lambda (entry)
+     (cons (%changed-file-code entry) (%changed-file-path entry)))
+   entries))
 
 (defun %changed-file-column-set-p (status)
   "T when STATUS -- a VCS-STATUS-ENTRY's INDEX-STATUS or WORKTREE-STATUS
@@ -77,16 +80,14 @@ CODE the same real XY pair %CHANGED-FILE-CODE already builds for them
     `(let ((,entries-var ,entries))
        (let (,result-var)
          (dolist (,entry-var ,entries-var (nreverse ,result-var))
-           (let ((,kind-var
-                   (vcs-kit:vcs-status-entry-kind ,entry-var)))
-             (unless (or (eq ,kind-var :untracked)
-                         (eq ,kind-var :ignored)
-                         (%status-entry-conflict-p ,entry-var))
-               (let ((,status-var
-                       (,status-accessor ,entry-var)))
+           (let ((,kind-var (vcs-kit:vcs-status-entry-kind ,entry-var)))
+             (unless 
+                 (or (eq ,kind-var :untracked)
+                     (eq ,kind-var :ignored)
+                     (%status-entry-conflict-p ,entry-var))
+               (let ((,status-var (,status-accessor ,entry-var)))
                  (when (%changed-file-column-set-p ,status-var)
-                   (push (cons ,status-var
-                               (%changed-file-path ,entry-var))
+                   (push (cons ,status-var (%changed-file-path ,entry-var))
                          ,result-var))))))))))
 
 (defun %worktree-status-staged-files (entries)
@@ -129,10 +130,11 @@ column, worktree side) -- magit's unstaged section (Unit MODEL)."
 
 (defun %read-worktree-status (worktree)
   (let ((repository (nerimux/workspace-model:worktree-repository worktree)))
-    (%read-worktree-status-at
-     (nerimux/workspace-model:worktree-path worktree)
-     (nerimux/workspace-model:worktree-head worktree)
-     (and repository (nerimux/workspace-model:repository-path repository)))))
+    (%read-worktree-status-at (nerimux/workspace-model:worktree-path worktree)
+                              (nerimux/workspace-model:worktree-head worktree)
+                              (and repository
+                                   (nerimux/workspace-model:repository-path
+                                    repository)))))
 
 (defun %apply-worktree-status (repository update)
   (let* ((worktree

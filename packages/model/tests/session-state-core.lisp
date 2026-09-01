@@ -3,7 +3,6 @@
 ;;;; Session state tests: pure session / window helpers.
 ;;;;
 ;;;; These tests avoid real PTYs and therefore always run in sandboxed builds.
-
 (describe "model-suite"
 
   ;;; ── session-active-pane (no PTY) ────────────────────────────────────────────

@@ -23,7 +23,6 @@
 ;;;; tests of label/info-cluster/activity helpers that operate on those
 ;;;; objects directly rather than on the flattened overview tree, where
 ;;;; window/pane rows no longer appear.
-
 (defun %build-five-level-tree ()
   "One organization -> one repository -> one worktree -> two windows (one
    with two panes, one with one pane). Returns (VALUES ORGANIZATION REPOSITORY
@@ -31,18 +30,45 @@
   (let* ((pane-1 (nerimux/pane:make-pane :id 1 :fd -1 :title "shell"))
          (pane-2 (nerimux/pane:make-pane :id 2 :fd -1 :title "test"))
          (pane-3 (nerimux/pane:make-pane :id 3 :fd -1 :title "logs"))
-         (window-1 (nerimux/window:make-window :id 1 :name "feature/tree"
-                                              :panes (list pane-1 pane-2)))
-         (window-2 (nerimux/window:make-window :id 2 :name "feature/tree (2)"
-                                              :panes (list pane-3)))
-         (worktree (nerimux/workspace-model:make-worktree
-                    :id "wt-1" :path "/repo/wt" :branch "feature/tree"))
-         (repository (nerimux/workspace-model:make-repository
-                      :id "repo-1" :specification "github.com/team/tree"
-                      :local-path "/repo" :worktrees (list worktree)))
-         (organization (nerimux/workspace-model:make-organization
-                        :id "github.com/team" :host "github.com" :name "team"
-                        :repositories (list repository))))
+         (window-1
+          (nerimux/window:make-window :id
+                                      1
+                                      :name
+                                      "feature/tree"
+                                      :panes
+                                      (list pane-1 pane-2)))
+         (window-2
+          (nerimux/window:make-window :id
+                                      2
+                                      :name
+                                      "feature/tree (2)"
+                                      :panes
+                                      (list pane-3)))
+         (worktree
+          (nerimux/workspace-model:make-worktree :id
+                                                 "wt-1"
+                                                 :path
+                                                 "/repo/wt"
+                                                 :branch
+                                                 "feature/tree"))
+         (repository
+          (nerimux/workspace-model:make-repository :id
+                                                   "repo-1"
+                                                   :specification
+                                                   "github.com/team/tree"
+                                                   :local-path
+                                                   "/repo"
+                                                   :worktrees
+                                                   (list worktree)))
+         (organization
+          (nerimux/workspace-model:make-organization :id
+                                                     "github.com/team"
+                                                     :host
+                                                     "github.com"
+                                                     :name
+                                                     "team"
+                                                     :repositories
+                                                     (list repository))))
     (setf (nerimux/pane:pane-window pane-1) window-1
           (nerimux/pane:pane-window pane-2) window-1
           (nerimux/pane:pane-window pane-3) window-2)
@@ -55,18 +81,37 @@
   "One organization -> one repository -> one worktree, WORKTREE optionally
    dirty (ATTENTION-P, so it needs attention) and optionally holding one
    pane (PANE-P). Returns (VALUES ORGANIZATION REPOSITORY WORKTREE)."
-  (let* ((worktree (nerimux/workspace-model:make-worktree
-                    :id "wt-section" :path "/repo/wt" :branch "feature/section"
-                    :dirty-p attention-p))
-         (repository (nerimux/workspace-model:make-repository
-                      :id "repo-section" :specification "github.com/team/section"
-                      :local-path "/repo" :worktrees (list worktree)))
-         (organization (nerimux/workspace-model:make-organization
-                        :id "github.com/team-section" :host "github.com"
-                        :name "team-section" :repositories (list repository))))
+  (let* ((worktree
+          (nerimux/workspace-model:make-worktree :id
+                                                 "wt-section"
+                                                 :path
+                                                 "/repo/wt"
+                                                 :branch
+                                                 "feature/section"
+                                                 :dirty-p
+                                                 attention-p))
+         (repository
+          (nerimux/workspace-model:make-repository :id
+                                                   "repo-section"
+                                                   :specification
+                                                   "github.com/team/section"
+                                                   :local-path
+                                                   "/repo"
+                                                   :worktrees
+                                                   (list worktree)))
+         (organization
+          (nerimux/workspace-model:make-organization :id
+                                                     "github.com/team-section"
+                                                     :host
+                                                     "github.com"
+                                                     :name
+                                                     "team-section"
+                                                     :repositories
+                                                     (list repository))))
     (when pane-p
       (let* ((pane (nerimux/pane:make-pane :id 1 :fd -1))
-             (window (nerimux/window:make-window :id 1 :name "w" :panes (list pane))))
+             (window
+              (nerimux/window:make-window :id 1 :name "w" :panes (list pane))))
         (setf (nerimux/pane:pane-window pane) window)
         (nerimux/pane:worktree-add-pane worktree pane)))
     (values organization repository worktree)))
@@ -78,23 +123,49 @@
    its (default-collapsed) Repositories row. Returns (VALUES ORGANIZATION
    MATCH-REPO MATCH-WORKTREE OTHER-REPO OTHER-WORKTREE)."
   (let* ((match-worktree
-           (nerimux/workspace-model:make-worktree
-            :id "wt-match" :path "/repo/match" :branch "only-match" :dirty-p t))
+          (nerimux/workspace-model:make-worktree :id
+                                                 "wt-match"
+                                                 :path
+                                                 "/repo/match"
+                                                 :branch
+                                                 "only-match"
+                                                 :dirty-p
+                                                 t))
          (match-repo
-           (nerimux/workspace-model:make-repository
-            :id "repo-match" :specification "github.com/team/match"
-            :local-path "/repo/match" :worktrees (list match-worktree)))
+          (nerimux/workspace-model:make-repository :id
+                                                   "repo-match"
+                                                   :specification
+                                                   "github.com/team/match"
+                                                   :local-path
+                                                   "/repo/match"
+                                                   :worktrees
+                                                   (list match-worktree)))
          (other-worktree
-           (nerimux/workspace-model:make-worktree
-            :id "wt-other" :path "/repo/other" :branch "buried-worktree"))
+          (nerimux/workspace-model:make-worktree :id
+                                                 "wt-other"
+                                                 :path
+                                                 "/repo/other"
+                                                 :branch
+                                                 "buried-worktree"))
          (other-repo
-           (nerimux/workspace-model:make-repository
-            :id "repo-other" :specification "github.com/team/other"
-            :local-path "/repo/other" :worktrees (list other-worktree)))
+          (nerimux/workspace-model:make-repository :id
+                                                   "repo-other"
+                                                   :specification
+                                                   "github.com/team/other"
+                                                   :local-path
+                                                   "/repo/other"
+                                                   :worktrees
+                                                   (list other-worktree)))
          (organization
-           (nerimux/workspace-model:make-organization
-            :id "github.com/team-filter" :host "github.com" :name "team-filter"
-            :repositories (list match-repo other-repo))))
+          (nerimux/workspace-model:make-organization :id
+                                                     "github.com/team-filter"
+                                                     :host
+                                                     "github.com"
+                                                     :name
+                                                     "team-filter"
+                                                     :repositories
+                                                     (list match-repo
+                                                           other-repo))))
     (values organization match-repo match-worktree other-repo other-worktree)))
 
 (defun %tree-entry-kinds (entries)
@@ -315,7 +386,6 @@
 ;;; is for. The section-based redesign adds a second collapse layer (a
 ;;; repository row's own default-collapsed worktree list) that filter must
 ;;; also penetrate.
-
 (describe "renderer-suite/workspace-tree-filter"
 
   ;; A filter matching one worktree's branch keeps that worktree and its
@@ -392,7 +462,6 @@
 ;;; (server-multi-dispatch-command-input.lisp) -- so pressing `/` fell
 ;;; through to the ordinary key-panel branch and the query the user was
 ;;; typing never appeared on screen.
-
 (describe "renderer-suite/workspace-tree-filter-prompt"
 
   (it "shows the /query prompt at the footer row when mode is :filter, and no ordinary key hints"
@@ -422,7 +491,6 @@
 ;;; relative last-activity time, in that priority order. Unaffected by the
 ;;; section-based redesign: a :WORKTREE row's info cluster is built the same
 ;;; way regardless of which section it appears under.
-
 (describe "renderer-suite/workspace-tree-info-cluster"
 
   ;; A fixed worktree: ahead 2, dirty, 2 panes with one exited, and a known
@@ -491,26 +559,26 @@
 ;;; renderer-workspace.lisp) -- the only render path that emits inline SGR
 ;;; for tree rows at all (see renderer-workspace-tree.lisp's file header on
 ;;; why the real cl-tui-kit client path does not).
-
 (describe "renderer-suite/workspace-tree-dracula-colors"
-
-  (it "renders a section header in +sgr-section+ and a worktree's ahead count in Dracula truecolour"
-    (multiple-value-bind (organization repository worktree)
-        (%build-section-fixture :attention-p t :pane-p t)
-      (declare (ignore repository))
-      (setf (nerimux/workspace-model:worktree-ahead worktree) 1)
-      (let ((frame
-              (nerimux/renderer:render-workspace-overview-to-string
-               (list organization) 24 100)))
-        (expect frame :to-contain-sgr nerimux/renderer::+sgr-section+)
-        (expect frame :to-contain-sgr nerimux/renderer::+sgr-ahead+)))))
+          (it
+           "renders a section header in +sgr-section+ and a worktree's ahead count in Dracula truecolour"
+           (multiple-value-bind (organization repository worktree) 
+               (%build-section-fixture :attention-p t :pane-p t)
+             (declare (ignore repository))
+             (setf (nerimux/workspace-model:worktree-ahead worktree) 1)
+             (let ((frame
+                    (nerimux/renderer:render-workspace-overview-to-string
+                     (list organization)
+                     24
+                     100)))
+               (expect frame :to-contain-sgr nerimux/renderer::+sgr-section+)
+               (expect frame :to-contain-sgr nerimux/renderer::+sgr-ahead+)))))
 
 ;;; Review-round fix: a "no matches: /query" placeholder replaces the empty
 ;;; tree box when a non-empty filter narrows a non-empty catalog to zero
 ;;; rows, on BOTH render paths -- the plain-ANSI pass draws the message
 ;;; itself, and the cl-tui-kit pass must skip invoking the tree widget
 ;;; entirely rather than overlay an empty (or worse, stale) box on top of it.
-
 (describe "renderer-suite/workspace-tree-no-matches"
 
   ;; (a) The plain-ANSI pass shows the placeholder and leaks no tree-row
@@ -542,7 +610,6 @@
 ;;; message layout is replaced by a single "too short" message instead of
 ;;; letting rows computed past the terminal's actual height silently
 ;;; overlap (the footer landing on top of the detail rows, for instance).
-
 (describe "renderer-suite/workspace-tree-too-short"
 
   (it "shows a single too-short message instead of the ordinary layout below 7 rows"
@@ -567,7 +634,6 @@
 ;;; substring unique to a neighbouring, easily-confused branch is absent, so
 ;;; a dispatch that quietly falls through to the wrong branch fails loudly
 ;;; rather than passing on a coincidental substring match.
-
 (describe "renderer-suite/workspace-key-panel-content"
 
   (it "shows the fold/section hints for a :section-keyword selection"
@@ -632,108 +698,217 @@
       (expect (not (search "delete" plain))))))
 
 (describe "renderer-suite/workspace-repository-state"
-
-  (it "renders every repository health state in the selected detail panel"
-    (multiple-value-bind (organization repository) (%build-five-level-tree)
-      (let ((states
-              (list (list :missing "MISSING"
-                          (lambda () (setf (nerimux/workspace-model:repository-missing-p repository) t)))
-                    (list :conflict "CONFLICT"
-                          (lambda () (setf (nerimux/workspace-model:repository-conflict-p repository) t)))
-                    (list :dirty "DIRTY"
-                          (lambda () (setf (nerimux/workspace-model:repository-dirty-p repository) t)))
-                    (list :no-worktree "NO-WORKTREE"
-                          (lambda () (setf (nerimux/workspace-model:repository-worktrees repository) nil)))
-                    (list :ready "ready" nil))))
-        (dolist (state states)
-          (setf (nerimux/workspace-model:repository-missing-p repository) nil
-                (nerimux/workspace-model:repository-conflict-p repository) nil
-                (nerimux/workspace-model:repository-dirty-p repository) nil
-                (nerimux/workspace-model:repository-worktrees repository)
-                (list (nerimux/workspace-model:make-worktree :id "state-wt" :path "/wt")))
-          (when (third state) (funcall (third state)))
-          (let ((plain
-                  (strip-sgr
-                   (nerimux/renderer:render-workspace-overview-to-string
-                    (list organization) 24 100
-                    :selected-tree-object repository))))
-            (expect (search (second state) plain))))))))
+          (it
+           "renders every repository health state in the selected detail panel"
+           (multiple-value-bind (organization repository) 
+               (%build-five-level-tree)
+             (let ((states
+                    (list
+                     (list :missing
+                           "MISSING"
+                           (lambda ()
+                             (setf (nerimux/workspace-model:repository-missing-p
+                                    repository) t)))
+                     (list :conflict
+                           "CONFLICT"
+                           (lambda ()
+                             (setf (nerimux/workspace-model:repository-conflict-p
+                                    repository) t)))
+                     (list :dirty
+                           "DIRTY"
+                           (lambda ()
+                             (setf (nerimux/workspace-model:repository-dirty-p
+                                    repository) t)))
+                     (list :no-worktree
+                           "NO-WORKTREE"
+                           (lambda ()
+                             (setf (nerimux/workspace-model:repository-worktrees
+                                    repository) nil)))
+                     (list :ready "ready" nil))))
+               (dolist (state states)
+                 (setf (nerimux/workspace-model:repository-missing-p repository) nil
+                       (nerimux/workspace-model:repository-conflict-p
+                        repository) nil
+                       (nerimux/workspace-model:repository-dirty-p repository) nil
+                       (nerimux/workspace-model:repository-worktrees repository) (list
+                                                                                  (nerimux/workspace-model:make-worktree
+                                                                                   :id
+                                                                                   "state-wt"
+                                                                                   :path
+                                                                                   "/wt")))
+                 (when (third state)
+                   (funcall (third state)))
+                 (let ((plain
+                        (strip-sgr
+                         (nerimux/renderer:render-workspace-overview-to-string
+                          (list organization)
+                          24
+                          100
+                          :selected-tree-object
+                          repository))))
+                   (expect (search (second state) plain))))))))
 
 (describe "renderer-suite/workspace-tree-projection-helpers"
-
-  (it "uses stable identities for every model level and a generic fallback"
-    (multiple-value-bind (organization repository worktree window-1)
-        (%build-five-level-tree)
-      (let ((pane (first (nerimux/window:window-panes window-1))))
-        (expect (equal '(:organization "github.com/team")
+          (it
+           "uses stable identities for every model level and a generic fallback"
+           (multiple-value-bind (organization repository worktree window-1) 
+               (%build-five-level-tree)
+             (let ((pane (first (nerimux/window:window-panes window-1))))
+               (expect
+                (equal '(:organization "github.com/team")
                        (nerimux/renderer::%workspace-tree-node-key organization)))
-        (expect (equal '(:repository "repo-1")
+               (expect
+                (equal '(:repository "repo-1")
                        (nerimux/renderer::%workspace-tree-node-key repository)))
-        (expect (equal '(:worktree "wt-1")
+               (expect
+                (equal '(:worktree "wt-1")
                        (nerimux/renderer::%workspace-tree-node-key worktree)))
-        (expect (equal '(:window 1)
+               (expect
+                (equal '(:window 1)
                        (nerimux/renderer::%workspace-tree-node-key window-1)))
-        (expect (equal '(:pane 1 1)
+               (expect
+                (equal '(:pane 1 1)
                        (nerimux/renderer::%workspace-tree-node-key pane)))
-        (expect (equal '(:workspace-object :other)
+               (expect
+                (equal '(:workspace-object :other)
                        (nerimux/renderer::%workspace-tree-node-key :other))))))
-
-  (it "falls back to readable identifiers when labels lack descriptive data"
-    (let ((organization (nerimux/workspace-model:make-organization :id "local-id" :host "" :name ""))
-          (repository (nerimux/workspace-model:make-repository :id "repo-id" :specification "" :local-path ""))
-          (worktree (nerimux/workspace-model:make-worktree :id "wt-id" :path "" :branch nil))
-          (pane (nerimux/pane:make-pane :id 7 :fd -1 :title "" :start-command "")))
-      (expect (string= "local-id" (nerimux/renderer::%organization-tree-label organization)))
-      (expect (string= "repo-id" (nerimux/renderer::%repository-tree-label repository)))
-      (expect (string= "wt-id" (nerimux/renderer::%worktree-tree-label worktree)))
-      (expect (string= "pane/7 shell" (nerimux/renderer::%pane-tree-label pane)))))
-
-  (it "prefers each available partial label before its identifier fallback"
-    (let ((host-only (nerimux/workspace-model:make-organization :id "org-id" :host "git.example" :name ""))
-          (name-only (nerimux/workspace-model:make-organization :id "org-id" :host "" :name "team"))
-          (path-only (nerimux/workspace-model:make-repository :id "repo-id" :specification "" :local-path "/work/repo"))
-          (command-only (nerimux/pane:make-pane :id 7 :fd -1 :title "" :start-command "make test")))
-      (expect (string= "git.example" (nerimux/renderer::%organization-tree-label host-only)))
-      (expect (string= "team" (nerimux/renderer::%organization-tree-label name-only)))
-      (expect (string= "/work/repo" (nerimux/renderer::%repository-tree-label path-only)))
-      (expect (string= "pane/7 make test" (nerimux/renderer::%pane-tree-label command-only)))))
-
-  (it "keeps only meaningful activity and info tokens"
-    (let* ((worktree (nerimux/workspace-model:make-worktree
-                      :id "wt" :path "/tmp/wt" :branch "main"
-                      :ahead 0 :behind 0))
-           (pane (nerimux/pane:make-pane :id 1 :fd -1)))
-      (nerimux/pane:worktree-add-pane worktree pane)
-      (expect (null (nerimux/renderer::%worktree-last-activity-time worktree)))
-      (expect (nerimux/renderer::%worktree-tree-info-tokens worktree))
-      (expect (string= "" (nerimux/renderer::%workspace-tree-node-search-text :unknown worktree)))))
-
-  (it "uses a readable fallback for non-letter prefix bindings"
-    (expect (string= "key/999"
-                     (nerimux/renderer::%workspace-prefix-label 999))))
-
-  (it "selects the newest output or focus timestamp"
-    (multiple-value-bind (organization repository worktree window-1)
-        (%build-five-level-tree)
-      (declare (ignorable organization repository))
-      (let ((pane-1 (first (nerimux/window:window-panes window-1)))
-            (pane-2 (second (nerimux/window:window-panes window-1))))
-        (setf (nerimux/pane:pane-last-output-time pane-1) 10
-              (nerimux/pane:pane-last-focused-time pane-2) 20)
-        (expect (= 20 (nerimux/renderer::%worktree-last-activity-time worktree))))))
-
-  (it "renders behind-only repository information"
-    (let ((worktree (nerimux/workspace-model:make-worktree :id "wt" :behind 2)))
-      (multiple-value-bind (plain styled)
-          (nerimux/renderer::%worktree-tree-info-suffix worktree 80)
-        (declare (ignore styled))
-        (expect (search "-2" plain))))))
+          (it
+           "falls back to readable identifiers when labels lack descriptive data"
+           (let ((organization
+                  (nerimux/workspace-model:make-organization :id
+                                                             "local-id"
+                                                             :host
+                                                             ""
+                                                             :name
+                                                             ""))
+                 (repository
+                  (nerimux/workspace-model:make-repository :id
+                                                           "repo-id"
+                                                           :specification
+                                                           ""
+                                                           :local-path
+                                                           ""))
+                 (worktree
+                  (nerimux/workspace-model:make-worktree :id
+                                                         "wt-id"
+                                                         :path
+                                                         ""
+                                                         :branch
+                                                         nil))
+                 (pane
+                  (nerimux/pane:make-pane :id
+                                          7
+                                          :fd
+                                          -1
+                                          :title
+                                          ""
+                                          :start-command
+                                          "")))
+             (expect
+              (string= "local-id"
+                       (nerimux/renderer::%organization-tree-label organization)))
+             (expect
+              (string= "repo-id"
+                       (nerimux/renderer::%repository-tree-label repository)))
+             (expect
+              (string= "wt-id"
+                       (nerimux/renderer::%worktree-tree-label worktree)))
+             (expect
+              (string= "pane/7 shell" (nerimux/renderer::%pane-tree-label pane)))))
+          (it
+           "prefers each available partial label before its identifier fallback"
+           (let ((host-only
+                  (nerimux/workspace-model:make-organization :id
+                                                             "org-id"
+                                                             :host
+                                                             "git.example"
+                                                             :name
+                                                             ""))
+                 (name-only
+                  (nerimux/workspace-model:make-organization :id
+                                                             "org-id"
+                                                             :host
+                                                             ""
+                                                             :name
+                                                             "team"))
+                 (path-only
+                  (nerimux/workspace-model:make-repository :id
+                                                           "repo-id"
+                                                           :specification
+                                                           ""
+                                                           :local-path
+                                                           "/work/repo"))
+                 (command-only
+                  (nerimux/pane:make-pane :id
+                                          7
+                                          :fd
+                                          -1
+                                          :title
+                                          ""
+                                          :start-command
+                                          "make test")))
+             (expect
+              (string= "git.example"
+                       (nerimux/renderer::%organization-tree-label host-only)))
+             (expect
+              (string= "team"
+                       (nerimux/renderer::%organization-tree-label name-only)))
+             (expect
+              (string= "/work/repo"
+                       (nerimux/renderer::%repository-tree-label path-only)))
+             (expect
+              (string= "pane/7 make test"
+                       (nerimux/renderer::%pane-tree-label command-only)))))
+          (it "keeps only meaningful activity and info tokens"
+              (let* ((worktree
+                      (nerimux/workspace-model:make-worktree :id
+                                                             "wt"
+                                                             :path
+                                                             "/tmp/wt"
+                                                             :branch
+                                                             "main"
+                                                             :ahead
+                                                             0
+                                                             :behind
+                                                             0))
+                     (pane (nerimux/pane:make-pane :id 1 :fd -1)))
+                (nerimux/pane:worktree-add-pane worktree pane)
+                (expect
+                 (null
+                  (nerimux/renderer::%worktree-last-activity-time worktree)))
+                (expect (nerimux/renderer::%worktree-tree-info-tokens worktree))
+                (expect
+                 (string= ""
+                          (nerimux/renderer::%workspace-tree-node-search-text
+                           :unknown
+                           worktree)))))
+          (it "uses a readable fallback for non-letter prefix bindings"
+              (expect
+               (string= "key/999"
+                        (nerimux/renderer::%workspace-prefix-label 999))))
+          (it "selects the newest output or focus timestamp"
+              (multiple-value-bind (organization repository worktree window-1) 
+                  (%build-five-level-tree)
+                (declare (ignorable organization repository))
+                (let ((pane-1 (first (nerimux/window:window-panes window-1)))
+                      (pane-2 (second (nerimux/window:window-panes window-1))))
+                  (setf (nerimux/pane:pane-last-output-time pane-1) 10
+                        (nerimux/pane:pane-last-focused-time pane-2) 20)
+                  (expect
+                   (= 20
+                      (nerimux/renderer::%worktree-last-activity-time worktree))))))
+          (it "renders behind-only repository information"
+              (let ((worktree
+                     (nerimux/workspace-model:make-worktree :id "wt" :behind 2)))
+                (multiple-value-bind (plain styled) 
+                    (nerimux/renderer::%worktree-tree-info-suffix worktree 80)
+                  (declare (ignore styled))
+                  (expect (search "-2" plain))))))
 
 ;;; PR2 tree row budget: the section-based redesign's key panel reserves 8
 ;;; rows around the tree at TERMINAL-ROWS >= 12 (a divider + 2 content lines
 ;;; instead of the single-line footer), collapsing back to the original 6
 ;;; rows below that height. Floored at 1.
-
 (describe "renderer-suite/workspace-tree-view-rows"
 
   (it "reserves 6 rows around the tree below the key-panel height threshold"
@@ -756,7 +931,6 @@
 ;;; expanded via *WORKSPACE-EXPANDED-NODE-IDS* keyed (:WORKTREE ID) -- the
 ;;; same table and default-COLLAPSED polarity a Repositories-section
 ;;; repository row already uses for its own expansion.
-
 (describe "renderer-suite/workspace-tree-worktree-expansion"
 
   (it "emits pane, file, and commit child rows in order when expanded"

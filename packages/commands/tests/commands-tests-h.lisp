@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/commands)
 
 ;;;; copy-mode-exit, clear-history — part VI
-
 (describe "commands-suite"
 
   ;;; ── copy-mode-exit ───────────────────────────────────────────────────────────

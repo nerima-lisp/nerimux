@@ -1,5 +1,4 @@
 ;;; ── Client/server wire protocol ──────────────────────────────────────────
-
 (defpackage #:nerimux/protocol
   (:use #:cl)
   (:documentation
@@ -33,7 +32,6 @@
    #:u16-octets #:u32-octets #:u16-octets-pair #:read-u16 #:read-u32))
 
 ;;; ── Client/server stream transport ───────────────────────────────────────
-
 (defpackage #:nerimux/transport
   (:use #:cl)
   ;; Four names out of the codec's forty: the header size and payload-length
@@ -55,14 +53,17 @@
    #:with-incoming-frame)) ; macro — read + Prolog-dispatch one frame from a stream
 
 (defpackage #:nerimux/net
-  (:use #:cl)
-  (:documentation
-   "INFRASTRUCTURE layer: the Unix-domain socket underneath detach-attach.  Thin
+            (:use #:cl)
+            (:documentation
+             "INFRASTRUCTURE layer: the Unix-domain socket underneath detach-attach.  Thin
     wrappers over sb-bsd-sockets so the server and client loops speak in terms of
     make-listener / accept-connection / connect-to and a binary stream rather than
     the raw contrib API, and so tests can ask whether the transport is available at
     all before exercising it.")
-  (:export
-   #:make-listener #:accept-connection #:connect-to
-   #:socket-stream #:socket-fd #:close-socket
-   #:unix-socket-available-p))
+            (:export #:make-listener
+                     #:accept-connection
+                     #:connect-to
+                     #:socket-stream
+                     #:socket-fd
+                     #:close-socket
+                     #:unix-socket-available-p))

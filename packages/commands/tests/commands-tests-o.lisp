@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/commands)
 
 ;;;; Commands tests — part XV: selection-bounds scrollback, word/paragraph nav, scroll-middle.
-
 (describe "commands-suite"
 
   ;; ── %selection-bounds scrollback spanning (virtual-row correctness) ──────────

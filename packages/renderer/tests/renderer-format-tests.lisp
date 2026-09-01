@@ -13,7 +13,6 @@
 ;;;; read — see renderer-style.lisp and renderer-style-data.lisp.  Every
 ;;;; style this renderer emits is now a fixed SGR constant, so there is no
 ;;;; longer a runtime string to parse or classify.
-
 (describe "renderer-suite"
 
   ;; ── Helper ──────────────────────────────────────────────────────────────────

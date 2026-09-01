@@ -3,7 +3,6 @@
 ;;;; Small screen-state setters driven by escape sequences: focus-event reports
 ;;;; (?1004), the pending-BEL flag, the OSC 0/2/7 title & cwd, the XTPUSHTITLE/
 ;;;; XTPOPTITLE title stack, and the OSC 110/111 default-colour resets.
-
 ;;; ── Focus event reporting (?1004) ──────────────────────────────────────────
 ;;;
 ;;; When an application enables focus events, it expects the terminal to deliver
@@ -15,10 +14,12 @@
 ;;; defparameter rather than defconstant is used for the report strings because
 ;;; string identity (EQL) cannot be guaranteed across image reloads — SBCL would
 ;;; signal a redefinition error for defconstant with a new string object.
-
-(defparameter +focus-gained-report+ (format nil "~C[I" #\Escape)
+(defparameter +focus-gained-report+
+  (format nil "~C[I" #\Escape)
   "VT sequence delivered to a focused application when it gains terminal focus.")
-(defparameter +focus-lost-report+   (format nil "~C[O" #\Escape)
+
+(defparameter +focus-lost-report+
+  (format nil "~C[O" #\Escape)
   "VT sequence delivered to a focused application when it loses terminal focus.")
 
 (defun focus-event-report (screen focused-p)
@@ -30,13 +31,11 @@
         +focus-lost-report+)))
 
 ;;; ── BEL pending ──────────────────────────────────────────────────────────────
-
 (defun set-bell-pending (screen)
   "Mark SCREEN as having a pending BEL (bell event) to be processed by the renderer."
   (setf (screen-bell-pending screen) t))
 
 ;;; ── Screen title ─────────────────────────────────────────────────────────────
-
 (defun set-screen-title (screen title)
   "Set the OSC window title of SCREEN to TITLE string."
   (setf (screen-title screen) title))
@@ -50,18 +49,18 @@
    The stack is bounded to +title-stack-max-depth+ entries (xterm limit);
    when the limit is exceeded the oldest entry is silently discarded."
   (let ((stack (screen-title-stack screen)))
-    (setf (screen-title-stack screen)
-          (cons (screen-title screen)
-                (if (>= (length stack) +title-stack-max-depth+)
-                    (butlast stack)
-                    stack)))))
+    (setf (screen-title-stack screen) (cons (screen-title screen)
+                                            (if (>= (length stack)
+                                                    +title-stack-max-depth+)
+                                                (butlast stack)
+                                                stack)))))
 
 (defun pop-title-stack (screen)
   "XTPOPTITLE (CSI < Ps t): pop and restore the most recently pushed title.
    A pop on an empty stack is a silent no-op, matching xterm behaviour."
   (let ((stack (screen-title-stack screen)))
     (when stack
-      (setf (screen-title       screen) (car stack)
+      (setf (screen-title screen) (car stack)
             (screen-title-stack screen) (cdr stack)))))
 
 (defun reset-osc-default-fg (screen)

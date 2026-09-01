@@ -4,9 +4,7 @@
 ;;;;
 ;;;; Covers wrapped-row metadata, ANSI boolean mode slots generated through
 ;;;; define-boolean-slot-tests, and copy search/rectangular-selection state.
-
 ;;; ── SUITE: screen-wrapped-rows and %mark-line-wrapped / %line-wrapped-p ──────
-
 (describe "terminal-suite/wrapped-rows-slot-suite"
 
   ;; screen-wrapped-rows is NIL on a fresh screen.
@@ -52,7 +50,6 @@
       (expect (nerimux/terminal/types:%line-wrapped-p s 3) :to-be-truthy))))
 
 ;;; ── SUITE: %clear-all-line-wrapped ──────────────────────────────────────────
-
 (describe "terminal-suite/clear-all-line-wrapped-suite"
 
   ;; %clear-all-line-wrapped makes every row report unwrapped.
@@ -73,7 +70,6 @@
       (expect (null (nerimux/terminal/types:screen-wrapped-rows s))))))
 
 ;;; ── SUITE: %shift-line-wrapped-up ────────────────────────────────────────────
-
 (describe "terminal-suite/shift-line-wrapped-up-suite"
 
   ;; %shift-line-wrapped-up: a flag at Y in (top,bottom] moves to Y-1.
@@ -109,7 +105,6 @@
 ;;;
 ;;; screen-insert-mode (IRM), screen-newline-mode (LNM), and screen-reverse-screen
 ;;; (DECSCNM) all follow the identical defaults-NIL / enable / disable triple.
-
 (define-boolean-slot-tests
   nerimux/terminal/types:screen-insert-mode
   screen-insert-mode-suite
@@ -132,7 +127,6 @@
   :suite-description "screen-reverse-screen: defaults NIL, ESC[?5h enables, ESC[?5l disables")
 
 ;;; ── SUITE: screen-copy-search-direction ──────────────────────────────────────
-
 (describe "terminal-suite/copy-search-direction-suite"
 
   ;; screen-copy-search-direction is NIL on a fresh screen.
@@ -160,7 +154,6 @@
       (expect (null (nerimux/terminal/types:screen-copy-search-direction s))))))
 
 ;;; ── SUITE: screen-copy-rect-select-p ────────────────────────────────────────
-
 (describe "terminal-suite/copy-rect-select-suite"
 
   ;; screen-copy-rect-select-p is NIL on a fresh screen.

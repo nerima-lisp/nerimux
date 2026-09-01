@@ -10,12 +10,12 @@
 ;;;;
 ;;;; PTY children may be spawned while reader/status threads are active, so
 ;;;; teardown must reliably join background threads and close pane processes.
-
 (defun %mark-dirty ()
   "Set the shared redraw flag."
   (setf *dirty* t))
 
-(defun %join-thread-with-timeout (thread &optional (timeout +reader-thread-join-timeout+))
+(defun %join-thread-with-timeout (thread &optional
+                                         (timeout +reader-thread-join-timeout+))
   "Join THREAD, waiting at most TIMEOUT seconds.
 
    SB-THREAD:JOIN-THREAD is called directly rather than through
@@ -31,7 +31,6 @@
   (sb-thread:join-thread thread :timeout timeout))
 
 ;;; -- Wait-for channel synchronization ----------------------------------------
-
 (defmacro with-channel-plist ((lk cv ch) &body body)
   "Bind LK and CV to the :lock and :cv fields of the channel plist CH."
   (let ((ch-var (gensym "CH")))
@@ -55,16 +54,18 @@
    on timeout.  A bounded wait prevents indefinite blocking when the
    corresponding signal-channel is never called."
   (with-channel-plist (lk cv (%ensure-channel name))
-    (with-lock-held (lk)
-      (condition-wait cv lk :timeout +wait-for-channel-timeout+))))
+                      (with-lock-held (lk)
+                                      (condition-wait cv
+                                                      lk
+                                                      :timeout
+                                                      +wait-for-channel-timeout+))))
 
 (defun signal-channel (name)
   "Signal all threads blocked on channel NAME."
   (let ((ch (%ensure-channel name)))
     (unless (getf ch :locked)
       (with-channel-plist (lk cv ch)
-        (with-lock-held (lk)
-          (condition-notify cv))))))
+                          (with-lock-held (lk) (condition-notify cv))))))
 
 (defun %set-channel-locked (name locked-p)
   "Set the :locked flag on channel NAME."
@@ -87,12 +88,10 @@
   (%set-channel-locked name nil))
 
 ;;; -- SIGWINCH ---------------------------------------------------------------
-
 (defun install-sigwinch-handler ()
   "Arm SIGWINCH so terminal resizes flag a one-shot relayout."
-  (sb-sys:enable-interrupt
-   sb-unix:sigwinch
-   (lambda (&rest ignored)
-     (declare (ignore ignored))
-     (setf *resize-pending* t
-           *dirty*           t))))
+  (sb-sys:enable-interrupt sb-unix:sigwinch
+                           (lambda (&rest ignored)
+                             (declare (ignore ignored))
+                             (setf *resize-pending* t
+                                   *dirty* t))))

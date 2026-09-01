@@ -10,7 +10,6 @@
 ;;;; drawn every frame. So the two halves are tested in two places -- the
 ;;;; census itself in the copy-mode search tests, and here only that a recorded
 ;;;; census reaches the string.
-
 (describe "renderer-suite/copy-mode-position-text"
 
   ;; No active search: just "[POS/LIMIT]".

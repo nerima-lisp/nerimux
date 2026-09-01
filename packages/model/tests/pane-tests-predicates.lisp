@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/model)
 
 ;;;; Pane tests - predicates and hit-testing.
-
 (describe "model-suite"
 
   ;;; ── pane-at-position hit test ────────────────────────────────────────────────

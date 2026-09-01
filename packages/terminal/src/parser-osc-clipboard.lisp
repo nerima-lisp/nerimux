@@ -1,7 +1,6 @@
 (in-package #:nerimux/terminal/parser)
 
 ;;;; OSC 52 clipboard helpers.
-
 ;;; OSC 52 delivers clipboard data; the Base64 payload is decoded and forwarded
 ;;; to *osc52-handler* when one has been installed.  nerimux keeps no
 ;;; clipboard state of its own (docs/notes/workspace-requirements.md §1.1,
@@ -12,8 +11,8 @@
 ;;; can find the other producer; this domain file must never call it itself —
 ;;; domain calling application would be the upward dependency
 ;;; docs/src/reference/architecture.md's layering rule forbids.
-
-(defvar *osc52-handler* nil
+(defvar *osc52-handler*
+  nil
   "A function of two arguments (screen, text) called when OSC 52 clipboard
    data is received from a pane's SCREEN.  Wired to %osc52-inbound-passthrough
    at load time, at the bottom of this file (after osc52-clipboard-sequence,
@@ -29,43 +28,53 @@
   (position char alphabet :test #'char=))
 
 (defun %b64-byte0 (index-a index-b)
-  (logior (ash index-a 2)
-          (ldb (byte 2 4) index-b)))
+  (logior (ash index-a 2) (ldb (byte 2 4) index-b)))
 
 (defun %b64-byte1 (index-b index-c)
-  (logior (ash (ldb (byte 4 0) index-b) 4)
-          (ldb (byte 4 2) index-c)))
+  (logior (ash (ldb (byte 4 0) index-b) 4) (ldb (byte 4 2) index-c)))
 
 (defun %b64-byte2 (index-c index-d)
-  (logior (ash (ldb (byte 2 0) index-c) 6)
-          index-d))
+  (logior (ash (ldb (byte 2 0) index-c) 6) index-d))
 
 (defun %decode-base64-group (alphabet encoded-string group-start)
   "Decode one 4-character Base64 group starting at GROUP-START in ENCODED-STRING.
    Returns (values byte0-or-nil byte1-or-nil byte2-or-nil)."
   (let* ((index-a (%alphabet-index alphabet (char encoded-string group-start)))
-         (index-b (%alphabet-index alphabet (char encoded-string (1+ group-start))))
-         (index-c (%alphabet-index alphabet (char encoded-string (+ group-start 2))))
-         (index-d (%alphabet-index alphabet (char encoded-string (+ group-start 3)))))
+         (index-b
+          (%alphabet-index alphabet (char encoded-string (1+ group-start))))
+         (index-c
+          (%alphabet-index alphabet (char encoded-string (+ group-start 2))))
+         (index-d
+          (%alphabet-index alphabet (char encoded-string (+ group-start 3)))))
     (when (and index-a index-b)
       (values (%b64-byte0 index-a index-b)
-              (when index-c (%b64-byte1 index-b index-c))
-              (when index-d (%b64-byte2 index-c index-d))))))
+              (when index-c
+                (%b64-byte1 index-b index-c))
+              (when index-d
+                (%b64-byte2 index-c index-d))))))
 
 (defun %base64-decode (encoded-string)
   "Decode Base64-encoded ENCODED-STRING into a byte vector."
-  (when (and (stringp encoded-string)
-             (zerop (mod (length encoded-string) 4)))
+  (when (and (stringp encoded-string) (zerop (mod (length encoded-string) 4)))
     (let* ((alphabet +base64-alphabet+)
            (input-length (length encoded-string))
-           (output (make-array 0 :element-type '(unsigned-byte 8)
-                                 :fill-pointer 0 :adjustable t)))
+           (output
+            (make-array 0
+                        :element-type
+                        '(unsigned-byte 8)
+                        :fill-pointer
+                        0
+                        :adjustable
+                        t)))
       (loop for group-start from 0 below input-length by 4
-            do (multiple-value-bind (byte0 byte1 byte2)
+            do (multiple-value-bind (byte0 byte1 byte2) 
                    (%decode-base64-group alphabet encoded-string group-start)
-                 (when byte0 (vector-push-extend byte0 output))
-                 (when byte1 (vector-push-extend byte1 output))
-                 (when byte2 (vector-push-extend byte2 output))))
+                 (when byte0
+                   (vector-push-extend byte0 output))
+                 (when byte1
+                   (vector-push-extend byte1 output))
+                 (when byte2
+                   (vector-push-extend byte2 output))))
       output)))
 
 (defun %base64-encode (bytes)
@@ -78,21 +87,39 @@
             for b1 = (and (< (1+ i) n) (aref bytes (1+ i)))
             for b2 = (and (< (+ i 2) n) (aref bytes (+ i 2)))
             do (let* ((x (ash b0 -2))
-                      (y (logior (ash (ldb (byte 2 0) b0) 4)
-                                 (if b1 (ash b1 -4) 0)))
-                      (z (if b1
-                             (logior (ash (ldb (byte 4 0) b1) 2)
-                                     (if b2 (ash b2 -6) 0))
-                             64))
-                      (w (if b2 (ldb (byte 6 0) b2) 64)))
+                      (y
+                       (logior (ash (ldb (byte 2 0) b0) 4)
+                               (if b1
+                                   (ash b1 -4)
+                                   0)))
+                      (z
+                       (if b1
+                           (logior (ash (ldb (byte 4 0) b1) 2)
+                                   (if b2
+                                       (ash b2 -6)
+                                       0))
+                           64))
+                      (w
+                       (if b2
+                           (ldb (byte 6 0) b2)
+                           64)))
                  (write-char (char alphabet x) out)
                  (write-char (char alphabet y) out)
-                 (write-char (if (< (1+ i) n) (char alphabet z) #\=) out)
-                 (write-char (if (< (+ i 2) n) (char alphabet w) #\=) out))))))
+                 (write-char
+                  (if (< (1+ i) n)
+                      (char alphabet z)
+                      #\=)
+                  out)
+                 (write-char
+                  (if (< (+ i 2) n)
+                      (char alphabet w)
+                      #\=)
+                  out))))))
 
 (defun osc52-clipboard-sequence (text)
   "Build the OSC 52 set-clipboard escape sequence."
-  (format nil "~C]52;c;~A~C\\"
+  (format nil
+          "~C]52;c;~A~C\\"
           #\Escape
           (%base64-encode (cl-codec-kit:string-to-octets text :encoding :utf-8))
           #\Escape))

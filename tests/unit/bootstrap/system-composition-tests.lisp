@@ -14,9 +14,7 @@
 ;;;; kit to core :depends-on compiles clean, loads clean, and every other test
 ;;;; still passes.  These two checks are the only thing standing between that
 ;;;; edit and a silently re-bloated binary.
-
 ;;; ── Layering guard helpers ───────────────────────────────────────────────────
-
 (defun %file-text (path)
   "PATH's contents as a string.
 
@@ -36,7 +34,11 @@
   (with-output-to-string (out)
     (dolist (line (uiop:split-string text :separator (list #\Newline)))
       (let ((semi (position #\; line)))
-        (write-line (if semi (subseq line 0 semi) line) out)))))
+        (write-line
+         (if semi
+             (subseq line 0 semi)
+             line)
+         out)))))
 
 (defun %package-declared-dependencies (text)
   "Parse TEXT (the contents of a package*.lisp file) into a list of
@@ -45,29 +47,40 @@
   (let ((clean (%strip-lisp-comments text))
         (result '())
         (start 0))
-    (loop
-      (let ((hit (search "(defpackage #:" clean :start2 start)))
-        (unless hit (return))
-        (let* ((name-start (+ hit (length "(defpackage #:")))
-               (name-end   (position-if (lambda (c) (member c '(#\Space #\Newline #\) #\Tab)))
-                                        clean :start name-start))
-               (name       (subseq clean name-start name-end))
-               (next       (or (search "(defpackage #:" clean :start2 name-end)
-                               (length clean)))
-               (body       (subseq clean name-end next))
-               (head-end   (or (search "(:export" body) (length body)))
-               (head       (subseq body 0 head-end))
-               (deps       '())
-               (from       0))
-          (loop
-            (let ((d (search "#:" head :start2 from)))
-              (unless d (return))
-              (let ((e (position-if (lambda (c) (member c '(#\Space #\Newline #\) #\Tab)))
-                                    head :start (+ d 2))))
-                (push (subseq head (+ d 2) e) deps)
-                (setf from (or e (length head))))))
-          (push (cons name (nreverse deps)) result)
-          (setf start name-end))))
+    (loop (let ((hit (search "(defpackage #:" clean :start2 start)))
+            (unless hit
+              (return))
+            (let* ((name-start (+ hit (length "(defpackage #:")))
+                   (name-end
+                    (position-if
+                     (lambda (c)
+                       (member c '(#\Space #\Newline #\) #\Tab)))
+                     clean
+                     :start
+                     name-start))
+                   (name (subseq clean name-start name-end))
+                   (next
+                    (or (search "(defpackage #:" clean :start2 name-end)
+                        (length clean)))
+                   (body (subseq clean name-end next))
+                   (head-end (or (search "(:export" body) (length body)))
+                   (head (subseq body 0 head-end))
+                   (deps '())
+                   (from 0))
+              (loop (let ((d (search "#:" head :start2 from)))
+                      (unless d
+                        (return))
+                      (let ((e
+                             (position-if
+                              (lambda (c)
+                                (member c '(#\Space #\Newline #\) #\Tab)))
+                              head
+                              :start
+                              (+ d 2))))
+                        (push (subseq head (+ d 2) e) deps)
+                        (setf from (or e (length head))))))
+              (push (cons name (nreverse deps)) result)
+              (setf start name-end))))
     (nreverse result)))
 
 (defun %layered-source-files ()
@@ -90,17 +103,20 @@
    that stops being true once files start moving under packages/<name>/src/, so
    this asks each file itself rather than assuming a location."
   (remove-if-not
-   (lambda (file) (search "(defpackage" (%file-text file)))
+   (lambda (file)
+     (search "(defpackage" (%file-text file)))
    (%layered-source-files)))
 
 ;;; ── Source-text layering guard helpers ──────────────────────────────────────
 ;;;
 ;;; See the "source-text layering guard" comment in the describe block below
 ;;; for why these exist alongside the declaration-based helpers above.
-
 (defparameter *layer-name-rank*
-  '(("FOUNDATION" . -1) ("DOMAIN" . 0) ("APPLICATION" . 1)
-    ("INFRASTRUCTURE" . 2) ("PRESENTATION" . 3) ("BOOTSTRAP" . 4))
+  '(("FOUNDATION" . -1) ("DOMAIN" . 0)
+                        ("APPLICATION" . 1)
+                        ("INFRASTRUCTURE" . 2)
+                        ("PRESENTATION" . 3)
+                        ("BOOTSTRAP" . 4))
   "Layer marker word -> a 0..4 scale for domain..bootstrap (see
    %package-name->layer-rank, which projects a package name onto this same
    scale), extended with -1 for FOUNDATION so a foundation package can
@@ -121,12 +137,13 @@
     (when doc-kw
       (let ((open (position #\" defpackage-body :start doc-kw)))
         (when open
-          (let ((j (1+ open)) (len (length defpackage-body)))
-            (loop while (< j len) do
-              (cond
-                ((char= (char defpackage-body j) #\\) (incf j 2))
-                ((char= (char defpackage-body j) #\") (return))
-                (t (incf j))))
+          (let ((j (1+ open))
+                (len (length defpackage-body)))
+            (loop while (< j len)
+                  do (cond
+                       ((char= (char defpackage-body j) #\\) (incf j 2))
+                       ((char= (char defpackage-body j) #\") (return))
+                       (t (incf j))))
             (subseq defpackage-body (1+ open) (min j len))))))))
 
 (defun %package-name->layer-name ()
@@ -137,22 +154,37 @@
     (dolist (file (%package-declaration-files))
       (let* ((raw (%file-text file))
              (from 0))
-        (loop
-          (let ((hit (search "(defpackage #:" raw :start2 from)))
-            (unless hit (return))
-            (let* ((name-start (+ hit (length "(defpackage #:")))
-                   (name-end (position-if (lambda (c) (member c '(#\Space #\Newline #\) #\Tab)))
-                                          raw :start name-start))
-                   (name (subseq raw name-start name-end))
-                   (next (or (search "(defpackage #:" raw :start2 name-end) (length raw)))
-                   (doc  (%extract-documentation-string (subseq raw name-end next)))
-                   (marker (and doc
-                                (loop for (word . nil) in *layer-name-rank*
-                                      for p = (search word doc)
-                                      when p collect (cons p word) into hits
-                                      finally (return (and hits (cdr (first (sort hits #'< :key #'car)))))))))
-              (push (cons name marker) result)
-              (setf from name-end))))))
+        (loop (let ((hit (search "(defpackage #:" raw :start2 from)))
+                (unless hit
+                  (return))
+                (let* ((name-start (+ hit (length "(defpackage #:")))
+                       (name-end
+                        (position-if
+                         (lambda (c)
+                           (member c '(#\Space #\Newline #\) #\Tab)))
+                         raw
+                         :start
+                         name-start))
+                       (name (subseq raw name-start name-end))
+                       (next
+                        (or (search "(defpackage #:" raw :start2 name-end)
+                            (length raw)))
+                       (doc
+                        (%extract-documentation-string
+                         (subseq raw name-end next)))
+                       (marker
+                        (and doc
+                             (loop for (word . nil) in *layer-name-rank*
+                                   for p = (search word doc)
+                                   when p
+                                     collect (cons p word) into hits
+                                   finally (return
+                                            (and hits
+                                                 (cdr
+                                                  (first
+                                                   (sort hits #'< :key #'car)))))))))
+                  (push (cons name marker) result)
+                  (setf from name-end))))))
     result))
 
 (defun %package-name->layer-rank ()
@@ -175,9 +207,11 @@
    name it returns comes from a defpackage this build actually found, so
    there is no second, hand-maintained list to fall out of sync with the
    packages that exist."
-  (mapcar (lambda (entry)
-            (cons (car entry) (cdr (assoc (cdr entry) *layer-name-rank* :test #'string=))))
-          (%package-name->layer-name)))
+  (mapcar
+   (lambda (entry)
+     (cons (car entry)
+           (cdr (assoc (cdr entry) *layer-name-rank* :test #'string=))))
+   (%package-name->layer-name)))
 
 (defun %strip-lisp-source (text)
   "TEXT with `;' comments, `#| |#' nested block comments, string literals,
@@ -193,42 +227,58 @@
   (let* ((len (length text))
          (out (make-string len :initial-element #\Space)))
     (labels ((keep-newlines (start end)
-               (loop for k from start below end
+               (loop for k from start below
+                     end
                      when (char= (char text k) #\Newline)
-                     do (setf (char out k) #\Newline))))
+                       do (setf (char out k) #\Newline))))
       (let ((i 0))
-        (loop while (< i len) do
-          (let ((c (char text i)))
-            (cond
-              ((and (char= c #\#) (< (1+ i) len) (char= (char text (1+ i)) #\\))
-               (let ((lit-end (min len (+ i 3))))
-                 (keep-newlines i lit-end)
-                 (setf i lit-end)))
-              ((char= c #\;)
-               (let ((eol (or (position #\Newline text :start i) len)))
-                 (keep-newlines i eol)
-                 (setf i eol)))
-              ((and (char= c #\#) (< (1+ i) len) (char= (char text (1+ i)) #\|))
-               (let ((depth 1) (j (+ i 2)))
-                 (loop while (and (< j len) (plusp depth)) do
+        (loop while (< i len)
+              do (let ((c (char text i)))
                    (cond
-                     ((and (char= (char text j) #\#) (< (1+ j) len) (char= (char text (1+ j)) #\|))
-                      (incf depth) (incf j 2))
-                     ((and (char= (char text j) #\|) (< (1+ j) len) (char= (char text (1+ j)) #\#))
-                      (decf depth) (incf j 2))
-                     (t (incf j))))
-                 (keep-newlines i j)
-                 (setf i j)))
-              ((char= c #\")
-               (let ((j (1+ i)))
-                 (loop while (< j len) do
-                   (cond
-                     ((char= (char text j) #\\) (incf j 2))
-                     ((char= (char text j) #\") (incf j) (return))
-                     (t (incf j))))
-                 (keep-newlines i j)
-                 (setf i j)))
-              (t (setf (char out i) c) (incf i)))))))
+                     ((and (char= c #\#)
+                           (< (1+ i) len)
+                           (char= (char text (1+ i)) #\\))
+                      (let ((lit-end (min len (+ i 3))))
+                        (keep-newlines i lit-end)
+                        (setf i lit-end)))
+                     ((char= c #\;)
+                      (let ((eol (or (position #\Newline text :start i) len)))
+                        (keep-newlines i eol)
+                        (setf i eol)))
+                     ((and (char= c #\#)
+                           (< (1+ i) len)
+                           (char= (char text (1+ i)) #\|))
+                      (let ((depth 1)
+                            (j (+ i 2)))
+                        (loop while (and (< j len) (plusp depth))
+                              do (cond
+                                   ((and (char= (char text j) #\#)
+                                         (< (1+ j) len)
+                                         (char= (char text (1+ j)) #\|))
+                                     (incf depth)
+                                     (incf j 2))
+                                   ((and (char= (char text j) #\|)
+                                         (< (1+ j) len)
+                                         (char= (char text (1+ j)) #\#))
+                                     (decf depth)
+                                     (incf j 2))
+                                   (t (incf j))))
+                        (keep-newlines i j)
+                        (setf i j)))
+                     ((char= c #\")
+                      (let ((j (1+ i)))
+                        (loop while (< j len)
+                              do (cond
+                                   ((char= (char text j) #\\) (incf j 2))
+                                   ((char= (char text j) #\")
+                                     (incf j)
+                                     (return))
+                                   (t (incf j))))
+                        (keep-newlines i j)
+                        (setf i j)))
+                     (t
+                       (setf (char out i) c)
+                       (incf i)))))))
     out))
 
 (defun %package-name-char-p (c)
@@ -238,40 +288,71 @@
   (not (or (alphanumericp c) (member c '(#\- #\/ #\: #\#)))))
 
 (defun %identifier-terminator-p (c)
-  (member c '(#\Space #\Tab #\Newline #\Return #\Linefeed #\Page
-              #\( #\) #\" #\; #\' #\` #\,)))
+  (member c
+          '(#\Space #\Tab
+                    #\Newline
+                    #\Return
+                    #\Linefeed
+                    #\Page
+                    #\(
+                    #\)
+                    #\"
+                    #\;
+                    #\'
+                    #\`
+                    #\,)))
 
 (defun %scan-package-qualified-references (clean-text)
   "Every PKG::SYM or PKG:SYM reference in CLEAN-TEXT (already stripped by
    %strip-lisp-source) where PKG is `nerimux' or `nerimux/...'.  Returns a
    list of (line-number package-name qualifier symbol-name)."
-  (let ((len (length clean-text)) (refs '()) (i 0))
-    (loop while (< i len) do
-      (if (and (char= (char clean-text i) #\n)
-               (or (zerop i) (%reference-boundary-char-p (char clean-text (1- i))))
-               (<= (+ i 7) len)
-               (string= clean-text "nerimux" :start1 i :end1 (+ i 7)))
-          (let ((pkg-end (+ i 7)))
-            (loop while (and (< pkg-end len) (%package-name-char-p (char clean-text pkg-end)))
-                  do (incf pkg-end))
-            (if (and (< pkg-end len) (char= (char clean-text pkg-end) #\:))
-                (let* ((double (and (< (1+ pkg-end) len) (char= (char clean-text (1+ pkg-end)) #\:)))
-                       (sym-start (+ pkg-end (if double 2 1))))
-                  (if (and (< sym-start len)
-                           (not (%identifier-terminator-p (char clean-text sym-start)))
-                           (not (char= (char clean-text sym-start) #\:)))
-                      (let ((sym-end sym-start))
-                        (loop while (and (< sym-end len) (not (%identifier-terminator-p (char clean-text sym-end))))
-                              do (incf sym-end))
-                        (push (list (1+ (count #\Newline clean-text :end i))
-                                    (subseq clean-text i pkg-end)
-                                    (if double :double :single)
-                                    (subseq clean-text sym-start sym-end))
-                              refs)
-                        (setf i sym-end))
-                      (setf i (1+ pkg-end))))
-                (setf i pkg-end)))
-          (incf i)))
+  (let ((len (length clean-text))
+        (refs '())
+        (i 0))
+    (loop while (< i len)
+          do (if (and (char= (char clean-text i) #\n)
+                      (or (zerop i)
+                          (%reference-boundary-char-p (char clean-text (1- i))))
+                      (<= (+ i 7) len)
+                      (string= clean-text "nerimux" :start1 i :end1 (+ i 7)))
+                 (let ((pkg-end (+ i 7)))
+                   (loop while (and (< pkg-end len)
+                                    (%package-name-char-p
+                                     (char clean-text pkg-end)))
+                         do (incf pkg-end))
+                   (if (and (< pkg-end len)
+                            (char= (char clean-text pkg-end) #\:))
+                       (let* ((double
+                               (and (< (1+ pkg-end) len)
+                                    (char= (char clean-text (1+ pkg-end)) #\:)))
+                              (sym-start
+                               (+ pkg-end
+                                  (if double
+                                      2
+                                      1))))
+                         (if (and (< sym-start len)
+                                  (not
+                                   (%identifier-terminator-p
+                                    (char clean-text sym-start)))
+                                  (not (char= (char clean-text sym-start) #\:)))
+                             (let ((sym-end sym-start))
+                               (loop while (and (< sym-end len)
+                                                (not
+                                                 (%identifier-terminator-p
+                                                  (char clean-text sym-end))))
+                                     do (incf sym-end))
+                               (push
+                                (list (1+ (count #\Newline clean-text :end i))
+                                      (subseq clean-text i pkg-end)
+                                      (if double
+                                          :double
+                                          :single)
+                                      (subseq clean-text sym-start sym-end))
+                                refs)
+                               (setf i sym-end))
+                             (setf i (1+ pkg-end))))
+                       (setf i pkg-end)))
+                 (incf i)))
     (nreverse refs)))
 
 (defun %file-in-package-name (text)
@@ -286,8 +367,13 @@
       (let ((colon (position #\: text :start hit)))
         (when colon
           (let* ((name-start (1+ colon))
-                 (name-end (position-if (lambda (c) (member c '(#\Space #\Newline #\) #\Tab)))
-                                        text :start name-start)))
+                 (name-end
+                  (position-if
+                   (lambda (c)
+                     (member c '(#\Space #\Newline #\) #\Tab)))
+                   text
+                   :start
+                   name-start)))
             (subseq text name-start name-end)))))))
 
 (defun %file-layer-name (file pkg->layer)
@@ -322,13 +408,18 @@
    omission -- see the conservation check there."
   (let* ((text (%file-text file))
          (own-package
-           (or (%file-in-package-name text)
-               (let ((hit (search "(defpackage #:" text)))
-                 (when hit
-                   (let* ((name-start (+ hit (length "(defpackage #:")))
-                          (name-end (position-if (lambda (c) (member c '(#\Space #\Newline #\) #\Tab)))
-                                                 text :start name-start)))
-                     (subseq text name-start name-end)))))))
+          (or (%file-in-package-name text)
+              (let ((hit (search "(defpackage #:" text)))
+                (when hit
+                  (let* ((name-start (+ hit (length "(defpackage #:")))
+                         (name-end
+                          (position-if
+                           (lambda (c)
+                             (member c '(#\Space #\Newline #\) #\Tab)))
+                           text
+                           :start
+                           name-start)))
+                    (subseq text name-start name-end)))))))
     (and own-package (cdr (assoc own-package pkg->layer :test #'string=)))))
 
 (defun %find-module-components (legacy-module-name flat-system-name)
@@ -346,9 +437,10 @@
    Returns NIL when neither shape resolves; every caller already has its own
    vacuity guard for that, so this stays silent rather than erroring."
   (let* ((nerimux (asdf:find-system "nerimux" nil))
-         (legacy (and nerimux
-                      (ignore-errors
-                        (asdf:find-component nerimux (list "src" legacy-module-name)))))
+         (legacy
+          (and nerimux
+               (ignore-errors
+                (asdf:find-component nerimux (list "src" legacy-module-name)))))
          (flat (and (not legacy) (asdf:find-system flat-system-name nil)))
          (module (or legacy flat)))
     (and module (mapcar #'asdf:component-name (asdf:component-children module)))))

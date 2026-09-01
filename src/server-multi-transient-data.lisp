@@ -1,6 +1,5 @@
 ;;;; Declarative transient menu data.
 ;;;; Handlers are lambdas where load order requires deferred function lookup.
-
 (in-package #:nerimux)
 
 ;;; ── +TRANSIENT-DEFINITIONS+ (contract §2/§3) ─────────────────────────────
@@ -14,7 +13,6 @@
 ;;; worktree's branch (%TRANSIENT-ACTION-DISPLAY-DESCRIPTION) -- Push/Pull's
 ;;; only use of it, to show "push to origin/<branch>" without a separate
 ;;; per-render templating slot.
-
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defparameter +transient-definitions+
   (list

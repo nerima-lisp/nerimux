@@ -13,7 +13,6 @@
 ;;;; relocation of code that uses the same public surface.  Keeping the import
 ;;;; shape aligned lets ASDF compile this system independently of the normal
 ;;;; sandbox-safe test system.
-
 (defpackage #:nerimux/pty-test
   ;; The test framework is cl-weave, used natively: every file registers its
   ;; own top-level (describe "name" (it "case" ...) ...) block directly with

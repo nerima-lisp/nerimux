@@ -12,7 +12,6 @@
 ;;; already use the multi-dispatch command handlers, not that removed table.
 ;;;
 ;;; main-startup.lisp keeps argv parsing and dispatch.
-
 (in-package :nerimux)
 
 (defun %attach-session (name &key target)
@@ -43,7 +42,6 @@
   (sb-ext:exit :code 0))
 
 ;;; ── nerimux kill (R8.1) ──────────────────────────────────────────────────
-
 (defun %kill-force-p (rest)
   "True when REST -- kill's own argv tail, e.g. (\"--force\") -- asks for
    --force.  kill is a :raw-args-p startup mode (see *startup-modes* below)
@@ -61,7 +59,9 @@
    trailing newline right after the status line is dropped with it so the
    pane list does not start with a blank line."
   (let ((newline (position #\Newline text)))
-    (if newline (subseq text (1+ newline)) "")))
+    (if newline
+        (subseq text (1+ newline))
+        "")))
 
 (defun run-kill (rest)
   "CLI entry point for `nerimux kill [--force]` (R8.1): ask the server at
@@ -81,26 +81,27 @@
    propagates to main()'s generic top-level handler-case unchanged, exactly
    like any other unexpected ERROR from send-kill-request (a malformed
    reply, a programming error)."
-  (multiple-value-bind (status text)
+  (multiple-value-bind (status text) 
       (send-kill-request "0" (%kill-force-p rest))
     (case status
       (:ok (sb-ext:exit :code 0))
       (:denied
-       (format *error-output*
-               "~&nerimux: kill refused, panes still open:~%~A~%~
+        (format *error-output*
+                "~&nerimux: kill refused, panes still open:~%~A~%~
                 nerimux: retry with --force to close them~%"
-               (%strip-kill-reply-status-line text))
-       (sb-ext:exit :code 1))
+                (%strip-kill-reply-status-line text))
+        (sb-ext:exit :code 1))
       (:no-server
-       (format *error-output* "~&nerimux: no server running~%")
-       (sb-ext:exit :code 1))
+        (format *error-output* "~&nerimux: no server running~%")
+        (sb-ext:exit :code 1))
       (t
-       (format *error-output* "~&nerimux: kill: no reply from server~%")
-       (sb-ext:exit :code 1)))))
+        (format *error-output* "~&nerimux: kill: no reply from server~%")
+        (sb-ext:exit :code 1)))))
 
 (defun %usage-string ()
   "One-page usage summary for -h/--help and bad-flag errors."
-  (format nil "usage: nerimux [command]~%~
+  (format nil
+          "usage: nerimux [command]~%~
                ~%~
                Commands:~%~
                ~2Tattach [selector]~26Topen the workspace UI (auto-starts a server)~%~
@@ -137,7 +138,6 @@
 ;;; Handlers that need RAW-ARGS (the full argv tail) receive them directly.
 ;;; Handlers that need only a session NAME extract (or (first rest) "0")
 ;;; outside the handler - this is the one-argument convention.
-
 (defparameter *startup-modes*
   (list (%startup-mode "server" run-server)
         (%startup-mode "attach" run-attach-simple)

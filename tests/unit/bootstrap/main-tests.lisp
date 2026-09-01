@@ -2,8 +2,8 @@
 
 ;;;; Tests for argv dispatch routing in src/bootstrap/main-startup*.lisp
 ;;;; (server/attach entry surface).
-
-(defvar *main-calls* nil
+(defvar *main-calls*
+  nil
   "Records (TAG . ARGS) for each stubbed entry function call.")
 
 (defmacro with-stubbed-entries (&body body)
@@ -27,18 +27,23 @@
    CODE-VAR and non-locally exits BODY via THROW (matching sb-ext:exit's
    declared return type of NIL — a returning stub triggers SIMPLE-CONTROL-ERROR).
    Uses WITHOUT-PACKAGE-LOCKS because SB-EXT is a locked package."
-  (let ((tag  (gensym "EXIT-TAG"))
+  (let ((tag (gensym "EXIT-TAG"))
         (orig (gensym "ORIG-EXIT")))
     `(sb-ext:without-package-locks
-       (let ((,orig (fdefinition 'sb-ext:exit)))
-         (setf (fdefinition 'sb-ext:exit)
-               (lambda (&rest args &key (code 0) &allow-other-keys)
-                 (declare (ignore args))
-                 (setf ,code-var code)
-                 (throw ',tag nil)))
-         (unwind-protect
-              (catch ',tag ,@body)
-           (setf (fdefinition 'sb-ext:exit) ,orig))))))
+      (let ((,orig (fdefinition 'sb-ext:exit)))
+        (setf (fdefinition 'sb-ext:exit) (lambda 
+                                             (&rest args
+                                                    &key
+                                                    (code 0)
+                                                    &allow-other-keys)
+                                           (declare (ignore args))
+                                           (setf ,code-var code)
+                                           (throw ',tag
+                                             nil)))
+        (unwind-protect 
+            (catch ',tag
+              ,@body)
+          (setf (fdefinition 'sb-ext:exit) ,orig))))))
 
 (describe "main-suite"
 

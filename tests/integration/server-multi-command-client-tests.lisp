@@ -1,7 +1,6 @@
 (in-package #:nerimux/test)
 
 ;;;; Multi-client server integration tests: command-client, exit policy, broadcast
-
 (describe "server-multi-suite"
 
   ;;; -- Command client: forwards a command to the server ------------------------

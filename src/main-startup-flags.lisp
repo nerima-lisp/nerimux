@@ -6,7 +6,6 @@
 ;;; exception — its --force is parsed by run-kill itself
 ;;; (main-startup-commands.lisp), not by *cli-app* below, per the next
 ;;; paragraph.
-
 (in-package :nerimux)
 
 ;;; ── Global CLI flags (cl-cli) ────────────────────────────────────────────────
@@ -28,7 +27,6 @@
 ;;; is never matched against *cli-app*'s option table at all and cannot
 ;;; trigger cl-cli's "unknown option" error the way it would if it appeared
 ;;; before the mode word.
-
 (defparameter *cli-app*
   (cl-cli:make-app
    :name "nerimux"

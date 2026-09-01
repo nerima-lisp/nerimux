@@ -3,29 +3,40 @@
 (defun %picker-item-worktree (item)
   (or (nerimux/picker:picker-item-worktree item)
       (let ((repository (nerimux/picker:picker-item-repository item)))
-        (or (and repository
-                 (or (nerimux/workspace-model:repository-main-worktree repository)
-                     (first (nerimux/workspace-model:repository-worktrees repository))))
-            (let ((organization (nerimux/picker:picker-item-organization item)))
-              (when organization
-                (loop for repository in
-                        (nerimux/workspace-model:organization-repositories organization)
-                      for worktree =
-                        (or (nerimux/workspace-model:repository-main-worktree repository)
-                            (first (nerimux/workspace-model:repository-worktrees repository)))
-                      when worktree return worktree)))))))
+        (or
+         (and repository
+              (or (nerimux/workspace-model:repository-main-worktree repository)
+                  (first
+                   (nerimux/workspace-model:repository-worktrees repository))))
+         (let ((organization (nerimux/picker:picker-item-organization item)))
+           (when organization
+             (loop for repository in (nerimux/workspace-model:organization-repositories
+                                      organization)
+                   for worktree = (or
+                                   (nerimux/workspace-model:repository-main-worktree
+                                    repository)
+                                   (first
+                                    (nerimux/workspace-model:repository-worktrees
+                                     repository)))
+                   when worktree
+                     return worktree)))))))
 
-(defun %workspace-worktrees (&optional (organizations (nerimux/vcs:workspace-organizations)))
+(defun %workspace-worktrees (&optional
+                             (organizations
+                              (nerimux/vcs:workspace-organizations)))
   "Return the catalog worktrees in stable organization/repository order."
   (loop for organization in organizations
-        append (loop for repository in
-                         (nerimux/workspace-model:organization-repositories organization)
+        append (loop for repository in (nerimux/workspace-model:organization-repositories
+                                        organization)
                      append (copy-list
-                             (nerimux/workspace-model:repository-worktrees repository)))))
+                             (nerimux/workspace-model:repository-worktrees
+                              repository)))))
 
-(defun %workspace-tree-objects
-    (&optional (organizations (nerimux/vcs:workspace-organizations)) filter
-               (file-diffs (%workspace-file-diffs)))
+(defun %workspace-tree-objects (&optional
+                                (organizations
+                                 (nerimux/vcs:workspace-organizations))
+                                filter
+                                (file-diffs (%workspace-file-diffs)))
   "The tree rows a client can currently select, in display order.
 
    Delegates to the renderer rather than walking the model itself. It used to
@@ -45,9 +56,12 @@
    screen."
   (nerimux/renderer:workspace-tree-objects organizations
                                            (%workspace-collapsed-nodes)
-                                           :filter filter
-                                           :expanded-node-ids (%workspace-expanded-nodes)
-                                           :file-diffs file-diffs))
+                                           :filter
+                                           filter
+                                           :expanded-node-ids
+                                           (%workspace-expanded-nodes)
+                                           :file-diffs
+                                           file-diffs))
 
 (defun %workspace-worktree-matches-token-p (worktree token)
   (or (eq worktree token)
@@ -59,22 +73,24 @@
                              (princ-to-string
                               (nerimux/workspace-model:worktree-branch worktree))))))))
 
-(defun %workspace-find-worktree (token &optional (organizations
-                                                  (nerimux/vcs:workspace-organizations)))
+(defun %workspace-find-worktree (token &optional
+                                       (organizations
+                                        (nerimux/vcs:workspace-organizations)))
   (when token
-    (find-if (lambda (worktree)
-               (%workspace-worktree-matches-token-p worktree token))
-             (%workspace-worktrees organizations))))
+    (find-if
+     (lambda (worktree)
+       (%workspace-worktree-matches-token-p worktree token))
+     (%workspace-worktrees organizations))))
 
 (defun %workspace-directory-prefix-p (directory path)
   (and (stringp directory)
        (string/= directory "")
        (stringp path)
-       (let ((prefix (if (and (string/= directory "")
-                              (char= (char directory (1- (length directory)))
-                                     #\/))
-                         directory
-                         (concatenate 'string directory "/"))))
+       (let ((prefix
+              (if (and (string/= directory "")
+                       (char= (char directory (1- (length directory))) #\/))
+                  directory
+                  (concatenate 'string directory "/"))))
          (or (string= directory path)
              (and (>= (length path) (length prefix))
                   (string= prefix path :end2 (length prefix)))))))
@@ -89,11 +105,12 @@
    matched an arbitrary worktree from any ancestor directory --
    %WORKSPACE-FIND-WORKTREE-FOR-CWD below is that path's correct inverse."
   (or (%workspace-find-worktree token organizations)
-      (find-if (lambda (worktree)
-                 (%workspace-directory-prefix-p
-                  token
-                  (nerimux/workspace-model:worktree-path worktree)))
-               (%workspace-worktrees organizations))))
+      (find-if
+       (lambda (worktree)
+         (%workspace-directory-prefix-p token
+                                        (nerimux/workspace-model:worktree-path
+                                         worktree)))
+       (%workspace-worktrees organizations))))
 
 (defun %workspace-find-worktree-for-cwd (cwd organizations)
   "The worktree CWD sits inside, preferring the most specific (deepest) match.
@@ -111,10 +128,12 @@
       (let ((best nil))
         (dolist (worktree (%workspace-worktrees organizations))
           (let ((path (nerimux/workspace-model:worktree-path worktree)))
-            (when (and (%workspace-directory-prefix-p path cwd)
-                       (or (null best)
-                           (> (length path)
-                              (length (nerimux/workspace-model:worktree-path best)))))
+            (when 
+                (and (%workspace-directory-prefix-p path cwd)
+                     (or (null best)
+                         (> (length path)
+                            (length
+                             (nerimux/workspace-model:worktree-path best)))))
               (setf best worktree))))
         best)))
 
@@ -127,12 +146,16 @@
    something the workspace was holding."
   (when (and (stringp token) (plusp (length token)))
     (loop for organization in organizations
-          thereis
-          (find-if (lambda (repository)
-                     (some (lambda (field)
-                             (and (stringp field) (string= field token)))
-                           (list (nerimux/workspace-model:repository-specification
-                                  repository)
-                                 (nerimux/workspace-model:repository-local-path repository)
-                                 (nerimux/workspace-model:repository-id repository))))
-                   (nerimux/workspace-model:organization-repositories organization)))))
+          thereis (find-if
+                   (lambda (repository)
+                     (some
+                      (lambda (field)
+                        (and (stringp field) (string= field token)))
+                      (list
+                       (nerimux/workspace-model:repository-specification
+                        repository)
+                       (nerimux/workspace-model:repository-local-path
+                        repository)
+                       (nerimux/workspace-model:repository-id repository))))
+                   (nerimux/workspace-model:organization-repositories
+                    organization)))))

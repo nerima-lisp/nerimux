@@ -8,7 +8,6 @@
 ;;;; superset of nerimux's former raw-mode flags.  These tests assert the
 ;;;; delegation contract rather than nerimux-internal termios machinery (the
 ;;;; old *saved-termios-table* / with-raw-termios-flags internals were removed).
-
 (describe "pty-rawmode-suite"
 
   ;;; ── Exported wrappers are fbound ─────────────────────────────────────────────

@@ -19,7 +19,6 @@
 ;;;;             → renderer-pane → renderer-statusbar
 ;;;;             → renderer-compose-protocols → renderer-compose-overlay
 ;;;;             → renderer-compose-effects → renderer-compose
-
 (defun %session-title-pane (session focus-pane)
   "The pane RENDER-SESSION-TO-STRING's own ACTIVE-PANE binding resolves to,
    duplicated as a top-level function so RENDER-SESSION-TO-TUI-STRING
@@ -28,35 +27,49 @@
    render-session-to-string's title block below for why that second call is
    the one that actually reaches the client."
   (let* ((window (session-active-window session))
-         (panes (when window (window-panes window))))
+         (panes
+          (when window
+            (window-panes window))))
     (or (and focus-pane (find focus-pane panes :test #'eq))
         (session-active-pane session))))
 
-(defun %render-panes-and-borders (buffer session window panes active-pane terminal-cols
-                                  &key (viewport 0))
+(defun %render-panes-and-borders (buffer session
+                                         window
+                                         panes
+                                         active-pane
+                                         terminal-cols
+                                         &key
+                                         (viewport 0))
   "Render all panes and split-tree borders for WINDOW into BUFFER.
    Snapshots zoom state under the window lock to avoid a race with
    window-zoom-toggle running on the main thread."
-  (let ((zoomed nil) (tree nil))
+  (let ((zoomed nil)
+        (tree nil))
     (when window
       (with-lock-held ((window-lock window))
-        (setf zoomed (window-zoom-p window)
-              tree   (window-tree   window))))
-          (dolist (pane panes)
-            (render-pane buffer session pane
-                         :viewport (if (eq pane active-pane) viewport 0)))
+                      (setf zoomed (window-zoom-p window)
+                            tree (window-tree window))))
+    (dolist (pane panes)
+      (render-pane buffer
+                   session
+                   pane
+                   :viewport
+                   (if (eq pane active-pane)
+                       viewport
+                       0)))
     (when (and tree (not zoomed))
       (render-tree-borders buffer tree active-pane terminal-cols))))
 
 (defun %picker-item-display-text (item)
   (let ((prefix
-          (case (nerimux/picker:picker-item-kind item)
-            (:organization "org ")
-            (:repository "repo")
-            (:worktree "  wt ")
-            (:pane "pane")
-            (otherwise "     "))))
-    (format nil "~A ~:[ ~;!~] ~A"
+         (case (nerimux/picker:picker-item-kind item)
+           (:organization "org ")
+           (:repository "repo")
+           (:worktree "  wt ")
+           (:pane "pane")
+           (otherwise "     "))))
+    (format nil
+            "~A ~:[ ~;!~] ~A"
             prefix
             (nerimux/picker:picker-item-attention-p item)
             (nerimux/picker:picker-item-label item))))
@@ -81,15 +94,21 @@
   (reset-attrs stream)
   (write-char #\| stream))
 
-(defun %render-client-picker
-    (stream terminal-rows terminal-cols items query index &key regex-p)
+(defun %render-client-picker (stream terminal-rows
+                                     terminal-cols
+                                     items
+                                     query
+                                     index
+                                     &key
+                                     regex-p)
   (when (and (>= terminal-rows 5) (>= terminal-cols 12))
     (let* ((inner-width (min 68 (max 1 (- terminal-cols 6))))
            (max-items (max 1 (min 10 (- terminal-rows 4))))
            (item-count (length items))
-           (first-index (if (plusp item-count)
-                            (max 0 (min index (- item-count max-items)))
-                            0))
+           (first-index
+            (if (plusp item-count)
+                (max 0 (min index (- item-count max-items)))
+                0))
            (last-index (min item-count (+ first-index max-items)))
            (display-count (max 1 (- last-index first-index)))
            (body-height (+ 1 display-count))
@@ -100,27 +119,33 @@
       (write-char #\+ stream)
       (write-string (make-string inner-width :initial-element #\-) stream)
       (write-char #\+ stream)
-      (%write-picker-box-line stream (1+ top) left
-                              (format nil "~:[literal~;regex~] query: ~A"
-                                      regex-p query)
+      (%write-picker-box-line stream
+                              (1+ top)
+                              left
+                              (format nil
+                                      "~:[literal~;regex~] query: ~A"
+                                      regex-p
+                                      query)
                               inner-width)
       (loop for item-index from first-index below last-index
-            for row from (+ top 2) do
-              (let ((item (nth item-index items)))
-                (%write-picker-box-line
-                 stream row left
-                 (%picker-item-display-text item)
-                 inner-width
-                 :selected (= item-index index)
-                 :attention (nerimux/picker:picker-item-attention-p item))))
+            for row from (+ top 2)
+            do (let ((item (nth item-index items)))
+                 (%write-picker-box-line stream
+                                         row
+                                         left
+                                         (%picker-item-display-text item)
+                                         inner-width
+                                         :selected
+                                         (= item-index index)
+                                         :attention
+                                         (nerimux/picker:picker-item-attention-p
+                                          item))))
       (when (= last-index first-index)
-        (%write-picker-box-line stream (+ top 2) left "no matches"
-                                inner-width))
+        (%write-picker-box-line stream (+ top 2) left "no matches" inner-width))
       (move-to stream (+ top box-height -1) left)
       (write-char #\+ stream)
       (write-string (make-string inner-width :initial-element #\-) stream)
-      (write-char #\+ stream)
-      )))
+      (write-char #\+ stream))))
 
 (defun %render-client-command-line
     (stream terminal-rows terminal-cols command-buffer)

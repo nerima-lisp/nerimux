@@ -2,19 +2,27 @@
 
 ;;;; Tests for Sprint 3 advanced features:
 ;;;;  synchronize-panes, layout persistence, update-environment.
-
 ;;; ── Fixtures ─────────────────────────────────────────────────────────────────
-
 (defun %two-pane-session ()
   "Session with one window containing two fake panes side-by-side."
-  (let* ((p0  (make-no-pty-pane 1  0 0 40 24))
-         (p1  (make-no-pty-pane 2 41 0 40 24))
-         (win (make-window :id 1 :name "w" :width 81 :height 24
-                           :panes (list p0 p1)
-                           :tree (make-layout-split :h
-                                    (make-layout-leaf p0)
-                                    (make-layout-leaf p1)
-                                    1/2)))
+  (let* ((p0 (make-no-pty-pane 1 0 0 40 24))
+         (p1 (make-no-pty-pane 2 41 0 40 24))
+         (win
+          (make-window :id
+                       1
+                       :name
+                       "w"
+                       :width
+                       81
+                       :height
+                       24
+                       :panes
+                       (list p0 p1)
+                       :tree
+                       (make-layout-split :h
+                                          (make-layout-leaf p0)
+                                          (make-layout-leaf p1)
+                                          1/2)))
          (sess (make-session :id 1 :name "0" :windows (list win))))
     (window-select-pane win p0)
     (session-select-window sess win)

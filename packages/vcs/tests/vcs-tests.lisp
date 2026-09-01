@@ -1,299 +1,387 @@
 (in-package #:nerimux/test/vcs)
 
 (describe "vcs value helpers"
-  (it "reports whether the VCS package is loaded"
-    (expect (eq (not (null (find-package :vcs-kit)))
-                (nerimux/vcs::vcs-package-available-p))))
-
-  (it "normalizes values and splits repository specifications"
-    (expect (string= "" (nerimux/vcs::%string-value nil)))
-    (expect (string= "value" (nerimux/vcs::%string-value "value")))
-    (expect (string= (namestring #P"/tmp/project")
-                     (nerimux/vcs::%string-value #P"/tmp/project")))
-    (expect (string= "42" (nerimux/vcs::%string-value 42)))
-    (expect (equal '("org" "project")
-                   (nerimux/vcs::%specification-parts "org//project/")))
-    (expect (equal '("project")
-                   (nerimux/vcs::%specification-parts "/project/")))
-    (expect (equal '("org" "project")
-                   (nerimux/vcs::%specification-parts "///org///project///")))
-    (expect (null (nerimux/vcs::%specification-parts nil))))
-
-  (it "strips C0 control characters and DEL, turning Tab into a single space (F5)"
-    (expect (string= "a[31mb"
+          (it "reports whether the VCS package is loaded"
+              (expect
+               (eq (not (null (find-package :vcs-kit)))
+                   (nerimux/vcs::vcs-package-available-p))))
+          (it "normalizes values and splits repository specifications"
+              (expect (string= "" (nerimux/vcs::%string-value nil)))
+              (expect (string= "value" (nerimux/vcs::%string-value "value")))
+              (expect
+               (string= (namestring #P"/tmp/project")
+                        (nerimux/vcs::%string-value #P"/tmp/project")))
+              (expect (string= "42" (nerimux/vcs::%string-value 42)))
+              (expect
+               (equal '("org" "project")
+                      (nerimux/vcs::%specification-parts "org//project/")))
+              (expect
+               (equal '("project")
+                      (nerimux/vcs::%specification-parts "/project/")))
+              (expect
+               (equal '("org" "project")
+                      (nerimux/vcs::%specification-parts "///org///project///")))
+              (expect (null (nerimux/vcs::%specification-parts nil))))
+          (it
+           "strips C0 control characters and DEL, turning Tab into a single space (F5)"
+           (expect
+            (string= "a[31mb"
                      (nerimux/vcs::%strip-control-characters
                       (format nil "a~C[31mb" (code-char 27)))))
-    (expect (string= "a b"
+           (expect
+            (string= "a b"
                      (nerimux/vcs::%strip-control-characters
                       (format nil "a~Cb" (code-char 9)))))
-    (expect (string= "ab"
+           (expect
+            (string= "ab"
                      (nerimux/vcs::%strip-control-characters
                       (format nil "a~Cb" (code-char 127)))))
-    (expect (notany (lambda (character) (< (char-code character) 32))
-                    (nerimux/vcs::%strip-control-characters
-                     (map 'string #'code-char (loop for code from 0 below 32
-                                                     collect code)))))
-    (expect (string= "no controls" (nerimux/vcs::%strip-control-characters
-                                    "no controls")))
-    (expect (null (nerimux/vcs::%strip-control-characters nil))))
-
-  (it "derives organization and repository names by specification shape"
-    (multiple-value-bind (organization name)
-        (nerimux/vcs::%organization-and-name "host/org/project")
-      (expect (string= "host" organization))
-      (expect (string= "org" name)))
-    (multiple-value-bind (organization name)
-        (nerimux/vcs::%organization-and-name "host/org/project/extra")
-      (expect (string= "host" organization))
-      (expect (string= "org" name)))
-    (multiple-value-bind (organization name)
-        (nerimux/vcs::%organization-and-name "org/project")
-      (expect (string= "local" organization))
-      (expect (string= "org" name)))
-    (multiple-value-bind (organization name)
-        (nerimux/vcs::%organization-and-name "project")
-      (expect (string= "local" organization))
-      (expect (string= "default" name)))
-    (multiple-value-bind (organization name)
-        (nerimux/vcs::%organization-and-name nil)
-      (expect (string= "local" organization))
-      (expect (string= "default" name)))))
+           (expect
+            (notany
+             (lambda (character)
+               (< (char-code character) 32))
+             (nerimux/vcs::%strip-control-characters
+              (map 'string
+                   #'code-char
+                   (loop for code from 0 below 32
+                         collect code)))))
+           (expect
+            (string= "no controls"
+                     (nerimux/vcs::%strip-control-characters "no controls")))
+           (expect (null (nerimux/vcs::%strip-control-characters nil))))
+          (it "derives organization and repository names by specification shape"
+              (multiple-value-bind (organization name) 
+                  (nerimux/vcs::%organization-and-name "host/org/project")
+                (expect (string= "host" organization))
+                (expect (string= "org" name)))
+              (multiple-value-bind (organization name) 
+                  (nerimux/vcs::%organization-and-name "host/org/project/extra")
+                (expect (string= "host" organization))
+                (expect (string= "org" name)))
+              (multiple-value-bind (organization name) 
+                  (nerimux/vcs::%organization-and-name "org/project")
+                (expect (string= "local" organization))
+                (expect (string= "org" name)))
+              (multiple-value-bind (organization name) 
+                  (nerimux/vcs::%organization-and-name "project")
+                (expect (string= "local" organization))
+                (expect (string= "default" name)))
+              (multiple-value-bind (organization name) 
+                  (nerimux/vcs::%organization-and-name nil)
+                (expect (string= "local" organization))
+                (expect (string= "default" name)))))
 
 (describe "vcs callback dispatch"
-  (it "defers a callback through the supplied dispatcher"
-    (let ((queued nil)
-          (result nil))
-      (nerimux/vcs::%dispatch-callback
-       (lambda (thunk) (setf queued thunk))
-       (lambda (value) (setf result value))
-       :done)
-      (expect (null result))
-      (expect (functionp queued))
-      (funcall queued)
-      (expect (eq :done result)))))
+          (it "defers a callback through the supplied dispatcher"
+              (let ((queued nil)
+                    (result nil))
+                (nerimux/vcs::%dispatch-callback
+                 (lambda (thunk)
+                   (setf queued thunk))
+                 (lambda (value)
+                   (setf result value))
+                 :done)
+                (expect (null result))
+                (expect (functionp queued))
+                (funcall queued)
+                (expect (eq :done result)))))
 
 (describe "vcs worktree status"
-  (it "marks an absent worktree without querying the adapter"
-    (let* ((path
-             (namestring
-              (merge-pathnames
-               (format nil "nerimux-missing-worktree-~D/" (random 1000000))
-               (host-kit:temporary-directory))))
-           (repository
-             (nerimux/workspace-model:make-repository
-              :specification "workspace-owner/project"
-              :local-path path))
-           (worktree
-             (nerimux/workspace-model:make-worktree
-              :repository repository
-              :path path
-              :branch "feature/ui"
-              :status :stale
-              :dirty-p t
-              :conflict-p t
-              :ahead 3
-              :behind 2)))
-      (nerimux/workspace-model:repository-add-worktree repository worktree)
-      (expect (null (probe-file path)))
-      (nerimux/vcs:worktree-status worktree)
-      (expect (nerimux/workspace-model:worktree-missing-p worktree))
-      (expect (null (nerimux/workspace-model:worktree-status worktree)))
-      (expect (not (nerimux/workspace-model:worktree-dirty-p worktree)))
-      (expect (not (nerimux/workspace-model:worktree-conflict-p worktree)))
-      (expect (zerop (nerimux/workspace-model:worktree-ahead worktree)))
-      (expect (zerop (nerimux/workspace-model:worktree-behind worktree)))
-      (expect (not (nerimux/workspace-model:repository-dirty-p repository)))
-      (expect (not (nerimux/workspace-model:repository-conflict-p repository))))))
+          (it "marks an absent worktree without querying the adapter"
+              (let* ((path
+                      (namestring
+                       (merge-pathnames
+                        (format nil
+                                "nerimux-missing-worktree-~D/"
+                                (random 1000000))
+                        (host-kit:temporary-directory))))
+                     (repository
+                      (nerimux/workspace-model:make-repository :specification
+                                                               "workspace-owner/project"
+                                                               :local-path
+                                                               path))
+                     (worktree
+                      (nerimux/workspace-model:make-worktree :repository
+                                                             repository
+                                                             :path
+                                                             path
+                                                             :branch
+                                                             "feature/ui"
+                                                             :status
+                                                             :stale
+                                                             :dirty-p
+                                                             t
+                                                             :conflict-p
+                                                             t
+                                                             :ahead
+                                                             3
+                                                             :behind
+                                                             2)))
+                (nerimux/workspace-model:repository-add-worktree repository
+                                                                 worktree)
+                (expect (null (probe-file path)))
+                (nerimux/vcs:worktree-status worktree)
+                (expect (nerimux/workspace-model:worktree-missing-p worktree))
+                (expect
+                 (null (nerimux/workspace-model:worktree-status worktree)))
+                (expect
+                 (not (nerimux/workspace-model:worktree-dirty-p worktree)))
+                (expect
+                 (not (nerimux/workspace-model:worktree-conflict-p worktree)))
+                (expect
+                 (zerop (nerimux/workspace-model:worktree-ahead worktree)))
+                (expect
+                 (zerop (nerimux/workspace-model:worktree-behind worktree)))
+                (expect
+                 (not (nerimux/workspace-model:repository-dirty-p repository)))
+                (expect
+                 (not
+                  (nerimux/workspace-model:repository-conflict-p repository))))))
 
 (describe "async vcs refresh"
-  (it "returns before slow repository status workers complete"
-    (let* ((repositories
-             (loop for index from 1 to 3
-                   collect
-                   (nerimux/workspace-model:make-repository
-                    :specification (format nil "workspace-owner/project-~D" index)
-                    :local-path (format nil "/tmp/project-~D" index))))
-           (completed nil)
-           (start (get-internal-real-time))
-           (threads
-             (nerimux/vcs:refresh-repositories-async
-              repositories
-              :status-reader (lambda (repository)
-                               (declare (ignore repository))
-                               (sleep 0.2)
-                               nil)
-              :on-complete (lambda (refreshed)
-                             (declare (ignore refreshed))
-                             (setf completed t))))
-           (dispatch-ms
-             (* 1000.0
-                (/ (- (get-internal-real-time) start)
-                   internal-time-units-per-second)))
-           (deadline (+ (get-internal-real-time)
-                        (* 2 internal-time-units-per-second))))
-      (loop until completed
-            while (< (get-internal-real-time) deadline)
-            do (sleep 0.01))
-      (expect (= 3 (length threads)))
-      (expect (< dispatch-ms 100.0))
-      (expect completed)))
-
-  (it "keeps the workspace status entry point non-blocking"
-    (let* ((repositories
-             (loop for index from 1 to 3
-                   collect
-                   (nerimux/workspace-model:make-repository
-                    :specification (format nil "workspace-owner/project-~D" index)
-                    :local-path (format nil "/tmp/project-~D" index))))
-           (organization
-             (nerimux/workspace-model:make-organization
-              :host "workspace-owner"
-              :name "workspace"
-              :repositories repositories))
-           (completed nil)
-           (start (get-internal-real-time))
-           (threads
-             (nerimux/vcs:refresh-workspace-status-async
-              :organizations (list organization)
-              :status-reader (lambda (repository)
-                               (declare (ignore repository))
-                               (sleep 0.2)
-                               nil)
-              :on-complete (lambda (refreshed)
-                             (declare (ignore refreshed))
-                             (setf completed t))))
-           (dispatch-ms
-             (* 1000.0
-                (/ (- (get-internal-real-time) start)
-                   internal-time-units-per-second)))
-           (deadline (+ (get-internal-real-time)
-                        (* 2 internal-time-units-per-second))))
-      (expect (= 3 (length threads)))
-      (expect (not completed))
-      (expect (< dispatch-ms 100.0))
-      (loop until completed
-            while (< (get-internal-real-time) deadline)
-            do (sleep 0.01))
-      (expect completed)))
-
-  (it "completes with the organizations, not the flattened repositories"
-    (let* ((repositories
-             (loop for index from 1 to 3
-                   collect
-                   (nerimux/workspace-model:make-repository
-                    :specification (format nil "workspace-owner/project-~D" index)
-                    :local-path (format nil "/tmp/project-~D" index))))
-           (organization
-             (nerimux/workspace-model:make-organization
-              :host "workspace-owner"
-              :name "workspace"
-              :repositories repositories))
-           (completed-with :not-called)
-           (deadline (+ (get-internal-real-time)
-                        (* 2 internal-time-units-per-second))))
-      (nerimux/vcs:refresh-workspace-status-async
-       :organizations (list organization)
-       :status-reader (lambda (repository)
-                        (declare (ignore repository))
-                        nil)
-       :on-complete (lambda (result)
-                      (setf completed-with result)))
-      (loop until (not (eq completed-with :not-called))
-            while (< (get-internal-real-time) deadline)
-            do (sleep 0.01))
-      (expect (listp completed-with))
-      (expect (= 1 (length completed-with)))
-      (expect (eq organization (first completed-with)))
-      (expect (not (eq repositories completed-with))))))
+          (it "returns before slow repository status workers complete"
+              (let* ((repositories
+                      (loop for index from 1 to 3
+                            collect (nerimux/workspace-model:make-repository
+                                     :specification
+                                     (format nil
+                                             "workspace-owner/project-~D"
+                                             index)
+                                     :local-path
+                                     (format nil "/tmp/project-~D" index))))
+                     (completed nil)
+                     (start (get-internal-real-time))
+                     (threads
+                      (nerimux/vcs:refresh-repositories-async repositories
+                                                              :status-reader
+                                                              (lambda 
+                                                                  (repository)
+                                                                (declare (ignore
+                                                                          repository))
+                                                                (sleep 0.2)
+                                                                nil)
+                                                              :on-complete
+                                                              (lambda 
+                                                                  (refreshed)
+                                                                (declare (ignore
+                                                                          refreshed))
+                                                                (setf completed t))))
+                     (dispatch-ms
+                      (* 1000.0
+                         (/ (- (get-internal-real-time) start)
+                            internal-time-units-per-second)))
+                     (deadline
+                      (+ (get-internal-real-time)
+                         (* 2 internal-time-units-per-second))))
+                (loop until completed
+                      while (< (get-internal-real-time) deadline)
+                      do (sleep 0.01))
+                (expect (= 3 (length threads)))
+                (expect (< dispatch-ms 100.0))
+                (expect completed)))
+          (it "keeps the workspace status entry point non-blocking"
+              (let* ((repositories
+                      (loop for index from 1 to 3
+                            collect (nerimux/workspace-model:make-repository
+                                     :specification
+                                     (format nil
+                                             "workspace-owner/project-~D"
+                                             index)
+                                     :local-path
+                                     (format nil "/tmp/project-~D" index))))
+                     (organization
+                      (nerimux/workspace-model:make-organization :host
+                                                                 "workspace-owner"
+                                                                 :name
+                                                                 "workspace"
+                                                                 :repositories
+                                                                 repositories))
+                     (completed nil)
+                     (start (get-internal-real-time))
+                     (threads
+                      (nerimux/vcs:refresh-workspace-status-async :organizations
+                                                                  (list
+                                                                   organization)
+                                                                  :status-reader
+                                                                  (lambda 
+                                                                      (repository)
+                                                                    (declare (ignore
+                                                                              repository))
+                                                                    (sleep 0.2)
+                                                                    nil)
+                                                                  :on-complete
+                                                                  (lambda 
+                                                                      (refreshed)
+                                                                    (declare (ignore
+                                                                              refreshed))
+                                                                    (setf completed t))))
+                     (dispatch-ms
+                      (* 1000.0
+                         (/ (- (get-internal-real-time) start)
+                            internal-time-units-per-second)))
+                     (deadline
+                      (+ (get-internal-real-time)
+                         (* 2 internal-time-units-per-second))))
+                (expect (= 3 (length threads)))
+                (expect (not completed))
+                (expect (< dispatch-ms 100.0))
+                (loop until completed
+                      while (< (get-internal-real-time) deadline)
+                      do (sleep 0.01))
+                (expect completed)))
+          (it "completes with the organizations, not the flattened repositories"
+              (let* ((repositories
+                      (loop for index from 1 to 3
+                            collect (nerimux/workspace-model:make-repository
+                                     :specification
+                                     (format nil
+                                             "workspace-owner/project-~D"
+                                             index)
+                                     :local-path
+                                     (format nil "/tmp/project-~D" index))))
+                     (organization
+                      (nerimux/workspace-model:make-organization :host
+                                                                 "workspace-owner"
+                                                                 :name
+                                                                 "workspace"
+                                                                 :repositories
+                                                                 repositories))
+                     (completed-with :not-called)
+                     (deadline
+                      (+ (get-internal-real-time)
+                         (* 2 internal-time-units-per-second))))
+                (nerimux/vcs:refresh-workspace-status-async :organizations
+                                                            (list organization)
+                                                            :status-reader
+                                                            (lambda (repository)
+                                                              (declare (ignore
+                                                                        repository))
+                                                              nil)
+                                                            :on-complete
+                                                            (lambda (result)
+                                                              (setf completed-with result)))
+                (loop until (not (eq completed-with :not-called))
+                      while (< (get-internal-real-time) deadline)
+                      do (sleep 0.01))
+                (expect (listp completed-with))
+                (expect (= 1 (length completed-with)))
+                (expect (eq organization (first completed-with)))
+                (expect (not (eq repositories completed-with))))))
 
 (describe "async vcs status ownership"
-  (it "applies worker results and completes only through the dispatcher"
-    (let* ((repository
-             (nerimux/workspace-model:make-repository
-              :specification "workspace-owner/project"
-              :local-path "/tmp/project"))
-           (queued nil)
-           (completed nil)
-           (thread
-             (first
-              (nerimux/vcs:refresh-repositories-async
-               (list repository)
-               :status-reader (lambda (current)
-                                (expect (eq repository current))
-                                :dirty)
-               :status-applier (lambda (current update)
-                                 (expect (eq :dirty update))
-                                 (setf (nerimux/workspace-model:repository-dirty-p current)
-                                       t))
-               :callback-dispatch (lambda (thunk) (push thunk queued))
-               :on-complete (lambda (repositories)
-                              (expect (equal (list repository) repositories))
-                              (setf completed t))))))
-      (sb-thread:join-thread thread :timeout 2)
-      (expect (= 1 (length queued)))
-      (expect (not (nerimux/workspace-model:repository-dirty-p repository)))
-      (expect (not completed))
-      (funcall (pop queued))
-      (expect (nerimux/workspace-model:repository-dirty-p repository))
-      (expect completed))))
+          (it "applies worker results and completes only through the dispatcher"
+              (let* ((repository
+                      (nerimux/workspace-model:make-repository :specification
+                                                               "workspace-owner/project"
+                                                               :local-path
+                                                               "/tmp/project"))
+                     (queued nil)
+                     (completed nil)
+                     (thread
+                      (first
+                       (nerimux/vcs:refresh-repositories-async (list repository)
+                                                               :status-reader
+                                                               (lambda (current)
+                                                                 (expect
+                                                                  (eq repository
+                                                                      current))
+                                                                 :dirty)
+                                                               :status-applier
+                                                               (lambda 
+                                                                   (current
+                                                                    update)
+                                                                 (expect
+                                                                  (eq :dirty
+                                                                      update))
+                                                                 (setf (nerimux/workspace-model:repository-dirty-p
+                                                                        current) t))
+                                                               :callback-dispatch
+                                                               (lambda (thunk)
+                                                                 (push thunk
+                                                                       queued))
+                                                               :on-complete
+                                                               (lambda 
+                                                                   (repositories)
+                                                                 (expect
+                                                                  (equal
+                                                                   (list
+                                                                    repository)
+                                                                   repositories))
+                                                                 (setf completed t))))))
+                (sb-thread:join-thread thread :timeout 2)
+                (expect (= 1 (length queued)))
+                (expect
+                 (not (nerimux/workspace-model:repository-dirty-p repository)))
+                (expect (not completed))
+                (funcall (pop queued))
+                (expect (nerimux/workspace-model:repository-dirty-p repository))
+                (expect completed))))
 
 (describe "async vcs batch edge cases"
-  (it "completes immediately for an empty repository set"
-    (let ((completed :not-called)
-          (threads :not-called))
-      (setf threads
-            (nerimux/vcs:refresh-repositories-async
-             nil
-             :on-complete (lambda (repositories)
-                            (setf completed repositories))))
-      (expect (null threads))
-      (expect (equal '() completed))))
-
-  (it "reports a repository refresh error before completing the batch"
-    (let* ((repository
-             (nerimux/workspace-model:make-repository
-              :specification "workspace-owner/project"
-              :local-path "/tmp/project"))
-           (error-repository nil)
-           (condition-seen nil)
-           (completed nil)
-           (deadline (+ (get-internal-real-time)
-                        (* 2 internal-time-units-per-second))))
-      (nerimux/vcs:refresh-repositories-async
-       (list repository)
-       :status-reader (lambda (current)
-                        (declare (ignore current))
-                        (error "synthetic repository refresh failure"))
-       :on-error (lambda (current condition)
-                   (setf error-repository current
-                         condition-seen condition))
-       :on-complete (lambda (repositories)
-                      (declare (ignore repositories))
-                      (setf completed t)))
-      (loop until completed
-            while (< (get-internal-real-time) deadline)
-            do (sleep 0.01))
-      (expect (eq repository error-repository))
-      (expect condition-seen)
-      (expect completed))))
+          (it "completes immediately for an empty repository set"
+              (let ((completed :not-called)
+                    (threads :not-called))
+                (setf threads (nerimux/vcs:refresh-repositories-async nil
+                                                                      :on-complete
+                                                                      (lambda 
+                                                                          (repositories)
+                                                                        (setf completed repositories))))
+                (expect (null threads))
+                (expect (equal '() completed))))
+          (it "reports a repository refresh error before completing the batch"
+              (let* ((repository
+                      (nerimux/workspace-model:make-repository :specification
+                                                               "workspace-owner/project"
+                                                               :local-path
+                                                               "/tmp/project"))
+                     (error-repository nil)
+                     (condition-seen nil)
+                     (completed nil)
+                     (deadline
+                      (+ (get-internal-real-time)
+                         (* 2 internal-time-units-per-second))))
+                (nerimux/vcs:refresh-repositories-async (list repository)
+                                                        :status-reader
+                                                        (lambda (current)
+                                                          (declare (ignore
+                                                                    current))
+                                                          (error
+                                                           "synthetic repository refresh failure"))
+                                                        :on-error
+                                                        (lambda 
+                                                            (current condition)
+                                                          (setf error-repository current
+                                                                condition-seen condition))
+                                                        :on-complete
+                                                        (lambda (repositories)
+                                                          (declare (ignore
+                                                                    repositories))
+                                                          (setf completed t)))
+                (loop until completed
+                      while (< (get-internal-real-time) deadline)
+                      do (sleep 0.01))
+                (expect (eq repository error-repository))
+                (expect condition-seen)
+                (expect completed))))
 
 (describe "async vcs scan errors"
-  (it "reports a scan failure without leaking an unhandled worker error"
-    (let ((condition-seen nil)
-          (deadline (+ (get-internal-real-time)
-                       (* 2 internal-time-units-per-second))))
-      (with-stubbed-fdefinition
-          ((vcs-kit:ghq-list-repositories
-             (lambda (&rest arguments)
-               (declare (ignore arguments))
-               (error "synthetic ghq failure"))))
-        (nerimux/vcs:scan-repositories-async
-         :on-error (lambda (condition)
-                     (setf condition-seen condition)))
-        (loop until condition-seen
-              while (< (get-internal-real-time) deadline)
-              do (sleep 0.01))
-        (expect condition-seen)))))
+          (it "reports a scan failure without leaking an unhandled worker error"
+              (let ((condition-seen nil)
+                    (deadline
+                     (+ (get-internal-real-time)
+                        (* 2 internal-time-units-per-second))))
+                (with-stubbed-fdefinition
+                 ((vcs-kit:ghq-list-repositories
+                   (lambda (&rest arguments)
+                     (declare (ignore arguments))
+                     (error "synthetic ghq failure"))))
+                 (nerimux/vcs:scan-repositories-async :on-error
+                                                      (lambda (condition)
+                                                        (setf condition-seen condition)))
+                 (loop until condition-seen
+                       while (< (get-internal-real-time) deadline)
+                       do (sleep 0.01))
+                 (expect condition-seen)))))
 
 ;;; %preserve-pane-associations runs on EVERY catalog refresh, via
 ;;; set-workspace-organizations.  A refresh replaces the whole organization tree
@@ -306,7 +394,6 @@
 ;;; had no production callers, and which was deleted.  The case moved here because
 ;;; it never tested the port: it tests live nerimux/vcs infrastructure.  The
 ;;; no-match case is new; that branch was never covered.
-
 (describe "workspace catalog pane preservation"
 
   ;; A refresh that produces an equivalent worktree (same path, new head) must
@@ -391,7 +478,6 @@
 ;;; rescan silently drops already-fetched commit history and lets a fresh
 ;;; WORKTREE-KEY-derived id -- which embeds HEAD -- replace the one a
 ;;; client (or a cache keyed on it) may already be holding.
-
 (describe "vcs workspace catalog commit-state preservation (F1)"
   (it "carries id, commits-state and recent-commits across a full catalog rescan matched by path"
     (let* ((previous (nerimux/vcs:workspace-organizations))
@@ -453,7 +539,6 @@
 ;;; OPPOSITE of the expected POST-sort order, so a passing assertion proves
 ;;; the sort actually ran rather than the fixture happening to already be in
 ;;; the right order.
-
 (describe "workspace catalog activity ordering"
 
   ;; 2 repositories, each holding 1 worktree with a distinct, known pane
@@ -588,7 +673,6 @@
 ;;; hermetic-suite precedent anywhere in this tree (see the attach-target
 ;;; jump test in attach-selector-resolution-tests.lisp, which registers the
 ;;; repository directly instead); this only exercises the pure merge step.
-
 (describe "merge-workspace-organizations"
 
   ;; A wholly new organization (by id) is added outright alongside whatever
@@ -681,11 +765,14 @@
 (defun %bare-status-fixture-directory (label)
   "Create and return a fresh, existing temporary directory path for LABEL."
   (let ((path
-          (namestring
-           (merge-pathnames
-            (format nil "nerimux-bare-status-~A-~D-~D/" label
-                    (get-universal-time) (random 1000000))
-            (host-kit:temporary-directory)))))
+         (namestring
+          (merge-pathnames
+           (format nil
+                   "nerimux-bare-status-~A-~D-~D/"
+                   label
+                   (get-universal-time)
+                   (random 1000000))
+           (host-kit:temporary-directory)))))
     (ensure-directories-exist path)
     path))
 
@@ -702,7 +789,6 @@
 ;;; count/timeout work happening concurrently to this file in vcs.lisp --
 ;;; that work changes HOW the git invocation runs, not whether a failure
 ;;; along the way still resolves to NIL.
-
 (describe "resolve-directory-organizations-fail-closed-suite"
 
   (it "returns-nil-for-a-nonexistent-path"
@@ -730,52 +816,58 @@
     (expect (null (nerimux/vcs:resolve-directory-organizations 42)))))
 
 (describe "directory repository root suite"
-  (it "returns no root when git reports no worktrees"
-    (let ((backend :fake-backend))
-      (with-stubbed-fdefinition
-          ((nerimux/vcs::%make-directory-vcs-repository
-             (lambda (directory)
-               (declare (ignore directory))
-               backend))
-           (vcs-kit:vcs-list-worktrees
-             (lambda (repository)
-               (expect (eq backend repository))
-               nil)))
-        (multiple-value-bind (root worktrees)
-            (nerimux/vcs::%directory-repository-root "/tmp/empty-worktrees")
-          (expect (null root))
-          (expect (null worktrees))))))
-
-  (it-each ((nil "/tmp/first-worktree"
-             ((:path "/tmp/first-worktree" :bare-p nil)
-              (:path "/tmp/second-worktree" :bare-p nil)))
+          (it "returns no root when git reports no worktrees"
+              (let ((backend :fake-backend))
+                (with-stubbed-fdefinition
+                 ((nerimux/vcs::%make-directory-vcs-repository
+                   (lambda (directory)
+                     (declare (ignore directory))
+                     backend))
+                  (vcs-kit:vcs-list-worktrees
+                   (lambda (repository)
+                     (expect (eq backend repository))
+                     nil)))
+                 (multiple-value-bind (root worktrees) 
+                     (nerimux/vcs::%directory-repository-root
+                      "/tmp/empty-worktrees")
+                   (expect (null root))
+                   (expect (null worktrees))))))
+          (it-each
+           ((nil "/tmp/first-worktree"
+                 ((:path "/tmp/first-worktree" :bare-p nil)
+                  (:path "/tmp/second-worktree" :bare-p nil)))
             (t "/tmp/bare-repository"
-             ((:path "/tmp/working-tree" :bare-p nil)
-              (:path "/tmp/bare-repository" :bare-p t))))
-      "selects the repository root from worktrees ~S"
-      (expected-bare-p expected-path raw-specs)
-    (let ((worktrees
-            (mapcar (lambda (spec)
-                      (apply #'vcs-kit::%make-vcs-worktree spec))
-                    raw-specs)))
-      (with-stubbed-fdefinition
-          ((nerimux/vcs::%make-directory-vcs-repository
-             (lambda (directory)
-               (declare (ignore directory))
-               :fake-backend))
-           (vcs-kit:vcs-list-worktrees
-             (lambda (backend)
-               (declare (ignore backend))
-               worktrees)))
-        (multiple-value-bind (root returned-worktrees)
-            (nerimux/vcs::%directory-repository-root "/tmp/probe")
-          (expect (string= expected-path root))
-          (expect (eq worktrees returned-worktrees))
-          (expect (eq expected-bare-p
-                      (vcs-kit:vcs-worktree-bare-p
-                       (find expected-path worktrees
-                             :key #'vcs-kit:vcs-worktree-path
-                             :test #'string=)))))))))
+               ((:path "/tmp/working-tree" :bare-p nil)
+                (:path "/tmp/bare-repository" :bare-p t))))
+           "selects the repository root from worktrees ~S"
+           (expected-bare-p expected-path raw-specs)
+           (let ((worktrees
+                  (mapcar
+                   (lambda (spec)
+                     (apply #'vcs-kit::%make-vcs-worktree spec))
+                   raw-specs)))
+             (with-stubbed-fdefinition
+              ((nerimux/vcs::%make-directory-vcs-repository
+                (lambda (directory)
+                  (declare (ignore directory))
+                  :fake-backend))
+               (vcs-kit:vcs-list-worktrees
+                (lambda (backend)
+                  (declare (ignore backend))
+                  worktrees)))
+              (multiple-value-bind (root returned-worktrees) 
+                  (nerimux/vcs::%directory-repository-root "/tmp/probe")
+                (expect (string= expected-path root))
+                (expect (eq worktrees returned-worktrees))
+                (expect
+                 (eq expected-bare-p
+                     (vcs-kit:vcs-worktree-bare-p
+                      (find expected-path
+                            worktrees
+                            :key
+                            #'vcs-kit:vcs-worktree-path
+                            :test
+                            #'string=)))))))))
 
 ;; F10: `git worktree list` includes the bare repository root itself (ghq's
 ;; `<repo>.git` layout as its own entry); running `git status` there always
@@ -785,76 +877,113 @@
 ;; bare repository into a false "failed" notify. Status collection must skip
 ;; the bare entry while still keeping it in the worktree list/model.
 (describe "vcs bare worktree status collection"
-  (it "%read-repository-refresh skips the bare entry and updates only the working worktree"
-    (let* ((bare-path (%bare-status-fixture-directory "refresh-bare"))
-           (work-path (%bare-status-fixture-directory "refresh-work"))
-           (repository
-             (nerimux/workspace-model:make-repository
-              :specification "workspace-owner/project"
-              :local-path bare-path))
-           (raw-worktrees
-             (list (vcs-kit::%make-vcs-worktree
-                    :path bare-path :branch nil :head "bare-head" :bare-p t)
-                   (vcs-kit::%make-vcs-worktree
-                    :path work-path :branch "main" :head "work-head"))))
-      (with-stubbed-fdefinition
-          ((vcs-kit:make-vcs-repository
-             (lambda (directory &rest arguments)
-               (declare (ignore arguments))
-               directory))
-           (vcs-kit:vcs-list-worktrees
-             (lambda (&rest arguments)
-               (declare (ignore arguments))
-               raw-worktrees))
-           (vcs-kit:vcs-status-structured
-             (lambda (backend-directory &rest arguments)
-               (declare (ignore arguments))
-               (if (string= backend-directory bare-path)
-                   (error "status must not run against the bare root")
-                   (vcs-kit::%make-vcs-status-snapshot
-                    :entries nil :branch-head "work-head"
-                    :ahead 0 :behind 0)))))
-        (let* ((refresh (nerimux/vcs::%read-repository-refresh repository))
-               (updates
-                 (nerimux/vcs::%repository-refresh-status-updates refresh)))
-          (expect (= 1 (length updates)))
-          (expect (string= work-path
-                           (nerimux/vcs::%worktree-status-update-path
-                            (first updates))))))))
-
-  (it "%read-repository-status skips the bare worktree and updates only the working worktree"
-    (let* ((bare-path (%bare-status-fixture-directory "status-bare"))
-           (work-path (%bare-status-fixture-directory "status-work"))
-           (repository
-             (nerimux/workspace-model:make-repository
-              :specification "workspace-owner/project"
-              :local-path bare-path))
-           (bare-worktree
-             (nerimux/workspace-model:make-worktree
-              :repository repository :path bare-path :bare-p t))
-           (work-worktree
-             (nerimux/workspace-model:make-worktree
-              :repository repository :path work-path :branch "main")))
-      (nerimux/workspace-model:repository-add-worktree repository bare-worktree)
-      (nerimux/workspace-model:repository-add-worktree repository work-worktree)
-      (with-stubbed-fdefinition
-          ((vcs-kit:make-vcs-repository
-             (lambda (directory &rest arguments)
-               (declare (ignore arguments))
-               directory))
-           (vcs-kit:vcs-status-structured
-             (lambda (backend-directory &rest arguments)
-               (declare (ignore arguments))
-               (if (string= backend-directory bare-path)
-                   (error "status must not run against the bare root")
-                   (vcs-kit::%make-vcs-status-snapshot
-                    :entries nil :branch-head "work-head"
-                    :ahead 0 :behind 0)))))
-        (let ((updates (nerimux/vcs::%read-repository-status repository)))
-          (expect (= 1 (length updates)))
-          (expect (string= work-path
-                           (nerimux/vcs::%worktree-status-update-path
-                            (first updates)))))))))
+          (it
+           "%read-repository-refresh skips the bare entry and updates only the working worktree"
+           (let* ((bare-path (%bare-status-fixture-directory "refresh-bare"))
+                  (work-path (%bare-status-fixture-directory "refresh-work"))
+                  (repository
+                   (nerimux/workspace-model:make-repository :specification
+                                                            "workspace-owner/project"
+                                                            :local-path
+                                                            bare-path))
+                  (raw-worktrees
+                   (list
+                    (vcs-kit::%make-vcs-worktree :path
+                                                 bare-path
+                                                 :branch
+                                                 nil
+                                                 :head
+                                                 "bare-head"
+                                                 :bare-p
+                                                 t)
+                    (vcs-kit::%make-vcs-worktree :path
+                                                 work-path
+                                                 :branch
+                                                 "main"
+                                                 :head
+                                                 "work-head"))))
+             (with-stubbed-fdefinition
+              ((vcs-kit:make-vcs-repository
+                (lambda (directory &rest arguments)
+                  (declare (ignore arguments))
+                  directory))
+               (vcs-kit:vcs-list-worktrees
+                (lambda (&rest arguments)
+                  (declare (ignore arguments))
+                  raw-worktrees))
+               (vcs-kit:vcs-status-structured
+                (lambda (backend-directory &rest arguments)
+                  (declare (ignore arguments))
+                  (if (string= backend-directory bare-path)
+                      (error "status must not run against the bare root")
+                      (vcs-kit::%make-vcs-status-snapshot :entries
+                                                          nil
+                                                          :branch-head
+                                                          "work-head"
+                                                          :ahead
+                                                          0
+                                                          :behind
+                                                          0)))))
+              (let* ((refresh
+                      (nerimux/vcs::%read-repository-refresh repository))
+                     (updates
+                      (nerimux/vcs::%repository-refresh-status-updates refresh)))
+                (expect (= 1 (length updates)))
+                (expect
+                 (string= work-path
+                          (nerimux/vcs::%worktree-status-update-path
+                           (first updates))))))))
+          (it
+           "%read-repository-status skips the bare worktree and updates only the working worktree"
+           (let* ((bare-path (%bare-status-fixture-directory "status-bare"))
+                  (work-path (%bare-status-fixture-directory "status-work"))
+                  (repository
+                   (nerimux/workspace-model:make-repository :specification
+                                                            "workspace-owner/project"
+                                                            :local-path
+                                                            bare-path))
+                  (bare-worktree
+                   (nerimux/workspace-model:make-worktree :repository
+                                                          repository
+                                                          :path
+                                                          bare-path
+                                                          :bare-p
+                                                          t))
+                  (work-worktree
+                   (nerimux/workspace-model:make-worktree :repository
+                                                          repository
+                                                          :path
+                                                          work-path
+                                                          :branch
+                                                          "main")))
+             (nerimux/workspace-model:repository-add-worktree repository
+                                                              bare-worktree)
+             (nerimux/workspace-model:repository-add-worktree repository
+                                                              work-worktree)
+             (with-stubbed-fdefinition
+              ((vcs-kit:make-vcs-repository
+                (lambda (directory &rest arguments)
+                  (declare (ignore arguments))
+                  directory))
+               (vcs-kit:vcs-status-structured
+                (lambda (backend-directory &rest arguments)
+                  (declare (ignore arguments))
+                  (if (string= backend-directory bare-path)
+                      (error "status must not run against the bare root")
+                      (vcs-kit::%make-vcs-status-snapshot :entries
+                                                          nil
+                                                          :branch-head
+                                                          "work-head"
+                                                          :ahead
+                                                          0
+                                                          :behind
+                                                          0)))))
+              (let ((updates (nerimux/vcs::%read-repository-status repository)))
+                (expect (= 1 (length updates)))
+                (expect
+                 (string= work-path
+                          (nerimux/vcs::%worktree-status-update-path
+                           (first updates)))))))))
 
 ;; Regression guard for the review finding that PRUNE-WORKTREES's :DRY-RUN
 ;; keyword had no default, so (prune-worktrees repository) with no keyword
@@ -894,7 +1023,6 @@
 ;;; index/worktree status characters from the git-layer parser (they default
 ;;; to two spaces -- see vcs-kit's parse-status.lisp), so %CHANGED-FILE-CODE
 ;;; maps them explicitly to the "??"/"!!" codes `git status --short` shows.
-
 (describe "vcs worktree changed-files"
   (it "%changed-file-code uses the real XY chars for ordinary/unmerged entries"
     (expect (string= "M "
@@ -987,116 +1115,231 @@
                        (nerimux/workspace-model:worktree-changed-files worktree)))))))
 
 (describe "vcs worktree status split (magit alignment, Unit MODEL)"
-  (it "%changed-file-column-set-p recognizes only real porcelain columns"
-    (dolist (case '(("M" . t) ("A" . t) ("R" . t) ("U" . t)
-                    (" " . nil) ("?" . nil) ("" . t)))
-      (expect (eql (cdr case)
+          (it
+           "%changed-file-column-set-p recognizes only real porcelain columns"
+           (dolist 
+               (case '(("M" . t) ("A" . t)
+                                 ("R" . t)
+                                 ("U" . t)
+                                 (" " . nil)
+                                 ("?" . nil)
+                                 ("" . t)))
+             (expect
+              (eql (cdr case)
                    (nerimux/vcs::%changed-file-column-set-p (car case))))))
-
-  (it "%worktree-status-untracked-files keeps only :untracked entries, code always \"??\""
-    (expect (equal (list (cons "??" "new.txt"))
+          (it
+           "%worktree-status-untracked-files keeps only :untracked entries, code always \"??\""
+           (expect
+            (equal (list (cons "??" "new.txt"))
                    (nerimux/vcs::%worktree-status-untracked-files
-                    (list (vcs-kit::%make-vcs-status-entry
-                           :kind :untracked :path "new.txt")
-                          (vcs-kit::%make-vcs-status-entry
-                           :kind :ordinary :index-status "M" :worktree-status " "
-                           :path "staged.lisp"))))))
-
-  (it "%worktree-status-unmerged-files keeps only conflict entries, code the real XY pair"
-    (expect (equal (list (cons "UU" "conflict.lisp"))
+                    (list
+                     (vcs-kit::%make-vcs-status-entry :kind
+                                                      :untracked
+                                                      :path
+                                                      "new.txt")
+                     (vcs-kit::%make-vcs-status-entry :kind
+                                                      :ordinary
+                                                      :index-status
+                                                      "M"
+                                                      :worktree-status
+                                                      " "
+                                                      :path
+                                                      "staged.lisp"))))))
+          (it
+           "%worktree-status-unmerged-files keeps only conflict entries, code the real XY pair"
+           (expect
+            (equal (list (cons "UU" "conflict.lisp"))
                    (nerimux/vcs::%worktree-status-unmerged-files
-                    (list (vcs-kit::%make-vcs-status-entry
-                           :kind :unmerged :index-status "U" :worktree-status "U"
-                           :path "conflict.lisp")
-                          (vcs-kit::%make-vcs-status-entry
-                           :kind :ordinary :index-status "M" :worktree-status " "
-                           :path "staged.lisp"))))))
-
-  (it "%worktree-status-staged-files keeps only entries with the X column set"
-    (expect (equal (list (cons "M" "staged.lisp"))
+                    (list
+                     (vcs-kit::%make-vcs-status-entry :kind
+                                                      :unmerged
+                                                      :index-status
+                                                      "U"
+                                                      :worktree-status
+                                                      "U"
+                                                      :path
+                                                      "conflict.lisp")
+                     (vcs-kit::%make-vcs-status-entry :kind
+                                                      :ordinary
+                                                      :index-status
+                                                      "M"
+                                                      :worktree-status
+                                                      " "
+                                                      :path
+                                                      "staged.lisp"))))))
+          (it
+           "%worktree-status-staged-files keeps only entries with the X column set"
+           (expect
+            (equal (list (cons "M" "staged.lisp"))
                    (nerimux/vcs::%worktree-status-staged-files
-                    (list (vcs-kit::%make-vcs-status-entry
-                           :kind :ordinary :index-status "M" :worktree-status " "
-                           :path "staged.lisp")
-                          (vcs-kit::%make-vcs-status-entry
-                           :kind :ordinary :index-status " " :worktree-status "M"
-                           :path "unstaged.lisp")
-                          (vcs-kit::%make-vcs-status-entry
-                           :kind :untracked :path "new.txt")
-                          (vcs-kit::%make-vcs-status-entry
-                           :kind :unmerged :index-status "U" :worktree-status "U"
-                           :path "conflict.lisp"))))))
-
-  (it "%worktree-status-unstaged-files keeps only entries with the Y column set"
-    (expect (equal (list (cons "M" "unstaged.lisp"))
+                    (list
+                     (vcs-kit::%make-vcs-status-entry :kind
+                                                      :ordinary
+                                                      :index-status
+                                                      "M"
+                                                      :worktree-status
+                                                      " "
+                                                      :path
+                                                      "staged.lisp")
+                     (vcs-kit::%make-vcs-status-entry :kind
+                                                      :ordinary
+                                                      :index-status
+                                                      " "
+                                                      :worktree-status
+                                                      "M"
+                                                      :path
+                                                      "unstaged.lisp")
+                     (vcs-kit::%make-vcs-status-entry :kind
+                                                      :untracked
+                                                      :path
+                                                      "new.txt")
+                     (vcs-kit::%make-vcs-status-entry :kind
+                                                      :unmerged
+                                                      :index-status
+                                                      "U"
+                                                      :worktree-status
+                                                      "U"
+                                                      :path
+                                                      "conflict.lisp"))))))
+          (it
+           "%worktree-status-unstaged-files keeps only entries with the Y column set"
+           (expect
+            (equal (list (cons "M" "unstaged.lisp"))
                    (nerimux/vcs::%worktree-status-unstaged-files
-                    (list (vcs-kit::%make-vcs-status-entry
-                           :kind :ordinary :index-status "M" :worktree-status " "
-                           :path "staged.lisp")
-                          (vcs-kit::%make-vcs-status-entry
-                           :kind :ordinary :index-status " " :worktree-status "M"
-                           :path "unstaged.lisp")
-                          (vcs-kit::%make-vcs-status-entry
-                           :kind :untracked :path "new.txt")
-                          (vcs-kit::%make-vcs-status-entry
-                           :kind :unmerged :index-status "U" :worktree-status "U"
-                           :path "conflict.lisp"))))))
-
-  (it "a file with both X and Y set appears in BOTH staged and unstaged -- magit's own behaviour"
-    (let ((entries (list (vcs-kit::%make-vcs-status-entry
-                          :kind :ordinary :index-status "M" :worktree-status "M"
-                          :path "both.lisp"))))
-      (expect (equal (list (cons "M" "both.lisp"))
+                    (list
+                     (vcs-kit::%make-vcs-status-entry :kind
+                                                      :ordinary
+                                                      :index-status
+                                                      "M"
+                                                      :worktree-status
+                                                      " "
+                                                      :path
+                                                      "staged.lisp")
+                     (vcs-kit::%make-vcs-status-entry :kind
+                                                      :ordinary
+                                                      :index-status
+                                                      " "
+                                                      :worktree-status
+                                                      "M"
+                                                      :path
+                                                      "unstaged.lisp")
+                     (vcs-kit::%make-vcs-status-entry :kind
+                                                      :untracked
+                                                      :path
+                                                      "new.txt")
+                     (vcs-kit::%make-vcs-status-entry :kind
+                                                      :unmerged
+                                                      :index-status
+                                                      "U"
+                                                      :worktree-status
+                                                      "U"
+                                                      :path
+                                                      "conflict.lisp"))))))
+          (it
+           "a file with both X and Y set appears in BOTH staged and unstaged -- magit's own behaviour"
+           (let ((entries
+                  (list
+                   (vcs-kit::%make-vcs-status-entry :kind
+                                                    :ordinary
+                                                    :index-status
+                                                    "M"
+                                                    :worktree-status
+                                                    "M"
+                                                    :path
+                                                    "both.lisp"))))
+             (expect
+              (equal (list (cons "M" "both.lisp"))
                      (nerimux/vcs::%worktree-status-staged-files entries)))
-      (expect (equal (list (cons "M" "both.lisp"))
+             (expect
+              (equal (list (cons "M" "both.lisp"))
                      (nerimux/vcs::%worktree-status-unstaged-files entries)))))
-
-  (it "every split function returns empty on an empty entries list"
-    (expect (null (nerimux/vcs::%worktree-status-untracked-files nil)))
-    (expect (null (nerimux/vcs::%worktree-status-unmerged-files nil)))
-    (expect (null (nerimux/vcs::%worktree-status-staged-files nil)))
-    (expect (null (nerimux/vcs::%worktree-status-unstaged-files nil))))
-
-  (it "%apply-worktree-status writes all four split lists from a stubbed status snapshot"
-    (let* ((path (namestring (host-kit:temporary-directory)))
-           (repository
-             (nerimux/workspace-model:make-repository
-              :specification "workspace-owner/project" :local-path path))
-           (worktree
-             (nerimux/workspace-model:make-worktree :repository repository :path path)))
-      (nerimux/workspace-model:repository-add-worktree repository worktree)
-      (with-stubbed-fdefinition
-          ((vcs-kit:make-vcs-repository
-             (lambda (directory &rest arguments)
-               (declare (ignore arguments))
-               directory))
-           (vcs-kit:vcs-status-structured
-             (lambda (&rest arguments)
-               (declare (ignore arguments))
-               (vcs-kit::%make-vcs-status-snapshot
-                :branch-head "wt-head" :ahead 0 :behind 0
-                :entries
-                (list (vcs-kit::%make-vcs-status-entry
-                       :kind :untracked :path "new.txt")
-                      (vcs-kit::%make-vcs-status-entry
-                       :kind :unmerged :index-status "U" :worktree-status "U"
-                       :path "conflict.lisp")
-                      (vcs-kit::%make-vcs-status-entry
-                       :kind :ordinary :index-status "M" :worktree-status " "
-                       :path "staged.lisp")
-                      (vcs-kit::%make-vcs-status-entry
-                       :kind :ordinary :index-status " " :worktree-status "M"
-                       :path "unstaged.lisp"))))))
-        (nerimux/vcs::%apply-worktree-status
-         repository (nerimux/vcs::%read-worktree-status-at path nil path))
-        (expect (equal (list (cons "??" "new.txt"))
-                       (nerimux/workspace-model:worktree-untracked-files worktree)))
-        (expect (equal (list (cons "UU" "conflict.lisp"))
-                       (nerimux/workspace-model:worktree-unmerged-files worktree)))
-        (expect (equal (list (cons "M" "staged.lisp"))
-                       (nerimux/workspace-model:worktree-staged-files worktree)))
-        (expect (equal (list (cons "M" "unstaged.lisp"))
-                       (nerimux/workspace-model:worktree-unstaged-files worktree)))))))
+          (it "every split function returns empty on an empty entries list"
+              (expect
+               (null (nerimux/vcs::%worktree-status-untracked-files nil)))
+              (expect (null (nerimux/vcs::%worktree-status-unmerged-files nil)))
+              (expect (null (nerimux/vcs::%worktree-status-staged-files nil)))
+              (expect (null (nerimux/vcs::%worktree-status-unstaged-files nil))))
+          (it
+           "%apply-worktree-status writes all four split lists from a stubbed status snapshot"
+           (let* ((path (namestring (host-kit:temporary-directory)))
+                  (repository
+                   (nerimux/workspace-model:make-repository :specification
+                                                            "workspace-owner/project"
+                                                            :local-path
+                                                            path))
+                  (worktree
+                   (nerimux/workspace-model:make-worktree :repository
+                                                          repository
+                                                          :path
+                                                          path)))
+             (nerimux/workspace-model:repository-add-worktree repository
+                                                              worktree)
+             (with-stubbed-fdefinition
+              ((vcs-kit:make-vcs-repository
+                (lambda (directory &rest arguments)
+                  (declare (ignore arguments))
+                  directory))
+               (vcs-kit:vcs-status-structured
+                (lambda (&rest arguments)
+                  (declare (ignore arguments))
+                  (vcs-kit::%make-vcs-status-snapshot :branch-head
+                                                      "wt-head"
+                                                      :ahead
+                                                      0
+                                                      :behind
+                                                      0
+                                                      :entries
+                                                      (list
+                                                       (vcs-kit::%make-vcs-status-entry
+                                                        :kind
+                                                        :untracked
+                                                        :path
+                                                        "new.txt")
+                                                       (vcs-kit::%make-vcs-status-entry
+                                                        :kind
+                                                        :unmerged
+                                                        :index-status
+                                                        "U"
+                                                        :worktree-status
+                                                        "U"
+                                                        :path
+                                                        "conflict.lisp")
+                                                       (vcs-kit::%make-vcs-status-entry
+                                                        :kind
+                                                        :ordinary
+                                                        :index-status
+                                                        "M"
+                                                        :worktree-status
+                                                        " "
+                                                        :path
+                                                        "staged.lisp")
+                                                       (vcs-kit::%make-vcs-status-entry
+                                                        :kind
+                                                        :ordinary
+                                                        :index-status
+                                                        " "
+                                                        :worktree-status
+                                                        "M"
+                                                        :path
+                                                        "unstaged.lisp"))))))
+              (nerimux/vcs::%apply-worktree-status repository
+                                                   (nerimux/vcs::%read-worktree-status-at
+                                                    path
+                                                    nil
+                                                    path))
+              (expect
+               (equal (list (cons "??" "new.txt"))
+                      (nerimux/workspace-model:worktree-untracked-files
+                       worktree)))
+              (expect
+               (equal (list (cons "UU" "conflict.lisp"))
+                      (nerimux/workspace-model:worktree-unmerged-files worktree)))
+              (expect
+               (equal (list (cons "M" "staged.lisp"))
+                      (nerimux/workspace-model:worktree-staged-files worktree)))
+              (expect
+               (equal (list (cons "M" "unstaged.lisp"))
+                      (nerimux/workspace-model:worktree-unstaged-files worktree)))))))
 
 ;;; F4 (CWE-400): the bootstrap-side per-file diff cache
 ;;; (NERIMUX::*WORKSPACE-FILE-DIFFS*) has no per-entry expiry of its own --
@@ -1108,7 +1351,6 @@
 ;;; writer that should ever touch that table; this test drives it directly
 ;;; by its bootstrap-package-qualified name, the same cross-package pattern
 ;;; %WORKTREE-STATUS-CHANGED-FILES's own suite above uses for VCS-KIT.
-
 ;;; BUG-2 (R6.2/design §7.3): a FAILED object shows stale; other objects
 ;;; don't inherit it. REFRESH-WORKSPACE-ORGANIZATIONS-ASYNC used to have a
 ;;; single ON-ERROR channel that REFRESH-WORKSPACE-STATUS-ASYNC's own
@@ -1122,7 +1364,6 @@
 ;;; REFRESH-REPOSITORIES-ASYNC are stubbed at the outer seam so the real
 ;;; REFRESH-WORKSPACE-STATUS-ASYNC (unstubbed) exercises the actual wiring
 ;;; this fix adds inside REFRESH-WORKSPACE-ORGANIZATIONS-ASYNC.
-
 (describe "refresh-workspace-organizations-async per-repository error channel (BUG-2)"
   (it "invokes on-repository-error for a failing repository, still calls on-complete, and never calls on-error"
     ;; PREVIOUS/UNWIND-PROTECT: REFRESH-WORKSPACE-ORGANIZATIONS-ASYNC's real

@@ -3,7 +3,6 @@
 ;;;; target tests — part B: %sigil-id, %name-prefix-p, edge cases for
 ;;;; find-session/window/pane-by-target, and multi-digit-id parsing for the
 ;;;; same.
-
 (describe "target-suite"
 
   ;;; ── %sigil-id (pure helper) ──────────────────────────────────────────────────

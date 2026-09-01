@@ -8,7 +8,6 @@
 ;;;; succeeded. MODE (:mark / :settle) makes that choice explicit at every
 ;;;; call site instead of leaving it to STALE-P, which never distinguished
 ;;;; in-flight from finished in the first place.
-
 (describe "workspace-catalog-refresh-state-suite"
 
   ;; The low-level function itself: :mark populates *workspace-refreshing-

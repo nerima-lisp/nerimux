@@ -10,7 +10,6 @@
 ;;;; is exactly this invariant: a trial passes by merely running to
 ;;;; completion, and any signaled error is minimized to the smallest
 ;;;; reproducing byte sequence.
-
 (describe "terminal-suite/parser-fuzz"
 
   (it-fuzz "screen-process-bytes never signals an error on an arbitrary byte stream"

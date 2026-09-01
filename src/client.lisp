@@ -15,9 +15,7 @@
 ;;;;   %run-attach-session   — handshake + event loop, socket-testable without a live terminal;
 ;;;;                           contains PEER-IO-FAILURE (server.lisp) so a wedged peer exits
 ;;;;                           this session cleanly instead of escaping into the debugger
-
 ;;; ── run-client event-loop helpers ───────────────────────────────────────────
-
 (defun %maybe-send-resize (stream)
   "If *resize-pending* is set, clear it, sample the current terminal dimensions,
    update *term-rows* and *term-cols*, and send a +msg-resize+ frame on STREAM.
@@ -48,11 +46,11 @@
      text         the decoded string payload for a :frame disposition, NIL otherwise.
    The caller (%receive-server-frame) owns the output side effect."
   (with-incoming-frame (type payload stream)
-    ((null type)        (values :exit nil))
-    ((= type +msg-bye+) (values :exit nil))
-    ((= type +msg-frame+)
-     (values :frame (decode-text payload)))
-    (t (values :ignore nil))))
+                       ((null type) (values :exit nil))
+                       ((= type +msg-bye+) (values :exit nil))
+                       ((= type +msg-frame+)
+                        (values :frame (decode-text payload)))
+                       (t (values :ignore nil))))
 
 (defun %receive-server-frame (stream)
   "Effect boundary: read and dispatch one frame from the server STREAM.
@@ -62,12 +60,14 @@
    NIL to continue the event loop."
   (multiple-value-bind (disposition text) (%decode-server-frame stream)
     (case disposition
-      (:exit   :exit)
-      (:frame  (write-string text) (force-output) nil)
-      (t       nil))))
+      (:exit :exit)
+      (:frame
+        (write-string text)
+        (force-output)
+        nil)
+      (t nil))))
 
 ;;; ── run-client ───────────────────────────────────────────────────────────────
-
 (defun %receive-if-ready (stream server-socket-fd ready)
   "If SERVER-SOCKET-FD appears in the READY fd list, read and dispatch one server
    frame from STREAM via %receive-server-frame.  Returns :exit when the server
@@ -80,16 +80,18 @@
 
 (defun %client-working-directory ()
   (let ((defaults *default-pathname-defaults*))
-    (or (handler-case (namestring (truename defaults))
-          (file-error () nil))
-        (namestring defaults)
-        "")))
+    (or
+     (handler-case (namestring (truename defaults))
+       (file-error ()
+         nil))
+     (namestring defaults)
+     "")))
 
 (defun %send-client-attach-target (stream target)
   (send-frame stream
-              (msg-command :attach-target nil
-                           (list (or target "")
-                                 (%client-working-directory)))))
+              (msg-command :attach-target
+                           nil
+                           (list (or target "") (%client-working-directory)))))
 
 (defun %run-attach-session (stream server-socket-fd target)
   "Send the initial handshake (msg-attach, then the attach-target command) on
@@ -118,17 +120,24 @@
    *ERROR-OUTPUT* and return, exactly as reaching :exit (+msg-bye+ / EOF)
    already does, so RUN-CLIENT's WITH-RAW-MODE still restores the terminal
    and its outer UNWIND-PROTECT still closes the socket."
-  (handler-case
-      (progn
-        (send-frame stream (msg-attach *term-rows* *term-cols*))
-        (%send-client-attach-target stream target)
-        (loop
-          (%maybe-send-resize stream)
-          (let ((ready (select-fds (list 0 server-socket-fd) +poll-timeout-us+)))
-            (when (member 0 ready)
-              (%forward-stdin-byte stream))
-            (when (eq :exit (%receive-if-ready stream server-socket-fd ready))
-              (return)))))
+  (handler-case (progn
+                  (send-frame stream (msg-attach *term-rows* *term-cols*))
+                  (%send-client-attach-target stream target)
+                  (loop (%maybe-send-resize stream) (let ((ready
+                                                           (select-fds
+                                                            (list 0
+                                                                  server-socket-fd)
+                                                            +poll-timeout-us+)))
+                                                      (when (member 0 ready)
+                                                        (%forward-stdin-byte
+                                                         stream))
+                                                      (when 
+                                                          (eq :exit
+                                                              (%receive-if-ready
+                                                               stream
+                                                               server-socket-fd
+                                                               ready))
+                                                        (return)))))
     (peer-io-failure (c)
       (format *error-output* "~&nerimux: connection lost: ~A~%" c))))
 
@@ -141,15 +150,14 @@
    function only owns the terminal/socket setup and teardown around it."
   (require :sb-posix)
   (let ((socket (connect-to (socket-path name))))
-    (unwind-protect
-         (let ((stream           (socket-stream socket))
-               (server-socket-fd (socket-fd socket)))
-           (multiple-value-setq (*term-rows* *term-cols*) (terminal-size))
-           (setf *resize-pending* nil)
-           (install-sigwinch-handler)
-           (with-raw-mode
-             (clear-display)
-             (%run-attach-session stream server-socket-fd target)))
+    (unwind-protect 
+        (let ((stream (socket-stream socket))
+              (server-socket-fd (socket-fd socket)))
+          (multiple-value-setq (*term-rows* *term-cols*) (terminal-size))
+          (setf *resize-pending* nil)
+          (install-sigwinch-handler)
+          (with-raw-mode (clear-display)
+                         (%run-attach-session stream server-socket-fd target)))
       (close-socket socket))))
 
 ;;; ── nerimux kill (R8.1) ──────────────────────────────────────────────────
@@ -166,7 +174,6 @@
 ;;; event-loop iteration ahead of message dispatch) before its reply
 ;;; arrives.  %read-kill-reply discards those instead of mistaking one for
 ;;; "no reply".
-
 (defun %read-kill-reply (stream)
   "Read frames from STREAM until a +msg-reply+ arrives or the connection
    ends, discarding any interleaved +msg-frame+ broadcast in between (see
@@ -174,13 +181,13 @@
    (values :eof NIL).  Bounded by read-frame's own +read-frame-timeout-
    seconds+ per call, so a server that never replies does not hang this
    forever."
-  (loop
-    (multiple-value-bind (type payload) (read-frame stream)
-      (cond
-        ((null type) (return (values :eof nil)))
-        ((= type +msg-bye+) (return (values :eof nil)))
-        ((= type +msg-reply+) (return (values :reply (decode-text payload))))
-        (t nil)))))
+  (loop (multiple-value-bind (type payload) (read-frame stream)
+          (cond
+            ((null type) (return (values :eof nil)))
+            ((= type +msg-bye+) (return (values :eof nil)))
+            ((= type +msg-reply+)
+             (return (values :reply (decode-text payload))))
+            (t nil)))))
 
 (defun %parse-kill-reply-status (text)
   "Classify a kill command's +msg-reply+ TEXT: the server-side contract
@@ -189,9 +196,14 @@
    a future reply shape this client does not know about -- is read as
    :denied so an unrecognized reply fails closed rather than reporting a
    kill succeeded when it is not certain."
-  (let* ((newline    (position #\Newline text))
-         (first-line (if newline (subseq text 0 newline) text)))
-    (if (string= first-line "OK") :ok :denied)))
+  (let* ((newline (position #\Newline text))
+         (first-line
+          (if newline
+              (subseq text 0 newline)
+              text)))
+    (if (string= first-line "OK")
+        :ok
+        :denied)))
 
 (defun send-kill-request (name force-p)
   "Connect to (socket-path NAME), send a `:kill` command (R8.1), and return
@@ -218,19 +230,23 @@
    running\", and is deliberately left to propagate uncaught: narrowing the
    handler to just CONNECT-TO is the fix, since wrapping the whole function
    mislabelled that case."
-  (let ((socket (handler-case (connect-to (socket-path name))
-                  (sb-bsd-sockets:socket-error ()
-                    (return-from send-kill-request (values :no-server nil))))))
-    (unwind-protect
-         (let ((stream (socket-stream socket)))
-           (handler-case
-               (send-frame stream
-                           (msg-command :kill nil
-                                        (when force-p (list "--force"))))
-             (peer-io-failure ()
-               (return-from send-kill-request (values :eof nil))))
-           (multiple-value-bind (disposition text) (%read-kill-reply stream)
-             (if (eq disposition :reply)
-                 (values (%parse-kill-reply-status text) text)
-                 (values :eof nil))))
+  (let ((socket
+         (handler-case (connect-to (socket-path name))
+           (sb-bsd-sockets:socket-error ()
+             (return-from send-kill-request
+               (values :no-server nil))))))
+    (unwind-protect 
+        (let ((stream (socket-stream socket)))
+          (handler-case (send-frame stream
+                                    (msg-command :kill
+                                                 nil
+                                                 (when force-p
+                                                   (list "--force"))))
+            (peer-io-failure ()
+              (return-from send-kill-request
+                (values :eof nil))))
+          (multiple-value-bind (disposition text) (%read-kill-reply stream)
+            (if (eq disposition :reply)
+                (values (%parse-kill-reply-status text) text)
+                (values :eof nil))))
       (close-socket socket))))

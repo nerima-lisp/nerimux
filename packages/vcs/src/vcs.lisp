@@ -38,10 +38,12 @@ reads it as CSI. Stripping C0 alone would block `ESC [` and pass its exact
   (let ((parts nil)
         (start 0)
         (string (%string-value specification)))
-    (loop for end = (position #\/ string :start start)
+    (loop for
+          end = (position #\/ string :start start)
           do (push (subseq string start end) parts)
-          if end
-            do (setf start (1+ end))
+          if
+          end
+          do (setf start (1+ end))
           else
             do (return))
     (remove "" (nreverse parts) :test #'string=)))
@@ -49,36 +51,37 @@ reads it as CSI. Stripping C0 alone would block `ESC [` and pass its exact
 (defun %organization-and-name (specification)
   (let ((parts (%specification-parts specification)))
     (cond
-      ((>= (length parts) 3)
-       (values (first parts) (second parts)))
-      ((= (length parts) 2)
-       (values "local" (first parts)))
-      ((= (length parts) 1)
-       (values "local" "default"))
-      (t
-       (values "local" "default")))))
+      ((>= (length parts) 3) (values (first parts) (second parts)))
+      ((= (length parts) 2) (values "local" (first parts)))
+      ((= (length parts) 1) (values "local" "default"))
+      (t (values "local" "default")))))
 
 (defun %repository-from-entry (entry)
   (let* ((specification
-           (%string-value
-            (vcs-kit:ghq-repository-entry-specification entry)))
+          (%string-value (vcs-kit:ghq-repository-entry-specification entry)))
          (path (%string-value (vcs-kit:ghq-repository-entry-path entry)))
          (backend (vcs-kit:ghq-repository-entry-backend entry))
          (host nil)
          (name nil))
-    (multiple-value-setq (host name)
-      (%organization-and-name specification))
+    (multiple-value-setq (host name) (%organization-and-name specification))
     (values
-     (nerimux/workspace-model:make-organization
-      :id (nerimux/workspace-model:organization-key host name)
-      :host host
-      :name name)
-     (nerimux/workspace-model:make-repository
-      :specification specification
-      :local-path path
-      :backend (or backend :git)))))
+     (nerimux/workspace-model:make-organization :id
+                                                (nerimux/workspace-model:organization-key
+                                                 host
+                                                 name)
+                                                :host
+                                                host
+                                                :name
+                                                name)
+     (nerimux/workspace-model:make-repository :specification
+                                              specification
+                                              :local-path
+                                              path
+                                              :backend
+                                              (or backend :git)))))
 
 (declaim (ftype function list-repository-worktrees))
+
 ;; %APPLY-REPOSITORY-WORKTREES is defined later in this file (near
 ;; LIST-REPOSITORY-WORKTREES, which it backs); RESOLVE-DIRECTORY-ORGANIZATIONS
 ;; above that point calls it directly to populate a repository from worktrees
@@ -87,7 +90,8 @@ reads it as CSI. Stripping C0 alone would block `ESC [` and pass its exact
 ;; declaim above -- harmless for a function, resolved by load time.
 (declaim (ftype function %apply-repository-worktrees))
 
-(defvar *ghq-root-cache* :unresolved
+(defvar *ghq-root-cache*
+  :unresolved
   "Cached result of VCS-KIT:GHQ-ROOT (FR-002/FR-004b's GHQ-ROOT-DIRECTORY).
    The ghq root does not change once nerimux has started, but
    %RENDER-CLIENT-FRAME calls GHQ-ROOT-DIRECTORY on every dirty frame for the
@@ -99,13 +103,14 @@ reads it as CSI. Stripping C0 alone would block `ESC [` and pass its exact
    lookup fails. Bootstrap code uses this domain-facing query rather than
    duplicating ghq-root lookup and failure handling."
   (when (eq *ghq-root-cache* :unresolved)
-    (setf *ghq-root-cache*
-          (and (vcs-package-available-p)
-               (handler-case (%string-value (vcs-kit:ghq-root))
-                 (error () nil)))))
+    (setf *ghq-root-cache* (and (vcs-package-available-p)
+                                (handler-case (%string-value (vcs-kit:ghq-root))
+                                  (error ()
+                                    nil)))))
   *ghq-root-cache*)
 
-(defvar *workspace-organizations* nil)
+(defvar *workspace-organizations*
+  nil)
 
 (defun workspace-organizations ()
   "Return the latest workspace catalog used by the global picker."
@@ -113,10 +118,11 @@ reads it as CSI. Stripping C0 alone would block `ESC [` and pass its exact
 
 (defun %catalog-worktrees (organizations)
   (loop for organization in organizations
-        append (loop for repository in
-                         (nerimux/workspace-model:organization-repositories organization)
+        append (loop for repository in (nerimux/workspace-model:organization-repositories
+                                        organization)
                      append (copy-list
-                             (nerimux/workspace-model:repository-worktrees repository)))))
+                             (nerimux/workspace-model:repository-worktrees
+                              repository)))))
 
 (defun %worktree-by-id (worktrees id)
   (find id worktrees :key #'nerimux/workspace-model:worktree-id :test #'string=))
@@ -135,39 +141,49 @@ vcs-inspect.lisp for the race this closes."
   (let ((live (%catalog-worktrees (workspace-organizations))))
     (if (member worktree live :test #'eq)
         worktree
-        (or (%worktree-by-id live (nerimux/workspace-model:worktree-id worktree))
-            worktree))))
+        (or
+         (%worktree-by-id live (nerimux/workspace-model:worktree-id worktree))
+         worktree))))
 
 (defun %worktree-association-match-p (id path worktree)
-  (or (and (stringp id)
-           (plusp (length id))
-           (string= id (nerimux/workspace-model:worktree-id worktree)))
-      (and (stringp path)
-           (plusp (length path))
-           (string= path (nerimux/workspace-model:worktree-path worktree)))))
+  (or
+   (and (stringp id)
+        (plusp (length id))
+        (string= id (nerimux/workspace-model:worktree-id worktree)))
+   (and (stringp path)
+        (plusp (length path))
+        (string= path (nerimux/workspace-model:worktree-path worktree)))))
 
 (defun %remember-pane-associations (organizations)
   (loop for worktree in (%catalog-worktrees organizations)
-        append (loop for pane in (nerimux/workspace-model:worktree-panes worktree)
-                     collect (list (nerimux/workspace-model:worktree-id worktree)
-                                   (nerimux/workspace-model:worktree-path worktree)
-                                   pane))))
+        append (loop for pane in (nerimux/workspace-model:worktree-panes
+                                  worktree)
+                     collect (list
+                              (nerimux/workspace-model:worktree-id worktree)
+                              (nerimux/workspace-model:worktree-path worktree)
+                              pane))))
 
 (defun %preserve-pane-associations (previous current)
   (let ((worktrees (%catalog-worktrees current)))
     (dolist (record (%remember-pane-associations previous))
       (destructuring-bind (id path pane) record
         (let ((worktree
-                (find-if (lambda (candidate)
-                           (%worktree-association-match-p id path candidate))
-                         worktrees)))
+               (find-if
+                (lambda (candidate)
+                  (%worktree-association-match-p id path candidate))
+                worktrees)))
           (if worktree
               (nerimux/pane:worktree-add-pane worktree pane)
               (setf (nerimux/pane:pane-worktree pane) nil))))))
   current)
 
 (defun %worktree-by-path (worktrees path)
-  (find path worktrees :key #'nerimux/workspace-model:worktree-path :test #'string=))
+  (find path
+        worktrees
+        :key
+        #'nerimux/workspace-model:worktree-path
+        :test
+        #'string=))
 
 (defun %preserve-worktree-commit-state (previous current)
   "Carry ID, COMMITS-STATE and RECENT-COMMITS from PREVIOUS's worktrees onto
@@ -194,19 +210,20 @@ fetch, so without this they would be silently dropped by every full
 rescan exactly as commit history was before this function existed."
   (let ((previous-worktrees (%catalog-worktrees previous)))
     (dolist (worktree (%catalog-worktrees current))
-      (let ((match (%worktree-by-path previous-worktrees
-                                      (nerimux/workspace-model:worktree-path worktree))))
+      (let ((match
+             (%worktree-by-path previous-worktrees
+                                (nerimux/workspace-model:worktree-path worktree))))
         (when match
-          (setf (nerimux/workspace-model:worktree-id worktree)
-                (nerimux/workspace-model:worktree-id match)
-                (nerimux/workspace-model:worktree-commits-state worktree)
-                (nerimux/workspace-model:worktree-commits-state match)
-                (nerimux/workspace-model:worktree-recent-commits worktree)
-                (nerimux/workspace-model:worktree-recent-commits match)
-                (nerimux/workspace-model:worktree-stashes-state worktree)
-                (nerimux/workspace-model:worktree-stashes-state match)
-                (nerimux/workspace-model:worktree-stashes worktree)
-                (nerimux/workspace-model:worktree-stashes match))))))
+          (setf (nerimux/workspace-model:worktree-id worktree) (nerimux/workspace-model:worktree-id
+                                                                match)
+                (nerimux/workspace-model:worktree-commits-state worktree) (nerimux/workspace-model:worktree-commits-state
+                                                                           match)
+                (nerimux/workspace-model:worktree-recent-commits worktree) (nerimux/workspace-model:worktree-recent-commits
+                                                                            match)
+                (nerimux/workspace-model:worktree-stashes-state worktree) (nerimux/workspace-model:worktree-stashes-state
+                                                                           match)
+                (nerimux/workspace-model:worktree-stashes worktree) (nerimux/workspace-model:worktree-stashes
+                                                                     match))))))
   current)
 
 (defun %worktree-recency (worktree)
@@ -219,22 +236,33 @@ rescan exactly as commit history was before this function existed."
    about the pane. A worktree with no panes, or only ever-idle ones, has no
    real timestamp to offer and sorts as least-recent (0)."
   (let ((times
-          (loop for pane in (nerimux/workspace-model:worktree-panes worktree)
-                for output = (nerimux/pane:pane-last-output-time pane)
-                for focused = (nerimux/pane:pane-last-focused-time pane)
-                when output collect output
-                when focused collect focused)))
-    (if times (reduce #'max times) 0)))
+         (loop for pane in (nerimux/workspace-model:worktree-panes worktree)
+               for output = (nerimux/pane:pane-last-output-time pane)
+               for focused = (nerimux/pane:pane-last-focused-time pane)
+               when output
+                 collect output
+               when focused
+                 collect focused)))
+    (if times
+        (reduce #'max times)
+        0)))
 
 (defun %repository-recency (repository)
-  (let ((times (mapcar #'%worktree-recency
-                       (nerimux/workspace-model:repository-worktrees repository))))
-    (if times (reduce #'max times) 0)))
+  (let ((times
+         (mapcar #'%worktree-recency
+                 (nerimux/workspace-model:repository-worktrees repository))))
+    (if times
+        (reduce #'max times)
+        0)))
 
 (defun %organization-recency (organization)
-  (let ((times (mapcar #'%repository-recency
-                       (nerimux/workspace-model:organization-repositories organization))))
-    (if times (reduce #'max times) 0)))
+  (let ((times
+         (mapcar #'%repository-recency
+                 (nerimux/workspace-model:organization-repositories
+                  organization))))
+    (if times
+        (reduce #'max times)
+        0)))
 
 (defun %sort-workspace-organizations-by-activity (organizations)
   "Reorder ORGANIZATIONS -- and, in place within each, its repositories, and
@@ -259,17 +287,23 @@ rescan exactly as commit history was before this function existed."
    destructive, so sorting the original list risks corrupting a structure
    another holder of the same list object still expects to see unmodified."
   (dolist (organization organizations)
-    (dolist (repository (nerimux/workspace-model:organization-repositories organization))
-      (setf (nerimux/workspace-model:repository-worktrees repository)
-            (stable-sort (copy-list (nerimux/workspace-model:repository-worktrees
-                                     repository))
-                        #'>
-                        :key #'%worktree-recency)))
-    (setf (nerimux/workspace-model:organization-repositories organization)
-          (stable-sort (copy-list (nerimux/workspace-model:organization-repositories
-                                   organization))
-                      #'>
-                      :key #'%repository-recency)))
+    (dolist 
+        (repository
+         (nerimux/workspace-model:organization-repositories organization))
+      (setf (nerimux/workspace-model:repository-worktrees repository) (stable-sort
+                                                                       (copy-list
+                                                                        (nerimux/workspace-model:repository-worktrees
+                                                                         repository))
+                                                                       #'>
+                                                                       :key
+                                                                       #'%worktree-recency)))
+    (setf (nerimux/workspace-model:organization-repositories organization) (stable-sort
+                                                                            (copy-list
+                                                                             (nerimux/workspace-model:organization-repositories
+                                                                              organization))
+                                                                            #'>
+                                                                            :key
+                                                                            #'%repository-recency)))
   (stable-sort (copy-list organizations) #'> :key #'%organization-recency))
 
 (defun set-workspace-organizations (organizations)
@@ -303,18 +337,22 @@ client's cursor while it is being looked at."
 
 (defun %repository-already-present-p (repository organizations)
   (let ((local-path (nerimux/workspace-model:repository-local-path repository))
-        (specification (nerimux/workspace-model:repository-specification repository)))
-    (some (lambda (organization)
-            (find-if
-             (lambda (candidate)
-               (or (and local-path
-                        (equal local-path
-                               (nerimux/workspace-model:repository-local-path candidate)))
-                   (and specification
-                        (equal specification
-                               (nerimux/workspace-model:repository-specification candidate)))))
-             (nerimux/workspace-model:organization-repositories organization)))
-          organizations)))
+        (specification
+         (nerimux/workspace-model:repository-specification repository)))
+    (some
+     (lambda (organization)
+       (find-if
+        (lambda (candidate)
+          (or
+           (and local-path
+                (equal local-path
+                       (nerimux/workspace-model:repository-local-path candidate)))
+           (and specification
+                (equal specification
+                       (nerimux/workspace-model:repository-specification
+                        candidate)))))
+        (nerimux/workspace-model:organization-repositories organization)))
+     organizations)))
 
 (defun merge-workspace-organizations (organizations)
   "Merge ORGANIZATIONS into *WORKSPACE-ORGANIZATIONS* (FR-002): a wholly new
@@ -331,14 +369,20 @@ client's cursor while it is being looked at."
           (additions nil))
       (dolist (organization organizations)
         (let ((existing
-                (find (nerimux/workspace-model:organization-id organization) merged
-                      :key #'nerimux/workspace-model:organization-id :test #'equal)))
+               (find (nerimux/workspace-model:organization-id organization)
+                     merged
+                     :key
+                     #'nerimux/workspace-model:organization-id
+                     :test
+                     #'equal)))
           (if existing
-              (dolist (repository
-                        (nerimux/workspace-model:organization-repositories organization))
+              (dolist 
+                  (repository
+                   (nerimux/workspace-model:organization-repositories
+                    organization))
                 (unless (%repository-already-present-p repository merged)
-                  (nerimux/workspace-model:organization-add-repository
-                   existing repository)))
+                  (nerimux/workspace-model:organization-add-repository existing
+                                                                       repository)))
               (push organization additions))))
       (setf merged (nconc merged (nreverse additions)))
       (set-workspace-organizations merged)))
@@ -348,12 +392,17 @@ client's cursor while it is being looked at."
   (when callback
     (if callback-dispatch
         (funcall callback-dispatch
-                 (lambda () (apply callback arguments)))
+                 (lambda ()
+                   (apply callback arguments)))
         (apply callback arguments))))
 
-(defun refresh-workspace-organizations-async
-    (&key query on-catalog on-complete on-error on-repository-error on-progress
-       callback-dispatch)
+(defun refresh-workspace-organizations-async (&key query
+                                                   on-catalog
+                                                   on-complete
+                                                   on-error
+                                                   on-repository-error
+                                                   on-progress
+                                                   callback-dispatch)
   "Refresh and store the workspace catalog on a worker thread.
    ON-CATALOG, when given, is called with the organizations as soon as the
    scan itself completes — before the per-repository status refresh, which
@@ -377,23 +426,35 @@ for the batch as a whole, since one repository's failure does not stop the
 others from settling. Conflating the two used to mean a single repository's
 status failure looked identical to a scan-wide failure to every caller,
 which is what let a per-repository failure mark the ENTIRE catalog stale."
-  (scan-repositories-async
-   :query query
-   :callback-dispatch callback-dispatch
-   :on-progress on-progress
-   :on-complete (lambda (organizations)
-                  (set-workspace-organizations organizations)
-                  (when on-catalog
-                    (funcall on-catalog organizations))
-                  (refresh-workspace-status-async
-                   :organizations organizations
-                   :callback-dispatch callback-dispatch
-                   :on-complete on-complete
-                   :on-error (lambda (repository condition)
-                               (when on-repository-error
-                                 (funcall on-repository-error repository
-                                          condition)))))
-   :on-error on-error))
+  (scan-repositories-async :query
+                           query
+                           :callback-dispatch
+                           callback-dispatch
+                           :on-progress
+                           on-progress
+                           :on-complete
+                           (lambda (organizations)
+                             (set-workspace-organizations organizations)
+                             (when on-catalog
+                               (funcall on-catalog organizations))
+                             (refresh-workspace-status-async :organizations
+                                                             organizations
+                                                             :callback-dispatch
+                                                             callback-dispatch
+                                                             :on-complete
+                                                             on-complete
+                                                             :on-error
+                                                             (lambda 
+                                                                 (repository
+                                                                  condition)
+                                                               (when 
+                                                                   on-repository-error
+                                                                 (funcall
+                                                                  on-repository-error
+                                                                  repository
+                                                                  condition)))))
+                           :on-error
+                           on-error))
 
 (defun scan-repositories (&key query on-complete on-error on-progress)
   "Build the organization/repository hierarchy from ghq-list-repositories.
@@ -443,9 +504,11 @@ which is what let a per-repository failure mark the ENTIRE catalog stale."
 
 (defun %read-repository-worktrees (repository)
   (let ((backend-repository
-          (%make-vcs-repository (nerimux/workspace-model:repository-path repository))))
+         (%make-vcs-repository
+          (nerimux/workspace-model:repository-path repository))))
     (values (vcs-kit:vcs-list-worktrees backend-repository)
-            (%path-missing-p (nerimux/workspace-model:repository-path repository)))))
+            (%path-missing-p
+             (nerimux/workspace-model:repository-path repository)))))
 
 (defun %apply-repository-worktrees
     (repository raw-worktrees missing-p &optional status-updates)
@@ -544,17 +607,23 @@ which is what let a per-repository failure mark the ENTIRE catalog stale."
     (%read-repository-worktrees repository)))
 
 (defun %read-repository-status (repository)
-  (loop for worktree in (nerimux/workspace-model:repository-worktrees repository)
+  (loop for worktree in (nerimux/workspace-model:repository-worktrees
+                         repository)
         unless (nerimux/workspace-model:worktree-bare-p worktree)
           collect (%read-worktree-status worktree)))
 
-(defun %apply-repository-status
-    (repository updates &optional (missing-p nil missing-p-p))
-  (mapc (lambda (update) (%apply-worktree-status repository update)) updates)
-  (setf (nerimux/workspace-model:repository-missing-p repository)
-        (if missing-p-p
-            missing-p
-            (%path-missing-p (nerimux/workspace-model:repository-path repository))))
+(defun %apply-repository-status (repository updates
+                                            &optional
+                                            (missing-p nil missing-p-p))
+  (mapc
+   (lambda (update)
+     (%apply-worktree-status repository update))
+   updates)
+  (setf (nerimux/workspace-model:repository-missing-p repository) (if missing-p-p
+                                                                      missing-p
+                                                                      (%path-missing-p
+                                                                       (nerimux/workspace-model:repository-path
+                                                                        repository))))
   (nerimux/workspace-model:repository-recompute-status repository)
   repository)
 
@@ -563,7 +632,8 @@ which is what let a per-repository failure mark the ENTIRE catalog stale."
   (let ((repository (nerimux/workspace-model:worktree-repository worktree)))
     (%apply-worktree-status repository (%read-worktree-status worktree))
     (when repository
-      (setf (nerimux/workspace-model:repository-missing-p repository)
-            (%path-missing-p (nerimux/workspace-model:repository-path repository)))
+      (setf (nerimux/workspace-model:repository-missing-p repository) (%path-missing-p
+                                                                       (nerimux/workspace-model:repository-path
+                                                                        repository)))
       (nerimux/workspace-model:repository-recompute-status repository))
     worktree))

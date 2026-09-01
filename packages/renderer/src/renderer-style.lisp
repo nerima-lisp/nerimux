@@ -16,65 +16,91 @@
 ;;;; Load order: renderer-format → renderer-style-data → renderer-style →
 ;;;; workspace and pane composition modules (all of which reference these
 ;;;; constants).  All files share the nerimux/renderer package.
-
 ;;; ── Palette (Dracula, truecolour) ────────────────────────────────────────────
 ;;;
 ;;; bg 40,42,54 · current-line 68,71,90 · fg 248,248,242 · comment 98,114,164
 ;;; · cyan 139,233,253 · green 80,250,123 · orange 255,184,108 · pink
 ;;; 255,121,198 · purple 189,147,249 · red 255,85,85 · yellow 241,250,140.
-
 (defmacro %define-sgr-constant (name value documentation)
   "DEFCONSTANT with the boundp guard this codebase uses for string constants."
   `(defconstant ,name
-       (if (boundp ',name) (symbol-value ',name) ,value)
+     (if (boundp ',name)
+         (symbol-value ',name)
+         ,value)
      ,documentation))
 
-(%define-sgr-constant +sgr-accent+ "38;2;139;233;253"
-  "Accent foreground (Dracula cyan): focused items, key hints, panel titles.")
-(%define-sgr-constant +sgr-accent-bold+ "1;38;2;139;233;253"
-  "Bold accent foreground -- +SGR-ACCENT+, bolded.")
-(%define-sgr-constant +sgr-branch+ "1;38;2;139;233;253"
-  "Branch/worktree names: bold Dracula cyan.")
-(%define-sgr-constant +sgr-ok+ "38;2;80;250;123"
-  "Healthy state (CLEAN): Dracula green.")
-(%define-sgr-constant +sgr-warn+ "38;2;241;250;140"
-  "Needs-attention state (DIRTY, PRUNABLE, unread output): Dracula yellow.")
-(%define-sgr-constant +sgr-alert+ "1;38;2;255;85;85"
-  "Broken state (CONFLICT, MISSING, exited pane): bold Dracula red.")
-(%define-sgr-constant +sgr-ahead+ "38;2;80;250;123"
-  "AHEAD n: Dracula green.")
-(%define-sgr-constant +sgr-behind+ "38;2;255;184;108"
-  "BEHIND n: Dracula orange.")
-(%define-sgr-constant +sgr-locked+ "38;2;255;184;108"
-  "LOCKED: Dracula orange.")
-(%define-sgr-constant +sgr-muted+ "38;2;98;114;164"
-  "Secondary text: labels, legends, notifications -- Dracula comment.")
-(%define-sgr-constant +sgr-muted-italic+ "3;38;2;98;114;164"
-  "Secondary text, italic: transient notifications, placeholders.")
-(%define-sgr-constant +sgr-faint+ "2;38;2;98;114;164"
-  "Tertiary text: scroll positions, UNKNOWN state, disabled hints -- dimmed
+(%define-sgr-constant +sgr-accent+
+                      "38;2;139;233;253"
+                      "Accent foreground (Dracula cyan): focused items, key hints, panel titles.")
+
+(%define-sgr-constant +sgr-accent-bold+
+                      "1;38;2;139;233;253"
+                      "Bold accent foreground -- +SGR-ACCENT+, bolded.")
+
+(%define-sgr-constant +sgr-branch+
+                      "1;38;2;139;233;253"
+                      "Branch/worktree names: bold Dracula cyan.")
+
+(%define-sgr-constant +sgr-ok+
+                      "38;2;80;250;123"
+                      "Healthy state (CLEAN): Dracula green.")
+
+(%define-sgr-constant +sgr-warn+
+                      "38;2;241;250;140"
+                      "Needs-attention state (DIRTY, PRUNABLE, unread output): Dracula yellow.")
+
+(%define-sgr-constant +sgr-alert+
+                      "1;38;2;255;85;85"
+                      "Broken state (CONFLICT, MISSING, exited pane): bold Dracula red.")
+
+(%define-sgr-constant +sgr-ahead+ "38;2;80;250;123" "AHEAD n: Dracula green.")
+
+(%define-sgr-constant +sgr-behind+
+                      "38;2;255;184;108"
+                      "BEHIND n: Dracula orange.")
+
+(%define-sgr-constant +sgr-locked+ "38;2;255;184;108" "LOCKED: Dracula orange.")
+
+(%define-sgr-constant +sgr-muted+
+                      "38;2;98;114;164"
+                      "Secondary text: labels, legends, notifications -- Dracula comment.")
+
+(%define-sgr-constant +sgr-muted-italic+
+                      "3;38;2;98;114;164"
+                      "Secondary text, italic: transient notifications, placeholders.")
+
+(%define-sgr-constant +sgr-faint+
+                      "2;38;2;98;114;164"
+                      "Tertiary text: scroll positions, UNKNOWN state, disabled hints -- dimmed
    Dracula comment.")
-(%define-sgr-constant +sgr-line+ "38;2;68;71;90"
-  "Panel separators and inactive pane borders: Dracula current-line, as a
+
+(%define-sgr-constant +sgr-line+
+                      "38;2;68;71;90"
+                      "Panel separators and inactive pane borders: Dracula current-line, as a
    foreground colour.")
-(%define-sgr-constant +sgr-header-chip+ "1;38;2;40;42;54;48;2;189;147;249"
-  "The `nerimux` header chip: dark (Dracula bg) text on Dracula purple.")
-(%define-sgr-constant +sgr-mode-chip+ "1;38;2;189;147;249;48;2;68;71;90"
-  "The footer/key-panel mode chip: Dracula purple text on the current-line
+
+(%define-sgr-constant +sgr-header-chip+
+                      "1;38;2;40;42;54;48;2;189;147;249"
+                      "The `nerimux` header chip: dark (Dracula bg) text on Dracula purple.")
+
+(%define-sgr-constant +sgr-mode-chip+
+                      "1;38;2;189;147;249;48;2;68;71;90"
+                      "The footer/key-panel mode chip: Dracula purple text on the current-line
    background.")
-(%define-sgr-constant +sgr-section+ "1;38;2;189;147;249"
-  "Section headings (Attention/Active/Repositories) in the overview tree:
+
+(%define-sgr-constant +sgr-section+
+                      "1;38;2;189;147;249"
+                      "Section headings (Attention/Active/Repositories) in the overview tree:
    bold Dracula purple.")
 
 ;;; ── Status bar ──────────────────────────────────────────────────────────────
-
-(%define-sgr-constant +sgr-default-status+ "48;2;40;42;54;38;2;248;248;242"
-  "Status-bar base SGR: Dracula bg with Dracula fg text.
+(%define-sgr-constant +sgr-default-status+
+                      "48;2;40;42;54;38;2;248;248;242"
+                      "Status-bar base SGR: Dracula bg with Dracula fg text.
    Replaces the pre-theme \"44;97\" (blue background + bright white) that the
    deleted `status-style` option used to resolve to.")
 
 ;;; ── Inline styling helper ───────────────────────────────────────────────────
-
 (defun %sgr-wrap (text sgr &optional (restore "0"))
   "TEXT wrapped in ESC[SGRm … ESC[RESTOREm.  RESTORE defaults to a plain
    reset; pass (concatenate 'string \"0;\" base) to fall back to a base style

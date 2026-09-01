@@ -1,34 +1,46 @@
 (in-package #:nerimux/test)
 
 ;;;; Pure selection, command, and picker helpers used by the multi-client UI.
-
 (defun %make-server-dispatch-helper-fixture ()
   (let* ((organization
-           (nerimux/workspace-model:make-organization
-            :id "org-id"
-            :host "origin"
-            :name "team"))
+          (nerimux/workspace-model:make-organization :id
+                                                     "org-id"
+                                                     :host
+                                                     "origin"
+                                                     :name
+                                                     "team"))
          (repository
-           (nerimux/workspace-model:make-repository
-            :id "repo-id"
-            :organization organization
-            :specification "origin/team/repo"
-            :local-path "/workspace/repo"))
+          (nerimux/workspace-model:make-repository :id
+                                                   "repo-id"
+                                                   :organization
+                                                   organization
+                                                   :specification
+                                                   "origin/team/repo"
+                                                   :local-path
+                                                   "/workspace/repo"))
          (main-worktree
-           (nerimux/workspace-model:make-worktree
-            :id "main-id"
-            :repository repository
-            :path "/workspace/repo"
-            :branch "main"))
+          (nerimux/workspace-model:make-worktree :id
+                                                 "main-id"
+                                                 :repository
+                                                 repository
+                                                 :path
+                                                 "/workspace/repo"
+                                                 :branch
+                                                 "main"))
          (feature-worktree
-           (nerimux/workspace-model:make-worktree
-            :id "feature-id"
-            :repository repository
-            :path "/workspace/repo/feature"
-            :branch "feature")))
-    (nerimux/workspace-model:organization-add-repository organization repository)
+          (nerimux/workspace-model:make-worktree :id
+                                                 "feature-id"
+                                                 :repository
+                                                 repository
+                                                 :path
+                                                 "/workspace/repo/feature"
+                                                 :branch
+                                                 "feature")))
+    (nerimux/workspace-model:organization-add-repository organization
+                                                         repository)
     (nerimux/workspace-model:repository-add-worktree repository main-worktree)
-    (nerimux/workspace-model:repository-add-worktree repository feature-worktree)
+    (nerimux/workspace-model:repository-add-worktree repository
+                                                     feature-worktree)
     (values (list organization)
             organization
             repository
@@ -1202,7 +1214,6 @@
 ;;; straight into its main worktree's shell instead of toggling it
 ;;; open/closed; h/l collapse/expand the owning repository from any row
 ;;; level; J/K jump the selection across repository rows only.
-
 (describe "server-dispatch-helper-tree-navigation-suite"
 
   ;; Enter on a repository row with a live pane already attached to its main
@@ -1503,127 +1514,143 @@
                  (length (nerimux::client-conn-tree-filter conn)))))))
 
 (describe "worktree-pane-memory"
-  (it "ignores incomplete remembers and self-heals stale panes"
-    (let* ((worktree (nerimux/workspace-model:make-worktree :id "wt-memory"))
-           (pane (nerimux/pane:make-pane :id 101))
-           (other-pane (nerimux/pane:make-pane :id 102))
-           (nerimux::*workspace-worktree-last-pane*
-             (make-hash-table :test #'equal)))
-      (expect (null (nerimux::%remember-worktree-pane nil pane)))
-      (expect (null (nerimux::%remember-worktree-pane worktree nil)))
-      (nerimux/pane:worktree-add-pane worktree pane)
-      (nerimux::%remember-worktree-pane worktree pane)
-      (expect (eq pane (nerimux::%worktree-remembered-pane worktree)))
-      (nerimux::%remember-worktree-pane worktree other-pane)
-      (expect (null (nerimux::%worktree-remembered-pane worktree)))
-      (expect (null (gethash "wt-memory"
-                             nerimux::*workspace-worktree-last-pane*))))))
+          (it "ignores incomplete remembers and self-heals stale panes"
+              (let* ((worktree
+                      (nerimux/workspace-model:make-worktree :id "wt-memory"))
+                     (pane (nerimux/pane:make-pane :id 101))
+                     (other-pane (nerimux/pane:make-pane :id 102))
+                     (nerimux::*workspace-worktree-last-pane*
+                      (make-hash-table :test #'equal)))
+                (expect (null (nerimux::%remember-worktree-pane nil pane)))
+                (expect (null (nerimux::%remember-worktree-pane worktree nil)))
+                (nerimux/pane:worktree-add-pane worktree pane)
+                (nerimux::%remember-worktree-pane worktree pane)
+                (expect (eq pane (nerimux::%worktree-remembered-pane worktree)))
+                (nerimux::%remember-worktree-pane worktree other-pane)
+                (expect (null (nerimux::%worktree-remembered-pane worktree)))
+                (expect
+                 (null
+                  (gethash "wt-memory" nerimux::*workspace-worktree-last-pane*))))))
 
 (describe "client-search-arguments"
-  (it "normalizes search aliases and whitespace"
-    (expect (eq :forward (nerimux::%client-search-direction "search-forward")))
-    (expect (eq :forward (nerimux::%client-search-direction "/")))
-    (expect (eq :backward (nerimux::%client-search-direction "search-backward")))
-    (expect (eq :backward (nerimux::%client-search-direction "?")))
-    (expect (null (nerimux::%client-search-direction "unknown")))
-    (expect (string= "needle with spaces"
-                     (nerimux::%client-search-term '("  needle" "with" "spaces  "))))))
+          (it "normalizes search aliases and whitespace"
+              (expect
+               (eq :forward
+                   (nerimux::%client-search-direction "search-forward")))
+              (expect (eq :forward (nerimux::%client-search-direction "/")))
+              (expect
+               (eq :backward
+                   (nerimux::%client-search-direction "search-backward")))
+              (expect (eq :backward (nerimux::%client-search-direction "?")))
+              (expect (null (nerimux::%client-search-direction "unknown")))
+              (expect
+               (string= "needle with spaces"
+                        (nerimux::%client-search-term
+                         '("  needle" "with" "spaces  "))))))
 
 (describe "client-dispatch-boundaries"
-  (it "consumes exactly the requested escape suffix"
-    (let ((conn (nerimux::%make-client-conn)))
-      (nerimux::%client-esc-swallow-start conn 1)
-      (expect (nerimux::%client-esc-swallow-consume conn))
-      (expect (null (nerimux::%client-esc-swallow-consume conn)))
-      (nerimux::%client-esc-swallow-start conn 2)
-      (expect (nerimux::%client-esc-swallow-consume conn))
-      (expect (nerimux::%client-esc-swallow-consume conn))
-      (expect (null (nerimux::%client-esc-swallow-consume conn)))))
-
-  (it "only claims one-byte workspace prefix payloads"
-    (let ((session (nerimux/session:make-session :id 1 :name "test"))
-          (conn (nerimux::%make-client-conn)))
-      (multiple-value-bind (handled result)
-          (nerimux::%handle-workspace-prefix-key session conn #(17 18))
-        (expect (null handled))
-        (expect (null result)))
-      (multiple-value-bind (handled result)
-          (nerimux::%handle-workspace-prefix-key session conn "Q")
-        (expect (null handled))
-        (expect (null result)))
-      (multiple-value-bind (handled result)
-          (nerimux::%handle-workspace-prefix-key
-           session conn
-           (vector (nerimux::client-conn-workspace-prefix-code conn)))
-        (expect handled)
-        (expect (null result))
-        (expect (nerimux::client-conn-ui-prefix-p conn)))))
-
-  (it "derives UI ownership from view and modal state"
-    (let ((conn (nerimux::%make-client-conn)))
-      (dolist (view '(:repolist :status))
-        (setf (nerimux::client-conn-view conn) view)
-        (expect (nerimux::%client-ui-keys-p conn)))
-      (setf (nerimux::client-conn-view conn) :pane)
-      (expect (null (nerimux::%client-ui-keys-p conn)))
-      (setf (nerimux::client-conn-view conn) :status
-            (nerimux::client-conn-modal conn) :command)
-      (expect (null (nerimux::%client-ui-keys-p conn)))))
-
-  (it "closes help on its documented exit keys and swallows escape tails"
-    (dolist (payload '("q" "?" #(13) #(10)))
-      (let ((conn (nerimux::%make-client-conn)))
-        (setf (nerimux::client-conn-modal conn) :help)
-        (nerimux::%handle-help-view-key conn payload)
-        (expect (null (nerimux::client-conn-modal conn)))))
-    (let ((conn (nerimux::%make-client-conn)))
-      (setf (nerimux::client-conn-modal conn) :help)
-      (nerimux::%handle-help-view-key conn #(27))
-      (expect (null (nerimux::client-conn-modal conn)))
-      (expect (nerimux::%client-esc-swallow-consume conn))
-      (expect (nerimux::%client-esc-swallow-consume conn))
-      (expect (null (nerimux::%client-esc-swallow-consume conn)))))
-
-  (it "reports unavailable-focused-pane-input"
-    (let* ((session (nerimux/session:make-session :id 1 :name "test"))
-           (conn (nerimux::%make-client-conn))
-           (pane (nerimux/pane:make-pane :fd -1))
-           (nerimux::*clients* (list conn))
-           (nerimux::*dirty* nil))
-      (setf (nerimux::client-conn-stdin-target conn) pane)
-      (expect (nerimux::%handle-client-input-key-payload session conn "x"))
-      (expect (equal '("focused pane is unavailable")
-                     (nerimux::client-conn-message-log conn)))
-      (expect nerimux::*dirty*)))
-
-  (it "contains-peer-io-failure-while-forwarding-pane-input"
-    (let* ((session (nerimux/session:make-session :id 1 :name "test"))
-           (conn (nerimux::%make-client-conn))
-           (pane (nerimux/pane:make-pane :fd 1))
-           (nerimux::*clients* (list conn))
-           (nerimux::*dirty* nil))
-      (setf (nerimux::client-conn-stdin-target conn) pane)
-      (with-stubbed-fdefinition
-          ((nerimux/pty:pty-write
-             (lambda (fd payload)
-               (declare (ignore fd payload))
-               (error 'nerimux::peer-io-failure))))
-        (expect (nerimux::%handle-client-input-key-payload session conn "x")))
-      (expect (search "input failed:"
-                      (first (nerimux::client-conn-message-log conn))))
-      (expect nerimux::*dirty*)))
-
-  (it "feeds-input-to-the-screen-after-pane-exit"
-    (let* ((session (nerimux/session:make-session :id 1 :name "test"))
-           (conn (nerimux::%make-client-conn))
-           (screen (nerimux/terminal:make-screen 5 2))
-           (pane (nerimux/pane:make-pane :fd -1 :screen screen))
-           (nerimux::*clients* (list conn))
-           (nerimux::*dirty* nil))
-      (setf (nerimux::client-conn-stdin-target conn) pane)
-      (expect (nerimux::%handle-client-input-key-payload
-               session conn (vector (char-code #\A))))
-      (expect (char= #\A (nerimux/terminal:cell-char
-                          (nerimux/terminal:screen-cell screen 0 0))))
-      (expect (null (nerimux::client-conn-message-log conn)))
-      (expect nerimux::*dirty*))))
+          (it "consumes exactly the requested escape suffix"
+              (let ((conn (nerimux::%make-client-conn)))
+                (nerimux::%client-esc-swallow-start conn 1)
+                (expect (nerimux::%client-esc-swallow-consume conn))
+                (expect (null (nerimux::%client-esc-swallow-consume conn)))
+                (nerimux::%client-esc-swallow-start conn 2)
+                (expect (nerimux::%client-esc-swallow-consume conn))
+                (expect (nerimux::%client-esc-swallow-consume conn))
+                (expect (null (nerimux::%client-esc-swallow-consume conn)))))
+          (it "only claims one-byte workspace prefix payloads"
+              (let ((session (nerimux/session:make-session :id 1 :name "test"))
+                    (conn (nerimux::%make-client-conn)))
+                (multiple-value-bind (handled result) 
+                    (nerimux::%handle-workspace-prefix-key session
+                                                           conn
+                                                           #(17 18))
+                  (expect (null handled))
+                  (expect (null result)))
+                (multiple-value-bind (handled result) 
+                    (nerimux::%handle-workspace-prefix-key session conn "Q")
+                  (expect (null handled))
+                  (expect (null result)))
+                (multiple-value-bind (handled result) 
+                    (nerimux::%handle-workspace-prefix-key session
+                                                           conn
+                                                           (vector
+                                                            (nerimux::client-conn-workspace-prefix-code
+                                                             conn)))
+                  (expect handled)
+                  (expect (null result))
+                  (expect (nerimux::client-conn-ui-prefix-p conn)))))
+          (it "derives UI ownership from view and modal state"
+              (let ((conn (nerimux::%make-client-conn)))
+                (dolist (view '(:repolist :status))
+                  (setf (nerimux::client-conn-view conn) view)
+                  (expect (nerimux::%client-ui-keys-p conn)))
+                (setf (nerimux::client-conn-view conn) :pane)
+                (expect (null (nerimux::%client-ui-keys-p conn)))
+                (setf (nerimux::client-conn-view conn) :status
+                      (nerimux::client-conn-modal conn) :command)
+                (expect (null (nerimux::%client-ui-keys-p conn)))))
+          (it
+           "closes help on its documented exit keys and swallows escape tails"
+           (dolist (payload '("q" "?" #(13) #(10)))
+             (let ((conn (nerimux::%make-client-conn)))
+               (setf (nerimux::client-conn-modal conn) :help)
+               (nerimux::%handle-help-view-key conn payload)
+               (expect (null (nerimux::client-conn-modal conn)))))
+           (let ((conn (nerimux::%make-client-conn)))
+             (setf (nerimux::client-conn-modal conn) :help)
+             (nerimux::%handle-help-view-key conn #(27))
+             (expect (null (nerimux::client-conn-modal conn)))
+             (expect (nerimux::%client-esc-swallow-consume conn))
+             (expect (nerimux::%client-esc-swallow-consume conn))
+             (expect (null (nerimux::%client-esc-swallow-consume conn)))))
+          (it "reports unavailable-focused-pane-input"
+              (let* ((session (nerimux/session:make-session :id 1 :name "test"))
+                     (conn (nerimux::%make-client-conn))
+                     (pane (nerimux/pane:make-pane :fd -1))
+                     (nerimux::*clients* (list conn))
+                     (nerimux::*dirty* nil))
+                (setf (nerimux::client-conn-stdin-target conn) pane)
+                (expect
+                 (nerimux::%handle-client-input-key-payload session conn "x"))
+                (expect
+                 (equal '("focused pane is unavailable")
+                        (nerimux::client-conn-message-log conn)))
+                (expect nerimux::*dirty*)))
+          (it "contains-peer-io-failure-while-forwarding-pane-input"
+              (let* ((session (nerimux/session:make-session :id 1 :name "test"))
+                     (conn (nerimux::%make-client-conn))
+                     (pane (nerimux/pane:make-pane :fd 1))
+                     (nerimux::*clients* (list conn))
+                     (nerimux::*dirty* nil))
+                (setf (nerimux::client-conn-stdin-target conn) pane)
+                (with-stubbed-fdefinition
+                 ((nerimux/pty:pty-write
+                   (lambda (fd payload)
+                     (declare (ignore fd payload))
+                     (error 'nerimux::peer-io-failure))))
+                 (expect
+                  (nerimux::%handle-client-input-key-payload session conn "x")))
+                (expect
+                 (search "input failed:"
+                         (first (nerimux::client-conn-message-log conn))))
+                (expect nerimux::*dirty*)))
+          (it "feeds-input-to-the-screen-after-pane-exit"
+              (let* ((session (nerimux/session:make-session :id 1 :name "test"))
+                     (conn (nerimux::%make-client-conn))
+                     (screen (nerimux/terminal:make-screen 5 2))
+                     (pane (nerimux/pane:make-pane :fd -1 :screen screen))
+                     (nerimux::*clients* (list conn))
+                     (nerimux::*dirty* nil))
+                (setf (nerimux::client-conn-stdin-target conn) pane)
+                (expect
+                 (nerimux::%handle-client-input-key-payload session
+                                                            conn
+                                                            (vector
+                                                             (char-code #\A))))
+                (expect
+                 (char= #\A
+                        (nerimux/terminal:cell-char
+                         (nerimux/terminal:screen-cell screen 0 0))))
+                (expect (null (nerimux::client-conn-message-log conn)))
+                (expect nerimux::*dirty*))))

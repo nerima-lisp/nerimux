@@ -3,7 +3,6 @@
 ;;;; screen tests — part B: copy-mode slots, alt-screen cursor save,
 ;;;; response-queue, origin-mode, tab-stops,
 ;;;; screen-lock, screen-cells/screen-parser accessors.
-
 (describe "terminal-suite/copy-mode-slots"
 
   ;; All copy-mode slots default to NIL/false on a fresh screen.
@@ -46,7 +45,6 @@
       (expect (= 7 (nerimux/terminal/types:screen-copy-mark-offset s))))))
 
 ;;; ── SUITE: alt-screen cursor save slots ─────────────────────────────────────
-
 (describe "terminal-suite/alt-screen-slots"
 
   ;; alt-cursor-x and alt-cursor-y both start at 0 on a fresh screen.
@@ -91,7 +89,6 @@
         (expect (= saved-fg (nerimux/terminal/types:screen-cur-fg s)))))))
 
 ;;; ── SUITE: response-queue ────────────────────────────────────────────────────
-
 (describe "terminal-suite/response-queue-suite"
 
   ;; Response queue is NIL on a fresh screen.
@@ -119,7 +116,6 @@
 ;;;
 ;;; screen-origin-mode (DECOM ?6) is exercised indirectly by modes-tests via
 ;;; the ?6h/?6l sequences.  This suite verifies the raw slot contract directly.
-
 (describe "terminal-suite/origin-mode-slot-suite"
 
   ;; A fresh screen has origin-mode NIL (absolute cursor positioning).
@@ -152,7 +148,6 @@
 ;;;
 ;;; screen-tab-stops defaults to the :default sentinel meaning "standard
 ;;; every-8-columns stops."  HTS (ESC H) materialises it into an explicit list.
-
 (describe "terminal-suite/tab-stops-slot-suite"
 
   ;; A fresh screen has tab-stops :default (standard every-8-column stops).
@@ -181,7 +176,6 @@
 ;;;
 ;;; screen-lock is a cl-concurrent-kit lock created at construction time.
 ;;; Unit tests verify the slot is populated and has the expected type.
-
 (describe "terminal-suite/screen-lock-suite"
 
   ;; A fresh screen's screen-lock slot is non-NIL.
@@ -213,7 +207,6 @@
 ;;;
 ;;; Both accessors are exported from nerimux/terminal/types but previously had
 ;;; no dedicated unit tests verifying their slot contracts.
-
 (describe "terminal-suite/screen-cells-parser-suite"
 
   ;; screen-cells returns a simple-vector whose length equals width*height.

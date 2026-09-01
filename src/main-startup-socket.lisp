@@ -1,16 +1,18 @@
 ;;; Startup socket discovery and server auto-start helpers.
-
 (in-package :nerimux)
 
 (declaim (notinline nerimux/net:connect-to nerimux/net:close-socket))
 
-(defconstant +server-socket-poll-interval-seconds+ 0.1
+(defconstant +server-socket-poll-interval-seconds+
+  0.1
   "Seconds between socket-existence probes while waiting for a server to start.")
 
-(defconstant +server-socket-poll-max-iterations+ 30
+(defconstant +server-socket-poll-max-iterations+
+  30
   "Maximum number of socket-existence probes (30 x 0.1 s = 3 s total wait).")
 
-(defconstant +server-log-rotate-bytes+ (* 1024 1024)
+(defconstant +server-log-rotate-bytes+
+  (* 1024 1024)
   "Server log rotation threshold (§1.4 / R2.8): a log at or above this size is
    replaced with a fresh file at startup instead of appended to.")
 
@@ -18,31 +20,40 @@
   "The SB-EXT:RUN-PROGRAM :if-output-exists action for LOG-PATH: :supersede
    (start a fresh file) when the existing log is at least
    +server-log-rotate-bytes+, else :append."
-  (handler-case
-      (if (and (probe-file log-path)
-               (>= (with-open-file (s log-path) (file-length s))
-                   +server-log-rotate-bytes+))
-          :supersede
-          :append)
-    (file-error () :append)
-    (stream-error () :append)))
+  (handler-case (if (and (probe-file log-path)
+                         (>=
+                          (with-open-file (s log-path)
+                            (file-length s))
+                          +server-log-rotate-bytes+))
+                    :supersede
+                    :append)
+    (file-error ()
+      :append)
+    (stream-error ()
+      :append)))
 
 (defun %stale-socket-p (socket-path)
   "True when SOCKET-PATH exists but no server accepts connections on it.
    A leftover socket file like this (e.g. after a crash) should not block
    attaching: it is unlinked and a fresh server started instead of failing."
-  (handler-case
-      (and (probe-file socket-path)
-           (not (handler-case
-                    (let ((sock (nerimux/net:connect-to socket-path)))
-                      (nerimux/net:close-socket sock)
-                      t)
-                  (sb-ext:timeout () nil)
-                  (sb-bsd-sockets:socket-error () nil)
-                  (file-error () nil)
-                  (stream-error () nil))))
-    (file-error () nil)
-    (stream-error () nil)))
+  (handler-case (and (probe-file socket-path)
+                     (not
+                      (handler-case (let ((sock
+                                           (nerimux/net:connect-to socket-path)))
+                                      (nerimux/net:close-socket sock)
+                                      t)
+                        (sb-ext:timeout ()
+                          nil)
+                        (sb-bsd-sockets:socket-error ()
+                          nil)
+                        (file-error ()
+                          nil)
+                        (stream-error ()
+                          nil))))
+    (file-error ()
+      nil)
+    (stream-error ()
+      nil)))
 
 (defun %secure-log-directory (log-path)
   "Best-effort chmod LOG-PATH's parent directory to 0700 once it exists, so a
@@ -56,16 +67,17 @@
    Chmod is defense in depth for the log's contents, not a precondition for
    logging or for starting the server, so syscall failures are ignored."
   (require :sb-posix)
-  (handler-case
-      (sb-posix:chmod (directory-namestring log-path) #o700)
-    (sb-posix:syscall-error () nil)))
+  (handler-case (sb-posix:chmod (directory-namestring log-path) #o700)
+    (sb-posix:syscall-error ()
+      nil)))
 
 (defun %launch-server-without-log (exe args)
   "Try the unredirected server launch after diagnostic logging is unavailable."
-  (handler-case
-      (sb-ext:run-program exe args :wait nil :output nil :error nil)
-    (file-error () nil)
-    (stream-error () nil)
+  (handler-case (sb-ext:run-program exe args :wait nil :output nil :error nil)
+    (file-error ()
+      nil)
+    (stream-error ()
+      nil)
     (error (condition)
       (values nil condition))))
 
@@ -118,13 +130,12 @@
    option is needed; %application-argv (main-startup.lisp) strips the
    --no-userinit prefix either way."
   (let* ((runtime (namestring sb-ext:*runtime-pathname*))
-         (core (and sb-ext:*core-pathname*
-                    (namestring sb-ext:*core-pathname*))))
+         (core (and sb-ext:*core-pathname* (namestring sb-ext:*core-pathname*))))
     (values runtime
-            (append (when (and core (string/= core runtime))
-                      (list "--noinform" "--core" core))
-                    (list "--no-sysinit" "--no-userinit"
-                          "server" session-name)))))
+            (append
+             (when (and core (string/= core runtime))
+               (list "--noinform" "--core" core))
+             (list "--no-sysinit" "--no-userinit" "server" session-name)))))
 
 (defun %ensure-server-running (session-name)
   "Start a background server for SESSION-NAME if no live socket exists.

@@ -16,28 +16,31 @@
 ;;;; nix build .#coverage-report runs this script inside the Nix sandbox,
 ;;;; where the full suite is known to complete cleanly (see checks.default);
 ;;;; the interactive devShell nerimux-coverage helper calls this same script.
-
 (require :asdf)
+
 (require :sb-cover)
+
 (asdf:load-system "sb-cover")
 
-(defconstant +coverage-test-timeout-ms+ 2700000)
+(defconstant +coverage-test-timeout-ms+
+  2700000)
 
 (defun %coverage-test-name-filter ()
   (let ((filter (uiop:getenv "CL_WEAVE_TEST_FILTER")))
-    (and filter
-         (plusp (length filter))
-         filter)))
+    (and filter (plusp (length filter)) filter)))
 
 (defun %ensure-full-coverage (statistics)
-  (loop for (kind covered-key total-key)
-          in '((:expression :expression-covered :expression-total)
-               (:branch :branch-covered :branch-total))
+  (loop for (kind covered-key total-key) in '((:expression :expression-covered
+                                                           :expression-total)
+                                              (:branch :branch-covered
+                                                       :branch-total))
         for covered = (getf statistics covered-key)
         for total = (getf statistics total-key)
         unless (= covered total)
           do (error "Coverage threshold failed for ~A: ~D/~D covered."
-                    kind covered total))
+                    kind
+                    covered
+                    total))
   statistics)
 
 ;; These files contain declarations, compile-time fact constructors, or static
@@ -85,30 +88,37 @@
                                  (component asdf:cl-source-file))
   (declare (ignore operation component))
   (proclaim '(optimize (sb-cover:store-coverage-data 3)))
-  (unwind-protect
-       (call-next-method)
+  (unwind-protect (call-next-method)
     (proclaim '(optimize (sb-cover:store-coverage-data 0)))))
 
 (defparameter *nerimux-project-root*
-  (truename (merge-pathnames #P"../"
-                             (uiop:pathname-directory-pathname *load-truename*))))
+  (truename
+   (merge-pathnames #P"../" (uiop:pathname-directory-pathname *load-truename*))))
 
 (defparameter *nerimux-source-root*
   (truename (merge-pathnames #P"src/" *nerimux-project-root*)))
 
 (push *nerimux-project-root* asdf:*central-registry*)
 
-(dolist (dir (uiop:split-string (or (uiop:getenv "NERIMUX_SIBLING_REGISTRY") "")
-                                :separator ":"))
+(dolist 
+    (dir
+     (uiop:split-string (or (uiop:getenv "NERIMUX_SIBLING_REGISTRY") "")
+                        :separator
+                        ":"))
   (unless (string= dir "")
     (push (truename (uiop:ensure-directory-pathname dir))
           asdf:*central-registry*)))
 
 (asdf:load-system "cl-weave")
+
 (cl-weave:reset-coverage)
+
 (asdf:clear-system "nerimux")
+
 (asdf:compile-system "nerimux" :force t)
+
 (asdf:load-system "nerimux" :force t)
+
 (asdf:clear-system "nerimux/test")
 
 (let* ((excluded-source-pathnames

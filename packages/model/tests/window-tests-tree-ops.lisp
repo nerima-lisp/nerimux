@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/model)
 
 ;;;; Window-level tests: tree refresh and tree surgery helpers.
-
 (describe "model-suite"
 
   ;; ── window-refresh-panes ────────────────────────────────────────────────────

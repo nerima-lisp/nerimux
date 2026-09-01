@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/commands)
 
 ;;;; copy-mode-scroll and shared no-PTY fixtures — part I
-
 ;;; ── Local fixtures (no PTY: fd -1, pid -1) ──────────────────────────────────
 ;;;
 ;;; These two are shared: %make-test-pane by commands-tests-c/-h and
@@ -9,17 +8,30 @@
 ;;; The split-window fixtures that used to live here (%vsplit-window,
 ;;; %hsplit-window, %make-session-with-window) went with the kill-pane and
 ;;; resize-pane tests that were their only callers.
-
 (defun %make-test-pane (&key (id 1) (x 0) (y 0) (w 20) (h 5))
   "Return a no-PTY pane with a fresh screen of W x H."
-  (make-pane :id id :x x :y y :width w :height h
-             :fd -1 :pid -1 :screen (make-screen w h)))
+  (make-pane :id
+             id
+             :x
+             x
+             :y
+             y
+             :width
+             w
+             :height
+             h
+             :fd
+             -1
+             :pid
+             -1
+             :screen
+             (make-screen w h)))
 
 (defun %screen-with-scrollback (n)
   "A copy-mode screen carrying N scrollback rows (contents irrelevant)."
   (let ((s (make-screen 20 5)))
-    (setf (screen-scrollback s)
-          (loop repeat n collect (make-array 0)))
+    (setf (screen-scrollback s) (loop repeat n
+                                      collect (make-array 0)))
     (nerimux/commands::copy-mode-enter s)
     s))
 

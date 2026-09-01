@@ -1,10 +1,15 @@
 (in-package #:nerimux/renderer)
 
 ;;;; Workspace `:` command completion and footer-row rendering (R6.12).
-
 (defparameter +workspace-command-names+
-  '("wt-create" "wt-delete" "wt-lock" "wt-unlock" "wt-prune" "wt-prune-confirm"
-    "overview" "detail" "refresh")
+  '("wt-create" "wt-delete"
+                "wt-lock"
+                "wt-unlock"
+                "wt-prune"
+                "wt-prune-confirm"
+                "overview"
+                "detail"
+                "refresh")
   "Command names completed by the workspace `:` prompt.")
 
 (defun %workspace-command-completions (command-buffer)
@@ -33,9 +38,11 @@
           (write-string visible stream)
           (reset-attrs stream))
         (let* ((remaining (- cols typed-width))
-               (suffix (if completions
-                           (%display-clip (format nil "  ~{~A~^ ~}" completions) remaining)
-                           ""))
+               (suffix
+                (if completions
+                    (%display-clip (format nil "  ~{~A~^ ~}" completions)
+                                   remaining)
+                    ""))
                (width (+ typed-width (%display-width suffix))))
           (move-to stream row 0)
           (%emit-sgr stream +sgr-accent-bold+)
@@ -46,7 +53,8 @@
           (write-string suffix stream)
           (reset-attrs stream)
           (when (< width cols)
-            (write-string (make-string (- cols width) :initial-element #\Space) stream))
+            (write-string (make-string (- cols width) :initial-element #\Space)
+                          stream))
           (reset-attrs stream)))))
 
 (defun %render-workspace-tree-filter-line (stream row cols tree-filter)
@@ -72,6 +80,7 @@
           (reset-attrs stream)
           (write-string (or tree-filter "") stream)
           (when (< typed-width cols)
-            (write-string (make-string (- cols typed-width) :initial-element #\Space)
-                          stream))
+            (write-string
+             (make-string (- cols typed-width) :initial-element #\Space)
+             stream))
           (reset-attrs stream)))))

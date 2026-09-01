@@ -5,7 +5,6 @@
 ;;;; see nerimux.asd) and define four server-dispatch macros and one declaim
 ;;;; that had nothing to do with declaring a package (see
 ;;;; server-dispatch-macros.lisp and domain/model/window-definitions.lisp).
-
 (defpackage #:nerimux
   (:use #:cl
         #:nerimux/ports

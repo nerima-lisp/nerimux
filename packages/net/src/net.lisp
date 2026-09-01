@@ -6,16 +6,17 @@
 ;;;; speak in terms of make-listener / accept-connection / connect-to / a binary
 ;;;; socket-stream, rather than the raw contrib API.  Frame I/O over the stream
 ;;;; lives in nerimux/transport; message framing in nerimux/protocol.
-
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (require :sb-bsd-sockets))
 
-(defconstant +accept-timeout-seconds+ 5
+(defconstant +accept-timeout-seconds+
+  5
   "Maximum seconds to block in accept-connection before returning NIL.
    Prevents the server accept loop from blocking forever on a client that
    opens a TCP connection but never sends any data.")
 
-(defconstant +socket-stream-timeout-seconds+ 30
+(defconstant +socket-stream-timeout-seconds+
+  30
   "Timeout in seconds passed to socket-make-stream for read/write operations.
    Bounds the duration of individual read-sequence / write-sequence calls on a
    socket stream so a hung or slow peer does not block the server indefinitely.")
@@ -26,9 +27,12 @@
    accept) and unix-socket-available-p (any error probing a throwaway bind)
    need 'reduce a blocking/failing syscall to a boolean-ish NIL', so this
    collapses the shared handler-case shape to one call site per use."
-  `(handler-case (progn ,@body)
-     ,@(mapcar (lambda (condition-class) `(,condition-class () nil))
-               condition-classes)))
+  `(handler-case (progn
+                   ,@body)
+     ,@(mapcar
+        (lambda (condition-class)
+          `(,condition-class () nil))
+        condition-classes)))
 
 (defun make-listener (path &key (backlog 1))
   "Bind a Unix-domain stream socket at PATH and start listening (BACKLOG deep)."
@@ -43,10 +47,11 @@
    Prevents the server accept loop from blocking forever on a client that
    connects at the TCP level but never sends a handshake."
   (%swallow-to-nil (sb-ext:timeout)
-    (sb-ext:with-timeout +accept-timeout-seconds+
-      (sb-bsd-sockets:socket-accept listener))))
+                   (sb-ext:with-timeout +accept-timeout-seconds+
+                                        (sb-bsd-sockets:socket-accept listener))))
 
-(defconstant +connect-timeout-seconds+ 5
+(defconstant +connect-timeout-seconds+
+  5
   "Maximum seconds to block in connect-to before signalling a timeout error.
    Prevents the client from hanging indefinitely when the server socket path
    exists but no process is accepting connections.")
@@ -57,7 +62,7 @@
    SB-EXT:TIMEOUT when the server does not accept within that window."
   (let ((socket (make-instance 'sb-bsd-sockets:local-socket :type :stream)))
     (sb-ext:with-timeout +connect-timeout-seconds+
-      (sb-bsd-sockets:socket-connect socket path))
+                         (sb-bsd-sockets:socket-connect socket path))
     socket))
 
 (defun socket-stream (socket)
@@ -65,9 +70,14 @@
    The stream is created with a timeout so individual read/write calls do not
    block indefinitely when the peer is hung."
   (sb-bsd-sockets:socket-make-stream socket
-                                     :input t :output t
-                                     :element-type '(unsigned-byte 8)
-                                     :timeout +socket-stream-timeout-seconds+))
+                                     :input
+                                     t
+                                     :output
+                                     t
+                                     :element-type
+                                     '(unsigned-byte 8)
+                                     :timeout
+                                     +socket-stream-timeout-seconds+))
 
 (defun socket-fd (socket)
   "The underlying file descriptor of SOCKET (for select-based multiplexing)."
@@ -88,13 +98,18 @@
    dropped client) — it skips the flush attempt entirely, so a broken peer
    cannot prevent this end's own fd from being freed."
   (handler-case (sb-bsd-sockets:socket-close socket :abort abort)
-    (sb-bsd-sockets:socket-error () nil)))
+    (sb-bsd-sockets:socket-error ()
+      nil)))
 
 (defun %make-probe-socket-path ()
   "Generate a unique throwaway socket path in the temp directory."
-  (let ((directory (string-right-trim "/" (or (sb-ext:posix-getenv "TMPDIR") "/tmp"))))
-    (format nil "~A/nerimux-probe-~D-~D.sock"
-            directory (get-universal-time) (random 1000000))))
+  (let ((directory
+         (string-right-trim "/" (or (sb-ext:posix-getenv "TMPDIR") "/tmp"))))
+    (format nil
+            "~A/nerimux-probe-~D-~D.sock"
+            directory
+            (get-universal-time)
+            (random 1000000))))
 
 (defun unix-socket-available-p ()
   "True when a Unix-domain socket can be bound in the temp directory.
@@ -102,7 +117,7 @@
    the environment forbids it (e.g. a restricted sandbox)."
   (let ((path (%make-probe-socket-path)))
     (%swallow-to-nil (sb-bsd-sockets:socket-error file-error)
-      (let ((socket (make-listener path)))
-        (close-socket socket)
-        (delete-file path)
-        t))))
+                     (let ((socket (make-listener path)))
+                       (close-socket socket)
+                       (delete-file path)
+                       t))))

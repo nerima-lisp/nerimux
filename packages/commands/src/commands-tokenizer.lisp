@@ -20,7 +20,6 @@
 ;;;; contributes is the rule/skip composition, span tracking, and the same
 ;;;; resource-limit guards (*maximum-tokenizer-source-length* et al.) every
 ;;;; other nerimux tokenizer built on it gets for free.
-
 (defun %consume-single-quoted (string start length accumulator)
   "Consume a single-quoted literal span from STRING beginning at START.
    Writes characters into ACCUMULATOR stream up to the closing quote.
@@ -54,23 +53,29 @@
    whitespace or the end of SOURCE.  Returns (values ok consumed-length text
    value) per the cl-parser-kit:make-token-rule matcher contract; (values nil
    index) when INDEX is already whitespace or end of input."
-  (let ((length       (length source))
-        (accumulator  (make-string-output-stream))
-        (position     index))
+  (let ((length (length source))
+        (accumulator (make-string-output-stream))
+        (position index))
     (loop while (and (< position length)
                      (not (member (char source position) '(#\Space #\Tab))))
           do (let ((character (char source position)))
                (cond
                  ((char= character #\')
-                  (setf position (%consume-single-quoted source position length accumulator)))
+                  (setf position (%consume-single-quoted source
+                                                         position
+                                                         length
+                                                         accumulator)))
                  ((char= character #\")
-                  (setf position (%consume-double-quoted source position length accumulator)))
+                  (setf position (%consume-double-quoted source
+                                                         position
+                                                         length
+                                                         accumulator)))
                  ((and (char= character #\\) (< (1+ position) length))
-                  (write-char (char source (1+ position)) accumulator)
-                  (incf position 2))
+                   (write-char (char source (1+ position)) accumulator)
+                   (incf position 2))
                  (t
-                  (write-char character accumulator)
-                  (incf position)))))
+                   (write-char character accumulator)
+                   (incf position)))))
     (if (> position index)
         (let ((text (get-output-stream-string accumulator)))
           (values t (- position index) text text))
@@ -97,5 +102,6 @@
    escapes; a bare \\ escapes the next character; adjacent spans concatenate.
    Unterminated quotes are tolerated (consumed to end of string).  An explicitly
    quoted empty token (e.g. '') yields an empty-string argument."
-  (map 'list #'cl-parser-kit:token-text
+  (map 'list
+       #'cl-parser-kit:token-text
        (cl-parser-kit:tokenize-string string *command-string-tokenizer*)))

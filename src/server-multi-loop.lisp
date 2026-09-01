@@ -1,12 +1,10 @@
 (in-package #:nerimux)
 
 ;;; ── Event-loop iteration ────────────────────────────────────────────────────
-
 ;;; The server does not exit on its own.  Detaching the last client leaves the
 ;;; runtime and every pane running, and an empty session is not a reason to shut
 ;;; down either (R8.3 — both were options; neither is now).  The only ways out
 ;;; are an explicit kill and the confirm-view quit, both of which clear *RUNNING*.
-
 (defun %accept-pending-connection (listener listener-fd ready)
   "When LISTENER-FD is in READY, accept and register the new connection.
    accept-connection may return NIL on a race (peer disappeared between
@@ -15,9 +13,12 @@
    the failed accept is dropped rather than propagating out of the serve loop
    and killing the server out from under every already-attached client."
   (when (member listener-fd ready)
-    (let ((sock (handler-case (accept-connection listener)
-                  (peer-io-failure () nil))))
-      (when sock (%add-client sock)))))
+    (let ((sock
+           (handler-case (accept-connection listener)
+             (peer-io-failure ()
+               nil))))
+      (when sock
+        (%add-client sock)))))
 
 (defun %read-and-dispatch-client-message (session conn)
   "Read one frame from CONN and dispatch it via %handle-multi-client-message.
@@ -26,10 +27,14 @@
    treated as a disconnect (:drop) so one malformed client cannot take down
    the multi-client event loop."
   (with-loop-safe-error (nil :on-error :drop)
-    (multiple-value-bind (type payload) (read-frame (client-conn-stream conn))
-      (if type
-          (%handle-multi-client-message type payload session conn)
-          :eof))))
+                        (multiple-value-bind (type payload) 
+                            (read-frame (client-conn-stream conn))
+                          (if type
+                              (%handle-multi-client-message type
+                                                            payload
+                                                            session
+                                                            conn)
+                              :eof))))
 
 (defun %apply-client-disposition (disposition conn)
   "Act on DISPOSITION (the result of dispatching CONN's message): drop CONN on
@@ -38,8 +43,12 @@
    nobody is attached (R8.3)."
   (case disposition
     (:quit :quit)
-    (:eof (%drop-client conn :bye nil) nil)
-    (:drop (%drop-client conn :bye t) nil)))
+    (:eof
+      (%drop-client conn :bye nil)
+      nil)
+    (:drop
+      (%drop-client conn :bye t)
+      nil)))
 
 (defun %dispatch-buffered-client-messages (session conn)
   "Dispatch the message select reported for CONN, then keep dispatching while
@@ -79,7 +88,7 @@
   (%drain-main-thread-callbacks)
   (%broadcast-frame session)
   (let* ((listener-fd (socket-fd listener))
-         (ready       (select-fds (cons listener-fd (%client-fds)) +poll-timeout-us+)))
+         (ready (select-fds (cons listener-fd (%client-fds)) +poll-timeout-us+)))
     (when ready
       (%accept-pending-connection listener listener-fd ready)
       (%dispatch-ready-clients session ready))))
@@ -87,16 +96,16 @@
 (defun %run-multi-server-loop (listener session)
   "Drive %multi-serve-iteration until *running* clears or a command ends the
    session.  Drops every remaining client (with a bye) on exit."
-  (unwind-protect
-       (loop while *running* do
-         (when (eq :quit (%multi-serve-iteration listener session))
-           (setf *running* nil)))
+  (unwind-protect 
+      (loop while *running*
+            do (when (eq :quit (%multi-serve-iteration listener session))
+                 (setf *running* nil)))
     (dolist (conn (copy-list *clients*))
       (%drop-client conn :bye t))))
 
 ;;; ── Server termination ─────────────────────────────────────────────────────
-
-(defconstant +kill-sighup-grace-seconds+ 3)
+(defconstant +kill-sighup-grace-seconds+
+  3)
 
 (defun %session-live-panes (session)
   "Return the live panes in SESSION."
@@ -104,16 +113,22 @@
 
 (defun %pane-kill-description (pane)
   "Describe PANE for a refusal message."
-  (format nil "pane ~D (pid ~D)~@[ in ~A~]"
-          (pane-id pane) (pane-pid pane)
+  (format nil
+          "pane ~D (pid ~D)~@[ in ~A~]"
+          (pane-id pane)
+          (pane-pid pane)
           (and (pane-worktree pane) (worktree-path (pane-worktree pane)))))
 
 (defun %process-alive-p (pid)
   "Return true when PID accepts a signal-zero probe."
   (require :sb-posix)
-  (and (integerp pid) (plusp pid)
-       (handler-case (progn (sb-posix:kill pid 0) t)
-         (sb-posix:syscall-error () nil))))
+  (and (integerp pid)
+       (plusp pid)
+       (handler-case (progn
+                       (sb-posix:kill pid 0)
+                       t)
+         (sb-posix:syscall-error ()
+           nil))))
 
 (defun %force-kill-panes (panes)
   "Close PANES, then SIGKILL processes that outlive the grace period."
@@ -123,9 +138,9 @@
   (sleep +kill-sighup-grace-seconds+)
   (dolist (pane panes)
     (when (%process-alive-p (pane-pid pane))
-      (handler-case
-          (sb-posix:kill (pane-pid pane) sb-posix:sigkill)
-        (sb-posix:syscall-error () nil)))))
+      (handler-case (sb-posix:kill (pane-pid pane) sb-posix:sigkill)
+        (sb-posix:syscall-error ()
+          nil)))))
 
 (defun %server-kill-request (session force-p)
   "Handle a kill request and return (VALUES status details)."
@@ -134,7 +149,7 @@
       ((and live (not force-p))
        (values :denied (mapcar #'%pane-kill-description live)))
       (t
-       (when live
-         (%force-kill-panes live))
-       (setf *running* nil)
-       (values :ok nil)))))
+        (when live
+          (%force-kill-panes live))
+        (setf *running* nil)
+        (values :ok nil)))))
