@@ -455,6 +455,18 @@
                         (logand (sb-posix:stat-mode (sb-posix:stat dir)) #o777))))
         (ignore-errors (sb-posix:rmdir dir)))))
 
+  (it "secure-log-directory-contains-chmod-syscall-errors"
+    (sb-ext:without-package-locks
+      (let ((original-chmod (fdefinition 'sb-posix:chmod)))
+        (unwind-protect
+             (progn
+               (setf (fdefinition 'sb-posix:chmod)
+                     (lambda (&rest arguments)
+                       (declare (ignore arguments))
+                       (error 'sb-posix:syscall-error)))
+               (finishes (nerimux::%secure-log-directory "/synthetic/log")))
+          (setf (fdefinition 'sb-posix:chmod) original-chmod)))))
+
   ;; End-to-end: %launch-server-and-poll-when-live itself must call
   ;; %secure-log-directory on its happy path (not only when called directly),
   ;; so the chmod actually happens for every real invocation, not just when
@@ -531,6 +543,33 @@
                  (finishes (nerimux::%launch-server-without-log
                             "nerimux" nil)))
             (setf (fdefinition 'sb-ext:run-program) orig))))))
+
+  (it "launch-server-falls-back-after-redirected-stream-error"
+    (sb-ext:without-package-locks
+      (let* ((original-run-program (fdefinition 'sb-ext:run-program))
+             (calls 0)
+             (dir (format nil "~A/nerimux-log-stream-test-~D"
+                          (string-right-trim "/"
+                                             (or (sb-ext:posix-getenv "TMPDIR")
+                                                 "/tmp"))
+                          (random 1000000)))
+             (log-path (merge-pathnames "server.log" (format nil "~A/" dir))))
+        (unwind-protect
+             (progn
+               (ensure-directories-exist log-path)
+               (setf (fdefinition 'sb-ext:run-program)
+                     (lambda (&rest arguments)
+                       (declare (ignore arguments))
+                       (incf calls)
+                       (if (= calls 1)
+                           (error 'stream-error)
+                           t)))
+               (finishes
+                 (nerimux::%launch-server-and-poll-when-live
+                  "/synthetic/socket" "nerimux" nil log-path))
+               (expect (= 2 calls)))
+          (setf (fdefinition 'sb-ext:run-program) original-run-program)
+          (ignore-errors (sb-posix:rmdir dir))))))
 
   ;;; -- server log rotation (R2.8) ------------------------------------------
 
