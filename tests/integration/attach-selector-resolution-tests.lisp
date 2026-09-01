@@ -81,6 +81,16 @@
         (expect (not (eq :picker (nerimux::client-conn-modal conn)))
                 ))))
 
+  (it "unknown-explicit-selector-reports-not-found"
+    (let* ((organizations (nth-value 0 (%attach-fixture)))
+           (selector "github.com/team/missing")
+           (conn (%make-test-conn)))
+      (let ((nerimux::*clients* (list conn)))
+        (setf (nerimux::client-conn-attach-target conn) selector)
+        (expect (null (nerimux::%client-attach-selection conn organizations)))
+        (expect (search "attach target not found: github.com/team/missing"
+                        (first (nerimux::client-conn-message-log conn)))))))
+
   ;; cwd auto-selection (kept out of R7.6's scope, unchanged by it) has its own
   ;; containment direction: the worktree's path must be a prefix of cwd, since
   ;; cwd is the client's own directory and may sit anywhere inside a worktree.
