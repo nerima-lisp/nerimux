@@ -153,7 +153,6 @@
                        t)
                       ((%client-ui-mode-p cmd)
                        (cond
-                         ((eq cmd :picker) (%open-client-picker conn))
                          ((eq cmd :copy) (%client-enter-copy-mode session conn))
                          (t
                            (%transition-client-ui-mode conn cmd)
