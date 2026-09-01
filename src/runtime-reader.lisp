@@ -13,14 +13,6 @@
 ;;;
 ;;; CPS state machine: each state function takes (pane) and returns the next
 ;;; state function (or NIL to stop).
-(defvar *reader-scratch-buffer*
-  nil
-  "Per-reader-thread scratch octet buffer reused by reader-reading-state to read
-   one PTY chunk without allocating a fresh +pty-buf-size+ buffer on every read.
-   Bound (thread-locally) around each reader loop in %pane-reader-loop, so each
-   pane's reader thread owns a distinct buffer.  pty-read-blocking-into returns a
-   fresh exact-size copy of the bytes read, so handing that copy downstream is
-   safe even though the scratch buffer is overwritten by the next read.")
 
 (defun %pane-retired-p (pane)
   "True once PANE's fd has been cleared, which is this loop's ONLY per-pane

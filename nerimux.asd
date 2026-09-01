@@ -145,6 +145,7 @@
        (:file "server-dispatch-macros") ; declarative rule-table macros (moved out of package.lisp, W6)
        (:file "runtime-data")         ; shared declarations and constants
        (:file "runtime")              ; channel sync + SIGWINCH
+       (:file "runtime-reader-data")  ; PTY reader shared state
        (:file "runtime-reader")       ; PTY reader CPS state machine
        (:file "session-registry")  ; lookup for the one session the server owns
        (:file "server")
