@@ -140,12 +140,14 @@ Each test that spawns a background thread or server joins it itself (see
 `with-loop-state` in `tests/helpers-loop-fixtures.lisp`), so isolation does not
 depend on suite boundaries or execution order.
 
-## Behavior changes need a tmux reference
+## Behavior changes need an executable reference
 
-nerimux aims for behavioral parity with tmux. When changing or adding
-command/format/escape behavior, state in the pull request what tmux does — man
-page section, upstream source, or a transcript from a real tmux session — and
-add a regression test that pins it.
+When changing user-visible command or terminal behavior, state the intended
+invariant and its reference in the pull request: a protocol specification,
+upstream source, or a reproducible session transcript where applicable. Add a
+cl-weave regression test that pins the behavior. Historical behavior is not a
+compatibility requirement by itself; the current architecture and explicit
+requirements are authoritative.
 
 ## Check existing tests before flipping behavior
 
@@ -194,7 +196,7 @@ Include:
 
 1. What you ran — command line and the byte/escape sequence if it is an
    emulation bug. There is no config file to include; nerimux reads none.
-2. What tmux does in the same situation.
-3. What nerimux does instead.
+2. The expected behavior and its reference.
+3. What nerimux does instead, including the smallest reproducing input.
 
 A failing cl-weave test case is the ideal bug report.

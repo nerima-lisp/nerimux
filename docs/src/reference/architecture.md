@@ -109,7 +109,7 @@ The layering rule is:
 - `application` holds use cases over the domain model: `packages/commands/` (copy
   mode, the command-line tokenizer, and pane PTY teardown) and `packages/picker/` (the
   global picker item model).
-- `infrastructure` provides the real PTY/socket/VCS adapters and binds the
+- `infrastructure` provides the concrete PTY/socket/VCS integrations and binds the
   domain's port variables to them.
 - `presentation` turns model state into escape codes and, for the workspace
   UI, into `cl-tui-kit` surfaces.
