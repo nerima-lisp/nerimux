@@ -58,6 +58,32 @@
                   "%drop-client must not signal when close-socket fails"))
       (expect (null nerimux::*clients*))))
 
+  (it "multi-drop-client-swallow-bye-transport-failures"
+    (dolist (condition-type '(sb-ext:timeout
+                              sb-bsd-sockets:socket-error
+                              stream-error))
+      (let* ((stream (make-two-way-stream
+                      (make-string-input-stream "")
+                      (make-string-output-stream)))
+             (conn (let ((value (%make-test-conn)))
+                     (setf (nerimux::client-conn-stream value) stream)
+                     value))
+             (nerimux::*clients* (list conn)))
+        (with-stubbed-fdefinition
+            ((nerimux/transport:send-frame
+              (lambda (&rest args)
+                (declare (ignore args))
+                (case condition-type
+                  (stream-error (error 'stream-error :stream stream))
+                  (sb-bsd-sockets:socket-error
+                   (error 'sb-bsd-sockets:socket-error
+                          :syscall "send" :errno 32))
+                  (t (error 'sb-ext:timeout))))))
+          (finishes (nerimux::%drop-client conn :bye t)
+                    "drop must contain ~A while sending bye"
+                    condition-type))
+        (expect (null nerimux::*clients*)))))
+
   ;;; ── Accept-loop resilience ───────────────────────────────────────────────
 
   ;; %accept-pending-connection must not let a failure from accept-connection
