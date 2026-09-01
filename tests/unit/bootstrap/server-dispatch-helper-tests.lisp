@@ -1837,6 +1837,35 @@
         (nerimux::%select-client-tree-relative conn 3)
         (expect (= 3 (nerimux::client-conn-tree-scroll conn))))))
 
+  (it "tree-relative-selection-clamps-at-both-list-ends"
+    (let* ((organization
+             (nerimux/workspace-model:make-organization
+              :id "org-relative-edges" :host "github.com" :name "team"))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :id "repo-relative-edges" :organization organization
+              :specification "github.com/team/repo-relative-edges"))
+           (first-worktree
+             (nerimux/workspace-model:make-worktree
+              :id "wt-relative-edge-1" :repository repository
+              :path "/tmp/relative-edge-1" :branch "first" :dirty-p t))
+           (second-worktree
+             (nerimux/workspace-model:make-worktree
+              :id "wt-relative-edge-2" :repository repository
+              :path "/tmp/relative-edge-2" :branch "second" :dirty-p t))
+           (conn (nerimux::%make-client-conn)))
+      (nerimux/workspace-model:organization-add-repository organization repository)
+      (nerimux/workspace-model:repository-add-worktree repository first-worktree)
+      (nerimux/workspace-model:repository-add-worktree repository second-worktree)
+      (let ((nerimux/vcs::*workspace-organizations* (list organization))
+            (nerimux::*dirty* nil))
+        (nerimux::%set-client-selected-tree-object conn first-worktree)
+        (expect (eq first-worktree
+                    (nerimux::%select-client-tree-relative conn -1)))
+        (nerimux::%set-client-selected-tree-object conn second-worktree)
+        (expect (eq second-worktree
+                    (nerimux::%select-client-tree-relative conn 1))))))
+
   ;; J moves the selection to the next :SECTION header row only, skipping
   ;; every worktree/repository row in between.
   (it "J-jumps-the-selection-forward-to-the-next-section-header"
