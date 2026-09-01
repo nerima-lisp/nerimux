@@ -269,3 +269,15 @@
           (nerimux::%client-attach-target
            conn (list nil "/tmp/nerimux-cwd-fixture/repo/.worktrees/wt-no-session/src"))
           (expect (eq :repolist (nerimux::client-conn-view conn))))))))
+
+  (it "r7-2-a-attach-with-no-match-focuses-the-active-pane"
+    (multiple-value-bind (session)
+        (make-single-pane-session)
+      (let* ((pane (first (nerimux/session:all-panes session)))
+             (conn (%make-test-conn))
+             (nerimux::*server-sessions* (list (cons "0" session)))
+             (nerimux/vcs::*workspace-organizations* nil))
+        (setf (nerimux::client-conn-view conn) :repolist)
+        (nerimux::%client-attach-target conn '(nil nil))
+        (expect (eq pane (nerimux::client-conn-focus conn)))
+        (expect (eq :repolist (nerimux::client-conn-view conn))))))
