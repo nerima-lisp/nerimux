@@ -151,8 +151,7 @@
                             (unless handled-p
                               (%client-notify
                                conn
-                               (format nil "unknown command: ~(~A~)" cmd))))
-                          (%client-notify conn "empty command"))
+                               (format nil "unknown command: ~(~A~)" cmd)))))
                       (unless handled-p
                         (%client-restore-command-view conn)))
                     (%set-client-modal conn nil)
