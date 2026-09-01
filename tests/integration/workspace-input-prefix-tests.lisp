@@ -339,7 +339,16 @@
         (nerimux/window:window-zoom-toggle window)
         (expect (nerimux/window:window-zoom-p window))
         (nerimux::%workspace-prefix-unzoom window)
-        (expect (not (nerimux/window:window-zoom-p window)))))) (it "r7-1-repository-fetch-reports-preconditions-and-completion"
+        (expect (not (nerimux/window:window-zoom-p window))))))
+
+  (it "r5-7-prefix-open-status-steps-out-from-the-status-view"
+    (with-fake-session (s :nwindows 0)
+      (let ((conn (%make-test-conn)))
+        (nerimux::%set-client-view conn :status)
+        (expect (null (nerimux::%workspace-prefix-open-status s conn)))
+        (expect (eq :repolist (nerimux::client-conn-view conn))))))
+
+  (it "r7-1-repository-fetch-reports-preconditions-and-completion"
     (with-fake-session (s)
       (expect s)
       (let ((conn (%make-test-conn))
