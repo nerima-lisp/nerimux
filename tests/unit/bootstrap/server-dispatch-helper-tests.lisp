@@ -1964,6 +1964,25 @@
         (expect (eq :repositories
                     (nerimux::%select-client-tree-section-relative conn -1))))))
 
+  (it "section-selection-starts-from-the-nearest-edge-without-a-selection"
+    (let* ((organization
+             (nerimux/workspace-model:make-organization
+              :id "org-jk-edge" :host "github.com" :name "team"))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :id "repo-jk-edge" :organization organization
+              :specification "github.com/team/repo-jk-edge"))
+           (conn (nerimux::%make-client-conn)))
+      (nerimux/workspace-model:organization-add-repository organization repository)
+      (let ((nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
+            (nerimux::*dirty* nil)
+            (nerimux/vcs::*workspace-organizations* (list organization)))
+        (expect (eq :repositories
+                    (nerimux::%select-client-tree-section-relative conn 1)))
+        (setf (nerimux::client-conn-selected-tree-object conn) nil)
+        (expect (eq :repositories
+                    (nerimux::%select-client-tree-section-relative conn -1))))))
+
   (it "J-scrolls-section-selection-into-a-narrow-view"
     (let* ((organization
              (nerimux/workspace-model:make-organization
