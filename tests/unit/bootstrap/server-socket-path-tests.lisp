@@ -270,6 +270,14 @@
              (expect (eq t (and (nerimux::%stale-socket-p path) t))))
         (ignore-errors (delete-file path)))))
 
+  (it "stale-socket-p-treats-probe-file-errors-as-not-stale"
+    (with-stubbed-locked-fdefinitions
+        ((probe-file
+          (lambda (path)
+            (declare (ignore path))
+            (error 'file-error))))
+      (expect (null (nerimux::%stale-socket-p "/synthetic/socket")))))
+
   ;; %stale-socket-p returns NIL when a live listener accepts on the path.
   (it "stale-socket-p-live-listener-is-not-stale"
     (let ((path (nerimux/net::%make-probe-socket-path)))
