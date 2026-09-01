@@ -27,13 +27,6 @@
 ;;;;     and `!` deliberately never runs an arbitrary user-typed shell command
 ;;;;     -- that is its own trust-boundary decision, not something to default
 ;;;;     into existence as a side effect of wiring a keymap.
-(defconstant +max-process-log-entries+
-  20
-  "Cap on CLIENT-CONN-PROCESS-LOG entry COUNT (contract §1's comment on that
-   slot already caps each entry's OUTPUT via nerimux/vcs's own
-   *write-operation-output-max-length*, so this bounds how many commands are
-   remembered, not how large one of them can be).")
-
 ;;; ── Argument-toggle persistence (FR-010) ─────────────────────────────────
 (defun %client-transient-active-flags (conn transient-key)
   (cdr (assoc transient-key (client-conn-transient-arguments conn))))

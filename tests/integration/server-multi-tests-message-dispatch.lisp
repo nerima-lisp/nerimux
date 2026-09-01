@@ -2285,7 +2285,25 @@
                                                                        nil
                                                                        nil
                                                                        nil)
-                                   (expect (= 2 (length calls)))))
+                                   (expect (= 2 (length calls)))
+                                   (nerimux::%client-transient-toggle-flag conn
+                                                                           #\P
+                                                                           "--force")
+                                   (nerimux::%run-transient-git-action conn
+                                                                       #\P
+                                                                       :push
+                                                                       nil
+                                                                       nil
+                                                                       '("--force"))
+                                   (expect
+                                    (eq :confirm
+                                        (nerimux::client-conn-modal conn)))
+                                   (funcall
+                                    (nerimux::client-conn-confirm-action conn))
+                                   (expect (= 3 (length calls)))
+                                   (nerimux::%client-transient-toggle-flag conn
+                                                                           #\P
+                                                                           "--force")))
                                 (with-stubbed-fdefinition
                                     ((nerimux/vcs:vcs-package-available-p (lambda () t))
                                      (nerimux/vcs:git-write-operation-async

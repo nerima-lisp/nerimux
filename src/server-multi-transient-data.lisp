@@ -2,6 +2,10 @@
 ;;;; Handlers are lambdas where load order requires deferred function lookup.
 (in-package #:nerimux)
 
+(defconstant +max-process-log-entries+
+  20
+  "Maximum number of process-log entries retained per client.")
+
 ;;; ── +TRANSIENT-DEFINITIONS+ (contract §2/§3) ─────────────────────────────
 ;;;
 ;;; KEY -> (TITLE ARGUMENTS ACTIONS).  ARGUMENTS is a list of (ARG-KEY . FLAG);
