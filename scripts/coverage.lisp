@@ -111,6 +111,9 @@
     (push (truename (uiop:ensure-directory-pathname dir))
           asdf:*central-registry*)))
 
+;; Load SB-COVER before cl-weave builds its coverage runner.  This keeps ASDF's
+;; dependency plan ordered when the runner accesses SB-COVER internals.
+(asdf:load-system "sb-cover")
 (asdf:load-system "cl-weave")
 
 (cl-weave:reset-coverage)
