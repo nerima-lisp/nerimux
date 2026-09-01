@@ -90,4 +90,18 @@
     (let* ((p1  (make-no-pty-pane 15 0 0 80 24))
            (win (make-window :id 1 :name "w" :width 80 :height 24
                              :panes (list p1))))
-      (expect (eq p1 (nerimux::find-pane-by-target win "%15"))))))
+      (expect (eq p1 (nerimux::find-pane-by-target win "%15")))))
+
+  (it "define-target-lookup-supports-docstrings-and-nil-guards"
+    (let ((name (gensym "TARGET-LOOKUP-")))
+      (unwind-protect
+           (progn
+             (eval `(nerimux::define-target-lookup ,name (value)
+                      "Generated lookup."
+                      (:nil-guard value)
+                      ((and (eql value :hit) :matched))))
+             (expect (null (funcall name nil)))
+             (expect (eq :matched (funcall name :hit)))
+             (expect (null (funcall name :miss))))
+        (when (fboundp name)
+          (fmakunbound name))))))
