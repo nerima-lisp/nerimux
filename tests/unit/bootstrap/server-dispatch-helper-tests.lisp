@@ -419,6 +419,26 @@
                        :test #'string=)
                 :to-be-truthy))))
 
+  (it "prune-confirm-reports-an-unavailable-vcs-package"
+    (multiple-value-bind (organizations organization repository main-worktree
+                          feature-worktree)
+        (%make-server-dispatch-helper-fixture)
+      (declare (ignore organization main-worktree feature-worktree))
+      (let ((conn (nerimux::%make-client-conn))
+            (nerimux::*clients* nil)
+            (nerimux/vcs::*workspace-organizations* organizations))
+        (setf nerimux::*clients* (list conn))
+        (nerimux::%set-client-selected-tree-object conn repository)
+        (setf (nerimux::client-conn-pending-prune-preview-repository-id conn)
+              (nerimux/workspace-model:repository-id repository))
+        (with-stubbed-fdefinition
+            ((nerimux/vcs:vcs-package-available-p (lambda () nil)))
+          (expect (nerimux::%client-prune-worktrees
+                   conn nil '("--confirm") :dry-run nil))
+          (expect (find "VCS adapter unavailable"
+                        (nerimux::client-conn-message-log conn)
+                        :test #'string=))))))
+
   (it "resolves-workspace-tokens-by-kind-and-ignores-option-values"
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
