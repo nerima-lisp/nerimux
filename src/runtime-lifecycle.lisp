@@ -1,9 +1,5 @@
 (in-package #:nerimux)
 
-(defparameter +runtime-safe-server-name-punctuation+
-  '(#\- #\_ #\.)
-  "Punctuation preserved when a runtime server name becomes a path component.")
-
 (defun %runtime-safe-server-name (name)
   (let ((text (princ-to-string (or name "default"))))
     (let ((result

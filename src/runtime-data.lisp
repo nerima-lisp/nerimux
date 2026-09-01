@@ -1,5 +1,9 @@
 (in-package #:nerimux)
 
+(defparameter +runtime-safe-server-name-punctuation+
+  '(#\- #\_ #\.)
+  "Punctuation preserved when a runtime server name becomes a path component.")
+
 (deftype peer-io-failure ()
   "Conditions that terminate a peer I/O operation and reach its CPS failure path.
 
