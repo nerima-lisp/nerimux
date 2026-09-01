@@ -1,18 +1,6 @@
 (in-package #:nerimux/test)
 
 ;;;; Per-client message dispatch tests for the multi-client server.
-(defun %wt-auto-branch-name-p (branch)
-  "T when BRANCH matches wt-YYYYMMDDTHHMMSS -- the auto-generated branch
-   name format %CLIENT-WORKTREE-CREATE-BRANCH-NAME produces for `n` (PR2,
-   R6.3 pivot). Written without a regex dependency: a hand rolled character-
-   class check over the fixed-width format is just as precise here."
-  (and (stringp branch)
-       (= (length branch) 18)
-       (string= "wt-" branch :end2 3)
-       (every #'digit-char-p (subseq branch 3 11))
-       (char= #\T (char branch 11))
-       (every #'digit-char-p (subseq branch 12 18))))
-
 (describe "server-multi-suite"
 
   (it "main-thread-callback-queue-preserves-order"

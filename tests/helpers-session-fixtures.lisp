@@ -7,13 +7,6 @@
   `(let ((,var (make-session :id 1 :name "0" :windows nil)))
      ,@body))
 
-(defmacro with-minimal-loop-session ((pane-var win-var sess-var &rest keys)
-                                     &body
-                                     body)
-  "Combine with-minimal-session + with-loop-state for dispatch tests."
-  `(with-minimal-session (,pane-var ,win-var ,sess-var ,@keys)
-                         (with-loop-state ,@body)))
-
 ;;; WITH-SESSION (real PTY-backed session, via create-initial-session) moved
 ;;; to tests/pty/helpers.lisp: R9.2's case-by-case audit found every one of its
 ;;; callers spawned a real PTY, so all of them moved into the nerimux/pty-test
