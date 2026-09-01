@@ -1,10 +1,6 @@
 (in-package #:nerimux)
 
 ;;;; Shared multi-client connection data.
-(defparameter +default-workspace-prefix-key-code+
-  #x11
-  "Control-Q, the workspace UI prefix used by the multi-client overview.")
-
 (defstruct (client-conn (:constructor %make-client-conn))
   "One attached client: its socket, a cached binary STREAM and FD, a private
    keystroke STATE (so each client has independent prefix/copy-mode state), the
@@ -90,10 +86,6 @@
 ;; SERVER-MULTI.LISP initializes the registry after this dispatch file loads.
 (declaim (special *clients*))
 
-(defvar *last-selected-worktree-token*
-  nil
-  "Stable selector for the most recently selected worktree across clients.")
-
 ;;;; Multi-client message handlers extracted from server-multi.lisp.
 ;;;;
 ;;;; The event loop keeps the dispatch table, while these helpers own the
@@ -145,20 +137,6 @@
                              '())
          ,on-error))))
 
-(defvar *client-esc-swallow-counts*
-  (make-hash-table :test #'eq :weakness :key)
-  "CONN -> count of upcoming key bytes to discard unconditionally.
-
-Set by ESC in a text-input UI mode (:picker / :command, R4.3): the client
-forwards stdin one byte at a time, so an arrow key still arrives as the
-3-byte escape sequence ESC [ A/B/C/D, split across three separate key
-messages. R4.1 dropped byte-sequence matching entirely, so without this the
-trailing 2 bytes of that sequence would land on whatever key handler runs
-next (typically the search/command buffer) as literal `[` and a letter.
-Keyed by CONN rather than a client-conn slot because client-conn is shared
-data defined above; :weakness :key lets a
-dropped connection's entry be reclaimed instead of leaking.")
-
 (defun %client-esc-swallow-start (conn &optional (n 2))
   (setf (gethash conn *client-esc-swallow-counts*) n))
 
@@ -201,25 +179,6 @@ dropped connection's entry be reclaimed instead of leaking.")
   (setf (client-conn-modal conn) modal)
   (%mark-dirty)
   modal)
-
-(defparameter +keyboard-owning-modals+
-  '(:confirm :help :process-log :transient)
-  "Modals the C-q prefix must not reach past.
-
-   These four take over the frame and each claims, in its own handler's
-   docstring, to own every key while it is up. That claim is only true if the
-   prefix is checked AFTER them -- and getting it wrong is not a cosmetic
-   ordering issue. C-q merely ARMS the prefix and returns; the byte the user
-   types next, believing it answers the y/n question still on screen, is then
-   consumed as the chord's second byte instead. If that byte is `Q`, it opens a
-   second confirmation over the first, and the original pending destructive
-   action is silently dropped -- neither run nor cancelled.
-
-   The remaining modals (:picker :command :filter :scrollback) are deliberately
-   NOT here: the prefix reached past them before this refactor too, and
-   promoting them now would be an unrequested behaviour change rather than a
-   fix. The line is \"owns the screen and asks a question\" versus \"an input
-   line over a view that is still visible underneath\".")
 
 (defun %handle-multi-key-message (session conn payload)
   "Feed PAYLOAD to whatever currently owns CONN's keyboard.

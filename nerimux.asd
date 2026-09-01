@@ -145,6 +145,7 @@
        (:file "session-registry")  ; lookup for the one session the server owns
        (:file "server")
        (:file "workspace-window") ; workspace window creation
+       (:file "server-multi-data") ; multi-client data declarations
        (:file "server-multi-dispatch") ; shared multi-client handlers
        (:file "server-multi-dispatch-prefix") ; C-q workspace actions
        (:file "server-multi-workspace-selection") ; workspace catalog selection logic
