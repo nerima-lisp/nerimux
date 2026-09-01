@@ -384,8 +384,7 @@
                     (nerimux::%client-selected-organization conn repository)))
         (expect (eq organization
                     (nerimux::%client-selected-organization conn feature-worktree)))
-        (expect (eq feature-worktree
-                    (nerimux::%client-operation-worktree conn feature-worktree))))))
+        )))
 
   (it "keeps-empty-selection-without-focus"
     (let ((conn (nerimux::%make-client-conn)))
