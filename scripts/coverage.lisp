@@ -53,6 +53,7 @@
     "src/main-startup-socket-data.lisp"
     "src/main-startup-socket-macros.lisp"
     "src/runtime-reader-data.lisp"
+    "src/server-multi-dispatch-command-input-data.lisp"
     "src/runtime-data.lisp"
     "src/package.lisp"
     "src/server-multi-state.lisp"

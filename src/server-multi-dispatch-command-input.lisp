@@ -201,15 +201,6 @@
 ;;; known, so this needs the opposite shape -- remember that an ESC is
 ;;; in-flight and route only the byte(s) that follow it, keyed by CONN so one
 ;;; client's pending sequence can never resolve against another's byte.
-(defvar *client-meta-pending*
-  (make-hash-table :test #'eq :weakness :key)
-  "CONN -> :SECOND (just saw ESC, waiting for the byte that disambiguates
-   M-n/M-p from a CSI introducer) or :CSI-THIRD (that byte was `[`, waiting
-   for the third byte that disambiguates S-TAB's `Z` from an arrow key's
-   A/B/C/D). Absent means no ESC is in flight for CONN. :weakness :key for
-   the same reason as *CLIENT-ESC-SWALLOW-COUNTS*: a dropped connection's
-   entry must not linger.")
-
 (defun %client-meta-pending-consume (conn payload)
   "Resolve the byte following a pending ESC. `n`/`p` while :SECOND completes
    M-n/M-p (contract SS2's section jump); `[` while :SECOND is a CSI
