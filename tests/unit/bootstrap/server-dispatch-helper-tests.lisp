@@ -1756,4 +1756,22 @@
                         (nerimux/terminal:cell-char
                          (nerimux/terminal:screen-cell screen 0 0))))
                 (expect (null (nerimux::client-conn-message-log conn)))
-                (expect nerimux::*dirty*)))))
+                (expect nerimux::*dirty*)))
+          (it "uses-live-workspace-defaults-and-stringifies-notices"
+              (multiple-value-bind (organizations organization repository
+                                    main-worktree feature-worktree)
+                  (%make-server-dispatch-helper-fixture)
+                (declare (ignorable organization main-worktree feature-worktree))
+                (let ((conn (nerimux::%make-client-conn))
+                      (nerimux::*clients* nil)
+                      (nerimux::*dirty* nil)
+                      (nerimux/vcs::*workspace-organizations* organizations))
+                  (expect (eq repository
+                              (nerimux::%workspace-find-repository "repo-id")))
+                  (expect (eq organization
+                              (nerimux::%workspace-find-organization "org-id")))
+                  (setf nerimux::*clients* (list conn))
+                  (expect (string= "42" (nerimux::%client-notify conn 42)))
+                  (expect (equal '("42")
+                                 (nerimux::client-conn-message-log conn)))))))
+)
