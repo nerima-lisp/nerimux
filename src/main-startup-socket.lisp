@@ -64,7 +64,8 @@
       (sb-ext:run-program exe args :wait nil :output nil :error nil)
     (file-error () nil)
     (stream-error () nil)
-    (error () nil)))
+    (error (condition)
+      (values nil condition))))
 
 (defun %launch-server-and-poll-when-live (socket-path exe args log-path)
   "Spawn EXE/ARGS non-blocking, redirecting its stdout and stderr to LOG-PATH
