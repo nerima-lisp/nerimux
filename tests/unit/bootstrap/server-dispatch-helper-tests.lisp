@@ -1663,6 +1663,21 @@
         (expect (nerimux::%client-tree-collapse-selected conn))
         (expect (null (gethash repo-key nerimux::*workspace-expanded-node-ids*))))))
 
+  (it "enter-on-an-expanded-repository-row-collapses-its-worktrees"
+    (multiple-value-bind (organizations organization repository main-worktree
+                          feature-worktree)
+        (%make-server-dispatch-helper-fixture)
+      (declare (ignorable organizations organization main-worktree feature-worktree))
+      (let* ((nerimux::*workspace-expanded-node-ids* (make-hash-table :test #'equal))
+             (nerimux::*dirty* nil)
+             (conn (nerimux::%make-client-conn))
+             (key (list :repository (nerimux/workspace-model:repository-id repository))))
+        (nerimux::%set-client-selected-tree-object conn repository)
+        (setf (gethash key nerimux::*workspace-expanded-node-ids*) t)
+        (expect (nerimux::%client-toggle-selected-tree-row conn))
+        (expect (null (gethash key nerimux::*workspace-expanded-node-ids*)))
+        (expect nerimux::*dirty*))))
+
   (it "h-and-l-toggle-a-section-row"
     (let ((nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
           (nerimux::*dirty* nil)
