@@ -173,7 +173,8 @@
        (:file "client")
        (:file "main-startup-flags") ; global cl-cli flag definitions
        (:file "main-startup-socket") ; socket discovery + server auto-start helpers
-       (:file "main-startup-commands") ; attach/version/usage handlers + mode table
+       (:file "main-startup-data") ; startup mode metadata
+       (:file "main-startup-commands") ; attach/version/usage handlers
        (:file "main-startup"))))
   ;; Build a standalone binary: (asdf:make :nerimux)
   :build-operation "program-op"

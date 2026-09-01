@@ -2286,6 +2286,17 @@
                                                                        nil
                                                                        nil)
                                    (expect (= 2 (length calls)))))
+                                (with-stubbed-fdefinition
+                                    ((nerimux/vcs:vcs-package-available-p (lambda () t))
+                                     (nerimux/vcs:git-write-operation-async
+                                      (lambda (received operation args &key on-complete
+                                                       on-error callback-dispatch)
+                                        (declare (ignore received operation args on-error
+                                                                callback-dispatch))
+                                        (funcall on-complete nil "failed"))))
+                                  (nerimux::%run-transient-git-action conn #\P :push nil nil nil)
+                                  (expect (string= "git push: failed"
+                                                   (first (nerimux::client-conn-message-log conn)))))
                                 (multiple-value-bind (repository worktree
                                                                  ignored-conn) 
                                     (%make-worktree-operation-fixture)

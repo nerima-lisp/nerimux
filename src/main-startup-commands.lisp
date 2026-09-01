@@ -121,12 +121,6 @@
   (write-string (%usage-string))
   (sb-ext:exit :code 0))
 
-(defmacro %startup-mode (mode-name handler &key raw-args-p)
-  `(list ,mode-name
-         ',handler
-         ,@(when raw-args-p
-             '(:raw-args-p t))))
-
 ;;; ── Startup mode dispatch (data / logic separation) ─────────────────────────
 ;;;
 ;;; *startup-modes* is the DATA: a map from mode-name strings to handler
@@ -138,23 +132,6 @@
 ;;; Handlers that need RAW-ARGS (the full argv tail) receive them directly.
 ;;; Handlers that need only a session NAME extract (or (first rest) "0")
 ;;; outside the handler - this is the one-argument convention.
-(defparameter *startup-modes*
-  (list (%startup-mode "server" run-server)
-        (%startup-mode "attach" run-attach-simple)
-        ;; kill (R8.1) is :raw-args-p so run-kill sees --force itself; it is
-        ;; kill's own argument (1.6), not parsed by *cli-app*'s global flags.
-        (%startup-mode "kill" run-kill :raw-args-p t)
-        ;; -V: print the version and exit. --version/-h/--help are
-        ;; nerimux's own conventions for the same flags.
-        (%startup-mode "-V" run-version :raw-args-p t)
-        (%startup-mode "--version" run-version :raw-args-p t)
-        (%startup-mode "-h" run-usage :raw-args-p t)
-        (%startup-mode "--help" run-usage :raw-args-p t))
-  "Mode-name -> plist dispatch table for the binary entry point.
-   Each entry is (mode-name . (handler-symbol &key :raw-args-p bool)).
-   :raw-args-p T means the handler receives the full raw argv tail rather
-   than a single session name.")
-
 (defun %startup-mode-entry (mode-name)
   (cdr (assoc mode-name *startup-modes* :test #'equal)))
 

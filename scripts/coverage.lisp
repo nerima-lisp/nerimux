@@ -49,6 +49,7 @@
 ;; representation instead of product behavior.
 (defparameter *coverage-excluded-source-files*
   '("src/main-startup-flags.lisp"
+    "src/main-startup-data.lisp"
     "src/runtime-data.lisp"
     "src/package.lisp"
     "src/server-multi-state.lisp"
