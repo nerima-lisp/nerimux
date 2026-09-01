@@ -1593,6 +1593,23 @@
                     (nerimux::%select-client-tree-section-relative conn -1)))
         (expect (eq :repositories (nerimux::%client-tree-object conn))))))
 
+  (it "K-starts-at-the-last-section-without-a-selection"
+    (let* ((organization
+             (nerimux/workspace-model:make-organization
+              :id "org-jk-empty" :host "github.com" :name "team"))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :id "repo-jk-empty" :organization organization
+              :specification "github.com/team/repo-jk-empty"))
+           (conn (nerimux::%make-client-conn)))
+      (nerimux/workspace-model:organization-add-repository organization repository)
+      (let ((nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
+            (nerimux::*dirty* nil)
+            (nerimux/vcs::*workspace-organizations* (list organization)))
+        (expect (eq :repositories
+                    (nerimux::%select-client-tree-section-relative conn -1)))
+        (expect (eq :repositories (nerimux::%client-tree-object conn))))))
+
   ;; Review-round fix: +MAX-TREE-FILTER-LENGTH+ (256, security review) caps
   ;; CLIENT-CONN-TREE-FILTER's length -- %CLIENT-TREE-FILTER-BUFFER-APPEND
   ;; must refuse further characters outright once the cap is hit, not
