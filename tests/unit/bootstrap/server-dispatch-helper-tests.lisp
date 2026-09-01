@@ -1751,9 +1751,11 @@
   (it "tree-selection-logic-covers-unselected-directional-fallbacks"
     (expect (= 0 (nerimux::%tree-selection-index nil '(a b) -1)))
     (expect (= -1 (nerimux::%tree-selection-index nil '(a b) 1)))
+    (expect (= -1 (nerimux::%tree-selection-index nil '(a b) 0)))
     (expect (= 2 (nerimux::%tree-selection-scroll 2 3 5)))
     (expect (= 3 (nerimux::%tree-selection-scroll 8 3 5)))
-    (expect (= 6 (nerimux::%tree-selection-scroll 10 0 5))))
+    (expect (= 6 (nerimux::%tree-selection-scroll 10 0 5)))
+    (expect (= 0 (nerimux::%tree-selection-scroll 5 0 10))))
 
   (it "tree-relative-selection-clamps-backward-movement-without-selection"
     (with-server-dispatch-helper-fixture
