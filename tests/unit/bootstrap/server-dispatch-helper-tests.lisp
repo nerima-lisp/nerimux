@@ -1067,6 +1067,19 @@
                  session conn direction)))
         (expect (= 4 (length (nerimux::client-conn-message-log conn)))))))
 
+  (it "selects the adjacent pane and marks the session dirty"
+    (with-two-pane-v-session (session _window upper lower)
+      (let ((conn (nerimux::%make-client-conn))
+            (nerimux::*clients* nil)
+            (nerimux::*dirty* nil))
+        (setf (nerimux/pane:pane-window upper) _window
+              (nerimux/pane:pane-window lower) _window)
+        (setf (nerimux::client-conn-focus conn) upper)
+        (expect (nerimux::%client-select-pane-direction
+                 session conn :down))
+        (expect (eq lower (nerimux::client-conn-focus conn)))
+        (expect nerimux::*dirty*))))
+
   (it "starts worktree creation with an automatic branch for a selected repository"
     (let ((session (nerimux/session:make-session :id 1 :name "test"))
           (conn (nerimux::%make-client-conn))
