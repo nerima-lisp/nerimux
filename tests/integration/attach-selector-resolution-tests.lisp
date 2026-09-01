@@ -268,7 +268,7 @@
           (setf (nerimux::client-conn-view conn) :repolist)
           (nerimux::%client-attach-target
            conn (list nil "/tmp/nerimux-cwd-fixture/repo/.worktrees/wt-no-session/src"))
-          (expect (eq :repolist (nerimux::client-conn-view conn))))))))
+          (expect (eq :repolist (nerimux::client-conn-view conn)))))))
 
   (it "r7-2-a-attach-with-no-match-focuses-the-active-pane"
     (multiple-value-bind (session)
@@ -281,3 +281,30 @@
         (nerimux::%client-attach-target conn '(nil nil))
         (expect (eq pane (nerimux::client-conn-focus conn)))
         (expect (eq :repolist (nerimux::client-conn-view conn))))))
+
+  (it "r7-2-a-attach-resolves-and-merges-a-fresh-cwd-catalog"
+    (multiple-value-bind (organizations)
+        (%attach-fixture
+         :worktree-path "/tmp/nerimux-cwd-fixture/repo/.worktrees/wt-resolved")
+      (multiple-value-bind (session)
+          (make-single-pane-session)
+        (let ((conn (%make-test-conn))
+              (nerimux::*server-sessions* (list (cons "0" session)))
+              (nerimux/vcs::*workspace-organizations* nil)
+              (resolver
+                (make-mock-function
+                 (lambda (directory)
+                   (expect (string= "/tmp/nerimux-cwd-fixture/repo/.worktrees/wt-resolved/src"
+                                    directory))
+                   organizations))))
+          (setf (nerimux::client-conn-view conn) :repolist)
+          (with-mocked-functions
+              (((fdefinition 'nerimux/vcs:resolve-directory-organizations)
+                 resolver))
+            (nerimux::%client-attach-target
+             conn
+             (list nil
+                   "/tmp/nerimux-cwd-fixture/repo/.worktrees/wt-resolved/src")))
+          (expect (equal organizations
+                          (nerimux/vcs:workspace-organizations)))
+          (expect (eq :repolist (nerimux::client-conn-view conn))))))))
