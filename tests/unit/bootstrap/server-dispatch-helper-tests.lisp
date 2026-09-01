@@ -1611,6 +1611,26 @@
                                  nerimux::*workspace-expanded-node-ids*)))
           (expect nerimux::*dirty*)))))
 
+  (it "tab-toggles-file-rows-and-ignores-unknown-tree-objects"
+    (let* ((conn (nerimux::%make-client-conn))
+           (calls nil)
+           (nerimux::*dirty* nil))
+      (with-stubbed-fdefinition
+          ((nerimux::%client-toggle-selected-file-diff
+             (lambda (&rest arguments)
+               (setf calls arguments)
+               :file-handled)))
+        (nerimux::%set-client-selected-tree-object
+         conn '(:file "worktree-1" "src/main.lisp" "M"))
+        (setf nerimux::*dirty* nil)
+        (expect (eq :file-handled
+                    (nerimux::%client-toggle-selected-tree-row conn)))
+        (expect (equal '("worktree-1" "src/main.lisp" "M") calls))
+        (nerimux::%set-client-selected-tree-object conn '(:other "value"))
+        (setf nerimux::*dirty* nil)
+        (expect (null (nerimux::%client-toggle-selected-tree-row conn)))
+        (expect (null nerimux::*dirty*)))))
+
   ;; h/l on a REPOSITORY row toggle its worktree listing under the
   ;; Repositories section (*WORKSPACE-EXPANDED-NODE-IDS*, default-collapsed
   ;; polarity -- the opposite sense from *WORKSPACE-COLLAPSED-NODE-IDS*,
