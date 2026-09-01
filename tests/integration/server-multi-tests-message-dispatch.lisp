@@ -1895,6 +1895,28 @@
                          calls)))))))
 
 (describe "transient data and process log suite"
+  (it "covers-meta-sequence-and-process-log-boundaries"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn))
+            (nerimux::*client-meta-pending* (make-hash-table :test #'eq)))
+        (dolist (key '(#\n #\p))
+          (setf (gethash conn nerimux::*client-meta-pending*) :second)
+          (nerimux::%client-meta-pending-consume conn (string key))
+          (expect (null (gethash conn nerimux::*client-meta-pending*))))
+        (setf (gethash conn nerimux::*client-meta-pending*) :second)
+        (nerimux::%client-meta-pending-consume conn "[")
+        (expect (eq :csi-third (gethash conn nerimux::*client-meta-pending*)))
+        (nerimux::%client-meta-pending-consume conn "Z")
+        (expect (null (gethash conn nerimux::*client-meta-pending*)))
+        (setf (gethash conn nerimux::*client-meta-pending*) :csi-third)
+        (nerimux::%client-meta-pending-consume conn "A")
+        (expect (null (gethash conn nerimux::*client-meta-pending*)))
+        (setf (nerimux::client-conn-process-log conn) '("one" "two"))
+        (nerimux::%scroll-client-process-log conn 99)
+        (expect (= 1 (nerimux::client-conn-process-log-scroll conn)))
+        (nerimux::%scroll-client-process-log conn -99)
+        (expect (zerop (nerimux::client-conn-process-log-scroll conn))))))
+
   (it "covers-visibility-and-process-log-state-machines"
     (with-fake-session (s)
       (let ((conn (%make-test-conn)))
