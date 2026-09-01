@@ -29,6 +29,17 @@
          (plusp (length filter))
          filter)))
 
+(defun %ensure-full-coverage (statistics)
+  (loop for (kind covered-key total-key)
+          in '((:expression :expression-covered :expression-total)
+               (:branch :branch-covered :branch-total))
+        for covered = (getf statistics covered-key)
+        for total = (getf statistics total-key)
+        unless (= covered total)
+          do (error "Coverage threshold failed for ~A: ~D/~D covered."
+                    kind covered total))
+  statistics)
+
 ;; These files contain declarations, compile-time fact constructors, or static
 ;; lookup values only. Their consumers remain covered; counting the definition
 ;; forms as executable behavior would make the percentage measure source
@@ -129,10 +140,6 @@
                               :coverage t :coverage-reset nil
                               :coverage-include-pathnames (list *nerimux-source-root*)
                               :coverage-exclude-pathnames excluded-source-pathnames
-                              :coverage-minimum-expression
-                              (and enforce-thresholds-p 100)
-                              :coverage-minimum-branch
-                              (and enforce-thresholds-p 100)
                               :coverage-report-directory report-dir))
     (error "nerimux test suite failed under coverage instrumentation"))
   (unless (and (probe-file report-index)
@@ -141,6 +148,11 @@
                                        :element-type '(unsigned-byte 8))
                  (plusp (file-length stream))))
     (error "coverage run did not produce a non-empty ~A" report-index))
+  (when enforce-thresholds-p
+    (%ensure-full-coverage
+     (cl-weave:coverage-statistics
+      :include-pathnames (list *nerimux-source-root*)
+      :exclude-pathnames excluded-source-pathnames)))
   (format t "~&Coverage report: ~A~%" report-dir))
 
 (uiop:quit 0)
