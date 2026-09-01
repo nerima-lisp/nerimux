@@ -3,6 +3,26 @@
 ;;;; Per-client message dispatch tests for the multi-client server.
 (describe "server-multi-suite"
 
+  (it "resolves picker worktrees through repository and organization fallbacks"
+    (let* ((empty-organization
+             (nerimux/workspace-model:make-organization))
+           (repository
+             (nerimux/workspace-model:make-repository))
+           (worktree
+             (nerimux/workspace-model:make-worktree :path "/tmp/nerimux-wt"))
+           (organization
+             (nerimux/workspace-model:make-organization)))
+      (nerimux/workspace-model:organization-add-repository
+       organization repository)
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
+      (expect (null (nerimux::%picker-item-worktree
+                     (nerimux/picker::%make-picker-item
+                      :organization empty-organization))))
+      (expect (eq worktree
+                  (nerimux::%picker-item-worktree
+                   (nerimux/picker::%make-picker-item
+                    :organization organization))))))
+
   (it "main-thread-callback-queue-preserves-order"
     (let ((events nil)
           (nerimux::*main-thread-callbacks* nil))
