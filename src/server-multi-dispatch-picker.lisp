@@ -1,8 +1,5 @@
 (in-package #:nerimux)
 
-(defparameter +client-ui-modes+
-  '(:normal :input :copy :command :picker :tree-filter))
-
 (defun %client-picker-items (conn)
   (or (client-conn-picker-items conn)
       (setf (client-conn-picker-items conn) (nerimux/picker:build-global-picker-items
@@ -352,12 +349,6 @@
 ;;; %worktree-window-name and %worktree-windows live in workspace-window.lisp
 ;;; (which loads before this file), next to the other worktree-window
 ;;; creation logic they serve.
-(defparameter +workspace-claude-command+
-  "claude --dangerously-skip-permissions")
-
-(defparameter +workspace-codex-command+
-  "codex --dangerously-bypass-approvals-and-sandbox")
-
 (defun %client-worktree-pane (session worktree)
   (and worktree
        (find worktree

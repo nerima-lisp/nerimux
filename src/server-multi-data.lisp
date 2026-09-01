@@ -1,5 +1,14 @@
 (in-package #:nerimux)
 
+(defparameter +client-ui-modes+
+  '(:normal :input :copy :command :picker :tree-filter))
+
+(defparameter +workspace-claude-command+
+  "claude --dangerously-skip-permissions")
+
+(defparameter +workspace-codex-command+
+  "codex --dangerously-bypass-approvals-and-sandbox")
+
 (defparameter +default-workspace-prefix-key-code+
   #x11
   "Control-Q, the workspace UI prefix used by the multi-client overview.")
