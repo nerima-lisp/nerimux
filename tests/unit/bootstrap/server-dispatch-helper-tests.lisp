@@ -1596,6 +1596,14 @@
       (expect (null (nerimux::%select-client-tree-relative conn 1)))
       (expect (null nerimux::*dirty*))))
 
+  (it "tree-selection-logic-resolves-direction-and-scroll-bounds"
+    (expect (= -1 (nerimux::%tree-selection-index nil '(a b) 1)))
+    (expect (= 0 (nerimux::%tree-selection-index nil '(a b) -1)))
+    (expect (= 1 (nerimux::%tree-selection-index 'b '(a b) 1)))
+    (expect (= 2 (nerimux::%tree-selection-scroll 2 3 5)))
+    (expect (= 3 (nerimux::%tree-selection-scroll 8 3 5)))
+    (expect (= 3 (nerimux::%tree-selection-scroll 4 3 5))))
+
   (it "tree-relative-selection-clamps-backward-movement-without-selection"
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)

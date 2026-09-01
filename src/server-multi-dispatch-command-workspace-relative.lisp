@@ -1,5 +1,17 @@
 (in-package #:nerimux)
 
+(defun %tree-selection-index (current objects delta)
+  (or (and current
+           (position current objects :test #'equal))
+      (if (minusp delta) 0 -1)))
+
+(defun %tree-selection-scroll (next scroll visible)
+  (cond
+    ((< next scroll) next)
+    ((>= next (+ scroll visible))
+     (max 0 (+ next 1 (- visible))))
+    (t scroll)))
+
 (defun %select-client-tree-relative (conn delta)
   (let* ((objects (%workspace-tree-objects
                    (nerimux/vcs:workspace-organizations)
@@ -7,17 +19,14 @@
          (count (length objects)))
     (when (plusp count)
       (let* ((current (%client-tree-object conn))
-             (index (or (and current
-                             (position current objects :test #'equal))
-                        (if (minusp delta) 0 -1)))
+             (index (%tree-selection-index current objects delta))
              (next (max 0 (min (1- count) (+ index delta))))
              (visible (max 1 (nerimux/renderer:workspace-tree-view-rows
                               (client-conn-rows conn)))))
         (%set-client-selected-tree-object conn (nth next objects))
-        (when (< next (client-conn-tree-scroll conn))
-          (setf (client-conn-tree-scroll conn) next))
-        (when (>= next (+ (client-conn-tree-scroll conn) visible))
-          (setf (client-conn-tree-scroll conn)
-                (max 0 (+ next 1 (- visible)))))
+        (setf (client-conn-tree-scroll conn)
+              (%tree-selection-scroll next
+                                      (client-conn-tree-scroll conn)
+                                      visible))
         (%mark-dirty)
         (nth next objects)))))
