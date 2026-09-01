@@ -447,6 +447,25 @@
       (expect (nerimux::%client-enter-command-mode conn 42))
       (expect (string= "" (nerimux::client-conn-command-buffer conn)))))
 
+  (it "focus-and-copy-boundaries-keep-client-state-consistent"
+    (let ((session (nerimux/session:make-session :id 1 :name "test"))
+          (conn (nerimux::%make-client-conn))
+          (notifications nil))
+      (nerimux::%set-client-view conn :status)
+      (expect (null (nerimux::%set-client-focus conn nil)))
+      (expect (null (nerimux::client-conn-focus conn)))
+      (expect (= 0 (nerimux::client-conn-viewport conn)))
+      (expect (eq :pane (nerimux::client-conn-view conn)))
+      (with-stubbed-fdefinition
+          ((nerimux::%client-notify
+             (lambda (connection message)
+               (declare (ignore connection))
+               (push message notifications))))
+        (expect (null (nerimux::%client-enter-copy-mode session conn)))
+        (expect (equal '("no focused pane") notifications)))
+      (expect (nerimux::%client-exit-copy-mode session conn))
+      (expect (null (nerimux::client-conn-modal conn)))))
+
   (it "command-buffer-delete-character-is-safe-at-both-boundaries"
     (let ((conn (nerimux::%make-client-conn)))
       (setf (nerimux::client-conn-command-buffer conn) "abc")
