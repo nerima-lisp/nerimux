@@ -611,32 +611,28 @@ CODE the same real XY pair %CHANGED-FILE-CODE already builds for them
         (push (cons (%changed-file-code entry) (%changed-file-path entry))
               result)))))
 
+(defmacro %collect-status-files (entries status-accessor)
+  `(let (result)
+     (dolist (entry ,entries (nreverse result))
+       (let ((kind (vcs-kit:vcs-status-entry-kind entry)))
+         (unless (or (eq kind :untracked) (eq kind :ignored)
+                     (%status-entry-conflict-p entry))
+           (let ((status (,status-accessor entry)))
+             (when (%changed-file-column-set-p status)
+               (push (cons status (%changed-file-path entry)) result))))))))
+
 (defun %worktree-status-staged-files (entries)
   "Non-conflict, non-untracked/ignored ENTRIES whose INDEX-STATUS (the X
 column, index side) is set, as (CODE . PATH) conses with CODE that single
 character -- magit's staged section (Unit MODEL). A rename-or-copy entry
 with both X and Y set also appears in %WORKTREE-STATUS-UNSTAGED-FILES:
 that duplication is magit's own display behaviour, not a bug."
-  (let (result)
-    (dolist (entry entries (nreverse result))
-      (let ((kind (vcs-kit:vcs-status-entry-kind entry)))
-        (unless (or (eq kind :untracked) (eq kind :ignored)
-                    (%status-entry-conflict-p entry))
-          (let ((status (vcs-kit:vcs-status-entry-index-status entry)))
-            (when (%changed-file-column-set-p status)
-              (push (cons status (%changed-file-path entry)) result))))))))
+  (%collect-status-files entries vcs-kit:vcs-status-entry-index-status))
 
 (defun %worktree-status-unstaged-files (entries)
   "As %WORKTREE-STATUS-STAGED-FILES, but for WORKTREE-STATUS (the Y
 column, worktree side) -- magit's unstaged section (Unit MODEL)."
-  (let (result)
-    (dolist (entry entries (nreverse result))
-      (let ((kind (vcs-kit:vcs-status-entry-kind entry)))
-        (unless (or (eq kind :untracked) (eq kind :ignored)
-                    (%status-entry-conflict-p entry))
-          (let ((status (vcs-kit:vcs-status-entry-worktree-status entry)))
-            (when (%changed-file-column-set-p status)
-              (push (cons status (%changed-file-path entry)) result))))))))
+  (%collect-status-files entries vcs-kit:vcs-status-entry-worktree-status))
 
 (defun %read-worktree-status-at (path fallback-head repository-path)
   (let* ((directory (if (plusp (length path)) path repository-path))
