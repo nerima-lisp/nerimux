@@ -1947,6 +1947,35 @@
         (nerimux::%client-step-back s conn)
         (expect (eq :repolist (nerimux::client-conn-view conn))))))
 
+  (it "steps-back-through-transient-filter-and-live-focus-boundaries"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (pane (first (nerimux::all-panes s))))
+        (setf (nerimux::client-conn-modal conn) :transient
+              (nerimux::client-conn-transient-view conn) :transient-data)
+        (nerimux::%client-step-back s conn)
+        (expect (null (nerimux::client-conn-modal conn)))
+        (expect (null (nerimux::client-conn-transient-view conn)))
+
+        (setf (nerimux::client-conn-tree-filter conn) "feature"
+              (nerimux::client-conn-view conn) :status)
+        (nerimux::%client-step-back s conn)
+        (expect (null (nerimux::client-conn-tree-filter conn)))
+        (expect (eq :status (nerimux::client-conn-view conn)))
+
+        (setf (nerimux::client-conn-focus conn) pane)
+        (nerimux::%client-step-back s conn)
+        (expect (eq :pane (nerimux::client-conn-view conn)))
+
+        (setf (nerimux::client-conn-view conn) :repolist
+              (nerimux::client-conn-focus conn) nil)
+        (nerimux::%client-step-back s conn)
+        (expect (eq :repolist (nerimux::client-conn-view conn)))
+
+        (setf (nerimux::client-conn-focus conn) pane)
+        (nerimux::%client-step-back s conn)
+        (expect (eq :pane (nerimux::client-conn-view conn))))))
+
   (it "transient-command-data-and-process-log-share-stable-contracts"
     (with-fake-session (s)
       (let ((conn (%make-test-conn)))
