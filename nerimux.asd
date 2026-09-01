@@ -45,10 +45,14 @@
                    (error "Cannot locate nerimux.asd while registering packages/.")))))
     (dolist (name cl-user::*nerimux-units*)
       (unless (asdf:find-system name nil)
-        (let ((asd (merge-pathnames (format nil "packages/~A/~A.asd"
-                                            (subseq name (length "nerimux-"))
-                                            name)
-                                    here)))
+        (let ((asd
+                (merge-pathnames
+                 (make-pathname
+                  :directory (list :relative "packages"
+                                   (subseq name (length "nerimux-")))
+                  :name name
+                  :type "asd")
+                 here)))
           (unless (probe-file asd)
             (error "Unit ~A is named in nerimux.asd but ~A does not exist." name asd))
           (load asd))))))
