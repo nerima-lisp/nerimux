@@ -17,9 +17,8 @@
                          ,(format nil "select a worktree to ~A" description)))
      t))
 
-(defmacro define-message-dispatch-fn (fn-name lambda-list docstring &rest rules)
-  "Build a named message-dispatch function from a declarative rule table."
-  `(defun ,fn-name ,lambda-list
+(defmacro %define-cond-dispatch (name lambda-list docstring &rest rules)
+  `(defun ,name ,lambda-list
      ,docstring
      (cond
        ,@(mapcar
@@ -27,6 +26,10 @@
             (destructuring-bind (condition &rest body) rule
               `(,condition ,@body)))
           rules))))
+
+(defmacro define-message-dispatch-fn (fn-name lambda-list docstring &rest rules)
+  "Build a named message-dispatch function from a declarative rule table."
+  `(%define-cond-dispatch ,fn-name ,lambda-list ,docstring ,@rules))
 
 (defmacro define-multi-msg-dispatch (&rest rules)
   "Build the multi-client message dispatcher from declarative rules."
