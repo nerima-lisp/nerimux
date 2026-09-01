@@ -473,9 +473,9 @@
         (expect (eq feature-worktree
                     (nerimux::%workspace-find-tree-object
                      feature-worktree organizations)))
-        (expect (eq "section-value"
-                    (nerimux::%workspace-find-tree-object
-                     '(:section "section-value") organizations)))
+        (expect (string= "section-value"
+                         (nerimux::%workspace-find-tree-object
+                          '(:section "section-value") organizations)))
         (expect (null (nerimux::%workspace-find-tree-object
                        (list :unknown "value") organizations)))
         (expect (null (nerimux::%client-positional-branch
