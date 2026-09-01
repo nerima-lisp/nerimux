@@ -1523,6 +1523,41 @@
         (expect (eq feature-worktree (nerimux::%client-tree-object conn)))
         (expect (null nerimux::*dirty*)))))
 
+  (it "enter-toggles-worktree-expansion-and-refreshes-missing-commits"
+    (dolist (case '((nil t) (:failed t) (:ready nil)))
+      (destructuring-bind (state refresh-p) case
+        (let* ((worktree
+                 (nerimux/workspace-model:make-worktree
+                  :id (format nil "toggle-~A" state)
+                  :path "/tmp/toggle" :branch "main"
+                  :commits-state state))
+               (conn (nerimux::%make-client-conn))
+               (refreshes 0)
+               (nerimux::*workspace-expanded-node-ids*
+                 (make-hash-table :test #'equal))
+               (nerimux::*dirty* nil))
+          (nerimux::%set-client-selected-tree-object conn worktree)
+          (setf nerimux::*dirty* nil)
+          (with-stubbed-fdefinition
+              ((nerimux::%client-start-worktree-commits-refresh
+                 (lambda (selected)
+                   (declare (ignore selected))
+                   (incf refreshes))))
+            (expect (nerimux::%client-toggle-selected-tree-row conn))
+            (expect (= (if refresh-p 1 0) refreshes))
+            (expect (eq (if refresh-p :pending :ready)
+                        (nerimux/workspace-model:worktree-commits-state worktree)))
+            (expect (gethash (list :worktree
+                                   (nerimux/workspace-model:worktree-id worktree))
+                             nerimux::*workspace-expanded-node-ids*))
+            (expect nerimux::*dirty*))
+          (setf nerimux::*dirty* nil)
+          (expect (nerimux::%client-toggle-selected-tree-row conn))
+          (expect (null (gethash (list :worktree
+                                       (nerimux/workspace-model:worktree-id worktree))
+                                 nerimux::*workspace-expanded-node-ids*)))
+          (expect nerimux::*dirty*)))))
+
   ;; h/l on a REPOSITORY row toggle its worktree listing under the
   ;; Repositories section (*WORKSPACE-EXPANDED-NODE-IDS*, default-collapsed
   ;; polarity -- the opposite sense from *WORKSPACE-COLLAPSED-NODE-IDS*,
