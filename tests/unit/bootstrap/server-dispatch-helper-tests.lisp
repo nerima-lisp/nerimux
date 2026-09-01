@@ -2031,6 +2031,31 @@
                     (nerimux::%select-client-tree-section-relative conn 1)))
         (expect (plusp (nerimux::client-conn-tree-scroll conn))))))
 
+  (it "K-scrolls-section-selection-back-into-view"
+    (let* ((organization
+             (nerimux/workspace-model:make-organization
+              :id "org-jk-scroll-back" :host "github.com" :name "team"))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :id "repo-jk-scroll-back" :organization organization
+              :specification "github.com/team/repo-jk-scroll-back"))
+           (worktree
+             (nerimux/workspace-model:make-worktree
+              :id "wt-jk-scroll-back" :repository repository
+              :path "/tmp/jk-scroll-back" :branch "main" :dirty-p t))
+           (conn (nerimux::%make-client-conn)))
+      (nerimux/workspace-model:organization-add-repository organization repository)
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
+      (let ((nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
+            (nerimux::*dirty* nil)
+            (nerimux/vcs::*workspace-organizations* (list organization)))
+        (setf (nerimux::client-conn-rows conn) 1
+              (nerimux::client-conn-tree-scroll conn) 3)
+        (nerimux::%set-client-selected-tree-object conn repository)
+        (expect (eq :repositories
+                    (nerimux::%select-client-tree-section-relative conn -1)))
+        (expect (= 2 (nerimux::client-conn-tree-scroll conn))))))
+
   ;; Review-round fix: +MAX-TREE-FILTER-LENGTH+ (256, security review) caps
   ;; CLIENT-CONN-TREE-FILTER's length -- %CLIENT-TREE-FILTER-BUFFER-APPEND
   ;; must refuse further characters outright once the cap is hit, not
