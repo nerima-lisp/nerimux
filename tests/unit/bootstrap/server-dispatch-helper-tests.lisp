@@ -1631,6 +1631,15 @@
         (expect (null (nerimux::%client-toggle-selected-tree-row conn)))
         (expect (null nerimux::*dirty*)))))
 
+  (it "collapses-an-expanded-file-diff-row"
+    (let* ((key (list :file-diff "worktree-1" "src/main.lisp"))
+           (nerimux::*workspace-expanded-node-ids*
+             (make-hash-table :test #'equal)))
+      (setf (gethash key nerimux::*workspace-expanded-node-ids*) t)
+      (expect (eq t (nerimux::%client-toggle-selected-file-diff
+                     "worktree-1" "src/main.lisp" "M")))
+      (expect (null (gethash key nerimux::*workspace-expanded-node-ids*)))))
+
   ;; h/l on a REPOSITORY row toggle its worktree listing under the
   ;; Repositories section (*WORKSPACE-EXPANDED-NODE-IDS*, default-collapsed
   ;; polarity -- the opposite sense from *WORKSPACE-COLLAPSED-NODE-IDS*,
