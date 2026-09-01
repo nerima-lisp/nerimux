@@ -2377,6 +2377,10 @@
                                    (expect
                                     (nerimux::%render-client-frame s conn)
                                     :to-be-truthy)
+                                   (setf (nerimux::client-conn-view conn) :status)
+                                   (expect
+                                    (nerimux::%render-client-frame s conn)
+                                    :to-be-truthy)
                                    (setf (nerimux::client-conn-modal conn) nil)
                                    (dolist (view '(:repolist :status :pane))
                                      (setf (nerimux::client-conn-view conn) view)
