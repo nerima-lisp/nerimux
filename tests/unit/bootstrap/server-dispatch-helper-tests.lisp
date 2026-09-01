@@ -1641,6 +1641,35 @@
         (expect (eq :repositories
                     (nerimux::%select-client-tree-relative conn 1))))))
 
+  (it "tree-relative-selection-starts-and-scrolls-a-multi-row-list"
+    (let* ((organization
+             (nerimux/workspace-model:make-organization
+              :id "org-relative" :host "github.com" :name "team"))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :id "repo-relative" :organization organization
+              :specification "github.com/team/repo-relative"))
+           (first-worktree
+             (nerimux/workspace-model:make-worktree
+              :id "wt-relative-1" :repository repository :path "/tmp/relative-1"
+              :branch "first" :dirty-p t))
+           (second-worktree
+             (nerimux/workspace-model:make-worktree
+              :id "wt-relative-2" :repository repository :path "/tmp/relative-2"
+              :branch "second" :dirty-p t))
+           (conn (nerimux::%make-client-conn)))
+      (nerimux/workspace-model:organization-add-repository organization repository)
+      (nerimux/workspace-model:repository-add-worktree repository first-worktree)
+      (nerimux/workspace-model:repository-add-worktree repository second-worktree)
+      (let ((nerimux/vcs::*workspace-organizations* (list organization))
+            (nerimux::*dirty* nil))
+        (setf (nerimux::client-conn-rows conn) 1)
+        (expect (eq first-worktree
+                    (nerimux::%select-client-tree-relative conn 1)))
+        (expect (eq second-worktree
+                    (nerimux::%select-client-tree-relative conn 1)))
+        (expect (= 2 (nerimux::client-conn-tree-scroll conn))))))
+
   (it "tree-relative-selection-adjusts-scroll-for-a-narrow-view"
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
