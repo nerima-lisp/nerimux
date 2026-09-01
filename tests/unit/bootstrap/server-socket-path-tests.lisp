@@ -326,6 +326,22 @@
                   (format nil "test-session-notice-~D" (random 1000000))))))
         (expect (search "nerimux: starting server..." errout) :to-be-truthy))))
 
+  (it "ensure-server-running-continues-when-stale-socket-cannot-be-deleted"
+    (with-stubbed-locked-fdefinitions
+        ((probe-file (lambda (path)
+                       (declare (ignore path))
+                       t))
+         (nerimux/net:connect-to (lambda (path)
+                                   (declare (ignore path))
+                                   (error 'sb-bsd-sockets:socket-error)))
+         (delete-file (lambda (path)
+                        (declare (ignore path))
+                        (error 'file-error)))
+         (nerimux::%launch-server-and-poll-when-live
+          (lambda (&rest args) (declare (ignore args)) nil)))
+      (signals error
+        (nerimux::%ensure-server-running "stale-socket-delete-failure"))))
+
   ;;; -- launch-server-and-poll: diagnostics must not block startup --------------
 
   ;; %launch-server-and-poll-when-live redirects the spawned server's
