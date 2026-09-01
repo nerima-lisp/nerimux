@@ -1,17 +1,17 @@
 (in-package #:nerimux)
 
 (defun %tree-selection-index (current objects delta)
-  (cond
-    ((and current (position current objects :test #'equal)))
-    ((minusp delta) 0)
-    (t -1)))
+  (let ((selected (and current (position current objects :test #'equal))))
+    (if selected
+        selected
+        (if (minusp delta) 0 -1))))
 
 (defun %tree-selection-scroll (next scroll visible)
-  (cond
-    ((< next scroll) next)
-    ((>= next (+ scroll visible))
-     (max 0 (+ next 1 (- visible))))
-    (t scroll)))
+  (if (< next scroll)
+      next
+      (if (>= next (+ scroll visible))
+          (max 0 (+ next 1 (- visible)))
+          scroll)))
 
 (defun %select-client-tree-relative (conn delta)
   (let* ((objects (%workspace-tree-objects
