@@ -438,6 +438,24 @@
       (expect (null (nerimux::%client-selected-organization conn)))
       (expect (null (nerimux::%client-operation-worktree conn)))))
 
+  (it "resolves-operations-from-the-focused-pane-worktree"
+    (multiple-value-bind (organizations organization repository main-worktree
+                          feature-worktree)
+        (%make-server-dispatch-helper-fixture)
+      (declare (ignore main-worktree))
+      (let* ((conn (nerimux::%make-client-conn))
+             (pane (nerimux/pane:make-pane :worktree feature-worktree))
+             (nerimux/vcs::*workspace-organizations* organizations))
+        (setf (nerimux::client-conn-focus conn) pane)
+        (expect (eq feature-worktree
+                    (nerimux::%client-context-object conn nil)))
+        (expect (eq feature-worktree
+                    (nerimux::%client-operation-worktree conn)))
+        (expect (eq repository
+                    (nerimux::%client-selected-repository conn)))
+        (expect (eq organization
+                    (nerimux::%client-selected-organization conn))))))
+
   (it "resolves-workspace-identifiers-and-guards-inactive-notifications"
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
