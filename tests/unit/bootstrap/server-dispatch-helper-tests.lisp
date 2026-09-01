@@ -1721,8 +1721,15 @@
                    (3 3 5 3)
                    (2 3 5 2)))
       (destructuring-bind (next scroll visible expected) case
-        (expect (= expected
+                   (expect (= expected
                    (nerimux::%tree-selection-scroll next scroll visible))))))
+
+  (it "tree-selection-logic-covers-unselected-directional-fallbacks"
+    (expect (= 0 (nerimux::%tree-selection-index nil '(a b) -1)))
+    (expect (= -1 (nerimux::%tree-selection-index nil '(a b) 1)))
+    (expect (= 2 (nerimux::%tree-selection-scroll 2 3 5)))
+    (expect (= 3 (nerimux::%tree-selection-scroll 8 3 5)))
+    (expect (= 6 (nerimux::%tree-selection-scroll 10 0 5))))
 
   (it "tree-relative-selection-clamps-backward-movement-without-selection"
     (with-server-dispatch-helper-fixture
