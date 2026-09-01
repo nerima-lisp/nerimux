@@ -1505,4 +1505,33 @@
            (vector (nerimux::client-conn-workspace-prefix-code conn)))
         (expect handled)
         (expect (null result))
-        (expect (nerimux::client-conn-ui-prefix-p conn))))))
+        (expect (nerimux::client-conn-ui-prefix-p conn)))))
+
+  (it "reports unavailable-focused-pane-input"
+    (let* ((session (nerimux/session:make-session :id 1 :name "test"))
+           (conn (nerimux::%make-client-conn))
+           (pane (nerimux/pane:make-pane :fd -1))
+           (nerimux::*clients* (list conn))
+           (nerimux::*dirty* nil))
+      (setf (nerimux::client-conn-stdin-target conn) pane)
+      (expect (nerimux::%handle-client-input-key-payload session conn "x"))
+      (expect (equal '("focused pane is unavailable")
+                     (nerimux::client-conn-message-log conn)))
+      (expect nerimux::*dirty*)))
+
+  (it "contains-peer-io-failure-while-forwarding-pane-input"
+    (let* ((session (nerimux/session:make-session :id 1 :name "test"))
+           (conn (nerimux::%make-client-conn))
+           (pane (nerimux/pane:make-pane :fd 1))
+           (nerimux::*clients* (list conn))
+           (nerimux::*dirty* nil))
+      (setf (nerimux::client-conn-stdin-target conn) pane)
+      (with-stubbed-fdefinition
+          ((nerimux/pty:pty-write
+             (lambda (fd payload)
+               (declare (ignore fd payload))
+               (error 'nerimux::peer-io-failure))))
+        (expect (nerimux::%handle-client-input-key-payload session conn "x")))
+      (expect (search "input failed:"
+                      (first (nerimux::client-conn-message-log conn))))
+      (expect nerimux::*dirty*))))
