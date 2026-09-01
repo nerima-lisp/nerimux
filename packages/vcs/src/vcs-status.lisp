@@ -1,3 +1,5 @@
+(in-package #:nerimux/vcs)
+
 (defun %changed-file-code (entry)
   "The 2-char git-status---short-style code for ENTRY (D1). :ORDINARY,
 :RENAME-OR-COPY and :UNMERGED entries already carry real index/worktree
@@ -173,33 +175,4 @@ column, worktree side) -- magit's unstaged section (Unit MODEL)."
           (%worktree-status-staged-files entries)
           (nerimux/workspace-model:worktree-unstaged-files worktree)
           (%worktree-status-unstaged-files entries))
-    worktree))
-
-(defun %read-repository-status (repository)
-  (loop for worktree in (nerimux/workspace-model:repository-worktrees repository)
-        ;; A bare root (ghq's `<repo>.git` layout) has no working tree of
-        ;; its own, so running `git status` against it always fails; that
-        ;; used to turn every successful worktree op into a false "failed"
-        ;; notify once this ran during the async catalog status refresh.
-        unless (nerimux/workspace-model:worktree-bare-p worktree)
-          collect (%read-worktree-status worktree)))
-
-(defun %apply-repository-status
-    (repository updates &optional (missing-p nil missing-p-p))
-  (mapc (lambda (update) (%apply-worktree-status repository update)) updates)
-  (setf (nerimux/workspace-model:repository-missing-p repository)
-        (if missing-p-p
-            missing-p
-            (%path-missing-p (nerimux/workspace-model:repository-path repository))))
-  (nerimux/workspace-model:repository-recompute-status repository)
-  repository)
-
-(defun worktree-status (worktree)
-  "Refresh WORKTREE status from vcs-status-structured."
-  (let ((repository (nerimux/workspace-model:worktree-repository worktree)))
-    (%apply-worktree-status repository (%read-worktree-status worktree))
-    (when repository
-      (setf (nerimux/workspace-model:repository-missing-p repository)
-            (%path-missing-p (nerimux/workspace-model:repository-path repository)))
-      (nerimux/workspace-model:repository-recompute-status repository))
     worktree))

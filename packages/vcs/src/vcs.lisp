@@ -542,3 +542,28 @@ which is what let a per-repository failure mark the ENTIRE catalog stale."
   (multiple-value-call #'%apply-repository-worktrees
     repository
     (%read-repository-worktrees repository)))
+
+(defun %read-repository-status (repository)
+  (loop for worktree in (nerimux/workspace-model:repository-worktrees repository)
+        unless (nerimux/workspace-model:worktree-bare-p worktree)
+          collect (%read-worktree-status worktree)))
+
+(defun %apply-repository-status
+    (repository updates &optional (missing-p nil missing-p-p))
+  (mapc (lambda (update) (%apply-worktree-status repository update)) updates)
+  (setf (nerimux/workspace-model:repository-missing-p repository)
+        (if missing-p-p
+            missing-p
+            (%path-missing-p (nerimux/workspace-model:repository-path repository))))
+  (nerimux/workspace-model:repository-recompute-status repository)
+  repository)
+
+(defun worktree-status (worktree)
+  "Refresh WORKTREE status from vcs-status-structured."
+  (let ((repository (nerimux/workspace-model:worktree-repository worktree)))
+    (%apply-worktree-status repository (%read-worktree-status worktree))
+    (when repository
+      (setf (nerimux/workspace-model:repository-missing-p repository)
+            (%path-missing-p (nerimux/workspace-model:repository-path repository)))
+      (nerimux/workspace-model:repository-recompute-status repository))
+    worktree))
