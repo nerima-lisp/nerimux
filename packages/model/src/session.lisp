@@ -64,7 +64,7 @@
   "Fork a shell and install it as WINDOW's sole full-screen leaf pane.
    START-DIR: when non-NIL, the shell starts in that directory.
    The initial pane gets +PANE-BASE-INDEX+."
-  (let* ((pane
+  (let ((pane
           (%fork-pane nil
                       +pane-base-index+
                       0
