@@ -2384,7 +2384,8 @@
                                       (nerimux::%render-client-frame s conn)
                                       :to-be-truthy))))))
 
-          (it "ui-command-dispatches-argument-fallbacks-and-picker-actions"
+          (describe "ui command dispatch contract"
+            (it "ui-command-dispatches-argument-fallbacks-and-picker-actions"
               (with-fake-session (s)
                 (let ((conn (%make-test-conn))
                       (calls nil))
@@ -2428,4 +2429,4 @@
                     (expect (equal '(:dirty (:mode :input) :close :open
                                      (:select "team/repo") :refresh
                                      (:attach ("team/repo")))
-                                   calls))))))
+                                   calls)))))))
