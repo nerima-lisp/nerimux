@@ -32,24 +32,24 @@
     (stream-error ()
       :append)))
 
+(defmacro %with-unavailable-socket-as-nil (&body body)
+  "Evaluate BODY as NIL when the socket cannot be inspected or reached."
+  `(handler-case (progn ,@body)
+     (sb-ext:timeout () nil)
+     (sb-bsd-sockets:socket-error () nil)
+     (file-error () nil)
+     (stream-error () nil)))
+
 (defun %stale-socket-p (socket-path)
   "True when SOCKET-PATH exists but no server accepts connections on it.
    A leftover socket file like this (e.g. after a crash) should not block
    attaching: it is unlinked and a fresh server started instead of failing."
   (handler-case (and (probe-file socket-path)
                      (not
-                      (handler-case (let ((sock
-                                           (nerimux/net:connect-to socket-path)))
-                                      (nerimux/net:close-socket sock)
-                                      t)
-                        (sb-ext:timeout ()
-                          nil)
-                        (sb-bsd-sockets:socket-error ()
-                          nil)
-                        (file-error ()
-                          nil)
-                        (stream-error ()
-                          nil))))
+                      (%with-unavailable-socket-as-nil
+                        (let ((sock (nerimux/net:connect-to socket-path)))
+                          (nerimux/net:close-socket sock)
+                          t))))
     (file-error ()
       nil)
     (stream-error ()
