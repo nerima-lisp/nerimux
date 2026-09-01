@@ -160,7 +160,8 @@
    +PTY-CHILD-WAIT-TIMEOUT+ — override only for tests that need a live child to
    time out quickly). NIL leaves the wait unbounded.
    Returns (values CODE KIND) where KIND is :exited (CODE = exit code) or
-   :signaled (CODE = signal number), or NIL when the child is unknown (foreign
+   :signaled (CODE = NIL on SBCL, whose process API does not expose the signal
+   number), or NIL when the child is unknown (foreign
    fd, synthetic test pane), the wait times out, or the wait fails."
   (let* ((pty (gethash master-fd *pty-processes*))
          (process (and pty (cl-tty-kit:pty-process pty))))
@@ -174,7 +175,7 @@
             (let ((code (sb-ext:process-exit-code process)))
               (when code
                 (if (eq (sb-ext:process-status process) :signaled)
-                    (values code :signaled)
+                    (values nil :signaled)
                     (values code :exited)))))
         (cl-concurrent-kit:operation-timed-out () nil)
         (error () nil)))))

@@ -203,10 +203,10 @@
                  (expect (eq :exited kind)))
                (nerimux/pty::%take-pty-process master-fd)
                (remember-process (start-process "kill -TERM $$"))
-               (multiple-value-bind (code kind)
+                 (multiple-value-bind (code kind)
                    (nerimux/pty:pty-child-exit-status
                     master-fd (cl-date-kit:duration-of-millis 1000))
-                 (expect (numberp code))
+                 (expect (null code))
                  (expect (eq :signaled kind))))
           (nerimux/pty::%take-pty-process master-fd)
           (dolist (process processes)

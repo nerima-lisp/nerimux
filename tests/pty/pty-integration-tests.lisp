@@ -73,7 +73,8 @@
   ;; pty-child-exit-status reports KIND = :signaled when the child dies from a
   ;; signal (vs :exited for a normal exit code).  SIGKILL (9) cannot be trapped,
   ;; so the spawned shell is guaranteed to terminate by signal; reaping it via
-  ;; pty-child-exit-status must yield (values 9 :signaled).
+  ;; pty-child-exit-status must yield (values nil :signaled); SBCL does not
+  ;; expose the signal number through its process API.
   (it "pty-child-exit-status-reports-signaled-kind"
     (unless (pty-available-p)
       (skip "no PTY available (sandboxed environment)"))
@@ -82,7 +83,7 @@
       (sb-posix:kill pid 9)              ; SIGKILL — untrappable
       (multiple-value-bind (code kind) (nerimux/pty:pty-child-exit-status fd)
         (expect (eq kind :signaled))
-        (expect (= code 9)))))
+        (expect (null code)))))
 
   ;;; ── set-pty-size argument order ──────────────────────────────────────────────
   ;;;
