@@ -170,6 +170,12 @@ SGR follows the same dependency direction: `sgr-definitions.lisp` owns the
 attribute rule table, `sgr-colors.lisp` decodes extended colours, `sgr.lisp`
 coordinates application, and `sgr-report.lisp` encodes status reports.
 
+Tests use `cl-weave` directly: suites, examples, skips, and reporters are
+registered through its native API. The production boundary does not wrap the
+library in an adapter. Repeated dispatch and declarative validation are
+expressed by macros, while runtime values remain in the data modules and the
+expanded functions perform the side effects.
+
 ## Source layout
 
 Each layer is its own ASDF system under `packages/<name>/`, and `src/` holds only
