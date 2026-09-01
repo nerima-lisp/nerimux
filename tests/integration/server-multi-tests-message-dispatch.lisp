@@ -2383,3 +2383,49 @@
                                      (expect
                                       (nerimux::%render-client-frame s conn)
                                       :to-be-truthy))))))
+
+          (it "ui-command-dispatches-argument-fallbacks-and-picker-actions"
+              (with-fake-session (s)
+                (let ((conn (%make-test-conn))
+                      (calls nil))
+                  (with-stubbed-fdefinition
+                      ((nerimux::%client-attach-target
+                         (lambda (client args)
+                           (declare (ignore client))
+                           (push (list :attach args) calls)))
+                       (nerimux::%client-refresh-workspace
+                         (lambda (client)
+                           (declare (ignore client))
+                           (push :refresh calls)))
+                       (nerimux::%select-client-tree-worktree
+                         (lambda (client selector)
+                           (declare (ignore client))
+                           (push (list :select selector) calls)))
+                       (nerimux::%open-client-picker
+                         (lambda (client)
+                           (declare (ignore client))
+                           (push :open calls)))
+                       (nerimux::%close-client-picker
+                         (lambda (client)
+                           (declare (ignore client))
+                           (push :close calls)))
+                       (nerimux::%transition-client-ui-mode
+                         (lambda (client mode)
+                           (declare (ignore client))
+                           (push (list :mode mode) calls)))
+                       (nerimux::%mark-dirty
+                         (lambda ()
+                           (push :dirty calls))))
+                    (dolist (command '((:attach-target nil ("team/repo"))
+                                       (:workspace-refresh nil nil)
+                                       (:tree-select nil ("team/repo"))
+                                       (:picker-open nil nil)
+                                       (:picker-close nil nil)
+                                       (:mode "input" nil)))
+                      (destructuring-bind (name target args) command
+                        (expect (nerimux::%handle-client-ui-command
+                                 s conn name target args))))
+                    (expect (equal '(:dirty (:mode :input) :close :open
+                                     (:select "team/repo") :refresh
+                                     (:attach ("team/repo")))
+                                   calls))))))
