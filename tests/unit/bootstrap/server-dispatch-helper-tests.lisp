@@ -1560,6 +1560,15 @@
         (expect (eq :repositories
                     (nerimux::%select-client-tree-relative conn 1))))))
 
+  (it "tree-relative-selection-uses-directional-fallback-for-stale-selection"
+    (multiple-value-bind (organizations) (%make-server-dispatch-helper-fixture)
+      (let ((conn (nerimux::%make-client-conn))
+            (nerimux/vcs::*workspace-organizations* organizations)
+            (nerimux::*dirty* nil))
+        (nerimux::%set-client-selected-tree-object conn :stale)
+        (expect (eq :repositories
+                    (nerimux::%select-client-tree-relative conn -1))))))
+
   (it "tree-relative-selection-adjusts-scroll-for-a-narrow-view"
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
@@ -1656,6 +1665,23 @@
         (expect (eq :repositories
                     (nerimux::%select-client-tree-section-relative conn -1)))
         (expect (eq :repositories (nerimux::%client-tree-object conn))))))
+
+  (it "K-uses-directional-fallback-for-a-stale-selection"
+    (let* ((organization
+             (nerimux/workspace-model:make-organization
+              :id "org-jk-stale" :host "github.com" :name "team"))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :id "repo-jk-stale" :organization organization
+              :specification "github.com/team/repo-jk-stale"))
+           (conn (nerimux::%make-client-conn)))
+      (nerimux/workspace-model:organization-add-repository organization repository)
+      (let ((nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
+            (nerimux::*dirty* nil)
+            (nerimux/vcs::*workspace-organizations* (list organization)))
+        (nerimux::%set-client-selected-tree-object conn :stale)
+        (expect (eq :repositories
+                    (nerimux::%select-client-tree-section-relative conn -1))))))
 
   (it "J-scrolls-section-selection-into-a-narrow-view"
     (let* ((organization
