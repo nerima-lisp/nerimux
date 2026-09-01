@@ -138,6 +138,18 @@
     (expect (nerimux::%startup-mode-raw-args-p "attach") :to-be-falsy)
     (expect (nerimux::%startup-mode-raw-args-p "bogus") :to-be-falsy))
 
+  (it "dispatches-raw-startup-handler-with-complete-argv-tail"
+    (let ((received nil))
+      (with-stubbed-fdefinition
+          ((nerimux::run-version
+             (lambda (args)
+               (setf received args))))
+        (nerimux::%dispatch-startup-mode-handler
+         (nerimux::%startup-mode-entry "-V")
+         "-V"
+         '("--version" "extra")))
+      (expect (equal '("--version" "extra") received) :to-be-truthy)))
+
   ;;; ── *startup-modes* table structure tests ────────────────────────────────────
 
   ;; The '-V' entry in *startup-modes* carries :raw-args-p T (it receives the
