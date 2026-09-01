@@ -47,6 +47,26 @@
                                                             :start-reader-p nil)))
         (expect (not reader-called)))))
 
+  (it "workspace-new-window-passes-a-default-command"
+    (let ((arguments nil)
+          (window :command-window))
+      (with-stubbed-fdefinition
+          ((nerimux::session-new-window
+            (lambda (&rest args)
+              (setf arguments args)
+              window)))
+        (let ((nerimux::*term-rows* 30)
+              (nerimux::*term-cols* 100))
+          (expect (eq window
+                      (nerimux::%workspace-new-window
+                       :session
+                       :name "named"
+                       :start-dir "/tmp/work"
+                       :default-command "make test"
+                       :start-reader-p nil)))
+          (expect (equal '(:session "named" 29 100 1 "/tmp/work" "make test")
+                         arguments))))))
+
   ;; The first window for a worktree is bare: just the branch name.
   (it "worktree-window-name-first-window-is-bare-branch-name"
     (let ((worktree
