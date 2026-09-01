@@ -246,12 +246,10 @@
   t)
 
 (defun %client-cycle-visibility (conn)
-  "S-TAB: advance CONN's visibility level 1->2->3->4->1. A never-yet-set
-   level (NIL) is treated as 0 so the first press lands on 1 rather than
-   erroring out of MOD."
+  "S-TAB: advance CONN's visibility level 1->2->3->4->1."
   (%client-set-visibility-level
    conn
-   (1+ (mod (or (client-conn-visibility-level conn) 0) 4))))
+   (1+ (mod (client-conn-visibility-level conn) 4))))
 
 ;;; ── FR-006 `q` step-back ladder ──────────────────────────────────────────
 
