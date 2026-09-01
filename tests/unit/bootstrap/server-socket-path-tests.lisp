@@ -325,6 +325,56 @@
                   (format nil "test-session-notice-~D" (random 1000000))))))
         (expect (search "nerimux: starting server..." errout) :to-be-truthy))))
 
+  (it "ensure-server-running-skips-spawn-for-a-live-socket"
+    (let ((path (format nil "/tmp/nerimux-live-~D.sock" (random 1000000))))
+      (unwind-protect
+           (progn
+             (with-open-file (stream path :direction :output :if-exists :supersede)
+               (declare (ignore stream)))
+             (with-stubbed-locked-fdefinitions
+                 ((nerimux::socket-path (lambda (name)
+                                          (declare (ignore name))
+                                          path))
+                  (nerimux::%stale-socket-p (lambda (socket)
+                                              (declare (ignore socket))
+                                              nil))
+         (nerimux::%launch-server-and-poll-when-live
+          (lambda (&rest args)
+            (declare (ignore args))
+            (error "live server must not be spawned"))))
+               (finishes (nerimux::%ensure-server-running "already-running"))))
+        (ignore-errors (delete-file path)))))
+
+  (it "ensure-server-running-removes-a-stale-socket-before-spawning"
+    (let ((deleted nil)
+          (spawned nil)
+          (original-delete-file (fdefinition 'delete-file)))
+      (let ((path (format nil "/tmp/nerimux-stale-~D.sock" (random 1000000))))
+        (unwind-protect
+             (progn
+               (with-open-file (stream path :direction :output :if-exists :supersede)
+                 (declare (ignore stream)))
+               (with-stubbed-locked-fdefinitions
+          ((nerimux::socket-path (lambda (name)
+                                   (declare (ignore name))
+                                   path))
+           (nerimux::%stale-socket-p (lambda (path)
+                                       (declare (ignore path))
+                                       t))
+           (delete-file (lambda (path)
+                          (setf deleted t)
+                          (funcall original-delete-file path)))
+           (nerimux::%launch-server-and-poll-when-live
+            (lambda (&rest args)
+              (declare (ignore args))
+              (setf spawned t)
+              (with-open-file (stream path :direction :output :if-exists :supersede)
+                (declare (ignore stream))))))
+                 (finishes (nerimux::%ensure-server-running "stale-session")))
+               (expect deleted :to-be-truthy)
+               (expect spawned :to-be-truthy))
+          (ignore-errors (delete-file path))))))
+
   (it "ensure-server-running-continues-when-stale-socket-cannot-be-deleted"
     (with-stubbed-locked-fdefinitions
         ((probe-file (lambda (path)
