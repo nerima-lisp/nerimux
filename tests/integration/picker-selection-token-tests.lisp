@@ -62,4 +62,19 @@
               (expected (second case)))
           (expect (equal expected
                          (nerimux::%tree-object-selection-token object)))))))
+
+  (it "normalizes row, pane, and empty identity tokens"
+    (let* ((worktree (nerimux/workspace-model:make-worktree :id "wt-id"))
+           (pane (nerimux/pane:make-pane :id 1 :worktree worktree)))
+      (expect (equal '(:worktree "wt-id")
+                     (nerimux::%tree-object-selection-token pane)))
+      (expect (equal '(:section :attention)
+                     (nerimux::%tree-object-selection-token :attention)))
+      (expect (equal '(:worktree "row-wt")
+                     (nerimux::%tree-object-selection-token
+                      '(:diff-more "row-wt" "file"))))
+      (expect (null (nerimux::%tree-object-selection-token '(row "value"))))
+      (expect (equal '(:repository nil)
+                    (nerimux::%tree-object-selection-token
+                     (nerimux/workspace-model:make-repository))))))
   )
