@@ -2,15 +2,17 @@
 
 (defun %tree-selection-index (current objects delta)
   (let ((selected (and current (position current objects :test #'equal))))
-    (or selected
-        (if (minusp delta) 0 -1))))
+    (cond
+      (selected selected)
+      ((minusp delta) 0)
+      (t -1))))
 
 (defun %tree-selection-scroll (next scroll visible)
-  (if (< next scroll)
-      next
-      (if (>= next (+ scroll visible))
-          (max 0 (+ next 1 (- visible)))
-          scroll)))
+  (cond
+    ((< next scroll) next)
+    ((>= next (+ scroll visible))
+     (max 0 (+ next 1 (- visible))))
+    (t scroll)))
 
 (defun %select-client-tree-relative (conn delta)
   (let* ((objects (%workspace-tree-objects
