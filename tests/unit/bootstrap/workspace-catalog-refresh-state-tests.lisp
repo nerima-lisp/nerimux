@@ -130,6 +130,37 @@
                 (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async)
                 refresh-fn)))))
 
+  (it "refresh-client-picker-reports-a-live-asynchronous-error"
+    (multiple-value-bind (organizations) (%make-server-dispatch-helper-fixture)
+      (let* ((nerimux::*workspace-refreshing-ids* (make-hash-table :test #'equal))
+             (nerimux::*workspace-stale-ids* (make-hash-table :test #'equal))
+             (nerimux::*dirty* nil)
+             (nerimux/vcs::*workspace-organizations* organizations)
+             (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
+             (refresh-fn (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async))
+             (conn (nerimux::%make-client-conn))
+             (captured-on-error nil)
+             (received-error nil))
+        (unwind-protect
+             (progn
+               (setf nerimux::*clients* (list conn)
+                     (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                     (lambda () t)
+                     (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async)
+                     (lambda (&key on-error &allow-other-keys)
+                       (setf captured-on-error on-error)))
+               (nerimux::%refresh-client-picker
+                conn :on-error (lambda (condition)
+                                 (setf received-error condition)))
+               (expect captured-on-error)
+               (funcall captured-on-error (make-condition 'error))
+               (expect (typep received-error 'error))
+               (expect (zerop (hash-table-count nerimux::*workspace-refreshing-ids*)))
+               (expect (plusp (hash-table-count nerimux::*workspace-stale-ids*))))
+          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
+                (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async)
+                refresh-fn)))))
+
   ;; FR-004b wiring, flagged by test/security review as an untested seam:
   ;; %add-client's own :on-progress callback (server-multi.lisp) is what a
   ;; large ghq root's in-flight scan count reaches the renderer through
