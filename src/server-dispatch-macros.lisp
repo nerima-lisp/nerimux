@@ -45,7 +45,7 @@
          (cond
            ,@(mapcar (lambda (rule)
                        (destructuring-bind (pattern &rest body) rule
-                         `(,(cond ((eq pattern t) t)
+                         `(,(cond ((eql pattern t) t)
                                   ((characterp pattern)
                                    `(%client-key-p ,payload-var ,pattern))
                                   ((integerp pattern)
@@ -64,7 +64,7 @@
        (cond
          ,@(mapcar (lambda (rule)
                      (destructuring-bind (pattern &rest body) rule
-                       `(,(cond ((eq pattern t) t)
+                       `(,(cond ((eql pattern t) t)
                                 ((and (consp pattern) (every #'keywordp pattern))
                                  `(member ,cmd-var ',pattern :test #'eq))
                                 ((keywordp pattern) `(eq ,cmd-var ,pattern))
