@@ -49,4 +49,22 @@
                             (gethash (list "wt-cache" "only.lisp")
                                     nerimux::*workspace-file-diffs*))))
         (setf nerimux::*workspace-file-diffs* previous-table
+              nerimux::*workspace-file-diffs-order* previous-order))))
+
+  (it "keeps a full table intact when its eviction order is empty"
+    (let ((previous-table nerimux::*workspace-file-diffs*)
+          (previous-order nerimux::*workspace-file-diffs-order*))
+      (unwind-protect
+           (let ((limit nerimux::*workspace-file-diffs-cache-limit*)
+                 (table (make-hash-table :test #'equal)))
+             (dotimes (index limit)
+               (setf (gethash (list "wt-cache" (format nil "pre-~D" index)) table)
+                     (list :ready index nil)))
+             (setf nerimux::*workspace-file-diffs* table
+                   nerimux::*workspace-file-diffs-order* nil)
+             (nerimux::%set-workspace-file-diff
+              (list "wt-cache" "new.lisp") (list :ready limit nil))
+             (expect (= (1+ limit)
+                        (hash-table-count nerimux::*workspace-file-diffs*))))
+        (setf nerimux::*workspace-file-diffs* previous-table
               nerimux::*workspace-file-diffs-order* previous-order)))))
