@@ -315,7 +315,7 @@
   (it "r4-4-prefix-dispatch-drops-only-the-explicit-detach-key"
     (with-fake-session (s)
       (let ((conn (%make-test-conn)))
-        (dolist (byte '(104 106 108 110 70 6))
+        (dolist (byte '(104 106 108 110 70 6 (char-code #\|)))
           (expect (null (nerimux::%workspace-prefix-dispatch s conn byte))))
         (expect (eq :drop
                     (nerimux::%workspace-prefix-dispatch
