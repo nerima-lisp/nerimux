@@ -41,8 +41,12 @@
                      (search ".local/state/nerimux/myserver.log"
                              (namestring
                               (nerimux::%runtime-log-path "myserver")))))))
-              (it "uses default values for empty server names"
+          (it "uses default values for empty server names"
                   (expect
                    (string= "default" (nerimux::%runtime-safe-server-name nil)))
                   (expect
-                   (string= "default" (nerimux::%runtime-safe-server-name ""))))))
+                   (string= "default" (nerimux::%runtime-safe-server-name ""))))
+          (it "preserves safe punctuation and replaces unsafe characters"
+              (expect
+               (string= "a-b_c.d__"
+                        (nerimux::%runtime-safe-server-name "a-b_c.d!?"))))))
