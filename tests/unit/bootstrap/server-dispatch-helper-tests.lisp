@@ -1531,6 +1531,18 @@
                     (nerimux::%select-client-tree-relative conn -1)))
         (expect (zerop (nerimux::client-conn-tree-scroll conn))))))
 
+  (it "tree-relative-selection-starts-at-the-first-row-for-forward-movement"
+    (multiple-value-bind (organizations organization repository main-worktree
+                          feature-worktree)
+        (%make-server-dispatch-helper-fixture)
+      (declare (ignorable organization repository main-worktree feature-worktree))
+      (let ((conn (nerimux::%make-client-conn))
+            (nerimux/vcs::*workspace-organizations* organizations)
+            (nerimux::*dirty* nil))
+        (setf (nerimux::client-conn-rows conn) 7)
+        (expect (eq :repositories
+                    (nerimux::%select-client-tree-relative conn 1))))))
+
   (it "tree-relative-selection-adjusts-scroll-for-a-narrow-view"
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
