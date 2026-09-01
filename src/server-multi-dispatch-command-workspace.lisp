@@ -409,37 +409,6 @@ the tree (R7.1)."
         (and (typep selected 'nerimux/workspace-model:worktree) selected)
         (and focused (nerimux/pane:pane-worktree focused)))))
 
-(defun %select-client-tree-relative (conn delta)
-  (let* ((objects (%workspace-tree-objects
-                   (nerimux/vcs:workspace-organizations)
-                   (client-conn-tree-filter conn)))
-         (count (length objects)))
-    (when (plusp count)
-      (let* ((current (%client-tree-object conn))
-             ;; EQUAL, not EQ: a :FILE/:COMMIT row's OBJECT is a freshly
-             ;; consed list rebuilt on every %WORKSPACE-TREE-OBJECTS call
-             ;; (D3, inline worktree expansion) rather than a persistent
-             ;; struct, so CURRENT -- captured on the PREVIOUS keystroke's
-             ;; flatten -- is never EQ to this call's re-consed OBJECTS
-             ;; entry even when it names the same row. EQUAL degrades to EQ
-             ;; for every struct/keyword-backed kind (structures compare by
-             ;; identity under EQUAL, same as EQL), so this changes nothing
-             ;; for any row kind that existed before this wave.
-             (index (or (and current
-                             (position current objects :test #'equal))
-                        (if (minusp delta) 0 -1)))
-             (next (max 0 (min (1- count) (+ index delta))))
-             (visible (max 1 (nerimux/renderer:workspace-tree-view-rows
-                              (client-conn-rows conn)))))
-        (%set-client-selected-tree-object conn (nth next objects))
-        (when (< next (client-conn-tree-scroll conn))
-          (setf (client-conn-tree-scroll conn) next))
-        (when (>= next (+ (client-conn-tree-scroll conn) visible))
-          (setf (client-conn-tree-scroll conn)
-                (max 0 (+ next 1 (- visible)))))
-        (%mark-dirty)
-        (nth next objects)))))
-
 (defun %select-client-tree-section-relative (conn direction)
   "J/K (section-based overview redesign, replacing the old repository-row
    jump): move the selection to the next/previous :SECTION header row --

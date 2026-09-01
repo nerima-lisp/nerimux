@@ -150,6 +150,7 @@
        (:file "server-multi-dispatch-prefix") ; C-q workspace actions
        (:file "server-multi-workspace-selection") ; workspace catalog selection logic
        (:file "server-multi-dispatch-picker") ; picker/tree selection
+       (:file "server-multi-dispatch-command-workspace-relative") ; relative tree selection
        (:file "server-multi-dispatch-command-workspace") ; workspace UI helpers
        (:file "server-multi-dispatch-command-worktree") ; worktree operations
        (:file "server-multi-command-input-primitives") ; payload predicates and decoding
