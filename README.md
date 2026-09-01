@@ -77,7 +77,7 @@ nix develop          # SBCL with every dependency on the ASDF registry
 nix run .#test       # run the test suite (bounded timeout)
 CL_WEAVE_TEST_FILTER=renderer nix run .#test  # run matching cl-weave tests
 nix build .#coverage-report --no-link --print-build-logs  # strict 100% gate
-nix develop --command nerimux-coverage-report  # report-only investigation
+NERIMUX_COVERAGE_REPORT_ONLY=1 nix develop --command sbcl --dynamic-space-size 4096 --no-sysinit --no-userinit --disable-debugger --script scripts/coverage.lisp /tmp/nerimux-coverage-report  # report-only investigation
 nix flake check      # tests + formatting + docs, the same gate CI uses
 nix fmt              # format Nix sources (treefmt)
 paredit --help       # structural Common Lisp editing in the dev shell

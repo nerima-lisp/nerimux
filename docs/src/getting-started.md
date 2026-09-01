@@ -317,9 +317,12 @@ and the behavior of those declarations' consumers remain in scope.
 
 The ordinary suite is the fast regression gate. The strict coverage derivation
 is a separate acceptance gate: it currently exposes uncovered runtime paths
-and therefore remains red until those paths have tests. Use report-only mode
-while investigating; do not weaken the threshold or expand the exclusion list
-to hide executable behavior.
+and therefore remains red until those paths have tests. Use
+`NERIMUX_COVERAGE_REPORT_ONLY=1 nix develop --command sbcl --dynamic-space-size
+4096 --no-sysinit --no-userinit --disable-debugger --script
+scripts/coverage.lisp /tmp/nerimux-coverage-report` while
+investigating; do not weaken the threshold or expand the exclusion list to
+hide executable behavior.
 
 ## Testing
 
