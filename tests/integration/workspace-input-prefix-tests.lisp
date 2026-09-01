@@ -388,6 +388,17 @@
                (nerimux::%workspace-prefix-fetch-repository conn)
                (expect (search "selected repository" (first messages)))
                (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                     (lambda () nil))
+               (let ((organization (nerimux/workspace-model:make-organization
+                                    :id "org" :host "github.com" :name "team")))
+                 (nerimux::%set-client-selected-tree-object
+                  conn
+                  (nerimux/workspace-model:make-repository
+                   :id "repo" :organization organization
+                   :specification "github.com/team/repo"))
+                 (nerimux::%workspace-prefix-fetch-repository conn)
+                 (expect (search "adapter unavailable" (first messages))))
+               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
                      (lambda () t)
                      (fdefinition 'nerimux/vcs:fetch-repository-async)
                      (lambda (repository &key on-complete on-error
@@ -436,7 +447,10 @@
       (let ((conn (%make-test-conn))
             (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
             (fetch (fdefinition 'nerimux/vcs:fetch-organization-async))
+            (refresh (fdefinition 'nerimux::%refresh-client-picker))
             (notify (fdefinition 'nerimux::%client-notify))
+            (error-callback nil)
+            (refreshed nil)
             (messages nil))
         (unwind-protect
              (progn
@@ -448,18 +462,42 @@
                        (push message messages)))
                (nerimux::%workspace-prefix-fetch-organization conn)
                (expect (search "selected organization" (first messages)))
-               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
-                     (lambda () t)
-                     (fdefinition 'nerimux/vcs:fetch-organization-async)
-                     (lambda (organization &key on-complete on-error
-                                        callback-dispatch)
-                       (declare (ignore organization on-error callback-dispatch))
-                       (funcall on-complete nil)))
                (let ((organization (nerimux/workspace-model:make-organization
                                     :id "org" :host "github.com" :name "team")))
                  (nerimux::%set-client-selected-tree-object conn organization)
                  (nerimux::%workspace-prefix-fetch-organization conn)
-                 (expect (search "already in progress" (first messages)))))
+                 (expect (search "adapter unavailable" (first messages))))
+               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                     (lambda () t)
+                     (fdefinition 'nerimux::%refresh-client-picker)
+                     (lambda (connection)
+                       (declare (ignore connection))
+                       (setf refreshed t))
+                     (fdefinition 'nerimux/vcs:fetch-organization-async)
+                     (lambda (organization &key on-complete on-error
+                                        callback-dispatch)
+                       (declare (ignore organization callback-dispatch))
+                       (funcall on-complete nil)
+                       (setf error-callback on-error)))
+               (let ((organization (nerimux/workspace-model:make-organization
+                                    :id "org" :host "github.com" :name "team")))
+                 (nerimux::%set-client-selected-tree-object conn organization)
+                 (nerimux::%workspace-prefix-fetch-organization conn)
+                 (expect (search "already in progress" (first messages)))
+                 (funcall error-callback
+                          (nerimux/workspace-model:make-repository
+                           :id "repo" :organization organization
+                           :specification "github.com/team/repo")
+                          (make-condition 'simple-error
+                                          :format-control "offline"))
+                 (expect (search "fetch failed for repo" (first messages)))
+                 (setf (fdefinition 'nerimux/vcs:fetch-organization-async)
+                       (lambda (&rest args)
+                         (declare (ignore args))
+                         (error "sync failure")))
+                 (nerimux::%workspace-prefix-fetch-organization conn)
+                 (expect (search "sync failure" (first messages))))))
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:fetch-organization-async) fetch
-                (fdefinition 'nerimux::%client-notify) notify))))))
+                (fdefinition 'nerimux::%refresh-client-picker) refresh
+                (fdefinition 'nerimux::%client-notify) notify)))))
