@@ -17,7 +17,7 @@
   ;; an already-empty table.
   (it "mark-then-settle-clears-the-refreshing-mark"
     (multiple-value-bind (organizations) (%make-server-dispatch-helper-fixture)
-      (let ((nerimux::*workspace-refreshing-ids* (make-hash-table :test #'equal))
+      (let* ((nerimux::*workspace-refreshing-ids* (make-hash-table :test #'equal))
             (nerimux::*workspace-stale-ids* (make-hash-table :test #'equal)))
         (nerimux::%set-workspace-catalog-refresh-state organizations :mark)
         (expect (plusp (hash-table-count nerimux::*workspace-refreshing-ids*)))
@@ -77,6 +77,56 @@
                (expect captured-on-complete)
                (funcall captured-on-complete organizations)
                (expect (zerop (hash-table-count nerimux::*workspace-refreshing-ids*))))
+          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
+                (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async)
+                refresh-fn)))))
+
+  (it "refresh-client-picker-builds-items-without-vcs"
+    (multiple-value-bind (organizations) (%make-server-dispatch-helper-fixture)
+      (let ((nerimux/vcs::*workspace-organizations* organizations)
+            (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
+            (conn (nerimux::%make-client-conn))
+            (completed nil))
+        (unwind-protect
+             (progn
+               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                     (lambda () nil))
+               (nerimux::%refresh-client-picker
+                conn :on-complete
+                (lambda (received)
+                  (setf completed received)))
+               (expect (equal organizations completed))
+               (expect (equal (length (nerimux/picker:build-global-picker-items
+                                       organizations))
+                              (length (nerimux::client-conn-picker-items conn)))))
+          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available)))))
+
+  (it "refresh-client-picker-settles-a-synchronous-startup-error"
+    (multiple-value-bind (organizations) (%make-server-dispatch-helper-fixture)
+      (let* ((nerimux::*workspace-refreshing-ids* (make-hash-table :test #'equal))
+            (nerimux::*workspace-stale-ids* (make-hash-table :test #'equal))
+            (nerimux::*dirty* nil)
+            (nerimux/vcs::*workspace-organizations* organizations)
+            (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
+            (refresh-fn (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async))
+            (conn (nerimux::%make-client-conn))
+            (nerimux::*clients* (list conn))
+            (received-error nil))
+        (unwind-protect
+             (progn
+               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                     (lambda () t)
+                     (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async)
+                     (lambda (&rest arguments)
+                       (declare (ignore arguments))
+                       (error "synthetic picker startup failure")))
+               (nerimux::%refresh-client-picker
+                conn :on-error
+                (lambda (condition)
+                  (setf received-error condition)))
+               (expect (typep received-error 'error))
+               (expect (zerop (hash-table-count nerimux::*workspace-refreshing-ids*)))
+               (expect (plusp (hash-table-count nerimux::*workspace-stale-ids*))))
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async)
                 refresh-fn)))))
