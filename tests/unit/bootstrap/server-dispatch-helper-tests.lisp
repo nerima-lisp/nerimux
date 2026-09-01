@@ -131,6 +131,13 @@
                   (nerimux::%workspace-find-tree-object
                    '(:worktree "feature-id") organizations)))))
 
+  (it "resolves-explicit-organization-tree-tokens"
+    (multiple-value-bind (organizations organization)
+        (%make-server-dispatch-helper-fixture)
+      (expect (eq organization
+                  (nerimux::%workspace-find-tree-object
+                   '(:organization "org-id") organizations)))))
+
   (it "uses-the-live-catalog-for-default-workspace-selection"
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
