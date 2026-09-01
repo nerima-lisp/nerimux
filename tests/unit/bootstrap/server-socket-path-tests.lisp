@@ -574,6 +574,16 @@
                                    (error 'stream-error))))
       (expect (null (nerimux::%stale-socket-p "/synthetic/socket")))))
 
+  (it "stale-socket-p-treats-connection-timeouts-as-not-stale"
+    (with-stubbed-locked-fdefinitions
+        ((probe-file (lambda (path)
+                       (declare (ignore path))
+                       t))
+         (nerimux/net:connect-to (lambda (path)
+                                   (declare (ignore path))
+                                   (error 'sb-ext:timeout))))
+      (expect (null (nerimux::%stale-socket-p "/synthetic/socket")))))
+
   (it "stale-socket-p-returns-nil-after-probe-stream-error"
     (sb-ext:without-package-locks
       (let ((original-probe-file (fdefinition 'probe-file)))
