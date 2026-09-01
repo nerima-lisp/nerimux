@@ -82,10 +82,7 @@
         (and
          (plusp
           (length (nerimux/workspace-model:repository-local-path repository)))
-         (nerimux/workspace-model:repository-local-path repository))
-        (and
-         (plusp (length (nerimux/workspace-model:repository-path repository)))
-         (nerimux/workspace-model:repository-path repository)))))
+         (nerimux/workspace-model:repository-local-path repository)))))
 
 (defun %tree-object-selection-token (object)
   "A refresh-stable token for OBJECT, resolvable back to the same row by
