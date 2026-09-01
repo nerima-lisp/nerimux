@@ -403,11 +403,11 @@ the tree (R7.1)."
               (nerimux/workspace-model:repository-organization repository)))))))
 
 (defun %client-operation-worktree (conn &optional target)
-  (or (%workspace-find-worktree target)
-      (and (typep (%client-tree-object conn) 'nerimux/workspace-model:worktree)
-           (%client-tree-object conn))
-      (and (client-conn-focus conn)
-           (nerimux/pane:pane-worktree (client-conn-focus conn)))))
+  (let ((selected (%client-tree-object conn))
+        (focused (client-conn-focus conn)))
+    (or (%workspace-find-worktree target)
+        (and (typep selected 'nerimux/workspace-model:worktree) selected)
+        (and focused (nerimux/pane:pane-worktree focused)))))
 
 (defun %select-client-tree-relative (conn delta)
   (let* ((objects (%workspace-tree-objects
