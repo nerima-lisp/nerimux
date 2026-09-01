@@ -11,61 +11,9 @@
 ;;;; PTY children may be spawned while reader/status threads are active, so
 ;;;; teardown must reliably join background threads and close pane processes.
 
-;;; -- Peer I/O failure type --------------------------------------------------
-
-(deftype peer-io-failure ()
-  "Everything a read or write against a peer can signal that a caller is
-   expected to contain rather than die on.
-
-   This exists as ONE name because the knowledge it encodes is easy to get
-   wrong in the same way twice: SB-EXT:TIMEOUT is a SERIOUS-CONDITION and is
-   deliberately NOT an ERROR, so the obvious (ERROR ...) clause reads as if
-   it catches everything and silently does not.  SEND-FRAME
-   (infrastructure/net/transport.lisp) documents itself as signalling exactly
-   that when a peer is too slow, and PTY-WRITE does the same for a stuck
-   pane, so every handler around either one needs both.
-
-   Naming it once means a site that gets this wrong is missing a name a
-   reader can look up, rather than silently under-matching a hand-written
-   clause list.  WITH-LOOP-SAFE-ERROR already had the ERROR-only version of
-   this bug, and its own comment records that the correct clause was
-   accidentally disabled once before.
-
-   Lives HERE, in the first file of the BOOTSTRAP-RUNTIME module, rather
-   than in server.lisp where it started: nerimux.asd loads BOOTSTRAP-RUNTIME
-   before BOOTSTRAP-SERVER, so a definition in server.lisp is not available
-   to runtime-reader.lisp -- and the reader thread is precisely where an
-   escaping SB-EXT:TIMEOUT is most dangerous, because an unhandled condition
-   on a non-main thread takes the whole process down under
-   --disable-debugger, not just that thread.
-
-   Deliberately does NOT include STORAGE-CONDITION: heap exhaustion must stay
-   fatal, not become a per-client, per-frame retry."
-  '(or error sb-ext:timeout))
-
-;;; -- Shared state -----------------------------------------------------------
-
-(defvar *dirty*   t   "Set by reader threads; cleared by the main render step.")
-(defvar *running* t   "Loop sentinel; set nil by :detach command.")
-(defvar *resize-pending* nil
-  "Set by the SIGWINCH handler; the event loop relayouts once and clears it.")
-(defvar *term-rows* 24
-  "Current terminal height in rows; updated on SIGWINCH and at startup.
-   Used by the renderer, pane-split, and resize logic throughout the codebase.")
-(defvar *term-cols* 80
-  "Current terminal width in columns; updated on SIGWINCH and at startup.
-   Used by the renderer, pane-split, and resize logic throughout the codebase.")
-(defvar *server-sessions* nil
-  "Alist mapping session-name (string) to session object for the running server.")
 (defun %mark-dirty ()
   "Set the shared redraw flag."
   (setf *dirty* t))
-
-;;; -- Named constants --------------------------------------------------------
-
-(defconstant +reader-thread-join-timeout+ 10
-  "Seconds (real number) to wait for a PTY reader thread to terminate before
-   giving up.")
 
 (defun %join-thread-with-timeout (thread &optional (timeout +reader-thread-join-timeout+))
   "Join THREAD, waiting at most TIMEOUT seconds.
@@ -82,15 +30,7 @@
    whole org SBCL-only, so the dead branch is gone rather than conditionalized."
   (sb-thread:join-thread thread :timeout timeout))
 
-(defconstant +wait-for-channel-timeout+ 30
-  "Seconds before wait-for-channel gives up waiting for a signal.
-   A bounded wait prevents indefinite blocking when signal-channel is
-   never called (e.g., after an unexpected server shutdown).")
-
 ;;; -- Wait-for channel synchronization ----------------------------------------
-
-(defparameter *wait-channels* (make-hash-table :test #'equal)
-  "Maps channel-name string to a plist (:lock lock :cv cv :locked bool).")
 
 (defmacro with-channel-plist ((lk cv ch) &body body)
   "Bind LK and CV to the :lock and :cv fields of the channel plist CH."

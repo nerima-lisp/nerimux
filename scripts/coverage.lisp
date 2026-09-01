@@ -46,6 +46,7 @@
 ;; representation instead of product behavior.
 (defparameter *coverage-excluded-source-files*
   '("src/main-startup-flags.lisp"
+    "src/runtime-data.lisp"
     "src/package.lisp"
     "src/server-multi-state.lisp"
     ;; Static transient menu declarations are data; their handlers are

@@ -138,7 +138,8 @@
        ;; also lives here.
        (:file "target")              ; session/window/pane target resolution (-t flag)
        (:file "server-dispatch-macros") ; declarative rule-table macros (moved out of package.lisp, W6)
-       (:file "runtime")              ; shared state + channel sync + SIGWINCH
+       (:file "runtime-data")         ; shared declarations and constants
+       (:file "runtime")              ; channel sync + SIGWINCH
        (:file "runtime-reader")       ; PTY reader CPS state machine
        (:file "session-registry")  ; lookup for the one session the server owns
        (:file "server")
