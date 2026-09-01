@@ -1537,6 +1537,31 @@
         (expect (null result))
         (expect (nerimux::client-conn-ui-prefix-p conn)))))
 
+  (it "derives UI ownership from view and modal state"
+    (let ((conn (nerimux::%make-client-conn)))
+      (dolist (view '(:repolist :status))
+        (setf (nerimux::client-conn-view conn) view)
+        (expect (nerimux::%client-ui-keys-p conn)))
+      (setf (nerimux::client-conn-view conn) :pane)
+      (expect (null (nerimux::%client-ui-keys-p conn)))
+      (setf (nerimux::client-conn-view conn) :status
+            (nerimux::client-conn-modal conn) :command)
+      (expect (null (nerimux::%client-ui-keys-p conn)))))
+
+  (it "closes help on its documented exit keys and swallows escape tails"
+    (dolist (payload '("q" "?" #(13) #(10)))
+      (let ((conn (nerimux::%make-client-conn)))
+        (setf (nerimux::client-conn-modal conn) :help)
+        (nerimux::%handle-help-view-key conn payload)
+        (expect (null (nerimux::client-conn-modal conn)))))
+    (let ((conn (nerimux::%make-client-conn)))
+      (setf (nerimux::client-conn-modal conn) :help)
+      (nerimux::%handle-help-view-key conn #(27))
+      (expect (null (nerimux::client-conn-modal conn)))
+      (expect (nerimux::%client-esc-swallow-consume conn))
+      (expect (nerimux::%client-esc-swallow-consume conn))
+      (expect (null (nerimux::%client-esc-swallow-consume conn)))))
+
   (it "reports unavailable-focused-pane-input"
     (let* ((session (nerimux/session:make-session :id 1 :name "test"))
            (conn (nerimux::%make-client-conn))
