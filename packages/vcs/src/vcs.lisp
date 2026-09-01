@@ -612,14 +612,25 @@ CODE the same real XY pair %CHANGED-FILE-CODE already builds for them
               result)))))
 
 (defmacro %collect-status-files (entries status-accessor)
-  `(let (result)
-     (dolist (entry ,entries (nreverse result))
-       (let ((kind (vcs-kit:vcs-status-entry-kind entry)))
-         (unless (or (eq kind :untracked) (eq kind :ignored)
-                     (%status-entry-conflict-p entry))
-           (let ((status (,status-accessor entry)))
-             (when (%changed-file-column-set-p status)
-               (push (cons status (%changed-file-path entry)) result))))))))
+  (let ((entries-var (gensym "ENTRIES-"))
+        (result-var (gensym "RESULT-"))
+        (entry-var (gensym "ENTRY-"))
+        (kind-var (gensym "KIND-"))
+        (status-var (gensym "STATUS-")))
+    `(let ((,entries-var ,entries))
+       (let (,result-var)
+         (dolist (,entry-var ,entries-var (nreverse ,result-var))
+           (let ((,kind-var
+                   (vcs-kit:vcs-status-entry-kind ,entry-var)))
+             (unless (or (eq ,kind-var :untracked)
+                         (eq ,kind-var :ignored)
+                         (%status-entry-conflict-p ,entry-var))
+               (let ((,status-var
+                       (,status-accessor ,entry-var)))
+                 (when (%changed-file-column-set-p ,status-var)
+                   (push (cons ,status-var
+                               (%changed-file-path ,entry-var))
+                         ,result-var))))))))))
 
 (defun %worktree-status-staged-files (entries)
   "Non-conflict, non-untracked/ignored ENTRIES whose INDEX-STATUS (the X
