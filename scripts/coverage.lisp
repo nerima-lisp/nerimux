@@ -126,6 +126,8 @@
 
 (asdf:clear-system "nerimux/test")
 
+(asdf:compile-system "nerimux/test" :force t)
+
 (let* ((excluded-source-pathnames
          ;; TRUENAME on a path that no longer exists signals a file-error naming
          ;; only the pathname, with nothing to say it came from the list above.
@@ -147,7 +149,7 @@
        (report-index (merge-pathnames "cover-index.html" report-dir))
        (enforce-thresholds-p
          (not (string= "1" (or (uiop:getenv "NERIMUX_COVERAGE_REPORT_ONLY") "")))))
-  (asdf:load-system "nerimux/test" :force t)
+  (asdf:load-system "nerimux/test")
   (unless (let ((*print-circle* t))
             (cl-weave:run-all :reporter :spec :max-workers 1
                               :pass-with-no-tests nil
