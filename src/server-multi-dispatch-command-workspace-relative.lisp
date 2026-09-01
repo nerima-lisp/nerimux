@@ -1,9 +1,10 @@
 (in-package #:nerimux)
 
 (defun %tree-selection-index (current objects delta)
-  (or (and current
-           (position current objects :test #'equal))
-      (if (minusp delta) 0 -1)))
+  (cond
+    ((and current (position current objects :test #'equal)))
+    ((minusp delta) 0)
+    (t -1)))
 
 (defun %tree-selection-scroll (next scroll visible)
   (cond
