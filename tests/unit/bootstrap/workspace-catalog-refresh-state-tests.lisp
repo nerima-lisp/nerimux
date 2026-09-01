@@ -211,6 +211,60 @@
       (funcall captured-on-progress 7)
       (expect (eql 7 nerimux::*workspace-scan-progress*))))
 
+  (it "add-client-refresh-callbacks-settle-and-rebind-live-clients"
+    (multiple-value-bind (organizations organization repository)
+        (%make-server-dispatch-helper-fixture)
+      (let ((nerimux::*workspace-catalog-refresh-started-p* nil)
+            (nerimux::*workspace-catalog-loaded-p* nil)
+            (nerimux::*workspace-scan-progress* nil)
+            (nerimux::*workspace-refreshing-ids* (make-hash-table :test #'equal))
+            (nerimux::*workspace-stale-ids* (make-hash-table :test #'equal))
+            (nerimux::*clients* nil)
+            (nerimux::*dirty* nil)
+            (nerimux/vcs::*workspace-organizations* organizations)
+            (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
+            (refresh-fn (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async))
+            (captured nil))
+        (unwind-protect
+             (progn
+               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                     (lambda () t)
+                     (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async)
+                     (lambda (&key on-catalog on-complete on-error on-repository-error
+                                on-progress callback-dispatch &allow-other-keys)
+                       (declare (ignore callback-dispatch))
+                       (setf captured (list on-catalog on-complete on-error
+                                            on-repository-error on-progress))))
+               (with-stubbed-fdefinition
+                   ((nerimux/net:socket-stream
+                      (lambda (socket)
+                        (declare (ignore socket))
+                        (make-two-way-stream
+                         (make-string-input-stream "")
+                         (make-string-output-stream))))
+                    (nerimux/net:socket-fd (lambda (socket)
+                                             (declare (ignore socket))
+                                             1))
+                    (nerimux/net:close-socket (lambda (&rest args)
+                                                (declare (ignore args)))))
+                 (let ((conn (nerimux::%add-client :socket)))
+                   (expect conn)
+                   (expect captured)
+                   (funcall (fifth captured) 3)
+                   (funcall (first captured) organizations)
+                   (funcall (fourth captured) repository (make-condition 'error))
+                   (expect (plusp (hash-table-count nerimux::*workspace-stale-ids*)))
+                   (funcall (second captured) organizations)
+                   (expect nerimux::*workspace-catalog-loaded-p*)
+                   (expect (null nerimux::*workspace-scan-progress*))
+                   (expect (zerop (hash-table-count nerimux::*workspace-refreshing-ids*)))
+                   (expect (member organization
+                                   (nerimux::client-conn-picker-items conn)
+                                   :key #'nerimux/picker:picker-item-organization)))))
+          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
+                (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async)
+                refresh-fn)))))
+
   (it "add-client-does-not-start-refresh-without-vcs"
     (let ((nerimux::*workspace-catalog-refresh-started-p* nil)
           (nerimux::*workspace-catalog-loaded-p* nil)
