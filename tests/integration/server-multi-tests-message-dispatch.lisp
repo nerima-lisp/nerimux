@@ -32,6 +32,11 @@
     (let ((session (make-session :id 1 :name "0")))
       (expect (null (nerimux::%client-worktree-pane session nil)))))
 
+  (it "returns no pane when picker worktree is not attached"
+    (let* ((session (make-session :id 1 :name "0"))
+           (worktree (nerimux/workspace-model:make-worktree)))
+      (expect (null (nerimux::%client-worktree-pane session worktree)))))
+
   (it "main-thread-callback-queue-preserves-order"
     (let ((events nil)
           (nerimux::*main-thread-callbacks* nil))
