@@ -106,7 +106,12 @@
     ;; pending data — either way the function must return NIL without signalling.
     ;; Pass NIL as the stream so no socket write can happen even if the byte test
     ;; were to incorrectly find data.
-    (let ((result (ignore-errors (nerimux::%forward-stdin-byte nil))))
+    (let ((result (catch 'forward-stdin-byte-error
+                    (handler-bind
+                        ((error (lambda (condition)
+                                  (declare (ignore condition))
+                                  (throw 'forward-stdin-byte-error nil))))
+                      (nerimux::%forward-stdin-byte nil)))))
       (expect (null result)))) (it "forward-stdin-byte-sends-available-byte"
     (let (sent)
       (with-stubbed-fdefinition
