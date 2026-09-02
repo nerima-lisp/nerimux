@@ -237,6 +237,18 @@
         (ignore-errors (sb-posix:rmdir target))
         (ignore-errors (sb-posix:rmdir base)))))
 
+  (it "socket-directory-recovers-when-the-initial-lstat-races-with-creation"
+    (let ((first-probe t)
+          (original-lstat (fdefinition 'sb-posix:lstat)))
+      (with-stubbed-locked-fdefinitions
+          ((sb-posix:lstat
+             (lambda (path)
+               (if (shiftf first-probe nil)
+                   (error 'sb-posix:syscall-error)
+                   (funcall original-lstat path)))))
+        (let ((dir (nerimux::%socket-directory)))
+          (expect (directory (format nil "~A/" dir)))))))
+
   ;; socket-path uses a fixed name for a given session name — no -L/-S
   ;; override can change it (R1.17 removed both CLI flags).
   (it "socket-path-name-is-fixed-for-a-given-session-name"
