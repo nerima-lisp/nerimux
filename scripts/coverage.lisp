@@ -27,7 +27,7 @@
 
 (defun %coverage-test-name-filter ()
   (let ((filter (uiop:getenv "CL_WEAVE_TEST_FILTER")))
-    (and (plusp (length filter)) filter)))
+    (and filter (plusp (length filter)) filter)))
 
 (defun %ensure-full-coverage (statistics)
   (loop for (kind covered-key total-key) in '((:expression :expression-covered
@@ -151,7 +151,8 @@
                                 relative-path))))
                  *coverage-excluded-source-files*))
        (report-dir (uiop:ensure-directory-pathname
-                    (or (second sb-ext:*posix-argv*) "coverage-report/")))
+                    (or (first (uiop:command-line-arguments))
+                        "coverage-report/")))
        (report-index (merge-pathnames "cover-index.html" report-dir))
        (enforce-thresholds-p
          (not (string= "1" (or (uiop:getenv "NERIMUX_COVERAGE_REPORT_ONLY") "")))))
