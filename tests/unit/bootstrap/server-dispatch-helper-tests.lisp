@@ -1002,6 +1002,11 @@
               (expect (equal (list message) notifications))
               (setf notifications nil)))))))
 
+  (it "open-worktree-pane-returns-nil-without-a-worktree"
+    (let ((conn (nerimux::%make-client-conn)))
+      (expect (null (nerimux::%open-client-worktree-pane
+                     nil conn nil)))))
+
   (it "open-worktree-pane-reports-a-window-without-an-active-pane"
     (let* ((conn (nerimux::%make-client-conn))
            (worktree
