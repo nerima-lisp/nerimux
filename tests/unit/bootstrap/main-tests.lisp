@@ -56,6 +56,13 @@
       (expect (equal '("attach" "myname")
                      (nerimux::%application-argv)))))
 
+  (it "application-argv-strips-the-last-wrapper-option-marker"
+    (let ((sb-ext:*posix-argv*
+            (list "sbcl" "--noinform" "attach" "--end-toplevel-options"
+                  "server" "0")))
+      (expect (equal '("server" "0")
+                     (nerimux::%application-argv)))))
+
   ;; main routes argv to the correct entry point with the correct session name
   ;; (the first positional entry-function argument).
   (it "dispatch-main-table"
