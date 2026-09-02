@@ -441,8 +441,7 @@
                           (nerimux/workspace-model:repository
                            "repository selected; use :wt-create --branch <branch> --confirm")
                           (nerimux/workspace-model:organization
-                           "organization selected; select a repository first")
-                          (t "picker item has no worktree")))
+                           "organization selected; select a repository first")))
         t)
       (t nil))))
 
