@@ -308,6 +308,8 @@
         (expect (consp (nerimux::%client-picker-visible-items conn)))
         (expect (nerimux::%set-client-picker-regex conn t t))
         (expect (nerimux::client-conn-picker-regex-p conn))
+        (expect (nerimux::%set-client-picker-regex conn :unknown t))
+        (expect (nerimux::client-conn-picker-regex-p conn))
         (expect (null (nerimux::%set-client-picker-regex conn nil t)))
         (expect (null (nerimux::client-conn-picker-regex-p conn)))
         (expect (nerimux::%set-client-picker-regex conn nil nil))
