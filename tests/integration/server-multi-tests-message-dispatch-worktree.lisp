@@ -3,6 +3,26 @@
 ;;;; Server multi-client message dispatch tests.
 (describe "server-multi-suite"
 
+  (it "worktree-create-now-reports-synchronous-vcs-errors"
+    (let* ((organization
+             (nerimux/workspace-model:make-organization
+              :id "org" :host "github.com" :name "team"))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :id "repo" :organization organization
+              :specification "github.com/team/repo"))
+           (conn (%make-test-conn))
+           (create-fn (fdefinition 'nerimux/vcs:create-worktree-async)))
+      (unwind-protect
+           (progn
+             (setf (fdefinition 'nerimux/vcs:create-worktree-async)
+                   (lambda (&rest arguments)
+                     (declare (ignore arguments))
+                     (error "synthetic create failure")))
+             (expect (nerimux::%client-create-worktree-now
+                      repository "feature/test" conn nil)))
+        (setf (fdefinition 'nerimux/vcs:create-worktree-async) create-fn))))
+
   (it "overview-worktree-prune-confirm-without-confirm-is-rejected"
     (with-fake-session (s)
       (let* ((organization
