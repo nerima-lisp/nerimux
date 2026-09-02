@@ -56,6 +56,8 @@
     "src/main-startup-socket-macros.lisp"
   "src/runtime-reader-data.lisp"
   "src/server-data.lisp"
+  "src/workspace-window-data.lisp"
+  "src/server-multi-dispatch-prefix-data.lisp"
   "src/server-multi-dispatch-tree-filter-data.lisp"
     "src/server-multi-dispatch-command-input-data.lisp"
     "src/runtime-data.lisp"

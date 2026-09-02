@@ -5,11 +5,6 @@
 ;;; Each action below takes SESSION/CONN and returns NIL (keep serving) or
 ;;; :drop (detach, for `d`).  %workspace-prefix-dispatch is the single place
 ;;; that maps a struck byte to an action; a byte not listed here is dropped.
-(defconstant +max-panes-per-window+
-  4
-  "Hard cap on panes within one window (§1.4, R5.2).  A split requested while
-   a window is already at the cap opens a new window for the same worktree
-   instead of subdividing an existing pane further.")
 
 (defun %workspace-prefix-context (session conn)
   "Return (values PANE WINDOW WORKTREE) for CONN's current focus, or all NIL

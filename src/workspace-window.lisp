@@ -6,13 +6,8 @@
 ;;;; `new-window` command once carried -- at-index, after-current,
 ;;;; before-current, detach -- went with the command table that was the
 ;;;; only way to supply them.
-;;; +status-line-rows+ (the status line is one row at the bottom, always --
-;;; requirements 1.4) is defined in server.lisp, which loads before this file
-;;; in the bootstrap-server ASDF module; reused here rather than redefined.
-;;; Windows and panes are numbered from 1 (requirements 1.4).
-(defconstant +first-window-index+
-  1
-  "Index the first window in a session takes.")
+;;; +status-line-rows+ is defined in server-data.lisp and the window index in
+;;; workspace-window-data.lisp; both are loaded before this logic file.
 
 (defun %workspace-new-window (session &key
                                       name
