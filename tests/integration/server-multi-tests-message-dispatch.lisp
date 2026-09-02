@@ -203,7 +203,7 @@
           (expect (eq :scrollback (nerimux::client-conn-modal conn)))
           (expect (nerimux::%handle-client-ui-command s conn :cancel nil nil))
           (expect (null (nerimux::client-conn-modal conn)))
-          (expect (equal '(:select :open) calls))))))
+          (expect (equal '(:select :open :close :open) calls))))))
 
   (it "ui-command-aliases-preserve-command-contract"
     (with-fake-session (s)
