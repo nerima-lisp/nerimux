@@ -358,34 +358,28 @@ FETCH-REPOSITORY-ASYNC)."
        (%server-kill-request session t)
        :quit))))
 
-(defun %workspace-prefix-dispatch (session conn byte)
+(define-key-rules %workspace-prefix-dispatch (session conn byte)
   "Resolve BYTE — the key struck right after C-q — against 1.5's table and
    run its action.  Returns the loop disposition (NIL to keep serving,
    :drop for `d`).  A BYTE with no binding here is discarded: the prefix
    already consumed it and nothing else happens (R4.4)."
-  (when (integerp byte)
-    (cond
-      ((= byte (char-code #\-)) (%workspace-prefix-split session conn :v))
-      ((= byte (char-code #\|)) (%workspace-prefix-split session conn :h))
-      ((= byte (char-code #\x)) (%workspace-prefix-close-pane session conn))
-      ((= byte (char-code #\z)) (%workspace-prefix-toggle-zoom session conn))
-      ((= byte (char-code #\h)) (%workspace-prefix-move-focus session conn :left))
-      ((= byte (char-code #\j)) (%workspace-prefix-move-focus session conn :down))
-      ((= byte (char-code #\k)) (%workspace-prefix-move-focus session conn :up))
-      ((= byte (char-code #\l)) (%workspace-prefix-move-focus session conn :right))
-      ((= byte (char-code #\n)) (%workspace-prefix-cycle-window session conn 1))
-      ((= byte (char-code #\p)) (%workspace-prefix-cycle-window session conn -1))
-      ((= byte (char-code #\w)) (%workspace-prefix-open-status session conn))
-      ((= byte (char-code #\t))
-       (%client-open-selected-worktree-command session conn nil))
-      ((= byte (char-code #\[)) (%workspace-prefix-open-scrollback session conn))
-      ((= byte (char-code #\d)) :drop)
-      ((= byte (char-code #\Q)) (%workspace-prefix-quit-server session conn))
-      ((= byte (client-conn-workspace-prefix-code conn))
-       ;; C-q C-q: drop any MODAL and hand the keyboard back to whatever VIEW
-       ;; is on screen (FR-007) — the only prefix action with no pane or
-       ;; worktree precondition, so it is handled inline rather than via a
-       ;; one-line %workspace-prefix-* wrapper.
-       (%set-client-modal conn nil)
-       nil)
-      (t nil))))
+  (#\- (%workspace-prefix-split session conn :v))
+  (#\| (%workspace-prefix-split session conn :h))
+  (#\x (%workspace-prefix-close-pane session conn))
+  (#\z (%workspace-prefix-toggle-zoom session conn))
+  (#\h (%workspace-prefix-move-focus session conn :left))
+  (#\j (%workspace-prefix-move-focus session conn :down))
+  (#\k (%workspace-prefix-move-focus session conn :up))
+  (#\l (%workspace-prefix-move-focus session conn :right))
+  (#\n (%workspace-prefix-cycle-window session conn 1))
+  (#\p (%workspace-prefix-cycle-window session conn -1))
+  (#\w (%workspace-prefix-open-status session conn))
+  (#\t (%client-open-selected-worktree-command session conn nil))
+  (#\[ (%workspace-prefix-open-scrollback session conn))
+  (#\d :drop)
+  (#\Q (%workspace-prefix-quit-server session conn))
+  ((and (integerp byte)
+        (= byte (client-conn-workspace-prefix-code conn)))
+   (%set-client-modal conn nil)
+   nil)
+  (t nil))

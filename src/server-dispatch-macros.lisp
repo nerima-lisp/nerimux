@@ -65,10 +65,12 @@
                 (destructuring-bind (pattern &rest body) rule
                   `(,(cond
                        ((eql pattern t) t)
-                       ((characterp pattern)
-                        `(%client-key-p ,payload-var ,pattern))
-                       ((integerp pattern)
-                        `(%client-byte-p ,payload-var ,pattern))
+                      ((characterp pattern)
+                        `(or (eql ,payload-var (char-code ,pattern))
+                             (%client-key-p ,payload-var ,pattern)))
+                      ((integerp pattern)
+                        `(or (eql ,payload-var ,pattern)
+                             (%client-byte-p ,payload-var ,pattern)))
                        (t pattern)) ,@body)))
               rules))))))
 
