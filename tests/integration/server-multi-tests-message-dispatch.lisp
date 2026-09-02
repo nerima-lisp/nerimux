@@ -304,7 +304,12 @@
         (expect (null
                  (nerimux::%handle-multi-command-message
                   s conn
-                  (nerimux/protocol::encode-command-payload :not-a-ui-command)))))))
+                  (nerimux/protocol::encode-command-payload :not-a-ui-command))))
+        (let ((nerimux::*dirty* nil))
+          (expect (null
+                   (nerimux::%handle-multi-command-message
+                    s conn nil)))
+          (expect nerimux::*dirty*)))))
 
   (it "forwarded-command-message-applies-focus-and-viewport"
     (with-fake-session (s)
