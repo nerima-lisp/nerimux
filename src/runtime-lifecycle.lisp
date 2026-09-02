@@ -6,10 +6,10 @@
            (coerce
             (loop for character across text
                   collect (if (or (alphanumericp character)
-                                  (find character
-                                        +runtime-safe-server-name-punctuation+
-                                        :test
-                                        #'char=))
+                                  (member character
+                                          +runtime-safe-server-name-punctuation+
+                                          :test
+                                          #'char=))
                               character
                               #\_))
             'string)))
@@ -39,5 +39,7 @@
    *runtime-server-name* special (which is not guaranteed bound in the
    launching/parent process)."
   (merge-pathnames
-   (format nil "nerimux/~A.log" (%runtime-safe-server-name name))
-   (pathname (format nil "~A/" (string-right-trim "/" (%runtime-state-home))))))
+   (make-pathname :directory (list :relative "nerimux")
+                  :name (%runtime-safe-server-name name)
+                  :type "log")
+   (uiop:ensure-directory-pathname (%runtime-state-home))))
