@@ -214,6 +214,9 @@
            (repository
              (nerimux/workspace-model::%make-repository
               :organization organization :specification "origin/team/repo"))
+           (local-path-repository
+             (nerimux/workspace-model::%make-repository
+              :local-path "/workspace/local-only"))
            (path-worktree
              (nerimux/workspace-model::%make-worktree
               :path "/workspace/repo"))
@@ -226,6 +229,9 @@
                        (nerimux::%organization-selection-token organization)))
       (expect (string= "origin/team/repo"
                        (nerimux::%repository-selection-token repository)))
+      (expect (string= "/workspace/local-only"
+                       (nerimux::%repository-selection-token
+                        local-path-repository)))
       (expect (string= "/workspace/repo"
                        (nerimux::%worktree-selection-token path-worktree)))
       (expect (string= "FEATURE"
