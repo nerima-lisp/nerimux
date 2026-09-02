@@ -23,6 +23,44 @@
                       repository "feature/test" conn nil)))
         (setf (fdefinition 'nerimux/vcs:create-worktree-async) create-fn))))
 
+  (it "worktree-create-now-focuses-the-new-worktree-in-an-active-session"
+    (with-fake-session (session)
+      (let* ((organization
+               (nerimux/workspace-model:make-organization
+                :id "org" :host "github.com" :name "team"))
+             (repository
+               (nerimux/workspace-model:make-repository
+                :id "repo" :organization organization
+                :specification "github.com/team/repo"))
+             (worktree
+               (nerimux/workspace-model:make-worktree
+                :id "feature" :repository repository
+                :path "/tmp/feature" :branch "feature/test"))
+             (conn (%make-test-conn))
+             (nerimux::*clients* (list conn))
+             (create-fn (fdefinition 'nerimux/vcs:create-worktree-async))
+             (focus-fn (fdefinition 'nerimux::%focus-selected-client-worktree))
+             (focused nil))
+        (unwind-protect
+             (progn
+               (setf (fdefinition 'nerimux/vcs:create-worktree-async)
+                     (lambda (received-repository &key on-complete
+                               &allow-other-keys)
+                       (expect (eq repository received-repository))
+                       (funcall on-complete worktree)
+                       t)
+                     (fdefinition 'nerimux::%focus-selected-client-worktree)
+                     (lambda (received-session received-conn)
+                       (setf focused (list received-session received-conn))
+                       t))
+               (expect (nerimux::%client-create-worktree-now
+                        repository "feature/test" conn session))
+               (expect (equal (list session conn) focused))
+               (expect (eq worktree
+                           (nerimux::client-conn-selected-worktree conn))))
+          (setf (fdefinition 'nerimux/vcs:create-worktree-async) create-fn
+                (fdefinition 'nerimux::%focus-selected-client-worktree) focus-fn)))))
+
   (it "overview-worktree-prune-confirm-without-confirm-is-rejected"
     (with-fake-session (s)
       (let* ((organization
