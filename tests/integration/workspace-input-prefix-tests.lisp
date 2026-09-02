@@ -531,3 +531,41 @@
                 (fdefinition 'nerimux/vcs:fetch-organization-async) fetch
                 (fdefinition 'nerimux::%refresh-client-picker) refresh
                 (fdefinition 'nerimux::%client-notify) notify)))))
+
+  (it "r5-4-refocuses-to-the-most-recent-pane-in-the-worktree"
+    (let* ((organization (nerimux/workspace-model:make-organization
+                           :id "org" :host "github.com" :name "team"))
+           (repository (nerimux/workspace-model:make-repository
+                         :id "repo" :organization organization
+                         :specification "github.com/team/repo"))
+           (worktree (nerimux/workspace-model:make-worktree
+                       :id "wt" :repository repository
+                       :path "/tmp/nerimux-r5-wt" :branch "feat/phase3"))
+           (session (nerimux/session:make-session :id 1 :name "0" :windows nil))
+           (test-conn (%make-test-conn))
+           (older-pane (make-no-pty-pane 1 0 0 40 10))
+           (newer-pane (make-no-pty-pane 2 0 0 40 10))
+           (older-window (make-window :id 1 :name "older" :width 40 :height 10))
+           (newer-window (make-window :id 2 :name "newer" :width 40 :height 10))
+            (selected-window nil)
+            (focused-pane nil))
+      (setf (nerimux/workspace-model:worktree-panes worktree)
+            (list older-pane newer-pane)
+            (nerimux/pane:pane-window older-pane) older-window
+            (nerimux/pane:pane-window newer-pane) newer-window
+            (nerimux/window:window-last-active-time older-window) 1
+            (nerimux/window:window-last-active-time newer-window) 2)
+      (nerimux/window:window-select-pane newer-window newer-pane)
+      (with-stubbed-fdefinition
+            ((nerimux/session:session-select-window
+              (lambda (object window)
+                (declare (ignore object))
+                (setf selected-window window)))
+             (nerimux::%set-client-focus
+              (lambda (connection pane)
+                (declare (ignore connection))
+                (setf focused-pane pane))))
+          (nerimux::%workspace-refocus-after-window-close
+           session test-conn worktree)
+          (expect (eq newer-window selected-window))
+          (expect (eq newer-pane focused-pane)))))
