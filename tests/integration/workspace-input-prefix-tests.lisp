@@ -530,7 +530,7 @@
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:fetch-organization-async) fetch
                 (fdefinition 'nerimux::%refresh-client-picker) refresh
-                (fdefinition 'nerimux::%client-notify) notify)))))
+                (fdefinition 'nerimux::%client-notify) notify))))
 
   (it "r5-4-refocuses-to-the-most-recent-pane-in-the-worktree"
     (let* ((organization (nerimux/workspace-model:make-organization
@@ -569,3 +569,4 @@
            session test-conn worktree)
           (expect (eq newer-window selected-window))
           (expect (eq newer-pane focused-pane)))))
+  )
