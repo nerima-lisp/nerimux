@@ -2471,22 +2471,37 @@
                            (declare (ignore client))
                            (push :close calls)))
                        (nerimux::%transition-client-ui-mode
-                         (lambda (client mode)
+                       (lambda (client mode)
                            (declare (ignore client))
                            (push (list :mode mode) calls)))
+                       (nerimux::%client-rebind-prefix
+                         (lambda (client prefix)
+                           (declare (ignore client))
+                           (push (list :prefix prefix) calls)))
+                       (nerimux::%select-client-tree-relative
+                         (lambda (client delta)
+                           (declare (ignore client))
+                           (push (list :tree delta) calls)))
+                       (nerimux::%move-client-picker-index
+                         (lambda (client delta)
+                           (declare (ignore client))
+                           (push (list :picker delta) calls)))
                        (nerimux::%mark-dirty
                          (lambda ()
                            (push :dirty calls))))
                     (dolist (command '((:attach-target nil ("team/repo"))
                                        (:workspace-refresh nil nil)
+                                       (:workspace-prefix nil ("C-x"))
                                        (:tree-select nil ("team/repo"))
+                                       (:tree-next nil ("2"))
                                        (:picker-open nil nil)
                                        (:picker-close nil nil)
-                                       (:mode "input" nil)))
+                                       (:mode nil ("input"))
+                                       (:picker-next nil ("2"))))
                       (destructuring-bind (name target args) command
                         (expect (nerimux::%handle-client-ui-command
                                  s conn name target args))))
-                    (expect (equal '(:dirty (:mode :input) :close :open
-                                     (:select "team/repo") :refresh
-                                     (:attach ("team/repo")))
+                    (expect (equal '((:picker 2) :dirty (:mode :input) :close :open
+                                     (:tree 2) (:select "team/repo") (:prefix "C-x")
+                                     :refresh (:attach ("team/repo")))
                                    calls)))))))
