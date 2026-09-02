@@ -13,7 +13,7 @@
                                       name
                                       start-dir
                                       default-command
-                                      (start-reader-p t))
+                                      (start-reader-p +start-reader-by-default+))
   "Create a window in SESSION and return it.
    NAME defaults to the shell basename.  START-DIR is the new pane's working
    directory.  START-READER-P is NIL when the caller starts the reader thread
