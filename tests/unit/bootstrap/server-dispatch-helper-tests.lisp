@@ -1667,6 +1667,25 @@
                      "worktree-1" "src/main.lisp" "M")))
       (expect (null (gethash key nerimux::*workspace-expanded-node-ids*)))))
 
+  (it "expands-an-untracked-file-without-starting-a-diff-fetch"
+    (let* ((key (list :file-diff "worktree-1" "untracked.lisp"))
+           (nerimux::*workspace-expanded-node-ids*
+             (make-hash-table :test #'equal))
+           (nerimux::*workspace-file-diffs*
+             (make-hash-table :test #'equal))
+           (nerimux::*dirty* nil)
+           (fetch-started nil))
+      (with-stubbed-fdefinition
+          ((nerimux::%client-start-worktree-file-diff-refresh
+             (lambda (&rest arguments)
+               (declare (ignore arguments))
+               (setf fetch-started t))))
+        (expect (eq t (nerimux::%client-toggle-selected-file-diff
+                       "worktree-1" "untracked.lisp" "??")))
+        (expect (gethash key nerimux::*workspace-expanded-node-ids*))
+        (expect (null fetch-started))
+        (expect nerimux::*dirty*))))
+
   ;; h/l on a REPOSITORY row toggle its worktree listing under the
   ;; Repositories section (*WORKSPACE-EXPANDED-NODE-IDS*, default-collapsed
   ;; polarity -- the opposite sense from *WORKSPACE-COLLAPSED-NODE-IDS*,
