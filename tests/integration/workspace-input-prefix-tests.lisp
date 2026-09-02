@@ -339,6 +339,10 @@
                          (nerimux::%workspace-prefix-dispatch
                           s conn (char-code #\-))))
           (expect (equal (list s conn :v) split-args))
+          (expect (equal (list s conn :h)
+                         (nerimux::%workspace-prefix-dispatch
+                          s conn (char-code #\|))))
+          (expect (equal (list s conn :h) split-args))
           (expect (equal (list s conn nil)
                          (nerimux::%workspace-prefix-dispatch
                           s conn (char-code #\t))))
