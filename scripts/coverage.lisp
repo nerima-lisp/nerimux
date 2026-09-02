@@ -27,7 +27,9 @@
 
 (defun %coverage-test-name-filter ()
   (let ((filter (uiop:getenv "CL_WEAVE_TEST_FILTER")))
-    (and filter (plusp (length filter)) filter)))
+    (cond ((null filter) nil)
+          ((string= filter "") nil)
+          (t filter))))
 
 (defun %ensure-full-coverage (statistics)
   (loop for (kind covered-key total-key) in '((:expression :expression-covered
@@ -88,6 +90,7 @@
     "packages/renderer/src/renderer-style-data.lisp"
     "packages/renderer/src/renderer-style.lisp"))
 
+#+sbcl
 (sb-ext:restrict-compiler-policy 'sb-cover:store-coverage-data 3)
 
 (proclaim '(optimize (sb-cover:store-coverage-data 3)))
@@ -168,8 +171,7 @@
                               :coverage-report-directory report-dir))
     (error "nerimux test suite failed under coverage instrumentation"))
   (unless (and (probe-file report-index)
-               (with-open-file (stream report-index
-                                       :direction :input
+                 (with-open-file (stream report-index
                                        :element-type '(unsigned-byte 8))
                  (plusp (file-length stream))))
     (error "coverage run did not produce a non-empty ~A" report-index))
