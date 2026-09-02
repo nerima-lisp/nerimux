@@ -78,6 +78,13 @@
                  (expect
                   (equal expected
                          (nerimux::%tree-object-selection-token object)))))))
+          (it "uses a repository local path as its direct fallback token"
+              (let ((repository
+                     (nerimux/workspace-model:make-repository :local-path
+                                                              "/local/repository")))
+                (expect
+                 (equal "/local/repository"
+                        (nerimux::%repository-selection-token repository)))))
           (it "normalizes row, pane, and empty identity tokens"
               (let* ((worktree
                       (nerimux/workspace-model:make-worktree :id "wt-id"))
