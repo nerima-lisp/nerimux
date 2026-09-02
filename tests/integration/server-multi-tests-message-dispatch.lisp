@@ -28,6 +28,10 @@
                    (nerimux/picker::%make-picker-item
                     :organization organization))))))
 
+  (it "does not search panes when picker worktree is absent"
+    (let ((session (make-session :id 1 :name "0")))
+      (expect (null (nerimux::%client-worktree-pane session nil)))))
+
   (it "main-thread-callback-queue-preserves-order"
     (let ((events nil)
           (nerimux::*main-thread-callbacks* nil))
