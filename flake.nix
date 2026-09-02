@@ -658,6 +658,9 @@
             packages = [
               sbcl
               paredit-cli.packages.${system}.default
+              (pkgs.writeShellScriptBin "paredit-cli" ''
+                exec ${paredit-cli.packages.${system}.default}/bin/paredit "$@"
+              '')
               pkgs.coreutils
               pkgs.python3Packages.mkdocs-material
             ];
@@ -692,6 +695,10 @@
                   sbcl --dynamic-space-size 4096 --no-sysinit --no-userinit \
                   --disable-debugger --script scripts/coverage.lisp "$report_dir"
                 echo "Coverage report: $report_dir" "cover-index.html"
+              }
+
+              paredit-cli() {
+                paredit "$@"
               }
 
               echo "nerimux dev shell"
