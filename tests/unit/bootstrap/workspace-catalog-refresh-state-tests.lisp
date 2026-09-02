@@ -55,7 +55,8 @@
             (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
             (refresh-fn (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async))
             (conn (nerimux::%make-client-conn))
-            (captured-on-complete nil))
+            (captured-on-complete nil)
+            (completed-organizations nil))
         (setf nerimux::*clients* (list conn))
         (unwind-protect
              (progn
@@ -68,7 +69,9 @@
                                         on-progress callback-dispatch))
                        (setf captured-on-complete on-complete)
                        (when on-catalog (funcall on-catalog organizations))))
-               (nerimux::%refresh-client-picker conn)
+               (nerimux::%refresh-client-picker
+                conn :on-complete (lambda (value)
+                                    (setf completed-organizations value)))
                ;; Sanity: the in-flight mark actually landed somewhere (via
                ;; %refresh-client-picker's own :mark call plus the stubbed
                ;; on-catalog callback's), or the :settle assertion below would
@@ -76,6 +79,7 @@
                (expect (plusp (hash-table-count nerimux::*workspace-refreshing-ids*)))
                (expect captured-on-complete)
                (funcall captured-on-complete organizations)
+               (expect (eq organizations completed-organizations))
                (expect (zerop (hash-table-count nerimux::*workspace-refreshing-ids*))))
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async)
