@@ -112,8 +112,7 @@
       (with-open-file (_out path :direction :output :element-type '(unsigned-byte 8)
                                 :if-exists :supersede)
         (finish-output _out))
-      (with-open-file (stream path :direction :input
-                                   :element-type '(unsigned-byte 8))
+      (with-open-file (stream path :element-type '(unsigned-byte 8))
         (let ((dispatched nil))
           (with-incoming-frame (type _payload stream)
             ((null type)        (expect (null _payload))
