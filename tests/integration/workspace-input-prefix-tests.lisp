@@ -323,6 +323,27 @@
         (expect (null (nerimux::%workspace-prefix-dispatch s conn 255)))
         (expect (null (nerimux::%workspace-prefix-dispatch s conn :unknown))))))
 
+  (it "prefix-dispatch-routes-split-and-worktree-command-bindings"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn))
+            (split-args nil)
+            (command-args nil))
+        (with-stubbed-fdefinition
+            ((nerimux::%workspace-prefix-split
+              (lambda (&rest args)
+                (setf split-args args)))
+             (nerimux::%client-open-selected-worktree-command
+              (lambda (&rest args)
+                (setf command-args args))))
+          (expect (equal (list s conn :v)
+                         (nerimux::%workspace-prefix-dispatch
+                          s conn (char-code #\-))))
+          (expect (equal (list s conn :v) split-args))
+          (expect (equal (list s conn nil)
+                         (nerimux::%workspace-prefix-dispatch
+                          s conn (char-code #\t))))
+          (expect (equal (list s conn nil) command-args))))))
+
   (it "r4-5-prefix-actions-report-missing-focus-without-mutating-session"
     (with-fake-session (s :nwindows 0)
       (let ((conn (%make-test-conn)))
