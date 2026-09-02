@@ -578,6 +578,9 @@
         (expect (eq repository
                     (nerimux::%workspace-find-tree-object
                      "repo-id" organizations)))
+        (expect (eq organization
+                    (nerimux::%workspace-find-tree-object
+                     "team" organizations)))
         (expect (string= "feature-value"
                          (nerimux::%client-positional-branch
                           '("--branch" "main" "feature-value"))))
