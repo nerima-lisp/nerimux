@@ -369,7 +369,7 @@
         (values +default-term-rows+ +default-term-cols+))))
 
 (defun install-pty-port ()
-  "Register this module as the active nerimux/ports PTY adapter."
+  "Install this module's concrete PTY operations into the nerimux/ports contract."
   (setf nerimux/ports:*spawn-pty* #'forkpty-with-shell
         nerimux/ports:*write-pty* #'pty-write
         nerimux/ports:*resize-pty* #'set-pty-size

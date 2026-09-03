@@ -6,7 +6,7 @@
 (in-package #:asdf-user)
 
 (defsystem "nerimux-pty"
-  :description "INFRASTRUCTURE pseudo-terminal adapter for nerimux: spawn, raw mode, fd IO"
+  :description "INFRASTRUCTURE pseudo-terminal operations for nerimux: spawn, raw mode, fd IO"
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
@@ -14,7 +14,7 @@
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  ;; pty.lisp writes into nerimux/ports' port variables; the adapter depends on
+  ;; pty.lisp installs the concrete implementation for nerimux/ports; it depends on
   ;; the abstraction, never the other way round.
   :depends-on ("nerimux-ports"
                :cl-tty-kit :cl-process-kit :cl-codec-kit
@@ -24,7 +24,7 @@
   :components ((:file "package")
                (:file "pty-ffi")       ; FFI declarations and platform constants
                (:file "pty-rawmode")   ; terminal raw mode management
-               (:file "pty"))          ; PTY lifecycle + install-pty-port adapter
+               (:file "pty"))          ; PTY lifecycle + port installation
   :in-order-to ((test-op (test-op "nerimux-pty/test"))))
 
 (defsystem "nerimux-pty/test"

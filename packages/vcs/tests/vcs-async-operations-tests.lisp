@@ -191,7 +191,7 @@
           (%vcs-operations-join threads))))))
 
 (describe "vcs synchronous fetch"
-          (it "fetches through the adapter and refreshes status"
+          (it "fetches and refreshes status"
               (let* ((repository
                       (nerimux/workspace-model:make-repository :specification
                                                                "workspace-owner/project"

@@ -87,7 +87,7 @@
                 (expect (eq :done result)))))
 
 (describe "vcs worktree status"
-          (it "marks an absent worktree without querying the adapter"
+          (it "marks an absent worktree without querying VCS"
               (let* ((path
                       (namestring
                        (merge-pathnames

@@ -6,7 +6,7 @@
 (in-package #:asdf-user)
 
 (defsystem "nerimux-vcs"
-  :description "INFRASTRUCTURE git adapter for nerimux: ghq discovery, worktree operations, status inspection"
+  :description "INFRASTRUCTURE VCS operations for nerimux: ghq discovery, worktree operations, status inspection"
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"

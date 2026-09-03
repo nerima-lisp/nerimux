@@ -15,7 +15,7 @@
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
   ;; nerimux-ports rather than nerimux-pty for the PTY teardown: commands-core
-  ;; calls nerimux/ports:close-pty, the abstraction, never the adapter.
+  ;; calls nerimux/ports:close-pty, the shared PTY contract.
   :depends-on ("nerimux-model" "nerimux-terminal" "nerimux-ports"
                :cl-parser-kit :cl-regex-kit)
   :pathname "src"
