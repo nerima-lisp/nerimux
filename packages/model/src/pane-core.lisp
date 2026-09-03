@@ -18,6 +18,7 @@
   ;; ── Window back-pointer and state ─────────────────────────────────────────
   (window   nil)                      ; back-pointer to the owning window (set on attach)
   (worktree nil)                      ; logical repository worktree shown by this pane
+  (role :terminal :type (member :terminal :agent))
   (marked           nil)              ; T when this pane is the marked pane (C-b m)
   (input-disabled   nil :type boolean) ; T when select-pane -d disables input
   ;; ── Identity strings ──────────────────────────────────────────────────────
@@ -135,6 +136,30 @@
 (defun pane-live-p (pane)
   "Return T when PANE still has a live PTY master fd."
   (and pane (> (pane-fd pane) 0)))
+
+(defun pane-agent-p (pane)
+  (and pane (eq (pane-role pane) :agent)))
+
+(defun worktree-agent-pane (worktree)
+  (find-if #'pane-agent-p (worktree-panes worktree)))
+
+(defun worktree-live-panes (worktree)
+  (remove-if-not #'pane-live-p (worktree-panes worktree)))
+
+(defun worktree-removal-blockers (worktree)
+  (when worktree
+    (let ((blockers nil))
+      (when (worktree-bare-p worktree) (push :bare-worktree blockers))
+      (when (worktree-locked-p worktree) (push :locked-worktree blockers))
+      (when (worktree-live-panes worktree) (push :live-pane blockers))
+      (nreverse blockers))))
+
+(defun worktree-removal-candidate-p (worktree)
+  (and worktree
+       (not (worktree-missing-p worktree))
+       (or (worktree-completed-p worktree)
+           (let ((agent (worktree-agent-pane worktree)))
+             (and agent (pane-process-exited-p agent))))))
 
 ;;; ── Response-queue drain helper (logic layer) ──────────────────────────────
 ;;;

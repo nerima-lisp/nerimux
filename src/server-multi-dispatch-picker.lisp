@@ -355,7 +355,8 @@
              :test
              #'eq)))
 
-(defun %open-client-worktree-pane (session conn worktree &key default-command)
+(defun %open-client-worktree-pane
+    (session conn worktree &key default-command (role :terminal))
   (let ((path (and worktree (worktree-path worktree))))
     (cond
       ((null worktree)
@@ -377,6 +378,8 @@
                              :default-command default-command
                              :start-reader-p nil))
                     (pane (window-active-pane window)))
+               (when pane
+                 (setf (nerimux/pane:pane-role pane) role))
                (cond
                  ((null pane)
                   (%client-notify conn "worktree pane unavailable")
@@ -400,6 +403,7 @@
                  (t
                   (start-reader-thread pane)
                   (worktree-add-pane worktree pane)
+                  (nerimux/workspace-model:worktree-reopen worktree)
                   (%set-client-selected-worktree conn worktree)
                   (%set-client-focus conn pane)
                   (%mark-dirty)
