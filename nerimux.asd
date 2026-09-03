@@ -157,7 +157,8 @@
        (:file "server-multi-dispatch-prefix-data") ; prefix constants
        (:file "server-multi-dispatch-prefix") ; C-q workspace actions
        (:file "server-multi-workspace-selection") ; workspace catalog selection logic
-       (:file "server-multi-dispatch-picker") ; picker/tree selection
+       (:file "server-multi-dispatch-picker-data") ; selection identity data
+       (:file "server-multi-dispatch-picker") ; picker/tree selection logic
        (:file "server-multi-dispatch-command-workspace-relative") ; relative tree selection
        (:file "server-multi-dispatch-command-workspace") ; workspace UI helpers
        (:file "server-multi-dispatch-command-worktree") ; worktree operations
