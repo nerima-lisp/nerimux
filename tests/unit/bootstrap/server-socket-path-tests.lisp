@@ -193,6 +193,20 @@
         (let ((dir (nerimux::%socket-directory)))
           (expect (directory (format nil "~A/" dir)))))))
 
+  (it "socket-directory-continues-after-creation-errors-before-verification"
+    (with-stubbed-locked-fdefinitions
+        ((sb-posix:lstat (lambda (path)
+                           (declare (ignore path))
+                           (error 'sb-posix:syscall-error :errno 2)))
+         (ensure-directories-exist (lambda (path)
+                                     (declare (ignore path))
+                                     (error 'file-error)))
+         (sb-posix:chmod (lambda (path mode)
+                           (declare (ignore path mode))
+                           (error 'sb-posix:syscall-error :errno 2))))
+      (signals error
+        (nerimux::%socket-directory))))
+
   (it "socket-path-name-is-fixed-for-a-given-session-name"
     (let ((p1 (nerimux::socket-path "fixedname"))
           (p2 (nerimux::socket-path "fixedname")))
