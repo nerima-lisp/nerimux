@@ -156,6 +156,7 @@
                      #:pane-notification
                      #:pane-notify
                      #:pane-pid
+                     #:pane-role
                      #:pane-process-exited-p
                      #:pane-reposition
                      #:pane-screen

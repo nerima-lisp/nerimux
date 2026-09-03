@@ -120,3 +120,14 @@ session 単位の `workspace-mode-p` 分岐で上書きしようとする、独�
   項目）で代替された。単一走行で 34/35、残る 1 項目（picker Enter）も独立 3 走行で
   PASS を確認しており、揺らぎは記録済みの macOS 固有スレッド停止によるものと判断
   された。
+
+## 5. 2026-09-04 の workspace 作業単位の統合
+
+`codex/refactor-2026-09-01` を main に統合し、その後に同 refactor 系列では未反映
+だった `de9a3e35`（workspace worktree command の完了作業）を反映した。後者の
+競合は refactor 側の新しい構成を採用して解消し、実質的な追加差分は pane core と
+picker の 2 ファイルに限定された。
+
+統合完了後、terminal launch、workspace completion、refactor の各 worktree と、同じ
+commit を指す detached worktree を削除した。統合用 worktree と一時 branch も、main
+の更新確認後に削除対象とした。

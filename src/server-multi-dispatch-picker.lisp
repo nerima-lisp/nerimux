@@ -403,7 +403,6 @@
                  (t
                   (start-reader-thread pane)
                   (worktree-add-pane worktree pane)
-                  (nerimux/workspace-model:worktree-reopen worktree)
                   (%set-client-selected-worktree conn worktree)
                   (%set-client-focus conn pane)
                   (%mark-dirty)
