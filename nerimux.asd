@@ -155,6 +155,7 @@
        (:file "server-multi-data") ; multi-client data declarations
        (:file "server-multi-dispatch") ; shared multi-client handlers
        (:file "server-multi-dispatch-prefix-data") ; prefix constants
+       (:file "server-multi-dispatch-fetch") ; fetch operations
        (:file "server-multi-dispatch-prefix") ; C-q workspace actions
        (:file "server-multi-workspace-selection") ; workspace catalog selection logic
        (:file "server-multi-dispatch-picker-data") ; selection identity data
