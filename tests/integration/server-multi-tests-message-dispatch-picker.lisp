@@ -149,6 +149,8 @@
         (expect (null (nerimux::%append-client-picker-query-octets
                        conn #(194 32))))
         (expect (null (nerimux::%append-client-picker-query-octets
+                       conn 42)))
+        (expect (null (nerimux::%append-client-picker-query-octets
                        conn #(1))))
         (expect (null (nerimux::%delete-client-picker-query-character conn)))
         (setf (nerimux::client-conn-picker-items conn) nil
