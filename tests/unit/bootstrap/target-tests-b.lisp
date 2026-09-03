@@ -1,7 +1,6 @@
 (in-package #:nerimux/test)
 
-(describe "target-suite"
-
+(describe "target-edge-cases-suite"
 
   (it "sigil-id-table"
     (dolist (row '(("$1"   #\$  1   "dollar single-digit")
