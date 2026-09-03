@@ -176,6 +176,11 @@ library in an adapter. Repeated dispatch and declarative validation are
 expressed by macros, while runtime values remain in the data modules and the
 expanded functions perform the side effects.
 
+Workspace discovery and mutations use the exported operations from
+`nerima-lisp/cl-vcs-kit` directly. The application keeps only its workspace
+model and UI state locally; it does not duplicate the VCS command protocol in
+an intermediate adapter layer.
+
 ## Source layout
 
 Each layer is its own ASDF system under `packages/<name>/`, and `src/` holds only
