@@ -175,6 +175,15 @@
    (%handle-multi-command-message session conn payload))
   (t :drop))
 
+(defun %settle-workspace-catalog-after-error (condition)
+  "Settle the catalog as stale after its asynchronous refresh fails."
+  (declare (ignore condition))
+  (setf *workspace-catalog-loaded-p* t
+        *workspace-scan-progress* nil)
+  (%set-workspace-catalog-refresh-state
+   (nerimux/vcs:workspace-organizations) :settle :stale-p t)
+  (%mark-dirty))
+
 (defun %add-client (socket)
   "Register SOCKET as a new client: build its CLIENT-CONN and mark
    the screen dirty so the new client gets an immediate paint.  Returns the
@@ -234,13 +243,7 @@
                                       (%client-picker-visible-items client)))
                (%mark-dirty))
              :on-error
-             (lambda (condition)
-               (declare (ignore condition))
-               (setf *workspace-catalog-loaded-p* t
-                     *workspace-scan-progress* nil)
-               (%set-workspace-catalog-refresh-state
-                (nerimux/vcs:workspace-organizations) :settle :stale-p t)
-               (%mark-dirty)))
+             #'%settle-workspace-catalog-after-error)
           (error (condition)
             (declare (ignore condition))
             (setf *workspace-catalog-loaded-p* t
