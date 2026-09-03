@@ -194,6 +194,9 @@
           (expect (nerimux::%handle-client-ui-command s conn :picker-close nil nil))
           (expect (null (nerimux::client-conn-modal conn)))
           (expect (nerimux::%handle-client-ui-command s conn :mode nil '("picker")))
+          (expect (nerimux::%handle-client-ui-command s conn :cancel nil nil))
+          (expect (null (nerimux::client-conn-modal conn)))
+          (expect (nerimux::%handle-client-ui-command s conn :mode nil '("picker")))
           (expect (nerimux::%handle-client-ui-command s conn :accept nil nil))
           (expect (null (nerimux::client-conn-modal conn)))
           (expect (nerimux::%handle-client-ui-command s conn :mode nil '("copy")))
@@ -204,7 +207,7 @@
           (expect (eq :scrollback (nerimux::client-conn-modal conn)))
           (expect (nerimux::%handle-client-ui-command s conn :cancel nil nil))
           (expect (null (nerimux::client-conn-modal conn)))
-          (expect (equal '(:select :open :close :open) calls))))))
+          (expect (equal '(:select :open :close :open :close :open) calls))))))
 
   (it "ui-command-aliases-preserve-command-contract"
     (with-fake-session (s)
