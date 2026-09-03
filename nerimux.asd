@@ -172,6 +172,7 @@
        (:file "server-multi-transient-data") ; declarative transient menus
        (:file "server-multi-dispatch-transient") ; magit transient state and key handling
        (:file "server-multi-dispatch-command-input-data") ; client input state
+       (:file "server-multi-dispatch-command-input-mode-data") ; generated branch data
        (:file "server-multi-dispatch-command-input-mode") ; command mode and tree navigation
        (:file "server-multi-dispatch-command-input") ; client input and command entry
        (:file "server-multi-dispatch-command-input-keymap") ; NIL-modal UI keymap

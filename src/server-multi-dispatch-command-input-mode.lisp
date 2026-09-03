@@ -29,22 +29,6 @@
             (%client-notify conn (format nil "no pane ~A" direction))
             t)))))
 
-(defun %client-worktree-create-branch-name ()
-  "An auto-generated branch name for `n` (item 5): wt-<YYYYmmddTHHMMSS>, built
-   from DECODE-UNIVERSAL-TIME rather than a date-formatting library -- this
-   codebase has no such dependency, and adding one for a single timestamp
-   string would be disproportionate."
-  (multiple-value-bind (second minute hour date month year) 
-      (decode-universal-time (get-universal-time))
-    (format nil
-            "wt-~4,'0D~2,'0D~2,'0DT~2,'0D~2,'0D~2,'0D"
-            year
-            month
-            date
-            hour
-            minute
-            second)))
-
 (defun %client-start-worktree-create (session conn)
   "n (item 5, user decision): create a worktree immediately, with an
    auto-generated branch name, for the selected repository, and jump straight
