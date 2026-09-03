@@ -304,19 +304,6 @@
         t)
       (t nil))))
 
-(defun %client-enter-tree-filter-mode (conn)
-  "`/` always starts from an empty query (vim's `/` semantics), even when a
-   previous filter session ended with Enter and left CONN-TREE-FILTER set
-   (the tree-filter modal's ESC/Enter asymmetry, contract SS5, keeps it on
-   exit, precisely so the filtered view survives into ordinary navigation)
-   -- without resetting it here, the next `/` silently prepended new
-   keystrokes onto that old query instead of starting fresh."
-  (setf (client-conn-tree-filter conn) nil
-        (client-conn-tree-scroll conn) 0)
-  (%set-client-modal conn :filter)
-  (%mark-dirty)
-  t)
-
 (defun %handle-client-input-key-payload (session conn payload)
   "Every byte, ESC included, is forwarded to the focused pane: VIEW :pane has
    no keyboard exit of its own (that returns with the C-q prefix, R4.4)."
