@@ -97,6 +97,19 @@
       (expect (= 2 (length closed)))
       (expect (equal (list one two) (nreverse closed)))))
 
+  (it "r8-1-force-kill-panes-ignores-sigkill-errors"
+    (let ((pane (make-pane :id 1 :fd -1 :pid 424242
+                           :screen (make-screen 10 3))))
+      (with-stubbed-locked-fdefinitions
+          ((nerimux::close-pane-pty (lambda (ignored) (declare (ignore ignored))))
+           (nerimux::%process-alive-p (lambda (ignored) (declare (ignore ignored)) t))
+           (sleep (lambda (ignored) (declare (ignore ignored)) nil)))
+        (with-stubbed-locked-fdefinitions
+            ((sb-posix:kill (lambda (ignored-pid ignored-signal)
+                             (declare (ignore ignored-pid ignored-signal))
+                             (error 'sb-posix:syscall-error :errno 2))))
+          (nerimux::%force-kill-panes (list pane))))))
+
   (it "r8-1-process-alive-p-answers-for-real-pids"
     (expect (nerimux::%process-alive-p (sb-posix:getpid)))
     (expect (not (nerimux::%process-alive-p 999999)))
