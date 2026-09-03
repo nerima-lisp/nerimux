@@ -1,5 +1,47 @@
 (in-package #:nerimux)
 
+(defun %worktree-selection-token (worktree)
+  (and worktree
+       (or (and (plusp (length (nerimux/workspace-model:worktree-id worktree)))
+                (nerimux/workspace-model:worktree-id worktree))
+           (and (plusp (length (nerimux/workspace-model:worktree-path worktree)))
+                (nerimux/workspace-model:worktree-path worktree))
+           (and (nerimux/workspace-model:worktree-branch worktree)
+                (princ-to-string (nerimux/workspace-model:worktree-branch worktree))))))
+
+(defun %organization-selection-token (organization)
+  (and organization
+       (or (and (plusp (length (nerimux/workspace-model:organization-id organization)))
+                (nerimux/workspace-model:organization-id organization))
+           (and (plusp (length (nerimux/workspace-model:organization-host organization)))
+                (plusp (length (nerimux/workspace-model:organization-name organization)))
+                (format nil "~A/~A"
+                        (nerimux/workspace-model:organization-host organization)
+                        (nerimux/workspace-model:organization-name organization))))))
+
+(defun %repository-selection-token (repository)
+  (and repository
+       (or (and (plusp (length (nerimux/workspace-model:repository-id repository)))
+                (nerimux/workspace-model:repository-id repository))
+           (and (plusp (length (nerimux/workspace-model:repository-specification repository)))
+                (nerimux/workspace-model:repository-specification repository))
+           (and (plusp (length (nerimux/workspace-model:repository-local-path repository)))
+                (nerimux/workspace-model:repository-local-path repository)))))
+
+(defun %tree-object-selection-token (object)
+  (typecase object
+    (nerimux/workspace-model:organization (list :organization (%organization-selection-token object)))
+    (nerimux/workspace-model:repository (list :repository (%repository-selection-token object)))
+    (nerimux/workspace-model:worktree (list :worktree (%worktree-selection-token object)))
+    (nerimux/pane:pane
+     (let ((worktree (nerimux/pane:pane-worktree object)))
+       (and worktree (list :worktree (%worktree-selection-token worktree)))))
+    (t (cond ((and (consp object) (keywordp (first object))
+                   (member (first object) '(:file :commit :diff-line :diff-more)))
+              (list :worktree (second object)))
+             ((keywordp object) (list :section object))))))
+
+
 (defun %client-picker-items (conn)
   (or (client-conn-picker-items conn)
       (setf (client-conn-picker-items conn) (nerimux/picker:build-global-picker-items
@@ -42,78 +84,6 @@
   (%refresh-client-picker conn)
   (%mark-dirty)
   conn)
-
-(defun %worktree-selection-token (worktree)
-  (and worktree
-       (or
-        (and (plusp (length (nerimux/workspace-model:worktree-id worktree)))
-             (nerimux/workspace-model:worktree-id worktree))
-        (and (plusp (length (nerimux/workspace-model:worktree-path worktree)))
-             (nerimux/workspace-model:worktree-path worktree))
-        (and (nerimux/workspace-model:worktree-branch worktree)
-             (princ-to-string
-              (nerimux/workspace-model:worktree-branch worktree))))))
-
-(defun %organization-selection-token (organization)
-  (and organization
-       (or
-        (and
-         (plusp (length (nerimux/workspace-model:organization-id organization)))
-         (nerimux/workspace-model:organization-id organization))
-        (and
-         (plusp
-          (length (nerimux/workspace-model:organization-host organization)))
-         (plusp
-          (length (nerimux/workspace-model:organization-name organization)))
-         (format nil
-                 "~A/~A"
-                 (nerimux/workspace-model:organization-host organization)
-                 (nerimux/workspace-model:organization-name organization))))))
-
-(defun %repository-selection-token (repository)
-  (and repository
-       (or
-        (and (plusp (length (nerimux/workspace-model:repository-id repository)))
-             (nerimux/workspace-model:repository-id repository))
-        (and
-         (plusp
-          (length (nerimux/workspace-model:repository-specification repository)))
-         (nerimux/workspace-model:repository-specification repository))
-        (and
-         (plusp
-          (length (nerimux/workspace-model:repository-local-path repository)))
-         (nerimux/workspace-model:repository-local-path repository)))))
-
-(defun %tree-object-selection-token (object)
-  "A refresh-stable token for OBJECT, resolvable back to the same row by
-   %WORKSPACE-FIND-TREE-OBJECT after a catalog rebuild (S1 fix).  A
-   :FILE/:COMMIT/:DIFF-LINE/:DIFF-MORE row's OBJECT is a fresh cons every
-   flatten call (D3) carrying its owning worktree's id in its second
-   element already, so its token IS the worktree's own -- the cursor
-   re-anchors on the parent worktree rather than staying on a row shape
-   that no longer exists post-refresh.  A PANE row resolves the same way
-   through its owning worktree.  A :SECTION row's OBJECT is a bare keyword
-   (:ATTENTION/:ACTIVE/:REPOSITORIES); its token round-trips through the
-   same keyword.  Any of these returning NIL (no owning worktree resolvable,
-   as for an orphaned pane) falls through to %REBIND-CLIENT-SELECTION's own
-   NIL-clears-selection behaviour, same as before this fix."
-  (typecase object
-    (nerimux/workspace-model:organization
-     (list :organization (%organization-selection-token object)))
-    (nerimux/workspace-model:repository
-     (list :repository (%repository-selection-token object)))
-    (nerimux/workspace-model:worktree
-     (list :worktree (%worktree-selection-token object)))
-    (nerimux/pane:pane
-     (let ((worktree (nerimux/pane:pane-worktree object)))
-       (and worktree (list :worktree (%worktree-selection-token worktree)))))
-    (t
-     (cond
-       ((and (consp object)
-             (keywordp (first object))
-             (member (first object) '(:file :commit :diff-line :diff-more)))
-        (list :worktree (second object)))
-       ((keywordp object) (list :section object))))))
 
 (defun %client-tree-object (conn)
   (or (client-conn-selected-tree-object conn)
