@@ -334,8 +334,7 @@
                                    (declare (ignore path))
                                    (error 'sb-bsd-sockets:socket-error)))
          (delete-file (lambda (path)
-                        (declare (ignore path))
-                        (error 'file-error)))
+                        (error 'file-error :pathname path)))
          (nerimux::%launch-server-and-poll-when-live
           (lambda (&rest args) (declare (ignore args)) nil)))
       (signals error
