@@ -178,20 +178,7 @@
   (member conn *clients* :test #'eq))
 
 (defun %attach-target-session ()
-  "The one live session a running server holds, or NIL outside one.
-
-   %CLIENT-ATTACH-TARGET below needs a session to jump a cwd-matched client
-   straight to its detail pane (FR-002's %FOCUS-SELECTED-CLIENT-WORKTREE
-   call), but its one call site -- the :ATTACH-TARGET rule in
-   server-multi-dispatch-command.lisp, which is outside this change's scope
-   -- invokes it as (%client-attach-target conn args), with no session
-   argument, and server-dispatch-helper-tests.lisp calls it the same way
-   directly. Adding a session parameter would have to default to something
-   in both of those callers anyway, so this reads the one session
-   RUN-SERVER (server.lisp) registers instead of threading one through:
-   *SERVER-SESSIONS* is empty in the unit test (no session ever registered
-   there), which is exactly what keeps this whole feature a no-op there
-   rather than a broken multiple-value-setq target."
+  "Return the session registered by the running server, if any."
   (cdr (first *server-sessions*)))
 
 (defun %client-attach-target (conn args)
