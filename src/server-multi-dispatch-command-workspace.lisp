@@ -276,8 +276,7 @@
                             (nerimux/workspace-model:repository-specification
                              repository)
                             (nerimux/workspace-model:repository-local-path
-                             repository)
-                            (nerimux/workspace-model:repository-local-path repository)))))
+                             repository)))))
           (return-from %workspace-find-repository
             repository))))))
 
