@@ -373,3 +373,19 @@
                (nerimux::run-kill nil)))
         (setf (fdefinition 'nerimux::send-kill-request) orig))
       (expect (equal (list "0" nil) captured)))))
+
+  (it "r8-3-client-dispositions-apply-quit-and-drop-actions"
+    (let ((calls nil)
+          (conn :connection))
+      (with-stubbed-fdefinition
+          ((nerimux::%drop-client
+            (lambda (client reason force-p)
+              (push (list client reason force-p) calls))))
+        (expect (eq :quit
+                    (nerimux::%apply-client-disposition :quit conn)))
+        (expect (null (nerimux::%apply-client-disposition :eof conn)))
+        (expect (null (nerimux::%apply-client-disposition :drop conn)))
+        (expect (null (nerimux::%apply-client-disposition :unknown conn))))
+      (expect (equal '(:connection :bye t) (first calls)))
+      (expect (equal '(:connection :bye nil) (second calls)))
+      (expect (= 2 (length calls)))))

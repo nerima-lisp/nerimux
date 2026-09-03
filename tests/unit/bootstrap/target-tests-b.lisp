@@ -38,7 +38,9 @@
   (it "find-window-by-target-index-out-of-range-returns-nil"
     (let* ((w1   (make-window :id 1 :name "w1" :width 80 :height 24))
            (sess (make-session :id 1 :name "s" :windows (list w1))))
-      (expect (null (nerimux::find-window-by-target sess "5")))))
+      (expect (null (nerimux::find-window-by-target sess "5")))
+      (expect (null (nerimux::find-window-by-target sess "-1")))
+      (expect (null (nerimux::find-window-by-target sess "not-an-index")))))
 
 
   (it "find-pane-by-target-empty-panes-returns-nil"
@@ -49,7 +51,9 @@
     (let* ((p1  (make-no-pty-pane 1 0 0 80 24))
            (win (make-window :id 1 :name "w" :width 80 :height 24
                              :panes (list p1))))
-      (expect (null (nerimux::find-pane-by-target win "10")))))
+      (expect (null (nerimux::find-pane-by-target win "10")))
+      (expect (null (nerimux::find-pane-by-target win "-1")))
+      (expect (null (nerimux::find-pane-by-target win "not-an-index")))))
 
 
   (it "find-session-by-target-multi-digit-id"
@@ -69,6 +73,9 @@
            (win (make-window :id 1 :name "w" :width 80 :height 24
                              :panes (list p1))))
       (expect (eq p1 (nerimux::find-pane-by-target win "%15")))))
+
+  (it "sigil-id-rejects-invalid-integer"
+    (expect (null (nerimux::%sigil-id "$not-an-id" #\$))))
 
   (it "define-target-lookup-supports-docstrings-and-nil-guards"
     (let ((name (gensym "TARGET-LOOKUP-")))
