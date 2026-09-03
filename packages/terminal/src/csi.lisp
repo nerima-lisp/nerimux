@@ -11,7 +11,6 @@
 ;;; The response-queue reply layer (DSR/DA1/DA2/DA3/XTVERSION/CPR fixed and
 ;;; computed replies, DECRQM mode-state tables, XTWINOPS size-report helpers)
 ;;; called by the rules below lives in csi-replies.lisp, which loads first.
-
 (define-csi-rule-set csi-screen-rules
 
   ;; CUU – Cursor Up

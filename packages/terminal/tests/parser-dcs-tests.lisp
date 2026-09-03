@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/terminal)
 
 ;;;; parser tests - DCS direct bridge and passthrough.
-
 (defun %fresh-dcs-buffer ()
   "A fresh empty adjustable octet buffer for make-dcs-st-k / make-dcs-k tests."
   (make-array 16 :element-type '(unsigned-byte 8) :fill-pointer 0 :adjustable t))

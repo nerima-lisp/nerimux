@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/commands)
 
 ;;;; pane lifecycle command tests: close-pane-pty
-
 (describe "commands-suite"
 
   ;;; -- close-pane-pty ----------------------------------------------------------

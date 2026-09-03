@@ -5,7 +5,6 @@
 ;;;; Moved from tests/unit/domain/model/pane-tests-ops.lisp (R9.2): the one case
 ;;;; there that spawns a real PTY, via WITH-SESSION and respawn-pane.  The
 ;;;; no-PTY last-pane-cycles case stayed in nerimux/test.
-
 (describe "model-suite"
 
   ;; respawn-pane closes the old PTY and assigns a fresh fd/pid to the pane.

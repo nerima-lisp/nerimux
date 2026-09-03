@@ -4,7 +4,6 @@
 ;;;; closest-to-center, layout-split-axis-extent v-split, resize-find-split nested,
 ;;;; pane-at-position out-of-bounds, orient-case, split-child-geometry table,
 ;;;; pane-neighbor three-panes, define-axis-rules/neighbor-finders macros, layout-min-extent nested.
-
 (describe "layout-geometry-suite"
 
   ;;; It is not exported, so we access it through the internal package name.

@@ -10,7 +10,6 @@
 ;;;; introducing a new one. The synchronous worker (%READ-WORKTREE-COMMITS)
 ;;;; is tested directly, plus one async smoke test exercising the thread/
 ;;;; callback-dispatch plumbing the way vcs-async-operations-tests.lisp does.
-
 (defun %inspect-fake-commit (id message)
   (vcs-kit::%make-vcs-commit :id id :message message))
 
@@ -125,7 +124,6 @@
 ;;;; from PROCESS-KIT verbatim rather than redefined by vcs-kit, so a real
 ;;;; struct instance is the simplest fixture -- no need to also stub the
 ;;;; accessor itself).
-
 (defun %inspect-fake-diff-result (stdout)
   (process-kit:make-process-result :stdout stdout))
 
@@ -281,106 +279,137 @@
 ;;;; pathological single line/message must not grow the cache unbounded,
 ;;;; and a control byte (an ESC sequence, in particular) must never reach a
 ;;;; renderer through this path.
-
 (describe "vcs worktree diff line content limits (F3b/F5)"
-  (it "truncates a single long retained line to *worktree-text-max-characters*"
-    (let ((worktree (nerimux/workspace-model:make-worktree
-                      :id "wt-diff-line-cap" :path "/tmp/nerimux-inspect-diff-line-cap"))
-          (long-line (make-string 10000 :initial-element #\a)))
-      (with-stubbed-fdefinition
-          ((vcs-kit:make-vcs-repository
-             (lambda (directory &rest arguments)
-               (declare (ignore arguments))
-               directory))
-           (vcs-kit:vcs-diff
-             (lambda (&rest arguments)
-               (declare (ignore arguments))
-               (%inspect-fake-diff-result (format nil "~A~%" long-line)))))
-        (let ((diff (nerimux/vcs::%read-worktree-file-diff
-                     worktree "src/big-line.lisp")))
-          (expect (= 1 (length (cdr diff))))
-          (expect (= nerimux/vcs::*worktree-text-max-characters*
-                     (length (first (cdr diff)))))
-          (expect (string=
-                   (subseq long-line 0 nerimux/vcs::*worktree-text-max-characters*)
-                   (first (cdr diff))))))))
-
-  (it "drops an ESC byte from a retained diff line, matching the finding's own example"
-    (let ((worktree (nerimux/workspace-model:make-worktree
-                      :id "wt-diff-esc" :path "/tmp/nerimux-inspect-diff-esc")))
-      (with-stubbed-fdefinition
-          ((vcs-kit:make-vcs-repository
-             (lambda (directory &rest arguments)
-               (declare (ignore arguments))
-               directory))
-           (vcs-kit:vcs-diff
-             (lambda (&rest arguments)
-               (declare (ignore arguments))
-               (%inspect-fake-diff-result
-                (format nil "a~C[31mb~%" (code-char 27))))))
-        (let ((diff (nerimux/vcs::%read-worktree-file-diff worktree "src/esc.lisp")))
-          (expect (string= "a[31mb" (first (cdr diff))))
-          (expect (notany (lambda (character) (< (char-code character) 32))
-                          (first (cdr diff))))))))
-
-  (it "turns Tab into a single space while dropping other C0 controls"
-    (let ((worktree (nerimux/workspace-model:make-worktree
-                      :id "wt-diff-tab" :path "/tmp/nerimux-inspect-diff-tab")))
-      (with-stubbed-fdefinition
-          ((vcs-kit:make-vcs-repository
-             (lambda (directory &rest arguments)
-               (declare (ignore arguments))
-               directory))
-           (vcs-kit:vcs-diff
-             (lambda (&rest arguments)
-               (declare (ignore arguments))
-               (%inspect-fake-diff-result
-                (format nil "a~Cb~Cc~%" (code-char 27) (code-char 9))))))
-        (let ((diff (nerimux/vcs::%read-worktree-file-diff worktree "src/tab.lisp")))
-          (expect (string= "ab c" (first (cdr diff)))))))))
+          (it
+           "truncates a single long retained line to *worktree-text-max-characters*"
+           (let ((worktree
+                  (nerimux/workspace-model:make-worktree :id
+                                                         "wt-diff-line-cap"
+                                                         :path
+                                                         "/tmp/nerimux-inspect-diff-line-cap"))
+                 (long-line (make-string 10000 :initial-element #\a)))
+             (with-stubbed-fdefinition
+              ((vcs-kit:make-vcs-repository
+                (lambda (directory &rest arguments)
+                  (declare (ignore arguments))
+                  directory))
+               (vcs-kit:vcs-diff
+                (lambda (&rest arguments)
+                  (declare (ignore arguments))
+                  (%inspect-fake-diff-result (format nil "~A~%" long-line)))))
+              (let ((diff
+                     (nerimux/vcs::%read-worktree-file-diff worktree
+                                                            "src/big-line.lisp")))
+                (expect (= 1 (length (cdr diff))))
+                (expect
+                 (= nerimux/vcs::*worktree-text-max-characters*
+                    (length (first (cdr diff)))))
+                (expect
+                 (string=
+                  (subseq long-line
+                          0
+                          nerimux/vcs::*worktree-text-max-characters*)
+                  (first (cdr diff))))))))
+          (it
+           "drops an ESC byte from a retained diff line, matching the finding's own example"
+           (let ((worktree
+                  (nerimux/workspace-model:make-worktree :id
+                                                         "wt-diff-esc"
+                                                         :path
+                                                         "/tmp/nerimux-inspect-diff-esc")))
+             (with-stubbed-fdefinition
+              ((vcs-kit:make-vcs-repository
+                (lambda (directory &rest arguments)
+                  (declare (ignore arguments))
+                  directory))
+               (vcs-kit:vcs-diff
+                (lambda (&rest arguments)
+                  (declare (ignore arguments))
+                  (%inspect-fake-diff-result
+                   (format nil "a~C[31mb~%" (code-char 27))))))
+              (let ((diff
+                     (nerimux/vcs::%read-worktree-file-diff worktree
+                                                            "src/esc.lisp")))
+                (expect (string= "a[31mb" (first (cdr diff))))
+                (expect
+                 (notany
+                  (lambda (character)
+                    (< (char-code character) 32))
+                  (first (cdr diff))))))))
+          (it "turns Tab into a single space while dropping other C0 controls"
+              (let ((worktree
+                     (nerimux/workspace-model:make-worktree :id
+                                                            "wt-diff-tab"
+                                                            :path
+                                                            "/tmp/nerimux-inspect-diff-tab")))
+                (with-stubbed-fdefinition
+                 ((vcs-kit:make-vcs-repository
+                   (lambda (directory &rest arguments)
+                     (declare (ignore arguments))
+                     directory))
+                  (vcs-kit:vcs-diff
+                   (lambda (&rest arguments)
+                     (declare (ignore arguments))
+                     (%inspect-fake-diff-result
+                      (format nil "a~Cb~Cc~%" (code-char 27) (code-char 9))))))
+                 (let ((diff
+                        (nerimux/vcs::%read-worktree-file-diff worktree
+                                                               "src/tab.lisp")))
+                   (expect (string= "ab c" (first (cdr diff)))))))))
 
 (describe "vcs worktree commit subject content limits (F3b/F5)"
-  (it "truncates a newline-less commit message to *worktree-text-max-characters*"
-    (let ((worktree (nerimux/workspace-model:make-worktree
-                      :id "wt-commit-cap" :path "/tmp/nerimux-inspect-commit-cap"))
-          (long-message (make-string 10000 :initial-element #\b)))
-      (with-stubbed-fdefinition
-          ((vcs-kit:make-vcs-repository
-             (lambda (directory &rest arguments)
-               (declare (ignore arguments))
-               directory))
-           (vcs-kit:vcs-list-commits
-             (lambda (&rest arguments)
-               (declare (ignore arguments))
-               (list (%inspect-fake-commit "abc1234" long-message)))))
-        (let ((commits (nerimux/vcs::%read-worktree-commits worktree)))
-          (expect (= nerimux/vcs::*worktree-text-max-characters*
-                     (length (cdr (first commits)))))
-          (expect (string=
-                   (subseq long-message 0 nerimux/vcs::*worktree-text-max-characters*)
-                   (cdr (first commits))))))))
-
-  (it "strips control characters from a commit subject"
-    (let ((worktree (nerimux/workspace-model:make-worktree
-                      :id "wt-commit-control"
-                      :path "/tmp/nerimux-inspect-commit-control")))
-      (with-stubbed-fdefinition
-          ((vcs-kit:make-vcs-repository
-             (lambda (directory &rest arguments)
-               (declare (ignore arguments))
-               directory))
-           (vcs-kit:vcs-list-commits
-             (lambda (&rest arguments)
-               (declare (ignore arguments))
-               (list (%inspect-fake-commit
-                      "abc1234" (format nil "a~C[31mb" (code-char 27)))))))
-        (let ((commits (nerimux/vcs::%read-worktree-commits worktree)))
-          (expect (string= "a[31mb" (cdr (first commits)))))))))
+          (it
+           "truncates a newline-less commit message to *worktree-text-max-characters*"
+           (let ((worktree
+                  (nerimux/workspace-model:make-worktree :id
+                                                         "wt-commit-cap"
+                                                         :path
+                                                         "/tmp/nerimux-inspect-commit-cap"))
+                 (long-message (make-string 10000 :initial-element #\b)))
+             (with-stubbed-fdefinition
+              ((vcs-kit:make-vcs-repository
+                (lambda (directory &rest arguments)
+                  (declare (ignore arguments))
+                  directory))
+               (vcs-kit:vcs-list-commits
+                (lambda (&rest arguments)
+                  (declare (ignore arguments))
+                  (list (%inspect-fake-commit "abc1234" long-message)))))
+              (let ((commits (nerimux/vcs::%read-worktree-commits worktree)))
+                (expect
+                 (= nerimux/vcs::*worktree-text-max-characters*
+                    (length (cdr (first commits)))))
+                (expect
+                 (string=
+                  (subseq long-message
+                          0
+                          nerimux/vcs::*worktree-text-max-characters*)
+                  (cdr (first commits))))))))
+          (it "strips control characters from a commit subject"
+              (let ((worktree
+                     (nerimux/workspace-model:make-worktree :id
+                                                            "wt-commit-control"
+                                                            :path
+                                                            "/tmp/nerimux-inspect-commit-control")))
+                (with-stubbed-fdefinition
+                 ((vcs-kit:make-vcs-repository
+                   (lambda (directory &rest arguments)
+                     (declare (ignore arguments))
+                     directory))
+                  (vcs-kit:vcs-list-commits
+                   (lambda (&rest arguments)
+                     (declare (ignore arguments))
+                     (list
+                      (%inspect-fake-commit "abc1234"
+                                            (format nil
+                                                    "a~C[31mb"
+                                                    (code-char 27)))))))
+                 (let ((commits (nerimux/vcs::%read-worktree-commits worktree)))
+                   (expect (string= "a[31mb" (cdr (first commits)))))))))
 
 ;;;; F2: a catalog rebuild that lands while REFRESH-WORKTREE-COMMITS-ASYNC's
 ;;;; fetch is still in flight must not orphan the settlement onto the
 ;;;; struct captured at launch -- see %SETTLE-TARGET-WORKTREE (vcs.lisp).
-
 (describe "vcs worktree commits settlement target (F2)"
   (it "redirects settlement to the catalog's current struct when a rebuild replaced the captured one"
     (let* ((previous (nerimux/vcs:workspace-organizations))

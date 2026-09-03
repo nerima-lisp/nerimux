@@ -3,7 +3,6 @@
 ;;; Socket discovery/server auto-start helpers live in main-startup-socket.lisp.
 ;;; Command handlers live in main-startup-commands.lisp.
 ;;; This file owns the binary entry-point dispatch.
-
 (in-package :nerimux)
 
 (defun %application-argv ()
@@ -11,8 +10,14 @@
    The Nix wrapper starts the saved core as `sbcl --core ... --no-userinit ...`;
    in that shape SBCL runtime options can appear before the real nerimux command."
   (let* ((argv (rest sb-ext:*posix-argv*))
-         (marker (or (position "--no-userinit" argv :test #'string= :from-end t)
-                     (position "--end-toplevel-options" argv :test #'string= :from-end t))))
+         (marker
+          (or (position "--no-userinit" argv :test #'string= :from-end t)
+              (position "--end-toplevel-options"
+                        argv
+                        :test
+                        #'string=
+                        :from-end
+                        t))))
     (if marker
         (nthcdr (1+ marker) argv)
         argv)))
@@ -21,8 +26,7 @@
   "Parse ARGV (the application argv, without the argv0 slot) against *cli-app*
    (main-startup-flags.lisp).  Returns the parser invocation, or NIL and
    prints a usage error to *error-output* when ARGV is malformed."
-  (handler-case
-      (cl-cli:parse-argv *cli-app* (cons "nerimux" argv))
+  (handler-case (cl-cli:parse-argv *cli-app* (cons "nerimux" argv))
     (cl-cli:cli-usage-error (c)
       (format *error-output* "~&nerimux: ~A~%" c)
       (write-string (%usage-string) *error-output*)
@@ -40,8 +44,12 @@
    names (-V/-h), so they work regardless of where they appear in argv.
    Returns T when one of them ran (the caller must not also dispatch a mode)."
   (cond
-    ((cl-cli:option-value invocation :print-version) (run-version nil) t)
-    ((cl-cli:option-value invocation :print-help)    (run-usage nil)   t)
+    ((cl-cli:option-value invocation :print-version)
+      (run-version nil)
+      t)
+    ((cl-cli:option-value invocation :print-help)
+      (run-usage nil)
+      t)
     (t nil)))
 
 (defun main ()

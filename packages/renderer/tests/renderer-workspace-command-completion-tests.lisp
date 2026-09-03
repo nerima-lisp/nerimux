@@ -6,7 +6,6 @@
 ;;;; (§11's action-menu requirement is rewritten by R6.12), the `:` prompt
 ;;;; itself lists matching command names right after the colon as its only
 ;;;; affordance beyond plain text entry.
-
 (describe "renderer-suite/workspace-command-completions"
 
   ;; Right after typing `:` (empty buffer), every command name is offered.
@@ -96,7 +95,6 @@
 ;;; input.lisp -- :TREE-FILTER below is only the retired legacy *command*
 ;;; name that maps to it, server-multi-dispatch-command-workspace.lisp) and
 ;;; returns to ordinary navigation.
-
 (describe "renderer-suite/workspace-tree-filter-line-rendering"
 
   ;; Direct unit coverage of %RENDER-WORKSPACE-TREE-FILTER-LINE: the typed

@@ -2,7 +2,6 @@
 
 ;;;; layout tests — part C: layout persistence internals (split-bounding-box,
 ;;;; node-to-string) and layout-find-parent deep-tree traversal.
-
 (describe "layout-tree-suite"
 
   ;;; ── Layout persistence: internal helpers ─────────────────────────────────────

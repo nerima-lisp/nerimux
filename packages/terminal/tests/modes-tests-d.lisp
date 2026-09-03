@@ -3,23 +3,21 @@
 ;;;; Modes tests — part IV: mouse reporting DEC private modes (accepted and
 ;;;; ignored), bracketed paste, focus events, app-cursor, auto-wrap,
 ;;;; reset-sgr-pen, screen-display-cell.
-
 ;;; ── Mouse reporting DEC private mode tests (1000/1002/1003/1006) ────────────
 ;;;
 ;;; Mouse-mode state tracking (screen-mouse-mode / screen-mouse-sgr-mode) was
 ;;; removed; these modes now fall through to the same silently-ignored path as
 ;;; any other unrecognised DEC private mode — see
 ;;; mouse-reporting-modes-are-silently-ignored below.
-
 (defun test-dec-pm-toggle-boolean (mode accessor)
   "Shared helper: verify that DEC PM MODE toggles boolean ACCESSOR on SCREEN
    to T on set (h) and back to NIL on reset (l)."
   (with-screen (s 20 5)
-    (expect (funcall accessor s) :to-be-falsy)
-    (feed s (esc "[?~Dh" mode))
-    (expect (funcall accessor s) :to-be-truthy)
-    (feed s (esc "[?~Dl" mode))
-    (expect (funcall accessor s) :to-be-falsy)))
+               (expect (funcall accessor s) :to-be-falsy)
+               (feed s (esc "[?~Dh" mode))
+               (expect (funcall accessor s) :to-be-truthy)
+               (feed s (esc "[?~Dl" mode))
+               (expect (funcall accessor s) :to-be-falsy)))
 
 (describe "terminal-suite/direct-modes-suite"
 
@@ -92,7 +90,6 @@
       (expect (= 0 (nerimux/terminal/types:screen-cur-ul-color s))))))
 
 ;;; ── screen-display-cell tests ────────────────────────────────────────────────
-
 (describe "terminal-suite/display-cell-suite"
 
   ;; screen-display-cell returns the live grid cell when copy-mode is off.

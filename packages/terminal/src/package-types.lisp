@@ -4,7 +4,6 @@
 ;;;; 500-line limit.  The seam is the emulator's own: this file declares the
 ;;;; package that owns the SCREEN and CELL structs, package-terminal.lisp the
 ;;;; five layers that act on them plus the facade over all six.
-
 (defpackage #:nerimux/terminal/types
   (:use #:cl)
   (:import-from #:cl-concurrent-kit #:make-lock)

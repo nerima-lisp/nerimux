@@ -20,7 +20,6 @@
 ;;;; Load order (declared in nerimux.asd): renderer-format → renderer-style
 ;;;;             → renderer-statusbar-layout → renderer-pane
 ;;;;             → renderer-statusbar → renderer-compose
-
 ;;; The status line is one row at the bottom, always (requirements §1.4).
 ;;; The old status-line-count option and +max-status-lines+ (the "status"
 ;;; option could pick 0..5 rows) are gone with domain/options (R2.2) — this
@@ -29,12 +28,11 @@
 ;;; still needs to reserve rows for the status line (e.g. pane-area layout)
 ;;; has exactly one definition to reference rather than each side keeping
 ;;; its own copy of "1".
-
-(defconstant +status-line-rows+ 1
+(defconstant +status-line-rows+
+  1
   "Rows reserved at the bottom of the terminal for the status line.")
 
 ;;; ── Left block: attention + repository + worktree + state token ───────────
-
 (defun %status-left-fields (focus-pane)
   "(VALUES ATTENTION REPOSITORY-TEXT WORKTREE-TEXT STATE-TEXT) for the status
    line's left block (R6.5). Each of REPOSITORY-TEXT/WORKTREE-TEXT/STATE-TEXT
@@ -43,10 +41,19 @@
    silently carry the previous frame's text forward."
   (let* ((worktree (and focus-pane (pane-worktree focus-pane)))
          (repository (and worktree (worktree-repository worktree))))
-    (values (if (and worktree (worktree-attention-p worktree)) "!" " ")
-            (if repository (%repository-title-text repository) (%workspace-em-dash))
-            (if worktree (%worktree-title-text worktree) (%workspace-em-dash))
-            (if worktree (%worktree-status-label worktree) (%workspace-em-dash)))))
+    (values
+     (if (and worktree (worktree-attention-p worktree))
+         "!"
+         " ")
+     (if repository
+         (%repository-title-text repository)
+         (%workspace-em-dash))
+     (if worktree
+         (%worktree-title-text worktree)
+         (%workspace-em-dash))
+     (if worktree
+         (%worktree-status-label worktree)
+         (%workspace-em-dash)))))
 
 (defun %status-state-text (worktree)
   "WORKTREE's status tokens, each wrapped in its palette colour
@@ -55,11 +62,15 @@
    helper because the workspace tree feeds the plain label through
    %DISPLAY-CLIP, which must never see escape sequences."
   (if worktree
-      (format nil "~{~A~^ ~}"
-              (mapcar (lambda (token)
-                        (let ((sgr (%worktree-state-token-sgr token)))
-                          (if sgr (%status-wrap token sgr) token)))
-                      (%worktree-status-tokens worktree)))
+      (format nil
+              "~{~A~^ ~}"
+              (mapcar
+               (lambda (token)
+                 (let ((sgr (%worktree-state-token-sgr token)))
+                   (if sgr
+                       (%status-wrap token sgr)
+                       token)))
+               (%worktree-status-tokens worktree)))
       (%workspace-em-dash)))
 
 (defun %status-left-text (focus-pane &key include-repository-p)
@@ -69,23 +80,27 @@
    first thing %COMPOSE-WORKSPACE-STATUS-LINE drops when the line does not
    fit (R6.5: notification, then tabs, then repository name; branch and
    state token are never dropped)."
-  (multiple-value-bind (attention repository worktree state)
+  (multiple-value-bind (attention repository worktree state) 
       (%status-left-fields focus-pane)
     (declare (ignore state))
     (let* ((source-worktree (and focus-pane (pane-worktree focus-pane)))
-           (attention-styled (if (string= attention "!")
-                                 (%status-wrap "!" +sgr-alert+)
-                                 attention))
+           (attention-styled
+            (if (string= attention "!")
+                (%status-wrap "!" +sgr-alert+)
+                attention))
            (repository-styled (%status-wrap repository +sgr-muted+))
            (worktree-styled (%status-wrap worktree +sgr-branch+))
            (state-styled (%status-state-text source-worktree)))
       (if include-repository-p
-          (format nil "~A ~A ~A ~A"
-                  attention-styled repository-styled worktree-styled state-styled)
+          (format nil
+                  "~A ~A ~A ~A"
+                  attention-styled
+                  repository-styled
+                  worktree-styled
+                  state-styled)
           (format nil "~A ~A ~A" attention-styled worktree-styled state-styled)))))
 
 ;;; ── Middle block: the current worktree's window/pane tabs (R6.5/R6.7) ─────
-
 (defun %status-pane-tab-token (pane focus-pane)
   "PANE's status-bar tab token, including its own leading separator: a space
    normally, or `!` in its place when PANE has unread output (R6.7) — the
@@ -94,19 +109,26 @@
    extra glue needed between it and the previous pane's tab).  The visible
    text is unchanged by the theme; the unread mark renders amber and the
    focused pane's `N*` renders bold accent."
-  (let ((separator (if (pane-unread-output-p pane)
-                       (%status-wrap "!" +sgr-warn+)
-                       " ")))
+  (let ((separator
+         (if (pane-unread-output-p pane)
+             (%status-wrap "!" +sgr-warn+)
+             " ")))
     (if (eq pane focus-pane)
-        (format nil "~A~A" separator
-                (%status-wrap (format nil "~D*" (pane-id pane)) +sgr-accent-bold+))
+        (format nil
+                "~A~A"
+                separator
+                (%status-wrap (format nil "~D*" (pane-id pane))
+                              +sgr-accent-bold+))
         (format nil "~A~D" separator (pane-id pane)))))
 
 (defun %status-window-tab (window focus-pane)
-  (format nil "~A~{~A~}~A"
+  (format nil
+          "~A~{~A~}~A"
           (%status-wrap (format nil "[w~D:" (window-id window)) +sgr-muted+)
-          (mapcar (lambda (pane) (%status-pane-tab-token pane focus-pane))
-                  (window-panes window))
+          (mapcar
+           (lambda (pane)
+             (%status-pane-tab-token pane focus-pane))
+           (window-panes window))
           (%status-wrap "]" +sgr-muted+)))
 
 (defun %status-window-pane-tabs (focus-pane)
@@ -116,15 +138,17 @@
   (let* ((worktree (and focus-pane (pane-worktree focus-pane)))
          (windows (and worktree (%worktree-tree-windows worktree))))
     (when windows
-      (format nil "~{~A~}"
-              (mapcar (lambda (window) (%status-window-tab window focus-pane))
-                      windows)))))
+      (format nil
+              "~{~A~}"
+              (mapcar
+               (lambda (window)
+                 (%status-window-tab window focus-pane))
+               windows)))))
 
 (defun %status-middle-text (focus-pane)
   (or (%status-window-pane-tabs focus-pane) (%workspace-em-dash)))
 
 ;;; ── Right block: latest notification (R6.5) ────────────────────────────────
-
 (defun %status-right-text (messages)
   "The right block: the single most recent notification, or an em-dash when
    there is none yet. MESSAGES is CLIENT-CONN-MESSAGE-LOG (most-recent-first,
@@ -136,7 +160,6 @@
       (%workspace-em-dash)))
 
 ;;; ── Mode chip (FR-003) ──────────────────────────────────────────────────────
-
 (defun %status-mode-chip (mode)
   "The status line's leftmost, always-kept segment (FR-003): a bold MODE-name
    chip naming whatever has taken the keyboard away from the shell. Returns
@@ -163,8 +186,10 @@
     (%status-wrap (format nil " ~:@(~A~) " mode) +sgr-mode-chip+)))
 
 ;;; ── Composition with width-driven degradation (R6.5) ───────────────────────
-
-(defun %compose-workspace-status-line (focus-pane messages cols &key (mode :normal))
+(defun %compose-workspace-status-line (focus-pane messages
+                                                  cols
+                                                  &key
+                                                  (mode :normal))
   "Assemble the R6.5 status line, dropping blocks right-to-left when COLS is
    too narrow: the notification first, then the window/pane tabs, then the
    repository name — branch and state token are never dropped (design doc
@@ -183,12 +208,13 @@
         (right (%status-right-text messages))
         (mode-chip (%status-mode-chip mode)))
     (labels ((assemble (include-repository-p include-middle-p include-right-p)
-               (format nil "~{~A~^  ~}"
+               (format nil
+                       "~{~A~^  ~}"
                        (remove nil
                                (list mode-chip
-                                     (%status-left-text
-                                      focus-pane
-                                      :include-repository-p include-repository-p)
+                                     (%status-left-text focus-pane
+                                                        :include-repository-p
+                                                        include-repository-p)
                                      (and include-middle-p middle)
                                      (and include-right-p right))))))
       (let ((full (assemble t t t)))
@@ -217,11 +243,15 @@
         (write-string (make-string gap :initial-element #\Space) stream))))
   (reset-attrs stream))
 
-(defun render-status-bar (stream session terminal-rows terminal-cols
-                          &key (status-row (- terminal-rows +status-line-rows+))
-                            (focus-pane (session-active-pane session))
-                            (messages nil)
-                            (mode :normal))
+(defun render-status-bar (stream session
+                                 terminal-rows
+                                 terminal-cols
+                                 &key
+                                 (status-row
+                                  (- terminal-rows +status-line-rows+))
+                                 (focus-pane (session-active-pane session))
+                                 (messages nil)
+                                 (mode :normal))
   "Draw the R6.5 status line at STATUS-ROW (defaults to the bottom row,
    §1.4/R2.2).
    FOCUS-PANE/MESSAGES default from SESSION / empty for a caller that has not
@@ -233,8 +263,12 @@
    %COMPOSE-WORKSPACE-STATUS-LINE now always draws first; this docstring
    used to describe render-session-to-string's call site as not yet passing
    it, which renderer-compose.lisp's render-session-to-string now does."
-  (%render-status-line stream status-row +sgr-default-status+
-                       (%compose-workspace-status-line focus-pane messages
+  (%render-status-line stream
+                       status-row
+                       +sgr-default-status+
+                       (%compose-workspace-status-line focus-pane
+                                                       messages
                                                        terminal-cols
-                                                       :mode mode)
+                                                       :mode
+                                                       mode)
                        terminal-cols))

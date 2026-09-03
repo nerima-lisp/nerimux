@@ -13,7 +13,6 @@
 ;;;; single-SGR status line has no per-segment style left to apply) no
 ;;;; longer exist.  See renderer-statusbar.lisp and
 ;;;; renderer-statusbar-layout.lisp.
-
 (describe "renderer-suite"
 
   ;;; ── status is always on ──────────────────────────────────────────────────────

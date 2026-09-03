@@ -6,7 +6,6 @@
 ;;;; presentation/renderer became nerimux-renderer. The assertion compares the
 ;;;; renderer help sections against nerimux::+transient-definitions+, which is
 ;;;; BOOTSTRAP data -- checking the two agree is precisely a cross-layer claim.
-
 (describe "renderer-help-transient-agreement-suite"
 
   ;; The help text is hand-written strings, so it drifts from the dispatch

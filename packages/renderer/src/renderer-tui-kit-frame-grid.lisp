@@ -1,6 +1,7 @@
 (in-package #:nerimux/renderer)
 
-(defconstant +frame-grid-continuation+ (code-char 0)
+(defconstant +frame-grid-continuation+
+  (code-char 0)
   "Sentinel written into the grid cell immediately right of a double-width
    character (R6.9-frame-grid). %frame-grid-text skips it, so the flattened
    row hands the real wide glyph alone to %surface-draw-text (already
@@ -30,22 +31,21 @@
   (let ((start 0)
         (length (length text))
         (params nil))
-    (when (and (plusp length)
-               (find (char text 0) "? > !" :test #'char=))
+    (when (and (plusp length) (find (char text 0) "? > !" :test #'char=))
       (incf start))
-    (loop for end from start to length
-          when (or (= end length)
-                   (char= (char text end) #\;))
-            do (push (or (parse-integer (subseq text start end)
-                                         :junk-allowed t)
-                         0)
-                     params)
-               (setf start (1+ end)))
+    (loop for
+          end from start to length
+          when (or (= end length) (char= (char text end) #\;))
+            do (push
+                (or (parse-integer (subseq text start end) :junk-allowed t) 0)
+                params) (setf start (1+ end)))
     (nreverse params)))
 
 (defun %frame-grid-param (params index default)
   (let ((value (nth index params)))
-    (if (and value (plusp value)) value default)))
+    (if (and value (plusp value))
+        value
+        default)))
 
 ;;; ── Style tracking (R-style-preservation) ───────────────────────────────────
 ;;;
@@ -56,14 +56,15 @@
 ;;; changes, and every cell written between changes shares that one
 ;;; instance -- allocating per cell would show up in the renderer's
 ;;; time-budget benchmark.
-
-(defvar *%default-style* nil
+(defvar *%default-style*
+  nil
   "Cached CL-TUI-KIT/CORE:STYLE for the unstyled default.  Styles are value
    objects, so every consumer safely shares this one instance instead of
    each allocating its own.")
 
 (defun %default-style ()
-  (or *%default-style* (setf *%default-style* (cl-tui-kit/core:make-style))))
+  (or *%default-style*
+      (setf *%default-style* (cl-tui-kit/core:make-style))))
 
 (defun %bce-style (style)
   "Return the style an EL/ED erase should stamp onto cleared cells.
@@ -106,16 +107,18 @@
       (let ((mode (aref codes (1+ index))))
         (cond
           ((and (= mode 5) (< (+ index 2) length))
-           (values (cl-tui-kit/core:indexed-color
-                    (%sgr-clamp-byte (aref codes (+ index 2))))
-                   3))
+           (values
+            (cl-tui-kit/core:indexed-color
+             (%sgr-clamp-byte (aref codes (+ index 2))))
+            3))
           ((= mode 5) (values nil (- length index)))
           ((and (= mode 2) (< (+ index 4) length))
-           (values (cl-tui-kit/core:rgb-color
-                    (%sgr-clamp-byte (aref codes (+ index 2)))
-                    (%sgr-clamp-byte (aref codes (+ index 3)))
-                    (%sgr-clamp-byte (aref codes (+ index 4))))
-                   5))
+           (values
+            (cl-tui-kit/core:rgb-color
+             (%sgr-clamp-byte (aref codes (+ index 2)))
+             (%sgr-clamp-byte (aref codes (+ index 3)))
+             (%sgr-clamp-byte (aref codes (+ index 4))))
+            5))
           ((= mode 2) (values nil (- length index)))
           (t (values nil 2))))))
 
@@ -140,42 +143,73 @@
           do (let ((code (aref codes index)))
                (cond
                  ((= code 0)
-                  (setf foreground (cl-tui-kit/core:default-color)
-                        background (cl-tui-kit/core:default-color)
-                        bold nil dim nil italic nil underline nil
-                        reverse nil strike nil)
-                  (incf index))
-                 ((= code 1) (setf bold t) (incf index))
-                 ((= code 2) (setf dim t) (incf index))
-                 ((= code 3) (setf italic t) (incf index))
-                 ((or (= code 4) (= code 21)) (setf underline t) (incf index))
-                 ((= code 22) (setf bold nil dim nil) (incf index))
-                 ((= code 23) (setf italic nil) (incf index))
-                 ((= code 24) (setf underline nil) (incf index))
-                 ((= code 7) (setf reverse t) (incf index))
-                 ((= code 27) (setf reverse nil) (incf index))
-                 ((= code 9) (setf strike t) (incf index))
-                 ((= code 29) (setf strike nil) (incf index))
-                 ((= code 39) (setf foreground (cl-tui-kit/core:default-color))
-                  (incf index))
-                 ((= code 49) (setf background (cl-tui-kit/core:default-color))
-                  (incf index))
+                   (setf foreground (cl-tui-kit/core:default-color)
+                         background (cl-tui-kit/core:default-color)
+                         bold nil
+                         dim nil
+                         italic nil
+                         underline nil
+                         reverse nil
+                         strike nil)
+                   (incf index))
+                 ((= code 1)
+                   (setf bold t)
+                   (incf index))
+                 ((= code 2)
+                   (setf dim t)
+                   (incf index))
+                 ((= code 3)
+                   (setf italic t)
+                   (incf index))
+                 ((or (= code 4) (= code 21))
+                   (setf underline t)
+                   (incf index))
+                 ((= code 22)
+                   (setf bold nil
+                         dim nil)
+                   (incf index))
+                 ((= code 23)
+                   (setf italic nil)
+                   (incf index))
+                 ((= code 24)
+                   (setf underline nil)
+                   (incf index))
+                 ((= code 7)
+                   (setf reverse t)
+                   (incf index))
+                 ((= code 27)
+                   (setf reverse nil)
+                   (incf index))
+                 ((= code 9)
+                   (setf strike t)
+                   (incf index))
+                 ((= code 29)
+                   (setf strike nil)
+                   (incf index))
+                 ((= code 39)
+                   (setf foreground (cl-tui-kit/core:default-color))
+                   (incf index))
+                 ((= code 49)
+                   (setf background (cl-tui-kit/core:default-color))
+                   (incf index))
                  ((<= 30 code 37)
-                  (setf foreground (cl-tui-kit/core:named-color
-                                    (aref %sgr-named-colors (- code 30))))
-                  (incf index))
+                   (setf foreground (cl-tui-kit/core:named-color
+                                     (aref %sgr-named-colors (- code 30))))
+                   (incf index))
                  ((<= 40 code 47)
-                  (setf background (cl-tui-kit/core:named-color
-                                    (aref %sgr-named-colors (- code 40))))
-                  (incf index))
+                   (setf background (cl-tui-kit/core:named-color
+                                     (aref %sgr-named-colors (- code 40))))
+                   (incf index))
                  ((<= 90 code 97)
-                  (setf foreground (cl-tui-kit/core:indexed-color (+ 8 (- code 90))))
-                  (incf index))
+                   (setf foreground (cl-tui-kit/core:indexed-color
+                                     (+ 8 (- code 90))))
+                   (incf index))
                  ((<= 100 code 107)
-                  (setf background (cl-tui-kit/core:indexed-color (+ 8 (- code 100))))
-                  (incf index))
+                   (setf background (cl-tui-kit/core:indexed-color
+                                     (+ 8 (- code 100))))
+                   (incf index))
                  ((or (= code 38) (= code 48))
-                  (multiple-value-bind (color consumed)
+                  (multiple-value-bind (color consumed) 
                       (%sgr-extended-color codes index length)
                     (when color
                       (if (= code 38)
@@ -183,24 +217,47 @@
                           (setf background color)))
                     (incf index consumed)))
                  (t (incf index)))))
-    (cl-tui-kit/core:make-style
-     :foreground foreground :background background
-     :bold bold :dim dim :italic italic :underline underline
-     :reverse reverse :strike strike)))
+    (cl-tui-kit/core:make-style :foreground
+                                foreground
+                                :background
+                                background
+                                :bold
+                                bold
+                                :dim
+                                dim
+                                :italic
+                                italic
+                                :underline
+                                underline
+                                :reverse
+                                reverse
+                                :strike
+                                strike)))
 
 (defun %frame-grid-clear-line (row col mode &optional style-row style)
   (case mode
-    (1 (fill row #\Space :start 0 :end (min (1+ col) (length row)))
-       (when style-row
-         (fill style-row style :start 0 :end (min (1+ col) (length style-row)))))
-    (2 (fill row #\Space)
-       (when style-row (fill style-row style)))
-    (otherwise (fill row #\Space :start (min col (length row)))
-               (when style-row
-                 (fill style-row style :start (min col (length style-row)))))))
+    (1
+      (fill row #\Space :start 0 :end (min (1+ col) (length row)))
+      (when style-row
+        (fill style-row style :start 0 :end (min (1+ col) (length style-row)))))
+    (2
+      (fill row #\Space)
+      (when style-row
+        (fill style-row style)))
+    (otherwise
+      (fill row #\Space :start (min col (length row)))
+      (when style-row
+        (fill style-row style :start (min col (length style-row)))))))
 
-(defun %frame-grid-apply-csi (grid row col saved-row saved-col params final
-                               &optional style-grid current-style)
+(defun %frame-grid-apply-csi (grid row
+                                   col
+                                   saved-row
+                                   saved-col
+                                   params
+                                   final
+                                   &optional
+                                   style-grid
+                                   current-style)
   "Apply one parsed CSI sequence to the cursor/erase state.
 
    STYLE-GRID and CURRENT-STYLE are optional: callers that only care about
@@ -213,12 +270,18 @@
         (style current-style))
     (cond
       ((or (char= final #\A) (char= final #\B))
-       (let ((delta (if (plusp count) count 1)))
+       (let ((delta
+              (if (plusp count)
+                  count
+                  1)))
          (if (char= final #\A)
              (decf row delta)
              (incf row delta))))
       ((or (char= final #\C) (char= final #\D))
-       (let ((delta (if (plusp count) count 1)))
+       (let ((delta
+              (if (plusp count)
+                  count
+                  1)))
          (if (char= final #\C)
              (incf col delta)
              (decf col delta))))
@@ -231,14 +294,16 @@
              col (1- (%frame-grid-param params 1 1))))
       ((char= final #\J)
        (when (member (or (first params) 0) '(2 3))
-         (%clear-frame-grid grid style-grid
+         (%clear-frame-grid grid
+                            style-grid
                             (%bce-style (or style (%default-style))))))
       ((char= final #\K)
        (%frame-grid-clear-line (aref grid (max 0 (min row (1- height))))
                                col
                                (or (first params) 0)
                                (and style-grid
-                                    (aref style-grid (max 0 (min row (1- height)))))
+                                    (aref style-grid
+                                          (max 0 (min row (1- height)))))
                                (%bce-style (or style (%default-style)))))
       ((char= final #\m)
        (setf style (%frame-grid-apply-sgr (or style (%default-style)) params)))
@@ -274,55 +339,76 @@
    the written cell and its continuation cell (R-style-preservation)."
   (let* ((height (length grid))
          (width (length (aref grid 0)))
-         (char-width (if (= 2 (nerimux/terminal/types:char-width character))
-                         2
-                         1))
+         (char-width
+          (if (= 2 (nerimux/terminal/types:char-width character))
+              2
+              1))
          (fits-p (<= (+ col char-width) width)))
-    (when (and (<= 0 row) (< row height)
-               (<= 0 col) (< col width))
+    (when (and (<= 0 row) (< row height) (<= 0 col) (< col width))
       (setf (char (aref grid row) col) character)
       (when style-grid
         (setf (aref (aref style-grid row) col) (or style (%default-style))))
       (when (and fits-p (= char-width 2))
         (setf (char (aref grid row) (1+ col)) +frame-grid-continuation+)
         (when style-grid
-          (setf (aref (aref style-grid row) (1+ col))
-                (or style (%default-style))))))
-    (let ((advance (if fits-p char-width 1)))
+          (setf (aref (aref style-grid row) (1+ col)) (or style
+                                                          (%default-style))))))
+    (let ((advance
+           (if fits-p
+               char-width
+               1)))
       (if (< (+ col advance) width)
           (+ col advance)
           0))))
 
-(defun %frame-grid-parse-csi (frame start grid row col saved-row saved-col
-                               &optional style-grid current-style)
+(defun %frame-grid-parse-csi (frame start
+                                    grid
+                                    row
+                                    col
+                                    saved-row
+                                    saved-col
+                                    &optional
+                                    style-grid
+                                    current-style)
   (let ((end start)
         (length (length frame)))
     (loop while (and (< end length)
-                     (not (<= (char-code #\@)
-                              (char-code (char frame end))
-                              (char-code #\~))))
+                     (not
+                      (<= (char-code #\@)
+                          (char-code (char frame end))
+                          (char-code #\~))))
           do (incf end))
     (if (= end length)
         (values length row col saved-row saved-col current-style)
-        (multiple-value-bind (new-row new-col new-saved-row new-saved-col new-style)
-            (%frame-grid-apply-csi
-             grid row col saved-row saved-col
-             (%frame-grid-params (subseq frame start end))
-             (char frame end)
-             style-grid current-style)
-          (values (1+ end) new-row new-col new-saved-row new-saved-col new-style)))))
+        (multiple-value-bind (new-row new-col
+                                      new-saved-row
+                                      new-saved-col
+                                      new-style) 
+            (%frame-grid-apply-csi grid
+                                   row
+                                   col
+                                   saved-row
+                                   saved-col
+                                   (%frame-grid-params (subseq frame start end))
+                                   (char frame end)
+                                   style-grid
+                                   current-style)
+          (values (1+ end)
+                  new-row
+                  new-col
+                  new-saved-row
+                  new-saved-col
+                  new-style)))))
 
 (defun %frame-grid-skip-osc (frame start)
   (let ((index start)
         (length (length frame)))
     (loop while (< index length)
           do (cond
-               ((= (char-code (char frame index)) 7)
-                (return (1+ index)))
+               ((= (char-code (char frame index)) 7) (return (1+ index)))
                ((and (= (char-code (char frame index)) 27)
                      (< (1+ index) length)
-                     (char= (char frame (1+ index)) #\\))
-                (return (+ index 2)))
+                     (char= (char frame (1+ index)) #\\)) (return (+ index 2)))
                (t (incf index)))
           finally (return length))))
 
@@ -352,37 +438,47 @@
                       (incf index)
                       (case (char frame (1+ index))
                         (#\[
-                         (multiple-value-setq
-                             (index row col saved-row saved-col current-style)
-                           (%frame-grid-parse-csi
-                            frame (+ index 2) grid row col
-                            saved-row saved-col style-grid current-style)))
+                         (multiple-value-setq (index row
+                                                     col
+                                                     saved-row
+                                                     saved-col
+                                                     current-style) (%frame-grid-parse-csi
+                                                                     frame
+                                                                     (+ index 2)
+                                                                     grid
+                                                                     row
+                                                                     col
+                                                                     saved-row
+                                                                     saved-col
+                                                                     style-grid
+                                                                     current-style)))
                         (#\]
                          (setf index (%frame-grid-skip-osc frame (+ index 2))))
-                        (otherwise
-                         (incf index 2)))))
+                        (otherwise (incf index 2)))))
                  ((char= character #\Newline)
-                  (setf col 0
-                        row (min (1+ row) (1- rows)))
-                  (incf index))
+                   (setf col 0
+                         row (min (1+ row) (1- rows)))
+                   (incf index))
                  ((char= character #\Return)
-                  (setf col 0)
-                  (incf index))
+                   (setf col 0)
+                   (incf index))
                  ((char= character #\Backspace)
-                  (setf col (max 0 (1- col)))
-                  (incf index))
+                   (setf col (max 0 (1- col)))
+                   (incf index))
                  ((char= character #\Tab)
-                  (setf col (min (1- cols)
-                                 (* 8 (1+ (floor col 8)))))
-                  (incf index))
+                   (setf col (min (1- cols) (* 8 (1+ (floor col 8)))))
+                   (incf index))
                  ((>= (char-code character) 32)
-                  (setf col (%frame-grid-put-char grid row col character
-                                                  style-grid current-style))
-                  (when (zerop col)
-                    (setf row (min (1+ row) (1- rows))))
-                  (incf index))
-                 (t
-                  (incf index)))))
+                   (setf col (%frame-grid-put-char grid
+                                                   row
+                                                   col
+                                                   character
+                                                   style-grid
+                                                   current-style))
+                   (when (zerop col)
+                     (setf row (min (1+ row) (1- rows))))
+                   (incf index))
+                 (t (incf index)))))
     (values grid style-grid)))
 
 (defun %frame-grid-row (grid row)
@@ -395,22 +491,30 @@
       (loop for character across (%frame-grid-row grid row)
             unless (char= character +frame-grid-continuation+)
               do (write-char character stream))
-      (unless (= row (1- (length grid))) (terpri stream)))))
+      (unless (= row (1- (length grid)))
+        (terpri stream)))))
 
 (defun %frame-grid-row-spans (chars-row styles-row)
   "Group CHARS-ROW into styled text spans, omitting wide-glyph sentinels."
-  (let ((spans nil) (run-style nil) (run nil))
+  (let ((spans nil)
+        (run-style nil)
+        (run nil))
     (flet ((flush ()
              (when run
-               (push (cl-tui-kit/core:make-text-span
-                      (coerce (nreverse run) 'string) :style run-style) spans)
+               (push
+                (cl-tui-kit/core:make-text-span (coerce (nreverse run) 'string)
+                                                :style
+                                                run-style)
+                spans)
                (setf run nil))))
       (loop for column from 0 below (length chars-row)
             for character = (char chars-row column)
             unless (char= character +frame-grid-continuation+)
               do (let ((style (aref styles-row column)))
-                   (unless (and run-style (cl-tui-kit/core:style= run-style style))
-                     (flush) (setf run-style style))
+                   (unless 
+                       (and run-style (cl-tui-kit/core:style= run-style style))
+                     (flush)
+                     (setf run-style style))
                    (push character run)))
       (flush))
     (nreverse spans)))

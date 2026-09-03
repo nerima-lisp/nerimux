@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/model)
 
 ;;;; Pane tests - geometry, feed, next-pane-id, split-window.
-
 (describe "model-suite"
 
   ;; ── pane-feed ────────────────────────────────────────────────────────────────

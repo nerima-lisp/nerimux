@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/model)
 
 ;;;; Session tests — start-directory slot, all-panes ordering, and window flag clearing.
-
 (describe "model-suite"
 
   ;;; ── session-start-directory slot ─────────────────────────────────────────────

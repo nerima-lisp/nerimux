@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/net)
 
 ;;;; Protocol command payload target and field ordering tests.
-
 (describe "protocol-suite"
 
   ;;; ── target-field-p edge cases ────────────────────────────────────────────────

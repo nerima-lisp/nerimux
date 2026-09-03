@@ -4,7 +4,6 @@
 ;;;; zoomed-window pane-neighbor guard, +neighbor-edge-tolerance+ constant,
 ;;;; pane-neighbor up/down symmetry, layout-split-axis-extent, and layout-split
 ;;;; type predicates.
-
 (describe "layout-tree-suite"
 
   ;;; ── layout-split struct defaults ─────────────────────────────────────────────

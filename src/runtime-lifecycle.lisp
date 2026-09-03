@@ -3,15 +3,19 @@
 (defun %runtime-safe-server-name (name)
   (let ((text (princ-to-string (or name "default"))))
     (let ((result
-            (coerce
-             (loop for character across text
-                   collect
-                   (if (or (alphanumericp character)
-                           (member character '(#\- #\_ #\.) :test #'char=))
-                       character
-                       #\_))
-             'string)))
-      (if (plusp (length result)) result "default"))))
+           (coerce
+            (loop for character across text
+                  collect (if (or (alphanumericp character)
+                                  (member character
+                                          +runtime-safe-server-name-punctuation+
+                                          :test
+                                          #'char=))
+                              character
+                              #\_))
+            'string)))
+      (if (string/= result "")
+          result
+          "default"))))
 
 (defun %runtime-state-home ()
   "The state-home DIRECTORY used by %runtime-log-path: $NERIMUX_RUNTIME_STATE
@@ -20,15 +24,13 @@
    NERIMUX_RUNTIME_STATE names a directory, not a literal file: the caller
    applies its own nerimux/<name>.log suffix on top of it."
   (let ((override (sb-ext:posix-getenv "NERIMUX_RUNTIME_STATE")))
-    (if (and override (plusp (length override)))
+    (if (and override (string/= override ""))
         override
         (let ((xdg (sb-ext:posix-getenv "XDG_STATE_HOME")))
-          (if (and xdg (plusp (length xdg)))
+          (if (and xdg (string/= xdg ""))
               xdg
               (namestring
-               (merge-pathnames
-                ".local/state/"
-                (user-homedir-pathname))))))))
+               (merge-pathnames ".local/state/" (user-homedir-pathname))))))))
 
 (defun %runtime-log-path (name)
   "Resolve the persistent log file path for the auto-started headless server
@@ -37,8 +39,7 @@
    *runtime-server-name* special (which is not guaranteed bound in the
    launching/parent process)."
   (merge-pathnames
-   (format nil "nerimux/~A.log"
-           (%runtime-safe-server-name name))
-   (pathname (format nil "~A/"
-                     (string-right-trim "/" (%runtime-state-home))))))
-
+   (make-pathname :directory (list :relative "nerimux")
+                  :name (%runtime-safe-server-name name)
+                  :type "log")
+   (uiop:ensure-directory-pathname (%runtime-state-home))))

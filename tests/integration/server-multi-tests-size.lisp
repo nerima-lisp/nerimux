@@ -1,7 +1,6 @@
 (in-package #:nerimux/test)
 
 ;;;; Pure size-selection helpers for multi-client server behavior.
-
 (describe "server-multi-suite"
 
   ;;; ── %client-fds / %client-size-reduce: pure registry helpers ─────────────────

@@ -1,7 +1,6 @@
 (in-package #:nerimux/test)
 
 ;;;; wait-for-channel, reader EOF, and sigwinch — part II
-
 (describe "runtime-suite"
 
   ;;; ── wait-for-channel (bounded blocking path) ─────────────────────────────────

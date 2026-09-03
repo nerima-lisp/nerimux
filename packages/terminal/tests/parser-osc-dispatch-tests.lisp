@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/terminal)
 
 ;;;; parser tests - OSC dispatch edge cases.
-
 (describe "terminal-suite/osc-dispatch-edge-cases"
 
   (it "osc-command-parser-rejects-invalid-and-accepts-zero"

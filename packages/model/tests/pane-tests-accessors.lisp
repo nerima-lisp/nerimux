@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/model)
 
 ;;;; Pane tests - state, accessors, and defaults.
-
 (describe "model-suite"
 
   ;;; ── Pane slot defaults ───────────────────────────────────────────────────────

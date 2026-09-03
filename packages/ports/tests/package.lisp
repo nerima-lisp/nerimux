@@ -1,5 +1,4 @@
 ;;;; Test package for nerimux-ports.
-
 (defpackage #:nerimux/test/ports
   ;; The test framework is cl-weave, used natively: every file registers its own
   ;; top-level (describe "name" (it "case" ...) ...) block.

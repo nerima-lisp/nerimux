@@ -5,7 +5,6 @@
 ;;;; This file is deliberately kept outside runtime coverage: it is a declarative
 ;;;; compile-time fact table whose generated functions are exercised through the
 ;;;; terminal actions API.
-
 (defmacro define-dec-pm-rules (&rest specs)
   "Generate DEC-PM-SET and DEC-PM-RESET from a single Prolog-like rule table.
    Each SPEC is (param (set-body...) (reset-body...)).
@@ -16,16 +15,21 @@
        (declare (ignorable screen))
        (dolist (param params)
          (case param
-           ,@(mapcar (lambda (s) `(,(car s) ,@(cadr s))) specs))))
+           ,@(mapcar
+              (lambda (s)
+                `(,(car s) ,@(cadr s)))
+              specs))))
      (defun dec-pm-reset (screen params)
        "Handle DEC private mode reset sequences (?XXXl)."
        (declare (ignorable screen))
        (dolist (param params)
          (case param
-           ,@(mapcar (lambda (s) `(,(car s) ,@(caddr s))) specs))))))
+           ,@(mapcar
+              (lambda (s)
+                `(,(car s) ,@(caddr s)))
+              specs))))))
 
 ;;; ── DEC PM rule table (data) ─────────────────────────────────────────────────
-
 (define-dec-pm-rules
   ;; Mode 25 — cursor visibility (DECTCEM)
   (25

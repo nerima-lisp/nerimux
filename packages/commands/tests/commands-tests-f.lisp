@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/commands)
 
 ;;;; linear selection-text — part III
-
 (describe "commands-suite"
 
   ;;; ── %selection-text ──────────────────────────────────────────────────────────

@@ -7,7 +7,6 @@
 ;;;; server event loop through nerimux::%dispatch-ready-clients and asserts on
 ;;;; nerimux::*clients*, so it spans nerimux-net and the bootstrap core and
 ;;;; belongs to neither unit alone.
-
 (describe "net-malformed-utf8-dispatch-suite"
 
   ;; The end-to-end claim.  A same-uid peer sends a structurally VALID frame

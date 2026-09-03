@@ -17,8 +17,7 @@
   :depends-on ("nerimux-ports" "nerimux-pty" :cl-tty-kit)
   :pathname "src"
   :serial t
-  :components ((:file "package")
-               (:file "input"))
+  :components ((:file "package") (:file "input"))
   :in-order-to ((test-op (test-op "nerimux-input/test"))))
 
 (defsystem "nerimux-input/test"

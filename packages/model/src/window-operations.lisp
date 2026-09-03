@@ -13,17 +13,18 @@
 ;;; Data/logic separation:
 ;;;   %zoom-in-geometry / %zoom-out-geometry — pure tree-slot mutations (no I/O)
 ;;;   window-zoom-toggle                     — orchestrator: tree mutation + PTY resize
-
 ;;; ── Resize via the tree ──────────────────────────────────────────────────────
-
 (defun %new-split-ratio (orient avail cur-ratio delta grow-first)
   "Compute the ratio after moving the split border by DELTA cells.
    Returns the new ratio as a rational, or NIL when the move would violate
    the minimum pane size on either side."
   (let* ((axis-floor (%axis-floor orient))
-         (cur-first  (round (* avail cur-ratio)))
-         (sign       (if grow-first 1 -1))
-         (new-first  (+ cur-first (* sign delta))))
+         (cur-first (round (* avail cur-ratio)))
+         (sign
+          (if grow-first
+              1
+              -1))
+         (new-first (+ cur-first (* sign delta))))
     (when (and (<= axis-floor new-first) (<= new-first (- avail axis-floor)))
       (/ new-first avail))))
 
@@ -38,7 +39,7 @@
   "Move the split border between the active pane and its neighbour in DIRECTION
    by DELTA cells, then relayout.  Returns the active pane on success, NIL when
    there is no neighbour in DIRECTION or the move would violate the minimum pane size."
-  (let* ((tree   (window-tree window))
+  (let* ((tree (window-tree window))
          (active (window-active-pane window))
          (orient (resize-direction-orientation direction)))
     (when (and tree active)
@@ -46,13 +47,17 @@
         (when leaf
           (multiple-value-bind (split side) (resize-find-split tree leaf orient)
             (when split
-              (let* ((avail      (max +pane-separator-width+
-                                      (- (layout-split-axis-extent split orient)
-                                         +pane-separator-width+)))
+              (let* ((avail
+                      (max +pane-separator-width+
+                           (- (layout-split-axis-extent split orient)
+                              +pane-separator-width+)))
                      (grow-first (%grow-first-p side direction))
-                     (new-ratio  (%new-split-ratio orient avail
-                                                   (layout-split-ratio split)
-                                                   delta grow-first)))
+                     (new-ratio
+                      (%new-split-ratio orient
+                                        avail
+                                        (layout-split-ratio split)
+                                        delta
+                                        grow-first)))
                 (when new-ratio
                   (setf (layout-split-ratio split) new-ratio)
                   (window-relayout-current window)
@@ -63,14 +68,13 @@
 ;;; Data/logic separation: the pure tree-slot mutations (%zoom-in-geometry,
 ;;; %zoom-out-geometry) are isolated from the PTY resize side-effect
 ;;; (pane-reposition in window-zoom-toggle) so each concern is a named step.
-
 (defun %zoom-in-geometry (window pane)
   "Save the current tree and replace it with a single-leaf tree for PANE.
    Sets window-zoom-p to T and refreshes the panes list.
    Does NOT call pane-reposition — the caller handles the PTY resize."
   (setf (window-zoom-tree window) (window-tree window)
-        (window-tree       window) (make-layout-leaf pane)
-        (window-zoom-p     window) t)
+        (window-tree window) (make-layout-leaf pane)
+        (window-zoom-p window) t)
   (window-refresh-panes window))
 
 (defun %zoom-out-geometry (window)
@@ -78,9 +82,9 @@
    Guards against corrupted state where zoom-tree is NIL.
    Returns T on success, NIL when the saved tree was missing."
   (when (window-zoom-tree window)
-    (setf (window-tree      window) (window-zoom-tree window)
+    (setf (window-tree window) (window-zoom-tree window)
           (window-zoom-tree window) nil
-          (window-zoom-p    window) nil)
+          (window-zoom-p window) nil)
     (window-relayout window (window-height window) (window-width window))
     t))
 

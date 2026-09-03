@@ -8,7 +8,6 @@
 ;;;; gone along with the config file that could ever have set either away
 ;;;; from its registered default: allow-passthrough always drains without
 ;;;; emitting, set-clipboard always emits — see renderer-compose-effects.lisp.
-
 (describe "renderer-suite/compose-effects"
 
   ;; allow-passthrough is always off: the queue is drained (cleared) without

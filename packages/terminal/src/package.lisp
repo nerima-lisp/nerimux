@@ -2,7 +2,6 @@
 ;;;;
 ;;;; The DATA layer these all build on is package-terminal-types.lisp, which
 ;;;; package.lisp loads first.
-
 ;; This :use of a sibling package is kept deliberately; check-coding.sh reports it.
 ;; CODING_STANDARD.md asks for :import-from so a symbol's origin stays readable, and
 ;; the reason it gives is collision when a :use-d package adds an export in a later
@@ -146,18 +145,17 @@
    #:%pen-to-sgr-params))
 
 (defpackage #:nerimux/terminal/csi
-  (:use #:cl
-        #:nerimux/terminal/types
-        #:nerimux/terminal/actions
-        #:nerimux/terminal/sgr)
-  (:documentation
-   "DOMAIN layer: the CSI rule table.  Maps a parsed control sequence — final byte,
+            (:use #:cl
+                  #:nerimux/terminal/types
+                  #:nerimux/terminal/actions
+                  #:nerimux/terminal/sgr)
+            (:documentation
+             "DOMAIN layer: the CSI rule table.  Maps a parsed control sequence — final byte,
     private-marker, and parameters — onto the nerimux/terminal/actions call it means,
     and generates the replies the host expects back (DSR/CPR cursor reports, DA1/DA2
     device attributes, DECRQM mode state, XTWINOPS size reports).  Declarative on
     purpose: the sequence set is a specification, not an algorithm.")
-  (:export
-   #:execute-csi))
+            (:export #:execute-csi))
 
 (defpackage #:nerimux/terminal/parser
   (:use #:cl
@@ -189,18 +187,15 @@
    #:csi-final-byte-p))
 
 (defpackage #:nerimux/terminal/emulator
-  (:use #:cl
-        #:nerimux/terminal/types)
-  (:documentation
-   "DOMAIN layer: the emulator's entry point, and nothing else.  SCREEN-PROCESS-BYTES
+            (:use #:cl #:nerimux/terminal/types)
+            (:documentation
+             "DOMAIN layer: the emulator's entry point, and nothing else.  SCREEN-PROCESS-BYTES
     drives a run of raw PTY octets through the CPS parser loop.  It is a package of
     its own so the layers above depend on the act of feeding bytes rather than on the
     state machine that consumes them.")
-  (:export
-   #:screen-process-bytes))
+            (:export #:screen-process-bytes))
 
 ;;; ── Terminal umbrella (re-export facade) ─────────────────────────────────
-
 (defpackage #:nerimux/terminal
   (:use #:cl
         #:nerimux/terminal/types

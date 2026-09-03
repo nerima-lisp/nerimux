@@ -1,103 +1,10 @@
 (in-package #:nerimux)
 
-;;;; Shared multi-client connection data.
-
-(defparameter +default-workspace-prefix-key-code+ #x11
-  "Control-Q, the workspace UI prefix used by the multi-client overview.")
-
-(defstruct (client-conn (:constructor %make-client-conn))
-  "One attached client: its socket, a cached binary STREAM and FD, a private
-   keystroke STATE (so each client has independent prefix/copy-mode state), the
-   ROWS×COLS geometry it last reported, an optional command-stdin target pane,
-   its private UI state, cached frame, and private message log."
-  socket
-  stream
-  fd
-  stdin-target
-  (message-log nil)
-  (rows 24 :type fixnum)
-  (cols 80 :type fixnum)
-  (focus nil)
-  (selected-tree-object nil)
-  (selected-worktree nil)
-  (tree-scroll 0 :type fixnum)
-  ;; The in-flight `/` overview tree-filter query (:tree-filter mode), or NIL
-  ;; when no filter is active (cleared by ESC, kept by Enter -- see
-  ;; %transition-client-ui-mode). NIL rather than "": an empty string is a
-  ;; filter box the user has entered but not typed into yet, still a real
-  ;; per-frame state the renderer draws differently from no filter at all.
-  (tree-filter nil)
-  (workspace-prefix-code +default-workspace-prefix-key-code+ :type fixnum)
-  (ui-prefix-p nil :type boolean)
-  (viewport 0 :type fixnum)
-  ;; The two axes that replaced the old MODE x VIEW product (magit alignment,
-  ;; FR-001/FR-007). VIEW says which screen is up; MODAL says what, if anything,
-  ;; has taken the keyboard away from that screen.
-  ;;
-  ;; The product used to have unreachable cells -- (:detail . :normal) meant "a
-  ;; pane is focused but keystrokes go to the UI", which is precisely the state
-  ;; pressing `i` existed to leave. With panes now taking input directly, where
-  ;; a key goes is DERIVED from VIEW whenever MODAL is NIL (%CLIENT-UI-KEYS-P),
-  ;; so no such cell exists to be constructed, asserted about, or drifted into.
-  ;;
-  ;; MODAL is one slot rather than a flag per state on purpose: two flags set at
-  ;; once is exactly the unreachable-combination problem this change removes.
-  (view :repolist)
-  (modal nil)
-  ;; Per-client, per-session argument toggles for the transient menus (FR-010),
-  ;; as an alist of TRANSIENT-KEY -> list of active flag strings. Kept when the
-  ;; transient closes: magit remembers a `--force-with-lease` you set earlier in
-  ;; the session, and losing it every close would make the toggle useless.
-  (transient-arguments nil)
-  (transient-view nil)
-  ;; magit's 1/2/3/4 global visibility level (FR-005). 4 = everything expanded,
-  ;; 1 = section headings only. Per client rather than per section table: the
-  ;; level is a lens over whatever the per-row expand state says, so pressing 4
-  ;; then 2 returns to the same rows rather than to a flattened remembering of
-  ;; them.
-  (visibility-level 2 :type (integer 1 4))
-  (command-buffer "" :type string)
-  (command-return-view nil)
-  (attach-target nil)
-  (attach-cwd nil)
-  (picker-items nil)
-  (picker-query "" :type string)
-  (picker-regex-p nil :type boolean)
-  (picker-index 0 :type fixnum)
-  ;; Set to the REPOSITORY-ID of the repository a dry-run prune preview was
-  ;; just shown for; a confirm (dry-run nil) prune must match it, so
-  ;; wt-prune-confirm --confirm cannot skip straight past the preview a user
-  ;; is meant to review first. Cleared once a confirmed prune completes.
-  (pending-prune-preview-repository-id nil)
-  ;; The full-screen confirmation (R6.4) this client is currently looking at, or
-  ;; NIL. Per client, not per server: two attached clients can be mid-answer on
-  ;; different questions, and a confirmation one of them never saw must not
-  ;; capture the other's keystrokes.
-  (confirm-view nil)
-  ;; What to run when the user answers y to CONFIRM-VIEW. A closure of no
-  ;; arguments; NIL when no confirmation is up. Kept beside the view rather than
-  ;; encoded in it so the renderer keeps taking plain data.
-  (confirm-action nil)
-  ;; The `$` process log (FR-011): executed git command, exit status, output.
-  ;; Most recent first, capped -- see +MAX-PROCESS-LOG-ENTRIES+.
-  (process-log nil)
-  (process-log-scroll 0 :type fixnum)
-  ;; No HELP-VIEW-P flag: the help view carries no per-client data, so MODAL
-  ;; :help IS its whole state. A boolean beside MODAL would be a second place
-  ;; to say the same thing, and the two could disagree.
-  (frame nil))
-
-;; SERVER-MULTI.LISP initializes the registry after this dispatch file loads.
-(declaim (special *clients*))
-
-(defvar *last-selected-worktree-token* nil
-  "Stable selector for the most recently selected worktree across clients.")
 
 ;;;; Multi-client message handlers extracted from server-multi.lisp.
 ;;;;
 ;;;; The event loop keeps the dispatch table, while these helpers own the
 ;;;; per-message policy for attach/resize, keys, and forwarded commands.
-
 ;;; WITH-LOOP-SAFE-ERROR is defined here because this file owns the per-client
 ;;; handler policy and every handler below uses the same error boundary.  The
 ;;; message-dispatch macro itself lives in server.lisp, which ASDF loads before
@@ -138,22 +45,12 @@
    it fatal."
   (let ((condition-var (first binding))
         (on-error (getf (rest binding) :on-error)))
-    `(handler-case (progn ,@body)
-       (peer-io-failure ,(if condition-var (list condition-var) '())
+    `(handler-case (progn
+                     ,@body)
+       (peer-io-failure ,(if condition-var
+                             (list condition-var)
+                             '())
          ,on-error))))
-
-(defvar *client-esc-swallow-counts* (make-hash-table :test #'eq :weakness :key)
-  "CONN -> count of upcoming key bytes to discard unconditionally.
-
-Set by ESC in a text-input UI mode (:picker / :command, R4.3): the client
-forwards stdin one byte at a time, so an arrow key still arrives as the
-3-byte escape sequence ESC [ A/B/C/D, split across three separate key
-messages. R4.1 dropped byte-sequence matching entirely, so without this the
-trailing 2 bytes of that sequence would land on whatever key handler runs
-next (typically the search/command buffer) as literal `[` and a letter.
-Keyed by CONN rather than a client-conn slot because client-conn is shared
-data defined above; :weakness :key lets a
-dropped connection's entry be reclaimed instead of leaking.")
 
 (defun %client-esc-swallow-start (conn &optional (n 2))
   (setf (gethash conn *client-esc-swallow-counts*) n))
@@ -197,24 +94,6 @@ dropped connection's entry be reclaimed instead of leaking.")
   (setf (client-conn-modal conn) modal)
   (%mark-dirty)
   modal)
-
-(defparameter +keyboard-owning-modals+ '(:confirm :help :process-log :transient)
-  "Modals the C-q prefix must not reach past.
-
-   These four take over the frame and each claims, in its own handler's
-   docstring, to own every key while it is up. That claim is only true if the
-   prefix is checked AFTER them -- and getting it wrong is not a cosmetic
-   ordering issue. C-q merely ARMS the prefix and returns; the byte the user
-   types next, believing it answers the y/n question still on screen, is then
-   consumed as the chord's second byte instead. If that byte is `Q`, it opens a
-   second confirmation over the first, and the original pending destructive
-   action is silently dropped -- neither run nor cancelled.
-
-   The remaining modals (:picker :command :filter :scrollback) are deliberately
-   NOT here: the prefix reached past them before this refactor too, and
-   promoting them now would be an unrequested behaviour change rather than a
-   fix. The line is \"owns the screen and asks a question\" versus \"an input
-   line over a view that is still visible underneath\".")
 
 (defun %handle-multi-key-message (session conn payload)
   "Feed PAYLOAD to whatever currently owns CONN's keyboard.
@@ -262,15 +141,6 @@ dropped connection's entry be reclaimed instead of leaking.")
                  ;; :pane -- FR-007. Every byte goes to the shell, ESC included.
                  (%handle-client-input-key-payload session conn payload))))))))))
 
-(defun %feed-client-stdin-target (conn payload)
-  "Feed PAYLOAD to CONN's split-window -I stdin target, if it has one.
-   Returns NIL either way: an unbound key is a no-op, not a loop disposition."
-  (let ((stdin-target (client-conn-stdin-target conn)))
-    (when stdin-target
-      (pane-feed stdin-target payload)
-      (%mark-dirty))
-    nil))
-
 (defun %handle-workspace-prefix-key (session conn payload)
   "Handle the client-local prefix (C-q, R4.4) and the key it introduces.
 
@@ -279,22 +149,19 @@ byte is resolved against 1.5's binding table by %workspace-prefix-dispatch;
 a byte the table does not recognize is discarded there instead of falling
 through to the normal key pipeline — the old 'unbound means pass through'
 behavior (:96-107 pre-R4.4) is gone."
-  (let ((single-byte (and (arrayp payload)
-                          (= (length payload) 1)
-                          (aref payload 0))))
+  (let ((single-byte
+         (and (arrayp payload) (= (length payload) 1) (aref payload 0))))
     (cond
       ((client-conn-ui-prefix-p conn)
-       (setf (client-conn-ui-prefix-p conn) nil)
-       (values t (%workspace-prefix-dispatch session conn single-byte)))
+        (setf (client-conn-ui-prefix-p conn) nil)
+        (values t (%workspace-prefix-dispatch session conn single-byte)))
       ((and (integerp single-byte)
             (= single-byte (client-conn-workspace-prefix-code conn)))
-       (setf (client-conn-ui-prefix-p conn) t)
-       (values t nil))
-      (t
-       (values nil nil)))))
+        (setf (client-conn-ui-prefix-p conn) t)
+        (values t nil))
+      (t (values nil nil)))))
 
 ;;; ── `?` full-screen help view (FR-005) ──────────────────────────────────────
-
 (defun %client-open-help-view (conn)
   "Put the static key-reference view up. Reached from the `?` transient's `k`
    entry (FR-010) rather than from `?` directly -- `?` now opens the dispatch
@@ -316,9 +183,10 @@ behavior (:96-107 pre-R4.4) is gone."
    against."
   (cond
     ((%client-byte-p payload 27)
-     (%client-esc-swallow-start conn)
-     (%close-help-view conn))
-    ((or (%client-key-p payload #\q) (%client-key-p payload #\?)
-         (%client-byte-p payload 13) (%client-byte-p payload 10))
-     (%close-help-view conn)))
+      (%client-esc-swallow-start conn)
+      (%close-help-view conn))
+    ((or (%client-key-p payload #\q)
+         (%client-key-p payload #\?)
+         (%client-byte-p payload 13)
+         (%client-byte-p payload 10)) (%close-help-view conn)))
   nil)

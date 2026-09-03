@@ -15,7 +15,6 @@
 ;;;; were exported and unit-tested but called from no production code, so the
 ;;;; tests were the only thing keeping them alive.  Reintroduce them next to a
 ;;;; caller, not on their own.
-
 (defun clear-display ()
   "Erase the entire terminal and move cursor home."
   (format t "~C[2J~C[H" +esc+ +esc+)

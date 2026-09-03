@@ -1,23 +1,58 @@
 (in-package #:nerimux/protocol)
 
-(defconstant +msg-attach+  1 "client→server: attach; payload = rows,cols (u16,u16)")
-(defconstant +msg-key+     2 "client→server: raw input bytes for the active pane")
-(defconstant +msg-resize+  3 "client→server: terminal resized; payload = rows,cols")
-(defconstant +msg-detach+  4 "client→server: detach (empty payload)")
-(defconstant +msg-frame+   5 "server→client: a rendered frame (UTF-8 payload)")
-(defconstant +msg-bye+     6 "server→client: server is closing (empty payload)")
-(defconstant +msg-command+ 7 "client→server: a named command")
-(defconstant +msg-reply+   8 "server→client: a forwarded command's text output")
-(defconstant +header-size+ 5 "1 type byte + 4 length bytes.")
-(defconstant +payload-length-offset+ 1 "Byte offset of the u32 payload length.")
-(defconstant +cols-offset-in-size-payload+ 2 "Byte offset of cols in a size payload.")
+(defconstant +msg-attach+
+  1
+  "client→server: attach; payload = rows,cols (u16,u16)")
+
+(defconstant +msg-key+
+  2
+  "client→server: raw input bytes for the active pane")
+
+(defconstant +msg-resize+
+  3
+  "client→server: terminal resized; payload = rows,cols")
+
+(defconstant +msg-detach+
+  4
+  "client→server: detach (empty payload)")
+
+(defconstant +msg-frame+
+  5
+  "server→client: a rendered frame (UTF-8 payload)")
+
+(defconstant +msg-bye+
+  6
+  "server→client: server is closing (empty payload)")
+
+(defconstant +msg-command+
+  7
+  "client→server: a named command")
+
+(defconstant +msg-reply+
+  8
+  "server→client: a forwarded command's text output")
+
+(defconstant +header-size+
+  5
+  "1 type byte + 4 length bytes.")
+
+(defconstant +payload-length-offset+
+  1
+  "Byte offset of the u32 payload length.")
+
+(defconstant +cols-offset-in-size-payload+
+  2
+  "Byte offset of cols in a size payload.")
 
 (defmacro define-wire-messages (&rest specs)
   "Build typed frame constructor functions from a declarative table."
   `(progn
      ,@(mapcar
         (lambda (spec)
-          (destructuring-bind (name type-const lambda-list payload-expr docstring) spec
+          (destructuring-bind (name type-const
+                                    lambda-list
+                                    payload-expr
+                                    docstring) spec
             `(defun ,name ,lambda-list
                ,docstring
                (encode-frame ,type-const ,payload-expr))))
@@ -33,8 +68,8 @@
 ;;;;   [target NUL] command-keyword-name NUL [arg NUL ...]
 ;;;; When target is NIL the target field is omitted entirely.
 ;;;; The command keyword name is encoded without the leading colon.
-
-(defconstant +field-delimiter+ 0
+(defconstant +field-delimiter+
+  0
   "ASCII NUL byte used to separate fields in a +msg-command+ payload.
    Every field in the NUL-delimited encoding is terminated by this byte.")
 
@@ -45,7 +80,6 @@
 ;;;   (first-char CHAR)     — the field starts with CHAR (e.g. '$' for sessions)
 ;;;   (contains-char CHAR)  — the field contains CHAR anywhere (e.g. ':' or '.')
 ;;; Adding a new sigil never requires touching the function body.
-
 (defmacro define-target-sigils (&rest rules)
   "Generate TARGET-FIELD-P from a declarative sigil/substring table.
    Each RULE is either (first-char CHAR) or (contains-char CHAR).
@@ -58,17 +92,16 @@
    separate from the NUL-field-splitting logic ensures that command names
    containing these characters are never misidentified."
      (and (plusp (length field))
-          (or ,@(mapcar (lambda (rule)
-                          (destructuring-bind (kind char) rule
-                            (ecase kind
-                              (first-char  `(char= (char field 0) ,char))
-                              (contains-char `(find ,char field)))))
-                        rules)))))
+          (or
+           ,@(mapcar
+              (lambda (rule)
+                (destructuring-bind (kind char) rule
+                  (ecase kind
+                    (first-char `(char= (char field 0) ,char))
+                    (contains-char `(find ,char field)))))
+              rules)))))
 
-(define-target-sigils
-  (first-char   #\$)
-  (contains-char #\:)
-  (contains-char #\.))
+(define-target-sigils (first-char #\$) (contains-char #\:) (contains-char #\.))
 
 (defun command-name-to-string (command-name)
   "Convert COMMAND-NAME (keyword or string) to a lowercase string for wire encoding."
@@ -79,9 +112,11 @@
 (defun assemble-command-fields (name-str target args)
   "Build the ordered list of NUL-delimited field strings for a command payload.
    TARGET is prepended when non-NIL; ARGS are appended after NAME-STR."
-  (append (when target (list target))
-          (list name-str)
-          args))
+  (append
+   (when target
+     (list target))
+   (list name-str)
+   args))
 
 (defun encode-fields-to-buffer (field-octets)
   "Pack FIELD-OCTETS (a list of octet vectors) into a fresh buffer using
@@ -89,7 +124,8 @@
    +field-delimiter+ (NUL) byte; the total length equals the sum of all
    field lengths plus one delimiter per field."
   (let* ((field-count (length field-octets))
-         (delimiters  (make-list field-count :initial-element (vector +field-delimiter+))))
+         (delimiters
+          (make-list field-count :initial-element (vector +field-delimiter+))))
     (apply #'concatenate
            '(simple-array (unsigned-byte 8) (*))
            (mapcan #'list field-octets delimiters))))
@@ -100,11 +136,13 @@
    TARGET is an optional -t target string (NIL = current session).
    ARGS is an optional list of argument strings.
    Returns a fresh octet vector of NUL-delimited UTF-8 fields."
-  (let* ((name-str      (command-name-to-string command-name))
+  (let* ((name-str (command-name-to-string command-name))
          (field-strings (assemble-command-fields name-str target args))
-         (field-octets  (mapcar (lambda (s)
-                                  (cl-codec-kit:string-to-octets s :encoding :utf-8))
-                                field-strings)))
+         (field-octets
+          (mapcar
+           (lambda (s)
+             (cl-codec-kit:string-to-octets s :encoding :utf-8))
+           field-strings)))
     (encode-fields-to-buffer field-octets)))
 
 ;;; ── Why this decode is deliberately STRICT ──────────────────────────────────
@@ -134,7 +172,6 @@
 ;;; Both halves are pinned together in
 ;;; tests/unit/infrastructure/net/protocol-command-malformed-utf8-tests.lisp so
 ;;; neither the strictness nor the guard can be removed on its own.
-
 (defun split-on-nul-bytes (octets)
   "Split OCTETS on NUL bytes and return a list of decoded UTF-8 strings.
    Each NUL-terminated region becomes one string; bytes after the final NUL
@@ -146,8 +183,15 @@
   (loop with start = 0
         for i from 0 below (length octets)
         when (zerop (aref octets i))
-          collect (cl-codec-kit:octets-to-string octets :start start :end i :encoding :utf-8)
-          and do (setf start (1+ i))))
+          collect (cl-codec-kit:octets-to-string octets
+                                                 :start
+                                                 start
+                                                 :end
+                                                 i
+                                                 :encoding
+                                                 :utf-8)
+        and
+        do (setf start (1+ i))))
 
 (defun decode-command-payload (payload)
   "Decode a +msg-command+ PAYLOAD into (values command target args).
@@ -171,16 +215,16 @@
    fields (empty or NUL-free input)."
   (let ((fields (split-on-nul-bytes (to-octets payload))))
     (cond
-      ((null fields)
-       (values nil nil nil))
-      ((and (>= (length fields) 2)
-            (target-field-p (first fields)))
-       (values (or (find-symbol (string-upcase (second fields)) :keyword)
-                   (second fields))
-               (first fields)
-               (cddr fields)))
+      ((null fields) (values nil nil nil))
+      ((and (>= (length fields) 2) (target-field-p (first fields)))
+       (values
+        (or (find-symbol (string-upcase (second fields)) :keyword)
+            (second fields))
+        (first fields)
+        (cddr fields)))
       (t
-       (values (or (find-symbol (string-upcase (first fields)) :keyword)
-                   (first fields))
-               nil
-               (rest fields))))))
+       (values
+        (or (find-symbol (string-upcase (first fields)) :keyword)
+            (first fields))
+        nil
+        (rest fields))))))

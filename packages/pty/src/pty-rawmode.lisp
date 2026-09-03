@@ -15,7 +15,6 @@
 ;;; These thin wrappers keep nerimux/pty's exported names enable-raw-mode! /
 ;;; disable-raw-mode! stable so the call sites (input.lisp, fd 0 = stdin) do not
 ;;; churn.
-
 (defun enable-raw-mode! (fd)
   "Switch FD to raw (unbuffered, no-echo) mode via cl-tty-kit:enable-raw-mode,
    which remembers the previous settings keyed by FD."

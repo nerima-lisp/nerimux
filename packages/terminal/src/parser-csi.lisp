@@ -1,29 +1,59 @@
 (in-package #:nerimux/terminal/parser)
 
 ;;;; CSI continuation logic.
-
 ;;; Named constants for the magic hex literals used in make-csi-k.
 ;;; The ranges follow ECMA-48 § 5.4 table.
+(defconstant +csi-digit-low+
+  #x30
+  "Lowest decimal digit byte in a CSI sequence (ASCII '0').")
 
-(defconstant +csi-digit-low+   #x30 "Lowest decimal digit byte in a CSI sequence (ASCII '0').")
-(defconstant +csi-digit-high+  #x39 "Highest decimal digit byte in a CSI sequence (ASCII '9').")
-(defconstant +csi-semicolon+   #x3B "CSI parameter separator ';'.")
-(defconstant +csi-colon+       #x3A
+(defconstant +csi-digit-high+
+  #x39
+  "Highest decimal digit byte in a CSI sequence (ASCII '9').")
+
+(defconstant +csi-semicolon+
+  #x3B
+  "CSI parameter separator ';'.")
+
+(defconstant +csi-colon+
+  #x3A
   "CSI sub-parameter separator ':' (ISO 8613-6).  Introduces colon-delimited
    sub-parameters within one parameter, e.g. SGR 4:3 (undercurl) or
    38:2::R:G:B (true-colour).  A parameter carrying colon sub-parameters is
    collected into a list (sub0 sub1 …) so apply-sgr can apply colon-form
    extended colour, rather than dropping everything after the leading value.")
-(defconstant +csi-dec-marker+  #x3F "DEC private-mode marker '?'.")
-(defconstant +csi-sec-da+      #x3E "Secondary DA marker '>'.")
-(defconstant +csi-xtpoptitle-marker+ #x3C
+
+(defconstant +csi-dec-marker+
+  #x3F
+  "DEC private-mode marker '?'.")
+
+(defconstant +csi-sec-da+
+  #x3E
+  "Secondary DA marker '>'.")
+
+(defconstant +csi-xtpoptitle-marker+
+  #x3C
   "ECMA-48 private-parameter marker '<' (e.g. CSI < Ps t, XTPOPTITLE).")
-(defconstant +csi-tertiary-da-marker+ #x3D
+
+(defconstant +csi-tertiary-da-marker+
+  #x3D
   "ECMA-48 private-parameter marker '=' (e.g. CSI = c, tertiary DA / DA3).")
-(defconstant +csi-intermed-low+  #x20 "Lowest CSI intermediate byte (SPACE).")
-(defconstant +csi-intermed-high+ #x2F "Highest CSI intermediate byte.")
-(defconstant +csi-final-low+   #x40 "Lowest valid CSI final byte '@'.")
-(defconstant +csi-final-high+  #x7E "Highest valid CSI final byte '~'.")
+
+(defconstant +csi-intermed-low+
+  #x20
+  "Lowest CSI intermediate byte (SPACE).")
+
+(defconstant +csi-intermed-high+
+  #x2F
+  "Highest CSI intermediate byte.")
+
+(defconstant +csi-final-low+
+  #x40
+  "Lowest valid CSI final byte '@'.")
+
+(defconstant +csi-final-high+
+  #x7E
+  "Highest valid CSI final byte '~'.")
 
 (declaim (inline csi-final-byte-before-p csi-final-byte-p))
 
@@ -46,14 +76,21 @@
       (nreverse (cons (or param-accumulator 0) subparams))
       (or param-accumulator 0)))
 
-(defun %csi-dispatch-final-byte (screen byte intermed private params param-accumulator subparams)
+(defun %csi-dispatch-final-byte (screen byte
+                                        intermed
+                                        private
+                                        params
+                                        param-accumulator
+                                        subparams)
   "Flush the trailing parameter (if any), reverse the collected PARAMS into
    final CSI dispatch order, and call EXECUTE-CSI with the assembled sequence.
    Called by make-csi-k's continuation once a final byte (0x40-0x7E) closes
    the sequence.  Always returns #'GROUND-STATE."
-  (let ((all-params (nreverse (if (or param-accumulator subparams)
-                                   (cons (%finish-param param-accumulator subparams) params)
-                                   params))))
+  (let ((all-params
+         (nreverse
+          (if (or param-accumulator subparams)
+              (cons (%finish-param param-accumulator subparams) params)
+              params))))
     (execute-csi screen (code-char byte) intermed private all-params))
   #'ground-state)
 

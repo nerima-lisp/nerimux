@@ -8,24 +8,36 @@
 ;;;; filtered to the candidates rather than silently picking one -- attaching to
 ;;;; the wrong worktree looks exactly like attaching to the right one until the
 ;;;; user runs a command in it.
-
 (defun %attach-fixture (&key (specification "github.com/team/widget")
                              worktree-path)
   "An organization holding one repository, and a worktree when PATH is given."
-  (let* ((organization (nerimux/workspace-model:make-organization
-                        :id "org" :host "github.com" :name "team"))
-         (repository (nerimux/workspace-model:make-repository
-                      :id "repo"
-                      :organization organization
-                      :specification specification)))
-    (nerimux/workspace-model:organization-add-repository organization repository)
+  (let* ((organization
+          (nerimux/workspace-model:make-organization :id
+                                                     "org"
+                                                     :host
+                                                     "github.com"
+                                                     :name
+                                                     "team"))
+         (repository
+          (nerimux/workspace-model:make-repository :id
+                                                   "repo"
+                                                   :organization
+                                                   organization
+                                                   :specification
+                                                   specification)))
+    (nerimux/workspace-model:organization-add-repository organization
+                                                         repository)
     (when worktree-path
-      (nerimux/workspace-model:repository-add-worktree
-       repository
-       (nerimux/workspace-model:make-worktree :id "wt"
-                                    :repository repository
-                                    :path worktree-path
-                                    :branch "main")))
+      (nerimux/workspace-model:repository-add-worktree repository
+                                                       (nerimux/workspace-model:make-worktree
+                                                        :id
+                                                        "wt"
+                                                        :repository
+                                                        repository
+                                                        :path
+                                                        worktree-path
+                                                        :branch
+                                                        "main")))
     (values (list organization) repository)))
 
 (describe "attach-selector-suite"
@@ -68,6 +80,16 @@
                 )
         (expect (not (eq :picker (nerimux::client-conn-modal conn)))
                 ))))
+
+  (it "unknown-explicit-selector-reports-not-found"
+    (let* ((organizations (nth-value 0 (%attach-fixture)))
+           (selector "github.com/team/missing")
+           (conn (%make-test-conn)))
+      (let ((nerimux::*clients* (list conn)))
+        (setf (nerimux::client-conn-attach-target conn) selector)
+        (expect (null (nerimux::%client-attach-selection conn organizations)))
+        (expect (search "attach target not found: github.com/team/missing"
+                        (first (nerimux::client-conn-message-log conn)))))))
 
   ;; cwd auto-selection (kept out of R7.6's scope, unchanged by it) has its own
   ;; containment direction: the worktree's path must be a prefix of cwd, since
@@ -151,7 +173,6 @@
 ;;;; client straight to the worktree's detail pane only in that case -- an
 ;;;; :explicit selector or a :previous selection lands on the overview
 ;;;; instead, per spec.
-
 (describe "attach-selector-source-suite"
 
   (it "r7-2-source-is-explicit-for-an-explicit-selector-match"
@@ -257,4 +278,43 @@
           (setf (nerimux::client-conn-view conn) :repolist)
           (nerimux::%client-attach-target
            conn (list nil "/tmp/nerimux-cwd-fixture/repo/.worktrees/wt-no-session/src"))
+          (expect (eq :repolist (nerimux::client-conn-view conn)))))))
+
+  (it "r7-2-a-attach-with-no-match-focuses-the-active-pane"
+    (multiple-value-bind (session)
+        (make-single-pane-session)
+      (let* ((pane (first (nerimux/session:all-panes session)))
+             (conn (%make-test-conn))
+             (nerimux::*server-sessions* (list (cons "0" session)))
+             (nerimux/vcs::*workspace-organizations* nil))
+        (setf (nerimux::client-conn-view conn) :repolist)
+        (nerimux::%client-attach-target conn '(nil nil))
+        (expect (eq pane (nerimux::client-conn-focus conn)))
+        (expect (eq :repolist (nerimux::client-conn-view conn))))))
+
+  (it "r7-2-a-attach-resolves-and-merges-a-fresh-cwd-catalog"
+    (multiple-value-bind (organizations)
+        (%attach-fixture
+         :worktree-path "/tmp/nerimux-cwd-fixture/repo/.worktrees/wt-resolved")
+      (multiple-value-bind (session)
+          (make-single-pane-session)
+        (let ((conn (%make-test-conn))
+              (nerimux::*server-sessions* (list (cons "0" session)))
+              (nerimux/vcs::*workspace-organizations* nil)
+              (resolver
+                (make-mock-function
+                 (lambda (directory)
+                   (expect (string= "/tmp/nerimux-cwd-fixture/repo/.worktrees/wt-resolved/src"
+                                    directory))
+                   organizations))))
+          (setf (nerimux::client-conn-view conn) :repolist)
+          (with-mocked-functions
+              (((fdefinition 'nerimux/vcs:resolve-directory-organizations)
+                 resolver))
+            (nerimux::%client-attach-target
+             conn
+             (list nil
+                   "/tmp/nerimux-cwd-fixture/repo/.worktrees/wt-resolved/src")))
+          (expect (equal organizations
+                          (nerimux/vcs:workspace-organizations)))
           (expect (eq :repolist (nerimux::client-conn-view conn))))))))

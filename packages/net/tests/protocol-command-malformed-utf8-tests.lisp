@@ -35,7 +35,6 @@
 ;;;; a hostile or buggy peer can produce: #xFF, which is never a legal UTF-8
 ;;;; leading byte, and E3 81, the first two bytes of a three-byte sequence (the
 ;;;; U+3040 hiragana block) cut short by the field delimiter.
-
 (describe "protocol-command-malformed-utf8-suite"
 
   ;;; ── Command channel: strict, does not repair ────────────────────────────────

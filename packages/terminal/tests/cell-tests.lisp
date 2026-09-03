@@ -1,7 +1,7 @@
 (in-package #:nerimux/test/terminal)
 
 (declaim (notinline nerimux/terminal/types:clamp
-                   nerimux/terminal/types:char-width))
+                    nerimux/terminal/types:char-width))
 
 ;;;; Cell tests (src/terminal/cell.lisp).
 ;;;; Tests: attribute constants, cell struct, blank-cell, clamp,
@@ -9,9 +9,7 @@
 ;;;;        and wide-char layout helpers.
 ;;;; Display-facing charset, BCE, constants, and hyperlink tests live in
 ;;;; cell-display-tests.lisp.
-
 ;;; ── SUITE: attribute bit constants ───────────────────────────────────────────
-
 (describe "terminal-suite/attr-constants"
 
   ;; Each attribute constant occupies exactly the declared bit position in its byte.
@@ -42,7 +40,6 @@
       (expect (every #'(lambda (c) (= 1 (logcount c))) constants)))))
 
 ;;; ── SUITE: cell struct ───────────────────────────────────────────────────────
-
 (describe "terminal-suite/cell-struct"
 
   ;; make-cell with no arguments returns a space/default-color/no-attrs cell.
@@ -110,7 +107,6 @@
       (expect (not (eq c1 c2))))))
 
 ;;; ── %make-blank-cells ────────────────────────────────────────────────────────
-
 (describe "terminal-suite/make-blank-cells-suite"
 
   ;; %make-blank-cells returns a simple-vector of the requested length.
@@ -137,7 +133,6 @@
       (expect (= 0 (length v))))))
 
 ;;; ── clamp ────────────────────────────────────────────────────────────────────
-
 (describe "terminal-suite/clamp-suite"
 
   ;; Table-driven clamp tests: (v lo hi expected description)
@@ -164,7 +159,6 @@
         (expect (= expected (nerimux/terminal/types:clamp v lo hi)))))))
 
 ;;; ── safe-code-char ───────────────────────────────────────────────────────────
-
 (describe "terminal-suite/safe-code-char-suite"
 
   ;; safe-code-char returns the character for a valid code point.
@@ -239,7 +233,6 @@
                 :to-be-truthy)))))
 
 ;;; ── SUITE: char-width / double-width ─────────────────────────────────────────
-
 (describe "terminal-suite/double-width"
 
   ;; char-width returns 2 for wide CJK/kana and 1 for ASCII and box drawing.
@@ -346,7 +339,6 @@
       (check-cursor s 2 1))))
 
 ;;; ── SUITE: combining characters ──────────────────────────────────────────────
-
 (describe "terminal-suite/cell-combining-chars"
 
   ;; Code points in the Combining Diacritical Marks block are combining.

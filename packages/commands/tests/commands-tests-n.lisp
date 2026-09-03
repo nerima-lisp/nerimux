@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/commands)
 
 ;;;; Commands tests — part XIV: copy-mode-begin-selection multi-row, yank, cancel-selection.
-
 (describe "commands-suite"
 
   ;;; ── copy-mode-begin-selection and copy-mode-yank ────────────────────────────

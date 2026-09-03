@@ -1,7 +1,7 @@
 (defpackage #:nerimux/version
-  (:use #:cl)
-  (:documentation
-   "FOUNDATION: the compiled-in release version, kept in a package of its own so
+            (:use #:cl)
+            (:documentation
+             "FOUNDATION: the compiled-in release version, kept in a package of its own so
     every reporter can reach it without dragging in a heavier dependency.  Read by
     -V, by the cl-cli option spec, by the XTVERSION (DA3) terminal reply, and by
     the #{version} format variable.
@@ -12,7 +12,7 @@
     APPLICATION (config-directives-set).  Under the old label those were upward
     references, and no-source-file-references-a-higher-layer-package found all
     three the first time it ran.  The label was wrong, not the callers.")
-  (:export #:version-string))
+            (:export #:version-string))
 
 (in-package #:nerimux/version)
 

@@ -5,8 +5,8 @@
 ;;; session-child-environment merges 5 sources in order.  The two inner merge
 ;;; steps (%apply-session-overlay and %apply-extra-env) are extracted into named
 ;;; helpers so each concern is independently testable.
-
-(defvar *suppress-update-environment* nil
+(defvar *suppress-update-environment*
+  nil
   "When non-NIL, session-child-environment SKIPS applying the update-environment
    variables (merge step 2).  Bound to T around new-session -E so the created
    session — including its initial pane — does not pick up update-environment.")
@@ -17,9 +17,10 @@
    hidden names (hidden variables are not passed to new processes).
    When SESSION is NIL this is a no-op (bootstrap / geometry-only callers)."
   (when session
-    (maphash (lambda (name value)
-               (setf (gethash name table) value))
-             (session-environment session))
+    (maphash
+     (lambda (name value)
+       (setf (gethash name table) value))
+     (session-environment session))
     (dolist (name (session-environment-unsets session))
       (remhash name table))
     (dolist (name (session-environment-hidden session))
@@ -29,9 +30,7 @@
   "Merge EXTRA-ENV (an alist of (NAME . VALUE) conses) into TABLE.
    Entries that are not proper (string . string) conses are silently skipped."
   (dolist (pair extra-env)
-    (when (and (consp pair)
-               (stringp (car pair))
-               (stringp (cdr pair)))
+    (when (and (consp pair) (stringp (car pair)) (stringp (cdr pair)))
       (setf (gethash (car pair) table) (cdr pair)))))
 
 (defun session-child-environment (session &key term extra-env)

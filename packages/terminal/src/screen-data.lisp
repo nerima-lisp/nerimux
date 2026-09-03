@@ -4,7 +4,6 @@
 ;;;;
 ;;;; This file contains the declarative screen state and its slot defaults.
 ;;;; Construction and grid operations live in screen.lisp.
-
 (defstruct (screen (:constructor %make-screen))
   "Virtual terminal screen: cursor, cell grid, and CPS parser continuation."
   ;; Geometry — defaults match the VT100 standard 80×24 terminal.

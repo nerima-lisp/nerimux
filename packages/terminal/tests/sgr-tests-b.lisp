@@ -3,12 +3,10 @@
 ;;;; sgr tests — part B: direct-action-sgr suite, sgr-extended (double-underline,
 ;;;; overline, ul-color), extra SGR codes, direct-dispatch helpers, truecolor edge cases,
 ;;;; define-sgr-rules macro, consume-256-color-param.
-
 ;;; ── SUITE: direct-action-sgr ─────────────────────────────────────────────────
 ;;;
 ;;; These tests call apply-sgr directly rather than through screen-process-bytes,
 ;;; targeting edge cases that the CSI/parser path may not hit explicitly.
-
 (describe "terminal-suite/direct-action-sgr"
 
   ;; apply-sgr called directly updates the screen's current SGR state.
@@ -66,7 +64,6 @@
       (expect (logbitp 1 (nerimux/terminal/types:screen-cur-attrs s)) :to-be-falsy))))
 
 ;;; ── SGR 21 double-underline ───────────────────────────────────────────────────
-
 (describe "terminal-suite/sgr-extended"
 
   ;; SGR 21 sets the +attr2-double-underline+ bit in cur-attrs2.
@@ -114,7 +111,6 @@
 ;;;   Bright background 100-107
 ;;;   %dispatch-sgr-code direct call
 ;;;   attr2-on / attr2-off direct calls
-
 (describe "terminal-suite/sgr"
 
   ;; SGR 30 sets foreground to index 0 (black); SGR 40 sets background to index 0 (black).
@@ -166,7 +162,6 @@
                (expect (= expected-bg (bg-at s 0 0)))))))
 
 ;;; ── direct-action-sgr additional ─────────────────────────────────────────────
-
 (describe "terminal-suite/direct-action-sgr"
 
   ;; %dispatch-sgr-code sets cur-fg or cur-bg directly by SGR code.
@@ -203,7 +198,6 @@
                               nerimux/terminal/types:+attr2-double-underline+)))))))
 
 ;;; ── SGR truecolor edge cases ─────────────────────────────────────────────────
-
 (describe "terminal-suite/sgr-extended"
 
   ;; SGR 58;2;R;G;B sets cur-ul-color to the true-color encoding.
@@ -217,7 +211,6 @@
 ;;;
 ;;; Audit finding: define-sgr-rules was not tested as a macro in isolation.
 ;;; The generated %dispatch-sgr-code now also carries a docstring; verify it.
-
 (describe "terminal-suite/direct-action-sgr"
 
   ;; define-sgr-rules is a defined macro in the sgr package.

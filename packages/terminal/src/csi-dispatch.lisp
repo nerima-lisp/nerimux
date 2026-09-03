@@ -5,7 +5,6 @@
 ;;;; The terminal domain keeps CSI decoding declarative: each rule is a fact
 ;;;; whose predicate selects a protocol action.  The macro expands that table
 ;;;; into the single EXECUTE-CSI entry point consumed by the parser.
-
 (defmacro define-csi-rules (&rest rules)
   "Each RULE is (condition-form &body forms).
    Available bindings in every rule body:
@@ -31,16 +30,18 @@
      (declare (type screen screen)
               (type character final)
               (ignorable intermed private))
-     (let* ((p1  (%csi-leading-int (first  params)))
-            (p2  (%csi-leading-int (second params)))
+     (let* ((p1 (%csi-leading-int (first params)))
+            (p2 (%csi-leading-int (second params)))
             (p1* (max 1 p1))
             (p2* (max 1 p2)))
-       (declare (type fixnum p1 p2 p1* p2*) (ignorable p1 p2 p1* p2*))
+       (declare (type fixnum p1 p2 p1* p2*)
+                (ignorable p1 p2 p1* p2*))
        (cond
-         ,@(mapcar (lambda (rule)
-                     (destructuring-bind (condition &rest body) rule
-                       `(,condition ,@body)))
-                   rules)
+         ,@(mapcar
+            (lambda (rule)
+              (destructuring-bind (condition &rest body) rule
+                `(,condition ,@body)))
+            rules)
          (t (values))))))
 
 (defmacro define-csi-rule-set (name &body rules)
@@ -53,12 +54,12 @@ the data without evaluating rule predicates outside EXECUTE-CSI."
 (defmacro define-composed-csi-rules (&rest rule-set-names)
   "Define EXECUTE-CSI from RULE-SET-NAMES in the given order."
   (let ((rules
-          (loop for name in rule-set-names
-                for expansion = (macroexpand-1 (list name))
-                unless (and (consp expansion)
-                            (eq (first expansion) 'quote)
-                            (consp (rest expansion))
-                            (null (cddr expansion)))
-                  do (error "~S is not a CSI rule-set macro" name)
-                append (second expansion))))
+         (loop for name in rule-set-names
+               for expansion = (macroexpand-1 (list name))
+               unless (and (consp expansion)
+                           (eq (first expansion) 'quote)
+                           (consp (rest expansion))
+                           (null (cddr expansion)))
+                 do (error "~S is not a CSI rule-set macro" name)
+               append (second expansion))))
     `(define-csi-rules ,@rules)))

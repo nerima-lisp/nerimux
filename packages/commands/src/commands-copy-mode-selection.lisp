@@ -4,19 +4,18 @@
 ;;;
 ;;; This file holds the pure data-extraction layer for copy-mode selection:
 ;;; canonical row/column bounds, virtual-row lookup, and text extraction.
-
 ;;; %selection-bounds extracts the canonical (start-row end-row start-col end-col)
 ;;; rectangle from the mark and cursor positions - independent of which end the
 ;;; user anchored first.  %selection-text builds the string from that rectangle.
 ;;; Both are private (percent-prefixed) and independently testable.
-
 (defun %selection-col-range (mark-vrow mark-col cur-vrow cursor-col)
   "Return (values start-col end-col) for a selection spanning MARK-VROW/MARK-COL
    to CUR-VROW/CURSOR-COL.  When mark is topmost, mark-col is start; when cursor
    is topmost, cursor-col is start; when on the same row, min/max applies."
-  (cond ((< mark-vrow cur-vrow) (values mark-col cursor-col))
-        ((> mark-vrow cur-vrow) (values cursor-col mark-col))
-        (t (values (min mark-col cursor-col) (max mark-col cursor-col)))))
+  (cond
+    ((< mark-vrow cur-vrow) (values mark-col cursor-col))
+    ((> mark-vrow cur-vrow) (values cursor-col mark-col))
+    (t (values (min mark-col cursor-col) (max mark-col cursor-col)))))
 
 (defun %copy-mode-cursor-vrow (screen)
   "Return the current copy-mode cursor as a virtual row.
@@ -25,7 +24,9 @@
    copy-mode has initialized the cursor."
   (let ((cursor (screen-copy-cursor screen)))
     (+ (length (screen-scrollback screen))
-       (if cursor (car cursor) 0)
+       (if cursor
+           (car cursor)
+           0)
        (- (screen-copy-offset screen)))))
 
 (defun %selection-bounds (screen)
@@ -60,10 +61,9 @@
    virtual-row reader or a viewport-row reader."
   (if (>= from-col to-col)
       ""
-      (%extract-chars
-       (- to-col from-col)
-       (lambda (i)
-         (funcall char-at (+ from-col i))))))
+      (%extract-chars (- to-col from-col)
+                      (lambda (i)
+                        (funcall char-at (+ from-col i))))))
 
 (defun %extract-vrow-chars (screen vrow from-col to-col)
   "Return a string of characters from SCREEN at virtual row VROW.

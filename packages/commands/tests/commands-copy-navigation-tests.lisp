@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/commands)
 
 ;;;; copy-mode search-next/search-prev/search-forward/search-backward: outside-copy-mode guards
-
 (describe "commands-suite"
 
   ;;; ── copy-mode-search-next / copy-mode-search-prev: outside copy mode ────────

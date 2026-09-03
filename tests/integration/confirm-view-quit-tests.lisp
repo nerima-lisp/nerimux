@@ -4,7 +4,6 @@
 ;;;; stopping the server; R8.3: detaching the last client does not stop it.
 ;;;; Driven one byte per %handle-multi-key-message call (§6), through the
 ;;;; real C-q prefix dispatch.
-
 (describe "confirm-view-quit-suite"
 
   ;; R8.2: C-q Q opens the confirm view, titled and carrying the live-pane

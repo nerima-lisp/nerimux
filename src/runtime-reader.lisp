@@ -9,19 +9,10 @@
 ;;;;   * One reader thread per pane: blocking read(PTY fd) -> pane-feed ->
 ;;;;     screen update -> sets *dirty* T.
 ;;;;   * Main thread: select(stdin, 50 ms) -> key dispatch -> render when dirty.
-
 ;;; -- PTY reader thread -------------------------------------------------------
 ;;;
 ;;; CPS state machine: each state function takes (pane) and returns the next
 ;;; state function (or NIL to stop).
-
-(defvar *reader-scratch-buffer* nil
-  "Per-reader-thread scratch octet buffer reused by reader-reading-state to read
-   one PTY chunk without allocating a fresh +pty-buf-size+ buffer on every read.
-   Bound (thread-locally) around each reader loop in %pane-reader-loop, so each
-   pane's reader thread owns a distinct buffer.  pty-read-blocking-into returns a
-   fresh exact-size copy of the bytes read, so handing that copy downstream is
-   safe even though the scratch buffer is overwritten by the next read.")
 
 (defun %pane-retired-p (pane)
   "True once PANE's fd has been cleared, which is this loop's ONLY per-pane
@@ -130,13 +121,17 @@
 
 (defun start-reader-thread (pane)
   "Spawn a thread running %pane-reader-loop for PANE."
-  (make-thread (lambda () (%pane-reader-loop pane))
-               :name (format nil "pty-reader-~D" (pane-id pane))))
+  (make-thread
+   (lambda ()
+     (%pane-reader-loop pane))
+   :name
+   (format nil "pty-reader-~D" (pane-id pane))))
 
 (defun stop-reader-threads (threads)
   "Signal shutdown and join each thread in THREADS with a bounded timeout."
   (setf *running* nil)
   (dolist (thread threads)
-    (handler-case
-        (%join-thread-with-timeout thread +reader-thread-join-timeout+)
-      (sb-thread:join-thread-error () nil))))
+    (handler-case (%join-thread-with-timeout thread
+                                             +reader-thread-join-timeout+)
+      (sb-thread:join-thread-error ()
+        nil))))

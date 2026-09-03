@@ -6,7 +6,7 @@
 (in-package #:asdf-user)
 
 (defsystem "nerimux-ports"
-  :description "DOMAIN port abstractions for nerimux: the boundary infrastructure adapters install into"
+  :description "Direct POSIX and PTY boundary operations used by nerimux"
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
@@ -17,9 +17,7 @@
   :depends-on ()
   :pathname "src"
   :serial t
-  :components ((:file "package")
-               (:file "posix-port")
-               (:file "pty-port"))
+  :components ((:file "package") (:file "posix-port") (:file "pty-port"))
   :in-order-to ((test-op (test-op "nerimux-ports/test"))))
 
 (defsystem "nerimux-ports/test"

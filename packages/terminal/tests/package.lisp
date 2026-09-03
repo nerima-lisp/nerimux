@@ -1,5 +1,4 @@
 ;;;; Test package for nerimux-terminal.
-
 (defpackage #:nerimux/test/terminal
   ;; The test framework is cl-weave, used natively: every file registers its own
   ;; top-level (describe "name" (it "case" ...) ...) block.

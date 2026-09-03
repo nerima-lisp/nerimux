@@ -109,7 +109,7 @@ The layering rule is:
 - `application` holds use cases over the domain model: `packages/commands/` (copy
   mode, the command-line tokenizer, and pane PTY teardown) and `packages/picker/` (the
   global picker item model).
-- `infrastructure` provides the real PTY/socket/VCS adapters and binds the
+- `infrastructure` provides the concrete PTY/socket/VCS integrations and binds the
   domain's port variables to them.
 - `presentation` turns model state into escape codes and, for the workspace
   UI, into `cl-tui-kit` surfaces.
@@ -169,6 +169,12 @@ charset remapping, wrapping, insertion, and cursor movement.
 SGR follows the same dependency direction: `sgr-definitions.lisp` owns the
 attribute rule table, `sgr-colors.lisp` decodes extended colours, `sgr.lisp`
 coordinates application, and `sgr-report.lisp` encodes status reports.
+
+Tests use `cl-weave` directly: suites, examples, skips, and reporters are
+registered through its native API. The production boundary does not wrap the
+library in an adapter. Repeated dispatch and declarative validation are
+expressed by macros, while runtime values remain in the data modules and the
+expanded functions perform the side effects.
 
 ## Source layout
 

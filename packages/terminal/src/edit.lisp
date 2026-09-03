@@ -4,7 +4,6 @@
 ;;;;
 ;;;; Loads after scroll.lisp (needs %copy-row, %clear-row) and erase.lisp.
 ;;;; These implement the DCH/ICH/IL/DL VT102 operations.
-
 ;;; ── Prolog-style char-edit dispatch macro ──────────────────────────────────
 ;;;
 ;;; delete-chars and insert-chars share the same two-loop skeleton:
@@ -19,7 +18,6 @@
 ;;;                                   blank_fill_loop(max(cx, w-n) .. w-1).
 ;;;   char_edit(insert, Screen, N) :- shift_loop(w-1 downto cx+n, src=x-n),
 ;;;                                   blank_fill_loop(cx .. min(w-1, cx+n-1)).
-
 (defmacro define-char-edit-rules (&rest specs)
   "Generate character-edit functions from a Prolog-like two-loop rule table.
    Each SPEC is (name docstring shift-loop-form blank-loop-form).
@@ -33,7 +31,7 @@
                (declare (ignorable n))
                (let ((cx (screen-cursor-x screen))
                      (cy (screen-cursor-y screen))
-                     (w  (screen-width    screen)))
+                     (w (screen-width screen)))
                  (declare (ignorable cx cy w))
                  ,shift-loop
                  ,blank-loop
@@ -41,23 +39,20 @@
         specs)))
 
 (define-char-edit-rules
-  (delete-chars
-   "DCH — delete N characters at the cursor, shifting remaining chars left.
+ (delete-chars
+  "DCH — delete N characters at the cursor, shifting remaining chars left.
     The vacated cells at the end of the line are filled with blanks."
-   (loop for x from cx to (- w n 1)
-         do (setf (screen-cell screen x cy)
-                  (screen-cell screen (+ x n) cy)))
-   (loop for x from (max cx (- w n)) to (1- w)
-         do (setf (screen-cell screen x cy) (%erase-cell screen))))
-
-  (insert-chars
-   "ICH — insert N blank characters at the cursor, pushing existing chars right.
+  (loop for x from cx to (- w n 1)
+        do (setf (screen-cell screen x cy) (screen-cell screen (+ x n) cy)))
+  (loop for x from (max cx (- w n)) to (1- w)
+        do (setf (screen-cell screen x cy) (%erase-cell screen))))
+ (insert-chars
+  "ICH — insert N blank characters at the cursor, pushing existing chars right.
     Characters shifted past the right margin are lost."
-   (loop for x from (1- w) downto (+ cx n)
-         do (setf (screen-cell screen x cy)
-                  (screen-cell screen (- x n) cy)))
-   (loop for x from cx to (min (1- w) (+ cx n -1))
-         do (setf (screen-cell screen x cy) (%erase-cell screen)))))
+  (loop for x from (1- w) downto (+ cx n)
+        do (setf (screen-cell screen x cy) (screen-cell screen (- x n) cy)))
+  (loop for x from cx to (min (1- w) (+ cx n -1))
+        do (setf (screen-cell screen x cy) (%erase-cell screen)))))
 
 ;;; ── Prolog-style line-edit dispatch macro ──────────────────────────────────
 ;;;
@@ -76,7 +71,6 @@
 ;;;     count = min(N, bottom - top + 1),
 ;;;     shift_loop(top .. bottom-count, src=row+count),
 ;;;     blank_fill_loop(bottom-count+1 .. bottom).
-
 (defmacro define-line-edit-rules (&rest specs)
   "Generate line-edit functions from a Prolog-like guard+clamp+two-loop table.
    Each SPEC is (name docstring shift-loop-form blank-loop-form).
@@ -100,18 +94,17 @@
         specs)))
 
 (define-line-edit-rules
-  (insert-lines
-   "IL — insert N blank lines at the cursor row, pushing lower lines down within
+ (insert-lines
+  "IL — insert N blank lines at the cursor row, pushing lower lines down within
     [cursor-row, scroll-bottom].  Lines pushed past the bottom are discarded."
-   (loop for row from bottom downto (+ top count)
-         do (%copy-row screen row (- row count)))
-   (loop for row from top to (+ top count -1)
-         do (%clear-row screen row)))
-
-  (delete-lines
-   "DL — delete N lines at the cursor row, pulling lower lines up within
+  (loop for row from bottom downto (+ top count)
+        do (%copy-row screen row (- row count)))
+  (loop for row from top to (+ top count -1)
+        do (%clear-row screen row)))
+ (delete-lines
+  "DL — delete N lines at the cursor row, pulling lower lines up within
     [cursor-row, scroll-bottom].  Lines exposed at the bottom become blank."
-   (loop for row from top to (- bottom count)
-         do (%copy-row screen row (+ row count)))
-   (loop for row from (- bottom count -1) to bottom
-         do (%clear-row screen row))))
+  (loop for row from top to (- bottom count)
+        do (%copy-row screen row (+ row count)))
+  (loop for row from (- bottom count -1) to bottom
+        do (%clear-row screen row))))

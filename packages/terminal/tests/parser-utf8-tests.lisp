@@ -2,9 +2,7 @@
 
 ;;;; Parser tests (src/terminal/parser.lisp).
 ;;;; UTF-8 coverage.
-
 ;;; ── SUITE: utf8 ─────────────────────────────────────────────────────────────
-
 (describe "terminal-suite/utf8"
 
   (it "utf8-byte-classification-and-lead-decoding"
@@ -116,29 +114,35 @@
       (expect (char= (code-char #xFFFD) (char-at s 0 0))))))
 
 (describe "terminal-suite/cell-primitives"
-  (it "blank-cell-returns-an-independent-default-cell"
-    (let ((first (nerimux/terminal/types:blank-cell))
-          (second (nerimux/terminal/types:blank-cell)))
-      (setf (nerimux/terminal/types:cell-char first) #\X)
-      (expect (char= #\Space (nerimux/terminal/types:cell-char second)))))
-
-  (it "clamp-bounds-values-at-either-end"
-    (expect (= 0 (nerimux/terminal/types:clamp -1 0 10)))
-    (expect (= 5 (nerimux/terminal/types:clamp 5 0 10)))
-    (expect (= 10 (nerimux/terminal/types:clamp 11 0 10))))
-
-  (it "safe-code-char-replaces-invalid-code-points"
-    (expect (char= #\A (nerimux/terminal/types:safe-code-char (char-code #\A))))
-    (expect (char= (code-char #xFFFD) (nerimux/terminal/types:safe-code-char #xD800)))
-    (expect (char= (code-char #xFFFD) (nerimux/terminal/types:safe-code-char char-code-limit))))
-
-  (it "surrogate-code-point-p-covers-range-boundaries"
-    (expect (not (nerimux/terminal/types::surrogate-code-point-p #xD7FF)))
-    (expect (nerimux/terminal/types::surrogate-code-point-p #xD800))
-    (expect (nerimux/terminal/types::surrogate-code-point-p #xDFFF))
-    (expect (not (nerimux/terminal/types::surrogate-code-point-p #xE000))))
-
-  (it "char-width-delegates-unicode-width"
-    (expect (= 0 (nerimux/terminal/types:char-width (code-char #x0301))))
-    (expect (= 2 (nerimux/terminal/types:char-width #\あ)))
-    (expect (= 1 (nerimux/terminal/types:char-width #\A)))))
+          (it "blank-cell-returns-an-independent-default-cell"
+              (let ((first (nerimux/terminal/types:blank-cell))
+                    (second (nerimux/terminal/types:blank-cell)))
+                (setf (nerimux/terminal/types:cell-char first) #\X)
+                (expect
+                 (char= #\Space (nerimux/terminal/types:cell-char second)))))
+          (it "clamp-bounds-values-at-either-end"
+              (expect (= 0 (nerimux/terminal/types:clamp -1 0 10)))
+              (expect (= 5 (nerimux/terminal/types:clamp 5 0 10)))
+              (expect (= 10 (nerimux/terminal/types:clamp 11 0 10))))
+          (it "safe-code-char-replaces-invalid-code-points"
+              (expect
+               (char= #\A
+                      (nerimux/terminal/types:safe-code-char (char-code #\A))))
+              (expect
+               (char= (code-char #xFFFD)
+                      (nerimux/terminal/types:safe-code-char #xD800)))
+              (expect
+               (char= (code-char #xFFFD)
+                      (nerimux/terminal/types:safe-code-char char-code-limit))))
+          (it "surrogate-code-point-p-covers-range-boundaries"
+              (expect
+               (not (nerimux/terminal/types::surrogate-code-point-p #xD7FF)))
+              (expect (nerimux/terminal/types::surrogate-code-point-p #xD800))
+              (expect (nerimux/terminal/types::surrogate-code-point-p #xDFFF))
+              (expect
+               (not (nerimux/terminal/types::surrogate-code-point-p #xE000))))
+          (it "char-width-delegates-unicode-width"
+              (expect
+               (= 0 (nerimux/terminal/types:char-width (code-char #x0301))))
+              (expect (= 2 (nerimux/terminal/types:char-width #\あ)))
+              (expect (= 1 (nerimux/terminal/types:char-width #\A)))))

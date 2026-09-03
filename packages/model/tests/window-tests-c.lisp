@@ -5,7 +5,6 @@
 ;;;;  dispatch-layer %format-window-list / %maybe-rename-window-from-title, both
 ;;;;  removed with application/dispatch and presentation/events; no domain-level
 ;;;;  replacement exists, so those cases were deleted rather than rewritten.)
-
 (describe "model-suite"
 
   ;; ── window-remove-pane (no PTY) ──────────────────────────────────────────────

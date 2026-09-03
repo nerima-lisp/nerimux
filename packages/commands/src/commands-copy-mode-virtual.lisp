@@ -1,9 +1,7 @@
 (in-package #:nerimux/commands)
 
 ;;;; Copy-mode virtual-buffer helpers.
-
 ;;; ── Virtual buffer helpers ───────────────────────────────────────────────────
-
 (defun %copy-mode-total-rows (screen)
   "Total row count in the virtual buffer (scrollback + live grid)."
   (+ (length (screen-scrollback screen)) (screen-height screen)))
@@ -14,12 +12,11 @@
   (%extract-vrow-chars screen vrow 0 (screen-width screen)))
 
 ;;; %copy-mode-cursor-vrow (canonical) is defined in commands-copy-mode-selection.lisp.
-
 (defun %copy-mode-set-virtual-row (screen vrow col)
   "Position the copy-mode cursor at (VROW, COL), adjusting offset so VROW is visible."
-  (let* ((sb-n   (length (screen-scrollback screen)))
+  (let* ((sb-n (length (screen-scrollback screen)))
          (offset (max 0 (min sb-n (- sb-n vrow))))
-         (crow   (+ vrow offset (- sb-n))))
+         (crow (+ vrow offset (- sb-n))))
     (setf (screen-copy-offset screen) offset
-          (screen-copy-cursor screen)  (cons crow col)
+          (screen-copy-cursor screen) (cons crow col)
           (screen-dirty-p screen) t)))

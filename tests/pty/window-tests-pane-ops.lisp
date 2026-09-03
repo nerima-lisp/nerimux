@@ -4,7 +4,6 @@
 ;;;;
 ;;;; Moved wholesale from tests/unit/domain/model/window-tests-pane-ops.lisp
 ;;;; (R9.2): its one case spawns a real PTY-backed session via WITH-SESSION.
-
 (describe "model-suite"
 
   ;;; ── Splitting and selecting panes ─────────────────────────────────────────

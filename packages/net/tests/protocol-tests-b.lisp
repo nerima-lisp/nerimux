@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/net)
 
 ;;;; Protocol field and text codec tests.
-
 (describe "protocol-suite"
 
   ;; ── read-u32 dedicated test ─────────────────────────────────────────────────

@@ -2,9 +2,7 @@
 
 ;;;; CSI dispatch tests (src/terminal/csi.lisp).
 ;;;; Tests: cursor-movement suite.
-
 ;;; ── SUITE: cursor-movement ──────────────────────────────────────────────────
-
 (describe "terminal-suite/cursor-movement"
 
   ;; CUP ESC[3;5H positions cursor at (col=4, row=2) in 0-based terms.
@@ -184,7 +182,6 @@
       (check-cursor s 0 1))))
 
 ;;; ── SUITE: decscusr ──────────────────────────────────────────────────────────
-
 (describe "terminal-suite/decscusr"
 
   ;;; The three DECSCUSR shapes share the same test shape (feed + check), so we
@@ -203,7 +200,6 @@
       (expect (= 1 (nerimux/terminal/types:screen-cursor-shape s))))))
 
 ;;; ── SUITE: cbt-cht ───────────────────────────────────────────────────────────
-
 (describe "terminal-suite/cbt-cht"
 
   ;; CSI 1 Z from column 12 moves cursor backward to column 8.
@@ -242,7 +238,6 @@
       (expect (<= (screen-cursor-x s) 9)))))
 
 ;;; ── SUITE: su-sd ─────────────────────────────────────────────────────────────
-
 (describe "terminal-suite/su-sd"
 
   ;; CSI 1 S scrolls the screen up by 1: row 0 moves to scrollback, row 1 becomes row 0.
@@ -287,7 +282,6 @@
 ;;; and :fixed.  (Mouse-mode reporting (1000/1002/1003/1006) carries no state
 ;;; anymore and falls into the generic "unrecognised" path covered in
 ;;; csi-tests-d.lisp.)
-
 (describe "terminal-suite/decrqm"
 
   ;; Accessor-based modes (e.g. mode 1004 focus-events) report 1 when the flag is

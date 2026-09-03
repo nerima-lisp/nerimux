@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/commands)
 
 ;;;; copy-mode WORD motion and cursor movement (src/commands.lisp) — part II
-
 (describe "commands-suite"
 
   ;;; ── copy-mode-move-cursor ────────────────────────────────────────────────────

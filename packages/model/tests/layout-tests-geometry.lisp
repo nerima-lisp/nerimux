@@ -1,15 +1,12 @@
 (in-package #:nerimux/test/model)
 
 ;;;; Layout tree geometry tests -- layout-tree-suite core geometry and tree ops.
-
 ;;; ────────────────────────────────────────────────────────────────────────────
 ;;; SUITE: layout-tree-suite (binary split-tree layout)
 ;;; ────────────────────────────────────────────────────────────────────────────
-
 ;;; ── Helpers ──────────────────────────────────────────────────────────────
 ;;; tl-pane, tl-leaf, tl-window are defined in tests/helpers-layout-fixtures.lisp and available
 ;;; to all test files in the suite -- no local redefinitions needed here.
-
 (describe "layout-tree-suite"
 
   ;;; ── layout-leaves / find helpers ─────────────────────────────────────────

@@ -2,10 +2,9 @@
 
 ;;;; Viewport projection: map a (col, row) viewport position to the cell shown for
 ;;;; the current copy-mode scroll state, reading from scrollback or the live grid.
-
 ;;; ── Display projection (copy-mode scrollback) ──────────────────────────────
-
-(defparameter *display-blank-cell* (blank-cell)
+(defparameter *display-blank-cell*
+  (blank-cell)
   "Shared immutable blank cell for out-of-range display lookups.
    Safe to share because cells are never mutated in place.")
 
@@ -32,8 +31,12 @@
    is shifted down by N rows.  VIEWPORT adds a client-local scroll offset
    without mutating the shared screen's copy-mode state.  Out-of-range reads
    return *display-blank-cell*."
-  (let ((offset (+ (if (screen-copy-mode-p screen) (screen-copy-offset screen) 0)
-                  (max 0 (or viewport 0)))))
+  (let ((offset
+         (+
+          (if (screen-copy-mode-p screen)
+              (screen-copy-offset screen)
+              0)
+          (max 0 (or viewport 0)))))
     (if (< row offset)
         (%scrollback-cell screen col (- offset row))
-        (%live-grid-cell  screen col (- row offset)))))
+        (%live-grid-cell screen col (- row offset)))))

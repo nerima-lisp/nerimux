@@ -10,15 +10,16 @@
 ;;;; VCS-REPOSITORY %MAKE-VCS-REPOSITORY builds type-errors here before any
 ;;;; git runs, and a broad HANDLER-CASE around that call would turn it into
 ;;;; a permanent, silent NIL rather than a visible failure.
-
-(defvar *write-operation-output-max-characters* 100000
+(defvar *write-operation-output-max-characters*
+  100000
   "Cap on a write operation's captured stdout/stderr (F3, CWE-400), passed
 as VCS-KIT's :MAX-OUTPUT-CHARACTERS execution option -- same role as
 *WORKTREE-LOG-MAX-OUTPUT-CHARACTERS* in vcs-inspect.lisp, needed here
 because `git push`/`git pull` echo the remote's own, equally untrusted,
 progress and error text.")
 
-(defvar *write-operation-output-max-length* 4000
+(defvar *write-operation-output-max-length*
+  4000
   "Maximum characters of a write operation's OUTPUT-STRING kept once it
 crosses the D1 boundary (F3b). Ordinary commit/push/merge output is a
 handful of lines; this only guards against a pathological hook or a merge
@@ -62,11 +63,12 @@ D1 boundary (F5/F3b). RESULT is NIL for a condition that never reached a
 process (e.g. a launch failure), in which case this returns \"\"."
   (let* ((stdout (or (and result (vcs-kit:process-result-stdout result)) ""))
          (stderr (or (and result (vcs-kit:process-result-stderr result)) ""))
-         (combined (cond
-                     ((and (plusp (length stdout)) (plusp (length stderr)))
-                      (concatenate 'string stdout (string #\Newline) stderr))
-                     ((plusp (length stderr)) stderr)
-                     (t stdout))))
+         (combined
+          (cond
+            ((and (plusp (length stdout)) (plusp (length stderr)))
+             (concatenate 'string stdout (string #\Newline) stderr))
+            ((plusp (length stderr)) stderr)
+            (t stdout))))
     (%truncate-write-output (%strip-control-characters combined))))
 
 (defun git-write-operation (repository operation &rest arguments)
@@ -85,14 +87,14 @@ trailing options plist -- is a programmer error, not a git failure, and is
 left to propagate."
   (let ((function (%write-operation-function operation))
         (handle (%repository-checked-handle repository)))
-    (handler-case
-        (let ((result
-                (apply function handle
-                       (append arguments
-                               (list :execution-options
-                                     (list :max-output-characters
-                                           *write-operation-output-max-characters*))))))
-          (values t (%write-operation-result-text result)))
+    (handler-case (let ((result
+                         (apply function
+                                handle
+                                (append arguments
+                                        (list :execution-options
+                                              (list :max-output-characters
+                                                    *write-operation-output-max-characters*))))))
+                    (values t (%write-operation-result-text result)))
       (vcs-kit:vcs-error (condition)
         (values nil
                 (%write-operation-result-text
@@ -104,22 +106,28 @@ left to propagate."
 ;;; *IN-PROGRESS-FETCHES* -- a fetch and a write are independent hazards (a
 ;;; fetch touches no working-tree state a concurrent write could collide
 ;;; with) and must be free to dedup separately.
+(defvar *write-lock*
+  (cl-concurrent-kit:make-lock :name "nerimux-vcs-write"))
 
-(defvar *write-lock* (cl-concurrent-kit:make-lock :name "nerimux-vcs-write"))
-(defvar *in-progress-writes* (make-hash-table :test #'equal))
+(defvar *in-progress-writes*
+  (make-hash-table :test #'equal))
 
 (defun %write-begin (key)
   (cl-concurrent-kit:with-lock-held (*write-lock*)
-    (if (gethash key *in-progress-writes*)
-        nil
-        (setf (gethash key *in-progress-writes*) t))))
+                                    (if (gethash key *in-progress-writes*)
+                                        nil
+                                        (setf (gethash key *in-progress-writes*) t))))
 
 (defun %write-end (key)
   (cl-concurrent-kit:with-lock-held (*write-lock*)
-    (remhash key *in-progress-writes*)))
+                                    (remhash key *in-progress-writes*)))
 
-(defun git-write-operation-async
-    (repository operation arguments &key callback-dispatch on-complete on-error)
+(defun git-write-operation-async (repository operation
+                                             arguments
+                                             &key
+                                             callback-dispatch
+                                             on-complete
+                                             on-error)
   "Run GIT-WRITE-OPERATION on a worker thread and dispatch one completion
 callback with the same (values SUCCESS-P OUTPUT-STRING) it returns
 synchronously.
@@ -139,19 +147,26 @@ ON-ERROR fires only for a framework-level failure (the worker thread itself
 erroring outside GIT-WRITE-OPERATION's own handler-case, e.g. it could not
 be launched); an ordinary git failure settles ON-COMPLETE with SUCCESS-P
 NIL, exactly as it does synchronously."
-  (let ((key (list :repository (nerimux/workspace-model:repository-id repository))))
+  (let ((key
+         (list :repository (nerimux/workspace-model:repository-id repository))))
     (if (%write-begin key)
         (cl-concurrent-kit:make-thread
          (lambda ()
-           (handler-case
-               (multiple-value-bind (success-p output)
-                   (apply #'git-write-operation repository operation arguments)
-                 (%write-end key)
-                 (%dispatch-callback callback-dispatch on-complete success-p output))
+           (handler-case (multiple-value-bind (success-p output) 
+                             (apply #'git-write-operation
+                                    repository
+                                    operation
+                                    arguments)
+                           (%write-end key)
+                           (%dispatch-callback callback-dispatch
+                                               on-complete
+                                               success-p
+                                               output))
              (error (condition)
                (%write-end key)
                (%dispatch-callback callback-dispatch on-error condition))))
-         :name "nerimux-vcs-write")
+         :name
+         "nerimux-vcs-write")
         (progn
           (%dispatch-callback callback-dispatch on-complete nil nil)
           nil))))
@@ -161,16 +176,15 @@ NIL, exactly as it does synchronously."
 ;;; VCS-REPOSITORY %MAKE-VCS-REPOSITORY builds, the same handle
 ;;; %READ-WORKTREE-COMMITS and %READ-WORKTREE-FILE-DIFF use (vcs-inspect.lisp),
 ;;; not %REPOSITORY-CHECKED-HANDLE above.
-
 (defun list-worktree-stashes (worktree)
   "WORKTREE's stashes as (REFERENCE . MESSAGE) conses, most recent first --
 VCS-KIT:VCS-LIST-STASHES already returns them in that order (git stash
 list's own traversal). Never a VCS-KIT:VCS-STASH-ENTRY struct crosses this
 boundary (D1)."
   (let ((backend-repository
-          (%make-vcs-repository (nerimux/workspace-model:worktree-path worktree))))
-    (mapcar (lambda (entry)
-              (cons (vcs-kit:vcs-stash-entry-reference entry)
-                    (%sanitize-retained-text
-                     (vcs-kit:vcs-stash-entry-message entry))))
-            (vcs-kit:vcs-list-stashes backend-repository))))
+         (%make-vcs-repository (nerimux/workspace-model:worktree-path worktree))))
+    (mapcar
+     (lambda (entry)
+       (cons (vcs-kit:vcs-stash-entry-reference entry)
+             (%sanitize-retained-text (vcs-kit:vcs-stash-entry-message entry))))
+     (vcs-kit:vcs-list-stashes backend-repository))))

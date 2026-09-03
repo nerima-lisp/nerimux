@@ -7,7 +7,6 @@
 ;;;; there that spawns a real PTY, via WITH-SESSION.  window-tests-c.lisp's
 ;;;; other pane-window back-pointer cases verify only the clear path, using
 ;;;; make-no-pty-pane, and stayed in nerimux/test.
-
 (describe "model-suite"
 
   ;; window-split wires pane-window on the new pane to the parent window.

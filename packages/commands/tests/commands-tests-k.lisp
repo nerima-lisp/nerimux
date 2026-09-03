@@ -2,7 +2,6 @@
 
 ;;;; commands tests — part K: copy-mode search-forward/backward, wrap-search,
 ;;;; search-across-scrollback.
-
 (defmacro define-copy-mode-search-cases (&body cases)
   `(progn
      ,@(loop for case in cases
@@ -18,13 +17,12 @@
                            ,fixture
                            (nerimux/commands::copy-mode-enter s)
                            ,@(when cursor
-                               `((setf (nerimux/terminal/types:screen-copy-cursor s)
-                                       ,cursor)))
+                               `((setf (nerimux/terminal/types:screen-copy-cursor
+                                        s) ,cursor)))
                            ,action
-                           (%check-copy-mode-search-expectations s ',expectations))
-             collect
-             `(it ,(string-downcase (symbol-name name))
-                ,body))))
+                           (%check-copy-mode-search-expectations s
+                                                                 ',expectations))
+             collect `(it ,(string-downcase (symbol-name name)) ,body))))
 
 (describe "commands-suite"
 

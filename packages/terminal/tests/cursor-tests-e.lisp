@@ -3,7 +3,6 @@
 ;;;; cursor tests — part E: custom multi-stop tab-stop navigation
 ;;;; (%next-tab-stop / %prev-tab-stop via HTS/TBC with several stops set),
 ;;;; plus a table-driven regression pass over cursor-cr and cursor-bs.
-
 ;;; ── SUITE: custom multi-stop tab navigation ─────────────────────────────────
 ;;;
 ;;; Coverage gap: set-tab-stop/cursor-ht/cursor-cbt were only exercised with a
@@ -11,7 +10,6 @@
 ;;; and %prev-tab-stop must search the sorted stop list (not just fall back to
 ;;; the :default every-8-columns grid) — the branch taken when
 ;;; (screen-tab-stops screen) is a concrete list with more than one entry.
-
 (describe "terminal-suite/multi-stop-tab-navigation"
 
   (defun %install-tab-stops (screen &rest columns)
@@ -87,7 +85,6 @@
 ;;; group; this table consolidates a quick regression pass across several
 ;;; starting columns in one place, per the "convert repeated patterns to
 ;;; table-driven form" goal.
-
 (describe "terminal-suite/cursor-cr-bs-table-suite"
 
   ;; cursor-cr resets the column to 0 regardless of the starting column.

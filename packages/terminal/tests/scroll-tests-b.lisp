@@ -2,12 +2,10 @@
 
 ;;;; scroll tests — part B: direct-row-primitives (%copy-row, %clear-row),
 ;;;; direct-action-erase suites, and scroll edge cases.
-
 ;;; ── SUITE: direct-row-primitives ────────────────────────────────────────────
 ;;;
 ;;; Coverage gap: %copy-row and %clear-row are used by scroll and edit operations
 ;;; but were previously only tested indirectly.  These tests call them directly.
-
 (describe "terminal-suite/direct-row-primitives"
 
   ;; %copy-row copies every cell from the source row to the destination row.
@@ -45,18 +43,15 @@
 ;;; indirectly (install the option, read it back through the port); now it is
 ;;; a plain DEFCONSTANT with no injection point, so the regression guard is a
 ;;; direct equality check against the value the requirements doc fixes.
-
 (describe "terminal-suite/scrollback-cap-constant"
-
-  (it "max-scrollback-lines-is-10000"
-    (expect (= 10000 nerimux/terminal:+max-scrollback-lines+))))
+          (it "max-scrollback-lines-is-10000"
+              (expect (= 10000 nerimux/terminal:+max-scrollback-lines+))))
 
 ;;; ── SUITE: direct-action-erase ───────────────────────────────────────────────
 ;;;
 ;;; These tests call erase-region, erase-display, erase-line directly rather
 ;;; than through the CSI parser path, targeting edge cases that high-level
 ;;; tests are unlikely to assert explicitly.
-
 (describe "terminal-suite/direct-action-erase"
 
   ;; erase-region blanks a linear span from (x0,y0) to (x1,y1) inclusive.
@@ -99,7 +94,6 @@
 ;;;
 ;;; Direct tests for the decstbm function, covering boundary conditions
 ;;; that the CSI parser integration tests do not exercise explicitly.
-
 (describe "terminal-suite/direct-decstbm"
 
   ;; decstbm with a valid top < bottom sets scroll-top and scroll-bottom.
@@ -150,7 +144,6 @@
 ;;;
 ;;; The shared with-5-row-scroll-region fixture eliminates the repeated inline
 ;;; 5-row fill + decstbm setup pattern from both tests.
-
 ;; Must be a genuine top-level DEFMACRO (not nested inside DESCRIBE's body):
 ;; DESCRIBE's body only runs as a lambda at suite-registration time, so a
 ;; DEFMACRO nested inside it is invisible to the compiler when it compiles
@@ -159,9 +152,9 @@
   "Bind SCREEN-VAR to a 5-row screen with rows labeled R0-R4 and scroll
    region restricted to rows 1-3.  Used by constrained-scroll tests."
   `(with-screen (,screen-var 5 5)
-     (feed-lines ,screen-var "R0" "R1" "R2" "R3" "R4")
-     (nerimux/terminal/actions:decstbm ,screen-var 1 3)
-     ,@body))
+                (feed-lines ,screen-var "R0" "R1" "R2" "R3" "R4")
+                (nerimux/terminal/actions:decstbm ,screen-var 1 3)
+                ,@body))
 
 (describe "terminal-suite/constrained-scroll"
 
@@ -189,7 +182,6 @@
 ;;;
 ;;; Both scroll-up-one and scroll-down-one must mark screen-dirty-p after they
 ;;; operate, so the renderer knows a repaint is needed.
-
 (describe "terminal-suite/scroll-dirty-flag"
 
   ;; Both scroll-up-one and scroll-down-one set screen-dirty-p to T.
@@ -201,4 +193,3 @@
         (expect (nerimux/terminal/types:screen-dirty-p s) :to-be-falsy)
         (funcall fn s)
         (expect (nerimux/terminal/types:screen-dirty-p s))))))
-

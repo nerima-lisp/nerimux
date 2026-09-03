@@ -1,9 +1,7 @@
 (in-package #:nerimux/test/terminal)
 
 ;;;; Terminal parser control-state and direct continuation tests.
-
 ;;; ── ground-state control-byte coverage ──────────────────────────────────────
-
 (describe "terminal-suite/ground-state-control-bytes"
 
   ;; ground-state on DEL (#x7F), SO (#x0E), and SI (#x0F) returns ground-state and writes nothing.
@@ -89,7 +87,6 @@
         (expect (eq #'nerimux/terminal/parser:osc-state next))))))
 
 ;;; ── make-dcs-k direct tests ──────────────────────────────────────────────────
-
 (describe "terminal-suite/direct-dcs-suite"
 
   ;; make-dcs-k continuation consumes non-ESC payload bytes and returns a continuation.

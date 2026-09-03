@@ -1,7 +1,6 @@
 (in-package #:nerimux/test)
 
 ;;;; Listener and readiness handling for the multi-client server loop.
-
 (describe "server-multi-suite"
 
   ;;; ── accept-pending-connection / dispatch-ready-clients ──────────────────────

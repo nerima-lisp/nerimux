@@ -5,9 +5,7 @@
 ;;;; All erase functions are expressed as Prolog-like rule tables,
 ;;;; consistent with the define-csi-rules / define-sgr-rules idiom.
 ;;;; Loads after scroll.lisp (needs blank-cell from cell.lisp, screen-cell).
-
 ;;; ── Primitive erase ─────────────────────────────────────────────────────────
-
 (defun erase-region (screen x0 y0 x1 y1)
   "Erase all cells from (X0,Y0) to (X1,Y1) inclusive, treating the range as
    a linear span across rows.  Sets screen-dirty-p whenever any cell is written."
@@ -30,7 +28,6 @@
 ;;;                          erase_region(S, 0, cursor-y, cursor-x, cursor-y).
 ;;;   erase_display(2, S) :- erase_region(S, 0, 0, w-1, h-1).
 ;;;   erase_display(3, S) :- erase_region(S, 0, 0, w-1, h-1), clear_scrollback(S).
-
 (defmacro define-erase-display-rules (&rest specs)
   "Build ERASE-DISPLAY from a Prolog-like mode rule table.
    Each SPEC is (mode &rest body).
@@ -42,10 +39,11 @@
       Mode 0: cursor to end.  Mode 1: start to cursor.
       Mode 2: entire screen.  Mode 3: entire screen + scrollback."
      (case mode
-       ,@(mapcar (lambda (spec)
-                   (destructuring-bind (mode-val &rest body) spec
-                     `(,mode-val ,@body)))
-                 specs))))
+       ,@(mapcar
+          (lambda (spec)
+            (destructuring-bind (mode-val &rest body) spec
+              `(,mode-val ,@body)))
+          specs))))
 
 (define-erase-display-rules
   (0
@@ -79,7 +77,6 @@
 ;;;   erase_line(0, Screen) :- erase_region(Screen, cursor-x, cursor-y, w-1, cursor-y).
 ;;;   erase_line(1, Screen) :- erase_region(Screen, 0,  cursor-y, cursor-x, cursor-y).
 ;;;   erase_line(2, Screen) :- erase_region(Screen, 0,  cursor-y, w-1, cursor-y).
-
 (defmacro define-erase-line-rules (&rest specs)
   "Build ERASE-LINE from a declarative range table.
    Each SPEC is (mode x0-expr x1-expr); CX (cursor-x), CY (cursor-y), W are bound.
@@ -87,10 +84,14 @@
   `(defun erase-line (screen mode)
      "Erase part or all of the current line (EL: ESC[Kn).
       Mode 0: cursor to end.  Mode 1: start to cursor.  Mode 2: entire line."
-     (let ((cx (screen-cursor-x screen)) (cy (screen-cursor-y screen)) (w (screen-width screen)))
+     (let ((cx (screen-cursor-x screen))
+           (cy (screen-cursor-y screen))
+           (w (screen-width screen)))
        (case mode
-         ,@(mapcar (lambda (s) `(,(first s) (erase-region screen ,(second s) cy ,(third s) cy)))
-                   specs)))))
+         ,@(mapcar
+            (lambda (s)
+              `(,(first s) (erase-region screen ,(second s) cy ,(third s) cy)))
+            specs)))))
 
 (define-erase-line-rules
   (0  cx     (1- w))   ; from cursor to end
@@ -101,17 +102,26 @@
 ;;;
 ;;; DECERA/DECFRA/DECCRA are xterm extensions used by full-screen TUI apps.
 ;;; Parameters arrive 1-based; helpers convert to 0-based and clamp to bounds.
-
 (defun %rect-bounds (screen top1 left1 bottom1 right1)
   "Convert 1-based inclusive DEC rectangle parameters to 0-based inclusive bounds
    clamped to the screen, returning (values t0 l0 b0 r0).
    A degenerate rectangle (top > bottom or left > right) returns (values 0 0 -1 -1)."
-  (let* ((w (screen-width  screen))
+  (let* ((w (screen-width screen))
          (h (screen-height screen))
          (t0 (1- (max 1 top1)))
          (l0 (1- (max 1 left1)))
-         (b0 (min (1- h) (1- (if (zerop bottom1) h bottom1))))
-         (r0 (min (1- w) (1- (if (zerop right1)  w right1)))))
+         (b0
+          (min (1- h)
+               (1-
+                (if (zerop bottom1)
+                    h
+                    bottom1))))
+         (r0
+          (min (1- w)
+               (1-
+                (if (zerop right1)
+                    w
+                    right1)))))
     (if (or (> t0 b0) (> l0 r0))
         (values 0 0 -1 -1)
         (values t0 l0 b0 r0))))
@@ -120,31 +130,42 @@
   "DECERA — Erase Rectangular Area (CSI Pt;Pl;Pb;Pr $ z).
    Parameters are 1-based and inclusive.  Cells are replaced with BCE blanks
    (background-colour-erase), matching DECERA semantics in xterm."
-  (multiple-value-bind (t0 l0 b0 r0)
+  (multiple-value-bind (t0 l0 b0 r0) 
       (%rect-bounds screen top1 left1 bottom1 right1)
     (when (and (<= t0 b0) (<= l0 r0))
-      (loop for y from t0 to b0 do
-        (loop for x from l0 to r0 do
-          (setf (screen-cell screen x y) (%erase-cell screen))))
+      (loop for y from t0 to b0
+            do (loop for x from l0 to r0
+                     do (setf (screen-cell screen x y) (%erase-cell screen))))
       (setf (screen-dirty-p screen) t))))
 
 (defun decfra (screen char-code top1 left1 bottom1 right1)
   "DECFRA — Fill Rectangular Area (CSI Pc;Pt;Pl;Pb;Pr $ x).
    CHAR-CODE is the character to fill with (e.g. 65 for 'A').
    Uses the current SGR pen for fg/bg/attrs so themed apps render correctly."
-  (multiple-value-bind (t0 l0 b0 r0)
+  (multiple-value-bind (t0 l0 b0 r0) 
       (%rect-bounds screen top1 left1 bottom1 right1)
     (when (and (<= t0 b0) (<= l0 r0))
-      (let* ((ch   (safe-code-char (if (zerop char-code) 32 char-code)))
-             (cell (make-cell :char     ch
-                              :fg       (screen-cur-fg       screen)
-                              :bg       (screen-cur-bg       screen)
-                              :attrs    (screen-cur-attrs    screen)
-                              :attrs2   (screen-cur-attrs2   screen)
-                              :ul-color (screen-cur-ul-color screen))))
-        (loop for y from t0 to b0 do
-          (loop for x from l0 to r0 do
-            (setf (screen-cell screen x y) cell))))
+      (let* ((ch
+              (safe-code-char
+               (if (zerop char-code)
+                   32
+                   char-code)))
+             (cell
+              (make-cell :char
+                         ch
+                         :fg
+                         (screen-cur-fg screen)
+                         :bg
+                         (screen-cur-bg screen)
+                         :attrs
+                         (screen-cur-attrs screen)
+                         :attrs2
+                         (screen-cur-attrs2 screen)
+                         :ul-color
+                         (screen-cur-ul-color screen))))
+        (loop for y from t0 to b0
+              do (loop for x from l0 to r0
+                       do (setf (screen-cell screen x y) cell))))
       (setf (screen-dirty-p screen) t))))
 
 (defun %copy-rect-buffered (screen src-top src-left rows cols tgt-top tgt-left)
@@ -172,17 +193,21 @@
               (aref buffer (+ (* ri cols) ci)))))
     (setf (screen-dirty-p screen) t)))
 
-(defun deccra (screen src-top1 src-left1 src-bottom1 src-right1
-                      tgt-top1 tgt-left1)
+(defun deccra (screen src-top1
+                      src-left1
+                      src-bottom1
+                      src-right1
+                      tgt-top1
+                      tgt-left1)
   "DECCRA — Copy Rectangular Area (CSI Pt;Pl;Pb;Pr;Pp;Ptp;Plp;Ppp $ v).
    Page parameters are ignored (only page 0 exists).
    Source and target rectangles are clamped independently; overlapping regions
    are handled correctly by buffering source cells before writing."
-  (multiple-value-bind (st sl sb sr)
+  (multiple-value-bind (st sl sb sr) 
       (%rect-bounds screen src-top1 src-left1 src-bottom1 src-right1)
     (when (and (<= st sb) (<= sl sr))
       (let* ((rows (1+ (- sb st)))
              (cols (1+ (- sr sl)))
-             (tt0  (1- (max 1 tgt-top1)))
-             (tl0  (1- (max 1 tgt-left1))))
+             (tt0 (1- (max 1 tgt-top1)))
+             (tl0 (1- (max 1 tgt-left1))))
         (%copy-rect-buffered screen st sl rows cols tt0 tl0)))))

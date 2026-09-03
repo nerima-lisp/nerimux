@@ -11,7 +11,6 @@
 ;;;;
 ;;;; with-temp-socket-path, with-connected-sockets, and write-frames-to-file
 ;;;; are defined in tests/helpers-net-protocol.lisp and shared with transport-tests.lisp.
-
 (describe "net-suite"
 
   ;;; ── %make-probe-socket-path ──────────────────────────────────────────────

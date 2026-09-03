@@ -7,14 +7,9 @@
 ;;;;
 ;;;; ── Action handler shapes ────────────────────────────────────────────────
 ;;;;
-;;;; Each action in +TRANSIENT-DEFINITIONS+ carries a HANDLER, one of:
-;;;;   (:git TRANSIENT-KEY OPERATION STATIC-ARGS CONFIRM-P CONFIRM-IF-ARGS)
-;;;;     Run via nerimux/vcs:git-write-operation-async. The final argument
-;;;;     list is STATIC-ARGS followed by whatever flags are currently active
-;;;;     for TRANSIENT-KEY (%CLIENT-TRANSIENT-ACTIVE-FLAGS) -- magit's own
-;;;;     rule that a transient's toggled arguments apply to every one of its
-;;;;     actions. Confirmed via %OPEN-CONFIRM-VIEW when CONFIRM-P, or when any
-;;;;     flag in CONFIRM-IF-ARGS is active (Push's force flags).
+;;;; Each action in +TRANSIENT-DEFINITIONS+ carries a HANDLER. Git actions use
+;;;; nerimux/vcs:git-write-operation-async with the active flags for their
+;;;; transient. Confirmation is handled by %OPEN-CONFIRM-VIEW when required.
 ;;;;   (:call FUNCTION)   Call (FUNCALL FUNCTION SESSION CONN) -- reuses an
 ;;;;     action that already exists elsewhere. SESSION is passed because
 ;;;;     worktree creation opens a pane and needs it; actions that do not want
@@ -32,15 +27,7 @@
 ;;;;     and `!` deliberately never runs an arbitrary user-typed shell command
 ;;;;     -- that is its own trust-boundary decision, not something to default
 ;;;;     into existence as a side effect of wiring a keymap.
-
-(defconstant +max-process-log-entries+ 20
-  "Cap on CLIENT-CONN-PROCESS-LOG entry COUNT (contract §1's comment on that
-   slot already caps each entry's OUTPUT via nerimux/vcs's own
-   *write-operation-output-max-length*, so this bounds how many commands are
-   remembered, not how large one of them can be).")
-
 ;;; ── Argument-toggle persistence (FR-010) ─────────────────────────────────
-
 (defun %client-transient-active-flags (conn transient-key)
   (cdr (assoc transient-key (client-conn-transient-arguments conn))))
 
@@ -50,53 +37,83 @@
    must see the same toggle state, not a fresh one."
   (let* ((alist (client-conn-transient-arguments conn))
          (current (cdr (assoc transient-key alist)))
-         (updated (if (member flag current :test #'string=)
-                      (remove flag current :test #'string=)
-                      (cons flag current))))
-    (setf (client-conn-transient-arguments conn)
-          (cons (cons transient-key updated)
-                (remove transient-key alist :key #'car)))))
+         (updated
+          (if (member flag current :test #'string=)
+              (remove flag current :test #'string=)
+              (cons flag current))))
+    (setf (client-conn-transient-arguments conn) (cons
+                                                  (cons transient-key updated)
+                                                  (remove transient-key
+                                                          alist
+                                                          :key
+                                                          #'car)))))
 
 ;;; ── Process log (FR-011) ─────────────────────────────────────────────────
-
 (defun %client-log-process (conn command success-p output)
   "Record one finished git write as a (COMMAND EXIT-STATUS OUTPUT) entry,
    most recent first -- EXIT-STATUS is \"0\"/\"1\" rather than a real process
    exit code, because GIT-WRITE-OPERATION-ASYNC only ever hands back
    SUCCESS-P, never the underlying number."
-  (push (list command (if success-p "0" "1") (or output ""))
-        (client-conn-process-log conn))
+  (push
+   (list command
+         (if success-p
+             "0"
+             "1")
+         (or output ""))
+   (client-conn-process-log conn))
   (when (> (length (client-conn-process-log conn)) +max-process-log-entries+)
-    (setf (client-conn-process-log conn)
-          (subseq (client-conn-process-log conn) 0 +max-process-log-entries+)))
+    (setf (client-conn-process-log conn) (subseq (client-conn-process-log conn)
+                                                 0
+                                                 +max-process-log-entries+)))
   (%mark-dirty))
 
 ;;; ── Running a git action ─────────────────────────────────────────────────
-
 (defun %transient-command-text (operation args)
   (format nil "git ~(~A~)~{ ~A~}" operation args))
 
 (defun %run-transient-git-write (conn repository operation args)
   (let ((command (%transient-command-text operation args)))
     (%client-notify conn (format nil "running ~A" command))
-    (nerimux/vcs:git-write-operation-async
-     repository operation args
-     :callback-dispatch #'%enqueue-main-thread-callback
-     :on-complete
-     (lambda (success-p output)
-       (%client-log-process conn command success-p output)
-       (if success-p
-           (progn
-             (%refresh-client-picker conn)
-             (%client-notify conn (format nil "~A: done" command)))
-           (%client-notify conn (format nil "~A: failed" command))))
-     :on-error
-     (lambda (condition)
-       (%client-log-process conn command nil (princ-to-string condition))
-       (%client-notify conn (format nil "~A: failed: ~A" command condition))))))
+    (nerimux/vcs:git-write-operation-async repository
+                                           operation
+                                           args
+                                           :callback-dispatch
+                                           #'%enqueue-main-thread-callback
+                                           :on-complete
+                                           (lambda (success-p output)
+                                             (%client-log-process conn
+                                                                  command
+                                                                  success-p
+                                                                  output)
+                                             (if success-p
+                                                 (progn
+                                                   (%refresh-client-picker conn)
+                                                   (%client-notify conn
+                                                                   (format nil
+                                                                           "~A: done"
+                                                                           command)))
+                                                 (%client-notify conn
+                                                                 (format nil
+                                                                         "~A: failed"
+                                                                         command))))
+                                           :on-error
+                                           (lambda (condition)
+                                             (%client-log-process conn
+                                                                  command
+                                                                  nil
+                                                                  (princ-to-string
+                                                                   condition))
+                                             (%client-notify conn
+                                                             (format nil
+                                                                     "~A: failed: ~A"
+                                                                     command
+                                                                     condition))))))
 
-(defun %run-transient-git-action
-    (conn transient-key operation static-args confirm-p confirm-if-args)
+(defun %run-transient-git-action (conn transient-key
+                                       operation
+                                       static-args
+                                       confirm-p
+                                       confirm-if-args)
   "Assemble STATIC-ARGS plus TRANSIENT-KEY's active toggles and run OPERATION
    against CONN's selected repository, confirming first when CONFIRM-P or any
    of CONFIRM-IF-ARGS is currently toggled on (Push's force flags -- contract
@@ -106,179 +123,32 @@
   (let* ((repository (%client-selected-repository conn))
          (active (%client-transient-active-flags conn transient-key))
          (args (append static-args active))
-         (force-p (some (lambda (flag) (member flag active :test #'string=))
-                         confirm-if-args)))
+         (force-p
+          (some
+           (lambda (flag)
+             (member flag active :test #'string=))
+           confirm-if-args)))
     (cond
-      ((null repository)
-       (%client-notify conn "no repository selected"))
+      ((null repository) (%client-notify conn "no repository selected"))
       ((not (nerimux/vcs:vcs-package-available-p))
        (%client-notify conn "VCS adapter unavailable"))
       ((or confirm-p force-p)
-       (%open-confirm-view
-        conn
-        (%transient-command-text operation args)
-        (list (cons "repository"
-                    (princ-to-string (nerimux/workspace-model:repository-id repository))))
-        (lambda () (%run-transient-git-write conn repository operation args))))
+       (%open-confirm-view conn
+                           (%transient-command-text operation args)
+                           (list
+                            (cons "repository"
+                                  (princ-to-string
+                                   (nerimux/workspace-model:repository-id
+                                    repository))))
+                           (lambda ()
+                             (%run-transient-git-write conn
+                                                       repository
+                                                       operation
+                                                       args))))
       (t (%run-transient-git-write conn repository operation args)))))
 
-;;; ── +TRANSIENT-DEFINITIONS+ (contract §2/§3) ─────────────────────────────
-;;;
-;;; KEY -> (TITLE ARGUMENTS ACTIONS).  ARGUMENTS is a list of (ARG-KEY . FLAG);
-;;; DESCRIPTION in the rendered view reuses FLAG verbatim (a git flag already
-;;; is its own clearest description -- see the Push example in the task
-;;; brief, "-f  --force-with-lease"). ACTIONS is a list of (ACTION-KEY
-;;; DESCRIPTION HANDLER); DESCRIPTION containing the literal two characters
-;;; "~A" is treated as a FORMAT control string interpolating the selected
-;;; worktree's branch (%TRANSIENT-ACTION-DISPLAY-DESCRIPTION) -- Push/Pull's
-;;; only use of it, to show "push to origin/<branch>" without a separate
-;;; per-render templating slot.
-
-(defparameter +transient-definitions+
-  (list
-   (cons #\c
-         (list "Commit" nil
-               (list (list #\e "amend, keep message"
-                           (list :git #\c :commit '("--amend" "--no-edit") nil nil))
-                     (list #\c "commit"
-                           (list :stub "commit needs a message; no text-prompt UI exists in this build")))))
-   (cons #\P
-         (list "Push"
-               (list (cons #\f "--force-with-lease") (cons #\F "--force"))
-               (list (list #\p "push to origin/~A"
-                           (list :git #\P :push nil nil '("--force" "--force-with-lease")))
-                     (list #\e "push to another remote"
-                           (list :stub "remote selection needs a text-prompt UI, not wired in this build")))))
-   (cons #\F
-         (list "Pull"
-               (list (cons #\r "--rebase"))
-               (list (list #\p "pull from origin/~A"
-                           (list :git #\F :pull nil nil nil)))))
-   (cons #\b
-         (list "Branch" nil
-               (list (list #\l "list branches"
-                           (list :git #\b :branch nil nil nil))
-                     (list #\- "switch to previous branch"
-                           (list :git #\b :switch '("-") nil nil))
-                     (list #\c "create branch"
-                           (list :stub "branch name needs a text-prompt UI, not wired in this build"))
-                     (list #\D "delete branch"
-                           (list :stub "branch name needs a text-prompt UI, not wired in this build")))))
-   (cons #\m
-         (list "Merge" nil
-               (list (list #\u "merge upstream (@{u})"
-                           (list :git #\m :merge '("@{u}") nil nil))
-                     (list #\b "merge another branch"
-                           (list :stub "branch name needs a text-prompt UI, not wired in this build")))))
-   (cons #\r
-         (list "Rebase" nil
-               (list (list #\u "rebase onto upstream (@{u})"
-                           (list :git #\r :rebase '("@{u}") t nil))
-                     (list #\a "abort rebase"
-                           (list :git #\r :rebase '("--abort") nil nil)))))
-   (cons #\z
-         (list "Stash" nil
-               (list (list #\z "stash changes"
-                           (list :git #\z :stash '("push") nil nil))
-                     (list #\p "pop latest stash"
-                           (list :git #\z :stash '("pop") nil nil)))))
-   (cons #\l
-         (list "Log" nil
-               (list (list #\l "show log"
-                           (list :stub "log view is not wired -- no read pager exists in this build")))))
-   (cons #\d
-         (list "Diff" nil
-               (list (list #\d "show diff"
-                           (list :stub "diff view is not wired -- no read pager exists in this build")))))
-   (cons #\f
-         (list "Fetch" nil
-               ;; Wrapped rather than sharp-quoted directly: :CALL hands its
-               ;; function (SESSION CONN), and both of these take CONN alone.
-               ;; A bare #' here is a wrong-argument-count error at the moment
-               ;; the key is struck -- and no gate sees it, because the arity
-               ;; only meets the callee through a FUNCALL out of this data
-               ;; table. That is how `f` reached this file already broken.
-               (list (list #\f "fetch this repository"
-                           (list :call (lambda (session conn)
-                                         (declare (ignore session))
-                                         (%workspace-prefix-fetch-repository conn))))
-                     (list #\F "fetch organization"
-                           (list :call (lambda (session conn)
-                                         (declare (ignore session))
-                                         (%workspace-prefix-fetch-organization conn)))))))
-   (cons #\t
-         (list "Tag" nil
-               (list (list #\l "list tags"
-                           (list :git #\t :tag nil nil nil))
-                     (list #\t "create tag"
-                           (list :stub "tag name needs a text-prompt UI, not wired in this build")))))
-   (cons #\X
-         (list "Reset" nil
-               (list (list #\s "reset --soft HEAD"
-                           (list :git #\X :reset '("--soft" "HEAD") nil nil))
-                     (list #\h "reset --hard HEAD"
-                           (list :git #\X :reset '("--hard" "HEAD") t nil))
-                     (list #\c "clean untracked files (-fd)"
-                           (list :git #\X :clean '("-fd") t nil)))))
-   (cons #\!
-         (list "Shell command" nil
-               (list (list #\! "run a shell command"
-                           (list :stub "arbitrary shell execution is deliberately not wired -- it is its own trust-boundary decision")))))
-   ;; These four are NOT stubs, and the difference from the name-taking git
-   ;; actions above is not effort. Worktree create/delete/lock/unlock already
-   ;; had working keys -- `n` `X` `L` `U` -- that the magit alignment retired,
-   ;; and every one of those paths avoids a text prompt by design: create
-   ;; generates its own branch name (an explicit 2026-08-27 decision against
-   ;; prompting for one), and the other three pre-fill the `:` command line,
-   ;; which IS the prompt. Stubbing them would have deleted four working
-   ;; features while looking like an unfinished new one.
-   (cons #\w
-         (list "Worktree" nil
-               ;; LAMBDA rather than #'%CLIENT-START-WORKTREE-CREATE, and the
-               ;; reason is load order: this table is a DEFPARAMETER, so a
-               ;; sharp-quote would resolve the fdefinition while this file
-               ;; loads -- and these four live in
-               ;; server-multi-dispatch-command-input.lisp, which loads AFTER
-               ;; this one (the keymap calls %OPEN-CLIENT-TRANSIENT, so it has
-               ;; to). A lambda defers the lookup to call time.
-               (list (list #\c "create worktree and open its shell"
-                           (list :call (lambda (session conn)
-                                         (%client-start-worktree-create session conn))))
-                     (list #\k "delete worktree"
-                           (list :call (lambda (session conn)
-                                         (declare (ignore session))
-                                         (%client-start-worktree-delete conn))))
-                     (list #\l "lock worktree"
-                           (list :call (lambda (session conn)
-                                         (declare (ignore session))
-                                         (%client-start-worktree-lock conn))))
-                     (list #\u "unlock worktree"
-                           (list :call (lambda (session conn)
-                                         (declare (ignore session))
-                                         (%client-start-worktree-unlock conn))))
-                     (list #\C "create with a chosen branch name"
-                           (list :stub "use `: wt-create --branch <name> --confirm`")))))
-   (cons #\?
-         (list "Dispatch" nil
-               (list (list #\c "Commit" (list :open-transient #\c))
-                     (list #\P "Push" (list :open-transient #\P))
-                     (list #\F "Pull" (list :open-transient #\F))
-                     (list #\b "Branch" (list :open-transient #\b))
-                     (list #\m "Merge" (list :open-transient #\m))
-                     (list #\r "Rebase" (list :open-transient #\r))
-                     (list #\z "Stash" (list :open-transient #\z))
-                     (list #\l "Log" (list :open-transient #\l))
-                     (list #\d "Diff" (list :open-transient #\d))
-                     (list #\f "Fetch" (list :open-transient #\f))
-                     (list #\t "Tag" (list :open-transient #\t))
-                     (list #\X "Reset" (list :open-transient #\X))
-                     (list #\! "Shell command" (list :open-transient #\!))
-                     (list #\w "Worktree" (list :open-transient #\w))
-                     (list #\k "help" (list :help))))))
-  "KEY -> (TITLE ARGUMENTS ACTIONS); see the section comment above.")
-
+;;; Transient menu data is defined in server-multi-transient-data.lisp.
 ;;; ── Building the renderer's TRANSIENT-VIEW ───────────────────────────────
-
 (defun %transient-branch (conn)
   (let ((worktree (%client-operation-worktree conn)))
     (and worktree (nerimux/workspace-model:worktree-head worktree))))
@@ -301,12 +171,15 @@
    docstring (renderer-tui-kit-transient.lisp) for why the fifth element
    (TRANSIENT-KEY, needed only to persist the toggle) rides along."
   (let ((active (%client-transient-active-flags conn transient-key)))
-    (mapcar (lambda (spec)
-              (let ((flag (cdr spec)))
-                (list (car spec) flag flag
-                      (and (member flag active :test #'string=) t)
-                      transient-key)))
-            arguments)))
+    (mapcar
+     (lambda (spec)
+       (let ((flag (cdr spec)))
+         (list (car spec)
+               flag
+               flag
+               (and (member flag active :test #'string=) t)
+               transient-key)))
+     arguments)))
 
 (defun %transient-render-actions (conn actions)
   "Project each static (ACTION-KEY DESCRIPTION HANDLER) into the render
@@ -315,11 +188,12 @@
    renderer's documented (KEY DESCRIPTION) shape -- same rationale as
    %TRANSIENT-RENDER-ARGUMENTS above -- so %RUN-TRANSIENT-ACTION never has to
    re-look-up +TRANSIENT-DEFINITIONS+ by key to find it again."
-  (mapcar (lambda (entry)
-            (list (first entry)
-                  (%transient-action-display-description conn (second entry))
-                  (third entry)))
-          actions))
+  (mapcar
+   (lambda (entry)
+     (list (first entry)
+           (%transient-action-display-description conn (second entry))
+           (third entry)))
+   actions))
 
 (defun %open-client-transient (conn key)
   "Open the transient KEY names (contract §3). A KEY with no entry in
@@ -329,12 +203,19 @@
   (let ((definition (cdr (assoc key +transient-definitions+))))
     (when definition
       (destructuring-bind (title arguments actions) definition
-        (setf (client-conn-transient-view conn)
-              (nerimux/renderer:make-transient-view
-               :title title
-               :subtitle (%transient-subtitle key conn)
-               :arguments (%transient-render-arguments key conn arguments)
-               :actions (%transient-render-actions conn actions)))
+        (setf (client-conn-transient-view conn) (nerimux/renderer:make-transient-view
+                                                 :title
+                                                 title
+                                                 :subtitle
+                                                 (%transient-subtitle key conn)
+                                                 :arguments
+                                                 (%transient-render-arguments
+                                                  key
+                                                  conn
+                                                  arguments)
+                                                 :actions
+                                                 (%transient-render-actions conn
+                                                                            actions)))
         (%set-client-modal conn :transient)
         t))))
 
@@ -348,7 +229,6 @@
   (%set-client-modal conn nil))
 
 ;;; ── Running an action ─────────────────────────────────────────────────────
-
 (defun %run-transient-action (session conn handler)
   "Run one action's HANDLER -- see the section comment above for the shapes.
    :OPEN-TRANSIENT replaces the open transient with a fresh one; every other
@@ -361,18 +241,24 @@
    worktree actions predate the transient and already work, so the transient
    adapts to their signature rather than the reverse."
   (case (first handler)
-    (:open-transient
-     (%open-client-transient conn (second handler)))
+    (:open-transient (%open-client-transient conn (second handler)))
     (t
-     (%close-client-transient conn)
-     (case (first handler)
-       (:git (destructuring-bind (transient-key operation args confirm-p confirm-if-args)
-                 (rest handler)
-               (%run-transient-git-action conn transient-key operation args
-                                          confirm-p confirm-if-args)))
-       (:call (funcall (second handler) session conn))
-       (:help (%client-open-help-view conn))
-       (:stub (%client-notify conn (second handler)))))))
+      (%close-client-transient conn)
+      (case (first handler)
+        (:git
+         (destructuring-bind (transient-key operation
+                                            args
+                                            confirm-p
+                                            confirm-if-args) (rest handler)
+           (%run-transient-git-action conn
+                                      transient-key
+                                      operation
+                                      args
+                                      confirm-p
+                                      confirm-if-args)))
+        (:call (funcall (second handler) session conn))
+        (:help (%client-open-help-view conn))
+        (:stub (%client-notify conn (second handler)))))))
 
 (defun %handle-client-transient-key-payload (session conn payload)
   "Answer the transient CONN is looking at (contract §3): ESC/q close it, an
@@ -386,25 +272,35 @@
   (let ((view (client-conn-transient-view conn)))
     (cond
       ((%client-byte-p payload 27)
-       (%client-esc-swallow-start conn)
-       (%close-client-transient conn)
-       t)
+        (%client-esc-swallow-start conn)
+        (%close-client-transient conn)
+        t)
       ((%client-key-p payload #\q)
-       (%close-client-transient conn)
-       t)
+        (%close-client-transient conn)
+        t)
       ((null view)
-       (%close-client-transient conn)
-       t)
+        (%close-client-transient conn)
+        t)
       (t
-       (let ((argument (find-if (lambda (entry) (%client-key-p payload (first entry)))
-                                 (nerimux/renderer:transient-view-arguments view))))
+       (let ((argument
+              (find-if
+               (lambda (entry)
+                 (%client-key-p payload (first entry)))
+               (nerimux/renderer:transient-view-arguments view))))
          (if argument
              (progn
-               (%client-transient-toggle-flag conn (fifth argument) (second argument))
+               (%client-transient-toggle-flag conn
+                                              (fifth argument)
+                                              (second argument))
                (%open-client-transient conn (fifth argument))
                t)
-             (let ((action (find-if (lambda (entry) (%client-key-p payload (first entry)))
-                                     (nerimux/renderer:transient-view-actions view))))
+             (let ((action
+                    (find-if
+                     (lambda (entry)
+                       (%client-key-p payload (first entry)))
+                     (nerimux/renderer:transient-view-actions view))))
                (if action
-                   (progn (%run-transient-action session conn (third action)) t)
+                   (progn
+                     (%run-transient-action session conn (third action))
+                     t)
                    t))))))))

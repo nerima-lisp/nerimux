@@ -2,8 +2,8 @@
 
 ;;;; Tests for argv dispatch routing in src/bootstrap/main-startup*.lisp
 ;;;; (server/attach entry surface).
-
-(defvar *main-calls* nil
+(defvar *main-calls*
+  nil
   "Records (TAG . ARGS) for each stubbed entry function call.")
 
 (defmacro with-stubbed-entries (&body body)
@@ -27,18 +27,23 @@
    CODE-VAR and non-locally exits BODY via THROW (matching sb-ext:exit's
    declared return type of NIL — a returning stub triggers SIMPLE-CONTROL-ERROR).
    Uses WITHOUT-PACKAGE-LOCKS because SB-EXT is a locked package."
-  (let ((tag  (gensym "EXIT-TAG"))
+  (let ((tag (gensym "EXIT-TAG"))
         (orig (gensym "ORIG-EXIT")))
     `(sb-ext:without-package-locks
-       (let ((,orig (fdefinition 'sb-ext:exit)))
-         (setf (fdefinition 'sb-ext:exit)
-               (lambda (&rest args &key (code 0) &allow-other-keys)
-                 (declare (ignore args))
-                 (setf ,code-var code)
-                 (throw ',tag nil)))
-         (unwind-protect
-              (catch ',tag ,@body)
-           (setf (fdefinition 'sb-ext:exit) ,orig))))))
+      (let ((,orig (fdefinition 'sb-ext:exit)))
+        (setf (fdefinition 'sb-ext:exit) (lambda 
+                                             (&rest args
+                                                    &key
+                                                    (code 0)
+                                                    &allow-other-keys)
+                                           (declare (ignore args))
+                                           (setf ,code-var code)
+                                           (throw ',tag
+                                             nil)))
+        (unwind-protect 
+            (catch ',tag
+              ,@body)
+          (setf (fdefinition 'sb-ext:exit) ,orig))))))
 
 (describe "main-suite"
 
@@ -49,6 +54,13 @@
                   "--no-sysinit" "--no-userinit"
                   "attach" "myname")))
       (expect (equal '("attach" "myname")
+                     (nerimux::%application-argv)))))
+
+  (it "application-argv-strips-the-last-wrapper-option-marker"
+    (let ((sb-ext:*posix-argv*
+            (list "sbcl" "--noinform" "attach" "--end-toplevel-options"
+                  "server" "0")))
+      (expect (equal '("server" "0")
                      (nerimux::%application-argv)))))
 
   ;; main routes argv to the correct entry point with the correct session name
@@ -132,6 +144,18 @@
     (expect (nerimux::%startup-mode-raw-args-p "server") :to-be-falsy)
     (expect (nerimux::%startup-mode-raw-args-p "attach") :to-be-falsy)
     (expect (nerimux::%startup-mode-raw-args-p "bogus") :to-be-falsy))
+
+  (it "dispatches-raw-startup-handler-with-complete-argv-tail"
+    (let ((received nil))
+      (with-stubbed-fdefinition
+          ((nerimux::run-version
+             (lambda (args)
+               (setf received args))))
+        (nerimux::%dispatch-startup-mode-handler
+         (nerimux::%startup-mode-entry "-V")
+         "-V"
+         '("--version" "extra")))
+      (expect (equal '("--version" "extra") received) :to-be-truthy)))
 
   ;;; ── *startup-modes* table structure tests ────────────────────────────────────
 

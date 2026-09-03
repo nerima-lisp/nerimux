@@ -8,7 +8,6 @@
 ;;;; ever drawn on a border) and R2.4 deleted the pane-border-lines glyph
 ;;;; dispatch (%dispatch-pane-border-chars) — see renderer-borders.lisp and
 ;;;; renderer-pane-tests.lisp's header.
-
 (defun %in-sel (row col sr er sc ec &optional rect-p)
   "Call in-selection-p with positional args in a more readable order."
   (nerimux/renderer::in-selection-p row col sr er sc ec rect-p))

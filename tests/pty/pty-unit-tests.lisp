@@ -6,7 +6,6 @@
 ;;;; cases from that file that spawn a real PTY-backed shell, directly via
 ;;;; forkpty-with-shell or through WITH-PTY-SHELL.  The argument-assembly,
 ;;;; fboundp-reachability, and pipe-fd cases stayed behind in nerimux/test.
-
 (describe "pty-unit-suite"
 
   ;;; ── forkpty-with-shell end-to-end (real PTY) ─────────────────────────────────

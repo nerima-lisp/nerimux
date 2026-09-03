@@ -2,8 +2,6 @@
 
 ;;;; cursor tests — part B: %place-wide-char, table-driven cursor movement,
 ;;;; combining-char-p, write-char combining, DEC special graphics charset.
-
-
 (describe "terminal-suite/place-wide-char-suite"
 
   ;; %place-wide-char writes a width-2 lead cell and width-0 continuation.
@@ -28,7 +26,6 @@
 ;;; ── SUITE: table-driven cursor movement ──────────────────────────────────────
 ;;;
 ;;; Repeated cursor-up/down/left/right cases at count=1 form a natural table.
-
 (describe "terminal-suite/cursor-movement-table-suite"
 
   ;; Each direction moves by 1 from a known starting position.
@@ -55,7 +52,6 @@
 ;;;
 ;;; combining-char-p is exported from nerimux/terminal/actions and must return
 ;;; T only for Unicode combining marks (category M*).
-
 (describe "terminal-suite/combining-char-p-suite"
 
   ;; combining-char-p returns T for code points in the Combining Diacritical Marks block (U+0300-U+036F).
@@ -105,7 +101,6 @@
 ;;;   1. Append the mark to the previous cell's combining slot.
 ;;;   2. NOT advance the cursor.
 ;;;   3. Mark the screen dirty.
-
 (describe "terminal-suite/write-char-combining-suite"
 
   ;; Writing a combining mark does not advance the cursor.
@@ -144,7 +139,6 @@
 ;;;
 ;;; When screen-charset = :dec-graphics, write-char-at-cursor remaps characters
 ;;; through %dec-graphics-char before placing them on the grid.
-
 (describe "terminal-suite/dec-graphics-suite"
 
   ;; After designate-charset :g0 :dec-graphics, writing 'j' places the box-drawing corner U+2518.

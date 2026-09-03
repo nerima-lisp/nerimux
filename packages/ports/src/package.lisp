@@ -1,5 +1,4 @@
 ;;; Domain abstraction packages.
-
 (defpackage #:nerimux/ports
   (:use #:cl)
   (:documentation

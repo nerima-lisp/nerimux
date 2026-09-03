@@ -4,18 +4,20 @@
 ;;;; B, D2): fetched on demand -- only when a client expands a worktree row
 ;;;; -- rather than with every status refresh, since `git log` is one more
 ;;;; process launch per worktree that most frames never need.
-
-(defvar *worktree-commit-log-limit* 5
+(defvar *worktree-commit-log-limit*
+  5
   "Maximum recent commits REFRESH-WORKTREE-COMMITS-ASYNC fetches per worktree.")
 
-(defvar *worktree-log-max-output-characters* 100000
+(defvar *worktree-log-max-output-characters*
+  100000
   "Cap on `git log`'s captured stdout (F3, CWE-400): passed as VCS-KIT's
    :MAX-OUTPUT-CHARACTERS execution option so a pathological commit history
    cannot make one worker thread hold an unbounded string, independent of
    *WORKTREE-COMMIT-LOG-LIMIT* -- that limit bounds the number of commits
    requested, not the size of any single field within them.")
 
-(defvar *worktree-text-max-characters* 500
+(defvar *worktree-text-max-characters*
+  500
   "Maximum characters kept per retained diff line or commit subject (F3b,
    CWE-400) -- applied at ingestion, before storage, by %TRUNCATE-TEXT.
    Bounds a single pathological line/message independent of
@@ -39,7 +41,9 @@ would be wasted work."
   (%truncate-text (%strip-control-characters text)))
 
 (defun %shorten-commit-id (id)
-  (if (and (stringp id) (> (length id) 7)) (subseq id 0 7) (or id "")))
+  (if (and (stringp id) (> (length id) 7))
+      (subseq id 0 7)
+      (or id "")))
 
 (defun %commit-subject-line (message)
   "MESSAGE's first line only -- the inline expansion shows one line per
@@ -48,7 +52,9 @@ it is retained."
   (%sanitize-retained-text
    (if message
        (let ((newline (position #\Newline message)))
-         (if newline (subseq message 0 newline) message))
+         (if newline
+             (subseq message 0 newline)
+             message))
        "")))
 
 (defun %worktree-commit-entry (commit)
@@ -69,24 +75,28 @@ one -- never the git-layer MAKE-REPOSITORY object VCS-KIT:GIT-REV-PARSE-
 VALUE and friends take; a wrong-type handle there type-errors before any
 git runs."
   (let ((backend-repository
-          (%make-vcs-repository (nerimux/workspace-model:worktree-path worktree))))
+         (%make-vcs-repository (nerimux/workspace-model:worktree-path worktree))))
     (mapcar #'%worktree-commit-entry
-            (vcs-kit:vcs-list-commits
-             backend-repository
-             :arguments
-             (list (format nil "--max-count=~D" *worktree-commit-log-limit*))
-             :execution-options
-             (list :max-output-characters *worktree-log-max-output-characters*)))))
+            (vcs-kit:vcs-list-commits backend-repository
+                                      :arguments
+                                      (list
+                                       (format nil
+                                               "--max-count=~D"
+                                               *worktree-commit-log-limit*))
+                                      :execution-options
+                                      (list :max-output-characters
+                                            *worktree-log-max-output-characters*)))))
 
 ;;;; Per-file diff for the same inline expansion (Wave C): one level deeper
 ;;;; than a :FILE row, fetched only when that row itself is expanded.
-
-(defvar *worktree-diff-line-limit* 200
+(defvar *worktree-diff-line-limit*
+  200
   "Maximum diff lines REFRESH-WORKTREE-FILE-DIFF-ASYNC keeps per file; the
    worker still counts the true total so the caller can report how many
    lines were left out.")
 
-(defvar *worktree-diff-max-output-characters* 1000000
+(defvar *worktree-diff-max-output-characters*
+  1000000
   "Cap on `git diff`'s captured stdout (F3, CWE-400): passed as VCS-KIT's
    :MAX-OUTPUT-CHARACTERS execution option so a single pathological diff
    (e.g. a generated file with no line breaks) cannot make one worker
@@ -101,10 +111,10 @@ any content, and keeping that segment would report one line more than the
 diff actually has. The empty string (no diff, e.g. an unchanged path) is
 NIL, not a list holding one empty line."
   (let ((text
-          (if (and (plusp (length stdout))
-                   (char= (char stdout (1- (length stdout))) #\Newline))
-              (subseq stdout 0 (1- (length stdout)))
-              stdout)))
+         (if (and (plusp (length stdout))
+                  (char= (char stdout (1- (length stdout))) #\Newline))
+             (subseq stdout 0 (1- (length stdout)))
+             stdout)))
     (when (plusp (length text))
       (loop with start = 0
             for newline = (position #\Newline text :start start)
@@ -140,18 +150,28 @@ own unified +/- hunks with no ANSI escapes in them -- a configured external
 diff driver instead produces arbitrary side-by-side text with no +/- lines
 at all, which %SPLIT-DIFF-LINES then treats as ordinary diff content."
   (let* ((backend-repository
-           (%make-vcs-repository (nerimux/workspace-model:worktree-path worktree)))
-         (result (vcs-kit:vcs-diff
-                  backend-repository "--no-ext-diff" "--no-color" "--" path
-                  :execution-options
-                  (list :max-output-characters
-                        *worktree-diff-max-output-characters*)))
+          (%make-vcs-repository
+           (nerimux/workspace-model:worktree-path worktree)))
+         (result
+          (vcs-kit:vcs-diff backend-repository
+                            "--no-ext-diff"
+                            "--no-color"
+                            "--"
+                            path
+                            :execution-options
+                            (list :max-output-characters
+                                  *worktree-diff-max-output-characters*)))
          (lines (%split-diff-lines (vcs-kit:process-result-stdout result)))
-         (retained (subseq lines 0 (min (length lines) *worktree-diff-line-limit*))))
+         (retained
+          (subseq lines 0 (min (length lines) *worktree-diff-line-limit*))))
     (cons (length lines) (mapcar #'%sanitize-retained-text retained))))
 
-(defun refresh-worktree-file-diff-async
-    (repository worktree path &key on-complete on-error callback-dispatch)
+(defun refresh-worktree-file-diff-async (repository worktree
+                                                    path
+                                                    &key
+                                                    on-complete
+                                                    on-error
+                                                    callback-dispatch)
   "Fetch WORKTREE's `git diff -- PATH` on a worker thread and settle with
 :READY/TOTAL/LINES or :FAILED to ON-COMPLETE, mirroring REFRESH-WORKTREE-
 COMMITS-ASYNC's shape exactly -- including catching the worker's own errors
@@ -170,19 +190,24 @@ REFRESH-WORKTREE-COMMITS-ASYNC documents. Dedup (never launch while a cache
 entry is already :PENDING) is the caller's responsibility, exactly as it is
 there."
   (declare (ignore repository))
-  (%run-vcs-operation-async
-   "nerimux-vcs-worktree-file-diff"
-   (lambda ()
-     (handler-case
-         (cons :ready (%read-worktree-file-diff worktree path))
-       (error () (cons :failed nil))))
-   #'identity
-   on-complete
-   on-error
-   callback-dispatch))
+  (%run-vcs-operation-async "nerimux-vcs-worktree-file-diff"
+                            (lambda ()
+                              (handler-case (cons :ready
+                                                  (%read-worktree-file-diff
+                                                   worktree
+                                                   path))
+                                (error ()
+                                  (cons :failed nil))))
+                            #'identity
+                            on-complete
+                            on-error
+                            callback-dispatch))
 
-(defun refresh-worktree-commits-async
-    (repository worktree &key on-complete on-error callback-dispatch)
+(defun refresh-worktree-commits-async (repository worktree
+                                                  &key
+                                                  on-complete
+                                                  on-error
+                                                  callback-dispatch)
   "Fetch WORKTREE's recent commit history on a worker thread and write
 WORKTREE-RECENT-COMMITS/WORKTREE-COMMITS-STATE once it settles.
 
@@ -221,20 +246,25 @@ any catalog was ever published and a WORKTREE since deleted outright; in
 the deleted case the write lands on an unreachable struct and is inert,
 not wrong."
   (declare (ignore repository))
-  (%run-vcs-operation-async
-   "nerimux-vcs-worktree-commits"
-   (lambda ()
-     (handler-case
-         (cons :ready (%read-worktree-commits worktree))
-       (error () (cons :failed nil))))
-   (lambda (worker-result)
-     (destructuring-bind (state . commits) worker-result
-       (let ((target (%settle-target-worktree worktree)))
-         (setf (nerimux/workspace-model:worktree-recent-commits target)
-               (if (eq state :ready) commits nil)
-               (nerimux/workspace-model:worktree-commits-state target)
-               state)
-         target)))
-   on-complete
-   on-error
-   callback-dispatch))
+  (%run-vcs-operation-async "nerimux-vcs-worktree-commits"
+                            (lambda ()
+                              (handler-case (cons :ready
+                                                  (%read-worktree-commits
+                                                   worktree))
+                                (error ()
+                                  (cons :failed nil))))
+                            (lambda (worker-result)
+                              (destructuring-bind (state . commits) 
+                                  worker-result
+                                (let ((target
+                                       (%settle-target-worktree worktree)))
+                                  (setf (nerimux/workspace-model:worktree-recent-commits
+                                         target) (if (eq state :ready)
+                                                     commits
+                                                     nil)
+                                        (nerimux/workspace-model:worktree-commits-state
+                                         target) state)
+                                  target)))
+                            on-complete
+                            on-error
+                            callback-dispatch))

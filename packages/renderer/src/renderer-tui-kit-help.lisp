@@ -23,31 +23,52 @@
 ;;;; that no longer exist, while claiming in this very comment to be verified.
 ;;;; A help screen naming keys that do nothing is worse than no help screen,
 ;;;; and nothing mechanical will catch it -- these are strings.
-
 (defparameter +help-view-sections+
   '(("Navigate"
-     (("n/p" . "move") ("M-n/M-p" . "section") ("Tab" . "expand")
-      ("S-Tab" . "cycle all") ("1-4" . "detail level") ("Enter" . "open")
-      ("q" . "back") ("g" . "refresh") ("/" . "filter")
-      (":" . "command") ("C-p" . "picker") ("$" . "process log")
-      ("?" . "menu")))
-    ("Status"
-     (("s/S" . "stage") ("u/U" . "unstage") ("k" . "discard")))
+     (("n/p" . "move") ("M-n/M-p" . "section")
+                       ("Tab" . "expand")
+                       ("S-Tab" . "cycle all")
+                       ("1-4" . "detail level")
+                       ("Enter" . "open")
+                       ("q" . "back")
+                       ("g" . "refresh")
+                       ("/" . "filter")
+                       (":" . "command")
+                       ("C-p" . "picker")
+                       ("$" . "process log")
+                       ("?" . "menu")))
+    ("Status" (("s/S" . "stage") ("u/U" . "unstage") ("k" . "discard")))
     ("Menus (?)"
-     (("c" . "commit") ("P" . "push") ("F" . "pull")
-      ("b" . "branch") ("m" . "merge") ("r" . "rebase")
-      ("z" . "stash") ("l" . "log") ("d" . "diff")
-      ("f" . "fetch") ("t" . "tag") ("X" . "reset")
-      ("w" . "worktree")))
+     (("c" . "commit") ("P" . "push")
+                       ("F" . "pull")
+                       ("b" . "branch")
+                       ("m" . "merge")
+                       ("r" . "rebase")
+                       ("z" . "stash")
+                       ("l" . "log")
+                       ("d" . "diff")
+                       ("f" . "fetch")
+                       ("t" . "tag")
+                       ("X" . "reset")
+                       ("w" . "worktree")))
     ("Prefix C-q"
-     (("-" . "split down") ("|" . "split right") ("x" . "close pane")
-      ("z" . "zoom") ("h/j/k/l" . "focus") ("n/p" . "cycle window")
-      ("w" . "status view") ("[" . "scrollback") ("d" . "detach")
-      ("Q" . "quit server")))
+     (("-" . "split down") ("|" . "split right")
+                           ("x" . "close pane")
+                           ("z" . "zoom")
+                           ("h/j/k/l" . "focus")
+                           ("n/p" . "cycle window")
+                           ("w" . "status view")
+                           ("[" . "scrollback")
+                           ("d" . "detach")
+                           ("Q" . "quit server")))
     ("Scrollback (C-q [)"
-     (("j/k" . "line") ("C-u/C-d" . "half page") ("g/G" . "top/bottom")
-      ("/" . "search") ("n/N" . "next/prev") ("Space" . "select")
-      ("y" . "yank+exit") ("q" . "exit")))
+     (("j/k" . "line") ("C-u/C-d" . "half page")
+                       ("g/G" . "top/bottom")
+                       ("/" . "search")
+                       ("n/N" . "next/prev")
+                       ("Space" . "select")
+                       ("y" . "yank+exit")
+                       ("q" . "exit")))
     ("Panes"
      (("" . "typing goes straight to the shell -- no mode to enter first")
       ("" . "every nerimux key inside a pane starts with C-q"))))
@@ -64,18 +85,17 @@
 ;;; surface (%MAKE-WORKSPACE-TREE-THEME's :ACCENT role, renderer-tui-kit-
 ;;; widgets.lisp, is the same pattern), not through the plain-ANSI path those
 ;;; string constants serve.
-
 (defun %help-view-heading-style ()
-  (cl-tui-kit/core:make-style
-   :bold t
-   :foreground (cl-tui-kit/core:rgb-color 189 147 249)))
+  (cl-tui-kit/core:make-style :bold
+                              t
+                              :foreground
+                              (cl-tui-kit/core:rgb-color 189 147 249)))
 
 (defun %help-view-key-style ()
-  (cl-tui-kit/core:make-style
-   :foreground (cl-tui-kit/core:rgb-color 139 233 253)))
+  (cl-tui-kit/core:make-style :foreground
+                              (cl-tui-kit/core:rgb-color 139 233 253)))
 
 ;;; ── Layout ───────────────────────────────────────────────────────────────
-
 (defun %help-view-binding-text (key description)
   (format nil "~A ~A" key description))
 
@@ -84,30 +104,52 @@
    gutter, so a section of short Overview/Prefix bindings packs several per
    row while Modes' long descriptions still get a row of their own -- no
    fixed magic-number column width to keep in sync with the content above."
-  (+ 2 (reduce #'max bindings
-               :key (lambda (binding)
-                      (%display-width
-                       (%help-view-binding-text (car binding) (cdr binding))))
-               :initial-value 0)))
+  (+ 2
+     (reduce #'max
+             bindings
+             :key
+             (lambda (binding)
+               (%display-width
+                (%help-view-binding-text (car binding) (cdr binding))))
+             :initial-value
+             0)))
 
 (defun %help-view-section-columns (bindings available-width)
-  (max 1 (min 3 (floor (max 1 available-width)
-                       (%help-view-section-item-width bindings)))))
+  (max 1
+       (min 3
+            (floor (max 1 available-width)
+                   (%help-view-section-item-width bindings)))))
 
 (defun %draw-help-view-heading (surface row col text width)
-  (cl-tui-kit/core:surface-draw-styled-text
-   surface col row
-   (list (cl-tui-kit/core:make-text-span text :style (%help-view-heading-style)))
-   :max-width width))
+  (cl-tui-kit/core:surface-draw-styled-text surface
+                                            col
+                                            row
+                                            (list
+                                             (cl-tui-kit/core:make-text-span
+                                              text
+                                              :style
+                                              (%help-view-heading-style)))
+                                            :max-width
+                                            width))
 
 (defun %draw-help-view-binding (surface row col key description width)
-  (cl-tui-kit/core:surface-draw-styled-text
-   surface col row
-   (list (cl-tui-kit/core:make-text-span key :style (%help-view-key-style))
-         (cl-tui-kit/core:make-text-span (format nil " ~A" description)))
-   :max-width width))
+  (cl-tui-kit/core:surface-draw-styled-text surface
+                                            col
+                                            row
+                                            (list
+                                             (cl-tui-kit/core:make-text-span key
+                                                                             :style
+                                                                             (%help-view-key-style))
+                                             (cl-tui-kit/core:make-text-span
+                                              (format nil " ~A" description)))
+                                            :max-width
+                                            width))
 
-(defun %draw-help-view-section (surface row indent available-width max-row section)
+(defun %draw-help-view-section (surface row
+                                        indent
+                                        available-width
+                                        max-row
+                                        section)
   "Draw SECTION -- (HEADING BINDINGS) -- starting at ROW, indented INDENT
    columns, wrapping BINDINGS into %HELP-VIEW-SECTION-COLUMNS side-by-side
    item columns. Returns the next free row. Drawing stops (silently clipping
@@ -124,42 +166,54 @@
             do (loop for offset from 0 below columns
                      for index = (+ start offset)
                      while (< index (length bindings))
-                     do (destructuring-bind (key . description)
+                     do (destructuring-bind (key . description) 
                             (nth index bindings)
-                          (%draw-help-view-binding
-                           surface row (+ indent (* offset item-width))
-                           key description item-width)))
-               (incf row)))
+                          (%draw-help-view-binding surface
+                                                   row
+                                                   (+ indent
+                                                      (* offset item-width))
+                                                   key
+                                                   description
+                                                   item-width))) (incf row)))
     (1+ row)))
 
 ;;; ── Box chrome ───────────────────────────────────────────────────────────
-
 (defun %render-help-view-box (surface rectangle)
-  (let ((box (cl-tui-kit/widgets:make-box-widget
-              (cl-tui-kit/widgets:make-text-widget "" :id :nerimux-help-body)
-              :id :nerimux-help-box :border-kind :single)))
+  (let ((box
+         (cl-tui-kit/widgets:make-box-widget
+          (cl-tui-kit/widgets:make-text-widget "" :id :nerimux-help-body)
+          :id
+          :nerimux-help-box
+          :border-kind
+          :single)))
     (cl-tui-kit/widgets:render-widget box surface rectangle)))
 
 (defun %stamp-help-view-title (surface rectangle title)
   (let* ((inner-width (max 0 (- (cl-tui-kit/core:rectangle-width rectangle) 4)))
          (text (%display-clip (format nil " ~A " title) inner-width)))
-    (cl-tui-kit/core:surface-draw-text
-     surface
-     (+ (cl-tui-kit/core:rectangle-x rectangle) 2)
-     (cl-tui-kit/core:rectangle-y rectangle)
-     text)))
+    (cl-tui-kit/core:surface-draw-text surface
+                                       (+
+                                        (cl-tui-kit/core:rectangle-x rectangle)
+                                        2)
+                                       (cl-tui-kit/core:rectangle-y rectangle)
+                                       text)))
 
 (defun %stamp-help-view-footer (surface rectangle hint)
   (let* ((width (cl-tui-kit/core:rectangle-width rectangle))
          (text (%display-clip (format nil " ~A " hint) (max 0 (- width 4))))
-         (x (max (+ (cl-tui-kit/core:rectangle-x rectangle) 2)
-                 (- (+ (cl-tui-kit/core:rectangle-x rectangle) width)
-                    2 (%display-width text)))))
-    (cl-tui-kit/core:surface-draw-text
-     surface x
-     (+ (cl-tui-kit/core:rectangle-y rectangle)
-        (1- (cl-tui-kit/core:rectangle-height rectangle)))
-     text)))
+         (x
+          (max (+ (cl-tui-kit/core:rectangle-x rectangle) 2)
+               (- (+ (cl-tui-kit/core:rectangle-x rectangle) width)
+                  2
+                  (%display-width text)))))
+    (cl-tui-kit/core:surface-draw-text surface
+                                       x
+                                       (+
+                                        (cl-tui-kit/core:rectangle-y rectangle)
+                                        (1-
+                                         (cl-tui-kit/core:rectangle-height
+                                          rectangle)))
+                                       text)))
 
 (defun render-help-view-to-tui-string (rows cols)
   "Render the `?` full-screen help view: a Dracula-styled static reference
@@ -172,14 +226,20 @@
          (inner (%box-widget-inner-rectangle rectangle))
          (indent (cl-tui-kit/core:rectangle-x inner))
          (available-width (cl-tui-kit/core:rectangle-width inner))
-         (max-row (max (cl-tui-kit/core:rectangle-y inner)
-                       (1- (+ (cl-tui-kit/core:rectangle-y inner)
-                              (cl-tui-kit/core:rectangle-height inner))))))
+         (max-row
+          (max (cl-tui-kit/core:rectangle-y inner)
+               (1-
+                (+ (cl-tui-kit/core:rectangle-y inner)
+                   (cl-tui-kit/core:rectangle-height inner))))))
     (%render-help-view-box surface rectangle)
     (%stamp-help-view-title surface rectangle "HELP")
     (%stamp-help-view-footer surface rectangle "q / ? / Enter / Esc close")
     (let ((row (cl-tui-kit/core:rectangle-y inner)))
       (dolist (section +help-view-sections+)
-        (setf row (%draw-help-view-section
-                   surface row indent available-width max-row section))))
+        (setf row (%draw-help-view-section surface
+                                           row
+                                           indent
+                                           available-width
+                                           max-row
+                                           section))))
     (%surface-to-ansi-frame surface)))

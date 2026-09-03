@@ -79,7 +79,9 @@ workspace overview
   ├─ Enter → agent / terminal view
   ├─ n     → workspace作成
   ├─ a     → agent割り当て
-  ├─ t     → terminal追加
+  ├─ t     → 通常terminal追加
+  ├─ c     → Claude agent追加
+  ├─ x     → Codex agent追加
   ├─ c     → 完了 / 未完了切替
   ├─ p     → 選択workspaceをprune
   └─ P     → prune all

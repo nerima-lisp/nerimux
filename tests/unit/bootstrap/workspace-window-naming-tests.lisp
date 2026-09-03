@@ -4,7 +4,6 @@
 ;;;; (workspace-window.lisp), unit-tested directly against %worktree-window-name
 ;;;; / %worktree-windows -- no session/dispatch machinery needed for the naming
 ;;;; rule itself.
-
 (describe "workspace-window-naming-suite"
 
   (it "workspace-new-window-passes-geometry-and-starts-reader-by-default"
@@ -46,6 +45,45 @@
                                                             :name "named"
                                                             :start-reader-p nil)))
         (expect (not reader-called)))))
+
+  (it "workspace-new-window-passes-a-default-command"
+    (let ((arguments nil)
+          (window :command-window))
+      (with-stubbed-fdefinition
+          ((nerimux::session-new-window
+            (lambda (&rest args)
+              (setf arguments args)
+              window)))
+        (let ((nerimux::*term-rows* 30)
+              (nerimux::*term-cols* 100))
+          (expect (eq window
+                      (nerimux::%workspace-new-window
+                       :session
+                       :name "named"
+                       :start-dir "/tmp/work"
+                       :default-command "make test"
+                       :start-reader-p nil)))
+          (expect (equal '(:session "named" 29 100 1 "/tmp/work" "make test")
+                         arguments))))))
+
+  (it "workspace-new-window-starts-the-reader-by-default"
+    (let ((reader-pane nil)
+          (window :reader-window))
+      (with-stubbed-fdefinition
+          ((nerimux::session-new-window
+            (lambda (&rest args)
+              (declare (ignore args))
+              window))
+           (nerimux::window-active-pane
+            (lambda (active-window)
+              (declare (ignore active-window))
+              :active-pane))
+           (nerimux::start-reader-thread
+            (lambda (pane)
+              (setf reader-pane pane))))
+        (expect (eq window
+                    (nerimux::%workspace-new-window :session :name "named")))
+        (expect (eq :active-pane reader-pane)))))
 
   ;; The first window for a worktree is bare: just the branch name.
   (it "worktree-window-name-first-window-is-bare-branch-name"

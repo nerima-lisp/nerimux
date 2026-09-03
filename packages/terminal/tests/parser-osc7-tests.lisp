@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/terminal)
 
 ;;;; parser tests - OSC 7 and percent decoding.
-
 (describe "terminal-suite/osc7-cwd-coverage"
 
   ;;; ── OSC 7: current working directory (file://host/path) ─────────────────────

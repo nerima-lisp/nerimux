@@ -2,9 +2,7 @@
 
 ;;;; Cell display/charset tests (src/domain/terminal/cell.lisp and related screen actions).
 ;;;; cell-tests.lisp declares terminal-suite and shared low-level fixtures first.
-
 ;;; ── SUITE: DEC special graphics character set ────────────────────────────────
-
 (describe "terminal-suite/dec-graphics"
 
   ;; define-dec-graphics-table macro is fbound.
@@ -51,7 +49,6 @@
 ;;;
 ;;; Cells cleared by ED/EL/ECH, the blanks from IL/DL/ICH/DCH, and lines exposed
 ;;; by scrolling must take the CURRENT SGR background colour, not the default.
-
 (describe "terminal-suite/bce-suite"
 
   ;; ESC[44m then ESC[2J fills the display with the current background (bg=4).
@@ -91,7 +88,6 @@
 ;;; Verify the values of constants that are referenced across multiple files.
 ;;; Any change to these values is a breaking change to color or geometry
 ;;; handling — tests here document the canonical values.
-
 (describe "terminal-suite/cross-file-constants"
 
   ;; +true-color-flag+ must equal #x1000000 (bit 24 of a colour slot).
@@ -181,7 +177,6 @@
       (expect (= 1 (nerimux/terminal/types:cell-width c))))))
 
 ;;; ── SUITE: cell-hyperlink slot ───────────────────────────────────────────────
-
 (describe "terminal-suite/cell-hyperlink-suite"
 
   ;; make-cell with no :hyperlink argument leaves the slot NIL.

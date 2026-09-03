@@ -7,35 +7,32 @@
 ;;;;        combining-char handling, DEC-graphics remapping, and %place-wide-char.
 ;;;; Also covers: combining-char-p predicate, DEC graphics charset remapping,
 ;;;;              write-char-at-cursor combining-char path, write-codepoint.
-
 ;;; ── Shared fixture: with-scroll-region ──────────────────────────────────────
 ;;;
 ;;; Several tests in this file set a non-trivial scroll region and position the
 ;;; cursor within it before calling action functions.  This macro captures the
 ;;; repeated setup to remove the inline duplication.
-
 (defmacro with-scroll-region ((screen-var w h top bottom cy) &body body)
   "Bind SCREEN-VAR to a W×H screen with scroll region TOP..BOTTOM and cursor
    initially on row CY.  Used by scroll-region clamping and cursor-ri tests."
   `(with-screen (,screen-var ,w ,h)
-     (setf (nerimux/terminal/types::screen-scroll-top    ,screen-var) ,top
-           (nerimux/terminal/types::screen-scroll-bottom ,screen-var) ,bottom
-           (nerimux/terminal/types::screen-cursor-y      ,screen-var) ,cy)
-     ,@body))
+                (setf (nerimux/terminal/types::screen-scroll-top ,screen-var) ,top
+                      (nerimux/terminal/types::screen-scroll-bottom ,screen-var) ,bottom
+                      (nerimux/terminal/types::screen-cursor-y ,screen-var) ,cy)
+                ,@body))
 
 ;;; ── Shared fixture: with-cursor-at ──────────────────────────────────────────
 ;;;
 ;;; Several tests position the cursor column (and, optionally, row) before
 ;;; calling an action function.  This macro captures the repeated
 ;;; (setf screen-cursor-x ...) / (setf screen-cursor-y ...) inline setup.
-
 (defmacro with-cursor-at ((screen-var w h x &optional (y 0)) &body body)
   "Bind SCREEN-VAR to a W×H screen with the cursor initially at column X,
    row Y (defaulting to row 0)."
   `(with-screen (,screen-var ,w ,h)
-     (setf (nerimux/terminal/types:screen-cursor-x ,screen-var) ,x
-           (nerimux/terminal/types:screen-cursor-y ,screen-var) ,y)
-     ,@body))
+                (setf (nerimux/terminal/types:screen-cursor-x ,screen-var) ,x
+                      (nerimux/terminal/types:screen-cursor-y ,screen-var) ,y)
+                ,@body))
 
 ;;; ── SUITE: scroll-region cursor clamping ────────────────────────────────────
 ;;;
@@ -45,7 +42,6 @@
 ;;; cursor-left/right clamp to column 0 / width-1.  These tests call the
 ;;; action functions directly, having first installed a non-trivial scroll
 ;;; region via the real slot accessors.
-
 (describe "terminal-suite/scroll-region-clamp"
 
   ;; cursor-up with a large count stops at scroll-top, NOT at row 0.
@@ -85,7 +81,6 @@
       (expect (= 7 (screen-cursor-y s))))))
 
 ;;; ── SUITE: set-cursor ────────────────────────────────────────────────────────
-
 (describe "terminal-suite/set-cursor-suite"
 
   ;; set-cursor moves cursor to (x,y) within bounds, clamping out-of-range values to screen edges.
@@ -106,7 +101,6 @@
 ;;; These tests call action functions directly rather than through
 ;;; screen-process-bytes, targeting edge cases that the CSI/parser path
 ;;; may not hit explicitly.
-
 (describe "terminal-suite/direct-action-cursor"
 
   ;; cursor-bs decrements the cursor column by 1; at column 0 it is a no-op.

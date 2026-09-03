@@ -1,12 +1,10 @@
 (in-package #:nerimux/terminal/actions)
 
 ;;;; Alt-screen enter/exit helpers.
-
 ;;; Entering the alternate screen used to be gated on the `alternate-screen`
 ;;; option, reached through a callback the bootstrap layer installed. The option
 ;;; is gone and the alt screen is always permitted, so both the callback and its
 ;;; default-allow fallback collapse into no check at all.
-
 (defun enter-alt-screen (screen &key save-cursor-p)
   "Save the current grid and cursor x/y to the alt-screen slots, then install a
    fresh blank grid.  When SAVE-CURSOR-P is T (?1049h), also save the FULL cursor
@@ -32,11 +30,12 @@
    (SGR attrs, charset, origin mode) via RESTORE-CURSOR — equivalent to ?1047l
    + ?1048l (DECRC).  Falls back to erase-display mode 2 when nothing was saved."
   (if (screen-alt-cells screen)
-      (setf (screen-cells      screen) (screen-alt-cells    screen)
-            (screen-cursor-x   screen) (screen-alt-cursor-x screen)
-            (screen-cursor-y   screen) (screen-alt-cursor-y screen)
-            (screen-alt-cells  screen) nil)
+      (setf (screen-cells screen) (screen-alt-cells screen)
+            (screen-cursor-x screen) (screen-alt-cursor-x screen)
+            (screen-cursor-y screen) (screen-alt-cursor-y screen)
+            (screen-alt-cells screen) nil)
       (erase-display screen 2))
-  (when restore-cursor-p (restore-cursor screen))
+  (when restore-cursor-p
+    (restore-cursor screen))
   (%clear-all-line-wrapped screen)
   (setf (screen-dirty-p screen) t))

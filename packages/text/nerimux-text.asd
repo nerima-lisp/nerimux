@@ -17,8 +17,7 @@
   :depends-on ()
   :pathname "src"
   :serial t
-  :components ((:file "package")
-               (:file "text-parse"))
+  :components ((:file "package") (:file "text-parse"))
   :in-order-to ((test-op (test-op "nerimux-text/test"))))
 
 (defsystem "nerimux-text/test"

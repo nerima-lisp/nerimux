@@ -1,20 +1,41 @@
 (in-package #:nerimux/test)
 
 ;;;; Per-client message dispatch tests for the multi-client server.
-
-(defun %wt-auto-branch-name-p (branch)
-  "T when BRANCH matches wt-YYYYMMDDTHHMMSS -- the auto-generated branch
-   name format %CLIENT-WORKTREE-CREATE-BRANCH-NAME produces for `n` (PR2,
-   R6.3 pivot). Written without a regex dependency: a hand rolled character-
-   class check over the fixed-width format is just as precise here."
-  (and (stringp branch)
-       (= (length branch) 18)
-       (string= "wt-" branch :end2 3)
-       (every #'digit-char-p (subseq branch 3 11))
-       (char= #\T (char branch 11))
-       (every #'digit-char-p (subseq branch 12 18))))
-
 (describe "server-multi-suite"
+
+  (it "resolves picker worktrees through repository and organization fallbacks"
+    (let* ((empty-organization
+             (nerimux/workspace-model:make-organization))
+           (repository
+             (nerimux/workspace-model:make-repository))
+           (worktree
+             (nerimux/workspace-model:make-worktree :path "/tmp/nerimux-wt"))
+           (organization
+             (nerimux/workspace-model:make-organization)))
+      (nerimux/workspace-model:organization-add-repository
+       organization repository)
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
+      (setf (nerimux/workspace-model:repository-main-worktree repository) nil)
+      (expect (eq worktree
+                  (nerimux::%picker-item-worktree
+                   (nerimux/picker::%make-picker-item
+                    :repository repository))))
+      (expect (null (nerimux::%picker-item-worktree
+                     (nerimux/picker::%make-picker-item
+                      :organization empty-organization))))
+      (expect (eq worktree
+                  (nerimux::%picker-item-worktree
+                   (nerimux/picker::%make-picker-item
+                    :organization organization))))))
+
+  (it "does not search panes when picker worktree is absent"
+    (let ((session (make-session :id 1 :name "0")))
+      (expect (null (nerimux::%client-worktree-pane session nil)))))
+
+  (it "returns no pane when picker worktree is not attached"
+    (let* ((session (make-session :id 1 :name "0"))
+           (worktree (nerimux/workspace-model:make-worktree)))
+      (expect (null (nerimux::%client-worktree-pane session worktree)))))
 
   (it "main-thread-callback-queue-preserves-order"
     (let ((events nil)
@@ -35,6 +56,30 @@
        (lambda () (push :after-error events)))
       (nerimux::%drain-main-thread-callbacks)
       (expect (equal '(:after-error) events))))
+
+  (it "tree-selection-helpers-cover-boundaries"
+    (check-table
+      (list (list (nerimux::%tree-selection-index 'a '(a b) 1)
+                  0
+                  "preserve an existing selection")
+            (list (nerimux::%tree-selection-index nil '(a b) -1)
+                  0
+                  "start before the first item when moving backward")
+            (list (nerimux::%tree-selection-index nil '(a b) 1)
+                  -1
+                  "keep the invalid forward sentinel")
+            (list (nerimux::%tree-selection-scroll 2 3 5)
+                  2
+                  "scroll upward to the selected item")
+            (list (nerimux::%tree-selection-scroll 8 3 5)
+                  4
+                  "scroll downward when the selection leaves the viewport")
+            (list (nerimux::%tree-selection-scroll 10 0 0)
+                  11
+                  "advance even when the visible height is empty")
+            (list (nerimux::%tree-selection-scroll 5 0 10)
+                  0
+                  "retain the viewport while the selection is visible"))))
 
   ;;; ── %handle-multi-client-message: per-client dispatch ────────────────────────
 
@@ -154,13 +199,20 @@
                 (setf (nerimux::client-conn-modal conn) :scrollback))))
           (expect (nerimux::%handle-client-ui-command s conn :mode nil '("picker")))
           (expect (eq :picker (nerimux::client-conn-modal conn)))
+          (expect (nerimux::%handle-client-ui-command s conn :picker-close nil nil))
+          (expect (null (nerimux::client-conn-modal conn)))
+          (expect (nerimux::%handle-client-ui-command s conn :mode nil '("picker")))
           (expect (nerimux::%handle-client-ui-command s conn :accept nil nil))
           (expect (null (nerimux::client-conn-modal conn)))
           (expect (nerimux::%handle-client-ui-command s conn :mode nil '("copy")))
           (expect (eq :scrollback (nerimux::client-conn-modal conn)))
+          (dolist (mode '(:normal :input :command :tree-filter))
+            (expect (nerimux::%handle-client-ui-command s conn mode nil nil)))
+          (expect (nerimux::%handle-client-ui-command s conn :copy nil nil))
+          (expect (eq :scrollback (nerimux::client-conn-modal conn)))
           (expect (nerimux::%handle-client-ui-command s conn :cancel nil nil))
           (expect (null (nerimux::client-conn-modal conn)))
-          (expect (equal '(:select :open) calls))))))
+          (expect (equal '(:select :open :close :open) calls))))))
 
   (it "ui-command-aliases-preserve-command-contract"
     (with-fake-session (s)
@@ -257,7 +309,12 @@
         (expect (null
                  (nerimux::%handle-multi-command-message
                   s conn
-                  (nerimux/protocol::encode-command-payload :not-a-ui-command)))))))
+                  (nerimux/protocol::encode-command-payload :not-a-ui-command))))
+        (let ((nerimux::*dirty* nil))
+          (expect (null
+                   (nerimux::%handle-multi-command-message
+                    s conn nil)))
+          (expect nerimux::*dirty*)))))
 
   (it "forwarded-command-message-applies-focus-and-viewport"
     (with-fake-session (s)
@@ -482,6 +539,12 @@
                (expect (eq :command (nerimux::client-conn-modal conn)))
                (expect (string= "wt-delete --confirm"
                                 (nerimux::client-conn-command-buffer conn)))
+               (nerimux::%handle-multi-key-message s conn #(127))
+               (expect (string= "wt-delete --confir"
+                                (nerimux::client-conn-command-buffer conn)))
+               (nerimux::%handle-multi-key-message
+                s conn
+                (cl-codec-kit:string-to-octets "m" :encoding :utf-8))
                ;; ... and submitting it must actually reach the VCS layer.
                (nerimux::%handle-multi-key-message s conn #(13))
                (expect (equal (list worktree nil) call))
@@ -1102,6 +1165,24 @@
         (nerimux::%handle-multi-key-message s conn #(9))
         (expect (gethash (list :repository (nerimux/workspace-model:repository-id repository))
                          nerimux::*workspace-expanded-node-ids*)))))
+
+  (it "h-and-l-toggle-the-selected-organization-row"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/workspace-model:make-organization
+                :id "org-hl" :host "github.com" :name "team"))
+             (conn (%make-test-conn))
+             (nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal)))
+        (setf (nerimux::client-conn-view conn) :repolist)
+        (nerimux::%set-client-selected-tree-object conn organization)
+        (nerimux::%client-tree-collapse-selected conn)
+        (expect (gethash (list :organization
+                               (nerimux/workspace-model:organization-id organization))
+                         nerimux::*workspace-collapsed-node-ids*))
+        (nerimux::%client-tree-expand-selected conn)
+        (expect (null (gethash (list :organization
+                                     (nerimux/workspace-model:organization-id organization))
+                               nerimux::*workspace-collapsed-node-ids*))))))
 
   ;; J/K (uppercase, byte-driven "jump across section headers") are retired
   ;; (contract §2's removal list); the same jump is now M-n/M-p, confirmed
@@ -1894,3 +1975,543 @@
           (expect (equal (list (list repository :restore (list "--" "src/foo.lisp")))
                          calls)))))))
 
+(describe "transient data and process log suite"
+          (it "covers-meta-sequence-and-process-log-boundaries"
+              (with-fake-session (s)
+                                 (let ((conn (%make-test-conn))
+                                       (nerimux::*client-meta-pending*
+                                        (make-hash-table :test #'eq)))
+                                   (dolist (key '(#\n #\p))
+                                     (setf (gethash conn
+                                                    nerimux::*client-meta-pending*) :second)
+                                     (nerimux::%client-meta-pending-consume conn
+                                                                            (string
+                                                                             key))
+                                     (expect
+                                      (null
+                                       (gethash conn
+                                                nerimux::*client-meta-pending*))))
+                                   (setf (gethash conn
+                                                  nerimux::*client-meta-pending*) :second)
+                                   (nerimux::%client-meta-pending-consume conn
+                                                                          "[")
+                                   (expect
+                                    (eq :csi-third
+                                        (gethash conn
+                                                 nerimux::*client-meta-pending*)))
+                                   (nerimux::%client-meta-pending-consume conn
+                                                                          "Z")
+                                   (expect
+                                    (null
+                                     (gethash conn
+                                              nerimux::*client-meta-pending*)))
+                                   (setf (gethash conn
+                                                  nerimux::*client-meta-pending*) :csi-third)
+                                   (nerimux::%client-meta-pending-consume conn
+                                                                          "A")
+                                   (expect
+                                    (null
+                                     (gethash conn
+                                              nerimux::*client-meta-pending*)))
+                                   (setf (nerimux::client-conn-process-log conn) '("one"
+                                                                                   "two"))
+                                   (nerimux::%scroll-client-process-log conn 99)
+                                   (expect
+                                    (= 1
+                                       (nerimux::client-conn-process-log-scroll
+                                        conn)))
+                                   (nerimux::%scroll-client-process-log conn
+                                                                        -99)
+                                   (expect
+                                    (zerop
+                                     (nerimux::client-conn-process-log-scroll
+                                      conn))))))
+          (it "covers-visibility-and-process-log-state-machines"
+              (with-fake-session (s)
+                                 (let ((conn (%make-test-conn)))
+                                   (expect
+                                    (nerimux::%client-set-visibility-level conn
+                                                                           0))
+                                   (expect
+                                    (= 2
+                                       (nerimux::client-conn-visibility-level
+                                        conn)))
+                                   (dolist (expected '(3 4 1 2))
+                                     (nerimux::%client-cycle-visibility conn)
+                                     (expect
+                                      (= expected
+                                         (nerimux::client-conn-visibility-level
+                                          conn))))
+                                   (nerimux::%client-cycle-visibility conn)
+                                   (expect
+                                    (= 3
+                                       (nerimux::client-conn-visibility-level
+                                        conn)))
+                                   (setf (nerimux::client-conn-process-log conn) (list
+                                                                                  "first"
+                                                                                  "second"
+                                                                                  "third"))
+                                   (nerimux::%handle-process-log-key conn "n")
+                                   (expect
+                                    (= 1
+                                       (nerimux::client-conn-process-log-scroll
+                                        conn)))
+                                   (nerimux::%handle-process-log-key conn "p")
+                                   (expect
+                                    (= 0
+                                       (nerimux::client-conn-process-log-scroll
+                                        conn)))
+                                   (setf (nerimux::client-conn-modal conn) :process-log)
+                                   (nerimux::%handle-process-log-key conn #(27))
+                                   (expect
+                                    (null (nerimux::client-conn-modal conn)))
+                                   (expect
+                                    (nerimux::%client-esc-swallow-consume conn))
+                                   (expect
+                                    (nerimux::%client-esc-swallow-consume conn))
+                                   (expect
+                                    (null
+                                     (nerimux::%client-esc-swallow-consume conn)))
+                                   (setf (nerimux::client-conn-modal conn) :process-log)
+                                   (nerimux::%handle-multi-key-message s
+                                                                       conn
+                                                                       "q")
+                                   (expect
+                                    (null (nerimux::client-conn-modal conn)))
+                                   (setf (nerimux::client-conn-view conn) :status)
+                                   (nerimux::%client-step-back s conn)
+                                   (expect
+                                    (eq :repolist
+                                        (nerimux::client-conn-view conn))))))
+          (it "steps-back-through-transient-filter-and-live-focus-boundaries"
+              (with-fake-session (s)
+                                 (let* ((conn (%make-test-conn))
+                                        (pane (first (nerimux::all-panes s))))
+                                   (setf (nerimux::client-conn-modal conn) :transient
+                                         (nerimux::client-conn-transient-view
+                                          conn) :transient-data)
+                                   (nerimux::%client-step-back s conn)
+                                   (expect
+                                    (null (nerimux::client-conn-modal conn)))
+                                   (expect
+                                    (null
+                                     (nerimux::client-conn-transient-view conn)))
+                                   (setf (nerimux::client-conn-tree-filter conn) "feature"
+                                         (nerimux::client-conn-view conn) :status)
+                                   (nerimux::%client-step-back s conn)
+                                   (expect
+                                    (null
+                                     (nerimux::client-conn-tree-filter conn)))
+                                   (expect
+                                    (eq :status
+                                        (nerimux::client-conn-view conn)))
+                                   (setf (nerimux::client-conn-focus conn) pane)
+                                   (nerimux::%client-step-back s conn)
+                                   (expect
+                                    (eq :pane (nerimux::client-conn-view conn)))
+                                   (setf (nerimux::client-conn-view conn) :repolist
+                                         (nerimux::client-conn-focus conn) nil)
+                                   (nerimux::%client-step-back s conn)
+                                   (expect
+                                    (eq :repolist
+                                        (nerimux::client-conn-view conn)))
+                                   (setf (nerimux::client-conn-focus conn) pane)
+                                   (nerimux::%client-step-back s conn)
+                                   (expect
+                                    (eq :pane (nerimux::client-conn-view conn))))))
+          (it "transient-command-data-and-process-log-share-stable-contracts"
+              (with-fake-session (s)
+                                 (let ((conn (%make-test-conn)))
+                                   (dolist 
+                                       (definition
+                                        nerimux::+transient-definitions+)
+                                     (let ((menu (cdr definition)))
+                                       (expect (characterp (car definition)))
+                                       (expect (stringp (first menu)))
+                                       (expect (listp (second menu)))
+                                       (dolist (action (third menu))
+                                         (expect (characterp (first action)))
+                                         (expect (stringp (second action)))
+                                         (expect
+                                          (member (first (third action))
+                                                  '(:git :call
+                                                         :open-transient
+                                                         :help
+                                                         :stub))))))
+                                   (expect
+                                    (string= "git push --force"
+                                             (nerimux::%transient-command-text
+                                              :push
+                                              '("--force"))))
+                                   (expect
+                                    (null (nerimux::%transient-branch conn)))
+                                   (expect
+                                    (null
+                                     (nerimux::%transient-subtitle #\P conn)))
+                                   (expect
+                                    (string= "on ?"
+                                             (nerimux::%transient-action-display-description
+                                              conn
+                                              "on ~A")))
+                                   (expect
+                                    (equal '((#\f "--force" "--force" nil #\P))
+                                           (nerimux::%transient-render-arguments
+                                            #\P
+                                            conn
+                                            '((#\f . "--force")))))
+                                   (nerimux::%client-transient-toggle-flag conn
+                                                                           #\P
+                                                                           "--force")
+                                   (expect
+                                    (equal '("--force")
+                                           (nerimux::%client-transient-active-flags
+                                            conn
+                                            #\P)))
+                                   (nerimux::%client-transient-toggle-flag conn
+                                                                           #\P
+                                                                           "--force")
+                                   (expect
+                                    (null
+                                     (nerimux::%client-transient-active-flags
+                                      conn
+                                      #\P)))
+                                   (dotimes 
+                                       (index
+                                        (1+ nerimux::+max-process-log-entries+))
+                                     (nerimux::%client-log-process conn
+                                                                   (format nil
+                                                                           "git ~D"
+                                                                           index)
+                                                                   t
+                                                                   nil))
+                                   (expect
+                                    (= nerimux::+max-process-log-entries+
+                                       (length
+                                        (nerimux::client-conn-process-log conn))))
+                                   (expect
+                                    (equal '("git 20" "0" "")
+                                           (first
+                                            (nerimux::client-conn-process-log
+                                             conn)))))))
+          (it "transient-rendering-and-dismissal-cover-the-modal-contract"
+              (with-fake-session (s)
+                                 (let ((conn (%make-test-conn)))
+                                   (expect
+                                    (null
+                                     (nerimux::%open-client-transient conn #\~)))
+                                   (expect
+                                    (nerimux::%open-client-transient conn #\P))
+                                   (let ((view
+                                          (nerimux::client-conn-transient-view
+                                           conn)))
+                                     (expect
+                                      (eq :transient
+                                          (nerimux::client-conn-modal conn)))
+                                     (expect
+                                      (string= "Push"
+                                               (nerimux/renderer:transient-view-title
+                                                view)))
+                                     (expect
+                                      (equal '(#\p #\e)
+                                             (mapcar #'first
+                                                     (nerimux/renderer:transient-view-actions
+                                                      view)))))
+                                   (nerimux::%handle-client-transient-key-payload
+                                    s
+                                    conn
+                                    #(102))
+                                   (expect
+                                    (equal '("--force-with-lease")
+                                           (nerimux::%client-transient-active-flags
+                                            conn
+                                            #\P)))
+                                   (nerimux::%run-transient-action s
+                                                                   conn
+                                                                   (list
+                                                                    :open-transient
+                                                                    #\P))
+                                   (expect
+                                    (eq :transient
+                                        (nerimux::client-conn-modal conn)))
+                                   (nerimux::%run-transient-action s
+                                                                   conn
+                                                                   (list :git
+                                                                         #\P
+                                                                         :push
+                                                                         nil
+                                                                         nil
+                                                                         nil))
+                                   (expect
+                                    (null (nerimux::client-conn-modal conn)))
+                                   (nerimux::%handle-client-transient-key-payload
+                                    s
+                                    conn
+                                    #(122))
+                                   (nerimux::%handle-client-transient-key-payload
+                                    s
+                                    conn
+                                    #(113))
+                                   (expect
+                                    (null (nerimux::client-conn-modal conn)))
+                                   (nerimux::%open-client-transient conn #\P)
+                                   (nerimux::%handle-client-transient-key-payload
+                                    s
+                                    conn
+                                    #(27))
+                                   (expect
+                                    (null
+                                     (nerimux::client-conn-transient-view conn))))))
+          (it
+           "transient-actions-cover-preconditions-confirmation-and-direct-execution"
+           (with-fake-session (s)
+                              (let ((conn (%make-test-conn))
+                                    (nerimux::*clients* nil))
+                                (setf nerimux::*clients* (list conn))
+                                (nerimux::%run-transient-git-action conn
+                                                                    #\P
+                                                                    :push
+                                                                    nil
+                                                                    nil
+                                                                    nil)
+                                (expect
+                                 (equal "no repository selected"
+                                        (first
+                                         (nerimux::client-conn-message-log conn))))
+                                (let* ((organization
+                                        (nerimux/workspace-model:make-organization
+                                         :id
+                                         "org-transient"
+                                         :host
+                                         "github.com"
+                                         :name
+                                         "team"))
+                                       (repository
+                                        (nerimux/workspace-model:make-repository
+                                         :id
+                                         "repo-transient"
+                                         :organization
+                                         organization
+                                         :specification
+                                         "github.com/team/repo-transient"))
+                                       (calls nil))
+                                  (nerimux/workspace-model:organization-add-repository
+                                   organization
+                                   repository)
+                                  (nerimux::%set-client-selected-tree-object
+                                   conn
+                                   repository)
+                                  (with-stubbed-fdefinition
+                                   ((nerimux/vcs:vcs-package-available-p
+                                     (lambda ()
+                                       nil)))
+                                   (nerimux::%run-transient-git-action conn
+                                                                       #\P
+                                                                       :push
+                                                                       nil
+                                                                       nil
+                                                                       nil)
+                                   (expect
+                                    (equal "VCS adapter unavailable"
+                                           (first
+                                            (nerimux::client-conn-message-log
+                                             conn)))))
+                                  (with-stubbed-fdefinition
+                                   ((nerimux/vcs:vcs-package-available-p
+                                     (lambda ()
+                                       t))
+                                    (nerimux::%refresh-client-picker
+                                     (lambda (ignored-connection)
+                                       (declare (ignore ignored-connection))))
+                                    (nerimux/vcs:git-write-operation-async
+                                     (lambda 
+                                         (received operation
+                                                   args
+                                                   &key
+                                                   on-complete
+                                                   on-error
+                                                   callback-dispatch)
+                                       (declare (ignore callback-dispatch
+                                                        on-error))
+                                       (push (list received operation args)
+                                             calls)
+                                       (funcall on-complete t "done")
+                                       t)))
+                                   (nerimux::%run-transient-git-action conn
+                                                                       #\P
+                                                                       :push
+                                                                       '("--force")
+                                                                       t
+                                                                       nil)
+                                   (expect
+                                    (eq :confirm
+                                        (nerimux::client-conn-modal conn)))
+                                   (funcall
+                                    (nerimux::client-conn-confirm-action conn))
+                                   (expect
+                                    (equal
+                                     (list (list repository :push '("--force")))
+                                     calls))
+                                   (nerimux::%run-transient-git-action conn
+                                                                       #\P
+                                                                       :push
+                                                                       nil
+                                                                       nil
+                                                                       nil)
+                                   (expect (= 2 (length calls)))
+                                   (nerimux::%client-transient-toggle-flag conn
+                                                                           #\P
+                                                                           "--force")
+                                   (nerimux::%run-transient-git-action conn
+                                                                       #\P
+                                                                       :push
+                                                                       nil
+                                                                       nil
+                                                                       '("--force"))
+                                   (expect
+                                    (eq :confirm
+                                        (nerimux::client-conn-modal conn)))
+                                   (funcall
+                                    (nerimux::client-conn-confirm-action conn))
+                                   (expect (= 3 (length calls)))
+                                   (nerimux::%client-transient-toggle-flag conn
+                                                                           #\P
+                                                                           "--force")))
+                                (with-stubbed-fdefinition
+                                    ((nerimux/vcs:vcs-package-available-p (lambda () t))
+                                     (nerimux/vcs:git-write-operation-async
+                                      (lambda (received operation args &key on-complete
+                                                       on-error callback-dispatch)
+                                        (declare (ignore received operation args on-error
+                                                                callback-dispatch))
+                                        (funcall on-complete nil "failed"))))
+                                  (nerimux::%run-transient-git-action conn #\P :push nil nil nil)
+                                  (expect (string= "git push: failed"
+                                                   (first (nerimux::client-conn-message-log conn)))))
+                                (multiple-value-bind (repository worktree
+                                                                 ignored-conn) 
+                                    (%make-worktree-operation-fixture)
+                                  (declare (ignore repository ignored-conn))
+                                  (nerimux::%set-client-selected-tree-object
+                                   conn
+                                   worktree)
+                                  (expect
+                                   (string=
+                                    "feature/errors -> origin/feature/errors"
+                                    (nerimux::%transient-subtitle #\P conn)))
+                                (expect
+                                 (string= "on feature/errors"
+                                          (nerimux::%transient-subtitle #\x
+                                                                        conn)))))))
+          (it "records transient write failures through the shared process log"
+              (with-fake-session (s)
+                (let ((conn (%make-test-conn))
+                      (nerimux::*clients* nil))
+                  (setf nerimux::*clients* (list conn))
+                  (multiple-value-bind (repository ignored-worktree ignored-conn)
+                      (%make-worktree-operation-fixture)
+                    (declare (ignore ignored-worktree ignored-conn))
+                    (nerimux::%set-client-selected-tree-object conn repository)
+                    (with-stubbed-fdefinition
+                        ((nerimux/vcs:vcs-package-available-p (lambda () t))
+                         (nerimux/vcs:git-write-operation-async
+                           (lambda (received operation args &key on-complete on-error
+                                            callback-dispatch)
+                             (declare (ignore received operation args on-complete
+                                                     callback-dispatch))
+                             (funcall on-error (make-condition 'simple-error
+                                                               :format-control "boom")))))
+                      (nerimux::%run-transient-git-action conn #\P :push nil nil nil)
+                      (expect (equal '("git push" "1" "boom")
+                                     (first (nerimux::client-conn-process-log conn))))
+                      (expect (string= "git push: failed: boom"
+                                       (first (nerimux::client-conn-message-log conn))))))))))
+
+(describe "client frame dispatch contract suite"
+          (it "renders every modal and base view through one frame boundary"
+              (with-fake-session (s)
+                                 (let ((conn
+                                        (%make-test-conn :rows 40 :cols 110)))
+                                   (dolist (modal '(:help :process-log :picker))
+                                     (setf (nerimux::client-conn-modal conn) modal)
+                                     (when (eq modal :process-log)
+                                       (setf (nerimux::client-conn-process-log
+                                              conn) '(("git status" 0 ""))))
+                                     (expect
+                                      (nerimux::%render-client-frame s conn)
+                                      :to-be-truthy))
+                                   (nerimux::%open-client-transient conn #\P)
+                                   (expect
+                                    (nerimux::%render-client-frame s conn)
+                                    :to-be-truthy)
+                                   (setf (nerimux::client-conn-view conn) :status)
+                                   (expect
+                                    (nerimux::%render-client-frame s conn)
+                                    :to-be-truthy)
+                                   (setf (nerimux::client-conn-modal conn) nil)
+                                   (dolist (view '(:repolist :status :pane))
+                                     (setf (nerimux::client-conn-view conn) view)
+                                     (expect
+                                      (nerimux::%render-client-frame s conn)
+                                      :to-be-truthy))))))
+
+          (describe "ui command dispatch contract"
+            (it "ui-command-dispatches-argument-fallbacks-and-picker-actions"
+              (with-fake-session (s)
+                (let ((conn (%make-test-conn))
+                      (calls nil))
+                  (with-stubbed-fdefinition
+                      ((nerimux::%client-attach-target
+                         (lambda (client args)
+                           (declare (ignore client))
+                           (push (list :attach args) calls)))
+                       (nerimux::%client-refresh-workspace
+                         (lambda (client)
+                           (declare (ignore client))
+                           (push :refresh calls)))
+                       (nerimux::%select-client-tree-worktree
+                         (lambda (client selector)
+                           (declare (ignore client))
+                           (push (list :select selector) calls)))
+                       (nerimux::%open-client-picker
+                         (lambda (client)
+                           (declare (ignore client))
+                           (push :open calls)))
+                       (nerimux::%close-client-picker
+                         (lambda (client)
+                           (declare (ignore client))
+                           (push :close calls)))
+                       (nerimux::%transition-client-ui-mode
+                       (lambda (client mode)
+                           (declare (ignore client))
+                           (push (list :mode mode) calls)))
+                       (nerimux::%client-rebind-prefix
+                         (lambda (client prefix)
+                           (declare (ignore client))
+                           (push (list :prefix prefix) calls)))
+                       (nerimux::%select-client-tree-relative
+                         (lambda (client delta)
+                           (declare (ignore client))
+                           (push (list :tree delta) calls)))
+                       (nerimux::%move-client-picker-index
+                         (lambda (client delta)
+                           (declare (ignore client))
+                           (push (list :picker delta) calls)))
+                       (nerimux::%mark-dirty
+                         (lambda ()
+                           (push :dirty calls))))
+                    (dolist (command '((:attach-target nil ("team/repo"))
+                                       (:workspace-refresh nil nil)
+                                       (:workspace-prefix nil ("C-x"))
+                                       (:tree-select nil ("team/repo"))
+                                       (:tree-next nil ("2"))
+                                       (:picker-open nil nil)
+                                       (:picker-close nil nil)
+                                       (:mode nil ("input"))
+                                       (:picker-next nil ("2"))))
+                      (destructuring-bind (name target args) command
+                        (expect (nerimux::%handle-client-ui-command
+                                 s conn name target args))))
+                    (expect (equal '((:picker 2) :dirty (:mode :input) :close :open
+                                     (:tree 2) (:select "team/repo") (:prefix "C-x")
+                                     :refresh (:attach ("team/repo")))
+                                   calls)))))))

@@ -11,7 +11,6 @@
 ;;;; so tests use single-colon qualified names (nerimux/protocol:name) rather
 ;;;; than double-colon internal access (nerimux/protocol::name).  If a helper
 ;;;; is renamed or unexported, the compile-time package check will catch it.
-
 (describe "protocol-suite"
 
   (it-each (((1 read 16 "invalid encoder name"))

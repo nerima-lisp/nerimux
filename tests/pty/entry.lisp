@@ -8,7 +8,6 @@
 ;;;; system loads only its own components, cl-weave's global registry holds
 ;;;; nothing but the suites this package registers, so RUN-ALL here runs
 ;;;; exactly the real-PTY suite and nothing else.
-
 (defun %test-name-filter-from-environment ()
   (let ((filter (uiop:getenv "CL_WEAVE_TEST_FILTER")))
     (when (and filter (plusp (length filter)))

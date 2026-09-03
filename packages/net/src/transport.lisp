@@ -6,19 +6,21 @@
 ;;;; encoded frames across any binary stream — a socket made via
 ;;;; sb-bsd-sockets:socket-make-stream, or (in tests) a temp-file stream.
 ;;;; The framing/parsing itself lives in nerimux/protocol; here we only do I/O.
-
-(defconstant +read-frame-timeout-seconds+ 30
+(defconstant +read-frame-timeout-seconds+
+  30
   "Maximum seconds to wait for a complete frame before aborting.
    Prevents indefinite blocking on a hung or slow peer.
    This budget is shared across both the header and payload read phases.")
 
-(defconstant +send-frame-timeout-seconds+ 30
+(defconstant +send-frame-timeout-seconds+
+  30
   "Maximum seconds to wait for write-sequence and finish-output to complete
    before aborting.  Mirrors +read-frame-timeout-seconds+ so send-frame is
    self-contained: it does not rely solely on the caller's stream having been
    constructed with its own timeout (e.g. nerimux/net:socket-stream).")
 
-(defconstant +max-frame-payload-bytes+ (* 64 1024 1024)
+(defconstant +max-frame-payload-bytes+
+  (* 64 1024 1024)
   "Maximum payload size (64 MiB) accepted by read-frame before rejecting.
    Prevents a malicious or buggy peer from triggering unbounded heap allocation.")
 
@@ -28,8 +30,8 @@
    Signals SB-EXT:TIMEOUT when the peer is too slow to accept the write."
   (%validate-outgoing-frame frame)
   (sb-ext:with-timeout +send-frame-timeout-seconds+
-    (write-sequence frame stream)
-    (finish-output stream)))
+                       (write-sequence frame stream)
+                       (finish-output stream)))
 
 (defun %read-exact (buffer stream start end)
   "Fill BUFFER[START..END) from STREAM; return the actual number of bytes read.
@@ -60,15 +62,22 @@
    Signals an error when any invariant is violated."
   (unless (and (vectorp frame) (>= (length frame) +header-size+))
     (error "Invalid frame: must be a vector of at least ~D bytes, got ~S"
-           +header-size+ frame))
-  (let* ((payload-length  (read-u32 frame +payload-length-offset+))
-         (expected-total  (+ +header-size+ payload-length)))
+           +header-size+
+           frame))
+  (let* ((payload-length (read-u32 frame +payload-length-offset+))
+         (expected-total (+ +header-size+ payload-length)))
     (unless (%payload-length-acceptable-p payload-length)
-      (error "Invalid frame: declared payload length ~D exceeds +max-frame-payload-bytes+ (~D)"
-             payload-length +max-frame-payload-bytes+))
+      (error
+       "Invalid frame: declared payload length ~D exceeds +max-frame-payload-bytes+ (~D)"
+       payload-length
+       +max-frame-payload-bytes+))
     (unless (= (length frame) expected-total)
-      (error "Invalid frame: total length ~D does not match header+payload (~D + ~D = ~D)"
-             (length frame) +header-size+ payload-length expected-total))))
+      (error
+       "Invalid frame: total length ~D does not match header+payload (~D + ~D = ~D)"
+       (length frame)
+       +header-size+
+       payload-length
+       expected-total))))
 
 ;;; ── CPS read-frame state machine ────────────────────────────────────────────
 ;;;
@@ -77,15 +86,18 @@
 ;;; read-header-k reads the 5-byte header and, on success, continues to
 ;;; read-payload-k.  read-payload-k reads the payload and, on success, decodes
 ;;; the complete frame.  Both steps return NIL on EOF or short-read.
-
 (defun %read-header-k (stream continuation)
   "Phase 1: read a 5-byte frame header from STREAM into a fresh adjustable buffer.
    On success, call CONTINUATION with the buffer and the decoded payload length.
    Returns NIL when the stream ends before a complete header is available."
-  (let ((buffer (make-array +header-size+
-                             :element-type '(unsigned-byte 8)
-                             :adjustable t
-                             :fill-pointer +header-size+)))
+  (let ((buffer
+         (make-array +header-size+
+                     :element-type
+                     '(unsigned-byte 8)
+                     :adjustable
+                     t
+                     :fill-pointer
+                     +header-size+)))
     (when (= +header-size+ (%read-exact buffer stream 0 +header-size+))
       (let ((payload-length (read-u32 buffer +payload-length-offset+)))
         (when (%payload-length-acceptable-p payload-length)
@@ -97,7 +109,8 @@
    Returns NIL when the stream ends before all payload bytes have arrived."
   (let ((total-length (+ +header-size+ payload-length)))
     (adjust-array buffer total-length :fill-pointer total-length)
-    (when (= total-length (%read-exact buffer stream +header-size+ total-length))
+    (when 
+        (= total-length (%read-exact buffer stream +header-size+ total-length))
       (funcall continuation buffer))))
 
 (defun read-frame (stream)
@@ -110,15 +123,24 @@
    and no REPLACE copy is needed.
    A single sb-ext:with-timeout wraps both phases so the total wall-clock
    budget is at most +read-frame-timeout-seconds+ seconds."
-  (handler-case
-      (sb-ext:with-timeout +read-frame-timeout-seconds+
-        (%read-header-k stream
-          (lambda (buffer payload-length)
-            (%read-payload-k buffer payload-length stream
-              (lambda (complete-buffer)
-                (multiple-value-bind (type payload) (decode-frame complete-buffer)
-                  (values type payload)))))))
-    (sb-ext:timeout () nil)))
+  (handler-case (sb-ext:with-timeout +read-frame-timeout-seconds+
+                                     (%read-header-k stream
+                                                     (lambda 
+                                                         (buffer payload-length)
+                                                       (%read-payload-k buffer
+                                                                        payload-length
+                                                                        stream
+                                                                        (lambda 
+                                                                            (complete-buffer)
+                                                                          (multiple-value-bind (type
+                                                                                                payload) 
+                                                                              (decode-frame
+                                                                               complete-buffer)
+                                                                            (values
+                                                                             type
+                                                                             payload)))))))
+    (sb-ext:timeout ()
+      nil)))
 
 (defmacro with-incoming-frame ((type-var payload-var stream) &rest rules)
   "Read one frame from STREAM, bind TYPE-VAR and PAYLOAD-VAR, then dispatch
@@ -130,7 +152,9 @@
      handle_frame(msg_detach, _)    :- disconnect.
      handle_frame(msg_key, payload) :- process_keys(session, payload)."
   `(multiple-value-bind (,type-var ,payload-var) (read-frame ,stream)
-     (cond ,@(mapcar (lambda (rule)
-                       (destructuring-bind (condition &rest body) rule
-                         `(,condition ,@body)))
-                     rules))))
+     (cond
+       ,@(mapcar
+          (lambda (rule)
+            (destructuring-bind (condition &rest body) rule
+              `(,condition ,@body)))
+          rules))))

@@ -2,9 +2,7 @@
 
 ;;;; Scroll-region parser-path tests for scroll.lisp and edit.lisp.
 ;;;; Suite: scroll-region.
-
 ;;; ── SUITE: scroll-region ────────────────────────────────────────────────────
-
 (defmacro define-scroll-region-cases (&body cases)
   "Define scroll-region parser-path cases from declarative rows."
   (labels ((case-option (options key)
@@ -27,11 +25,13 @@
              (destructuring-bind (name &rest options) case
                (destructuring-bind (width height) (case-option options :screen)
                  `(it ,(string-downcase (symbol-name name))
-                    (with-screen (s ,width ,height)
-                      ,@(mapcar #'expand-step (case-option options :steps))
-                      ,@(mapcar #'expand-assertion
-                                (case-option options :assertions))))))))
-    `(progn ,@(mapcar #'expand-case cases))))
+                      (with-screen (s ,width ,height)
+                                   ,@(mapcar #'expand-step
+                                             (case-option options :steps))
+                                   ,@(mapcar #'expand-assertion
+                                             (case-option options :assertions))))))))
+    `(progn
+       ,@(mapcar #'expand-case cases))))
 
 (describe "terminal-suite/scroll-region"
 

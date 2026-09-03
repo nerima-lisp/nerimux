@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/model)
 
 ;;;; Session state tests: structural window/session helpers.
-
 (describe "model-suite"
 
   ;;; ── %attach-full-screen-pane structural test (no PTY) ───────────────────────

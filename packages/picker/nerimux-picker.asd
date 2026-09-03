@@ -17,8 +17,7 @@
   :depends-on ("nerimux-model" :cl-regex-kit)
   :pathname "src"
   :serial t
-  :components ((:file "package")
-               (:file "global-picker"))
+  :components ((:file "package") (:file "global-picker"))
   :in-order-to ((test-op (test-op "nerimux-picker/test"))))
 
 (defsystem "nerimux-picker/test"

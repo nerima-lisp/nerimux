@@ -11,7 +11,6 @@
 ;;;; copy-mode-line-numbers is fixed "off" (§1.4): the gutter this used to
 ;;;; draw is gone outright, and %render-pane-body always uses the pane's full
 ;;;; width.
-
 (describe "renderer-suite"
 
   ;; render-pane draws the copy-mode position banner in the fixed

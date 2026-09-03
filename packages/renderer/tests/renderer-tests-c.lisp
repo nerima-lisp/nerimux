@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/renderer)
 
 ;;;; status-left-text copy mode, zoom suppression — part III
-
 (describe "renderer-suite"
 
   ;; The five protocol-toggle tests that used to open this block

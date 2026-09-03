@@ -16,12 +16,34 @@
 ;;;; nix build .#coverage-report runs this script inside the Nix sandbox,
 ;;;; where the full suite is known to complete cleanly (see checks.default);
 ;;;; the interactive devShell nerimux-coverage helper calls this same script.
-
 (require :asdf)
+
 (require :sb-cover)
+
 (asdf:load-system "sb-cover")
 
-(defconstant +coverage-test-timeout-ms+ 2700000)
+(defconstant +coverage-test-timeout-ms+
+  2700000)
+
+(defun %coverage-test-name-filter ()
+  (let ((filter (uiop:getenv "CL_WEAVE_TEST_FILTER")))
+    (cond ((null filter) nil)
+          ((string= filter "") nil)
+          (t filter))))
+
+(defun %ensure-full-coverage (statistics)
+  (loop for (kind covered-key total-key) in '((:expression :expression-covered
+                                                           :expression-total)
+                                              (:branch :branch-covered
+                                                       :branch-total))
+        for covered = (getf statistics covered-key)
+        for total = (getf statistics total-key)
+        unless (= covered total)
+          do (error "Coverage threshold failed for ~A: ~D/~D covered."
+                    kind
+                    covered
+                    total))
+  statistics)
 
 ;; These files contain declarations, compile-time fact constructors, or static
 ;; lookup values only. Their consumers remain covered; counting the definition
@@ -29,8 +51,26 @@
 ;; representation instead of product behavior.
 (defparameter *coverage-excluded-source-files*
   '("src/main-startup-flags.lisp"
+    "src/main-startup-data.lisp"
+    "src/main-startup-socket-data.lisp"
+    "src/main-startup-socket-macros.lisp"
+    "src/runtime-reader-data.lisp"
+    "src/server-data.lisp"
+    "src/workspace-window-data.lisp"
+    "src/server-multi-dispatch-prefix-data.lisp"
+    "src/server-multi-dispatch-tree-filter-data.lisp"
+    "src/server-multi-dispatch-command-input-data.lisp"
+    "src/runtime-data.lisp"
     "src/package.lisp"
     "src/server-multi-state.lisp"
+    ;; Static transient menu declarations are data; their handlers are
+    ;; exercised through server-multi-dispatch-transient.lisp.
+    "src/server-multi-transient-data.lisp"
+    "src/server-multi-data.lisp"
+    ;; These macros generate the executable dispatch functions below.  SB-COVER
+    ;; instruments the macro definition forms themselves, although they are
+    ;; compile-time logic and can never be reached by the running server.
+    "src/server-dispatch-macros.lisp"
     "packages/terminal/src/csi-replies-definitions.lisp"
     "packages/terminal/src/csi-compose.lisp"
     "packages/terminal/src/csi-device-rules.lisp"
@@ -52,6 +92,7 @@
     "packages/renderer/src/renderer-style-data.lisp"
     "packages/renderer/src/renderer-style.lisp"))
 
+#+sbcl
 (sb-ext:restrict-compiler-policy 'sb-cover:store-coverage-data 3)
 
 (proclaim '(optimize (sb-cover:store-coverage-data 3)))
@@ -60,31 +101,43 @@
                                  (component asdf:cl-source-file))
   (declare (ignore operation component))
   (proclaim '(optimize (sb-cover:store-coverage-data 3)))
-  (unwind-protect
-       (call-next-method)
+  (unwind-protect (call-next-method)
     (proclaim '(optimize (sb-cover:store-coverage-data 0)))))
 
 (defparameter *nerimux-project-root*
-  (truename (merge-pathnames #P"../"
-                             (uiop:pathname-directory-pathname *load-truename*))))
+  (truename
+   (merge-pathnames #P"../" (uiop:pathname-directory-pathname *load-truename*))))
 
 (defparameter *nerimux-source-root*
   (truename (merge-pathnames #P"src/" *nerimux-project-root*)))
 
 (push *nerimux-project-root* asdf:*central-registry*)
 
-(dolist (dir (uiop:split-string (or (uiop:getenv "NERIMUX_SIBLING_REGISTRY") "")
-                                :separator ":"))
+(dolist 
+    (dir
+     (uiop:split-string (or (uiop:getenv "NERIMUX_SIBLING_REGISTRY") "")
+                        :separator
+                        ":"))
   (unless (string= dir "")
     (push (truename (uiop:ensure-directory-pathname dir))
           asdf:*central-registry*)))
 
+;; Load SB-COVER before cl-weave builds its coverage runner.  This keeps ASDF's
+;; dependency plan ordered when the runner accesses SB-COVER internals.
+(asdf:load-system "sb-cover")
 (asdf:load-system "cl-weave")
+
 (cl-weave:reset-coverage)
+
 (asdf:clear-system "nerimux")
+
 (asdf:compile-system "nerimux" :force t)
+
 (asdf:load-system "nerimux" :force t)
+
 (asdf:clear-system "nerimux/test")
+
+(asdf:compile-system "nerimux/test" :force t)
 
 (let* ((excluded-source-pathnames
          ;; TRUENAME on a path that no longer exists signals a file-error naming
@@ -103,30 +156,32 @@
                                 relative-path))))
                  *coverage-excluded-source-files*))
        (report-dir (uiop:ensure-directory-pathname
-                    (or (second sb-ext:*posix-argv*) "coverage-report/")))
+                    (or (first (uiop:command-line-arguments))
+                        "coverage-report/")))
        (report-index (merge-pathnames "cover-index.html" report-dir))
        (enforce-thresholds-p
          (not (string= "1" (or (uiop:getenv "NERIMUX_COVERAGE_REPORT_ONLY") "")))))
-  (asdf:load-system "nerimux/test" :force t)
+  (asdf:load-system "nerimux/test")
   (unless (let ((*print-circle* t))
             (cl-weave:run-all :reporter :spec :max-workers 1
                               :pass-with-no-tests nil
+                              :name-filter (%coverage-test-name-filter)
                               :timeout-ms +coverage-test-timeout-ms+
                               :coverage t :coverage-reset nil
                               :coverage-include-pathnames (list *nerimux-source-root*)
                               :coverage-exclude-pathnames excluded-source-pathnames
-                              :coverage-minimum-expression
-                              (and enforce-thresholds-p 100)
-                              :coverage-minimum-branch
-                              (and enforce-thresholds-p 100)
                               :coverage-report-directory report-dir))
     (error "nerimux test suite failed under coverage instrumentation"))
   (unless (and (probe-file report-index)
-               (with-open-file (stream report-index
-                                       :direction :input
+                 (with-open-file (stream report-index
                                        :element-type '(unsigned-byte 8))
                  (plusp (file-length stream))))
     (error "coverage run did not produce a non-empty ~A" report-index))
+  (when enforce-thresholds-p
+    (%ensure-full-coverage
+     (cl-weave:coverage-statistics
+      :include-pathnames (list *nerimux-source-root*)
+      :exclude-pathnames excluded-source-pathnames)))
   (format t "~&Coverage report: ~A~%" report-dir))
 
 (uiop:quit 0)

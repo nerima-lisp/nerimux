@@ -2,7 +2,6 @@
 
 ;;;; commands tests — part C: copy-mode virtual-row-string, timeout, clamp-cursor,
 ;;;; selection-bounds, word/paragraph navigation, scroll helpers, extract-row-chars.
-
 (describe "commands-suite"
 
   ;; ── %copy-mode-virtual-row-string (direct unit tests) ───────────────────────

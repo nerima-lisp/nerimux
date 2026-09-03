@@ -5,19 +5,21 @@
 ;;;; with-raw-mode touches fd 0 (stdin) so it is verified by macroexpansion only.
 ;;;; read-byte-nonblock's select+read path is exercised with deterministic
 ;;;; function bindings, so no TTY or process-global stdin state is required.
-
 (defmacro with-function-stubs ((&rest bindings) &body body)
   (let ((saved (gensym "SAVED")))
-    `(let ((,saved (list ,@(mapcar (lambda (binding)
-                                    `(cons ',(first binding)
-                                           (symbol-function ',(first binding))))
-                                  bindings))))
-       (unwind-protect
+    `(let ((,saved
+            (list
+             ,@(mapcar
+                (lambda (binding)
+                  `(cons ',(first binding) (symbol-function ',(first binding))))
+                bindings))))
+       (unwind-protect 
            (progn
-             ,@(mapcar (lambda (binding)
-                         `(setf (symbol-function ',(first binding))
-                                (function ,(second binding))))
-                       bindings)
+             ,@(mapcar
+                (lambda (binding)
+                  `(setf (symbol-function ',(first binding)) (function
+                                                              ,(second binding))))
+                bindings)
              ,@body)
          (dolist (entry ,saved)
            (setf (symbol-function (car entry)) (cdr entry)))))))

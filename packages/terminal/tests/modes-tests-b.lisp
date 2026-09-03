@@ -3,12 +3,10 @@
 ;;;; modes tests — part B: set-cursor-shape, bell-pending, designate-charset/title,
 ;;;; reset-terminal-modes, DECNKM, DECOM, origin-mode, screen-display-cell
 ;;;; continuation, DECSTBM, mouse/focus-reporting edge cases.
-
 ;;; ── SUITE: set-cursor-shape ──────────────────────────────────────────────────
 ;;;
 ;;; set-cursor-shape wraps DECSCUSR: clamps the shape value to [0,6] and stores
 ;;; it in screen-cursor-shape.
-
 (describe "terminal-suite/set-cursor-shape-suite"
 
   ;; set-cursor-shape stores values in [0,6] unchanged.
@@ -42,7 +40,6 @@
 ;;;
 ;;; set-bell-pending sets screen-bell-pending to T.
 ;;; screen-consume-bell returns T and clears the flag; returns NIL when not set.
-
 (describe "terminal-suite/bell-pending-suite"
 
   ;; set-bell-pending sets screen-bell-pending to T.
@@ -77,7 +74,6 @@
 ;;; designate-charset (G0, the default active slot) stores the character set
 ;;; keyword into screen-charset.
 ;;; set-screen-title stores the OSC window title string.
-
 (describe "terminal-suite/set-charset-set-title-suite"
 
   ;; designate-charset :g0 :ascii sets screen-charset to :ascii.
@@ -118,7 +114,6 @@
 ;;;
 ;;; reset-terminal-modes resets cursor visibility, autowrap, charset, and scroll
 ;;; region to VT100 defaults without touching the cell grid.
-
 (describe "terminal-suite/reset-terminal-modes-suite"
 
   ;; reset-terminal-modes restores cursor-visible and autowrap to T, and charset to :ascii.
@@ -154,7 +149,6 @@
 ;;;
 ;;; enter-alt-screen and exit-alt-screen are called directly to verify the
 ;;; no-op guard (enter when already in alt, exit when not in alt).
-
 (describe "terminal-suite/alt-screen-direct-suite"
 
   ;; enter-alt-screen is a no-op when called while the alt screen is already active.
@@ -179,7 +173,6 @@
         (expect (row-blank-p s y))))))
 
 ;;; ── SUITE: enter/exit alt-screen direct content verification ─────────────────
-
 (describe "terminal-suite/alt-screen-content-suite"
 
   ;; enter-alt-screen replaces the live grid with a fresh blank grid.

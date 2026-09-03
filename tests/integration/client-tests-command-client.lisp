@@ -68,7 +68,25 @@
              (expect (= nerimux::*term-cols* cols))))
           (t (fail "%maybe-send-resize: unexpected frame type ~D" type)))))) (it "maybe-send-resize-does-nothing-when-not-pending"
     (let ((nerimux::*resize-pending* nil))
-      (expect (nerimux::%maybe-send-resize nil) :to-be-falsy))) (it "maybe-send-resize-samples-size-and-sends-through-the-effect-boundary"
+      (expect (nerimux::%maybe-send-resize nil) :to-be-falsy)))
+
+  (it "install-sigwinch-handler-flags-resize-and-dirty"
+    (let ((captured-handler nil)
+          (nerimux::*resize-pending* nil)
+          (nerimux::*dirty* nil))
+      (sb-ext:without-package-locks
+        (with-stubbed-fdefinition
+            ((sb-sys:enable-interrupt
+              (lambda (signal handler)
+                (declare (ignore signal))
+                (setf captured-handler handler)
+                :installed)))
+          (expect (nerimux::install-sigwinch-handler) :to-be :installed)))
+      (funcall captured-handler)
+      (expect nerimux::*resize-pending* :to-be-truthy)
+      (expect nerimux::*dirty* :to-be-truthy)))
+
+  (it "maybe-send-resize-samples-size-and-sends-through-the-effect-boundary"
     (let ((nerimux::*resize-pending* t)
           (nerimux::*term-rows* 1)
           (nerimux::*term-cols* 2)
@@ -88,7 +106,12 @@
     ;; pending data — either way the function must return NIL without signalling.
     ;; Pass NIL as the stream so no socket write can happen even if the byte test
     ;; were to incorrectly find data.
-    (let ((result (ignore-errors (nerimux::%forward-stdin-byte nil))))
+    (let ((result (catch 'forward-stdin-byte-error
+                    (handler-bind
+                        ((error (lambda (condition)
+                                  (declare (ignore condition))
+                                  (throw 'forward-stdin-byte-error nil))))
+                      (nerimux::%forward-stdin-byte nil)))))
       (expect (null result)))) (it "forward-stdin-byte-sends-available-byte"
     (let (sent)
       (with-stubbed-fdefinition
@@ -175,7 +198,7 @@
            (expect (null target))
            (expect (equal "target" (first args)))
            (expect (stringp (second args)))))
-        (t (fail "unexpected frame type"))))
+        (t (fail "unexpected frame type")))))
 
   ;;; ── %run-attach-session peer-io-failure containment ──────────────────────────
   ;;;
@@ -364,27 +387,21 @@
             (decode-command-payload payload)
           (expect (eq :kill command))
           (expect (null target))
-          (expect (equal '("--force") args))))))))
+          (expect (equal '("--force") args)))))))
 
-  ;;; ── %maybe-send-resize behavior ──────────────────────────────────────────────
-  ;;;
-  ;;; %maybe-send-resize encapsulates the resize-pending check that was inline in
-  ;;; run-client.  It is tested here using a socket pair so the msg-resize frame
-  ;;; can be observed without a live terminal.
-
-  ;; %maybe-send-resize sends a +msg-resize+ frame and clears *resize-pending*
-  ;; when *resize-pending* is T — verifies the resize-dispatch path extracted from run-client.
-
-
-  ;; %maybe-send-resize is a no-op when *resize-pending* is NIL.
-
-
-  ;;; ── %forward-stdin-byte behavior ─────────────────────────────────────────────
-  ;;;
-  ;;; %forward-stdin-byte reads one non-blocking byte from fd 0 (stdin) and
-  ;;; forwards it as a +msg-key+ frame.  We test the "nothing ready" branch
-  ;;; (returns NIL without I/O) — the "byte forwarded" branch requires a real
-  ;;; non-blocking stdin fd, which is unavailable in a sandboxed test runner.
-
-  ;; %forward-stdin-byte returns NIL without error when stdin has no
-  ;; data ready (non-blocking read returns nil).
+;;; ── %maybe-send-resize behavior ──────────────────────────────────────────────
+;;;
+;;; %maybe-send-resize encapsulates the resize-pending check that was inline in
+;;; run-client.  It is tested here using a socket pair so the msg-resize frame
+;;; can be observed without a live terminal.
+;; %maybe-send-resize sends a +msg-resize+ frame and clears *resize-pending*
+;; when *resize-pending* is T — verifies the resize-dispatch path extracted from run-client.
+;; %maybe-send-resize is a no-op when *resize-pending* is NIL.
+;;; ── %forward-stdin-byte behavior ─────────────────────────────────────────────
+;;;
+;;; %forward-stdin-byte reads one non-blocking byte from fd 0 (stdin) and
+;;; forwards it as a +msg-key+ frame.  We test the "nothing ready" branch
+;;; (returns NIL without I/O) — the "byte forwarded" branch requires a real
+;;; non-blocking stdin fd, which is unavailable in a sandboxed test runner.
+;; %forward-stdin-byte returns NIL without error when stdin has no
+;; data ready (non-blocking read returns nil).

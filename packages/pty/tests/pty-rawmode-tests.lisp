@@ -8,7 +8,6 @@
 ;;;; superset of nerimux's former raw-mode flags.  These tests assert the
 ;;;; delegation contract rather than nerimux-internal termios machinery (the
 ;;;; old *saved-termios-table* / with-raw-termios-flags internals were removed).
-
 (describe "pty-rawmode-suite"
 
   ;;; ── Exported wrappers are fbound ─────────────────────────────────────────────
@@ -37,7 +36,7 @@
   ;; wrapper signals an error — confirming the delegation path is exercised.
   (it "enable-raw-mode-signals-on-non-tty"
     (with-pipe-fds (rfd wfd)
-      (declare (ignore wfd))
+      (declare (ignorable wfd))
       (signals error (nerimux/pty:enable-raw-mode! rfd))))
 
   ;; enable-raw-mode! inherits cl-tty-kit's fd validation: a negative fd is

@@ -1,24 +1,23 @@
 (in-package #:nerimux/test)
 
 (defmacro with-stubbed-locked-fdefinitions (bindings &body body)
-  (let ((originals (loop for (name replacement) in bindings
-                         collect (list (gensym "ORIGINAL-")
-                                       `(fdefinition ',name)))))
+  (let ((originals
+         (loop for (name replacement) in bindings
+               collect (list (gensym "ORIGINAL-") `(fdefinition ',name)))))
     `(sb-ext:without-package-locks
-       (let ,originals
-         (unwind-protect
-              (progn
-                ,@(loop for (name replacement) in bindings
-                        for (original-variable original) in originals
-                        collect `(setf (fdefinition ',name) ,replacement))
-                ,@body)
-           (progn
-             ,@(loop for (name replacement) in bindings
-                     for (original-variable original) in originals
-                     collect `(setf (fdefinition ',name) ,original-variable))))))))
+      (let ,originals
+        (unwind-protect 
+            (progn
+              ,@(loop for (name replacement) in bindings
+                      for (original-variable original) in originals
+                      collect `(setf (fdefinition ',name) ,replacement))
+              ,@body)
+          (progn
+            ,@(loop for (name replacement) in bindings
+                    for (original-variable original) in originals
+                    collect `(setf (fdefinition ',name) ,original-variable))))))))
 
 ;;;; socket-path and stale-socket tests
-
 (describe "server-suite"
 
   ;;; -- socket-path naming ------------------------------------------------------
@@ -179,7 +178,7 @@
       (unwind-protect
            (progn
              (with-open-file (s path :direction :output :if-does-not-exist :create)
-               (declare (ignore s)))
+               nil)
              (signals error
                (nerimux::%verify-socket-directory-private path (sb-posix:getuid))
                "must refuse a socket directory path that is a plain file"))
@@ -238,6 +237,18 @@
         (ignore-errors (sb-posix:rmdir target))
         (ignore-errors (sb-posix:rmdir base)))))
 
+  (it "socket-directory-recovers-when-the-initial-lstat-races-with-creation"
+    (let ((first-probe t)
+          (original-lstat (fdefinition 'sb-posix:lstat)))
+      (with-stubbed-locked-fdefinitions
+          ((sb-posix:lstat
+             (lambda (path)
+               (if (shiftf first-probe nil)
+                   (error 'sb-posix:syscall-error)
+                   (funcall original-lstat path)))))
+        (let ((dir (nerimux::%socket-directory)))
+          (expect (directory (format nil "~A/" dir)))))))
+
   ;; socket-path uses a fixed name for a given session name — no -L/-S
   ;; override can change it (R1.17 removed both CLI flags).
   (it "socket-path-name-is-fixed-for-a-given-session-name"
@@ -266,9 +277,17 @@
       (unwind-protect
            (progn
              (with-open-file (s path :direction :output :if-does-not-exist :create)
-               (declare (ignore s)))
+               nil)
              (expect (eq t (and (nerimux::%stale-socket-p path) t))))
         (ignore-errors (delete-file path)))))
+
+  (it "stale-socket-p-treats-probe-file-errors-as-not-stale"
+    (with-stubbed-locked-fdefinitions
+        ((probe-file
+          (lambda (path)
+            (declare (ignore path))
+            (error 'file-error))))
+      (expect (null (nerimux::%stale-socket-p "/synthetic/socket")))))
 
   ;; %stale-socket-p returns NIL when a live listener accepts on the path.
   (it "stale-socket-p-live-listener-is-not-stale"
@@ -318,6 +337,72 @@
                   (format nil "test-session-notice-~D" (random 1000000))))))
         (expect (search "nerimux: starting server..." errout) :to-be-truthy))))
 
+  (it "ensure-server-running-skips-spawn-for-a-live-socket"
+    (let ((path (format nil "/tmp/nerimux-live-~D.sock" (random 1000000))))
+      (unwind-protect
+           (progn
+             (with-open-file (stream path :direction :output :if-exists :supersede)
+               (declare (ignore stream)))
+             (with-stubbed-locked-fdefinitions
+                 ((nerimux::socket-path (lambda (name)
+                                          (declare (ignore name))
+                                          path))
+                  (nerimux::%stale-socket-p (lambda (socket)
+                                              (declare (ignore socket))
+                                              nil))
+         (nerimux::%launch-server-and-poll-when-live
+          (lambda (&rest args)
+            (declare (ignore args))
+            (error "live server must not be spawned"))))
+               (finishes (nerimux::%ensure-server-running "already-running"))))
+        (ignore-errors (delete-file path)))))
+
+  (it "ensure-server-running-removes-a-stale-socket-before-spawning"
+    (let ((deleted nil)
+          (spawned nil)
+          (original-delete-file (fdefinition 'delete-file)))
+      (let ((path (format nil "/tmp/nerimux-stale-~D.sock" (random 1000000))))
+        (unwind-protect
+             (progn
+               (with-open-file (stream path :direction :output :if-exists :supersede)
+                 (declare (ignore stream)))
+               (with-stubbed-locked-fdefinitions
+          ((nerimux::socket-path (lambda (name)
+                                   (declare (ignore name))
+                                   path))
+           (nerimux::%stale-socket-p (lambda (path)
+                                       (declare (ignore path))
+                                       t))
+           (delete-file (lambda (path)
+                          (setf deleted t)
+                          (funcall original-delete-file path)))
+           (nerimux::%launch-server-and-poll-when-live
+            (lambda (&rest args)
+              (declare (ignore args))
+              (setf spawned t)
+              (with-open-file (stream path :direction :output :if-exists :supersede)
+                (declare (ignore stream))))))
+                 (finishes (nerimux::%ensure-server-running "stale-session")))
+               (expect deleted :to-be-truthy)
+               (expect spawned :to-be-truthy))
+          (ignore-errors (delete-file path))))))
+
+  (it "ensure-server-running-continues-when-stale-socket-cannot-be-deleted"
+    (with-stubbed-locked-fdefinitions
+        ((probe-file (lambda (path)
+                       (declare (ignore path))
+                       t))
+         (nerimux/net:connect-to (lambda (path)
+                                   (declare (ignore path))
+                                   (error 'sb-bsd-sockets:socket-error)))
+         (delete-file (lambda (path)
+                        (declare (ignore path))
+                        (error 'file-error)))
+         (nerimux::%launch-server-and-poll-when-live
+          (lambda (&rest args) (declare (ignore args)) nil)))
+      (signals error
+        (nerimux::%ensure-server-running "stale-socket-delete-failure"))))
+
   ;;; -- launch-server-and-poll: diagnostics must not block startup --------------
 
   ;; %launch-server-and-poll-when-live redirects the spawned server's
@@ -346,7 +431,7 @@
       (unwind-protect
            (progn
              (with-open-file (s blocker :direction :output :if-does-not-exist :create)
-               (declare (ignore s)))
+               nil)
              (with-stubbed-locked-fdefinitions
                  ((sb-ext:run-program
                     (lambda (&rest args) (push args calls) nil)))
@@ -381,6 +466,18 @@
              (expect (= #o700
                         (logand (sb-posix:stat-mode (sb-posix:stat dir)) #o777))))
         (ignore-errors (sb-posix:rmdir dir)))))
+
+  (it "secure-log-directory-contains-chmod-syscall-errors"
+    (sb-ext:without-package-locks
+      (let ((original-chmod (fdefinition 'sb-posix:chmod)))
+        (unwind-protect
+             (progn
+               (setf (fdefinition 'sb-posix:chmod)
+                     (lambda (&rest arguments)
+                       (declare (ignore arguments))
+                       (error 'sb-posix:syscall-error)))
+               (finishes (nerimux::%secure-log-directory "/synthetic/log")))
+          (setf (fdefinition 'sb-posix:chmod) original-chmod)))))
 
   ;; End-to-end: %launch-server-and-poll-when-live itself must call
   ;; %secure-log-directory on its happy path (not only when called directly),
@@ -458,6 +555,33 @@
                  (finishes (nerimux::%launch-server-without-log
                             "nerimux" nil)))
             (setf (fdefinition 'sb-ext:run-program) orig))))))
+
+  (it "launch-server-falls-back-after-redirected-stream-error"
+    (sb-ext:without-package-locks
+      (let* ((original-run-program (fdefinition 'sb-ext:run-program))
+             (calls 0)
+             (dir (format nil "~A/nerimux-log-stream-test-~D"
+                          (string-right-trim "/"
+                                             (or (sb-ext:posix-getenv "TMPDIR")
+                                                 "/tmp"))
+                          (random 1000000)))
+             (log-path (merge-pathnames "server.log" (format nil "~A/" dir))))
+        (unwind-protect
+             (progn
+               (ensure-directories-exist log-path)
+               (setf (fdefinition 'sb-ext:run-program)
+                     (lambda (&rest arguments)
+                       (declare (ignore arguments))
+                       (incf calls)
+                       (if (= calls 1)
+                           (error 'stream-error)
+                           t)))
+               (finishes
+                 (nerimux::%launch-server-and-poll-when-live
+                  "/synthetic/socket" "nerimux" nil log-path))
+               (expect (= 2 calls)))
+          (setf (fdefinition 'sb-ext:run-program) original-run-program)
+          (ignore-errors (sb-posix:rmdir dir))))))
 
   ;;; -- server log rotation (R2.8) ------------------------------------------
 
@@ -545,6 +669,36 @@
                        (error 'file-error)))
                (expect (null (nerimux::%stale-socket-p "/synthetic/socket"))))
           (setf (fdefinition 'probe-file) original-probe-file)))))
+
+  (it "stale-socket-p-treats-connection-file-errors-as-not-stale"
+    (with-stubbed-locked-fdefinitions
+        ((probe-file (lambda (path)
+                       (declare (ignore path))
+                       t))
+         (nerimux/net:connect-to (lambda (path)
+                                   (declare (ignore path))
+                                   (error 'file-error))))
+      (expect (null (nerimux::%stale-socket-p "/synthetic/socket")))))
+
+  (it "stale-socket-p-treats-connection-stream-errors-as-not-stale"
+    (with-stubbed-locked-fdefinitions
+        ((probe-file (lambda (path)
+                       (declare (ignore path))
+                       t))
+         (nerimux/net:connect-to (lambda (path)
+                                   (declare (ignore path))
+                                   (error 'stream-error))))
+      (expect (null (nerimux::%stale-socket-p "/synthetic/socket")))))
+
+  (it "stale-socket-p-treats-connection-timeouts-as-not-stale"
+    (with-stubbed-locked-fdefinitions
+        ((probe-file (lambda (path)
+                       (declare (ignore path))
+                       t))
+         (nerimux/net:connect-to (lambda (path)
+                                   (declare (ignore path))
+                                   (error 'sb-ext:timeout))))
+      (expect (null (nerimux::%stale-socket-p "/synthetic/socket")))))
 
   (it "stale-socket-p-returns-nil-after-probe-stream-error"
     (sb-ext:without-package-locks

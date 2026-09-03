@@ -3,7 +3,6 @@
 ;;; This file must be loaded before parser.lisp because escape-state calls
 ;;; make-dcs-k, make-charset-designator-k, make-ignore-final-byte-k, and
 ;;; make-hash-line-size-k.
-
 (in-package #:nerimux/terminal/parser)
 
 ;;; ESC P introduces a DCS; collect bytes until ESC \ (ST).
@@ -20,8 +19,8 @@
 ;;;
 ;;; make-dcs-st-k is the bridge state waiting for the backslash of ESC \ after
 ;;; an ESC byte seen inside a DCS payload.  This is symmetric with make-osc-st-k.
-
-(defconstant +dcs-max-payload+ 1048576
+(defconstant +dcs-max-payload+
+  1048576
   "Maximum DCS passthrough payload bytes buffered (1 MiB).  Beyond this the
    payload is truncated — a safety bound against a runaway/malformed stream.")
 
@@ -36,10 +35,13 @@
   "Generate buffer prefix predicate functions from a declarative fact table.
    Each SPEC is (fn-name docstring byte...) — the bytes are matched literally."
   `(progn
-     ,@(mapcar (lambda (spec)
-                 (destructuring-bind (name doc &rest bytes) spec
-                   `(defun ,name (buffer) ,doc (%buffer-prefix-p buffer ,@bytes))))
-               specs)))
+     ,@(mapcar
+        (lambda (spec)
+          (destructuring-bind (name doc &rest bytes) spec
+            `(defun ,name (buffer)
+               ,doc
+               (%buffer-prefix-p buffer ,@bytes))))
+        specs)))
 
 (define-buffer-prefix-checkers
   (%dcs-tmux-prefix-p
@@ -50,14 +52,13 @@
    43 113)                   ; + q
   (%dcs-decrqss-prefix-p
    "T when BUFFER begins with \"$q\" (DECRQSS request status string query)."
-   36 113))                  ; $ q  ; q
+   36 113)) ; $ q  ; q
 
 (defun %hex-digit-16 (digit)
   "Return the numeric value of an ASCII hexadecimal digit DIGIT, or NIL."
   (let ((code (char-code digit)))
     (cond
-      ((<= (char-code #\0) code (char-code #\9))
-       (- code (char-code #\0)))
+      ((<= (char-code #\0) code (char-code #\9)) (- code (char-code #\0)))
       ((<= (char-code #\A) code (char-code #\F))
        (+ 10 (- code (char-code #\A))))
       ((<= (char-code #\a) code (char-code #\f))
@@ -66,11 +67,12 @@
 (defun %hex-decode-string (hex)
   "Decode an even-length hex string to its ASCII characters, or NIL if malformed.
    XTGETTCAP encodes capability names in hex (\"Tc\" → \"5463\")."
-  (when (and (stringp hex)
-             (plusp (length hex))
-             (evenp (length hex))
-             (loop for ch of-type character across hex
-                   always (%hex-digit-16 ch)))
+  (when 
+      (and (stringp hex)
+           (plusp (length hex))
+           (evenp (length hex))
+           (loop for ch of-type character across hex
+                 always (%hex-digit-16 ch)))
     (with-output-to-string (out)
       (loop for i from 0 below (length hex) by 2
             for high = (%hex-digit-16 (aref hex i))
@@ -80,7 +82,8 @@
 (defun %hex-encode-string (string)
   "Hex-encode STRING's characters as lowercase hex (for XTGETTCAP reply values)."
   (with-output-to-string (out)
-    (loop for ch across string do (format out "~(~2,'0X~)" (char-code ch)))))
+    (loop for ch across string
+          do (format out "~(~2,'0X~)" (char-code ch)))))
 
 (defun %xtgettcap-value (capname)
   "The XTGETTCAP answer for terminfo capability CAPNAME:
@@ -99,22 +102,30 @@
   (loop with start = 0
         for pos = (position #\; string :start start)
         collect (subseq string start (or pos (length string)))
-        while pos do (setf start (1+ pos))))
+        while pos
+        do (setf start (1+ pos))))
 
 (defun %dcs-reply (ok-p body)
   "Build a DCS string-terminator reply: ESC P {1=ok/0=err} BODY ST."
-  (format nil "~CP~D~A~C\\" #\Escape (if ok-p 1 0) body #\Escape))
+  (format nil
+          "~CP~D~A~C\\"
+          #\Escape
+          (if ok-p
+              1
+              0)
+          body
+          #\Escape))
 
 (defun %xtgettcap-reply-1 (hex-name)
   "Build one XTGETTCAP DCS reply for the requested HEX-NAME (echoed verbatim):
    known cap → ESC P 1 + r <hexname>[=<hexvalue>] ST; unknown → ESC P 0 + r <hexname> ST."
   (let* ((name (%hex-decode-string hex-name))
-         (val  (and name (%xtgettcap-value name))))
+         (val (and name (%xtgettcap-value name))))
     (cond
-      ((null val)        (%dcs-reply nil (format nil "+r~A" hex-name)))
-      ((eq val :boolean) (%dcs-reply t   (format nil "+r~A" hex-name)))
-      (t                 (%dcs-reply t   (format nil "+r~A=~A" hex-name
-                                                 (%hex-encode-string val)))))))
+      ((null val) (%dcs-reply nil (format nil "+r~A" hex-name)))
+      ((eq val :boolean) (%dcs-reply t (format nil "+r~A" hex-name)))
+      (t
+       (%dcs-reply t (format nil "+r~A=~A" hex-name (%hex-encode-string val)))))))
 
 (defun %handle-xtgettcap (screen request)
   "Handle an XTGETTCAP request (the payload after \"+q\"): a ';'-separated list of
@@ -133,13 +144,20 @@
      SP q → DECSCUSR cursor style  (the shape number)"
   (cond
     ((string= request "m")
-     (%dcs-reply t (format nil "$r~Am"
-                           (nerimux/terminal/sgr:%pen-to-sgr-params
-                            (screen-cur-fg screen) (screen-cur-bg screen)
-                            (screen-cur-attrs screen) (screen-cur-attrs2 screen)))))
+     (%dcs-reply t
+                 (format nil
+                         "$r~Am"
+                         (nerimux/terminal/sgr:%pen-to-sgr-params
+                          (screen-cur-fg screen)
+                          (screen-cur-bg screen)
+                          (screen-cur-attrs screen)
+                          (screen-cur-attrs2 screen)))))
     ((string= request "r")
-     (%dcs-reply t (format nil "$r~D;~Dr"
-                           (1+ (screen-scroll-top screen)) (1+ (screen-scroll-bottom screen)))))
+     (%dcs-reply t
+                 (format nil
+                         "$r~D;~Dr"
+                         (1+ (screen-scroll-top screen))
+                         (1+ (screen-scroll-bottom screen)))))
     ((string= request " q")
      (%dcs-reply t (format nil "$r~D q" (screen-cursor-shape screen))))
     (t (%dcs-reply nil "$r"))))
@@ -209,8 +227,13 @@
      all other designators → ASCII (accepted silently).
    Designating does NOT activate G1 — that requires a SO (0x0E) locking shift."
   (lambda (screen byte)
-    (declare (type screen screen) (type (unsigned-byte 8) byte))
-    (designate-charset screen g (if (= byte #x30) :dec-graphics :ascii))
+    (declare (type screen screen)
+             (type (unsigned-byte 8) byte))
+    (designate-charset screen
+                       g
+                       (if (= byte #x30)
+                           :dec-graphics
+                           :ascii))
     #'ground-state))
 
 (defun make-ignore-final-byte-k ()

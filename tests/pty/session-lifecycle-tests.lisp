@@ -9,7 +9,6 @@
 ;;;; are left in place: a real PTY is still not guaranteed inside
 ;;;; nix run .#test-pty's own sandbox, so this suite must still be able to
 ;;;; skip cleanly there.
-
 (describe "model-suite"
 
   ;; ── Session bootstrap ──────────────────────────────────────────────────────

@@ -7,12 +7,13 @@
 (in-package #:asdf-user)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (load (merge-pathnames
-         "system/asdf-test-components.lisp"
-         (uiop:pathname-directory-pathname
-          (or *load-truename*
-              *load-pathname*
-              (error "Cannot locate nerimux.asd while loading test components."))))))
+  (load
+   (merge-pathnames "system/asdf-test-components.lisp"
+                    (uiop:pathname-directory-pathname
+                     (or *load-truename*
+                         *load-pathname*
+                         (error
+                          "Cannot locate nerimux.asd while loading test components."))))))
 
 ;;; Register every packages/<name>/nerimux-<name>.asd before the systems below
 ;;; name them in :depends-on.
@@ -44,10 +45,14 @@
                    (error "Cannot locate nerimux.asd while registering packages/.")))))
     (dolist (name cl-user::*nerimux-units*)
       (unless (asdf:find-system name nil)
-        (let ((asd (merge-pathnames (format nil "packages/~A/~A.asd"
-                                            (subseq name (length "nerimux-"))
-                                            name)
-                                    here)))
+        (let ((asd
+                (merge-pathnames
+                 (make-pathname
+                  :directory (list :relative "packages"
+                                   (subseq name (length "nerimux-")))
+                  :name name
+                  :type "asd")
+                 here)))
           (unless (probe-file asd)
             (error "Unit ~A is named in nerimux.asd but ~A does not exist." name asd))
           (load asd))))))
@@ -77,7 +82,7 @@
   ;;                          fixed cffi prototype, which misfires on the arm64
   ;;                          variadic ABI, so pane resize was a silent no-op on
   ;;                          Apple Silicon.
-  ;;   * babel             -> cl-codec-kit, a from-scratch, babel-API-compatible
+  ;;   * babel             -> cl-codec-kit, an independent from-scratch
   ;;                          codec with no dependencies of its own, which
   ;;                          cl-tty-kit and cl-process-kit already use. Call
   ;;                          sites went through cl-host-kit for one day before
@@ -138,15 +143,22 @@
        ;; also lives here.
        (:file "target")              ; session/window/pane target resolution (-t flag)
        (:file "server-dispatch-macros") ; declarative rule-table macros (moved out of package.lisp, W6)
-       (:file "runtime")              ; shared state + channel sync + SIGWINCH
+       (:file "runtime-data")         ; shared declarations and constants
+       (:file "runtime")              ; channel sync + SIGWINCH
+       (:file "runtime-reader-data")  ; PTY reader shared state
        (:file "runtime-reader")       ; PTY reader CPS state machine
        (:file "session-registry")  ; lookup for the one session the server owns
+       (:file "server-data")
        (:file "server")
+       (:file "workspace-window-data") ; workspace window constants
        (:file "workspace-window") ; workspace window creation
+       (:file "server-multi-data") ; multi-client data declarations
        (:file "server-multi-dispatch") ; shared multi-client handlers
+       (:file "server-multi-dispatch-prefix-data") ; prefix constants
        (:file "server-multi-dispatch-prefix") ; C-q workspace actions
        (:file "server-multi-workspace-selection") ; workspace catalog selection logic
        (:file "server-multi-dispatch-picker") ; picker/tree selection
+       (:file "server-multi-dispatch-command-workspace-relative") ; relative tree selection
        (:file "server-multi-dispatch-command-workspace") ; workspace UI helpers
        (:file "server-multi-dispatch-command-worktree") ; worktree operations
        (:file "server-multi-command-input-primitives") ; payload predicates and decoding
@@ -155,8 +167,13 @@
        ;; only warn at compile time, but a warning is not what catches a
        ;; misspelled name here -- an undefined function fails at runtime, and a
        ;; transient key that silently does nothing looks like an unbound key.
+       (:file "server-multi-transient-data") ; declarative transient menus
        (:file "server-multi-dispatch-transient") ; magit transient state and key handling
+       (:file "server-multi-dispatch-command-input-data") ; client input state
+       (:file "server-multi-dispatch-command-input-mode") ; command mode and tree navigation
        (:file "server-multi-dispatch-command-input") ; client input and command entry
+       (:file "server-multi-dispatch-command-input-keymap") ; NIL-modal UI keymap
+       (:file "server-multi-dispatch-tree-filter-data") ; tree-filter declarations
        (:file "server-multi-dispatch-tree-filter") ; tree-filter input mode
        (:file "server-multi-dispatch-command") ; final command dispatcher
        (:file "server-multi-state") ; mutable multi-client and workspace state
@@ -166,8 +183,11 @@
        (:file "runtime-lifecycle") ; per-server state directory and log path
        (:file "client")
        (:file "main-startup-flags") ; global cl-cli flag definitions
+       (:file "main-startup-socket-data") ; startup timing and log policy
+       (:file "main-startup-socket-macros") ; startup socket error boundary
        (:file "main-startup-socket") ; socket discovery + server auto-start helpers
-       (:file "main-startup-commands") ; attach/version/usage handlers + mode table
+       (:file "main-startup-data") ; startup mode metadata
+       (:file "main-startup-commands") ; attach/version/usage handlers
        (:file "main-startup"))))
   ;; Build a standalone binary: (asdf:make :nerimux)
   :build-operation "program-op"
@@ -204,7 +224,6 @@
              (declare (ignore op c))
              (funcall (find-symbol "RUN-TESTS" (find-package "NERIMUX/TEST")))))
 
-
 ;; The real-PTY suite, split out of nerimux/test by R9.2.
 ;;
 ;; `nix flake check` builds in a sandbox with no /dev/ptmx, so every case that
@@ -226,20 +245,21 @@
   :depends-on ("nerimux" (:version "cl-weave" "1.3.0"))
   :pathname "tests/pty"
   :serial t
-  :components ((:file "package")
-               (:file "helpers")
-               (:file "pty-unit-tests")
-               (:file "pty-integration-tests")
-               (:file "pane-tests-geometry-pty")
-               (:file "pane-tests-ops-pty")
-               (:file "window-tests-c-pty")
-               (:file "window-tests-pane-ops")
-               (:file "window-tests-split-math-pty")
-               (:file "session-lifecycle-tests")
-               (:file "server-command-tests")
-               (:file "server-client-cps-pty-tests")
-               (:file "server-multi-command-client-pty-tests")
-               (:file "entry"))
+  :components ((:file "package") (:file "helpers")
+                                 (:file "pty-unit-tests")
+                                 (:file "pty-integration-tests")
+                                 (:file "pane-tests-geometry-pty")
+                                 (:file "pane-tests-ops-pty")
+                                 (:file "window-tests-c-pty")
+                                 (:file "window-tests-pane-ops")
+                                 (:file "window-tests-split-math-pty")
+                                 (:file "session-lifecycle-tests")
+                                 (:file "server-command-tests")
+                                 (:file "server-client-cps-pty-tests")
+                                 (:file "server-multi-command-client-pty-tests")
+                                 (:file "entry"))
   :perform (test-op (op c)
-             (declare (ignore op c))
-             (funcall (find-symbol "RUN-PTY-TESTS" (find-package "NERIMUX/PTY-TEST")))))
+                    (declare (ignore op c))
+                    (funcall
+                     (find-symbol "RUN-PTY-TESTS"
+                                  (find-package "NERIMUX/PTY-TEST")))))

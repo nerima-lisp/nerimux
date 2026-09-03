@@ -16,7 +16,6 @@
 ;;;; ioctl did.  pane-reposition guards (plusp width) and (plusp content-height)
 ;;;; for the same reason; see pane-tests-geometry.lisp's
 ;;;; pane-reposition-degenerate-dimensions-skip-the-pty-resize.
-
 (describe "model-suite"
 
   ;;; ── window-relayout preserves a vertical split (no PTY) ────────────────────

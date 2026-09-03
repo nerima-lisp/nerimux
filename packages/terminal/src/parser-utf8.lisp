@@ -1,7 +1,6 @@
 (in-package #:nerimux/terminal/parser)
 
 ;;;; UTF-8 parser continuation logic.
-
 (declaim (inline utf8-lead-p utf8-continuation-p))
 
 (defun utf8-lead-p (byte)
@@ -14,9 +13,10 @@
 
 (defun utf8-lead-decode (byte)
   "Return (values initial-accumulator continuation-bytes-remaining)."
-  (cond ((< byte #xE0) (values (logand byte #x1F) 1))
-        ((< byte #xF0) (values (logand byte #x0F) 2))
-        (t             (values (logand byte #x07) 3))))
+  (cond
+    ((< byte #xE0) (values (logand byte #x1F) 1))
+    ((< byte #xF0) (values (logand byte #x0F) 2))
+    (t (values (logand byte #x07) 3))))
 
 (defun make-utf8-k (code-point-accumulator continuation-bytes-remaining)
   "Return a continuation that collects UTF-8 continuation bytes.

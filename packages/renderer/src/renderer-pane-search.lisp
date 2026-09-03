@@ -1,7 +1,6 @@
 (in-package #:nerimux/renderer)
 
 ;;; Copy-mode search-match highlighting for pane rendering.
-
 (defun %screen-row-display-string (screen row)
   "The visible (offset-aware) content of ROW as a string."
   (with-output-to-string (s)
@@ -25,32 +24,44 @@
    version did (it compiled TERM once just to test validity, then handed the raw
    string to ALL-MATCHES)."
   (let ((scanner
-          (handler-case
-              (cl-regex-kit:compile-regex term :octal nil)
-            (cl-regex-kit:regex-syntax-error () nil))))
+         (handler-case (cl-regex-kit:compile-regex term :octal nil)
+           (cl-regex-kit:regex-syntax-error ()
+             nil))))
     (if scanner
         (loop for match in (cl-regex-kit:all-matches scanner row-str)
               for s = (cl-regex-kit:match-start match)
               for e = (cl-regex-kit:match-end match)
-              when (> e s) collect (cons s e))
-        (loop with tlen = (length term) and start = 0
+              when (> e s)
+                collect (cons s e))
+        (loop with tlen = (length term)
+              and start = 0
               for pos = (search term row-str :start2 start)
               while pos
               collect (cons pos (+ pos tlen))
               do (setf start (+ pos (max 1 tlen)))))))
 
-(defun %render-row-search-matches (buffer row row-str term w
-                                    cur-row cur-col match-sgr current-sgr
-                                    ox oy)
+(defun %render-row-search-matches (buffer row
+                                          row-str
+                                          term
+                                          w
+                                          cur-row
+                                          cur-col
+                                          match-sgr
+                                          current-sgr
+                                          ox
+                                          oy)
   "Overdraw every TERM match in ROW-STR (screen row ROW, already offset by
    OX/OY) onto BUFFER in MATCH-SGR — CURRENT-SGR when the match spans
    (CUR-ROW . CUR-COL), the copy-mode cursor position."
   (dolist (range (%all-match-ranges term row-str))
     (let* ((start (car range))
-           (end   (min (cdr range) w))
-           (current-p (and (eql cur-row row) cur-col
-                           (<= start cur-col) (< cur-col end)))
-           (sgr   (if current-p (or current-sgr match-sgr) match-sgr)))
+           (end (min (cdr range) w))
+           (current-p
+            (and (eql cur-row row) cur-col (<= start cur-col) (< cur-col end)))
+           (sgr
+            (if current-p
+                (or current-sgr match-sgr)
+                match-sgr)))
       (move-to buffer (+ oy row) (+ ox start))
       (%emit-sgr buffer sgr)
       (write-string (subseq row-str start end) buffer)
@@ -64,17 +75,25 @@
     (when (and screen (screen-copy-mode-p screen))
       (let ((term (screen-copy-search-term screen)))
         (when (and term (plusp (length term)))
-          (let* ((match-sgr   +sgr-copy-mode-match+)
-                 (current-sgr  +sgr-copy-mode-current-match+)
-                 (cursor       (screen-copy-cursor screen))
-                 (cur-row      (and (consp cursor) (car cursor)))
-                 (cur-col      (and (consp cursor) (cdr cursor)))
-                 (ox           (pane-x pane))
-                 (oy           (pane-y pane))
-                 (w            (screen-width screen)))
+          (let* ((match-sgr +sgr-copy-mode-match+)
+                 (current-sgr +sgr-copy-mode-current-match+)
+                 (cursor (screen-copy-cursor screen))
+                 (cur-row (and (consp cursor) (car cursor)))
+                 (cur-col (and (consp cursor) (cdr cursor)))
+                 (ox (pane-x pane))
+                 (oy (pane-y pane))
+                 (w (screen-width screen)))
             (when match-sgr
               (dotimes (row (screen-height screen))
                 (let ((row-str (%screen-row-display-string screen row)))
-                  (%render-row-search-matches buffer row row-str term w
-                                               cur-row cur-col match-sgr current-sgr
-                                               ox oy))))))))))
+                  (%render-row-search-matches buffer
+                                              row
+                                              row-str
+                                              term
+                                              w
+                                              cur-row
+                                              cur-col
+                                              match-sgr
+                                              current-sgr
+                                              ox
+                                              oy))))))))))

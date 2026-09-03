@@ -18,7 +18,6 @@
 ;;;; regardless of content, since there is no config-authored style for a
 ;;;; non-trivial BODY to mean anything any more — see
 ;;;; renderer-statusbar-layout.lisp.
-
 (describe "renderer-suite"
 
   ;;; ── set-cursor-shape in rendered output ──────────────────────────────────────

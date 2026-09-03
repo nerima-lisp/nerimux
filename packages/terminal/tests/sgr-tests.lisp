@@ -2,9 +2,7 @@
 
 ;;;; SGR tests (src/terminal/sgr.lisp).
 ;;;; Tests: sgr suite.
-
 ;;; ── SUITE: sgr ──────────────────────────────────────────────────────────────
-
 (describe "terminal-suite/sgr"
 
   ;; Standard foreground SGR codes 31-37 set fg indices 1-7.

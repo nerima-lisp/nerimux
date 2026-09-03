@@ -14,9 +14,7 @@
 ;;;; All three functions are exported from nerimux/terminal/types (declared in
 ;;;; src/bootstrap/package-terminal.lisp) and re-exported through the
 ;;;; nerimux/terminal umbrella package.
-
 ;;; ── Dirty-flag mutation ────────────────────────────────────────────────────
-
 (defun screen-clear-dirty (screen)
   "Clear the dirty flag on SCREEN, marking it as freshly rendered.
    The renderer calls this after every successful frame paint so the next
@@ -24,7 +22,6 @@
   (setf (screen-dirty-p screen) nil))
 
 ;;; ── BEL consumption ────────────────────────────────────────────────────────
-
 (defun screen-consume-bell (screen)
   "Return T and clear SCREEN's bell-pending flag when a BEL is pending.
    Returns NIL without side effects when no bell is pending.
@@ -37,7 +34,6 @@
     t))
 
 ;;; ── Queue draining ───────────────────────────────────────────────────────────
-
 (defun screen-drain-queue (screen queue-reader queue-writer)
   "Atomically read and clear a push-accumulated queue slot on SCREEN, returning
    the queued items in push order (oldest first).
@@ -56,14 +52,14 @@
 ;;; five-slot SGR reset.
 ;;; The canonical definition lives in this shared file so neither layer needs
 ;;; to reference the other, resolving the historical load-order circularity.
-
 (declaim (inline reset-sgr-pen))
+
 (defun reset-sgr-pen (screen)
   "Reset all five SGR pen slots of SCREEN to VT100 power-on defaults:
    foreground / background = +default-color+ (terminal default), all
    attribute bits clear.  Inlined for use in the hot SGR dispatch path."
-  (setf (screen-cur-fg       screen) +default-color+
-        (screen-cur-bg       screen) +default-color+
-        (screen-cur-attrs    screen) 0
-        (screen-cur-attrs2   screen) 0
+  (setf (screen-cur-fg screen) +default-color+
+        (screen-cur-bg screen) +default-color+
+        (screen-cur-attrs screen) 0
+        (screen-cur-attrs2 screen) 0
         (screen-cur-ul-color screen) 0))

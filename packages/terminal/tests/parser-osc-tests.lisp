@@ -2,7 +2,6 @@
 
 ;;;; Parser tests (src/terminal/parser.lisp).
 ;;;; OSC coverage and the parser-special suite.
-
 (describe "terminal-suite/special"
 
   ;; ── SUITE: special ──────────────────────────────────────────────────────────

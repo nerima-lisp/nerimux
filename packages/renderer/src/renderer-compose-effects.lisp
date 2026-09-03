@@ -5,9 +5,7 @@
 ;;;; This file owns the post-layout output effects: bell emission, cursor
 ;;;; restoration, and draining passthrough / clipboard queues into the final
 ;;;; frame stream.
-
 ;;; ── Full-session render effects ─────────────────────────────────────────────
-
 (defun %emit-bell (buffer)
   "Write the audible BEL character to BUFFER.
    visual-bell (domain/options, deleted R2.2) defaulted to \"off\", which
@@ -42,8 +40,8 @@
     (let ((bell-pending (screen-consume-bell (pane-screen active-pane))))
       (when bell-pending
         (%emit-bell buffer))))
-  (when (or (null active-pane)
-            (screen-cursor-visible (pane-screen active-pane)))
+  (when 
+      (or (null active-pane) (screen-cursor-visible (pane-screen active-pane)))
     (cursor-visible buffer)
     (when active-pane
       (set-cursor-shape buffer (screen-cursor-shape (pane-screen active-pane))))))
@@ -60,10 +58,13 @@
     (let ((screen (pane-screen pane)))
       (when screen
         (with-lock-held ((screen-lock screen))
-          (let ((queued (screen-drain-queue screen queue-reader queue-writer)))
-            (when emit
-              (dolist (seq queued)
-                (write-string seq buffer)))))))))
+                        (let ((queued
+                               (screen-drain-queue screen
+                                                   queue-reader
+                                                   queue-writer)))
+                          (when emit
+                            (dolist (seq queued)
+                              (write-string seq buffer)))))))))
 
 (defun %render-passthrough (buffer panes)
   "Drain each pane's passthrough-queue, discarding it without emitting.
@@ -71,7 +72,8 @@
    no config to turn it \"on\"/\"all\", so this never wrote to BUFFER even
    before R2 — the queue still had to be drained every frame so a pane that
    keeps emitting DCS-passthrough sequences cannot grow it without bound."
-  (%drain-screen-queue buffer panes
+  (%drain-screen-queue buffer
+                       panes
                        #'screen-passthrough-queue
                        (lambda (screen value)
                          (setf (screen-passthrough-queue screen) value))
@@ -86,7 +88,8 @@
    session-scoped one, silently falling through to its own passed-in
    default \"on\" every time) never changed the outcome, so it is not a
    behaviour change — see the R2 renderer report."
-  (%drain-screen-queue buffer panes
+  (%drain-screen-queue buffer
+                       panes
                        #'screen-clipboard-queue
                        (lambda (screen value)
                          (setf (screen-clipboard-queue screen) value))

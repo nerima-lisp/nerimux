@@ -4,7 +4,6 @@
 ;;;;
 ;;;; Tests: target-suite — %parse-target, find-session-by-target,
 ;;;; find-window-by-target, find-pane-by-target.
-
 (describe "target-suite"
 
   ;;; ── %parse-session-component direct tests ───────────────────────────────────

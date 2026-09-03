@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/terminal)
 
 ;;;; parser tests - helper utilities and direct parser edge cases.
-
 ;;; ── Coverage gap: make-bytes / feed-osc helpers ──────────────────────────────
 ;;;
 ;;; Audit finding: the pattern
@@ -11,25 +10,31 @@
 ;;;   (screen-process-bytes s (cl-codec-kit:string-to-octets (format nil "~C]N;...~C" ...)
 ;;;                                                          :encoding :utf-8))
 ;;; is repeated 10+ times.  Centralise it as feed-osc.
-
 (defun make-bytes (&rest byte-values)
   "Return a simple (unsigned-byte 8) vector containing BYTE-VALUES."
   (make-array (length byte-values)
-              :element-type '(unsigned-byte 8)
-              :initial-contents byte-values))
+              :element-type
+              '(unsigned-byte 8)
+              :initial-contents
+              byte-values))
 
 (defun feed-osc (screen command-number body-string)
   "Feed an OSC sequence with integer COMMAND-NUMBER and BODY-STRING to SCREEN,
    terminated by BEL (ASCII 7).  Uses UTF-8 encoding to match real terminal behaviour."
   (screen-process-bytes screen
-    (cl-codec-kit:string-to-octets
-      (format nil "~C]~D;~A~C" #\Escape command-number body-string (code-char 7))
-      :encoding :utf-8)))
+                        (cl-codec-kit:string-to-octets
+                         (format nil
+                                 "~C]~D;~A~C"
+                                 #\Escape
+                                 command-number
+                                 body-string
+                                 (code-char 7))
+                         :encoding
+                         :utf-8)))
 
 ;;; Verify the helpers function correctly before relying on them in later tests.
 ;;; These live in their own describe group so the helper checks are reported
 ;;; distinctly from the parser behaviour tests that use them.
-
 (describe "terminal-suite/parser-helper-suite"
 
   ;; make-bytes returns a (unsigned-byte 8) vector with the given byte values.
@@ -73,7 +78,6 @@
 ;;;
 ;;; Audit finding: screen-process-bytes with start=0, end=0 on a zero-length
 ;;; buffer was not tested.
-
 (describe "terminal-suite/parser-suite"
 
   ;; screen-process-bytes on a zero-length buffer (start=end=0) is a no-op.
@@ -87,7 +91,6 @@
 ;;;
 ;;; Audit finding: Base64 padding ('='), truncated input, and invalid characters
 ;;; were not directly asserted.
-
 (describe "terminal-suite/base64-decode-suite"
 
   ;; %base64-decode decodes a standard Base64 string ('hello' = aGVsbG8=).
@@ -142,7 +145,6 @@
 ;;; A colon introduces sub-parameters within one CSI parameter (SGR 4:3 undercurl,
 ;;; 38:2::R:G:B true-colour).  The parser keeps the leading value and skips the
 ;;; rest, so such a sequence neither aborts (printing stray bytes) nor mis-applies.
-
 (describe "parser-suite/csi-colon-subparams"
 
   ;; CSI 4:3 m (undercurl) keeps the leading 4 -> underline; no stray bytes print.

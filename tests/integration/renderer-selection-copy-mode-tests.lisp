@@ -3,7 +3,6 @@
 ;;;; Direct unit tests for renderer-pane-selection.lisp's %compute-selection-bounds,
 ;;;; which previously had no dedicated coverage (only exercised transitively, if at
 ;;;; all, through full-screen render integration tests).
-
 (describe "renderer-suite/pane-selection"
 
   ;; %compute-selection-bounds reports SEL-ACTIVE nil (and all-zero defaults) when

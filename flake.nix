@@ -20,7 +20,14 @@
       # pre-migration owner; pin it to the org (and to a tag) so no takeokunn/*
       # rev survives in our lock. paredit-cli is a transitive dev tool only and
       # is never linked into nerimux.
-      inputs.paredit-cli.url = "github:nerima-lisp/paredit-cli/v1.6.0";
+      inputs.paredit-cli.url = "github:nerima-lisp/paredit-cli/v1.6.2";
+    };
+    # Keep the structural editor available as a first-class project tool.
+    # cl-weave consumes the same release transitively, but exposing it here
+    # makes the documented editing workflow reproducible in the dev shell.
+    paredit-cli = {
+      url = "github:nerima-lisp/paredit-cli/v1.6.2";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     # `flake = false`: consumed as a plain source checkout, pushed onto ASDF's
@@ -83,7 +90,7 @@
       flake = false;
     };
     cl-codec-kit = {
-      # From-scratch, babel-API-compatible codec: the 71 string<->octet call
+      # Independent from-scratch codec: the string<->octet call
       # sites in src/ and tests/ name cl-codec-kit:string-to-octets /
       # octets-to-string directly. Briefly routed through cl-host-kit instead;
       # re-pointed here on 2026-08-02 so the codec is named at its own call
@@ -102,16 +109,14 @@
       flake = false;
     };
     cl-tui-kit = {
-      # The headless surface/layout/backend boundary used by nerimux's
-      # per-client renderer. Pin the API that exposes make-surface and the
-      # ANSI backend used by the deterministic frame adapter.
+      # The headless surface/layout/backend API used by nerimux's per-client
+      # renderer. Pin the API that exposes make-surface and the ANSI backend.
       url = "github:nerima-lisp/cl-tui-kit/v4.1.3";
       flake = false;
     };
     cl-vcs-kit = {
-      # ghq/repository/worktree discovery for the global picker. The adapter
-      # keeps discovery off the UI thread while this source provides the
-      # stable VCS observation API.
+      # ghq/repository/worktree discovery for the global picker. The source
+      # provides the stable VCS observation API used by the picker.
       url = "github:nerima-lisp/cl-vcs-kit/v0.2.0";
       flake = false;
     };
@@ -127,6 +132,7 @@
       self,
       nixpkgs,
       cl-weave,
+      paredit-cli,
       cl-cli,
       cl-date-kit,
       cl-parser-kit,
@@ -651,6 +657,10 @@
           default = pkgs.mkShell {
             packages = [
               sbcl
+              paredit-cli.packages.${system}.default
+              (pkgs.writeShellScriptBin "paredit-cli" ''
+                exec ${paredit-cli.packages.${system}.default}/bin/paredit "$@"
+              '')
               pkgs.coreutils
               pkgs.python3Packages.mkdocs-material
             ];
@@ -685,6 +695,10 @@
                   sbcl --dynamic-space-size 4096 --no-sysinit --no-userinit \
                   --disable-debugger --script scripts/coverage.lisp "$report_dir"
                 echo "Coverage report: $report_dir" "cover-index.html"
+              }
+
+              paredit-cli() {
+                paredit "$@"
               }
 
               echo "nerimux dev shell"

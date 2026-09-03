@@ -26,7 +26,6 @@
 ;;;; window-relayout and pane close call those ports while this suite uses
 ;;;; synthetic panes. Outside a running server they are nil because
 ;;;; install-pty-port only runs at server startup.
-
 (defmacro %with-r5-fixture ((session-var conn-var worktree-var window-var) &body body)
   "Stub %fork-pane and start-reader-thread, bind PTY resize and close ports to
    no-ops,
@@ -43,8 +42,8 @@
                                         nil)))
        (with-stubbed-fdefinition
            ((nerimux/pane::%fork-pane
-             (lambda (session id x y cols rows &key start-dir)
-               (declare (ignore session))
+             (lambda (session id x y cols rows &key start-dir default-command)
+               (declare (ignore session default-command))
                (let ((pane (make-no-pty-pane id x y cols rows)))
                  (setf (nerimux/pane:pane-fd pane) 9999
                        (nerimux/pane:pane-start-path pane) (or start-dir ""))
@@ -211,8 +210,8 @@
     (with-loop-state
       (with-stubbed-fdefinition
           ((nerimux/pane::%fork-pane
-            (lambda (session id x y cols rows &key start-dir)
-              (declare (ignore session start-dir))
+            (lambda (session id x y cols rows &key start-dir default-command)
+              (declare (ignore session start-dir default-command))
               (make-no-pty-pane id x y cols rows)))) ; fd stays -1: not live
         (let* ((organization
                  (nerimux/workspace-model:make-organization

@@ -3,7 +3,6 @@
 ;;;; R8.1: `nerimux kill` server-side decision and client-side reply mapping.
 ;;;; Socket I/O stays at the transport seams here; dispatch and exit-code tests
 ;;;; cover the protocol contract without depending on a live daemon.
-
 (defmacro %with-stubbed-run-kill-exit (code-var &body body)
   "Local copy of main-entry-tests.lisp's WITH-STUBBED-EXIT idiom (not shared
    across files here -- see execution-workflow on load-order-independent
@@ -13,15 +12,20 @@
   (let ((tag (gensym "EXIT-TAG"))
         (orig (gensym "ORIG-EXIT")))
     `(sb-ext:without-package-locks
-       (let ((,orig (fdefinition 'sb-ext:exit)))
-         (setf (fdefinition 'sb-ext:exit)
-               (lambda (&rest args &key (code 0) &allow-other-keys)
-                 (declare (ignore args))
-                 (setf ,code-var code)
-                 (throw ',tag nil)))
-         (unwind-protect
-              (catch ',tag ,@body)
-           (setf (fdefinition 'sb-ext:exit) ,orig))))))
+      (let ((,orig (fdefinition 'sb-ext:exit)))
+        (setf (fdefinition 'sb-ext:exit) (lambda 
+                                             (&rest args
+                                                    &key
+                                                    (code 0)
+                                                    &allow-other-keys)
+                                           (declare (ignore args))
+                                           (setf ,code-var code)
+                                           (throw ',tag
+                                             nil)))
+        (unwind-protect 
+            (catch ',tag
+              ,@body)
+          (setf (fdefinition 'sb-ext:exit) ,orig))))))
 
 (describe "server-kill-request-suite"
 

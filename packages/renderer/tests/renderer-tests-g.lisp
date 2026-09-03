@@ -13,7 +13,6 @@
 ;;;; context and status-justify value it used to return: R6.5's status bar is
 ;;;; composed directly by %status-left-text/%status-middle-text/%status-right-
 ;;;; text (renderer-statusbar.lisp) instead.
-
 (describe "renderer-suite"
 
   ;;; ── %split-align-attr ────────────────────────────────────────────────────────

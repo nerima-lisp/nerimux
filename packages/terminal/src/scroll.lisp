@@ -5,17 +5,14 @@
 ;;;; Loads BEFORE cursor.lisp, erase.lisp, and edit.lisp:
 ;;;;   cursor.lisp needs scroll-up-one;
 ;;;;   erase.lisp and edit.lisp need %copy-row / %clear-row.
-
 ;;; ── Row primitives (data-layer helpers) ─────────────────────────────────────
 ;;;
 ;;; Both scroll operations and line-edit operations (insert-lines, delete-lines)
 ;;; work row-by-row.  %copy-row and %clear-row are the shared building blocks.
-
 (defun %copy-row (screen dst-row src-row)
   "Copy all cells from SRC-ROW to DST-ROW within SCREEN."
   (dotimes (col (screen-width screen))
-    (setf (screen-cell screen col dst-row)
-          (screen-cell screen col src-row))))
+    (setf (screen-cell screen col dst-row) (screen-cell screen col src-row))))
 
 (defun %erase-cell (screen)
   "A blank cell carrying the current background colour (BCE — background colour
@@ -31,10 +28,9 @@
     (setf (screen-cell screen col row) (%erase-cell screen))))
 
 ;;; ── Scroll operations ───────────────────────────────────────────────────────
-
 ;;; ── Scrollback trimming ────────────────────────────────────────────────────
-
-(defconstant +max-scrollback-lines+ 10000
+(defconstant +max-scrollback-lines+
+  10000
   "Scrollback cap, in rows (§1.4).
 
    This used to be a 1000-row fallback behind *HISTORY-LIMIT-FUNCTION*, a
@@ -65,7 +61,6 @@
 ;;; scrollback. This was the `scroll-on-clear` option, reached through a callback
 ;;; the bootstrap layer installed; it is now unconditional, so both the option
 ;;; and the injection point are gone and ERASE-DISPLAY simply always scrolls.
-
 (defun %push-row-to-scrollback (screen row)
   "Copy ROW of SCREEN into a new vector and prepend it to the scrollback list.
    Enforces the history cap via TRIM-SCROLL-HISTORY after the push.
@@ -127,9 +122,10 @@
   (incf (screen-history-trimmed screen) (length (screen-scrollback screen)))
   (setf (screen-scrollback screen) nil
         (screen-scrollback-wrapped screen) nil
-        (screen-prompt-marks screen)
-        (delete-if (lambda (m) (< m (screen-history-trimmed screen)))
-                   (screen-prompt-marks screen))))
+        (screen-prompt-marks screen) (delete-if
+                                      (lambda (m)
+                                        (< m (screen-history-trimmed screen)))
+                                      (screen-prompt-marks screen))))
 
 (defun trim-below-cursor (screen)
   "resize-pane -T: drop the rows below the cursor and pull rows out of the
@@ -178,14 +174,13 @@
     (setf (screen-dirty-p screen) t)))
 
 ;;; ── Scroll region ──────────────────────────────────────────────────────────
-
 (defun decstbm (screen top bottom)
   "DECSTBM — set the vertical scroll region.
    TOP and BOTTOM are 0-based inclusive row indices.  The cursor is homed
    to (0,0) after a valid set."
-  (let ((clamped-top    (max 0 top))
+  (let ((clamped-top (max 0 top))
         (clamped-bottom (min (1- (screen-height screen)) bottom)))
     (when (< clamped-top clamped-bottom)
-      (setf (screen-scroll-top    screen) clamped-top
+      (setf (screen-scroll-top screen) clamped-top
             (screen-scroll-bottom screen) clamped-bottom)
       (set-cursor screen 0 0))))

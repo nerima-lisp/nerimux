@@ -3,7 +3,6 @@
 ;;;; window tests — part B: last-window by recency, move-window, swap-window,
 ;;;; find-window-by-name, list-windows-format, auto-rename-from-osc,
 ;;;; window-remove-pane, window-last-active-time, window-layout-cycle-index.
-
 (describe "model-suite"
 
   ;;; ── last-window by recency ───────────────────────────────────────────────────

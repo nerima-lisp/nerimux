@@ -1,14 +1,12 @@
 (in-package #:nerimux/test/terminal)
 
 (declaim (notinline nerimux/terminal/csi::%csi-leading-int
-                   nerimux/terminal/csi::%csi-decstbm-params))
+                    nerimux/terminal/csi::%csi-decstbm-params))
 
 ;;;; csi tests — part B: ECH, DECRQM, XTWINOPS, CPR, DA table,
 ;;;; REP count=0, VPR/CNL/HPR, ICH, DCH, ED/EL, SGR in CSI, IL/DL,
 ;;;; DECFRA, DECCRA, REP in cell-with-attributes suites.
-
 ;;; ── SUITE: ech ───────────────────────────────────────────────────────────────
-
 (describe "terminal-suite/ech"
 
   ;; CSI 3 X erases 3 characters at the cursor position without moving the cursor.
@@ -41,7 +39,6 @@
       (check-cursor s 2 0))))
 
 ;;; ── SUITE: dsr ───────────────────────────────────────────────────────────────
-
 (describe "terminal-suite/dsr"
 
   ;; CSI 5 n (DSR) queues the ESC[0n status reply without moving the cursor or
@@ -60,7 +57,6 @@
                     (nerimux/terminal/types:screen-response-queue s))))))
 
 ;;; ── SUITE: ich-dch ───────────────────────────────────────────────────────────
-
 (describe "terminal-suite/ich-dch"
 
   ;; CSI 2 @ at column 1 inserts 2 blanks, pushing existing text right.
@@ -117,7 +113,6 @@
       (check-cursor s 1 0))))
 
 ;;; ── SUITE: il-dl ─────────────────────────────────────────────────────────────
-
 (describe "terminal-suite/il-dl"
 
   ;; CSI 1 L at row 1 inserts a blank line, pushing row 1 down to row 2.
@@ -163,7 +158,6 @@
       (expect (row-blank-p s 2)))))
 
 ;;; ── SUITE: decstbm-csi ────────────────────────────────────────────────────────
-
 (describe "terminal-suite/decstbm-csi"
 
   ;; ESC[3;8r sets the scroll region to rows 2-7 (0-based) and homes the cursor.
@@ -213,7 +207,6 @@
       (expect (= 9 (nerimux/terminal/types:screen-scroll-bottom s))))))
 
 ;;; ── SUITE: execute-csi-direct ────────────────────────────────────────────────
-
 (describe "terminal-suite/execute-csi-direct"
 
   ;; execute-csi called directly with final #\H and params '(3 5) positions cursor.
@@ -246,7 +239,6 @@
       (check-cursor s 0 0))))
 
 ;;; ── SUITE: %csi-decstbm-params ───────────────────────────────────────────────
-
 (describe "terminal-suite/csi-decstbm-params"
 
   ;; %csi-decstbm-params converts 1-based params to 0-based; 0 defaults to top=0 or bottom=height-1.
@@ -270,7 +262,6 @@
 ;;; (the scalar-param extraction helper) were exercised only indirectly through
 ;;; execute-csi end-to-end paths, mirroring the direct define-sgr-rules /
 ;;; %pen-to-sgr-params coverage already present in sgr-tests-b.lisp.
-
 (describe "terminal-suite/csi-rules-macro-and-helpers"
 
   ;; define-csi-rules is a defined macro in the csi package.
@@ -299,7 +290,6 @@
 ;;; CSI Ps l with no private marker) were tested only via direct calls to
 ;;; decstr-action / set-ansi-mode / reset-ansi-mode (modes-tests-e.lisp), never
 ;;; through the execute-csi/parser dispatch path that actually routes to them.
-
 (describe "terminal-suite/csi-decstr-ansi-mode-dispatch"
 
   ;; ESC[!p (DECSTR) reached via the parser clears IRM but leaves screen content alone.

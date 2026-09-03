@@ -2,7 +2,6 @@
 
 ;;;; Parser tests (src/terminal/parser.lisp).
 ;;;; ESC/CSI coverage.
-
 (describe "special"
 
   ;; CSI < t (XTPOPTITLE) and CSI = c (DA3) use the < / = private markers; the byte

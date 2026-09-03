@@ -6,7 +6,6 @@
 ;;;; %status-pad-to, and %expand-segment-or-empty.
 ;;;; These were previously exercised only transitively (if at all) through
 ;;;; %compose-aligned-line and #{...} integration tests.
-
 (describe "renderer-suite/statusbar-layout"
 
   ;;; ── %sgr-sequence-end ────────────────────────────────────────────────────────

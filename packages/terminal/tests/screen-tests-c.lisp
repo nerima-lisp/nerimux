@@ -3,7 +3,6 @@
 (declaim (notinline nerimux/terminal/types:reset-sgr-pen))
 
 ;;;; Screen tests — part III: screen-clear-dirty, reset-sgr-pen, bell-pending, screen-consume-bell, miscellaneous slots, copy-mode extra slots.
-
 (describe "terminal-suite/resize"
 
   ;;; ── screen-clear-dirty ───────────────────────────────────────────────────────
@@ -18,7 +17,6 @@
       (expect (nerimux/terminal/types:screen-dirty-p s) :to-be-falsy))))
 
 ;;; ── reset-sgr-pen ────────────────────────────────────────────────────────────
-
 (describe "terminal-suite/reset-sgr-pen-suite"
 
   ;; reset-sgr-pen sets all five SGR pen fields to VT100 defaults.
@@ -52,7 +50,6 @@
       (expect (= nerimux/terminal/types:+default-color+ (nerimux/terminal/types:screen-cur-bg s))))))
 
 ;;; ── bell-pending slot ────────────────────────────────────────────────────────
-
 (describe "terminal-suite/bell-pending-c-suite"
 
   ;; bell-pending defaults to NIL and can be toggled via setf.
@@ -74,7 +71,6 @@
       (expect (nerimux/terminal/types:screen-bell-pending s) :to-be-truthy))))
 
 ;;; ── screen-consume-bell ──────────────────────────────────────────────────────
-
 (describe "terminal-suite/screen-consume-bell-c-suite"
 
   ;; screen-consume-bell returns NIL and has no side effect when bell is not pending.
@@ -105,7 +101,6 @@
       (expect (nerimux/terminal/types:screen-bell-pending s) :to-be-falsy))))
 
 ;;; ── SUITE: miscellaneous screen slots ────────────────────────────────────────
-
 (describe "terminal-suite/screen-slots"
 
   ;; screen-last-char is NIL on a fresh screen and updates to the last character written.
@@ -130,7 +125,6 @@
           (expect (equal expected (funcall accessor s))))))))
 
 ;;; ── SUITE: copy-mode extra slots ─────────────────────────────────────────────
-
 (describe "terminal-suite/copy-mode-extra-slots"
 
   ;; copy-mode-entered-by-mouse-p defaults to NIL on a fresh screen.
@@ -160,7 +154,6 @@
       (expect (nerimux/terminal/types:screen-copy-exit-on-bottom s) :to-be-falsy))))
 
 ;;; ── SUITE: OSC 10/11 default colour slots ─────────────────────────────────
-
 (describe "terminal-suite/osc-default-color-slots"
 
   ;; screen-osc-default-fg on a fresh screen equals +osc-default-fg+ (white).
@@ -198,7 +191,6 @@
                  (nerimux/terminal/types:screen-osc-default-bg s))))))
 
 ;;; ── SUITE: OSC 8 current-hyperlink slot ──────────────────────────────────
-
 (describe "terminal-suite/current-hyperlink-slots"
 
   ;; screen-current-hyperlink is NIL on a fresh screen.
@@ -238,7 +230,6 @@
       (expect (null (nerimux/terminal/types:cell-hyperlink (cell-at s 2 0)))))))
 
 ;;; ── SUITE: %clear-line-wrapped ────────────────────────────────────────────
-
 (describe "terminal-suite/clear-line-wrapped-suite"
 
   ;; %clear-line-wrapped removes a wrap flag that was previously set.

@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/commands)
 
 ;;;; rectangle-sel-text and set-cursor
-
 (describe "commands-suite"
 
   ;;; ── %rectangle-selection-text (direct unit tests) ────────────────────────────

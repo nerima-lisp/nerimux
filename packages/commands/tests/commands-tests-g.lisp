@@ -1,9 +1,7 @@
 (in-package #:nerimux/test/commands)
 
 ;;;; command tokenizer, copy-mode find
-
 ;;; ── %copy-mode-find-forward / %copy-mode-find-backward ──────────────────────
-
 (defun %copy-mode-find-result (fn width height text term row col)
   (let ((s (make-screen width height)))
     (feed s text)
@@ -12,22 +10,25 @@
 
 (defun %check-copy-mode-find-case (width height text term case)
   (destructuring-bind (fn srow scol expected-row expected-col desc) case
-    (multiple-value-bind (row col)
+    (multiple-value-bind (row col) 
         (%copy-mode-find-result fn width height text term srow scol)
       (check-table
-       (list (list row expected-row
-                   (format nil "~A: row (got ~S)" desc row))
-             (list col expected-col
-                   (format nil "~A: col (got ~S)" desc col)))
-       :test #'equal))))
+       (list (list row expected-row (format nil "~A: row (got ~S)" desc row))
+             (list col expected-col (format nil "~A: col (got ~S)" desc col)))
+       :test
+       #'equal))))
 
 (defmacro define-copy-mode-find-cases (&body cases)
   `(progn
      ,@(loop for (name doc width height text term rows) in cases
-             collect
-             `(it ,(string-downcase (symbol-name name))
-                (dolist (case ',rows)
-                  (%check-copy-mode-find-case ,width ,height ,text ,term case))))))
+             collect `(it ,(string-downcase (symbol-name name))
+                          (dolist 
+                              (case ',rows)
+                            (%check-copy-mode-find-case ,width
+                                                        ,height
+                                                        ,text
+                                                        ,term
+                                                        case))))))
 
 (describe "commands-suite"
 

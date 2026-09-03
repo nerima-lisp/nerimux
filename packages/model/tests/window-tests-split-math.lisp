@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/model)
 
 ;;;; Window-level tests: pure split math and axis helpers.
-
 (describe "model-suite"
 
   ;;; ── %grow-first-p direct tests (pure, no PTY) ────────────────────────────────

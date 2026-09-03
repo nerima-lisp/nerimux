@@ -3,7 +3,6 @@
 ;;;; Mode and screen-state tests covering src/domain/terminal/modes-alt-screen.lisp,
 ;;;; modes-reset.lisp (RIS), and modes-cursor-save.lisp (DECSC/DECRC).
 ;;;; Tests: modes suite — RIS, alt-screen, DECSC/DECRC.
-
 (describe "terminal-suite/modes"
 
   ;; ESC c (RIS) clears the screen and homes the cursor.
@@ -135,7 +134,6 @@
       (expect (not (nerimux/terminal/types:screen-origin-mode s))))))
 
 ;;; ── Direct modes function tests ──────────────────────────────────────────────
-
 (describe "terminal-suite/direct-modes-suite"
 
   ;; ris-action clears all cells, homes the cursor, resets SGR and scroll region, and restores cursor visibility.

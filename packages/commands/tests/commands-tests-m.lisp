@@ -2,7 +2,6 @@
 
 ;;;; commands tests — part M: line-wrap flag propagation (scroll-up shift,
 ;;;; erase clearing).
-
 (describe "commands-suite"
 
   ;; %shift-line-wrapped-up (scroll-up of the wrap flags): a flag at row Y in the

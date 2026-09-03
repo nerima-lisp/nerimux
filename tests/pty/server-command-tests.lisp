@@ -4,7 +4,6 @@
 ;;;;
 ;;;; Moved wholesale from tests/unit/bootstrap/server-command-tests.lisp (R9.2):
 ;;;; its one case spawns a real PTY-backed session via WITH-SESSION.
-
 (describe "server-suite"
 
   ;; Creating a session (create-initial-session, the surviving primitive behind

@@ -4,7 +4,6 @@
 ;;; set this file once held is gone with the command dispatcher that
 ;;; would have driven it; only the low-level PTY close survives, called
 ;;; directly by the runtime reader and the server on pane exit.
-
 (defun close-pane-pty (target)
   "Close TARGET's PTY, leaving PANE-FD/PANE-PID as they are.
 

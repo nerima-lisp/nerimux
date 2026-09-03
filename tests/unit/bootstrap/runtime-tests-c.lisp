@@ -2,7 +2,6 @@
 
 ;;;; runtime tests — part C: stop-reader-threads and the wait-for channel table,
 ;;;; constants/global-var coverage, wait-for channel synchronization.
-
 (describe "runtime-suite"
 
   ;; ── stop-reader-threads ──────────────────────────────────────────────────────

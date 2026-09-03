@@ -17,7 +17,6 @@
 ;;;; automatically" reduces to: two independent calls at two different sizes
 ;;;; produce independent, size-correct output -- exercised directly below by
 ;;;; calling at a too-small size then again at a valid size in the same test.
-
 (describe "renderer-suite/tui-kit-min-size-boundary"
 
   ;; Exactly at the floor (40x10): NOT too small -- the ordinary layout

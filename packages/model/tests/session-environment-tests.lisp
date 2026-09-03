@@ -1,7 +1,6 @@
 (in-package #:nerimux/test/model)
 
 ;;;; Session tests — environment overlay, process helpers, and child env merge.
-
 (describe "model-suite"
 
   ;;; ── update-environment defaults ────────────────────────────────────────────

@@ -13,7 +13,6 @@
 ;;;;
 ;;;; (The child-environment assignment logic now lives in
 ;;;; session-environment-tests.lisp.)
-
 (defun %wait-until-process-gone (pid &optional (deadline-seconds 5))
   "Poll until PID is no longer a live process, bounded by DEADLINE-SECONDS.
    Returns T when it went away, NIL when the deadline passed first.
@@ -44,16 +43,17 @@
       (sleep 0.01))))
 
 (describe "pty process table"
-  (it "remembers-and-takes-processes-atomically"
-    (let* ((master-fd (gensym "synthetic-master-"))
-           (pty (list :synthetic)))
-      (unwind-protect
-           (progn
-             (expect (null (nerimux/pty::%take-pty-process master-fd)))
-             (nerimux/pty::%remember-pty-process master-fd pty)
-             (expect (eq pty (nerimux/pty::%take-pty-process master-fd)))
-             (expect (null (nerimux/pty::%take-pty-process master-fd))))
-        (nerimux/pty::%take-pty-process master-fd)))))
+          (it "remembers-and-takes-processes-atomically"
+              (let* ((master-fd (gensym "synthetic-master-"))
+                     (pty (list :synthetic)))
+                (unwind-protect 
+                    (progn
+                      (expect (null (nerimux/pty::%take-pty-process master-fd)))
+                      (nerimux/pty::%remember-pty-process master-fd pty)
+                      (expect
+                       (eq pty (nerimux/pty::%take-pty-process master-fd)))
+                      (expect (null (nerimux/pty::%take-pty-process master-fd))))
+                  (nerimux/pty::%take-pty-process master-fd)))))
 
 (describe "pty-unit-suite"
 
@@ -203,10 +203,10 @@
                  (expect (eq :exited kind)))
                (nerimux/pty::%take-pty-process master-fd)
                (remember-process (start-process "kill -TERM $$"))
-               (multiple-value-bind (code kind)
+                 (multiple-value-bind (code kind)
                    (nerimux/pty:pty-child-exit-status
                     master-fd (cl-date-kit:duration-of-millis 1000))
-                 (expect (numberp code))
+                 (expect (null code))
                  (expect (eq :signaled kind))))
           (nerimux/pty::%take-pty-process master-fd)
           (dolist (process processes)
@@ -257,7 +257,7 @@
 
   (it "pty-close-closes-an-unregistered-fd-without-signalling"
     (with-pipe-fds (read-fd write-fd)
-      (declare (ignore write-fd))
+      (declare (ignorable write-fd))
       (nerimux/pty:pty-close read-fd 0)
       (expect (null (gethash read-fd nerimux/pty::*pty-processes*)))
       (signals sb-posix:syscall-error (sb-posix:close read-fd))))

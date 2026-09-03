@@ -4,14 +4,12 @@
 ;;;;
 ;;;; This file sits after screen-metadata so resize can reset capture metadata
 ;;;; without making the screen data definition depend on later logic.
-
 (defun %copy-overlapping-cells (screen old-cells old-width copy-cols copy-rows)
   "Copy the top-left COPY-COLS x COPY-ROWS rectangle from OLD-CELLS (a raw
    vector with OLD-WIDTH stride) into SCREEN's freshly installed grid."
   (dotimes (y copy-rows)
     (dotimes (x copy-cols)
-      (setf (screen-cell screen x y)
-            (aref old-cells (+ (* y old-width) x))))))
+      (setf (screen-cell screen x y) (aref old-cells (+ (* y old-width) x))))))
 
 (defun screen-resize (screen new-width new-height)
   "Resize SCREEN to NEW-WIDTH x NEW-HEIGHT in place, preserving the
