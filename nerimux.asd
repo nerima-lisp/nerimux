@@ -160,6 +160,7 @@
        (:file "server-multi-dispatch-picker-data") ; selection identity data
        (:file "server-multi-dispatch-picker") ; picker/tree selection logic
        (:file "server-multi-dispatch-command-workspace-relative") ; relative tree selection
+       (:file "server-multi-dispatch-command-workspace-data") ; command argument data
        (:file "server-multi-dispatch-command-workspace") ; workspace UI helpers
        (:file "server-multi-dispatch-command-worktree") ; worktree operations
        (:file "server-multi-command-input-primitives") ; payload predicates and decoding
