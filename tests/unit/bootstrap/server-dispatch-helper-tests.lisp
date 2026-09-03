@@ -420,7 +420,7 @@
             ((nerimux/vcs:vcs-package-available-p (lambda () nil)))
           (expect (nerimux::%client-prune-worktrees
                    conn nil '("--confirm") :dry-run nil))
-          (expect (find "VCS adapter unavailable"
+          (expect (find "VCS unavailable"
                         (nerimux::client-conn-message-log conn)
                         :test #'string=))))))
 

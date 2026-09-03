@@ -204,7 +204,7 @@ FETCH-REPOSITORY-ASYNC)."
       ((not repository)
        (%client-notify conn "fetch requires a selected repository"))
       ((not (nerimux/vcs:vcs-package-available-p))
-       (%client-notify conn "VCS adapter unavailable"))
+       (%client-notify conn "VCS unavailable"))
       (t
         (%client-notify conn "fetching...")
         (handler-case (nerimux/vcs:fetch-repository-async repository
@@ -244,7 +244,7 @@ FETCH-REPOSITORY-ASYNC)."
       ((not organization)
        (%client-notify conn "fetch requires a selected organization"))
       ((not (nerimux/vcs:vcs-package-available-p))
-       (%client-notify conn "VCS adapter unavailable"))
+       (%client-notify conn "VCS unavailable"))
       (t
         (%client-notify conn "fetching organization...")
         (handler-case (nerimux/vcs:fetch-organization-async organization

@@ -88,7 +88,7 @@
            (%client-notify conn "worktree create requires a branch")
            t)
           ((not (nerimux/vcs:vcs-package-available-p))
-           (%client-notify conn "VCS adapter unavailable")
+           (%client-notify conn "VCS unavailable")
            t)
           (t
            (%client-create-worktree-now
@@ -107,7 +107,7 @@
             (%client-notify conn "worktree delete requires a worktree")
             t)
           ((not (nerimux/vcs:vcs-package-available-p))
-            (%client-notify conn "VCS adapter unavailable")
+            (%client-notify conn "VCS unavailable")
             t)
           (t
             (%client-notify conn
@@ -178,7 +178,7 @@
             (%client-notify conn "worktree lock requires a worktree")
             t)
           ((not (nerimux/vcs:vcs-package-available-p))
-            (%client-notify conn "VCS adapter unavailable")
+          (%client-notify conn "VCS unavailable")
             t)
           (t
             (%client-notify conn
@@ -236,7 +236,7 @@
             (%client-notify conn "worktree unlock requires a worktree")
             t)
           ((not (nerimux/vcs:vcs-package-available-p))
-            (%client-notify conn "VCS adapter unavailable")
+          (%client-notify conn "VCS unavailable")
             t)
           (t
             (%client-notify conn
@@ -310,7 +310,7 @@ preview, or a preview of a different repository."
                             "worktree prune requires a preview first: run wt-prune, then wt-prune-confirm --confirm")
             t)
           ((not (nerimux/vcs:vcs-package-available-p))
-            (%client-notify conn "VCS adapter unavailable")
+          (%client-notify conn "VCS unavailable")
             t)
           (t
             (%client-notify conn

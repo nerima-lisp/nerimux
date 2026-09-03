@@ -325,7 +325,7 @@
                    :id "repo" :organization organization
                    :specification "github.com/team/repo"))
                  (nerimux::%workspace-prefix-fetch-repository conn)
-                 (expect (search "adapter unavailable" (first messages))))
+                 (expect (search "VCS unavailable" (first messages))))
                (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
                      (lambda () t)
                      (fdefinition 'nerimux/vcs:fetch-repository-async)
@@ -395,7 +395,7 @@
                                     :id "org" :host "github.com" :name "team")))
                  (nerimux::%set-client-selected-tree-object conn organization)
                  (nerimux::%workspace-prefix-fetch-organization conn)
-                 (expect (search "adapter unavailable" (first messages))))
+                 (expect (search "VCS unavailable" (first messages))))
                (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
                      (lambda () t)
                      (fdefinition 'nerimux::%refresh-client-picker)

@@ -480,6 +480,6 @@
                                             t)
                                            (expect
                                             (%worktree-message-seen-p conn
-                                                                      "VCS adapter unavailable")))
+                                                                      "VCS unavailable")))
                                        (setf (fdefinition
                                               'nerimux/vcs:vcs-package-available-p) available)))))))

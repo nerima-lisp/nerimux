@@ -101,7 +101,7 @@
     (cond
       ((null repository) (%client-notify conn "no repository selected"))
       ((not (nerimux/vcs:vcs-package-available-p))
-       (%client-notify conn "VCS adapter unavailable"))
+       (%client-notify conn "VCS unavailable"))
       ((or confirm-p force-p)
        (%open-confirm-view conn
                            (%transient-command-text operation args)

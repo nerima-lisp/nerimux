@@ -1919,7 +1919,7 @@
                                                                        nil
                                                                        nil)
                                    (expect
-                                    (equal "VCS adapter unavailable"
+                                    (equal "VCS unavailable"
                                            (first
                                             (nerimux::client-conn-message-log
                                              conn)))))
