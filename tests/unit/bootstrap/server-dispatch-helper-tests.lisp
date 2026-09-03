@@ -925,6 +925,42 @@
                          "workspace refresh started")
                        notifications)))))
 
+  (it "workspace-refresh-skips-continuations-for-disconnected-clients"
+    (let ((conn (nerimux::%make-client-conn))
+          (completion-callback nil)
+          (error-callback nil)
+          (completions 0)
+          (errors 0)
+          (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
+          (refresh (fdefinition
+                    'nerimux/vcs:refresh-workspace-organizations-async)))
+      (unwind-protect
+           (progn
+             (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                   (lambda () t)
+                   (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async)
+                   (lambda (&key on-complete on-error &allow-other-keys)
+                     (setf completion-callback on-complete
+                           error-callback on-error)
+                     t))
+             (let ((nerimux::*clients* nil))
+               (nerimux::%refresh-client-picker
+                conn
+                :on-complete (lambda (organizations)
+                               (declare (ignore organizations))
+                               (incf completions))
+                :on-error (lambda (condition)
+                            (declare (ignore condition))
+                            (incf errors)))
+               (funcall completion-callback nil)
+               (funcall error-callback (make-condition 'simple-error
+                                                       :format-control "offline"))))
+        (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
+              (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async)
+              refresh))
+      (expect (= 0 completions))
+      (expect (= 0 errors))))
+
   (it "open-worktree-pane-reports-invalid-paths"
     (let ((conn (nerimux::%make-client-conn))
           (notifications nil))
