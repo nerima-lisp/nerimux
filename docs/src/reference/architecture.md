@@ -160,8 +160,8 @@ declarative rules into the common conditional dispatch form. The
 handler shape used by `server-multi.lisp`; the client connection data lives in
 the shared `server-multi-dispatch.lisp` module, while per-message helpers live in the
 `server-multi-dispatch-prefix.lisp`, `server-multi-dispatch-picker.lisp`,
-`server-multi-dispatch-command-input.lisp`, and `server-multi-dispatch-command.lisp`
-files. The terminal parser is a CPS state machine, with its data
+`server-multi-dispatch-fetch.lisp`, `server-multi-dispatch-command-input.lisp`,
+and `server-multi-dispatch-command.lisp` files. The terminal parser is a CPS state machine, with its data
 structs kept apart from the `actions`, `csi`, and `sgr` logic. Character writing is split by role:
 `char-write-definitions.lisp` holds declarative charset and width facts,
 `char-write-cells.lisp` owns cell placement, and `char-write.lisp` coordinates
@@ -171,15 +171,14 @@ attribute rule table, `sgr-colors.lisp` decodes extended colours, `sgr.lisp`
 coordinates application, and `sgr-report.lisp` encodes status reports.
 
 Tests use `cl-weave` directly: suites, examples, skips, and reporters are
-registered through its native API. The production boundary does not wrap the
-library in an adapter. Repeated dispatch and declarative validation are
+registered through its native API. Repeated dispatch and declarative validation are
 expressed by macros, while runtime values remain in the data modules and the
 expanded functions perform the side effects.
 
 Workspace discovery and mutations use the exported operations from
 `nerima-lisp/cl-vcs-kit` directly. The application keeps only its workspace
-model and UI state locally; it does not duplicate the VCS command protocol in
-an intermediate adapter layer.
+model and UI state locally; command-specific orchestration is kept in the
+dispatch units that call those operations.
 
 ## Source layout
 
