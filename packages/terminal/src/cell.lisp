@@ -1,19 +1,5 @@
 (in-package #:nerimux/terminal/types)
 
-;;;; Immutable cell type and Unicode character-width table.
-;;;;
-;;;; This file contains only pure, stateless definitions:
-;;;;   - attribute bit constants
-;;;;   - named constants for cross-file magic values and terminal geometry
-;;;;   - the CELL defstruct and BLANK-CELL constructor
-;;;;   - CLAMP and SAFE-CODE-CHAR utilities
-;;;;   - the DEFINE-WIDE-CHAR-RANGES macro and its invocation
-;;; ── Attribute bit constants ────────────────────────────────────────────────
-;;;
-;;; Prolog-like fact table — each constant is one named bit in the attrs byte.
-;;; Bit layout (LSB first): bold dim reverse underline blink italic conceal
-;;; strikethrough (bits 0-7).  Double-underline and overline are stored in
-;;; a separate 16-bit word in the cell struct (see below).
 (defconstant +attr-bold+
   #b00000001)
 
@@ -38,19 +24,12 @@
 (defconstant +attr-strikethrough+
   #b10000000)
 
-;;; Extended attribute bits stored in the cell's attrs2 slot (16-bit).
-;;; These are less common and placed in a second word to keep attrs as (unsigned-byte 8).
 (defconstant +attr2-double-underline+
   #b00000001) ; SGR 21
 
 (defconstant +attr2-overline+
   #b00000010) ; SGR 53
 
-;;; ── Named constants for cross-file magic values ────────────────────────────
-;;;
-;;; These are the single source of truth for values used across multiple files.
-;;; Consumers (sgr.lisp, parser.lisp) reference these symbols rather than
-;;; repeating the numeric literals.
 (defconstant +true-color-flag+
   #x1000000
   "Bit 24 of a colour slot: when set, bits 23-16 are R, 15-8 are G, 7-0 are B.
@@ -69,10 +48,6 @@
   "Unicode code point U+FFFD REPLACEMENT CHARACTER.
    Used as a fallback for invalid or unrepresentable code points.")
 
-;;; ── Default terminal geometry ──────────────────────────────────────────────
-;;;
-;;; These are the canonical VT100 / xterm default dimensions used as initforms
-;;; in the screen defstruct and as cross-file reference values.
 (defconstant +default-screen-width+
   80
   "Default virtual terminal width in columns (VT100 standard).")
@@ -93,7 +68,6 @@
   #x000000
   "Default background colour for OSC 11/111 colour resets (black).")
 
-;;; ── Cell ───────────────────────────────────────────────────────────────────
 (defstruct cell
   "One character position on the virtual screen.
 
@@ -106,21 +80,12 @@
      0-255            — palette index (0-7 standard, 8-15 bright, 16-255 extended)
      >= +true-color-flag+ — true-colour RGB: bits 23-16 R, 15-8 G, 7-0 B"
   (char  #\Space :type character)
-  ;; see color encoding; +default-color+ = terminal default fg (SGR 39)
   (fg    +default-color+ :type (unsigned-byte 25))
-  ;; see color encoding; +default-color+ = terminal default bg (SGR 49)
   (bg    +default-color+ :type (unsigned-byte 25))
   (attrs 0       :type (unsigned-byte 8))   ; bit-field: see +attr-* constants
-  ;; Extended attributes: double-underline (bit 0), overline (bit 1)
   (attrs2 0      :type (unsigned-byte 8))
-  ;; Underline color (SGR 58): same encoding as fg/bg. 0 = default (use fg).
   (ul-color 0   :type (unsigned-byte 25))
-  ;; Combining characters appended after the base char (zero-width marks).
-  ;; NIL when no combining chars are present; a list of characters otherwise.
   (combining nil :type list)
-  ;; OSC 8 hyperlink URI active when this cell was written, or NIL.  The renderer
-  ;; re-emits OSC 8 around runs of cells sharing a hyperlink so the outer terminal
-  ;; makes them clickable (transparency for ls --hyperlink, gcc, pagers, ...).
   (hyperlink nil :type (or null string))
   (width 1       :type (integer 0 2))) ; 1 normal, 2 wide lead, 0 continuation
 

@@ -1,4 +1,3 @@
-;;; Startup socket discovery and server auto-start helpers.
 (in-package :nerimux)
 
 (declaim (notinline nerimux/net:connect-to nerimux/net:close-socket))
@@ -89,8 +88,6 @@
                                     :error :output))
             (file-error () (%launch-server-without-log exe args))
             (stream-error () (%launch-server-without-log exe args)))))
-    ;; Poll only when we actually attempted a launch.  This avoids the
-    ;; unconditional 3-second dead-time when run-program silently failed.
     (when launched
       (loop repeat +server-socket-poll-max-iterations+
             until (probe-file socket-path)
@@ -146,14 +143,8 @@
             (delete-file socket-path)
           (file-error () nil)))
       (unless (probe-file socket-path)
-        ;; No live socket: we are about to spawn a server the caller will
-        ;; then wait on, so tell the user before the wait starts rather than
-        ;; leaving them staring at an apparently frozen terminal (FR-004a).
         (format *error-output* "~&nerimux: starting server...~%")
         (force-output *error-output*)
-        ;; Guard: run-program may fail in test environments or when the
-        ;; binary is not yet on PATH.  Only poll if the spawn succeeded.
-        ;; :wait nil means non-blocking, so run-program returns after starting the child.
         (%launch-server-and-poll-when-live socket-path exe args log-path))
       (unless (probe-file socket-path)
         (error "server failed to start (timed out waiting for socket at ~A)"

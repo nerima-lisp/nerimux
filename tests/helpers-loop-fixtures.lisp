@@ -1,6 +1,5 @@
 (in-package #:nerimux/test)
 
-;;;; Event-loop isolation fixtures.
 (defmacro with-global-running (value &body body)
   "Run BODY with the GLOBAL value of nerimux::*running* set to VALUE, restoring
    the prior global value afterward.
@@ -45,9 +44,6 @@
                (and (stringp name)
                     (or (search "pty-reader" name)
                         (search "shell-bg" name)))))
-           ;; cl-concurrent-kit deliberately wraps no thread-enumeration call --
-           ;; it is a debugging facility, not a concurrency primitive -- so this
-           ;; reaches for SB-THREAD directly, as runtime.lisp already does.
            (sb-thread:list-all-threads))))
     (when targets
       (setf nerimux::*running* nil)

@@ -1,7 +1,5 @@
 (in-package #:nerimux)
 
-;;; The NIL-modal keymap is kept separate from command parsing so the input
-;;; state machine and the UI's declarative vocabulary can evolve independently.
 (define-key-rules %handle-client-ui-key-payload
                   (session conn payload)
                   (:let ((view (client-conn-view conn))))

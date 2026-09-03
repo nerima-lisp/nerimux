@@ -73,14 +73,6 @@
                  nil
                  :callback-dispatch (lambda (callback) (push callback queued))
                  :on-complete (lambda (result) (setf completed result)))))
-          ;; Bounded, like every other join in tests/ (vcs-operations-tests.lisp:24,
-          ;; vcs-tests.lisp:174, helpers-loop-fixtures.lisp:55 all use 2s): an
-          ;; unbounded join here blocks the whole runner, not just this case, if
-          ;; the worker ever fails to finish.  Bare seconds, not a
-          ;; CL-DATE-KIT:DURATION -- the DURATION rule in development-rules.md is
-          ;; scoped to CL-CONCURRENT-KIT:WITH-TIMEOUT, while JOIN-THREAD's
-          ;; :TIMEOUT forwards straight to SB-THREAD:JOIN-THREAD, which takes
-          ;; seconds.
           (cl-concurrent-kit:join-thread thread :timeout 2)
           (expect (= 0 refresh-count))
           (expect (null completed))

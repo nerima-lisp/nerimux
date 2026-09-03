@@ -1,53 +1,10 @@
 (in-package #:nerimux/renderer)
 
-;;;; Workspace-view frame rendering, drawn as plain ANSI into a string. The
-;;;; organization -> repository -> worktree -> window -> pane projection lives
-;;;; in renderer-workspace-tree.lisp and is shared with the cl-tui-kit pass.
-;;;;
-;;;; This is the FIRST of the two passes behind the workspace UI.  The second,
-;;;; in renderer-tui-kit.lisp, replays this frame into a cl-tui-kit surface and
-;;;; draws the tree as a real widget on top -- which is why
-;;;; render-workspace-overview-to-string is called from there with
-;;;; :render-tree-p NIL.  That is deliberate plumbing between the two passes,
-;;;; not a redundant duplicate.
-;;;;
-;;;; Overview redesign PR2: the WORKTREES/PANES/PREVIEW three-column layout
-;;;; ("worktrees column hard to read", "Enter floods the screen with a
-;;;; branch list") is gone. The frame is now one column, top to bottom:
-;;;; header (1 row, unchanged) / tree (WORKSPACE-TREE-VIEW-ROWS rows, full
-;;;; width, section-based -- see renderer-workspace-tree.lisp) / a horizontal
-;;;; separator (1 row) / a 2-line detail panel for whatever tree row is
-;;;; selected / a 1-line most-recent-message strip / a bottom key panel.
-;;;;
-;;;; The section-based overview redesign replaced the old single-line footer
-;;;; with a 2-line key panel (plus its own divider) whose content switches on
-;;;; the selected row's KIND -- section, repository, or worktree -- so the
-;;;; hints on screen always name keys that do something on the current
-;;;; selection (see %WORKSPACE-KEY-PANEL-CONTENT). Below TERMINAL-ROWS = 12
-;;;; there is no room for 3 extra rows over the pre-redesign layout, so the
-;;;; panel collapses back to the original single %WORKSPACE-FOOTER-LINE.
-;;;;
-;;;; These functions used to live in renderer-compose.lisp, the pane-frame
-;;;; compositor.  They were the workspace views' ONLY reason to reach into that
-;;;; file and its VT100 / border / status-bar / copy-mode machinery for
-;;;; terminal panes. Split out, the workspace render path depends on generic
-;;;; ANSI primitives, workspace presentation helpers, tree projection, and
-;;;; none of the pane renderer. The aggregate attention view that used
-;;;; to live here (render-workspace-attention-to-string) is gone -- workspace
-;;;; contraction phase 3, R1.7 -- but the attention MODEL it read from
-;;;; (worktree-attention-p / worktree-attention-reasons /
-;;;; organization-attention-count / organization-attention-worktrees) is
-;;;; still live: it drives the `!` marks in the tree below.
-;;;;
-;;;; Load order (declared in nerimux.asd): renderer-format -> workspace
-;;;; status/title and command-line helpers -> renderer-workspace-tree ->
-;;;; renderer-workspace, ahead of the pane-compositor chain.
 (defun %workspace-prefix-label (code)
   (if (and (integerp code) (<= 1 code) (<= code 26))
       (format nil "C-~A" (code-char (+ (char-code #\a) (1- code))))
       (format nil "key/~D" code)))
 
-;;; ── Styled row emission ─────────────────────────────────────────────────────
 (defun %emit-styled-row (stream row col width text)
   "MOVE-TO (ROW, COL) and write TEXT — which may embed SGR escapes — clipped
    SGR-aware to WIDTH display columns and padded with spaces to exactly WIDTH,
@@ -134,12 +91,6 @@
                     (%workspace-hint "Tab" "expand")
                     (%workspace-hint "w" "worktree menu")
                     (%workspace-hint "f" "fetch menu")))
-             ;; Inline worktree expansion (Wave B): a :COMMIT row has no
-             ;; action of its own -- Enter genuinely does nothing, shown
-             ;; honestly rather than hidden or faked as working.
-             ;; Wave C gave :FILE its Tab action (inline diff); :DIFF-LINE/
-             ;; :DIFF-MORE (the diff's own child rows) are navigation-only,
-             ;; same rationale as :COMMIT.
              ((and (consp selected-object) (eq (first selected-object) :file))
               (list (%workspace-hint "Tab" "diff")
                     (%workspace-hint "s/u" "stage")
@@ -165,9 +116,6 @@
                (format nil "~A  " (%sgr-wrap (format nil "/~A" tree-filter) +sgr-muted+))
                "")
            (%sgr-wrap (format nil " ~:@(~A~) " mode) +sgr-mode-chip+)
-           ;; Line 2 is the "leaving this screen" row. It no longer advertises
-           ;; o/d/i/c: view switching is Enter and q now, and a pane takes
-           ;; typing with no mode to enter, so `i` and `c` have nothing to name.
            (list (%workspace-hint "q" "back")
                  (%workspace-hint "?" "menu")
                  (%workspace-hint "$" "log")
@@ -177,7 +125,6 @@
                  (%workspace-hint (format nil "~A d" (%workspace-prefix-label prefix-code))
                                   "detach")))))
 
-;;; ── Initial-scan placeholder (R6.2) ─────────────────────────────────────────
 (defun %render-workspace-scanning-frame (terminal-rows terminal-cols
                                                        &key
                                                        scan-progress)
@@ -282,18 +229,7 @@
              (cols (max 1 terminal-cols))
              (stream (make-string-output-stream))
              (wide-enough-p (>= cols 9))
-             ;; The fixed 6-row overhead (header + separator + 2-line detail
-             ;; + message + footer) needs at least 7 rows before the tree
-             ;; gets even a single row of its own; below that, the footer
-             ;; row (FOOTER-ROW, always ROWS-1) lands on top of the detail
-             ;; rows instead of below them, and some rows compute past the
-             ;; terminal's actual height entirely.
              (tall-enough-p (>= rows 7))
-             ;; The key panel (a divider + 2 content lines, replacing the old
-             ;; single footer line) needs 2 more rows than that floor allows
-             ;; for; below TERMINAL-ROWS = 12 it collapses back to the single
-             ;; %WORKSPACE-FOOTER-LINE row instead (see WORKSPACE-TREE-VIEW-
-             ;; ROWS, which reserves the matching 8 vs. 6 rows of overhead).
              (key-panel-p (>= rows 12))
              (view-rows (workspace-tree-view-rows rows))
              (tree-top 1)
@@ -336,11 +272,6 @@
             ((cell (row col width value)
                (when (plusp width)
                  (move-to stream row col)
-                 ;; %display-clip already pads its own truncation branch to
-                 ;; exactly WIDTH columns; the pad below only fires for text
-                 ;; shorter than WIDTH, measured by display width (not
-                 ;; (length text)) so a fullwidth character does not leave the
-                 ;; row one column short (R6.9).
                  (let* ((text (%display-clip value width))
                         (pad (- width (%display-width text))))
                    (write-string text stream)
@@ -362,14 +293,6 @@
                  ((null (repository-worktrees repository)) "NO-WORKTREE")
                  (t "ready")))
              (detail-row-styled-label (label object kind)
-               ;; Inline worktree expansion (Wave B): file rows colour their
-               ;; 2-char status code (+SGR-ALERT+ for a "UU" conflict,
-               ;; +SGR-WARN+ otherwise); commit rows colour their hash, or
-               ;; the whole label faint/italic for the :PENDING/:FAILED
-               ;; placeholder rows (HASH holds the state keyword there);
-               ;; pane rows go +SGR-ALERT+ once their process has exited,
-               ;; the same alert colour every other exited-pane marker in
-               ;; this tree already uses (%WORKTREE-PANE-COUNT-TEXT's "!").
                (case kind
                  (:file
                   (let ((code (fourth object)) (path (third object)))
@@ -388,20 +311,6 @@
                   (if (pane-process-exited-p object)
                       (%sgr-wrap label +sgr-alert+)
                       label))
-                 ;; Wave C: a :FILE row's own inline-diff child rows, ALL
-                 ;; carrying entry KIND = :DIFF-LINE -- including the
-                 ;; truncation row, whose OBJECT head is :DIFF-MORE but
-                 ;; whose KIND (dispatched on here) is still :DIFF-LINE, so
-                 ;; a separate (:DIFF-MORE ...) case clause above this one
-                 ;; was dead: KIND never takes that value. The check on
-                 ;; (FIRST OBJECT) below makes that dispatch explicit rather
-                 ;; than relying on the truncation label happening not to
-                 ;; start with +/-/@@ and falling into the same plain-muted
-                 ;; default by accident.
-                 ;; The sentinel (:PENDING/:FAILED/:UNTRACKED) sits in a real
-                 ;; line's OBJECT's INDEX slot (fourth object) exactly where
-                 ;; its integer index would be -- same sentinel-in-place-of-
-                 ;; data convention :COMMIT's HASH slot already uses above.
                  (:diff-line
                   (cond
                     ((eq (first object) :diff-more)
@@ -424,12 +333,6 @@
              (tree-row-text (entry)
                (destructuring-bind (level label object kind) entry
                  (let* ((selected
-                          ;; A :FILE/:COMMIT row's OBJECT is a fresh cons
-                          ;; every flatten call (D3), so EQ never matches it
-                          ;; against a SELECTED-OBJECT captured on an earlier
-                          ;; frame -- fall back to EQUAL for that case only;
-                          ;; every struct/keyword-backed kind keeps its
-                          ;; original EQ behaviour unchanged.
                           (or (eq object selected-object)
                               (and (consp object) (consp selected-object)
                                    (equal object selected-object))))
@@ -509,19 +412,6 @@
                               +sgr-accent-bold+)
                    (%sgr-wrap "worktree" +sgr-muted+)))
           (if (and wide-enough-p tall-enough-p)
-              ;; ALL-TREE-ENTRIES/TREE-COUNT are computed unconditionally
-              ;; here now, not inside a (WHEN RENDER-TREE-P ...) guard: the
-              ;; NO-MATCHES-P message below must appear even when
-              ;; RENDER-TREE-P is NIL (the real client's tui-kit pass, which
-              ;; leaves ordinary row *content* to the tree widget) --
-              ;; otherwise a filter with zero matches produced a silent blank
-              ;; tree area with no way to tell "broken" from "no matches"
-              ;; apart from an empty catalog, which CATALOG-EMPTY-HINT does
-              ;; not cover (it only fires when ORGANIZATIONS itself is
-              ;; empty). The tree widget still recomputes its own copy
-              ;; separately (renderer-tui-kit-widgets.lisp) -- see
-              ;; RENDER-WORKSPACE-OVERVIEW-TO-TUI-STRING's own NO-MATCHES-P
-              ;; check for why that is not wasted, either.
               (let* ((all-tree-entries
                        (or precomputed-tree-entries
                            (%workspace-flat-tree-entries
@@ -538,9 +428,6 @@
                 (cond
                   (no-matches-p
                    (let* ((message (format nil "no matches: /~A" tree-filter))
-                          ;; Clip-before-SGR (this file's ordering rule):
-                          ;; %DISPLAY-CLIP never sees an escape, so it is
-                          ;; wrapped in SGR only after clipping.
                           (clipped (%display-clip message cols))
                           (width (%display-width clipped)))
                      (%emit-styled-row
@@ -575,20 +462,10 @@
                       ((not wide-enough-p)
                        "WORKSPACE OVERVIEW (terminal too narrow for panels)")
                       (t "WORKSPACE OVERVIEW (terminal too short for panels)"))))
-          ;; Reaching this branch already means (not (and scanning-p (null
-          ;; organizations))) -- the IF above took its other arm otherwise --
-          ;; so ORGANIZATIONS being null here already implies SCANNING-P is
-          ;; false; no need to re-check it.
           (when (and (null organizations) catalog-empty-hint)
             (%render-workspace-empty-catalog-hint stream rows cols
                                                   catalog-empty-hint))
           (reset-attrs stream)
-          ;; :COMMAND/:FILTER replace the WHOLE panel with the prompt at
-          ;; FOOTER-ROW alone, exactly as they replaced the single-line
-          ;; footer before the key panel existed -- "no ordinary key hints
-          ;; while the user is actively typing" holds regardless of
-          ;; KEY-PANEL-P, so the divider and first content line only draw in
-          ;; the third, ordinary-navigation branch below.
           (cond
             ((eq mode :command)
              (%render-workspace-command-line stream footer-row cols command-buffer))
@@ -606,13 +483,6 @@
             (t
              (%emit-styled-row stream footer-row 0 cols
                                (%workspace-footer-line mode prefix-code tree-filter))))
-          ;; R6.11: embedded here for a caller of the plain-ANSI entry point
-          ;; directly, but a client only ever sees this through
-          ;; RENDER-WORKSPACE-OVERVIEW-TO-TUI-STRING (renderer-tui-kit.lisp),
-          ;; whose ansi-frame/tui-kit round-trip parses this OSC sequence and
-          ;; then discards it when redrawing from the parsed grid -- that
-          ;; function re-emits the same title after the round-trip so it
-          ;; actually reaches the outer terminal.
           (write-string (%client-title-osc selected-repository selected-worktree)
                         stream)
           (get-output-stream-string stream)))))

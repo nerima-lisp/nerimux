@@ -1,9 +1,5 @@
 (in-package #:nerimux/test)
 
-;;;; R5.8: window names are branch name + sequence number
-;;;; (workspace-window.lisp), unit-tested directly against %worktree-window-name
-;;;; / %worktree-windows -- no session/dispatch machinery needed for the naming
-;;;; rule itself.
 (describe "workspace-window-naming-suite"
 
   (it "workspace-new-window-passes-geometry-and-starts-reader-by-default"
@@ -85,16 +81,12 @@
                     (nerimux::%workspace-new-window :session :name "named")))
         (expect (eq :active-pane reader-pane)))))
 
-  ;; The first window for a worktree is bare: just the branch name.
   (it "worktree-window-name-first-window-is-bare-branch-name"
     (let ((worktree
             (nerimux/workspace-model:make-worktree
              :id "wt" :path "/tmp/wt" :branch "feat/phase3")))
       (expect (string= "feat/phase3" (nerimux::%worktree-window-name worktree)))))
 
-  ;; A worktree with an existing window numbers the next one (2), and a third
-  ;; window continues the count -- the ordinal is 1 + the count of windows
-  ;; %worktree-windows already finds among the worktree's panes.
   (it "worktree-window-name-numbers-subsequent-windows"
     (let* ((worktree
              (nerimux/workspace-model:make-worktree
@@ -110,7 +102,6 @@
       (nerimux/pane:worktree-add-pane worktree win-2)
       (expect (string= "feat/phase3 (3)" (nerimux::%worktree-window-name worktree)))))
 
-  ;; A detached-HEAD worktree (no branch) falls back to its path, then its id.
   (it "worktree-window-name-falls-back-to-path-then-id-with-no-branch"
     (let ((by-path
             (nerimux/workspace-model:make-worktree :id "wt-1" :path "/tmp/detached" :branch nil))
@@ -119,8 +110,6 @@
       (expect (string= "/tmp/detached" (nerimux::%worktree-window-name by-path)))
       (expect (string= "wt-2" (nerimux::%worktree-window-name by-id)))))
 
-  ;; %worktree-windows returns the DISTINCT windows holding the worktree's
-  ;; panes, ordered by window id -- not one entry per pane.
   (it "worktree-windows-deduplicates-and-orders-by-window-id"
     (let* ((worktree (nerimux/workspace-model:make-worktree :id "wt" :path "/tmp/wt"))
            (window-a (nerimux/window:make-window :id 5 :name "a"))

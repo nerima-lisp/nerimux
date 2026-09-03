@@ -1,16 +1,11 @@
 (in-package #:nerimux/test)
 
-;;;; Session and buffer fixtures.
 (defmacro with-empty-session ((var) &body body)
   "Bind VAR to a windowless session suitable for empty-state guard tests.
    The session has id 1, name \"0\", and an empty window list."
   `(let ((,var (make-session :id 1 :name "0" :windows nil)))
      ,@body))
 
-;;; WITH-SESSION (real PTY-backed session, via create-initial-session) moved
-;;; to tests/pty/helpers.lisp: R9.2's case-by-case audit found every one of its
-;;; callers spawned a real PTY, so all of them moved into the nerimux/pty-test
-;;; system, and this macro had no remaining caller here.
 (defmacro with-fake-session ((var &rest make-args) &body body)
   "Bind VAR to a fresh fake session built from MAKE-ARGS and run BODY inside
    WITH-LOOP-STATE isolation.  Composes MAKE-FAKE-SESSION with WITH-LOOP-STATE

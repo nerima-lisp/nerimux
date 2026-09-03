@@ -1,28 +1,5 @@
 (in-package #:nerimux/test/renderer)
 
-;;;; Direct unit tests for %WORKSPACE-FLAT-TREE-ENTRIES / %WORKSPACE-NODE-
-;;;; EXPANDED-P / %WORKSPACE-NODE-REFRESH-TAG (renderer-workspace-tree.lisp).
-;;;;
-;;;; The section-based overview redesign (magit-style) replaced the old
-;;;; org -> repo -> worktree -> window -> pane hierarchy with three fixed
-;;;; sections -- Attention, Active, Repositories -- so most of this file's
-;;;; describe blocks below are section-shaped rather than level-shaped:
-;;;;
-;;;;   - A worktree needing attention (or holding an exited pane) shows
-;;;;     under Attention; any other worktree with at least one pane shows
-;;;;     under Active; every repository always has a row under Repositories,
-;;;;     collapsed by default. A worktree never appears twice.
-;;;;   - Window and pane rows are no longer part of the overview tree at all.
-;;;;   - Expansion is keyed by (KIND . stable ID) in an external hash table
-;;;;     the caller owns, not by object identity, so it survives being handed
-;;;;     a freshly-scanned tree after a refresh.
-;;;;   - Refresh state (R6.2) is a second, independent per-row tag.
-;;;;
-;;;; %BUILD-FIVE-LEVEL-TREE still builds the underlying MODEL fixture --
-;;;; organization -> repository -> worktree -> 2 windows -> 3 panes -- for
-;;;; tests of label/info-cluster/activity helpers that operate on those
-;;;; objects directly rather than on the flattened overview tree, where
-;;;; window/pane rows no longer appear.
 (defun %build-five-level-tree ()
   "One organization -> one repository -> one worktree -> two windows (one
    with two panes, one with one pane). Returns (VALUES ORGANIZATION REPOSITORY
@@ -201,9 +178,6 @@
       (let* ((entries (nerimux/renderer::%workspace-flat-tree-entries
                        (list organization) nil))
              (kinds (%tree-entry-kinds entries)))
-        ;; Only the Repositories section (header + its always-visible
-        ;; repository row) shows -- the worktree itself stays hidden behind
-        ;; that repository row's own default collapse.
         (expect (equal '(:section :repository) kinds))
         (expect (search "Repositories (1)" (second (first entries)))))))
 
@@ -236,8 +210,6 @@
                          (list organization) nil :expanded-node-ids expanded))
                (worktree-entries
                  (remove-if-not (lambda (e) (eq (fourth e) :worktree)) entries)))
-          ;; WORKTREE shows once, under Attention -- not a second time nested
-          ;; under the (now expanded) Repositories > repository row.
           (expect (= 1 (length worktree-entries)))
           (expect (eq worktree (third (first worktree-entries))))))))
 
@@ -259,8 +231,6 @@
         (setf (gethash (list :repository (nerimux/workspace-model:repository-id repository))
                        expanded)
               t)
-        ;; Simulate a refresh: a new organization/repository/worktree tree
-        ;; with the SAME stable IDs as before, but different (non-EQ) structs.
         (let* ((new-worktree
                  (nerimux/workspace-model:make-worktree
                   :id "wt-section" :path "/repo/wt" :branch "feature/tree-2"))
@@ -281,9 +251,6 @@
 
 (describe "renderer-suite/workspace-tree-refresh-tags"
 
-  ;; R6.2: a row being refreshed carries a " refreshing" suffix; a row whose
-  ;; last refresh failed carries " stale" instead. Neither tag is present
-  ;; when the row is in neither table.
   (it "appends refreshing/stale suffixes to worktree and repository labels"
     (multiple-value-bind (organization repository worktree)
         (%build-section-fixture :attention-p t)
@@ -297,14 +264,9 @@
                 (nerimux/renderer::%workspace-flat-tree-entries
                  (list organization) nil
                  :refreshing-ids refreshing :stale-ids stale)))
-          ;; entries: (Attention header) (worktree, refreshing)
-          ;;          (Repositories header) (repository, stale)
           (expect (search " refreshing" (second (second entries))))
           (expect (search " stale" (second (fourth entries))))))))
 
-  ;; Refreshing wins over stale when a row is (transiently) in both tables.
-  ;; %WORKSPACE-NODE-REFRESH-TAG is a generic (KIND ID) lookup, independent
-  ;; of whether that KIND currently has any row in the tree.
   (it "prefers refreshing over stale when both apply to the same row"
     (let ((refreshing (make-hash-table :test #'equal))
           (stale (make-hash-table :test #'equal)))
@@ -316,10 +278,6 @@
 
 (describe "renderer-suite/workspace-scanning-placeholder"
 
-  ;; R6.2: while the initial ghq/worktree scan is still running, the whole
-  ;; frame is replaced by an empty tree plus a centred scanning message
-  ;; -- no header, no tree box, nothing that implies data has loaded.
-  ;; The " nerimux " chip is the ordinary frame's header signature.
   (it "shows only the scanning message while the initial catalog scan is still running"
     (let ((frame
             (nerimux/renderer:render-workspace-overview-to-string
@@ -327,8 +285,6 @@
       (expect (search "scanning workspaces..." frame))
       (expect (not (search " nerimux " frame)))))
 
-  ;; Once organizations exist, scanning-p no longer applies even if left T --
-  ;; the guard is specifically "still scanning AND nothing has arrived yet".
   (it "renders the ordinary tree once organizations have arrived, even if scanning-p lingers"
     (multiple-value-bind (organization) (%build-five-level-tree)
       (let ((frame
@@ -337,17 +293,12 @@
         (expect (search " nerimux " frame))
         (expect (not (search "scanning workspaces..." frame))))))
 
-  ;; FR-004b: a positive SCAN-PROGRESS names how many repositories the scan
-  ;; has found so far, instead of the bare ellipsis -- a scan that
-  ;; legitimately runs tens of seconds otherwise looks identical at second 1
-  ;; and second 30.
   (it "shows the repository count in the scanning message when scan-progress is a positive integer"
     (let ((frame
             (nerimux/renderer:render-workspace-overview-to-string
              nil 24 80 :scanning-p t :scan-progress 12)))
       (expect (search "scanning workspaces... 12 repositories" frame))))
 
-  ;; NIL scan-progress (the default) keeps the plain ellipsis wording.
   (it "keeps the plain ellipsis wording when scan-progress is nil"
     (let ((frame
             (nerimux/renderer:render-workspace-overview-to-string
@@ -357,11 +308,6 @@
 
 (describe "renderer-suite/workspace-catalog-empty-hint"
 
-  ;; FR-004c: an empty catalog with no scan running shows a 3-line guide
-  ;; naming the ghq root, instead of leaving the interior blank -- an empty
-  ;; tree because the scan has not finished (the scanning-p placeholder
-  ;; above) needs to read differently from an empty tree because there is
-  ;; genuinely nothing to find.
   (it "shows the no-repositories-found guide with the ghq root when the catalog is empty"
     (let ((frame
             (nerimux/renderer:render-workspace-overview-to-string
@@ -370,27 +316,14 @@
       (expect (search "/tmp/ghq" frame))
       (expect (search "ghq get <owner>/<repo>" frame))))
 
-  ;; While a scan is running, this branch never applies -- scanning-p on an
-  ;; empty catalog takes the whole-frame scanning placeholder instead (R6.2),
-  ;; which has nothing to do with catalog-empty-hint at all.
   (it "does not show the empty-catalog hint while a scan is running"
     (let ((frame
             (nerimux/renderer:render-workspace-overview-to-string
              nil 24 80 :scanning-p t :catalog-empty-hint "/tmp/ghq")))
       (expect (not (search "no repositories found" frame))))))
 
-;;; PR2 `/` text filter: %WORKSPACE-FILTER-TREE-ENTRIES keeps a row when its
-;;; own node matches, or any descendant does -- which, read the other way,
-;;; keeps every ancestor of a match too. Siblings of a match that do not
-;;; themselves match must NOT survive, which is the precise thing a filter
-;;; is for. The section-based redesign adds a second collapse layer (a
-;;; repository row's own default-collapsed worktree list) that filter must
-;;; also penetrate.
 (describe "renderer-suite/workspace-tree-filter"
 
-  ;; A filter matching one worktree's branch keeps that worktree and its
-  ;; Attention section header (ancestor) -- but prunes the sibling
-  ;; repository/worktree that do not match at all.
   (it "keeps a matching worktree and its section header, prunes the non-matching sibling"
     (multiple-value-bind (organization match-repo match-worktree)
         (%build-filter-fixture)
@@ -403,7 +336,6 @@
         (expect (equal '(:section :worktree) kinds))
         (expect (member match-worktree objects :test #'eq)))))
 
-  ;; Case-insensitive: an uppercase query matches a lowercase branch.
   (it "matches case-insensitively"
     (multiple-value-bind (organization) (%build-filter-fixture)
       (let ((entries
@@ -411,7 +343,6 @@
                (list organization) nil :filter "ONLY-MATCH")))
         (expect (find :worktree entries :key #'fourth)))))
 
-  ;; NIL or an all-blank filter is treated as "no filter": every row survives.
   (it "returns every row unchanged for a NIL or all-blank filter"
     (multiple-value-bind (organization) (%build-filter-fixture)
       (let ((unfiltered
@@ -426,8 +357,6 @@
         (expect (equal (%tree-entry-kinds unfiltered) (%tree-entry-kinds nil-filtered)))
         (expect (equal (%tree-entry-kinds unfiltered) (%tree-entry-kinds blank-filtered))))))
 
-  ;; A filter matching nothing at all leaves an empty tree, not an error and
-  ;; not the unfiltered tree.
   (it "returns no rows for a filter matching nothing"
     (multiple-value-bind (organization) (%build-filter-fixture)
       (let ((entries
@@ -435,11 +364,6 @@
                (list organization) nil :filter "no-such-match-anywhere")))
         (expect (null entries)))))
 
-  ;; Search penetrates a repository row's own default collapse: OTHER-
-  ;; WORKTREE is clean and pane-less (no Attention/Active row of its own),
-  ;; reachable unfiltered only by expanding OTHER-REPO's Repositories row --
-  ;; which is collapsed by default (no EXPANDED-NODE-IDS entry at all). A
-  ;; filter matching its branch must still surface it and its repository.
   (it "search penetrates a repository row's default-collapsed worktree list"
     (multiple-value-bind (organization match-repo match-worktree other-repo other-worktree)
         (%build-filter-fixture)
@@ -455,13 +379,6 @@
         (expect (member other-worktree objects :test #'eq))
         (expect (member other-repo objects :test #'eq))))))
 
-;;; Bug fix: RENDER-WORKSPACE-OVERVIEW-TO-STRING used to compare MODE
-;;; against the retired :TREE-FILTER modal (the legacy *command* name in
-;;; server-multi-dispatch-command-workspace.lisp's mapping table) instead
-;;; of the live :FILTER modal %CLIENT-ENTER-TREE-FILTER-MODE actually sets
-;;; (server-multi-dispatch-command-input.lisp) -- so pressing `/` fell
-;;; through to the ordinary key-panel branch and the query the user was
-;;; typing never appeared on screen.
 (describe "renderer-suite/workspace-tree-filter-prompt"
 
   (it "shows the /query prompt at the footer row when mode is :filter, and no ordinary key hints"
@@ -475,8 +392,6 @@
         (expect (not (search "refresh" plain)))
         (expect (not (search "detach" plain))))))
 
-  ;; An empty (but non-NIL) tree-filter still draws the bare `/` prompt --
-  ;; the moment the user presses `/` and has typed nothing yet.
   (it "shows a bare / prompt when mode is :filter and tree-filter is empty"
     (multiple-value-bind (organization) (%build-five-level-tree)
       (let* ((frame
@@ -487,22 +402,11 @@
         (expect (search "/" plain))
         (expect (not (search "detach" plain)))))))
 
-;;; PR2 worktree-row info cluster: state tag, ahead/behind, pane count, and a
-;;; relative last-activity time, in that priority order. Unaffected by the
-;;; section-based redesign: a :WORKTREE row's info cluster is built the same
-;;; way regardless of which section it appears under.
 (describe "renderer-suite/workspace-tree-info-cluster"
 
-  ;; A fixed worktree: ahead 2, dirty, 2 panes with one exited, and a known
-  ;; last-output-time 5 minutes in the past. All four fields must appear in
-  ;; the rendered (SGR-stripped) tree row.
   (it "shows ahead count, pane count with exit marker, state tag, and relative time"
     (let* ((pane-1 (nerimux/pane:make-pane :id 1 :fd -1))
            (pane-2 (nerimux/pane:make-pane :id 2 :fd -1 :process-exited-p t))
-           ;; %WORKTREE-TREE-WINDOWS (called while flattening the tree) sorts
-           ;; WORKTREE-PANES by their owning window's id, so every pane here
-           ;; needs a real WINDOW -- a pane with no window at all is a type
-           ;; error there, not just an incomplete fixture.
            (window
              (nerimux/window:make-window
               :id 1 :name "info" :panes (list pane-1 pane-2)))
@@ -533,9 +437,6 @@
         (expect (search "DIRTY" plain))
         (expect (search "5m" plain)))))
 
-  ;; %WORKTREE-RELATIVE-TIME-TEXT's own boundaries: <60s is "now"; the Nm/Nh/
-  ;; Nd buckets switch exactly at 60/3600/86400 seconds, per its own
-  ;; (< DELTA 60) / (< DELTA 3600) / (< DELTA 86400) guards.
   (it "switches relative-time buckets at the 60s/3600s/86400s boundaries"
     (flet ((relative (delta)
              (nerimux/renderer::%worktree-relative-time-text
@@ -546,19 +447,9 @@
       (expect (string= "1h" (relative 3600)))
       (expect (string= "1d" (relative 86400)))))
 
-  ;; NIL (a pane that has never produced output or been focused) reports
-  ;; "never" by returning NIL itself -- the caller (%WORKTREE-TREE-INFO-
-  ;; TOKENS) drops a NIL time token entirely rather than showing a literal
-  ;; string for it.
   (it "returns NIL for a worktree with no pane activity at all"
     (expect (null (nerimux/renderer::%worktree-relative-time-text nil)))))
 
-;;; Section-based redesign: the Dracula truecolour palette (renderer-
-;;; style.lisp) and the new +SGR-SECTION+ constant reach an actual rendered
-;;; frame through the plain-ANSI tree row path (TREE-ROW-TEXT in
-;;; renderer-workspace.lisp) -- the only render path that emits inline SGR
-;;; for tree rows at all (see renderer-workspace-tree.lisp's file header on
-;;; why the real cl-tui-kit client path does not).
 (describe "renderer-suite/workspace-tree-dracula-colors"
           (it
            "renders a section header in +sgr-section+ and a worktree's ahead count in Dracula truecolour"
@@ -574,15 +465,8 @@
                (expect frame :to-contain-sgr nerimux/renderer::+sgr-section+)
                (expect frame :to-contain-sgr nerimux/renderer::+sgr-ahead+)))))
 
-;;; Review-round fix: a "no matches: /query" placeholder replaces the empty
-;;; tree box when a non-empty filter narrows a non-empty catalog to zero
-;;; rows, on BOTH render paths -- the plain-ANSI pass draws the message
-;;; itself, and the cl-tui-kit pass must skip invoking the tree widget
-;;; entirely rather than overlay an empty (or worse, stale) box on top of it.
 (describe "renderer-suite/workspace-tree-no-matches"
 
-  ;; (a) The plain-ANSI pass shows the placeholder and leaks no tree-row
-  ;; text (the worktree's branch label) through.
   (it "shows a no-matches placeholder and no tree-row text when the filter matches nothing"
     (multiple-value-bind (organization) (%build-five-level-tree)
       (let* ((frame
@@ -592,10 +476,6 @@
         (expect (search "no matches: /zzz-no-match-anywhere" plain))
         (expect (not (search "feature/tree" plain))))))
 
-  ;; (b) The cl-tui-kit pass skips drawing the tree widget entirely in the
-  ;; same case -- the organization's own label must not appear anywhere in
-  ;; the final output either, which only holds if the widget-renderer was
-  ;; never invoked (not merely that it drew zero rows).
   (it "suppresses the tree widget so no organization label appears either"
     (multiple-value-bind (organization) (%build-five-level-tree)
       (let* ((output
@@ -605,11 +485,6 @@
         (expect (search "no matches: /zzz-no-match-anywhere" plain))
         (expect (not (search "github.com/team" plain)))))))
 
-;;; Review-round fix: below the 7-row floor (TALL-ENOUGH-P in RENDER-
-;;; WORKSPACE-OVERVIEW-TO-STRING), the ordinary tree/separator/detail/
-;;; message layout is replaced by a single "too short" message instead of
-;;; letting rows computed past the terminal's actual height silently
-;;; overlap (the footer landing on top of the detail rows, for instance).
 (describe "renderer-suite/workspace-tree-too-short"
 
   (it "shows a single too-short message instead of the ordinary layout below 7 rows"
@@ -619,21 +494,10 @@
                 (list organization) 5 100 :selected-tree-object organization))
              (plain (strip-sgr frame)))
         (expect (search "terminal too short for panels" plain))
-        ;; No ordinary tree-row content (the worktree's branch label) and no
-        ;; detail-panel content (an organization field, or the no-selection
-        ;; placeholder) ever renders in this branch -- DETAIL-LINES is never
-        ;; called at all when TALL-ENOUGH-P is false.
         (expect (not (search "feature/tree" plain)))
         (expect (not (search "(no selection)" plain)))
         (expect (not (search "organization:" plain)))))))
 
-;;; S3: %WORKSPACE-KEY-PANEL-CONTENT switches its first line's hints on the
-;;; selected row's KIND with no test coverage of any branch -- collapsing
-;;; every branch to the same default would have gone unnoticed. Each case
-;;; below asserts a hint substring unique to that branch is present, and a
-;;; substring unique to a neighbouring, easily-confused branch is absent, so
-;;; a dispatch that quietly falls through to the wrong branch fails loudly
-;;; rather than passing on a coincidental substring match.
 (describe "renderer-suite/workspace-key-panel-content"
 
   (it "shows the fold/section hints for a :section-keyword selection"
@@ -656,14 +520,8 @@
            (plain (strip-sgr
                    (nerimux/renderer::%workspace-key-panel-content
                     worktree :normal #x11 nil))))
-      ;; Destructive worktree actions moved behind the `w` menu when the magit
-      ;; keymap retired their single-key shortcuts, so the panel names the menu
-      ;; rather than an `X` that no longer does anything.
       (expect (search "worktree menu" plain))
       (expect (not (search "shell(main)" plain)))
-      ;; This panel is permanently on screen, so a retired key advertised here
-      ;; misleads on every frame -- worse than the help view, which the user
-      ;; has to ask for.
       (expect (not (search "X delete" plain)))
       (expect (not (search "L/U" plain)))))
 
@@ -905,10 +763,6 @@
                   (declare (ignore styled))
                   (expect (search "-2" plain))))))
 
-;;; PR2 tree row budget: the section-based redesign's key panel reserves 8
-;;; rows around the tree at TERMINAL-ROWS >= 12 (a divider + 2 content lines
-;;; instead of the single-line footer), collapsing back to the original 6
-;;; rows below that height. Floored at 1.
 (describe "renderer-suite/workspace-tree-view-rows"
 
   (it "reserves 6 rows around the tree below the key-panel height threshold"
@@ -919,18 +773,11 @@
     (expect (= 4 (nerimux/renderer:workspace-tree-view-rows 12)))
     (expect (= 22 (nerimux/renderer:workspace-tree-view-rows 30))))
 
-  ;; The floor at 1 kicks in for any terminal too short to spare the
-  ;; reserved rows, rather than going negative or zero.
   (it "floors at 1 row for a terminal shorter than the reserved rows"
     (expect (= 1 (nerimux/renderer:workspace-tree-view-rows 6)))
     (expect (= 1 (nerimux/renderer:workspace-tree-view-rows 1)))
     (expect (= 1 (nerimux/renderer:workspace-tree-view-rows 0)))))
 
-;;; Inline worktree expansion (Wave B): Tab on a worktree row emits pane/
-;;; file/commit child rows one level deeper, in that fixed order, when
-;;; expanded via *WORKSPACE-EXPANDED-NODE-IDS* keyed (:WORKTREE ID) -- the
-;;; same table and default-COLLAPSED polarity a Repositories-section
-;;; repository row already uses for its own expansion.
 (describe "renderer-suite/workspace-tree-worktree-expansion"
 
   (it "emits pane, file, and commit child rows in order when expanded"
@@ -958,7 +805,6 @@
                  (nerimux/renderer::%workspace-flat-tree-entries
                   (list organization) nil :expanded-node-ids expanded))
                (kinds (%tree-entry-kinds entries)))
-          ;; (Attention header) worktree pane file commit (Repositories header) repository
           (expect (equal '(:section :worktree :pane :file :commit :section :repository)
                          kinds))
           (expect (eq pane (third (third entries))))
@@ -971,14 +817,11 @@
     (multiple-value-bind (organization repository worktree)
         (%build-section-fixture :attention-p t)
       (declare (ignore repository))
-      ;; Collapsed by default: no expansion-table entry at all.
       (let ((collapsed-entries
               (nerimux/renderer::%workspace-flat-tree-entries
                (list organization) nil)))
         (expect (equal '(:section :worktree :section :repository)
                        (%tree-entry-kinds collapsed-entries))))
-      ;; Expanded, but with no panes/changed-files/commits at all: still no
-      ;; child rows -- an empty group contributes nothing, not a blank row.
       (let ((expanded (make-hash-table :test #'equal)))
         (setf (gethash (list :worktree (nerimux/workspace-model:worktree-id worktree))
                        expanded)
@@ -1009,8 +852,6 @@
                 (nerimux/renderer::%workspace-flat-tree-entries
                  (list organization) nil :expanded-node-ids expanded)))
           (expect (search "UNKNOWN" (second (third entries)))))
-        ;; NIL (never fetched): no placeholder row at all, not even a blank
-        ;; one -- distinct from :FAILED, which always shows "UNKNOWN".
         (setf (nerimux/workspace-model:worktree-commits-state worktree) nil)
         (let ((entries
                 (nerimux/renderer::%workspace-flat-tree-entries
@@ -1028,10 +869,6 @@
       (expect (equal first-key second-key))
       (expect (not (eq first-key second-key)))))
 
-  ;; Wave C: a :FILE row's own inline-diff expansion, one level deeper than
-  ;; the :FILE row itself, gated by *WORKSPACE-EXPANDED-NODE-IDS* under
-  ;; (:FILE-DIFF WORKTREE-ID PATH) -- NOT the file row's own node key -- and
-  ;; sourced from the *WORKSPACE-FILE-DIFFS* cache passed in as :FILE-DIFFS.
   (it "keeps a diff-line cons node's own list EQUAL-stable across two flatten calls"
     (let ((first-key
             (nerimux/renderer::%workspace-tree-node-key
@@ -1100,7 +937,6 @@
                     (list organization) nil
                     :expanded-node-ids expanded :file-diffs file-diffs))
                  (diff-entries (remove-if-not (lambda (e) (eq (fourth e) :diff-line)) entries)))
-            ;; 200 real lines + 1 trailing "more" row.
             (expect (= 201 (length diff-entries)))
             (expect (search "more lines" (second (car (last diff-entries)))))
             (expect (search "50" (second (car (last diff-entries)))))
@@ -1164,10 +1000,6 @@
                    :expanded-node-ids expanded :file-diffs file-diffs)))
             (expect (null (find :diff-line entries :key #'fourth)))))))
 
-    ;; The ANSI render path (renderer-workspace.lisp's TREE-ROW-TEXT) is the
-    ;; only one that colours tree rows at all (see renderer-workspace-tree's
-    ;; own file header on why the cl-tui-kit widget path does not) -- same
-    ;; rationale the Dracula-colour test above uses for +SGR-SECTION+.
     (it "colours diff lines by their leading character: + ok, - alert, @@ accent"
       (multiple-value-bind (organization repository worktree)
           (%build-diff-fixture)

@@ -1,6 +1,5 @@
 (in-package #:nerimux/terminal/parser)
 
-;;;; UTF-8 parser continuation logic.
 (declaim (inline utf8-lead-p utf8-continuation-p))
 
 (defun utf8-lead-p (byte)
@@ -33,7 +32,6 @@
               (progn (write-codepoint screen updated-accumulator)
                      #'ground-state)
               (make-utf8-k updated-accumulator bytes-left)))
-        ;; Malformed: emit U+FFFD, re-process this byte in ground state
         (progn
           (write-codepoint screen #xFFFD)
           (ground-state screen byte)))))

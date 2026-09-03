@@ -1,11 +1,5 @@
 (in-package #:nerimux/test)
 
-;;;; Layout fixture that needs the event loop.
-;;;;
-;;;; The rest of helpers-layout-fixtures.lisp moved to packages/model/tests/
-;;;; when domain/model became nerimux-model. This one stayed: it wraps its body
-;;;; in WITH-LOOP-STATE, which binds nerimux::*running*, so a DOMAIN unit cannot
-;;;; carry it.
 (defmacro with-two-pane-v-session ((sess-var win-var p0-var p1-var) &body body)
   "Bind SESS-VAR WIN-VAR P0-VAR P1-VAR to a 2-pane vertical split session:
    p0 (y=0 h=10) above p1 (y=11 h=10), window 80x21, first pane active.

@@ -1,7 +1,3 @@
-;; No :import-from for the sibling kits — input.lisp writes
-;; cl-tty-kit:fd-read-octets qualified in full, which is what keeps the
-;; descriptor-level surface legible. (It formerly wrote cffi: forms here; cffi
-;; is no longer a dependency.)
 (defpackage #:nerimux/input
             (:use #:cl #:nerimux/ports #:nerimux/pty)
             (:documentation

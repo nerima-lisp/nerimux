@@ -1,14 +1,7 @@
 (in-package #:nerimux/pty-test)
 
-;;;; Server command helpers.
-;;;;
-;;;; Moved wholesale from tests/unit/bootstrap/server-command-tests.lisp (R9.2):
-;;;; its one case spawns a real PTY-backed session via WITH-SESSION.
 (describe "server-suite"
 
-  ;; Creating a session (create-initial-session, the surviving primitive behind
-  ;; the deleted new-session tmux command), naming it, and registering it via
-  ;; server-add-session makes it findable in the server registry.
   (it "new-session-command"
     (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
     (with-empty-registry

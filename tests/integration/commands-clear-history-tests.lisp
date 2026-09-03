@@ -1,11 +1,5 @@
 (in-package #:nerimux/test)
 
-;;;; clear-history under server state.
-;;;;
-;;;; Moved out of packages/commands/tests/commands-tests-h.lisp when
-;;;; application/commands became nerimux-commands. WITH-COMMAND-TEST-STATE binds
-;;;; nerimux::*server-sessions*, a BOOTSTRAP internal that a unit test system
-;;;; cannot see when run on its own, so this case belongs above every unit.
 (defun %clear-history-fixture ()
   "Single-pane window \"w\" in session \"0\" whose screen has a non-empty
    scrollback.  Returns (values sess win screen)."
@@ -61,7 +55,6 @@
 
 (describe "commands-clear-history-suite"
 
-  ;; clear-scrollback empties the target pane's scrollback.
   (it "cmd-clear-history-clears-scrollback"
     (multiple-value-bind (sess win screen) (%clear-history-fixture)
       (declare (ignore win))

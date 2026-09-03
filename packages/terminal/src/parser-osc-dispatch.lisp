@@ -1,6 +1,5 @@
 (in-package #:nerimux/terminal/parser)
 
-;;;; OSC command parsing and dispatch.
 (defun %parse-osc-command (payload semicolon-position)
   "Parse the OSC command integer from PAYLOAD up to SEMICOLON-POSITION."
   (handler-case (parse-integer (subseq payload 0 semicolon-position))

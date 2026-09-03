@@ -12,12 +12,7 @@
       (:file "helpers-loop-fixtures")
       (:file "helpers-session-fixtures")
       (:file "helpers-input-fixtures")
-      ;; Split out of helpers-layout-fixtures.lisp when domain/model became
-      ;; nerimux-model: this one wraps its body in WITH-LOOP-STATE, which binds
-      ;; nerimux:: server state, so a DOMAIN unit cannot carry it.
       (:file "helpers-layout-loop-fixtures")
-      ;; Binds nerimux::*server-sessions*, so no unit test system can see it
-      ;; when run on its own.
       (:file "helpers-command-state")
       (:module "unit"
        :serial t
@@ -36,10 +31,6 @@
       (:file "workspace-window-naming-tests") ; R5.8
       (:file "workspace-catalog-refresh-state-tests") ; FR-005: mark/settle, not re-mark
           (:file "system-composition-tests") ; layering guard; core declares no optional kit
-          ;; Moved from tests/unit/domain/model/ with the extraction of
-          ;; nerimux-model. target.lisp itself moved to src/bootstrap/ earlier;
-          ;; these reference nerimux:: internals and were never model tests, only
-          ;; tests that had not followed their subject.
           (:file "target-tests") ; parse-session/window/pane/target, find-by-target - part I
           (:file "target-tests-b"))) ; %sigil-id, %name-prefix-p, edge cases, table-driven parse-target, multi-digit ids - part II
         (:module "bootstrap-2"

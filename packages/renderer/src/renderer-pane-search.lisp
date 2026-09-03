@@ -1,6 +1,5 @@
 (in-package #:nerimux/renderer)
 
-;;; Copy-mode search-match highlighting for pane rendering.
 (defun %screen-row-display-string (screen row)
   "The visible (offset-aware) content of ROW as a string."
   (with-output-to-string (s)

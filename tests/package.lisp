@@ -1,7 +1,4 @@
-;;;; Test package for nerimux.
 (defpackage #:nerimux/test
-  ;; The test framework is cl-weave, used natively throughout: every file
-  ;; registers its own top-level (describe "name" (it "case" ...) ...) block.
   (:use #:cl)
   (:shadowing-import-from #:cl-weave #:describe)
   (:import-from #:cl-weave
@@ -15,10 +12,6 @@
                 #:it-property #:it-fuzz #:gen-integer #:gen-list #:gen-boolean #:gen-string
                 #:gen-vector #:gen-member #:gen-one-of
                 #:defmatcher)
-  ;; Fixtures that moved out with their unit. The root suite is above every
-  ;; unit, so it may reach down into one; naming the source package here is
-  ;; what keeps that reach a declaration rather than an accident of one shared
-  ;; test package.
   (:import-from #:nerimux/test/ports
                 #:with-temporary-posix-environment-variable
                 #:with-pipe-fds
@@ -166,7 +159,6 @@
                 #:session-touch
                 #:session-insert-window)
   (:import-from #:nerimux
-                ;; Runtime state (needed by tests)
                 #:*server-sessions*)
   (:import-from #:nerimux/renderer
                 #:render-session-to-string
@@ -188,7 +180,6 @@
                 #:socket-stream #:socket-fd #:close-socket
                 #:unix-socket-available-p)
   (:import-from #:nerimux/commands
-                ;; pane PTY teardown: reader-thread EOF and server shutdown
                 #:close-pane-pty)
   (:import-from #:nerimux/pty
                 #:forkpty-with-shell

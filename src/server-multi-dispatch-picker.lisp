@@ -159,9 +159,6 @@
          (explicit-repository
            (and explicitp
                 (%workspace-find-repository-for-attach explicit organizations)))
-         ;; Evaluated lazily via AND, same as the OR they replace below: a cwd
-         ;; lookup only runs when there was no explicit-worktree hit, and a
-         ;; previous-token lookup only when neither of the first two hit.
          (cwd-worktree
            (and (not explicit-worktree)
                 (stringp cwd)
@@ -173,7 +170,6 @@
                 previous
                 (%workspace-find-worktree previous organizations))))
     (cond
-      ;; Both readings hit: let the user say which, rather than guessing.
       ((and explicit-worktree explicit-repository)
        (%open-client-picker-filtered conn explicit)
        (values nil nil))
@@ -185,8 +181,6 @@
          (cond
            (worktree
             (%set-client-selected-worktree conn worktree))
-           ;; A repository and no worktree in it: select the repository so the
-           ;; overview opens there, rather than reporting it as not found.
            (explicit-repository
             (%set-client-selected-tree-object conn explicit-repository))
            ((and explicitp organizations)
@@ -245,22 +239,15 @@
 (defun %refresh-client-picker (conn &key on-complete on-error)
   (if (nerimux/vcs:vcs-package-available-p)
       (let ((failed-repository-ids nil))
-        ;; :MARK: this refresh is starting (see the matching call and
-        ;; rationale in %ADD-CLIENT, server-multi.lisp -- FR-005).
         (%set-workspace-catalog-refresh-state
          (nerimux/vcs:workspace-organizations) :mark)
         (handler-case
             (nerimux/vcs:refresh-workspace-organizations-async
              :callback-dispatch #'%enqueue-main-thread-callback
-             ;; :MARK: the scan landed but the status refresh behind it is
-             ;; still in flight for every one of these nodes.
              :on-catalog
              (lambda (organizations)
                (%set-workspace-catalog-refresh-state organizations :mark)
                (%mark-dirty))
-             ;; R6.2/design §7.3 (mirrors %ADD-CLIENT's own wiring, server-
-             ;; multi.lisp): a FAILED object shows stale; other objects
-             ;; don't inherit it.
              :on-repository-error
              (lambda (repository condition)
                (declare (ignore condition))
@@ -270,10 +257,6 @@
                (%mark-dirty))
              :on-complete
              (lambda (organizations)
-               ;; :SETTLE :STALE-P NIL: this refresh has actually finished --
-               ;; every visible node goes fresh; any repository that failed
-               ;; its own status fetch is re-marked stale immediately below
-               ;; instead of via a blanket STALE-P over the whole catalog.
                (%set-workspace-catalog-refresh-state
                 organizations :settle :stale-p nil)
                (%reapply-stale-repository-marks organizations failed-repository-ids)
@@ -290,20 +273,14 @@
                (when (and on-complete (%client-live-p conn))
                  (funcall on-complete organizations))
                (%mark-dirty))
-             ;; :ON-ERROR now covers only a terminal scan failure -- see the
-             ;; matching rationale in %ADD-CLIENT.
              :on-error
              (lambda (condition)
-               ;; :SETTLE + stale: the refresh terminated in error; no
-               ;; on-complete is coming to clear the in-flight mark.
                (%set-workspace-catalog-refresh-state
                 (nerimux/vcs:workspace-organizations) :settle :stale-p t)
                (when (and on-error (%client-live-p conn))
                  (funcall on-error condition))
                (%mark-dirty)))
           (error (condition)
-            ;; :SETTLE + stale: kicking the refresh off failed synchronously,
-            ;; so no callback above will run to clear the :mark set above.
             (%set-workspace-catalog-refresh-state
              (nerimux/vcs:workspace-organizations) :settle :stale-p t)
             (when (and on-error (%client-live-p conn))
@@ -343,9 +320,6 @@
   (let ((items (%client-picker-visible-items conn)))
     (and items (nth (client-conn-picker-index conn) items))))
 
-;;; %worktree-window-name and %worktree-windows live in workspace-window.lisp
-;;; (which loads before this file), next to the other worktree-window
-;;; creation logic they serve.
 (defun %client-worktree-pane (session worktree)
   (and worktree
        (find worktree
@@ -382,14 +356,6 @@
                   (%client-notify conn "worktree pane unavailable")
                   nil)
                  ((not (pane-live-p pane))
-                  ;; R5.7: a pane that came back without a live PTY is a
-                  ;; startup failure — record it as durable pane state
-                  ;; (pane-mark-startup-failure) instead of only a
-                  ;; one-shot notification, so it survives as the `!`
-                  ;; overview mark (3.4) rather than vanishing once the
-                  ;; message log scrolls. No reader thread: start-reader-thread
-                  ;; would call select-fds on a dead pane's fd (-1 or worse,
-                  ;; unvalidated), which process-kit rejects outright.
                   (pane-mark-startup-failure pane)
                   (worktree-add-pane worktree pane)
                   (%set-client-selected-worktree conn worktree)

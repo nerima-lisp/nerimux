@@ -1,6 +1,5 @@
 (in-package #:nerimux/renderer)
 
-;;; Selection bounds and hit-testing for pane rendering.
 (defun in-selection-p (row col
                            sel-start-r
                            sel-end-r
@@ -44,8 +43,6 @@
              (cur-offset  (screen-copy-offset screen))
              (h           (screen-height screen))
              (rect-p      (screen-copy-rect-select-p screen))
-             ;; Convert viewport rows to virtual rows so selection stays stable
-             ;; across scrollback changes.
              (mark-vrow   (+ sb-n (car mark) (- mark-offset)))
              (cur-vrow    (+ sb-n (car cursor) (- cur-offset)))
              (start-vrow  (min mark-vrow cur-vrow))

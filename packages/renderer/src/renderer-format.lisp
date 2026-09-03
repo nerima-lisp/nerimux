@@ -1,37 +1,12 @@
 (in-package #:nerimux/renderer)
 
-;;;; ANSI escape-code primitives — pure data layer.
-;;;;
-;;;; All functions here write escape sequences to a stream; they do not touch
-;;;; any model or terminal state.
 (defconstant +esc+
   #\Escape)
 
-;;; ── Cursor positioning ──────────────────────────────────────────────────────
 (defun move-to (stream row col)
   "ESC[row;colH — cursor absolute position, 1-based."
   (format stream "~C[~D;~DH" +esc+ (1+ row) (1+ col)))
 
-;;; ── Colour SGR emission helpers (Prolog-like fact table) ────────────────────
-;;;
-;;; Color encoding (matches cell.fg / cell.bg in cell.lisp):
-;;;   0-7   : standard ANSI                → SGR 30-37 / 40-47
-;;;   8-15  : bright ANSI                  → SGR 90-97 / 100-107
-;;;   16-255: 256-color palette            → SGR 38;5;N / 48;5;N
-;;;   bit 24 set (#x1000000+): true-color  → SGR 38;2;R;G;B / 48;2;R;G;B
-;;;
-;;; emit_colour(fg/bg, 0-7)       :- standard_colour_code(fg/bg, n).
-;;; emit_colour(fg/bg, 8-15)      :- bright_colour_code(fg/bg, n).
-;;; emit_colour(fg/bg, 16-255)    :- palette_256(fg/bg, n).
-;;; emit_colour(fg/bg, 0x1RRGGBB) :- true_colour(fg/bg, r, g, b).
-;;; ── Terminal colour-capability downsampling (cl-tty-kit) ────────────────────
-;;;
-;;; A -2 flag ("force 256-colour") exists because not every outer terminal
-;;; understands 24-bit SGR (38;2;R;G;B).  nerimux always emitted
-;;; true-colour unconditionally; *color-downsample-fn*, set from -2 by
-;;; %apply-global-cli-invocation (main-startup-flags.lisp), routes true-colour
-;;; cell values through cl-tty-kit:rgb-to-256 before classification so -2
-;;; sessions degrade gracefully instead of leaking raw 24-bit escapes.
 (defvar *color-downsample-fn*
   nil
   "Optional function (packed-rgb-int) -> palette-index, applied to TRUE-COLOR
@@ -55,20 +30,12 @@
       (funcall *color-downsample-fn* n)
       n))
 
-;;; %EMIT-FG and %EMIT-BG are inlined: render-pane calls render-cell-attrs up
-;;; to ~1920 times per frame; eliminating the two call frames is measurable.
 (declaim (inline %emit-fg %emit-bg))
 
 (define-colour-emitters
-  ;;        name       label         std  bright  256-pfx  tc-pfx  default
   (%emit-fg "foreground"              30    82    "38;5"   "38;2"   39)
   (%emit-bg "background"              40    92    "48;5"   "48;2"   49))
 
-;;; ── Underline colour (SGR 58) ────────────────────────────────────────────────
-;;;
-;;; Unlike fg/bg, the underline colour has no 30-37/40-47 "standard" short-form:
-;;; all indices use the 58;5;N 256-colour form or 58;2;R;G;B for true-colour.
-;;; 0 means "default" (inherit from fg) and is never emitted.
 (declaim (inline %emit-ul-color))
 
 (defun %emit-ul-color (stream n)
@@ -84,15 +51,6 @@
                   (logand rgb #xFF)))
         (format stream ";58;5;~D" n))))
 
-;;; ── Attribute rendering ─────────────────────────────────────────────────────
-;;;
-;;; define-cell-attr-renderer is a Prolog-like rule table:
-;;;   render_attr(bold, stream)      :- write(stream, ";1").
-;;;   render_attr(italic, stream)    :- write(stream, ";3").
-;;;   ...
-;;;
-;;; ATTRS2 extended attributes (double-underline SGR 21, overline SGR 53) and
-;;; UL-COLOR (SGR 58) are optional; zero means "not set / default".
 (define-cell-attr-renderer
   (0 1)    ; bold          → SGR 1
   (1 2)    ; dim           → SGR 2
@@ -103,7 +61,6 @@
   (6 8)    ; conceal       → SGR 8
   (7 9)) ; strikethrough → SGR 9
 
-;;; ── Cursor visibility ───────────────────────────────────────────────────────
 (defun cursor-invisible (stream)
   "Emit DECTCEM hide-cursor sequence ESC[?25l to STREAM."
   (write-string (cl-tty-kit:ansi-hide-cursor) stream))
@@ -116,7 +73,6 @@
   "Emit DECSCUSR CSI sequence to set cursor shape in the outer terminal."
   (format stream "~C[~D q" +esc+ shape))
 
-;;; ── Attribute reset ─────────────────────────────────────────────────────────
 (defun %emit-sgr (stream code)
   "Emit an ANSI SGR escape sequence (ESC[CODEm) to STREAM.
    CODE may be an integer or a string (e.g. \"44;96\" for compound SGR parameters).
@@ -128,30 +84,10 @@
   "Emit SGR reset sequence ESC[0m to STREAM, clearing all attributes and colours."
   (write-string (cl-tty-kit:ansi-reset-style) stream))
 
-;;; ── Layout helpers ──────────────────────────────────────────────────────────
 (defun %center-coord (total size)
   "Return the column/row offset to center SIZE within TOTAL (clamped to 0)."
   (max 0 (floor (- total size) 2)))
 
-;;; ── Display-width text clipping (R6.9) ────────────────────────────────────
-;;;
-;;; The emulator side treats a full-width character (CJK, kana, hangul, most
-;;; emoji) as two terminal cells -- %place-wide-char and CHAR-WIDTH in
-;;; src/domain/terminal/. Column math here used to count (LENGTH TEXT)
-;;; instead, so a path or branch name containing Japanese desynced by one
-;;; cell per wide character. These two functions are the one place plain
-;;; (non-SGR) text gets measured and truncated by display width; every clip
-;;; site outside the status bar's own SGR-aware layer (renderer-statusbar-
-;;; layout.lisp, which has a parallel fix) routes through them instead of
-;;; repeating the column math locally.
-;;;
-;;; CHAR-WIDTH lives in NERIMUX/TERMINAL/TYPES and is not re-exported by the
-;;; NERIMUX/TERMINAL facade package that NERIMUX/RENDERER otherwise :USEs
-;;; (package-terminal.lisp's :export list omits it) -- referenced here fully
-;;; qualified rather than through the facade. This is a downward reference
-;;; (DOMAIN -> DOMAIN, both PRESENTATION's dependency direction), so it does
-;;; not trip the layering guard, but it does bypass the facade's stated
-;;; purpose of keeping callers off individual sub-packages.
 (defun %display-width (text)
   "Sum of NERIMUX/TERMINAL/TYPES:CHAR-WIDTH across TEXT's characters: the
    number of terminal columns TEXT occupies, as opposed to (LENGTH TEXT)."
@@ -192,11 +128,6 @@
                            "..."
                            ""))))))
 
-;;; ── SGR-aware width math ────────────────────────────────────────────────────
-;;;
-;;; Moved here from renderer-statusbar-layout.lisp: the workspace frame's
-;;; styled header/footer rows need the same escape-skipping clip math the
-;;; status bar uses, and this file loads ahead of both consumers.
 (defun %sgr-sequence-end (str start)
   "If STR has a CSI escape starting at START, return the index just past its final byte.
    Otherwise returns NIL.

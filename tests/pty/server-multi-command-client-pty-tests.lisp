@@ -1,12 +1,5 @@
 (in-package #:nerimux/pty-test)
 
-;;;; Multi-client server integration test: a real PTY-backed pane's live
-;;;; output reaches an attached client's rendered frame.
-;;;;
-;;;; Moved from tests/integration/server-multi-command-client-tests.lisp (R9.2):
-;;;; the one case there that spawns a real PTY (WITH-PTY-AVAILABLE +
-;;;; WITH-SESSION + a real reader thread).  The other six cases in that file
-;;;; use WITH-FAKE-SESSION (no real PTY) and stayed in nerimux/test.
 (describe "server-multi-suite"
           (it "multi-socket-renders-live-pty-output"
               (with-pty-available

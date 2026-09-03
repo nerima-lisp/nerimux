@@ -1,30 +1,5 @@
 (in-package #:nerimux/renderer)
 
-;;;; Workspace tree projection: stable node identities, labels, attention,
-;;;; refresh state, and section-based flattening. Both the plain ANSI
-;;;; workspace renderer and the cl-tui-kit tree consume this projection.
-;;;;
-;;;; Overview redesign PR2 made the tree the overview's only panel (the
-;;;; WORKTREES/PANES/PREVIEW three-column layout is gone -- see
-;;;; renderer-workspace.lisp), fully expanded by default, with a text filter
-;;;; and a worktree-row info cluster.
-;;;;
-;;;; The section-based overview redesign (magit-style) replaced the
-;;;; org -> repo -> worktree -> window -> pane hierarchy %WORKSPACE-FLAT-
-;;;; TREE-ENTRIES used to walk with three fixed sections, in this order:
-;;;; Attention (any worktree needing attention, or holding an exited pane),
-;;;; Active (any other worktree with at least one pane), and Repositories
-;;;; (every repository, worktrees collapsed under it by default). A worktree
-;;;; appears in at most one of Attention/Active; a clean, pane-less worktree
-;;;; shows only under its repository's expansion. Window and pane rows are
-;;;; no longer part of the overview tree at all (a later wave adds inline
-;;;; pane detail); the ORGANIZATION level is folded into the "org/repo ·
-;;;; branch" and "org/name" row labels instead of getting its own row --
-;;;; %ORGANIZATION-TREE-LABEL and %REPOSITORY-TREE-LABEL are still the label
-;;;; builders, just composed differently. Row order within a section follows
-;;;; %SORT-WORKSPACE-ORGANIZATIONS-BY-ACTIVITY's activity sort (vcs.lisp),
-;;;; which runs once per catalog publish/refresh -- never here, and never
-;;;; per-frame -- so a row does not move under the cursor mid-navigation.
 (defun %repository-attention-p (repository)
   "T when REPOSITORY itself, or any worktree under it, needs attention."
   (or (repository-dirty-p repository)
@@ -59,10 +34,6 @@
     (worktree (list :worktree (worktree-id node)))
     (window (list :window (window-id node)))
     (pane (list :pane (window-id (pane-window node)) (pane-id node)))
-    ;; Inline worktree expansion (Wave B): a :FILE or :COMMIT row's OBJECT is
-    ;; already an EQUAL-comparable list rebuilt fresh every frame -- see the
-    ;; header comment above -- so it IS its own stable key, unlike every
-    ;; other kind here, which derives a key from a persistent struct.
     (cons node)
     (t (list :workspace-object node))))
 
@@ -153,8 +124,6 @@
     (:repository (%repository-attention-p object))
     (:worktree (worktree-attention-p object))
     (:pane (pane-attention-p object))
-    ;; A :SECTION row's own label already names what it holds ("Attention
-    ;; (N)"); it never carries the `!` mark itself.
     (:section nil)
     (t nil)))
 
@@ -166,16 +135,6 @@
       ((and stale-ids (gethash key stale-ids)) " stale")
       (t ""))))
 
-;;; ── Worktree tree-row info cluster ──────────────────────────────────────────
-;;;
-;;; The one-column overview (PR2) puts a compact status cluster to the right
-;;; of every worktree row: state tag, ahead/behind counts, pane count, and a
-;;; relative last-activity time. Built here as plain-text-first-then-SGR
-;;; pairs (UI theme convention) so both consumers can use the plain half --
-;;; the cl-tui-kit list-widget draws each row through SURFACE-DRAW-TEXT with
-;;; one uniform per-row style (list.lisp:WIDGET-RENDER in cl-tui-kit), so it
-;;; cannot honour embedded SGR the way %EMIT-STYLED-ROW can; only the plain
-;;; ANSI render path (render-tree-p T) gets the coloured STYLED half.
 (defun %worktree-relative-time-text (universal-time)
   "ASCII relative-time label for UNIVERSAL-TIME (a GET-UNIVERSAL-TIME
    integer, or NIL for \"never\"): \"now\" under a minute, then Nm/Nh/Nd.
@@ -286,12 +245,6 @@
           when (or (null (cdr remaining)) (<= (%display-width plain) width))
             return (values (%display-clip plain width) styled))))
 
-;;; ── Text filter (`/query`) ───────────────────────────────────────────────────
-;;;
-;;; A row survives the filter when its own node matches, or any descendant's
-;;; does -- which, read the other way, means every ancestor of a match
-;;; survives too. Both directions fall out of one predicate: "this row's
-;;; whole subtree, itself included, contains a match".
 (defun %workspace-tree-node-search-text (kind object &optional label)
   "Lowercased text FILTER is matched against for one tree row: label for an
    organization, specification+name for a repository, branch+path for a
@@ -393,28 +346,6 @@
               when (aref keep index)
                 collect (aref vector index)))))
 
-;;; ── Inline worktree expansion (Wave B) ──────────────────────────────────────
-;;;
-;;; Pressing Tab on a worktree row expands three optional child-row groups
-;;; directly beneath it, one level deeper than the worktree row itself: its
-;;; panes, its changed files, and its recent commits, in that fixed order.
-;;; Empty groups are omitted entirely. Expansion state lives in the SAME
-;;; *WORKSPACE-EXPANDED-NODE-IDS* table the Repositories section's own
-;;; repository rows already use for their own expansion (default COLLAPSED;
-;;; see %WORKSPACE-REPOSITORY-NODE-EXPANDED-P) -- keyed by the worktree's own
-;;; %WORKSPACE-TREE-NODE-KEY, i.e. (:WORKTREE ID), which cannot collide with
-;;; a (:REPOSITORY ID) key in the same table.
-;;;
-;;; A file row's OBJECT is (:FILE WORKTREE-ID PATH CODE); a commit row's is
-;;; (:COMMIT WORKTREE-ID HASH SUBJECT), with HASH holding the keyword
-;;; :PENDING or :FAILED (and SUBJECT NIL) for the two placeholder rows shown
-;;; while WORKTREE-COMMITS-STATE is unsettled. Both are freshly-consed lists
-;;; rebuilt on every flatten call, so their row identity for selection and
-;;; the tree widget comes from %WORKSPACE-TREE-NODE-KEY's CONS branch above
-;;; (structural EQUAL), not EQ. Pane rows keep the pane struct itself as
-;;; OBJECT (KIND :PANE) -- identity-stable across a frame exactly like every
-;;; other struct-backed row in this tree, so no such branch was needed for
-;;; them.
 (defun %workspace-worktree-node-expanded-p (worktree expanded-node-ids)
   (and expanded-node-ids
        (gethash (%workspace-tree-node-key worktree) expanded-node-ids)
@@ -565,12 +496,6 @@
                                                     file-diffs)
             (%workspace-worktree-commit-child-entries worktree level))))
 
-;;; ── Sections ─────────────────────────────────────────────────────────────────
-;;;
-;;; The overview tree's three fixed sections, in display order: Attention,
-;;; Active, Repositories. A worktree lands in Attention or Active by its own
-;;; state, never both; every repository always has a row under Repositories,
-;;; whether or not any of its worktrees appear above.
 (defun %workspace-worktree-needs-attention-p (worktree)
   "T when WORKTREE itself belongs under the Attention section: WORKTREE-
    ATTENTION-P (dirty/conflict/ahead/behind/missing -- the existing model
@@ -746,7 +671,6 @@
                   (%workspace-node-expanded-p :section key collapsed-node-ids))
             row-entries))))
 
-;;; ── Flattening ───────────────────────────────────────────────────────────────
 (defun workspace-tree-objects (organizations collapsed-node-ids
                                              &key
                                              filter
@@ -832,7 +756,6 @@
                                           filter-active-p))))
         (%workspace-filter-tree-entries entries filter)))))
 
-;;; ── Tree view-row budget ─────────────────────────────────────────────────────
 (defun workspace-tree-view-rows (terminal-rows)
   "Rows available for the tree in the one-column overview layout:
    TERMINAL-ROWS minus header(1) + separator(1) + detail(2) + message(1) +

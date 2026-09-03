@@ -1,15 +1,5 @@
 (in-package #:nerimux/pty)
 
-;;;; PTY management, terminal raw mode, and multiplexed I/O.
-;;;;
-;;;; Implemented in pure Common Lisp using:
-;;;;   • SB-EXT        — process spawning with a PTY stream
-;;;;   • cl-tty-kit    — PTY creation, raw mode, fd read/write, window size
-;;;;   • cl-process-kit — select(2) over raw fds
-;;;;   • sb-posix      — signal delivery and fallback fd close
-;;;;
-;;;; Platform constants live in pty-ffi.lisp.
-;;; ── Public: PTY creation ───────────────────────────────────────────────────
 (defun set-pty-size (master-fd rows cols)
   "Notify the kernel PTY driver of a new ROWS×COLS window size.
 
@@ -52,7 +42,6 @@
    guards (PLUSP WIDTH) and (PLUSP CONTENT-HEIGHT) alongside its fd guard."
   (cl-tty-kit:set-terminal-size cols rows master-fd))
 
-;;; ── Private: spawned PTY helpers ───────────────────────────────────────────
 (defvar *pty-processes*
   (make-hash-table :synchronized t)
   "MASTER-FD -> cl-tty-kit PTY struct for PTYs spawned by forkpty-with-shell.
@@ -171,8 +160,6 @@
     (when process
       (handler-case
           (progn
-            ;; Bare deadline form, not (timeout): cl-concurrent-kit's WITH-TIMEOUT
-            ;; is shaped like SB-EXT:WITH-TIMEOUT, not bordeaux-threads'.
             (cl-concurrent-kit:with-timeout timeout
               (sb-ext:process-wait process))
             (let ((code (sb-ext:process-exit-code process)))
@@ -192,11 +179,6 @@
    stream and pid but not a portable slave-path, so SLAVE-PATH is currently the
    empty string."
   (declare (type fixnum rows cols))
-  ;; nerimux assembles the program/args/environment/directory; cl-tty-kit performs
-  ;; the actual sb-ext:run-program :pty t spawn (the same mechanism nerimux used
-  ;; directly before).  cl-tty-kit always searches PATH for a relative program,
-  ;; which subsumes nerimux's SEARCH-P (absolute programs like /bin/sh are found
-  ;; regardless), so SEARCH-P is no longer threaded through.
   (multiple-value-bind (program args search-p)
       (%target-program-and-args default-command)
     (declare (ignore search-p))
@@ -205,36 +187,18 @@
                                     :environment environment
                                     :directory (%spawn-directory start-dir)))
           (success nil))
-      ;; make-pty has already spawned the child.  Everything below (fd/pid
-      ;; extraction, ioctl resize, table registration) can signal; until
-      ;; %remember-pty-process records the pty in *pty-processes*, nothing else
-      ;; can reap the child or close the master fd.  Guard the post-spawn steps
-      ;; so a non-local exit before successful registration tears the pty down
-      ;; (closing its process + master stream/fd), avoiding a child/fd leak.
       (unwind-protect
            (let ((master (cl-tty-kit:pty-fd pty))
                  (pid (cl-tty-kit:pty-pid pty)))
              (set-pty-size master rows cols)
-             ;; Retain the cl-tty-kit PTY struct keyed by MASTER so it (and the fd
-             ;; it owns) survives GC until pty-close reaps it.
              (%remember-pty-process master pty)
              (setf success t)
-             ;; SBCL exposes the master stream and pid but not a portable slave
-             ;; path, so SLAVE-PATH stays the empty string, preserving the pane
-             ;; tty field's existing (empty) value that callers store.
              (values master pid ""))
         (unless success
           (handler-case
               (cl-tty-kit:close-pty pty)
             (cl-tty-kit:pty-operation-failed () nil)))))))
 
-;;; ── Public: PTY I/O ────────────────────────────────────────────────────────
-;;;
-;;; Byte-transparent master-fd read/write is delegated to cl-tty-kit's
-;;; fd-centric layer (fd-read-octets / fd-write-octets), which wraps the same
-;;; unix-read/unix-write calls nerimux formerly issued via CFFI.  nerimux keeps
-;;; its own type-guarding and empty-noop conventions here so callers and tests
-;;; observe unchanged behavior.
 (defun pty-write (fd data)
   "Write DATA (octet vector or UTF-8 string) to the PTY master fd, within
    +PTY-WRITE-TIMEOUT-SECONDS+.  Signals SB-EXT:TIMEOUT when the write does
@@ -246,14 +210,6 @@
     (string
      (pty-write fd (cl-codec-kit:string-to-octets data :encoding :utf-8)))
     ((simple-array (unsigned-byte 8) (*))
-     ;; Two noop guards preserving the prior raw-write(2) behavior:
-     ;;   * empty vector — no write is issued (tests assert this).
-     ;;   * negative fd — the "no PTY / dead pane" sentinel (pane-fd -1).  The
-     ;;     former CFFI write(2) ignored its return value, so a write to fd -1
-     ;;     silently failed; cl-tty-kit's fd-write-octets instead asserts a
-     ;;     non-negative fd and signals, so we skip it here.  Real PTY master fds
-     ;;     are always positive, and the domain already gates real writes on
-     ;;     (> (pane-fd pane) 0).
      (when (and (>= fd 0) (plusp (length data)))
        (sb-ext:with-timeout +pty-write-timeout-seconds+
          (cl-tty-kit:fd-write-octets fd data))))))
@@ -281,14 +237,6 @@
    A non-positive CHILD-PID is ignored: kill(-1)/kill(0) broadcast the signal to
    the whole process group (including this process), which must never happen.
    Likewise a negative MASTER-FD is not closed."
-  ;; nerimux-specific teardown: SIGHUP (NOT cl-tty-kit's SIGTERM->SIGKILL
-  ;; escalation) then close the master.  Drop the retained cl-tty-kit PTY
-  ;; struct from *pty-processes* so it is no longer reachable; closing its
-  ;; SBCL process object closes the master stream (and fd), as before.
-  ;; sb-posix:kill, NOT process-kit's signal API: that one is shaped around a
-  ;; process handle it spawned and checks process-group ownership, whereas
-  ;; nerimux holds a bare pid from a cl-tty-kit PTY. sb-posix ships with SBCL
-  ;; and is not an external dependency.
   (when (plusp child-pid)
     (handler-case
         (sb-posix:kill child-pid sb-posix:sighup)
@@ -304,7 +252,6 @@
               (sb-posix:close master-fd)
             (sb-posix:syscall-error () nil))))))
 
-;;; ── Public: select-based I/O multiplexing ─────────────────────────────────
 (defconstant +microseconds-per-second+
   1000000
   "Number of microseconds in one second; used in struct timeval decomposition.")
@@ -399,7 +346,6 @@
         (process-kit:fd-wait-failed ()
           nil)))))
 
-;;; ── Public: terminal geometry ──────────────────────────────────────────────
 (defconstant +max-sane-rows+
   1000)
 
@@ -422,12 +368,6 @@
         (values rows cols)
         (values +default-term-rows+ +default-term-cols+))))
 
-;;; ── Port adapter ─────────────────────────────────────────────────────────────
-;;;
-;;; install-pty-port wires this module's PTY functions into the
-;;; nerimux/ports abstraction layer so that domain code (nerimux/model) calls
-;;; through the port rather than referencing nerimux/pty symbols directly.
-;;; Must be called before any pane is created (server startup or test setup).
 (defun install-pty-port ()
   "Register this module as the active nerimux/ports PTY adapter."
   (setf nerimux/ports:*spawn-pty* #'forkpty-with-shell

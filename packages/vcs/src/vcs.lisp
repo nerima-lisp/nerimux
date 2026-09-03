@@ -82,12 +82,6 @@ reads it as CSI. Stripping C0 alone would block `ESC [` and pass its exact
 
 (declaim (ftype function list-repository-worktrees))
 
-;; %APPLY-REPOSITORY-WORKTREES is defined later in this file (near
-;; LIST-REPOSITORY-WORKTREES, which it backs); RESOLVE-DIRECTORY-ORGANIZATIONS
-;; above that point calls it directly to populate a repository from worktrees
-;; already fetched, rather than through LIST-REPOSITORY-WORKTREES, which would
-;; re-run `git worktree list` (F1). Same forward-reference shape as the
-;; declaim above -- harmless for a function, resolved by load time.
 (declaim (ftype function %apply-repository-worktrees))
 
 (defvar *ghq-root-cache*
@@ -320,18 +314,7 @@ client's cursor while it is being looked at."
         (current (copy-list organizations)))
     (setf *workspace-organizations* current)
     (%preserve-pane-associations previous current)
-    ;; F1: carry id/commits-state/recent-commits across a full catalog
-    ;; rescan, matched by path -- see %PRESERVE-WORKTREE-COMMIT-STATE.
-    ;; Order relative to %PRESERVE-PANE-ASSOCIATIONS above does not matter:
-    ;; that function matches a remembered pane by id OR path, and path
-    ;; alone already identifies the right worktree before this runs.
     (%preserve-worktree-commit-state previous current)
-    ;; Activity order (item 6) is applied here, after pane associations are
-    ;; re-established above -- not before -- because a worktree's recency
-    ;; comes from its panes' last-output/last-focused times, and those panes
-    ;; are only attached to CURRENT's worktree structs once
-    ;; %PRESERVE-PANE-ASSOCIATIONS has run.  Sorting first would sort every
-    ;; worktree as equally-idle (0), pane associations notwithstanding.
     (setf *workspace-organizations*
           (%sort-workspace-organizations-by-activity *workspace-organizations*))))
 
@@ -474,10 +457,6 @@ which is what let a per-repository failure mark the ENTIRE catalog stale."
                          (setf (gethash key organizations) candidate))))
               (nerimux/workspace-model:organization-add-repository
                organization repository)
-              ;; One unreadable repository (a broken or half-deleted clone in
-              ;; the ghq root) must not abort the scan: the enclosing
-              ;; handler-case would blank the entire catalog with no message.
-              ;; Keep the entry, mark it missing, move on.
               (handler-case
                   (list-repository-worktrees repository)
                 (error ()
@@ -550,22 +529,9 @@ which is what let a per-repository failure mark the ENTIRE catalog stale."
                 :behind (if old-worktree
                             (nerimux/workspace-model:worktree-behind old-worktree)
                             0)
-                ;; Inline tree-row expansion data (Wave B) rides along with
-                ;; the rest of OLD-WORKTREE's carried-over status, the same
-                ;; way DIRTY-P/CONFLICT-P/AHEAD/BEHIND already do above: a
-                ;; worktree-list rebuild must not blank an already-fetched
-                ;; commit history or file list only to have %APPLY-WORKTREE-
-                ;; STATUS or REFRESH-WORKTREE-COMMITS-ASYNC repopulate it
-                ;; moments later.
                 :changed-files (and old-worktree
                                     (nerimux/workspace-model:worktree-changed-files
                                      old-worktree))
-                ;; STAGED/UNSTAGED/UNTRACKED/UNMERGED-FILES are the same
-                ;; status-pass partition as CHANGED-FILES (Unit MODEL) and
-                ;; ride along with it for the same reason -- carried here
-                ;; only so a worktree-list-only rebuild (no status-updates,
-                ;; see LIST-REPOSITORY-WORKTREES) does not blank them until
-                ;; the next status pass runs.
                 :staged-files (and old-worktree
                                    (nerimux/workspace-model:worktree-staged-files
                                     old-worktree))

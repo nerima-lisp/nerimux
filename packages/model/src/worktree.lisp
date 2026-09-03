@@ -22,29 +22,9 @@
   (locked-p nil :type boolean)
   (prunable-p nil :type boolean)
   (missing-p nil :type boolean)
-  ;; Inline tree-row expansion (Tab on a worktree row, Wave B).
-  ;; CHANGED-FILES: plain (CODE . PATH) conses, CODE a 2-char git-status-
-  ;; --short-style string -- never a cl-vcs-kit struct; populated by
-  ;; %APPLY-WORKTREE-STATUS alongside DIRTY-P/CONFLICT-P (vcs.lisp).
-  ;; RECENT-COMMITS: plain (HASH . SUBJECT) conses, HASH already shortened to
-  ;; 7 characters; COMMITS-STATE is NIL (never fetched) | :PENDING | :READY |
-  ;; :FAILED, both written only by REFRESH-WORKTREE-COMMITS-ASYNC
-  ;; (vcs-inspect.lisp), fetched on demand rather than with every status
-  ;; refresh.
   (changed-files nil :type list)
   (recent-commits nil :type list)
   (commits-state nil)
-  ;; STAGED-FILES/UNSTAGED-FILES/UNTRACKED-FILES/UNMERGED-FILES: the same
-  ;; porcelain-v2 entries CHANGED-FILES already carries, re-partitioned by
-  ;; kind and by which XY column is set (magit alignment, Unit MODEL) --
-  ;; no separate fetch. A file with both the index (X) and worktree (Y)
-  ;; columns set appears in BOTH STAGED-FILES and UNSTAGED-FILES; that is
-  ;; magit's own display behaviour, not a bug. Each is (CODE . PATH), CODE
-  ;; the single X or Y character for the staged/unstaged lists, "??" for
-  ;; untracked, and the real two-character code for unmerged (conflict)
-  ;; entries. STASHES/STASHES-STATE follow RECENT-COMMITS/COMMITS-STATE's
-  ;; shape exactly -- fetched on demand, not from the status pass, so
-  ;; STASHES-STATE is NIL | :PENDING | :READY | :FAILED.
   (staged-files nil :type list)
   (unstaged-files nil :type list)
   (untracked-files nil :type list)
@@ -134,9 +114,6 @@
                     stashes-state)))
 
 (defun worktree-attention-p (worktree)
-  ;; worktree-attention-reasons composes pane state (attention.lisp), so it
-  ;; lives in nerimux/pane, not here -- see package-domain-model.lisp's
-  ;; header for why this is package-qualified rather than :USEd.
   (not (null (nerimux/pane:worktree-attention-reasons worktree))))
 
 (defun %organization-counts-explicit-p (organization)

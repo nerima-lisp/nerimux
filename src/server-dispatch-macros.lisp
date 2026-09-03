@@ -1,9 +1,3 @@
-;;;; Declarative rule-table macros for the multi-client server's dispatchers.
-;;;;
-;;;; Moved out of package.lisp (W6): these have nothing to do with package
-;;;; declaration, and package.lisp used to be the only file guaranteed to
-;;;; load before every server-multi-dispatch-*.lisp consumer. Placed first in
-;;;; bootstrap-server's component list for the same reason.
 (in-package #:nerimux)
 
 (defmacro define-worktree-command-entry (name command description)

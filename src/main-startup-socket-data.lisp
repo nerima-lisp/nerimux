@@ -1,4 +1,3 @@
-;;; Startup socket timing and log policy.
 (in-package #:nerimux)
 
 (defconstant +server-socket-poll-interval-seconds+ 0.1)

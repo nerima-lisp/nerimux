@@ -1,20 +1,5 @@
 (in-package #:nerimux)
 
-;;;; Detach-attach server: socket serve-loop.
-;;;;
-;;;; The server owns the session, PTYs, and per-pane reader threads, and serves
-;;;; one attached client at a time over a Unix socket.  Client keystrokes are
-;;;; run through the SAME process-byte pipeline the in-process loop uses, so
-;;;; prefix commands / copy mode / prompts all behave identically when attached.
-;;;; On detach the client disconnects but the session persists for re-attach;
-;;;; the server only exits when the last window is killed (:quit) or *running*
-;;;; is cleared.
-;;;;
-;;;; Session registry management (server-add-session, server-find-session)
-;;;; lives in session-registry.lisp.
-;;;;
-;;;; with-incoming-frame is defined in nerimux/transport so both server and
-;;;; client can use it without creating a circular dependency.
 (defun %socket-tmp-base ()
   "The socket base directory: $TMPDIR, else /tmp (§1.4 — no -L/-S override,
    and no legacy temp-dir env var override: R1.17 removed the CLI flags
@@ -116,8 +101,6 @@
       (handler-case
           (ensure-directories-exist (format nil "~A/" dir))
         (file-error () nil))
-      ;; Only ever on a path this process just created, so there is no
-      ;; attacker-planted symlink for CHMOD to follow.
       (handler-case
           (sb-posix:chmod dir #o700)
         (sb-posix:syscall-error () nil)))
@@ -136,9 +119,6 @@
     (when active-window
       (window-relayout active-window (- rows +status-line-rows+) cols))))
 
-;;; PEER-IO-FAILURE, which several handlers in this file's dispatch path use,
-;;; is defined in runtime.lisp -- nerimux.asd loads BOOTSTRAP-RUNTIME before
-;;; BOOTSTRAP-SERVER, and runtime-reader.lisp needs the type too.
 (defun %start-session-reader-threads (session)
   (mapcar #'start-reader-thread (all-panes session)))
 
@@ -167,8 +147,6 @@
            (reader-threads (%start-session-reader-threads session)))
         (install-sigwinch-handler)
         (unwind-protect
-            ;; A single select(2) serves the listener and every attached
-            ;; client concurrently (%run-multi-server-loop).
             (%run-multi-server-loop listener session)
           (stop-reader-threads reader-threads)
           (close-socket listener)

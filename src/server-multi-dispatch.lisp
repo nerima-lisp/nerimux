@@ -1,14 +1,6 @@
 (in-package #:nerimux)
 
 
-;;;; Multi-client message handlers extracted from server-multi.lisp.
-;;;;
-;;;; The event loop keeps the dispatch table, while these helpers own the
-;;;; per-message policy for attach/resize, keys, and forwarded commands.
-;;; WITH-LOOP-SAFE-ERROR is defined here because this file owns the per-client
-;;; handler policy and every handler below uses the same error boundary.  The
-;;; message-dispatch macro itself lives in server.lisp, which ASDF loads before
-;;; this file; server-multi.lisp then uses the same expansion.
 (defmacro with-loop-safe-error (binding &body body)
   "Run BODY, catching a failed client/command so one of them can never wedge
    the multi-client event loop.  On success, returns BODY's value; on a
@@ -72,7 +64,6 @@
   (multiple-value-bind (rows cols) (decode-size payload)
     (setf (client-conn-rows conn) rows
           (client-conn-cols conn) cols))
-  ;; Keep this client most-recent so window-size latest follows the active peer.
   (setf *clients* (cons conn (remove conn *clients*)))
   (%apply-effective-size session)
   nil)
@@ -108,9 +99,7 @@
    keymap, and every other view (i.e. :pane) hands the byte straight to the
    shell with no mode to leave first."
   (cond
-    ;; Swallowed by a pending ESC sequence (R4.3): never reaches any dispatch.
     ((%client-esc-swallow-consume conn) nil)
-    ;; Before the prefix, not after -- see +KEYBOARD-OWNING-MODALS+.
     ((member (client-conn-modal conn) +keyboard-owning-modals+ :test #'eq)
      (case (client-conn-modal conn)
        (:confirm (nth-value 1 (%handle-confirm-key session conn payload)))
@@ -132,13 +121,8 @@
                 ((and (%client-ui-keys-p conn) (%client-byte-p payload 16))
                  (%open-client-picker conn))
                 ((%client-ui-keys-p conn)
-                 ;; A key the UI does not bind is simply dropped here. It must
-                 ;; NOT fall through to the shell: the retired keys (j/k/i/c/r
-                 ;; and friends) would otherwise land in whatever program the
-                 ;; focused pane is running, which is worse than doing nothing.
                  (or (%handle-client-ui-key-payload session conn payload) nil))
                 (t
-                 ;; :pane -- FR-007. Every byte goes to the shell, ESC included.
                  (%handle-client-input-key-payload session conn payload))))))))))
 
 (defun %handle-workspace-prefix-key (session conn payload)
@@ -161,7 +145,6 @@ behavior (:96-107 pre-R4.4) is gone."
         (values t nil))
       (t (values nil nil)))))
 
-;;; ── `?` full-screen help view (FR-005) ──────────────────────────────────────
 (defun %client-open-help-view (conn)
   "Put the static key-reference view up. Reached from the `?` transient's `k`
    entry (FR-010) rather than from `?` directly -- `?` now opens the dispatch

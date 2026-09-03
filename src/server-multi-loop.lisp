@@ -1,10 +1,5 @@
 (in-package #:nerimux)
 
-;;; ── Event-loop iteration ────────────────────────────────────────────────────
-;;; The server does not exit on its own.  Detaching the last client leaves the
-;;; runtime and every pane running, and an empty session is not a reason to shut
-;;; down either (R8.3 — both were options; neither is now).  The only ways out
-;;; are an explicit kill and the confirm-view quit, both of which clear *RUNNING*.
 (defun %accept-pending-connection (listener listener-fd ready)
   "When LISTENER-FD is in READY, accept and register the new connection.
    accept-connection may return NIL on a race (peer disappeared between
@@ -62,7 +57,6 @@
     (let ((disposition (%read-and-dispatch-client-message session conn)))
       (when (eq :quit (%apply-client-disposition disposition conn))
         (return :quit))
-      ;; :drop and :eof closed CONN's socket; reading further would error.
       (when (member disposition '(:drop :eof))
         (return nil))
       (unless (handler-case (listen (client-conn-stream conn))
@@ -103,7 +97,6 @@
     (dolist (conn (copy-list *clients*))
       (%drop-client conn :bye t))))
 
-;;; ── Server termination ─────────────────────────────────────────────────────
 
 (defun %session-live-panes (session)
   "Return the live panes in SESSION."

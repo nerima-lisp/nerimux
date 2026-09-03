@@ -1,13 +1,5 @@
 (in-package #:nerimux/commands)
 
-;;;; Copy-mode selection extraction helpers.
-;;;
-;;; This file holds the pure data-extraction layer for copy-mode selection:
-;;; canonical row/column bounds, virtual-row lookup, and text extraction.
-;;; %selection-bounds extracts the canonical (start-row end-row start-col end-col)
-;;; rectangle from the mark and cursor positions - independent of which end the
-;;; user anchored first.  %selection-text builds the string from that rectangle.
-;;; Both are private (percent-prefixed) and independently testable.
 (defun %selection-col-range (mark-vrow mark-col cur-vrow cursor-col)
   "Return (values start-col end-col) for a selection spanning MARK-VROW/MARK-COL
    to CUR-VROW/CURSOR-COL.  When mark is topmost, mark-col is start; when cursor
@@ -39,7 +31,6 @@
          (cursor      (screen-copy-cursor screen))
          (mark-offset (screen-copy-mark-offset screen))
          (cur-offset  (screen-copy-offset screen))
-         ;; Convert viewport rows to virtual rows using the offset in effect at placement.
          (mark-vrow   (+ sb-n (car mark)   (- mark-offset)))
          (cur-vrow    (+ sb-n (car cursor) (- cur-offset))))
     (multiple-value-bind (start-col end-col)
@@ -76,12 +67,10 @@
      to-col
      (lambda (col)
        (if (< vrow sb-n)
-           ;; Scrollback: vrow 0 = oldest = nth(sb-n-1), newest = nth(0).
            (let ((vec (nth (- sb-n 1 vrow) sb)))
              (if (and vec (< col (length vec)))
                  (cell-char (aref vec col))
                  #\Space))
-           ;; Live grid row.
            (cell-char (screen-cell screen col (- vrow sb-n))))))))
 
 (defun %selection-text (screen)
@@ -100,7 +89,6 @@
                        (let* ((col-from (if (= vrow start-vrow) start-col 0))
                               (col-to   (if (= vrow end-vrow)   end-col   w))
                               (row-str  (%extract-vrow-chars screen vrow col-from col-to)))
-                         ;; Trim trailing spaces from intermediate rows.
                          (write-string (if (< vrow end-vrow)
                                            (string-right-trim " " row-str)
                                            row-str)

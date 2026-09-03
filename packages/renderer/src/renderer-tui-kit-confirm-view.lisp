@@ -37,13 +37,6 @@
          (y (%center-coord rows height)))
     (cl-tui-kit/core:make-rectangle x y width height)))
 
-;;; ── Styles (Dracula) ─────────────────────────────────────────────────────
-;;;
-;;; A confirm view is always about a consequential action (delete/lock/quit)
-;;; or a failure, so its heading is styled danger red unconditionally rather
-;;; than reading a severity field the struct does not have. FIELDS is
-;;; (LABEL . VALUE): LABEL is the "key" role +SGR-ACCENT+ names elsewhere
-;;; (renderer-style.lisp), VALUE stays in the surface's default style.
 (defun %confirm-view-heading-style ()
   (cl-tui-kit/core:make-style :bold
                               t

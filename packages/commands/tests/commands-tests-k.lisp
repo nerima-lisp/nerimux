@@ -1,7 +1,5 @@
 (in-package #:nerimux/test/commands)
 
-;;;; commands tests — part K: copy-mode search-forward/backward, wrap-search,
-;;;; search-across-scrollback.
 (defmacro define-copy-mode-search-cases (&body cases)
   `(progn
      ,@(loop for case in cases
@@ -26,7 +24,6 @@
 
 (describe "commands-suite"
 
-  ;; ── copy-mode-search-forward / search-backward ──────────────────────────────
 
   (defun %check-copy-mode-search-expectations (screen expectations)
     (dolist (expectation expectations)
@@ -80,11 +77,6 @@
      :action (nerimux/commands::copy-mode-search-forward s "(")
      :expectations ((:cursor-col 2 "literal '(' must be found at col 2"))))
 
-  ;; ── wrap-search: search always wraps around the buffer ends ──────────────────
-  ;;
-  ;; §1.4 of docs/notes/workspace-requirements.md fixes this: "検索は折り返す"
-  ;; ("search wraps around"), and R6.8 confirms no on/off toggle survives —
-  ;; there is no configuration path left to turn it off.
 
   (define-copy-mode-search-cases
     (copy-mode-search-forward-wraps-to-top
@@ -123,7 +115,6 @@
                (nerimux/commands::copy-mode-search-prev s))
      :expectations ((:cursor-col 5 "search-prev must not move cursor when no term is saved"))))
 
-  ;; ── copy-mode search across scrollback boundary ─────────────────────────────
 
   (defun %make-text-row (width text)
     "Create a scrollback row vector WIDTH wide with TEXT followed by space cells."
@@ -137,28 +128,18 @@
                       :char (char text i) :fg 7 :bg 0 :attrs 0 :width 1)))
       row))
 
-  ;; Forward search with wrap-search wraps from the live grid into the scrollback buffer
-  ;; when the term is only present in the scrollback.
   (it "copy-mode-search-forward-wraps-into-scrollback"
-    ;; Screen 20x3; scrollback newest-first: sb[0]=row with term, sb[1]=blank.
-    ;; Virtual rows: vrow0=sb[1](blank), vrow1=sb[0](term), vrow2-4=live(blank).
     (let* ((s    (make-screen 20 3))
            (sb0  (%make-text-row 20 "findme here"))
            (sb1  (%make-text-row 20 "")))
       (setf (nerimux/terminal/types:screen-scrollback s) (list sb0 sb1))
       (nerimux/commands::copy-mode-enter s)
-      ;; Cursor starts at bottom of live grid (row 2, col 0), offset 0.
       (nerimux/commands::copy-mode-search-forward s "findme")
-      ;; After wrap the term is at virtual row 1 (newest scrollback); set_vrow
-      ;; sets offset=1, cursor-row=0.
       (expect (= 1 (nerimux/terminal/types:screen-copy-offset s)))
       (expect (= 0 (car (nerimux/terminal/types:screen-copy-cursor s))))
       (expect (= 0 (cdr (nerimux/terminal/types:screen-copy-cursor s))))))
 
-  ;; Backward search from the live grid finds a term in the scrollback without wrapping.
   (it "copy-mode-search-backward-finds-term-in-scrollback"
-    ;; Screen 20x3; sb[0]=newest='target row', sb[1]=oldest=blank.
-    ;; Cursor at live-grid top (row 0, offset 0).
     (let* ((s    (make-screen 20 3))
            (sb0  (%make-text-row 20 "target row"))
            (sb1  (%make-text-row 20 "")))
@@ -166,18 +147,14 @@
       (nerimux/commands::copy-mode-enter s)
       (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 0))
       (nerimux/commands::copy-mode-search-backward s "target")
-      ;; target is in vrow 1 (newest scrollback); set_vrow → offset=1, row=0.
       (expect (= 1 (nerimux/terminal/types:screen-copy-offset s)))
       (expect (= 0 (cdr (nerimux/terminal/types:screen-copy-cursor s))))))
 
-  ;; R6.8's "2/7": which match the cursor is on, out of how many exist in the
-  ;; whole virtual buffer -- not just the visible viewport.
   (it "copy-mode-search-records-which-match-of-how-many"
     (let* ((s (make-screen 20 3))
            (sb0 (%make-text-row 20 "hit third"))
            (sb1 (%make-text-row 20 "hit second"))
            (sb2 (%make-text-row 20 "hit first")))
-      ;; Scrollback is newest-first, so vrow order is sb2, sb1, sb0, then grid.
       (setf (nerimux/terminal/types:screen-scrollback s) (list sb0 sb1 sb2))
       (nerimux/commands::copy-mode-enter s)
       (setf (nerimux/terminal/types:screen-copy-cursor s) (cons 0 0)
@@ -189,7 +166,6 @@
       (expect (<= 1 (nerimux/terminal/types:screen-copy-search-index s) 3)
               )))
 
-  ;; A term with no match must not leave the previous search's census standing.
   (it "copy-mode-search-clears-the-census-when-nothing-matches"
     (let* ((s (make-screen 20 3))
            (sb0 (%make-text-row 20 "hit")))
@@ -202,8 +178,6 @@
       (expect (null (nerimux/terminal/types:screen-copy-search-index s)))
       (expect (= 0 (nerimux/terminal/types:screen-copy-search-total s)))))
 
-  ;; Leaving copy mode drops the census: the buffer keeps taking live output, so
-  ;; the numbers would describe something that no longer exists.
   (it "copy-mode-exit-clears-the-census-but-keeps-the-term"
     (let* ((s (make-screen 20 3))
            (sb0 (%make-text-row 20 "hit")))

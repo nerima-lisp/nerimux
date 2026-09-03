@@ -1,7 +1,4 @@
-;;;; Test package for nerimux-renderer.
 (defpackage #:nerimux/test/renderer
-  ;; The test framework is cl-weave, used natively: every file registers its own
-  ;; top-level (describe "name" (it "case" ...) ...) block.
   (:use #:cl)
   (:shadowing-import-from #:cl-weave #:describe)
   (:import-from #:cl-weave
@@ -15,8 +12,6 @@
                 #:it-property #:it-fuzz #:gen-integer #:gen-list #:gen-boolean #:gen-string
                 #:gen-vector #:gen-member #:gen-one-of
                 #:defmatcher)
-  ;; The model and terminal surfaces the renderer draws from, plus the picker it
-  ;; renders. All mirror nerimux-renderer's own :depends-on.
 (:import-from #:nerimux/pane
                 #:make-pane #:pane-feed #:pane-screen #:pane-id
                 #:pane-x #:pane-y #:pane-width #:pane-height #:pane-fd #:pane-pid
@@ -134,7 +129,6 @@
                 #:tl-leaf
                 #:tl-pane
                 #:tl-window)
-  ;; Reached by the root suite's integration tests.
   (:export #:strip-sgr
            #:render-pane-output
            #:make-test-pane

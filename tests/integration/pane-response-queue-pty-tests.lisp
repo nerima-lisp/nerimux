@@ -1,23 +1,7 @@
 (in-package #:nerimux/test)
 
-;;;; Pane response-queue drain, through the real PTY port.
-;;;;
-;;;; Moved out of packages/model/tests/pane-tests-accessors.lisp when
-;;;; domain/model became nerimux-model. The production path goes through
-;;;; nerimux/ports, which is why nerimux-model does not depend on nerimux-pty --
-;;;; but this case installs the real pty adapter into *write-pty* and reads the
-;;;; bytes back with pty-read-blocking-into, so it exercises both units at once
-;;;; and belongs to neither.
 (describe "pane-response-queue-pty-suite"
 
-  ;; %drain-response-queue's write-back branch (pane-fd > 0) was previously only
-  ;; reachable with a synthetic :fd -1 pane, so the actual write-pty call was
-  ;; never exercised. A real pipe fd stands in for a PTY master fd here.
-  ;;
-  ;; *write-pty* is nil outside a running server (install-pty-port only runs at
-  ;; server startup); bind it to the real pty-write for this test's extent so
-  ;; write-pty's (funcall *write-pty* ...) has something to call instead of
-  ;; signalling undefined-function on nil.
   (it "drain-response-queue-writes-queued-reply-to-real-fd"
     (let ((nerimux/ports:*write-pty* #'nerimux/pty:pty-write))
       (with-pipe-fds (read-fd write-fd)

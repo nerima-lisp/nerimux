@@ -1,21 +1,11 @@
 (in-package #:nerimux/terminal/parser)
 
-;;;; Core parser predicates and state definition macro.
 (declaim (inline printable-ascii-p))
 
 (defun printable-ascii-p (byte)
   "Return T when BYTE is in the printable ASCII range #x20-#x7E (space through tilde)."
   (and (>= byte #x20) (< byte #x7F)))
 
-;;; (define-state NAME (SCREEN BYTE) rule...)
-;;; Each rule is (PATTERN &rest BODY) where PATTERN is:
-;;;   integer  → exact byte match:   (= BYTE integer)
-;;;   symbol   → predicate match:    (symbol BYTE)
-;;;   t        → default clause
-;;;   list     → verbatim condition
-;;; The BODY forms are evaluated in order; the last form is the next state.
-;;; Both SCREEN and BYTE are declared ignorable so state functions that
-;;; discard their arguments (e.g. osc-state, charset-state) compile cleanly.
 (defmacro define-state (name (screen-var byte-var) &rest rules)
   "Prolog-like CPS state definition: one rule per parser state clause.
    Expands into a DEFUN named NAME that takes (SCREEN-VAR BYTE-VAR) and

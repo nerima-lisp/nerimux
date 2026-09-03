@@ -1,6 +1,5 @@
 (in-package #:nerimux/terminal/csi)
 
-;;;; CSI device queries, reports, tabulation, and private modes.
 (define-csi-rule-set csi-device-rules
                      ((and (null intermed) (char= final #\n) (= p1 5))
                       (enqueue-dsr-reply screen))

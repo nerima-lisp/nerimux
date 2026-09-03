@@ -1,10 +1,5 @@
 (in-package #:nerimux/test/net)
 
-;;; ── Throwaway test-socket paths ─────────────────────────────────────────────
-;;;
-;;; %test-socket-path is the single source of the "unique per-test Unix socket
-;;; path under $TMPDIR (or /tmp)" pattern that used to be re-derived inline in
-;;; client-tests.lisp and server-multi-tests.lisp.
 (defun %test-socket-directory ()
   (let ((tmpdir (sb-ext:posix-getenv "TMPDIR")))
     (string-right-trim "/"

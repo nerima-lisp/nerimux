@@ -1,7 +1,5 @@
 (in-package #:nerimux/test)
 
-;;;; Tests for argv dispatch routing in src/bootstrap/main-startup*.lisp
-;;;; (server/attach entry surface).
 (defvar *main-calls*
   nil
   "Records (TAG . ARGS) for each stubbed entry function call.")
@@ -16,8 +14,6 @@
            (lambda (&rest a) (push (cons :server a) *main-calls*)))
           (nerimux::run-client
            (lambda (&rest a) (push (cons :client a) *main-calls*)))
-          ;; Stub out the socket-probe / server-spawn so tests stay fast and
-          ;; sandboxed.  run-client is still called; attach tests check that.
           (nerimux::%ensure-server-running
            (lambda (&rest _) (declare (ignore _)) nil)))
        ,@body)))
@@ -47,7 +43,6 @@
 
 (describe "main-suite"
 
-  ;; %application-argv drops SBCL saved-core wrapper options before dispatch.
   (it "application-argv-strips-sbcl-wrapper-options"
     (let ((sb-ext:*posix-argv*
             (list "sbcl" "--noinform" "--core" "/nix/store/core"
@@ -63,8 +58,6 @@
       (expect (equal '("server" "0")
                      (nerimux::%application-argv)))))
 
-  ;; main routes argv to the correct entry point with the correct session name
-  ;; (the first positional entry-function argument).
   (it "dispatch-main-table"
     (dolist (c '((("server" "foo") :server "foo" "server with name")
                  (("attach" "foo") :client "foo" "attach with name")
@@ -79,10 +72,6 @@
           (expect (eq expected-key (car (first *main-calls*))))
           (expect (equal expected-name (first (cdr (first *main-calls*)))))))))
 
-  ;; An unrecognized mode word is a usage error: %dispatch-unknown-mode no
-  ;; longer forwards to a running server or falls back to a standalone run,
-  ;; it always prints usage to *error-output* and exits 1, and no entry
-  ;; function is dispatched.
   (it "dispatch-unknown-mode-prints-usage-and-exits-one"
     (with-stubbed-entries
       (let (exit-code errout)
@@ -95,11 +84,6 @@
         (expect (search "usage: nerimux" errout) :to-be-truthy)
         (expect (null *main-calls*)))))
 
-  ;; FR-001: a bare `nerimux` (no argv at all) no longer takes the
-  ;; unknown-mode usage-error path -- %dispatch-startup-mode-entry defaults
-  ;; that case to `attach` at its own default-session convention, so this
-  ;; dispatches exactly like the ("attach") row of dispatch-main-table above:
-  ;; one :client call, session name "0", and no usage error/exit at all.
   (it "dispatch-no-args-falls-back-to-attach-with-default-session"
     (with-stubbed-entries
       (let ((sb-ext:*posix-argv* (list "nerimux")))
@@ -108,7 +92,6 @@
       (expect (eq :client (car (first *main-calls*))))
       (expect (equal "0" (first (cdr (first *main-calls*)))))))
 
-  ;; main routes argv correctly when the saved core is launched through SBCL options.
   (it "dispatch-main-from-sbcl-wrapper-argv"
     (with-stubbed-entries
       (let ((sb-ext:*posix-argv*
@@ -120,22 +103,16 @@
       (expect (eq :server (car (first *main-calls*))))
       (expect (equal "myserver" (first (cdr (first *main-calls*)))))))
 
-  ;;; ── *startup-modes* data table ───────────────────────────────────────────────
 
-  ;; *startup-modes* has handler entries for server and attach.
   (it "startup-modes-contains-server-and-attach"
     (expect (assoc "server" nerimux::*startup-modes* :test #'equal))
     (expect (assoc "attach" nerimux::*startup-modes* :test #'equal))
-    ;; Each entry's cdr is a list starting with the handler symbol.
     (dolist (name '("server" "attach"))
       (let ((entry (alist-value name nerimux::*startup-modes* :test #'equal)))
         (expect (consp entry))
         (expect (symbolp (first entry))))))
 
-  ;;; ── %startup-mode-raw-args-p ────────────────────────────────────────────────
 
-  ;; %startup-mode-raw-args-p returns T only for the version/help flags, which
-  ;; receive the full argv tail; name-only modes and unknown words are falsy.
   (it "startup-mode-raw-args-p-known-raw-modes"
     (expect (nerimux::%startup-mode-raw-args-p "-V") :to-be-truthy)
     (expect (nerimux::%startup-mode-raw-args-p "--version") :to-be-truthy)
@@ -157,15 +134,11 @@
          '("--version" "extra")))
       (expect (equal '("--version" "extra") received) :to-be-truthy)))
 
-  ;;; ── *startup-modes* table structure tests ────────────────────────────────────
 
-  ;; The '-V' entry in *startup-modes* carries :raw-args-p T (it receives the
-  ;; full argv tail rather than a single session name, like --version/-h/--help).
   (it "startup-modes-version-flag-has-raw-args-key"
     (let ((entry (alist-value "-V" nerimux::*startup-modes* :test #'equal)))
       (expect (getf (rest entry) :raw-args-p) :to-be-truthy)))
 
-  ;; Each *startup-modes* entry names the correct handler symbol.
   (it "startup-modes-handler-table"
     (dolist (c '(("server"    nerimux::run-server        "server → run-server")
                  ("attach"    nerimux::run-attach-simple  "attach → run-attach-simple")
@@ -178,10 +151,7 @@
         (let ((entry (alist-value mode nerimux::*startup-modes* :test #'equal)))
           (expect (eq expected-fn (first entry)))))))
 
-  ;;; ── server-socket-poll constants ─────────────────────────────────────────────
 
-  ;; +server-socket-poll-interval-seconds+ and +server-socket-poll-max-iterations+
-  ;; are positive numbers used to bound the server-start wait loop.
   (it "server-socket-poll-constants-are-positive"
     (expect (plusp nerimux::+server-socket-poll-interval-seconds+))
     (expect (plusp nerimux::+server-socket-poll-max-iterations+))

@@ -1,6 +1,5 @@
 (in-package #:nerimux)
 
-;;;; Client geometry and frame delivery for the multi-client server.
 (defun %client-size-reduce (fn)
   "Apply FN across all attached clients' rows and cols, returning both."
   (values (reduce fn *clients* :key #'client-conn-rows)
@@ -142,25 +141,7 @@
                (client-conn-rows conn)
                (client-conn-cols conn)
                :scroll (client-conn-process-log-scroll conn)))
-             ;; The picker needs its OWN arm, not a fallthrough. It is only ever
-             ;; opened from :repolist or :status (%CLIENT-UI-KEYS-P gates C-p,
-             ;; and from :pane every byte goes to the shell), and neither of
-             ;; those two renderers takes picker arguments at all -- only the
-             ;; pane renderer does. An earlier revision of this function let
-             ;; :picker fall through to the view dispatch below on the theory
-             ;; that it "draws over whichever view is underneath"; the result
-             ;; was a picker that opened, captured the keyboard, and never
-             ;; appeared on screen.
              (:picker (%render-pane-frame session conn))
-             ;; A transient opened from :repolist has nowhere to go in the
-             ;; repolist frame -- %RENDER-WORKSPACE-FRAME has no transient
-             ;; parameter and RENDER-WORKSPACE-OVERVIEW-TO-TUI-STRING accepts
-             ;; none. Only the status frame can host the panel in place, so the
-             ;; repolist case takes the same full-screen fallback the status
-             ;; view uses when it is too short to grow its key panel. Without
-             ;; this, `?` from the repolist captures every key while the screen
-             ;; still shows an ordinary repolist -- and the dispatch transient's
-             ;; actions include running git.
              (:transient
               (if (eq (client-conn-view conn) :status)
                   (%render-status-frame conn)

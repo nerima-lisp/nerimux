@@ -1,14 +1,10 @@
 (in-package #:nerimux/layout)
 
-;;; ── Tree geometry: rectangle assignment ────────────────────────────────────
-;;; orient-case is defined in layout.lisp (which loads before this file).
-;;; It dispatches on :h/:v and is used extensively below.
 (defun %assign-split (node x y width height)
   "Assign rectangles to the two children of layout-split NODE.
    The :h and :v cases are symmetric: :h divides WIDTH, :v divides HEIGHT."
   (let* ((orient          (layout-split-orientation node))
          (ratio           (layout-split-ratio node))
-         ;; :h splits divide the width (cols); :v splits divide the height (rows).
          (available-cells (1- (orient-case orient :h width :v height)))
          (first-extent    (max 1 (min (1- available-cells) (round (* available-cells ratio)))))
          (second-extent   (- available-cells first-extent)))
@@ -37,13 +33,6 @@
                             (max 1 height)))
     (layout-split (%assign-split node x y width height))))
 
-;;; ── Pane neighbor lookup and hit testing — see window-neighbor.lisp ─────────
-;;;
-;;; pane-neighbor, pane-at-position, and their helpers (%ranges-overlap-p,
-;;; %pane-center-x/y) live in window-neighbor.lisp because they access WINDOW
-;;; struct slots (window-panes), which are defined in window-core.lisp.
-;;; Defining them here would forward-reference the WINDOW struct (loaded later).
-;;; ── Resize helpers ─────────────────────────────────────────────────────────
 (defun layout-split-axis-extent (split orient)
   "Span of SPLIT's bounding rectangle along ORIENT's axis (:v → rows, :h → cols),
    derived from its already-laid-out leaves.  This is the SPLIT's own extent, so
@@ -51,10 +40,8 @@
    a sub-rectangle of the window."
   (let ((panes (layout-leaves split)))
     (orient-case orient
-      ;; :v → measure rows: max(y + height) - min(y)
       :v (- (reduce #'max panes :key (lambda (p) (+ (pane-y p) (pane-height p))))
             (reduce #'min panes :key #'pane-y))
-      ;; :h → measure cols: max(x + width) - min(x)
       :h (- (reduce #'max panes :key (lambda (p) (+ (pane-x p) (pane-width p))))
             (reduce #'min panes :key #'pane-x)))))
 

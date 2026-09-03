@@ -1,7 +1,5 @@
 (in-package #:nerimux/renderer)
 
-;;;; Split-tree separator and pane border rendering.
-;;; ── Split-tree separators ───────────────────────────────────────────────────
 (defun layout-subtree-rect (node)
   "Bounding rectangle of NODE's leaves as a plist (:x :y :w :h), derived from the
    already-laid-out pane geometry."
@@ -13,18 +11,6 @@
   "True when PANE is a leaf of NODE's subtree."
   (and pane (member pane (layout-leaves node))))
 
-;;; ── Border style SGR / glyphs ────────────────────────────────────────────────
-;;;
-;;; §1.4/R6.6 fix every pane-border option: pane-border-lines is always
-;;; "single" (so the double/heavy/simple/padded/number glyph table and the
-;;; number-drawing code that only "number" ever reached are unreachable —
-;;; deleted, not hardcoded to a dead branch); pane-border-indicators is
-;;; always "colour" (so the arrows/both glyph code, only reachable for
-;;; "arrows"/"both", is equally unreachable — deleted); pane-active-border-
-;;; style is always "fg=green" (SGR "32", what %color-name-to-sgr-number
-;;; used to resolve "green" to) and pane-border-style (inactive) is always ""
-;;; (no colour — a plain reset).  pane-border-status/pane-border-format are
-;;; deleted outright per R6.6: no label is ever drawn on a border.
 (defconstant +pane-border-vertical+
   #\│
   "Vertical pane-border glyph.  pane-border-lines is fixed \"single\" (§1.4);
@@ -89,7 +75,6 @@
           do (write-char +pane-border-horizontal+ stream))
     (reset-attrs stream)))
 
-;;; ── Tree border walk (logic layer) ──────────────────────────────────────────
 (defun render-tree-borders (stream node active-pane terminal-cols)
   "Walk the split-tree NODE, drawing one separator per internal split node.
    :h (left|right) splits draw │ bars; :v (top/bottom) splits draw ─ bars.

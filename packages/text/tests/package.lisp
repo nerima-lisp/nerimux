@@ -1,7 +1,4 @@
-;;;; Test package for nerimux-text.
 (defpackage #:nerimux/test/text
-  ;; The test framework is cl-weave, used natively: every file registers its own
-  ;; top-level (describe "name" (it "case" ...) ...) block.
   (:use #:cl)
   (:shadowing-import-from #:cl-weave #:describe)
   (:import-from #:cl-weave

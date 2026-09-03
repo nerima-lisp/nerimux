@@ -91,12 +91,6 @@
            (%client-notify conn "VCS adapter unavailable")
            t)
           (t
-           ;; %ATTACH-TARGET-SESSION, not a threaded parameter: this function's
-           ;; own call signature (CONN TARGET ARGS) is fixed by its `:`
-           ;; command-dispatch call site (server-multi-dispatch-command.lisp,
-           ;; outside this change's scope), which has no session argument to
-           ;; pass through either -- same rationale as that function's own
-           ;; docstring.
            (%client-create-worktree-now
             repository branch conn (%attach-target-session)
             :path path :force force))))))

@@ -1,10 +1,5 @@
 (in-package #:nerimux/test/net)
 
-;;; ── Shared transport / net fixtures ─────────────────────────────────────────
-;;;
-;;; Both transport-tests and net-tests write and read protocol frames over file
-;;; or socket streams.  The helpers below are shared to avoid duplicating the
-;;; temp-path idiom and the write-frames pattern.
 (defmacro with-temp-octet-file ((path-var) &body body)
   "Bind PATH-VAR to a unique fresh temp file path, run BODY, then delete the file.
    The filename includes a timestamp and random component so that concurrent test

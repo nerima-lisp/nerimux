@@ -544,13 +544,6 @@
                 (setf condition-seen condition)))
             (expect (typep condition-seen 'error)))))))
 
-  ;; Review-round fix: a repository with no remote, or one where `git remote
-  ;; set-head origin` was simply never run (both routine, not contrived),
-  ;; makes `git rev-parse origin/HEAD` fail outright (exit 128) rather than
-  ;; return something empty. %DEFAULT-BRANCH-START-POINT must fall back to
-  ;; local HEAD in that case instead of propagating the ORIGIN/HEAD failure,
-  ;; since HEAD is resolvable for any repository CREATE-WORKTREE is ever
-  ;; called against.
   (it "falls back to local HEAD when origin/HEAD cannot be resolved"
     (let* ((repository-path (%vcs-operations-existing-path))
            (repository
@@ -577,12 +570,6 @@
       (expect (null condition-seen))
       (expect (string= "deadbeefcafe" start-point))))
 
-  ;; %rev-parse must call GIT-REV-PARSE-VALUE (a git-layer entry point) with a
-  ;; VCS-KIT:REPOSITORY handle (MAKE-REPOSITORY), never the backend-layer
-  ;; VCS-KIT:VCS-REPOSITORY that VCS-WORKTREE takes -- %run-git check-types its
-  ;; REPOSITORY argument as (OR NULL REPOSITORY), so passing the wrong struct
-  ;; type-errors before any git runs, which silently made worktree creation a
-  ;; no-op.
   (it "rev-parse-passes-a-git-layer-repository-handle-not-the-vcs-backend-one"
     (let* ((repository-path (%vcs-operations-existing-path))
            (repository

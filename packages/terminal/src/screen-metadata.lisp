@@ -1,10 +1,5 @@
 (in-package #:nerimux/terminal/types)
 
-;;;; Screen metadata helpers.
-;;;;
-;;;; The screen struct owns the slots; this file owns the mutation rules for
-;;;; capture line-wrap metadata and OSC palette overrides.
-;;; ── Line-wrap flags (capture-pane -J metadata) ──────────────────────────────
 (defun %mark-line-wrapped (screen row)
   "Mark that ROW's line wraps (continues onto ROW+1) — set when an autowrap
    actually carries content to the next row."
@@ -47,12 +42,6 @@
          ht)
         (setf (screen-wrapped-rows screen) new)))))
 
-;;; ── OSC 4 / OSC 104 palette overrides ───────────────────────────────────────
-;;;
-;;; A custom palette entry set by OSC 4 shadows the built-in xterm palette for
-;;; that index.  Storage is lazily allocated (NIL until the first set) to keep the
-;;; common no-override screen cheap, the standard pattern for a sparse
-;;; per-index override table.
 (defun %palette-override-get (screen index)
   "Return the custom 0xRRGGBB override for palette INDEX, or NIL when INDEX has no
    override (caller falls back to the built-in xterm palette).  INDEX out of the

@@ -1,6 +1,5 @@
 (in-package #:nerimux)
 
-;;;; Mutable data owned by the single multi-client event loop.
 (defvar *clients*
   nil)
 

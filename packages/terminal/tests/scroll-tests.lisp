@@ -1,10 +1,5 @@
 (in-package #:nerimux/test/terminal)
 
-;;;; Scroll operation tests for scroll.lisp.
-;;;; Suite: scroll-ops.
-;;; ── SUITE: scroll-ops ───────────────────────────────────────────────────────
-;;;
-;;; Direct tests for scroll-up-one and scroll-down-one (defined in scroll.lisp).
 (defmacro define-scroll-operation-cases (&body cases)
   "Define direct scroll operation cases from declarative rows."
   (labels ((case-option (options key)
@@ -46,8 +41,6 @@
              (let ((forms (append (mapcar #'expand-step steps)
                                   (mapcar #'expand-assertion assertions))))
                (if cap-aware-p
-                   ;; trim-scroll-history no longer reads an option (§1.4, §2.2 of
-                   ;; the requirements doc): it always caps at the plain constant.
                    `((let ((cap nerimux/terminal:+max-scrollback-lines+))
                        (declare (ignorable cap))
                        (with-screen (s ,width ,height)

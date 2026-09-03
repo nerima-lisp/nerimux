@@ -31,11 +31,6 @@
   (#\/ (%client-enter-command-mode conn "search-forward "))
   (#\? (%client-enter-command-mode conn "search-backward "))
   (#\q
-   ;; Mirrors what %client-exit-copy-mode used to do to SCREEN before this
-   ;; unit was told (contract SS0) to stop calling it: q must still unfreeze
-   ;; the viewport, or live PTY output keeps appending underneath a frame
-   ;; anchored at the old scroll offset while the keyboard has already moved
-   ;; on to the view underneath.
    (when (screen-copy-mode-p screen) (copy-mode-exit screen))
    (%set-client-modal conn nil)))
 
@@ -118,23 +113,6 @@
         (handler-case
             (let* ((tokens (tokenize-command-string input))
                    (name (first tokens))
-                   ;; FIND-SYMBOL, never INTERN: NAME comes from
-                   ;; CLIENT-CONN-COMMAND-BUFFER, which is filled one keystroke
-                   ;; at a time by %CLIENT-COMMAND-BUFFER-APPEND with no length
-                   ;; cap, straight from the wire.  INTERN here let any peer
-                   ;; grow the KEYWORD package without bound -- CL never
-                   ;; releases interned symbols -- simply by typing a fresh
-                   ;; garbage name and pressing Enter, repeatedly, for the life
-                   ;; of the server.
-                   ;;
-                   ;; Falling back to the raw string rather than NIL keeps the
-                   ;; "unknown command" report: DEFINE-COMMAND-RULES compares
-                   ;; with EQ/MEMBER against keyword literals, so a string
-                   ;; matches nothing and falls through exactly as an
-                   ;; unrecognised keyword did, while NIL would instead read as
-                   ;; "no command at all" and report nothing.  Same shape as
-                   ;; DECODE-COMMAND-PAYLOAD (infrastructure/net/protocol-command.lisp)
-                   ;; and %CLIENT-UI-MODE-VALUE.
                    (cmd (and name
                              (or (find-symbol (string-upcase name) :keyword)
                                  name)))
@@ -171,7 +149,6 @@
 
 (define-key-rules %handle-client-command-key-payload (session conn payload)
   (27
-   ;; R4.3: see the matching comment in %handle-client-picker-key-payload.
    (%client-esc-swallow-start conn)
    (setf (client-conn-command-buffer conn) "")
    (%client-restore-command-view conn)
@@ -187,20 +164,6 @@
    (%client-command-buffer-append conn payload)
    t))
 
-;;; ── ESC-prefixed multi-byte keys (M-n, M-p, S-TAB) ──────────────────────────
-;;;
-;;; The client forwards stdin one byte at a time (see *CLIENT-ESC-SWALLOW-
-;;; COUNTS* above), so Alt/Meta and shifted-function keys still arrive as a
-;;; multi-byte escape sequence split across separate key messages: M-n/M-p is
-;;; ESC then the letter (2 bytes), S-TAB is ESC [ Z (3 bytes), and a real
-;;; arrow key is ESC [ A/B/C/D (3 bytes, same CSI introducer as S-TAB).
-;;;
-;;; *CLIENT-ESC-SWALLOW-COUNTS* is the wrong tool here: it discards a fixed,
-;;; already-known number of trailing bytes after something else has already
-;;; acted on the ESC. Here nothing may act until the byte AFTER the ESC is
-;;; known, so this needs the opposite shape -- remember that an ESC is
-;;; in-flight and route only the byte(s) that follow it, keyed by CONN so one
-;;; client's pending sequence can never resolve against another's byte.
 (defun %client-meta-pending-consume (conn payload)
   "Resolve the byte following a pending ESC. `n`/`p` while :SECOND completes
    M-n/M-p (contract SS2's section jump); `[` while :SECOND is a CSI
@@ -228,7 +191,6 @@
          (%client-cycle-visibility conn)))))
   t)
 
-;;; ── FR-005 visibility levels ─────────────────────────────────────────────
 (defun %client-set-visibility-level (conn level)
   "`1`-`4` (contract SS2): set CONN's global section-visibility preset.
    Out-of-range LEVEL is a no-op rather than storing an unrenderable value --
@@ -244,7 +206,6 @@
   (%client-set-visibility-level conn
                                 (1+ (mod (client-conn-visibility-level conn) 4))))
 
-;;; ── FR-006 `q` step-back ladder ──────────────────────────────────────────
 (defun %client-focused-live-pane (session conn)
   "CONN's own remembered focus, still live in SESSION -- deliberately NOT
    %RESOLVE-CLIENT-FOCUS-PANE's window-active-pane fallback, which always
@@ -280,7 +241,6 @@
        (%set-client-view conn :pane))))
   t)
 
-;;; ── FR-011 `$` process log ───────────────────────────────────────────────
 (defun %scroll-client-process-log (conn delta)
   (let* ((entries (client-conn-process-log conn))
          (max-scroll (max 0 (1- (length entries)))))
@@ -311,19 +271,6 @@
     ((%client-key-p payload #\p) (%scroll-client-process-log conn -1)))
   nil)
 
-;;; ── FR-003 stage/unstage/discard (magit-style status actions) ────────────
-;;;
-;;; s/S/u/U/k below are reached straight from %HANDLE-CLIENT-UI-KEY-PAYLOAD's
-;;; NIL-modal keymap (see the status-only clauses further down), which has no
-;;; error boundary of its own above it: %HANDLE-MULTI-KEY-MESSAGE's only
-;;; handler-case is PEER-IO-FAILURE, not ERROR (server-multi-dispatch.lisp),
-;;; so an unhandled condition from any of these five would propagate out of
-;;; the single select(2) loop shared by every client and kill the server.
-;;; Every path through these five functions must therefore end in either a
-;;; %CLIENT-NOTIFY or a %RUN-TRANSIENT-GIT-WRITE dispatch, never a bare
-;;; ERROR -- %CLIENT-RUN-STATUS-WRITE's HANDLER-CASE is the actual guard;
-;;; the rest of this section is just making sure every branch reaches it or
-;;; a no-op notify instead of a bare struct-slot access on NIL.
 (defun %client-selected-status-file (conn)
   "The (WORKTREE PATH) pair for CONN's selected status-view row, or NIL when
    there is no selection, the selection is not a :FILE row (its OBJECT is

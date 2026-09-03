@@ -1,8 +1,5 @@
 (in-package #:nerimux/vcs)
 
-;;; Fetch is explicit: status refreshes never contact remotes implicitly.
-;;; The guarded key set suppresses concurrent fetches of the same repository
-;;; or organization without serializing independent targets.
 (defvar *fetch-lock*
   (cl-concurrent-kit:make-lock :name "nerimux-vcs-fetch"))
 

@@ -1,18 +1,5 @@
 (in-package #:nerimux)
 
-;;;; PTY reader thread — CPS state machine.
-;;;;
-;;;; This file contains the per-pane I/O thread and state machine.  It is
-;;;; loaded after runtime.lisp (shared state, channel sync).
-;;;;
-;;;; Threading model recap:
-;;;;   * One reader thread per pane: blocking read(PTY fd) -> pane-feed ->
-;;;;     screen update -> sets *dirty* T.
-;;;;   * Main thread: select(stdin, 50 ms) -> key dispatch -> render when dirty.
-;;; -- PTY reader thread -------------------------------------------------------
-;;;
-;;; CPS state machine: each state function takes (pane) and returns the next
-;;; state function (or NIL to stop).
 
 (defun %pane-retired-p (pane)
   "True once PANE's fd has been cleared, which is this loop's ONLY per-pane
@@ -50,27 +37,6 @@
     (if (null bytes)
         #'reader-eof-state
         (progn
-          ;; PANE-FEED is not just a screen update: after processing the bytes
-          ;; it drains the device-report queue (DA1/DA2/CPR/DSR/DECRQM/
-          ;; XTGETTCAP/DECRQSS/OSC-colour) back to the PTY through WRITE-PTY,
-          ;; i.e. PTY-WRITE -- which is bounded by SB-EXT:WITH-TIMEOUT and so
-          ;; can signal SB-EXT:TIMEOUT when the pane's child has stopped
-          ;; draining its input (SIGTSTP'd, wedged) for longer than
-          ;; +PTY-WRITE-TIMEOUT-SECONDS+.
-          ;;
-          ;; This runs on a per-pane reader THREAD, and an unhandled condition
-          ;; on a non-main thread does not merely kill that thread: under
-          ;; --disable-debugger SBCL prints "unhandled condition in
-          ;; --disable-debugger mode, quitting" and the WHOLE PROCESS exits.
-          ;; Verified directly with a two-thread probe -- the main thread's
-          ;; scheduled output never ran.  One pane whose child stopped reading
-          ;; would therefore disconnect every client on every pane.
-          ;;
-          ;; Contained rather than propagated: a device-report reply that
-          ;; cannot be delivered is not worth a reader thread, let alone the
-          ;; server.  The pane keeps its screen state and the loop continues;
-          ;; a genuinely dead pane still reaches READER-EOF-STATE by its read
-          ;; returning NIL.
           (handler-case (pane-feed pane bytes)
             (peer-io-failure () nil))
           (nerimux/pane:pane-mark-output pane bytes)
@@ -83,15 +49,6 @@
   "Close PANE's PTY when it reaches EOF and stop the reader loop immediately —
    pane 終了時は即座に閉じる (§1.4): there is no dead-pane banner and no
    parking state to return to."
-  ;; The child has exited and the master fd is now at EOF.  Mark the pane DEAD:
-  ;; close the master fd (nothing else closes it here — a leak otherwise) and
-  ;; reset pane-fd/pane-pid to -1.  #{pane_dead} keys on (<= pane-fd 0)
-  ;; (format.lisp), and respawn-pane (without -k) is gated on the pane being
-  ;; dead — both were wrong because the reader never reset the fd.  Resetting
-  ;; pane-pid too prevents a later teardown (e.g. %destroy-session) from
-  ;; re-signalling a stale (possibly OS-reused) pid; respawn-pane re-establishes
-  ;; both slots.  pty-close guards non-positive fd/pid, so no-PTY panes (fd -1)
-  ;; are an untouched no-op.
   (when (> (pane-fd pane) 0)
     (multiple-value-bind (code kind)
         (nerimux/pty:pty-child-exit-status (pane-fd pane))
@@ -112,9 +69,6 @@
 
 (defun %pane-reader-loop (pane)
   "Feed PTY output into PANE screen until EOF or *running* becomes NIL."
-  ;; Allocate ONE scratch read buffer for this reader thread (one thread per
-  ;; pane) and bind it thread-locally for reader-reading-state to reuse, so the
-  ;; hot read path no longer allocates a +pty-buf-size+ buffer per read.
   (let ((*reader-scratch-buffer*
           (make-array +pty-buf-size+ :element-type '(unsigned-byte 8))))
     (%run-reader-states pane #'reader-idle-state)))

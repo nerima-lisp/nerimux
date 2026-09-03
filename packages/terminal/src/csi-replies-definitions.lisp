@@ -1,6 +1,5 @@
 (in-package #:nerimux/terminal/csi)
 
-;;;; Compile-time fact-table constructors for CSI reply helpers.
 (defmacro define-fixed-reply-enqueuers (&rest specs)
   "Generate enqueuer functions for static (load-time) reply strings.
    Each SPEC is (fn-name reply-form docstring).

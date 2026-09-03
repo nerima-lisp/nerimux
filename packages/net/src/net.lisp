@@ -1,11 +1,5 @@
 (in-package #:nerimux/net)
 
-;;;; Unix-domain socket primitives for client/server detach-attach.
-;;;;
-;;;; Thin wrappers over sb-bsd-sockets so the server/client loops (and tests)
-;;;; speak in terms of make-listener / accept-connection / connect-to / a binary
-;;;; socket-stream, rather than the raw contrib API.  Frame I/O over the stream
-;;;; lives in nerimux/transport; message framing in nerimux/protocol.
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (require :sb-bsd-sockets))
 

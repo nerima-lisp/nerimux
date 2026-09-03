@@ -1,10 +1,5 @@
 (in-package #:nerimux)
 
-;;; ── C-q prefix action table (R4.4, 1.5) ─────────────────────────────────────
-;;;
-;;; Each action below takes SESSION/CONN and returns NIL (keep serving) or
-;;; :drop (detach, for `d`).  %workspace-prefix-dispatch is the single place
-;;; that maps a struck byte to an action; a byte not listed here is dropped.
 
 (defun %workspace-prefix-context (session conn)
   "Return (values PANE WINDOW WORKTREE) for CONN's current focus, or all NIL
@@ -32,11 +27,6 @@
       ((or (null pane) (null window))
        (%client-notify conn "no focused pane"))
       (t
-       ;; Un-zoom BEFORE reading window-panes: while zoomed, window-panes
-       ;; reflects only the single collapsed leaf (window-refresh-panes runs
-       ;; against the zoom's 1-leaf tree, not the real one), so the pane-cap
-       ;; check below would undercount a window that is actually already at
-       ;; +max-panes-per-window+.
        (%workspace-prefix-unzoom window)
        (cond
          ((>= (length (window-panes window)) +max-panes-per-window+)
@@ -48,16 +38,11 @@
             (if new-pane
                 (progn
                   (when worktree (worktree-add-pane worktree new-pane))
-                  ;; A split whose PTY failed to spawn comes back with a dead
-                  ;; (non-live) pane; starting a reader thread on it would call
-                  ;; select-fds on an invalid fd and crash the process.
                   (when (pane-live-p new-pane)
                     (start-reader-thread new-pane))
                   (window-select-pane window new-pane)
                   (%set-client-focus conn new-pane)
                   (%mark-dirty))
-                ;; %split-fit-p already refused the split (too small); R5.1
-                ;; asks only for a message and otherwise doing nothing.
                 (%client-notify conn "pane too small to split")))))))
     nil))
 
@@ -301,9 +286,6 @@ FETCH-REPOSITORY-ASYNC)."
                                             :fields fields
                                             :prompt-p t)
         (client-conn-confirm-action conn) action)
-  ;; MODAL :confirm alongside CONFIRM-VIEW (contract §5): %HANDLE-MULTI-KEY-
-  ;; MESSAGE routes purely on MODAL, so without this a confirmation would be
-  ;; drawn but never reached by the key dispatch that is supposed to answer it.
   (%set-client-modal conn :confirm)
   nil)
 
@@ -347,9 +329,6 @@ FETCH-REPOSITORY-ASYNC)."
                               "every pane is signalled and the server exits"
                               "the server exits")))
      (lambda ()
-       ;; The confirm view already showed the live-pane count, so answering y IS
-       ;; the force decision; %server-kill-request's refusal branch exists for
-       ;; `nerimux kill` without --force, which has no screen to show it on.
        (%server-kill-request session t)
        :quit))))
 

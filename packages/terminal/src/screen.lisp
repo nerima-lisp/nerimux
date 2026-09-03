@@ -1,9 +1,5 @@
 (in-package #:nerimux/terminal/types)
 
-;;;; Screen construction and grid access.
-;;;;
-;;;; The screen data definition lives in screen-data.lisp.  Mutation helpers
-;;;; that operate on screen state live in the adjacent screen-* modules.
 (defun %make-blank-cells (cell-count)
   "Allocate a simple vector of CELL-COUNT blank cells.
 
@@ -46,6 +42,3 @@ wired after all packages have loaded."
 Dirty-marking is the responsibility of the action layer; this setter is a
 pure grid accessor."
   (setf (aref (screen-cells screen) (+ (* y (screen-width screen)) x)) cell))
-
-;;; screen-clear-dirty, screen-consume-bell, and reset-sgr-pen are defined in
-;;; screen-logic.lisp (loaded immediately after this file).

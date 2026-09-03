@@ -58,28 +58,11 @@
                (encode-frame ,type-const ,payload-expr))))
         specs)))
 
-;;;; +msg-command+ payload codec — NUL-delimited field encoding/decoding.
-;;;;
-;;;; This file is the pure, transport-agnostic codec for the command message
-;;;; type.  It lives in the same package as protocol.lisp so all codec
-;;;; primitives are co-located in nerimux/protocol.
-;;;;
-;;;; Payload format: NUL-delimited fields.
-;;;;   [target NUL] command-keyword-name NUL [arg NUL ...]
-;;;; When target is NIL the target field is omitted entirely.
-;;;; The command keyword name is encoded without the leading colon.
 (defconstant +field-delimiter+
   0
   "ASCII NUL byte used to separate fields in a +msg-command+ payload.
    Every field in the NUL-delimited encoding is terminated by this byte.")
 
-;;; ── Target-sigil detection macro ─────────────────────────────────────────────
-;;;
-;;; define-target-sigils is a declarative table that drives the target-field-p
-;;; predicate.  Each rule describes one detection policy:
-;;;   (first-char CHAR)     — the field starts with CHAR (e.g. '$' for sessions)
-;;;   (contains-char CHAR)  — the field contains CHAR anywhere (e.g. ':' or '.')
-;;; Adding a new sigil never requires touching the function body.
 (defmacro define-target-sigils (&rest rules)
   "Generate TARGET-FIELD-P from a declarative sigil/substring table.
    Each RULE is either (first-char CHAR) or (contains-char CHAR).
@@ -145,33 +128,6 @@
            field-strings)))
     (encode-fields-to-buffer field-octets)))
 
-;;; ── Why this decode is deliberately STRICT ──────────────────────────────────
-;;;
-;;; PARSER-OSC-DISPATCH.LISP decodes with :ERRORP NIL and U+FFFD, and that is
-;;; correct THERE: an OSC payload is terminal *output* handed to the title /
-;;; colour / clipboard handlers as opaque text, so one unrepresentable byte
-;;; costs one mangled glyph and can change no decision.
-;;;
-;;; A +msg-command+ payload is the opposite — a *control* channel.  Field 0
-;;; reaches TARGET-FIELD-P and then INTERN in DECODE-COMMAND-PAYLOAD below: it
-;;; names a command the server will execute.  Substituting U+FFFD would guess at
-;;; a byte the sender never wrote, turning a malformed command into a different
-;;; well-formed one, and would widen the set of byte strings that reach INTERN
-;;; from "valid UTF-8" to "anything at all".  Input on a command channel must
-;;; fail closed rather than be repaired.
-;;;
-;;; Failing closed is safe here precisely because the error has a bounded
-;;; per-client destination.  CL-CODEC-KIT:DECODE-ERROR propagates out through
-;;; %HANDLE-MULTI-COMMAND-MESSAGE into the WITH-LOOP-SAFE-ERROR guard in
-;;; %READ-AND-DISPATCH-CLIENT-MESSAGE (server-multi-loop.lisp), which turns it
-;;; into the :DROP disposition: the sender is disconnected, while the server,
-;;; the session, and every other attached client keep running.  That guard is
-;;; load-bearing — it is the only thing standing between a strict decode here
-;;; and a server-wide crash, and it has been accidentally disabled once before
-;;; (see the macro-ordering note at the top of the core server-multi-dispatch.lisp).
-;;; Both halves are pinned together in
-;;; tests/unit/infrastructure/net/protocol-command-malformed-utf8-tests.lisp so
-;;; neither the strictness nor the guard can be removed on its own.
 (defun split-on-nul-bytes (octets)
   "Split OCTETS on NUL bytes and return a list of decoded UTF-8 strings.
    Each NUL-terminated region becomes one string; bytes after the final NUL

@@ -1,15 +1,5 @@
 (in-package #:nerimux/vcs)
 
-;;;; Git working-tree and history mutation -- magit's write side: add,
-;;;; commit, push, pull, branch, merge, rebase, stash, reset, restore, tag,
-;;;; clean, switch. Every one of these is a %DEFINE-CHECKED-OPERATION-
-;;;; generated vcs-kit function and therefore type-checks its handle as
-;;;; VCS-KIT:REPOSITORY, exactly like GIT-REV-PARSE-VALUE -- see
-;;;; %REPOSITORY-CHECKED-HANDLE (vcs-worktree-operations.lisp) and the
-;;;; vcs-kit-two-repository-types-trap it documents: the backend-neutral
-;;;; VCS-REPOSITORY %MAKE-VCS-REPOSITORY builds type-errors here before any
-;;;; git runs, and a broad HANDLER-CASE around that call would turn it into
-;;;; a permanent, silent NIL rather than a visible failure.
 (defvar *write-operation-output-max-characters*
   100000
   "Cap on a write operation's captured stdout/stderr (F3, CWE-400), passed
@@ -101,11 +91,6 @@ left to propagate."
                  (and (typep condition 'vcs-kit:git-error)
                       (vcs-kit:git-error-result condition))))))))
 
-;;; Async wrapper: mirrors FETCH-REPOSITORY-ASYNC's wiring (vcs-fetch.lisp)
-;;; exactly, down to its own dedicated in-progress table rather than sharing
-;;; *IN-PROGRESS-FETCHES* -- a fetch and a write are independent hazards (a
-;;; fetch touches no working-tree state a concurrent write could collide
-;;; with) and must be free to dedup separately.
 (defvar *write-lock*
   (cl-concurrent-kit:make-lock :name "nerimux-vcs-write"))
 
@@ -171,11 +156,6 @@ NIL, exactly as it does synchronously."
           (%dispatch-callback callback-dispatch on-complete nil nil)
           nil))))
 
-;;; Stash listing: a structured (keyword-argument) vcs-kit observation, not a
-;;; %DEFINE-CHECKED-OPERATION write -- takes the backend-neutral
-;;; VCS-REPOSITORY %MAKE-VCS-REPOSITORY builds, the same handle
-;;; %READ-WORKTREE-COMMITS and %READ-WORKTREE-FILE-DIFF use (vcs-inspect.lisp),
-;;; not %REPOSITORY-CHECKED-HANDLE above.
 (defun list-worktree-stashes (worktree)
   "WORKTREE's stashes as (REFERENCE . MESSAGE) conses, most recent first --
 VCS-KIT:VCS-LIST-STASHES already returns them in that order (git stash

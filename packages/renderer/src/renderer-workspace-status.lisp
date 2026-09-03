@@ -1,47 +1,5 @@
 (in-package #:nerimux/renderer)
 
-;;;; magit-style per-worktree status view (FR-003, magit alignment contract
-;;;; §3 Unit STATUS-VIEW).
-;;;;
-;;;; This is the third full-screen view alongside the repolist tree
-;;;; (renderer-workspace-tree.lisp / renderer-tui-kit.lisp) and the `?` help
-;;;; view (renderer-tui-kit-help.lisp): one worktree's HEAD, its four
-;;;; partitioned change lists (Unit MODEL), stashes, recent commits, its
-;;;; panes, and its sibling worktrees, flattened into the same (LEVEL LABEL
-;;;; OBJECT KIND) tuple shape %WORKSPACE-FLAT-TREE-ENTRIES already uses for
-;;;; the repolist tree -- so every row-kind helper the tree already built
-;;;; (file/commit/pane child rows, Wave C's inline diff expansion) is called
-;;;; here rather than re-implemented.
-;;;;
-;;;; Unlike the repolist tree, this view does not go through cl-tui-kit's
-;;;; list-widget: a status row routinely mixes more than one colour (a
-;;;; file's status code plus its path, a commit's hash plus its subject),
-;;;; and the list-widget can only carry one uniform style per row
-;;;; (constraint §4.4). It draws directly onto a CL-TUI-KIT/CORE surface via
-;;;; SURFACE-DRAW-STYLED-TEXT spans instead -- the same pattern
-;;;; RENDER-HELP-VIEW-TO-TUI-STRING (renderer-tui-kit-help.lisp) already
-;;;; uses for exactly this reason -- so it never touches %EMIT-STYLED-ROW or
-;;;; %DISPLAY-CLIP, both of which count SGR escape bytes as display width
-;;;; (constraint §4.1) and would corrupt a two-colour row.
-;;;;
-;;;; FR-005's visibility level (1-4) is a LENS over the per-row expand
-;;;; table, not a replacement for it: %WORKSPACE-STATUS-ROW-EXPANDED-P below
-;;;; only consults the level when the caller never explicitly toggled that
-;;;; row, so changing level can never destroy an explicit per-row TAB
-;;;; toggle, and returning to an earlier level reproduces the exact same
-;;;; rows (see that function's docstring).
-;;; ── Styles (CL-TUI-KIT spans) ────────────────────────────────────────────
-;;;
-;;; The RGB triples below mirror renderer-style.lisp's documented Dracula
-;;; palette exactly (bg 40,42,54 / current-line 68,71,90 / comment 98,114,164
-;;; / cyan 139,233,253 / green 80,250,123 / orange 255,184,108 / purple
-;;; 189,147,249 / red 255,85,85 / yellow 241,250,140), following
-;;; %MAKE-WORKSPACE-TREE-THEME's (renderer-tui-kit-widgets.lisp) and
-;;; RENDER-HELP-VIEW-TO-TUI-STRING's (renderer-tui-kit-help.lisp) own
-;;; precedent of hardcoding the same values as CL-TUI-KIT style objects
-;;; locally -- renderer-style.lisp only defines SGR-string constants for the
-;;; plain-ANSI path, not CL-TUI-KIT style objects, and this agent does not
-;;; own that file.
 (defun %workspace-status-style-plain ()
   (cl-tui-kit/core:make-style))
 
@@ -56,8 +14,6 @@
                               (cl-tui-kit/core:rgb-color 98 114 164)))
 
 (defun %workspace-status-style-faint ()
-  ;; No separate "dim" attribute in CL-TUI-KIT/CORE:STYLE -- the same muted
-  ;; foreground the plain-ANSI path's +SGR-FAINT+ falls back to visually.
   (cl-tui-kit/core:make-style
    :foreground (cl-tui-kit/core:rgb-color 98 114 164)))
 
@@ -97,7 +53,6 @@
                               :background
                               (cl-tui-kit/core:rgb-color 189 147 249)))
 
-;;; ── Per-row expansion: level as a lens over an explicit override table ──
 (defun %workspace-status-row-expanded-p (key expanded-node-ids default-p)
   "T when KEY's row should show its children: an explicit T/NIL override in
    EXPANDED-NODE-IDS when one was ever stored for KEY (a TAB toggle on that
@@ -130,7 +85,6 @@
    4-level symmetry with the repolist tree, which may have one."
   (>= level 3))
 
-;;; ── HEAD row ──────────────────────────────────────────────────────────────
 (defun %workspace-status-head-parts (worktree)
   "List of (TEXT . STYLE-OR-NIL) parts for the Head row, plain-first-then-
    styled the way %WORKTREE-AHEAD-BEHIND-PARTS (renderer-workspace-tree.lisp)
@@ -179,7 +133,6 @@
        (and (worktree-head worktree) (plusp (length (worktree-head worktree)))))
     (list (list 0 (%workspace-status-head-label worktree) worktree :head))))
 
-;;; ── File rows (Unmerged/Untracked/Unstaged/Staged) ──────────────────────
 (defun %workspace-status-file-diff-child-entries (worktree-id path
                                                               code
                                                               level
@@ -253,7 +206,6 @@
          ((#\R #\C) (%workspace-status-style-accent))
          (t (%workspace-status-style-warn))))))
 
-;;; ── Stash rows ────────────────────────────────────────────────────────────
 (defun %workspace-status-stash-entries (worktree level)
   "LEVEL entries for WORKTREE's stash group -- mirrors %WORKSPACE-WORKTREE-
    COMMIT-CHILD-ENTRIES's :PENDING/:FAILED placeholder convention exactly
@@ -282,7 +234,6 @@
                          :stash)))
     (t nil)))
 
-;;; ── Sibling worktree rows ─────────────────────────────────────────────────
 (defun %workspace-status-sibling-worktree-entries (worktree level)
   "One LEVEL entry per sibling of WORKTREE under its own repository -- every
    REPOSITORY-WORKTREES entry except WORKTREE itself, sorted by path for a
@@ -303,7 +254,6 @@
                           sibling
                           :worktree))))
 
-;;; ── Flattening ───────────────────────────────────────────────────────────
 (defun %workspace-status-section-entries (key heading
                                               count
                                               child-entries
@@ -459,13 +409,7 @@
               3
               6))))
 
-;;; ── Row rendering (spans) ────────────────────────────────────────────────
 (defun %workspace-status-row-selected-p (object selected-object)
-  ;; A :FILE/:COMMIT/:STASH/:DIFF-LINE row's OBJECT is a fresh cons every
-  ;; WORKSPACE-STATUS-ENTRIES call, so EQ never matches it against a
-  ;; SELECTED-OBJECT captured on an earlier frame -- fall back to EQUAL for
-  ;; that case only, exactly as the repolist tree's own TREE-ROW-TEXT does
-  ;; (renderer-workspace.lisp).
   (or (eq object selected-object)
       (and (consp object) (consp selected-object) (equal object selected-object))))
 
@@ -492,9 +436,6 @@
    (cl-tui-kit/core:make-text-span " ")))
 
 (defun %workspace-status-diff-line-style (object label)
-  ;; Mirrors DETAIL-ROW-STYLED-LABEL's :DIFF-LINE case (renderer-
-  ;; workspace.lisp) exactly, just returning a CL-TUI-KIT style object
-  ;; instead of an SGR-wrapped string.
   (cond
     ((eq (first object) :diff-more) (%workspace-status-style-muted))
     (t (case (fourth object)
@@ -582,7 +523,6 @@
       (append (%workspace-status-row-prefix-spans level selected-p attention-p)
               (%workspace-status-row-content-spans label object kind)))))
 
-;;; ── Header ───────────────────────────────────────────────────────────────
 (defun %workspace-status-header-spans (worktree)
   (let* ((repository (worktree-repository worktree))
          (organization (and repository (repository-organization repository)))
@@ -610,7 +550,6 @@
                   (%worktree-tree-label worktree))
           (format nil " ~A" (%worktree-tree-label worktree)))))))
 
-;;; ── Bottom key panel ─────────────────────────────────────────────────────
 (defun %workspace-status-hint-spans (pairs)
   "One flat spans list for PAIRS (KEY . DESCRIPTION) -- the span equivalent
    of %WORKSPACE-HINT's plain-ANSI string building (renderer-workspace.lisp),
@@ -667,7 +606,6 @@
                 "detach")
           (cons "q" "back")))))
 
-;;; ── Frame assembly ───────────────────────────────────────────────────────
 (defun %workspace-status-panel-rows-available (rows)
   "Rows the bottom key panel occupies below TERMINAL-ROWS = 12's threshold
    (2 content lines) vs. above the single-line footer it collapses to (1) --

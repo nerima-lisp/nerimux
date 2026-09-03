@@ -1,10 +1,5 @@
 (in-package #:nerimux/terminal/actions)
 
-;;;; Prolog-like DEC PM rule table macro + the DEC private-mode dispatch table.
-;;;;
-;;;; This file is deliberately kept outside runtime coverage: it is a declarative
-;;;; compile-time fact table whose generated functions are exercised through the
-;;;; terminal actions API.
 (defmacro define-dec-pm-rules (&rest specs)
   "Generate DEC-PM-SET and DEC-PM-RESET from a single Prolog-like rule table.
    Each SPEC is (param (set-body...) (reset-body...)).
@@ -29,115 +24,63 @@
                 `(,(car s) ,@(caddr s)))
               specs))))))
 
-;;; ── DEC PM rule table (data) ─────────────────────────────────────────────────
 (define-dec-pm-rules
-  ;; Mode 25 — cursor visibility (DECTCEM)
   (25
-   ;; Set (?25h): show the cursor
    ((setf (screen-cursor-visible screen) t))
-   ;; Reset (?25l): hide the cursor
    ((setf (screen-cursor-visible screen) nil)))
 
-  ;; Mode 6 — origin mode (DECOM): CUP/HVP rows become relative to the scroll
-  ;; region; setting/resetting homes the cursor to the (new) origin.
   (6
-   ;; Set (?6h): origin mode on; home the cursor to the scroll-region origin.
    ((setf (screen-origin-mode screen) t)
     (set-cursor screen 0 (screen-scroll-top screen)))
-   ;; Reset (?6l): origin mode off (absolute); home the cursor to (0,0).
    ((setf (screen-origin-mode screen) nil)
     (set-cursor screen 0 0)))
 
-  ;; Mode 5 — DECSCNM (reverse-video screen): while set, the whole grid renders
-  ;; with fg/bg swapped (a global reverse XORed with each cell's own reverse
-  ;; attribute).  Apps use it for a screen "flash" or a reverse theme.
   (5
-   ;; Set (?5h): reverse-video screen on.
    ((setf (screen-reverse-screen screen) t
           (screen-dirty-p screen) t))
-   ;; Reset (?5l): reverse-video screen off.
    ((setf (screen-reverse-screen screen) nil
           (screen-dirty-p screen) t)))
 
-  ;; Mode 1 — application cursor keys (?1h / ?1l)
-  ;; When set, pane expects ESC O A-D instead of ESC [ A-D for arrow keys.
   (1
-   ;; Set (?1h): application cursor keys on
    ((setf (screen-app-cursor-keys screen) t))
-   ;; Reset (?1l): application cursor keys off
    ((setf (screen-app-cursor-keys screen) nil)))
 
-  ;; Mode 2004 — bracketed paste mode (?2004h / ?2004l)
-  ;; Modern shells (bash, zsh, fish) and editors (vim, neovim) toggle this mode.
   (2004
-   ;; Set (?2004h): enable bracketed paste
    ((setf (screen-bracketed-paste screen) t))
-   ;; Reset (?2004l): disable bracketed paste
    ((setf (screen-bracketed-paste screen) nil)))
 
-  ;; Mode 7 — auto-wrap mode (?7h = wrap on, ?7l = wrap off)
-  ;; Default is wrap-on (VT100 default).
   (7
-   ;; Set (?7h): enable auto-wrap
    ((setf (screen-autowrap screen) t))
-   ;; Reset (?7l): disable auto-wrap
    ((setf (screen-autowrap screen) nil)))
 
-  ;; Mode 1004 — focus event reporting (?1004h / ?1004l)
-  ;; vim, neovim, and a nested terminal multiplexer enable this to learn when
-  ;; they gain/lose the terminal's focus; the report bytes are sent by
-  ;; focus-event-report below.
   (1004
-   ;; Set (?1004h): enable focus event reporting
    ((setf (screen-focus-events screen) t))
-   ;; Reset (?1004l): disable focus event reporting
    ((setf (screen-focus-events screen) nil)))
 
-  ;; Mode 1049 — alternate screen (?1049h enters, ?1049l exits)
-  ;; Equivalent to ?1047h + ?1048h (DECSC): saves full cursor state (SGR attrs,
-  ;; charset, origin-mode) in addition to the grid swap -- the same combined
-  ;; save+swap that alt-screen-using apps expect.
   (1049
-   ;; Set: save full cursor state (DECSC) + grid, replace with a fresh blank grid.
    ((enter-alt-screen screen :save-cursor-p t))
-   ;; Reset: restore saved grid + full cursor state (DECRC), or clear if unsaved.
    ((exit-alt-screen screen :restore-cursor-p t)))
 
-  ;; Mode 2026 — Synchronized Output (?2026h / ?2026l)
-  ;; Applications batch terminal updates between ?2026h and ?2026l.
-  ;; We accept and silently ignore this mode — our renderer already
-  ;; composites frames atomically, so no special batching is needed.
   (2026
    ((values))
    ((values)))
 
-  ;; Mode 47 — alternate screen (older form of 1049, without save/restore)
   (47
    ((enter-alt-screen screen))
    ((exit-alt-screen screen)))
 
-  ;; Mode 2048 — Kitty extended keyboard protocol (?2048h / ?2048l).
-  ;; We accept and silently ignore — no extended key reporting is implemented
-  ;; (we pass the standard CSI sequences through).  Kitty-aware apps work in
-  ;; degraded mode (fall back to standard CSI encoding) which is correct behaviour.
   (2048
    ((values))
    ((values)))
 
-  ;; Mode 1047 — alternate screen buffer (the 1049 component without cursor
-  ;; save/restore).  Set switches to the alt screen, reset back to the primary.
   (1047
    ((enter-alt-screen screen))
    ((exit-alt-screen screen)))
 
-  ;; Mode 1048 — save/restore cursor (the other 1049 component): set saves the
-  ;; cursor (like DECSC / ESC 7), reset restores it (like DECRC / ESC 8).  Some
-  ;; ncurses apps toggle 1047 and 1048 separately instead of the combined 1049.
   (1048
    ((save-cursor screen))
    ((restore-cursor screen)))
 
-  ;; Mode 12 — local echo mode (accepted silently, not modelled).
   (12
    ((values))
    ((values))))

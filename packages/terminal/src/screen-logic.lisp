@@ -1,27 +1,11 @@
 (in-package #:nerimux/terminal/types)
 
-;;;; Screen state-mutation helpers (LOGIC layer).
-;;;;
-;;;; This file contains functions that mutate exactly one or a small fixed set
-;;;; of screen slots.  They are separated from screen.lisp so that the DATA
-;;;; layer (screen.lisp) contains only the defstruct definition, pure grid
-;;;; accessors, and side-effect-free constructors.
-;;;;
-;;;; Load order:
-;;;;   cell.lisp → screen.lisp → screen-metadata.lisp → screen-resize.lisp
-;;;;   → screen-logic.lisp → …
-;;;;
-;;;; All three functions are exported from nerimux/terminal/types (declared in
-;;;; src/bootstrap/package-terminal.lisp) and re-exported through the
-;;;; nerimux/terminal umbrella package.
-;;; ── Dirty-flag mutation ────────────────────────────────────────────────────
 (defun screen-clear-dirty (screen)
   "Clear the dirty flag on SCREEN, marking it as freshly rendered.
    The renderer calls this after every successful frame paint so the next
    PTY write can re-arm the flag via (setf (screen-dirty-p …) t)."
   (setf (screen-dirty-p screen) nil))
 
-;;; ── BEL consumption ────────────────────────────────────────────────────────
 (defun screen-consume-bell (screen)
   "Return T and clear SCREEN's bell-pending flag when a BEL is pending.
    Returns NIL without side effects when no bell is pending.
@@ -33,7 +17,6 @@
     (setf (screen-bell-pending screen) nil)
     t))
 
-;;; ── Queue draining ───────────────────────────────────────────────────────────
 (defun screen-drain-queue (screen queue-reader queue-writer)
   "Atomically read and clear a push-accumulated queue slot on SCREEN, returning
    the queued items in push order (oldest first).
@@ -45,13 +28,6 @@
     (funcall queue-writer screen nil)
     queued))
 
-;;; ── SGR pen reset ──────────────────────────────────────────────────────────
-;;;
-;;; Both nerimux/terminal/sgr (DISPATCH layer) and nerimux/terminal/actions
-;;; (modes-reset / modes-cursor-save, LOGIC layer) perform an identical
-;;; five-slot SGR reset.
-;;; The canonical definition lives in this shared file so neither layer needs
-;;; to reference the other, resolving the historical load-order circularity.
 (declaim (inline reset-sgr-pen))
 
 (defun reset-sgr-pen (screen)

@@ -1,13 +1,5 @@
 (in-package #:nerimux/input)
 
-;;;; Keyboard input: raw-mode wrapper and non-blocking stdin reads.
-;;;;
-;;;; We read from fd 0 (stdin) at the descriptor level rather than through a
-;;;; Lisp stream because Lisp streams may buffer; we need single bytes. The
-;;;; readiness poll goes through nerimux/pty:select-fds (cl-process-kit) and the
-;;;; read itself through cl-tty-kit:fd-read-octets, the same function
-;;;; pty-read-blocking-into already uses for the PTY master side.
-;;; ── Raw-mode convenience macro ─────────────────────────────────────────────
 (defmacro with-raw-mode (&body body)
   "Execute BODY with stdin in raw mode, restoring the terminal on exit.
    ENABLE-RAW-MODE! runs OUTSIDE the unwind-protect deliberately: cl-tty-kit's
@@ -25,11 +17,9 @@
      (unwind-protect
           (progn ,@body)
        (disable-raw-mode! 0)
-       ;; Move cursor to a clean line after restoring
        (format t "~%")
        (force-output))))
 
-;;; ── Non-blocking byte read ─────────────────────────────────────────────────
 (defun read-byte-nonblock (&optional (timeout-us +poll-timeout-us+))
   "Return a byte (0–255) from stdin within TIMEOUT-US microseconds, or NIL.
    NIL means the timeout elapsed with no data — it does NOT mean EOF.
@@ -51,7 +41,6 @@
   (declare (type fixnum timeout-us))
   (let ((ready (nerimux/pty:select-fds (list 0) timeout-us)))
     (when ready
-      ;; Read exactly one byte from fd 0 directly (bypasses Lisp buffering).
       (let ((buffer (make-array 1 :element-type '(unsigned-byte 8))))
         (let ((count (handler-case (cl-tty-kit:fd-read-octets 0 buffer 1)
                        (cl-tty-kit:pty-operation-failed () nil))))

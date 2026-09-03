@@ -1,13 +1,3 @@
-;;;; Whole-tree structure check for nerimux.
-;;;;
-;;;; Reads every *.lisp and *.asd under the current directory with
-;;;; *READ-SUPPRESS* bound to T.  Under that binding the reader still tracks list
-;;;; structure, strings, char literals and #| |# blocks, but interns nothing and
-;;;; evaluates no #. form — so a file can be checked for balanced delimiters
-;;;; without any package in the system being defined and without loading ASDF.
-;;;; Unbalanced parens surface as END-OF-FILE.
-;;;;
-;;;; Exits non-zero when any file fails, so it cannot report a false green.
 (defun check-file (path)
   (handler-case (with-open-file 
                     (s path :direction :input :external-format :utf-8)

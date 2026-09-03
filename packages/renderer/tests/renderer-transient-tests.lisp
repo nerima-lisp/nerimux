@@ -1,6 +1,5 @@
 (in-package #:nerimux/test/renderer)
 
-;;;; The magit transient panel (FR-010) and the `$` process log (FR-011).
 (defun %render-transient-panel-output (view cols rows)
   "Draw VIEW into a fresh COLS x ROWS surface and return the plain ANSI
    frame -- RENDER-TRANSIENT-PANEL itself draws onto a caller-owned surface
@@ -26,9 +25,7 @@
              :title "Fetch"
              :arguments nil
              :actions (list (list #\f "fetch this repository" nil)))))
-      ;; 1 title + (1 heading + 2 rows) + 1 heading + 2 rows + 1 q-back = 8.
       (expect (= 8 (nerimux/renderer:transient-view-height with-arguments)))
-      ;; No Arguments section at all when ARGUMENTS is empty: 1 + 1 + 1 + 1 = 4.
       (expect (= 4 (nerimux/renderer:transient-view-height without-arguments)))))
 
   (it "renders an active argument as [x] and an inactive one as [ ]"
@@ -99,10 +96,6 @@
       (expect (search "error: no rebase in progress" visible))
       (expect (search "[0]" visible))
       (expect (search "[1]" visible))
-      ;; Zero and non-zero exits are drawn in genuinely different styles,
-      ;; not merely different text -- derived from the real style objects
-      ;; (renderer-tui-kit-help-tests.lisp's %EXPECTED-SGR-PARAMS pattern)
-      ;; rather than hand-computed SGR parameters.
       (expect output :to-contain-sgr
               (%expected-sgr-params (nerimux/renderer::%process-log-exit-ok-style)))
       (expect output :to-contain-sgr
@@ -114,24 +107,9 @@
            (entries (list (list "git fetch" "0" malicious)))
            (output (nerimux/renderer:render-process-log-to-tui-string entries 40 100))
            (visible (strip-sgr output)))
-      ;; `[31m` surviving as LITERAL TEXT is the whole assertion, and it is
-      ;; strictly stronger than counting control bytes. STRIP-SGR removes CSI
-      ;; sequences: had the ESC introducer survived, `[31m` would have been
-      ;; eaten with it and VISIBLE would read "line oneFAKE". Seeing the
-      ;; parameter bytes as text proves the introducer was stripped and the
-      ;; remainder is inert.
-      ;;
-      ;; The obvious alternative -- asserting no character below 32 survives --
-      ;; measures the wrong thing twice over: it cannot tell the attacker's SGR
-      ;; from the frame's own, and it fires on the CR that
-      ;; %SURFACE-TO-ANSI-FRAME writes between every pair of rows on purpose
-      ;; (the client tty runs with OPOST off, so CR+LF is deliberate).
       (expect (search "[31mFAKE" visible))
       (expect (search "line one" visible))
       (expect (search "line two" visible))
-      ;; No BARE escape byte anywhere: every ESC in a well-formed frame
-      ;; introduces a CSI sequence STRIP-SGR consumes whole, so one left over
-      ;; is one that did not parse as chrome -- i.e. injected.
       (expect (notany (lambda (character) (char= character (code-char 27)))
                       visible))))
 

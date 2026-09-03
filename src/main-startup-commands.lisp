@@ -1,17 +1,3 @@
-;;; Startup command handlers.
-;;;
-;;; The entry surface is `attach`, `server`, `kill`, and the version/usage
-;;; flags (1.6).  Every other startup mode belonged to the removed
-;;; command-forwarding layer: modes such as new-session, has-session,
-;;; kill-server, list-*, show-*, display-message, and source-file sent a
-;;; command name over the socket to a server-side command table, and
-;;; attach-session existed only for their flag parsing.  They were removed
-;;; along with that table; main-startup.lisp rejects an unrecognized word
-;;; rather than forwarding it.  `kill` (R8.1) is new, not revived: it talks
-;;; to the server over the same +msg-command+ channel worktree commands
-;;; already use the multi-dispatch command handlers, not that removed table.
-;;;
-;;; main-startup.lisp keeps argv parsing and dispatch.
 (in-package :nerimux)
 
 (defun %attach-session (name &key target)
@@ -41,7 +27,6 @@
   (format t "nerimux ~A~%" (nerimux/version:version-string))
   (sb-ext:exit :code 0))
 
-;;; ── nerimux kill (R8.1) ──────────────────────────────────────────────────
 (defun %kill-force-p (rest)
   "True when REST -- kill's own argv tail, e.g. (\"--force\") -- asks for
    --force.  kill is a :raw-args-p startup mode (see *startup-modes* below)
@@ -121,17 +106,6 @@
   (write-string (%usage-string))
   (sb-ext:exit :code 0))
 
-;;; ── Startup mode dispatch (data / logic separation) ─────────────────────────
-;;;
-;;; *startup-modes* is the DATA: a map from mode-name strings to handler
-;;; functions.  main is the LOGIC: it looks up the mode and dispatches.
-;;;
-;;; Each handler is a symbol so test stubs that rebind the function cell with
-;;; SETF FDEFINITION are honoured at dispatch time.
-;;;
-;;; Handlers that need RAW-ARGS (the full argv tail) receive them directly.
-;;; Handlers that need only a session NAME extract (or (first rest) "0")
-;;; outside the handler - this is the one-argument convention.
 (defun %startup-mode-entry (mode-name)
   (cdr (assoc mode-name *startup-modes* :test #'equal)))
 

@@ -1,6 +1,5 @@
 (in-package #:nerimux/terminal/parser)
 
-;;;; OSC 7 and OSC 8 helpers.
 (defun %flush-utf8-octets (octets out)
   "Write accumulated UTF-8 OCTETS to the string stream OUT and reset OCTETS."
   (when (> (length octets) 0)

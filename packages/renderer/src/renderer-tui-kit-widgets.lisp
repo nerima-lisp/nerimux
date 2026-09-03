@@ -1,15 +1,5 @@
 (in-package #:nerimux/renderer)
 
-;;; ── Widget themes ───────────────────────────────────────────────────────────
-;;;
-;;; cl-tui-kit widgets resolve their colours through theme roles
-;;; (:foreground, :selected, :border, …).  These two themes translate the
-;;; renderer's Dracula truecolour palette (renderer-style.lisp) into
-;;; cl-tui-kit styles via RGB-COLOR: the tree theme is transparent (list rows
-;;; sit on the frame's own background), the panel theme carries a raised
-;;; Dracula-bg background for the picker modal so the dialog reads as a
-;;; surface above the frame.  Selection highlights use the Dracula
-;;; current-line colour in both themes.
 (defun %make-workspace-tree-theme ()
   (cl-tui-kit/core:make-theme
    (list (cons :foreground (cl-tui-kit/core:make-style))
@@ -149,12 +139,6 @@
   (let* ((rows (max 1 rows))
          (cols (max 1 cols))
          (multi-column-p (>= cols 9))
-         ;; WORKSPACE-TREE-VIEW-ROWS floors at 1 (MAX 1 (- ROWS 6)), so
-         ;; (PLUSP VIEW-ROWS) used to be vacuously true at every ROWS --
-         ;; this is the widget's half of the same tall-enough-p ROWS>=7
-         ;; floor RENDER-WORKSPACE-OVERVIEW-TO-STRING now enforces, so a
-         ;; too-short terminal skips the tree widget instead of squeezing a
-         ;; 1-row tree into a layout that no longer has room for it.
          (tall-enough-p (>= rows 7))
          (tree-top 1)
          (view-rows (workspace-tree-view-rows rows))
@@ -229,11 +213,6 @@
          (input
            (cl-tui-kit/widgets:make-input-widget
             :value query
-            ;; The leading space is deliberate: cl-tui-kit's input widget
-            ;; (v4.1.3) draws its cursor cell even when unfocused, and with
-            ;; an empty value that reverse-video cell lands on column 0 --
-            ;; over the placeholder's first character.  Giving the cursor a
-            ;; space to sit on keeps the whole placeholder readable.
             :placeholder " search workspace, repository, worktree, or pane"
             :id :nerimux-picker-query
             :theme *picker-panel-theme*

@@ -1,18 +1,5 @@
 (in-package #:nerimux/renderer)
 
-;;;; The magit-style transient menu (FR-010). Deliberately NOT an overlay --
-;;;; this project forbids popups -- so RENDER-TRANSIENT-PANEL draws straight
-;;;; onto whatever surface the caller already owns, growing the bottom key
-;;;; panel in place exactly the way the plain key hints already do in
-;;;; renderer-workspace.lisp's %WORKSPACE-KEY-PANEL-CONTENT. Sibling of
-;;;; renderer-tui-kit-confirm-view.lisp: bootstrap builds the TRANSIENT-VIEW
-;;;; struct and owns every action's closure, this package only draws it.
-;;;;
-;;;; RENDER-TRANSIENT-FULL-SCREEN-TO-TUI-STRING is the HEIGHT FALLBACK only
-;;;; (contract §3): when the frame cannot spare TRANSIENT-VIEW-HEIGHT rows for
-;;;; the in-place panel, the caller reaches for this instead, which wraps the
-;;;; identical content in a full-screen bordered box (confirm-view/help-view's
-;;;; shape) rather than drawing anything different.
 (defstruct transient-view
   "One open transient menu. ARGUMENTS is a list of (KEY FLAG DESCRIPTION
    ACTIVE-P TRANSIENT-KEY) and ACTIONS a list of (KEY DESCRIPTION HANDLER) --
@@ -29,7 +16,6 @@
   (arguments nil :type list)
   (actions nil :type list))
 
-;;; ── Styles (Dracula) ─────────────────────────────────────────────────────
 (defun %transient-title-style ()
   (cl-tui-kit/core:make-style :bold
                               t
@@ -58,7 +44,6 @@
   (cl-tui-kit/core:make-style :foreground
                               (cl-tui-kit/core:rgb-color 98 114 164)))
 
-;;; ── Layout ───────────────────────────────────────────────────────────────
 (defun %transient-pad (text width)
   "TEXT padded with spaces to WIDTH display columns.  Never truncates -- every
    text this is called on is already sized into WIDTH by the column-width
@@ -264,7 +249,6 @@
                                                   :max-width
                                                   (heading-width))))))
 
-;;; ── Full-screen height fallback ──────────────────────────────────────────
 (defun %render-transient-view-box (surface rectangle)
   (let ((box
          (cl-tui-kit/widgets:make-box-widget

@@ -383,21 +383,8 @@
                        do (sleep 0.01))
                  (expect condition-seen)))))
 
-;;; %preserve-pane-associations runs on EVERY catalog refresh, via
-;;; set-workspace-organizations.  A refresh replaces the whole organization tree
-;;; with freshly-scanned structs, so a pane already attached to a worktree would
-;;; lose its binding unless the association is re-established by matching the old
-;;; worktree's id/path against the new tree.
-;;;
-;;; The first of these cases used to live in tests/unit/domain/ports/vcs-port-tests.lisp,
-;;; misfiled under the VCS *port* — an abstraction that was never installed and
-;;; had no production callers, and which was deleted.  The case moved here because
-;;; it never tested the port: it tests live nerimux/vcs infrastructure.  The
-;;; no-match case is new; that branch was never covered.
 (describe "workspace catalog pane preservation"
 
-  ;; A refresh that produces an equivalent worktree (same path, new head) must
-  ;; re-bind the pane to the NEW struct — matching by id/path, not by identity.
   (it "re-binds a pane to the refreshed worktree with the same path"
     (let* ((previous (nerimux/vcs:workspace-organizations))
            (pane (nerimux/pane:make-pane :id 31 :title "editor"))
@@ -431,9 +418,6 @@
                              :test #'eq)))
         (nerimux/vcs:set-workspace-organizations previous))))
 
-  ;; The other branch: when the worktree a pane was attached to is gone from the
-  ;; refreshed catalog, the pane's back-pointer must be CLEARED rather than left
-  ;; dangling at a struct no longer reachable from the catalog.
   (it "clears the pane's worktree when the worktree vanishes from the catalog"
     (let* ((previous (nerimux/vcs:workspace-organizations))
            (pane (nerimux/pane:make-pane :id 32 :title "shell"))
@@ -468,16 +452,6 @@
                                   :test #'eq))))
         (nerimux/vcs:set-workspace-organizations previous)))))
 
-;;; F1/F1b: a full catalog rescan (SCAN-REPOSITORIES) builds an entirely
-;;; fresh ORGANIZATION/REPOSITORY/WORKTREE struct per ghq entry, unlike a
-;;; single-repository refresh (LIST-REPOSITORY-WORKTREES), which mutates a
-;;; repository struct already live in the catalog and so finds its own
-;;; OLD-WORKTREE match inside %APPLY-REPOSITORY-WORKTREES. A full rescan's
-;;; OLD-WORKTREE lookup there is always NIL, so without
-;;; %PRESERVE-WORKTREE-COMMIT-STATE (SET-WORKSPACE-ORGANIZATIONS) a
-;;; rescan silently drops already-fetched commit history and lets a fresh
-;;; WORKTREE-KEY-derived id -- which embeds HEAD -- replace the one a
-;;; client (or a cache keyed on it) may already be holding.
 (describe "vcs workspace catalog commit-state preservation (F1)"
   (it "carries id, commits-state and recent-commits across a full catalog rescan matched by path"
     (let* ((previous (nerimux/vcs:workspace-organizations))
@@ -489,9 +463,6 @@
            (old-worktree (nerimux/workspace-model:make-worktree
                           :path "work/f1-project/wt" :branch "feature/f1"
                           :head "old-head"))
-           ;; A fresh scan never reuses a struct -- build entirely new
-           ;; ORGANIZATION/REPOSITORY/WORKTREE structs sharing only the
-           ;; worktree's PATH, exactly as SCAN-REPOSITORIES would.
            (new-organization (nerimux/workspace-model:make-organization
                               :host "vcs-host" :name "f1-owner"))
            (new-repository (nerimux/workspace-model:make-repository
@@ -505,9 +476,6 @@
              (nerimux/workspace-model:organization-add-repository old-organization old-repository)
              (nerimux/workspace-model:repository-add-worktree old-repository old-worktree)
              (nerimux/vcs:set-workspace-organizations (list old-organization))
-             ;; Publish once, then simulate the async commit-log fetch
-             ;; having already settled :READY on the published worktree --
-             ;; the state a rescan must not drop.
              (let ((published (nerimux/workspace-model:repository-worktree-by-path
                                (first (nerimux/workspace-model:organization-repositories
                                        (first (nerimux/vcs:workspace-organizations))))
@@ -531,30 +499,14 @@
                                   (nerimux/workspace-model:worktree-recent-commits rescanned)))))))
         (nerimux/vcs:set-workspace-organizations previous)))))
 
-;;; PR2 item 6 (activity order): SET-WORKSPACE-ORGANIZATIONS reorders
-;;; worktrees within a repository, repositories within an organization, and
-;;; organizations themselves, most-recently-active first -- recency is the
-;;; MAX of every pane's last-output/last-focused time under a worktree (0
-;;; when it has none). Each case below constructs the PRE-sort order as the
-;;; OPPOSITE of the expected POST-sort order, so a passing assertion proves
-;;; the sort actually ran rather than the fixture happening to already be in
-;;; the right order.
 (describe "workspace catalog activity ordering"
 
-  ;; 2 repositories, each holding 1 worktree with a distinct, known pane
-  ;; activity time: the more-recently-active repository/worktree pair sorts
-  ;; first, both at the repository level (within the organization) and the
-  ;; worktree level (within its own repository).
   (it "sorts repositories and their worktrees by most-recent pane activity first"
     (let ((previous (nerimux/vcs:workspace-organizations)))
       (unwind-protect
            (let* ((organization
                     (nerimux/workspace-model:make-organization
                      :id "org-activity" :host "github.com" :name "team"))
-                  ;; Added in reverse-of-expected order: repo-old first, then
-                  ;; repo-new -- ORGANIZATION-ADD-REPOSITORY prepends, so the
-                  ;; pre-sort order is (repo-new repo-old), the opposite of
-                  ;; what activity order must produce.
                   (repo-old
                     (nerimux/workspace-model:make-repository
                      :id "repo-old" :organization organization
@@ -590,8 +542,6 @@
                                sorted-organization)))))
         (nerimux/vcs:set-workspace-organizations previous))))
 
-  ;; A worktree with no pane activity at all (recency 0) sorts BELOW any
-  ;; worktree with a real timestamp, however small.
   (it "sorts a worktree with no pane activity below any worktree with a timestamp"
     (let ((previous (nerimux/vcs:workspace-organizations)))
       (unwind-protect
@@ -602,10 +552,6 @@
                     (nerimux/workspace-model:make-repository
                      :id "repo-nil-time" :organization organization
                      :specification "github.com/team/repo"))
-                  ;; Added in reverse-of-expected order: worktree-active
-                  ;; first, worktree-idle second -- REPOSITORY-ADD-WORKTREE
-                  ;; prepends, so pre-sort order is (worktree-idle
-                  ;; worktree-active), the opposite of the expected result.
                   (worktree-active
                     (nerimux/workspace-model:make-worktree
                      :id "wt-active" :repository repository
@@ -629,9 +575,6 @@
                                        sorted-organization)))))))
         (nerimux/vcs:set-workspace-organizations previous))))
 
-  ;; A tie (both worktrees at recency 0, no pane activity anywhere) leaves the
-  ;; existing order exactly as it was -- STABLE-SORT, not an arbitrary
-  ;; reshuffle.
   (it "keeps the existing order for tied (no-activity) worktrees"
     (let ((previous (nerimux/vcs:workspace-organizations)))
       (unwind-protect
@@ -651,9 +594,6 @@
                      :id "wt-second" :repository repository
                      :path "/tmp/second" :branch "second")))
              (nerimux/workspace-model:organization-add-repository organization repository)
-             ;; Added second-then-first so pushnew's prepend makes the
-             ;; pre-sort (and, since both tie, expected post-sort) order
-             ;; (worktree-first worktree-second).
              (nerimux/workspace-model:repository-add-worktree repository worktree-second)
              (nerimux/workspace-model:repository-add-worktree repository worktree-first)
              (nerimux/vcs:set-workspace-organizations (list organization))
@@ -664,19 +604,8 @@
                                        sorted-organization)))))))
         (nerimux/vcs:set-workspace-organizations previous)))))
 
-;;; ── merge-workspace-organizations (FR-002) ──────────────────────────────────
-;;;
-;;; A cwd with nothing in the catalog under it yet gets one chance to resolve
-;;; and register its repository synchronously (RESOLVE-DIRECTORY-
-;;; ORGANIZATIONS + this merge) before falling back to the ordinary overview.
-;;; RESOLVE-DIRECTORY-ORGANIZATIONS itself shells out to git and has no
-;;; hermetic-suite precedent anywhere in this tree (see the attach-target
-;;; jump test in attach-selector-resolution-tests.lisp, which registers the
-;;; repository directly instead); this only exercises the pure merge step.
 (describe "merge-workspace-organizations"
 
-  ;; A wholly new organization (by id) is added outright alongside whatever
-  ;; was already in the catalog.
   (it "adds-a-wholly-new-organization-by-id"
     (let ((previous (nerimux/vcs:workspace-organizations)))
       (unwind-protect
@@ -692,9 +621,6 @@
                (expect (find existing merged :test #'eq))))
         (nerimux/vcs:set-workspace-organizations previous))))
 
-  ;; Merging must retain the catalog order and append new organizations in
-  ;; their incoming order; this is the observable contract of the linear
-  ;; accumulation in MERGE-WORKSPACE-ORGANIZATIONS.
   (it "preserves-catalog-and-incoming-organization-order"
     (let ((previous (nerimux/vcs:workspace-organizations)))
       (unwind-protect
@@ -719,10 +645,6 @@
                (expect (eq existing-a (first merged)))))
         (nerimux/vcs:set-workspace-organizations previous))))
 
-  ;; An organization already present in the catalog (matched by id) gets only
-  ;; the repositories it does not already hold -- one matched by local-path
-  ;; is left exactly as it was (same instance, not duplicated), and a
-  ;; genuinely new one is appended.
   (it "adds-only-the-missing-repository-to-an-already-present-organization"
     (let ((previous (nerimux/vcs:workspace-organizations)))
       (unwind-protect
@@ -776,19 +698,6 @@
     (ensure-directories-exist path)
     path))
 
-;;; ── resolve-directory-organizations fail-closed contract (FR-002) ───────────
-;;;
-;;; Coverage gap flagged by test/security review: RESOLVE-DIRECTORY-
-;;; ORGANIZATIONS's docstring asserts it "[r]eturns NIL, without signalling,
-;;; for a non-git DIRECTORY or any failure along the way", but nothing pinned
-;;; that external contract with a test -- it was read off the docstring, not
-;;; verified. Every case below resolves to NIL regardless of whether a git
-;;; binary is even on PATH: the outer HANDLER-CASE (ERROR () NIL) inside
-;;; RESOLVE-DIRECTORY-ORGANIZATIONS catches whatever a missing or failing git
-;;; invocation raises, so these are hermetic and independent of the git-call-
-;;; count/timeout work happening concurrently to this file in vcs.lisp --
-;;; that work changes HOW the git invocation runs, not whether a failure
-;;; along the way still resolves to NIL.
 (describe "resolve-directory-organizations-fail-closed-suite"
 
   (it "returns-nil-for-a-nonexistent-path"
@@ -796,20 +705,12 @@
                    (format nil "/nonexistent-nerimux-resolve-probe-~D"
                            (random 1000000))))))
 
-  ;; An existing, real directory that is simply not a git repository (no
-  ;; .git, not inside a work tree) -- git-worktree-list fails there just as
-  ;; surely as against a nonexistent path, from the other direction: this
-  ;; time the directory exists but git itself has nothing to report.
   (it "returns-nil-for-a-directory-that-is-not-a-git-repository"
     (let ((dir (%bare-status-fixture-directory "resolve-non-git")))
       (unwind-protect
            (expect (null (nerimux/vcs:resolve-directory-organizations dir)))
         (ignore-errors (sb-posix:rmdir dir)))))
 
-  ;; The guard ahead of any git invocation at all: an empty string, and any
-  ;; non-string, both short-circuit to NIL before %directory-repository-root
-  ;; is ever called -- these two cannot depend on git's behavior even in
-  ;; principle.
   (it "returns-nil-for-empty-or-non-string-input"
     (expect (null (nerimux/vcs:resolve-directory-organizations "")))
     (expect (null (nerimux/vcs:resolve-directory-organizations nil)))
@@ -869,13 +770,6 @@
                             :test
                             #'string=)))))))))
 
-;; F10: `git worktree list` includes the bare repository root itself (ghq's
-;; `<repo>.git` layout as its own entry); running `git status` there always
-;; fails, since a bare root has no working tree. Both refresh paths used to
-;; collect status for every raw/model worktree unconditionally, which turned
-;; every successful worktree operation (create/lock/unlock/delete) against a
-;; bare repository into a false "failed" notify. Status collection must skip
-;; the bare entry while still keeping it in the worktree list/model.
 (describe "vcs bare worktree status collection"
           (it
            "%read-repository-refresh skips the bare entry and updates only the working worktree"
@@ -985,11 +879,6 @@
                           (nerimux/vcs::%worktree-status-update-path
                            (first updates)))))))))
 
-;; Regression guard for the review finding that PRUNE-WORKTREES's :DRY-RUN
-;; keyword had no default, so (prune-worktrees repository) with no keyword
-;; silently performed a LIVE destructive prune despite the docstring calling
-;; dry-run "the caller's default". The test replaces the direct cl-vcs-kit
-;; functions and inspects the exact arguments VCS-WORKTREE receives.
 (describe "prune-worktrees default dry-run"
   (it "defaults to a dry run when :dry-run is omitted entirely"
     (let ((captured-arguments nil)
@@ -1011,18 +900,9 @@
              (lambda (&rest arguments)
                (declare (ignore arguments))
                nil)))
-        ;; No :dry-run keyword at all -- this is the exact call shape the
-        ;; review flagged as unsafe.
         (nerimux/vcs:prune-worktrees repository)
         (expect (member "--dry-run" captured-arguments :test #'equal))))))
 
-;;; Inline worktree expansion (Wave B / D1): CHANGED-FILES arrives as plain
-;;; (CODE . PATH) conses derived from a VCS-STATUS-SNAPSHOT's entries, never
-;;; a cl-vcs-kit struct -- the infrastructure-to-domain boundary this
-;;; feature's D1 decision draws. :UNTRACKED/:IGNORED entries carry no real
-;;; index/worktree status characters from the git-layer parser (they default
-;;; to two spaces -- see vcs-kit's parse-status.lisp), so %CHANGED-FILE-CODE
-;;; maps them explicitly to the "??"/"!!" codes `git status --short` shows.
 (describe "vcs worktree changed-files"
   (it "%changed-file-code uses the real XY chars for ordinary/unmerged entries"
     (expect (string= "M "
@@ -1058,8 +938,6 @@
                     (vcs-kit::%make-vcs-status-entry
                      :kind :rename-or-copy :index-status "R" :worktree-status " "
                      :path "new.lisp" :original-path "old.lisp"))))
-    ;; A non-rename entry has no ORIGINAL-PATH to fall back to reading --
-    ;; PATH alone, unchanged.
     (expect (equal "src/foo.lisp"
                    (nerimux/vcs::%changed-file-path
                     (vcs-kit::%make-vcs-status-entry
@@ -1341,40 +1219,8 @@
                (equal (list (cons "M" "unstaged.lisp"))
                       (nerimux/workspace-model:worktree-unstaged-files worktree)))))))
 
-;;; F4 (CWE-400): the bootstrap-side per-file diff cache
-;;; (NERIMUX::*WORKSPACE-FILE-DIFFS*) has no per-entry expiry of its own --
-;;; only a wholesale CLRHASH at catalog-refresh settle, arbitrarily far in
-;;; the future from any one client's perspective -- so the number of
-;;; distinct (worktree-id path) keys a client can accumulate by expanding
-;;; files is otherwise unbounded across the process lifetime.
-;;; NERIMUX::%SET-WORKSPACE-FILE-DIFF (server-multi.lisp) is the only
-;;; writer that should ever touch that table; this test drives it directly
-;;; by its bootstrap-package-qualified name, the same cross-package pattern
-;;; %WORKTREE-STATUS-CHANGED-FILES's own suite above uses for VCS-KIT.
-;;; BUG-2 (R6.2/design §7.3): a FAILED object shows stale; other objects
-;;; don't inherit it. REFRESH-WORKSPACE-ORGANIZATIONS-ASYNC used to have a
-;;; single ON-ERROR channel that REFRESH-WORKSPACE-STATUS-ASYNC's own
-;;; per-repository ON-ERROR fed into, discarding the failing REPOSITORY
-;;; (bootstrap's %ADD-CLIENT/%REFRESH-CLIENT-PICKER then had no way to tell
-;;; "one repository's git status failed" apart from "the whole scan
-;;; failed", so both marked the ENTIRE catalog stale). ON-REPOSITORY-ERROR
-;;; is the new, distinct channel: fired once per failing repository, with
-;;; ON-COMPLETE still firing afterward for the batch, and ON-ERROR reserved
-;;; for a genuinely terminal scan failure. SCAN-REPOSITORIES-ASYNC and
-;;; REFRESH-REPOSITORIES-ASYNC are stubbed at the outer seam so the real
-;;; REFRESH-WORKSPACE-STATUS-ASYNC (unstubbed) exercises the actual wiring
-;;; this fix adds inside REFRESH-WORKSPACE-ORGANIZATIONS-ASYNC.
 (describe "refresh-workspace-organizations-async per-repository error channel (BUG-2)"
   (it "invokes on-repository-error for a failing repository, still calls on-complete, and never calls on-error"
-    ;; PREVIOUS/UNWIND-PROTECT: REFRESH-WORKSPACE-ORGANIZATIONS-ASYNC's real
-    ;; ON-COMPLETE (exercised here through the stubs below) calls
-    ;; SET-WORKSPACE-ORGANIZATIONS, which overwrites the GLOBAL
-    ;; *WORKSPACE-ORGANIZATIONS* -- the same save/restore convention every
-    ;; other test in this file uses around that mutation (e.g. "vcs workspace
-    ;; catalog commit-state preservation (F1)" above). Omitting it here once
-    ;; leaked this test's single-organization fixture catalog into every
-    ;; later test in a full, unfiltered run -- including the picker suite,
-    ;; which then saw non-empty items where it expected none.
     (let ((previous (nerimux/vcs:workspace-organizations)))
       (unwind-protect
            (let* ((organization (nerimux/workspace-model:make-organization
@@ -1400,10 +1246,6 @@
                                status-reader status-applier callback-dispatch)
                       (declare (ignore on-repository status-reader status-applier
                                        callback-dispatch))
-                      ;; Exactly the shape REFRESH-REPOSITORIES-ASYNC's own
-                      ;; FAIL-ONE calls ON-ERROR with (repository condition),
-                      ;; then still completes the batch -- one repository's
-                      ;; failure does not stop the others from settling.
                       (funcall on-error repository synthetic-condition)
                       (funcall on-complete repositories)
                       nil)))

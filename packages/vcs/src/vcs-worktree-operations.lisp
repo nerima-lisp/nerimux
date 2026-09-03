@@ -92,8 +92,6 @@
   (conflict-p nil :read-only t)
   (ahead nil :read-only t)
   (behind nil :read-only t)
-  ;; Plain (CODE . PATH) conses derived from the snapshot's entries (D1) --
-  ;; never a vcs-kit struct; see %WORKTREE-STATUS-CHANGED-FILES in vcs.lisp.
   (changed-files nil :read-only t))
 
 (defun %status-entry-conflict-p (entry)
@@ -157,14 +155,6 @@ PATH, when given, is used verbatim. Otherwise the path is fixed to
   (%make-vcs-repository (nerimux/workspace-model:repository-local-path repository)))
 
 (defun %repository-checked-handle (repository)
-  ;; git-rev-parse-value, and every %DEFINE-CHECKED-OPERATION-generated git
-  ;; write function vcs-git-write.lisp calls, is a git-layer entry point:
-  ;; its %run-git check-types the handle as VCS-KIT:REPOSITORY
-  ;; (make-repository), not the backend-layer VCS-REPOSITORY that
-  ;; vcs-worktree/%repository-backend takes.  Passing %repository-backend's
-  ;; handle here type-errors before any git runs, which made worktree
-  ;; creation a no-op the first time this was gotten wrong -- see
-  ;; vcs-kit-two-repository-types-trap.
   (vcs-kit:make-repository
    (%string-value (nerimux/workspace-model:repository-local-path repository))))
 

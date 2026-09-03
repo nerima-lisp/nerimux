@@ -1,14 +1,5 @@
 (in-package #:nerimux/terminal/actions)
 
-;;;; Scroll operations and scroll-region setup.
-;;;;
-;;;; Loads BEFORE cursor.lisp, erase.lisp, and edit.lisp:
-;;;;   cursor.lisp needs scroll-up-one;
-;;;;   erase.lisp and edit.lisp need %copy-row / %clear-row.
-;;; ── Row primitives (data-layer helpers) ─────────────────────────────────────
-;;;
-;;; Both scroll operations and line-edit operations (insert-lines, delete-lines)
-;;; work row-by-row.  %copy-row and %clear-row are the shared building blocks.
 (defun %copy-row (screen dst-row src-row)
   "Copy all cells from SRC-ROW to DST-ROW within SCREEN."
   (dotimes (col (screen-width screen))
@@ -27,8 +18,6 @@
   (dotimes (col (screen-width screen))
     (setf (screen-cell screen col row) (%erase-cell screen))))
 
-;;; ── Scroll operations ───────────────────────────────────────────────────────
-;;; ── Scrollback trimming ────────────────────────────────────────────────────
 (defconstant +max-scrollback-lines+
   10000
   "Scrollback cap, in rows (§1.4).
@@ -46,21 +35,13 @@
     (when (> len cap)
       (let ((tail (nthcdr (1- cap) (screen-scrollback screen))))
         (when tail (setf (cdr tail) nil)))
-      ;; Truncate the parallel wrap-flag list in lockstep.
       (let ((wtail (nthcdr (1- cap) (screen-scrollback-wrapped screen))))
         (when wtail (setf (cdr wtail) nil)))
-      ;; Rows dropped forever shift the absolute-index base; prune OSC 133
-      ;; prompt marks that now point below the retained history.
       (incf (screen-history-trimmed screen) (- len cap))
       (setf (screen-prompt-marks screen)
             (delete-if (lambda (m) (< m (screen-history-trimmed screen)))
                        (screen-prompt-marks screen))))))
 
-;;; Clearing the whole screen (ED 2, or the `clear` command) first scrolls the
-;;; visible content into history, so what was on screen stays reachable in the
-;;; scrollback. This was the `scroll-on-clear` option, reached through a callback
-;;; the bootstrap layer installed; it is now unconditional, so both the option
-;;; and the injection point are gone and ERASE-DISPLAY simply always scrolls.
 (defun %push-row-to-scrollback (screen row)
   "Copy ROW of SCREEN into a new vector and prepend it to the scrollback list.
    Enforces the history cap via TRIM-SCROLL-HISTORY after the push.
@@ -69,7 +50,6 @@
          (saved (make-array w)))
     (dotimes (col w) (setf (aref saved col) (screen-cell screen col row)))
     (push saved (screen-scrollback screen))
-    ;; Keep the wrap flag with the row it belongs to (capture-pane -J).
     (push (%line-wrapped-p screen row) (screen-scrollback-wrapped screen))
     (trim-scroll-history screen)))
 
@@ -94,17 +74,12 @@
    The list is maintained newest-first so the tail is always the oldest entry."
   (let* ((top    (screen-scroll-top    screen))
          (bottom (screen-scroll-bottom screen)))
-    ;; Only the primary screen with a full-top scroll region contributes to
-    ;; the scrollback history (see this function's docstring for why).
     (when (and (zerop top) (null (screen-alt-cells screen)))
       (%push-row-to-scrollback screen top))
-    ;; Copy row+1 → row (shift content upward within the scroll region).
     (loop for row from top below bottom
           do (%copy-row screen row (1+ row)))
     (%clear-row screen bottom)
-    ;; Shift the capture-pane -J wrap flags in lockstep with the content.
     (%shift-line-wrapped-up screen top bottom)
-    ;; Shift the DECDHL/DECDWL row sizes with their lines.
     (let ((sizes (screen-line-sizes screen)))
       (when (plusp (hash-table-count sizes))
         (loop for row from top below bottom
@@ -140,11 +115,8 @@
            (cy   (screen-cursor-y screen))
            (need (- h (1+ cy))))
       (when (plusp need)
-        ;; Shift the surviving rows 0..cy down by NEED (bottom-up copy).
         (loop for y from cy downto 0
               do (%copy-row screen (+ y need) y))
-        ;; Refill rows NEED-1..0 upward from the newest-first scrollback; rows
-        ;; beyond the available history are cleared to blanks.
         (loop for y from (1- need) downto 0
               do (pop (screen-scrollback-wrapped screen))
                  (let ((saved (pop (screen-scrollback screen))))
@@ -155,7 +127,6 @@
                                    (aref saved col)
                                    (blank-cell))))
                        (%clear-row screen y))))
-        ;; Wrap flags no longer line up with the shifted content.
         (%clear-all-line-wrapped screen)
         (setf (screen-cursor-y screen) (1- h)
               (screen-dirty-p screen) t)))))
@@ -167,13 +138,9 @@
     (loop for row from bottom above top
           do (%copy-row screen row (1- row)))
     (%clear-row screen top)
-    ;; Reverse index (RI) is rare; drop the -J wrap flags rather than track the
-    ;; downward shift (safe — capture-pane -J then degrades to no-join, never a
-    ;; wrong join).
     (%clear-all-line-wrapped screen)
     (setf (screen-dirty-p screen) t)))
 
-;;; ── Scroll region ──────────────────────────────────────────────────────────
 (defun decstbm (screen top bottom)
   "DECSTBM — set the vertical scroll region.
    TOP and BOTTOM are 0-based inclusive row indices.  The cursor is homed

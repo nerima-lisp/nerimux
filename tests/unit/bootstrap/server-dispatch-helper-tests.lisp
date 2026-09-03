@@ -1,6 +1,5 @@
 (in-package #:nerimux/test)
 
-;;;; Pure selection, command, and picker helpers used by the multi-client UI.
 (defun %make-server-dispatch-helper-fixture ()
   (let* ((organization
           (nerimux/workspace-model:make-organization :id
@@ -58,24 +57,6 @@
 
 (describe "server-dispatch-helper-suite"
 
-  ;;; -- with-loop-safe-error containment ---------------------------------------
-  ;;;
-  ;;; This macro carries the file's "never let one client take down the server
-  ;;; loop" invariant, and had no test at all -- which is how it came to miss
-  ;;; the one condition it most needed to contain.
-  ;;;
-  ;;; SB-EXT:TIMEOUT is a SERIOUS-CONDITION that is deliberately NOT an ERROR,
-  ;;; so the obvious (ERROR ...) clause reads as if it catches everything and
-  ;;; silently does not.  SEND-FRAME bounds every socket write with
-  ;;; SB-EXT:WITH-TIMEOUT and documents itself as signalling exactly this, and
-  ;;; %BROADCAST-FRAME runs it through this macro for every attached client on
-  ;;; every dirty frame -- so one stalled peer escaped the handler and took the
-  ;;; whole server down with it.
-  ;;;
-  ;;; The third case is not padding: it pins that the fix stayed NARROW.
-  ;;; Widening to SERIOUS-CONDITION would also catch STORAGE-CONDITION, turning
-  ;;; heap exhaustion into a per-client-per-frame retry loop instead of a
-  ;;; fatal error.
 
   (it "with-loop-safe-error-contains-a-send-timeout"
     (let ((ran nil))
@@ -92,8 +73,6 @@
                       (error "boom")))))
 
   (it "with-loop-safe-error-does-not-swallow-storage-condition"
-    ;; Heap exhaustion must stay fatal; SIGNAL rather than a real allocation
-    ;; failure, since the point is which clause matches, not how it arose.
     (expect (eq :propagated
                 (handler-case
                     (nerimux::with-loop-safe-error (nil :on-error :wrongly-caught)
@@ -254,13 +233,6 @@
             (nerimux::*last-selected-worktree-token* nil)
             (nerimux::*workspace-collapsed-node-ids*
               (make-hash-table :test #'equal))
-            ;; Both worktrees here are clean and pane-less -- no Attention/
-            ;; Active row of their own -- so they are reachable only through
-            ;; the Repositories section, and a repository row defaults
-            ;; COLLAPSED (*WORKSPACE-EXPANDED-NODE-IDS*, opposite polarity
-            ;; from *WORKSPACE-COLLAPSED-NODE-IDS*). Pre-expanding REPOSITORY
-            ;; here reveals them, mirroring what the pre-redesign fully-
-            ;; expanded-by-default table used to give this fixture for free.
             (nerimux::*workspace-expanded-node-ids*
               (let ((table (make-hash-table :test #'equal)))
                 (setf (gethash (list :repository (nerimux/workspace-model:repository-id repository))
@@ -271,9 +243,6 @@
             (conn (nerimux::%make-client-conn)))
         (setf (nerimux::client-conn-rows conn) 5)
         (let ((objects (nerimux::%workspace-tree-objects organizations)))
-          ;; (Repositories header) (repository) (feature-worktree) (main-worktree)
-          ;; -- REPOSITORY-ADD-WORKTREE prepends, so the more-recently-added
-          ;; FEATURE-WORKTREE sorts before MAIN-WORKTREE.
           (expect (= 4 (length objects)))
           (expect (eq :repositories (first objects)))
           (expect (eq repository (second objects)))
@@ -406,8 +375,6 @@
                         (first (nerimux::client-conn-message-log conn))))
         (expect (eq :input
                     (nerimux::%set-client-ui-mode conn :input)))
-        ;; Magit alignment (contract §5): :cancel now maps to MODAL nil
-        ;; rather than the old MODE vocabulary word :normal.
         (expect (null (nerimux::%transition-client-ui-mode conn :cancel)))
         (expect (eq :picker
                     (nerimux::%client-ui-mode-value "picker")))
@@ -640,17 +607,9 @@
                          (:unknown :unchanged)))
         (expect (eq (second mapping)
                     (nerimux::%client-ui-mode-target-modal (first mapping)))))
-      ;; %client-enter-input-mode retired with the `i` key it existed to
-      ;; implement (contract §5): VIEW :pane is now reached only by focusing
-      ;; a pane, never by an explicit "enter input" step. Confirm the
-      ;; replacement primitive lands there and that %client-ui-keys-p
-      ;; correctly derives "no" for it.
       (expect (eq :pane (nerimux::%set-client-view conn :pane)))
       (expect (null (nerimux::%client-ui-keys-p conn)))
       (expect (eq :copy (nerimux::%set-client-ui-mode conn :copy)))
-      ;; MODAL was :scrollback (from :copy above); :toggle-copy flips it to
-      ;; nil, then the second call flips it back -- %transition-client-ui-
-      ;; mode now returns the MODAL value itself, not the old MODE word.
       (expect (null (nerimux::%transition-client-ui-mode
                      conn :toggle-copy)))
       (expect (eq :scrollback
@@ -667,9 +626,6 @@
                        (nerimux::client-conn-command-buffer conn)))
       (expect (eq :repolist
                   (nerimux::client-conn-command-return-view conn)))
-      ;; :accept maps to MODAL nil (contract §5) -- leaving :command clears
-      ;; the buffer and the return-view, same as before under the old
-      ;; :normal spelling.
       (expect (null (nerimux::%transition-client-ui-mode conn :accept)))
       (expect (string= "" (nerimux::client-conn-command-buffer conn)))
       (expect (null (nerimux::client-conn-command-return-view conn)))
@@ -780,20 +736,8 @@
                session conn "x"))
       (expect (nerimux::%handle-client-copy-key-payload
                session conn "q"))
-      ;; No focused pane -> %copy-key-dispatch's (null screen) clause fires,
-      ;; which transitions via :enter-normal -- MODAL nil under contract §5,
-      ;; not the old MODE word :normal.
       (expect (null (nerimux::client-conn-modal conn)))))
 
-  ;; Magit alignment (contract SS2 "scrollback", FR-008): the scrollback
-  ;; table is j/k line, C-u/C-d (byte 21/4) half page, g/G top/bottom, /
-  ;; ? search, n/N search next/prev, Space begin selection, y yank, q leave
-  ;; -- 13 keys, replacing the old j/k/h/l/g/G/Space/y/n/N/[/?/q table (h/l
-  ;; horizontal movement dropped, C-u/C-d half-page added). q's own leave
-  ;; action no longer calls %CLIENT-EXIT-COPY-MODE (see the header comment
-  ;; on %HANDLE-CLIENT-COPY-KEY-PAYLOAD): it drops MODAL inline, so it is the
-  ;; one bound key with no stub above to record it -- the other 12 each
-  ;; drive exactly one stubbed call.
   (it "copy-dispatches-every-bound-key-through-one-contract"
     (let* ((session (nerimux/session:make-session :id 1 :name "test"))
            (conn (nerimux::%make-client-conn))
@@ -826,7 +770,6 @@
                         (format nil "~S" calls)))
         (expect (search "search-forward "
                         (format nil "~S" calls)))
-        ;; q's observable effect, since it has no stub call of its own.
         (expect (null (nerimux::client-conn-modal conn))))))
 
   (it "ui-key-dispatch-covers-common-and-status-contracts"
@@ -1032,13 +975,6 @@
                        nil conn worktree)))
         (expect (equal (list "worktree pane unavailable") notifications)))))
 
-  ;; Magit alignment (contract SS5): %SUBMIT-CLIENT-SEARCH now closes MODAL
-  ;; and restores VIEW by calling %SET-CLIENT-MODAL / %CLIENT-RESTORE-
-  ;; COMMAND-VIEW directly, not by routing through the retired event
-  ;; vocabulary of %TRANSITION-CLIENT-UI-MODE -- so this asserts the
-  ;; OBSERVABLE result of both calls (view restored, return-view cleared,
-  ;; modal dropped) rather than a call count through a function this helper
-  ;; no longer touches.
   (it "search-submit-reports-invalid-input-and-restores-view"
     (let* ((session (nerimux/session:make-session :id 1 :name "test"))
            (conn (nerimux::%make-client-conn))
@@ -1107,14 +1043,6 @@
       (expect (eq :status (nerimux::client-conn-view conn)))
       (expect (null (nerimux::client-conn-modal conn)))))
 
-  ;; Magit alignment (contract §2, "KEYS THAT NO LONGER EXIST"): d, o, and i
-  ;; are all retired from the UI keymap -- d/o used to flip client-conn-view
-  ;; between :overview and :detail directly, and i (%client-enter-input-mode,
-  ;; now gone entirely) was the only way into what is now the VIEW derived
-  ;; by focusing a pane. %handle-client-normal-key-payload itself is REPLACED
-  ;; by %handle-client-ui-key-payload (contract §5). None of the three has a
-  ;; new binding, so striking any of them must be a pure no-op: no VIEW
-  ;; change, no MODAL entered.
   (it "retired-view-switch-keys-d-o-i-are-unbound-in-the-ui-keymap"
     (let ((session (nerimux/session:make-session :id 1 :name "test"))
           (conn (nerimux::%make-client-conn))
@@ -1222,15 +1150,6 @@
           (setf (nerimux::client-conn-selected-tree-object conn) nil)
           (expect (eq main-worktree (nerimux::%client-tree-object conn)))))))
 
-  ;; F9 regression: a freshly attached client has NO selection at all --
-  ;; %client-tree-object returns nil (no selected-tree-object, no
-  ;; selected-worktree, no focus pane). The FIRST Enter used to bind OBJECT to
-  ;; that nil before dispatching, miss every typep clause, and fall into the
-  ;; catch-all worktree branch -- which selected row 0 as a side effect but
-  ;; then read a still-nil client-conn-selected-worktree and reported "no
-  ;; worktree selected", even though row 0 was a perfectly good row that
-  ;; should have toggled. Only the SECOND Enter worked, because the first
-  ;; one's fallback had, by then, set up state for it.
   (it "first-enter-on-a-fresh-client-toggles-the-default-row-not-a-nil-selection"
     (let* ((organization
              (nerimux/workspace-model:make-organization
@@ -1241,39 +1160,20 @@
               :specification "github.com/team/repo"))
            (conn (nerimux::%make-client-conn))
            (nerimux/vcs::*workspace-organizations* (list organization))
-           ;; Section-based redesign: row 0 of a fresh, unfiltered tree is
-           ;; the Repositories section header (its ROW's OBJECT is the
-           ;; :REPOSITORIES keyword, not an organization) -- sections start
-           ;; EXPANDED (absent from this table), so the first Enter's toggle
-           ;; must COLLAPSE it.
            (nerimux::*workspace-collapsed-node-ids*
              (make-hash-table :test #'equal))
            (nerimux::*clients* (list conn))
            (nerimux::*dirty* nil))
       (nerimux/workspace-model:organization-add-repository organization repository)
       (setf (nerimux::client-conn-view conn) :repolist)
-      ;; Fresh conn: nothing selected, nothing focused.
       (expect (null (nerimux::%client-tree-object conn)))
       (expect (nerimux::%focus-selected-client-worktree nil conn))
-      ;; The Repositories section header (the only row, expanded by default)
-      ;; must have toggled to collapsed ...
       (expect (gethash (list :section :repositories)
                        nerimux::*workspace-collapsed-node-ids*))
-      ;; ... and the nil-selection catch-all must never have fired.
       (expect (null (find "no worktree selected"
                          (nerimux::client-conn-message-log conn)
                          :test #'string=)))))
 
-  ;; Empty-catalog edge: no organizations at all (as opposed to the test
-  ;; above, one organization with no selection yet). This is a
-  ;; characterization test pinning current correct behavior, not a fix
-  ;; guard -- %select-client-tree-worktree/%workspace-find-tree-object/
-  ;; %client-tree-object (server-multi-dispatch-picker.lisp,
-  ;; server-multi-dispatch-command-workspace.lisp) are all nil-safe over an
-  ;; empty organizations list, so the catch-all branch in
-  ;; %focus-selected-client-worktree (server-multi-dispatch-command-input.lisp)
-  ;; is reached the same way as the fresh-client case above, and reports
-  ;; "no worktree selected" without signalling.
   (it "focus-selected-client-worktree-on-an-empty-catalog-reports-no-worktree-selected"
     (let* ((conn (nerimux::%make-client-conn))
            (nerimux/vcs::*workspace-organizations* nil)
@@ -1472,18 +1372,8 @@
 
   )
 
-;;; PR2 tree-navigation redesign (R6.3 pivot): Enter on a repository row dives
-;;; straight into its main worktree's shell instead of toggling it
-;;; open/closed; h/l collapse/expand the owning repository from any row
-;;; level; J/K jump the selection across repository rows only.
 (describe "server-dispatch-helper-tree-navigation-suite"
 
-  ;; Enter on a repository row with a live pane already attached to its main
-  ;; worktree jumps straight to that pane's shell (view :pane, focus set),
-  ;; with no intermediate expand/collapse step. FD 9999 fakes "live" without
-  ;; a real PTY (the same technique used elsewhere in this suite, e.g.
-  ;; confirm-view-quit-tests.lisp), so %OPEN-CLIENT-WORKTREE-PANE's spawn
-  ;; path is never reached.
   (it "enter-on-a-repository-row-with-a-main-worktree-jumps-straight-to-its-shell"
     (with-fake-session (s)
       (let* ((pane (nerimux/window:window-active-pane
@@ -1509,8 +1399,6 @@
         (expect (eq :pane (nerimux::client-conn-view conn)))
         (expect (eq pane (nerimux::client-conn-focus conn))))))
 
-  ;; A repository with no worktrees at all reports it rather than silently
-  ;; doing nothing or erroring.
   (it "enter-on-a-repository-row-with-no-worktrees-notifies-instead-of-crashing"
     (let* ((organization
              (nerimux/workspace-model:make-organization
@@ -1520,8 +1408,6 @@
               :id "repo" :organization organization
               :specification "github.com/team/repo"))
            (conn (nerimux::%make-client-conn))
-           ;; %CLIENT-NOTIFY only appends to the message log for a live
-           ;; (registered) client -- see %CLIENT-LIVE-P.
            (nerimux::*clients* (list conn)))
       (nerimux/workspace-model:organization-add-repository organization repository)
       (setf (nerimux::client-conn-view conn) :repolist)
@@ -1529,12 +1415,8 @@
       (expect (eq t (nerimux::%focus-selected-client-worktree nil conn)))
       (expect (string= "repository has no worktrees"
                        (first (nerimux::client-conn-message-log conn))))
-      ;; No jump happened -- the view is untouched.
       (expect (eq :repolist (nerimux::client-conn-view conn)))))
 
-  ;; Enter on an organization row still toggles its collapse state (unchanged
-  ;; from the repository-row pivot above) -- a direct, non-edge-case check
-  ;; distinct from the fresh-client regression test above.
   (it "enter-on-an-organization-row-toggles-its-collapse-state"
     (let* ((organization
              (nerimux/workspace-model:make-organization
@@ -1588,10 +1470,6 @@
         (expect (nerimux::%focus-selected-client-worktree nil conn))
         (expect (null nerimux::*dirty*)))))
 
-  ;; Section-based redesign: a worktree row has no expand state of its own
-  ;; any more (a later wave adds inline detail) -- h/l on one is a no-op,
-  ;; not a jump to its owning repository the way the pre-redesign collapse
-  ;; chain used to work.
   (it "h-and-l-are-no-ops-on-a-selected-worktree-row"
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
@@ -1600,9 +1478,6 @@
       (let ((nerimux::*dirty* nil)
             (conn (nerimux::%make-client-conn)))
         (nerimux::%set-client-selected-tree-object conn feature-worktree)
-        ;; %SET-CLIENT-SELECTED-TREE-OBJECT itself marks dirty (a selection
-        ;; change); reset before the collapse/expand no-ops under test so
-        ;; the assertion below is about THEM, not the selection above.
         (setf nerimux::*dirty* nil)
         (expect (null (nerimux::%client-tree-collapse-selected conn)))
         (expect (null (nerimux::%client-tree-expand-selected conn)))
@@ -1692,10 +1567,6 @@
         (expect (null fetch-started))
         (expect nerimux::*dirty*))))
 
-  ;; h/l on a REPOSITORY row toggle its worktree listing under the
-  ;; Repositories section (*WORKSPACE-EXPANDED-NODE-IDS*, default-collapsed
-  ;; polarity -- the opposite sense from *WORKSPACE-COLLAPSED-NODE-IDS*,
-  ;; which every other row's own collapse state uses).
   (it "h-and-l-toggle-a-repository-row-in-the-expanded-node-table"
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
@@ -1706,8 +1577,6 @@
             (conn (nerimux::%make-client-conn))
             (repo-key (list :repository (nerimux/workspace-model:repository-id repository))))
         (nerimux::%set-client-selected-tree-object conn repository)
-        ;; Never touched: absent, i.e. collapsed -- H is a no-op on the
-        ;; table's contents but still reports handled.
         (expect (nerimux::%client-tree-collapse-selected conn))
         (expect (null (gethash repo-key nerimux::*workspace-expanded-node-ids*)))
         (expect (nerimux::%client-tree-expand-selected conn))
@@ -1744,10 +1613,6 @@
       (expect nerimux::*dirty*))
 
   (it "h-and-l-still-toggle-a-directly-selected-organization-row"
-    ;; Organizations no longer appear in the overview tree itself, but the
-    ;; collapse/expand handlers still special-case one if a caller selects
-    ;; it directly (e.g. picker/command-target resolution) -- unchanged from
-    ;; before the section-based redesign.
     (let ((organization
             (nerimux/workspace-model:make-organization
              :id "org-direct" :host "github.com" :name "team"))
@@ -1770,7 +1635,6 @@
       (expect (nerimux::%client-enter-tree-filter-mode conn))
       (expect (null (nerimux::client-conn-tree-filter conn)))
       (expect (zerop (nerimux::client-conn-tree-scroll conn)))
-      ;; :tree-filter -> MODAL :filter (contract §5).
       (expect (eq :filter (nerimux::client-conn-modal conn)))))
 
   (it "tree-relative-selection-empty-workspace"
@@ -1817,8 +1681,6 @@
             (nerimux/vcs::*workspace-organizations* organizations)
             (nerimux::*dirty* nil))
         (setf (nerimux::client-conn-rows conn) 7)
-        ;; Both worktrees in this fixture are clean and pane-less, so the
-        ;; only row at all is the Repositories section header.
         (expect (eq :repositories
                     (nerimux::%select-client-tree-relative conn -1)))
         (expect (zerop (nerimux::client-conn-tree-scroll conn))))))
@@ -1892,8 +1754,6 @@
             (nerimux/vcs::*workspace-organizations* organizations)
             (nerimux::*dirty* nil))
         (setf (nerimux::client-conn-rows conn) 7)
-        ;; Row 0 is the Repositories section header; selecting it and moving
-        ;; forward lands on REPOSITORY, its own row.
         (nerimux::%set-client-selected-tree-object conn :repositories)
         (expect (eq repository
                     (nerimux::%select-client-tree-relative conn 1)))
@@ -1944,8 +1804,6 @@
         (expect (eq second-worktree
                     (nerimux::%select-client-tree-relative conn 1))))))
 
-  ;; J moves the selection to the next :SECTION header row only, skipping
-  ;; every worktree/repository row in between.
   (it "J-jumps-the-selection-forward-to-the-next-section-header"
     (let* ((organization
              (nerimux/workspace-model:make-organization
@@ -1964,23 +1822,11 @@
       (let ((nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
             (nerimux::*dirty* nil)
             (nerimux/vcs::*workspace-organizations* (list organization)))
-        ;; Rows: (Attention header) worktree-a (Repositories header) repo-a
-        ;; -- select worktree-a (dirty, so it is under Attention) first, so
-        ;; J has to skip past it and land on the :REPOSITORIES header.
         (nerimux::%set-client-selected-tree-object conn worktree-a)
         (expect (eq :repositories
                     (nerimux::%select-client-tree-section-relative conn 1)))
         (expect (eq :repositories (nerimux::%client-tree-object conn))))))
 
-  ;; FIXED: %SELECT-CLIENT-TREE-SECTION-RELATIVE's LOOP used to step
-  ;; `by direction` directly, and CL's LOOP requires a BY step to be a
-  ;; positive real -- a SIMPLE-TYPE-ERROR fired the instant DIRECTION was
-  ;; negative, so every K press in :overview was broken (verified directly
-  ;; against SBCL 2.6.6: `(loop for i from 3 by -1 ...)` errors the same way,
-  ;; before the loop body ever runs). The fix always steps a positive
-  ;; iteration count and multiplies by DIRECTION to get the index. This test
-  ;; pins the required behaviour (K moves backward to the previous section
-  ;; header).
   (it "K-jumps-the-selection-backward-to-the-previous-section-header"
     (let* ((organization
              (nerimux/workspace-model:make-organization
@@ -1999,10 +1845,6 @@
       (let ((nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
             (nerimux::*dirty* nil)
             (nerimux/vcs::*workspace-organizations* (list organization)))
-        ;; Rows: (Attention header) worktree-a (Repositories header) repo-a
-        ;; -- select repo-a and expect K to land on the NEAREST preceding
-        ;; section header, :REPOSITORIES (repo-a's own section) -- not all
-        ;; the way back to :ATTENTION, which is one section further still.
         (nerimux::%set-client-selected-tree-object conn repo-a)
         (expect (eq :repositories
                     (nerimux::%select-client-tree-section-relative conn -1)))
@@ -2110,12 +1952,6 @@
                     (nerimux::%select-client-tree-section-relative conn -1)))
         (expect (= 2 (nerimux::client-conn-tree-scroll conn))))))
 
-  ;; Review-round fix: +MAX-TREE-FILTER-LENGTH+ (256, security review) caps
-  ;; CLIENT-CONN-TREE-FILTER's length -- %CLIENT-TREE-FILTER-BUFFER-APPEND
-  ;; must refuse further characters outright once the cap is hit, not
-  ;; silently truncate (truncating would still accept and discard an
-  ;; unbounded payload forever, only quietly); the query's CONTENTS must be
-  ;; unchanged by the refused keystroke, not just its length.
   (it "refuses to grow the tree filter past +max-tree-filter-length+"
     (let ((conn (nerimux::%make-client-conn)))
       (setf (nerimux::client-conn-tree-filter conn)
@@ -2125,8 +1961,6 @@
                  (length (nerimux::client-conn-tree-filter conn))))
       (expect (string= (make-string nerimux::+max-tree-filter-length+ :initial-element #\a)
                        (nerimux::client-conn-tree-filter conn)))
-      ;; Below the cap, an ordinary append still works -- this is a hard
-      ;; ceiling, not a broken append path.
       (setf (nerimux::client-conn-tree-filter conn)
             (make-string (1- nerimux::+max-tree-filter-length+) :initial-element #\a))
       (expect (nerimux::%client-tree-filter-buffer-append conn "b"))

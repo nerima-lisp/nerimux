@@ -1,15 +1,5 @@
 (in-package #:nerimux)
 
-;;;; Runtime state and per-pane I/O threading.
-;;;;
-;;;; Threading model:
-;;;;   * One reader thread per pane: blocking read(PTY fd) -> pane-feed ->
-;;;;     screen update -> sets *dirty* T.
-;;;;   * Main thread (see events.lisp): select(stdin, 50 ms) -> key dispatch or
-;;;;     PTY forward -> render when *dirty*.
-;;;;
-;;;; PTY children may be spawned while reader/status threads are active, so
-;;;; teardown must reliably join background threads and close pane processes.
 (defun %mark-dirty ()
   "Set the shared redraw flag."
   (setf *dirty* t))
@@ -30,7 +20,6 @@
    whole org SBCL-only, so the dead branch is gone rather than conditionalized."
   (sb-thread:join-thread thread :timeout timeout))
 
-;;; -- Wait-for channel synchronization ----------------------------------------
 (defmacro with-channel-plist ((lk cv ch) &body body)
   "Bind LK and CV to the :lock and :cv fields of the channel plist CH."
   (let ((ch-var (gensym "CH")))
@@ -87,7 +76,6 @@
    deliver signals that were suppressed while the channel was locked."
   (%set-channel-locked name nil))
 
-;;; -- SIGWINCH ---------------------------------------------------------------
 (defun install-sigwinch-handler ()
   "Arm SIGWINCH so terminal resizes flag a one-shot relayout."
   (sb-sys:enable-interrupt sb-unix:sigwinch

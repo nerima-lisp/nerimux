@@ -1,7 +1,4 @@
-;;;; Test package for nerimux-commands.
 (defpackage #:nerimux/test/commands
-  ;; The test framework is cl-weave, used natively: every file registers its own
-  ;; top-level (describe "name" (it "case" ...) ...) block.
   (:use #:cl)
   (:shadowing-import-from #:cl-weave #:describe)
   (:import-from #:cl-weave
@@ -15,8 +12,6 @@
                 #:it-property #:it-fuzz #:gen-integer #:gen-list #:gen-boolean #:gen-string
                 #:gen-vector #:gen-member #:gen-one-of
                 #:defmatcher)
-  ;; The model and terminal surfaces these commands operate on. Both mirror
-  ;; nerimux-commands' own :depends-on.
 (:import-from #:nerimux/pane
                 #:make-pane #:pane-feed #:pane-screen #:pane-id
                 #:pane-x #:pane-y #:pane-width #:pane-height #:pane-fd #:pane-pid
@@ -128,7 +123,5 @@
                 #:check-row
                 #:check-cell
                 #:display-row-string)
-  ;; Reached by the root suite: two cases that also touch bootstrap state moved
-  ;; to tests/integration/ but still build their screens with this fixture.
   (:export #:copy-mode-screen
            #:with-copy-mode-cursor))

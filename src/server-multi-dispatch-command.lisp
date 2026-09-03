@@ -204,16 +204,7 @@
   (multiple-value-bind (cmd target args) (decode-command-payload payload)
     (let ((result (%handle-client-ui-command session conn cmd target args)))
       (cond
-        ;; The handler's own value decides the disposition. This used to be
-        ;; discarded to NIL unconditionally, which made :QUIT unreachable from
-        ;; any forwarded command however the handler was written -- the key path
-        ;; already forwarded its handler's value, which is why C-q d worked and
-        ;; nothing on this path could ever stop the server.
         (result (if (eq result :quit) :quit nil))
-        ;; Anything the workspace UI does not recognize is rejected.  This used
-        ;; to fall through to %dispatch-forwarded-command, which ran the name
-        ;; against a server-side command table -- that fallthrough was the only
-        ;; thing making the forwarded-command surface reachable from `:`.
         (cmd
          (%client-notify conn (format nil "unknown command: ~(~A~)" cmd))
          (%mark-dirty)

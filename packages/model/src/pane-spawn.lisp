@@ -1,23 +1,11 @@
 (in-package #:nerimux/pane)
 
-;;; ── PTY-backed pane factory ─────────────────────────────────────────────────
-;;;
-;;; Data/logic separation: %fork-pane encapsulates the "how to allocate a pane
-;;; with a live shell behind it" into one named step, keeping callers free to
-;;; express the "where to attach it" concern independently.
 (defvar *pane-extra-env*
   nil
   "Dynamic variable: alist of (NAME . VALUE) pairs to set in the NEXT pane's
    child environment.  Bound by callers that need per-pane env vars (e.g.
    new-window -e VAR=val).  Consumed by %fork-pane and reset to NIL after use.")
 
-;;; ── Fixed pane environment ──────────────────────────────────────────────────
-;;;
-;;; §1.4 / R2.5: every pane's child gets TERM=screen-256color and
-;;; COLORTERM=truecolor.  Both used to come from the 'default-terminal' option
-;;; (TERM only; COLORTERM was never sent); now they are fixed, and R2.2
-;;; deleted the domain-layer options package wholesale, so there is no
-;;; package left to read either value from.
 (defvar +pane-term+
   "screen-256color"
   "TERM given to every pane's child process (§1.4: names the emulator's
@@ -46,14 +34,6 @@
              :environment
              environment))
 
-;;; ── %spawn-shell-for-pane — shared spawn skeleton ───────────────────────────
-;;;
-;;; %fork-pane and respawn-pane both: (1) assemble a child environment fixing
-;;; TERM/COLORTERM and merging the session overlay with EXTRA-ENV and
-;;; *pane-extra-env* (consuming and resetting it), then (2) spawn a PTY with
-;;; the caller's DEFAULT-COMMAND (or NIL, meaning "run the shell").
-;;; %spawn-shell-for-pane captures that shared skeleton; callers differ only in
-;;; what they do with the resulting (fd pid slave-path).
 (defun %spawn-shell-for-pane (session rows cols &key start-dir default-command extra-env)
   "Spawn a shell for a pane at COLS x ROWS, merging SESSION's environment overlay
    with *PANE-COLORTERM-ENV*, EXTRA-ENV, and the consumed *PANE-EXTRA-ENV*.
@@ -65,7 +45,6 @@
                                                  :extra-env (list* *pane-colorterm-env*
                                                                    (append extra-env
                                                                            *pane-extra-env*)))))
-    ;; Consume *pane-extra-env*: reset so a later pane spawn without -e starts clean.
     (setf *pane-extra-env* nil)
     (%spawn-pty-with-default-options rows cols
                                      :start-dir start-dir
@@ -145,9 +124,7 @@
         (old-pid (pane-pid pane))
         (cols    (pane-width  pane))
         (rows    (pane-height pane)))
-    ;; The concrete PTY adapter handles already-closed descriptors.
     (close-pty old-fd old-pid)
-    ;; Open a fresh PTY-backed shell at the same geometry.
     (multiple-value-bind (new-fd new-pid slave-path)
         (%spawn-shell-for-pane session rows cols
                                :start-dir start-dir
@@ -160,7 +137,6 @@
             (pane-start-path pane) (or start-dir
                                        (nerimux/ports:working-directory)
                                        "")
-            ;; The pane is alive again — clear the exit record.
             (pane-unread-output-p pane) nil
             (pane-bell-p pane) nil
             (pane-process-exited-p pane) nil

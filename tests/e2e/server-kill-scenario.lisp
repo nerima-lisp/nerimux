@@ -1,19 +1,3 @@
-;;;; Headless server/kill e2e scenarios: drive the real nerimux binary as a
-;;;; subprocess and check its exit codes and socket lifecycle, with no
-;;;; nerimux package loaded and no ASDF:LOAD-SYSTEM -- pure stock SBCL
-;;;; (SB-EXT:RUN-PROGRAM, PROBE-FILE, SLEEP), exactly like a user driving the
-;;;; binary from a shell.
-;;;;
-;;;; The three KILL-* scenarios below (excluding KILL-WITHOUT-SERVER) share
-;;;; one server process: SERVER-STARTS spawns it, KILL-REFUSES-WITH-PANE
-;;;; checks the refusal against the pane that server pre-spawns, and
-;;;; KILL-FORCE-CLEANS tears it down. They are therefore order-dependent and
-;;;; must run in the order e2e-smoke.lisp already fixes them in: KILL-WITHOUT
-;;;; -SERVER first (clean state, no server yet), then SERVER-STARTS,
-;;;; KILL-REFUSES-WITH-PANE, KILL-FORCE-CLEANS.
-;;;;
-;;;; Depends on helpers.lisp (POLL-UNTIL, RUN-PROGRAM-BOUNDED, SPAWN-ASYNC,
-;;;; %EXPECTED-SOCKET-PATH) already being loaded.
 (defvar *ksc-server-process*
   nil
   "The SB-EXT:PROCESS spawned by SCENARIO-SERVER-STARTS, reused by the later

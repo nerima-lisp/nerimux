@@ -1,9 +1,5 @@
 (in-package #:nerimux/vcs)
 
-;;;; Recent-commit history for a worktree's inline tree-row expansion (Wave
-;;;; B, D2): fetched on demand -- only when a client expands a worktree row
-;;;; -- rather than with every status refresh, since `git log` is one more
-;;;; process launch per worktree that most frames never need.
 (defvar *worktree-commit-log-limit*
   5
   "Maximum recent commits REFRESH-WORKTREE-COMMITS-ASYNC fetches per worktree.")
@@ -87,8 +83,6 @@ git runs."
                                       (list :max-output-characters
                                             *worktree-log-max-output-characters*)))))
 
-;;;; Per-file diff for the same inline expansion (Wave C): one level deeper
-;;;; than a :FILE row, fetched only when that row itself is expanded.
 (defvar *worktree-diff-line-limit*
   200
   "Maximum diff lines REFRESH-WORKTREE-FILE-DIFF-ASYNC keeps per file; the

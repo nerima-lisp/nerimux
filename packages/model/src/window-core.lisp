@@ -20,15 +20,6 @@
   (setf (window-active window) pane
         (window-last-active-time window) (get-universal-time)))
 
-;;; ── Orientation-aware pane extent ──────────────────────────────────────────
-;;;
-;;; The :v/:h naming matches layout.lisp's split-tree orientation keywords:
-;;;   :v split stacks children vertically → extent measured in ROWS (height)
-;;;   :h split places children side-by-side → extent measured in COLS (width)
-;;;
-;;; Axis fact table (Prolog-style):
-;;;   axis_extent(:v, pane) :- pane-height.
-;;;   axis_extent(:h, pane) :- pane-width.
 (defun %orient-pane-extent (pane orient)
   "Current extent of PANE along ORIENT's split axis."
   (orient-case orient :v (pane-height pane) :h (pane-width pane)))
@@ -43,7 +34,6 @@
   "T when PANE is wide/tall enough to split along ORIENT."
   (%split-axis-fits-p (%orient-pane-extent pane orient) orient))
 
-;;; ── Window-level pane ID allocation ────────────────────────────────────────
 (defun next-pane-id (window)
   "Smallest pane id >= +PANE-BASE-INDEX+ not already used in WINDOW.
    Window-level concern: queries pane membership, not geometry."
@@ -52,12 +42,6 @@
           unless (member i used)
             return i)))
 
-;;; ── Size-hint conversion ────────────────────────────────────────────────────
-;;;
-;;; Size-hint fact table (Prolog-style):
-;;;   hint_rule(integer, positive) :- hint cells for the new pane.
-;;;   hint_rule(real, 0<r<1)       :- proportional cells derived from avail.
-;;;   hint_rule(_default_)         :- half the available space.
 (defun %requested-cells-from-hint (hint avail orient)
   "Convert a split size HINT to a cell count within AVAIL along ORIENT.
    Returns an integer: the requested cell count for the new (second) child."
@@ -78,11 +62,8 @@
    the new (second) child given AVAIL total cells and ORIENT.
    Returns a ratio in (0,1) clamped to leave at least the axis floor on each side."
   (let* ((axis-floor   (%axis-floor orient))
-         ;; Requested cells for the NEW (second) child.
          (requested    (%requested-cells-from-hint hint avail orient))
-         ;; Upper bound: leave at least axis-floor cells for the FIRST child.
          (upper-bound  (- avail axis-floor))
-         ;; Clamped size: both halves stay above axis-floor.
          (clamped-size (max axis-floor (min upper-bound requested))))
     (/ clamped-size avail)))
 
@@ -213,5 +194,3 @@
             (unless no-focus
               (setf (window-active window) new-pane))
             new-pane))))))
-
-;;; Tree-link mutation, relayout, and removal moved to window-tree.lisp.

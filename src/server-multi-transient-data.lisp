@@ -1,22 +1,9 @@
-;;;; Declarative transient menu data.
-;;;; Handlers are lambdas where load order requires deferred function lookup.
 (in-package #:nerimux)
 
 (defconstant +max-process-log-entries+
   20
   "Maximum number of process-log entries retained per client.")
 
-;;; ── +TRANSIENT-DEFINITIONS+ (contract §2/§3) ─────────────────────────────
-;;;
-;;; KEY -> (TITLE ARGUMENTS ACTIONS).  ARGUMENTS is a list of (ARG-KEY . FLAG);
-;;; DESCRIPTION in the rendered view reuses FLAG verbatim (a git flag already
-;;; is its own clearest description -- see the Push example in the task
-;;; brief, "-f  --force-with-lease"). ACTIONS is a list of (ACTION-KEY
-;;; DESCRIPTION HANDLER); DESCRIPTION containing the literal two characters
-;;; "~A" is treated as a FORMAT control string interpolating the selected
-;;; worktree's branch (%TRANSIENT-ACTION-DISPLAY-DESCRIPTION) -- Push/Pull's
-;;; only use of it, to show "push to origin/<branch>" without a separate
-;;; per-render templating slot.
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defparameter +transient-definitions+
   (list
@@ -76,12 +63,6 @@
                            (list :stub "diff view is not wired -- no read pager exists in this build")))))
    (cons #\f
          (list "Fetch" nil
-               ;; Wrapped rather than sharp-quoted directly: :CALL hands its
-               ;; function (SESSION CONN), and both of these take CONN alone.
-               ;; A bare #' here is a wrong-argument-count error at the moment
-               ;; the key is struck -- and no gate sees it, because the arity
-               ;; only meets the callee through a FUNCALL out of this data
-               ;; table. That is how `f` reached this file already broken.
                (list (list #\f "fetch this repository"
                            (list :call (lambda (session conn)
                                          (declare (ignore session))
@@ -108,23 +89,8 @@
          (list "Shell command" nil
                (list (list #\! "run a shell command"
                            (list :stub "arbitrary shell execution is deliberately not wired -- it is its own trust-boundary decision")))))
-   ;; These four are NOT stubs, and the difference from the name-taking git
-   ;; actions above is not effort. Worktree create/delete/lock/unlock already
-   ;; had working keys -- `n` `X` `L` `U` -- that the magit alignment retired,
-   ;; and every one of those paths avoids a text prompt by design: create
-   ;; generates its own branch name (an explicit 2026-08-27 decision against
-   ;; prompting for one), and the other three pre-fill the `:` command line,
-   ;; which IS the prompt. Stubbing them would have deleted four working
-   ;; features while looking like an unfinished new one.
    (cons #\w
          (list "Worktree" nil
-               ;; LAMBDA rather than #'%CLIENT-START-WORKTREE-CREATE, and the
-               ;; reason is load order: this table is a DEFPARAMETER, so a
-               ;; sharp-quote would resolve the fdefinition while this file
-               ;; loads -- and these four live in
-               ;; server-multi-dispatch-command-input.lisp, which loads AFTER
-               ;; this one (the keymap calls %OPEN-CLIENT-TRANSIENT, so it has
-               ;; to). A lambda defers the lookup to call time.
                (list (list #\c "create worktree and open its shell"
                            (list :call (lambda (session conn)
                                          (%client-start-worktree-create session conn))))

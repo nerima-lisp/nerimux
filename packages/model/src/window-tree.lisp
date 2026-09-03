@@ -1,13 +1,5 @@
 (in-package #:nerimux/window)
 
-;;; ── Tree-link mutation ──────────────────────────────────────────────────────
-;;;
-;;; Both %replace-in-tree and %collapse-parent share the same pattern:
-;;;   set_tree_link(Window, Node, New) :-
-;;;     find_parent(Window.tree, Node, Parent, Side), !,
-;;;     set_child(Parent, Side, New).
-;;;   set_tree_link(Window, _Node, New) :-
-;;;     Window.tree := New.
 (defmacro %set-tree-link (window node new-value)
   "Replace NODE's position in WINDOW's tree with NEW-VALUE.
    If NODE has a parent, updates that parent's child link (preserving side);
@@ -38,11 +30,6 @@
     (%set-tree-link window parent sibling)
     sibling))
 
-;;; ── Window-level axis extent ────────────────────────────────────────────────
-;;;
-;;; The axis of a split measured at the WINDOW level (used by window-split :full):
-;;;   :h → window-width   (how many columns the whole window spans)
-;;;   :v → window-height  (how many rows the whole window spans)
 (defun %window-axis-extent (window direction)
   "Return the WINDOW dimension along DIRECTION's split axis.
    :h → window-width (columns); :v → window-height (rows)."
@@ -92,11 +79,9 @@
         (multiple-value-bind (parent which) (layout-find-parent tree leaf)
           (setf (pane-window pane) nil)
           (if parent
-              ;; Normal case: collapse the parent split and relayout.
               (let ((sibling (%collapse-parent window parent which)))
                 (window-relayout-current window)
                 (first (layout-leaves sibling)))
-              ;; LEAF was the sole root — window becomes empty.
               (setf (window-tree  window) nil
                     (window-panes window) nil)))
         (first (window-panes window)))))

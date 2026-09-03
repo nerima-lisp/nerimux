@@ -1,10 +1,5 @@
 (in-package #:nerimux/pane)
 
-;;; ── pane-reposition ──────────────────────────────────────────────────────────
-;;;
-;;; Data/logic separation mirrors the zoom helpers in window-core.lisp:
-;;;   %update-pane-geometry — pure slot mutation (data)
-;;;   pane-reposition       — geometry update then PTY/screen resize (effects)
 (defun %update-pane-geometry (pane x y width height)
   "Update PANE's position and dimension slots to X, Y, WIDTH, HEIGHT.
    Pure data mutation — no I/O side effects."

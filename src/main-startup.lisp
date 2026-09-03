@@ -1,8 +1,3 @@
-;;; Startup mode dispatch and CLI entry point.
-;;;
-;;; Socket discovery/server auto-start helpers live in main-startup-socket.lisp.
-;;; Command handlers live in main-startup-commands.lisp.
-;;; This file owns the binary entry-point dispatch.
 (in-package :nerimux)
 
 (defun %application-argv ()
@@ -67,13 +62,6 @@
    %parse-global-cli-argv already reports a malformed global flag: a one-line
    message on *error-output* and exit 1 — never the raw SBCL debugger, which
    the saved core would otherwise drop a real user into."
-  ;; *PRINT-CIRCLE* T for the whole main thread: the domain model is cyclic
-  ;; (REPOSITORY <-> ORGANIZATION back-pointers), and every ~A of a condition
-  ;; whose datum holds one — this outermost net, the dispatch-layer
-  ;; "... failed: ~A" notifies, %DRAIN-MAIN-THREAD-CALLBACKS — otherwise
-  ;; exhausts the control stack mid-report and lands in the debugger the
-  ;; saved core exists to avoid.  Same rationale as WITH-CYCLE-SAFE-PRINTING
-  ;; (tests/suite.lisp); a thread that reports conditions must rebind this itself.
   (let ((*print-circle* t)
         (invocation (%parse-global-cli-argv (%application-argv))))
     (if (null invocation)
@@ -83,16 +71,6 @@
             (let* ((mode  (first mode-args))
                    (rest  (rest mode-args))
                    (entry (cdr (assoc mode *startup-modes* :test #'equal))))
-              ;; (OR ERROR SB-EXT:TIMEOUT), not ERROR: this is the outermost
-              ;; net, and SB-EXT:TIMEOUT is a SERIOUS-CONDITION that is
-              ;; deliberately not an ERROR, so an ERROR-only clause lets it
-              ;; through — into precisely the raw SBCL debugger this handler
-              ;; exists to keep a real user out of.  It is a reachable
-              ;; condition here, not a theoretical one: SEND-FRAME bounds
-              ;; every socket write with SB-EXT:WITH-TIMEOUT and documents
-              ;; itself as signalling it, and both the client loop and the
-              ;; server loop reach this frame.  See the fuller note on
-              ;; WITH-LOOP-SAFE-ERROR in server-multi-dispatch.lisp.
               (handler-case
                   (%dispatch-startup-mode-entry entry mode rest)
                 ((or error sb-ext:timeout) (c)
@@ -131,17 +109,12 @@
   (cond
     (entry (%dispatch-startup-mode-handler entry mode rest))
     (mode  (%dispatch-unknown-mode mode rest))
-    ;; "attach", not the incidental NIL in MODE: %dispatch-startup-mode-handler
-    ;; re-derives raw-args-p by looking MODE up in *startup-modes*, and an
-    ;; assoc miss on NIL only coincidentally matches attach's raw-args-p=NIL.
     (t     (%dispatch-startup-mode-handler (%startup-mode-entry "attach")
                                            "attach" rest))))
 
 (defun %dispatch-startup-mode-handler (entry mode rest)
   (let ((handler    (first entry))
         (raw-args-p (%startup-mode-raw-args-p mode)))
-    ;; Dispatch: :raw-args-p modes receive the full tail; name-only modes
-    ;; receive a single session name so their signature stays (name).
     (if raw-args-p
         (funcall (symbol-function handler) rest)
         (funcall (symbol-function handler) (or (first rest) "0")))))

@@ -1,20 +1,5 @@
 (in-package #:nerimux/test)
 
-;;;; ASDF system-composition tests.
-;;;;
-;;;; src/dataflow/ (nerimux/dataflow-model, cl-dataflow-kit) and src/reasoning/
-;;;; (nerimux/reasoning, cl-prolog-kit) have both been deleted outright, along
-;;;; with the optional systems that carried them -- neither appears in
-;;;; nerimux.asd anymore.  The cl-prolog-kit and cl-dataflow-kit assertions
-;;;; below therefore guard something stronger than a layering rule: that
-;;;; neither kit reappears in the dependency closure at all, direct or
-;;;; transitive.
-;;;;
-;;;; Nothing else in the suite would notice that regressing: re-adding either
-;;;; kit to core :depends-on compiles clean, loads clean, and every other test
-;;;; still passes.  These two checks are the only thing standing between that
-;;;; edit and a silently re-bloated binary.
-;;; ── Layering guard helpers ───────────────────────────────────────────────────
 (defun %file-text (path)
   "PATH's contents as a string.
 
@@ -107,10 +92,6 @@
      (search "(defpackage" (%file-text file)))
    (%layered-source-files)))
 
-;;; ── Source-text layering guard helpers ──────────────────────────────────────
-;;;
-;;; See the "source-text layering guard" comment in the describe block below
-;;; for why these exist alongside the declaration-based helpers above.
 (defparameter *layer-name-rank*
   '(("FOUNDATION" . -1) ("DOMAIN" . 0)
                         ("APPLICATION" . 1)
@@ -447,58 +428,24 @@
 
 (describe "system-composition-suite"
 
-  ;;; -- declared dependencies ---------------------------------------------------
 
-  ;; Catches the regression at its source: someone adding :cl-prolog-kit or
-  ;; :cl-dataflow-kit back to core `nerimux''s :depends-on in nerimux.asd.
-  ;; Checked against the declaration rather than the load, so it fires even if
-  ;; load order happens to mask the effect.
   (it "core-nerimux-does-not-declare-the-optional-kits"
     (let ((deps (mapcar (lambda (d) (string-downcase (princ-to-string d)))
                         (asdf:system-depends-on (asdf:find-system "nerimux")))))
-      ;; Guard against a vacuous pass: if the dependency list came back empty
-      ;; the two assertions below would hold for the wrong reason.
       (expect (plusp (length deps)))
       (expect (member "cl-tty-kit" deps :test #'string=))
       (expect (null (member "cl-prolog-kit" deps :test #'string=)))
       (expect (null (member "cl-dataflow-kit" deps :test #'string=)))))
 
-  ;;; -- resulting image ---------------------------------------------------------
 
-  ;; Catches an accidental transitive pull-in that never appears in
-  ;; :depends-on -- e.g. a future core dependency that itself requires one of
-  ;; the kits.  This suite's own system depends only on ("nerimux" "cl-weave"),
-  ;; so the running image is core plus the test framework and nothing else.
   (it "core-nerimux-load-does-not-intern-the-optional-kits"
-    ;; Same vacuity guard: assert the packages that MUST be here are, so an
-    ;; empty or half-loaded image cannot pass by absence.
     (expect (find-package "NERIMUX"))
     (expect (find-package "NERIMUX/TERMINAL"))
     (expect (null (find-package "CL-PROLOG-KIT")))
     (expect (null (find-package "CL-DATAFLOW-KIT"))))
 
-  ;;; -- renderer load order -----------------------------------------------------
-  ;;;
-  ;;; Be precise about what this proves.  It asserts the DECLARED component
-  ;;; order in nerimux.asd, nothing stronger.  The workspace tree projection
-  ;;; and frame depend on renderer-format.lisp and on none of the pane
-  ;;; compositor; loading them ahead of that chain is how the .asd
-  ;;; states it, and this catches someone quietly reordering it back -- the
-  ;;; likely regression, since "move the file next to renderer-compose" looks
-  ;;; tidy.
-  ;;;
-  ;;; It does NOT prove the two paths are independent, and must not be cited as
-  ;;; if it did.  They share one package and one system, so nothing stops
-  ;;; workspace code calling a pane-compositor function; SBCL would emit a
-  ;;; style-warning for the forward reference and this build does not treat
-  ;;; style-warnings as fatal.  Proving independence needs the file-level
-  ;;; closure computed from the render entry points, which is a review-time
-  ;;; analysis rather than something a unit test can hold.
 
   (it "renderer-workspace-loads-before-the-pane-compositor"
-    ;; %find-module-components locates "presentation/renderer" wherever it
-    ;; currently lives -- inside nerimux's single "src" module today, or as
-    ;; its own flat nerimux-renderer system once the module is extracted.
     (let* ((names (%find-module-components "presentation/renderer" "nerimux-renderer"))
            (format-pos (position "renderer-format" names :test #'string=))
            (status-title-pos
@@ -508,9 +455,6 @@
            (tree-pos (position "renderer-workspace-tree" names :test #'string=))
            (workspace-pos (position "renderer-workspace" names :test #'string=))
            (compose-pos (position "renderer-compose" names :test #'string=)))
-      ;; Vacuity guard: a module %find-module-components could not locate
-      ;; returns NIL children, and every position below would then be NIL
-      ;; rather than wrong.
       (expect (plusp (length names)))
       (expect format-pos)
       (expect status-title-pos)
@@ -564,19 +508,6 @@
       (expect report-pos)
       (expect (< definitions-pos colors-pos flow-pos report-pos))))
 
-  ;;; -- layering -----------------------------------------------------------
-  ;;;
-  ;;; Nothing enforced the layer order, and three violations had accumulated
-  ;;; unnoticed: nerimux/model :use'd nerimux/config, which made every
-  ;;; domain->application reference UNQUALIFIED and therefore invisible to a
-  ;;; search for "nerimux/config:".  They surfaced only when someone read the
-  ;;; defpackage forms directly.
-  ;;;
-  ;;; Be precise about the reach.  This reads DECLARATIONS, not the call graph:
-  ;;; it catches a package declaring an upward :use or :import-from, which is
-  ;;; what re-opens the invisible-reference hole.  It does NOT catch one
-  ;;; qualified upward reference inside a function body -- that stays a
-  ;;; review-time check, and is at least greppable.
   (it "no-package-declares-an-upward-layer-dependency"
     (let* ((pkg->rank (%package-name->layer-rank))
            (violations '())
@@ -591,15 +522,6 @@
                     (incf edges)
                     (when (> theirs mine)
                       (push (list (car entry) "->" dep) violations)))))))))
-      ;; Conservation check: every LIVE package -- one %package-name->layer-rank
-      ;; found a defpackage for -- must also carry a RANK, i.e. its
-      ;; documentation string must have a recognized layer marker.  This is
-      ;; what makes a package silently missing a marker a hard failure
-      ;; instead of a package quietly skipped on both sides of every edge it
-      ;; takes part in, which is exactly how the retired *layer-rank* let ten
-      ;; live packages (and one already-deleted one) go unchecked for as
-      ;; long as it did.  No maintained threshold: it holds at any package
-      ;; count, so it never needs editing when a package is added.
       (format t "~&no-package-declares-an-upward-layer-dependency: ranked ~d of ~d live package~:p~%"
               (length (remove-if-not #'cdr pkg->rank)) (length pkg->rank))
       (expect (plusp (length pkg->rank)))
@@ -607,46 +529,6 @@
       (expect (> edges 10))
       (expect (null violations))))
 
-  ;;; -- source-text layering guard -----------------------------------------
-  ;;;
-  ;;; The guard above reads DECLARATIONS: a package's own :use and
-  ;;; :import-from clauses.  A reference written PKG::SYM or PKG:SYM inside a
-  ;;; function body names no :use, so it appears in no defpackage form and the
-  ;;; declaration scan cannot see it; double-colon additionally bypasses the
-  ;;; export list.  Four such references had accumulated by 2026-08-20 -- an
-  ;;; audit found them while the test above stayed green -- each reaching from
-  ;;; a lower layer up into BOOTSTRAP: NERIMUX::%PARSE-INTEGER-OR-NIL,
-  ;;; NERIMUX::%JOIN-THREAD-WITH-TIMEOUT, NERIMUX::SERVER-FIND-SESSION, and
-  ;;; NERIMUX::*CLOCK-MODE-PANE-ID*.
-  ;;;
-  ;;; This guard scans the SOURCE TEXT of every file under src/ and
-  ;;; packages/*/src/ instead of any defpackage form.  It derives a FILE's
-  ;;; layer from what the file itself declares, not from its path -- see
-  ;;; %file-layer-name for the two shapes it recognizes (an ordinary file's
-  ;;; own (in-package ...) package, or a package*.lisp file's own defpackage
-  ;;; name) and why a path-segment lookup stopped working the moment a layer
-  ;;; flattens to packages/<name>/src/*.lisp with no layer-named directory
-  ;;; left to read.  A file with neither form cannot be classified at all,
-  ;;; and the conservation check below fails closed on that rather than
-  ;;; silently skipping it.  It derives a referenced PACKAGE's layer from
-  ;;; the first layer marker inside that package's own (:documentation ...)
-  ;;; string, wherever in the tree that package's defpackage form lives (see
-  ;;; %package-declaration-files): "DOMAIN layer", "APPLICATION layer",
-  ;;; "INFRASTRUCTURE layer", "PRESENTATION layer", "BOOTSTRAP layer", or
-  ;;; "FOUNDATION" for nerimux/text, which sits below every layer by design
-  ;;; and may be referenced from anywhere.  Every defpackage form found this
-  ;;; way carries exactly one such marker in its documentation string, so
-  ;;; this is a complete mapping, not a hand-maintained subset -- unlike the
-  ;;; fixed table 'no-package-declares-an-upward-layer-dependency' used to
-  ;;; hardcode as *layer-rank*, which several terminal sub-packages and
-  ;;; nerimux/version were missing from (see %package-name->layer-rank,
-  ;;; which now derives that guard's ranking the same way this one does).
-  ;;;
-  ;;; A file whose layer is strictly lower than a referenced package's layer
-  ;;; is an upward reference, full stop.  Whether the symbol is exported is a
-  ;;; separate, unrelated concern this guard does not check: a downward or
-  ;;; same-layer double-colon reference (nerimux/session::%shell-basename from
-  ;;; src/bootstrap/, say) is legal direction and must not fail here.
 
   (it "no-source-file-references-a-higher-layer-package"
     (let* ((root-dir (asdf:system-source-directory :nerimux))
@@ -668,11 +550,6 @@
               (incf total-refs)
               (let ((theirs-name (cdr (assoc pkg pkg->layer :test #'string=))))
                 (cond
-                  ;; A referenced nerimux-family package absent from every
-                  ;; documentation string cannot be placed in the layer
-                  ;; order; report it rather than silently treating it as
-                  ;; legal, so a future package added without a marker
-                  ;; cannot become a blind spot the way :: was.
                   ((null theirs-name)
                    (push (format nil "~a:~d  ~a~a~a  -- referenced package has no layer marker"
                                  (enough-namestring file root-dir) line pkg
@@ -684,17 +561,6 @@
                                  (if (eq qualifier :double) "::" ":") symbol
                                  mine-name theirs-name)
                          violations))))))))
-      ;; Conservation check, replacing the old absolute lower bound.  The
-      ;; prior guard here was `(expect (plusp (length layered-files)))',
-      ;; which tolerated 159 of 160 files vanishing from the scan as long as
-      ;; ONE remained classifiable -- exactly the failure mode
-      ;; %file-layer-name's path-based predecessor produced silently the
-      ;; moment a layer stopped living under a layer-named directory
-      ;; (src/bootstrap/*'s 29 files kept passing on their own, masking the
-      ;; other 131).  Asserting the two counts are EQUAL instead makes any
-      ;; unclassifiable file a hard failure rather than a silent omission,
-      ;; and it needs no maintained threshold: the property holds at any
-      ;; file count, so it never needs editing when a file is added or moved.
       (format t "~&no-source-file-references-a-higher-layer-package: examined ~d of ~d source file~:p~%"
               (length layered-files) (length all-files))
       (expect (plusp (length all-files)))
@@ -704,34 +570,11 @@
       (expect (null unclassified))
       (expect (null violations))))
 
-  ;;; -- version string --------------------------------------------------------
-  ;;;
-  ;;; nerimux.asd's :version comment calls itself "Single source of truth for
-  ;;; the version: flake.nix reads this form and release.yml refuses to
-  ;;; publish a tag that disagrees with it" -- but nothing previously checked
-  ;;; it against nerimux/version:version-string, the literal every runtime
-  ;;; reporter (-V, the cl-cli option spec, XTVERSION/DA3, #{version}) actually
-  ;;; returns. The two had drifted silently to "0.3.0" vs "0.1.0" before this
-  ;;; test existed.
 
   (it "nerimux-version-string-matches-asdf-version"
     (expect (string= (asdf:component-version (asdf:find-system "nerimux"))
                      (nerimux/version:version-string))))
 
-  ;;; -- the reporter can print the domain model --------------------------------
-  ;;;
-  ;;; These two guard the runner's *PRINT-CIRCLE* binding (tests/suite.lisp).
-  ;;; Without it, a failed assertion whose ACTUAL value is any linked model
-  ;;; object sends SBCL's structure pretty printer into unbounded recursion and
-  ;;; kills the process mid-report -- so instead of one red test, the run
-  ;;; produces no results at all and every other test's outcome is lost.
-  ;;;
-  ;;; The ordering matters: the binding check below fails CLEANLY if someone
-  ;;; removes the binding, which is the signal we want.  The render check that
-  ;;; follows it proves the actual behaviour, but can only ever be reached
-  ;;; while the binding is in place -- a regression that got past the first
-  ;;; check would take the process down here rather than report.  That is
-  ;;; precisely why the cheap canary comes first.
 
   (it "the-runner-binds-print-circle"
     (expect *print-circle*))
@@ -740,19 +583,12 @@
     (let ((organization (nerimux/workspace-model:make-organization :id "org" :name "org"))
           (repository (nerimux/workspace-model:make-repository :id "repo")))
       (nerimux/workspace-model:organization-add-repository organization repository)
-      ;; Pin the cycle itself: without this the render below would prove
-      ;; nothing, because a non-cyclic structure prints fine either way.
       (expect (eq organization
                   (nerimux/workspace-model:repository-organization repository)))
       (expect (member repository
                       (nerimux/workspace-model:organization-repositories organization)
                       :test #'eq))
-      ;; ~S with the pretty printer on is exactly how a reporter renders a
-      ;; failed assertion's value.
       (let ((rendered (let ((*print-pretty* t))
                         (format nil "~S" organization))))
         (expect (plusp (length rendered)))
-        ;; #N= is the circular-reference label: its presence is what
-        ;; distinguishes "cycle detected and rendered" from "happened not to
-        ;; recurse", so this asserts the mechanism, not just survival.
         (expect (search "#1=" rendered))))))

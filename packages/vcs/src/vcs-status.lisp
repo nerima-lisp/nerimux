@@ -112,8 +112,6 @@ column, worktree side) -- magit's unstaged section (Unit MODEL)."
         (%make-worktree-status-update
          :path path :missing-p t :head fallback-head :ahead 0 :behind 0)
         (let* ((snapshot
-                 ;; This reads local remote-tracking refs. Only an explicit
-                 ;; fetch advances them, so refresh never performs network I/O.
                  (vcs-kit:vcs-status-structured
                   (%make-vcs-repository directory)))
                (entries (vcs-kit:vcs-status-snapshot-entries snapshot))
@@ -140,14 +138,6 @@ column, worktree side) -- magit's unstaged section (Unit MODEL)."
   (let* ((worktree
            (nerimux/workspace-model:repository-worktree-by-path
             repository (%worktree-status-update-path update)))
-         ;; The four-way split below re-reads UPDATE's own SNAPSHOT rather
-         ;; than threading new fields through %WORKTREE-STATUS-UPDATE (owned
-         ;; by another unit right now): the snapshot already carries every
-         ;; entry CHANGED-FILES was built from, so this is a repartition of
-         ;; data already fetched, never a second git call. NIL when UPDATE
-         ;; came from the missing-worktree branch of %READ-WORKTREE-STATUS-AT,
-         ;; which never stores a snapshot -- all four lists then default to
-         ;; empty via the loops below finding nothing to iterate.
          (snapshot (%worktree-status-update-snapshot update))
          (entries (and snapshot (vcs-kit:vcs-status-snapshot-entries snapshot))))
     (unless worktree

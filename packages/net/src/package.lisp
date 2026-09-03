@@ -1,4 +1,3 @@
-;;; ── Client/server wire protocol ──────────────────────────────────────────
 (defpackage #:nerimux/protocol
   (:use #:cl)
   (:documentation
@@ -8,35 +7,23 @@
     command payload.  Deliberately holds no sockets and no global state, so the
     format is unit-testable without a server; the I/O sits in nerimux/transport.")
   (:export
-   ;; Message type tags + header size
    #:+msg-attach+ #:+msg-key+ #:+msg-resize+ #:+msg-detach+ #:+msg-frame+ #:+msg-bye+
    #:+msg-command+ #:+msg-reply+
    #:+header-size+
-   ;; Frame layout constants
    #:+payload-length-offset+
    #:+cols-offset-in-size-payload+
-   ;; Frame codec
    #:encode-frame #:decode-frame
-   ;; Typed message constructors
    #:msg-attach #:msg-key #:msg-resize #:msg-detach #:msg-frame #:msg-bye
    #:msg-command #:msg-reply
-   ;; Command message codec (protocol-command.lisp, same package)
    #:+field-delimiter+
    #:encode-command-payload #:decode-command-payload #:target-field-p
-   ;; Command payload helpers — exported as stable API so tests use single-colon access
    #:split-on-nul-bytes #:command-name-to-string
    #:assemble-command-fields #:encode-fields-to-buffer
-   ;; Payload decoders + octet helpers
    #:decode-size #:decode-text #:to-octets
-   ;; Integer codec helpers (exported so tests can use single-colon access)
    #:u16-octets #:u32-octets #:u16-octets-pair #:read-u16 #:read-u32))
 
-;;; ── Client/server stream transport ───────────────────────────────────────
 (defpackage #:nerimux/transport
   (:use #:cl)
-  ;; Four names out of the codec's forty: the header size and payload-length
-  ;; offset needed to know how much to read, the length decoder, and DECODE-FRAME.
-  ;; Everything else in nerimux/protocol is for packet authors, not for the pipe.
   (:import-from #:nerimux/protocol
                 #:+header-size+
                 #:+payload-length-offset+

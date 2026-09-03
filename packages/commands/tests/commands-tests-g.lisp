@@ -1,7 +1,5 @@
 (in-package #:nerimux/test/commands)
 
-;;;; command tokenizer, copy-mode find
-;;; ── %copy-mode-find-forward / %copy-mode-find-backward ──────────────────────
 (defun %copy-mode-find-result (fn width height text term row col)
   (let ((s (make-screen width height)))
     (feed s text)
@@ -32,9 +30,7 @@
 
 (describe "commands-suite"
 
-  ;;; ── tokenize-command-string (shell-style command lexer) ──────────────────────
 
-  ;; tokenize-command-string splits on whitespace; handles quoted spans, escapes, and unterminated quotes.
   (it "tokenize-command-string-table"
     (dolist (c '(("a b c"          ("a" "b" "c")  "basic whitespace split")
                  ("  a   b  "      ("a" "b")       "leading/trailing collapses")
@@ -88,7 +84,6 @@
                   "\"a\\b\"" 0 5 double)))
       (expect (string= "ab" (get-output-stream-string double)))))
 
-  ;;; ── %copy-mode-find-forward / %copy-mode-find-backward ──────────────────────
 
   (define-copy-mode-find-cases
     (copy-mode-find-locates-term

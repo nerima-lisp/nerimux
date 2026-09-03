@@ -1,4 +1,3 @@
-;;;; Pane fixture helpers for nerimux tests.
 (in-package #:nerimux/test/model)
 
 (defun make-no-pty-pane (id x y w h)

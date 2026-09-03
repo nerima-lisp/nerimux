@@ -1,6 +1,5 @@
 (in-package #:nerimux/renderer)
 
-;;;; Workspace `:` command completion and footer-row rendering (R6.12).
 (defparameter +workspace-command-names+
   '("wt-create" "wt-delete"
                 "wt-lock"

@@ -47,15 +47,6 @@
         value
         default)))
 
-;;; ── Style tracking (R-style-preservation) ───────────────────────────────────
-;;;
-;;; A parallel per-cell style grid rides alongside the character grid so SGR
-;;; state survives the ANSI-frame -> surface round trip in
-;;; %SURFACE-FROM-ANSI-FRAME.  Styles are immutable CL-TUI-KIT/CORE:STYLE
-;;; value objects: a new one is built only when the SGR state actually
-;;; changes, and every cell written between changes shares that one
-;;; instance -- allocating per cell would show up in the renderer's
-;;; time-budget benchmark.
 (defvar *%default-style*
   nil
   "Cached CL-TUI-KIT/CORE:STYLE for the unstyled default.  Styles are value

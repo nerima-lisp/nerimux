@@ -1,6 +1,5 @@
 (in-package #:nerimux/test/ports)
 
-;;;; POSIX pipe fixtures.
 (defun write-octets-to-fd (fd octets)
   "Write OCTETS, a sequence of (unsigned-byte 8), to file descriptor FD.
    Returns the number of bytes written.  Goes through cl-tty-kit:fd-write-octets,

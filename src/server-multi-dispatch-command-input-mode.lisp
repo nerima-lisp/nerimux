@@ -1,10 +1,5 @@
 (in-package #:nerimux)
 
-;; %client-enter-input-mode retired with the `i` key it existed to implement
-;; (magit alignment, FR-007): its only production caller was the old
-;; %handle-client-normal-key-payload's `#\i` clause, and with :pane keys now
-;; going straight to the shell (%client-ui-keys-p), there is no mode left to
-;; enter -- grepping the bare identifier turned up no other call site.
 (defun %client-enter-command-mode (conn &optional (initial-buffer ""))
   (setf (client-conn-command-return-view conn) (client-conn-view conn))
   (%set-client-modal conn :command)
@@ -23,9 +18,6 @@
 (defun %client-select-pane-direction (session conn direction)
   (let* ((pane (%resolve-client-focus-pane session nil conn))
          (window (and pane (nerimux/pane:pane-window pane))))
-    ;; R5.6: a zoomed window has no neighbours (pane-neighbor returns NIL by
-    ;; design), so un-zoom before looking one up rather than reporting "no
-    ;; pane <direction>" for a move that would otherwise have succeeded.
     (%workspace-prefix-unzoom window)
     (let ((neighbor (and window (pane-neighbor window pane direction))))
       (if neighbor
@@ -90,10 +82,6 @@
    showing organizations rather than everything at once. Enter on those used to
    start a worktree-create prompt — which made the create flow reachable but
    left expansion with no key at all."
-  ;; A fresh client has no selection, so %client-tree-object returns nil and
-  ;; every typep below misses; the dispatch must not typecase a nil selection.
-  ;; This fallback used to live inside the catch-all (t) branch, which made
-  ;; the FIRST Enter a no-op "primer" that only set up state for the second.
   (unless (%client-tree-object conn)
     (%select-client-tree-worktree conn nil))
   (let ((object (%client-tree-object conn)))
@@ -104,17 +92,8 @@
        (%mark-dirty)
        t)
       ((keywordp object)
-       ;; A :SECTION row (its OBJECT is the section keyword itself --
-       ;; :ATTENTION/:ACTIVE/:REPOSITORIES): Enter toggles it exactly like
-       ;; Tab (%CLIENT-TOGGLE-SELECTED-TREE-ROW).
        (%client-toggle-selected-tree-row conn))
       ((typep object 'nerimux/workspace-model:repository)
-       ;; Enter no longer toggles a repository row open/closed (user
-       ;; decision, R6.3 pivot): it dives straight into the repository's
-       ;; main worktree (or its first one, when there is no main) via the
-       ;; SAME open/attach corridor as the (t) worktree branch below --
-       ;; recursing after selecting the worktree reuses that branch instead
-       ;; of duplicating its remembered-pane/open-pane logic here.
        (let ((worktree (or (nerimux/workspace-model:repository-main-worktree object)
                             (first (nerimux/workspace-model:repository-worktrees
                                     object)))))
@@ -130,15 +109,6 @@
        (%set-client-view conn :pane)
        (%mark-dirty)
        t)
-      ;; Inline worktree expansion (Wave B): a :FILE or :COMMIT row's OBJECT
-      ;; is a plain (:FILE ...) / (:COMMIT ...) list (D3), never a model
-      ;; struct or the section keyword handled above -- Enter on either is a
-      ;; deliberate no-op this wave (no diff/log view exists yet), not a
-      ;; fallthrough into the (T ...) worktree-open branch below, which
-      ;; would otherwise open or create a pane the user never asked for.
-      ;; :DIFF-LINE/:DIFF-MORE (Wave C, a :FILE row's own inline-diff child
-      ;; rows) join the same no-op for the same reason -- Tab, not Enter, is
-      ;; their only action.
       ((and (consp object) (member (first object) '(:file :commit :diff-line :diff-more)))
        t)
       ((typep object 'nerimux/window:window)
@@ -152,9 +122,6 @@
        (unless (client-conn-selected-worktree conn)
          (%select-client-tree-worktree conn nil))
        (let* ((worktree (client-conn-selected-worktree conn))
-              ;; The pane last focused in this worktree, so Enter returns to
-              ;; where the user was rather than to whichever pane happens to be
-              ;; first (R6.3).
               (pane (or (%worktree-remembered-pane worktree)
                         (%client-worktree-pane session worktree))))
          (cond
@@ -184,10 +151,6 @@
        :callback-dispatch #'%enqueue-main-thread-callback
        :on-complete (lambda (result) (declare (ignore result)) (%mark-dirty))
        :on-error (lambda (condition) (declare (ignore condition)) (%mark-dirty)))
-    ;; Kicking the async refresh off itself failed synchronously (e.g.
-    ;; thread creation) -- same shape as %ADD-CLIENT's catalog-refresh
-    ;; launch: no callback is ever coming, so COMMITS-STATE must settle to
-    ;; :FAILED here rather than being stuck at :PENDING forever.
     (error ()
       (setf (nerimux/workspace-model:worktree-commits-state worktree) :failed)
       (%mark-dirty))))
@@ -221,11 +184,6 @@
                   (list :failed 0 nil)))
              (%mark-dirty))
            :on-error #'%on-error)
-        ;; Kicking the async refresh off itself failed synchronously (e.g.
-        ;; thread creation) -- same shape as %CLIENT-START-WORKTREE-COMMITS-
-        ;; REFRESH's own guard: no callback is ever coming otherwise, so the
-        ;; entry must settle to :FAILED here rather than being stuck at
-        ;; :PENDING forever.
         (error (condition) (%on-error condition))))))
 
 (defun %client-toggle-selected-file-diff (worktree-id path code)

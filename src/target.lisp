@@ -1,23 +1,5 @@
 (in-package #:nerimux)
 
-;;;; Session/window/pane target parsing and lookup — the "-t session:window.pane"
-;;;; DSL's data and matching layers. The single public entry point that used
-;;;; to compose these (resolve-target/resolve-target-context) was deleted
-;;;; once nothing called it; find-pane-by-target itself still has a live
-;;;; caller.
-;;;;
-;;;; Architecture (data / logic separation):
-;;;;   DATA  — parse-target splits a string into its three components
-;;;;   LOGIC — find-*-by-target matches each component against the registry
-;;;;
-;;;; Target grammar:
-;;;;   [SESSION][:WINDOW][.PANE]
-;;;;     SESSION — session name prefix or $N (by id)
-;;;;     WINDOW  — window name, @N (by id), or numeric index (0-based in list)
-;;;;     PANE    — %N (by id) or numeric index (0-based in panes list)
-;;;;   Any component may be absent; absent parts default to the current
-;;;;   session/window/pane.
-;;; ── Pure: parse a raw target string into three string components ─────────────
 (defun %parse-session-component (target-string colon-pos dot-pos)
   "Derive the session component from TARGET-STRING given split positions.
    When a colon is present, the session is the text before it (possibly empty).
@@ -53,25 +35,16 @@
               (#\@ (values nil target-string nil))     ; @N → window-id
               (t   (values target-string nil nil)))    ; $N session-id or plain name
             (let* ((win-raw  (cond
-                               ;; Both colon and dot: window is between them.
                                ((and colon-pos dot-pos)
                                 (subseq target-string (1+ colon-pos) dot-pos))
-                               ;; Colon but no dot: window is everything after colon.
                                (colon-pos
                                 (subseq target-string (1+ colon-pos)))
-                               ;; No colon — no window component.
                                (t nil)))
                    (pane-raw (when dot-pos
                                (subseq target-string (1+ dot-pos))))
                    (sess-str (%parse-session-component target-string colon-pos dot-pos)))
               (values sess-str (nerimux/text:non-empty-string win-raw) (nerimux/text:non-empty-string pane-raw)))))))
 
-;;; ── define-target-lookup — Prolog-style sequential rule dispatch ─────────────
-;;;
-;;; Follows the same pattern as define-csi-rules / define-command-handlers.
-;;; Each rule is a list: (test-expr) — return test-expr when it is non-NIL.
-;;; The special rule (:nil-guard EXPR) exits early when EXPR is NIL.
-;;; The generated dispatcher tries rules in order; returns NIL when none match.
 (defmacro define-target-lookup (name lambda-list &rest rules)
   "Generate a target lookup function NAME with LAMBDA-LIST.
    An optional docstring may appear as the first element of RULES.
@@ -98,7 +71,6 @@
             actual-rules)
          (t nil)))))
 
-;;; ── Sigil helpers (pure) ─────────────────────────────────────────────────────
 (defun %sigil-id (target-str sigil-char)
   "If TARGET-STR starts with SIGIL-CHAR, parse the rest as an integer.
    Returns the integer or NIL."
@@ -110,7 +82,6 @@
   (and (>= (length name) (length prefix))
        (string= prefix name :end2 (min (length prefix) (length name)))))
 
-;;; ── Find: session lookup ─────────────────────────────────────────────────────
 (define-target-lookup find-session-by-target
                       (server target-str)
                       "Find a session in SERVER matching TARGET-STR.
@@ -126,7 +97,6 @@
                                        (%name-prefix-p target-str name))
                                return sess)))
 
-;;; ── Find: window lookup ──────────────────────────────────────────────────────
 (define-target-lookup find-window-by-target
                       (session target-str)
                       "Find a window in SESSION matching TARGET-STR.
@@ -152,7 +122,6 @@
                                                     (window-name window))
                                  return window))))
 
-;;; ── Find: pane lookup ────────────────────────────────────────────────────────
 (define-target-lookup find-pane-by-target
                       (window target-str)
                       "Find a pane in WINDOW matching TARGET-STR.

@@ -1,6 +1,5 @@
 (in-package #:nerimux/terminal/parser)
 
-;;;; OSC color and palette helpers.
 (defun %scale-hex-channel (channel)
   "Scale a 4-bit or 8-bit hex channel to 8-bit integer."
   (if (< channel 16)

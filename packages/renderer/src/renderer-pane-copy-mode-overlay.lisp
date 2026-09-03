@@ -1,6 +1,5 @@
 (in-package #:nerimux/renderer)
 
-;;;; Copy-mode position overlay rendering.
 (defun %copy-mode-position-overlay-text (pane)
   "Position text for PANE's copy-mode overlay (R6.8): \"[POS/LIMIT]\", plus
    \" /TERM\" while a search is active, plus \" INDEX/TOTAL\" naming which match
@@ -21,8 +20,6 @@
          (total  (screen-copy-search-total screen)))
     (format nil "[~D/~D]~@[ /~A~]~@[ ~A~]"
             pos limit active
-            ;; Only alongside a term, and only once a search has landed: an
-            ;; ordinal with nothing to be an ordinal of says nothing.
             (and active index (plusp total)
                  (format nil "~D/~D" index total)))))
 
