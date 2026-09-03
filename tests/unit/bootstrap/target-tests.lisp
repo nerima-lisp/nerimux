@@ -3,13 +3,15 @@
 (describe "target-suite"
 
   (it "define-target-lookup-preserves-an-optional-docstring"
-    (eval
-     '(nerimux::define-target-lookup target-test-with-docstring (value)
-        "A generated lookup used to verify the macro contract."
-        ((and value (numberp value)) :number)
-        (:nil-guard value)))
-    (expect (string= "A generated lookup used to verify the macro contract."
-                     (documentation 'nerimux::target-test-with-docstring 'function)))
+    (let ((expansion
+            (macroexpand-1
+             '(nerimux::define-target-lookup nerimux::target-test-with-docstring (value)
+                "A generated lookup used to verify the macro contract."
+                ((when (and value (numberp value)) :number))
+                (:nil-guard value)))))
+      (expect (string= "A generated lookup used to verify the macro contract."
+                       (fourth expansion)))
+      (eval expansion))
     (expect (eq :number (nerimux::target-test-with-docstring 7)))
     (expect (null (nerimux::target-test-with-docstring nil))))
 
