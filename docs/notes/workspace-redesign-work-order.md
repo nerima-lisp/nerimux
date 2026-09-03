@@ -2,7 +2,7 @@
 
 ## 1. 実装方針
 
-`docs/notes/workspace-redesign-spec.md` を唯一のUX受け入れ基準とする。既存のworkspace-only構成、PTY、TUI renderer、VCS adapterは再利用し、利用者のメンタルモデルと状態遷移をworkspace中心へ統一する。
+`docs/notes/workspace-redesign-spec.md` を唯一のUX受け入れ基準とする。既存のworkspace-only構成、PTY、TUI renderer、VCS操作は再利用し、利用者のメンタルモデルと状態遷移をworkspace中心へ統一する。
 
 Orca、tmux、外部GUI、repository固有の設定には依存を追加しない。
 
@@ -34,7 +34,7 @@ Orca、tmux、外部GUI、repository固有の設定には依存を追加しな�
 - attachment中のprune拒否test
 - 再開時のcompleted解除test
 
-### Phase 2: Git / VCS adapter
+### Phase 2: Git / VCS操作
 
 - bare repositoryからremote default branchを解決する。
 - `git fetch origin` 後に `origin/main` のcommitを確定する。
