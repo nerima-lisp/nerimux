@@ -372,7 +372,7 @@
              (%with-stubbed-run-kill-exit exit-code
                (nerimux::run-kill nil)))
         (setf (fdefinition 'nerimux::send-kill-request) orig))
-      (expect (equal (list "0" nil) captured)))))
+      (expect (equal (list "0" nil) captured))))
 
   (it "r8-3-client-dispositions-apply-quit-and-drop-actions"
     (let ((calls nil)
@@ -388,4 +388,4 @@
         (expect (null (nerimux::%apply-client-disposition :unknown conn))))
       (expect (equal '(:connection :bye t) (first calls)))
       (expect (equal '(:connection :bye nil) (second calls)))
-      (expect (= 2 (length calls)))))
+      (expect (= 2 (length calls))))))
