@@ -313,7 +313,7 @@
                      (lambda (connection message)
                        (declare (ignore connection))
                        (push message messages)))
-               (nerimux::%workspace-prefix-fetch-repository conn)
+               (nerimux::%workspace-fetch-repository conn)
                (expect (search "selected repository" (first messages)))
                (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
                      (lambda () nil))
@@ -324,7 +324,7 @@
                   (nerimux/workspace-model:make-repository
                    :id "repo" :organization organization
                    :specification "github.com/team/repo"))
-                 (nerimux::%workspace-prefix-fetch-repository conn)
+                 (nerimux::%workspace-fetch-repository conn)
                  (expect (search "VCS unavailable" (first messages))))
                (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
                      (lambda () t)
@@ -349,7 +349,7 @@
                                    :id "repo" :organization organization
                                    :specification "github.com/team/repo"))
                  (nerimux::%set-client-selected-tree-object conn repository)
-                 (nerimux::%workspace-prefix-fetch-repository conn)
+                 (nerimux::%workspace-fetch-repository conn)
                  (funcall callback t)
                  (expect refreshed)
                  (expect (search "fetch complete" (first messages)))
@@ -364,7 +364,7 @@
                          (declare (ignore repository on-complete on-error
                                              callback-dispatch))
                          (error "sync failure")))
-                 (nerimux::%workspace-prefix-fetch-repository conn)
+                 (nerimux::%workspace-fetch-repository conn)
                  (expect (search "sync failure" (first messages)))))
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:fetch-repository-async) fetch
@@ -389,12 +389,12 @@
                      (lambda (connection message)
                        (declare (ignore connection))
                        (push message messages)))
-               (nerimux::%workspace-prefix-fetch-organization conn)
+               (nerimux::%workspace-fetch-organization conn)
                (expect (search "selected organization" (first messages)))
                (let ((organization (nerimux/workspace-model:make-organization
                                     :id "org" :host "github.com" :name "team")))
                  (nerimux::%set-client-selected-tree-object conn organization)
-                 (nerimux::%workspace-prefix-fetch-organization conn)
+                 (nerimux::%workspace-fetch-organization conn)
                  (expect (search "VCS unavailable" (first messages))))
                (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
                      (lambda () t)
@@ -412,7 +412,7 @@
                (let ((organization (nerimux/workspace-model:make-organization
                                     :id "org" :host "github.com" :name "team")))
                  (nerimux::%set-client-selected-tree-object conn organization)
-                 (nerimux::%workspace-prefix-fetch-organization conn)
+                 (nerimux::%workspace-fetch-organization conn)
                  (expect refreshed)
                  (expect (search "fetch complete" (first messages)))
                  (funcall completion-callback nil)
@@ -428,7 +428,7 @@
                        (lambda (&rest args)
                          (declare (ignore args))
                          (error "sync failure")))
-                 (nerimux::%workspace-prefix-fetch-organization conn)
+                 (nerimux::%workspace-fetch-organization conn)
                  (expect (search "sync failure" (first messages))))))
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:fetch-organization-async) fetch

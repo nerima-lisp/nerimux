@@ -188,12 +188,8 @@
     (%set-client-modal conn :scrollback))
   nil)
 
-(defun %workspace-prefix-fetch-repository (conn)
-  "Fetch the selected repository, then refresh status.  No longer bound to
-   C-q F (magit alignment, contract §2/§3: fetch moves to the `f`
-   transient) -- kept as a function because workspace-input-prefix-tests.lisp
-   still exercises it directly and the `f` transient is a separate unit's
-   call site for the same logic.
+(defun %workspace-fetch-repository (conn)
+  "Fetch the selected repository, then refresh status.
 
 A fetch already running for this repository is not started twice; the
 caller that finds one in flight is told so and the in-flight fetch's own
@@ -233,12 +229,10 @@ FETCH-REPOSITORY-ASYNC)."
             (%client-notify conn (format nil "fetch failed: ~A" condition)))))))
   nil)
 
-(defun %workspace-prefix-fetch-organization (conn)
+(defun %workspace-fetch-organization (conn)
   "Fetch every repository in the selected organization concurrently, then
-   refresh status.  No longer bound to C-q C-f -- same removal, and the same
-   reason to keep the function, as %WORKSPACE-PREFIX-FETCH-REPOSITORY above.
-   Duplicate suppression and the completion callback mirror that function,
-   one level up (nerimux/vcs:FETCH-ORGANIZATION-ASYNC)."
+   refresh status.  Duplicate suppression and the completion callback mirror
+   the repository operation one level up."
   (let ((organization (%client-selected-organization conn)))
     (cond
       ((not organization)
