@@ -33,6 +33,7 @@
                (:file "renderer-style")
                (:file "renderer-workspace-status-title")
                (:file "renderer-workspace-command-line")
+               (:file "renderer-workspace-frame")
                (:file "renderer-workspace-tree-data")
                (:file "renderer-workspace-tree-entries")
                (:file "renderer-workspace-tree-layout")
