@@ -175,6 +175,15 @@
       (expect (null (nerimux::%client-selected-organization conn)))
       (expect (null (nerimux::%client-operation-worktree conn)))))
 
+  (it "keeps-empty-selection-with-focus-without-worktree"
+    (let ((conn (nerimux::%make-client-conn))
+          (pane (nerimux/pane:make-pane)))
+      (setf (nerimux::client-conn-focus conn) pane)
+      (expect (null (nerimux::%client-context-object conn nil)))
+      (expect (null (nerimux::%client-selected-repository conn)))
+      (expect (null (nerimux::%client-selected-organization conn)))
+      (expect (null (nerimux::%client-operation-worktree conn)))))
+
   (it "resolves-operations-from-the-focused-pane-worktree"
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
