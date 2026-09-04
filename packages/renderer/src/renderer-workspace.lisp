@@ -47,17 +47,8 @@
    line -- neither mode's ordinary key hints or divider draw at all while
    the prompt is active, matching the single-line footer's own pre-key-
    panel behaviour.
-   PRECOMPUTED-TREE-ENTRIES, when non-NIL, is used verbatim instead of
-   calling %WORKSPACE-FLAT-TREE-ENTRIES again -- RENDER-WORKSPACE-OVERVIEW-
-   TO-TUI-STRING (renderer-tui-kit.lisp) flattens the tree once per frame
-   and passes the result here, since this function used to redo that same
-   walk of the org/repo/worktree/pane graph on every call regardless of
-   whether the caller already had it. NIL still means \"not supplied\" (the
-   default, and what a direct caller such as a test gets), so it falls back
-   to computing it here exactly as before; the one frame where that is
-   wrong -- FILTER narrows the tree to genuinely zero rows, which is also
-   NIL -- just recomputes an already-empty result, which is cheap and not a
-   correctness gap."
+  PRECOMPUTED-TREE-ENTRIES, when non-NIL, is used verbatim. NIL requests
+  that this function compute the flattened tree entries itself."
   (if (and scanning-p (null organizations))
       (%render-workspace-scanning-frame terminal-rows terminal-cols
                                         :scan-progress scan-progress)
