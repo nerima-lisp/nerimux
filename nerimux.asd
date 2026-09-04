@@ -109,12 +109,8 @@
      ;; lives in packages/<name>/ and is named in :depends-on above, so this
      ;; module loads after all of them without having to say so.
      ((:file "package")             ; nerimux (BOOTSTRAP layer, needs everything)
-       ;; target resolution is a "nerimux"-package service (W4-prep found it was
-       ;; never really part of nerimux/model despite living in that directory);
-       ;; moved here from domain/model now that its true package's declaration
-       ;; also lives here.
        (:file "target")              ; session/window/pane target resolution (-t flag)
-       (:file "server-dispatch-macros") ; declarative rule-table macros (moved out of package.lisp, W6)
+       (:file "server-dispatch-macros") ; declarative rule-table macros
        (:file "runtime-data")         ; shared declarations and constants
        (:file "runtime")              ; channel sync + SIGWINCH
        (:file "runtime-reader-data")  ; PTY reader shared state

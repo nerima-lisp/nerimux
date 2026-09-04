@@ -116,19 +116,11 @@
   t)
 
 (defun %client-toggle-selected-tree-row (conn)
-  "Tab, and Enter on a :SECTION row (section-based overview redesign): toggle
-   the selected row's own expand/collapse state. A :SECTION row (its OBJECT
-   is the section keyword) toggles that section in *WORKSPACE-COLLAPSED-
-   NODE-IDS* (absent = expanded); a REPOSITORY row under Repositories
-   toggles its worktrees in *WORKSPACE-EXPANDED-NODE-IDS* (absent =
-   collapsed -- the opposite polarity, since repository rows default
-   collapsed). A WORKTREE row (Wave B) toggles its own inline expansion in
-   the SAME *WORKSPACE-EXPANDED-NODE-IDS* table, keyed (:WORKTREE ID); the
-   first time it expands with no commit history fetched yet (or the last
-   fetch failed), this also kicks off the async commit-log fetch. A :FILE
-   row (Wave C) toggles its own inline diff the same way -- see
-   %CLIENT-TOGGLE-SELECTED-FILE-DIFF. No selection has no expand state of
-   its own and is a no-op."
+  "Toggle expansion for the selected section, repository, worktree, or file.
+   Expansion state is stored in the corresponding workspace node table.  A
+   worktree without cached commits starts an asynchronous commit refresh, and
+   a file delegates to %CLIENT-TOGGLE-SELECTED-FILE-DIFF.  No selection is a
+   no-op."
   (let ((object (%client-tree-object conn)))
     (cond
       ((keywordp object)
