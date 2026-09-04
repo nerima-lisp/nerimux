@@ -35,9 +35,8 @@ repository whose own `git status` failed during REFRESH-WORKSPACE-STATUS-
 ASYNC below, called with (REPOSITORY CONDITION) exactly as REFRESH-
 REPOSITORIES-ASYNC's own ON-ERROR is -- ON-COMPLETE still fires afterward
 for the batch as a whole, since one repository's failure does not stop the
-others from settling. Conflating the two used to mean a single repository's
-status failure looked identical to a scan-wide failure to every caller,
-which is what let a per-repository failure mark the ENTIRE catalog stale."
+others from settling. A repository failure therefore marks only that repository
+stale; a scan failure marks the entire catalog stale."
   (scan-repositories-async :query
                            query
                            :callback-dispatch
@@ -232,4 +231,3 @@ which is what let a per-repository failure mark the ENTIRE catalog stale."
                                                                         repository)))
       (nerimux/workspace-model:repository-recompute-status repository))
     worktree))
-

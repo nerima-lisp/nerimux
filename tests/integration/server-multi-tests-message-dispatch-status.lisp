@@ -42,7 +42,9 @@
         (expect (every (lambda (call) (eq repository (first call))) calls))
         (expect (eq :confirm (nerimux::client-conn-modal conn)))))))
 
-  (it "status-view-discard-key-confirms-before-writing"
+  (describe "status-view-confirmation-suite"
+
+    (it "status-view-discard-key-confirms-before-writing"
     (with-fake-session (s)
       (let* ((organization
                (nerimux/workspace-model:make-organization
@@ -81,4 +83,4 @@
           (nerimux::%handle-multi-key-message s conn "y")
           (expect (null (nerimux::client-conn-modal conn)))
           (expect (equal (list (list repository :restore (list "--" "src/foo.lisp")))
-                         calls))))))
+                         calls)))))))

@@ -490,7 +490,9 @@
       (expect (typep captured 'vcs-kit:repository))
       (expect (not (typep captured 'vcs-kit:vcs-repository))))))
 
-  (it "resolves local HEAD when the remote default branch is unavailable"
+  (describe "repository-helper-suite"
+
+    (it "resolves local HEAD when the remote default branch is unavailable"
     (let ((repository
             (nerimux/workspace-model:make-repository
              :specification "workspace-owner/project"
@@ -561,4 +563,4 @@
       (with-stubbed-fdefinition
           ((vcs-kit:ghq-root
              (lambda () (error "ghq root unavailable"))))
-        (expect (null (nerimux/vcs:ghq-root-directory))))))
+        (expect (null (nerimux/vcs:ghq-root-directory)))))))
