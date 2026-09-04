@@ -93,6 +93,13 @@ The layering rule is:
 bound at server startup by `install-pty-port` (`packages/pty/src/pty.lisp`)
   and bound to a fake by the PTY tests.
 
+The concrete PTY implementation is split by operation: `pty-process.lisp`
+owns child lifetime and the process table, `pty-io.lisp` owns master-fd I/O,
+`pty-select.lisp` owns readiness polling, and `pty-terminal.lisp` owns terminal
+geometry. `pty.lisp` contains only the size-setting primitive and port wiring.
+The ASDF serial order loads these implementation modules before the wiring
+form, so the public port surface remains explicit without an adapter layer.
+
   A capability with exactly one implementation is a plain **wrapper**:
   `environment-value`, `environment-entries`, `working-directory` in
   `posix-port.lisp`. Their tests stub by setting a real environment variable,
