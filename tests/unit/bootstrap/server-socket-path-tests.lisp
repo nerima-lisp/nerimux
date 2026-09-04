@@ -205,6 +205,21 @@
       (expect (equal "server" (nth (- (length args) 2) args)))
       (expect (equal "session-name" (car (last args))))))
 
+  (it "server-respawn-command-omits-core-when-runtime-is-an-executable-core"
+    (let* ((runtime sb-ext:*runtime-pathname*)
+           (original-core sb-ext:*core-pathname*))
+      (unwind-protect
+           (progn
+             (setf sb-ext:*core-pathname* runtime)
+             (multiple-value-bind (exe args)
+                 (nerimux::%server-respawn-command "executable-core")
+               (expect (string= (namestring runtime) exe))
+               (expect (null (member "--core" args :test #'string=)))
+               (expect (equal '("--no-sysinit" "--no-userinit" "server"
+                                "executable-core")
+                              args))))
+        (setf sb-ext:*core-pathname* original-core))))
+
 
   (it "stale-socket-p-detects-dead-socket-file"
     (expect (null (nerimux::%stale-socket-p "/nonexistent/nerimux-stale-probe.sock")))
