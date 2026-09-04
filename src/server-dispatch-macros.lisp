@@ -1,5 +1,14 @@
 (in-package #:nerimux)
 
+(defmacro %with-client-confirmation ((conn args operation) &body body)
+  `(if (%client-boolean-option-p ,args '("--confirm" "confirm"))
+       (progn ,@body)
+       (progn
+         (%client-notify ,conn
+                         ,(format nil "worktree ~A requires --confirm"
+                                  operation))
+         t)))
+
 (defmacro define-worktree-command-entry (name command description)
   `(defun ,name (conn)
      ,(format nil

@@ -1,12 +1,9 @@
 (in-package #:nerimux)
 
 (defun %client-delete-worktree (conn target args)
-  (if (not (%client-boolean-option-p args '("--confirm" "confirm")))
-      (progn
-        (%client-notify conn "worktree delete requires --confirm")
-        t)
-      (let ((worktree (%client-operation-worktree conn target))
-            (force (%client-boolean-option-p args '("--force" "force"))))
+  (%with-client-confirmation (conn args "delete")
+    (let ((worktree (%client-operation-worktree conn target))
+          (force (%client-boolean-option-p args '("--force" "force"))))
         (cond
           ((not worktree)
             (%client-notify conn "worktree delete requires a worktree")
@@ -72,12 +69,9 @@
             t)))))
 
 (defun %client-lock-worktree (conn target args)
-  (if (not (%client-boolean-option-p args '("--confirm" "confirm")))
-      (progn
-        (%client-notify conn "worktree lock requires --confirm")
-        t)
-      (let ((worktree (%client-operation-worktree conn target))
-            (reason (%client-option-value args '("--reason" "reason"))))
+  (%with-client-confirmation (conn args "lock")
+    (let ((worktree (%client-operation-worktree conn target))
+          (reason (%client-option-value args '("--reason" "reason"))))
         (cond
           ((not worktree)
             (%client-notify conn "worktree lock requires a worktree")
@@ -131,11 +125,8 @@
             t)))))
 
 (defun %client-unlock-worktree (conn target args)
-  (if (not (%client-boolean-option-p args '("--confirm" "confirm")))
-      (progn
-        (%client-notify conn "worktree unlock requires --confirm")
-        t)
-      (let ((worktree (%client-operation-worktree conn target)))
+  (%with-client-confirmation (conn args "unlock")
+    (let ((worktree (%client-operation-worktree conn target)))
         (cond
           ((not worktree)
             (%client-notify conn "worktree unlock requires a worktree")
