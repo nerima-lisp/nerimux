@@ -67,9 +67,8 @@
    moment the file's status changes. An untracked file (CODE \"??\") has
    nothing to diff against HEAD -- a single muted placeholder row, not a
    cache lookup that will never resolve for it."
-  (when 
-      (and expanded-node-ids
-           (gethash (list :file-diff worktree-id path) expanded-node-ids))
+  (when (and expanded-node-ids
+             (gethash (list :file-diff worktree-id path) expanded-node-ids))
     (if (string= code "??")
         (list
          (list level
