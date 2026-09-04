@@ -97,11 +97,12 @@
                          (sb-posix:syscall-error () nil))))
     (unless pre-existing
       (handler-case
-          (ensure-directories-exist (format nil "~A/" dir))
-        (file-error () nil))
-      (handler-case
-          (sb-posix:chmod dir #o700)
-        (sb-posix:syscall-error () nil)))
+          (progn
+            (ensure-directories-exist (format nil "~A/" dir))
+            (handler-case
+                (sb-posix:chmod dir #o700)
+              (sb-posix:syscall-error () nil)))
+        (file-error () nil)))
     (%verify-socket-directory-private dir uid)
     dir))
 
