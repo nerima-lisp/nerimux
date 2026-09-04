@@ -40,8 +40,8 @@
       (:file "workspace-window-naming-tests") ; R5.8
       (:file "workspace-catalog-refresh-state-tests") ; FR-005: mark/settle, not re-mark
           (:file "system-composition-tests") ; layering guard; core declares no optional kit
-          (:file "target-tests") ; parse-session/window/pane/target, find-by-target - part I
-          (:file "target-tests-b"))) ; %sigil-id, %name-prefix-p, edge cases, table-driven parse-target, multi-digit ids - part II
+          (:file "target-tests")
+          (:file "target-tests-b")))
         (:module "bootstrap-2"
          :pathname "bootstrap"
          :serial t
@@ -49,8 +49,8 @@
          ((:file "runtime-tests") ; globals, pane-reader-loop, EOF/remain-on-exit, alert actions
           (:file "runtime-reader-cps-tests") ; reader CPS state machine contracts
           (:file "runtime-channel-helper-tests") ; cap-list and channel plist helpers
-          (:file "runtime-tests-c") ; stop-reader-threads, wait-for-channel - part III
-          (:file "runtime-tests-b") ; wait-for-channel - part II
+          (:file "runtime-tests-c")
+          (:file "runtime-tests-b")
           (:file "main-tests")
           (:file "main-entry-tests")))))
       (:module "integration"

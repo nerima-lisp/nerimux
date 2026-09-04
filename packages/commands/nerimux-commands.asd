@@ -47,21 +47,21 @@
   :serial t
   :components ((:file "package")
                (:file "helpers-copy-mode-fixtures")
-               (:file "commands-tests") ; resize-pane, scroll, select/rename - part I
+               (:file "commands-tests")
                (:file "commands-pane-lifecycle-tests") ; close-pane-pty: fd/pid order, error swallowing
-               (:file "commands-tests-e") ; copy-mode WORD-motion and cursor movement - part II
-               (:file "commands-tests-f") ; rename-window, kill-window, linear selection-text - part III
-               (:file "commands-tests-m") ; shift-line-wrapped, line-wrapped flag on erase - part XIII
-               (:file "commands-tests-n") ; copy-mode-begin-selection multi-row, yank, other-end - part XIV
-               (:file "commands-tests-k") ; begin-line-selection, copy-end-of-line (D), copy-line (Y), search-forward/backward, wrap-search - part XI
-               (:file "commands-tests-g") ; tokenize-command-string, message-log append/cap/order - part V
-               (:file "commands-tests-h") ; copy-mode exit and half-page scroll, clear-history, rotate - part VI
+               (:file "commands-tests-e")
+               (:file "commands-tests-f")
+               (:file "commands-tests-m")
+               (:file "commands-tests-n")
+               (:file "commands-tests-k")
+               (:file "commands-tests-g")
+               (:file "commands-tests-h")
                (:file "commands-window-navigation-tests") ; find-window and next/previous/last-window command behavior
-               (:file "commands-tests-c") ; pipe-pane, virtual-row, timeout, scroll helpers, word/paragraph nav - part VII
-               (:file "commands-tests-o") ; selection-bounds scrollback, word/paragraph nav, scroll-middle - part XV
-               (:file "commands-tests-j") ; resize up, copy-mode search/scroll/word-bounds, row extraction - part X
-               (:file "commands-tests-l") ; copy-mode exit resets rect-select, yank-rectangle fixed columns - part XII
-               (:file "commands-tests-i") ; rectangle selection-text, run-copy-command, copy-mode set-cursor - part IX
+               (:file "commands-tests-c")
+               (:file "commands-tests-o")
+               (:file "commands-tests-j")
+               (:file "commands-tests-l")
+               (:file "commands-tests-i")
                (:file "commands-copy-navigation-tests")) ; copy-mode search next/prev/forward/backward guards
   ;; See packages/text/nerimux-text.asd for why this form is repeated per unit
   ;; rather than shared, and why *PRINT-CIRCLE* is load-bearing.
