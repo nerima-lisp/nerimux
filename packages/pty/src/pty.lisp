@@ -45,8 +45,7 @@
 
 (defun %spawn-directory (start-dir)
   "Return a truename pathname for START-DIR, or NIL when it is absent/invalid.
-   The old child path ignored chdir failures; keeping NIL preserves that behavior
-   by letting the child inherit the current directory."
+   NIL lets the child inherit the current directory."
   (when (%string-non-empty-p start-dir)
     (handler-case (truename start-dir)
       (file-error ()
@@ -123,11 +122,11 @@
    stalls its caller for a bounded, barely perceptible instant instead of
    forever.
 
-   Measured cost, so the tradeoff is on the record: SB-EXT:WITH-TIMEOUT
+   Measured cost: SB-EXT:WITH-TIMEOUT
    registers and deregisters a timer against SBCL's global timer queue on
    every call, costing ~228 bytes consed per call against 0 for the bare
-   write.  On the keystroke path that is per-keystroke.  Accepted here
-   because the alternative it replaces is an unbounded hang of every client;
+   write.  On the keystroke path that is per-keystroke.  This cost is accepted
+   because an unbounded write would hang every client;
    arming the timer only after a non-blocking first write reports EWOULDBLOCK
    would remove the cost from the common case, and is the change to make if
    this ever shows up in a profile.")
@@ -212,8 +211,7 @@
    Callers gate this with select-fds, so FD is ready when we read: cl-tty-kit's
    fd-read-octets then returns the available bytes (positive count) without
    waiting to fill BUFFER.  A 0 (EOF) or NIL (would-block) result maps to NIL —
-   the 'no data / child gone' signal the reader treats as EOF, matching the
-   previous %read-based convention."
+   the reader's 'no data / child gone' signal."
   (let ((count (cl-tty-kit:fd-read-octets fd buffer)))
     (when (and count (plusp count))
       (subseq buffer 0 count))))
@@ -258,28 +256,24 @@
    loop can still be holding one in its poll set for the iteration in which a
    pane is torn down.
 
-   The hand-rolled %select this replaced tolerated that: it returned -1 and the
-   positive-count guard turned the whole call into NIL.  PROCESS-KIT's
+   PROCESS-KIT's
    %VALIDATE-FDS instead requires (INTEGER 0) and raises a BARE TYPE-ERROR —
    deliberately, so a descriptor number no caller could sensibly correct is not
    offered a STORE-VALUE restart — and a TYPE-ERROR is NOT a
    PROCESS-KIT:FD-WAIT-FAILED, so SELECT-FDS's handler-case below does not catch
    it.  Without this filter a dead pane in the reader loop becomes an unhandled
-   error out of the event loop where it used to be a silent no-op.
+   error out of the event loop.
 
    Filtered here rather than by widening the handler-case to TYPE-ERROR, for two
-   reasons.  It restores the old contract exactly (a dead pane is simply not
-   polled, and any live fds in the same call still are, instead of the whole poll
-   collapsing to NIL).  And TYPE-ERROR is also how PROCESS-KIT reports a bad
+   reason: a dead pane is simply not polled, and live fds in the same call still
+   are. TYPE-ERROR is also how PROCESS-KIT reports a bad
    :TIMEOUT and how a genuine programming mistake — a stream or NIL reaching this
    list — would surface; swallowing those would turn a real bug into an event
    loop that quietly reports nothing ready forever.
 
    An fd above PROCESS-KIT:+MAXIMUM-FD+ (1022, two below FD_SETSIZE) is
    deliberately NOT filtered: PROCESS-KIT signals FD-SET-OVERFLOW for it, and a
-   descriptor select(2) cannot watch is a caller bug — the old code met it with
-   silence, and past FD_SETSIZE with memory corruption (see SELECT-FDS below) —
-   not a sentinel to be swallowed."
+   descriptor select(2) cannot watch is a caller bug, not a sentinel to swallow."
   (remove-if-not
    (lambda (fd)
      (typep fd '(integer 0)))
@@ -296,15 +290,9 @@
    src/ and tests/, and this one function is what the nerimux/ports layer and the
    test suite name. Converting here keeps that surface unchanged.
 
-   Two behaviors improve on the hand-rolled select(2) this replaces.
-
-   EINTR is now retried against a deadline fixed up front, instead of surfacing
-   as a spurious \"nothing is ready\". The old code inspected the read-set only
-   on a positive count, so a SIGWINCH or SIGCHLD landing mid-wait made this
-   return NIL early — in the event loop that meant a resize or a child exit
-   could cut a poll short and, with a -1 (infinite) timeout, restart the whole
-   wait. process-kit resumes the remaining time instead.
-
+   EINTR is retried against a deadline fixed up front, instead of surfacing
+   as a spurious \"nothing is ready\". process-kit resumes the remaining time
+   after a signal.
    An fd above PROCESS-KIT:+MAXIMUM-FD+ now signals PROCESS-KIT:FD-SET-OVERFLOW.
    That ceiling is 1022, TWO below FD_SETSIZE, not 1023: select(2)'s first
    argument is one PAST the highest descriptor watched and must stay under
@@ -313,17 +301,13 @@
    is why fd 1023 is refused here rather than deeper down, where it used to
    surface as an untyped SIMPLE-ERROR.
 
-   Not caught, deliberately. Past FD_SETSIZE the old fd-set! computed
-   (floor fd 32) and wrote that word unconditionally, i.e. it scribbled past the
-   end of a 128-byte fd_set; that is memory corruption, and any descriptor this
-   library cannot watch is a caller bug rather than the closed-descriptor race
-   below.
+   Not caught, deliberately. Any descriptor this library cannot watch is a
+   caller bug rather than the closed-descriptor race below.
 
-   PROCESS-KIT:FD-WAIT-FAILED (EBADF on a closed descriptor, say) IS mapped back
-   to NIL, preserving the old contract: %select returned -1 and the positive-count
-   guard yielded NIL. The event loop polls a set that a concurrently-detaching
-   client can close underneath it, and turning that race into a signal would take
-   the server down where it previously just iterated again."
+   PROCESS-KIT:FD-WAIT-FAILED (EBADF on a closed descriptor, say) is mapped to NIL.
+   The event loop can poll a descriptor that a concurrently-detaching client
+   closes underneath it; treating that race as no ready descriptors keeps the
+   loop alive."
   (let ((fds (%selectable-fds fds)))
     (when fds
       (handler-case (process-kit:wait-for-input fds
