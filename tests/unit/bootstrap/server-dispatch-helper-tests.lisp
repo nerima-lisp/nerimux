@@ -12,6 +12,9 @@
       (expect (eq main-worktree
                   (nerimux::%workspace-find-worktree "/workspace/repo"
                                                      organizations)))
+      (expect (null (nerimux::%workspace-find-worktree 42 organizations)))
+      (expect (null (nerimux::%workspace-find-worktree
+                     "not-a-worktree" organizations)))
       (expect (eq feature-worktree
                   (nerimux::%workspace-find-worktree-for-attach
                    "/workspace/repo/" organizations)))
