@@ -47,7 +47,7 @@
       (:module "integration"
        :serial t
        :components
-        ((:file "pane-response-queue-pty-tests") ; spans nerimux-model and the real nerimux-pty adapter
+        ((:file "pane-response-queue-pty-tests") ; spans nerimux-model and the concrete nerimux-pty implementation
          (:file "net-malformed-utf8-dispatch-tests") ; spans nerimux-net and the bootstrap event loop
          (:file "commands-clear-history-tests") ; binds nerimux:: server state around a commands case
          (:file "renderer-selection-copy-mode-tests") ; renderer bounds over a commands-built copy-mode screen
