@@ -179,6 +179,18 @@ vcs-inspect.lisp for the race this closes."
         :test
         #'string=))
 
+(defun %preserve-worktree-state (source target)
+  (setf (nerimux/workspace-model:worktree-id target)
+        (nerimux/workspace-model:worktree-id source)
+        (nerimux/workspace-model:worktree-commits-state target)
+        (nerimux/workspace-model:worktree-commits-state source)
+        (nerimux/workspace-model:worktree-recent-commits target)
+        (nerimux/workspace-model:worktree-recent-commits source)
+        (nerimux/workspace-model:worktree-stashes-state target)
+        (nerimux/workspace-model:worktree-stashes-state source)
+        (nerimux/workspace-model:worktree-stashes target)
+        (nerimux/workspace-model:worktree-stashes source)))
+
 (defun %preserve-worktree-commit-state (previous current)
   "Carry ID, COMMITS-STATE and RECENT-COMMITS from PREVIOUS's worktrees onto
 CURRENT's, matched by path (F1). A full catalog rescan (SCAN-REPOSITORIES)
@@ -205,19 +217,10 @@ rescan exactly as commit history was before this function existed."
   (let ((previous-worktrees (%catalog-worktrees previous)))
     (dolist (worktree (%catalog-worktrees current))
       (let ((match
-             (%worktree-by-path previous-worktrees
-                                (nerimux/workspace-model:worktree-path worktree))))
+              (%worktree-by-path previous-worktrees
+                                 (nerimux/workspace-model:worktree-path worktree))))
         (when match
-          (setf (nerimux/workspace-model:worktree-id worktree) (nerimux/workspace-model:worktree-id
-                                                                match)
-                (nerimux/workspace-model:worktree-commits-state worktree) (nerimux/workspace-model:worktree-commits-state
-                                                                           match)
-                (nerimux/workspace-model:worktree-recent-commits worktree) (nerimux/workspace-model:worktree-recent-commits
-                                                                            match)
-                (nerimux/workspace-model:worktree-stashes-state worktree) (nerimux/workspace-model:worktree-stashes-state
-                                                                           match)
-                (nerimux/workspace-model:worktree-stashes worktree) (nerimux/workspace-model:worktree-stashes
-                                                                     match))))))
+          (%preserve-worktree-state match worktree)))))
   current)
 
 (defun %worktree-recency (worktree)
@@ -370,5 +373,3 @@ client's cursor while it is being looked at."
       (setf merged (nconc merged (nreverse additions)))
       (set-workspace-organizations merged)))
   (workspace-organizations))
-
-
