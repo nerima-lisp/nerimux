@@ -19,24 +19,11 @@
    redundant — the unit suite is the one that runs in `nix develop`.
    The same transposition, in the read direction, is done by TERMINAL-SIZE below.
 
-   This is also a BUG FIX. The previous implementation called variadic ioctl(2)
-   through a FIXED cffi prototype. On the arm64 ABI a variadic argument is passed
-   on the stack while a fixed prototype passes it in a register, so the kernel
-   read a garbage pointer and the call failed with EFAULT: verified on this
-   machine, where the fixed-prototype TIOCSWINSZ returned -1 and left the pty at
-   0x0, while SBCL's own sb-unix:unix-ioctl (what cl-tty-kit uses) set 40x123
-   correctly on the same fd. set-pty-size was therefore a silent no-op on Apple
-   Silicon — every child process saw a stale or zero window size and SIGWINCH was
-   never delivered.
-
-   cl-tty-kit signals TERMINAL-SIZE-SET-FAILED on failure, whereas the old ioctl
-   returned -1 that no caller inspected. FORKPTY-WITH-SHELL calls this inside an
-   unwind-protect that tears the pty down, and the resize command path wraps it,
-   so a genuine failure now surfaces instead of leaving a wrongly-sized pane.
+   cl-tty-kit signals TERMINAL-SIZE-SET-FAILED on failure, so resize errors
+   propagate through the PTY lifecycle instead of being silently ignored.
 
    ROWS and COLS must both be POSITIVE. cl-tty-kit's %ASSERT-TERMINAL-DIMENSION
-   rejects 0 (and anything negative) before attempting the ioctl, where the old
-   cffi path passed a 0x0 winsize through and ignored the -1 return. A degenerate
+   rejects 0 (and anything negative) before attempting the ioctl. A degenerate
    layout can produce a zero content height, so NERIMUX/MODEL:PANE-REPOSITION —
    the only caller that computes its dimensions rather than receiving them —
    guards (PLUSP WIDTH) and (PLUSP CONTENT-HEIGHT) alongside its fd guard."

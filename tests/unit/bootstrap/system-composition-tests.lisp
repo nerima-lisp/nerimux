@@ -358,16 +358,10 @@
             (subseq text name-start name-end)))))))
 
 (defun %file-layer-name (file pkg->layer)
-  "FILE's layer marker word, derived from what FILE itself declares -- never
-   from its path.  The previous implementation read the segment right after
-   the nearest `src' path component (src/domain/... -> DOMAIN), which
-   depended on every source file living under a layer-named directory.
-   That stopped holding the moment a layer flattens to
-   packages/<name>/src/*.lisp with no layer segment at all: the segment
-   right after `src' becomes the bare filename, which matches none of the
-   five layer directories, so every such file returned NIL here and was
-   silently dropped by the caller's remove-if-not.  Nothing failed loudly;
-   the guard just stopped looking at 131 of 160 files without saying so.
+  "Return FILE's layer marker from its declared package.
+
+   Source and package-definition files use their declared package so the
+   result does not depend on the source file's directory.
 
    FILE says what it is regardless of where it sits, so read that instead
    of the path:
