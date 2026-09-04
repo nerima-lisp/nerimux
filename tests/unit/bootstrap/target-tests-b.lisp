@@ -88,4 +88,15 @@
              (expect (eq :matched (funcall name :hit)))
              (expect (null (funcall name :miss))))
         (when (fboundp name)
+          (fmakunbound name)))))
+
+  (it "define-target-lookup-supports-rules-without-a-docstring"
+    (let ((name (gensym "TARGET-LOOKUP-")))
+      (unwind-protect
+           (progn
+             (eval `(nerimux::define-target-lookup ,name (value)
+                      ((when (eql value :hit) :matched))))
+             (expect (eq :matched (funcall name :hit)))
+             (expect (null (funcall name :miss))))
+        (when (fboundp name)
           (fmakunbound name))))))
