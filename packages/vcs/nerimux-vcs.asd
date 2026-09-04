@@ -63,6 +63,7 @@
                (:file "vcs-fetch-dedup-tests") ; R7.1: one fetch in flight per target
                (:file "vcs-worktree-path-tests") ; R7.2: timestamp-sha path, -2/-3 on collision
                (:file "vcs-operations-tests")
+               (:file "vcs-command-tests")
                (:file "vcs-async-operations-tests")
                (:file "vcs-inspect-tests"))
   ;; See packages/text/nerimux-text.asd for why this form is repeated per unit
