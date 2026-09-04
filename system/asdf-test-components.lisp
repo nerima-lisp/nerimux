@@ -28,7 +28,8 @@
           (:file "server-client-cps-tests") ; client key CPS, runtime registry, resize edge cases
           (:file "server-dispatch-helper-fixtures")
           (:file "server-dispatch-helper-error-tests")
-          (:file "server-dispatch-helper-tests") ; selection, picker, and command helper algebra
+          (:file "server-dispatch-helper-tests") ; command helper algebra
+          (:file "server-dispatch-helper-selection-tests") ; workspace and picker selection
           (:file "server-dispatch-helper-refresh-tests") ; asynchronous refresh CPS
           (:file "server-dispatch-helper-catalog-refresh-tests") ; failed catalog refresh state
           (:file "server-dispatch-helper-status-tests")
