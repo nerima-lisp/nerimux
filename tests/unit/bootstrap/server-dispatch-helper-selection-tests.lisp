@@ -74,6 +74,34 @@
       (nerimux/workspace-model:repository-add-worktree repository worktree)
       (expect (eq worktree (nerimux::%picker-item-worktree item)))))
 
+  (it "resolves-picker-repositories-through-their-main-worktree"
+    (let* ((repository (nerimux/workspace-model:make-repository :id "repo"))
+           (main-worktree
+             (nerimux/workspace-model:make-worktree
+              :id "main" :repository repository :path "/tmp/main"))
+           (item (nerimux/picker::%make-picker-item
+                  :id "repo" :kind :repository :label "repo"
+                  :repository repository)))
+      (setf (nerimux/workspace-model:repository-main-worktree repository)
+            main-worktree)
+      (expect (eq main-worktree (nerimux::%picker-item-worktree item)))))
+
+  (it "resolves-picker-repositories-through-their-first-worktree"
+    (let* ((repository (nerimux/workspace-model:make-repository :id "repo"))
+           (worktree
+             (nerimux/workspace-model:make-worktree
+              :id "tree" :repository repository :path "/tmp/tree"))
+           (item (nerimux/picker::%make-picker-item
+                  :id "repo" :kind :repository :label "repo"
+                  :repository repository)))
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
+      (expect (eq worktree (nerimux::%picker-item-worktree item)))))
+
+  (it "returns-no-worktree-for-an-unowned-picker-item"
+    (let ((item (nerimux/picker::%make-picker-item
+                 :id "empty" :kind :unknown :label "empty")))
+      (expect (null (nerimux::%picker-item-worktree item)))))
+
   (it "resolves-the-most-specific-worktree-containing-a-cwd"
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
