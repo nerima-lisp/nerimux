@@ -57,6 +57,8 @@
   :serial t
   :components ((:file "package")
                (:file "vcs-tests")
+               (:file "vcs-tests-workspace")
+               (:file "vcs-tests-status")
                (:file "vcs-fetch-dedup-tests") ; R7.1: one fetch in flight per target
                (:file "vcs-worktree-path-tests") ; R7.2: timestamp-sha path, -2/-3 on collision
                (:file "vcs-operations-tests")
