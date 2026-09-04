@@ -35,6 +35,7 @@
                (:file "renderer-workspace-command-line")
                (:file "renderer-workspace-tree-data")
                (:file "renderer-workspace-tree-entries")
+               (:file "renderer-workspace-tree-layout")
                (:file "renderer-workspace-tree")
                (:file "renderer-workspace-key-panel")
                (:file "renderer-workspace")

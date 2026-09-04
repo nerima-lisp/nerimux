@@ -409,19 +409,3 @@
                                           collapsed-node-ids
                                           filter-active-p))))
         (%workspace-filter-tree-entries entries filter)))))
-
-(defun workspace-tree-view-rows (terminal-rows)
-  "Rows available for the tree in the one-column overview layout:
-   TERMINAL-ROWS minus header(1) + separator(1) + detail(2) + message(1) +
-   the bottom key panel -- 3 rows (a divider and 2 content lines) at
-   TERMINAL-ROWS >= 12, or the single-line footer it collapses to below that
-   height (see RENDER-WORKSPACE-OVERVIEW-TO-STRING) -- floored at 1. Shared
-   with the bootstrap scroll-clamping math for the same reason
-   %WORKSPACE-LEFT-WIDTH used to be shared: two layers computing this
-   independently can silently disagree about where the tree ends."
-  (max 1
-       (- terminal-rows
-          (if (< terminal-rows 12)
-              6
-              8))))
-
