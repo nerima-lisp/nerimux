@@ -41,3 +41,44 @@
         (expect (= 4 (length calls)))
         (expect (every (lambda (call) (eq repository (first call))) calls))
         (expect (eq :confirm (nerimux::client-conn-modal conn)))))))
+
+  (it "status-view-discard-key-confirms-before-writing"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/workspace-model:make-organization
+                :id "org" :host "github.com" :name "team"))
+             (repository
+               (nerimux/workspace-model:make-repository
+                :id "repo" :organization organization
+                :specification "github.com/team/repo"))
+             (worktree
+               (nerimux/workspace-model:make-worktree
+                :id "wt-discard-confirm" :repository repository
+                :path "/tmp/wt-discard-confirm" :branch "main"))
+             (conn (%make-test-conn))
+             (nerimux::*clients* (list conn))
+             (nerimux/vcs::*workspace-organizations* (list organization))
+             (calls nil))
+        (nerimux/workspace-model:organization-add-repository organization repository)
+        (nerimux/workspace-model:repository-add-worktree repository worktree)
+        (setf (nerimux::client-conn-view conn) :status
+              (nerimux::client-conn-selected-worktree conn) worktree)
+        (nerimux::%set-client-selected-tree-object
+         conn (list :file "wt-discard-confirm" "src/foo.lisp" " M"))
+        (with-stubbed-fdefinition
+            ((nerimux/vcs:vcs-package-available-p (lambda () nil))
+             (nerimux/vcs:git-write-operation-async
+               (lambda (received-repository operation arguments
+                        &key callback-dispatch on-complete on-error)
+                 (declare (ignore callback-dispatch on-error))
+                 (push (list received-repository operation arguments) calls)
+                 (when on-complete (funcall on-complete t ""))
+                 t)))
+          (nerimux::%handle-multi-key-message s conn "k")
+          (expect (null calls))
+          (expect (eq :confirm (nerimux::client-conn-modal conn)))
+          (expect (nerimux::client-conn-confirm-action conn))
+          (nerimux::%handle-multi-key-message s conn "y")
+          (expect (null (nerimux::client-conn-modal conn)))
+          (expect (equal (list (list repository :restore (list "--" "src/foo.lisp")))
+                         calls))))))
