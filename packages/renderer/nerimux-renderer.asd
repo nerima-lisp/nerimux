@@ -96,6 +96,7 @@
                (:file "renderer-workspace-status-tokens-tests")
                (:file "renderer-workspace-clip-tests")
                (:file "renderer-workspace-tree-tests")
+               (:file "renderer-workspace-tree-panels-tests")
                (:file "renderer-workspace-command-completion-tests")
                (:file "renderer-statusbar-workspace-tests")
                (:file "renderer-copy-mode-position-tests")
