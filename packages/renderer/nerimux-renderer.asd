@@ -63,7 +63,7 @@
                (:file "renderer-workspace-status-data")
                (:file "renderer-workspace-status-style-data")
                (:file "renderer-workspace-status-render")
-               (:file "renderer-workspace-status")               )
+               (:file "renderer-workspace-status"))
   :in-order-to ((test-op (test-op "nerimux-renderer/test"))))
 
 (defsystem "nerimux-renderer/test"
@@ -106,7 +106,7 @@
                (:file "renderer-tui-kit-tests")
                (:file "renderer-tui-kit-help-tests")
                (:file "renderer-transient-tests")
-               (:file "renderer-workspace-status-tests")               )
+               (:file "renderer-workspace-status-tests"))
   ;; See packages/text/nerimux-text.asd for why this form is repeated per unit
   ;; rather than shared, and why *PRINT-CIRCLE* is load-bearing.
   :perform (test-op (op c)
