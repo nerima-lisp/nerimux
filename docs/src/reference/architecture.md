@@ -90,7 +90,7 @@ The layering rule is:
 
   A capability with a second implementation that tests genuinely exercise is a
   port **variable**: `nerimux/ports:*spawn-pty*`, `*write-pty*` and friends,
-  bound at server startup by `install-pty-port` (`src/server.lisp`)
+bound at server startup by `install-pty-port` (`packages/pty/src/pty.lisp`)
   and bound to a fake by the PTY tests.
 
   A capability with exactly one implementation is a plain **wrapper**:
@@ -154,9 +154,9 @@ Terminal code separates data (`types`) from logic (`actions`, `csi`, `sgr`, the
 CPS parser) one level further down.
 
 The bootstrap dispatch layer follows the same separation. The shared
-`define-message-dispatch-fn` macro in `src/server.lisp` expands
+`define-message-dispatch-fn` macro in `src/server-dispatch-macros.lisp` expands
 declarative rules into the common conditional dispatch form. The
-`define-multi-msg-dispatch` wrapper in `server.lisp` supplies the multi-client
+`define-multi-msg-dispatch` wrapper in `src/server-dispatch-macros.lisp` supplies the multi-client
 handler shape used by `server-multi.lisp`; the client connection data lives in
 the shared `server-multi-dispatch.lisp` module, while per-message helpers live in the
 `server-multi-dispatch-prefix.lisp`, `server-multi-dispatch-picker.lisp`,
