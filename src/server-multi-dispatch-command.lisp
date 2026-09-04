@@ -34,7 +34,7 @@
                        t)
                       ((:detail :pane-detail) (%set-client-view conn :pane) t)
                       ((:workspace-prefix :prefix-key :rebind-prefix)
-                       (%client-rebind-prefix conn (or target (first args)))
+                       (%client-rebind-prefix conn (command-argument))
                        t)
                       ((:workspace-refresh :vcs-refresh :refresh-workspace)
                        (%client-refresh-workspace conn))
@@ -43,26 +43,26 @@
                                                      (-
                                                       (or
                                                        (%parse-client-integer
-                                                        (or target (first args)))
+                                                        (command-argument))
                                                        1)))
                        t)
                       ((:tree-down :worktree-down :tree-next)
                        (%select-client-tree-relative conn
                                                      (or
                                                       (%parse-client-integer
-                                                       (or target (first args)))
+                                                       (command-argument))
                                                       1))
                        t)
                       (:tree-scroll
                        (%move-client-tree-scroll conn
                                                  (or
                                                   (%parse-client-integer
-                                                   (or target (first args)))
+                                                   (command-argument))
                                                   1))
                        t)
                       ((:tree-select :worktree-select)
                        (%select-client-tree-worktree conn
-                                                     (or target (first args)))
+                                                     (command-argument))
                        t)
                       (:tree-top
                        (%set-client-selected-tree-object conn
@@ -95,7 +95,7 @@
                        (%client-prune-worktrees conn target args :dry-run nil))
                       (:mode
                        (let ((mode
-                              (%client-ui-mode-value (or target (first args)))))
+                              (%client-ui-mode-value (command-argument))))
                          (when mode
                            (cond
                              ((eq mode :picker) (%open-client-picker conn))
@@ -128,7 +128,7 @@
                       ((:picker-next :picker-down :picker-prev :picker-up)
                        (let ((delta
                               (or
-                               (%parse-client-integer (or target (first args)))
+                               (%parse-client-integer (command-argument))
                                1)))
                          (%move-client-picker-index conn
                                                     (if (member cmd
@@ -148,7 +148,7 @@
                        t)
                       (:picker-regex
                        (%set-client-picker-regex conn
-                                                 (or target (first args))
+                                                 (command-argument)
                                                  (or target args))
                        t)
                       ((%client-ui-mode-p cmd)
@@ -192,7 +192,7 @@
                          t))
                       (:viewport
                        (let ((delta
-                              (%parse-client-integer (or target (first args)))))
+                              (%parse-client-integer (command-argument))))
                          (when delta
                            (%move-client-viewport conn delta)
                            (%mark-dirty))

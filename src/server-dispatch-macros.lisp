@@ -89,14 +89,18 @@
                            ,cmd-var
                            ,target-var
                            ,args-var))
-       (cond
-         ,@(mapcar
-            (lambda (rule)
-              (destructuring-bind (pattern &rest body) rule
-                `(,(cond
-                     ((eql pattern t) t)
-                     ((and (consp pattern) (every #'keywordp pattern))
-                      `(member ,cmd-var ',pattern :test #'eq))
-                     ((keywordp pattern) `(eq ,cmd-var ,pattern))
-                     (t pattern)) ,@body)))
-            rules)))))
+       (macrolet ((command-argument (&optional default)
+                    (list 'or ',target-var
+                          (list 'first ',args-var)
+                          default)))
+         (cond
+           ,@(mapcar
+              (lambda (rule)
+                (destructuring-bind (pattern &rest body) rule
+                  `(,(cond
+                       ((eql pattern t) t)
+                       ((and (consp pattern) (every #'keywordp pattern))
+                        `(member ,cmd-var ',pattern :test #'eq))
+                       ((keywordp pattern) `(eq ,cmd-var ,pattern))
+                       (t pattern)) ,@body)))
+              rules))))))
