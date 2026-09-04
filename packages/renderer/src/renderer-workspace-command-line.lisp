@@ -59,7 +59,7 @@
 (defun %render-workspace-tree-filter-line (stream row cols tree-filter)
   "Draw the tree-filter (`/query`) input line at ROW: the `%RENDER-
    WORKSPACE-COMMAND-LINE` shape, but for the one-column overview's tree
-   search (redesign PR2) -- a bold-accent `/` followed by the typed query.
+   search -- a bold-accent `/` followed by the typed query.
    No separate cursor glyph is drawn: like the `:` command line, the real
    terminal cursor stays hidden (CURSOR-INVISIBLE, called once for the whole
    frame) and a synthetic block cursor would need an ambiguous-width

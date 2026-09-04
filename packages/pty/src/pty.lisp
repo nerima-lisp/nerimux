@@ -298,8 +298,7 @@
    argument is one PAST the highest descriptor watched and must stay under
    FD_SETSIZE, so watching fd 1023 would mean passing 1024, which
    SB-UNIX:UNIX-FAST-SELECT refuses. Naming the bound as one documented condition
-   is why fd 1023 is refused here rather than deeper down, where it used to
-   surface as an untyped SIMPLE-ERROR.
+   is why fd 1023 is refused here with the documented condition.
 
    Not caught, deliberately. Any descriptor this library cannot watch is a
    caller bug rather than the closed-descriptor race below.

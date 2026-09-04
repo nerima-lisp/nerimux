@@ -75,8 +75,7 @@
 (%define-sgr-constant +sgr-default-status+
                       "48;2;40;42;54;38;2;248;248;242"
                       "Status-bar base SGR: Dracula bg with Dracula fg text.
-   Replaces the pre-theme \"44;97\" (blue background + bright white) that the
-   deleted `status-style` option used to resolve to.")
+   Replaces the pre-theme \"44;97\" (blue background + bright white).")
 
 (defun %sgr-wrap (text sgr &optional (restore "0"))
   "TEXT wrapped in ESC[SGRm … ESC[RESTOREm.  RESTORE defaults to a plain

@@ -29,9 +29,8 @@
    What Enter means depends on the level, and the two upper levels mean
    something the tree had no way to express before: organization and repository
    rows toggle open and closed, so a workspace of a thousand repositories opens
-   showing organizations rather than everything at once. Enter on those used to
-   start a worktree-create prompt — which made the create flow reachable but
-   left expansion with no key at all."
+   showing organizations rather than everything at once. Enter on an organization
+   or repository expands or collapses that row."
   (unless (%client-tree-object conn)
     (%select-client-tree-worktree conn nil))
   (let ((object (%client-tree-object conn)))
