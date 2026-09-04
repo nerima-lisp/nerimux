@@ -14,6 +14,15 @@
                  (expect
                   (string= "/tmp/nerimux-log-test-dir/nerimux/myserver.log"
                            (namestring (nerimux::%runtime-log-path "myserver")))))))
+          (it "falls back when NERIMUX_RUNTIME_STATE is empty"
+              (with-temporary-posix-environment-variable
+               ("NERIMUX_RUNTIME_STATE" "")
+               (with-temporary-posix-environment-variable
+                ("XDG_STATE_HOME" "/tmp/nerimux-log-empty-override")
+                (expect
+                 (string= "/tmp/nerimux-log-empty-override/nerimux/myserver.log"
+                          (namestring
+                           (nerimux::%runtime-log-path "myserver")))))))
           (it "resolves the log path under XDG_STATE_HOME"
               (with-temporary-posix-environment-variable
                ("NERIMUX_RUNTIME_STATE" nil)
