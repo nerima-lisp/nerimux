@@ -61,6 +61,7 @@
                (:file "renderer-tui-kit-transient")
                (:file "renderer-process-log")
                (:file "renderer-workspace-status-data")
+               (:file "renderer-workspace-status-style-data")
                (:file "renderer-workspace-status-render")
                (:file "renderer-workspace-status")               )
   :in-order-to ((test-op (test-op "nerimux-renderer/test"))))
