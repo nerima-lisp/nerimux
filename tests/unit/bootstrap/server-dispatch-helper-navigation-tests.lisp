@@ -587,6 +587,36 @@
                     (nerimux::%select-client-tree-section-relative conn -1)))
         (expect (= 2 (nerimux::client-conn-tree-scroll conn))))))
 
+  (it "section-selection-adjusts-scroll-in-both-directions"
+    (let* ((organization
+             (nerimux/workspace-model:make-organization
+              :id "org-jk-both" :host "github.com" :name "team"))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :id "repo-jk-both" :organization organization
+              :specification "github.com/team/repo-jk-both"))
+           (worktree
+             (nerimux/workspace-model:make-worktree
+              :id "wt-jk-both" :repository repository :path "/tmp/jk-both"
+              :branch "main" :dirty-p t))
+           (conn (nerimux::%make-client-conn)))
+      (nerimux/workspace-model:organization-add-repository organization repository)
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
+      (let ((nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
+            (nerimux::*dirty* nil)
+            (nerimux/vcs::*workspace-organizations* (list organization)))
+        (setf (nerimux::client-conn-rows conn) 1
+              (nerimux::client-conn-tree-scroll conn) 0)
+        (nerimux::%set-client-selected-tree-object conn :attention)
+        (expect (eq :repositories
+                    (nerimux::%select-client-tree-section-relative conn 1)))
+        (expect (plusp (nerimux::client-conn-tree-scroll conn)))
+        (setf (nerimux::client-conn-tree-scroll conn) 3
+              (nerimux::client-conn-selected-tree-object conn) :repositories)
+        (expect (eq :attention
+                    (nerimux::%select-client-tree-section-relative conn -1)))
+        (expect (= 1 (nerimux::client-conn-tree-scroll conn))))))
+
   (it "refuses to grow the tree filter past +max-tree-filter-length+"
     (let ((conn (nerimux::%make-client-conn)))
       (setf (nerimux::client-conn-tree-filter conn)
