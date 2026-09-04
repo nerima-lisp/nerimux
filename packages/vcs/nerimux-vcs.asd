@@ -57,6 +57,7 @@
   :serial t
   :components ((:file "package")
                (:file "vcs-value-tests")
+               (:file "vcs-worktree-status-tests")
                (:file "vcs-tests")
                (:file "vcs-prune-tests")
                (:file "vcs-tests-workspace")
