@@ -81,7 +81,7 @@
       (unwind-protect
            (progn
              (eval `(nerimux::define-target-lookup ,name (value)
-                      "Generated lookup."
+                      "Lookup used to verify the macro contract."
                       (:nil-guard value)
                       ((and (eql value :hit) :matched))))
              (expect (null (funcall name nil)))

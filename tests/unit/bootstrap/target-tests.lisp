@@ -6,10 +6,10 @@
     (let ((expansion
             (macroexpand-1
              '(nerimux::define-target-lookup nerimux::target-test-with-docstring (value)
-                "A generated lookup used to verify the macro contract."
+                "A lookup used to verify the macro contract."
                 ((when (and value (numberp value)) :number))
                 (:nil-guard value)))))
-      (expect (string= "A generated lookup used to verify the macro contract."
+      (expect (string= "A lookup used to verify the macro contract."
                        (fourth expansion)))
       (eval expansion))
     (expect (eq :number (nerimux::target-test-with-docstring 7)))

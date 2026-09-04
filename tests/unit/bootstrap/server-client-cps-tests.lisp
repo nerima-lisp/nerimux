@@ -1,8 +1,8 @@
 (in-package #:nerimux/test)
 
-(nerimux::define-message-dispatch-fn nerimux::%test-only-message-dispatch-fn
+(nerimux::define-message-dispatch-fn nerimux::%test-message-dispatch-fn
                                      (msg-type payload)
-                                     "Dispatch representative message types for the dispatch tests."
+                                     "Dispatch message types for the dispatch tests."
                                      ((null msg-type) :nil-arm)
                                      ((eq msg-type :known)
                                       (list :known-arm payload))
@@ -11,15 +11,15 @@
 (describe "server-suite"
 
 
-  (it "define-message-dispatch-fn-generated-function-is-fbound"
-    (expect (fboundp 'nerimux::%test-only-message-dispatch-fn)))
+  (it "define-message-dispatch-fn-defines-the-function"
+    (expect (fboundp 'nerimux::%test-message-dispatch-fn)))
 
-  (it "define-message-dispatch-fn-returns-same-as-cond-table"
-    (expect (eq :nil-arm (nerimux::%test-only-message-dispatch-fn nil :ignored)))
+  (it "define-message-dispatch-fn-selects-the-matching-arm"
+    (expect (eq :nil-arm (nerimux::%test-message-dispatch-fn nil :ignored)))
     (expect (equal '(:known-arm :payload-value)
-                    (nerimux::%test-only-message-dispatch-fn :known :payload-value)))
+                    (nerimux::%test-message-dispatch-fn :known :payload-value)))
     (expect (eq :fallback-arm
-                (nerimux::%test-only-message-dispatch-fn :unrecognised nil))))
+                (nerimux::%test-message-dispatch-fn :unrecognised nil))))
 
   (it "session-pane-lifecycle-functions-visit-every-pane"
     (let ((events nil))
