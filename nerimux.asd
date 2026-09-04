@@ -177,6 +177,7 @@
        (:file "server-multi-dispatch-command-input-data") ; client input state
        (:file "server-multi-dispatch-command-input-mode-data") ; generated branch data
        (:file "server-multi-dispatch-command-input-tree-filter") ; tree filter state
+       (:file "server-multi-dispatch-command-input-mode-commands") ; command mode commands
        (:file "server-multi-dispatch-command-status") ; status mutations
        (:file "server-multi-dispatch-command-input-mode") ; command mode and tree navigation
        (:file "server-multi-dispatch-command-input") ; client input and command entry
