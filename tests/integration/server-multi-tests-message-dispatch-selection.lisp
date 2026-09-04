@@ -52,4 +52,28 @@
       (nerimux::%enqueue-main-thread-callback
        (lambda () (push :after-error events)))
       (nerimux::%drain-main-thread-callbacks)
-      (expect (equal '(:after-error) events)))))
+      (expect (equal '(:after-error) events))))
+
+  (it "tree-selection-helpers-cover-boundaries"
+    (check-table
+      (list (list (nerimux::%tree-selection-index 'a '(a b) 1)
+                  0
+                  "preserve an existing selection")
+            (list (nerimux::%tree-selection-index nil '(a b) -1)
+                  0
+                  "start before the first item when moving backward")
+            (list (nerimux::%tree-selection-index nil '(a b) 1)
+                  -1
+                  "keep the invalid forward sentinel")
+            (list (nerimux::%tree-selection-scroll 2 3 5)
+                  2
+                  "scroll upward to the selected item")
+            (list (nerimux::%tree-selection-scroll 8 3 5)
+                  4
+                  "scroll downward when the selection leaves the viewport")
+            (list (nerimux::%tree-selection-scroll 10 0 0)
+                  11
+                  "advance even when the visible height is empty")
+            (list (nerimux::%tree-selection-scroll 5 0 10)
+                  0
+                  "retain the viewport while the selection is visible")))))
