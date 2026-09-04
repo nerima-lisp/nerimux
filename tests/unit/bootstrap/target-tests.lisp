@@ -41,8 +41,10 @@
   (it "parse-target-table"
     (dolist (c '(("mysession"  "mysession" nil   nil   "plain name → session only")
                  ("sess:win"   "sess"      "win" nil   "sess:win → session+window")
+                 ("sess:"      "sess"      nil   nil   "empty window component is absent")
                  ("sess:win.3" "sess"      "win" "3"   "sess:win.pane → all three")
                  ("sess.2"     "sess"      nil   "2"   "sess.N (no colon) → session+pane")
+                 ("sess."       "sess"      nil   nil   "empty pane component is absent")
                  (":win"       nil         "win" nil   ":win → window only")
                  ("$1:@2.%3"  "$1"        "@2"  "%3"  "sigil forms → session+window+pane")
                  ("%2"         nil         nil   "%2"  "bare %N → pane id")
