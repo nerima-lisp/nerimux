@@ -28,6 +28,7 @@
           (:file "server-dispatch-helper-fixtures")
           (:file "server-dispatch-helper-error-tests")
           (:file "server-dispatch-helper-tests") ; selection, picker, and command helper algebra
+          (:file "server-dispatch-helper-status-tests")
           (:file "server-dispatch-helper-navigation-tests")
           (:file "runtime-lifecycle-tests")
       (:file "server-kill-request-tests") ; R8.1/R8.3
