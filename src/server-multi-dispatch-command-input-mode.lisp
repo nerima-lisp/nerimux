@@ -1,12 +1,7 @@
 (in-package #:nerimux)
 
 (defun %client-start-worktree-create (session conn)
-  "n (item 5, user decision): create a worktree immediately, with an
-   auto-generated branch name, for the selected repository, and jump straight
-   into its shell -- no branch prompt in between. This replaces the old
-   behaviour of pre-filling `:` command mode with \"wt-create --branch \";
-   `:wt-create --branch <name> --confirm` still exists for a user-chosen
-   branch name and still requires --confirm (%CLIENT-CREATE-WORKTREE)."
+  "Create a worktree with an automatic branch name and open its shell."
   (let ((repository (%client-selected-repository conn)))
     (if repository
         (%client-create-worktree-now repository
