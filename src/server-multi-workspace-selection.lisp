@@ -37,23 +37,10 @@
                                  (nerimux/vcs:workspace-organizations))
                                 filter
                                 (file-diffs (%workspace-file-diffs)))
-  "The tree rows a client can currently select, in display order.
+  "Return the selectable tree rows in display order.
 
-   Delegates to the renderer rather than walking the model itself. It used to
-   flatten organization -> repository -> worktree unconditionally, which was
-   correct only while the tree was always fully expanded: once R6.3 made rows
-   collapse and added the window and pane levels, this enumeration and the drawn
-   frame described different lists, and j/k walked the cursor onto rows the
-   frame was not showing.
-
-   FILTER, when given, must be the same in-tree-filter query string the frame
-   was rendered with (CLIENT-CONN-TREE-FILTER) -- callers that move the
-   cursor or resolve a selection have to walk the SAME filtered row set the
-   client is actually looking at, or j/k and Enter would land on a row the
-   filter had hidden from the drawn frame. FILE-DIFFS (Wave C) is the same
-   cache the frame's own render pass reads, so an expanded :FILE row's
-   :DIFF-LINE child rows are selectable rows here too, not just pixels on
-   screen."
+   FILTER and FILE-DIFFS must match the corresponding render pass so
+   navigation and selection follow the visible rows."
   (nerimux/renderer:workspace-tree-objects organizations
                                            (%workspace-collapsed-nodes)
                                            :filter
@@ -96,14 +83,9 @@
                   (string= prefix path :end2 (length prefix)))))))
 
 (defun %workspace-find-worktree-for-attach (token organizations)
-  "Resolve an EXPLICIT attach selector TOKEN to a worktree.
-   The prefix fallback deliberately asks \"is TOKEN a directory prefix of the
-   worktree's path\" -- TOKEN names a place to search UNDER, so an ancestor
-   token matching the first worktree found is the intended behavior here
-   (pinned by server-dispatch-helper-tests).  Do not reuse this for cwd-based
-   auto-selection: a cwd is the LONGER string, and this direction silently
-   matched an arbitrary worktree from any ancestor directory --
-   %WORKSPACE-FIND-WORKTREE-FOR-CWD below is that path's correct inverse."
+  "Resolve an explicit attach selector TOKEN to a worktree.
+
+   A directory selector matches a worktree below that directory."
   (or (%workspace-find-worktree token organizations)
       (find-if
        (lambda (worktree)
@@ -113,17 +95,7 @@
        (%workspace-worktrees organizations))))
 
 (defun %workspace-find-worktree-for-cwd (cwd organizations)
-  "The worktree CWD sits inside, preferring the most specific (deepest) match.
-
-   %workspace-find-worktree-for-attach is for an explicit selector: TOKEN names a
-   directory to search under, so the worktree's path is the longer string and
-   TOKEN the prefix. A cwd runs the other way -- it is the longer string, and the
-   worktree's path must be its prefix. Reusing the attach direction here let any
-   ancestor of every worktree (the ghq root, $HOME) match every worktree path as
-   a 'prefix' of TOKEN and silently pre-select whichever worktree the scan
-   reached first. Two worktrees can also nest (one's path a prefix of another's),
-   so this keeps the longest-matching -- most specific -- worktree rather than
-   the first one found."
+  "Resolve CWD to the deepest worktree containing it."
   (or (%workspace-find-worktree cwd organizations)
       (let ((best nil))
         (dolist (worktree (%workspace-worktrees organizations))
