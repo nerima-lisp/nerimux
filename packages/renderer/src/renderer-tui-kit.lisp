@@ -19,17 +19,8 @@
 
 (defun %surface-from-ansi-frame (frame rows cols &key (viewport 0))
   "Parse FRAME into a headless CL-TUI-KIT/CORE surface, preserving SGR
-   styling (R-style-preservation).
-
-   Previously this drew through CL-TUI-KIT/WIDGETS's text-widget +
-   viewport-widget pair for VIEWPORT > 0 (unstyled, and separately from the
-   VIEWPORT = 0 path below).  A VIEWPORT-WIDGET renders its child clipped to
-   AREA at (0, -OFFSET-Y): with AREA = (0 0 COLS ROWS) and OFFSET-Y =
-   VIEWPORT, that shows content rows [VIEWPORT, VIEWPORT+ROWS) at surface
-   rows [0, ROWS) -- exactly the window drawn row-by-row below, so dropping
-   the widget path changes no visible output for VIEWPORT > 0, and folding
-   VIEWPORT = 0 into the same CONTENT-HEIGHT = ROWS case (viewport offset
-   0) unifies what were two separate code paths."
+   styling. CONTENT-HEIGHT includes VIEWPORT rows above the visible surface;
+   each visible row reads from CONTENT-ROW = SURFACE-ROW + VIEWPORT."
   (let* ((rows (max 1 rows))
          (cols (max 1 cols))
          (viewport (max 0 viewport))

@@ -39,12 +39,10 @@
 
 (defun %workspace-node-expanded-p (kind id collapsed-node-ids)
   "T unless the (KIND ID) organization/repository row is marked collapsed in
-   COLLAPSED-NODE-IDS (a hash-table of tree-node keys -> T, or NIL). Absent
-   means expanded -- the tree's default state since the one-column overview
-   redesign (PR2), which replaced R6.3's collapse-by-default with full
-   expansion so a newly attached client sees the whole hierarchy at once.
-   Worktree/window/pane rows have no collapse state of their own; once both
-   ancestors are not collapsed, everything under a worktree shows."
+   COLLAPSED-NODE-IDS (a hash-table of tree-node keys -> T, or NIL). Rows
+   absent from the table are expanded. Worktree/window/pane rows have no
+   collapse state of their own; once both ancestors are not collapsed,
+   everything under a worktree shows."
   (not (and collapsed-node-ids (gethash (list kind id) collapsed-node-ids))))
 
 (defun %organization-tree-label (organization)
@@ -67,13 +65,10 @@
       name))
 
 (defun %repository-tree-label (repository)
-  "Repository row label: the repository NAME only (SPECIFICATION's segment
-   after its last `/', with a trailing `.git' stripped, or the whole string
-   when there is no `/') -- the organization row above it already shows the
-   org/host part, so repeating it on every repository row wasted width and
-   read as noise once the tree became the overview's only panel (PR2), and
-   `.git' is a hosting-convention artifact no one reads the name by. Falls
-   back to LOCAL-PATH or ID exactly as before when SPECIFICATION is empty."
+  "Repository row label: the repository name from the final segment of
+   SPECIFICATION, with a trailing `.git' removed. When SPECIFICATION is
+   empty, use LOCAL-PATH or ID. The organization row supplies the host and
+   organization context."
   (let ((specification (repository-specification repository)))
     (if (plusp (length specification))
         (let ((slash (position #\/ specification :from-end t)))
@@ -297,12 +292,10 @@
                                                    downcased-filter
                                                    &optional
                                                    label)
-  "T when OBJECT's search text contains DOWNCASED-FILTER. DOWNCASED-FILTER
-   is expected already lower-cased by the caller
-   (%WORKSPACE-FILTER-TREE-ENTRIES downcases FILTER once per call rather
-   than re-downcasing it on every node, which is what this function used to
-   do). LABEL is forwarded to %WORKSPACE-TREE-NODE-SEARCH-TEXT for the
-   :DIFF-LINE/:DIFF-MORE kinds it needs it for; every other kind ignores it."
+  "T when OBJECT's search text contains DOWNCASED-FILTER. The caller
+   lower-cases FILTER once per traversal. LABEL is forwarded to
+   %WORKSPACE-TREE-NODE-SEARCH-TEXT for the :DIFF-LINE/:DIFF-MORE kinds;
+   other kinds ignore it."
   (and downcased-filter
        (plusp (length downcased-filter))
        (search downcased-filter
@@ -344,4 +337,3 @@
               count
               when (aref keep index)
                 collect (aref vector index)))))
-
