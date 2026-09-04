@@ -26,6 +26,7 @@
           (:file "server-socket-path-tests") ; socket paths and stale sockets
           (:file "server-client-cps-tests") ; client key CPS, runtime registry, resize edge cases
           (:file "server-dispatch-helper-tests") ; selection, picker, and command helper algebra
+          (:file "server-dispatch-helper-navigation-tests")
           (:file "runtime-lifecycle-tests")
       (:file "server-kill-request-tests") ; R8.1/R8.3
       (:file "workspace-window-naming-tests") ; R5.8
