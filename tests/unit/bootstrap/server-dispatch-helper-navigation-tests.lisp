@@ -342,6 +342,20 @@
         (expect (eq :repositories
                     (nerimux::%select-client-tree-relative conn 1))))))
 
+  (it "tree-relative-selection-uses-directional-fallback-without-selection"
+    (multiple-value-bind (organizations organization repository main-worktree
+                          feature-worktree)
+        (%make-server-dispatch-helper-fixture)
+      (declare (ignorable organization main-worktree feature-worktree))
+      (let ((nerimux/vcs::*workspace-organizations* organizations)
+            (nerimux::*dirty* nil)
+            (conn (nerimux::%make-client-conn)))
+        (expect (eq repository
+                    (nerimux::%select-client-tree-relative conn 1)))
+        (setf (nerimux::client-conn-selected-tree-object conn) nil)
+        (expect (eq :repositories
+                    (nerimux::%select-client-tree-relative conn -1))))))
+
   (it "tree-relative-selection-starts-and-scrolls-a-multi-row-list"
     (let* ((organization
              (nerimux/workspace-model:make-organization
