@@ -16,10 +16,9 @@
     cl-weave = {
       url = "github:nerima-lisp/cl-weave/v1.3.0";
       inputs.nixpkgs.follows = "nixpkgs";
-      # cl-weave's own flake still declares its paredit-cli dev input under the
-      # pre-migration owner; pin it to the org (and to a tag) so no takeokunn/*
-      # rev survives in our lock. paredit-cli is a transitive dev tool only and
-      # is never linked into nerimux.
+      # cl-weave's own flake declares paredit-cli as a development input. Pin it
+      # explicitly to the release tag used by this project so the transitive
+      # development tool remains reproducible and is never linked into nerimux.
       inputs.paredit-cli.url = "github:nerima-lisp/paredit-cli/v1.6.2";
     };
     # Keep the structural editor available as a first-class project tool.
