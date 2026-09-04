@@ -60,7 +60,7 @@
                   (nerimux/pane:pane-worktree (client-conn-focus conn))))))
     (%worktree-selection-token worktree)))
 
-(defun %client-attach-selection (conn organizations)
+(defun %resolve-client-attach-selection (conn organizations)
   "Resolve what this client attached to, and say so when it is not one thing.
 
    A selector with a slash can name a repository (github.com/org/repo) or a
@@ -70,13 +70,7 @@
    Selection by cwd, and by whatever was selected last, is unchanged: neither is
    a selector the user typed, so neither can be ambiguous in this sense.
 
-   Returns (VALUES WORKTREE SOURCE), where SOURCE is :EXPLICIT, :CWD,
-   :PREVIOUS, or NIL saying which of those three matched -- FR-002 needs to
-   know specifically that a cwd match is why the worktree was found, so it
-   can jump the client straight to the worktree's detail pane only in that
-   case, not for an explicit selector or a remembered previous selection.
-   Existing single-value callers (e.g. %REBIND-CLIENT-SELECTION) are
-   unaffected: they only ever used the first value."
+   Returns a property list consumed by %CLIENT-ATTACH-SELECTION."
   (let* ((explicit (client-conn-attach-target conn))
          (explicitp (and (stringp explicit) (plusp (length explicit))))
          (cwd (client-conn-attach-cwd conn))
@@ -98,24 +92,36 @@
                 (not cwd-worktree)
                 previous
                 (%workspace-find-worktree previous organizations))))
+    (list :explicit explicit
+          :explicit-p explicitp
+          :ambiguous-p (and explicit-worktree explicit-repository)
+          :worktree (or explicit-worktree cwd-worktree previous-worktree)
+          :source (cond (explicit-worktree :explicit)
+                        (cwd-worktree :cwd)
+                        (previous-worktree :previous))
+          :repository explicit-repository
+          :organizations-p organizations)))
+
+(defun %client-attach-selection (conn organizations)
+  (let ((resolution (%resolve-client-attach-selection conn organizations)))
     (cond
-      ((and explicit-worktree explicit-repository)
-       (%open-client-picker-filtered conn explicit)
+      ((getf resolution :ambiguous-p)
+       (%open-client-picker-filtered conn (getf resolution :explicit))
+       (values nil nil))
+      ((getf resolution :worktree)
+       (%set-client-selected-worktree conn (getf resolution :worktree))
+       (values (getf resolution :worktree) (getf resolution :source)))
+      ((getf resolution :repository)
+       (%set-client-selected-tree-object conn (getf resolution :repository))
+       (values nil nil))
+      ((and (getf resolution :explicit-p)
+            (getf resolution :organizations-p))
+       (%client-notify conn
+                       (format nil "attach target not found: ~A"
+                               (getf resolution :explicit)))
        (values nil nil))
       (t
-       (let* ((worktree (or explicit-worktree cwd-worktree previous-worktree))
-              (source (cond (explicit-worktree :explicit)
-                            (cwd-worktree :cwd)
-                            (previous-worktree :previous))))
-         (cond
-           (worktree
-            (%set-client-selected-worktree conn worktree))
-           (explicit-repository
-            (%set-client-selected-tree-object conn explicit-repository))
-           ((and explicitp organizations)
-            (%client-notify conn
-                            (format nil "attach target not found: ~A" explicit))))
-         (values worktree source))))))
+       (values nil nil)))))
 
 (defun %rebind-client-selection (conn organizations)
   (or (%client-attach-selection conn organizations)
