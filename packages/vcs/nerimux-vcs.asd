@@ -58,6 +58,7 @@
   :components ((:file "package")
                (:file "vcs-value-tests")
                (:file "vcs-tests")
+               (:file "vcs-prune-tests")
                (:file "vcs-tests-workspace")
                (:file "vcs-tests-status")
                (:file "vcs-fetch-dedup-tests") ; R7.1: one fetch in flight per target
