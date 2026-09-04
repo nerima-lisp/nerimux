@@ -185,6 +185,15 @@
         (%mark-dirty)))
     text))
 
+(defun %adjust-client-tree-scroll (conn index visible)
+  (setf (client-conn-tree-scroll conn)
+        (cond
+          ((< index (client-conn-tree-scroll conn)) index)
+          ((>= index (+ (client-conn-tree-scroll conn) visible))
+           (max 0 (+ index 1 (- visible))))
+          (t (client-conn-tree-scroll conn))))
+  (client-conn-tree-scroll conn))
+
 (defun %select-client-tree-section-relative (conn direction)
   "J/K (section-based overview redesign, replacing the old repository-row
    jump): move the selection to the next/previous :SECTION header row --
@@ -211,11 +220,7 @@
               for candidate = (nth index objects)
               when (keywordp candidate)
                 do (%set-client-selected-tree-object conn candidate)
-                   (when (< index (client-conn-tree-scroll conn))
-                     (setf (client-conn-tree-scroll conn) index))
-                   (when (>= index (+ (client-conn-tree-scroll conn) visible))
-                     (setf (client-conn-tree-scroll conn)
-                           (max 0 (+ index 1 (- visible)))))
+                   (%adjust-client-tree-scroll conn index visible)
                    (%mark-dirty)
                    (return candidate))))))
 
