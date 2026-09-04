@@ -455,6 +455,13 @@
                     (nerimux::%select-client-tree-section-relative conn 1)))
         (expect (eq :repositories (nerimux::%client-tree-object conn))))))
 
+  (it "section-selection-returns-nil-for-an-empty-tree"
+    (let ((conn (nerimux::%make-client-conn))
+          (nerimux/vcs::*workspace-organizations* nil)
+          (nerimux::*dirty* nil))
+      (expect (null (nerimux::%select-client-tree-section-relative conn 1)))
+      (expect (null (nerimux::%client-tree-object conn)))))
+
   (it "K-jumps-the-selection-backward-to-the-previous-section-header"
     (let* ((organization
              (nerimux/workspace-model:make-organization
