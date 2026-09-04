@@ -56,6 +56,7 @@
   :pathname "tests"
   :serial t
   :components ((:file "package")
+               (:file "vcs-value-tests")
                (:file "vcs-tests")
                (:file "vcs-tests-workspace")
                (:file "vcs-tests-status")
