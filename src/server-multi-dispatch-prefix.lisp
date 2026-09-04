@@ -188,42 +188,6 @@
     (%set-client-modal conn :scrollback))
   nil)
 
-(defun %open-confirm-view (conn operation fields action)
-  "Put a y/n confirmation in front of CONN and remember what to run on y.
-   OPERATION titles the box; FIELDS is the ordered (LABEL . VALUE) body."
-  (setf (client-conn-confirm-view conn)
-        (nerimux/renderer:make-confirm-view :operation operation
-                                            :fields fields
-                                            :prompt-p t)
-        (client-conn-confirm-action conn) action)
-  (%set-client-modal conn :confirm)
-  nil)
-
-(defun %close-confirm-view (conn)
-  "Take the confirmation down and forget its pending action."
-  (setf (client-conn-confirm-view conn) nil
-        (client-conn-confirm-action conn) nil)
-  (%set-client-modal conn nil))
-
-(defun %handle-confirm-key (session conn payload)
-  "Answer the confirmation CONN is looking at.  Returns two values: whether the
-   key was consumed here, and the loop disposition.
-
-   Only y and n are consumed.  Every other key is swallowed too — a
-   confirmation that let j scroll the tree underneath it would be asking about
-   one thing while the user changed another."
-  (declare (ignore session))
-  (let ((action (client-conn-confirm-action conn)))
-    (cond
-      ((%client-key-p payload #\y)
-        (%close-confirm-view conn)
-        (values t (and action (funcall action))))
-      ((%client-key-p payload #\n)
-        (%close-confirm-view conn)
-        (%client-notify conn "cancelled")
-        (values t nil))
-      (t (values t nil)))))
-
 (defun %workspace-prefix-quit-server (session conn)
   "C-q Q (R8.2): ask before stopping the server, showing how many panes are
    still running so the count is in front of the user at the moment they answer
