@@ -142,12 +142,9 @@
    characters (CJK, kana, hangul, fullwidth forms, most emoji), 1 otherwise.
    Ambiguous-width ranges (box drawing) are treated as 1.
 
-   Delegates to CL-TTY-KIT:CHAR-WIDTH.  This used to be a hand-rolled
-   DEFINE-WIDE-CHAR-RANGES table of 13 coarse ranges that returned 1 for every
-   character it did not recognise, including zero-width ones, so column counts
-   drifted from what the outer terminal actually drew.  Three concrete cases the
-   table got wrong, each confirmed against cl-tty-kit's 121 ranges plus its
-   SB-UNICODE general-category handling:
+   Delegates to CL-TTY-KIT:CHAR-WIDTH, whose Unicode width data and general
+   category handling keep column counts aligned with terminal rendering. Three
+   representative cases are:
 
      * U+0301 COMBINING ACUTE ACCENT (Mn) — table said 1, true width is 0.
      * U+309A COMBINING KATAKANA-HIRAGANA SEMI-VOICED SOUND MARK — the table's
