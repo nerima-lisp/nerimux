@@ -212,6 +212,14 @@
                 "detach")
           (cons "q" "back")))))
 
+(defmacro %draw-status-text (surface row spans cols)
+  `(cl-tui-kit/core:surface-draw-styled-text ,surface
+                                             0
+                                             ,row
+                                             ,spans
+                                             :max-width
+                                             ,cols))
+
 (defun %workspace-status-panel-rows-available (rows)
   "Rows the bottom key panel occupies below TERMINAL-ROWS = 12's threshold
    (2 content lines) vs. above the single-line footer it collapses to (1) --
@@ -261,35 +269,17 @@
          (selected-entry
           (%workspace-status-selected-entry entries selected-object))
          (selected-kind (and selected-entry (fourth selected-entry))))
-    (cl-tui-kit/core:surface-draw-styled-text surface
-                                              0
-                                              0
-                                              (%workspace-status-header-spans
-                                               worktree)
-                                              :max-width
-                                              cols)
+    (%draw-status-text surface 0 (%workspace-status-header-spans worktree) cols)
     (loop for entry in visible
           for row from content-top
-          do (cl-tui-kit/core:surface-draw-styled-text surface
-                                                       0
-                                                       row
-                                                       (%workspace-status-row-spans
-                                                        entry
-                                                        selected-object)
-                                                       :max-width
-                                                       cols))
-    (cl-tui-kit/core:surface-draw-styled-text surface
-                                              0
-                                              separator-row
-                                              (list
-                                               (cl-tui-kit/core:make-text-span
-                                                (make-string cols
-                                                             :initial-element
-                                                             #\─)
-                                                :style
-                                                (%workspace-status-style-muted)))
-                                              :max-width
-                                              cols)
+          do (%draw-status-text
+              surface row (%workspace-status-row-spans entry selected-object) cols))
+    (%draw-status-text
+     surface separator-row
+     (list (cl-tui-kit/core:make-text-span
+            (make-string cols :initial-element #\─)
+            :style (%workspace-status-style-muted)))
+     cols)
     (let ((panel-top
            (if key-panel-p
                key-panel-separator-row
@@ -305,53 +295,28 @@
                                  transient))
         (key-panel-p
           (when messages
-            (cl-tui-kit/core:surface-draw-styled-text surface
-                                                      0
-                                                      message-row
-                                                      (list
-                                                       (cl-tui-kit/core:make-text-span
-                                                        (format nil
-                                                                "message: ~A"
-                                                                (first messages))
-                                                        :style
-                                                        (%workspace-status-style-muted)))
-                                                      :max-width
-                                                      cols))
-          (cl-tui-kit/core:surface-draw-styled-text surface
-                                                    0
-                                                    key-panel-separator-row
-                                                    (list
-                                                     (cl-tui-kit/core:make-text-span
-                                                      (make-string cols
-                                                                   :initial-element
-                                                                   #\─)
-                                                      :style
-                                                      (%workspace-status-style-muted)))
-                                                    :max-width
-                                                    cols)
+            (%draw-status-text
+             surface message-row
+             (list (cl-tui-kit/core:make-text-span
+                    (format nil "message: ~A" (first messages))
+                    :style (%workspace-status-style-muted)))
+             cols))
+          (%draw-status-text
+           surface key-panel-separator-row
+           (list (cl-tui-kit/core:make-text-span
+                  (make-string cols :initial-element #\─)
+                  :style (%workspace-status-style-muted)))
+           cols)
           (multiple-value-bind (line-1 line-2) 
               (%workspace-status-key-panel-spans selected-kind prefix-code)
-            (cl-tui-kit/core:surface-draw-styled-text surface
-                                                      0
-                                                      key-panel-line-1
-                                                      line-1
-                                                      :max-width
-                                                      cols)
-            (cl-tui-kit/core:surface-draw-styled-text surface
-                                                      0
-                                                      footer-row
-                                                      line-2
-                                                      :max-width
-                                                      cols)))
+            (%draw-status-text surface key-panel-line-1 line-1 cols)
+            (%draw-status-text surface footer-row line-2 cols)))
         (t
-         (cl-tui-kit/core:surface-draw-styled-text surface
-                                                   0
-                                                   footer-row
-                                                   (%workspace-status-hint-spans
-                                                    (list (cons "q" "back")
-                                                          (cons "?" "help")))
-                                                   :max-width
-                                                   cols))))
+         (%draw-status-text
+          surface footer-row
+          (%workspace-status-hint-spans
+           (list (cons "q" "back") (cons "?" "help")))
+          cols))))
     (%surface-to-ansi-frame surface)))
 
 (defun render-workspace-status-to-tui-string (worktree rows
@@ -391,4 +356,3 @@
                                         messages
                                         transient
                                         prefix-code))))
-
