@@ -184,6 +184,7 @@
        (:file "server-multi-dispatch-command-status") ; status mutations
        (:file "server-multi-dispatch-command-input-mode") ; command mode and tree navigation
        (:file "server-multi-dispatch-command-input") ; client input and command entry
+       (:file "server-multi-dispatch-command-input-process-log") ; process log modal
        (:file "server-multi-dispatch-command-input-keymap") ; NIL-modal UI keymap
        (:file "server-multi-dispatch-tree-filter-data") ; tree-filter declarations
        (:file "server-multi-dispatch-tree-filter") ; tree-filter input mode

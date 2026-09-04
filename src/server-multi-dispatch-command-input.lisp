@@ -241,36 +241,6 @@
        (%set-client-view conn :pane))))
   t)
 
-(defun %scroll-client-process-log (conn delta)
-  (let* ((entries (client-conn-process-log conn))
-         (max-scroll (max 0 (1- (length entries)))))
-    (setf (client-conn-process-log-scroll conn) (max 0
-                                                     (min max-scroll
-                                                          (+
-                                                           (client-conn-process-log-scroll
-                                                            conn)
-                                                           delta))))
-    (%mark-dirty)))
-
-(defun %handle-process-log-key (conn payload)
-  "Answer the `$` process log CONN is looking at: q/ESC close it (dropping
-   MODAL, the same shape %CLOSE-HELP-VIEW uses -- there is no separate
-   'process log mode' to leave, only a modal to drop); n/p scroll;
-   everything else is swallowed, mirroring %HANDLE-HELP-VIEW-KEY. ESC goes
-   through %CLIENT-ESC-SWALLOW-START first (R4.3) for the identical reason
-   documented there: a lone ESC byte here could be the first of a 3-byte
-   arrow-key sequence, and closing the view immediately would hand its
-   trailing 2 bytes to whatever key handler runs next as literal `[` and a
-   letter."
-  (cond
-    ((%client-byte-p payload 27)
-      (%client-esc-swallow-start conn)
-      (%set-client-modal conn nil))
-    ((%client-key-p payload #\q) (%set-client-modal conn nil))
-    ((%client-key-p payload #\n) (%scroll-client-process-log conn 1))
-    ((%client-key-p payload #\p) (%scroll-client-process-log conn -1)))
-  nil)
-
 (defun %client-open-selected-worktree-command (session conn command)
   "Open a new pane for the selected worktree running COMMAND.
    A NIL command deliberately starts the user's ordinary shell."
