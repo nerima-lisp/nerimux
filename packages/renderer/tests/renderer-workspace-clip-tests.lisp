@@ -29,7 +29,7 @@
 
 (describe "renderer-suite/workspace-clip-ascii-regression"
 
-  (it "matches the pre-R6.9 length-based clip result for ASCII-only text"
+  (it "preserves ASCII clipping with an ellipsis"
     (let ((clipped (nerimux/renderer::%display-clip "abcdefgh" 5)))
       (expect (string= "ab..." clipped))
       (expect (= 5 (length clipped)))

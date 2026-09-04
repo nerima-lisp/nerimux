@@ -132,7 +132,7 @@ The prefix is consumed before the stdin-target path.  Once struck, the next
 byte is resolved against 1.5's binding table by %workspace-prefix-dispatch;
 a byte the table does not recognize is discarded there instead of falling
 through to the normal key pipeline — the old 'unbound means pass through'
-behavior (:96-107 pre-R4.4) is gone."
+   behavior is discarded."
   (let ((single-byte
          (and (arrayp payload) (= (length payload) 1) (aref payload 0))))
     (cond

@@ -23,7 +23,7 @@
 (defun %workspace-tree-node-key (node)
   "Stable, EQUAL-comparable identity for a tree row. Covers a struct-backed
    organization/repository/worktree/window/pane row, a cons-keyed :FILE/
-   :COMMIT/:DIFF-LINE/:DIFF-MORE inline-expansion row (Wave B/C), and a
+   :COMMIT/:DIFF-LINE/:DIFF-MORE inline-expansion row, and a
    :SECTION row keyed by its own keyword (:ATTENTION/:ACTIVE/:REPOSITORIES)
    via the fallback branch below. Used both for tree-widget selection and,
    at the section and repository levels, as the collapse/expand-state
@@ -165,7 +165,7 @@
 (defun %worktree-ahead-behind-parts (worktree)
   "List of (TEXT . SGR) pairs for WORKTREE's nonzero ahead/behind counts,
    ahead first -- \"+N\"/\"-N\" (ASCII, never the ambiguous-width arrow
-   glyphs the pre-redesign status line used)."
+   glyphs)."
   (append
    (when (plusp (worktree-ahead worktree))
      (list (cons (format nil "+~D" (worktree-ahead worktree)) +sgr-ahead+)))
@@ -251,17 +251,16 @@
    worktree, title+start-command for a pane. Window rows have no fields of
    their own to search, so they fall back to their own label.
 
-   :FILE and :COMMIT rows (the inline worktree expansion, Wave B) match
+   :FILE and :COMMIT rows (the inline worktree expansion) match
    independently through their own visible text -- path+code, hash+subject
    -- exactly like every other row kind here; a filter matching the parent
    worktree's OWN text does not, by itself, keep a non-matching child row.
    That is the same ancestor-only propagation %WORKSPACE-FILTER-TREE-
    ENTRIES already applies to every other level of this tree (a matching
    Attention-section worktree does not force its non-matching siblings to
-   survive either), so this is the existing rule extended rather than a new
-   one invented for this wave.
+   survive either).
 
-   :DIFF-LINE and :DIFF-MORE rows (Wave C) match on LABEL instead of OBJECT:
+   :DIFF-LINE and :DIFF-MORE rows match on LABEL instead of OBJECT:
    their OBJECT deliberately carries only WORKTREE-ID/PATH/INDEX, not the
    line text itself (keeping it out of the node key, which only needs to be
    stable, not searchable), so the caller passes the row's own LABEL --
@@ -345,5 +344,4 @@
               count
               when (aref keep index)
                 collect (aref vector index)))))
-
 

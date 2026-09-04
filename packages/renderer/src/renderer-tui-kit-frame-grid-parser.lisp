@@ -98,8 +98,8 @@
    e.g. a border glyph appended right after a padded label -- landed one
    grid column left of where the source ANSI text (already correctly
    %DISPLAY-CLIP/%DISPLAY-WIDTH laid out) placed it. A zero-width character
-   (combining marks) keeps the pre-fix one-column advance: that class is
-   unaffected by this fix and stays as it was.
+   (combining marks) keeps the one-column advance, because that class does
+   not occupy a grid cell.
 
    STYLE-GRID/STYLE are optional: when supplied, STYLE is also recorded for
    the written cell and its continuation cell (R-style-preservation)."
@@ -246,4 +246,3 @@
                    (incf index))
                  (t (incf index)))))
     (values grid style-grid)))
-

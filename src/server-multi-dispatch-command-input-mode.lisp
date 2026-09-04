@@ -87,7 +87,7 @@
             t)))))))
 
 (defun %client-toggle-selected-file-diff (worktree-id path code)
-  "Tab on a :FILE row (Wave C): toggle that file's own inline-diff expansion
+  "Tab on a :FILE row toggles that file's own inline-diff expansion
    in *WORKSPACE-EXPANDED-NODE-IDS*, keyed (:FILE-DIFF WORKTREE-ID PATH) --
    deliberately NOT the row's own %WORKSPACE-TREE-NODE-KEY, which embeds
    CODE and would drift out of sync with the expansion table the moment the

@@ -41,7 +41,7 @@
 
 (defvar *workspace-file-diffs*
   (make-hash-table :test #'equal)
-  "Per-file diff cache for a :FILE row's inline expansion (Wave C), keyed
+  "Per-file diff cache for a :FILE row's inline expansion, keyed
    (WORKTREE-ID PATH). Value is (STATE TOTAL LINES): STATE one of :PENDING/
    :READY/:FAILED, TOTAL the file's full diff line count, LINES the first
    *WORKTREE-DIFF-LINE-LIMIT* of them (NIL until :READY). Deliberately

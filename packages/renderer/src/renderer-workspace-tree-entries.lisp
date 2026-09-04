@@ -16,7 +16,7 @@
         collect (list level (%pane-tree-label pane) pane :pane)))
 
 (defun %workspace-file-diff-line-entries (worktree-id path level cache-entry)
-  "LEVEL entries for one expanded :FILE row's own inline diff (Wave C),
+  "LEVEL entries for one expanded :FILE row's own inline diff,
    mirroring %WORKSPACE-WORKTREE-COMMIT-CHILD-ENTRIES's :PENDING/:FAILED
    placeholder convention one level down: CACHE-ENTRY is (STATE TOTAL LINES)
    from *WORKSPACE-FILE-DIFFS* (bootstrap), or NIL while nothing has been
@@ -60,7 +60,7 @@
                                                           level
                                                           expanded-node-ids
                                                           file-diffs)
-  "The inline-diff child rows for one :FILE row (Wave C), when that file's
+  "The inline-diff child rows for one :FILE row, when that file's
    own (:FILE-DIFF WORKTREE-ID PATH) key is expanded in EXPANDED-NODE-IDS --
    deliberately NOT the :FILE row's own %WORKSPACE-TREE-NODE-KEY, which
    embeds CODE and would drift out of sync with the expansion table the
@@ -87,9 +87,9 @@
                                                         &key
                                                         expanded-node-ids
                                                         file-diffs)
-  "One LEVEL entry per WORKTREE-CHANGED-FILES entry (D1's plain (CODE . PATH)
+  "One LEVEL entry per WORKTREE-CHANGED-FILES entry (plain (CODE . PATH)
    conses), labelled \"XY path\" the way `git status --short` shows it,
-   followed by that file's own inline-diff child rows (Wave C, LEVEL+1)."
+   followed by that file's own inline-diff child rows (LEVEL+1)."
   (let ((worktree-id (worktree-id worktree)))
     (loop for (code . path) in (worktree-changed-files worktree)
           append (cons
@@ -137,7 +137,7 @@
                                                     file-diffs)
   "Child rows for WORKTREE's inline expansion, one LEVEL deeper than
    WORKTREE's own row -- NIL when WORKTREE is not expanded
-   (%WORKSPACE-WORKTREE-NODE-EXPANDED-P). FILE-DIFFS (Wave C) is forwarded
+   (%WORKSPACE-WORKTREE-NODE-EXPANDED-P). FILE-DIFFS is forwarded
    to the file group alone -- the pane and commit groups have no diff data
    of their own."
   (when (%workspace-worktree-node-expanded-p worktree expanded-node-ids)
@@ -225,7 +225,7 @@
                                                     file-diffs)
   "One level-1 (LEVEL LABEL OBJECT :WORKTREE) entry per (ORGANIZATION
    REPOSITORY WORKTREE) in TRIPLES, for the Attention/Active sections,
-   followed by that worktree's own inline-expansion child rows (Wave B,
+   followed by that worktree's own inline-expansion child rows at
    level 2) when it is expanded."
   (loop for (organization repository worktree) in triples
         append (cons
@@ -263,7 +263,7 @@
    used to) -- by one level-2 (LEVEL LABEL OBJECT :WORKTREE) entry per
    worktree not already in SHOWN-WORKTREES (the Attention/Active set: a
    worktree never appears twice), each followed in turn by its own inline-
-   expansion child rows (Wave B, level 3) when that worktree is expanded.
+   expansion child rows at level 3 when that worktree is expanded.
    Repository rows themselves are never gated by section collapse -- only
    the wrapping %WORKSPACE-SECTION-ENTRIES call folds the whole
    Repositories section, including its repository rows, as one unit."

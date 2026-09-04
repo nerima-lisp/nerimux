@@ -16,7 +16,7 @@
   *workspace-expanded-node-ids*)
 
 (defun %workspace-file-diffs ()
-  "The per-file diff cache (Wave C; see *WORKSPACE-FILE-DIFFS*), for callers
+  "The per-file diff cache (see *WORKSPACE-FILE-DIFFS*), for callers
    that load before its DEFVAR -- same forward-reference rationale as
    %WORKSPACE-COLLAPSED-NODES/%WORKSPACE-EXPANDED-NODES above."
   *workspace-file-diffs*)

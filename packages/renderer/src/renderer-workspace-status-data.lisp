@@ -86,14 +86,14 @@
                                                               expanded-node-ids
                                                               file-diffs
                                                               diff-default-p)
-  "The inline-diff child rows for one status-view :FILE row (Wave C), gated
+  "The inline-diff child rows for one status-view :FILE row, gated
    by the status view's own level-aware %WORKSPACE-STATUS-ROW-EXPANDED-P
    rather than %WORKSPACE-WORKTREE-FILE-DIFF-ENTRIES's plain presence check
    (renderer-workspace-tree.lisp) -- that function's gate has no notion of
    VISIBILITY-LEVEL, and it is not this agent's file to add one to. The
    untracked-file placeholder and the cache-entry lookup are the same shape
    that function uses; the actual line formatting is still
-   %WORKSPACE-FILE-DIFF-LINE-ENTRIES (Wave C), which is reused unchanged."
+   %WORKSPACE-FILE-DIFF-LINE-ENTRIES, which is reused unchanged."
   (when 
       (%workspace-status-row-expanded-p (list :file-diff worktree-id path)
                                         expanded-node-ids
@@ -340,4 +340,3 @@
                                     file-diffs
                                     :visibility-level
                                     visibility-level)))
-

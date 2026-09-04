@@ -1,7 +1,7 @@
 (in-package #:nerimux)
 
 (defun %client-start-worktree-commits-refresh (worktree)
-  "Launch an async recent-commit fetch for WORKTREE (D2/Wave B), mirroring
+  "Launch an async recent-commit fetch for WORKTREE, mirroring
    %WORKSPACE-PREFIX-FETCH-REPOSITORY's dispatch wiring (server-multi-
    dispatch-prefix.lisp): CALLBACK-DISPATCH marshals the worker's completion
    back onto the main event loop, where both outcomes just need a redraw --
@@ -20,7 +20,7 @@
       (%mark-dirty))))
 
 (defun %client-start-worktree-file-diff-refresh (worktree path)
-  "Launch an async `git diff -- PATH` fetch for WORKTREE (Wave C), mirroring
+  "Launch an async `git diff -- PATH` fetch for WORKTREE, mirroring
    %CLIENT-START-WORKTREE-COMMITS-REFRESH's wiring exactly: CALLBACK-
    DISPATCH marshals the worker's completion back onto the main event loop,
    where both outcomes write *WORKSPACE-FILE-DIFFS* and just need a redraw.
