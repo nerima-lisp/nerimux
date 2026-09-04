@@ -844,6 +844,13 @@
         (expect (= 3 (count "select a file first" notifications :test #'string=)))
         (expect (= 2 (count "no worktree selected" notifications :test #'string=))))))
 
+  (it "status-selection-ignores-non-file-tree-objects"
+    (let ((conn (nerimux::%make-client-conn)))
+      (dolist (selection (list nil :repositories '(:worktree "id")
+                               '(:other "id" "path")))
+        (setf (nerimux::client-conn-selected-tree-object conn) selection)
+        (expect (null (nerimux::%client-selected-status-file conn))))))
+
   (it "status-commands-write-selected-and-all-files"
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
