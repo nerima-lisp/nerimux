@@ -1,9 +1,7 @@
 (in-package #:nerimux)
 
 (defun %socket-tmp-base ()
-  "The socket base directory: $TMPDIR, else /tmp (§1.4 — no -L/-S override,
-   and no legacy temp-dir env var override: R1.17 removed the CLI flags
-   that could reach one, and R2.7 dropped the env var alongside them)."
+  "The socket base directory: $TMPDIR, else /tmp."
   (let ((tmpdir (sb-ext:posix-getenv "TMPDIR")))
     (string-right-trim "/"
                        (if (and tmpdir (plusp (length tmpdir)))

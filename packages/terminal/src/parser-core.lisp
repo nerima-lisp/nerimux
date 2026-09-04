@@ -7,11 +7,7 @@
   (and (>= byte #x20) (< byte #x7F)))
 
 (defmacro define-state (name (screen-var byte-var) &rest rules)
-  "Prolog-like CPS state definition: one rule per parser state clause.
-   Expands into a DEFUN named NAME that takes (SCREEN-VAR BYTE-VAR) and
-   returns the next CPS continuation function.  A generated docstring is
-   injected so the exported state functions are documented at the function
-   level, not only via the surrounding block comments."
+  "Define a Prolog-like CPS parser state with one rule per state clause."
   `(defun ,name (,screen-var ,byte-var)
      ,(format nil
               "CPS parser state ~(~A~): (screen byte) -> next-state-function.~%   ~

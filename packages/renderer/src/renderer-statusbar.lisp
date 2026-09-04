@@ -140,12 +140,7 @@
    mechanism already used to drop the middle/right blocks when width
    excludes them. Every non-NIL MODE (:view-pane, :scrollback, :command,
    :filter, :picker, :transient, ...) shows the chip alone, the mode name
-   already being the whole message -- the old :NORMAL branch's muted
-   \" i to type\" hint was for a modal value FR-007 retired (no client-
-   visible modal is ever :NORMAL any more; the legacy :normal *command*
-   maps to modal NIL, server-multi-dispatch-command-workspace.lisp), so
-   comparing MODE against :NORMAL here was dead and always fell through to
-   this function formatting NIL itself, printing the literal text \"NIL\".
+   already being the whole message.
    Styled with %STATUS-WRAP (not %SGR-WRAP) so it restores the status bar's
    own base style rather than a plain reset; +sgr-mode-chip+
    (renderer-style.lisp) is the same chip the workspace footer uses
