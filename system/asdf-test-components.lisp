@@ -68,6 +68,7 @@
          (:file "server-multi-tests-message-dispatch-commands")
          (:file "server-multi-tests-message-dispatch-rendering")
          (:file "server-multi-tests-message-dispatch-forwarding")
+         (:file "server-multi-tests-message-dispatch-status")
          (:file "server-multi-tests-message-dispatch")
          (:file "server-multi-tests-transient")
          (:file "server-multi-tests-client-frame-dispatch")
