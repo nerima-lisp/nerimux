@@ -223,25 +223,26 @@ REPOSITORY's default branch tip (R7.3) when not given."
       "VCS created a worktree but it was not returned by list-worktrees: ~A"
       worktree-path))))
 
+(defun %refresh-worktree-repository (repository)
+  (list-repository-worktrees repository)
+  (refresh-repository-status repository))
+
 (defun delete-worktree (worktree &key force)
   "Remove WORKTREE after protecting the repository's primary checkout."
   (let ((repository (%delete-worktree-command worktree force)))
-    (list-repository-worktrees repository)
-    (refresh-repository-status repository)
+    (%refresh-worktree-repository repository)
     t))
 
 (defun lock-worktree (worktree &key reason)
   "Lock WORKTREE so prune and delete operations skip it until unlocked."
   (let ((repository (%lock-worktree-command worktree reason)))
-    (list-repository-worktrees repository)
-    (refresh-repository-status repository)
+    (%refresh-worktree-repository repository)
     t))
 
 (defun unlock-worktree (worktree)
   "Unlock WORKTREE, restoring it to prune and delete eligibility."
   (let ((repository (%unlock-worktree-command worktree)))
-    (list-repository-worktrees repository)
-    (refresh-repository-status repository)
+    (%refresh-worktree-repository repository)
     t))
 
 (defun prune-worktrees (repository &key (dry-run t) verbose)
@@ -252,8 +253,7 @@ what would be removed without mutating anything; callers must only pass a
 false DRY-RUN once a user has explicitly confirmed the operation."
   (let* ((operation (%prune-worktrees-command repository dry-run verbose))
          (result (second operation)))
-    (list-repository-worktrees repository)
-    (refresh-repository-status repository)
+    (%refresh-worktree-repository repository)
     result))
 
 (defun %run-vcs-operation-async (name worker
