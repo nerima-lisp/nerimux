@@ -25,6 +25,7 @@
           (:file "server-session-listing-tests")
           (:file "server-socket-path-tests") ; socket paths and stale sockets
           (:file "server-client-cps-tests") ; client key CPS, runtime registry, resize edge cases
+          (:file "server-dispatch-helper-fixtures")
           (:file "server-dispatch-helper-tests") ; selection, picker, and command helper algebra
           (:file "server-dispatch-helper-navigation-tests")
           (:file "runtime-lifecycle-tests")
