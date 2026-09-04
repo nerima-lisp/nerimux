@@ -158,10 +158,9 @@ versus report that they are not wired yet (source: `+transient-definitions+`,
 | `?` | Dispatch | opens any of the above; `k` opens the full-screen help view | — |
 
 A "not wired" action reports so on screen (`"... not wired in this build"`)
-and does nothing. Every one of them is blocked on the same missing piece: this
-build has no free-text prompt, so anything needing a commit message, a branch
-name, a tag name or a remote name has nowhere to read it from. The `:` command
-line is the workaround where one exists, and the table names it.
+and does nothing. These actions require free text that the dispatch menu cannot
+collect: a commit message, branch name, tag name, or remote name. Use the `:`
+command line for the alternatives listed in the table.
 
 ### The `C-q` prefix
 
