@@ -19,11 +19,13 @@
   :serial t
   :components ((:file "package")
                (:file "vcs")
+               (:file "vcs-catalog")
                (:file "vcs-worktree-operations")
                (:file "vcs-status")
                (:file "vcs-async-operations")
                (:file "vcs-fetch")
                (:file "vcs-inspect")
+               (:file "vcs-operations")
                ;; Last: the write operations need %REPOSITORY-CHECKED-HANDLE (the
                ;; vcs-kit:make-repository construction extracted from
                ;; vcs-worktree-operations.lisp's %REV-PARSE) and
