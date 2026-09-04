@@ -68,37 +68,9 @@
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  ;; NO EXTERNAL (non-org) DEPENDENCIES. Every name below is a nerima-lisp
-  ;; sibling, so this system now satisfies DEPENDENCY_POLICY.md's default rule
-  ;; outright rather than through the grandfather clause it used to rely on, and
-  ;; CODING_STANDARD.md's "外部依存を持つのは nerimux の1リポジトリだけです" no
-  ;; longer describes any repository in the org.
-  ;;
-  ;; Four external dependencies were removed across the 2026-08-01/02 sweep, each
-  ;; replaced by an org sibling rather than by hand-written code:
-  ;;   * cffi              -> cl-process-kit (select(2)), cl-tty-kit (ioctl
-  ;;                          TIOCSWINSZ, read(2)) and sb-posix (kill(2)). This
-  ;;                          also FIXED a live bug: the old ioctl went through a
-  ;;                          fixed cffi prototype, which misfires on the arm64
-  ;;                          variadic ABI, so pane resize was a silent no-op on
-  ;;                          Apple Silicon.
-  ;;   * babel             -> cl-codec-kit, an independent from-scratch
-  ;;                          codec with no dependencies of its own, which
-  ;;                          cl-tty-kit and cl-process-kit already use. Call
-  ;;                          sites went through cl-host-kit for one day before
-  ;;                          being re-pointed here; cl-host-kit remains a
-  ;;                          dependency, but for pathname/string ops only.
-  ;;   * bordeaux-threads  -> cl-concurrent-kit. Portability was the whole point
-  ;;                          of bordeaux-threads and ADR-0048 makes the org
-  ;;                          SBCL-only, so it was buying nothing. Note
-  ;;                          WITH-TIMEOUT's shape differs (see below).
-  ;;   * cl-ppcre          -> cl-regex-kit. This one is NOT behaviour-preserving:
-  ;;                          cl-regex-kit is RE2/Rust-style with no
-  ;;                          backreferences and no lookaround. That is a
-  ;;                          deliberate trade, and it moves nerimux CLOSER to
-  ;;                          upstream tmux, which compiles #{m/r:} and #{s///}
-  ;;                          patterns with regcomp()+REG_EXTENDED — POSIX ERE,
-  ;;                          which has neither construct either.
+  ;; Runtime dependencies are provided by nerima-lisp sibling systems.
+  ;; Platform-specific process, terminal, codec, and concurrency operations
+  ;; stay in those libraries instead of being reimplemented here.
   :depends-on (:cl-date-kit      ; exact elapsed-time values for deadline APIs
                :cl-concurrent-kit ; threads, locks, condvars and preemptive deadlines
                :cl-regex-kit     ; regex engine behind copy-mode search/highlight and picker query matching
