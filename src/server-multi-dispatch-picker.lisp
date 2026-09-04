@@ -23,15 +23,16 @@
                         (setf (gethash worktree worktrees) t))
                       item))))
 
+(defun %client-picker-filtered-items (conn)
+  "Return picker data after applying the client's query and uniqueness rule."
+  (%deduplicate-client-picker-items
+   (nerimux/picker:filter-global-picker-items
+    (%client-picker-items conn)
+    (client-conn-picker-query conn)
+    :regex-p (client-conn-picker-regex-p conn))))
+
 (defun %client-picker-visible-items (conn)
-  (let* ((filtered
-          (nerimux/picker:filter-global-picker-items (%client-picker-items conn)
-                                                     (client-conn-picker-query
-                                                      conn)
-                                                     :regex-p
-                                                     (client-conn-picker-regex-p
-                                                      conn)))
-         (items (%deduplicate-client-picker-items filtered)))
+  (let ((items (%client-picker-filtered-items conn)))
     (%picker-clamp-index conn items)
     items))
 
