@@ -74,8 +74,7 @@
        (string/= directory "")
        (stringp path)
        (let ((prefix
-              (if (and (string/= directory "")
-                       (char= (char directory (1- (length directory))) #\/))
+              (if (char= (char directory (1- (length directory))) #\/)
                   directory
                   (concatenate 'string directory "/"))))
          (or (string= directory path)
