@@ -170,13 +170,7 @@
       (t nil))))
 
 (defun %client-tree-collapse-selected (conn)
-  "H (item 3): collapse the selected row. An organization row (reachable
-   only via direct selection now, never via tree navigation -- see the
-   section-based redesign's header comment in renderer-workspace-tree.lisp)
-   or a :SECTION row folds; a REPOSITORY row under Repositories folds its
-   worktrees (*WORKSPACE-EXPANDED-NODE-IDS*, default-collapsed polarity).
-   Any other row (a worktree; no selection) has no collapse state of its own
-   in the section-based tree and is a no-op."
+  "Collapse the selected organization, section, or repository row."
   (let ((object (%client-tree-object conn)))
     (cond
       ((typep object 'nerimux/workspace-model:organization)
@@ -199,7 +193,7 @@
       (t nil))))
 
 (defun %client-tree-expand-selected (conn)
-  "L (item 3): expand the selected row -- the inverse of H above."
+  "Expand the selected organization, section, or repository row."
   (let ((object (%client-tree-object conn)))
     (cond
       ((typep object 'nerimux/workspace-model:organization)
