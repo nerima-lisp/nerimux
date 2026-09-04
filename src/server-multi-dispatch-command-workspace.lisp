@@ -195,15 +195,10 @@
   (client-conn-tree-scroll conn))
 
 (defun %select-client-tree-section-relative (conn direction)
-  "J/K (section-based overview redesign, replacing the old repository-row
-   jump): move the selection to the next/previous :SECTION header row --
-   Attention, Active, or Repositories, identified by its OBJECT being a
-   section keyword rather than a model object -- skipping every worktree/
-   repository row in between. Walks the same filtered row set %SELECT-
-   CLIENT-TREE-RELATIVE (j/k) uses, so a section hidden by an active
-   tree-filter (an empty section is omitted entirely, see %WORKSPACE-
-   SECTION-ENTRIES) is skipped exactly as j/k already skips any filtered-out
-   row."
+  "Move to the next or previous visible section header.
+
+Section headers are keyword objects in the same filtered row sequence used
+by %SELECT-CLIENT-TREE-RELATIVE."
   (let* ((objects (%workspace-tree-objects
                    (nerimux/vcs:workspace-organizations)
                    (client-conn-tree-filter conn)))
