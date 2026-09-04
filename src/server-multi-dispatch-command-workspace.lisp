@@ -135,6 +135,21 @@
   "Return the session registered by the running server, if any."
   (cdr (first *server-sessions*)))
 
+(defun %client-attach-refresh-catalog (conn session cwd)
+  (multiple-value-bind (worktree source)
+      (%client-attach-selection conn (nerimux/vcs:workspace-organizations))
+    (when (and session
+               (null worktree)
+               (stringp cwd)
+               (plusp (length cwd)))
+      (let ((organizations (nerimux/vcs:resolve-directory-organizations cwd)))
+        (when organizations
+          (nerimux/vcs:merge-workspace-organizations organizations)
+          (multiple-value-setq (worktree source)
+            (%client-attach-selection
+             conn (nerimux/vcs:workspace-organizations))))))
+    (values worktree source)))
+
 (defun %client-attach-target (conn args)
   (let ((target (first args))
         (cwd (second args))
@@ -144,17 +159,7 @@
           (client-conn-attach-cwd conn)
           (and (stringp cwd) (plusp (length cwd)) cwd))
     (multiple-value-bind (worktree source)
-        (%client-attach-selection conn (nerimux/vcs:workspace-organizations))
-      (when (and session
-                 (null worktree)
-                 (stringp cwd)
-                 (plusp (length cwd)))
-        (let ((organizations (nerimux/vcs:resolve-directory-organizations cwd)))
-          (when organizations
-            (nerimux/vcs:merge-workspace-organizations organizations)
-            (multiple-value-setq (worktree source)
-              (%client-attach-selection
-               conn (nerimux/vcs:workspace-organizations))))))
+        (%client-attach-refresh-catalog conn session cwd)
       (when (and session (eq source :cwd))
         (%focus-selected-client-worktree session conn))
       (when (and session (null (client-conn-focus conn)))
