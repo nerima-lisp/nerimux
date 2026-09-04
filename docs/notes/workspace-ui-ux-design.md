@@ -306,7 +306,7 @@ workspaceは次の3つを別々の情報源として扱う。
 一つの情報源が失敗しても、他の情報源から得た対象を消去しない。例えばworktreeの
 pathが消えていても、repositoryから返された登録情報を`MISSING`として残す。
 
-### 7.2 Adapterが実行する代表コマンド
+### 7.2 情報取得層が実行する代表コマンド
 
 以下のshell変数は、UIが選択済みの値を解決したものを示す。
 
@@ -520,9 +520,9 @@ actionを残す。
 UIはGitの出力形式を直接解釈せず、次の責務に分ける。
 
 ```text
-ghq adapter ───────┐
-bare Git adapter ──┼─> organization/repository/worktree model ─> overview/picker/detail
-status adapter ────┘                         │
+ghq操作 ───────────┐
+bare Git操作 ──────┼─> organization/repository/worktree model ─> overview/picker/detail
+status操作 ────────┘                         │
                                              └─> pane attach / command context
 ```
 
@@ -539,7 +539,7 @@ idle
   -> error (mutation failure, previous state retained)
 ```
 
-VCS adapterは、inventory、worktree列挙、status、create、lock、unlock、delete、prune、scanを
+VCS操作層は、inventory、worktree列挙、status、create、lock、unlock、delete、prune、scanを
 別操作として公開する。
 UIはmutation完了を待たずに成功表示せず、mutation後のrefreshで実状態を確認してから選択を更新する。
 
