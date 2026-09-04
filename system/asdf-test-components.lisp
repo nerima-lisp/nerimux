@@ -20,7 +20,8 @@
         ((:module "bootstrap"
          :serial t
          :components
-         ((:file "server-registry-tests")
+         ((:file "helpers-stubbed-fdefinitions")
+          (:file "server-registry-tests")
           (:file "server-window-link-tests")
           (:file "server-session-listing-tests")
           (:file "server-socket-path-tests") ; socket paths and stale sockets

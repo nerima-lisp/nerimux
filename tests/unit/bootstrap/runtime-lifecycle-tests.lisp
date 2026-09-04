@@ -57,4 +57,4 @@
           (it "preserves safe punctuation and replaces unsafe characters"
               (expect
                (string= "a-b_c.d__"
-                        (nerimux::%runtime-safe-server-name "a-b_c.d!?"))))))
+                        (nerimux::%runtime-safe-server-name "a-b_c.d!?")))))
