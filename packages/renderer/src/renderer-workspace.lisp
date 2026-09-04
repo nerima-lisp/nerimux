@@ -41,6 +41,16 @@
           (%sgr-wrap key +sgr-accent-bold+)
           (%sgr-wrap description +sgr-muted+)))
 
+(defparameter *workspace-footer-hints*
+  '(("n/p" "select")
+    ("Enter" "open")
+    ("Tab" "expand")
+    ("g" "refresh")
+    ("/" "filter")
+    (":" "command")
+    ("?" "menu"))
+  "Static key hints rendered in the workspace overview footer.")
+
 (defun %workspace-footer-line (mode prefix-code &optional tree-filter)
   "The overview footer: a mode chip followed by two-tone key hints.  The
    pre-theme footer spelled out every :wt-* command; those are discoverable
@@ -57,16 +67,13 @@
                       (%sgr-wrap (format nil "/~A" tree-filter) +sgr-muted+))
               "")
           (%sgr-wrap (format nil " ~:@(~A~) " mode) +sgr-mode-chip+)
-          (list (%workspace-hint "n/p" "select")
-                (%workspace-hint "Enter" "open")
-                (%workspace-hint "Tab" "expand")
-                (%workspace-hint "g" "refresh")
-                (%workspace-hint "/" "filter")
-                (%workspace-hint ":" "command")
-                (%workspace-hint "?" "menu")
+          (append (mapcar (lambda (hint)
+                            (apply #'%workspace-hint hint))
+                          *workspace-footer-hints*)
+                  (list
                 (%workspace-hint
                  (format nil "~A d" (%workspace-prefix-label prefix-code))
-                 "detach"))))
+                 "detach")))))
 
 (defun %workspace-key-panel-content (selected-object mode prefix-code tree-filter)
   "Two values -- the key panel's two content lines -- switching on
