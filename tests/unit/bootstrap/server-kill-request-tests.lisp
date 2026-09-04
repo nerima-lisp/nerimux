@@ -1,29 +1,5 @@
 (in-package #:nerimux/test)
 
-(defmacro %with-stubbed-run-kill-exit (code-var &body body)
-  "Local copy of main-entry-tests.lisp's WITH-STUBBED-EXIT idiom (not shared
-   across files here -- see execution-workflow on load-order-independent
-   test files): sb-ext:exit terminates the process, so it must be stubbed to
-   capture :code and unwind via THROW instead of actually exiting the test
-   runner. Uses WITHOUT-PACKAGE-LOCKS because SB-EXT is a locked package."
-  (let ((tag (gensym "EXIT-TAG"))
-        (orig (gensym "ORIG-EXIT")))
-    `(sb-ext:without-package-locks
-      (let ((,orig (fdefinition 'sb-ext:exit)))
-        (setf (fdefinition 'sb-ext:exit) (lambda 
-                                             (&rest args
-                                                    &key
-                                                    (code 0)
-                                                    &allow-other-keys)
-                                           (declare (ignore args))
-                                           (setf ,code-var code)
-                                           (throw ',tag
-                                             nil)))
-        (unwind-protect 
-            (catch ',tag
-              ,@body)
-          (setf (fdefinition 'sb-ext:exit) ,orig))))))
-
 (describe "server-kill-request-suite"
 
   (it "session-live-panes-filters-to-live-fds-only"
@@ -259,7 +235,7 @@
                    (lambda (name force-p)
                      (declare (ignore name force-p))
                      (values :ok "")))
-             (%with-stubbed-run-kill-exit exit-code
+             (with-stubbed-exit exit-code
                (nerimux::run-kill nil)))
         (setf (fdefinition 'nerimux::send-kill-request) orig))
       (expect (eql 0 exit-code))))
@@ -275,7 +251,7 @@
                      (values :denied (format nil "DENIED~%pane 1 (pid 123) in /tmp/wt"))))
              (setf errout
                    (with-output-to-string (*error-output*)
-                     (%with-stubbed-run-kill-exit exit-code
+                     (with-stubbed-exit exit-code
                        (nerimux::run-kill nil)))))
         (setf (fdefinition 'nerimux::send-kill-request) orig))
       (expect (eql 1 exit-code))
@@ -294,7 +270,7 @@
                      (values :denied (format nil "DENIED~%pane 1 (pid 123) in /tmp/wt~%pane 2 (pid 456) in /tmp/wt"))))
              (setf errout
                    (with-output-to-string (*error-output*)
-                     (%with-stubbed-run-kill-exit exit-code
+                     (with-stubbed-exit exit-code
                        (nerimux::run-kill nil)))))
         (setf (fdefinition 'nerimux::send-kill-request) orig))
       (expect (eql 1 exit-code))
@@ -313,7 +289,7 @@
                      (values :no-server nil)))
              (setf errout
                    (with-output-to-string (*error-output*)
-                     (%with-stubbed-run-kill-exit exit-code
+                     (with-stubbed-exit exit-code
                        (nerimux::run-kill nil)))))
         (setf (fdefinition 'nerimux::send-kill-request) orig))
       (expect (eql 1 exit-code))
@@ -333,7 +309,7 @@
              (setf errout
                    (with-output-to-string (*error-output*)
                      (handler-case
-                         (%with-stubbed-run-kill-exit exit-code
+                         (with-stubbed-exit exit-code
                            (nerimux::run-kill nil))
                        (sb-bsd-sockets:socket-error () (setf signalled t))))))
         (setf (fdefinition 'nerimux::send-kill-request) orig))
@@ -352,7 +328,7 @@
                      (values :eof nil)))
              (setf errout
                    (with-output-to-string (*error-output*)
-                     (%with-stubbed-run-kill-exit exit-code
+                     (with-stubbed-exit exit-code
                        (nerimux::run-kill nil)))))
         (setf (fdefinition 'nerimux::send-kill-request) orig))
       (expect (eql 1 exit-code))
@@ -367,7 +343,7 @@
                    (lambda (name force-p)
                      (setf captured (list name force-p))
                      (values :ok "")))
-             (%with-stubbed-run-kill-exit exit-code
+             (with-stubbed-exit exit-code
                (nerimux::run-kill (list "--force"))))
         (setf (fdefinition 'nerimux::send-kill-request) orig))
       (expect (equal (list "0" t) captured))
@@ -382,7 +358,7 @@
                    (lambda (name force-p)
                      (setf captured (list name force-p))
                      (values :ok "")))
-             (%with-stubbed-run-kill-exit exit-code
+             (with-stubbed-exit exit-code
                (nerimux::run-kill nil)))
         (setf (fdefinition 'nerimux::send-kill-request) orig))
       (expect (equal (list "0" nil) captured))))

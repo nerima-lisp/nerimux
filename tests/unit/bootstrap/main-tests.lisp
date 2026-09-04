@@ -18,29 +18,6 @@
            (lambda (&rest _) (declare (ignore _)) nil)))
        ,@body)))
 
-(defmacro with-stubbed-main-exit (code-var &body body)
-  "Stub sb-ext:exit so it captures the :code argument in the existing variable
-   CODE-VAR and non-locally exits BODY via THROW (matching sb-ext:exit's
-   declared return type of NIL — a returning stub triggers SIMPLE-CONTROL-ERROR).
-   Uses WITHOUT-PACKAGE-LOCKS because SB-EXT is a locked package."
-  (let ((tag (gensym "EXIT-TAG"))
-        (orig (gensym "ORIG-EXIT")))
-    `(sb-ext:without-package-locks
-      (let ((,orig (fdefinition 'sb-ext:exit)))
-        (setf (fdefinition 'sb-ext:exit) (lambda 
-                                             (&rest args
-                                                    &key
-                                                    (code 0)
-                                                    &allow-other-keys)
-                                           (declare (ignore args))
-                                           (setf ,code-var code)
-                                           (throw ',tag
-                                             nil)))
-        (unwind-protect 
-            (catch ',tag
-              ,@body)
-          (setf (fdefinition 'sb-ext:exit) ,orig))))))
-
 (describe "main-suite"
 
   (it "application-argv-strips-sbcl-wrapper-options"
@@ -77,7 +54,7 @@
       (let (exit-code errout)
         (setf errout
               (with-output-to-string (*error-output*)
-                (with-stubbed-main-exit exit-code
+                (with-stubbed-exit exit-code
                   (let ((sb-ext:*posix-argv* (list "nerimux" "bogus" "foo")))
                     (nerimux::main)))))
         (expect (eql 1 exit-code))
