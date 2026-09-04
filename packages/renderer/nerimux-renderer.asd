@@ -36,6 +36,7 @@
                (:file "renderer-workspace-tree-data")
                (:file "renderer-workspace-tree-entries")
                (:file "renderer-workspace-tree")
+               (:file "renderer-workspace-key-panel")
                (:file "renderer-workspace")
                (:file "renderer-pane-selection")
                (:file "renderer-statusbar-layout")
