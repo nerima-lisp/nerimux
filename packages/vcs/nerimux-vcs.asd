@@ -20,6 +20,7 @@
   :components ((:file "package")
                (:file "vcs")
                (:file "vcs-catalog")
+               (:file "vcs-directory-resolution")
                (:file "vcs-worktree-operations")
                (:file "vcs-worktree-async-operations")
                (:file "vcs-worktree-status-refresh")
