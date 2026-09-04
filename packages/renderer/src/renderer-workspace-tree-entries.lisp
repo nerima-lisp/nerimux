@@ -212,8 +212,7 @@
 
 (defun %workspace-repository-node-expanded-p (id expanded-node-ids)
   "T when the (:REPOSITORY ID) row under the Repositories section shows its
-   worktrees. Repository rows here default COLLAPSED (a section-based-
-   redesign decision) -- the opposite sense from every other row's own
+   worktrees. Repository rows default COLLAPSED, unlike other rows whose
    collapse state, which defaults expanded (%WORKSPACE-NODE-EXPANDED-P) --
    so this checks presence in EXPANDED-NODE-IDS rather than absence."
   (and expanded-node-ids (gethash (list :repository id) expanded-node-ids) t))
@@ -259,8 +258,8 @@
   "One level-1 (LEVEL LABEL OBJECT :REPOSITORY) entry per (ORGANIZATION
    REPOSITORY) in REPOSITORY-TUPLES, followed -- when that repository row is
    expanded (%WORKSPACE-REPOSITORY-NODE-EXPANDED-P, or FILTER-ACTIVE-P
-   bypasses the default collapse the same way organization/repository rows
-   used to) -- by one level-2 (LEVEL LABEL OBJECT :WORKTREE) entry per
+   bypasses the default collapse) -- by one level-2 (LEVEL LABEL OBJECT
+   :WORKTREE) entry per
    worktree not already in SHOWN-WORKTREES (the Attention/Active set: a
    worktree never appears twice), each followed in turn by its own inline-
    expansion child rows at level 3 when that worktree is expanded.

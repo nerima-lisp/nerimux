@@ -5,13 +5,9 @@
    ENABLE-RAW-MODE! runs OUTSIDE the unwind-protect deliberately: cl-tty-kit's
    enable-raw-mode only records fd 0 as raw AFTER its TCSETATTR syscall
    succeeds, so if it signals an error the terminal was never actually put
-   into raw mode and there is nothing to restore. A handler-bind safety net
-   used to call disable-raw-mode! unconditionally here, but handler-bind
-   runs its handler BEFORE unwinding the stack — if enable-raw-mode! itself
-   was the one signalling (still holding cl-tty-kit's internal raw-mode
-   lock), that handler's disable-raw-mode! call recursed on the same lock
-   from the same thread, crashing with a masking \"recursive lock attempt\"
-   error instead of the real one."
+   into raw mode and there is nothing to restore. Keeping the call outside
+   the UNWIND-PROTECT also avoids re-entering cl-tty-kit's raw-mode lock
+   while a failing enable operation still holds it."
   `(progn
      (enable-raw-mode! 0)        ; fd 0 = stdin
      (unwind-protect
@@ -26,18 +22,10 @@
    EOF on stdin is indistinguishable from a zero-byte read at this layer;
    both return NIL.  TIMEOUT-US = 0 is a purely non-blocking poll.
 
-   cl-tty-kit:fd-read-octets already collapses the cases the raw read(2) call
-   this replaces had to distinguish by hand: it returns a positive count for
-   data, 0 at EOF, and NIL when the read would have blocked (EAGAIN/EWOULDBLOCK)
-   or a signal interrupted it (EINTR).  Only a count of exactly 1 yields a byte,
-   so EOF and would-block both fall through to NIL — the documented contract
-   above, unchanged.
-
-   A hard OS error is the one case whose handling had to change rather than be
-   copied: the old code ignored read(2)'s -1 return and produced NIL, whereas
-   fd-read-octets signals PTY-OPERATION-FAILED.  It is mapped back to NIL here
-   so an unreadable stdin cannot take down the interactive key loop, matching
-   both the previous behavior and this function's stated \"or NIL\" contract."
+   cl-tty-kit:fd-read-octets returns a positive count for data, 0 at EOF, and
+   NIL when the read would block or is interrupted. Only a count of exactly 1
+   yields a byte, so EOF and would-block both return NIL. PTY-OPERATION-FAILED
+   is also mapped to NIL so an unreadable stdin cannot terminate the key loop."
   (declare (type fixnum timeout-us))
   (let ((ready (nerimux/pty:select-fds (list 0) timeout-us)))
     (when ready

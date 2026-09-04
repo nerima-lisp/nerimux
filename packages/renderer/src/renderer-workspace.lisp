@@ -21,7 +21,7 @@
                                             (tree-filter nil)
                                             (precomputed-tree-entries nil))
   "Render the bare-repository/worktree overview used by an attached client:
-   a header, the tree (its only panel now -- PR2's one-column redesign), a
+   a header, the tree panel, a
    separator, a 2-line detail panel for the current selection, a
    most-recent-message strip, and a bottom key panel (2 content lines plus
    its own divider at TERMINAL-ROWS >= 12, else the single-line

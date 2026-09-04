@@ -222,9 +222,7 @@
    client's focus tracks the session's active pane, which is the common
    case, so this degrades gracefully rather than going blank.
    MODE (FR-003) feeds the mode chip (%STATUS-MODE-CHIP) that
-   %COMPOSE-WORKSPACE-STATUS-LINE now always draws first; this docstring
-   used to describe render-session-to-string's call site as not yet passing
-   it, which renderer-compose.lisp's render-session-to-string now does."
+   %COMPOSE-WORKSPACE-STATUS-LINE draws first."
   (%render-status-line stream
                        status-row
                        +sgr-default-status+
