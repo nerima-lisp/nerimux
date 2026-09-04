@@ -22,6 +22,7 @@
                (:file "vcs-catalog")
                (:file "vcs-worktree-operations")
                (:file "vcs-worktree-async-operations")
+               (:file "vcs-worktree-status-refresh")
                (:file "vcs-status")
                (:file "vcs-async-operations")
                (:file "vcs-fetch")
