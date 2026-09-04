@@ -899,6 +899,33 @@
         (expect (= 3 (count "select a file first" notifications :test #'string=)))
         (expect (= 2 (count "no worktree selected" notifications :test #'string=))))))
 
+  (it "status-commands-write-selected-and-all-files"
+    (multiple-value-bind (organizations organization repository main-worktree
+                          feature-worktree)
+        (%make-server-dispatch-helper-fixture)
+      (declare (ignore organization main-worktree))
+      (let ((conn (nerimux::%make-client-conn))
+            (writes nil)
+            (nerimux/vcs::*workspace-organizations* organizations))
+        (setf (nerimux::client-conn-selected-tree-object conn)
+              (list :file "feature-id" "README.md" :modified)
+              (nerimux::client-conn-selected-worktree conn) feature-worktree)
+        (with-stubbed-fdefinition
+            ((nerimux::%run-transient-git-write
+               (lambda (&rest arguments)
+                 (push arguments writes))))
+          (expect (equal (list feature-worktree "README.md")
+                         (nerimux::%client-selected-status-file conn)))
+          (nerimux::%client-stage-selection conn)
+          (nerimux::%client-stage-all conn)
+          (nerimux::%client-unstage-selection conn)
+          (nerimux::%client-unstage-all conn))
+        (expect (= 4 (length writes)))
+        (expect (equal '(:restore ("--staged" "--" "."))
+                       (subseq (first writes) 2)))
+        (expect (equal '(:add ("--" "README.md"))
+                       (subseq (fourth writes) 2))))))
+
   (it "workspace-refresh-command-wires-completion-and-error-notifications"
     (let ((conn (nerimux::%make-client-conn))
           (notifications nil)
