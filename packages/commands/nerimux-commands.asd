@@ -19,11 +19,6 @@
   :depends-on ("nerimux-model" "nerimux-terminal" "nerimux-ports"
                :cl-parser-kit :cl-regex-kit)
   :pathname "src"
-  ;; This sequence used to need three ASDF modules and a :pathname override,
-  ;; because commands-core and commands-tokenizer lived beside each other while
-  ;; the copy-mode cluster sat in a subdirectory and had to load between them.
-  ;; Flattening the directory removes the override but not the ordering: the
-  ;; list below is that interleave, not directory order.
   :serial t
   :components ((:file "package")
                (:file "commands-core")
