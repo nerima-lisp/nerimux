@@ -175,6 +175,7 @@
        ;; misspelled name here -- an undefined function fails at runtime, and a
        ;; transient key that silently does nothing looks like an unbound key.
        (:file "server-multi-transient-data") ; declarative transient menus
+       (:file "server-multi-dispatch-transient-render") ; transient display projections
        (:file "server-multi-dispatch-transient") ; magit transient state and key handling
        (:file "server-multi-dispatch-command-input-data") ; client input state
        (:file "server-multi-dispatch-command-input-mode-data") ; generated branch data

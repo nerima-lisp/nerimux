@@ -117,52 +117,6 @@
                                                        args))))
       (t (%run-transient-git-write conn repository operation args)))))
 
-(defun %transient-branch (conn)
-  (let ((worktree (%client-operation-worktree conn)))
-    (and worktree (nerimux/workspace-model:worktree-head worktree))))
-
-(defun %transient-subtitle (key conn)
-  (let ((branch (%transient-branch conn)))
-    (when branch
-      (if (member key '(#\P #\F #\f))
-          (format nil "~A -> origin/~A" branch branch)
-          (format nil "on ~A" branch)))))
-
-(defun %transient-action-display-description (conn description)
-  (if (search "~A" description)
-      (format nil description (or (%transient-branch conn) "?"))
-      description))
-
-(defun %transient-render-arguments (transient-key conn arguments)
-  "Enrich each static (ARG-KEY . FLAG) into the render struct's (KEY FLAG
-   DESCRIPTION ACTIVE-P TRANSIENT-KEY) shape -- see TRANSIENT-VIEW's
-   docstring (renderer-tui-kit-transient.lisp) for why the fifth element
-   (TRANSIENT-KEY, needed only to persist the toggle) rides along."
-  (let ((active (%client-transient-active-flags conn transient-key)))
-    (mapcar
-     (lambda (spec)
-       (let ((flag (cdr spec)))
-         (list (car spec)
-               flag
-               flag
-               (and (member flag active :test #'string=) t)
-               transient-key)))
-     arguments)))
-
-(defun %transient-render-actions (conn actions)
-  "Project each static (ACTION-KEY DESCRIPTION HANDLER) into the render
-   struct's (KEY DESCRIPTION HANDLER) shape, interpolating the branch
-   template where DESCRIPTION uses one. HANDLER rides along past the
-   renderer's documented (KEY DESCRIPTION) shape -- same rationale as
-   %TRANSIENT-RENDER-ARGUMENTS above -- so %RUN-TRANSIENT-ACTION never has to
-   re-look-up +TRANSIENT-DEFINITIONS+ by key to find it again."
-  (mapcar
-   (lambda (entry)
-     (list (first entry)
-           (%transient-action-display-description conn (second entry))
-           (third entry)))
-   actions))
-
 (defun %open-client-transient (conn key)
   "Open the transient KEY names (contract §3). A KEY with no entry in
    +TRANSIENT-DEFINITIONS+ is a no-op: the keymap only ever calls this with a
