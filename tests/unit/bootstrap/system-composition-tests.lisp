@@ -403,28 +403,10 @@
                     (subseq text name-start name-end)))))))
     (and own-package (cdr (assoc own-package pkg->layer :test #'string=)))))
 
-(defun %find-module-components (legacy-module-name flat-system-name)
-  "Every ordering test below needs this module's ASDF children, located
-   wherever the module currently lives.  Two shapes, resolved identically:
-
-   TODAY, `nerimux' nests every module under one \"src\" component, so the
-   module sits at (\"src\" LEGACY-MODULE-NAME) inside system \"nerimux\" --
-   e.g. (\"src\" \"presentation/renderer\").
-
-   AFTER packages/<name> extraction, LEGACY-MODULE-NAME's files become their
-   own system FLAT-SYSTEM-NAME (e.g. \"nerimux-renderer\"), and its children
-   sit flat at that system's top level with no \"src\" wrapper at all.
-
-   Returns NIL when neither shape resolves; every caller already has its own
-   vacuity guard for that, so this stays silent rather than erroring."
-  (let* ((nerimux (asdf:find-system "nerimux" nil))
-         (legacy
-          (and nerimux
-               (ignore-errors
-                (asdf:find-component nerimux (list "src" legacy-module-name)))))
-         (flat (and (not legacy) (asdf:find-system flat-system-name nil)))
-         (module (or legacy flat)))
-    (and module (mapcar #'asdf:component-name (asdf:component-children module)))))
+(defun %find-module-components (system-name)
+  "Return the direct component names of SYSTEM-NAME."
+  (let ((system (asdf:find-system system-name nil)))
+    (and system (mapcar #'asdf:component-name (asdf:component-children system)))))
 
 (describe "system-composition-suite"
 
@@ -446,7 +428,7 @@
 
 
   (it "renderer-workspace-loads-before-the-pane-compositor"
-    (let* ((names (%find-module-components "presentation/renderer" "nerimux-renderer"))
+    (let* ((names (%find-module-components "nerimux-renderer"))
            (format-pos (position "renderer-format" names :test #'string=))
            (status-title-pos
              (position "renderer-workspace-status-title" names :test #'string=))
@@ -466,7 +448,7 @@
       (expect (< workspace-pos compose-pos))))
 
   (it "renderer-tui-kit-modules-load-in-dependency-order"
-    (let* ((names (%find-module-components "presentation/renderer" "nerimux-renderer"))
+    (let* ((names (%find-module-components "nerimux-renderer"))
            (compose-pos (position "renderer-compose" names :test #'string=))
            (frame-grid-pos
              (position "renderer-tui-kit-frame-grid" names :test #'string=))
@@ -484,7 +466,7 @@
       (expect (< compose-pos frame-grid-pos widgets-pos tui-kit-pos confirm-pos))))
 
   (it "terminal-character-writing-modules-load-in-dependency-order"
-    (let* ((names (%find-module-components "domain/terminal" "nerimux-terminal"))
+    (let* ((names (%find-module-components "nerimux-terminal"))
            (definitions-pos
              (position "char-write-definitions" names :test #'string=))
            (cells-pos (position "char-write-cells" names :test #'string=))
@@ -496,7 +478,7 @@
       (expect (< definitions-pos cells-pos flow-pos))))
 
   (it "terminal-sgr-modules-load-in-dependency-order"
-    (let* ((names (%find-module-components "domain/terminal" "nerimux-terminal"))
+    (let* ((names (%find-module-components "nerimux-terminal"))
            (definitions-pos (position "sgr-definitions" names :test #'string=))
            (colors-pos (position "sgr-colors" names :test #'string=))
            (flow-pos (position "sgr" names :test #'string=))
