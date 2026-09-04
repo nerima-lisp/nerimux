@@ -24,7 +24,11 @@
   :components ((:file "package")
                (:file "pty-ffi")       ; FFI declarations and platform constants
                (:file "pty-rawmode")   ; terminal raw mode management
-               (:file "pty"))          ; PTY lifecycle + port installation
+               (:file "pty-process")
+               (:file "pty-io")
+               (:file "pty-select")
+               (:file "pty-terminal")
+               (:file "pty"))
   :in-order-to ((test-op (test-op "nerimux-pty/test"))))
 
 (defsystem "nerimux-pty/test"
