@@ -6,7 +6,7 @@
 (in-package #:asdf-user)
 
 (defsystem "nerimux-vcs"
-  :description "INFRASTRUCTURE git adapter for nerimux: ghq discovery, worktree operations, status inspection"
+  :description "INFRASTRUCTURE VCS operations for nerimux: ghq discovery, worktree operations, status inspection"
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
@@ -19,11 +19,16 @@
   :serial t
   :components ((:file "package")
                (:file "vcs")
+               (:file "vcs-catalog")
+               (:file "vcs-directory-resolution")
                (:file "vcs-worktree-operations")
+               (:file "vcs-worktree-async-operations")
+               (:file "vcs-worktree-status-refresh")
                (:file "vcs-status")
                (:file "vcs-async-operations")
                (:file "vcs-fetch")
                (:file "vcs-inspect")
+               (:file "vcs-operations")
                ;; Last: the write operations need %REPOSITORY-CHECKED-HANDLE (the
                ;; vcs-kit:make-repository construction extracted from
                ;; vcs-worktree-operations.lisp's %REV-PARSE) and
@@ -52,10 +57,16 @@
   :pathname "tests"
   :serial t
   :components ((:file "package")
+               (:file "vcs-value-tests")
+               (:file "vcs-worktree-status-tests")
                (:file "vcs-tests")
+               (:file "vcs-prune-tests")
+               (:file "vcs-tests-workspace")
+               (:file "vcs-tests-status")
                (:file "vcs-fetch-dedup-tests") ; R7.1: one fetch in flight per target
                (:file "vcs-worktree-path-tests") ; R7.2: timestamp-sha path, -2/-3 on collision
                (:file "vcs-operations-tests")
+               (:file "vcs-command-tests")
                (:file "vcs-async-operations-tests")
                (:file "vcs-inspect-tests"))
   ;; See packages/text/nerimux-text.asd for why this form is repeated per unit

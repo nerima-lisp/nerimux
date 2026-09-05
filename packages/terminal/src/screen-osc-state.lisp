@@ -1,19 +1,5 @@
 (in-package #:nerimux/terminal/actions)
 
-;;;; Small screen-state setters driven by escape sequences: focus-event reports
-;;;; (?1004), the pending-BEL flag, the OSC 0/2/7 title & cwd, the XTPUSHTITLE/
-;;;; XTPOPTITLE title stack, and the OSC 110/111 default-colour resets.
-;;; ── Focus event reporting (?1004) ──────────────────────────────────────────
-;;;
-;;; When an application enables focus events, it expects the terminal to deliver
-;;; ESC[I when focus is gained and ESC[O when focus is lost.  This pure function
-;;; produces those report bytes; the dispatch layer writes them to the pane's PTY
-;;; as the active pane changes.  Returns NIL when the screen has not opted in, so
-;;; callers can treat "no report" and "focus events off" uniformly.
-;;;
-;;; defparameter rather than defconstant is used for the report strings because
-;;; string identity (EQL) cannot be guaranteed across image reloads — SBCL would
-;;; signal a redefinition error for defconstant with a new string object.
 (defparameter +focus-gained-report+
   (format nil "~C[I" #\Escape)
   "VT sequence delivered to a focused application when it gains terminal focus.")
@@ -30,12 +16,10 @@
         +focus-gained-report+
         +focus-lost-report+)))
 
-;;; ── BEL pending ──────────────────────────────────────────────────────────────
 (defun set-bell-pending (screen)
   "Mark SCREEN as having a pending BEL (bell event) to be processed by the renderer."
   (setf (screen-bell-pending screen) t))
 
-;;; ── Screen title ─────────────────────────────────────────────────────────────
 (defun set-screen-title (screen title)
   "Set the OSC window title of SCREEN to TITLE string."
   (setf (screen-title screen) title))

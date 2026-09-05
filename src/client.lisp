@@ -1,21 +1,5 @@
 (in-package #:nerimux)
 
-;;;; Detach-attach client.
-;;;;
-;;;; A thin terminal: it puts its own stdin in raw mode, forwards keystrokes and
-;;;; resizes to the server as protocol frames, and paints the rendered frames
-;;;; the server sends back.  It holds no session state — all prefix handling and
-;;;; rendering happen server-side, so the client is the same for any session.
-;;;;
-;;;; Event-loop decomposition:
-;;;;   %maybe-send-resize    — pure resize check + frame send (testable without terminal)
-;;;;   %forward-stdin-byte   — read one byte from stdin and forward it to the server
-;;;;   %decode-server-frame  — pure: read one server frame, return disposition + text
-;;;;   %receive-server-frame — effect boundary: call decode, then write text to stdout
-;;;;   %run-attach-session   — handshake + event loop, socket-testable without a live terminal;
-;;;;                           contains PEER-IO-FAILURE (server.lisp) so a wedged peer exits
-;;;;                           this session cleanly instead of escaping into the debugger
-;;; ── run-client event-loop helpers ───────────────────────────────────────────
 (defun %maybe-send-resize (stream)
   "If *resize-pending* is set, clear it, sample the current terminal dimensions,
    update *term-rows* and *term-cols*, and send a +msg-resize+ frame on STREAM.
@@ -67,7 +51,6 @@
         nil)
       (t nil))))
 
-;;; ── run-client ───────────────────────────────────────────────────────────────
 (defun %receive-if-ready (stream server-socket-fd ready)
   "If SERVER-SOCKET-FD appears in the READY fd list, read and dispatch one server
    frame from STREAM via %receive-server-frame.  Returns :exit when the server
@@ -160,20 +143,6 @@
                          (%run-attach-session stream server-socket-fd target)))
       (close-socket socket))))
 
-;;; ── nerimux kill (R8.1) ──────────────────────────────────────────────────
-;;;
-;;; A one-shot control connection: connect, send one +msg-command+, read back
-;;; the +msg-reply+ the server's `:kill` command handler sends (that handler
-;;; lives in server-multi-dispatch-command.lisp, out of this file's scope -- see the
-;;; interface reported alongside this change), then disconnect.  It never
-;;; sends +msg-attach+, so it is not RUN-CLIENT above -- but the server
-;;; registers any accepted connection as a full client (%add-client,
-;;; server-multi.lisp) before it ever reads a frame, so this connection is
-;;; briefly a *clients* member and can receive an ordinary +msg-frame+
-;;; broadcast (server-multi.lisp's %broadcast-frame, which runs once per
-;;; event-loop iteration ahead of message dispatch) before its reply
-;;; arrives.  %read-kill-reply discards those instead of mistaking one for
-;;; "no reply".
 (defun %read-kill-reply (stream)
   "Read frames from STREAM until a +msg-reply+ arrives or the connection
    ends, discarding any interleaved +msg-frame+ broadcast in between (see

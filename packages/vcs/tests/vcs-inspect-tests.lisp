@@ -1,15 +1,5 @@
 (in-package #:nerimux/test/vcs)
 
-;;;; REFRESH-WORKTREE-COMMITS-ASYNC (vcs-inspect.lisp, Wave B / D2): recent-
-;;;; commit history for a worktree's inline tree-row expansion.
-;;;;
-;;;; Every other file in this directory drives cl-vcs-kit through
-;;;; WITH-STUBBED-FDEFINITION rather than a real on-disk git repository --
-;;;; grep across tests/ finds no helper anywhere that shells out to `git init`,
-;;;; so this file follows the same established convention instead of
-;;;; introducing a new one. The synchronous worker (%READ-WORKTREE-COMMITS)
-;;;; is tested directly, plus one async smoke test exercising the thread/
-;;;; callback-dispatch plumbing the way vcs-async-operations-tests.lisp does.
 (defun %inspect-fake-commit (id message)
   (vcs-kit::%make-vcs-commit :id id :message message))
 
@@ -75,9 +65,6 @@
                  :callback-dispatch (lambda (callback) (push callback queued))
                  :on-complete (lambda (result) (setf completed result)))))
           (cl-concurrent-kit:join-thread thread :timeout 2)
-          ;; Nothing applied yet -- APPLY-RESULT only runs once the queued
-          ;; callback is drained, matching every other *-ASYNC test in this
-          ;; directory (vcs-async-operations-tests.lisp).
           (expect (null (nerimux/workspace-model:worktree-commits-state worktree)))
           (expect (= 1 (length queued)))
           (funcall (pop queued))
@@ -116,14 +103,6 @@
           (expect (eq :failed (nerimux/workspace-model:worktree-commits-state worktree)))
           (expect (null (nerimux/workspace-model:worktree-recent-commits worktree))))))))
 
-;;;; REFRESH-WORKTREE-FILE-DIFF-ASYNC (vcs-inspect.lisp, Wave C): per-file
-;;;; diff for a :FILE row's own inline expansion. Same
-;;;; WITH-STUBBED-FDEFINITION convention as the commits suite above --
-;;;; VCS-KIT:VCS-DIFF is stubbed to return a real PROCESS-KIT:PROCESS-RESULT
-;;;; (the only accessor this code calls, PROCESS-RESULT-STDOUT, is imported
-;;;; from PROCESS-KIT verbatim rather than redefined by vcs-kit, so a real
-;;;; struct instance is the simplest fixture -- no need to also stub the
-;;;; accessor itself).
 (defun %inspect-fake-diff-result (stdout)
   (process-kit:make-process-result :stdout stdout))
 
@@ -146,13 +125,6 @@
           (expect (equal '("@@ -1,2 +1,2 @@" "-old line" "+new line") (cdr diff)))))))
 
   (it "%read-worktree-file-diff passes -- PATH and a max-output-characters execution option (F3a)"
-    ;; VCS-KIT:VCS-DIFF is the plain %DEFINE-VCS-OPERATION function
-    ;; (repository &rest arguments), never a keyword entry point -- a
-    ;; previous call here of the shape (VCS-DIFF REPO :ARGUMENTS (LIST "--"
-    ;; PATH)) forwarded the literal keyword :ARGUMENTS and a list as two raw
-    ;; argv entries to `git diff`, so the real call always failed; this test
-    ;; (and its stub, below) previously matched that same wrong convention
-    ;; instead of the real one, which is why it never caught the bug.
     (let ((worktree (nerimux/workspace-model:make-worktree
                       :id "wt-diff-args" :path "/tmp/nerimux-inspect-diff-args"))
           (captured-arguments nil))
@@ -175,13 +147,6 @@
                        (last captured-arguments 2))))))
 
   (it "%read-worktree-file-diff passes --no-ext-diff and --no-color before -- (BUG-1)"
-    ;; A user's global git config can set diff.external (an external diff
-    ;; driver, e.g. difftastic/delta) or color.diff=always. Either turns
-    ;; `git diff`'s stdout into something other than plain unified +/- hunks
-    ;; -- side-by-side text with no +/- prefixes, or ANSI-colored hunks --
-    ;; which %SPLIT-DIFF-LINES then retains verbatim as if it were ordinary
-    ;; diff content. These two flags force git's own unified, uncolored
-    ;; output regardless of the user's config.
     (let ((worktree (nerimux/workspace-model:make-worktree
                       :id "wt-diff-no-ext" :path "/tmp/nerimux-inspect-diff-no-ext"))
           (captured-arguments nil))
@@ -245,8 +210,6 @@
                  :callback-dispatch (lambda (callback) (push callback queued))
                  :on-complete (lambda (result) (setf completed result)))))
           (cl-concurrent-kit:join-thread thread :timeout 2)
-          ;; Nothing applied yet -- ON-COMPLETE only runs once the queued
-          ;; callback is drained, same convention as the commits suite.
           (expect (null completed))
           (expect (= 1 (length queued)))
           (funcall (pop queued))
@@ -273,12 +236,6 @@
             (cl-concurrent-kit:join-thread thread :timeout 2)
             (expect (equal (list :failed) completed))))))))
 
-;;;; F3b/F5 (CWE-400 / CWE-150-adjacent): every retained diff line and
-;;;; commit subject is capped at *WORKTREE-TEXT-MAX-CHARACTERS* and has its
-;;;; control characters stripped at ingestion, before storage -- a
-;;;; pathological single line/message must not grow the cache unbounded,
-;;;; and a control byte (an ESC sequence, in particular) must never reach a
-;;;; renderer through this path.
 (describe "vcs worktree diff line content limits (F3b/F5)"
           (it
            "truncates a single long retained line to *worktree-text-max-characters*"
@@ -407,9 +364,6 @@
                  (let ((commits (nerimux/vcs::%read-worktree-commits worktree)))
                    (expect (string= "a[31mb" (cdr (first commits)))))))))
 
-;;;; F2: a catalog rebuild that lands while REFRESH-WORKTREE-COMMITS-ASYNC's
-;;;; fetch is still in flight must not orphan the settlement onto the
-;;;; struct captured at launch -- see %SETTLE-TARGET-WORKTREE (vcs.lisp).
 (describe "vcs worktree commits settlement target (F2)"
   (it "redirects settlement to the catalog's current struct when a rebuild replaced the captured one"
     (let* ((previous (nerimux/vcs:workspace-organizations))
@@ -446,11 +400,6 @@
                        nil struct-a
                        :callback-dispatch (lambda (callback) (push callback queued))
                        :on-complete (lambda (result) (setf completed result)))))
-                ;; Simulate a rebuild landing while the fetch is in flight:
-                ;; the repository's worktree list is rebuilt with a fresh
-                ;; struct sharing STRUCT-A's id, exactly as
-                ;; LIST-REPOSITORY-WORKTREES would (%APPLY-REPOSITORY-
-                ;; WORKTREES always allocates a fresh struct per path).
                 (setf (nerimux/workspace-model:repository-worktrees repository) nil)
                 (nerimux/workspace-model:repository-add-worktree repository struct-b)
                 (cl-concurrent-kit:join-thread thread :timeout 2)

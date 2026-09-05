@@ -1,18 +1,5 @@
 (in-package #:nerimux/test/vcs)
 
-;;;; Direct unit tests for FETCH-REPOSITORY-ASYNC / FETCH-ORGANIZATION-ASYNC's
-;;;; duplicate-fetch suppression in vcs-fetch.lisp, the R7.1 requirement:
-;;;; "進行中の同一対象への重複実行を抑止する" (a fetch already running for a
-;;;; target is not started again).
-;;;;
-;;;; *IN-PROGRESS-FETCHES* + *FETCH-LOCK* implement this: %FETCH-BEGIN claims
-;;;; a (:repository id) or (:organization id) key and returns T only if it
-;;;; was not already claimed; a call made while a fetch is in flight for the
-;;;; same key invokes its ON-COMPLETE immediately with NIL and starts no
-;;;; thread at all -- the in-flight fetch's own callback is the one that
-;;;; eventually reports the real result. These tests replace the direct
-;;;; VCS-KIT:VCS-FETCH boundary so the first fetch can be held open long enough
-;;;; for a second call to observe it in flight.
 (defun %delayed-vcs-fetch (call-log delay-seconds)
   "Return a direct VCS-FETCH stub that records each real fetch invocation."
   (lambda (repository &rest arguments)
@@ -47,10 +34,6 @@
 
 (describe "renderer-suite/vcs-fetch-dedup-repository"
 
-  ;; R7.1: a fetch issued for a repository while an earlier fetch for the
-  ;; SAME repository is still running does not start a second real fetch --
-  ;; its ON-COMPLETE fires immediately with NIL, and the in-flight fetch is
-  ;; the only one that ever calls VCS-KIT:VCS-FETCH.
   (it "does not start a second real fetch while one is already in flight for the same repository"
     (with-mocked-vcs-fetch (call-log :delay 0.3)
       (let* ((repository
@@ -62,27 +45,17 @@
         (nerimux/vcs:fetch-repository-async
          repository
          :on-complete (lambda (result) (setf first-result result)))
-        ;; Issued while the first fetch is still sleeping inside the mock.
         (nerimux/vcs:fetch-repository-async
          repository
          :on-complete (lambda (result) (setf second-result result)))
-        ;; The duplicate's callback must have already fired -- %FETCH-BEGIN
-        ;; is checked synchronously in the caller's own thread before any
-        ;; worker is spawned, so this needs no polling at all.
         (expect (null second-result))
         (expect (eq :pending first-result))
-        ;; Now wait for the real (first) fetch to finish.
         (expect (%poll-until (lambda () (not (eq :pending first-result)))))
         (expect (eq repository first-result))
-        ;; Exactly one real VCS-FETCH call happened -- the duplicate never
-        ;; reached VCS-KIT:VCS-FETCH at all.
         (expect (= 1 (length (cdr call-log))))))))
 
 (describe "renderer-suite/vcs-fetch-dedup-repository-recovery"
 
-  ;; Once the in-flight fetch completes, the key is released
-  ;; (%FETCH-END, called from the completion callback) -- a later fetch for
-  ;; the same repository is not suppressed and actually runs.
   (it "allows a fresh fetch for the same repository once the prior one has completed"
     (with-mocked-vcs-fetch (call-log :delay 0.05)
       (let* ((repository
@@ -165,11 +138,6 @@
 
 (describe "renderer-suite/vcs-fetch-dedup-organization"
 
-  ;; R7.1's other target: C-q C-f fetches every repository under an
-  ;; organization. The dedup key is (:organization id), independent from the
-  ;; (:repository id) key above -- a repository-level and an
-  ;; organization-level fetch of the same underlying repository do not
-  ;; collide with each other's in-progress marker.
   (it "does not start a second organization-wide fetch while one is already in flight"
     (with-mocked-vcs-fetch (call-log :delay 0.3)
       (let* ((repository

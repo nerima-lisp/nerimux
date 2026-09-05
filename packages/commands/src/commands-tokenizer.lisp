@@ -1,25 +1,5 @@
 (in-package #:nerimux/commands)
 
-;;;; Command-string tokeniser: shell-style quote/escape splitting shared by
-;;;; multi-argument commands such as send-keys (and, in future,
-;;;; display-message / if-shell).
-;;;;
-;;;; Command arguments are split shell-style: whitespace separates arguments,
-;;;; '...' is a literal span, "..." allows backslash escapes, and a bare \\ escapes
-;;;; the next character.  Adjacent spans join into one argument (foo"bar baz" →
-;;;; foobar baz).
-;;;;
-;;;; Built on cl-parser-kit's tokenizer framework (cl-parser-kit:tokenizer /
-;;;; token-rule / tokenize-string): a skipped whitespace rule plus one custom
-;;;; :argument rule whose matcher runs the quote/escape-joining scan below and
-;;;; reports how many source characters it consumed, exactly the contract
-;;;; cl-parser-kit:make-token-rule expects.  That scan is the one piece with
-;;;; no off-the-shelf cl-parser-kit rule -- quotes and escapes don't open a
-;;;; new token the way they would in a typical language lexer, they extend
-;;;; the CURRENT argument -- so it stays hand-written; what cl-parser-kit
-;;;; contributes is the rule/skip composition, span tracking, and the same
-;;;; resource-limit guards (*maximum-tokenizer-source-length* et al.) every
-;;;; other nerimux tokenizer built on it gets for free.
 (defun %consume-single-quoted (string start length accumulator)
   "Consume a single-quoted literal span from STRING beginning at START.
    Writes characters into ACCUMULATOR stream up to the closing quote.
@@ -84,10 +64,6 @@
 (defparameter *command-string-tokenizer*
   (cl-parser-kit:make-tokenizer
    :rules (list
-           ;; Only space/tab separate arguments (not every char-whitespace-p
-           ;; class member), matching the original hand-rolled scanner: any
-           ;; other whitespace, e.g. a literal newline, stays inside its
-           ;; argument.
            (cl-parser-kit:make-predicate-rule
             :whitespace (lambda (ch) (member ch '(#\Space #\Tab))) :skip-p t)
            (cl-parser-kit:make-token-rule :type :argument

@@ -1,10 +1,5 @@
 (in-package #:nerimux/session)
 
-;;; ── Child environment snapshot ───────────────────────────────────────────────
-;;;
-;;; session-child-environment merges 5 sources in order.  The two inner merge
-;;; steps (%apply-session-overlay and %apply-extra-env) are extracted into named
-;;; helpers so each concern is independently testable.
 (defvar *suppress-update-environment*
   nil
   "When non-NIL, session-child-environment SKIPS applying the update-environment
@@ -44,21 +39,14 @@
      5. EXTRA-ENV alist of (NAME . VALUE), when supplied
    SESSION may be NIL for bootstrap or pure geometry helpers — step 3 is skipped.
    The result is suitable for passing as :environment to sb-ext:run-program."
-  ;; Step 1: base from current process.
   (let ((table (%environment-strings-to-table (nerimux/ports:environment-entries))))
-    ;; Step 2: update-environment propagation (new-session -E suppresses this).
     (unless *suppress-update-environment*
       (dolist (pair (get-update-environment-vars))
         (setf (gethash (car pair) table) (cdr pair))))
-    ;; Hidden globals (set-environment -hg) never reach child processes; they
-    ;; live in the real process environment (step 1) so strip them here.
     (dolist (name *global-hidden-environment-names*)
       (remhash name table))
-    ;; Step 3: session overlay.
     (%apply-session-overlay session table)
-    ;; Step 4: TERM override.
     (when (and term (plusp (length term)))
       (setf (gethash "TERM" table) term))
-    ;; Step 5: extra per-call environment.
     (%apply-extra-env extra-env table)
     (%environment-table-to-list table)))

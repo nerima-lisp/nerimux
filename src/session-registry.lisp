@@ -1,11 +1,5 @@
 (in-package #:nerimux)
 
-;;;; Session registry.
-;;;;
-;;;; *server-sessions* is the authoritative registry of all live sessions
-;;;; (defvar lives in runtime.lisp so dispatch.lisp can reference it before
-;;;; server loads).  run-server initialises it with the single initial session.
-;;; ── Session registry ──────────────────────────────────────────────────────────
 (defun server-add-session (session)
   "Register SESSION in *server-sessions* keyed by (session-name session).
    If a session with the same name already exists it is replaced."

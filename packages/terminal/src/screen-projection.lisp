@@ -1,8 +1,5 @@
 (in-package #:nerimux/terminal/actions)
 
-;;;; Viewport projection: map a (col, row) viewport position to the cell shown for
-;;;; the current copy-mode scroll state, reading from scrollback or the live grid.
-;;; ── Display projection (copy-mode scrollback) ──────────────────────────────
 (defparameter *display-blank-cell*
   (blank-cell)
   "Shared immutable blank cell for out-of-range display lookups.

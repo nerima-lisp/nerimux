@@ -1,16 +1,5 @@
 (in-package #:nerimux/terminal/parser)
 
-;;;; OSC 52 clipboard helpers.
-;;; OSC 52 delivers clipboard data; the Base64 payload is decoded and forwarded
-;;; to *osc52-handler* when one has been installed.  nerimux keeps no
-;;; clipboard state of its own (docs/notes/workspace-requirements.md §1.1,
-;;; §R3.3): a pane's OSC 52 write is passed straight through to the client
-;;; terminal via the owning SCREEN's clipboard-queue — the same queue
-;;; copy-mode yank writes into, one layer up, from
-;;; nerimux/commands::%maybe-copy-to-clipboard.  Named here only so a reader
-;;; can find the other producer; this domain file must never call it itself —
-;;; domain calling application would be the upward dependency
-;;; docs/src/reference/architecture.md's layering rule forbids.
 (defvar *osc52-handler*
   nil
   "A function of two arguments (screen, text) called when OSC 52 clipboard
@@ -137,5 +126,4 @@
    allow re-initialisation if the handler variable is reset."
   (setf *osc52-handler* #'%osc52-inbound-passthrough))
 
-;; Wire OSC 52 handler at module load time via an explicit named call.
 (initialize-osc52-handler)

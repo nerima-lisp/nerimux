@@ -1,11 +1,5 @@
 (in-package #:nerimux/test)
 
-;;;; Selection tokens the picker derives from model objects.
-;;;;
-;;;; Moved out of packages/picker/tests/global-picker-tests.lisp when
-;;;; application/picker became nerimux-picker. The token functions are BOOTSTRAP
-;;;; internals (src/server-multi-dispatch-picker.lisp), not picker ones, so this
-;;;; case never belonged to the unit -- it pins that the two agree.
 (describe "picker-selection-token-suite"
           (it "derives stable selection tokens from fallback model fields"
               (let ((organization

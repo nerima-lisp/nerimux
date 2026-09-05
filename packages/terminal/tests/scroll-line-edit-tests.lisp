@@ -1,12 +1,5 @@
 (in-package #:nerimux/test/terminal)
 
-;;;; CSI line-edit parser-path tests for edit.lisp.
-;;;; Suite: delete-insert-chars.
-;;; ── SUITE: delete/insert characters (DCH / ICH) ─────────────────────────────
-;;;
-;;; Driven via the real CSI parser path: CSI n P (DCH) shifts the tail left
-;;; and blanks the vacated end; CSI n @ (ICH) shifts the tail right and blanks
-;;; the gap.  We also exercise the n >= width edge.
 (defmacro define-csi-line-edit-cases (&body cases)
   "Define parser-path DCH/ICH cases from declarative rows."
   (labels ((case-option (options key)

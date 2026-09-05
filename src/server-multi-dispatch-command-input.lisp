@@ -31,11 +31,6 @@
   (#\/ (%client-enter-command-mode conn "search-forward "))
   (#\? (%client-enter-command-mode conn "search-backward "))
   (#\q
-   ;; Mirrors what %client-exit-copy-mode used to do to SCREEN before this
-   ;; unit was told (contract SS0) to stop calling it: q must still unfreeze
-   ;; the viewport, or live PTY output keeps appending underneath a frame
-   ;; anchored at the old scroll offset while the keyboard has already moved
-   ;; on to the view underneath.
    (when (screen-copy-mode-p screen) (copy-mode-exit screen))
    (%set-client-modal conn nil)))
 
@@ -118,23 +113,6 @@
         (handler-case
             (let* ((tokens (tokenize-command-string input))
                    (name (first tokens))
-                   ;; FIND-SYMBOL, never INTERN: NAME comes from
-                   ;; CLIENT-CONN-COMMAND-BUFFER, which is filled one keystroke
-                   ;; at a time by %CLIENT-COMMAND-BUFFER-APPEND with no length
-                   ;; cap, straight from the wire.  INTERN here let any peer
-                   ;; grow the KEYWORD package without bound -- CL never
-                   ;; releases interned symbols -- simply by typing a fresh
-                   ;; garbage name and pressing Enter, repeatedly, for the life
-                   ;; of the server.
-                   ;;
-                   ;; Falling back to the raw string rather than NIL keeps the
-                   ;; "unknown command" report: DEFINE-COMMAND-RULES compares
-                   ;; with EQ/MEMBER against keyword literals, so a string
-                   ;; matches nothing and falls through exactly as an
-                   ;; unrecognised keyword did, while NIL would instead read as
-                   ;; "no command at all" and report nothing.  Same shape as
-                   ;; DECODE-COMMAND-PAYLOAD (infrastructure/net/protocol-command.lisp)
-                   ;; and %CLIENT-UI-MODE-VALUE.
                    (cmd (and name
                              (or (find-symbol (string-upcase name) :keyword)
                                  name)))
@@ -171,7 +149,6 @@
 
 (define-key-rules %handle-client-command-key-payload (session conn payload)
   (27
-   ;; R4.3: see the matching comment in %handle-client-picker-key-payload.
    (%client-esc-swallow-start conn)
    (setf (client-conn-command-buffer conn) "")
    (%client-restore-command-view conn)
@@ -187,20 +164,6 @@
    (%client-command-buffer-append conn payload)
    t))
 
-;;; ── ESC-prefixed multi-byte keys (M-n, M-p, S-TAB) ──────────────────────────
-;;;
-;;; The client forwards stdin one byte at a time (see *CLIENT-ESC-SWALLOW-
-;;; COUNTS* above), so Alt/Meta and shifted-function keys still arrive as a
-;;; multi-byte escape sequence split across separate key messages: M-n/M-p is
-;;; ESC then the letter (2 bytes), S-TAB is ESC [ Z (3 bytes), and a real
-;;; arrow key is ESC [ A/B/C/D (3 bytes, same CSI introducer as S-TAB).
-;;;
-;;; *CLIENT-ESC-SWALLOW-COUNTS* is the wrong tool here: it discards a fixed,
-;;; already-known number of trailing bytes after something else has already
-;;; acted on the ESC. Here nothing may act until the byte AFTER the ESC is
-;;; known, so this needs the opposite shape -- remember that an ESC is
-;;; in-flight and route only the byte(s) that follow it, keyed by CONN so one
-;;; client's pending sequence can never resolve against another's byte.
 (defun %client-meta-pending-consume (conn payload)
   "Resolve the byte following a pending ESC. `n`/`p` while :SECOND completes
    M-n/M-p (contract SS2's section jump); `[` while :SECOND is a CSI
@@ -228,7 +191,6 @@
          (%client-cycle-visibility conn)))))
   t)
 
-;;; ── FR-005 visibility levels ─────────────────────────────────────────────
 (defun %client-set-visibility-level (conn level)
   "`1`-`4` (contract SS2): set CONN's global section-visibility preset.
    Out-of-range LEVEL is a no-op rather than storing an unrenderable value --
@@ -244,7 +206,6 @@
   (%client-set-visibility-level conn
                                 (1+ (mod (client-conn-visibility-level conn) 4))))
 
-;;; ── FR-006 `q` step-back ladder ──────────────────────────────────────────
 (defun %client-focused-live-pane (session conn)
   "CONN's own remembered focus, still live in SESSION -- deliberately NOT
    %RESOLVE-CLIENT-FOCUS-PANE's window-active-pane fallback, which always
@@ -279,176 +240,6 @@
      (when (%client-focused-live-pane session conn)
        (%set-client-view conn :pane))))
   t)
-
-;;; ── FR-011 `$` process log ───────────────────────────────────────────────
-(defun %scroll-client-process-log (conn delta)
-  (let* ((entries (client-conn-process-log conn))
-         (max-scroll (max 0 (1- (length entries)))))
-    (setf (client-conn-process-log-scroll conn) (max 0
-                                                     (min max-scroll
-                                                          (+
-                                                           (client-conn-process-log-scroll
-                                                            conn)
-                                                           delta))))
-    (%mark-dirty)))
-
-(defun %handle-process-log-key (conn payload)
-  "Answer the `$` process log CONN is looking at: q/ESC close it (dropping
-   MODAL, the same shape %CLOSE-HELP-VIEW uses -- there is no separate
-   'process log mode' to leave, only a modal to drop); n/p scroll;
-   everything else is swallowed, mirroring %HANDLE-HELP-VIEW-KEY. ESC goes
-   through %CLIENT-ESC-SWALLOW-START first (R4.3) for the identical reason
-   documented there: a lone ESC byte here could be the first of a 3-byte
-   arrow-key sequence, and closing the view immediately would hand its
-   trailing 2 bytes to whatever key handler runs next as literal `[` and a
-   letter."
-  (cond
-    ((%client-byte-p payload 27)
-      (%client-esc-swallow-start conn)
-      (%set-client-modal conn nil))
-    ((%client-key-p payload #\q) (%set-client-modal conn nil))
-    ((%client-key-p payload #\n) (%scroll-client-process-log conn 1))
-    ((%client-key-p payload #\p) (%scroll-client-process-log conn -1)))
-  nil)
-
-;;; ── FR-003 stage/unstage/discard (magit-style status actions) ────────────
-;;;
-;;; s/S/u/U/k below are reached straight from %HANDLE-CLIENT-UI-KEY-PAYLOAD's
-;;; NIL-modal keymap (see the status-only clauses further down), which has no
-;;; error boundary of its own above it: %HANDLE-MULTI-KEY-MESSAGE's only
-;;; handler-case is PEER-IO-FAILURE, not ERROR (server-multi-dispatch.lisp),
-;;; so an unhandled condition from any of these five would propagate out of
-;;; the single select(2) loop shared by every client and kill the server.
-;;; Every path through these five functions must therefore end in either a
-;;; %CLIENT-NOTIFY or a %RUN-TRANSIENT-GIT-WRITE dispatch, never a bare
-;;; ERROR -- %CLIENT-RUN-STATUS-WRITE's HANDLER-CASE is the actual guard;
-;;; the rest of this section is just making sure every branch reaches it or
-;;; a no-op notify instead of a bare struct-slot access on NIL.
-(defun %client-selected-status-file (conn)
-  "The (WORKTREE PATH) pair for CONN's selected status-view row, or NIL when
-   there is no selection, the selection is not a :FILE row (its OBJECT is
-   (:FILE WORKTREE-ID PATH CODE) -- see WORKSPACE-STATUS-ENTRIES /
-   %WORKSPACE-STATUS-FILE-ENTRIES, renderer-workspace-status.lisp, and the
-   existing :FILE handling in %CLIENT-TOGGLE-SELECTED-TREE-ROW above), or the
-   row's own WORKTREE-ID no longer resolves in the live catalog. Resolving
-   the worktree from the row's OWN embedded id, rather than from CLIENT-CONN-
-   SELECTED-WORKTREE, keeps this correct even for a :FILE row reached via the
-   repolist tree's inline expansion (Wave B/C), which need not agree with
-   whichever worktree CLIENT-CONN-SELECTED-WORKTREE currently names."
-  (let ((object (%client-tree-object conn)))
-    (when (and (consp object) (eq (first object) :file))
-      (destructuring-bind (worktree-id path code) (rest object)
-        (declare (ignore code))
-        (let ((worktree (%workspace-find-worktree worktree-id)))
-          (and worktree (list worktree path)))))))
-
-(defun %client-run-status-write (conn repository operation args)
-  "Run one stage/unstage/discard write through the same async path and
-   process log the transient menu's own writes use (%RUN-TRANSIENT-GIT-
-   WRITE) -- not the synchronous GIT-WRITE-OPERATION, both for consistency
-   with every other write this server issues and so a slow `git add` on a
-   large index cannot stall the one event loop every attached client shares.
-   REPOSITORY nil (no repository resolved for the selected worktree) is
-   reported rather than attempted. HANDLER-CASE is the actual crash fix this
-   whole section exists for -- see the header comment above."
-  (if (null repository)
-      (%client-notify conn "no repository selected")
-      (handler-case (%run-transient-git-write conn repository operation args)
-        (error (condition)
-          (%client-notify conn
-                          (format nil
-                                  "git ~(~A~): failed: ~A"
-                                  operation
-                                  condition)))))
-  t)
-
-(defun %client-stage-selection (conn)
-  "s (contract SS3): `git add -- PATH` for the selected :FILE row."
-  (let ((selection (%client-selected-status-file conn)))
-    (if selection
-        (destructuring-bind (worktree path) selection
-          (%client-run-status-write conn
-                                    (nerimux/workspace-model:worktree-repository
-                                     worktree)
-                                    :add
-                                    (list "--" path)))
-        (progn
-          (%client-notify conn "select a file first")
-          t))))
-
-(defun %client-stage-all (conn)
-  "S (contract SS3): `git add -A` for the status view's own worktree
-   (CLIENT-CONN-SELECTED-WORKTREE, the worktree %RENDER-STATUS-FRAME is
-   currently drawing -- there is no per-file selection to key this one off
-   of)."
-  (let ((worktree (client-conn-selected-worktree conn)))
-    (if worktree
-        (%client-run-status-write conn
-                                  (nerimux/workspace-model:worktree-repository
-                                   worktree)
-                                  :add
-                                  (list "-A"))
-        (progn
-          (%client-notify conn "no worktree selected")
-          t))))
-
-(defun %client-unstage-selection (conn)
-  "u (contract SS3): `git restore --staged -- PATH` for the selected :FILE
-   row."
-  (let ((selection (%client-selected-status-file conn)))
-    (if selection
-        (destructuring-bind (worktree path) selection
-          (%client-run-status-write conn
-                                    (nerimux/workspace-model:worktree-repository
-                                     worktree)
-                                    :restore
-                                    (list "--staged" "--" path)))
-        (progn
-          (%client-notify conn "select a file first")
-          t))))
-
-(defun %client-unstage-all (conn)
-  "U (contract SS3): `git restore --staged -- .` for the status view's own
-   worktree, mirroring %CLIENT-STAGE-ALL's worktree resolution."
-  (let ((worktree (client-conn-selected-worktree conn)))
-    (if worktree
-        (%client-run-status-write conn
-                                  (nerimux/workspace-model:worktree-repository
-                                   worktree)
-                                  :restore
-                                  (list "--staged" "--" "."))
-        (progn
-          (%client-notify conn "no worktree selected")
-          t))))
-
-(defun %client-start-discard-selection (conn)
-  "k (contract SS3): `git restore -- PATH` for the selected :FILE row --
-   destructive (it throws away uncommitted worktree changes with no undo),
-   so unlike stage/unstage above it never runs immediately: it always
-   confirms first via %OPEN-CONFIRM-VIEW, the same gate %RUN-TRANSIENT-GIT-
-   ACTION's own CONFIRM-P branch uses for force-push/reset --hard/branch
-   -D/clean (server-multi-dispatch-transient.lisp)."
-  (let ((selection (%client-selected-status-file conn)))
-    (if selection
-        (destructuring-bind (worktree path) selection
-          (let ((repository
-                 (nerimux/workspace-model:worktree-repository worktree)))
-            (%open-confirm-view conn
-                                (format nil "git restore -- ~A" path)
-                                (list
-                                 (cons "worktree"
-                                       (nerimux/workspace-model:worktree-path
-                                        worktree))
-                                 (cons "path" path))
-                                (lambda ()
-                                  (%client-run-status-write conn
-                                                            repository
-                                                            :restore
-                                                            (list "--" path))))
-            t))
-        (progn
-          (%client-notify conn "select a file first")
-          t))))
 
 (defun %client-open-selected-worktree-command (session conn command)
   "Open a new pane for the selected worktree running COMMAND.

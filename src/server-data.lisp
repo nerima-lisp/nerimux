@@ -6,7 +6,7 @@
 
 (defvar *runtime-server-name*
   "default"
-  "Name used to select the server's persistent runtime snapshot.")
+  "Name selecting the server's persistent runtime snapshot.")
 
 (defconstant +status-line-rows+
   1

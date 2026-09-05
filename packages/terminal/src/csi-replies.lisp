@@ -1,24 +1,11 @@
 (in-package #:nerimux/terminal/csi)
 
-;;;; CSI response-queue helper layer.
-;;;;
-;;;; Everything here builds and enqueues terminal reply strings (DSR, DA1/DA2/DA3,
-;;;; XTVERSION, CPR, DECRQM for both DEC-private and ANSI modes, XTWINOPS size
-;;;; reports) onto the screen's response queue, so the PTY loop can drain them
-;;;; back to the application.  The CSI final-byte dispatch table that calls these
-;;;; helpers lives in csi.lisp, which loads after this file.
-;;; ── Response-queue primitive ───────────────────────────────────────────────
 (declaim (inline %enqueue-reply))
 
 (defun %enqueue-reply (screen reply)
   "Push REPLY string onto SCREEN's response queue."
   (push reply (screen-response-queue screen)))
 
-;;; ── Fixed-string reply enqueuers ───────────────────────────────────────────
-;;;
-;;; define-fixed-reply-enqueuers generates the static-string variants as a
-;;; Prolog-style fact table.  The constructor is loaded immediately before
-;;; this file; the invocation stays here so generated functions are measured.
 (define-fixed-reply-enqueuers
  (enqueue-dsr-reply (format nil "~C[0n" #\Escape)
                     "Push Device Status Report OK (ESC[0n) onto SCREEN's response queue.")
@@ -51,12 +38,6 @@
                               (1+ (screen-cursor-y screen)))
                           (1+ (screen-cursor-x screen)))))
 
-;;; ── DECRQM mode-state helpers ──────────────────────────────────────────────
-;;;
-;;; %decrqm-flag-code encodes a boolean flag as the DECRQM wire integer (1 =
-;;; set, 2 = reset).  define-decrqm-mode-table is a Prolog-style fact table
-;;; that generates %decrqm-mode-state from a declarative (mode accessor) list,
-;;; with special sentinels for the alt-screen predicate and fixed values.
 (defun %decrqm-flag-code (x)
   "Encode a flag for a DECRQM reply: T → 1 (set, wire code), NIL → 2 (reset).
    The wire protocol uses 1/2, not 0/1, to distinguish 'set' from 'not recognised' (0)."
@@ -105,12 +86,6 @@
                           mode
                           (%decrqm-ansi-mode-state screen mode))))
 
-;;; ── XTWINOPS size-report constants ─────────────────────────────────────────
-;;;
-;;; XTWINOPS (CSI Ps ; … t) operations 18 and 19 query the grid size.
-;;; The reply encodes the op as a different code: 18 → code 8 (text-area
-;;; report), 19 → code 9 (screen report).  Named constants document the
-;;; mapping so the dispatch rule and the reply encoder stay in sync.
 (defun enqueue-xtwinops-reply (screen op)
   "Push the XTWINOPS size REPORT for operation OP onto SCREEN's response queue:
      +xtwinops-text-area-query+ (18) → ESC [ 8 ; rows ; cols t

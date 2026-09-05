@@ -1,16 +1,5 @@
 (in-package #:nerimux/layout)
 
-;;; -- Layout persistence (layout string serialization) --------------------------
-;;;
-;;; Encode the layout tree as a WxH,X,Y layout string.
-;;; Full form: checksum,WxH,X,Y[node1,node2]  or  checksum,WxH,X,Y,pane-id
-;;;
-;;; For nerimux we use a simplified subset:
-;;;   Leaf:  "WxH,X,Y,pane-id"
-;;;   H-split: "WxH,X,Y{first,second}"
-;;;   V-split: "WxH,X,Y[first,second]"
-;;; The 4-hex-digit checksum prefix is computed from the string.
-;;; Rolling checksum constants for the layout string's integrity check.
 (defconstant +checksum-multiplier+
   61
   "Multiplier for the rolling 16-bit layout-string checksum.")
@@ -53,11 +42,6 @@
                     (+ (pane-y p) (pane-height p))))))
     (values min-x min-y (- max-rx min-x) (- max-ry min-y))))
 
-;;; %node->string uses define-layout-fold to dispatch over tree node types,
-;;; eliminating the manual etypecase branch.  In the split branch, the bounding
-;;; box is derived from already-laid-out leaf coordinates via layout-node-bounding-box.
-;;;
-;;; orient-case dispatches on :h/:v (defined in layout.lisp).
 (define-layout-fold %node->string
                     (node)
                     :docstring

@@ -1,11 +1,5 @@
 (in-package #:nerimux/transport)
 
-;;;; Frame transport over a binary stream (client/server detach-attach).
-;;;;
-;;;; This is the impure shell around the pure nerimux/protocol codec: it moves
-;;;; encoded frames across any binary stream — a socket made via
-;;;; sb-bsd-sockets:socket-make-stream, or (in tests) a temp-file stream.
-;;;; The framing/parsing itself lives in nerimux/protocol; here we only do I/O.
 (defconstant +read-frame-timeout-seconds+
   30
   "Maximum seconds to wait for a complete frame before aborting.
@@ -79,13 +73,6 @@
        payload-length
        expected-total))))
 
-;;; ── CPS read-frame state machine ────────────────────────────────────────────
-;;;
-;;; read-frame is expressed as two CPS continuation steps matching the terminal
-;;; parser convention: each step is (data stream k) → next-state-result.
-;;; read-header-k reads the 5-byte header and, on success, continues to
-;;; read-payload-k.  read-payload-k reads the payload and, on success, decodes
-;;; the complete frame.  Both steps return NIL on EOF or short-read.
 (defun %read-header-k (stream continuation)
   "Phase 1: read a 5-byte frame header from STREAM into a fresh adjustable buffer.
    On success, call CONTINUATION with the buffer and the decoded payload length.

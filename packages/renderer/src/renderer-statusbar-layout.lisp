@@ -1,29 +1,8 @@
 (in-package #:nerimux/renderer)
 
-;;;; Status bar layout helpers.
-;;;;
-;;;; This file holds the SGR-aware width math, justify strategies, and aligned
-;;;; segment composition used by renderer-statusbar.lisp.
-;;; ── SGR-aware length / truncation ────────────────────────────────────────────
-;;;
-;;; Status strings may embed CSI SGR sequences — both from theme styling and
-;;; from inline #[fg=…] blocks (expanded below).  Those sequences are
-;;; zero-width on screen, so gap math and width clamping must count VISIBLE
-;;; cells, not raw characters.  %SGR-SEQUENCE-END / %VISIBLE-LENGTH /
-;;; %VISIBLE-TRUNCATE moved to renderer-format.lisp so the workspace frame's
-;;; styled rows (which load earlier) share the same math.
 (defun %status-style-block-sgr (body base-sgr)
-  "SGR escape string for one inline #[BODY] status block: always resets to
-   BASE-SGR (reset + base attrs), regardless of BODY.
-   Previously an empty / \"default\" / \"none\" BODY reset to BASE-SGR while
-   any other BODY was parsed as a style string (e.g. \"fg=green,bold\")
-   via %status-sgr-from-style, which R2.4 deleted along with the rest of the
-   style-string parser.  A non-default/none/empty BODY can only occur in
-   live data now (a window/session name that happens to contain literal
-   \"#[...]\" text — status-left/-right/window-status-format are fixed
-   templates that never embed one themselves, R2.3), so there is no longer a
-   config-authored style for a non-trivial BODY to mean anything; BODY is
-   accepted but ignored."
+  "SGR escape string for one inline #[BODY] status block. Always resets to
+   BASE-SGR; BODY is not interpreted."
   (declare (ignore body))
   (format nil "~C[0;~Am" +esc+ base-sgr))
 
@@ -56,13 +35,6 @@
                          (incf i))))))
       str))
 
-;;; %status-format-or-default, %status-segment-limit, and
-;;; %clamp-status-segment used to live here: the option-driven per-segment
-;;; length cap ("status-left-length" et al.) that fed R6.5's predecessor
-;;; status bar. R6.5 replaced that bar outright with a fixed 3-block layout
-;;; whose own width handling is %COMPOSE-WORKSPACE-STATUS-LINE's progressive
-;;; degradation (renderer-statusbar.lisp) rather than a per-segment cap, so
-;;; nothing calls these any more; removed rather than left as dead code.
 (defun %split-comma-attrs (body)
   "Split BODY on commas and preserve empty fields."
   (let ((parts nil)
@@ -74,19 +46,6 @@
           else
             do (return (nreverse parts)))))
 
-;;; %justify-right / %justify-centre / %status-justify-line and
-;;; %status-segment-style-sgr / %apply-segment-style used to live here: the
-;;; left+right two-segment layout and per-segment SGR override for R6.5's
-;;; predecessor status bar (session name + window list vs. the clock). R6.5's
-;;; fixed 3-block layout has its own composer, %COMPOSE-WORKSPACE-STATUS-LINE
-;;; (renderer-statusbar.lisp), so these are gone rather than left unreachable.
-;;; ── #[align=…] regions + status-format[0] template path ─────────────────────
-;;;
-;;; A status line format can be a single string whose #[align=left|centre|right]
-;;; blocks divide it into three regions positioned within the terminal width.  nerimux
-;;; normally renders the bar procedurally (status-left + window-list + status-
-;;; right); when status-format[0] is SET it instead expands that template and
-;;; composes the regions here.  The procedural default path is unchanged.
 (defun %split-align-attr (body)
   "Parse a #[BODY] block's comma-separated attrs.  Returns (values ALIGN REST):
    ALIGN is :left/:centre/:right when an align=… attr is present (else NIL), and

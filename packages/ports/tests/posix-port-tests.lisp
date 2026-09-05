@@ -24,12 +24,6 @@
                         :test #'string=)))))
 
   (it "working-directory names the real process cwd once SB-POSIX is loaded"
-    ;; nerimux/test depends on the "nerimux" system, and
-    ;; src/infrastructure/pty/pty-ffi.lisp unconditionally (require :sb-posix)s
-    ;; at load time (pty.lisp calls sb-posix:kill/close). SB-POSIX is therefore
-    ;; already loaded by the time any test runs, so this pins the
-    ;; SB-POSIX-present branch specifically -- not the "absent" branch, which
-    ;; only occurs in a REPL or harness that never loaded the nerimux system.
     (let ((cwd (nerimux/ports:working-directory)))
       (expect (stringp cwd))
       (expect (plusp (length cwd)))

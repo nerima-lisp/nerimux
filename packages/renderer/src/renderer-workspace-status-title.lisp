@@ -1,12 +1,5 @@
 (in-package #:nerimux/renderer)
 
-;;;; Worktree status labels and client-terminal titles shared by the workspace
-;;;; frame, pane status bar, pane compositor, and cl-tui-kit adapter.
-;;; ── Worktree status tokens (R6.1) ──────────────────────────────────────────
-;;;
-;;; WORKTREE-STATUS is NIL until the first successful status refresh and is
-;;; reset to NIL when the path disappears. Structural flags come from the
-;;; worktree catalog and therefore remain meaningful before that refresh.
 (defun %worktree-status-tokens (worktree)
   "Return WORKTREE's structural and VCS status token strings in display order."
   (let ((structural
@@ -41,7 +34,6 @@
   "The single-character placeholder for an unselected workspace value."
   (string (code-char #x2014)))
 
-;;; ── Client-terminal title (R6.11) ───────────────────────────────────────────
 (defun %repository-title-text (repository)
   (or
    (and repository

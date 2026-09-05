@@ -1,18 +1,5 @@
 (in-package #:nerimux/layout)
 
-;;; ── Layout tree ────────────────────────────────────────────────────────────
-;;;
-;;; A window's geometry is a BINARY SPLIT TREE.  Every leaf wraps exactly one
-;;; pane; every internal node splits its rectangle into two children along one
-;;; axis at a fractional ratio.  This lets a split halve ONLY the active pane's
-;;; rectangle and supports arbitrary nested/mixed layouts (a pane split top/
-;;; bottom, one half then split left/right, …).
-;;;
-;;; Orientations use -v/-h naming so the keywords are not inverted:
-;;;   :v  — top/bottom split  (children stacked vertically; the divider runs
-;;;         horizontally)
-;;;   :h  — left/right split  (children side by side; the divider runs
-;;;         vertically)
 (defconstant +pane-min-width+
   2
   "Smallest interior width (columns) a pane may occupy.")
@@ -48,8 +35,6 @@
   "Return (values PARENT WHICH) for CHILD's immediate parent LAYOUT-SPLIT,
    where WHICH is :first or :second.  Returns (values NIL NIL) when not found."
   (when (layout-split-p node)
-    ;; Check direct children.  Note: OR cannot be used here — it only propagates
-    ;; the primary value, discarding the secondary :first/:second.
     (multiple-value-bind (p s) (%direct-child-side node child)
       (if p
           (values p s)
@@ -57,17 +42,6 @@
             (if p2 (values p2 s2)
                 (layout-find-parent (layout-split-second node) child)))))))
 
-;;; ── orient-case: concise :h/:v dispatch ────────────────────────────────────
-;;;
-;;; Defined here (layout.lisp, the earliest-loading layout file) so that every
-;;; later file — layout-geometry.lisp, window-core.lisp, window-tree.lisp, window-layout.lisp —
-;;; can use it without forward-reference issues.
-;;;
-;;; Pattern (Prolog analogy):
-;;;   orient_case(:h, H-form).
-;;;   orient_case(:v, V-form).
-;;;
-;;; Expands to: (ecase ORIENT-VAR (:h H-FORM) (:v V-FORM))
 (defmacro orient-case (orient-var &key h v)
   "Dispatch on ORIENT-VAR (:h or :v), evaluating H or V respectively.
    A concise replacement for repeated (ecase orient (:h ...) (:v ...))."
@@ -75,21 +49,10 @@
      (:h ,h)
      (:v ,v)))
 
-;;; ── Tree geometry: assign rectangles ───────────────────────────────────────
-;;; ── %axis-floor: pure data lookup ───────────────────────────────────────────
-;;;
-;;; A Prolog-like fact:
-;;;   axis_floor(:v) :- +pane-min-height+.
-;;;   axis_floor(:h) :- +pane-min-width+.
 (defun %axis-floor (orient)
   "Minimum pane extent (cells) along ORIENT's split axis: rows for :v, cols for :h."
   (orient-case orient :h +pane-min-width+ :v +pane-min-height+))
 
-;;; ── %build-flat-tree ─────────────────────────────────────────────────────────
-;;;
-;;; A pure tree-construction helper that only needs layout types
-;;; (make-layout-leaf, make-layout-split), so it belongs here rather than in a
-;;; file that pulls in WINDOW struct accessors.
 (defun %build-flat-tree (panes orientation)
   "Build a right-leaning binary split chain from PANES using ORIENTATION.
    Single pane: return a layout-leaf.  Two or more: first pane is the
@@ -99,7 +62,3 @@
       (make-layout-split orientation
                          (make-layout-leaf (first panes))
                          (%build-flat-tree (rest panes) orientation))))
-
-;;; Layout persistence (serialization) lives in layout-persistence.lisp,
-;;; which is loaded immediately after this file.  That file defines:
-;;;   %layout-checksum, layout-node-bounding-box, %node->string, layout->string.

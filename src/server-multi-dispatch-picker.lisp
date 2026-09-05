@@ -23,15 +23,16 @@
                         (setf (gethash worktree worktrees) t))
                       item))))
 
+(defun %client-picker-filtered-items (conn)
+  "Return picker data after applying the client's query and uniqueness rule."
+  (%deduplicate-client-picker-items
+   (nerimux/picker:filter-global-picker-items
+    (%client-picker-items conn)
+    (client-conn-picker-query conn)
+    :regex-p (client-conn-picker-regex-p conn))))
+
 (defun %client-picker-visible-items (conn)
-  (let* ((filtered
-          (nerimux/picker:filter-global-picker-items (%client-picker-items conn)
-                                                     (client-conn-picker-query
-                                                      conn)
-                                                     :regex-p
-                                                     (client-conn-picker-regex-p
-                                                      conn)))
-         (items (%deduplicate-client-picker-items filtered)))
+  (let ((items (%client-picker-filtered-items conn)))
     (%picker-clamp-index conn items)
     items))
 
@@ -42,78 +43,6 @@
   (%refresh-client-picker conn)
   (%mark-dirty)
   conn)
-
-(defun %worktree-selection-token (worktree)
-  (and worktree
-       (or
-        (and (plusp (length (nerimux/workspace-model:worktree-id worktree)))
-             (nerimux/workspace-model:worktree-id worktree))
-        (and (plusp (length (nerimux/workspace-model:worktree-path worktree)))
-             (nerimux/workspace-model:worktree-path worktree))
-        (and (nerimux/workspace-model:worktree-branch worktree)
-             (princ-to-string
-              (nerimux/workspace-model:worktree-branch worktree))))))
-
-(defun %organization-selection-token (organization)
-  (and organization
-       (or
-        (and
-         (plusp (length (nerimux/workspace-model:organization-id organization)))
-         (nerimux/workspace-model:organization-id organization))
-        (and
-         (plusp
-          (length (nerimux/workspace-model:organization-host organization)))
-         (plusp
-          (length (nerimux/workspace-model:organization-name organization)))
-         (format nil
-                 "~A/~A"
-                 (nerimux/workspace-model:organization-host organization)
-                 (nerimux/workspace-model:organization-name organization))))))
-
-(defun %repository-selection-token (repository)
-  (and repository
-       (or
-        (and (plusp (length (nerimux/workspace-model:repository-id repository)))
-             (nerimux/workspace-model:repository-id repository))
-        (and
-         (plusp
-          (length (nerimux/workspace-model:repository-specification repository)))
-         (nerimux/workspace-model:repository-specification repository))
-        (and
-         (plusp
-          (length (nerimux/workspace-model:repository-local-path repository)))
-         (nerimux/workspace-model:repository-local-path repository)))))
-
-(defun %tree-object-selection-token (object)
-  "A refresh-stable token for OBJECT, resolvable back to the same row by
-   %WORKSPACE-FIND-TREE-OBJECT after a catalog rebuild (S1 fix).  A
-   :FILE/:COMMIT/:DIFF-LINE/:DIFF-MORE row's OBJECT is a fresh cons every
-   flatten call (D3) carrying its owning worktree's id in its second
-   element already, so its token IS the worktree's own -- the cursor
-   re-anchors on the parent worktree rather than staying on a row shape
-   that no longer exists post-refresh.  A PANE row resolves the same way
-   through its owning worktree.  A :SECTION row's OBJECT is a bare keyword
-   (:ATTENTION/:ACTIVE/:REPOSITORIES); its token round-trips through the
-   same keyword.  Any of these returning NIL (no owning worktree resolvable,
-   as for an orphaned pane) falls through to %REBIND-CLIENT-SELECTION's own
-   NIL-clears-selection behaviour, same as before this fix."
-  (typecase object
-    (nerimux/workspace-model:organization
-     (list :organization (%organization-selection-token object)))
-    (nerimux/workspace-model:repository
-     (list :repository (%repository-selection-token object)))
-    (nerimux/workspace-model:worktree
-     (list :worktree (%worktree-selection-token object)))
-    (nerimux/pane:pane
-     (let ((worktree (nerimux/pane:pane-worktree object)))
-       (and worktree (list :worktree (%worktree-selection-token worktree)))))
-    (t
-     (cond
-       ((and (consp object)
-             (keywordp (first object))
-             (member (first object) '(:file :commit :diff-line :diff-more)))
-        (list :worktree (second object)))
-       ((keywordp object) (list :section object))))))
 
 (defun %client-tree-object (conn)
   (or (client-conn-selected-tree-object conn)
@@ -131,7 +60,7 @@
                   (nerimux/pane:pane-worktree (client-conn-focus conn))))))
     (%worktree-selection-token worktree)))
 
-(defun %client-attach-selection (conn organizations)
+(defun %resolve-client-attach-selection (conn organizations)
   "Resolve what this client attached to, and say so when it is not one thing.
 
    A selector with a slash can name a repository (github.com/org/repo) or a
@@ -141,13 +70,7 @@
    Selection by cwd, and by whatever was selected last, is unchanged: neither is
    a selector the user typed, so neither can be ambiguous in this sense.
 
-   Returns (VALUES WORKTREE SOURCE), where SOURCE is :EXPLICIT, :CWD,
-   :PREVIOUS, or NIL saying which of those three matched -- FR-002 needs to
-   know specifically that a cwd match is why the worktree was found, so it
-   can jump the client straight to the worktree's detail pane only in that
-   case, not for an explicit selector or a remembered previous selection.
-   Existing single-value callers (e.g. %REBIND-CLIENT-SELECTION) are
-   unaffected: they only ever used the first value."
+   Returns a property list consumed by %CLIENT-ATTACH-SELECTION."
   (let* ((explicit (client-conn-attach-target conn))
          (explicitp (and (stringp explicit) (plusp (length explicit))))
          (cwd (client-conn-attach-cwd conn))
@@ -159,9 +82,6 @@
          (explicit-repository
            (and explicitp
                 (%workspace-find-repository-for-attach explicit organizations)))
-         ;; Evaluated lazily via AND, same as the OR they replace below: a cwd
-         ;; lookup only runs when there was no explicit-worktree hit, and a
-         ;; previous-token lookup only when neither of the first two hit.
          (cwd-worktree
            (and (not explicit-worktree)
                 (stringp cwd)
@@ -172,27 +92,36 @@
                 (not cwd-worktree)
                 previous
                 (%workspace-find-worktree previous organizations))))
+    (list :explicit explicit
+          :explicit-p explicitp
+          :ambiguous-p (and explicit-worktree explicit-repository)
+          :worktree (or explicit-worktree cwd-worktree previous-worktree)
+          :source (cond (explicit-worktree :explicit)
+                        (cwd-worktree :cwd)
+                        (previous-worktree :previous))
+          :repository explicit-repository
+          :organizations-p organizations)))
+
+(defun %client-attach-selection (conn organizations)
+  (let ((resolution (%resolve-client-attach-selection conn organizations)))
     (cond
-      ;; Both readings hit: let the user say which, rather than guessing.
-      ((and explicit-worktree explicit-repository)
-       (%open-client-picker-filtered conn explicit)
+      ((getf resolution :ambiguous-p)
+       (%open-client-picker-filtered conn (getf resolution :explicit))
+       (values nil nil))
+      ((getf resolution :worktree)
+       (%set-client-selected-worktree conn (getf resolution :worktree))
+       (values (getf resolution :worktree) (getf resolution :source)))
+      ((getf resolution :repository)
+       (%set-client-selected-tree-object conn (getf resolution :repository))
+       (values nil nil))
+      ((and (getf resolution :explicit-p)
+            (getf resolution :organizations-p))
+       (%client-notify conn
+                       (format nil "attach target not found: ~A"
+                               (getf resolution :explicit)))
        (values nil nil))
       (t
-       (let* ((worktree (or explicit-worktree cwd-worktree previous-worktree))
-              (source (cond (explicit-worktree :explicit)
-                            (cwd-worktree :cwd)
-                            (previous-worktree :previous))))
-         (cond
-           (worktree
-            (%set-client-selected-worktree conn worktree))
-           ;; A repository and no worktree in it: select the repository so the
-           ;; overview opens there, rather than reporting it as not found.
-           (explicit-repository
-            (%set-client-selected-tree-object conn explicit-repository))
-           ((and explicitp organizations)
-            (%client-notify conn
-                            (format nil "attach target not found: ~A" explicit))))
-         (values worktree source))))))
+       (values nil nil)))))
 
 (defun %rebind-client-selection (conn organizations)
   (or (%client-attach-selection conn organizations)
@@ -245,22 +174,15 @@
 (defun %refresh-client-picker (conn &key on-complete on-error)
   (if (nerimux/vcs:vcs-package-available-p)
       (let ((failed-repository-ids nil))
-        ;; :MARK: this refresh is starting (see the matching call and
-        ;; rationale in %ADD-CLIENT, server-multi.lisp -- FR-005).
         (%set-workspace-catalog-refresh-state
          (nerimux/vcs:workspace-organizations) :mark)
         (handler-case
             (nerimux/vcs:refresh-workspace-organizations-async
              :callback-dispatch #'%enqueue-main-thread-callback
-             ;; :MARK: the scan landed but the status refresh behind it is
-             ;; still in flight for every one of these nodes.
              :on-catalog
              (lambda (organizations)
                (%set-workspace-catalog-refresh-state organizations :mark)
                (%mark-dirty))
-             ;; R6.2/design §7.3 (mirrors %ADD-CLIENT's own wiring, server-
-             ;; multi.lisp): a FAILED object shows stale; other objects
-             ;; don't inherit it.
              :on-repository-error
              (lambda (repository condition)
                (declare (ignore condition))
@@ -270,10 +192,6 @@
                (%mark-dirty))
              :on-complete
              (lambda (organizations)
-               ;; :SETTLE :STALE-P NIL: this refresh has actually finished --
-               ;; every visible node goes fresh; any repository that failed
-               ;; its own status fetch is re-marked stale immediately below
-               ;; instead of via a blanket STALE-P over the whole catalog.
                (%set-workspace-catalog-refresh-state
                 organizations :settle :stale-p nil)
                (%reapply-stale-repository-marks organizations failed-repository-ids)
@@ -290,20 +208,14 @@
                (when (and on-complete (%client-live-p conn))
                  (funcall on-complete organizations))
                (%mark-dirty))
-             ;; :ON-ERROR now covers only a terminal scan failure -- see the
-             ;; matching rationale in %ADD-CLIENT.
              :on-error
              (lambda (condition)
-               ;; :SETTLE + stale: the refresh terminated in error; no
-               ;; on-complete is coming to clear the in-flight mark.
                (%set-workspace-catalog-refresh-state
                 (nerimux/vcs:workspace-organizations) :settle :stale-p t)
                (when (and on-error (%client-live-p conn))
                  (funcall on-error condition))
                (%mark-dirty)))
           (error (condition)
-            ;; :SETTLE + stale: kicking the refresh off failed synchronously,
-            ;; so no callback above will run to clear the :mark set above.
             (%set-workspace-catalog-refresh-state
              (nerimux/vcs:workspace-organizations) :settle :stale-p t)
             (when (and on-error (%client-live-p conn))
@@ -338,7 +250,6 @@
         (client-conn-picker-index conn) 0)
   (%mark-dirty)
   conn)
-
 (defun %picker-selected-item (conn)
   (let ((items (%client-picker-visible-items conn)))
     (and items (nth (client-conn-picker-index conn) items))))

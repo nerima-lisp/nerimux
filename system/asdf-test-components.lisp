@@ -12,12 +12,7 @@
       (:file "helpers-loop-fixtures")
       (:file "helpers-session-fixtures")
       (:file "helpers-input-fixtures")
-      ;; Split out of helpers-layout-fixtures.lisp when domain/model became
-      ;; nerimux-model: this one wraps its body in WITH-LOOP-STATE, which binds
-      ;; nerimux:: server state, so a DOMAIN unit cannot carry it.
       (:file "helpers-layout-loop-fixtures")
-      ;; Binds nerimux::*server-sessions*, so no unit test system can see it
-      ;; when run on its own.
       (:file "helpers-command-state")
       (:module "unit"
        :serial t
@@ -25,23 +20,28 @@
         ((:module "bootstrap"
          :serial t
          :components
-         ((:file "server-registry-tests")
+         ((:file "helpers-stubbed-fdefinitions")
+          (:file "server-registry-tests")
           (:file "server-window-link-tests")
           (:file "server-session-listing-tests")
           (:file "server-socket-path-tests") ; socket paths and stale sockets
           (:file "server-client-cps-tests") ; client key CPS, runtime registry, resize edge cases
-          (:file "server-dispatch-helper-tests") ; selection, picker, and command helper algebra
+          (:file "server-dispatch-helper-fixtures")
+          (:file "server-dispatch-helper-error-tests")
+          (:file "server-dispatch-helper-tests") ; command helper algebra
+          (:file "server-dispatch-helper-selection-tests") ; workspace and picker selection
+          (:file "server-dispatch-helper-refresh-tests") ; asynchronous refresh CPS
+          (:file "server-dispatch-helper-catalog-refresh-tests") ; failed catalog refresh state
+          (:file "server-dispatch-helper-status-tests")
+          (:file "server-dispatch-helper-search-tests")
+          (:file "server-dispatch-helper-navigation-tests")
           (:file "runtime-lifecycle-tests")
       (:file "server-kill-request-tests") ; R8.1/R8.3
       (:file "workspace-window-naming-tests") ; R5.8
       (:file "workspace-catalog-refresh-state-tests") ; FR-005: mark/settle, not re-mark
           (:file "system-composition-tests") ; layering guard; core declares no optional kit
-          ;; Moved from tests/unit/domain/model/ with the extraction of
-          ;; nerimux-model. target.lisp itself moved to src/bootstrap/ earlier;
-          ;; these reference nerimux:: internals and were never model tests, only
-          ;; tests that had not followed their subject.
-          (:file "target-tests") ; parse-session/window/pane/target, find-by-target - part I
-          (:file "target-tests-b"))) ; %sigil-id, %name-prefix-p, edge cases, table-driven parse-target, multi-digit ids - part II
+          (:file "target-tests")
+          (:file "target-tests-b")))
         (:module "bootstrap-2"
          :pathname "bootstrap"
          :serial t
@@ -49,14 +49,14 @@
          ((:file "runtime-tests") ; globals, pane-reader-loop, EOF/remain-on-exit, alert actions
           (:file "runtime-reader-cps-tests") ; reader CPS state machine contracts
           (:file "runtime-channel-helper-tests") ; cap-list and channel plist helpers
-          (:file "runtime-tests-c") ; stop-reader-threads, wait-for-channel - part III
-          (:file "runtime-tests-b") ; wait-for-channel - part II
+          (:file "runtime-tests-c")
+          (:file "runtime-tests-b")
           (:file "main-tests")
           (:file "main-entry-tests")))))
       (:module "integration"
        :serial t
        :components
-        ((:file "pane-response-queue-pty-tests") ; spans nerimux-model and the real nerimux-pty adapter
+        ((:file "pane-response-queue-pty-tests") ; spans nerimux-model and the concrete nerimux-pty implementation
          (:file "net-malformed-utf8-dispatch-tests") ; spans nerimux-net and the bootstrap event loop
          (:file "commands-clear-history-tests") ; binds nerimux:: server state around a commands case
          (:file "renderer-selection-copy-mode-tests") ; renderer bounds over a commands-built copy-mode screen
@@ -68,7 +68,15 @@
          (:file "net-tests")
          (:file "server-multi-tests-support")
          (:file "server-multi-tests-size")
+         (:file "server-multi-tests-message-dispatch-selection")
+         (:file "server-multi-tests-message-dispatch-commands")
+         (:file "server-multi-tests-message-dispatch-rendering")
+         (:file "server-multi-tests-message-dispatch-forwarding")
+         (:file "server-multi-tests-message-dispatch-status")
+         (:file "server-multi-tests-message-dispatch-worktree-commands")
          (:file "server-multi-tests-message-dispatch")
+         (:file "server-multi-tests-transient")
+         (:file "server-multi-tests-client-frame-dispatch")
          (:file "server-multi-tests-message-dispatch-worktree")
          (:file "server-multi-tests-message-dispatch-errors")
          (:file "server-multi-tests-message-dispatch-picker")

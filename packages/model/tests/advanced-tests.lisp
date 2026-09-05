@@ -1,8 +1,5 @@
 (in-package #:nerimux/test/model)
 
-;;;; Tests for Sprint 3 advanced features:
-;;;;  synchronize-panes, layout persistence, update-environment.
-;;; ── Fixtures ─────────────────────────────────────────────────────────────────
 (defun %two-pane-session ()
   "Session with one window containing two fake panes side-by-side."
   (let* ((p0 (make-no-pty-pane 1 0 0 40 24))
@@ -30,16 +27,8 @@
 
 (describe "advanced-suite"
 
-  ;; synchronize-panes never drove any behavior (the keystroke-forwarding
-  ;; fanout it once gated was removed with presentation/events) and R2.2
-  ;; deleted the domain-layer options package wholesale.  A dead option
-  ;; with zero live callers leaves nothing to replace with a constant, so
-  ;; it is gone rather than hardcoded — there is no
-  ;; "synchronize-panes-sends-to-all" behavior to assert.
 
-  ;;; ── Layout persistence: round-trip ──────────────────────────────────────────
 
-  ;; layout->string returns a non-NIL string for a window that has a tree.
   (it "layout-to-string-not-nil-for-window-with-tree"
     (multiple-value-bind (sess win p0 p1) (%two-pane-session)
       (declare (ignore sess p0 p1))
@@ -48,13 +37,11 @@
         (expect (stringp str))
         (expect (plusp (length str))))))
 
-  ;; layout->string returns NIL when the window has no tree.
   (it "layout-to-string-nil-for-empty-window"
     (let ((win (make-window :id 1 :name "w" :width 80 :height 24
                             :tree nil)))
       (expect (null (nerimux/layout:layout->string win)))))
 
-  ;; layout->string result starts with a 4-character hex checksum.
   (it "layout-checksum-4-hex-chars"
     (multiple-value-bind (_sess win p0 p1) (%two-pane-session)
       (declare (ignore _sess p0 p1))
@@ -65,9 +52,7 @@
         (expect (every (lambda (ch) (or (digit-char-p ch) (find ch "ABCDEFabcdef")))
                        (or csum ""))))))
 
-  ;;; ── update-environment ───────────────────────────────────────────────────────
 
-  ;; *update-environment* is a list of environment variable names.
   (it "update-environment-default-list"
     (let ((vars nerimux/session:*update-environment*))
       (expect (listp vars))

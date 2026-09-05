@@ -1,17 +1,5 @@
 (in-package #:nerimux/renderer)
 
-;;;; The `$` full-screen git process log (FR-011): every write operation this
-;;;; client has run through a transient, most recent first, with its exit
-;;;; status and captured output. Sibling of renderer-tui-kit-help.lisp -- a
-;;;; full-screen bordered box, reusing %RENDER-HELP-VIEW-BOX's chrome shape --
-;;;; but the content underneath it is a NEW TRUST BOUNDARY the help view never
-;;;; had: OUTPUT is git's own stdout/stderr, which echoes a remote's progress
-;;;; text, a pre/post-commit hook's output, or a crafted branch/ref name
-;;;; verbatim (contract §4.5). Nothing here assumes an upstream caller already
-;;;; sanitized it -- %PROCESS-LOG-SANITIZE-TEXT strips C0 control characters
-;;;; and caps length before a single character reaches the surface, exactly
-;;;; the trust posture the diff/log ingestion caps elsewhere in this codebase
-;;;; already hold their own inputs to.
 (defconstant +process-log-max-render-characters+
   4000
   "Hard cap on one entry's OUTPUT before it is even split into lines, applied
@@ -78,7 +66,6 @@
                          (- (length lines) +process-log-max-output-lines+))))
         lines)))
 
-;;; ── Styles (Dracula) ─────────────────────────────────────────────────────
 (defun %process-log-exit-ok-style ()
   (cl-tui-kit/core:make-style :bold
                               t
@@ -102,7 +89,6 @@
 (defun %process-log-separator-style ()
   (cl-tui-kit/core:make-style :foreground (cl-tui-kit/core:rgb-color 68 71 90)))
 
-;;; ── Layout ───────────────────────────────────────────────────────────────
 (defun %process-log-exit-ok-p (exit-status)
   (and (stringp exit-status) (string= exit-status "0")))
 

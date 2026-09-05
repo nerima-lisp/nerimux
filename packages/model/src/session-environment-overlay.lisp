@@ -1,14 +1,5 @@
 (in-package #:nerimux/session)
 
-;;; ── Session overlay environment ──────────────────────────────────────────────
-;;;
-;;; This file owns the in-session environment overlay: parsing NAME=VALUE
-;;; strings, validating names, and reading/writing the session's overlay tables.
-;;; ── NAME=VALUE string pair helpers ──────────────────────────────────────────
-;;;
-;;; %ENVIRONMENT-ENTRY-NAME lives in session-environment-process.lisp (loaded
-;;; before this file, and itself a caller) rather than here, to avoid the two
-;;; files each defining an identical name-parsing helper.
 (defun %environment-entry-value (entry)
   "Return the VALUE component of a NAME=VALUE environment ENTRY string, or NIL."
   (let ((eq-pos (position #\= entry)))
@@ -34,14 +25,12 @@
      table)
     (sort entries #'string< :key #'%environment-entry-name)))
 
-;;; ── %assert-environment-variable-name ───────────────────────────────────────
 (defun %assert-environment-variable-name (name)
   "Signal an error when NAME is not a valid POSIX environment variable name.
    A valid name is a non-empty string containing no '=' character."
   (unless (and (stringp name) (plusp (length name)) (not (find #\= name)))
     (error "Invalid environment variable name: ~S" name)))
 
-;;; ── Session overlay access ───────────────────────────────────────────────────
 (defun session-environment-value (session name)
   "Return SESSION's effective value for NAME.
    Returns two values: (value source-keyword) where source-keyword is one of:
@@ -57,10 +46,6 @@
          (gethash name (session-environment session))
        (if present-p
            (values value :session)
-           ;; Fall back to the live process environment: an unset session var
-           ;; still resolves from the server's own environment.  The fallback lives
-           ;; in the else-branch so it stays reachable — a `(t ...)` middle
-           ;; cond clause would make it dead code.
            (let ((process-value (process-environment-value name)))
              (if process-value
                  (values process-value :process)

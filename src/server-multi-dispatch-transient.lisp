@@ -1,33 +1,5 @@
 (in-package #:nerimux)
 
-;;;; The magit transient menus (FR-010): +TRANSIENT-DEFINITIONS+ is the data
-;;;; table every `?`/c/P/F/b/m/r/z/l/d/f/t/X/!/w key opens, and the functions
-;;;; below build the renderer's TRANSIENT-VIEW from it, run its answer, and
-;;;; persist argument toggles across the client's session.
-;;;;
-;;;; ── Action handler shapes ────────────────────────────────────────────────
-;;;;
-;;;; Each action in +TRANSIENT-DEFINITIONS+ carries a HANDLER. Git actions use
-;;;; nerimux/vcs:git-write-operation-async with the active flags for their
-;;;; transient. Confirmation is handled by %OPEN-CONFIRM-VIEW when required.
-;;;;   (:call FUNCTION)   Call (FUNCALL FUNCTION SESSION CONN) -- reuses an
-;;;;     action that already exists elsewhere. SESSION is passed because
-;;;;     worktree creation opens a pane and needs it; actions that do not want
-;;;;     it take a LAMBDA that ignores it. Sharp-quoting a one-argument
-;;;;     function here is a wrong-argument-count error raised only when the key
-;;;;     is struck, and no static gate can see it: the arity meets the callee
-;;;;     through a FUNCALL out of a data table.
-;;;;   (:open-transient KEY)   Replace the open transient with KEY's (the `?`
-;;;;     dispatch transient's own actions, magit-dispatch's shape).
-;;;;   (:help)   Open the full-screen help view (%CLIENT-OPEN-HELP-VIEW).
-;;;;   (:stub MESSAGE)   Notify MESSAGE and close.  Used for every action this
-;;;;     pass could not wire for a reason worth being honest about on screen
-;;;;     rather than silently dropping the key: free-text entry (a branch,
-;;;;     tag, remote, or commit message) has no prompt widget in this build,
-;;;;     and `!` deliberately never runs an arbitrary user-typed shell command
-;;;;     -- that is its own trust-boundary decision, not something to default
-;;;;     into existence as a side effect of wiring a keymap.
-;;; ── Argument-toggle persistence (FR-010) ─────────────────────────────────
 (defun %client-transient-active-flags (conn transient-key)
   (cdr (assoc transient-key (client-conn-transient-arguments conn))))
 
@@ -48,7 +20,6 @@
                                                           :key
                                                           #'car)))))
 
-;;; ── Process log (FR-011) ─────────────────────────────────────────────────
 (defun %client-log-process (conn command success-p output)
   "Record one finished git write as a (COMMAND EXIT-STATUS OUTPUT) entry,
    most recent first -- EXIT-STATUS is \"0\"/\"1\" rather than a real process
@@ -67,7 +38,6 @@
                                                  +max-process-log-entries+)))
   (%mark-dirty))
 
-;;; ── Running a git action ─────────────────────────────────────────────────
 (defun %transient-command-text (operation args)
   (format nil "git ~(~A~)~{ ~A~}" operation args))
 
@@ -131,7 +101,7 @@
     (cond
       ((null repository) (%client-notify conn "no repository selected"))
       ((not (nerimux/vcs:vcs-package-available-p))
-       (%client-notify conn "VCS adapter unavailable"))
+       (%client-notify conn "VCS unavailable"))
       ((or confirm-p force-p)
        (%open-confirm-view conn
                            (%transient-command-text operation args)
@@ -146,54 +116,6 @@
                                                        operation
                                                        args))))
       (t (%run-transient-git-write conn repository operation args)))))
-
-;;; Transient menu data is defined in server-multi-transient-data.lisp.
-;;; ── Building the renderer's TRANSIENT-VIEW ───────────────────────────────
-(defun %transient-branch (conn)
-  (let ((worktree (%client-operation-worktree conn)))
-    (and worktree (nerimux/workspace-model:worktree-head worktree))))
-
-(defun %transient-subtitle (key conn)
-  (let ((branch (%transient-branch conn)))
-    (when branch
-      (if (member key '(#\P #\F #\f))
-          (format nil "~A -> origin/~A" branch branch)
-          (format nil "on ~A" branch)))))
-
-(defun %transient-action-display-description (conn description)
-  (if (search "~A" description)
-      (format nil description (or (%transient-branch conn) "?"))
-      description))
-
-(defun %transient-render-arguments (transient-key conn arguments)
-  "Enrich each static (ARG-KEY . FLAG) into the render struct's (KEY FLAG
-   DESCRIPTION ACTIVE-P TRANSIENT-KEY) shape -- see TRANSIENT-VIEW's
-   docstring (renderer-tui-kit-transient.lisp) for why the fifth element
-   (TRANSIENT-KEY, needed only to persist the toggle) rides along."
-  (let ((active (%client-transient-active-flags conn transient-key)))
-    (mapcar
-     (lambda (spec)
-       (let ((flag (cdr spec)))
-         (list (car spec)
-               flag
-               flag
-               (and (member flag active :test #'string=) t)
-               transient-key)))
-     arguments)))
-
-(defun %transient-render-actions (conn actions)
-  "Project each static (ACTION-KEY DESCRIPTION HANDLER) into the render
-   struct's (KEY DESCRIPTION HANDLER) shape, interpolating the branch
-   template where DESCRIPTION uses one. HANDLER rides along past the
-   renderer's documented (KEY DESCRIPTION) shape -- same rationale as
-   %TRANSIENT-RENDER-ARGUMENTS above -- so %RUN-TRANSIENT-ACTION never has to
-   re-look-up +TRANSIENT-DEFINITIONS+ by key to find it again."
-  (mapcar
-   (lambda (entry)
-     (list (first entry)
-           (%transient-action-display-description conn (second entry))
-           (third entry)))
-   actions))
 
 (defun %open-client-transient (conn key)
   "Open the transient KEY names (contract §3). A KEY with no entry in
@@ -228,7 +150,6 @@
   (setf (client-conn-transient-view conn) nil)
   (%set-client-modal conn nil))
 
-;;; ── Running an action ─────────────────────────────────────────────────────
 (defun %run-transient-action (session conn handler)
   "Run one action's HANDLER -- see the section comment above for the shapes.
    :OPEN-TRANSIENT replaces the open transient with a fresh one; every other

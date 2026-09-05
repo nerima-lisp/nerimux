@@ -1,6 +1,5 @@
 (in-package #:nerimux/terminal/actions)
 
-;;;; Character-writing flow: charset remapping, wrapping, insertion, placement.
 (defun %remap-charset-char (screen ch)
   "Apply a pending single shift or the active DEC graphics charset to CH."
   (let ((shift (screen-single-shift screen)))

@@ -1,11 +1,5 @@
 (in-package #:nerimux/terminal/actions)
 
-;;;; Erase operations: region, display, and line.
-;;;;
-;;;; All erase functions are expressed as Prolog-like rule tables,
-;;;; consistent with the define-csi-rules / define-sgr-rules idiom.
-;;;; Loads after scroll.lisp (needs blank-cell from cell.lisp, screen-cell).
-;;; ── Primitive erase ─────────────────────────────────────────────────────────
 (defun erase-region (screen x0 y0 x1 y1)
   "Erase all cells from (X0,Y0) to (X1,Y1) inclusive, treating the range as
    a linear span across rows.  Sets screen-dirty-p whenever any cell is written."
@@ -17,17 +11,6 @@
                    do (setf (screen-cell screen x y) (%erase-cell screen)))))
   (setf (screen-dirty-p screen) t))
 
-;;; ── ED (erase-display) rule table ──────────────────────────────────────────
-;;;
-;;; Prolog-like factual table — each clause maps one mode value to its action.
-;;; Parallel structure with define-erase-line-rules.
-;;;
-;;;   erase_display(0, S) :- erase_region(S, cursor-x, cursor-y, w-1, cursor-y),
-;;;                          when(cursor-y+1 < h, erase_region(S, 0, cursor-y+1, w-1, h-1)).
-;;;   erase_display(1, S) :- when(cursor-y > 0, erase_region(S, 0, 0, w-1, cursor-y-1)),
-;;;                          erase_region(S, 0, cursor-y, cursor-x, cursor-y).
-;;;   erase_display(2, S) :- erase_region(S, 0, 0, w-1, h-1).
-;;;   erase_display(3, S) :- erase_region(S, 0, 0, w-1, h-1), clear_scrollback(S).
 (defmacro define-erase-display-rules (&rest specs)
   "Build ERASE-DISPLAY from a Prolog-like mode rule table.
    Each SPEC is (mode &rest body).
@@ -59,10 +42,6 @@
        (erase-region screen 0 0 (1- w) (1- cy)))
      (erase-region screen 0 cy cx cy)))
   (2
-   ;; A full-screen clear moves the visible content into history first, so what
-   ;; was on screen stays reachable in the scrollback. This was conditional on
-   ;; the scroll-on-clear option; with no config to turn it off it is simply what
-   ;; a clear does.
    (let ((w (screen-width screen)) (h (screen-height screen)))
      (scroll-screen-to-history screen)
      (erase-region screen 0 0 (1- w) (1- h))))
@@ -71,12 +50,6 @@
      (erase-region screen 0 0 (1- w) (1- h))
      (setf (screen-scrollback screen) nil))))
 
-;;; ── EL (erase-line) rule table ─────────────────────────────────────────────
-;;;
-;;; Prolog-like table: each row maps a mode number to the x-extent of the erase.
-;;;   erase_line(0, Screen) :- erase_region(Screen, cursor-x, cursor-y, w-1, cursor-y).
-;;;   erase_line(1, Screen) :- erase_region(Screen, 0,  cursor-y, cursor-x, cursor-y).
-;;;   erase_line(2, Screen) :- erase_region(Screen, 0,  cursor-y, w-1, cursor-y).
 (defmacro define-erase-line-rules (&rest specs)
   "Build ERASE-LINE from a declarative range table.
    Each SPEC is (mode x0-expr x1-expr); CX (cursor-x), CY (cursor-y), W are bound.
@@ -98,10 +71,6 @@
   (1  0       cx)      ; from start to cursor
   (2  0      (1- w)))
 
-;;; ── DEC Rectangle operations ─────────────────────────────────────────────────
-;;;
-;;; DECERA/DECFRA/DECCRA are xterm extensions used by full-screen TUI apps.
-;;; Parameters arrive 1-based; helpers convert to 0-based and clamp to bounds.
 (defun %rect-bounds (screen top1 left1 bottom1 right1)
   "Convert 1-based inclusive DEC rectangle parameters to 0-based inclusive bounds
    clamped to the screen, returning (values t0 l0 b0 r0).
@@ -177,14 +146,12 @@
          (tb0 (min (1- h) (+ tgt-top  rows -1)))
          (tr0 (min (1- w) (+ tgt-left cols -1)))
          (buffer (make-array (* rows cols))))
-    ;; Read phase: buffer all source cells before any writes.
     (loop for sy from src-top to (+ src-top rows -1)
           for ri from 0 do
       (loop for sx from src-left to (+ src-left cols -1)
             for ci from 0 do
         (setf (aref buffer (+ (* ri cols) ci))
               (screen-cell screen sx sy))))
-    ;; Write phase: copy buffer to target rectangle.
     (loop for ty from tgt-top to tb0
           for ri from 0 do
       (loop for tx from tgt-left to tr0

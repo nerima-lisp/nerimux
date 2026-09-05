@@ -1,10 +1,5 @@
 (in-package #:nerimux)
 
-;;; ── C-q prefix action table (R4.4, 1.5) ─────────────────────────────────────
-;;;
-;;; Each action below takes SESSION/CONN and returns NIL (keep serving) or
-;;; :drop (detach, for `d`).  %workspace-prefix-dispatch is the single place
-;;; that maps a struck byte to an action; a byte not listed here is dropped.
 
 (defun %workspace-prefix-context (session conn)
   "Return (values PANE WINDOW WORKTREE) for CONN's current focus, or all NIL
@@ -32,11 +27,6 @@
       ((or (null pane) (null window))
        (%client-notify conn "no focused pane"))
       (t
-       ;; Un-zoom BEFORE reading window-panes: while zoomed, window-panes
-       ;; reflects only the single collapsed leaf (window-refresh-panes runs
-       ;; against the zoom's 1-leaf tree, not the real one), so the pane-cap
-       ;; check below would undercount a window that is actually already at
-       ;; +max-panes-per-window+.
        (%workspace-prefix-unzoom window)
        (cond
          ((>= (length (window-panes window)) +max-panes-per-window+)
@@ -48,16 +38,11 @@
             (if new-pane
                 (progn
                   (when worktree (worktree-add-pane worktree new-pane))
-                  ;; A split whose PTY failed to spawn comes back with a dead
-                  ;; (non-live) pane; starting a reader thread on it would call
-                  ;; select-fds on an invalid fd and crash the process.
                   (when (pane-live-p new-pane)
                     (start-reader-thread new-pane))
                   (window-select-pane window new-pane)
                   (%set-client-focus conn new-pane)
                   (%mark-dirty))
-                ;; %split-fit-p already refused the split (too small); R5.1
-                ;; asks only for a message and otherwise doing nothing.
                 (%client-notify conn "pane too small to split")))))))
     nil))
 
@@ -203,135 +188,6 @@
     (%set-client-modal conn :scrollback))
   nil)
 
-(defun %workspace-prefix-fetch-repository (conn)
-  "Fetch the selected repository, then refresh status.  No longer bound to
-   C-q F (magit alignment, contract §2/§3: fetch moves to the `f`
-   transient) -- kept as a function because workspace-input-prefix-tests.lisp
-   still exercises it directly and the `f` transient is a separate unit's
-   call site for the same logic.
-
-A fetch already running for this repository is not started twice; the
-caller that finds one in flight is told so and the in-flight fetch's own
-completion is what eventually refreshes the picker (nerimux/vcs's
-FETCH-REPOSITORY-ASYNC)."
-  (let ((repository (%client-selected-repository conn)))
-    (cond
-      ((not repository)
-       (%client-notify conn "fetch requires a selected repository"))
-      ((not (nerimux/vcs:vcs-package-available-p))
-       (%client-notify conn "VCS adapter unavailable"))
-      (t
-        (%client-notify conn "fetching...")
-        (handler-case (nerimux/vcs:fetch-repository-async repository
-                                                          :callback-dispatch
-                                                          #'%enqueue-main-thread-callback
-                                                          :on-complete
-                                                          (lambda (result)
-                                                            (if result
-                                                                (progn
-                                                                  (%refresh-client-picker
-                                                                   conn)
-                                                                  (%client-notify
-                                                                   conn
-                                                                   "fetch complete"))
-                                                                (%client-notify
-                                                                 conn
-                                                                 "fetch already in progress")))
-                                                          :on-error
-                                                          (lambda (condition)
-                                                            (%client-notify conn
-                                                                            (format
-                                                                             nil
-                                                                             "fetch failed: ~A"
-                                                                             condition))))
-          (error (condition)
-            (%client-notify conn (format nil "fetch failed: ~A" condition)))))))
-  nil)
-
-(defun %workspace-prefix-fetch-organization (conn)
-  "Fetch every repository in the selected organization concurrently, then
-   refresh status.  No longer bound to C-q C-f -- same removal, and the same
-   reason to keep the function, as %WORKSPACE-PREFIX-FETCH-REPOSITORY above.
-   Duplicate suppression and the completion callback mirror that function,
-   one level up (nerimux/vcs:FETCH-ORGANIZATION-ASYNC)."
-  (let ((organization (%client-selected-organization conn)))
-    (cond
-      ((not organization)
-       (%client-notify conn "fetch requires a selected organization"))
-      ((not (nerimux/vcs:vcs-package-available-p))
-       (%client-notify conn "VCS adapter unavailable"))
-      (t
-        (%client-notify conn "fetching organization...")
-        (handler-case (nerimux/vcs:fetch-organization-async organization
-                                                            :callback-dispatch
-                                                            #'%enqueue-main-thread-callback
-                                                            :on-complete
-                                                            (lambda 
-                                                                (repositories)
-                                                              (if repositories
-                                                                  (progn
-                                                                    (%refresh-client-picker
-                                                                     conn)
-                                                                    (%client-notify
-                                                                     conn
-                                                                     "fetch complete"))
-                                                                  (%client-notify
-                                                                   conn
-                                                                   "fetch already in progress")))
-                                                            :on-error
-                                                            (lambda 
-                                                                (repository
-                                                                 condition)
-                                                              (%client-notify
-                                                               conn
-                                                               (format nil
-                                                                       "fetch failed for ~A: ~A"
-                                                                       (nerimux/workspace-model:repository-id
-                                                                        repository)
-                                                                       condition))))
-          (error (condition)
-            (%client-notify conn (format nil "fetch failed: ~A" condition)))))))
-  nil)
-
-(defun %open-confirm-view (conn operation fields action)
-  "Put a y/n confirmation in front of CONN and remember what to run on y.
-   OPERATION titles the box; FIELDS is the ordered (LABEL . VALUE) body."
-  (setf (client-conn-confirm-view conn)
-        (nerimux/renderer:make-confirm-view :operation operation
-                                            :fields fields
-                                            :prompt-p t)
-        (client-conn-confirm-action conn) action)
-  ;; MODAL :confirm alongside CONFIRM-VIEW (contract §5): %HANDLE-MULTI-KEY-
-  ;; MESSAGE routes purely on MODAL, so without this a confirmation would be
-  ;; drawn but never reached by the key dispatch that is supposed to answer it.
-  (%set-client-modal conn :confirm)
-  nil)
-
-(defun %close-confirm-view (conn)
-  "Take the confirmation down and forget its pending action."
-  (setf (client-conn-confirm-view conn) nil
-        (client-conn-confirm-action conn) nil)
-  (%set-client-modal conn nil))
-
-(defun %handle-confirm-key (session conn payload)
-  "Answer the confirmation CONN is looking at.  Returns two values: whether the
-   key was consumed here, and the loop disposition.
-
-   Only y and n are consumed.  Every other key is swallowed too — a
-   confirmation that let j scroll the tree underneath it would be asking about
-   one thing while the user changed another."
-  (declare (ignore session))
-  (let ((action (client-conn-confirm-action conn)))
-    (cond
-      ((%client-key-p payload #\y)
-        (%close-confirm-view conn)
-        (values t (and action (funcall action))))
-      ((%client-key-p payload #\n)
-        (%close-confirm-view conn)
-        (%client-notify conn "cancelled")
-        (values t nil))
-      (t (values t nil)))))
-
 (defun %workspace-prefix-quit-server (session conn)
   "C-q Q (R8.2): ask before stopping the server, showing how many panes are
    still running so the count is in front of the user at the moment they answer
@@ -347,9 +203,6 @@ FETCH-REPOSITORY-ASYNC)."
                               "every pane is signalled and the server exits"
                               "the server exits")))
      (lambda ()
-       ;; The confirm view already showed the live-pane count, so answering y IS
-       ;; the force decision; %server-kill-request's refusal branch exists for
-       ;; `nerimux kill` without --force, which has no screen to show it on.
        (%server-kill-request session t)
        :quit))))
 

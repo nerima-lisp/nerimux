@@ -1,7 +1,5 @@
 (in-package #:nerimux/terminal/actions)
 
-;;;; Terminal modes — cursor save/restore (DECSC/DECRC) and cursor shape (DECSCUSR).
-;;; ── DECSC / DECRC (cursor save & restore) ──────────────────────────────────
 (defun save-cursor (screen)
   "DECSC (ESC 7): save the cursor position, full SGR pen, charset state, and origin mode.
    A correct DECSC saves more than just cursor position: also the pen
@@ -72,7 +70,6 @@
       (%restore-cursor-to-defaults screen)
       (%restore-cursor-from-snapshot screen (screen-saved-cursor screen))))
 
-;;; ── DECSCUSR cursor shape ────────────────────────────────────────────────────
 (defun set-cursor-shape (screen shape)
   "DECSCUSR: set the cursor shape to SHAPE (0-6, clamped).
    0 = default blinking block, 1 = blinking block, 2 = steady block,

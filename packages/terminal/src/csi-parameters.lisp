@@ -1,10 +1,5 @@
 (in-package #:nerimux/terminal/csi)
 
-;;;; CSI parameter interpretation.
-;;;;
-;;;; These helpers translate terminal-protocol parameter facts into the scalar
-;;;; values expected by the screen action layer.  They stay separate from the
-;;;; rule table so CSI actions remain declarative.
 (declaim (inline %csi-leading-int))
 
 (defun %csi-leading-int (param)

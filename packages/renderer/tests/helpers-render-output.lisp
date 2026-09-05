@@ -1,14 +1,5 @@
-;;;; Renderer output helpers for nerimux tests.
 (in-package #:nerimux/test/renderer)
 
-;;; ── Custom matcher: SGR escape-sequence assertions ──────────────────────────
-;;;
-;;; Renderer tests repeatedly assert that a rendered frame contains (or omits)
-;;; the raw ANSI SGR sequence for a given parameter — previously spelled out
-;;; by hand at each call site as (search (format nil "~C[~Am" #\Escape code)
-;;; frame).  A cl-weave custom matcher collapses that into a single readable
-;;; assertion: (expect frame :to-contain-sgr code) / (expect frame :not
-;;; :to-contain-sgr code).
 (cl-weave:defmatcher :to-contain-sgr
                      (actual expected)
                      "T when ACTUAL contains the SGR escape sequence ESC[CODEm for the given SGR

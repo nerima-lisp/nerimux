@@ -1,4 +1,3 @@
-;;;; Key translation and binding assertion helpers for nerimux tests.
 (in-package #:nerimux/test)
 
 (defun alist-value (key alist &key (test #'eql))

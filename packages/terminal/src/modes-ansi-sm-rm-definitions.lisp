@@ -1,9 +1,5 @@
 (in-package #:nerimux/terminal/actions)
 
-;;;; Terminal modes — ANSI (non-private) Set/Reset Mode, CSI Ps h / CSI Ps l.
-;;;;
-;;;; The macro and its declarative rule table are compile-time definitions.  The
-;;;; generated actions are covered through the parser and terminal actions APIs.
 (defmacro define-ansi-mode-rules (&rest specs)
   "Generate SET-ANSI-MODE and RESET-ANSI-MODE from a symmetric declarative table.
    Each SPEC is (param-number slot-accessor).

@@ -1,20 +1,5 @@
 (in-package #:nerimux/commands)
 
-;;; ── Copy-mode search subsystem ──────────────────────────────────────────────
-;;;
-;;; copy_mode_search_forward(Screen, Term)  :- scan rows from cursor downward
-;;;   through the *entire* virtual buffer (scrollback + live grid).
-;;; copy_mode_search_backward(Screen, Term) :- scan rows from cursor upward.
-;;; copy_mode_search_next(Screen)           :- repeat last search forward.
-;;; copy_mode_search_prev(Screen)           :- repeat last search backward.
-;;;
-;;; Virtual row numbering (0 = oldest scrollback row, increasing toward live grid):
-;;;   0 .. sb-count-1  : scrollback (oldest→newest)
-;;;   sb-count .. sb-count+height-1 : live grid (top→bottom)
-;;;
-;;; Mapping from (copy-offset, viewport-row) to virtual row:
-;;;   vrow = sb-count + viewport-row - copy-offset
-;;; ── Matcher factory ──────────────────────────────────────────────────────────
 (defun %copy-mode-make-matcher (term)
   "Return a matcher closure (row-string start) → match-start-column (or NIL).
    TERM is compiled as a cl-regex-kit regex; on compile failure falls back to
@@ -43,7 +28,6 @@
         (lambda (str start)
           (search term str :start2 start)))))
 
-;;; ── Full-buffer directional search ──────────────────────────────────────────
 (defun %copy-mode-find-forward (screen term start-vrow start-col)
   "Scan forward through the full virtual buffer from (START-VROW, START-COL).
    Returns (values vrow col) of the first match, or (values nil nil) when absent."
@@ -68,7 +52,6 @@
     (loop for vrow from start-vrow downto 0
           for row-str = (%copy-mode-virtual-row-string screen vrow)
           for end-col = (if (= vrow start-vrow) start-col (length row-str))
-          ;; Walk all matches left-to-right, keep the last start < end-col.
           for best = (loop with b = nil and from = 0
                            for pos = (and (<= from (length row-str))
                                           (funcall match row-str from))
@@ -77,10 +60,6 @@
           when best return (values vrow best)
           finally (return (values nil nil)))))
 
-;;; ── Wrap-around search ───────────────────────────────────────────────────────
-;;;
-;;; Search always wraps around the buffer ends (§1.4 of
-;;; docs/notes/workspace-requirements.md: "検索は折り返す").
 (defun %copy-mode-wrap-start (forwardp screen)
   "The (vrow col) a wrapped search restarts from: the top-left corner when
    searching FORWARDP, otherwise the bottom-right corner of the virtual buffer."
@@ -111,7 +90,6 @@
         (multiple-value-bind (wrap-vrow wrap-col) (funcall wrap-start-fn)
           (attempt wrap-vrow wrap-col)))))
 
-;;; ── Match census (R6.8's "2/7") ─────────────────────────────────────────────
 (defun %copy-mode-all-matches (screen term)
   "Every match for TERM in the virtual buffer, as (VROW . COL) in buffer order.
 
@@ -128,9 +106,6 @@
                              (funcall match row-str from))
               while pos
               do (push (cons vrow pos) found)
-                 ;; Advance past the match start, not past its end: the matcher
-                 ;; reports only where a match begins, and a zero-width regex
-                 ;; would otherwise loop here forever.
                  (setf from (1+ pos)))))))
 
 (defun %copy-mode-record-search-position (screen term vrow col)
@@ -149,7 +124,6 @@
   (setf (screen-copy-search-index screen) nil
         (screen-copy-search-total screen) 0))
 
-;;; ── Public search commands ───────────────────────────────────────────────────
 (defun %copy-mode-search-direction (screen term direction &optional (save-direction-p t))
   "Shared search engine for copy-mode-search-{forward,backward}.
    DIRECTION is :forward or :backward.  Saves TERM; always wraps around the
@@ -173,9 +147,6 @@
            (lambda (found-vrow found-col)
              (%copy-mode-set-virtual-row screen found-vrow found-col)
              (%copy-mode-record-search-position screen term found-vrow found-col)))
-          ;; A term with no match anywhere: report no ordinal rather than
-          ;; leaving the previous search's numbers on screen next to the new
-          ;; term, which would read as "match 2 of 7" for something with none.
           (progn (%copy-mode-clear-search-position screen) nil)))))
 
 (defun copy-mode-search-forward (screen term)
@@ -218,11 +189,3 @@
                                          :backward
                                          :forward)
                                      nil)))))
-
-;;; Incremental search (C-s / C-r) was removed: copy-mode-search-forward-
-;;; incremental, copy-mode-search-backward-incremental, %copy-mode-isearch-
-;;; start, %copy-mode-isearch-from-origin, and *copy-mode-isearch-origin*
-;;; formed a closed island — grep across src/ found no caller of the two
-;;; incremental entry points outside this file's own definitions and the
-;;; package export list. The live search kernel (copy-mode-search-forward/
-;;; backward/next/prev above) does not use this machinery.

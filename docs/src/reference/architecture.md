@@ -90,8 +90,15 @@ The layering rule is:
 
   A capability with a second implementation that tests genuinely exercise is a
   port **variable**: `nerimux/ports:*spawn-pty*`, `*write-pty*` and friends,
-  bound at server startup by `install-pty-port` (`src/server.lisp`)
+bound at server startup by `install-pty-port` (`packages/pty/src/pty.lisp`)
   and bound to a fake by the PTY tests.
+
+The concrete PTY implementation is split by operation: `pty-process.lisp`
+owns child lifetime and the process table, `pty-io.lisp` owns master-fd I/O,
+`pty-select.lisp` owns readiness polling, and `pty-terminal.lisp` owns terminal
+geometry. `pty.lisp` contains only the size-setting primitive and port wiring.
+The ASDF serial order loads these implementation modules before the wiring
+form, so the public port surface remains explicit without an adapter layer.
 
   A capability with exactly one implementation is a plain **wrapper**:
   `environment-value`, `environment-entries`, `working-directory` in
@@ -154,14 +161,14 @@ Terminal code separates data (`types`) from logic (`actions`, `csi`, `sgr`, the
 CPS parser) one level further down.
 
 The bootstrap dispatch layer follows the same separation. The shared
-`define-message-dispatch-fn` macro in `src/server.lisp` expands
+`define-message-dispatch-fn` macro in `src/server-dispatch-macros.lisp` expands
 declarative rules into the common conditional dispatch form. The
-`define-multi-msg-dispatch` wrapper in `server.lisp` supplies the multi-client
+`define-multi-msg-dispatch` wrapper in `src/server-dispatch-macros.lisp` supplies the multi-client
 handler shape used by `server-multi.lisp`; the client connection data lives in
 the shared `server-multi-dispatch.lisp` module, while per-message helpers live in the
 `server-multi-dispatch-prefix.lisp`, `server-multi-dispatch-picker.lisp`,
-`server-multi-dispatch-command-input.lisp`, and `server-multi-dispatch-command.lisp`
-files. The terminal parser is a CPS state machine, with its data
+`server-multi-dispatch-fetch.lisp`, `server-multi-dispatch-command-input.lisp`,
+and `server-multi-dispatch-command.lisp` files. The terminal parser is a CPS state machine, with its data
 structs kept apart from the `actions`, `csi`, and `sgr` logic. Character writing is split by role:
 `char-write-definitions.lisp` holds declarative charset and width facts,
 `char-write-cells.lisp` owns cell placement, and `char-write.lisp` coordinates
@@ -171,10 +178,14 @@ attribute rule table, `sgr-colors.lisp` decodes extended colours, `sgr.lisp`
 coordinates application, and `sgr-report.lisp` encodes status reports.
 
 Tests use `cl-weave` directly: suites, examples, skips, and reporters are
-registered through its native API. The production boundary does not wrap the
-library in an adapter. Repeated dispatch and declarative validation are
+registered through its native API. Repeated dispatch and declarative validation are
 expressed by macros, while runtime values remain in the data modules and the
 expanded functions perform the side effects.
+
+Workspace discovery and mutations use the exported operations from
+`nerima-lisp/cl-vcs-kit` directly. The application keeps only its workspace
+model and UI state locally; command-specific orchestration is kept in the
+dispatch units that call those operations.
 
 ## Source layout
 

@@ -1,6 +1,5 @@
 (in-package #:nerimux/layout)
 
-;;; Declarative traversal macros for the binary layout tree.
 (defmacro define-layout-visitor (name (node-var)
                                       &key
                                       on-null

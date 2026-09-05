@@ -1,87 +1,5 @@
 (in-package #:nerimux/vcs)
 
-(defvar *directory-resolve-timeout*
-  2.0d0)
-
-(defun %make-directory-vcs-repository (directory)
-  (vcs-kit:make-vcs-repository directory
-                               :default-timeout
-                               *directory-resolve-timeout*))
-
-(defun %path-missing-p (path)
-  (and (stringp path) (plusp (length path)) (null (probe-file path))))
-
-(defun %directory-repository-root (directory)
-  (let ((worktrees
-         (vcs-kit:vcs-list-worktrees (%make-directory-vcs-repository directory))))
-    (when worktrees
-      (let ((bare (find-if #'vcs-kit:vcs-worktree-bare-p worktrees)))
-        (values (vcs-kit:vcs-worktree-path (or bare (first worktrees)))
-                worktrees)))))
-
-(defun %directory-under-p (root path)
-  (and (stringp root)
-       (plusp (length root))
-       (stringp path)
-       (plusp (length path))
-       (let ((prefix
-              (if (char= (char root (1- (length root))) #\/)
-                  root
-                  (concatenate 'string root "/"))))
-         (and (>= (length path) (length prefix))
-              (string= prefix path :end2 (length prefix))))))
-
-(defun %directory-specification (repository-root)
-  (let ((ghq-root (ghq-root-directory)))
-    (if (and repository-root
-             ghq-root
-             (%directory-under-p ghq-root repository-root))
-        (let ((prefix
-               (if (char= (char ghq-root (1- (length ghq-root))) #\/)
-                   ghq-root
-                   (concatenate 'string ghq-root "/"))))
-          (if (>= (length repository-root) (length prefix))
-              (subseq repository-root (length prefix))
-              ""))
-        "local")))
-
-(defun resolve-directory-organizations (directory)
-  (handler-case (when (and (stringp directory) (plusp (length directory)))
-                  (multiple-value-bind (repository-root raw-worktrees) 
-                      (%directory-repository-root directory)
-                    (when (and repository-root (plusp (length repository-root)))
-                      (let* ((specification
-                              (%directory-specification repository-root))
-                             (repository
-                              (nerimux/workspace-model:make-repository
-                               :specification
-                               specification
-                               :local-path
-                               repository-root
-                               :backend
-                               :git)))
-                        (multiple-value-bind (host name) 
-                            (%organization-and-name specification)
-                          (let ((organization
-                                 (nerimux/workspace-model:make-organization :id
-                                                                            (nerimux/workspace-model:organization-key
-                                                                             host
-                                                                             name)
-                                                                            :host
-                                                                            host
-                                                                            :name
-                                                                            name)))
-                            (nerimux/workspace-model:organization-add-repository
-                             organization
-                             repository)
-                            (%apply-repository-worktrees repository
-                                                         raw-worktrees
-                                                         (%path-missing-p
-                                                          repository-root))
-                            (list organization)))))))
-    (error ()
-      nil)))
-
 (defstruct (%worktree-status-update
              (:constructor %make-worktree-status-update))
   (path nil :read-only t)
@@ -92,8 +10,6 @@
   (conflict-p nil :read-only t)
   (ahead nil :read-only t)
   (behind nil :read-only t)
-  ;; Plain (CODE . PATH) conses derived from the snapshot's entries (D1) --
-  ;; never a vcs-kit struct; see %WORKTREE-STATUS-CHANGED-FILES in vcs.lisp.
   (changed-files nil :read-only t))
 
 (defun %status-entry-conflict-p (entry)
@@ -157,14 +73,6 @@ PATH, when given, is used verbatim. Otherwise the path is fixed to
   (%make-vcs-repository (nerimux/workspace-model:repository-local-path repository)))
 
 (defun %repository-checked-handle (repository)
-  ;; git-rev-parse-value, and every %DEFINE-CHECKED-OPERATION-generated git
-  ;; write function vcs-git-write.lisp calls, is a git-layer entry point:
-  ;; its %run-git check-types the handle as VCS-KIT:REPOSITORY
-  ;; (make-repository), not the backend-layer VCS-REPOSITORY that
-  ;; vcs-worktree/%repository-backend takes.  Passing %repository-backend's
-  ;; handle here type-errors before any git runs, which made worktree
-  ;; creation a no-op the first time this was gotten wrong -- see
-  ;; vcs-kit-two-repository-types-trap.
   (vcs-kit:make-repository
    (%string-value (nerimux/workspace-model:repository-local-path repository))))
 
@@ -233,25 +141,26 @@ REPOSITORY's default branch tip (R7.3) when not given."
       "VCS created a worktree but it was not returned by list-worktrees: ~A"
       worktree-path))))
 
+(defun %refresh-worktree-repository (repository)
+  (list-repository-worktrees repository)
+  (refresh-repository-status repository))
+
 (defun delete-worktree (worktree &key force)
   "Remove WORKTREE after protecting the repository's primary checkout."
   (let ((repository (%delete-worktree-command worktree force)))
-    (list-repository-worktrees repository)
-    (refresh-repository-status repository)
+    (%refresh-worktree-repository repository)
     t))
 
 (defun lock-worktree (worktree &key reason)
   "Lock WORKTREE so prune and delete operations skip it until unlocked."
   (let ((repository (%lock-worktree-command worktree reason)))
-    (list-repository-worktrees repository)
-    (refresh-repository-status repository)
+    (%refresh-worktree-repository repository)
     t))
 
 (defun unlock-worktree (worktree)
   "Unlock WORKTREE, restoring it to prune and delete eligibility."
   (let ((repository (%unlock-worktree-command worktree)))
-    (list-repository-worktrees repository)
-    (refresh-repository-status repository)
+    (%refresh-worktree-repository repository)
     t))
 
 (defun prune-worktrees (repository &key (dry-run t) verbose)
@@ -262,8 +171,7 @@ what would be removed without mutating anything; callers must only pass a
 false DRY-RUN once a user has explicitly confirmed the operation."
   (let* ((operation (%prune-worktrees-command repository dry-run verbose))
          (result (second operation)))
-    (list-repository-worktrees repository)
-    (refresh-repository-status repository)
+    (%refresh-worktree-repository repository)
     result))
 
 (defun %run-vcs-operation-async (name worker
@@ -409,134 +317,3 @@ false DRY-RUN once a user has explicitly confirmed the operation."
                                              (when verbose
                                                "--verbose")))))
     (list repository result)))
-
-(defmacro define-worktree-async-operation (name lambda-list
-                                                documentation
-                                                thread-name
-                                                command-form)
-  `(defun ,name ,lambda-list
-     ,documentation
-     (%run-vcs-operation-async ,thread-name
-                               (lambda ()
-                                 (let ((repository ,command-form))
-                                   (%capture-worktree-operation-result
-                                    repository
-                                    t)))
-                               #'%apply-worktree-operation-result
-                               on-complete
-                               on-error
-                               callback-dispatch)))
-
-(defun create-worktree-async (repository &key
-                                         branch
-                                         path
-                                         start-point
-                                         force
-                                         on-complete
-                                         on-error
-                                         callback-dispatch)
-  "Create a worktree on a worker thread and invoke one callback."
-  (%run-vcs-operation-async "nerimux-vcs-worktree-create"
-                            (lambda ()
-                              (%capture-worktree-operation-result repository
-                                                                  (%create-worktree-command
-                                                                   repository
-                                                                   branch
-                                                                   path
-                                                                   start-point
-                                                                   force)))
-                            (lambda (operation-result)
-                              (%apply-created-worktree repository
-                                                       operation-result))
-                            on-complete
-                            on-error
-                            callback-dispatch))
-
-(define-worktree-async-operation delete-worktree-async
-                                 (worktree &key
-                                           force
-                                           on-complete
-                                           on-error
-                                           callback-dispatch)
-                                 "Delete a worktree on a worker thread and invoke one callback."
-                                 "nerimux-vcs-worktree-delete"
-                                 (%delete-worktree-command worktree force))
-
-(define-worktree-async-operation lock-worktree-async
-                                 (worktree &key
-                                           reason
-                                           on-complete
-                                           on-error
-                                           callback-dispatch)
-                                 "Lock a worktree on a worker thread and invoke one callback."
-                                 "nerimux-vcs-worktree-lock"
-                                 (%lock-worktree-command worktree reason))
-
-(define-worktree-async-operation unlock-worktree-async
-                                 (worktree &key
-                                           on-complete
-                                           on-error
-                                           callback-dispatch)
-                                 "Unlock a worktree on a worker thread and invoke one callback."
-                                 "nerimux-vcs-worktree-unlock"
-                                 (%unlock-worktree-command worktree))
-
-(defun prune-worktrees-async (repository &key
-                                         (dry-run t)
-                                         verbose
-                                         on-complete
-                                         on-error
-                                         callback-dispatch)
-  "Prune a repository's worktrees on a worker thread and invoke one callback.
-
-DRY-RUN defaults true, matching PRUNE-WORKTREES, so an omitted keyword here
-stays non-destructive instead of silently forwarding a false DRY-RUN."
-  (%run-vcs-operation-async "nerimux-vcs-worktree-prune"
-                            (lambda ()
-                              (let ((worker-result
-                                     (%prune-worktrees-command repository
-                                                               dry-run
-                                                               verbose)))
-                                (%capture-worktree-operation-result
-                                 (first worker-result)
-                                 (second worker-result))))
-                            (lambda (operation-result)
-                              (%apply-worktree-operation-result
-                               operation-result))
-                            on-complete
-                            on-error
-                            callback-dispatch))
-
-(defstruct (%repository-refresh (:constructor %make-repository-refresh))
-  (raw-worktrees nil :read-only t)
-  (missing-p nil :read-only t)
-  (status-updates nil :read-only t))
-
-(defun %read-repository-refresh (repository)
-  (multiple-value-bind (raw-worktrees missing-p) 
-      (%read-repository-worktrees repository)
-    (%make-repository-refresh :raw-worktrees
-                              raw-worktrees
-                              :missing-p
-                              missing-p
-                              :status-updates
-                              (loop for raw in raw-worktrees
-                                    unless (vcs-kit:vcs-worktree-bare-p raw)
-                                      collect (%read-worktree-status-at
-                                               (vcs-kit:vcs-worktree-path raw)
-                                               (vcs-kit:vcs-worktree-head raw)
-                                               (nerimux/workspace-model:repository-local-path
-                                                repository))))))
-
-(defun %apply-repository-refresh (repository refresh)
-  (%apply-repository-worktrees repository
-                               (%repository-refresh-raw-worktrees refresh)
-                               (%repository-refresh-missing-p refresh)
-                               (%repository-refresh-status-updates refresh))
-  (%apply-repository-status repository
-                            (%repository-refresh-status-updates refresh)
-                            (%repository-refresh-missing-p refresh)))
-
-(defun refresh-repository-status (repository)
-  "Refresh all statuses for REPOSITORY synchronously."
-  (%apply-repository-status repository (%read-repository-status repository)))

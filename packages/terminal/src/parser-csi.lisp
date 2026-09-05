@@ -1,8 +1,5 @@
 (in-package #:nerimux/terminal/parser)
 
-;;;; CSI continuation logic.
-;;; Named constants for the magic hex literals used in make-csi-k.
-;;; The ranges follow ECMA-48 § 5.4 table.
 (defconstant +csi-digit-low+
   #x30
   "Lowest decimal digit byte in a CSI sequence (ASCII '0').")
@@ -111,51 +108,27 @@
   (lambda (screen byte)
     (declare (type screen screen) (type (unsigned-byte 8) byte))
     (cond
-      ;; Digit 0-9: accumulate into the current parameter accumulator — unless we
-      ;; are skipping a colon sub-parameter, in which case the digit is consumed
-      ;; and discarded (we keep only the parameter's leading value).
       ((and (>= byte +csi-digit-low+) (<= byte +csi-digit-high+))
        (make-csi-k params
                    (+ (* (or param-accumulator 0) 10) (- byte +csi-digit-low+))
                    intermed private subparams))
-      ;; Colon: ISO 8613-6 sub-parameter separator.  Flush the leading value
-      ;; accumulated so far into SUBPARAMS and begin the next sub-parameter; the
-      ;; finished parameter becomes a list so apply-sgr parses colon-form
-      ;; extended colour (38:2:R:G:B, 38:5:N, 4:3 undercurl) rather than dropping
-      ;; everything after the leading value.
       ((= byte +csi-colon+)
        (make-csi-k params nil intermed private
                    (cons (or param-accumulator 0) subparams)))
-      ;; Semicolon: flush the current parameter (combining its colon sub-params,
-      ;; if any), start fresh.
       ((= byte +csi-semicolon+)
        (make-csi-k (cons (%finish-param param-accumulator subparams) params)
                    nil intermed private nil))
-      ;; ? — DEC private-mode marker byte (selects DEC private sequences).
-      ;; Recorded in the PRIVATE slot (separate from a true intermediate) so that
-      ;; sequences carrying BOTH — e.g. DECRQM "CSI ? Ps $ p" — keep the ? marker
-      ;; even when a #x20-#x2F intermediate ($) follows.
       ((= byte +csi-dec-marker+)
        (make-csi-k params param-accumulator intermed #\? subparams))
-      ;; > — secondary DA marker byte (selects secondary device attribute queries).
       ((= byte +csi-sec-da+)
        (make-csi-k params param-accumulator intermed #\> subparams))
-      ;; < and = — the remaining ECMA-48 private-parameter markers (0x3C / 0x3D):
-      ;; e.g. CSI < Ps t (XTPOPTITLE), CSI = c (tertiary DA / DA3).  Recorded in
-      ;; PRIVATE like ? and >.  Without these, the byte hit the catch-all and
-      ;; ABORTED the sequence, leaving the final byte to print as a stray char.
       ((= byte +csi-xtpoptitle-marker+)
        (make-csi-k params param-accumulator intermed #\< subparams))
       ((= byte +csi-tertiary-da-marker+)
        (make-csi-k params param-accumulator intermed #\= subparams))
-      ;; Intermediate bytes (SPACE through 0x2F): record as intermed.
-      ;; SPACE (#x20) is the most common (used by DECSCUSR "CSI N SP q");
-      ;; $ (#x24) appears in DECRQM.  Does NOT disturb the private marker.
       ((and (>= byte +csi-intermed-low+) (<= byte +csi-intermed-high+))
        (make-csi-k params param-accumulator (code-char byte) private subparams))
-      ;; Final byte (0x40-0x7E): flush accumulator, reverse collected params, dispatch.
       ((csi-final-byte-p byte)
        (%csi-dispatch-final-byte screen byte intermed private params
                                   param-accumulator subparams))
-      ;; Anything else: abort CSI (e.g. C0 controls inside a sequence).
       (t #'ground-state))))

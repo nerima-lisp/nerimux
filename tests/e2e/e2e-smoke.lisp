@@ -1,26 +1,3 @@
-;;;; End-to-end smoke test entry point: dispatches headless server/kill
-;;;; scenarios (pure stock SBCL, no ASDF/nerimux) and the real-PTY attach
-;;;; scenario (loads :nerimux) against a real, already-built nerimux binary.
-;;;;
-;;;; Kept at this path/name because existing docs reference it directly.
-;;;; Run via `nix run .#e2e`, or from the dev shell after a build:
-;;;;
-;;;;   nix build .
-;;;;   nerimux-sbcl --script tests/e2e/e2e-smoke.lisp result/bin/nerimux
-;;;;
-;;;; or, baked to the flake-built binary:
-;;;;
-;;;;   nix run .#e2e
-;;;;
-;;;; Optional trailing arguments restrict which scenarios run, by name:
-;;;;
-;;;;   nerimux-sbcl --script tests/e2e/e2e-smoke.lisp result/bin/nerimux attach
-;;;;
-;;;; With no scenario names given, every scenario runs in the fixed order
-;;;; below. The three kill-* scenarios other than kill-without-server share
-;;;; one server process spawned by server-starts (see
-;;;; server-kill-scenario.lisp), so selecting them apart from that group
-;;;; produces a FAIL, not a skip -- they are not independent tests.
 (defparameter *e2e-dir*
   (make-pathname :name nil :type nil :defaults *load-truename*)
   "Directory this file was loaded from, used to locate the sibling scenario
@@ -36,16 +13,11 @@
 
 (load (merge-pathnames "server-kill-scenario.lisp" *e2e-dir*))
 
-;;; ── Scenario table ────────────────────────────────────────────────────────
-;;;
-;;; :ATTACH is special-cased: its file is loaded lazily, only when selected,
-;;; so a load failure (missing system, missing /dev/ptmx, ...) cannot take
-;;; down the headless scenario results that ran before it.
 (defparameter *scenarios*
   (list (cons "kill-without-server" 'scenario-kill-without-server)
         (cons "server-starts" 'scenario-server-starts)
-        (cons "kill-refuses-with-pane" 'scenario-kill-refuses-with-pane)
-        (cons "kill-force-cleans" 'scenario-kill-force-cleans)
+        (cons "kill-cleans-empty-server" 'scenario-kill-cleans-empty-server)
+        (cons "kill-force-without-server" 'scenario-kill-force-without-server)
         (cons "attach" :attach))
   "Mode-name -> handler-symbol (or :ATTACH), in the fixed run order.")
 

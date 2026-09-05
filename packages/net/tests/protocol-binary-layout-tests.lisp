@@ -1,14 +1,8 @@
 (in-package #:nerimux/test/net)
 
-;;;; Protocol binary integer, frame layout, and attach payload tests.
 (describe "protocol-suite"
 
-  ;;; ── Message type tag constant values ─────────────────────────────────────────
-  ;;;
-  ;;; The wire protocol fixes the numeric type tags permanently.  Pinning these
-  ;;; byte values catches defconstant drift at test time instead of integration time.
 
-  ;; Message type tag constants are fixed wire-protocol values and must not change.
   (it "message-type-tag-constants-have-expected-values"
     (dolist (c `((1 ,+msg-attach+  "+msg-attach+ must equal 1")
                  (2 ,+msg-key+     "+msg-key+ must equal 2")
@@ -23,25 +17,17 @@
         (declare (ignore desc))
         (expect (= expected constant)))))
 
-  ;;; ── u16-octets-pair with max values ─────────────────────────────────────────
 
-  ;; u16-octets-pair encodes the maximum u16 pair (65535, 65535) as four 0xFF bytes.
   (it "u16-octets-pair-max-values"
     (expect (equalp #(255 255 255 255)
                 (nerimux/protocol:u16-octets-pair 65535 65535))))
 
-  ;; u16-octets-pair with different row and col values encodes each independently.
   (it "u16-octets-pair-asymmetric-values"
     (let ((result (nerimux/protocol:u16-octets-pair 1 256)))
       (expect (= 4 (length result)))
       (expect (equalp #(0 1 1 0) result))))
 
-  ;;; ── Table-driven u16/u32 encoder output correctness ─────────────────────────
-  ;;;
-  ;;; The same encode-byte pattern repeats across u16 and u32 with many values.
-  ;;; A single table-driven test makes each case visible and avoids repetition.
 
-  ;; u16-octets encodes each value to the exact expected big-endian byte sequence.
   (it "u16-octets-table-driven-encoding"
     (dolist (entry '((0      #(0 0))
                      (1      #(0 1))
@@ -57,7 +43,6 @@
       (destructuring-bind (n expected) entry
         (expect (equalp expected (nerimux/protocol:u16-octets n))))))
 
-  ;; u32-octets encodes each value to the exact expected big-endian byte sequence.
   (it "u32-octets-table-driven-encoding"
     (dolist (entry '((0          #(0 0 0 0))
                      (1          #(0 0 0 1))
@@ -71,9 +56,7 @@
       (destructuring-bind (n expected) entry
         (expect (equalp expected (nerimux/protocol:u32-octets n))))))
 
-  ;;; ── encode-frame / decode-frame type byte ────────────────────────────────────
 
-  ;; encode-frame places the type tag in byte 0 of the resulting frame.
   (it "encode-frame-type-byte-is-first-byte"
     (dolist (entry (list (list +msg-attach+ (nerimux/protocol:u16-octets-pair 24 80))
                          (list +msg-key+    #(65 66))
@@ -82,9 +65,7 @@
         (let ((frame (encode-frame type-tag payload)))
           (expect (= type-tag (aref frame 0)))))))
 
-  ;;; ── decode-frame with explicit end=start (zero bytes available) ──────────────
 
-  ;; decode-frame with end equal to start (zero available bytes) returns NIL.
   (it "decode-frame-zero-bytes-available-returns-nil"
     (let ((frame (msg-key #(1 2 3))))
       (multiple-value-bind (type payload next)
@@ -93,28 +74,17 @@
         (expect (null payload))
         (expect (= 0 next)))))
 
-  ;;; ── Pinning tests for wire-protocol constants ────────────────────────────────
 
-  ;; +field-delimiter+ must equal 0 (ASCII NUL), the byte used to separate
-  ;; NUL-delimited fields in a +msg-command+ payload.  Pinning prevents silent
-  ;; drift if the constant is ever accidentally edited.
   (it "field-delimiter-constant-is-ascii-nul"
     (expect (= 0 nerimux/protocol:+field-delimiter+)))
 
-  ;; The frame-layout constants must be mutually consistent:
-  ;;   +payload-length-offset+ (1) + 4 bytes == +header-size+ (5)
-  ;;   +cols-offset-in-size-payload+ must equal 2 (after the 2-byte rows u16)
   (it "frame-layout-offset-constants-are-consistent"
     (expect (= +header-size+
            (+ nerimux/protocol:+payload-length-offset+ 4)))
     (expect (= 2 nerimux/protocol:+cols-offset-in-size-payload+)))
 
-  ;;; ── decode-frame start/end window narrowing ──────────────────────────────────
 
-  ;; decode-frame with start > 0 parses correctly when the window [start, end)
-  ;; is exactly the size of one frame.
   (it "decode-frame-with-nonzero-start-and-matching-end"
-    ;; Put a detach frame at offset 5 in a larger buffer.
     (let* ((prefix  (make-array 5 :element-type '(unsigned-byte 8) :initial-element 0))
            (frame   (msg-detach))
            (buffer  (concatenate '(simple-array (unsigned-byte 8) (*)) prefix frame)))
@@ -124,8 +94,6 @@
         (expect (= 0 (length payload)))
         (expect (= (length buffer) next)))))
 
-  ;; decode-frame with start = end (window of zero bytes) returns (values NIL NIL start)
-  ;; regardless of what the buffer contains before or after start.
   (it "decode-frame-start-equals-end-returns-nil"
     (let ((frame (msg-resize 10 20)))
       (multiple-value-bind (type payload next)
@@ -134,10 +102,7 @@
         (expect (null payload))
         (expect (= 3 next)))))
 
-  ;;; ── msg-attach with large u16 boundary values ────────────────────────────────
 
-  ;; msg-attach with the maximum u16 values (65535 × 65535) round-trips via
-  ;; decode-frame + decode-size without truncation or overflow.
   (it "msg-attach-max-u16-rows-cols-roundtrip"
     (multiple-value-bind (type payload)
         (decode-frame (msg-attach 65535 65535))

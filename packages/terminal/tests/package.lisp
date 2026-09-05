@@ -1,7 +1,4 @@
-;;;; Test package for nerimux-terminal.
 (defpackage #:nerimux/test/terminal
-  ;; The test framework is cl-weave, used natively: every file registers its own
-  ;; top-level (describe "name" (it "case" ...) ...) block.
   (:use #:cl)
   (:shadowing-import-from #:cl-weave #:describe)
   (:import-from #:cl-weave
@@ -15,8 +12,6 @@
                 #:it-property #:it-fuzz #:gen-integer #:gen-list #:gen-boolean #:gen-string
                 #:gen-vector #:gen-member #:gen-one-of
                 #:defmatcher)
-  ;; The unit under test. These were in tests/package.lisp's one shared import
-  ;; list; they move with the tests that use them.
   (:import-from #:nerimux/terminal
                 #:make-screen
                 #:screen-resize
@@ -48,9 +43,6 @@
                 #:screen-dirty-p
                 #:char-width
                 #:screen-p)
-  ;; Fixtures the units above terminal, and the root suite, reach for. Every
-  ;; caller of these depends on nerimux-terminal, so this is the lowest unit that
-  ;; can host them.
   (:export #:with-screen
            #:octets
            #:feed

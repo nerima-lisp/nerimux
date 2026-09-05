@@ -1,6 +1,5 @@
 (in-package #:nerimux/terminal/actions)
 
-;;;; Compile-time charset slot fact table.
 (defmacro define-charset-slot-rules (&rest specs)
   "Build %CHARSET-SLOT-REF and %CHARSET-SLOT-SET from a declarative two-column
    table mapping G designator keywords to screen accessor names.

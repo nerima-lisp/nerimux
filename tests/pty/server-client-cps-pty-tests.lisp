@@ -1,14 +1,7 @@
 (in-package #:nerimux/pty-test)
 
-;;;; run-server's session-registry initialization: a real PTY-backed spawn.
-;;;;
-;;;; Moved from tests/unit/bootstrap/server-client-cps-tests.lisp (R9.2): the one
-;;;; case there that spawns a real PTY, via create-initial-session.  The
-;;;; define-message-dispatch-fn macro-engine cases in that file spawn nothing
-;;;; and stayed in nerimux/test.
 (describe "server-suite"
 
-  ;; The session-registry setup that run-server performs: reset to NIL then add the initial session.
   (it "run-server-session-registry-initialization"
     (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
     (with-empty-registry

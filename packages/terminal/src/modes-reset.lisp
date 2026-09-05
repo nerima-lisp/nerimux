@@ -1,7 +1,5 @@
 (in-package #:nerimux/terminal/actions)
 
-;;;; Terminal modes — full/soft/hard resets (reset-terminal-modes, RIS, DECSTR, DECALN).
-;;; ── Full reset ─────────────────────────────────────────────────────────────
 (defun reset-terminal-modes (screen)
   "Reset all terminal mode flags and scroll region to their VT100 defaults.
    Covers: cursor visibility, autowrap, charset, and the scroll region."

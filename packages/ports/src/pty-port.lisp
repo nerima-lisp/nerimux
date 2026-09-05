@@ -1,19 +1,5 @@
 (in-package #:nerimux/ports)
 
-;;;; PTY Port — domain-side abstraction for PTY operations.
-;;;;
-;;;; Domain code (nerimux/model) calls spawn-pty/write-pty/resize-pty/close-pty.
-;;;; Infrastructure (nerimux/pty) installs concrete implementations via
-;;;; install-pty-port at server or test setup time.
-;;;;
-;;;; Dependency Inversion Principle:
-;;;;   Domain (high-level)       → this abstraction
-;;;;   Infrastructure (low-level) → implements this abstraction
-;;; ── Port variables ───────────────────────────────────────────────────────────
-;;;
-;;; Each var holds a function installed by install-pty-port (nerimux/pty).
-;;; Initial value NIL; domain functions guard with (> (pane-fd pane) 0) so
-;;; these are only called when a real PTY fd exists.
 (defvar *spawn-pty*
   nil
   "Function (rows cols &key start-dir default-command environment) → (values fd pid tty).
@@ -34,11 +20,6 @@
   "Function (fd pid) → nil.
    Installed by nerimux/pty:install-pty-port.")
 
-;;; ── Port functions ───────────────────────────────────────────────────────────
-;;;
-;;; These are the only PTY-related names the domain model imports.
-;;; Replacing *spawn-pty* / *write-pty* / *resize-pty* / *close-pty* in tests
-;;; allows mocking at the abstraction boundary rather than at the C-FFI layer.
 (defun spawn-pty (rows cols &key start-dir default-command environment)
   "Spawn a PTY-backed shell process. Returns (values fd pid slave-path)."
   (funcall *spawn-pty*

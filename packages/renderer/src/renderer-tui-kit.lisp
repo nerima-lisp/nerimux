@@ -19,17 +19,8 @@
 
 (defun %surface-from-ansi-frame (frame rows cols &key (viewport 0))
   "Parse FRAME into a headless CL-TUI-KIT/CORE surface, preserving SGR
-   styling (R-style-preservation).
-
-   Previously this drew through CL-TUI-KIT/WIDGETS's text-widget +
-   viewport-widget pair for VIEWPORT > 0 (unstyled, and separately from the
-   VIEWPORT = 0 path below).  A VIEWPORT-WIDGET renders its child clipped to
-   AREA at (0, -OFFSET-Y): with AREA = (0 0 COLS ROWS) and OFFSET-Y =
-   VIEWPORT, that shows content rows [VIEWPORT, VIEWPORT+ROWS) at surface
-   rows [0, ROWS) -- exactly the window drawn row-by-row below, so dropping
-   the widget path changes no visible output for VIEWPORT > 0, and folding
-   VIEWPORT = 0 into the same CONTENT-HEIGHT = ROWS case (viewport offset
-   0) unifies what were two separate code paths."
+   styling. CONTENT-HEIGHT includes VIEWPORT rows above the visible surface;
+   each visible row reads from CONTENT-ROW = SURFACE-ROW + VIEWPORT."
   (let* ((rows (max 1 rows))
          (cols (max 1 cols))
          (viewport (max 0 viewport))
@@ -69,31 +60,12 @@
                   (setf previous-style style)))
               (write-string (cl-tui-kit/core:cell-content cell) stream))))
         (unless (= row (1- (cl-tui-kit/core:surface-height surface)))
-          ;; CR+LF, not TERPRI's bare #\Newline: the client's tty is in raw
-          ;; mode (OPOST off), so the terminal receives these bytes verbatim
-          ;; with no ONLCR translation.  A bare LF moves down without
-          ;; returning the column; after each full-width row the frame
-          ;; staircases past the right margin and its top half scrolls off
-          ;; the screen -- a real terminal showed only the empty panel
-          ;; bottoms and the status line.  No automated check caught this
-          ;; because every screen model in reach (pyte drivers, the
-          ;; frame-grid parser above) treats LF as CR+LF.
           (write-string #.(coerce (list #\Return #\Linefeed) 'string)
                         stream)))
       (write-string (cl-tui-kit/ansi:ansi-encode-style
                      (cl-tui-kit/core:make-style))
                     stream))))
 
-;;; ── Terminal-too-small guard (R6.10) ────────────────────────────────────────
-;;;
-;;; Placed in %RENDER-ANSI-FRAME-WITH-TUI-KIT rather than in either public
-;;; entry point separately: RENDER-SESSION-TO-TUI-STRING (pane view) and
-;;; RENDER-WORKSPACE-OVERVIEW-TO-TUI-STRING (workspace overview) both funnel
-;;; through this one function, so putting the guard here covers both without
-;;; duplicating it. ROWS/COLS are read fresh on every call (the server passes
-;;; the client's current size each frame, not stored state), so recovery on
-;;; resize falls out of that per-frame re-evaluation rather than needing any
-;;; dedicated "was too small" flag.
 (defconstant +min-terminal-cols+
   40)
 
@@ -145,13 +117,6 @@
                (%render-picker-widget
                 surface terminal-rows terminal-cols picker-items picker-query
                 picker-index picker-regex-p))))
-         ;; R6.11: the OSC-0 title RENDER-SESSION-TO-STRING embeds in its
-         ;; frame text does not survive %RENDER-ANSI-FRAME-WITH-TUI-KIT's
-         ;; ansi-frame/tui-kit round-trip (its frame-grid parser skips OSC
-         ;; sequences without retaining them, then the surface is redrawn
-         ;; from the parsed grid) -- re-derive the same pane here and
-         ;; re-emit after the round-trip, at the boundary a client actually
-         ;; receives.
          (active-pane (%session-title-pane session focus-pane))
          (worktree (and active-pane (pane-worktree active-pane))))
     (concatenate
@@ -204,9 +169,6 @@
    large) org/repo/worktree/pane graph up to three times: once here for
    NO-MATCHES-P, again inside the ANSI pass, and a third time inside the
    tree widget."
-  ;; R6.11: same round-trip-discards-OSC situation as
-  ;; render-session-to-tui-string above -- re-derive the title selection at
-  ;; this boundary and re-emit after the round-trip.
   (let ((all-tree-entries
           (%workspace-flat-tree-entries
            organizations collapsed-node-ids
@@ -219,17 +181,6 @@
         (%workspace-title-selection focus-pane selected-tree-object
                                     selected-worktree)
       (let ((no-matches-p
-              ;; Same condition RENDER-WORKSPACE-OVERVIEW-TO-STRING uses to
-              ;; decide whether to draw the "no matches: /query" placeholder
-              ;; (PR2 tree-filter fix): a non-empty filter that narrows a
-              ;; non-empty catalog down to zero rows. Read off ALL-TREE-
-              ;; ENTRIES above now rather than recomputed, purely to skip
-              ;; building the tree widget at all in that case -- the
-              ;; widget's own list-widget draws nothing for zero entries
-              ;; either way (WIDGET-RENDER only loops over visible items),
-              ;; so this is belt-and-suspenders against a future cl-tui-kit
-              ;; list-widget that fills its rectangle unconditionally, not a
-              ;; fix for a real overlay seen today.
               (and organizations
                    (plusp (length (or tree-filter "")))
                    (null all-tree-entries))))
@@ -260,13 +211,6 @@
           terminal-rows terminal-cols
           :viewport 0
           :widget-renderer
-          ;; R6.2: while the initial scan is still running there is nothing for
-          ;; the tree widget to draw -- the ANSI pass above already rendered the
-          ;; "scanning..." placeholder frame, so skip overlaying an empty tree
-          ;; box on top of it.  The same holds for the empty-catalog hint (FR-004c)
-          ;; and now NO-MATCHES-P (tree-filter fix): the ANSI pass already drew
-          ;; its own guidance where an empty tree box would otherwise paint over
-          ;; it.
           (unless (and (null organizations)
                        (or scanning-p catalog-empty-hint))
             (unless no-matches-p

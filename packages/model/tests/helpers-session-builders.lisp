@@ -1,11 +1,5 @@
 (in-package #:nerimux/test/model)
 
-;;;; Fake session/window constructors.
-;;;;
-;;;; Split out of tests/helpers-session-fixtures.lisp when domain/model became
-;;;; nerimux-model. These three build model structures and nothing else; the
-;;;; macros left behind wrap their bodies in WITH-LOOP-STATE, which binds
-;;;; nerimux::*running* and therefore cannot live in a DOMAIN unit.
 (defun make-fake-window (id name &key (npanes 1))
   "A window with NPANES fake panes (fd -1) and a matching tree; the first pane is active.
    Sets :active directly in make-window rather than calling window-select-pane to

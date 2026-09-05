@@ -1,8 +1,5 @@
 (in-package #:nerimux/test/terminal)
 
-;;;; Erase tests for erase.lisp through parser and direct action paths.
-;;;; Suite: erase.
-;;; ── SUITE: erase ────────────────────────────────────────────────────────────
 (defun fill-screen (screen)
   "Fill every cell of SCREEN with 'X' and return SCREEN."
   (dotimes (y (screen-height screen) screen)
@@ -55,11 +52,6 @@
     `(progn
        ,@(mapcar #'expand-case cases))))
 
-;;; ── Direct erase-display tests covering guarded edge cases ──────────────────
-;;;
-;;; These call erase-display directly to exercise the edge at cy=0 for mode 1
-;;; (the when guard in erase.lisp) and other paths not clearly covered by the
-;;; high-level CSI path above.
 (defmacro define-direct-erase-cases (&body cases)
   "Define direct erase-display/erase-line cases from declarative rows."
   (labels ((case-option (options key)
@@ -163,9 +155,6 @@
      :assertions ((:row-blank 0)
                   (:cursor-y 0))))
 
-  ;; ESC[2J always moves the visible content into the scrollback before
-  ;; erasing (§1.4: scroll-on-clear is unconditional now that the option and
-  ;; its callback are gone), so a full-screen clear stays in history.
   (it "ed2-pushes-screen-to-history"
     (with-screen (s 5 3)
       (fill-screen s)
@@ -175,8 +164,6 @@
       (dotimes (y 3)
         (expect (row-blank-p s y)))))
 
-  ;; scroll-on-clear still does not push to history on the alternate screen
-  ;; (no scrollback there) — this guard is independent of the old option.
   (it "scroll-on-clear-skips-alternate-screen"
     (with-screen (s 5 3)
       (feed s (esc "[?1049h"))
@@ -211,10 +198,6 @@
      :call (:display 2)
      :assertions ((:blank-rows 3))))
 
-  ;;; ── Direct erase-line tests for modes 1 and 2 ───────────────────────────────
-  ;;;
-  ;;; Coverage gap: modes 1 and 2 were only exercised through the CSI path.
-  ;;; These call erase-line directly to give each mode an isolated assertion.
 
   (define-direct-erase-cases
     (erase-line-direct-mode-1-erases-start-to-cursor

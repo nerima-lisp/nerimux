@@ -1,13 +1,5 @@
 (in-package #:nerimux)
 
-;;;; Window creation for the workspace UI.
-;;;;
-;;;; One entry point: open a window for a worktree. The parameters a
-;;;; `new-window` command once carried -- at-index, after-current,
-;;;; before-current, detach -- went with the command table that was the
-;;;; only way to supply them.
-;;; +status-line-rows+ is defined in server-data.lisp and the window index in
-;;; workspace-window-data.lisp; both are loaded before this logic file.
 
 (defun %workspace-new-window (session &key
                                       name
@@ -40,7 +32,6 @@
       (start-reader-thread (window-active-pane win)))
     win))
 
-;;; ── Worktree ↔ window naming (R5.8) ─────────────────────────────────────────
 (defun %worktree-windows (worktree)
   "Distinct windows holding at least one of WORKTREE's panes, ordered by
    window id (the order the tree shows them in, R5.8)."

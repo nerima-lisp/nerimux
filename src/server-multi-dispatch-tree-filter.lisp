@@ -29,9 +29,6 @@
   "Handle ESC, Enter, editing, and printable input in tree-filter mode."
   (27
    (%client-esc-swallow-start conn)
-   ;; ESC drops the in-progress query entirely; Enter below keeps it -- the
-   ;; user is happy with the filtered set and wants to keep navigating it
-   ;; with MODAL back to NIL, not have it silently reset to the full tree.
    (%set-client-modal conn nil)
    (setf (client-conn-tree-filter conn) nil)
    (%mark-dirty)

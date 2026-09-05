@@ -1,15 +1,5 @@
 (in-package #:nerimux/test/renderer)
 
-;;;; Unit tests for WORKSPACE-STATUS-ENTRIES / WORKSPACE-STATUS-OBJECTS /
-;;;; RENDER-WORKSPACE-STATUS-TO-TUI-STRING (renderer-workspace-status.lisp,
-;;;; magit alignment contract §3 Unit STATUS-VIEW).
-;;;;
-;;;; %EXPECTED-SGR-PARAMS (renderer-tui-kit-tests.lisp) derives the SGR
-;;;; assertion from the real CL-TUI-KIT style object rather than a
-;;;; hand-computed code string, the same honesty principle
-;;;; renderer-tui-kit-help-tests.lisp already applies to the sibling
-;;;; full-screen help view -- this file's ASDF registration must load after
-;;;; both of those (see the orchestrator report).
 (defun %build-status-fixture (&key (branch "feature/status")
                                    head
                                    ahead
@@ -134,10 +124,6 @@
              (headers (remove-if-not (lambda (e) (eq (fourth e) :section)) entries)))
         (expect (find-if (lambda (e) (search "Unstaged changes (2)" (second e))) headers))
         (expect (find-if (lambda (e) (search "Staged changes (1)" (second e))) headers))
-        ;; A :PENDING stash group has no STASHES entries yet, but still shows
-        ;; one placeholder row -- so its header counts 1, not 0, and the
-        ;; section is not omitted (contract's own commits/stash convention,
-        ;; renderer-workspace-tree.lisp).
         (expect (find-if (lambda (e) (search "Stashes (1)" (second e))) headers))
         (expect (find-if (lambda (e) (search "stashes: refreshing..." (second e))) entries)))))
 
@@ -193,17 +179,13 @@
     (multiple-value-bind (worktree)
         (%build-status-fixture :unstaged '(("M" . "a.txt")))
       (let ((expanded (make-hash-table :test #'equal)))
-        ;; Explicitly COLLAPSE the Unstaged section (a TAB toggle), overriding
-        ;; level 2's own "sections expanded" default.
         (setf (gethash (list :status-section :unstaged) expanded) nil)
         (let ((at-level-2 (nerimux/renderer:workspace-status-entries
                            worktree :visibility-level 2 :expanded-node-ids expanded)))
           (expect (equal '(:head :section) (%status-entry-kinds at-level-2))))
-        ;; Level 4 never touches EXPANDED -- the explicit override still wins.
         (let ((at-level-4 (nerimux/renderer:workspace-status-entries
                            worktree :visibility-level 4 :expanded-node-ids expanded)))
           (expect (equal '(:head :section) (%status-entry-kinds at-level-4))))
-        ;; Pressing 4 then 2 again reproduces exactly the level-2 rows.
         (let ((at-level-2-again (nerimux/renderer:workspace-status-entries
                                  worktree :visibility-level 2 :expanded-node-ids expanded)))
           (expect (equal '(:head :section) (%status-entry-kinds at-level-2-again))))))))
@@ -225,8 +207,6 @@
         (expect (search "Staged changes (1)" visible))
         (expect (search "unstaged.txt" visible))
         (expect (search "staged.txt" visible))
-        ;; Section headings carry the Dracula-purple heading style, derived
-        ;; from the real style object (see file header comment).
         (expect output :to-contain-sgr
                 (%expected-sgr-params (nerimux/renderer::%workspace-status-style-heading))))))
 
@@ -242,11 +222,6 @@
               (nerimux/renderer:make-transient-view
                :title "Push" :subtitle nil :arguments nil
                :actions (list (list #\p "push")))))
-        ;; A transient panel only ever gets 1-2 rows in this view
-        ;; (%WORKSPACE-STATUS-PANEL-ROWS-AVAILABLE); TRANSIENT-VIEW-HEIGHT
-        ;; for a titled panel with one action already exceeds that, so this
-        ;; exercises the full-screen fallback without needing to fabricate
-        ;; an artificially tall TRANSIENT-VIEW.
         (let ((output (nerimux/renderer:render-workspace-status-to-tui-string
                        worktree 24 80 :transient transient)))
           (expect (search "Push" (strip-sgr output))))))))

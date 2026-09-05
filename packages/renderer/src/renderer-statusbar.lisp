@@ -1,38 +1,9 @@
 (in-package #:nerimux/renderer)
 
-;;;; Status bar composition for the nerimux renderer.
-;;;;
-;;;; This file owns the status bar: format composition and the
-;;;; render-status-bar entry point.  It has no knowledge of session-frame
-;;;; compositing; that lives in renderer-compose.lisp.
-;;;;
-;;;; R6.5 replaced the previous status bar (session name, whole-session
-;;;; window list, clock) with the workspace-scoped contract: attention mark +
-;;;; repository + worktree + state token on the left, the CURRENT worktree's
-;;;; window/pane tabs in the middle (not every window in the session — a
-;;;; worktree's own windows, %WORKTREE-TREE-WINDOWS,
-;;;; renderer-workspace-tree.lisp),
-;;;; and the latest client notification on the right.  No clock (§1.4/R6.5).
-;;;; The old per-option R2.2/R2.3 "fixed at its registered default" comments
-;;;; this file used to carry no longer apply to any of the content below —
-;;;; there is no more session/window-list template to have fixed.
-;;;;
-;;;; Load order (declared in nerimux.asd): renderer-format → renderer-style
-;;;;             → renderer-statusbar-layout → renderer-pane
-;;;;             → renderer-statusbar → renderer-compose
-;;; The status line is one row at the bottom, always (requirements §1.4).
-;;; The old status-line-count option and +max-status-lines+ (the "status"
-;;; option could pick 0..5 rows) are gone with domain/options (R2.2) — this
-;;; is the one place that concept survives, as a fixed constant instead of a
-;;; cross-package function call, so anything outside nerimux/renderer that
-;;; still needs to reserve rows for the status line (e.g. pane-area layout)
-;;; has exactly one definition to reference rather than each side keeping
-;;; its own copy of "1".
 (defconstant +status-line-rows+
   1
   "Rows reserved at the bottom of the terminal for the status line.")
 
-;;; ── Left block: attention + repository + worktree + state token ───────────
 (defun %status-left-fields (focus-pane)
   "(VALUES ATTENTION REPOSITORY-TEXT WORKTREE-TEXT STATE-TEXT) for the status
    line's left block (R6.5). Each of REPOSITORY-TEXT/WORKTREE-TEXT/STATE-TEXT
@@ -100,7 +71,6 @@
                   state-styled)
           (format nil "~A ~A ~A" attention-styled worktree-styled state-styled)))))
 
-;;; ── Middle block: the current worktree's window/pane tabs (R6.5/R6.7) ─────
 (defun %status-pane-tab-token (pane focus-pane)
   "PANE's status-bar tab token, including its own leading separator: a space
    normally, or `!` in its place when PANE has unread output (R6.7) — the
@@ -148,7 +118,6 @@
 (defun %status-middle-text (focus-pane)
   (or (%status-window-pane-tabs focus-pane) (%workspace-em-dash)))
 
-;;; ── Right block: latest notification (R6.5) ────────────────────────────────
 (defun %status-right-text (messages)
   "The right block: the single most recent notification, or an em-dash when
    there is none yet. MESSAGES is CLIENT-CONN-MESSAGE-LOG (most-recent-first,
@@ -159,7 +128,6 @@
       (%status-wrap (first messages) +sgr-muted-italic+)
       (%workspace-em-dash)))
 
-;;; ── Mode chip (FR-003) ──────────────────────────────────────────────────────
 (defun %status-mode-chip (mode)
   "The status line's leftmost, always-kept segment (FR-003): a bold MODE-name
    chip naming whatever has taken the keyboard away from the shell. Returns
@@ -172,12 +140,7 @@
    mechanism already used to drop the middle/right blocks when width
    excludes them. Every non-NIL MODE (:view-pane, :scrollback, :command,
    :filter, :picker, :transient, ...) shows the chip alone, the mode name
-   already being the whole message -- the old :NORMAL branch's muted
-   \" i to type\" hint was for a modal value FR-007 retired (no client-
-   visible modal is ever :NORMAL any more; the legacy :normal *command*
-   maps to modal NIL, server-multi-dispatch-command-workspace.lisp), so
-   comparing MODE against :NORMAL here was dead and always fell through to
-   this function formatting NIL itself, printing the literal text \"NIL\".
+   already being the whole message.
    Styled with %STATUS-WRAP (not %SGR-WRAP) so it restores the status bar's
    own base style rather than a plain reset; +sgr-mode-chip+
    (renderer-style.lisp) is the same chip the workspace footer uses
@@ -185,7 +148,6 @@
   (when mode
     (%status-wrap (format nil " ~:@(~A~) " mode) +sgr-mode-chip+)))
 
-;;; ── Composition with width-driven degradation (R6.5) ───────────────────────
 (defun %compose-workspace-status-line (focus-pane messages
                                                   cols
                                                   &key
@@ -260,9 +222,7 @@
    client's focus tracks the session's active pane, which is the common
    case, so this degrades gracefully rather than going blank.
    MODE (FR-003) feeds the mode chip (%STATUS-MODE-CHIP) that
-   %COMPOSE-WORKSPACE-STATUS-LINE now always draws first; this docstring
-   used to describe render-session-to-string's call site as not yet passing
-   it, which renderer-compose.lisp's render-session-to-string now does."
+   %COMPOSE-WORKSPACE-STATUS-LINE draws first."
   (%render-status-line stream
                        status-row
                        +sgr-default-status+

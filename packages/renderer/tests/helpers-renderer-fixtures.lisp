@@ -1,6 +1,5 @@
 (in-package #:nerimux/test/renderer)
 
-;;;; Renderer pane and session fixtures.
 (defun make-test-pane (w h &key (id 1) (content "") (x 0) (y 0))
   "Build a no-PTY pane of W x H at (X, Y) with ID.
    CONTENT is fed into the pane's screen if non-empty.

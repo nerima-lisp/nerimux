@@ -1,19 +1,5 @@
 (in-package #:nerimux/window)
 
-;;; ── Window resize and zoom operations ─────────────────────────────────────────
-;;;
-;;; This file holds the window-resize-active and window-zoom-toggle operations
-;;; split from window-core.lisp/window-tree.lisp.  All functions depend on:
-;;;   - window struct accessors (window-definitions.lisp)
-;;;   - layout helpers: layout-find-leaf, layout-find-parent, layout-split-*,
-;;;     resize-find-split, resize-direction-orientation, layout-leaves (layout.lisp)
-;;;   - %axis-floor (layout.lisp), +pane-separator-width+ (window-definitions.lisp)
-;;;   - pane-reposition (pane-geometry.lisp)
-;;;
-;;; Data/logic separation:
-;;;   %zoom-in-geometry / %zoom-out-geometry — pure tree-slot mutations (no I/O)
-;;;   window-zoom-toggle                     — orchestrator: tree mutation + PTY resize
-;;; ── Resize via the tree ──────────────────────────────────────────────────────
 (defun %new-split-ratio (orient avail cur-ratio delta grow-first)
   "Compute the ratio after moving the split border by DELTA cells.
    Returns the new ratio as a rational, or NIL when the move would violate
@@ -63,11 +49,6 @@
                   (window-relayout-current window)
                   active)))))))))
 
-;;; ── Zoom helpers — pure tree transforms ─────────────────────────────────────
-;;;
-;;; Data/logic separation: the pure tree-slot mutations (%zoom-in-geometry,
-;;; %zoom-out-geometry) are isolated from the PTY resize side-effect
-;;; (pane-reposition in window-zoom-toggle) so each concern is a named step.
 (defun %zoom-in-geometry (window pane)
   "Save the current tree and replace it with a single-leaf tree for PANE.
    Sets window-zoom-p to T and refreshes the panes list.
@@ -96,9 +77,7 @@
    All slot mutations are protected by the window lock to prevent renderer races."
   (with-lock-held ((window-lock window))
     (if (window-zoom-p window)
-        ;; Zoom out: restore saved tree (guard against corrupted state).
         (%zoom-out-geometry window)
-        ;; Zoom in: save tree, replace with single leaf, then resize PTY.
         (let ((pane (window-active-pane window)))
           (when pane
             (%zoom-in-geometry window pane)

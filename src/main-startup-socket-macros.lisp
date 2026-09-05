@@ -1,4 +1,3 @@
-;;; Startup socket error boundary.
 (in-package #:nerimux)
 
 (defmacro %with-unavailable-socket-as-nil (&body body)

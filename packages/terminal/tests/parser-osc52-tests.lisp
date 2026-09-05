@@ -1,25 +1,18 @@
 (in-package #:nerimux/test/terminal)
 
-;;;; parser tests - OSC 52 clipboard coverage.
 (describe "terminal-suite/osc52-coverage"
 
-  ;; When *osc52-handler* is set, OSC 52 with a valid Base64 payload invokes it
-  ;; with the decoded text string.
   (it "osc52-handler-invoked-with-decoded-text"
     (with-screen (s 20 5)
-      ;; Base64-encode \"hello\" -> SGVsbG8=
       (let* ((received nil)
              (nerimux/terminal/parser:*osc52-handler*
                (lambda (text) (setf received text))))
-        ;; Base64 of "hello" is aGVsbG8=  (SGVsbG8= would decode to "Hello").
-        ;; Feed OSC 52 ; c ; aGVsbG8= BEL  (c = clipboard target, ignored)
         (screen-process-bytes s
           (cl-codec-kit:string-to-octets
             (format nil "~C]52;c;aGVsbG8=~C" #\Escape (code-char 7))
             :encoding :utf-8))
         (expect (string= "hello" received)))))
 
-  ;; When *osc52-handler* is NIL, an OSC 52 sequence is consumed without error.
   (it "osc52-nil-handler-silently-dropped"
     (with-screen (s 20 5)
       (let ((nerimux/terminal/parser:*osc52-handler* nil))
@@ -29,7 +22,6 @@
               (format nil "~C]52;c;SGVsbG8=~C" #\Escape (code-char 7))
               :encoding :utf-8))))))
 
-  ;; OSC 52 with payload '?' (clipboard read request) is silently ignored.
   (it "osc52-read-request-silently-ignored"
     (with-screen (s 20 5)
       (let* ((received :not-called)
@@ -45,21 +37,11 @@
     (let* ((received :not-called)
            (nerimux/terminal/parser:*osc52-handler*
              (lambda (text) (setf received text))))
-      ;; 7aCA is Base64 for the invalid UTF-8 byte sequence ED A0 80.
       (finishes
         (nerimux/terminal/parser::%handle-osc-52 "c;7aCA"))
       (expect (eq :not-called received))))
 
-  ;;; ── Coverage gap: osc52-clipboard-sequence (outbound OSC 52 builder) ────────
-  ;;;
-  ;;; osc52-clipboard-sequence is exported from nerimux/terminal/parser but was
-  ;;; previously exercised only indirectly (its counterpart, inbound OSC 52
-  ;;; decoding via %handle-osc-52, is covered by the tests above).  This is the
-  ;;; OUTBOUND direction: build the escape sequence nerimux writes to the real
-  ;;; terminal to copy TEXT onto the host clipboard.
 
-  ;; osc52-clipboard-sequence builds ESC ] 52 ; c ; <base64> ESC \, and the
-  ;; embedded Base64 payload decodes back to the original UTF-8 text.
   (it "osc52-clipboard-sequence-round-trips-through-base64-decode"
     (let* ((text   "hello, nerimux!")
            (seq    (nerimux/terminal/parser:osc52-clipboard-sequence text))

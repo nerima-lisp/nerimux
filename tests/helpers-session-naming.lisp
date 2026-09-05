@@ -1,4 +1,3 @@
-;;;; Session and window naming helpers for nerimux tests.
 (in-package #:nerimux/test)
 
 (defmacro with-registered-sessions ((&rest session-bindings) &body body)

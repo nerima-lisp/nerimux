@@ -1,36 +1,14 @@
 (in-package #:nerimux)
 
-;;;; Runtime state and per-pane I/O threading.
-;;;;
-;;;; Threading model:
-;;;;   * One reader thread per pane: blocking read(PTY fd) -> pane-feed ->
-;;;;     screen update -> sets *dirty* T.
-;;;;   * Main thread (see events.lisp): select(stdin, 50 ms) -> key dispatch or
-;;;;     PTY forward -> render when *dirty*.
-;;;;
-;;;; PTY children may be spawned while reader/status threads are active, so
-;;;; teardown must reliably join background threads and close pane processes.
 (defun %mark-dirty ()
   "Set the shared redraw flag."
   (setf *dirty* t))
 
 (defun %join-thread-with-timeout (thread &optional
                                          (timeout +reader-thread-join-timeout+))
-  "Join THREAD, waiting at most TIMEOUT seconds.
-
-   SB-THREAD:JOIN-THREAD is called directly rather than through
-   CL-CONCURRENT-KIT:JOIN-THREAD only because there is nothing to gain from the
-   wrapper here: it forwards :TIMEOUT to this same call.  Signals
-   SB-THREAD:JOIN-THREAD-ERROR when the deadline passes or THREAD aborted;
-   callers that treat a stuck reader as survivable wrap this in IGNORE-ERRORS.
-
-   This used to carry a #-SBCL polling fallback for implementations whose
-   JOIN-THREAD takes no timeout.  It was already incoherent — the #+SBCL branch
-   above it made the function SBCL-only in practice — and ADR-0048 makes the
-   whole org SBCL-only, so the dead branch is gone rather than conditionalized."
+  "Join THREAD, waiting at most TIMEOUT seconds."
   (sb-thread:join-thread thread :timeout timeout))
 
-;;; -- Wait-for channel synchronization ----------------------------------------
 (defmacro with-channel-plist ((lk cv ch) &body body)
   "Bind LK and CV to the :lock and :cv fields of the channel plist CH."
   (let ((ch-var (gensym "CH")))
@@ -87,7 +65,6 @@
    deliver signals that were suppressed while the channel was locked."
   (%set-channel-locked name nil))
 
-;;; -- SIGWINCH ---------------------------------------------------------------
 (defun install-sigwinch-handler ()
   "Arm SIGWINCH so terminal resizes flag a one-shot relayout."
   (sb-sys:enable-interrupt sb-unix:sigwinch

@@ -1,11 +1,9 @@
 (in-package #:nerimux/session)
 
-;;; ── Session ID counter ──────────────────────────────────────────────────────
 (defparameter *session-id-counter*
   0
   "Auto-increment counter for session IDs. Each new session gets (incf *session-id-counter*).")
 
-;;; ── Session ────────────────────────────────────────────────────────────────
 (defstruct session
   "Top-level container: a named set of windows with one active."
   (id          0   :type fixnum)
@@ -15,18 +13,11 @@
   (last-active 0   :type integer)   ; universal-time of last access; updated on touch
   (created (get-universal-time) :type integer) ; universal-time at construction (#{session_created})
   (window-stack nil :type list)     ; windows in MRU order, current first (#{window_stack_index})
-  ;; Per-session window index overrides: window -> index in THIS session.
-  ;; One window can carry different indexes in different sessions; the
-  ;; override applies only where link-window placed it at a non-default
-  ;; slot (absent = the window's own id).
   (window-index-map (make-hash-table :test #'eq) :type hash-table)
   (clients     nil :type list)      ; list of connected client descriptors
-  ;; NIL or string: session working dir (new-session/attach-session -c)
   (start-directory nil)
   (environment (make-hash-table :test #'equal))
   (environment-unsets nil :type list)
-  ;; Names marked hidden via set-environment -h:
-  ;; excluded from plain show-environment and from child-process environments.
   (environment-hidden nil :type list))
 
 (defun session-active-window (session)
@@ -40,7 +31,6 @@
    without the timestamp side effect should set (session-active session) directly."
   (setf (session-active session) window)
   (when window
-    ;; MRU stack for #{window_stack_index}: current window moves to the front.
     (setf (session-window-stack session)
           (cons window (delete window (session-window-stack session))))
     (setf (window-last-active-time window) (get-universal-time))))
@@ -51,11 +41,6 @@
     (when window
       (window-active-pane window))))
 
-;;; ── Full-screen window factory ──────────────────────────────────────────────
-;;;
-;;; Data/logic separation:
-;;;   %attach-full-screen-pane  — window data setup (PTY pane → tree leaf)
-;;;   session-new-window        — session attachment (window → session list)
 (defun %attach-full-screen-pane (window rows
                                         cols
                                         &key
@@ -139,13 +124,9 @@
                               :start-dir start-dir
                               :default-command default-command)
     (session-insert-window session win)
-    ;; Focus assignment is logic — kept as an explicit named call so callers
-    ;; can opt out by using session-insert-window directly if no focus switch
-    ;; is desired.
     (session-select-window session win)
     win))
 
-;;; ── Window removal ──────────────────────────────────────────────────────────
 (defun session-remove-window (session window)
   "Remove WINDOW from SESSION: drop it from the window list, the MRU stack,
    and the winlink index-override table.  Clears SESSION's active window when
@@ -160,7 +141,6 @@
     (setf (session-active session) nil))
   (session-windows session))
 
-;;; ── Global state & initialisation ─────────────────────────────────────────
 (defun session-touch (session)
   "Update SESSION's last-active timestamp to the current universal time."
   (setf (session-last-active session) (get-universal-time))
@@ -198,7 +178,6 @@
   (let* ((session   (make-session :id (incf *session-id-counter*)
                                   :name "0"
                                   :last-active (get-universal-time)))
-         ;; Reserve one row at the bottom for the status bar.
          (pane-rows (- rows +status-line-rows+)))
     (session-new-window session (%shell-basename) pane-rows cols +base-index+ start-dir)
     session))
@@ -208,7 +187,6 @@
   (loop for window in (session-windows session)
         nconc (copy-list (window-panes window))))
 
-;;; ── Window reordering ────────────────────────────────────────────────────────
 (defun session-move-window (session window target-index)
   "Move WINDOW to TARGET-INDEX (0-based) in SESSION's window list.
    Clamps TARGET-INDEX to valid range. Returns the updated window list."
@@ -244,7 +222,3 @@
   (let* ((wins (session-windows session))
          (sorted (sort (copy-list wins) #'> :key #'window-last-active-time)))
     (second sorted)))
-
-;;; Environment management has been split into
-;;; session-environment-process.lisp, session-environment-overlay.lisp, and
-;;; session-environment-child.lisp.

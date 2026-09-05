@@ -1,11 +1,5 @@
 (in-package #:nerimux/renderer)
 
-;;;; Pane and border rendering.
-;;;;
-;;;; Depends on the ANSI escape-code primitives from renderer-format.lisp
-;;;; (loaded first in the same package) and the layout/model structures from
-;;;; nerimux/model.
-;;; ── Per-row cell rendering ───────────────────────────────────────────────────
 (defstruct (sgr-register (:conc-name sgr-reg-))
   "Mutable SGR state registers threaded across cells (and rows for hyperlinks).
    Tracks the last-emitted attribute values so redundant SGR sequences are suppressed."
@@ -96,18 +90,12 @@
                                          base-fg base-bg)
           (let* ((fg (if mark-col-p mark-fg sel-fg))
                  (bg (if mark-col-p mark-bg sel-bg))
-                 ;; DECSCNM (reverse-video screen) and the selection highlight both
-                 ;; toggle reverse; XOR both so a cell that is reverse for two
-                 ;; reasons renders normal (correct double-reverse).
                  (attrs (%pane-cell-attrs cell in-sel selection-style-colour mark-col-p rev-screen))
-                 ;; Extended attributes and underline colour pass through without
-                 ;; modification (no selection / DECSCNM involvement).
                  (attrs2   (cell-attrs2 cell))
                  (ul-color (cell-ul-color cell)))
             (%emit-cell-sgr-if-changed stream sgr-reg fg bg attrs attrs2 ul-color)
             (%emit-cell-hyperlink-if-changed stream sgr-reg (cell-hyperlink cell))
             (write-char (cell-char cell) stream)
-            ;; Unicode combining characters (zero-width marks) follow the base char.
             (dolist (ch (cell-combining cell))
               (write-char ch stream))))))))
 
@@ -127,10 +115,6 @@
    colours.
    MARK-STYLE-FG / MARK-STYLE-BG (or NIL) are the copy-mode mark-row colours.
   Returns nothing; mutates SGR-REG as a side-effect."
-  ;; DECDHL/DECDWL: re-emit the row's line-size attribute so the OUTER
-  ;; terminal draws double-width/height lines.  Only active when any row
-  ;; carries a size flag; unflagged rows then emit single-width (ESC # 5)
-  ;; to reset a previously-flagged terminal line.
   (let ((sizes (nerimux/terminal/types:screen-line-sizes screen)))
     (when (plusp (hash-table-count sizes))
       (format stream "~C#~C" #\Escape (or (gethash row sizes) #\5))))
@@ -138,8 +122,6 @@
                                nerimux/terminal/types:+attr-reverse+)
         for col below pane-col-count
         for cell = (screen-display-cell screen col row viewport)
-        ;; A continuation cell (width 0) is the right half of a double-width
-        ;; glyph the terminal already drew — emit nothing.
         unless (zerop (cell-width cell))
           do (%render-cell stream cell row col sgr-reg rev-screen
                            def-fg def-bg selection-style-fg selection-style-bg
@@ -221,23 +203,6 @@
   mark-fg
   mark-bg)
 
-;;; window-style / window-active-style (the pane-background recolour hook)
-;;; defaulted to "" — no override — and nothing could ever set them once
-;;; domain/options (R2.2) has no config or set-option to write through, so
-;;; DEF-FG/DEF-BG below are always NIL: %pane-cell-base-colors never
-;;; recolours a cell.  copy-mode-mark-style (§1.4: mark the selection anchor
-;;; row) is the one style here that ever resolved to real colours — its
-;;; default "bg=red,fg=black" parsed via the old %color-name-to-cell-color
-;;; table to cell colours 1 (red) / 0 (black); those two integers are now
-;;; hardcoded instead of re-derived from the string every frame.
-;;;
-;;; copy-mode-selection-style (§1.4/R6.8: selection shown by video reverse)
-;;; never resolved to a colour either way — its default "reverse" and the
-;;; registry's "#{E:mode-style}" both parse to a plist with no :fg/:bg key,
-;;; so SELECTION-FG/-BG were always NIL and the highlight always came from
-;;; the reverse-video XOR in %pane-cell-attrs (below), never from a colour
-;;; substitution here.  Deleting the dead colour path leaves that XOR as the
-;;; only mechanism, matching the fixed decision exactly.
 (defconstant +copy-mode-mark-fg+
   0
   "Cell-colour index for the copy-mode mark row's foreground (black).
@@ -275,13 +240,9 @@
    copy-mode-line-numbers is fixed \"off\" (§1.4), so there is no gutter to
    reserve — content always fills the pane's full width."
   (with-lock-held ((screen-lock screen))
-    ;; Hoist selection boundary computation outside the cell loop so it is
-    ;; computed once per frame instead of once per cell (~1920 times).
     (multiple-value-bind (sel-active sel-start-row sel-end-row sel-start-col sel-end-col
                           sel-rect-p sel-mark-row sel-mark-col)
         (%compute-selection-bounds screen)
-      ;; sgr-register bundles the mutable last-emitted SGR state so
-      ;; %render-cell-row can detect and suppress redundant attribute sequences.
       (let ((sgr-reg (make-sgr-register))
             (sel     (make-selection-bounds :active sel-active
                                             :start-row sel-start-row :end-row sel-end-row
@@ -298,7 +259,6 @@
                               (pane-style-selection-fg colours) (pane-style-selection-bg colours)
                               (pane-style-mark-fg colours) (pane-style-mark-bg colours)
                               viewport)))
-        ;; Close any hyperlink still open at the end of the pane (OSC 8 ; ;).
         (when (sgr-reg-hyperlink sgr-reg)
           (write-string (format nil "~C]8;;~C\\" #\Escape #\Escape) stream)))))
   (screen-clear-dirty screen))
@@ -315,7 +275,5 @@
                        origin-x origin-y
                        (%resolve-pane-style-colours pane)
                        viewport)
-    ;; Copy-mode overlay is rendered as a right-aligned slice so it does not
-    ;; repaint the whole pane row.
     (%render-copy-mode-position-overlay stream pane
                                         origin-x origin-y pane-width)))

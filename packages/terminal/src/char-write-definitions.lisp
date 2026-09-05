@@ -1,6 +1,5 @@
 (in-package #:nerimux/terminal/actions)
 
-;;;; Declarative character mappings and width classification used while writing.
 (defmacro define-dec-graphics-table (&rest mappings)
   "Generate %DEC-GRAPHICS-CHAR from a declarative character-mapping table.
 Each MAPPING is (ASCII-CHAR UNICODE-CHAR DESCRIPTION); DESCRIPTION documents the

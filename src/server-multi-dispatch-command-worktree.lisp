@@ -1,119 +1,15 @@
 (in-package #:nerimux)
 
-(defun %client-create-worktree-now (repository branch
-                                               conn
-                                               session
-                                               &key
-                                               path
-                                               force)
-  "The worktree-create core shared by both entry paths (item 5): `n`'s
-   immediate auto-branch create (server-multi-dispatch-command-input.lisp,
-   %CLIENT-START-WORKTREE-CREATE) and `:wt-create --branch <name> --confirm`
-   (%CLIENT-CREATE-WORKTREE below). Takes REPOSITORY and BRANCH as already
-   resolved and validated -- it does not itself gate on --confirm, since that
-   gate belongs to whichever caller is exposed to an unconfirmed keystroke:
-   for `n` a single keystroke IS the confirmation, and for `:` the gate is
-   %CLIENT-CREATE-WORKTREE's own guard, run before this is ever reached.
-
-   On completion, jumps CONN straight to the new worktree's shell when
-   SESSION is available (user decision: create now attaches immediately,
-   with no intermediate branch prompt) -- both callers want this, so it
-   lives here once rather than being duplicated at each call site. SESSION
-   may be NIL (e.g. no session registered yet, or a hermetic unit test with
-   no *SERVER-SESSIONS* entry), in which case the jump is simply skipped and
-   the worktree is only selected, exactly as before this feature existed."
-  (%client-notify conn (format nil "creating worktree ~A" branch))
-  (%mark-workspace-refreshing :repository
-                              (nerimux/workspace-model:repository-id repository))
-  (flet ((%on-error (condition)
-           (%clear-workspace-refreshing :repository
-                                        (nerimux/workspace-model:repository-id
-                                         repository)
-                                        :stale-p
-                                        t)
-           (%client-notify conn
-                           (format nil "worktree create failed: ~A" condition))
-           (%mark-dirty)))
-    (handler-case (nerimux/vcs:create-worktree-async repository
-                                                     :branch
-                                                     branch
-                                                     :path
-                                                     path
-                                                     :force
-                                                     force
-                                                     :callback-dispatch
-                                                     #'%enqueue-main-thread-callback
-                                                     :on-complete
-                                                     (lambda (worktree)
-                                                       (%clear-workspace-refreshing
-                                                        :repository
-                                                        (nerimux/workspace-model:repository-id
-                                                         repository))
-                                                       (when 
-                                                           (%client-live-p conn)
-                                                         (%set-client-selected-worktree
-                                                          conn
-                                                          worktree)
-                                                         (when session
-                                                           (%focus-selected-client-worktree
-                                                            session
-                                                            conn)))
-                                                       (%refresh-client-picker
-                                                        conn)
-                                                       (%client-notify conn
-                                                                       "worktree created")
-                                                       (%mark-dirty))
-                                                     :on-error
-                                                     #'%on-error)
-      (error (condition)
-        (%on-error condition))))
-  t)
-
-(defun %client-create-worktree (conn target args)
-  (if (not (%client-boolean-option-p args '("--confirm" "confirm")))
-      (progn
-        (%client-notify conn "worktree create requires --confirm")
-        t)
-      (let* ((repository (%client-selected-repository conn target))
-             (branch (or (%client-option-value args
-                                               '("--branch" "-b" "branch"))
-                         (%client-positional-branch args)))
-             (path (%client-option-value args '("--path" "path")))
-             (force (%client-boolean-option-p args '("--force" "force"))))
-        (cond
-          ((not repository)
-           (%client-notify conn "worktree create requires a repository")
-           t)
-          ((not (and (stringp branch) (plusp (length branch))))
-           (%client-notify conn "worktree create requires a branch")
-           t)
-          ((not (nerimux/vcs:vcs-package-available-p))
-           (%client-notify conn "VCS adapter unavailable")
-           t)
-          (t
-           ;; %ATTACH-TARGET-SESSION, not a threaded parameter: this function's
-           ;; own call signature (CONN TARGET ARGS) is fixed by its `:`
-           ;; command-dispatch call site (server-multi-dispatch-command.lisp,
-           ;; outside this change's scope), which has no session argument to
-           ;; pass through either -- same rationale as that function's own
-           ;; docstring.
-           (%client-create-worktree-now
-            repository branch conn (%attach-target-session)
-            :path path :force force))))))
-
 (defun %client-delete-worktree (conn target args)
-  (if (not (%client-boolean-option-p args '("--confirm" "confirm")))
-      (progn
-        (%client-notify conn "worktree delete requires --confirm")
-        t)
-      (let ((worktree (%client-operation-worktree conn target))
-            (force (%client-boolean-option-p args '("--force" "force"))))
+  (%with-client-confirmation (conn args "delete")
+    (let ((worktree (%client-operation-worktree conn target))
+          (force (%client-boolean-option-p args '("--force" "force"))))
         (cond
           ((not worktree)
             (%client-notify conn "worktree delete requires a worktree")
             t)
           ((not (nerimux/vcs:vcs-package-available-p))
-            (%client-notify conn "VCS adapter unavailable")
+            (%client-notify conn "VCS unavailable")
             t)
           (t
             (%client-notify conn
@@ -172,120 +68,79 @@
                   (%on-error condition))))
             t)))))
 
-(defun %client-lock-worktree (conn target args)
-  (if (not (%client-boolean-option-p args '("--confirm" "confirm")))
-      (progn
-        (%client-notify conn "worktree lock requires --confirm")
-        t)
-      (let ((worktree (%client-operation-worktree conn target))
-            (reason (%client-option-value args '("--reason" "reason"))))
-        (cond
-          ((not worktree)
-            (%client-notify conn "worktree lock requires a worktree")
-            t)
-          ((not (nerimux/vcs:vcs-package-available-p))
-            (%client-notify conn "VCS adapter unavailable")
-            t)
-          (t
+(defmacro %define-worktree-state-operation
+    (name operation command progressive complete &rest operation-arguments)
+  `(defun ,name (conn target args)
+     (%with-client-confirmation (conn args ,command)
+       (let ((worktree (%client-operation-worktree conn target)))
+         (cond
+           ((not worktree)
             (%client-notify conn
-                            (format nil
-                                    "locking worktree ~A"
+                            (format nil "worktree ~A requires a worktree"
+                                    ,command))
+            t)
+           ((not (nerimux/vcs:vcs-package-available-p))
+            (%client-notify conn "VCS unavailable")
+            t)
+           (t
+            (%client-notify conn
+                            (format nil "~A worktree ~A"
+                                    ,progressive
                                     (nerimux/workspace-model:worktree-path
                                      worktree)))
-            (%mark-workspace-refreshing :worktree
-                                        (nerimux/workspace-model:worktree-id
-                                         worktree))
+            (%mark-workspace-refreshing
+             :worktree
+             (nerimux/workspace-model:worktree-id worktree))
             (flet ((%on-error (condition)
-                     (%clear-workspace-refreshing :worktree
-                                                  (nerimux/workspace-model:worktree-id
-                                                   worktree)
-                                                  :stale-p
-                                                  t)
-                     (%client-notify conn
-                                     (format nil
-                                             "worktree lock failed: ~A"
-                                             condition))
+                     (%clear-workspace-refreshing
+                      :worktree
+                      (nerimux/workspace-model:worktree-id worktree)
+                      :stale-p
+                      t)
+                     (%client-notify
+                      conn
+                      (format nil "worktree ~A failed: ~A"
+                              ,command
+                              condition))
                      (%mark-dirty)))
-              (handler-case (nerimux/vcs:lock-worktree-async worktree
-                                                             :reason
-                                                             reason
-                                                             :callback-dispatch
-                                                             #'%enqueue-main-thread-callback
-                                                             :on-complete
-                                                             (lambda (ignored)
-                                                               (declare (ignore
-                                                                         ignored))
-                                                               (%clear-workspace-refreshing
-                                                                :worktree
-                                                                (nerimux/workspace-model:worktree-id
-                                                                 worktree))
-                                                               (%refresh-client-picker
-                                                                conn)
-                                                               (%client-notify
-                                                                conn
-                                                                "worktree locked")
-                                                               (%mark-dirty))
-                                                             :on-error
-                                                             #'%on-error)
+              (handler-case
+                  (,operation worktree
+                              ,@operation-arguments
+                              :callback-dispatch
+                              #'%enqueue-main-thread-callback
+                              :on-complete
+                              (lambda (ignored)
+                                (declare (ignore ignored))
+                                (%clear-workspace-refreshing
+                                 :worktree
+                                 (nerimux/workspace-model:worktree-id
+                                  worktree))
+                                (%refresh-client-picker conn)
+                                (%client-notify
+                                 conn
+                                 (format nil "worktree ~A" ,complete))
+                                (%mark-dirty))
+                              :on-error
+                              #'%on-error)
                 (error (condition)
                   (%on-error condition))))
-            t)))))
+            t))))))
 
-(defun %client-unlock-worktree (conn target args)
-  (if (not (%client-boolean-option-p args '("--confirm" "confirm")))
-      (progn
-        (%client-notify conn "worktree unlock requires --confirm")
-        t)
-      (let ((worktree (%client-operation-worktree conn target)))
-        (cond
-          ((not worktree)
-            (%client-notify conn "worktree unlock requires a worktree")
-            t)
-          ((not (nerimux/vcs:vcs-package-available-p))
-            (%client-notify conn "VCS adapter unavailable")
-            t)
-          (t
-            (%client-notify conn
-                            (format nil
-                                    "unlocking worktree ~A"
-                                    (nerimux/workspace-model:worktree-path
-                                     worktree)))
-            (%mark-workspace-refreshing :worktree
-                                        (nerimux/workspace-model:worktree-id
-                                         worktree))
-            (flet ((%on-error (condition)
-                     (%clear-workspace-refreshing :worktree
-                                                  (nerimux/workspace-model:worktree-id
-                                                   worktree)
-                                                  :stale-p
-                                                  t)
-                     (%client-notify conn
-                                     (format nil
-                                             "worktree unlock failed: ~A"
-                                             condition))
-                     (%mark-dirty)))
-              (handler-case (nerimux/vcs:unlock-worktree-async worktree
-                                                               :callback-dispatch
-                                                               #'%enqueue-main-thread-callback
-                                                               :on-complete
-                                                               (lambda (ignored)
-                                                                 (declare (ignore
-                                                                           ignored))
-                                                                 (%clear-workspace-refreshing
-                                                                  :worktree
-                                                                  (nerimux/workspace-model:worktree-id
-                                                                   worktree))
-                                                                 (%refresh-client-picker
-                                                                  conn)
-                                                                 (%client-notify
-                                                                  conn
-                                                                  "worktree unlocked")
-                                                                 (%mark-dirty))
-                                                               :on-error
-                                                               #'%on-error)
-                (error (condition)
-                  (%on-error condition))))
-            t)))))
+(%define-worktree-state-operation
+ %client-lock-worktree
+ nerimux/vcs:lock-worktree-async
+ "lock"
+ "locking"
+ "locked"
+ :reason
+ (%client-option-value args '("--reason" "reason")))
+
+(%define-worktree-state-operation
+ %client-unlock-worktree
+ nerimux/vcs:unlock-worktree-async
+ "unlock"
+ "unlocking"
+ "unlocked")
 
 (defun %client-prune-worktrees (conn target args &key dry-run)
   "Preview or perform a git worktree prune for the target repository.
@@ -316,7 +171,7 @@ preview, or a preview of a different repository."
                             "worktree prune requires a preview first: run wt-prune, then wt-prune-confirm --confirm")
             t)
           ((not (nerimux/vcs:vcs-package-available-p))
-            (%client-notify conn "VCS adapter unavailable")
+          (%client-notify conn "VCS unavailable")
             t)
           (t
             (%client-notify conn

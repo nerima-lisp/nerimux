@@ -1,6 +1,5 @@
 (in-package #:nerimux/renderer)
 
-;;;; Compile-time fact-table constructors for ANSI renderer helpers.
 (defmacro define-colour-emitters (&rest specs)
   "Build %EMIT-FG and %EMIT-BG from a declarative spec table.
    Each SPEC is (name label std-base bright-base palette-prefix tc-prefix default-val).

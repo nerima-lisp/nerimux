@@ -1,9 +1,5 @@
 (in-package #:nerimux/terminal/types)
 
-;;;; Screen resize logic.
-;;;;
-;;;; This file sits after screen-metadata so resize can reset capture metadata
-;;;; without making the screen data definition depend on later logic.
 (defun %copy-overlapping-cells (screen old-cells old-width copy-cols copy-rows)
   "Copy the top-left COPY-COLS x COPY-ROWS rectangle from OLD-CELLS (a raw
    vector with OLD-WIDTH stride) into SCREEN's freshly installed grid."
@@ -27,8 +23,6 @@
   (let* ((old-width  (screen-width  screen))
          (old-height (screen-height screen))
          (old-cells  (screen-cells  screen)))
-    ;; Install the new grid before using screen-cell so the index arithmetic
-    ;; uses new-width. Copy the old content via OLD-CELLS using old-width stride.
     (setf (screen-cells  screen) (%make-blank-cells (* new-width new-height))
           (screen-width  screen) new-width
           (screen-height screen) new-height)
@@ -39,6 +33,5 @@
           (screen-cursor-x      screen) (clamp (screen-cursor-x screen) 0 (1- new-width))
           (screen-cursor-y      screen) (clamp (screen-cursor-y screen) 0 (1- new-height))
           (screen-dirty-p       screen) t)
-    ;; Content reflows on resize; drop the -J wrap flags (re-marked as new wraps occur).
     (%clear-all-line-wrapped screen)
     screen))

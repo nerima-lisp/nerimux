@@ -1,23 +1,5 @@
 (in-package #:nerimux/terminal/actions)
 
-;;;; Character and line editing: insert/delete within lines and rows.
-;;;;
-;;;; Loads after scroll.lisp (needs %copy-row, %clear-row) and erase.lisp.
-;;;; These implement the DCH/ICH/IL/DL VT102 operations.
-;;; ── Prolog-style char-edit dispatch macro ──────────────────────────────────
-;;;
-;;; delete-chars and insert-chars share the same two-loop skeleton:
-;;;   1. shift loop  — copy cells in one direction
-;;;   2. blank-fill loop — clear the vacated cells
-;;;
-;;; define-char-edit-rules builds both functions from a declarative table:
-;;;   (name docstring shift-start shift-end shift-src blank-start blank-end)
-;;;
-;;; Prolog-like facts:
-;;;   char_edit(delete, Screen, N) :- shift_loop(cx .. w-n-1, src=x+n),
-;;;                                   blank_fill_loop(max(cx, w-n) .. w-1).
-;;;   char_edit(insert, Screen, N) :- shift_loop(w-1 downto cx+n, src=x-n),
-;;;                                   blank_fill_loop(cx .. min(w-1, cx+n-1)).
 (defmacro define-char-edit-rules (&rest specs)
   "Generate character-edit functions from a Prolog-like two-loop rule table.
    Each SPEC is (name docstring shift-loop-form blank-loop-form).
@@ -54,23 +36,6 @@
   (loop for x from cx to (min (1- w) (+ cx n -1))
         do (setf (screen-cell screen x cy) (%erase-cell screen)))))
 
-;;; ── Prolog-style line-edit dispatch macro ──────────────────────────────────
-;;;
-;;; insert-lines and delete-lines share the same skeleton:
-;;;   scroll-region guard + count-clamp + shift loop + blank-fill loop.
-;;;
-;;; define-line-edit-rules builds both from a declarative table:
-;;;   (name docstring shift-loop-form blank-loop-form)
-;;;
-;;; Prolog-like facts:
-;;;   line_edit(insert, Screen, N) :- guard(top <= bottom),
-;;;     count = min(N, bottom - top + 1),
-;;;     shift_loop(bottom downto top+count, src=row-count),
-;;;     blank_fill_loop(top .. top+count-1).
-;;;   line_edit(delete, Screen, N) :- guard(top <= bottom),
-;;;     count = min(N, bottom - top + 1),
-;;;     shift_loop(top .. bottom-count, src=row+count),
-;;;     blank_fill_loop(bottom-count+1 .. bottom).
 (defmacro define-line-edit-rules (&rest specs)
   "Generate line-edit functions from a Prolog-like guard+clamp+two-loop table.
    Each SPEC is (name docstring shift-loop-form blank-loop-form).
@@ -83,9 +48,6 @@
                ,docstring
                (let* ((top    (screen-cursor-y      screen))
                       (bottom (screen-scroll-bottom screen)))
-                 ;; IL/DL operate only when the cursor is INSIDE the scroll region:
-                 ;; ignored when above scroll-top (would shift rows outside the
-                 ;; region) or below scroll-bottom (top > bottom).  Per VT spec.
                  (when (and (<= (screen-scroll-top screen) top) (<= top bottom))
                    (let ((count (min n (- bottom top -1))))
                      ,shift-loop

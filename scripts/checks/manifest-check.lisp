@@ -1,23 +1,3 @@
-;;;; Cross-check every declaration of a test file against the files on disk.
-;;;;
-;;;; Two failure modes this catches, both of which kill the whole suite or hide
-;;;; tests silently:
-;;;;   MISSING  — something names a component with no file behind it.  ASDF
-;;;;              aborts loading that system, so its tests disappear at once.
-;;;;   ORPHAN   — a .lisp file under tests/ or packages/*/tests/ that nothing
-;;;;              names.  It is never loaded, so its tests silently stop
-;;;;              running.
-;;;;
-;;;; There are two declaration sites, not one.  Root test files are enumerated
-;;;; by system/asdf-test-components.lisp, a plain DEFPARAMETER in CL-USER that
-;;;; loads without ASDF.  Each extracted unit enumerates its own test files in
-;;;; packages/<name>/nerimux-<name>.asd instead.  Reading only the first would
-;;;; report every unit's tests as ORPHAN — the invariant is "no test file goes
-;;;; unloaded", not "the root manifest lists it".
-;;;;
-;;;; The .asd files are READ, never evaluated.  ASDF is required first only so
-;;;; the reader can resolve the package-qualified symbols inside a :perform
-;;;; form; nothing here calls into ASDF.
 (require :asdf)
 
 (load "system/asdf-test-components.lisp")
@@ -56,7 +36,6 @@
 (dolist (asd (directory "packages/*/nerimux-*.asd"))
   (let ((unit-dir (let* ((s (namestring asd))
                          (slash (position #\/ s :from-end t)))
-                    ;; "…/packages/text/nerimux-text.asd" -> "packages/text/"
                     (let ((dir (subseq s 0 (1+ slash))))
                       (subseq dir (search "packages/" dir))))))
     (with-open-file (in asd :external-format :utf-8)
@@ -77,9 +56,6 @@
        (on-disk (sort (mapcar (lambda (p)
                                 (let ((s (namestring p)))
                                   (subseq s (length root))))
-                              ;; tests/pty belongs to nerimux/pty-test and tests/e2e is run by hand against a
-                              ;; built binary; neither is in this manifest by design, so
-                              ;; neither should be reported as an accident.
                               (remove-if (lambda (p)
                                            (let ((s (namestring p)))
                                              (or (search "/tests/pty/" s)

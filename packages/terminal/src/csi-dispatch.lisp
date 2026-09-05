@@ -1,10 +1,5 @@
 (in-package #:nerimux/terminal/csi)
 
-;;;; CSI dispatch macro.
-;;;;
-;;;; The terminal domain keeps CSI decoding declarative: each rule is a fact
-;;;; whose predicate selects a protocol action.  The macro expands that table
-;;;; into the single EXECUTE-CSI entry point consumed by the parser.
 (defmacro define-csi-rules (&rest rules)
   "Each RULE is (condition-form &body forms).
    Available bindings in every rule body:
@@ -45,9 +40,7 @@
          (t (values))))))
 
 (defmacro define-csi-rule-set (name &body rules)
-  "Define NAME as a declarative provider of CSI RULES.
-The generated macro expands to a quoted rule list so composition can inspect
-the data without evaluating rule predicates outside EXECUTE-CSI."
+  "Define NAME as a declarative provider of CSI RULES."
   `(defmacro ,name ()
      (list 'quote ',rules)))
 

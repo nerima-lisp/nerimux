@@ -1,8 +1,5 @@
 (in-package #:nerimux/test/terminal)
 
-;;;; Scroll-region parser-path tests for scroll.lisp and edit.lisp.
-;;;; Suite: scroll-region.
-;;; ── SUITE: scroll-region ────────────────────────────────────────────────────
 (defmacro define-scroll-region-cases (&body cases)
   "Define scroll-region parser-path cases from declarative rows."
   (labels ((case-option (options key)
@@ -37,13 +34,11 @@
 
   (define-scroll-region-cases
     (scroll-auto
-     ;; Writing a 4th line into a 3-row screen scrolls the content up.
      :screen (5 3)
      :steps ((:feed-lines "L1" "L2" "L3" "L4"))
      :assertions ((:check-row 0 "L2")
                   (:check-row 2 "L4")))
     (decstbm-restricts-scroll-to-region
-     ;; DECSTBM restricts scrolling to the specified region (rows 2-3 of 5).
      :screen (5 5)
      :steps ((:feed-lines "R0" "R1" "R2" "R3" "R4")
              (:feed (esc "[2;4r"))
@@ -51,7 +46,6 @@
              (:feed-lines "" "NR"))
      :assertions ((:row-prefix 0 "R0" 2 "row 0 should be untouched, got ~S")))
     (reverse-index-scrolls-region-down
-     ;; ESC M at the top of the scroll region scrolls the region down.
      :screen (5 3)
      :steps ((:feed-lines "AA" "BB" "CC")
              (:feed (esc "[1;1H"))
@@ -60,7 +54,6 @@
                     "after RI, old row 0 should be at row 1; got ~S")
                   (:row-blank 0)))
     (il-insert-lines-pushes-content-down
-     ;; ESC[2L (insert 2 lines) pushes existing content down.
      :screen (5 4)
      :steps ((:feed-lines "AA" "BB" "CC" "DD")
              (:feed (esc "[2;1H"))
@@ -70,7 +63,6 @@
                   (:row-blank 2)
                   (:check-row 3 "BB")))
     (dl-delete-lines-pulls-content-up
-     ;; ESC[2M (delete 2 lines) pulls content up.
      :screen (5 4)
      :steps ((:feed-lines "AA" "BB" "CC" "DD")
              (:feed (esc "[2;1H"))

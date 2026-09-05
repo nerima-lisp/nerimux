@@ -1,31 +1,9 @@
-;;;; Real-PTY attach e2e scenario: drive the *real* nerimux binary inside a
-;;;; PTY.
-;;;;
-;;;; This is the ONLY e2e file that loads the nerimux system -- it needs
-;;;; nerimux/pty (forkpty-with-shell, pty-read-blocking-into, select-fds,
-;;;; pty-child-exit-status) and a real /dev/ptmx. e2e-smoke.lisp loads this
-;;;; file lazily, only when the attach scenario is selected, and wraps the
-;;;; load in HANDLER-CASE so a load failure here cannot take down the
-;;;; headless scenario results.
-;;;;
-;;;; The scenario spawns `nerimux attach` on a pseudo-terminal, enters
-;;;; :input mode, types `echo <marker>` at the keyboard, and verifies the
-;;;; marker appears in nerimux's *rendered* output -- proving the full
-;;;; pipeline: stdin -> key forward -> inner shell -> PTY reader thread ->
-;;;; screen -> renderer. Then it sends the detach key (C-q d) and verifies
-;;;; the process exits cleanly.
-;;;;
-;;;; Depends on helpers.lisp (%CONFIGURE-ASDF-REGISTRY, %MAKE-ACCUMULATOR,
-;;;; %ACCUMULATE-CHUNK, %SEARCH-IN-TAIL) already being loaded, and on
-;;;; *E2E-REPO-ROOT* being bound by the caller (e2e-smoke.lisp) before this
-;;;; file is loaded.
 (%configure-asdf-registry *e2e-repo-root*)
 
 (asdf:load-system :nerimux)
 
 (use-package :nerimux/pty)
 
-;;; ── Timing constants ─────────────────────────────────────────────────────────
 (defconstant +e2e-startup-timeout-seconds+
   8
   "Maximum seconds to wait for nerimux and its inner shell to initialize before typing.")
@@ -63,7 +41,6 @@
   (* 64 1024)
   "Maximum recent PTY output bytes to scan for the marker.")
 
-;;; ── CPS-style polling loop ───────────────────────────────────────────────────
 (defun %wait-for-marker (fd substr seconds acc)
   "Poll FD for PTY output up to SECONDS, accumulating into ACC.
    Returns T when SUBSTR appears in the output, NIL on timeout."
@@ -133,9 +110,6 @@
       (when (> (get-internal-real-time) deadline) (return (values nil nil)))
       (when (select-fds (list fd) +e2e-poll-timeout-us+)
         (let ((chunk (pty-read-blocking-into fd (make-array +e2e-read-buf-size+ :element-type '(unsigned-byte 8)))))
-          ;; A NIL chunk (EOF/read error) means the child already closed its
-          ;; end -- nothing more to drain, so just fall through to the
-          ;; exit-status check below, same as any other iteration.
           (when chunk (%accumulate-chunk acc chunk))))
       (multiple-value-bind (exit-code exit-kind)
           (pty-child-exit-status
@@ -143,48 +117,23 @@
         (when exit-kind
           (return (values exit-code exit-kind)))))))
 
-;;; ── Scenario entry point ──────────────────────────────────────────────────────
 (defun run-attach-scenario (binary)
   "Drive BINARY through `attach` -> type a marker -> detach. Returns
    (VALUES pass-p detail-string); never calls SB-EXT:EXIT, so the caller
    controls the process's overall exit status."
   (format t "~&[e2e] driving ~A~%" binary)
   (multiple-value-bind (fd pid)
-      ;; :ENVIRONMENT must be passed explicitly: cl-tty-kit's MAKE-PTY always
-      ;; forwards :ENVIRONMENT to SB-EXT:RUN-PROGRAM, even when NIL, which
-      ;; defeats RUN-PROGRAM's own "omit the keyword to inherit" default and
-      ;; spawns the child with an EMPTY environment instead. Without this,
-      ;; the spawned `nerimux attach` can't see this process's TMPDIR (or
-      ;; GHQ_ROOT/NERIMUX_RUNTIME_STATE), so its auto-started server falls
-      ;; back to a fixed, unqualified /tmp/nerimux-<uid>/... socket path --
-      ;; colliding with any other concurrent attach-scenario run on the
-      ;; same machine regardless of each caller's own TMPDIR isolation.
       (forkpty-with-shell 24 80
                           :default-command (format nil "exec ~S attach" binary)
                           :environment (sb-ext:posix-environ))
     (unwind-protect
          (let ((marker "E2E_PROOF_4242")
                (acc    (%make-accumulator)))
-           ;; Let nerimux and its inner shell start up.
            (%wait-for-startup-render fd +e2e-startup-timeout-seconds+ acc)
-           ;; `q`, not `i`. This used to send `i` to leave :normal for :input,
-           ;; because the workspace dropped unbound normal-mode keys and
-           ;; :input then typed into the focused pane from any view. The magit
-           ;; keymap retired that pair: a key reaches the shell only when the
-           ;; client's VIEW is :pane, and attaching from a cwd outside the
-           ;; catalog lands on :repolist. `q` is FR-006's step-back, which from
-           ;; :repolist goes to the focused pane.
-           ;;
-           ;; Leaving the `i` in did not fail loudly -- it was typed literally,
-           ;; the command became `iecho E2E_PROOF_4242`, and the marker never
-           ;; appeared. Nothing caught it because tests/e2e/ sits outside
-           ;; `nix flake check`.
            (pty-write fd (make-array 1 :element-type '(unsigned-byte 8)
                                       :initial-contents (list (char-code #\q))))
            (pty-write fd (format nil "echo ~A~%" marker))
-           ;; Wait for the marker to appear in rendered output.
            (let ((found (%wait-for-marker fd marker +e2e-marker-timeout-seconds+ acc)))
-             ;; Detach: prefix C-q (byte 17) then 'd'.
              (pty-write fd (make-array 2 :element-type '(unsigned-byte 8)
                                           :initial-contents (list 17 (char-code #\d))))
              (multiple-value-bind (exit-code exit-kind)

@@ -1,10 +1,13 @@
-;;;; Declarative rule-table macros for the multi-client server's dispatchers.
-;;;;
-;;;; Moved out of package.lisp (W6): these have nothing to do with package
-;;;; declaration, and package.lisp used to be the only file guaranteed to
-;;;; load before every server-multi-dispatch-*.lisp consumer. Placed first in
-;;;; bootstrap-server's component list for the same reason.
 (in-package #:nerimux)
+
+(defmacro %with-client-confirmation ((conn args operation) &body body)
+  `(if (%client-boolean-option-p ,args '("--confirm" "confirm"))
+       (progn ,@body)
+       (progn
+         (%client-notify ,conn
+                         ,(format nil "worktree ~A requires --confirm"
+                                  operation))
+         t)))
 
 (defmacro define-worktree-command-entry (name command description)
   `(defun ,name (conn)
@@ -95,14 +98,18 @@
                            ,cmd-var
                            ,target-var
                            ,args-var))
-       (cond
-         ,@(mapcar
-            (lambda (rule)
-              (destructuring-bind (pattern &rest body) rule
-                `(,(cond
-                     ((eql pattern t) t)
-                     ((and (consp pattern) (every #'keywordp pattern))
-                      `(member ,cmd-var ',pattern :test #'eq))
-                     ((keywordp pattern) `(eq ,cmd-var ,pattern))
-                     (t pattern)) ,@body)))
-            rules)))))
+       (macrolet ((command-argument (&optional default)
+                    (list 'or ',target-var
+                          (list 'first ',args-var)
+                          default)))
+         (cond
+           ,@(mapcar
+              (lambda (rule)
+                (destructuring-bind (pattern &rest body) rule
+                  `(,(cond
+                       ((eql pattern t) t)
+                       ((and (consp pattern) (every #'keywordp pattern))
+                        `(member ,cmd-var ',pattern :test #'eq))
+                       ((keywordp pattern) `(eq ,cmd-var ,pattern))
+                       (t pattern)) ,@body)))
+              rules))))))

@@ -1,10 +1,5 @@
 (in-package #:nerimux/test/model)
 
-;;;; Session + process-environment fixtures.
-;;;;
-;;;; Split out of tests/helpers-process-fixtures.lisp when domain/model became
-;;;; nerimux-model. Both build a session and set a real environment variable;
-;;;; their only callers are the model session-environment tests.
 (defmacro with-session-and-env-var ((sess-var name-var env-name env-value) &body
                                                                            body)
   "Bind SESS-VAR to a fresh empty session and NAME-VAR to ENV-NAME.

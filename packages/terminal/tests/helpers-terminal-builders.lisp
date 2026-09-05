@@ -1,4 +1,3 @@
-;;;; Terminal builder and inspection helpers for nerimux tests.
 (in-package #:nerimux/test/terminal)
 
 (defmacro with-screen ((var w h) &body body)

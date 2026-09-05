@@ -1,14 +1,5 @@
 (in-package #:nerimux/test/terminal)
 
-;;;; Modes tests — part IV: mouse reporting DEC private modes (accepted and
-;;;; ignored), bracketed paste, focus events, app-cursor, auto-wrap,
-;;;; reset-sgr-pen, screen-display-cell.
-;;; ── Mouse reporting DEC private mode tests (1000/1002/1003/1006) ────────────
-;;;
-;;; Mouse-mode state tracking (screen-mouse-mode / screen-mouse-sgr-mode) was
-;;; removed; these modes now fall through to the same silently-ignored path as
-;;; any other unrecognised DEC private mode — see
-;;; mouse-reporting-modes-are-silently-ignored below.
 (defun test-dec-pm-toggle-boolean (mode accessor)
   "Shared helper: verify that DEC PM MODE toggles boolean ACCESSOR on SCREEN
    to T on set (h) and back to NIL on reset (l)."
@@ -21,9 +12,6 @@
 
 (describe "terminal-suite/direct-modes-suite"
 
-  ;; Mouse-reporting modes (1000/1002/1003/1006) carry no state anymore, but a
-  ;; real client may still send them — set and reset sequences must be accepted
-  ;; without error and leave the rest of the screen untouched.
   (it "mouse-reporting-modes-are-silently-ignored"
     (with-screen (s 20 5)
       (feed s "hello")
@@ -33,15 +21,12 @@
       (check-row s 0 "hello")))
 
   (it "dec-pm-boolean-toggle-table"
-    ;; DEC private modes 1/1004/2004 toggle their boolean accessors via h/l sequences.
     (dolist (row (list (list 1    #'nerimux/terminal/types:screen-app-cursor-keys)
                        (list 1004 #'nerimux/terminal/types:screen-focus-events)
                        (list 2004 #'nerimux/terminal/types:screen-bracketed-paste)))
       (destructuring-bind (mode accessor) row
         (test-dec-pm-toggle-boolean mode accessor))))
 
-  ;; focus-event-report yields ESC[I on focus gained, ESC[O on focus lost, and NIL
-  ;; when focus events are disabled.
   (it "focus-event-report-bytes"
     (with-screen (s 20 5)
       (expect (nerimux/terminal/actions:focus-event-report s t) :to-be-falsy)
@@ -52,18 +37,12 @@
       (expect (string= (format nil "~C[O" #\Escape)
                        (nerimux/terminal/actions:focus-event-report s nil)))))
 
-  ;;; ── Application cursor keys (?1h / ?1l) ─────────────────────────────────────
 
-  ;;; ── Auto-wrap mode (?7h / ?7l) ───────────────────────────────────────────────
 
-  ;; auto-wrap is enabled by default (screen-autowrap = T).
   (it "autowrap-default-is-on"
     (with-screen (s 10 5)
       (expect (nerimux/terminal/types:screen-autowrap s))))
 
-  ;; ESC[?7l disables auto-wrap; ESC[?7h re-enables it.
-  ;; Note: screen-autowrap is T by default, so the default-off check in
-  ;; test-dec-pm-toggle-boolean does not apply here — we test the round-trip directly.
   (it "autowrap-disable-toggle"
     (with-screen (s 10 5)
       (feed s (esc "[?7l"))
@@ -71,12 +50,9 @@
       (feed s (esc "[?7h"))
       (expect (nerimux/terminal/types:screen-autowrap s))))
 
-  ;;; ── reset-sgr-pen direct tests ───────────────────────────────────────────────
 
-  ;; reset-sgr-pen sets fg=7, bg=0, attrs=0, attrs2=0, ul-color=0.
   (it "reset-sgr-pen-clears-all-slots"
     (with-screen (s 10 5)
-      ;; Mutate all five slots to non-default values.
       (setf (nerimux/terminal/types:screen-cur-fg       s) 3
             (nerimux/terminal/types:screen-cur-bg       s) 5
             (nerimux/terminal/types:screen-cur-attrs    s) #xFF
@@ -89,47 +65,35 @@
       (expect (= 0 (nerimux/terminal/types:screen-cur-attrs2 s)))
       (expect (= 0 (nerimux/terminal/types:screen-cur-ul-color s))))))
 
-;;; ── screen-display-cell tests ────────────────────────────────────────────────
 (describe "terminal-suite/display-cell-suite"
 
-  ;; screen-display-cell returns the live grid cell when copy-mode is off.
   (it "display-cell-live-grid-when-no-copy-mode"
     (with-screen (s 5 3)
       (feed s "abcde")
-      ;; copy-mode is off: display cell == live cell.
       (expect (char= #\a (cell-char (nerimux/terminal/actions:screen-display-cell s 0 0))))
       (expect (char= #\e (cell-char (nerimux/terminal/actions:screen-display-cell s 4 0))))))
 
-  ;; screen-display-cell returns a blank cell when the row exceeds screen height.
   (it "display-cell-returns-blank-for-out-of-range-row"
     (with-screen (s 5 3)
       (feed s "hello")
-      ;; Row 99 is beyond the screen; expect the shared blank cell.
       (let ((cell (nerimux/terminal/actions:screen-display-cell s 0 99)))
         (expect (char= #\Space (cell-char cell))))))
 
-  ;; screen-display-cell reads from scrollback when copy-offset > 0.
   (it "display-cell-scrollback-when-copy-mode-offset"
     (with-screen (s 5 3)
-      ;; Force a scrollback row: feed two full-screen-height worth of lines.
       (feed s (format nil "AAAAA~C~CBBBBB~C~CCCCCC" #\Return #\Linefeed
                                                      #\Return #\Linefeed))
-      ;; scrollback must have at least one row now.
       (let ((sb-len (length (nerimux/terminal/types:screen-scrollback s))))
         (when (> sb-len 0)
-          ;; Enter copy-mode-like state by manipulating the screen slots directly.
           (setf (nerimux/terminal/types:screen-copy-mode-p s) t
                 (nerimux/terminal/types:screen-copy-offset s) 1)
           (let ((cell (nerimux/terminal/actions:screen-display-cell s 0 0)))
             (expect (characterp (cell-char cell))))))))
 
-  ;; screen-display-cell returns blank when the scrollback vector is shorter than the column.
   (it "display-cell-copy-mode-blank-for-empty-scrollback-entry"
     (with-screen (s 5 3)
-      ;; Directly install a zero-length scrollback row.
       (setf (nerimux/terminal/types:screen-scrollback s) (list (vector))
             (nerimux/terminal/types:screen-copy-mode-p s) t
             (nerimux/terminal/types:screen-copy-offset s) 1)
-      ;; Column 0 of row 0 should be the display-blank-cell (Space).
       (let ((cell (nerimux/terminal/actions:screen-display-cell s 0 0)))
         (expect (char= #\Space (cell-char cell)))))))

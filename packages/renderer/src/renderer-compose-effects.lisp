@@ -1,11 +1,5 @@
 (in-package #:nerimux/renderer)
 
-;;;; Session-frame side effects for the nerimux renderer.
-;;;;
-;;;; This file owns the post-layout output effects: bell emission, cursor
-;;;; restoration, and draining passthrough / clipboard queues into the final
-;;;; frame stream.
-;;; ── Full-session render effects ─────────────────────────────────────────────
 (defun %emit-bell (buffer)
   "Write the audible BEL character to BUFFER.
    visual-bell (domain/options, deleted R2.2) defaulted to \"off\", which

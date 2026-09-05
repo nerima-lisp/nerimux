@@ -1,28 +1,5 @@
 (in-package #:nerimux/renderer)
 
-;;;; The `?` full-screen help view (FR-005): a static, Dracula-styled key
-;;;; reference. Sibling of renderer-tui-kit-confirm-view.lisp -- a bordered
-;;;; box spanning the whole frame instead of a centred one, and content drawn
-;;;; as styled spans (section headings in +sgr-section+'s Dracula purple, keys
-;;;; in +sgr-accent+'s Dracula cyan) rather than confirm-view's plain
-;;;; text-widget lines, since a single row here mixes both colours.
-;;;;
-;;;; Content is hardcoded (this project has no config to read it from, R2.4)
-;;;; and has to be re-read against the live dispatch tables whenever they move:
-;;;; %HANDLE-CLIENT-UI-KEY-PAYLOAD (server-multi-dispatch-command-input.lisp)
-;;;; for Navigate/Status, %WORKSPACE-PREFIX-DISPATCH (server-multi-dispatch-
-;;;; prefix.lisp) for the C-q table, %COPY-KEY-DISPATCH (same file as the
-;;;; keymap) for Scrollback, and +TRANSIENT-DEFINITIONS+ (server-multi-
-;;;; dispatch-transient.lisp) for the transient keys.
-;;;;
-;;;; Reached from the `?` transient's `k` entry, not from `?` directly -- `?`
-;;;; opens the dispatch transient, as in magit.
-;;;;
-;;;; This list went stale once already, through the magit alignment: it kept
-;;;; advertising j/k, r, i, c, o, d, X, L/U and a "Modes" section for modes
-;;;; that no longer exist, while claiming in this very comment to be verified.
-;;;; A help screen naming keys that do nothing is worse than no help screen,
-;;;; and nothing mechanical will catch it -- these are strings.
 (defparameter +help-view-sections+
   '(("Navigate"
      (("n/p" . "move") ("M-n/M-p" . "section")
@@ -77,14 +54,6 @@
    binding; %HELP-VIEW-BINDING-TEXT formats it the same way, which just leaves
    a leading space.")
 
-;;; ── Styles ───────────────────────────────────────────────────────────────
-;;;
-;;; Built from the same Dracula RGB triples as +SGR-SECTION+/+SGR-ACCENT+
-;;; (renderer-style.lisp), as CL-TUI-KIT/CORE:STYLE objects rather than SGR
-;;; parameter strings -- this view draws styled spans directly onto the
-;;; surface (%MAKE-WORKSPACE-TREE-THEME's :ACCENT role, renderer-tui-kit-
-;;; widgets.lisp, is the same pattern), not through the plain-ANSI path those
-;;; string constants serve.
 (defun %help-view-heading-style ()
   (cl-tui-kit/core:make-style :bold
                               t
@@ -95,7 +64,6 @@
   (cl-tui-kit/core:make-style :foreground
                               (cl-tui-kit/core:rgb-color 139 233 253)))
 
-;;; ── Layout ───────────────────────────────────────────────────────────────
 (defun %help-view-binding-text (key description)
   (format nil "~A ~A" key description))
 
@@ -177,7 +145,6 @@
                                                    item-width))) (incf row)))
     (1+ row)))
 
-;;; ── Box chrome ───────────────────────────────────────────────────────────
 (defun %render-help-view-box (surface rectangle)
   (let ((box
          (cl-tui-kit/widgets:make-box-widget

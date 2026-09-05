@@ -1,6 +1,5 @@
 (in-package #:nerimux/terminal/csi)
 
-;;;; CSI rectangular operations and extended terminal controls.
 (define-csi-rule-set csi-extended-rules
                      ((and (null private) (eql intermed #\$) (char= final #\z))
                       (let ((p3 (%csi-leading-int (third params)))

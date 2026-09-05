@@ -1,7 +1,4 @@
-;;;; Test package for nerimux-model.
 (defpackage #:nerimux/test/model
-  ;; The test framework is cl-weave, used natively: every file registers its own
-  ;; top-level (describe "name" (it "case" ...) ...) block.
   (:use #:cl)
   (:shadowing-import-from #:cl-weave #:describe)
   (:import-from #:cl-weave
@@ -15,8 +12,6 @@
                 #:it-property #:it-fuzz #:gen-integer #:gen-list #:gen-boolean #:gen-string
                 #:gen-vector #:gen-member #:gen-one-of
                 #:defmatcher)
-  ;; The unit under test. These were in tests/package.lisp's one shared import
-  ;; list; they move with the tests that use them.
 (:import-from #:nerimux/pane
                 #:make-pane #:pane-feed #:pane-screen #:pane-id
                 #:pane-x #:pane-y #:pane-width #:pane-height #:pane-fd #:pane-pid
@@ -86,8 +81,6 @@
                 #:session-last-active
                 #:session-touch
                 #:session-insert-window)
-  ;; Both edges mirror nerimux-model's own :depends-on: ports for the POSIX
-  ;; environment fixture, terminal for the screen builders.
   (:import-from #:nerimux/terminal
                 #:make-screen
                 #:screen-resize
@@ -106,7 +99,6 @@
   (:import-from #:nerimux/test/terminal
                 #:feed
                 #:check-table)
-  ;; Fixtures the units above model, and the root suite, reach for.
   (:export #:tl-pane
            #:tl-leaf
            #:tl-window

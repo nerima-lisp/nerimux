@@ -1,8 +1,5 @@
 (in-package #:nerimux/test/terminal)
 
-;;;; Screen assertion DSL and command-state fixtures.
-;;; These macros raise the abstraction level for common screen assertions,
-;;; making test intent visible and reducing boilerplate IS calls.
 (defmacro check-row (screen y expected-string)
   "Assert that row Y of SCREEN starts with EXPECTED-STRING."
   `(expect

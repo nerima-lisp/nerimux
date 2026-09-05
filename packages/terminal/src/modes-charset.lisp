@@ -1,6 +1,5 @@
 (in-package #:nerimux/terminal/actions)
 
-;;;; Terminal modes — G0..G3 charset designation and invocation (ESC ( / ESC ) / SO / SI).
 (defun screen-invoked-charset (screen g)
   "Return the charset currently designated to G (:g0 or :g1) on SCREEN."
   (%charset-slot-ref screen g))

@@ -1,24 +1,4 @@
-;;;; Package for nerimux/pty-test, the real-PTY suite split out of nerimux/test.
-;;;;
-;;;; R9.2 of docs/notes/workspace-requirements.md: `nix flake check` runs only
-;;;; nerimux/test, whose sandboxed builder has no /dev/ptmx.  Every case
-;;;; registered under this package spawns (or once spawned) a real PTY-backed
-;;;; shell via forkpty-with-shell -- directly, through WITH-PTY-SHELL /
-;;;; WITH-PTY-AVAILABLE, or through WITH-SESSION (which wraps
-;;;; create-initial-session).  The sandbox-safe argument-assembly, port-stub,
-;;;; and pipe-fd cases that used to share a file with them stayed behind in
-;;;; nerimux/test; only the genuinely PTY-spawning cases moved here.
-;;;;
-;;;; The import list mirrors tests/package.lisp's on purpose: every case below is a
-;;;; relocation of code that uses the same public surface.  Keeping the import
-;;;; shape aligned lets ASDF compile this system independently of the normal
-;;;; sandbox-safe test system.
 (defpackage #:nerimux/pty-test
-  ;; The test framework is cl-weave, used natively: every file registers its
-  ;; own top-level (describe "name" (it "case" ...) ...) block directly with
-  ;; cl-weave's global registry.  Because this system loads only its own test
-  ;; components, RUN-PTY-TESTS's cl-weave:run-all sees only the suites this
-  ;; package registers.
   (:use #:cl)
   (:shadowing-import-from #:cl-weave #:describe)
   (:import-from #:cl-weave

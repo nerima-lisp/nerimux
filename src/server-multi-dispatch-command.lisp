@@ -34,7 +34,7 @@
                        t)
                       ((:detail :pane-detail) (%set-client-view conn :pane) t)
                       ((:workspace-prefix :prefix-key :rebind-prefix)
-                       (%client-rebind-prefix conn (or target (first args)))
+                       (%client-rebind-prefix conn (command-argument))
                        t)
                       ((:workspace-refresh :vcs-refresh :refresh-workspace)
                        (%client-refresh-workspace conn))
@@ -43,26 +43,26 @@
                                                      (-
                                                       (or
                                                        (%parse-client-integer
-                                                        (or target (first args)))
+                                                        (command-argument))
                                                        1)))
                        t)
                       ((:tree-down :worktree-down :tree-next)
                        (%select-client-tree-relative conn
                                                      (or
                                                       (%parse-client-integer
-                                                       (or target (first args)))
+                                                       (command-argument))
                                                       1))
                        t)
                       (:tree-scroll
                        (%move-client-tree-scroll conn
                                                  (or
                                                   (%parse-client-integer
-                                                   (or target (first args)))
+                                                   (command-argument))
                                                   1))
                        t)
                       ((:tree-select :worktree-select)
                        (%select-client-tree-worktree conn
-                                                     (or target (first args)))
+                                                     (command-argument))
                        t)
                       (:tree-top
                        (%set-client-selected-tree-object conn
@@ -95,7 +95,7 @@
                        (%client-prune-worktrees conn target args :dry-run nil))
                       (:mode
                        (let ((mode
-                              (%client-ui-mode-value (or target (first args)))))
+                              (%client-ui-mode-value (command-argument))))
                          (when mode
                            (cond
                              ((eq mode :picker) (%open-client-picker conn))
@@ -128,7 +128,7 @@
                       ((:picker-next :picker-down :picker-prev :picker-up)
                        (let ((delta
                               (or
-                               (%parse-client-integer (or target (first args)))
+                               (%parse-client-integer (command-argument))
                                1)))
                          (%move-client-picker-index conn
                                                     (if (member cmd
@@ -148,7 +148,7 @@
                        t)
                       (:picker-regex
                        (%set-client-picker-regex conn
-                                                 (or target (first args))
+                                                 (command-argument)
                                                  (or target args))
                        t)
                       ((%client-ui-mode-p cmd)
@@ -192,7 +192,7 @@
                          t))
                       (:viewport
                        (let ((delta
-                              (%parse-client-integer (or target (first args)))))
+                              (%parse-client-integer (command-argument))))
                          (when delta
                            (%move-client-viewport conn delta)
                            (%mark-dirty))
@@ -204,16 +204,7 @@
   (multiple-value-bind (cmd target args) (decode-command-payload payload)
     (let ((result (%handle-client-ui-command session conn cmd target args)))
       (cond
-        ;; The handler's own value decides the disposition. This used to be
-        ;; discarded to NIL unconditionally, which made :QUIT unreachable from
-        ;; any forwarded command however the handler was written -- the key path
-        ;; already forwarded its handler's value, which is why C-q d worked and
-        ;; nothing on this path could ever stop the server.
         (result (if (eq result :quit) :quit nil))
-        ;; Anything the workspace UI does not recognize is rejected.  This used
-        ;; to fall through to %dispatch-forwarded-command, which ran the name
-        ;; against a server-side command table -- that fallthrough was the only
-        ;; thing making the forwarded-command surface reachable from `:`.
         (cmd
          (%client-notify conn (format nil "unknown command: ~(~A~)" cmd))
          (%mark-dirty)

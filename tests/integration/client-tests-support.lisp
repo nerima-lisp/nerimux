@@ -1,35 +1,13 @@
 (in-package #:nerimux/test)
 
-;;;; Client lifecycle and outbound client tests (src/client.lisp).
-;;;;
-;;;; run-client itself is integration-level (requires a live socket and raw
-;;;; terminal) but its building blocks are unit-testable:
-;;;;
-;;;;   * socket-path naming — pure string function
-;;;;   * with-incoming-frame dispatch — the same Prolog-dispatch macro used by
-;;;;     both server (serve-client) and client (run-client); tested via a real
-;;;;     Unix-domain socket roundtrip (same technique as net-tests.lisp), guarded
-;;;;     by unix-socket-available-p so tests self-skip in restricted sandboxes
-;;;;   * msg-command encoding — verifies the detach-others frame type
-;;;;
-;;;; Server-frame receive/decode behavior lives in client-receive-tests.lisp.
 (describe "client-suite"
 
-  ;; All key client mode functions are fbound.
   (it "client-functions-fbound-table"
     (dolist (sym '(nerimux::run-client
                    nerimux::%ensure-server-running
                    nerimux::run-attach-simple))
       (expect (fboundp sym)))))
 
-;;; socket-path naming is tested canonically in server-tests.lisp since
-;;; socket-path is defined in server.lisp.  No duplicate tests here.
-;;; ── with-incoming-frame dispatch (socket roundtrip) ─────────────────────────
-;;;
-;;; These tests drive with-incoming-frame directly via a Unix-domain socket
-;;; stream pair.  We write frames from one end and read from the other, exactly
-;;; as run-client does.  The macro is in nerimux/transport and is used by both
-;;; server (serve-client) and client (run-client).
 (defmacro with-client-test-socket-pair ((writer-stream reader-stream) &body
                                                                       body)
   "Create a Unix-domain socket pair: listener→accept→connect.
@@ -74,12 +52,6 @@
                                                (client-side ,client-side))
                                ,@body))))))
 
-;;; with-guarded-socket-test/fd: variant exposing raw socket objects so tests
-;;; that need socket-fd (e.g. %receive-if-ready's select-fds parameter) can
-;;; obtain it without duplicating the full socket lifecycle.
-;;;
-;;; Binds SERVER-SOCK/CLIENT-SOCK (socket objects), SERVER-STREAM/CLIENT-STREAM
-;;; (binary streams), and CLIENT-FD (the integer fd of the client socket).
 (defmacro with-guarded-socket-test/fd ((&key (server-sock (gensym "SSOCK"))
                                              (client-sock (gensym "CSOCK"))
                                              (server-stream (gensym "SSTREAM"))

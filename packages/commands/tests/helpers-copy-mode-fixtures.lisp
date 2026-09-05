@@ -1,11 +1,5 @@
 (in-package #:nerimux/test/commands)
 
-;;;; Copy-mode screen fixtures.
-;;;;
-;;;; Lives with nerimux-commands: COPY-MODE-SCREEN calls
-;;;; nerimux/commands::copy-mode-enter to put the screen into copy mode, so a
-;;;; terminal test system carrying it would need an edge from DOMAIN up to
-;;;; APPLICATION that the source deliberately does not have.
 (defun copy-mode-screen (&key (w 20) (h 5) (content "") cursor mark selecting)
   "Return a copy-mode screen pre-filled with CONTENT and optional copy state."
   (let ((screen (make-screen w h)))

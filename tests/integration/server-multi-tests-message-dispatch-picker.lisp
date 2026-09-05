@@ -1,6 +1,5 @@
 (in-package #:nerimux/test)
 
-;;;; Server multi-client message dispatch tests.
 (describe "server-multi-suite"
 
   (it "picker-arrow-key-bytes-one-at-a-time-do-not-move-the-index"
@@ -34,9 +33,6 @@
         (expect (null (nerimux::client-conn-modal conn))
                 ))))
 
-  ;; The replacement for those arrow branches. C-p/C-n are used rather than j/k
-  ;; because every other key in the picker is a character of the search query --
-  ;; a letter that also moved the cursor could not be typed.
   (it "multi-picker-c-p-c-n-move-the-selection"
     (with-fake-session (s)
       (let* ((organization
@@ -153,6 +149,8 @@
         (expect (null (nerimux::%append-client-picker-query-octets
                        conn #(194 32))))
         (expect (null (nerimux::%append-client-picker-query-octets
+                       conn 42)))
+        (expect (null (nerimux::%append-client-picker-query-octets
                        conn #(1))))
         (expect (null (nerimux::%delete-client-picker-query-character conn)))
         (setf (nerimux::client-conn-picker-items conn) nil
@@ -204,6 +202,20 @@
         (nerimux::%client-picker-visible-items conn)
         (expect (= 0 (nerimux::client-conn-picker-index conn))))))
 
+  (it "picker-selected-item-returns-the-current-visible-item"
+    (with-fake-session (s)
+      (let* ((first-item (nerimux/picker::%make-picker-item
+                          :id "first" :kind :repository :label "first"))
+             (second-item (nerimux/picker::%make-picker-item
+                           :id "second" :kind :repository :label "second"))
+             (conn (%make-test-conn)))
+        (setf (nerimux::client-conn-picker-items conn)
+              (list first-item second-item)
+              (nerimux::client-conn-picker-index conn) 1)
+        (expect (eq second-item (nerimux::%picker-selected-item conn)))
+        (setf (nerimux::client-conn-picker-items conn) nil)
+        (expect (null (nerimux::%picker-selected-item conn))))))
+
   (it "picker-selects-repository-and-organization-without-opening-a-pane"
     (with-fake-session (s)
       (let* ((organization
@@ -241,15 +253,5 @@
           (setf (nerimux::client-conn-picker-items conn) nil)
           (expect (null (nerimux::%select-client-picker-item s conn)))))))
 
-  ;; The workspace->tmux command vocabulary translation
-  ;; (%canonical-client-command: :close -> :kill-pane, :split -> :split-window,
-  ;; and so on) was deleted with the tmux command table it fed.  Its only
-  ;; consumer was %dispatch-forwarded-command; once that went, the translation
-  ;; had nothing to translate for, and this test was the only thing still
-  ;; calling it.
 
-  ;; A resize updates the resized client's own geometry and immediately
-  ;; re-applies the effective shared size, which §1.4 / R8.4 fix to the
-  ;; smallest attached client — not the just-resized one.  window-size
-  ;; "latest" (and "largest"/"manual") went away with domain/options (R2.2).
 )

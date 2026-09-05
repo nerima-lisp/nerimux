@@ -1,24 +1,5 @@
-;;; DCS helper cluster split out of parser.lisp.
-;;;
-;;; This file must be loaded before parser.lisp because escape-state calls
-;;; make-dcs-k, make-charset-designator-k, make-ignore-final-byte-k, and
-;;; make-hash-line-size-k.
 (in-package #:nerimux/terminal/parser)
 
-;;; ESC P introduces a DCS; collect bytes until ESC \ (ST).
-;;;
-;;; A DCS passthrough sequence is \eP tmux;<payload> \e\\ where every ESC in
-;;; the inner <payload> is DOUBLED (\e\e); "tmux;" is the literal ASCII tag on
-;;; the wire marking a DCS payload as passthrough rather than raw DCS data.
-;;; When the payload begins with those bytes, we accumulate the rest, un-double
-;;; the ESCs, and push the inner sequence onto the screen's passthrough-queue
-;;; for the renderer to emit to the OUTER terminal -- this is how a nested
-;;; multiplexer or an image protocol (iTerm2/kitty inline images) reaches past
-;;; an attached client to the real terminal.  Any other DCS (e.g. Sixel) is
-;;; consumed and discarded as before.
-;;;
-;;; make-dcs-st-k is the bridge state waiting for the backslash of ESC \ after
-;;; an ESC byte seen inside a DCS payload.  This is symmetric with make-osc-st-k.
 (defconstant +dcs-max-payload+
   1048576
   "Maximum DCS passthrough payload bytes buffered (1 MiB).  Beyond this the
@@ -212,9 +193,7 @@
       (declare (type screen screen) (type (unsigned-byte 8) byte)
                (ignorable screen))
       (if (= byte #x1B)
-          ;; Possible ESC \ ST or doubled ESC — hand off to the bridge state.
           (make-dcs-st-k buf)
-          ;; Accumulate payload byte (so the passthrough tag + inner can be parsed).
           (progn (%dcs-accumulate buf byte)
                  (make-dcs-k buf))))))
 

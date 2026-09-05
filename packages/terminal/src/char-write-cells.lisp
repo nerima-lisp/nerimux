@@ -1,6 +1,5 @@
 (in-package #:nerimux/terminal/actions)
 
-;;;; Cell placement primitives used by the character-writing flow.
 (declaim (inline %mark-dirty))
 
 (defun %mark-dirty (screen)

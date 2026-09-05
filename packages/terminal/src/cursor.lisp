@@ -1,24 +1,9 @@
 (in-package #:nerimux/terminal/actions)
 
-;;;; Cursor movement.
-;;;; Loads AFTER scroll.lisp so cursor-down/scroll can call scroll-up-one
-;;;; (defined there) without a forward-reference.
-;;;; Character writing (combining chars, DEC graphics, wide/normal cells) lives
-;;;; in char-write.lisp, which loads after this file.
-;;; ── Constants ──────────────────────────────────────────────────────────────
 (defconstant +tab-width+
   8
   "Standard terminal tab column interval: tab stops every 8 columns by default.")
 
-;;; ── Cursor movement ────────────────────────────────────────────────────────
-;;;
-;;; define-cursor-movements is a Prolog-like table:
-;;;   cursor_move(up,    Screen, N) :- cursor-y(Screen) := clamp(cursor-y - N, scroll_top).
-;;;   cursor_move(down,  Screen, N) :- cursor-y(Screen) := clamp(cursor-y + N, scroll_bottom).
-;;;   cursor_move(right, Screen, N) :- cursor-x(Screen) := clamp(cursor-x + N, width-1).
-;;;   cursor_move(left,  Screen, N) :- cursor-x(Screen) := clamp(cursor-x - N, 0).
-;;;
-;;; Each spec: (name docstring accessor clamped-expression)
 (declaim (inline %cancel-wrap))
 
 (defun %cancel-wrap (screen)
@@ -46,8 +31,6 @@
   (%cancel-wrap screen)
   (setf (screen-cursor-x screen) (clamp x 0 (1- (screen-width  screen)))
         (screen-cursor-y screen) (clamp y 0 (1- (screen-height screen))))
-  ;; Explicit positioning starts fresh content on the target row — its old wrap
-  ;; flag (if any) no longer applies.
   (%clear-line-wrapped screen (screen-cursor-y screen)))
 
 (define-cursor-movements
@@ -174,8 +157,6 @@
   "Carriage return: move the cursor to column 0."
   (%cancel-wrap screen)
   (setf (screen-cursor-x screen) 0)
-  ;; CR returns to the line start to overwrite it (e.g. progress bars) — clear any
-  ;; stale wrap flag for this row.
   (%clear-line-wrapped screen (screen-cursor-y screen)))
 
 (defun cursor-nel (screen)

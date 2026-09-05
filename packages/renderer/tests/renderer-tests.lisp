@@ -1,14 +1,5 @@
 (in-package #:nerimux/test/renderer)
 
-;;;; render-status-bar, render-session, clear-display, and status-pane indicators
-;;;;
-;;;; status-format[0] (domain/options + domain/format, deleted R2.2/R2.3) is
-;;;; gone: the status bar is now always composed procedurally (left/window-
-;;;; list/right), never expanded from a template — see renderer-statusbar.lisp.
-;;; ── Test fixtures ───────────────────────────────────────────────────────────
-;;;
-;;; make-renderer-test-session is defined in tests/helpers-renderer-fixtures.lisp
-;;; and shared across renderer-tests.lisp and renderer-pane-tests.lisp.
 (defun make-split-session (w h orient)
   "A 1-window session split into two panes (fd -1, no PTY).
    ORIENT is :h (side-by-side left|right) or :v (stacked top/bottom).
@@ -118,23 +109,13 @@
 
 (describe "renderer-suite"
 
-  ;;; ── render-status-bar ───────────────────────────────────────────────────────
 
-  ;; render-status-bar draws something for a session with no worktree (R6.5:
-  ;; the middle block's window/pane tabs only appear for a focus pane that
-  ;; has one — make-renderer-test-session's pane does not, so this only
-  ;; checks the bar renders at all, not any window-index:name text).
   (it "render-status-bar-shows-names"
     (let* ((sess (make-renderer-test-session 40 10 :content ""))
            (out  (render-status-bar-output sess 10 40)))
       (expect (search "0" out))))
 
-  ;; %compose-aligned-line places #[align=right] content flush-right and
-  ;; #[align=centre] content centred, filling to the requested width.
   (it "compose-aligned-line-positions-regions"
-    ;; cl-regex-kit:replace-all takes a COMPILED regex (there is no string
-    ;; overload), so the pattern is compiled once outside the flet rather than
-    ;; per call as cl-ppcre's string-accepting regex-replace-all allowed.
     (let ((sgr (cl-regex-kit:compile-regex (format nil "~C\\[[0-9;]*m" #\Escape))))
       (flet ((vis (s) (cl-regex-kit:replace-all sgr s ""))
              (compose (spec) (nerimux/renderer::%compose-aligned-line spec "" 10)))
@@ -143,7 +124,6 @@
         (expect (= 10 (nerimux/renderer::%visible-length
                        (compose "L#[align=centre]C#[align=right]R")))))))
 
-  ;; The status bar does not show a COPY/offset indicator when a pane is in copy mode.
   (it "render-status-bar-copy-mode-has-no-indicator"
     (let* ((sess   (make-renderer-test-session 60 10 :content ""))
            (ap     (session-active-pane sess))
@@ -154,20 +134,12 @@
         (expect (null (search "COPY" out)))
         (expect (null (search "+3" out))))))
 
-  ;; The status bar never shows a COPY indicator for a pane that is not in copy mode.
   (it "render-status-bar-no-copy-indicator-live"
     (let* ((sess (make-renderer-test-session 60 10 :content ""))
            (out  (render-status-bar-output sess 10 60)))
       (expect (not (search "COPY" out)))))
 
-  ;; On a narrow terminal, the status bar's visible content is clamped to the terminal width.
   (it "render-status-bar-truncates-long-line"
-    ;; A very narrow terminal forces the status line to be truncated.
-    ;; The bar is: move-to, ESC[<base>m, <status content + padding>, ESC[0m.
-    ;; The content between the base SGR and the trailing reset may embed
-    ;; further zero-width SGR wraps (branch/state colouring), so it is
-    ;; measured in VISIBLE cells: truncation plus background padding fill the
-    ;; row to exactly the terminal width, never past it.
     (let* ((width  8)
            (sess   (make-renderer-test-session width 10 :content ""))
            (out    (render-status-bar-output sess 10 width))
@@ -179,9 +151,7 @@
            (content (subseq out start end)))
       (expect (= width (nerimux/renderer::%visible-length content)))))
 
-  ;;; ── render-session-to-string (full frame) ───────────────────────────────────
 
-  ;; render-session-to-string emits pane content plus cursor-hide/show sequences and the status bar.
   (it "render-session-to-string-full-frame"
     (let* ((sess (make-renderer-test-session 20 5 :content "hi"))
            (out  (render-session-to-string sess 6 20)))
@@ -190,7 +160,6 @@
       (expect (search (format nil "~C[?25l" #\Escape) out))
       (expect (search (format nil "~C[?25h" #\Escape) out))))
 
-  ;; A side-by-side split renders a vertical separator, highlights the active pane's border, and shows both panes' content.
   (it "render-session-vertical-split-emits-separators"
     (let* ((sess  (make-split-session 5 3 :h))
            (win   (session-active-window sess))
@@ -201,12 +170,10 @@
       (feed (pane-screen (second panes)) "BBB")
       (let ((out (render-session-to-string sess 3 11)))   ; full width = 2*5+1
         (expect (find (code-char #x2502) out))
-        ;; pane 0 is active and non-last, so its right border is highlighted.
         (expect (search accent out))
         (expect (find #\A out))
         (expect (find #\B out)))))
 
-  ;; A stacked (top/bottom) split renders a horizontal separator and shows both panes' content.
   (it "render-session-horizontal-split-emits-separators"
     (let* ((sess  (make-split-session 5 3 :v))
            (win   (session-active-window sess))
@@ -218,17 +185,12 @@
         (expect (find #\A out))
         (expect (find #\B out)))))
 
-  ;; In render-session-to-string the vertical separator is drawn only when the
-  ;; border column is strictly inside the terminal width.  A split whose first
-  ;; pane's right edge lands exactly at terminal-cols suppresses the │ bar.
   (it "render-session-vertical-border-suppressed-at-edge"
     (let* ((sess  (make-split-session 5 3 :h))
            (win   (session-active-window sess))
            (panes (window-panes win)))
       (feed (pane-screen (first  panes)) "AAA")
       (feed (pane-screen (second panes)) "BBB")
-      ;; First pane is x=0 width=5, so its border column is 5.  Render with
-      ;; terminal-cols=5 → (< 5 5) is false → the vertical border is suppressed.
       (let ((out (render-session-to-string sess 3 5)))
         (expect (null (find (code-char #x2502) out))))))
 
@@ -270,8 +232,6 @@
                 8 24
                 :mode :command
                 :command-buffer "status")))
-      ;; The `:` prompt carries its own accent SGR, so the visible text is
-      ;; checked with escapes stripped.
       (expect (search ":status" (strip-sgr out))))
     (let ((stream (make-string-output-stream)))
       (nerimux/renderer::%render-client-command-line
@@ -286,9 +246,7 @@
       (nerimux/renderer::%render-client-command-line stream 5 10 nil)
       (expect (string= "" (get-output-stream-string stream)))))
 
-  ;;; ── clear-display ───────────────────────────────────────────────────────────
 
-  ;; clear-display writes the ANSI erase-screen (ESC[2J) and cursor-home (ESC[H) sequences.
   (it "clear-display-emits-clear-and-home"
     (let ((out (let ((*standard-output* (make-string-output-stream)))
                  (clear-display)

@@ -1,17 +1,8 @@
 (in-package #:nerimux/test)
 
-;;;; Multi-client server integration tests: command-client, exit policy, broadcast
 (describe "server-multi-suite"
 
-  ;;; -- Command client: forwards a command to the server ------------------------
 
-  ;; A command the workspace UI does not recognize is rejected with a client
-  ;; notification and NO reply frame.  This used to be the server side of the
-  ;; `nerimux display -p` stdout channel: the command ran against the tmux
-  ;; command table and its output came back as +msg-reply+.  That fallthrough
-  ;; was removed with the tmux command surface, so the socket must now stay
-  ;; quiet — asserted here rather than only at the dispatch level, because the
-  ;; regression that matters is a stray frame reaching a real client.
   (it "command-client-unknown-command-notifies-and-sends-no-reply"
     (progn
       (with-fake-session (s)
@@ -25,25 +16,13 @@
                               :display-message :args '("hello"))))
                 (expect (null (nerimux::%handle-multi-client-message
                                nerimux::+msg-command+ payload s conn)))
-                ;; %client-notify pushes the bare text, not a (timestamp . text)
-                ;; cons, so the log entry is the message itself.
                 (let ((entry (first (nerimux::client-conn-message-log conn))))
                   (expect (stringp entry))
                   (expect (search "unknown command" entry) :to-be-truthy)
                   (expect (search "display-message" entry) :to-be-truthy))
-                ;; Nothing should be readable on the client socket.  A short
-                ;; timeout is enough: the reply, when it existed, was written
-                ;; synchronously during the dispatch call above.
                 (expect (null (nerimux/pty:select-fds
                                (list (nerimux/net:socket-fd client)) 200000))))))))))
 
-  ;; A client that connects and sends a +msg-command+ frame directly (the
-  ;; surviving wire-level path client.lisp itself uses for :attach-target)
-  ;; decodes on the server side as a command keyword
-  ;; plus its argument list.  This used to be driven through the now-deleted
-  ;; run-command-client CLI helper; the socket-level encode/decode contract it
-  ;; exercised survives independently of that helper, so the frame is built
-  ;; and sent directly here instead.
   (it "command-client-sends-decodable-command-frame"
     (with-test-listener (listener path (%test-socket-path "cmdtest") :backlog 4)
       (let ((client (nerimux/net:connect-to path)))
@@ -68,16 +47,7 @@
                       (expect (eq :next-window cmd))
                       (expect (equal '("-t" "2") args))))))))))))
 
-  ;;; -- R8.3: the server never exits on its own ----------------------------------
 
-  ;; Dropping the last attached client must not stop the server: R8.3 retired
-  ;; exit-unattached and exit-empty (both now OFF-equivalent constants, i.e.
-  ;; gone from src entirely), so panes and the runtime stay alive across every
-  ;; client detaching.  Only an explicit :quit disposition — `nerimux kill` or
-  ;; the confirm-view quit — clears *running*.  Driven through
-  ;; %apply-client-disposition, the actual production caller of :drop
-  ;; (%run-multi-server-loop / %dispatch-ready-clients), rather than asserting
-  ;; a constant directly.
   (it "last-client-detach-leaves-running-true"
     (let* ((conn (nerimux::%make-client-conn))
            (nerimux::*clients* (list conn))
@@ -90,10 +60,7 @@
     (let ((conn (nerimux::%make-client-conn)))
       (expect (eql :quit (nerimux::%apply-client-disposition :quit conn)))))
 
-  ;;; -- Integration: a broadcast frame reaches every attached client ------------
 
-  ;; Two clients attached to the server both receive a broadcast frame — the core
-  ;; multi-client property (one render fanned out to all).
   (it "multi-broadcast-reaches-all-clients"
     (progn
       (with-fake-session (s)
@@ -108,8 +75,6 @@
               (nerimux::%add-client server2)
               (setf nerimux::*dirty* t)
               (nerimux::%broadcast-frame s)
-              ;; Both client sockets must now have a frame to read.  Gate the
-              ;; reads on select so a missing frame fails fast (not hangs).
               (dolist (client (list client1 client2))
                 (let ((ready (nerimux/pty:select-fds
                               (list (nerimux/net:socket-fd client)) 1000000)))
