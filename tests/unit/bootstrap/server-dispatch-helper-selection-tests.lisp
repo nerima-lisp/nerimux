@@ -243,6 +243,8 @@
         (expect (consp (nerimux::%client-picker-visible-items conn)))
         (expect (nerimux::%set-client-picker-regex conn nil nil))
         (expect (nerimux::client-conn-picker-regex-p conn))
+        (expect (null (nerimux::%set-client-picker-regex conn nil nil)))
+        (expect (null (nerimux::client-conn-picker-regex-p conn)))
         (expect (nerimux::%set-client-picker-query conn ""))
         (expect (nerimux::%append-client-picker-query-octets conn "repo"))
         (expect (nerimux::%append-client-picker-query-octets

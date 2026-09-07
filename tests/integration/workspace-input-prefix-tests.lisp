@@ -303,142 +303,223 @@
   (it "r7-1-repository-fetch-reports-preconditions-and-completion"
     (with-fake-session (s)
       (expect s)
-      (let ((conn (%make-test-conn))
-            (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
-            (fetch (fdefinition 'nerimux/vcs:fetch-repository-async))
-            (refresh (fdefinition 'nerimux::%refresh-client-picker))
-            (notify (fdefinition 'nerimux::%client-notify))
-            (callback nil)
-            (error-callback nil)
-            (refreshed nil)
-            (messages nil))
-        (unwind-protect
-             (progn
-               (setf (fdefinition 'nerimux::%client-notify)
-                     (lambda (connection message)
-                       (declare (ignore connection))
-                       (push message messages)))
-               (nerimux::%workspace-fetch-repository conn)
-               (expect (search "selected repository" (first messages)))
-               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
-                     (lambda () nil))
-               (let ((organization (nerimux/workspace-model:make-organization
-                                    :id "org" :host "github.com" :name "team")))
-                 (nerimux::%set-client-selected-tree-object
-                  conn
-                  (nerimux/workspace-model:make-repository
-                   :id "repo" :organization organization
-                   :specification "github.com/team/repo"))
-                 (nerimux::%workspace-fetch-repository conn)
-                 (expect (search "VCS unavailable" (first messages))))
-               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
-                     (lambda () t)
-                     (fdefinition 'nerimux/vcs:fetch-repository-async)
-                     (lambda (repository &key on-complete on-error
-                                      callback-dispatch)
-                       (declare (ignore repository callback-dispatch))
-                       (setf callback on-complete error-callback on-error)
-                       t)
-                     (fdefinition 'nerimux::%refresh-client-picker)
-                     (lambda (connection)
-                       (declare (ignore connection))
-                       (setf refreshed t))
-                     (fdefinition 'nerimux::%client-notify)
-                     (lambda (connection message)
-                       (declare (ignore connection))
-                       (push message messages)))
-               (let ((organization (nerimux/workspace-model:make-organization
-                                    :id "org" :host "github.com" :name "team"))
-                     (repository nil))
-                 (setf repository (nerimux/workspace-model:make-repository
-                                   :id "repo" :organization organization
-                                   :specification "github.com/team/repo"))
-                 (nerimux::%set-client-selected-tree-object conn repository)
-                 (nerimux::%workspace-fetch-repository conn)
-                 (funcall callback t)
-                 (expect refreshed)
-                 (expect (search "fetch complete" (first messages)))
-                 (funcall callback nil)
-                 (expect (search "already in progress" (first messages)))
-                 (funcall error-callback (make-condition 'simple-error
-                                                          :format-control "offline"))
-                 (expect (search "fetch failed" (first messages)))
-                 (setf (fdefinition 'nerimux/vcs:fetch-repository-async)
-                       (lambda (repository &key on-complete on-error
-                                        callback-dispatch)
-                         (declare (ignore repository on-complete on-error
-                                             callback-dispatch))
-                         (error "sync failure")))
-                 (nerimux::%workspace-fetch-repository conn)
-                 (expect (search "sync failure" (first messages)))))
-          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
-                (fdefinition 'nerimux/vcs:fetch-repository-async) fetch
-                (fdefinition 'nerimux::%refresh-client-picker) refresh
-                (fdefinition 'nerimux::%client-notify) notify))))) (it "r7-1-organization-fetch-reports-unavailable-and-in-progress"
+      (let* ((conn (%make-test-conn))
+             (organization
+               (nerimux/workspace-model:make-organization
+                :id "org" :host "github.com" :name "team"))
+             (repository
+               (nerimux/workspace-model:make-repository
+                :id "repo" :organization organization
+                :specification "github.com/team/repo"))
+             (nerimux::*workspace-operation-jobs*
+               (make-hash-table :test (function equal)))
+             (available-p t)
+             (fetch-count 0)
+             (callbacks nil)
+             (sync-failure-p nil)
+             (refresh-count 0)
+             (messages nil))
+        (with-stubbed-fdefinition
+            ((nerimux/vcs:vcs-package-available-p
+               (lambda () available-p))
+             (nerimux/vcs:fetch-repository-async
+               (lambda (current &rest arguments)
+                 (expect (eq repository current))
+                 (if sync-failure-p
+                     (error "sync failure")
+                     (progn
+                       (incf fetch-count)
+                       (if (= fetch-count 1)
+                           (progn
+                             (setf callbacks arguments)
+                             (funcall (getf arguments :on-accepted)))
+                           (funcall (getf arguments :on-complete) nil))))))
+             (nerimux::%refresh-client-picker
+               (lambda (connection)
+                 (declare (ignore connection))
+                 (incf refresh-count)))
+             (nerimux::%client-notify
+               (lambda (connection message)
+                 (declare (ignore connection))
+                 (push message messages))))
+          (nerimux::%workspace-fetch-repository conn)
+          (expect (search "selected repository" (first messages)))
+          (nerimux::%set-client-selected-tree-object conn repository)
+          (setf available-p nil)
+          (nerimux::%workspace-fetch-repository conn)
+          (expect (search "VCS unavailable" (first messages)))
+          (setf available-p t)
+          (nerimux::%workspace-fetch-repository conn)
+          (let ((job
+                  (gethash (list :repository "repo" :fetch)
+                           nerimux::*workspace-operation-jobs*)))
+            (expect (= 1 fetch-count))
+            (expect (functionp (getf callbacks :on-accepted)))
+            (expect (functionp (getf callbacks :on-start)))
+            (expect (functionp (getf callbacks :on-complete)))
+            (expect (functionp (getf callbacks :on-error)))
+            (expect job)
+            (expect (eq :queued
+                        (nerimux::workspace-operation-job-state job)))
+            (nerimux::%workspace-fetch-repository conn)
+            (expect (= 2 fetch-count))
+            (expect (search "already in progress" (first messages)))
+            (expect (eq job
+                        (gethash (list :repository "repo" :fetch)
+                                 nerimux::*workspace-operation-jobs*)))
+            (expect (eq :queued
+                        (nerimux::workspace-operation-job-state job)))
+            (funcall (getf callbacks :on-start))
+            (expect (eq :running
+                        (nerimux::workspace-operation-job-state job)))
+            (funcall (getf callbacks :on-complete) repository)
+            (expect (eq :succeeded
+                        (nerimux::workspace-operation-job-state job)))
+            (expect (= 1 refresh-count))
+            (expect (= 1 (count "fetch complete" messages :test (function string=))))
+            (funcall (getf callbacks :on-error)
+                     (make-condition (quote simple-error)
+                                     :format-control "offline"))
+            (expect (search "fetch failed" (first messages)))
+            (expect (eq :succeeded
+                        (nerimux::workspace-operation-job-state job)))
+            (setf sync-failure-p t)
+            (nerimux::%workspace-fetch-repository conn)
+            (expect (search "sync failure" (first messages)))))))) (it "r7-1-organization-fetch-reports-unavailable-and-in-progress"
     (with-fake-session (s)
       (expect s)
-      (let ((conn (%make-test-conn))
-            (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
-            (fetch (fdefinition 'nerimux/vcs:fetch-organization-async))
-            (refresh (fdefinition 'nerimux::%refresh-client-picker))
-            (notify (fdefinition 'nerimux::%client-notify))
-            (completion-callback nil)
-            (error-callback nil)
-            (refreshed nil)
-            (messages nil))
-        (unwind-protect
-             (progn
-               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
-                     (lambda () nil)
-                     (fdefinition 'nerimux::%client-notify)
-                     (lambda (connection message)
-                       (declare (ignore connection))
-                       (push message messages)))
-               (nerimux::%workspace-fetch-organization conn)
-               (expect (search "selected organization" (first messages)))
-               (let ((organization (nerimux/workspace-model:make-organization
-                                    :id "org" :host "github.com" :name "team")))
-                 (nerimux::%set-client-selected-tree-object conn organization)
-                 (nerimux::%workspace-fetch-organization conn)
-                 (expect (search "VCS unavailable" (first messages))))
-               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
-                     (lambda () t)
-                     (fdefinition 'nerimux::%refresh-client-picker)
-                     (lambda (connection)
-                       (declare (ignore connection))
-                       (setf refreshed t))
-                     (fdefinition 'nerimux/vcs:fetch-organization-async)
-                     (lambda (organization &key on-complete on-error
-                                        callback-dispatch)
-                       (declare (ignore organization callback-dispatch))
-                       (setf completion-callback on-complete)
-                       (funcall on-complete (list :repository))
-                       (setf error-callback on-error)))
-               (let ((organization (nerimux/workspace-model:make-organization
-                                    :id "org" :host "github.com" :name "team")))
-                 (nerimux::%set-client-selected-tree-object conn organization)
-                 (nerimux::%workspace-fetch-organization conn)
-                 (expect refreshed)
-                 (expect (search "fetch complete" (first messages)))
-                 (funcall completion-callback nil)
-                 (expect (search "already in progress" (first messages)))
-                 (funcall error-callback
-                          (nerimux/workspace-model:make-repository
-                           :id "repo" :organization organization
-                           :specification "github.com/team/repo")
-                          (make-condition 'simple-error
-                                          :format-control "offline"))
-                 (expect (search "fetch failed for repo" (first messages)))
-                 (setf (fdefinition 'nerimux/vcs:fetch-organization-async)
-                       (lambda (&rest args)
-                         (declare (ignore args))
-                         (error "sync failure")))
-                 (nerimux::%workspace-fetch-organization conn)
-                 (expect (search "sync failure" (first messages))))))
-          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
-                (fdefinition 'nerimux/vcs:fetch-organization-async) fetch
-                (fdefinition 'nerimux::%refresh-client-picker) refresh
-                (fdefinition 'nerimux::%client-notify) notify))))
+      (let* ((conn (%make-test-conn))
+             (organization
+               (nerimux/workspace-model:make-organization
+                :id "org" :host "github.com" :name "team"))
+             (repository
+               (nerimux/workspace-model:make-repository
+                :id "repo" :organization organization
+                :specification "github.com/team/repo"))
+             (failed-organization
+               (nerimux/workspace-model:make-organization
+                :id "failed-org" :host "github.com" :name "failed-team"))
+             (failed-repository
+               (nerimux/workspace-model:make-repository
+                :id "failed-repo" :organization failed-organization
+                :specification "github.com/failed-team/failed-repo"))
+             (failure
+               (make-condition (quote simple-error)
+                               :format-control "offline"))
+             (nerimux::*workspace-operation-jobs*
+               (make-hash-table :test (function equal)))
+             (available-p t)
+             (fetch-count 0)
+             (success-callbacks nil)
+             (failure-callbacks nil)
+             (sync-failure-p nil)
+             (refresh-count 0)
+             (messages nil))
+        (nerimux/workspace-model:organization-add-repository
+         organization repository)
+        (nerimux/workspace-model:organization-add-repository
+         failed-organization failed-repository)
+        (with-stubbed-fdefinition
+            ((nerimux/vcs:vcs-package-available-p
+               (lambda () available-p))
+             (nerimux/vcs:fetch-organization-async
+               (lambda (current &rest arguments)
+                 (if sync-failure-p
+                     (error "sync failure")
+                     (progn
+                       (incf fetch-count)
+                       (case fetch-count
+                         (1
+                          (expect (eq organization current))
+                          (setf success-callbacks arguments)
+                          (funcall (getf arguments :on-accepted)))
+                         (2
+                          (expect (eq organization current))
+                          (funcall (getf arguments :on-complete) nil))
+                         (3
+                          (expect (eq failed-organization current))
+                          (setf failure-callbacks arguments)
+                          (funcall (getf arguments :on-accepted)))
+                         (otherwise
+                          (error "unexpected fetch invocation")))))))
+             (nerimux::%refresh-client-picker
+               (lambda (connection)
+                 (declare (ignore connection))
+                 (incf refresh-count)))
+             (nerimux::%client-notify
+               (lambda (connection message)
+                 (declare (ignore connection))
+                 (push message messages))))
+          (nerimux::%workspace-fetch-organization conn)
+          (expect (search "selected organization" (first messages)))
+          (nerimux::%set-client-selected-tree-object conn organization)
+          (setf available-p nil)
+          (nerimux::%workspace-fetch-organization conn)
+          (expect (search "VCS unavailable" (first messages)))
+          (setf available-p t)
+          (nerimux::%workspace-fetch-organization conn)
+          (let ((job
+                  (gethash (list :organization "org" :fetch)
+                           nerimux::*workspace-operation-jobs*)))
+            (expect (= 1 fetch-count))
+            (expect (functionp (getf success-callbacks :on-accepted)))
+            (expect (functionp (getf success-callbacks :on-start)))
+            (expect (functionp (getf success-callbacks :on-complete)))
+            (expect (functionp (getf success-callbacks :on-error)))
+            (expect job)
+            (expect (eq :queued
+                        (nerimux::workspace-operation-job-state job)))
+            (funcall (getf success-callbacks :on-start))
+            (expect (eq :running
+                        (nerimux::workspace-operation-job-state job)))
+            (funcall (getf success-callbacks :on-complete)
+                     (list repository))
+            (expect (eq :succeeded
+                        (nerimux::workspace-operation-job-state job)))
+            (expect (= 1 refresh-count))
+            (expect (= 1 (count "fetch complete" messages :test (function string=))))
+            (nerimux::%workspace-fetch-organization conn)
+            (expect (= 2 fetch-count))
+            (expect (search "already in progress" (first messages)))
+            (expect (eq job
+                        (gethash (list :organization "org" :fetch)
+                                 nerimux::*workspace-operation-jobs*)))
+            (expect (eq :succeeded
+                        (nerimux::workspace-operation-job-state job))))
+          (nerimux::%set-client-selected-tree-object conn failed-organization)
+          (nerimux::%workspace-fetch-organization conn)
+          (let* ((job
+                   (gethash (list :organization "failed-org" :fetch)
+                            nerimux::*workspace-operation-jobs*))
+                 (refresh-before refresh-count)
+                 (complete-before
+                   (count "fetch complete" messages :test (function string=))))
+            (expect (= 3 fetch-count))
+            (expect job)
+            (expect (eq :queued
+                        (nerimux::workspace-operation-job-state job)))
+            (funcall (getf failure-callbacks :on-start))
+            (expect (eq :running
+                        (nerimux::workspace-operation-job-state job)))
+            (funcall (getf failure-callbacks :on-error)
+                     failed-repository failure)
+            (expect (search "fetch failed for failed-repo" (first messages)))
+            (expect (eq :failed
+                        (nerimux::workspace-operation-job-state job)))
+            (expect (eq failure
+                        (nerimux::workspace-operation-job-outcome job)))
+            (funcall (getf failure-callbacks :on-complete)
+                     (list failed-repository))
+            (expect (= refresh-before refresh-count))
+            (expect (= complete-before
+                       (count "fetch complete" messages :test (function string=))))
+            (expect (eq :failed
+                        (nerimux::workspace-operation-job-state job)))
+            (expect (eq failure
+                        (nerimux::workspace-operation-job-outcome job))))
+          (setf sync-failure-p t)
+          (nerimux::%workspace-fetch-organization conn)
+          (expect (search "sync failure" (first messages)))))))
 
   (it "r5-4-refocuses-to-the-most-recent-pane-in-the-worktree"
     (let* ((organization (nerimux/workspace-model:make-organization
