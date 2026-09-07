@@ -10,14 +10,9 @@
   (write-char (code-char 7) buffer))
 
 (defun %discard-background-bells (session active-window)
-  "Consume, without relaying, every pending BEL in a window other than
-   ACTIVE-WINDOW.
-
-   Relaying these was the background-bell alert, and it went with the rest of
-   the alert machinery. Consuming them did not: a pending bell is sticky, so
-   dropping the drain along with the relay would make a bell raised while a
-   window sat in the background ring later, at the moment the user switched to
-   it. A bell the user was not present for is not owed to them on arrival."
+  "Consume pending BEL flags for non-active panes.
+   Their raw BEL sequence is retained on the pane notification queue and is
+   sent by the server as a binary notification frame."
   (dolist (win (session-windows session))
     (unless (eq win active-window)
       (dolist (pane (window-panes win))
@@ -25,15 +20,11 @@
           (screen-consume-bell (pane-screen pane)))))))
 
 (defun %render-bell-and-cursor (buffer active-pane)
-  "Emit a pending BEL from ACTIVE-PANE (if any) and restore cursor visibility.
-   bell-action (domain/options, deleted R2.2) defaulted to \"any\" — always
-   relay — with no config to set \"none\"/\"other\" (suppress); §1.1 (alerts
-   retired outright) makes that the permanent behaviour, so the suppression
-   branch is gone rather than dispatching on a value that can never differ."
+  "Clear the active pane's consumed BEL flag and restore cursor visibility.
+   The raw BEL is sent through the notification wire message, so emitting it
+   in the rendered frame would duplicate the host notification."
   (when active-pane
-    (let ((bell-pending (screen-consume-bell (pane-screen active-pane))))
-      (when bell-pending
-        (%emit-bell buffer))))
+    (screen-consume-bell (pane-screen active-pane)))
   (when 
       (or (null active-pane) (screen-cursor-visible (pane-screen active-pane)))
     (cursor-visible buffer)

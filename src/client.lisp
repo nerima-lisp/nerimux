@@ -27,14 +27,34 @@
      disposition  :exit    — server signalled end-of-session (+msg-bye+ or EOF);
                   :frame   — a rendered screen frame was received;
                   :ignore  — an unrecognised frame type (continue event loop).
-     text         the decoded string payload for a :frame disposition, NIL otherwise.
+     text         the decoded string payload for a :frame disposition, NIL otherwise;
+     raw bytes    the original octet payload for a :notification disposition.
    The caller (%receive-server-frame) owns the output side effect."
   (with-incoming-frame (type payload stream)
                        ((null type) (values :exit nil))
                        ((= type +msg-bye+) (values :exit nil))
                        ((= type +msg-frame+)
                         (values :frame (decode-text payload)))
+                       ((= type +msg-notification+)
+                        (values :notification payload))
                        (t (values :ignore nil))))
+
+(defun %write-notification-bytes (bytes)
+  "Write BYTES to stdout without applying a character encoding."
+  (let ((standard-output *standard-output*))
+    (if (subtypep (stream-element-type standard-output)
+                  '(unsigned-byte 8))
+        (progn
+          (write-sequence bytes standard-output)
+          (force-output standard-output))
+        (let ((binary-output
+                (sb-sys:make-fd-stream 1
+                                       :output t
+                                       :element-type '(unsigned-byte 8)
+                                       :buffering :none
+                                       :auto-close nil)))
+          (write-sequence bytes binary-output)
+          (force-output binary-output)))))
 
 (defun %receive-server-frame (stream)
   "Effect boundary: read and dispatch one frame from the server STREAM.
@@ -48,6 +68,9 @@
       (:frame
         (write-string text)
         (force-output)
+        nil)
+      (:notification
+        (%write-notification-bytes text)
         nil)
       (t nil))))
 

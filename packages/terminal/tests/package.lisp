@@ -41,6 +41,7 @@
                 #:screen-copy-rect-select-p
                 #:screen-app-cursor-keys
                 #:screen-dirty-p
+                #:screen-notification-queue
                 #:char-width
                 #:screen-p)
   (:export #:with-screen

@@ -20,7 +20,9 @@
       (expect (char= #\a (char-at s 0 0)))
       (expect (char= #\b (char-at s 1 0)))
       (check-cursor s 2 0)
-      (expect (nerimux/terminal/types:screen-bell-pending s))))
+      (expect (nerimux/terminal/types:screen-bell-pending s))
+      (expect (equalp #(7)
+                      (car (car (nerimux/terminal/types:screen-notification-queue s)))))))
 
 
   (defun %feed-osc (s payload)
@@ -205,6 +207,17 @@
       (feed s "b")
       (expect (char= #\a (char-at s 0 0)))
       (expect (char= #\b (char-at s 1 0)))))
+
+  (it "notification-osc-preserves-raw-payload-and-terminator"
+    (with-screen (s 20 5)
+      (let ((raw (make-array 0 :element-type '(unsigned-byte 8)
+                             :adjustable t :fill-pointer 0)))
+        (dolist (byte '(#x1B #x5D #x39 #x39 #x3B #xC3 #x28 #x1B #x5C))
+          (vector-push-extend byte raw))
+        (screen-process-bytes s raw)
+        (let ((entry (car (nerimux/terminal/types:screen-notification-queue s))))
+          (expect (equalp raw (car entry)))
+          (expect (stringp (cdr entry)))))))
 
   (it "osc-st-ignored"
     (with-screen (s 10 2)

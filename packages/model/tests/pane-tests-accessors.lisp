@@ -62,4 +62,27 @@
       (setf (nerimux/terminal/types:screen-response-queue screen)
             (list (format nil "~C[?1;2c" #\Escape)))
       (finishes (nerimux/pane::%drain-response-queue pane screen))
-      (expect (null (nerimux/terminal/types:screen-response-queue screen))))))
+      (expect (null (nerimux/terminal/types:screen-response-queue screen)))))
+
+  (it "pane-feed-records-raw-notification-and-text"
+    (let* ((screen (make-screen 10 5))
+           (pane (make-pane :id 1 :x 0 :y 0 :width 10 :height 5
+                            :fd -1 :pid -1 :screen screen)))
+      (pane-feed pane (make-array 9 :element-type '(unsigned-byte 8)
+                                  :initial-contents
+                                  '(27 93 57 59 104 105 7 65 66)))
+      (let ((notifications (pane-drain-notifications pane)))
+        (expect (= 1 (length notifications)))
+        (expect (equalp #(27 93 57 59 104 105 7) (first notifications)))
+        (expect (string= "hi" (pane-notification pane))))))
+
+  (it "pane-feed-coalesces-one-hundred-notifications-in-one-second"
+    (let* ((screen (make-screen 10 5))
+           (pane (make-pane :id 1 :x 0 :y 0 :width 10 :height 5
+                            :fd -1 :pid -1 :screen screen))
+           (bytes (make-array (* 100 8)
+                              :element-type '(unsigned-byte 8))))
+      (loop for offset from 0 below (length bytes) by 8
+            do (replace bytes #(27 93 57 59 120 120 120 7) :start1 offset))
+      (pane-feed pane bytes)
+      (expect (= 1 (length (pane-drain-notifications pane)))))))

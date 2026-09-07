@@ -84,6 +84,15 @@
         (expect (null (nerimux/terminal/types:screen-bell-pending
                        (nerimux/pane:pane-screen pane2)))))))
 
+  (it "render-session-keeps-background-raw-notifications-for-server"
+    (let* ((sess (make-fake-session :nwindows 2))
+           (win2 (second (nerimux/session:session-windows sess)))
+           (pane2 (first (nerimux/window:window-panes win2))))
+      (nerimux/pane:pane-feed pane2 #(7))
+      (let ((out (nerimux/renderer::render-session-to-string sess 5 20)))
+        (expect (null (find (code-char 7) (%bel-before-title-osc out))))
+        (expect (= 1 (length (nerimux/pane:pane-drain-notifications pane2)))))))
+
   (it "emit-bell-always-audible"
     (let ((out (with-output-to-string (s) (nerimux/renderer::%emit-bell s))))
       (expect (find (code-char 7) out)))))

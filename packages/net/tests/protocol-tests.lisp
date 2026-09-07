@@ -112,7 +112,15 @@
       (assert-decoded-frame-payload
        frame
        (lambda (payload)
-         (expect (string= text (decode-text payload)))))))
+           (expect (string= text (decode-text payload)))))))
+
+  (it "notification-roundtrip-preserves-binary-payload"
+    (let ((raw #(27 93 57 59 0 255 7)))
+      (multiple-value-bind (type payload next)
+          (decode-frame (msg-notification raw))
+        (expect (= +msg-notification+ type))
+        (expect (equalp raw payload))
+        (expect (= (length (msg-notification raw)) next)))))
 
   (it "decode-text-replaces-malformed-utf8"
     (expect (string= (format nil "A~Cz" #\REPLACEMENT_CHARACTER)
