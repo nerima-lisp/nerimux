@@ -135,7 +135,8 @@
       (when (%stale-socket-p socket-path)
         (handler-case
             (delete-file socket-path)
-          (file-error () nil)))
+          (file-error ()
+            (error "could not remove stale socket at ~A" socket-path))))
       (unless (probe-file socket-path)
         (format *error-output* "~&nerimux: starting server...~%")
         (force-output *error-output*)
