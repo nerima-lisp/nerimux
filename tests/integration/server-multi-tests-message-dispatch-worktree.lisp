@@ -317,7 +317,7 @@
       (expect (null deletes))
       (expect (equal '(:locked :metadata-repair-required)
                      (mapcar #'third (nerimux::workspace-prune-job-results
-                                      (nerimux::client-conn-workspace-prune-job conn))))))))
+                                      (nerimux::client-conn-workspace-prune-job conn)))))))
 
   (it "ignores stale delete callbacks and settles cancellation or exclusion"
     (with-workspace-prune-fixture (conn worktrees preflights deletes)
@@ -362,7 +362,7 @@
 (it "derives a directory identity from the real worktree path"
   (let ((worktree (nerimux/workspace-model:make-worktree
                    :path (namestring (truename ".")))))
-    (expect (nerimux::%workspace-prune-directory-identity worktree))))
+    (expect (nerimux::%workspace-prune-directory-identity worktree)))))
 
 (defun %expect-attached-worktree-delete (view modal target connected session-p blocked)
   (dolist (force '(nil t))
@@ -1247,7 +1247,7 @@
           (let ((operation
                   (gethash '(:worktree "prune-a" :prune)
                            nerimux::*workspace-operation-jobs*)))
-            (expect (eq :failed (nerimux::workspace-operation-job-state operation)))))))))
+            (expect (eq :failed (nerimux::workspace-operation-job-state operation))))))))
 
   (it "tracks prune worker starts and synchronous failures"
     (with-workspace-prune-fixture (conn worktrees preflights deletes)
@@ -1285,4 +1285,4 @@
                 (gethash '(:worktree "prune-a" :prune)
                          nerimux::*workspace-operation-jobs*)))
           (expect (eq :failed (nerimux::workspace-prune-job-state job)))
-          (expect (eq :failed (nerimux::workspace-operation-job-state operation)))))))
+          (expect (eq :failed (nerimux::workspace-operation-job-state operation))))))))

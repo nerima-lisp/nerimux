@@ -332,7 +332,7 @@
                (expect (zerop (hash-table-count nerimux::*workspace-refreshing-ids*))))
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:refresh-workspace-organizations-async)
-                refresh-fn))))))
+                refresh-fn)))))
 
   (it "refresh-client-picker-builds-items-without-vcs"
     (multiple-value-bind (organizations) (%make-server-dispatch-helper-fixture)
@@ -692,4 +692,4 @@
               (declare (ignore args))
               (error 'stream-error :stream stream))))
         (nerimux::%drop-client conn :bye t))
-      (expect (null nerimux::*clients*))))
+      (expect (null nerimux::*clients*)))))
