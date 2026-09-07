@@ -220,6 +220,7 @@
                                  (lambda (part)
                                    (%sgr-wrap (car part) (cdr part)))
                                  ahead-behind))))
+                  (cons pane-count (%sgr-wrap pane-count +sgr-faint+))
                   (cons (format nil "~A git:~A" agent state)
                         (format nil "~A git:~A"
                                 (%sgr-wrap agent

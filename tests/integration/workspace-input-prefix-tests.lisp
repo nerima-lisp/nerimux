@@ -165,7 +165,7 @@
         (expect (null (nerimux::client-conn-ui-prefix-p conn)))
         (expect (null (nerimux::client-conn-modal conn))))))
 
-  (it "r4-4-prefix-w-opens-status-view-for-the-focused-worktree"
+  (it "r4-4-prefix-w-opens-overview-directly-and-repeatedly-for-the-focused-worktree"
     (with-minimal-session (pane win sess)
       (declare (ignorable win))
       (let* ((organization
@@ -184,10 +184,15 @@
         (nerimux/workspace-model:repository-add-worktree repository worktree)
         (nerimux/pane:worktree-add-pane worktree pane)
         (nerimux::%set-client-focus conn pane)
-        (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q
-        (nerimux::%handle-multi-key-message sess conn #(119)) ; w
-        (expect (eq :status (nerimux::client-conn-view conn)))
-        (expect (eq worktree (nerimux::client-conn-selected-worktree conn))))))
+        (dolist (view '(:pane :status :repolist))
+          (nerimux::%set-client-view conn view)
+          (dotimes (iteration 2)
+            (declare (ignore iteration))
+            (nerimux::%handle-multi-key-message sess conn #(17))
+            (nerimux::%handle-multi-key-message sess conn #(119))
+            (expect (eq :repolist (nerimux::client-conn-view conn)))
+            (expect (eq worktree (nerimux::client-conn-selected-worktree conn)))
+            (expect (eq worktree (nerimux::client-conn-selected-tree-object conn))))))))
 
   (it "r4-4-prefix-w-with-no-focused-worktree-falls-back-to-repolist"
     (with-minimal-session (pane win sess)

@@ -56,8 +56,8 @@
             (guard-observer
              (lambda (repository condition)
                (when on-repository-error
-                 (funcall on-repository-error repository condition))))))
-       :on-error (guard-observer on-error))))))
+                 (funcall on-repository-error repository condition)))))))
+       :on-error (guard-observer on-error)))))
 
 (defun scan-repositories (&key query on-complete on-error on-progress)
   "Build the organization/repository hierarchy from ghq-list-repositories.

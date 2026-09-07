@@ -245,14 +245,14 @@
              (nerimux/workspace-model:organization-add-repository organization repository)
              (with-stubbed-fdefinition
                  ((nerimux/vcs:scan-repositories-async
-                    (lambda (&key query on-complete on-error on-progress callback-dispatch)
-                      (declare (ignore query on-error on-progress callback-dispatch))
+                    (lambda (&key query on-start on-complete on-error on-progress callback-dispatch)
+                      (declare (ignore query on-start on-error on-progress callback-dispatch))
                       (funcall on-complete (list organization))
                       nil))
                   (nerimux/vcs:refresh-repositories-async
-                    (lambda (repositories &key on-repository on-complete on-error
+                    (lambda (repositories &key on-start on-repository on-complete on-error
                                status-reader status-applier callback-dispatch)
-                      (declare (ignore on-repository status-reader status-applier
+                      (declare (ignore on-start on-repository status-reader status-applier
                                        callback-dispatch))
                       (funcall on-error repository synthetic-condition)
                       (funcall on-complete repositories)

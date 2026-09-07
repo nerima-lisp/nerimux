@@ -335,7 +335,7 @@
         (nerimux::%set-client-selected-tree-object conn worktree)
         (nerimux::%handle-multi-key-message s conn #(9)) ; Tab: expand the worktree
         (nerimux::%handle-multi-key-message
-         s conn (cl-codec-kit:string-to-octets "n" :encoding :utf-8)) ; move onto the :file row
+         s conn #(27 91 66)) ; Down: move onto the :file row
         (let ((selected (nerimux::client-conn-selected-tree-object conn)))
           (expect (consp selected))
           (expect (eq :file (first selected))))

@@ -404,7 +404,7 @@
 
 (describe "renderer-suite/workspace-tree-info-cluster"
 
-  (it "shows ahead count, pane count with exit marker, state tag, and relative time"
+  (it "shows terminal count without confusing terminal exit with agent exit"
     (let* ((pane-1 (nerimux/pane:make-pane :id 1 :fd -1))
            (pane-2 (nerimux/pane:make-pane :id 2 :fd -1 :process-exited-p t))
            (window
@@ -433,8 +433,8 @@
                 (list organization) 24 100))
              (plain (strip-sgr frame)))
         (expect (search "+2" plain))
-        (expect (search "2p!" plain))
-        (expect (search "DIRTY" plain))
+        (expect (search "terminal:2 agent:NONE git:DIRTY" plain))
+        (expect (not (search "EXITED" plain)))
         (expect (search "5m" plain)))))
 
   (it "switches relative-time buckets at the 60s/3600s/86400s boundaries"

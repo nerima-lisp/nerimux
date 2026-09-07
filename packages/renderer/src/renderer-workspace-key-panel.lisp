@@ -78,7 +78,7 @@
                     (if (eq mode :repolist)
                         (%workspace-hint "c/x" "Claude/Codex")
                         (%workspace-hint "c/P/F" "commit/push/pull"))
-                    (%workspace-hint "g" "refresh")))))
+                    (%workspace-hint "g" "refresh"))))))
    (format nil " ~A~A  ~{~A~^  ~}"
            (if (plusp (length (or tree-filter "")))
                (format nil "~A  " (%sgr-wrap (format nil "/~A" tree-filter) +sgr-muted+))
@@ -91,4 +91,4 @@
                  (%workspace-hint (format nil "~A w" (%workspace-prefix-label prefix-code))
                                   "status")
                  (%workspace-hint (format nil "~A d" (%workspace-prefix-label prefix-code))
-                                  "detach"))))))
+                                  "detach")))))

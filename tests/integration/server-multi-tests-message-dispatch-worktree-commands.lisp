@@ -112,7 +112,7 @@
                      (fdefinition 'nerimux/vcs:create-worktree-async)
                      (lambda (received-repository
                               &key branch path force on-complete on-error
-                                callback-dispatch)
+                                callback-dispatch &allow-other-keys)
                        (declare (ignore path force on-complete on-error
                                        callback-dispatch))
                        (setf call (list received-repository branch))
@@ -134,7 +134,8 @@
 
   (it "overview-worktree-delete-dispatches-and-restores-overview"
     (with-fake-session (s)
-      (let* ((organization
+      (let* ((nerimux::*worktree-delete-reservations* (make-hash-table :test #'equal))
+             (organization
                (nerimux/workspace-model:make-organization
                 :id "org"
                 :host "github.com"
@@ -162,8 +163,8 @@
                      (lambda () t)
                      (fdefinition 'nerimux/vcs:delete-worktree-async)
                      (lambda (received-worktree
-                              &key force on-complete on-error callback-dispatch)
-                       (declare (ignore on-complete on-error callback-dispatch))
+                              &key force on-complete on-error on-result callback-dispatch)
+                       (declare (ignore on-complete on-error on-result callback-dispatch))
                        (setf call (list received-worktree force))
                        t))
                (setf (nerimux::client-conn-view conn) :repolist)

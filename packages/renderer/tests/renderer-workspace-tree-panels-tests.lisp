@@ -9,12 +9,12 @@
       (expect (search "fold" plain))
       (expect (not (search "shell(main)" plain)))))
 
-  (it "shows the shell(main)/fetch hints for a repository selection"
+  (it "shows the create and fetch hints for a repository selection"
     (let* ((repository (nerimux/workspace-model:make-repository :id "repo-panel" :specification "s"))
            (plain (strip-sgr
                    (nerimux/renderer::%workspace-key-panel-content
                     repository :normal #x11 nil))))
-      (expect (search "shell(main)" plain))
+      (expect (search "main:agent>terminal>assign" plain))
       (expect (not (search "fold" plain)))))
 
   (it "shows the default worktree-row hints for a worktree selection"

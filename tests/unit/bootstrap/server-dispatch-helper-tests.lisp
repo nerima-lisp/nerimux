@@ -468,12 +468,26 @@
     (let* ((session (nerimux/session:make-session :id 1 :name "test"))
            (conn (nerimux::%make-client-conn))
            (calls 0)
+           (row-calls nil)
+           (prune-calls nil)
+           (create-calls nil)
            (record (lambda (&rest arguments)
                      (declare (ignore arguments))
                      (incf calls))))
       (with-stubbed-fdefinition
           ((nerimux::%client-meta-pending-consume record)
-           (nerimux::%select-client-tree-relative record)
+           (nerimux::%select-client-tree-relative
+             (lambda (received-conn delta)
+               (push (list received-conn delta) row-calls)
+               (incf calls)))
+           (nerimux::%client-start-worktree-create
+             (lambda (received-session received-conn)
+               (push (list received-session received-conn) create-calls)
+               t))
+           (nerimux::%client-prune-workspaces
+             (lambda (received-conn &key all)
+               (push (list received-conn all) prune-calls)
+               t))
            (nerimux::%client-toggle-selected-tree-row record)
            (nerimux::%client-set-visibility-level record)
            (nerimux::%focus-selected-client-worktree record)
@@ -489,10 +503,19 @@
            (nerimux::%client-unstage-selection record)
            (nerimux::%client-unstage-all record)
            (nerimux::%client-start-discard-selection record))
+        (setf (nerimux::client-conn-view conn) :status)
         (dolist (payload '("n" "p" #(9) "1" "2" "3" "4"
                            #(13) #(10) "g" "q" "$" "/" ":" "?"))
           (nerimux::%handle-client-ui-key-payload session conn payload))
+        (expect (equal (list (list conn -1) (list conn 1)) row-calls))
+        (expect (null create-calls))
+        (expect (null prune-calls))
         (setf (nerimux::client-conn-view conn) :repolist)
+        (dolist (payload '("n" "p" "P"))
+          (nerimux::%handle-client-ui-key-payload session conn payload))
+        (expect (equal (list (list session conn)) create-calls))
+        (expect (equal (list (list conn t) (list conn nil)) prune-calls))
+        (expect (equal (list (list conn -1) (list conn 1)) row-calls))
         (dolist (payload '("t" "c" "x"))
           (nerimux::%handle-client-ui-key-payload session conn payload))
         (setf (nerimux::client-conn-view conn) :status)
@@ -502,6 +525,7 @@
         (setf (gethash conn nerimux::*client-meta-pending*) :second)
         (nerimux::%handle-client-ui-key-payload session conn "x")
         (remhash conn nerimux::*client-meta-pending*)
+        (expect (equal (list (list conn t) (list conn nil)) prune-calls))
         (expect (= 38 calls)))))
 
   (it "open-selected-worktree-command-reports-missing-selection"
@@ -533,7 +557,8 @@
                t)))
         (expect (nerimux::%client-open-selected-worktree-command
                  :session conn :shell))
-        (expect (equal (list :session conn :worktree :default-command :shell)
+        (expect (equal (list :session conn :worktree :default-command :shell
+                             :agent-kind nil)
                        calls)))))
 
   (it "status-commands-report-missing-selection-through-one-contract"
@@ -928,7 +953,7 @@
         (expect (eq lower (nerimux::client-conn-focus conn)))
         (expect nerimux::*dirty*))))
 
-  (it "starts worktree creation with an automatic branch for a selected repository"
+  (it "starts detached worktree creation for a selected repository"
     (let ((session (nerimux/session:make-session :id 1 :name "test"))
           (conn (nerimux::%make-client-conn))
           (repository (nerimux/workspace-model:make-repository
@@ -939,15 +964,14 @@
              (lambda (connection)
                (declare (ignore connection))
                repository))
-           (nerimux::%client-create-worktree-now
-             (lambda (selected branch connection current-session)
-               (setf arguments (list selected branch connection current-session))))
+           (nerimux::%client-create-detached-worktree
+             (lambda (selected connection current-session)
+               (setf arguments (list selected connection current-session))))
            (nerimux::%mark-dirty (lambda () t)))
         (expect (nerimux::%client-start-worktree-create session conn))
         (expect (eq repository (first arguments)))
-        (expect (uiop:string-prefix-p "wt-" (second arguments)))
-        (expect (eq conn (third arguments)))
-        (expect (eq session (fourth arguments))))))
+        (expect (eq conn (second arguments)))
+        (expect (eq session (third arguments))))))
 
   )
 (describe "agent-workspace merge additions"
