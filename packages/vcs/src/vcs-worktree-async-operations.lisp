@@ -6,27 +6,157 @@
                                                 command-form)
   `(defun ,name ,lambda-list
      ,documentation
-     (%run-vcs-operation-async ,thread-name
+     (let ((generation (%begin-worktree-request worktree)))
+       (%run-vcs-operation-async ,thread-name
                                (lambda ()
                                  (let ((repository ,command-form))
                                    (%capture-worktree-operation-result
                                     repository
-                                    t)))
+                                    t generation)))
                                #'%apply-worktree-operation-result
                                on-complete
                                on-error
-                               callback-dispatch)))
+                               callback-dispatch))))
 
+(defstruct (detached-worktree-result (:constructor %make-detached-worktree-result))
+  (path nil :read-only t)
+  (head nil :read-only t)
+  worktree
+  refresh-error)
+
+(defun %create-detached-worktree-result (repository)
+  (%fetch-origin-main repository)
+  (let* ((head (%rev-parse repository "--verify" "refs/remotes/origin/main^{commit}"))
+         (short-head (%rev-parse repository "--short" head))
+         (path (%resolve-worktree-path repository short-head nil)))
+    (vcs-kit:vcs-worktree (%repository-backend repository)
+                          "add" "--detach" path head)
+    (let ((receipt (%make-detached-worktree-result :path path :head head)))
+      (cons receipt
+            (handler-case (%read-repository-refresh repository)
+              (error (condition)
+                (setf (detached-worktree-result-refresh-error receipt) condition)
+                nil))))))
+
+(defun %apply-detached-worktree-result (repository result)
+  (let ((receipt (car result)))
+    (unless (detached-worktree-result-refresh-error receipt)
+      (handler-case
+          (sb-thread:with-recursive-lock (*workspace-catalog-generation-lock*)
+            (%apply-repository-refresh repository (cdr result))
+            (setf (detached-worktree-result-worktree receipt)
+                  (%created-worktree-by-path
+                   repository (detached-worktree-result-path receipt))))
+        (error (condition)
+          (setf (detached-worktree-result-refresh-error receipt) condition))))
+    receipt))
+
+(defun create-detached-worktree-async (repository &key on-complete on-error on-start
+                                                    callback-dispatch)
+  "Fetch origin/main and create a detached worktree. ON-COMPLETE receives a
+DETACHED-WORKTREE-RESULT even if catalog refresh fails after creation.
+Reject concurrent detached creation for the same canonical repository path.
+The reservation lasts until callback delivery; generic fetch is independent.
+Joining the returned thread also yields the creation receipt and a worker or
+dispatch error as two values, so failed delivery cannot hide a created path."
+  (let ((key (list :detached-worktree
+                   (namestring
+                    (truename (nerimux/workspace-model:repository-local-path
+                               repository)))))
+        (generation nil)
+        (released-p nil)
+        (release-requested-p nil)
+        (active-deliveries 0)
+        (delivery-lock (cl-concurrent-kit:make-lock :name "detached-worktree-delivery")))
+    (unless (%fetch-begin key)
+      (%dispatch-callback callback-dispatch on-error
+                          (make-condition 'simple-error
+                                          :format-control "Detached worktree creation already in progress"))
+      (return-from create-detached-worktree-async nil))
+    (setf generation (%begin-repository-data-generation repository))
+    (labels ((release-if-idle ()
+               (when (and release-requested-p (zerop active-deliveries)
+                          (not released-p))
+                 (setf released-p t)
+                 (%fetch-end key)))
+             (release-reservation ()
+               (cl-concurrent-kit:with-lock-held (delivery-lock)
+                 (setf release-requested-p t)
+                 (release-if-idle)))
+             (dispatch (callback &rest arguments)
+               (let ((state :pending))
+                 (handler-case
+                     (%dispatch-callback
+                      callback-dispatch
+                      (lambda ()
+                        (when (cl-concurrent-kit:with-lock-held (delivery-lock)
+                                (when (eq state :pending)
+                                  (setf state :delivered)
+                                  (incf active-deliveries)))
+                          (unwind-protect
+                               (apply callback arguments)
+                            (cl-concurrent-kit:with-lock-held (delivery-lock)
+                              (decf active-deliveries)
+                              (release-if-idle))))))
+                   (error (condition)
+                     (cl-concurrent-kit:with-lock-held (delivery-lock)
+                       (when (eq state :pending)
+                         (setf state :cancelled)))
+                     (error condition)))))
+             (complete (receipt)
+               (unwind-protect
+                    (when on-complete (funcall on-complete receipt))
+                 (release-reservation)))
+             (fail (condition)
+               (unwind-protect
+                    (when on-error (funcall on-error condition))
+                 (release-reservation))))
+      (handler-case
+          (cl-concurrent-kit:make-thread
+           (lambda ()
+             (let ((receipt nil))
+               (handler-case
+                   (let ((result (progn
+                                   (when on-start (dispatch on-start))
+                                   (%create-detached-worktree-result repository))))
+                     (setf receipt (car result))
+                     (dispatch
+                      (lambda ()
+                        (handler-case
+                            (complete
+                             (sb-thread:with-recursive-lock (*workspace-catalog-generation-lock*)
+                               (if (%repository-data-generation-current-p
+                                    repository generation :before-apply t)
+                                   (%apply-detached-worktree-result repository result)
+                                   (progn
+                                     (unless (detached-worktree-result-refresh-error receipt)
+                                       (setf (detached-worktree-result-refresh-error receipt)
+                                             (make-condition 'simple-error
+                                                             :format-control "Worktree refresh was superseded; refresh the workspace catalogue.")))
+                                     receipt))))
+                          (error (condition) (fail condition)))))
+                     (values receipt nil))
+                 (error (condition)
+                   (handler-case
+                       (dispatch #'fail condition)
+                     (error () (release-reservation)))
+                   (values receipt condition)))))
+           :name "nerimux-vcs-detached-create")
+        (error (condition)
+          (release-reservation)
+          (error condition))))))
 (defun create-worktree-async (repository &key
                                          branch
                                          path
                                          start-point
                                          force
+                                         on-start
                                          on-complete
                                          on-error
                                          callback-dispatch)
   "Create a worktree on a worker thread and invoke one callback."
-  (%run-vcs-operation-async "nerimux-vcs-worktree-create"
+  (let ((generation (%begin-worktree-request repository)))
+    (%run-vcs-operation-async "nerimux-vcs-worktree-create"
                             (lambda ()
                               (%capture-worktree-operation-result repository
                                                                   (%create-worktree-command
@@ -34,24 +164,64 @@
                                                                    branch
                                                                    path
                                                                    start-point
-                                                                   force)))
+                                                                   force)
+                                                                  generation))
                             (lambda (operation-result)
                               (%apply-created-worktree repository
                                                        operation-result))
                             on-complete
                             on-error
-                            callback-dispatch))
+                            callback-dispatch on-start)))
+(defstruct worktree-delete-result
+  (removed-p nil)
+  error
+  refresh-error)
 
-(define-worktree-async-operation delete-worktree-async
-                                 (worktree &key
-                                           force
-                                           on-complete
-                                           on-error
-                                           callback-dispatch)
-                                 "Delete a worktree on a worker thread and invoke one callback."
-                                 "nerimux-vcs-worktree-delete"
-                                 (%delete-worktree-command worktree force))
-
+(defun delete-worktree-async (worktree &key force before-delete on-complete
+                                         on-error on-result on-start callback-dispatch)
+  "ON-RESULT receives the removal receipt instead of the legacy callbacks.
+Observer errors do not change the recorded outcome of Git removal."
+  (let ((generation (%begin-worktree-request worktree)))
+    (cl-concurrent-kit:make-thread
+   (lambda ()
+     (%dispatch-callback callback-dispatch on-start)
+     (let ((receipt (make-worktree-delete-result))
+           (snapshot nil)
+           (repository nil)
+           (settled-p nil))
+       (handler-case
+           (progn
+             (when before-delete (funcall before-delete))
+             (setf repository (%delete-worktree-command worktree force)
+                   (worktree-delete-result-removed-p receipt) t)
+             (handler-case
+                 (setf snapshot (%capture-worktree-operation-result repository t generation))
+               (error (condition)
+                 (setf (worktree-delete-result-refresh-error receipt) condition))))
+         (error (condition)
+           (setf (worktree-delete-result-error receipt) condition)))
+       (%dispatch-callback
+        callback-dispatch
+        (lambda ()
+          (unless settled-p
+            (setf settled-p t)
+            (when snapshot
+              (handler-case (%apply-worktree-operation-result snapshot)
+                (error (condition)
+                  (setf (worktree-delete-result-refresh-error receipt) condition))))
+            (cond
+              (on-result (funcall on-result receipt))
+              ((or (worktree-delete-result-error receipt)
+                   (worktree-delete-result-refresh-error receipt))
+               (when on-error
+                 (funcall on-error (or (worktree-delete-result-error receipt)
+                                       (worktree-delete-result-refresh-error receipt)))))
+              (on-complete
+               (handler-case (funcall on-complete t)
+                 (error (condition)
+                   (when on-error (funcall on-error condition)))))))))
+       receipt))
+   :name "nerimux-vcs-worktree-delete")))
 (define-worktree-async-operation lock-worktree-async
                                  (worktree &key
                                            reason
@@ -81,7 +251,8 @@
 
 DRY-RUN defaults true, matching PRUNE-WORKTREES, so an omitted keyword here
 stays non-destructive instead of silently forwarding a false DRY-RUN."
-  (%run-vcs-operation-async "nerimux-vcs-worktree-prune"
+  (let ((generation (%begin-worktree-request repository)))
+    (%run-vcs-operation-async "nerimux-vcs-worktree-prune"
                             (lambda ()
                               (let ((worker-result
                                      (%prune-worktrees-command repository
@@ -89,10 +260,10 @@ stays non-destructive instead of silently forwarding a false DRY-RUN."
                                                                verbose)))
                                 (%capture-worktree-operation-result
                                  (first worker-result)
-                                 (second worker-result))))
+                                 (second worker-result) generation)))
                             (lambda (operation-result)
                               (%apply-worktree-operation-result
                                operation-result))
                             on-complete
                             on-error
-                            callback-dispatch))
+                            callback-dispatch)))

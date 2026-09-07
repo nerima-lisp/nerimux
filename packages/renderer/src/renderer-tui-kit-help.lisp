@@ -2,11 +2,11 @@
 
 (defparameter +help-view-sections+
   '(("Navigate"
-     (("n/p" . "move") ("M-n/M-p" . "section")
+     (("Up/Down" . "move") ("M-n/M-p" . "section")
                        ("Tab" . "expand")
                        ("S-Tab" . "cycle all")
                        ("1-4" . "detail level")
-                       ("Enter" . "open")
+                       ("Enter" . "agent>terminal>assign")
                        ("q" . "back")
                        ("g" . "refresh")
                        ("/" . "filter")
@@ -14,7 +14,8 @@
                        ("C-p" . "picker")
                        ("$" . "process log")
                        ("?" . "menu")))
-    ("Status" (("s/S" . "stage") ("u/U" . "unstage") ("k" . "discard")))
+    ("Repolist" (("n" . "create+assign") ("a" . "assign existing")))
+    ("Status" (("n/p" . "move") ("s/S" . "stage") ("u/U" . "unstage") ("k" . "discard")))
     ("Menus (?)"
      (("c" . "commit") ("P" . "push")
                        ("F" . "pull")
@@ -34,7 +35,8 @@
                            ("z" . "zoom")
                            ("h/j/k/l" . "focus")
                            ("n/p" . "cycle window")
-                           ("w" . "status view")
+                           ("w" . "workspace overview")
+                           ("K" . "stop workspace agent")
                            ("[" . "scrollback")
                            ("d" . "detach")
                            ("Q" . "quit server")))

@@ -404,7 +404,7 @@
 
 (describe "renderer-suite/workspace-tree-info-cluster"
 
-  (it "shows ahead count, pane count with exit marker, state tag, and relative time"
+  (it "shows terminal count without confusing terminal exit with agent exit"
     (let* ((pane-1 (nerimux/pane:make-pane :id 1 :fd -1))
            (pane-2 (nerimux/pane:make-pane :id 2 :fd -1 :process-exited-p t))
            (window
@@ -433,8 +433,8 @@
                 (list organization) 24 100))
              (plain (strip-sgr frame)))
         (expect (search "+2" plain))
-        (expect (search "2p!" plain))
-        (expect (search "DIRTY" plain))
+        (expect (search "terminal:2 agent:NONE git:DIRTY" plain))
+        (expect (not (search "EXITED" plain)))
         (expect (search "5m" plain)))))
 
   (it "switches relative-time buckets at the 60s/3600s/86400s boundaries"
@@ -497,3 +497,118 @@
         (expect (not (search "feature/tree" plain)))
         (expect (not (search "(no selection)" plain)))
         (expect (not (search "organization:" plain)))))))
+(describe "workspace-job tree labels"
+  (it "workspace-job renders operation states on matching rows without changing identity"
+    (multiple-value-bind (organization repository worktree) (%build-section-fixture)
+      (let* ((labels (make-hash-table :test #'equal))
+             (expanded (make-hash-table :test #'equal)))
+        (setf (gethash (list :repository (nerimux/workspace-model:repository-id repository)) expanded) t
+              (gethash '(:section :repositories) labels) " [scan:succeeded]"
+              (gethash (list :repository (nerimux/workspace-model:repository-id repository)) labels)
+              " [fetch:running |] [status:failed]"
+              (gethash (list :worktree (nerimux/workspace-model:worktree-id worktree)) labels)
+              " [prune:queued]")
+        (let* ((entries (nerimux/renderer::%workspace-flat-tree-entries
+                         (list organization) nil :expanded-node-ids expanded :job-labels labels))
+               (repo-row (find repository entries :key #'third :test #'eq))
+               (worktree-row (find worktree entries :key #'third :test #'eq))
+               (section-row (find :repositories entries :key #'third)))
+          (expect repo-row)
+          (expect worktree-row)
+          (expect section-row)
+          (expect (search "fetch:running |" (second repo-row)))
+          (expect (search "status:failed" (second repo-row)))
+          (expect (search "prune:queued" (second worktree-row)))
+          (expect (search "scan:succeeded" (second section-row))))))))
+(describe "agent-workspace merge additions"
+  (it "shows terminal count without confusing terminal exit with agent exit"
+      (let* ((pane-1 (nerimux/pane:make-pane :id 1 :fd -1))
+             (pane-2 (nerimux/pane:make-pane :id 2 :fd -1 :process-exited-p t))
+             (window
+               (nerimux/window:make-window
+                :id 1 :name "info" :panes (list pane-1 pane-2)))
+             (worktree
+               (nerimux/workspace-model:make-worktree
+                :id "wt-info" :path "/repo/info" :branch "info"
+                :status t :dirty-p t :ahead 2))
+             (repository
+               (nerimux/workspace-model:make-repository
+                :id "repo-info" :specification "github.com/team/info"
+                :local-path "/repo" :worktrees (list worktree)))
+             (organization
+               (nerimux/workspace-model:make-organization
+                :id "github.com/team-info" :host "github.com" :name "team-info"
+                :repositories (list repository))))
+        (setf (nerimux/pane:pane-window pane-1) window
+              (nerimux/pane:pane-window pane-2) window)
+        (nerimux/pane:worktree-add-pane worktree pane-1)
+        (nerimux/pane:worktree-add-pane worktree pane-2)
+        (setf (nerimux/pane:pane-last-output-time pane-1)
+              (- (get-universal-time) 300))
+        (let* ((frame
+                 (nerimux/renderer:render-workspace-overview-to-string
+                  (list organization) 24 100))
+               (plain (strip-sgr frame)))
+          (expect (search "+2" plain))
+          (expect (search "terminal:2 agent:NONE git:DIRTY" plain))
+          (expect (not (search "EXITED" plain)))
+          (expect (search "5m" plain)))))
+  (it "shows no agent and zero terminals on an empty workspace"
+      (let ((worktree (nerimux/workspace-model:make-worktree :status t)))
+        (expect (string= "terminal:0 agent:NONE git:CLEAN"
+                         (nerimux/renderer::%worktree-tree-info-suffix worktree 100)))))
+  (it "shows a running Codex agent separately from ordinary terminals"
+      (let ((worktree (nerimux/workspace-model:make-worktree :status t)))
+        (nerimux/pane:worktree-add-pane worktree
+          (nerimux/pane:make-pane :id 1 :fd 10 :agent-kind :codex))
+        (nerimux/pane:worktree-add-pane worktree (nerimux/pane:make-pane :id 2))
+        (nerimux/pane:worktree-add-pane worktree (nerimux/pane:make-pane :id 3))
+        (expect (string= "terminal:2 agent:RUNNING/Codex git:CLEAN"
+                         (nerimux/renderer::%worktree-tree-info-suffix worktree 100)))))
+  (it "shows an exited Claude agent independently from dirty Git state"
+      (let ((worktree (nerimux/workspace-model:make-worktree :status t :dirty-p t)))
+        (nerimux/pane:worktree-add-pane worktree
+          (nerimux/pane:make-pane :agent-kind :claude :process-exited-p t))
+        (expect (string= "terminal:0 agent:EXITED/Claude git:DIRTY"
+                         (nerimux/renderer::%worktree-tree-info-suffix worktree 100)))))
+  (it "keeps a running agent visible when the workspace is completed"
+      (let ((worktree (nerimux/workspace-model:make-worktree :status t :completed-p t)))
+        (nerimux/pane:worktree-add-pane worktree
+          (nerimux/pane:make-pane :fd 10 :agent-kind :codex))
+        (expect (string= "terminal:0 agent:RUNNING+COMPLETED/Codex git:CLEAN"
+                         (nerimux/renderer::%worktree-tree-info-suffix worktree 100)))))
+  (it "shows explicit completion without implying an agent process exit"
+      (let ((worktree (nerimux/workspace-model:make-worktree :status t :completed-p t)))
+        (expect (string= "terminal:0 agent:COMPLETED git:CLEAN"
+                         (nerimux/renderer::%worktree-tree-info-suffix worktree 100)))))
+  (it "retains agent exit history after the pane is removed"
+      (let* ((worktree (nerimux/workspace-model:make-worktree :status t))
+             (agent (nerimux/pane:make-pane :fd 10 :agent-kind :claude)))
+        (nerimux/pane:worktree-add-pane worktree agent)
+        (setf (nerimux/pane:pane-fd agent) -1
+              (nerimux/pane:pane-process-exited-p agent) t
+              (nerimux/workspace-model:worktree-panes worktree) nil)
+        (expect (string= "terminal:0 agent:EXITED/Claude git:CLEAN"
+                         (nerimux/renderer::%worktree-tree-info-suffix worktree 100)))))
+  (it "clips completed running state without presenting completion alone"
+      (let ((worktree (nerimux/workspace-model:make-worktree :status t :completed-p t)))
+        (nerimux/pane:worktree-add-pane worktree
+          (nerimux/pane:make-pane :fd 10 :agent-kind :codex))
+        (multiple-value-bind (plain styled)
+            (nerimux/renderer::%worktree-tree-info-suffix worktree 16)
+          (expect (string= "agent:RUNNING..." plain))
+          (expect (string= "agent:RUNNING+COMPLETED/Codex git:CLEAN" (strip-sgr styled))))
+        (loop for width from 0 to 50
+              for plain = (nerimux/renderer::%worktree-tree-info-suffix worktree width)
+              do (expect (<= (nerimux/renderer::%display-width plain) width))
+                 (when (search "COMPLETED" plain)
+                   (expect (search "RUNNING" plain))))))
+  (it "shows the create and fetch hints for a repository selection"
+      (let* ((repository (nerimux/workspace-model:make-repository :id "repo-panel" :specification "s"))
+             (plain (strip-sgr
+                     (nerimux/renderer::%workspace-key-panel-content
+                      repository :normal #x11 nil))))
+        (expect (search "main:agent>terminal>assign" plain))
+        (expect (search "fetch menu" plain))
+        (expect (not (search "fold" plain)))))
+)

@@ -610,3 +610,41 @@
                (expect (null (nerimux::%stale-socket-p "/synthetic/socket"))))
           (setf (fdefinition 'probe-file) original-probe-file)))))
   )
+(describe "agent-workspace merge additions"
+  (it "socket-directory-continues-when-directory-creation-fails"
+      (with-stubbed-locked-fdefinitions
+          ((nerimux::%socket-tmp-base (lambda () "/tmp/nerimux-test-base"))
+           (sb-posix:lstat (lambda (path)
+                             (declare (ignore path))
+                             nil))
+           (ensure-directories-exist (lambda (path)
+                                       (declare (ignore path))
+                                       (error 'file-error)))
+           (sb-posix:chmod (lambda (path mode)
+                             (declare (ignore path mode))))
+           (nerimux::%verify-socket-directory-private
+            (lambda (path uid)
+              (declare (ignore path uid))
+              t)))
+        (expect (string= (format nil "/tmp/nerimux-test-base/nerimux-~D"
+                                 (sb-posix:getuid))
+                         (nerimux::%socket-directory)))))
+  (it "socket-directory-continues-when-chmod-fails"
+      (with-stubbed-locked-fdefinitions
+          ((nerimux::%socket-tmp-base (lambda () "/tmp/nerimux-test-base"))
+           (sb-posix:lstat (lambda (path)
+                             (declare (ignore path))
+                             nil))
+           (ensure-directories-exist (lambda (path)
+                                       (declare (ignore path))))
+           (sb-posix:chmod (lambda (path mode)
+                             (declare (ignore path mode))
+                             (error 'sb-posix:syscall-error)))
+           (nerimux::%verify-socket-directory-private
+            (lambda (path uid)
+              (declare (ignore path uid))
+              t)))
+        (expect (string= (format nil "/tmp/nerimux-test-base/nerimux-~D"
+                                 (sb-posix:getuid))
+                         (nerimux::%socket-directory)))))
+)

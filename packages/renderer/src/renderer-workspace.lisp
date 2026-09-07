@@ -12,6 +12,7 @@
                                             collapsed-node-ids
                                             expanded-node-ids
                                             refreshing-ids
+                                            job-labels
                                             stale-ids
                                             file-diffs
                                             (scanning-p nil)
@@ -244,6 +245,7 @@
                            (%workspace-flat-tree-entries
                             organizations collapsed-node-ids
                             :refreshing-ids refreshing-ids
+                            :job-labels job-labels
                             :stale-ids stale-ids
                             :filter tree-filter
                             :expanded-node-ids expanded-node-ids

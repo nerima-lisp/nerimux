@@ -11,6 +11,25 @@
            (session (make-session :id 1 :name "0" :windows (list win))))
       (expect (equal (list live) (nerimux::%session-live-panes session)))))
 
+  (it "session-live-panes-keeps-a-stop-requested-process-until-it-exits"
+    (let* ((stopping (make-pane :id 3 :fd -1 :pid -1 :screen (make-screen 10 3)))
+           (dead (make-pane :id 4 :fd -1 :pid -1 :screen (make-screen 10 3)))
+           (win (make-window :id 1 :name "w" :panes (list stopping dead)
+                             :tree (make-layout-split :h (make-layout-leaf stopping)
+                                                       (make-layout-leaf dead) 1/2)))
+           (session (make-session :id 1 :name "0" :windows (list win))))
+      (setf (nerimux/pane:pane-stop-requested stopping) t)
+      (expect (equal (list stopping) (nerimux::%session-live-panes session)))))
+
+  (it "session-live-panes-drops-a-stop-requested-process-after-exit"
+    (let* ((stopping (make-pane :id 5 :fd -1 :pid -1 :process-exited-p t
+                                :screen (make-screen 10 3)))
+           (win (make-window :id 1 :name "w" :panes (list stopping)
+                             :tree (make-layout-leaf stopping)))
+           (session (make-session :id 1 :name "0" :windows (list win))))
+      (setf (nerimux/pane:pane-stop-requested stopping) t)
+      (expect (null (nerimux::%session-live-panes session)))))
+
   (it "r8-1-refuses-when-live-panes-exist-without-force"
     (with-global-running t
       (let* ((live (make-pane :id 3 :fd 9999 :pid -1 :screen (make-screen 10 3)))

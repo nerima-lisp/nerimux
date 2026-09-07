@@ -1,36 +1,35 @@
 (in-package #:nerimux)
 
 
-(defun %workspace-new-window (session &key
-                                      name
-                                      start-dir
-                                      default-command
-                                      (start-reader-p +start-reader-by-default+))
+(defun %workspace-new-window (session &rest args)
   "Create a window in SESSION and return it.
    NAME defaults to the shell basename.  START-DIR is the new pane's working
    directory.  START-READER-P is NIL when the caller starts the reader thread
    itself once the pane is fully built."
-  (let* ((rows (- *term-rows* +status-line-rows+))
-         (cols *term-cols*)
-         (win-name (or name (nerimux/session::%shell-basename)))
-         (win
-          (if default-command
-              (session-new-window session
-                                  win-name
-                                  rows
-                                  cols
-                                  +first-window-index+
-                                  start-dir
-                                  default-command)
-              (session-new-window session
-                                  win-name
-                                  rows
-                                  cols
-                                  +first-window-index+
-                                  start-dir))))
-    (when start-reader-p
-      (start-reader-thread (window-active-pane win)))
-    win))
+  (destructuring-bind (&key name start-dir default-command start-reader-p) args
+    (unless (member :start-reader-p args :test #'eq)
+      (setf start-reader-p +start-reader-by-default+))
+    (let* ((rows (- *term-rows* +status-line-rows+))
+           (cols *term-cols*)
+           (win-name (or name (nerimux/session::%shell-basename)))
+           (win
+            (if default-command
+                (session-new-window session
+                                    win-name
+                                    rows
+                                    cols
+                                    +first-window-index+
+                                    start-dir
+                                    default-command)
+                (session-new-window session
+                                    win-name
+                                    rows
+                                    cols
+                                    +first-window-index+
+                                    start-dir))))
+      (when start-reader-p
+        (start-reader-thread (window-active-pane win)))
+      win)))
 
 (defun %worktree-windows (worktree)
   "Distinct windows holding at least one of WORKTREE's panes, ordered by

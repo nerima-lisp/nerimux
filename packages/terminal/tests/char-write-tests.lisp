@@ -93,6 +93,40 @@
       (expect (equal (list (code-char #x0301) (code-char #x0308))
                      (nerimux/terminal/types:cell-combining (screen-cell s 0 0)))))))
 
+(describe "terminal-suite/right-edge-combining"
+
+  (it-each ((3 "ABC" 2 #\C 1 (#x0301))
+            (4 "ABあ" 2 #\あ 2 (#x0301))
+            (1 "A" 0 #\A 1 (#x0301))
+            (3 "ABC" 2 #\C 1 (#x0301 #x0308)))
+      "right-edge combining width ~A base ~A column ~A char ~A width ~A marks ~A"
+      (width base target char cell-size codepoints)
+    (with-screen (s width 3)
+      (let ((marks (mapcar #'code-char codepoints)))
+        (utf8-feed s (concatenate 'string base (coerce marks 'string)))
+        (check-cursor s (1- width) 0)
+        (expect (nerimux/terminal/types:screen-pending-wrap s) :to-be-truthy)
+        (expect (char= char (cell-char (screen-cell s target 0))))
+        (expect (= cell-size (cell-width (screen-cell s target 0))))
+        (expect (equal marks
+                       (nerimux/terminal/types:cell-combining
+                        (screen-cell s target 0))))
+        (dotimes (x width)
+          (unless (= x target)
+            (expect (null (nerimux/terminal/types:cell-combining
+                           (screen-cell s x 0))))))
+        (when (= cell-size 2)
+          (expect (= 0 (cell-width (screen-cell s (1+ target) 0)))))
+        (expect (row-blank-p s 1))
+        (utf8-feed s "D")
+        (expect (char= #\D (cell-char (screen-cell s 0 1))))
+        (check-cursor s (if (= width 1) 0 1) 1)
+        (expect (eql (= width 1)
+                     (nerimux/terminal/types:screen-pending-wrap s)))
+        (expect (equal marks
+                       (nerimux/terminal/types:cell-combining
+                        (screen-cell s target 0))))))))
+
 (describe "terminal-suite/format-characters-combine"
 
   (it "zwj-combines-rather-than-taking-a-column"

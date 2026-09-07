@@ -41,6 +41,9 @@
                      #:repository-worktrees
                      #:worktree
                      #:worktree-ahead
+                     #:worktree-agent-pane
+                     #:worktree-completed-p
+                     #:worktree-complete
                      #:worktree-attention-p
                      #:worktree-bare-p
                      #:worktree-behind
@@ -58,6 +61,7 @@
                      #:worktree-panes
                      #:worktree-path
                      #:worktree-prunable-p
+                     #:worktree-prune-classification
                      #:worktree-recent-commits
                      #:worktree-repository
                      #:worktree-staged-files
@@ -91,6 +95,7 @@
                      #:organization-recompute-counts
                      #:pane
                      #:pane-attention-p
+                     #:pane-agent-kind
                      #:pane-attention-reasons
                      #:pane-bell-p
                      #:pane-clear-unread-output
@@ -116,6 +121,9 @@
                      #:pane-pid
                      #:pane-role
                      #:pane-process-exited-p
+                     #:pane-process-lock
+                     #:pane-process-generation
+                     #:pane-stop-requested
                      #:pane-reposition
                      #:pane-screen
                      #:pane-start-command
@@ -131,6 +139,9 @@
                      #:pane-y
                      #:respawn-pane
                      #:worktree-add-pane
+                     #:worktree-agent-state
+                     #:worktree-running-agent-p
+                     #:worktree-resume
                      #:worktree-attention-reasons))
 
 (defpackage #:nerimux/layout

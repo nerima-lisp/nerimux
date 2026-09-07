@@ -14,58 +14,50 @@
                                                    on-error
                                                    on-repository-error
                                                    on-progress
+                                                   on-start
+                                                   on-repository-start
+                                                   on-repository
                                                    callback-dispatch)
   "Refresh and store the workspace catalog on a worker thread.
-   ON-CATALOG, when given, is called with the organizations as soon as the
-   scan itself completes — before the per-repository status refresh, which
-   runs `git status` across every repository and can take seconds on a large
-   root.  ON-COMPLETE still fires only after the statuses; a UI caller uses
-   ON-CATALOG to paint the freshly scanned tree instead of holding the
-   \"scanning...\" placeholder until every status has arrived. ON-PROGRESS
-   (FR-004b), when given, is called with the running repository count as the
-   scan discovers each ghq entry -- before ON-CATALOG, and well before
-   ON-COMPLETE's status pass.
-
-ON-ERROR and ON-REPOSITORY-ERROR are two distinct failure channels, not one
-(R6.2/design §7.3, FAILED-object-only staleness): ON-ERROR fires only for a
-terminal scan failure (SCAN-REPOSITORIES-ASYNC's own ON-ERROR below, e.g.
-`ghq list` itself failing) -- there is no catalog and no further callback
-coming, so the whole refresh has failed. ON-REPOSITORY-ERROR fires once per
-repository whose own `git status` failed during REFRESH-WORKSPACE-STATUS-
-ASYNC below, called with (REPOSITORY CONDITION) exactly as REFRESH-
-REPOSITORIES-ASYNC's own ON-ERROR is -- ON-COMPLETE still fires afterward
-for the batch as a whole, since one repository's failure does not stop the
-others from settling. A repository failure therefore marks only that repository
-stale; a scan failure marks the entire catalog stale."
-  (scan-repositories-async :query
-                           query
-                           :callback-dispatch
-                           callback-dispatch
-                           :on-progress
-                           on-progress
-                           :on-complete
-                           (lambda (organizations)
-                             (set-workspace-organizations organizations)
-                             (when on-catalog
-                               (funcall on-catalog organizations))
-                             (refresh-workspace-status-async :organizations
-                                                             organizations
-                                                             :callback-dispatch
-                                                             callback-dispatch
-                                                             :on-complete
-                                                             on-complete
-                                                             :on-error
-                                                             (lambda 
-                                                                 (repository
-                                                                  condition)
-                                                               (when 
-                                                                   on-repository-error
-                                                                 (funcall
-                                                                  on-repository-error
-                                                                  repository
-                                                                  condition)))))
-                           :on-error
-                           on-error))
+   Only the latest registered request publishes a catalog or invokes observers.
+   Registration happens under the catalog lock before scanning starts.
+   Delivery checks the generation under the catalog lock."
+  (let ((generation (gensym "CATALOG-")))
+    (sb-thread:with-recursive-lock (*workspace-catalog-generation-lock*)
+      (setf *workspace-catalog-generation* generation))
+    (labels ((current-p ()
+               (eq generation *workspace-catalog-generation*))
+             (guard-observer (observer)
+               (when observer
+                 (lambda (&rest arguments)
+                   (sb-thread:with-recursive-lock (*workspace-catalog-generation-lock*)
+                     (when (current-p)
+                       (apply observer arguments)))))))
+      (scan-repositories-async
+       :query query
+       :on-start (guard-observer on-start)
+       :callback-dispatch callback-dispatch
+       :on-progress (guard-observer on-progress)
+       :on-complete
+       (lambda (organizations)
+         (when (sb-thread:with-recursive-lock (*workspace-catalog-generation-lock*)
+                 (when (current-p)
+                   (set-workspace-organizations organizations)
+                   (when on-catalog
+                     (funcall on-catalog organizations))
+                   (current-p)))
+           (refresh-workspace-status-async
+            :organizations organizations
+            :on-start (guard-observer on-repository-start)
+            :on-repository (guard-observer on-repository)
+            :callback-dispatch callback-dispatch
+            :on-complete (guard-observer on-complete)
+            :on-error
+            (guard-observer
+             (lambda (repository condition)
+               (when on-repository-error
+                 (funcall on-repository-error repository condition)))))))
+       :on-error (guard-observer on-error)))))
 
 (defun scan-repositories (&key query on-complete on-error on-progress)
   "Build the organization/repository hierarchy from ghq-list-repositories.
@@ -183,6 +175,10 @@ stale; a scan failure marks the entire catalog stale."
                 :stashes-state (and old-worktree
                                     (nerimux/workspace-model:worktree-stashes-state
                                      old-worktree))
+                :completed-p (and old-worktree
+                                  (nerimux/workspace-model:worktree-completed-p old-worktree))
+                :agent-pane (and old-worktree
+                                 (nerimux/workspace-model:worktree-agent-pane old-worktree))
                 :bare-p (vcs-kit:vcs-worktree-bare-p raw)
                 :locked-p (vcs-kit:vcs-worktree-locked-p raw)
                 :prunable-p (vcs-kit:vcs-worktree-prunable-p raw)

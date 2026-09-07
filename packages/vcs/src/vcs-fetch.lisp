@@ -18,19 +18,81 @@
   (cl-concurrent-kit:with-lock-held (*fetch-lock*)
                                     (remhash key *in-progress-fetches*)))
 
+(defun %fetch-origin-main (repository)
+  (vcs-kit:vcs-fetch
+   (%repository-backend repository)
+   "origin" "+refs/heads/main:refs/remotes/origin/main"
+   :execution-options
+   '(:environment-update (("GIT_TERMINAL_PROMPT" . "0")
+                          ("GIT_ASKPASS" . "true")
+                          ("SSH_ASKPASS" . "true")
+                          ("GIT_SSH_COMMAND" . "ssh -oBatchMode=yes")))))
+
+(defun %fetch-optional-output (function &rest arguments)
+  (handler-case
+      (values (string-right-trim '(#\Newline #\Return)
+                                 (or (vcs-kit:process-result-stdout
+                                      (apply function arguments)) ""))
+              t)
+    (vcs-kit:git-exit-error (condition)
+      (unless (eql 1 (vcs-kit:git-exit-error-exit-code condition))
+        (error condition))
+      (values nil nil))
+    (vcs-kit:vcs-command-exit-error (condition)
+      (unless (eql 1 (vcs-kit:vcs-command-exit-error-exit-code condition))
+        (error condition))
+      (values nil nil))))
+
+(defun %bare-origin-fetch-p (repository backend)
+  (and (string= "true" (%rev-parse repository "--is-bare-repository"))
+       (string= "origin" (%fetch-optional-output #'vcs-kit:vcs-remote backend))
+       (not (nth-value 1 (%fetch-optional-output
+                          #'vcs-kit:vcs-config backend
+                          "--get-all" "remote.origin.fetch")))
+       (not (equal "true" (%fetch-optional-output
+                           #'vcs-kit:vcs-config backend
+                           "--type=bool" "--get" "fetch.all")))
+       (let* ((branch (%fetch-optional-output
+                       #'vcs-kit:git-symbolic-ref
+                       (%repository-checked-handle repository)
+                       "-q" "--short" "HEAD"))
+              (remote (when branch
+                        (%fetch-optional-output
+                         #'vcs-kit:vcs-config backend "--get"
+                         (format nil "branch.~A.remote" branch)))))
+         (or (null remote) (string= "origin" remote)))))
+
+(defun %fetch-repository-remotes (repository)
+  (let ((backend (%repository-backend repository)))
+    (if (%bare-origin-fetch-p repository backend)
+        (progn
+          (vcs-kit:vcs-fetch backend "origin"
+                             "+refs/heads/*:refs/remotes/origin/*")
+          (let ((checked (%repository-checked-handle repository)))
+            ;; Preserve even a dangling symbolic HEAD: it can express user intent.
+            (unless (or (nth-value 1 (%fetch-optional-output
+                                      #'vcs-kit:git-symbolic-ref checked
+                                      "-q" "refs/remotes/origin/HEAD"))
+                        (nth-value 1 (%fetch-optional-output
+                                      #'vcs-kit:git-show-ref checked
+                                      "--verify" "--quiet" "refs/remotes/origin/HEAD")))
+              (vcs-kit:vcs-remote backend "set-head" "origin" "-a"))))
+        (vcs-kit:vcs-fetch backend))))
+
 (defun fetch-repository (repository)
   "Fetch REPOSITORY's remotes with git fetch, then refresh its status."
   (unless repository
     (error "A repository is required to fetch."))
-  (vcs-kit:vcs-fetch (%repository-backend repository))
+  (%fetch-repository-remotes repository)
   (refresh-repository-status repository)
   repository)
 
 (defun %read-fetched-repository-status (repository)
-  (vcs-kit:vcs-fetch (%repository-backend repository))
+  (%fetch-repository-remotes repository)
   (%read-repository-status repository))
 
 (defun fetch-repository-async (repository &key
+                                          on-accepted on-start on-deduplicated
                                           on-complete
                                           on-error
                                           callback-dispatch)
@@ -41,8 +103,15 @@ with NIL without starting another worker."
   (let ((key
          (list :repository (nerimux/workspace-model:repository-id repository))))
     (if (%fetch-begin key)
-        (first
+        (handler-case
+         (progn
+          (when on-accepted (funcall on-accepted))
+          (first
          (refresh-repositories-async (list repository)
+                                     :on-start (and on-start
+                                                    (lambda (current)
+                                                      (declare (ignore current))
+                                                      (funcall on-start)))
                                      :status-reader
                                      #'%read-fetched-repository-status
                                      :on-complete
@@ -57,12 +126,17 @@ with NIL without starting another worker."
                                        (when on-error
                                          (funcall on-error condition)))
                                      :callback-dispatch
-                                     callback-dispatch))
+                                     callback-dispatch)))
+          (error (condition)
+            (%fetch-end key)
+            (error condition)))
         (progn
+          (%dispatch-callback callback-dispatch on-deduplicated)
           (%dispatch-callback callback-dispatch on-complete nil)
           nil))))
 
 (defun fetch-organization-async (organization &key
+                                              on-accepted on-start on-deduplicated
                                               on-complete
                                               on-error
                                               callback-dispatch)
@@ -74,8 +148,15 @@ with NIL without starting another set of workers."
          (list :organization
                (nerimux/workspace-model:organization-id organization))))
     (if (%fetch-begin key)
-        (refresh-repositories-async
+        (handler-case
+         (progn
+         (when on-accepted (funcall on-accepted))
+         (refresh-repositories-async
          (nerimux/workspace-model:organization-repositories organization)
+         :on-start (and on-start
+                        (lambda (repository)
+                          (declare (ignore repository))
+                          (funcall on-start)))
          :on-complete
          (lambda (repositories)
            (%fetch-end key)
@@ -88,7 +169,11 @@ with NIL without starting another set of workers."
          :status-reader
          #'%read-fetched-repository-status
          :callback-dispatch
-         callback-dispatch)
+         callback-dispatch))
+         (error (condition)
+           (%fetch-end key)
+           (error condition)))
         (progn
+          (%dispatch-callback callback-dispatch on-deduplicated)
           (%dispatch-callback callback-dispatch on-complete nil)
           nil))))

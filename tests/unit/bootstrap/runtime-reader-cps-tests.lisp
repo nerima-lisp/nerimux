@@ -34,6 +34,64 @@
         (expect (eq #'nerimux::reader-idle-state
                     (nerimux::reader-idle-state pane))))))
 
+  (it "runtime-reader-idle-wait-allows-concurrent-pane-close"
+    (let ((pane (make-pane :id 1 :fd 7 :pid 4321 :screen (make-screen 10 3)))
+          (entered (sb-thread:make-semaphore))
+          (release (sb-thread:make-semaphore))
+          (closed (sb-thread:make-semaphore))
+          (reader nil)
+          (closer nil)
+          (reader-error nil)
+          (close-error nil)
+          (next nil)
+          (selected nil)
+          (close-arguments nil)
+          (waits 0))
+      (flet ((wait-at-idle ()
+               (incf waits)
+               (sb-thread:signal-semaphore entered)
+               (sb-thread:wait-on-semaphore release)))
+        (with-stubbed-fdefinition
+            ((nerimux::%reader-idle-wait #'wait-at-idle)
+             (nerimux/pty:select-fds
+              (lambda (fds timeout-us)
+                (setf selected fds)
+                (when (plusp timeout-us) (wait-at-idle))
+                nil)))
+          (unwind-protect
+               (progn
+                 (setf reader
+                       (sb-thread:make-thread
+                        (lambda ()
+                          (handler-case
+                              (setf next (nerimux::reader-idle-state pane))
+                            (error (condition) (setf reader-error condition))))))
+                 (expect (sb-thread:wait-on-semaphore entered :timeout 5))
+                 (expect (= 1 waits))
+                 (expect (equal '(7) selected))
+                 (setf closer
+                       (sb-thread:make-thread
+                        (lambda ()
+                          (handler-case
+                              (let ((nerimux/ports:*close-pty*
+                                      (lambda (fd pid)
+                                        (setf close-arguments (list fd pid))
+                                        (values 0 :exited))))
+                                (nerimux/commands:close-pane-pty pane))
+                            (error (condition) (setf close-error condition)))
+                          (sb-thread:signal-semaphore closed))))
+                 (expect (sb-thread:wait-on-semaphore closed :timeout 5))
+                 (expect (null close-error))
+                 (expect (equal '(7 4321) close-arguments))
+                 (expect (= -1 (pane-fd pane)))
+                 (expect (= -1 (pane-pid pane)))
+                 (expect (nerimux/pane:pane-process-exited-p pane)))
+            (sb-thread:signal-semaphore release)
+            (when reader (sb-thread:join-thread reader :timeout 5))
+            (when closer (sb-thread:join-thread closer :timeout 5)))
+          (expect (null reader-error))
+          (expect (eq #'nerimux::reader-idle-state next))))))
+
   (it "reader-idle-state-stops-when-the-pane-is-retired"
     (let ((pane (make-pane :id 1 :fd -1 :pid -1 :screen (make-screen 10 3)))
           (calls 0))
@@ -141,19 +199,15 @@
             (observed-signal :unset)
             (dirty 0))
         (with-stubbed-fdefinition
-            ((nerimux/pty:pty-child-exit-status
-              (lambda (fd)
-                (declare (ignore fd))
+            ((nerimux/ports:close-pty
+              (lambda (fd pid)
+                (declare (ignore fd pid))
                 (values code kind)))
              (nerimux/pane:pane-mark-process-exit
               (lambda (received-pane &key status signal)
                 (declare (ignore received-pane))
                 (setf (values observed-status observed-signal)
                       (values status signal))))
-             (nerimux::close-pane-pty
-              (lambda (received-pane)
-                (declare (ignore received-pane))
-                nil))
              (nerimux::%mark-dirty
               (lambda ()
                 (incf dirty))))
@@ -224,14 +278,52 @@
       (expect (eql -1 (pane-fd pane)))
       (expect (eql -1 (pane-pid pane)))))
 
-  (it "close-pane-pty-leaves-the-pid-for-sigkill-escalation"
-    (let ((pane (make-pane :id 1 :fd 7 :pid 4321 :screen (make-screen 10 3))))
+  (it "workspace-agent-stop-close-retires-identifiers-once"
+    (let ((pane (make-pane :id 1 :fd 7 :pid 4321 :agent-kind :codex
+                           :screen (make-screen 10 3)))
+          (worktree (nerimux/workspace-model:make-worktree :id "eof"))
+          (calls 0))
+      (nerimux/pane:worktree-add-pane worktree pane)
       (with-stubbed-fdefinition
           ((nerimux/ports:close-pty
-            (lambda (fd pid) (declare (ignore fd pid)) nil)))
+            (lambda (fd pid)
+              (declare (ignore fd pid))
+              (incf calls)
+              (expect (eq :running (nerimux/pane:worktree-agent-state worktree)))
+              (expect (not (nerimux/pane:pane-process-exited-p pane)))
+              (values 0 :exited))))
+        (nerimux::reader-eof-state pane)
         (nerimux/commands:close-pane-pty pane))
-      (expect (eql 7 (pane-fd pane)))
-      (expect (eql 4321 (pane-pid pane)))))
+      (expect (= 1 calls))
+      (expect (eq :exited (nerimux/pane:worktree-agent-state worktree)))
+      (expect (eql -1 (pane-fd pane)))
+      (expect (eql -1 (pane-pid pane)))))
+
+  (it "workspace-agent-stop-old-reader-cannot-touch-new-generation"
+    (let* ((pane (make-pane :id 1 :fd 7 :pid 4321 :screen (make-screen 10 3)))
+           (nerimux::*reader-process-generation*
+             (nerimux/pane:pane-process-generation pane)))
+      (setf (nerimux/pane:pane-process-generation pane) (list nil)
+            (pane-fd pane) 8 (pane-pid pane) 4322)
+      (with-stubbed-fdefinition
+          ((nerimux/pty:select-fds (lambda (&rest args)
+                                   (declare (ignore args)) (error "stale select")))
+           (nerimux/pty:pty-read-blocking-into
+             (lambda (&rest args) (declare (ignore args)) (error "stale read")))
+           (nerimux/ports:close-pty
+             (lambda (&rest args) (declare (ignore args)) (error "stale close"))))
+        (expect (null (nerimux::reader-idle-state pane)))
+        (expect (null (nerimux::reader-reading-state pane)))
+        (expect (null (nerimux::reader-eof-state pane))))
+      (expect (= 8 (pane-fd pane)))
+      (expect (= 4322 (pane-pid pane)))
+      (expect (not (nerimux/pane:pane-process-exited-p pane)))))
+
+  (it "pane-retired-keeps-a-matching-reader-generation-live"
+    (let* ((pane (make-pane :id 1 :fd 7 :pid -1 :screen (make-screen 10 3)))
+           (generation (nerimux/pane:pane-process-generation pane)))
+      (let ((nerimux::*reader-process-generation* generation))
+        (expect (null (nerimux::%pane-retired-p pane))))))
 
   (it "run-reader-states-exits-when-running-nil"
     (with-dead-pane (pane)

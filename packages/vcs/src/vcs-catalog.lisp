@@ -167,7 +167,11 @@ vcs-inspect.lisp for the race this closes."
                   (%worktree-association-match-p id path candidate))
                 worktrees)))
           (if worktree
-              (nerimux/pane:worktree-add-pane worktree pane)
+              (progn
+                (pushnew pane
+                         (nerimux/workspace-model:worktree-panes worktree)
+                         :test #'eq)
+                (setf (nerimux/pane:pane-worktree pane) worktree))
               (setf (nerimux/pane:pane-worktree pane) nil))))))
   current)
 
@@ -189,7 +193,11 @@ vcs-inspect.lisp for the race this closes."
         (nerimux/workspace-model:worktree-stashes-state target)
         (nerimux/workspace-model:worktree-stashes-state source)
         (nerimux/workspace-model:worktree-stashes target)
-        (nerimux/workspace-model:worktree-stashes source)))
+        (nerimux/workspace-model:worktree-stashes source)
+        (nerimux/workspace-model:worktree-completed-p target)
+        (nerimux/workspace-model:worktree-completed-p source)
+        (nerimux/workspace-model:worktree-agent-pane target)
+        (nerimux/workspace-model:worktree-agent-pane source)))
 
 (defun %preserve-worktree-commit-state (previous current)
   "Carry ID, COMMITS-STATE and RECENT-COMMITS from PREVIOUS's worktrees onto
@@ -223,103 +231,116 @@ rescan exactly as commit history was before this function existed."
           (%preserve-worktree-state match worktree)))))
   current)
 
-(defun %worktree-recency (worktree)
-  "The most recent activity timestamp among WORKTREE's panes (item 6): the
-   later of each pane's last-output and last-focused time. Both are NIL
-   until a pane has ever produced output or been focused, so they are
-   excluded from the MAX rather than coerced to 0 -- coercing would make
-   \"never happened\" sort as an actual instant (epoch 0), only not the most
-   recent one, which is a fact about REDUCE's argument order rather than
-   about the pane. A worktree with no panes, or only ever-idle ones, has no
-   real timestamp to offer and sorts as least-recent (0)."
-  (let ((times
-         (loop for pane in (nerimux/workspace-model:worktree-panes worktree)
-               for output = (nerimux/pane:pane-last-output-time pane)
-               for focused = (nerimux/pane:pane-last-focused-time pane)
-               when output
-                 collect output
-               when focused
-                 collect focused)))
-    (if times
-        (reduce #'max times)
-        0)))
+(defun %valid-worktree-creation-date-p (year month day)
+  (and (<= 1 year 9999)
+       (<= 1 month 12)
+       (let ((days (if (= month 2)
+                       (if (and (zerop (mod year 4))
+                                (or (not (zerop (mod year 100)))
+                                    (zerop (mod year 400))))
+                           29 28)
+                       (if (member month '(4 6 9 11)) 30 31))))
+         (<= 1 day days))))
 
-(defun %repository-recency (repository)
-  (let ((times
-         (mapcar #'%worktree-recency
-                 (nerimux/workspace-model:repository-worktrees repository))))
-    (if times
-        (reduce #'max times)
-        0)))
+(defun %worktree-creation-key (worktree)
+  (let ((path (nerimux/workspace-model:worktree-path worktree)))
+    (unless (stringp path)
+      (return-from %worktree-creation-key nil))
+    (let* ((trimmed (string-right-trim "/" path))
+           (start (1+ (or (position #\/ trimmed :from-end t) -1)))
+           (name (subseq trimmed start))
+           (length (length name)))
+      (unless (and (> length 16)
+                   (char= (char name 8) #\T)
+                   (char= (char name 15) #\-)
+                   (loop for index below 15
+                         always (or (= index 8)
+                                    (digit-char-p (char name index) 10))))
+        (return-from %worktree-creation-key nil))
+      (let* ((year (parse-integer name :end 4))
+             (month (parse-integer name :start 4 :end 6))
+             (day (parse-integer name :start 6 :end 8))
+             (hour (parse-integer name :start 9 :end 11))
+             (minute (parse-integer name :start 11 :end 13))
+             (second (parse-integer name :start 13 :end 15))
+             (suffix-start (position #\- name :start 16))
+             (sha-end (or suffix-start length)))
+        (unless (and (%valid-worktree-creation-date-p year month day)
+                     (< hour 24) (< minute 60) (< second 60)
+                     (> sha-end 16)
+                     (loop for index from 16 below sha-end
+                           always (digit-char-p (char name index) 16)))
+          (return-from %worktree-creation-key nil))
+        (let ((suffix 1))
+          (when suffix-start
+            (let ((digits-start (1+ suffix-start)))
+              (unless (and (< digits-start length)
+                           (char/= (char name digits-start) #\0)
+                           (loop for index from digits-start below length
+                                 always (digit-char-p (char name index) 10)))
+                (return-from %worktree-creation-key nil))
+              (setf suffix (parse-integer name :start digits-start))
+              (unless (>= suffix 2)
+                (return-from %worktree-creation-key nil))))
+          (cons (+ (* (parse-integer name :end 8) 1000000)
+                   (parse-integer name :start 9 :end 15))
+                suffix))))))
 
-(defun %organization-recency (organization)
-  (let ((times
-         (mapcar #'%repository-recency
-                 (nerimux/workspace-model:organization-repositories
-                  organization))))
-    (if times
-        (reduce #'max times)
-        0)))
+(defun %worktree-creation-key-newer-p (left right)
+  (and left
+       (or (null right)
+           (> (car left) (car right))
+           (and (= (car left) (car right))
+                (> (cdr left) (cdr right))))))
 
-(defun %sort-workspace-organizations-by-activity (organizations)
-  "Reorder ORGANIZATIONS -- and, in place within each, its repositories, and
-   within each of those, its worktrees -- most-recently-active first (item
-   6, activity order).
-
-   Runs only from SET-WORKSPACE-ORGANIZATIONS, i.e. only when the catalog is
-   published (a scan landing, a merge, a worktree create/delete refresh),
-   never per-frame or mid-navigation: the requirement is that a row must not
-   move under the cursor while a client is looking at it, and a per-frame
-   re-sort would do exactly that on every keystroke that touches pane
-   activity (a reader thread's output alone would reorder the tree the
-   client is currently scrolling).
-
-   STABLE-SORT keeps ties (equal recency, including the common case where
-   every worktree in view is at the default 0) in their existing order,
-   which for a freshly scanned catalog is ghq's own enumeration order --
-   so an all-idle catalog looks exactly as before this feature.  Sorts
-   copies of the WORKTREES/REPOSITORIES lists rather than the lists in
-   place: those lists are shared with whatever built them (e.g.
-   ORGANIZATION-ADD-REPOSITORY's PUSHNEW), and SORT/STABLE-SORT are
-   destructive, so sorting the original list risks corrupting a structure
-   another holder of the same list object still expects to see unmodified."
+(defun %sort-workspace-worktrees-by-creation (organizations)
   (dolist (organization organizations)
-    (dolist 
-        (repository
-         (nerimux/workspace-model:organization-repositories organization))
-      (setf (nerimux/workspace-model:repository-worktrees repository) (stable-sort
-                                                                       (copy-list
-                                                                        (nerimux/workspace-model:repository-worktrees
-                                                                         repository))
-                                                                       #'>
-                                                                       :key
-                                                                       #'%worktree-recency)))
-    (setf (nerimux/workspace-model:organization-repositories organization) (stable-sort
-                                                                            (copy-list
-                                                                             (nerimux/workspace-model:organization-repositories
-                                                                              organization))
-                                                                            #'>
-                                                                            :key
-                                                                            #'%repository-recency)))
-  (stable-sort (copy-list organizations) #'> :key #'%organization-recency))
+    (dolist (repository
+             (nerimux/workspace-model:organization-repositories organization))
+      (setf (nerimux/workspace-model:repository-worktrees repository)
+            (stable-sort
+             (copy-list (nerimux/workspace-model:repository-worktrees repository))
+             #'%worktree-creation-key-newer-p :key #'%worktree-creation-key))))
+  organizations)
+
+(defvar *workspace-catalog-generation* nil)
+(defvar *workspace-catalog-generation-lock*
+  (cl-concurrent-kit:make-lock :name "workspace-catalog-generation"))
+
+(defstruct (%repository-data-generation
+            (:constructor %make-repository-data-generation))
+  catalog catalog-generation worktrees)
+
+(defvar *repository-data-generations* (make-hash-table :test #'eq :weakness :key))
+
+(defun %begin-repository-data-generation (repository)
+  (sb-thread:with-recursive-lock (*workspace-catalog-generation-lock*)
+    (setf (gethash repository *repository-data-generations*)
+          (%make-repository-data-generation
+           :catalog *workspace-organizations*
+           :catalog-generation *workspace-catalog-generation*
+           :worktrees (nerimux/workspace-model:repository-worktrees repository)))))
+
+(defun %repository-data-generation-current-p (repository generation &key before-apply)
+  (and (eq generation (gethash repository *repository-data-generations*))
+       (eq *workspace-organizations* (%repository-data-generation-catalog generation))
+       (eq *workspace-catalog-generation*
+           (%repository-data-generation-catalog-generation generation))
+       (or (not before-apply)
+           (eq (nerimux/workspace-model:repository-worktrees repository)
+               (%repository-data-generation-worktrees generation)))))
 
 (defun set-workspace-organizations (organizations)
-  "Replace the workspace catalog with ORGANIZATIONS.
-
-As a side effect, reorders the published catalog -- organizations,
-repositories within each, and worktrees within each of those -- most-
-recently-active first (%SORT-WORKSPACE-ORGANIZATIONS-BY-ACTIVITY, item 6).
-That sort runs only here, i.e. only when the catalog is (re-)published, and
-never per-frame or mid-navigation, because a row must not move under a
-client's cursor while it is being looked at."
+  "Replace the workspace catalog with ORGANIZATIONS and publish a new generation."
   (check-type organizations list)
-  (let ((previous *workspace-organizations*)
-        (current (copy-list organizations)))
-    (setf *workspace-organizations* current)
-    (%preserve-pane-associations previous current)
-    (%preserve-worktree-commit-state previous current)
-    (setf *workspace-organizations*
-          (%sort-workspace-organizations-by-activity *workspace-organizations*))))
+  (sb-thread:with-recursive-lock (*workspace-catalog-generation-lock*)
+    (let ((previous *workspace-organizations*)
+          (current (copy-list organizations)))
+      (setf *workspace-organizations* current)
+      (%preserve-pane-associations previous current)
+      (%preserve-worktree-commit-state previous current)
+      (setf *workspace-organizations*
+            (%sort-workspace-worktrees-by-creation *workspace-organizations*)))))
 
 (defun %repository-already-present-p (repository organizations)
   (let ((local-path (nerimux/workspace-model:repository-local-path repository))
@@ -362,7 +383,7 @@ client's cursor while it is being looked at."
                      :test
                      #'equal)))
           (if existing
-              (dolist 
+              (dolist
                   (repository
                    (nerimux/workspace-model:organization-repositories
                     organization))

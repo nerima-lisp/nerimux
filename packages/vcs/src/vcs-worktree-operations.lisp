@@ -1,5 +1,83 @@
 (in-package #:nerimux/vcs)
 
+(defstruct worktree-prune-snapshot identity content changed-files)
+
+(defun %prune-file-identity (path directory-p &optional allow-missing)
+  (let* ((stat (handler-case (uiop:symbol-call :sb-posix :lstat path)
+                 (error (condition)
+                   (if (and allow-missing
+                            (typep condition (find-symbol "SYSCALL-ERROR" :sb-posix))
+                            (= (uiop:symbol-call :sb-posix :syscall-errno condition)
+                               (symbol-value (find-symbol "ENOENT" :sb-posix))))
+                       (return-from %prune-file-identity nil)
+                       (error condition)))))
+         (mode (uiop:symbol-call :sb-posix :stat-mode stat)))
+    (unless (uiop:symbol-call :sb-posix (if directory-p :s-isdir :s-isreg) mode)
+      (error "workspace prune refuses symlinks, submodules and special files: ~A" path))
+    (list (uiop:symbol-call :sb-posix :stat-dev stat)
+          (uiop:symbol-call :sb-posix :stat-ino stat) mode)))
+
+(defun %read-worktree-prune-snapshot (worktree)
+  (let* ((path (nerimux/workspace-model:worktree-path worktree))
+         (root (uiop:ensure-directory-pathname path))
+         (identity (%prune-file-identity (string-right-trim "/" path) t))
+         (repository (vcs-kit:make-repository path))
+         (status (vcs-kit:vcs-status-structured (%make-vcs-repository path)
+                                               :untracked-files :all :ignored t))
+         (entries (vcs-kit:vcs-status-snapshot-entries status))
+         (index (vcs-kit:process-result-stdout
+                 (vcs-kit:git-ls-files repository "--stage" "-z")))
+         (names (vcs-kit:process-result-stdout
+                 (vcs-kit:git-ls-files repository "--cached" "--others"
+                                         "--exclude-standard" "-z")))
+         (content nil))
+    (unless (string=
+             (vcs-kit:git-rev-parse-value repository "--path-format=absolute" "--git-common-dir")
+             (vcs-kit:git-rev-parse-value
+              (%repository-checked-handle (nerimux/workspace-model:worktree-repository worktree))
+              "--path-format=absolute" "--git-common-dir"))
+      (error "workspace prune repository identity mismatch"))
+    (when (find :ignored entries :key #'vcs-kit:vcs-status-entry-kind)
+      (error "workspace prune excluded: ignored files require manual review"))
+    (dolist (name (remove-duplicates
+                  (remove "" (uiop:split-string names :separator '(#\Null)) :test #'string=)
+                  :test #'string=))
+      (let* ((file (uiop:parse-native-namestring
+                    (concatenate 'string (namestring root) name)))
+             (file-identity (%prune-file-identity (uiop:native-namestring file) nil t)))
+        (when file-identity
+          (unless (string= (namestring file) (namestring (truename file)))
+            (error "workspace prune refuses indirect file paths: ~A" name))
+          (push (list name file-identity
+                      (vcs-kit:process-result-stdout
+                       (vcs-kit:git-hash-object repository "--no-filters" "--" name)))
+                content))))
+    (make-worktree-prune-snapshot
+     :identity (list identity
+                     (vcs-kit:git-rev-parse-value repository "--absolute-git-dir")
+                     (vcs-kit:git-rev-parse-value repository "HEAD")
+                     (vcs-kit:git-rev-parse-value repository "--symbolic-full-name" "HEAD")
+                     (%prune-file-identity (namestring (merge-pathnames ".git" root)) nil)
+                     (vcs-kit:process-result-stdout
+                      (vcs-kit:git-hash-object repository "--no-filters" "--" ".git")))
+     :content (list index names (nreverse content))
+     :changed-files (%worktree-status-changed-files entries))))
+
+(defun validate-worktree-prune-snapshot (worktree snapshot)
+  (let ((current (%read-worktree-prune-snapshot worktree)))
+    (unless (and (equal (worktree-prune-snapshot-identity snapshot)
+                        (worktree-prune-snapshot-identity current))
+                 (equal (worktree-prune-snapshot-content snapshot)
+                        (worktree-prune-snapshot-content current))
+                 (equal (worktree-prune-snapshot-changed-files snapshot)
+                        (worktree-prune-snapshot-changed-files current)))
+      (error "workspace changed after prune preflight; retry required"))
+    t))
+
+(defun read-worktree-prune-snapshot-async (worktree &key on-complete on-error callback-dispatch on-start)
+  (%run-vcs-operation-async "workspace-prune-preflight"
+                            (lambda () (%read-worktree-prune-snapshot worktree))
+                            #'identity on-complete on-error callback-dispatch on-start))
 (defstruct (%worktree-status-update
              (:constructor %make-worktree-status-update))
   (path nil :read-only t)
@@ -108,6 +186,22 @@ already turns that into a \"worktree create failed: ...\" notification."
 (defun %short-sha (repository commit)
   (%rev-parse repository "--short" commit))
 
+(defun %created-worktree-by-path (repository worktree-path)
+  (or
+   (nerimux/workspace-model:repository-worktree-by-path repository worktree-path)
+   (nerimux/workspace-model:repository-worktree-by-path
+    repository
+    (string-right-trim
+     "/"
+     (namestring
+      (truename
+       (merge-pathnames
+        worktree-path
+        (%ensure-trailing-slash
+         (nerimux/workspace-model:repository-local-path repository)))))))
+   (error
+    "VCS created a worktree but it was not returned by list-worktrees: ~A"
+    worktree-path)))
 (defun create-worktree (repository &key branch path start-point force)
   "Create a worktree with a new branch and refresh its repository model.
 
@@ -134,12 +228,7 @@ REPOSITORY's default branch tip (R7.3) when not given."
     (apply #'vcs-kit:vcs-worktree backend-repository arguments)
     (list-repository-worktrees repository)
     (refresh-repository-status repository)
-    (or
-     (nerimux/workspace-model:repository-worktree-by-path repository
-                                                          worktree-path)
-     (error
-      "VCS created a worktree but it was not returned by list-worktrees: ~A"
-      worktree-path))))
+    (%created-worktree-by-path repository worktree-path)))
 
 (defun %refresh-worktree-repository (repository)
   (list-repository-worktrees repository)
@@ -178,9 +267,10 @@ false DRY-RUN once a user has explicitly confirmed the operation."
                                       apply-result
                                       on-complete
                                       on-error
-                                      callback-dispatch)
+                                      callback-dispatch &optional on-start)
   (cl-concurrent-kit:make-thread
    (lambda ()
+     (%dispatch-callback callback-dispatch on-start)
      (handler-case (let ((worker-result (funcall worker)))
                      (%dispatch-callback callback-dispatch
                                          (lambda ()
@@ -206,22 +296,46 @@ false DRY-RUN once a user has explicitly confirmed the operation."
     (%worktree-operation-result (:constructor %make-worktree-operation-result))
   (repository nil :read-only t)
   (value nil :read-only t)
+  (catalog-generation nil :read-only t)
+  (catalog nil :read-only t)
+  (repository-generation nil :read-only t)
+  (previous-worktrees nil :read-only t)
   (refresh nil :read-only t))
 
-(defun %capture-worktree-operation-result (repository value)
-  (%make-worktree-operation-result :repository
+(defun %capture-worktree-operation-result
+    (repository value &optional (generation (%begin-repository-data-generation repository)))
+  (let ((catalog (%repository-data-generation-catalog generation))
+        (catalog-generation (%repository-data-generation-catalog-generation generation))
+        (previous (%repository-data-generation-worktrees generation)))
+    (%make-worktree-operation-result :repository
                                    repository
                                    :value
                                    value
+                                   :catalog-generation catalog-generation
+                                   :catalog catalog
+                                   :repository-generation generation
+                                   :previous-worktrees previous
                                    :refresh
-                                   (%read-repository-refresh repository)))
+                                   (%read-repository-refresh repository))))
+
+(defun %begin-worktree-request (target)
+  (let ((repository (typecase target
+                      (nerimux/workspace-model:repository target)
+                      (nerimux/workspace-model:worktree
+                       (nerimux/workspace-model:worktree-repository target)))))
+    (when repository (%begin-repository-data-generation repository))))
 
 (defun %apply-worktree-operation-result (operation-result)
-  (%apply-repository-refresh
-   (%worktree-operation-result-repository operation-result)
-   (%worktree-operation-result-refresh operation-result))
+  (sb-thread:with-recursive-lock (*workspace-catalog-generation-lock*)
+    (unless (%repository-data-generation-current-p
+             (%worktree-operation-result-repository operation-result)
+             (%worktree-operation-result-repository-generation operation-result)
+             :before-apply t)
+      (error "Worktree refresh was superseded; refresh the workspace catalogue."))
+    (%apply-repository-refresh
+     (%worktree-operation-result-repository operation-result)
+     (%worktree-operation-result-refresh operation-result)))
   (%worktree-operation-result-value operation-result))
-
 (defun %worktree-command-arguments (operation &rest arguments)
   (append (list operation) (remove nil arguments)))
 
@@ -253,12 +367,7 @@ false DRY-RUN once a user has explicitly confirmed the operation."
 
 (defun %apply-created-worktree (repository operation-result)
   (let ((worktree-path (%apply-worktree-operation-result operation-result)))
-    (or
-     (nerimux/workspace-model:repository-worktree-by-path repository
-                                                          worktree-path)
-     (error
-      "VCS created a worktree but it was not returned by list-worktrees: ~A"
-      worktree-path))))
+    (%created-worktree-by-path repository worktree-path)))
 
 (defun %worktree-operation-command (worktree operation &rest options)
   (let ((repository
@@ -285,6 +394,11 @@ false DRY-RUN once a user has explicitly confirmed the operation."
                  (string= (nerimux/workspace-model:worktree-path worktree)
                           (nerimux/workspace-model:worktree-path main-worktree))))
       (error "The repository's primary worktree cannot be deleted."))
+    (when (or (some #'nerimux/pane:pane-live-p
+                    (nerimux/workspace-model:worktree-panes worktree))
+              (nerimux/pane:pane-live-p
+               (nerimux/workspace-model:worktree-agent-pane worktree)))
+      (error "Close the worktree's live panes before deleting it."))
     (%worktree-operation-command worktree
                                  "remove"
                                  (when force

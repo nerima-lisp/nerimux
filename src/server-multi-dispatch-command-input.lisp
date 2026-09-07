@@ -126,7 +126,9 @@
                     (let ((handled-p nil))
                       (if cmd
                           (multiple-value-bind (target args)
-                              (%client-command-target-and-args (rest tokens))
+                              (if (member cmd '(:workspace-complete :wt-complete))
+                                  (values nil (rest tokens))
+                                  (%client-command-target-and-args (rest tokens)))
                             (setf handled-p
                                   (%handle-client-ui-command
                                    session conn cmd target args))
@@ -136,7 +138,8 @@
                                (format nil "unknown command: ~(~A~)" cmd)))))
                       (unless handled-p
                         (%client-restore-command-view conn)))
-                    (%set-client-modal conn nil)
+                    (when (eq (client-conn-modal conn) :command)
+                      (%set-client-modal conn nil))
                     (%mark-dirty))))
           (error (condition)
             (%client-notify
@@ -165,18 +168,7 @@
    t))
 
 (defun %client-meta-pending-consume (conn payload)
-  "Resolve the byte following a pending ESC. `n`/`p` while :SECOND completes
-   M-n/M-p (contract SS2's section jump); `[` while :SECOND is a CSI
-   introducer and advances to :CSI-THIRD instead of acting; `Z` while
-   :CSI-THIRD completes S-TAB (cycle visibility). Anything else -- most
-   importantly an arrow key's A/B/C/D at :CSI-THIRD -- is an unrecognised
-   sequence and is swallowed right here rather than replayed into
-   %HANDLE-CLIENT-UI-KEY-PAYLOAD's own per-key table, which is exactly the
-   'a sequence's trailing bytes must never land on the wrong handler' rule
-   the ESC clause in %HANDLE-HELP-VIEW-KEY documents for the same hazard.
-   This is also the reason an arrow key cannot mis-fire a bound letter: its
-   third byte only ever reaches this COND, never the table below, and A/B/C/D
-   match nothing in it."
+  "Resolve UI escape sequences without replaying their tails as ordinary keys."
   (let ((state (gethash conn *client-meta-pending*)))
     (remhash conn *client-meta-pending*)
     (case state
@@ -187,8 +179,10 @@
          ((%client-byte-p payload 91) ; `[`, the CSI introducer
           (setf (gethash conn *client-meta-pending*) :csi-third))))
       (:csi-third
-       (when (%client-byte-p payload 90) ; `Z`
-         (%client-cycle-visibility conn)))))
+       (case (%client-single-byte payload)
+         (65 (%select-client-tree-relative conn -1))
+         (66 (%select-client-tree-relative conn 1))
+         (90 (%client-cycle-visibility conn))))))
   t)
 
 (defun %client-set-visibility-level (conn level)
@@ -241,18 +235,15 @@
        (%set-client-view conn :pane))))
   t)
 
-(defun %client-open-selected-worktree-command (session conn command)
+(defun %client-open-selected-worktree-command (session conn command &key agent-kind)
   "Open a new pane for the selected worktree running COMMAND.
    A NIL command deliberately starts the user's ordinary shell."
   (let ((worktree (client-conn-selected-worktree conn)))
     (unless worktree
       (%select-client-tree-worktree conn nil)
       (setf worktree (client-conn-selected-worktree conn)))
-    (if (and worktree
-             (%open-client-worktree-pane session
-                                         conn
-                                         worktree
-                                         :default-command
-                                         command))
-        t
+    (if worktree
+        (%open-client-worktree-pane session conn worktree
+                                    :default-command command
+                                    :agent-kind agent-kind)
         (%client-notify conn "no worktree selected"))))

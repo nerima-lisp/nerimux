@@ -1,5 +1,7 @@
 (in-package #:nerimux)
 
+(declaim (special *workspace-catalog-loaded-p* *workspace-scan-progress*))
+
 (defun %client-picker-items (conn)
   (or (client-conn-picker-items conn)
       (setf (client-conn-picker-items conn) (nerimux/picker:build-global-picker-items
@@ -174,10 +176,11 @@
 (defun %refresh-client-picker (conn &key on-complete on-error)
   (if (nerimux/vcs:vcs-package-available-p)
       (let ((failed-repository-ids nil))
+        (setf *workspace-scan-progress* nil)
         (%set-workspace-catalog-refresh-state
          (nerimux/vcs:workspace-organizations) :mark)
         (handler-case
-            (nerimux/vcs:refresh-workspace-organizations-async
+              (%workspace-refresh-organizations-async
              :callback-dispatch #'%enqueue-main-thread-callback
              :on-catalog
              (lambda (organizations)
@@ -192,6 +195,8 @@
                (%mark-dirty))
              :on-complete
              (lambda (organizations)
+               (setf *workspace-catalog-loaded-p* t
+                     *workspace-scan-progress* nil)
                (%set-workspace-catalog-refresh-state
                 organizations :settle :stale-p nil)
                (%reapply-stale-repository-marks organizations failed-repository-ids)
@@ -210,12 +215,16 @@
                (%mark-dirty))
              :on-error
              (lambda (condition)
+               (setf *workspace-catalog-loaded-p* t
+                     *workspace-scan-progress* nil)
                (%set-workspace-catalog-refresh-state
                 (nerimux/vcs:workspace-organizations) :settle :stale-p t)
                (when (and on-error (%client-live-p conn))
                  (funcall on-error condition))
                (%mark-dirty)))
           (error (condition)
+            (setf *workspace-catalog-loaded-p* t
+                  *workspace-scan-progress* nil)
             (%set-workspace-catalog-refresh-state
              (nerimux/vcs:workspace-organizations) :settle :stale-p t)
             (when (and on-error (%client-live-p conn))
@@ -229,6 +238,8 @@
   conn)
 
 (defun %open-client-picker (conn)
+  (when (%reject-pending-worktree-attachment conn :pane nil)
+    (return-from %open-client-picker nil))
   (%set-client-modal conn :picker)
   (setf (client-conn-picker-query conn) ""
         (client-conn-picker-regex-p conn) nil
@@ -240,6 +251,9 @@
   conn)
 
 (defun %close-client-picker (conn)
+  (when (and (client-conn-focus conn)
+             (%reject-pending-worktree-attachment conn))
+    (return-from %close-client-picker nil))
   (%set-client-modal conn nil)
   (%set-client-view conn
                     (if (client-conn-focus conn)

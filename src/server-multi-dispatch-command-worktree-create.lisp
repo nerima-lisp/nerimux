@@ -6,36 +6,57 @@
                                                &key
                                                path
                                                force)
-  "Create a worktree and select it when the asynchronous operation completes."
   (%client-notify conn (format nil "creating worktree ~A" branch))
   (%mark-workspace-refreshing :repository
                               (nerimux/workspace-model:repository-id repository))
+  (let ((job (%workspace-job-begin :repository (repository-id repository) :create repository)))
   (flet ((%on-error (condition)
+           (%workspace-job-update job repository :failed :outcome condition)
            (%clear-workspace-refreshing :repository
                                         (nerimux/workspace-model:repository-id
                                          repository)
-                                        :stale-p t)
+                                        :stale-p
+                                        t)
            (%client-notify conn
                            (format nil "worktree create failed: ~A" condition))
            (%mark-dirty)))
-    (handler-case
-        (nerimux/vcs:create-worktree-async
-         repository :branch branch :path path :force force
-         :callback-dispatch #'%enqueue-main-thread-callback
-         :on-complete
-         (lambda (worktree)
-           (%clear-workspace-refreshing
-            :repository (nerimux/workspace-model:repository-id repository))
-           (when (%client-live-p conn)
-             (%set-client-selected-worktree conn worktree)
-             (when session
-               (%focus-selected-client-worktree session conn)))
-           (%refresh-client-picker conn)
-           (%client-notify conn "worktree created")
-           (%mark-dirty))
-         :on-error #'%on-error)
+    (handler-case (nerimux/vcs:create-worktree-async repository
+                                                     :branch
+                                                     branch
+                                                     :path
+                                                     path
+                                                     :force
+                                                     force
+                                                     :callback-dispatch
+                                                     #'%enqueue-main-thread-callback
+                                                     :on-start
+                                                     (lambda () (%workspace-job-update job repository :running))
+                                                     :on-complete
+                                                     (lambda (worktree)
+                                                       (%workspace-job-update job repository :succeeded)
+                                                       (%clear-workspace-refreshing
+                                                        :repository
+                                                        (nerimux/workspace-model:repository-id
+                                                         repository))
+                                                       (when
+                                                           (%client-live-p conn)
+                                                         (%set-client-selected-worktree
+                                                          conn
+                                                          worktree)
+                                                         (when session
+                                                           (%open-client-worktree-pane
+                                                            session
+                                                            conn
+                                                            worktree)))
+                                                       (%refresh-client-picker
+                                                        conn)
+                                                       (%client-notify conn
+                                                                       "worktree created")
+                                                       (%mark-dirty))
+                                                     :on-error
+                                                     #'%on-error)
       (error (condition)
-        (%on-error condition))))
+        (%on-error condition)))))
   t)
 
 (defun %client-create-worktree (conn target args)

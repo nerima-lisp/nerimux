@@ -23,9 +23,13 @@
    instead (R5.2) via the existing %open-client-worktree-pane path."
   (multiple-value-bind (pane window worktree)
       (%workspace-prefix-context session conn)
+    (when (%reject-pending-worktree-attachment conn :worktree worktree :pane pane :window window)
+      (return-from %workspace-prefix-split nil))
     (cond
       ((or (null pane) (null window))
        (%client-notify conn "no focused pane"))
+      ((%worktree-cancel-pending-p worktree)
+       (%client-notify conn "worktree cancellation is pending"))
       (t
        (%workspace-prefix-unzoom window)
        (cond
@@ -62,6 +66,8 @@
     (if best-pane
         (let* ((window (pane-window best-pane))
                (active (window-active-pane window)))
+          (when (%reject-pending-worktree-attachment conn :pane active :window window)
+            (return-from %workspace-refocus-after-window-close nil))
           (session-select-window session window)
           (%set-client-focus conn active))
         (%set-client-view conn :repolist))))
@@ -77,8 +83,13 @@
    shutdown paths (%FORCE-KILL-PANES, RUN-SERVER's unwind) deliberately keep
    using CLOSE-PANE-PTY, because they read PANE-PID back afterwards to
    escalate to SIGKILL."
-  (multiple-value-bind (pane window worktree) 
+  (multiple-value-bind (pane window worktree)
       (%workspace-prefix-context session conn)
+    (when (or (%reject-pending-worktree-attachment conn :worktree worktree :pane pane :window window)
+              (some (lambda (candidate)
+                      (%window-delete-pending-p (pane-window candidate)))
+                    (and worktree (worktree-panes worktree))))
+      (return-from %workspace-prefix-close-pane nil))
     (cond
       ((or (null pane) (null window)) (%client-notify conn "no focused pane"))
       (t
@@ -115,6 +126,8 @@
   "C-q h/j/k/l : move focus to the neighbouring pane in DIRECTION,
    un-zooming first per R5.6."
   (multiple-value-bind (pane window) (%workspace-prefix-context session conn)
+    (when (%reject-pending-worktree-attachment conn :pane pane :window window)
+      (return-from %workspace-prefix-move-focus nil))
     (cond
       ((or (null pane) (null window)) (%client-notify conn "no focused pane"))
       (t
@@ -131,7 +144,7 @@
 (defun %workspace-prefix-cycle-window (session conn delta)
   "C-q n / C-q p : cycle DELTA steps through the current worktree's windows
    (wrapping), un-zooming the departing window first per R5.6."
-  (multiple-value-bind (pane window worktree) 
+  (multiple-value-bind (pane window worktree)
       (%workspace-prefix-context session conn)
     (declare (ignore pane))
     (cond
@@ -144,6 +157,10 @@
          (if (or (null index) (<= count 1))
              (%client-notify conn "no other window")
              (let* ((next-window (nth (mod (+ index delta) count) windows)))
+               (when (%reject-pending-worktree-attachment conn
+                                                         :pane (window-active-pane next-window)
+                                                         :window next-window)
+                 (return-from %workspace-prefix-cycle-window nil))
                (%workspace-prefix-unzoom window)
                (session-select-window session next-window)
                (%set-client-focus conn (window-active-pane next-window))
@@ -218,10 +235,13 @@
   (#\h (%workspace-prefix-move-focus session conn :left))
   (#\j (%workspace-prefix-move-focus session conn :down))
   (#\k (%workspace-prefix-move-focus session conn :up))
+  (#\K (nerimux/commands:stop-worktree-agent
+         (client-conn-selected-worktree conn) :on-finish #'%mark-dirty)
+        nil)
   (#\l (%workspace-prefix-move-focus session conn :right))
   (#\n (%workspace-prefix-cycle-window session conn 1))
   (#\p (%workspace-prefix-cycle-window session conn -1))
-  (#\w (%workspace-prefix-open-status session conn))
+  (#\w (%workspace-prefix-open-overview session conn))
   (#\t (%client-open-selected-worktree-command session conn nil))
   (#\[ (%workspace-prefix-open-scrollback session conn))
   (#\d :drop)
@@ -231,3 +251,107 @@
    (%set-client-modal conn nil)
    nil)
   (t nil))
+
+
+(defun %workspace-prefix-open-overview (session conn)
+  "Return directly to the workspace overview, retaining the focused worktree
+   selection."
+  (multiple-value-bind (pane window worktree)
+      (%workspace-prefix-context session conn)
+    (declare (ignore window))
+    (when (and pane worktree)
+      (%set-client-selected-worktree conn worktree))
+    (%set-client-view conn :repolist))
+  nil)
+
+
+(defun %workspace-prefix-fetch-repository (conn)
+  "Fetch the selected repository, then refresh status.  No longer bound to
+   C-q F (magit alignment, contract §2/§3: fetch moves to the `f`
+   transient) -- kept as a function because workspace-input-prefix-tests.lisp
+   still exercises it directly and the `f` transient is a separate unit's
+   call site for the same logic.
+
+A fetch already running for this repository is not started twice; the
+caller that finds one in flight is told so and the in-flight fetch's own
+completion is what eventually refreshes the picker (nerimux/vcs's
+FETCH-REPOSITORY-ASYNC)."
+  (let ((repository (%client-selected-repository conn)))
+    (cond
+      ((not repository)
+       (%client-notify conn "fetch requires a selected repository"))
+      ((not (nerimux/vcs:vcs-package-available-p))
+       (%client-notify conn "VCS adapter unavailable"))
+      (t
+        (%client-notify conn "fetching...")
+        (handler-case (%workspace-fetch-repository-async repository
+                                                          :callback-dispatch
+                                                          #'%enqueue-main-thread-callback
+                                                          :on-complete
+                                                          (lambda (result)
+                                                            (if result
+                                                                (progn
+                                                                  (%refresh-client-picker
+                                                                   conn)
+                                                                  (%client-notify
+                                                                   conn
+                                                                   "fetch complete"))
+                                                                (%client-notify
+                                                                 conn
+                                                                 "fetch already in progress")))
+                                                          :on-error
+                                                          (lambda (condition)
+                                                            (%client-notify conn
+                                                                            (format
+                                                                             nil
+                                                                             "fetch failed: ~A"
+                                                                             condition))))
+          (error (condition)
+            (%client-notify conn (format nil "fetch failed: ~A" condition)))))))
+  nil)
+
+
+(defun %workspace-prefix-fetch-organization (conn)
+  "Fetch every repository in the selected organization concurrently, then
+   refresh status.  No longer bound to C-q C-f -- same removal, and the same
+   reason to keep the function, as %WORKSPACE-PREFIX-FETCH-REPOSITORY above.
+   Duplicate suppression and the completion callback mirror that function,
+   one level up (nerimux/vcs:FETCH-ORGANIZATION-ASYNC)."
+  (let ((organization (%client-selected-organization conn)))
+    (cond
+      ((not organization)
+       (%client-notify conn "fetch requires a selected organization"))
+      ((not (nerimux/vcs:vcs-package-available-p))
+       (%client-notify conn "VCS adapter unavailable"))
+      (t
+        (%client-notify conn "fetching organization...")
+        (handler-case (%workspace-fetch-organization-async organization
+                                                            :callback-dispatch
+                                                            #'%enqueue-main-thread-callback
+                                                            :on-complete
+                                                            (lambda 
+                                                                (repositories)
+                                                              (if repositories
+                                                                  (progn
+                                                                    (%refresh-client-picker
+                                                                     conn)
+                                                                    (%client-notify
+                                                                     conn
+                                                                     "fetch complete"))
+                                                                  (%client-notify
+                                                                   conn
+                                                                   "fetch already in progress")))
+                                                            :on-error
+                                                            (lambda 
+                                                                (repository
+                                                                 condition)
+                                                              (%client-notify
+                                                               conn
+                                                               (format nil
+                                                                       "fetch failed for ~A: ~A"
+                                                                       (nerimux/workspace-model:repository-id
+                                                                        repository)
+                                                                       condition))))
+          (error (condition)
+            (%client-notify conn (format nil "fetch failed: ~A" condition)))))))
+  nil)

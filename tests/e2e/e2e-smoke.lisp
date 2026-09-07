@@ -13,6 +13,46 @@
 
 (load (merge-pathnames "server-kill-scenario.lisp" *e2e-dir*))
 
+(defun %run-helper-regressions ()
+  (let* ((runtime (namestring (truename sb-ext:*runtime-pathname*)))
+         (core (and sb-ext:*core-pathname*
+                    (namestring (truename sb-ext:*core-pathname*))))
+         (passed 0)
+         (failed 0))
+    (dolist (name '("bounded-process" "isolation"))
+      (handler-case
+          (multiple-value-bind (code stdout stderr timed-out)
+              (run-program-bounded
+               runtime
+               (append (list "--noinform")
+                       (when (and core (string/= core runtime))
+                         (list "--core" core))
+                       (list "--no-sysinit" "--no-userinit" "--script"
+                             (namestring
+                              (truename
+                               (merge-pathnames
+                                (format nil "~A-tests.lisp" name) *e2e-dir*))))))
+            (write-string stdout)
+            (write-string stderr *error-output*)
+            (let* ((expected (format nil "[~A] 4 selected, 4 passed, 0 failed" name))
+                   (summaries
+                     (with-input-from-string (stream stdout)
+                       (loop for line = (read-line stream nil nil)
+                             while line count (string= line expected)))))
+              (unless (and (eql code 0) (not timed-out) (= summaries 1))
+                (error "exit=~S timeout=~S matching-summaries=~D (expected 1)"
+                       code timed-out summaries)))
+            (incf passed))
+        (error (condition)
+          (incf failed)
+          (format *error-output* "~&[e2e helpers] FAIL ~A -- ~A~%" name condition)))
+      (finish-output)
+      (finish-output *error-output*))
+    (format t "~&[e2e helpers] ~D verified tests, ~D passed suites, ~D failed suites~%"
+            (* 4 passed) passed failed)
+    (finish-output)
+    (zerop failed)))
+
 (defparameter *scenarios*
   (list (cons "kill-without-server" 'scenario-kill-without-server)
         (cons "server-starts" 'scenario-server-starts)
@@ -58,17 +98,17 @@
 
 (defun %reap-server-process ()
   "Unconditionally SIGKILL and confirm exit of *KSC-SERVER-PROCESS* (defined
-   in server-kill-scenario.lisp, loaded eagerly by this file before RUN-E2E
-   is ever called). A spawned `nerimux server` outlives this process
+   in server-kill-scenario.lisp). A spawned `nerimux server` outlives this process
    whenever SERVER-STARTS times out or KILL-FORCE-CLEANS fails to confirm
    exit; this reap runs regardless of which scenarios passed or failed. A
    no-op when the process is nil or already exited."
   (when (and *ksc-server-process* (sb-ext:process-alive-p *ksc-server-process*))
     (ignore-errors (sb-ext:process-kill *ksc-server-process* 9))
-    (poll-until
-     (lambda ()
-       (not (sb-ext:process-alive-p *ksc-server-process*)))
-     +ksc-reap-timeout-seconds+)))
+    (unless (poll-until
+             (lambda ()
+               (not (sb-ext:process-alive-p *ksc-server-process*)))
+             +ksc-reap-timeout-seconds+)
+      (error "E2E server process survived cleanup"))))
 
 (defparameter +ksc-attach-kill-timeout-seconds+
   10
@@ -76,50 +116,66 @@
    the attach scenario auto-started and left running.")
 
 (defun %reap-attach-server (binary names)
-  "When \"attach\" was among the selected scenario NAMES, issue `BINARY kill
-   --force' to clean up whatever server RUN-ATTACH-SCENARIO auto-started
-   (attach-scenario.lisp): attach detaches without killing, by design --
-   the server is meant to persist for reattachment -- so nothing else in
-   this file's control flow ever stops it. This reuses the product's own
-   cleanup path rather than tracking the attach scenario's server pid.
-   A \"no reply from server\" failure (nonzero exit, no crash) is expected
-   and ignored whenever the attach scenario never got far enough to start
-   a server, or something else already cleaned it up."
-  (when (member "attach" names :test #'string=)
-    (ignore-errors
-     (run-program-bounded binary
-                          '("kill" "--force")
-                          :timeout-seconds
-                          +ksc-attach-kill-timeout-seconds+))))
+  "Request server shutdown and confirm socket removal, not process exit."
+  (when (and (member "attach" names :test #'string=)
+             (probe-file (%expected-socket-path "0")))
+    (multiple-value-bind (code stdout stderr timed-out)
+        (run-program-bounded binary '("kill" "--force")
+                             :timeout-seconds +ksc-attach-kill-timeout-seconds+)
+      (declare (ignore stdout))
+      (unless (and (eql code 0) (not timed-out))
+        (error "E2E attach cleanup failed: exit=~S timeout=~S stderr=~S"
+               code timed-out stderr)))
+    ;; Auto-start discards its process handle; unlink is not proof of exit.
+    (unless (poll-until (lambda () (not (probe-file (%expected-socket-path "0"))))
+                        +ksc-reap-timeout-seconds+)
+      (error "E2E attach socket survived cleanup"))))
+
+(defun %cleanup-e2e-servers (binary names)
+  (let ((failures nil))
+    (dolist (cleanup (list (lambda () (%reap-attach-server binary names))
+                          #'%reap-server-process))
+      (handler-case (funcall cleanup)
+        (error (condition) (push condition failures))))
+    (when failures
+      (error "E2E server cleanup failed: ~{~A~^; ~}" failures))))
 
 (defun run-e2e (binary filter-args)
   "Run the selected scenarios against BINARY in order, printing one PASS/FAIL
-   line per scenario, then a summary line. Exits 0 only when at least one
-   scenario was selected and every selected scenario passed -- a selection
-   matching nothing is a FAIL, not a vacuous pass."
+   line per scenario and a summary after successful cleanup. Cleanup errors
+   propagate without a summary. Returns 0 only when at least one scenario
+   was selected, every selected scenario passed, and both helper suites passed."
   (let* ((names (%selected-scenario-names filter-args))
          (passed 0)
-         (failed 0))
-    (dolist (name names)
-      (multiple-value-bind (ok detail) (%run-one-scenario name binary)
-        (format t "~&[e2e] ~:[FAIL~;PASS~] ~A -- ~A~%" ok name detail)
-        (finish-output)
-        (if ok
-            (incf passed)
-            (incf failed))))
-    (%reap-server-process)
-    (%reap-attach-server binary names)
+         (failed 0)
+         (helpers-passed nil))
+    (call-with-isolated-e2e-environment
+     (lambda (root)
+       (declare (ignore root))
+       (setf *ksc-server-process* nil)
+       (setf helpers-passed (%run-helper-regressions))
+       (dolist (name names)
+         (multiple-value-bind (ok detail) (%run-one-scenario name binary)
+           (format t "~&[e2e] ~:[FAIL~;PASS~] ~A -- ~A~%" ok name detail)
+           (finish-output)
+           (if ok
+               (incf passed)
+               (incf failed)))))
+     :cleanup (lambda (root)
+                (declare (ignore root))
+                (%cleanup-e2e-servers binary names)))
     (format t
             "~&[e2e] ~D selected, ~D passed, ~D failed~%"
             (length names)
             passed
             failed)
     (finish-output)
-    (sb-ext:exit :code
-                 (if (and (plusp (length names)) (zerop failed))
-                     0
-                     1))))
+    (if (and helpers-passed (plusp (length names)) (zerop failed)) 0 1)))
 
 (let ((binary (or (second sb-ext:*posix-argv*) "result/bin/nerimux"))
       (filters (nthcdr 2 sb-ext:*posix-argv*)))
-  (run-e2e binary filters))
+  (sb-ext:exit :code
+               (handler-case (run-e2e binary filters)
+                 (error (condition)
+                   (format *error-output* "~&[e2e] FAIL harness -- ~A~%" condition)
+                   1))))

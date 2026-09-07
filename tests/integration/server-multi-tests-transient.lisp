@@ -147,7 +147,7 @@
           (it "transient-command-data-and-process-log-share-stable-contracts"
               (with-fake-session (s)
                                  (let ((conn (%make-test-conn)))
-                                   (dolist 
+                                   (dolist
                                        (definition
                                         nerimux::+transient-definitions+)
                                      (let ((menu (cdr definition)))
@@ -200,7 +200,7 @@
                                      (nerimux::%client-transient-active-flags
                                       conn
                                       #\P)))
-                                   (dotimes 
+                                   (dotimes
                                        (index
                                         (1+ nerimux::+max-process-log-entries+))
                                      (nerimux::%client-log-process conn
@@ -348,7 +348,7 @@
                                      (lambda (ignored-connection)
                                        (declare (ignore ignored-connection))))
                                     (nerimux/vcs:git-write-operation-async
-                                     (lambda 
+                                     (lambda
                                          (received operation
                                                    args
                                                    &key
@@ -413,7 +413,7 @@
                                   (expect (string= "git push: failed"
                                                    (first (nerimux::client-conn-message-log conn)))))
                                 (multiple-value-bind (repository worktree
-                                                                 ignored-conn) 
+                                                                 ignored-conn)
                                     (%make-worktree-operation-fixture)
                                   (declare (ignore repository ignored-conn))
                                   (nerimux::%set-client-selected-tree-object
@@ -450,4 +450,3 @@
                                      (first (nerimux::client-conn-process-log conn))))
                       (expect (string= "git push: failed: boom"
                                        (first (nerimux::client-conn-message-log conn))))))))))
-

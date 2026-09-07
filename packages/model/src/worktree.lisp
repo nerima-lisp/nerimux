@@ -6,7 +6,7 @@
                       conflict-p ahead behind bare-p locked-p prunable-p
                       missing-p changed-files recent-commits commits-state
                       staged-files unstaged-files untracked-files
-                      unmerged-files stashes stashes-state)))
+                      unmerged-files stashes stashes-state completed-p agent-pane)))
   (id "" :type string)
   (repository nil)
   (path "" :type string)
@@ -14,6 +14,8 @@
   (head nil)
   (status nil)
   (panes nil :type list)
+  (completed-p nil :type boolean)
+  (agent-pane nil)
   (dirty-p nil :type boolean)
   (conflict-p nil :type boolean)
   (ahead 0 :type integer)
@@ -62,7 +64,9 @@
                            untracked-files
                            unmerged-files
                            stashes
-                           stashes-state)
+                           stashes-state
+                           completed-p
+                           agent-pane)
   (let ((path-string (%model-string path)))
     (%make-worktree :id
                     (or id (worktree-key path-string branch head))
@@ -78,6 +82,10 @@
                     status
                     :panes
                     (copy-list panes)
+                    :completed-p
+                    (not (null completed-p))
+                    :agent-pane
+                    agent-pane
                     :dirty-p
                     (not (null dirty-p))
                     :conflict-p
@@ -112,6 +120,37 @@
                     (copy-list stashes)
                     :stashes-state
                     stashes-state)))
+
+(defun worktree-complete (worktree)
+  (setf (worktree-completed-p worktree) t)
+  worktree)
+
+(defun worktree-prune-classification (worktree)
+  "Classify WORKTREE's snapshot for prune review, not deletion authorization."
+  (let* ((repository (worktree-repository worktree))
+         (primary (and repository (repository-main-worktree repository))))
+    (cond
+      ((null repository)
+       (values :excluded :missing-repository))
+      ((and primary
+            (or (eq primary worktree)
+                (string= (worktree-path primary) (worktree-path worktree))))
+       (values :excluded :primary))
+      ((worktree-bare-p worktree)
+       (values :excluded :bare))
+      ((worktree-locked-p worktree)
+       (values :excluded :locked))
+      ((or (some #'nerimux/pane:pane-live-p (worktree-panes worktree))
+           (nerimux/pane:pane-live-p (worktree-agent-pane worktree)))
+       (values :excluded :live-pane))
+      ((and (not (worktree-completed-p worktree))
+            (not (eq :exited (nerimux/pane:worktree-agent-state worktree))))
+       (values :excluded :not-completed-or-agent-exited))
+      ((worktree-missing-p worktree)
+       (values :missing :metadata-repair-required))
+      ((or (worktree-dirty-p worktree) (worktree-conflict-p worktree))
+       (values :candidate :confirmation-required))
+      (t (values :candidate :clean)))))
 
 (defun worktree-attention-p (worktree)
   (not (null (nerimux/pane:worktree-attention-reasons worktree))))

@@ -62,7 +62,24 @@
               :handled)))
         (expect (null
                  (nerimux::%dispatch-buffered-client-messages
-                  :session conn)))))) (it "dispatch-ready-clients-returns-quit-when-a-client-requests-shutdown"
+                  :session conn)))))) (it "dispatch-buffered-client-messages-continues-while-listen-reports-buffered-input"
+    (let ((conn (%make-test-conn))
+          (reads 0))
+      (sb-ext:without-package-locks
+        (with-stubbed-fdefinition
+            ((nerimux::%read-and-dispatch-client-message
+              (lambda (session client)
+                (declare (ignore session client))
+                (incf reads)
+                (if (= reads 1) :handled :quit)))
+             (listen
+              (lambda (stream)
+                (declare (ignore stream))
+                (= reads 1))))
+          (expect (eq :quit
+                      (nerimux::%dispatch-buffered-client-messages
+                       :session conn)))))
+      (expect (= 2 reads)))) (it "dispatch-ready-clients-returns-quit-when-a-client-requests-shutdown"
     (let* ((conn (%make-test-conn))
            (nerimux::*clients* (list conn)))
       (setf (nerimux::client-conn-fd conn) 4242)
@@ -156,4 +173,17 @@
                                     (and (consp event)
                                          (eq :drop (first event))
                                          (eq conn-b (second event))))
-                                  events))))))))
+                                  events)))))))) (it "run-multi-server-loop-continues-after-nil-iteration"
+    (let ((calls 0)
+          (nerimux::*running* t))
+      (let ((nerimux::*clients* nil))
+        (with-stubbed-fdefinition
+            ((nerimux::%multi-serve-iteration
+              (lambda (listener session)
+                (declare (ignore listener session))
+                (incf calls)
+                (when (= calls 2)
+                  :quit))))
+          (expect (null (nerimux::%run-multi-server-loop :listener :session)))
+          (expect (null nerimux::*running*))
+          (expect (= 2 calls))))))

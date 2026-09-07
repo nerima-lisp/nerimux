@@ -307,7 +307,7 @@
                   (make-string cols :initial-element #\─)
                   :style (%workspace-status-style-muted)))
            cols)
-          (multiple-value-bind (line-1 line-2) 
+          (multiple-value-bind (line-1 line-2)
               (%workspace-status-key-panel-spans selected-kind prefix-code)
             (%draw-status-text surface key-panel-line-1 line-1 cols)
             (%draw-status-text surface footer-row line-2 cols)))

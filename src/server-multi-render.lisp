@@ -50,6 +50,7 @@
                                            (client-conn-tree-filter conn)
                                            :refreshing-ids
                                            *workspace-refreshing-ids*
+                                           :job-labels (%workspace-job-labels)
                                            :stale-ids
                                            *workspace-stale-ids*
                                            :file-diffs
@@ -123,8 +124,7 @@
    Precedence mirrors %HANDLE-MULTI-KEY-MESSAGE's exactly, and deliberately so:
    whoever owns the keyboard must be what the user is looking at. When the two
    orders disagree, a key answers a question that is not on screen."
-  (let ((frame
-          (msg-frame
+  (multiple-value-bind (text snapshot)
            (case (client-conn-modal conn)
              (:confirm
               (render-confirm-view-to-tui-string
@@ -153,14 +153,40 @@
               (case (client-conn-view conn)
                 (:repolist (%render-workspace-frame conn))
                 (:status (%render-status-frame conn))
-                (t (%render-pane-frame session conn))))))))
-    (setf (client-conn-frame conn) frame)
-    frame))
+                (t (%render-pane-frame session conn)))))
+    (let ((frame (msg-frame text)))
+      (setf (client-conn-frame conn) frame
+            (client-conn-row-frame-candidate conn)
+            (when (and snapshot (null (client-conn-modal conn))
+                       (member (client-conn-view conn) '(:repolist :status)))
+              (list frame (%client-row-frame-key conn) snapshot)))
+      frame)))
+
+(defun %client-row-frame-key (conn)
+  (list (client-conn-rows conn) (client-conn-cols conn)
+        (client-conn-view conn) (client-conn-modal conn)))
 
 (defun %send-client-frame (conn frame)
   "Cache and send FRAME to one client connection."
   (setf (client-conn-frame conn) frame)
-  (send-frame (client-conn-stream conn) frame))
+  (let* ((candidate (client-conn-row-frame-candidate conn))
+         (eligible (and (eq frame (first candidate))
+                        (equal (%client-row-frame-key conn) (second candidate))))
+         (previous (client-conn-sent-row-frame conn))
+         (delta (when (and eligible
+                           (equal (second previous) (second candidate)))
+                  (nerimux/renderer:ansi-row-delta
+                   (third previous) (third candidate))))
+         (completed nil))
+    (unwind-protect
+         (progn
+           (unless (and delta (zerop (length delta)))
+             (send-frame (client-conn-stream conn)
+                         (if delta (msg-frame delta) frame)))
+           (setf (client-conn-sent-row-frame conn) (when eligible candidate)
+                 completed t))
+      ;; A partial write leaves the terminal state unknown, even if flush failed.
+      (unless completed (setf (client-conn-sent-row-frame conn) nil)))))
 
 (defun %broadcast-frame (session)
   "Render and send a dirty frame to every attached client."

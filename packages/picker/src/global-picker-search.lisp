@@ -13,12 +13,12 @@
                              #'nerimux/workspace-model:organization-host
                              #'nerimux/workspace-model:organization-name
                              (lambda (organization)
-                               (when 
+                               (when
                                    (nerimux/workspace-model:organization-missing-p
                                     organization)
                                  "missing"))
                              (lambda (organization)
-                               (when 
+                               (when
                                    (plusp
                                     (nerimux/workspace-model:organization-attention-count
                                      organization))
@@ -44,17 +44,17 @@
                              #'nerimux/workspace-model:repository-remote
                              #'nerimux/workspace-model:repository-backend
                              (lambda (repository)
-                               (when 
+                               (when
                                    (nerimux/workspace-model:repository-dirty-p
                                     repository)
                                  "dirty"))
                              (lambda (repository)
-                               (when 
+                               (when
                                    (nerimux/workspace-model:repository-conflict-p
                                     repository)
                                  "conflict"))
                              (lambda (repository)
-                               (when 
+                               (when
                                    (plusp
                                     (nerimux/workspace-model:repository-ahead
                                      repository))
@@ -63,7 +63,7 @@
                                          (nerimux/workspace-model:repository-ahead
                                           repository))))
                              (lambda (repository)
-                               (when 
+                               (when
                                    (plusp
                                     (nerimux/workspace-model:repository-behind
                                      repository))
@@ -72,7 +72,7 @@
                                          (nerimux/workspace-model:repository-behind
                                           repository))))
                              (lambda (repository)
-                               (when 
+                               (when
                                    (nerimux/workspace-model:repository-missing-p
                                     repository)
                                  "missing")))
@@ -86,17 +86,17 @@
                              #'nerimux/workspace-model:worktree-head
                              #'nerimux/workspace-model:worktree-status
                              (lambda (worktree)
-                               (when 
+                               (when
                                    (nerimux/workspace-model:worktree-dirty-p
                                     worktree)
                                  "dirty"))
                              (lambda (worktree)
-                               (when 
+                               (when
                                    (nerimux/workspace-model:worktree-conflict-p
                                     worktree)
                                  "conflict"))
                              (lambda (worktree)
-                               (when 
+                               (when
                                    (plusp
                                     (nerimux/workspace-model:worktree-ahead
                                      worktree))
@@ -105,7 +105,7 @@
                                          (nerimux/workspace-model:worktree-ahead
                                           worktree))))
                              (lambda (worktree)
-                               (when 
+                               (when
                                    (plusp
                                     (nerimux/workspace-model:worktree-behind
                                      worktree))
@@ -114,22 +114,22 @@
                                          (nerimux/workspace-model:worktree-behind
                                           worktree))))
                              (lambda (worktree)
-                               (when 
+                               (when
                                    (nerimux/workspace-model:worktree-bare-p
                                     worktree)
                                  "bare"))
                              (lambda (worktree)
-                               (when 
+                               (when
                                    (nerimux/workspace-model:worktree-locked-p
                                     worktree)
                                  "locked"))
                              (lambda (worktree)
-                               (when 
+                               (when
                                    (nerimux/workspace-model:worktree-prunable-p
                                     worktree)
                                  "prunable"))
                              (lambda (worktree)
-                               (when 
+                               (when
                                    (nerimux/workspace-model:worktree-missing-p
                                     worktree)
                                  "missing"))
@@ -159,7 +159,7 @@
 
 (defun %picker-item-search-text (item)
   (with-output-to-string (stream)
-    (dolist 
+    (dolist
         (value
          (list* (picker-item-id item)
                 (picker-item-kind item)
@@ -209,4 +209,3 @@
      (or (find selection items :key #'picker-item-id :test #'string=)
          (find selection items :key #'picker-item-label :test #'string=)))
     (t nil)))
-

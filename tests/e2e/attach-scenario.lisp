@@ -41,6 +41,45 @@
   (* 64 1024)
   "Maximum recent PTY output bytes to scan for the marker.")
 
+(defun %run-git (&rest args)
+  (multiple-value-bind (exit-code stdout stderr timed-out)
+      (run-program-bounded "git" args :timeout-seconds 20 :search t)
+    (unless (and (eql exit-code 0) (not timed-out))
+      (error "git ~{~A~^ ~} failed: exit=~S timeout=~S stderr=~S"
+             args exit-code timed-out stderr))
+    stdout))
+
+(defun %prepare-bare-worktree ()
+  "Create a real bare repository with one linked worktree for attach E2E."
+  (let* ((tmpdir (uiop:ensure-directory-pathname
+                  (or (sb-ext:posix-getenv "TMPDIR") "/tmp/")))
+         (root (merge-pathnames "git-attach/" tmpdir))
+         (seed (merge-pathnames "seed/" root))
+         (bare (merge-pathnames "repository.git/" root))
+         (worktree (merge-pathnames "worktree/" root))
+         (readme (merge-pathnames "README" seed)))
+    (ensure-directories-exist root)
+    (%run-git "init" "-q" (namestring seed))
+    (with-open-file (stream readme :direction :output :if-exists :supersede
+                                   :if-does-not-exist :create)
+      (write-line "nerimux E2E" stream))
+    (%run-git "-C" (namestring seed) "config" "user.email"
+              "nerimux-e2e@example.invalid")
+    (%run-git "-C" (namestring seed) "config" "user.name" "nerimux E2E")
+    (%run-git "-C" (namestring seed) "add" "README")
+    (%run-git "-C" (namestring seed) "commit" "-q" "-m" "initial")
+    (%run-git "clone" "--bare" "-q" (namestring seed) (namestring bare))
+    (%run-git "--git-dir" (namestring bare) "worktree" "add" "--detach"
+              "-q" (namestring worktree) "HEAD")
+    (let ((worktree-list
+            (%run-git "--git-dir" (namestring bare) "worktree" "list"
+                      "--porcelain")))
+      (let ((expected (string-right-trim "/"
+                                         (namestring (truename worktree)))))
+        (unless (search expected worktree-list)
+          (error "git worktree list omitted linked worktree ~A" worktree)))
+    (namestring worktree))))
+
 (defun %wait-for-marker (fd substr seconds acc)
   "Poll FD for PTY output up to SECONDS, accumulating into ACC.
    Returns T when SUBSTR appears in the output, NIL on timeout."
@@ -118,30 +157,38 @@
           (return (values exit-code exit-kind)))))))
 
 (defun run-attach-scenario (binary)
-  "Drive BINARY through `attach` -> type a marker -> detach. Returns
+  "Drive BINARY through `attach` from a linked worktree, type a Git marker,
+   then detach. Returns
    (VALUES pass-p detail-string); never calls SB-EXT:EXIT, so the caller
    controls the process's overall exit status."
   (format t "~&[e2e] driving ~A~%" binary)
-  (multiple-value-bind (fd pid)
-      (forkpty-with-shell 24 80
-                          :default-command (format nil "exec ~S attach" binary)
-                          :environment (sb-ext:posix-environ))
+  (let* ((worktree (handler-case (%prepare-bare-worktree)
+                     (error (condition)
+                       (error "bare worktree setup failed: ~A" condition))))
+         (marker "E2E_GIT_WORKTREE_true")
+         (command
+           (format nil
+                   "printf 'E2E_GIT_WORKTREE_%s\\n' \"$(git rev-parse --is-inside-work-tree)\"~%")))
+    (multiple-value-bind (fd pid)
+        (forkpty-with-shell 24 80
+                            :start-dir worktree
+                            :default-command (format nil "exec ~S attach" binary)
+                            :environment (sb-ext:posix-environ))
     (unwind-protect
-         (let ((marker "E2E_PROOF_4242")
-               (acc    (%make-accumulator)))
-           (%wait-for-startup-render fd +e2e-startup-timeout-seconds+ acc)
-           (pty-write fd (make-array 1 :element-type '(unsigned-byte 8)
-                                      :initial-contents (list (char-code #\q))))
-           (pty-write fd (format nil "echo ~A~%" marker))
+         (let ((startup-acc (%make-accumulator))
+               (acc (%make-accumulator)))
+           (assert (null (search marker command)))
+           (%wait-for-startup-render fd +e2e-startup-timeout-seconds+ startup-acc)
+           (pty-write fd command)
            (let ((found (%wait-for-marker fd marker +e2e-marker-timeout-seconds+ acc)))
              (pty-write fd (make-array 2 :element-type '(unsigned-byte 8)
                                           :initial-contents (list 17 (char-code #\d))))
              (multiple-value-bind (exit-code exit-kind)
                  (%wait-for-child-exit-draining fd +e2e-detach-timeout-seconds+ acc)
                (if (and found (eq :exited exit-kind) (zerop exit-code))
-                   (values t "marker rendered and nerimux exited cleanly")
+                   (values t "linked worktree Git marker rendered and nerimux exited cleanly")
                    (values nil
                            (format nil "marker=~A exit-kind=~A exit-code=~A captured=~D bytes"
                                    (if found :found :missing) exit-kind exit-code
                                    (fill-pointer acc)))))))
-      (pty-close fd pid))))
+      (pty-close fd pid)))))

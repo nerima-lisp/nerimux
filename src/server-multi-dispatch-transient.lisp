@@ -192,6 +192,10 @@
    and a letter."
   (let ((view (client-conn-transient-view conn)))
     (cond
+      ((let ((state (client-conn-workspace-assignment conn)))
+         (and state (eq (workspace-assignment-phase state) :assigning)
+              (eq view (workspace-assignment-view state))
+              (%handle-worktree-assignment-key session conn state payload))))
       ((%client-byte-p payload 27)
         (%client-esc-swallow-start conn)
         (%close-client-transient conn)

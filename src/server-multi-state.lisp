@@ -30,6 +30,13 @@
 (defvar *workspace-stale-ids*
   (make-hash-table :test #'equal))
 
+(defstruct workspace-operation-job
+  key object (token (gensym "WORKSPACE-JOB-"))
+  (state :queued) phase outcome)
+
+(defvar *workspace-operation-jobs* (make-hash-table :test #'equal))
+(defvar *workspace-job-spinner-tick* 0)
+
 (defvar *workspace-worktree-last-pane*
   (make-hash-table :test #'equal))
 

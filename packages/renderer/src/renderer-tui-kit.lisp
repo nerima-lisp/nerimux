@@ -42,13 +42,16 @@
                                                     :max-width
                                                     cols))))))
 
-(defun %surface-to-ansi-frame (surface)
-  (let ((escape (code-char 27))
-        (previous-style nil))
+(defstruct (ansi-row-snapshot (:constructor %make-ansi-row-snapshot))
+  (rows #() :read-only t)
+  (width 0 :read-only t)
+  (footer "" :read-only t)
+  (title "" :read-only t))
+
+(defun %surface-ansi-row (surface row)
+  (let ((previous-style nil))
     (with-output-to-string (stream)
-      (format stream "~C[2J~C[H" escape escape)
-      (dotimes (row (cl-tui-kit/core:surface-height surface))
-        (setf previous-style nil)
+      (format stream "~C[~D;1H~C[0m" (code-char 27) (1+ row) (code-char 27))
         (dotimes (column (cl-tui-kit/core:surface-width surface))
           (let ((cell (cl-tui-kit/core:surface-cell surface column row)))
             (unless (cl-tui-kit/core:cell-continuation-p cell)
@@ -58,13 +61,48 @@
                   (write-string (cl-tui-kit/ansi:ansi-encode-style style)
                                 stream)
                   (setf previous-style style)))
-              (write-string (cl-tui-kit/core:cell-content cell) stream))))
-        (unless (= row (1- (cl-tui-kit/core:surface-height surface)))
-          (write-string #.(coerce (list #\Return #\Linefeed) 'string)
-                        stream)))
-      (write-string (cl-tui-kit/ansi:ansi-encode-style
-                     (cl-tui-kit/core:make-style))
-                    stream))))
+              (write-string (cl-tui-kit/core:cell-content cell) stream)))))))
+
+(defun %surface-to-ansi-frame (surface)
+  (let* ((height (cl-tui-kit/core:surface-height surface))
+         (width (cl-tui-kit/core:surface-width surface))
+         (rows (map 'vector (lambda (row) (%surface-ansi-row surface row))
+                    (loop for row below height collect row)))
+         (footer (format nil "~C[0m~C[~D;~DH" (code-char 27) (code-char 27)
+                         height width))
+         (snapshot (%make-ansi-row-snapshot :rows rows :width width
+                                           :footer footer)))
+    (values (with-output-to-string (stream)
+              (format stream "~C[2J" (code-char 27))
+              (map nil (lambda (row) (write-string row stream)) rows)
+              (write-string footer stream))
+            snapshot)))
+
+(defun ansi-row-delta (previous current)
+  "Return a compatible row update, or NIL when a full repaint is required."
+  (when (and previous current
+             (= (ansi-row-snapshot-width previous)
+                (ansi-row-snapshot-width current))
+             (= (length (ansi-row-snapshot-rows previous))
+                (length (ansi-row-snapshot-rows current))))
+    (with-output-to-string (stream)
+      (let ((changed nil))
+        (loop for old across (ansi-row-snapshot-rows previous)
+              for new across (ansi-row-snapshot-rows current)
+              unless (string= old new)
+                do (write-string new stream) (setf changed t))
+        (when changed (write-string (ansi-row-snapshot-footer current) stream)))
+      (unless (string= (ansi-row-snapshot-title previous)
+                       (ansi-row-snapshot-title current))
+        (write-string (ansi-row-snapshot-title current) stream)))))
+
+(defun %ansi-frame-with-title (frame snapshot title)
+  (values (concatenate 'string frame title)
+          (when snapshot
+            (%make-ansi-row-snapshot
+             :rows (ansi-row-snapshot-rows snapshot)
+             :width (ansi-row-snapshot-width snapshot)
+             :footer (ansi-row-snapshot-footer snapshot) :title title))))
 
 (defconstant +min-terminal-cols+
   40)
@@ -148,6 +186,7 @@
                                                collapsed-node-ids
                                                expanded-node-ids
                                                refreshing-ids
+                                               job-labels
                                                stale-ids
                                                file-diffs
                                                (scanning-p nil)
@@ -172,6 +211,7 @@
   (let ((all-tree-entries
           (%workspace-flat-tree-entries
            organizations collapsed-node-ids
+           :job-labels job-labels
            :refreshing-ids refreshing-ids
            :stale-ids stale-ids
            :filter tree-filter
@@ -184,8 +224,7 @@
               (and organizations
                    (plusp (length (or tree-filter "")))
                    (null all-tree-entries))))
-        (concatenate
-         'string
+        (multiple-value-bind (frame snapshot)
          (%render-ansi-frame-with-tui-kit
           (render-workspace-overview-to-string
            organizations terminal-rows terminal-cols
@@ -225,4 +264,5 @@
                  :filter tree-filter
                  :file-diffs file-diffs
                  :precomputed-entries all-tree-entries)))))
-         (%client-title-osc title-repository title-worktree))))))
+          (%ansi-frame-with-title
+           frame snapshot (%client-title-osc title-repository title-worktree)))))))

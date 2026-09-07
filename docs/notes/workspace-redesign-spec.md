@@ -82,13 +82,13 @@ workspace overview
   ├─ t     → 通常terminal追加
   ├─ c     → Claude agent追加
   ├─ x     → Codex agent追加
-  ├─ c     → 完了 / 未完了切替
+  ├─ C     → 完了 / 未完了切替
   ├─ p     → 選択workspaceをprune
   └─ P     → prune all
 
 agent / terminal view
   ├─ C-q w → workspace overview
-  ├─ C-q k → agent停止
+  ├─ C-q K → agent停止
   ├─ C-q t → terminal追加
   └─ C-q h/j/k/l → pane focus移動
 ```

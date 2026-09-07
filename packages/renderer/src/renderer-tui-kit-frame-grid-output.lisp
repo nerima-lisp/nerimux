@@ -30,7 +30,7 @@
             for character = (char chars-row column)
             unless (char= character +frame-grid-continuation+)
               do (let ((style (aref styles-row column)))
-                   (unless 
+                   (unless
                        (and run-style (cl-tui-kit/core:style= run-style style))
                      (flush)
                      (setf run-style style))

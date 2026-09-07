@@ -204,6 +204,41 @@
                  conn (list nil "/tmp/nerimux-cwd-fixture/repo/.worktrees/wt-cwd/src"))
                 (expect (eq :pane (nerimux::client-conn-view conn))))))))))
 
+  (it "r7-2-a-cwd-match-with-no-pane-opens-a-direct-shell"
+    (let ((nerimux::*last-selected-worktree-token* nil))
+      (multiple-value-bind (organizations)
+          (%attach-fixture
+           :worktree-path "/tmp/nerimux-cwd-fixture/repo/.worktrees/wt-direct")
+        (let* ((repository
+                 (first (nerimux/workspace-model:organization-repositories
+                         (first organizations))))
+               (worktree
+                 (first (nerimux/workspace-model:repository-worktrees
+                         repository)))
+               (opened nil))
+          (multiple-value-bind (session)
+              (make-single-pane-session)
+            (let ((pane (first (nerimux/session:all-panes session)))
+                  (conn (%make-test-conn))
+                  (nerimux::*server-sessions* (list (cons "0" session)))
+                  (nerimux/vcs::*workspace-organizations* organizations))
+              (setf (nerimux::client-conn-view conn) :repolist)
+              (with-stubbed-fdefinition
+                  ((nerimux::%open-client-worktree-pane
+                    (lambda (s c wt &key default-command agent-kind)
+                      (declare (ignore s default-command agent-kind))
+                      (setf opened wt
+                            (nerimux::client-conn-focus c)
+                            pane)
+                      t)))
+                (nerimux::%client-attach-target
+                 conn
+                 (list nil
+                       "/tmp/nerimux-cwd-fixture/repo/.worktrees/wt-direct/src")))
+              (expect (eq worktree opened))
+              (expect (eq :pane (nerimux::client-conn-view conn)))
+              (expect (null (nerimux::client-conn-workspace-assignment conn)))))))))
+
   (it "r7-2-a-cwd-match-with-no-registered-session-does-not-jump-to-detail"
     (let ((nerimux::*last-selected-worktree-token* nil))
       (multiple-value-bind (organizations)

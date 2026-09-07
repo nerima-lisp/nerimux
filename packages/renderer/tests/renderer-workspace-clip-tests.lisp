@@ -79,4 +79,46 @@
                (nerimux/renderer::%visible-truncate row-value cols)))
         (expect (> (nerimux/renderer::%display-width row-value) cols))
         (expect (search expected-truncated frame))
-        (expect (not (search branch frame)))))))
+        (expect (not (search branch frame))))))
+
+  (it "keeps running before completion in styled frames across narrow widths"
+    (let* ((worktree
+             (nerimux/workspace-model:make-worktree
+              :id "wt-running" :path "/repo/run" :branch "run"
+              :status t :completed-p t))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :id "repo-running" :specification "github.com/o/r"
+              :local-path "/repo" :worktrees (list worktree)))
+           (organization
+             (nerimux/workspace-model:make-organization
+              :id "team-running" :name "o"
+              :repositories (list repository))))
+      (nerimux/pane:worktree-add-pane worktree
+        (nerimux/pane:make-pane :fd 10 :agent-kind :codex))
+      (let* ((entry (find worktree
+                          (nerimux/renderer::%workspace-flat-tree-entries
+                           (list organization) nil)
+                          :key #'third))
+             (base (format nil "~A~A"
+                           (make-string (+ 3 (* 2 (first entry)))
+                                        :initial-element #\Space)
+                           (second entry))))
+        (loop for cols from 20 to 80
+              for frame = (nerimux/renderer:render-workspace-overview-to-string
+                           (list organization) 24 cols)
+              for suffix = (nth-value 1
+                            (nerimux/renderer::%worktree-tree-info-suffix
+                             worktree (max 0 (- cols
+                                                (nerimux/renderer::%display-width base)
+                                                2))))
+              for row = (nerimux/renderer::%visible-truncate
+                         (format nil "~A  ~A" base suffix) cols)
+              for plain-row = (strip-sgr row)
+              do (expect (search row frame))
+                 (expect (<= (nerimux/renderer::%display-width plain-row) cols))
+                 (when (search "COMPLETED" plain-row)
+                   (expect (search "RUNNING" plain-row)))
+                 (when (= cols 80)
+                   (expect (search "agent:RUNNING+COMPLETED/Codex git:CLEAN"
+                                   (strip-sgr frame)))))))))

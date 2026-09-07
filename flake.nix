@@ -171,6 +171,85 @@
       # from us. Restore it only alongside a specific package that needs it.
       pkgsFor = system: import nixpkgs { inherit system; };
 
+      # SBCL's Darwin PTYs need a session and controlling terminal for job-control shells.
+      sbclFor =
+        system:
+        let
+          pkgs = pkgsFor system;
+          controllingPtyPatch = pkgs.writeText "sbcl-darwin-controlling-pty.patch" ''
+            diff --git a/src/runtime/run-program.c b/src/runtime/run-program.c
+            --- a/src/runtime/run-program.c
+            +++ b/src/runtime/run-program.c
+            @@ -95,9 +95,25 @@
+                 if ((fd = open(pty_name, O_RDWR, 0)) == -1)
+                     return (-1);
+            +#ifdef LISP_FEATURE_DARWIN
+            +    if (ioctl(fd, TIOCSCTTY, 0) < 0 ||
+            +        dup2(fd, 0) < 0 ||
+            +        dup2(fd, 1) < 0 ||
+            +        dup2(fd, 2) < 0 ||
+            +        !set_noecho(0)) {
+            +        int saved_errno = errno;
+            +        if (fd > 2)
+            +            close(fd);
+            +        errno = saved_errno;
+            +        return -1;
+            +    }
+            +    if (fd > 2)
+            +        close(fd);
+            +#else
+                 dup2(fd, 0);
+                 set_noecho(0);
+                 dup2(fd, 1);
+                 dup2(fd, 2);
+                 close(fd);
+            +#endif
+                 return (0);
+             }
+            @@ -327,6 +343,12 @@
+                 /* Put us in our own process group, but only if we need not
+                  * share stdin with our parent. In the latter case we claim
+                  * control of the terminal. */
+            +#ifdef LISP_FEATURE_DARWIN
+            +    if (pty_name) {
+            +        if (setsid() < 0)
+            +            goto child_setup_failed;
+            +    } else
+            +#endif
+                 if (sin >= 0) {
+             #ifdef LISP_FEATURE_OPENBSD
+                   setsid();
+            @@ -348,7 +370,12 @@
+                 /* If we are supposed to be part of some other pty, go for it. */
+            -    if (pty_name)
+            +    if (pty_name) {
+            +#ifdef LISP_FEATURE_DARWIN
+            +        if (set_pty(pty_name) < 0)
+            +            goto child_setup_failed;
+            +#else
+                     set_pty(pty_name);
+            -    else {
+            +#endif
+            +    } else {
+                 /* Set up stdin, stdout, and stderr */
+                 if (sin >= 0)
+                     dup2(sin, 0);
+            @@ -385,3 +412,6 @@
+            +#ifdef LISP_FEATURE_DARWIN
+            +child_setup_failed:
+            +#endif
+                 /* When exec or chdir fails and channel is available, send the errno value. */
+                 if (-1 != channel[1]) {
+                     int our_errno = errno;
+          '';
+        in
+        if pkgs.stdenv.hostPlatform.isDarwin then
+          pkgs.sbcl.overrideAttrs (old: {
+            patches = (old.patches or [ ]) ++ [ controllingPtyPatch ];
+          })
+        else
+          pkgs.sbcl;
+
       # Single source of truth for the version: the `:version` form in
       # nerimux.asd. A release only ever edits the .asd, and every Nix package
       # follows automatically; release.yml refuses a tag that disagrees.
@@ -291,13 +370,14 @@
         system: name: testSystem:
         let
           pkgs = pkgsFor system;
-          sbcl = pkgs.sbcl;
+          sbcl = sbclFor system;
         in
         pkgs.runCommand name
           {
             nativeBuildInputs = [
               sbcl
               pkgs.coreutils
+              pkgs.git
             ];
             NERIMUX_SIBLING_REGISTRY = siblingRegistry system;
             NERIMUX_TEST_SYSTEM = testSystem;
@@ -322,7 +402,7 @@
         system:
         let
           pkgs = pkgsFor system;
-          sbcl = pkgs.sbcl;
+          sbcl = sbclFor system;
         in
         rec {
           nerimux = pkgs.stdenv.mkDerivation {
@@ -428,6 +508,7 @@
                 nativeBuildInputs = [
                   sbcl
                   pkgs.coreutils
+                  pkgs.git
                 ];
                 NERIMUX_SIBLING_REGISTRY = siblingRegistry system;
               }
@@ -457,7 +538,7 @@
         system:
         let
           pkgs = pkgsFor system;
-          sbcl = pkgs.sbcl;
+          sbcl = sbclFor system;
 
           # scripts/checks/*.lisp and *.pl (see scripts/checks/README.md) need
           # neither ASDF nor a compile — each only reads the tree, so ${self}
@@ -512,13 +593,14 @@
         system:
         let
           pkgs = pkgsFor system;
-          sbcl = pkgs.sbcl;
+          sbcl = sbclFor system;
 
           test = pkgs.writeShellApplication {
             name = "nerimux-test";
             runtimeInputs = [
               sbcl
               pkgs.coreutils
+              pkgs.git
             ];
             text = ''
               export NERIMUX_SIBLING_REGISTRY="${siblingRegistry system}"
@@ -545,6 +627,7 @@
             runtimeInputs = [
               sbcl
               pkgs.coreutils
+              pkgs.git
             ];
             text = ''
               export NERIMUX_SIBLING_REGISTRY="${siblingRegistry system}"
@@ -585,6 +668,7 @@
             runtimeInputs = [
               sbcl
               pkgs.coreutils
+              pkgs.git
             ];
             text = ''
               export NERIMUX_SIBLING_REGISTRY="${siblingRegistry system}"
@@ -650,7 +734,7 @@
         system:
         let
           pkgs = pkgsFor system;
-          sbcl = pkgs.sbcl;
+          sbcl = sbclFor system;
         in
         {
           default = pkgs.mkShell {

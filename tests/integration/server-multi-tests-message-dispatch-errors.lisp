@@ -40,7 +40,8 @@
               (with-fake-session (s)
                                  (multiple-value-bind (repository worktree conn) 
                                      (%make-worktree-operation-fixture)
-                                   (let* ((nerimux::*clients* (list conn))
+                                   (let* ((nerimux::*worktree-delete-reservations* (make-hash-table :test #'equal))
+                                          (nerimux::*clients* (list conn))
                                           (available
                                            (fdefinition
                                             'nerimux/vcs:vcs-package-available-p))
@@ -75,6 +76,7 @@
                                                                                            branch
                                                                                            path
                                                                                            force
+                                                                                           on-start
                                                                                            on-complete
                                                                                            on-error
                                                                                            callback-dispatch)
@@ -85,6 +87,8 @@
                                                                                                   force
                                                                                                   on-complete
                                                                                                   callback-dispatch))
+                                                                                        (expect (functionp on-start))
+                                                                                        (funcall on-start)
                                                                                         (funcall
                                                                                          on-error
                                                                                          "create async failure")
@@ -123,15 +127,18 @@
                                                                                            force
                                                                                            on-complete
                                                                                            on-error
+                                                                                           on-result
                                                                                            callback-dispatch)
                                                                                         (declare (ignore
                                                                                                   received-worktree
                                                                                                   force
                                                                                                   on-complete
+                                                                                                  on-error
                                                                                                   callback-dispatch))
                                                                                         (funcall
-                                                                                         on-error
-                                                                                         "delete async failure")
+                                                                                         on-result
+                                                                                         (nerimux/vcs::make-worktree-delete-result
+                                                                                          :error "delete async failure"))
                                                                                         t))
                                            (nerimux::%client-delete-worktree
                                             conn
@@ -293,7 +300,8 @@
               (with-fake-session (s)
                                  (multiple-value-bind (repository worktree conn) 
                                      (%make-worktree-operation-fixture)
-                                   (let* ((nerimux::*clients* (list conn))
+                                   (let* ((nerimux::*worktree-delete-reservations* (make-hash-table :test #'equal))
+                                          (nerimux::*clients* (list conn))
                                           (available
                                            (fdefinition
                                             'nerimux/vcs:vcs-package-available-p))
@@ -316,6 +324,7 @@
                                                                                            branch
                                                                                            path
                                                                                            force
+                                                                                           on-start
                                                                                            on-complete
                                                                                            on-error
                                                                                            callback-dispatch)
@@ -326,6 +335,8 @@
                                                                                                   force
                                                                                                   on-error
                                                                                                   callback-dispatch))
+                                                                                        (expect (functionp on-start))
+                                                                                        (funcall on-start)
                                                                                         (funcall
                                                                                          on-complete
                                                                                          worktree)
@@ -352,15 +363,18 @@
                                                                                            force
                                                                                            on-complete
                                                                                            on-error
+                                                                                           on-result
                                                                                            callback-dispatch)
                                                                                         (declare (ignore
                                                                                                   received-worktree
                                                                                                   force
+                                                                                                  on-complete
                                                                                                   on-error
                                                                                                   callback-dispatch))
                                                                                         (funcall
-                                                                                         on-complete
-                                                                                         nil)
+                                                                                         on-result
+                                                                                         (nerimux/vcs::make-worktree-delete-result
+                                                                                          :removed-p t))
                                                                                         t))
                                            (nerimux::%set-client-selected-tree-object
                                             conn

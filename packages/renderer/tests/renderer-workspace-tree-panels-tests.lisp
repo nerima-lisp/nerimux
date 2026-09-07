@@ -9,12 +9,12 @@
       (expect (search "fold" plain))
       (expect (not (search "shell(main)" plain)))))
 
-  (it "shows the shell(main)/fetch hints for a repository selection"
+  (it "shows the create and fetch hints for a repository selection"
     (let* ((repository (nerimux/workspace-model:make-repository :id "repo-panel" :specification "s"))
            (plain (strip-sgr
                    (nerimux/renderer::%workspace-key-panel-content
                     repository :normal #x11 nil))))
-      (expect (search "shell(main)" plain))
+      (expect (search "main:agent>terminal>assign" plain))
       (expect (not (search "fold" plain)))))
 
   (it "shows the default worktree-row hints for a worktree selection"
@@ -60,7 +60,7 @@
 (describe "renderer-suite/workspace-repository-state"
           (it
            "renders every repository health state in the selected detail panel"
-           (multiple-value-bind (organization repository) 
+           (multiple-value-bind (organization repository)
                (%build-five-level-tree)
              (let ((states
                     (list
@@ -111,7 +111,7 @@
 (describe "renderer-suite/workspace-tree-projection-helpers"
           (it
            "uses stable identities for every model level and a generic fallback"
-           (multiple-value-bind (organization repository worktree window-1) 
+           (multiple-value-bind (organization repository worktree window-1)
                (%build-five-level-tree)
              (let ((pane (first (nerimux/window:window-panes window-1))))
                (expect
@@ -247,7 +247,7 @@
                (string= "key/999"
                         (nerimux/renderer::%workspace-prefix-label 999))))
           (it "selects the newest output or focus timestamp"
-              (multiple-value-bind (organization repository worktree window-1) 
+              (multiple-value-bind (organization repository worktree window-1)
                   (%build-five-level-tree)
                 (declare (ignorable organization repository))
                 (let ((pane-1 (first (nerimux/window:window-panes window-1)))
@@ -260,7 +260,7 @@
           (it "renders behind-only repository information"
               (let ((worktree
                      (nerimux/workspace-model:make-worktree :id "wt" :behind 2)))
-                (multiple-value-bind (plain styled) 
+                (multiple-value-bind (plain styled)
                     (nerimux/renderer::%worktree-tree-info-suffix worktree 80)
                   (declare (ignore styled))
                   (expect (search "-2" plain))))))

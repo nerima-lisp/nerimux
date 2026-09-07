@@ -202,7 +202,7 @@
                                      (+ 8 (- code 100))))
                    (incf index))
                  ((or (= code 38) (= code 48))
-                  (multiple-value-bind (color consumed) 
+                  (multiple-value-bind (color consumed)
                       (%sgr-extended-color codes index length)
                     (when color
                       (if (= code 38)
@@ -226,4 +226,3 @@
                                 reverse
                                 :strike
                                 strike)))
-

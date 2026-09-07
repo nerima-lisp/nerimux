@@ -60,9 +60,7 @@
 (defun %client-context-object (conn target)
   (or (%workspace-find-tree-object target)
       (%client-tree-object conn)
-      (%workspace-find-tree-object (%client-selection-token conn))
-      (and (client-conn-focus conn)
-           (nerimux/pane:pane-worktree (client-conn-focus conn)))))
+      (%workspace-find-tree-object (%client-selection-token conn))))
 
 (defun %client-selected-repository (conn &optional target)
   (let ((object (%client-context-object conn target)))
@@ -87,8 +85,6 @@
               (nerimux/workspace-model:repository-organization repository)))))))
 
 (defun %client-operation-worktree (conn &optional target)
-  (let ((selected (%client-tree-object conn))
-        (focused (client-conn-focus conn)))
+  (let ((selected (%client-tree-object conn)))
     (or (%workspace-find-worktree target)
-        (and (typep selected 'nerimux/workspace-model:worktree) selected)
-        (and focused (nerimux/pane:pane-worktree focused)))))
+        (and (typep selected 'nerimux/workspace-model:worktree) selected))))

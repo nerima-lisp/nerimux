@@ -24,7 +24,20 @@
    #:create-worktree
    #:delete-worktree
    #:create-worktree-async
+   #:create-detached-worktree-async
+   #:detached-worktree-result
+   #:detached-worktree-result-path
+   #:detached-worktree-result-head
+   #:detached-worktree-result-worktree
+   #:detached-worktree-result-refresh-error
    #:delete-worktree-async
+   #:read-worktree-prune-snapshot-async
+   #:validate-worktree-prune-snapshot
+   #:worktree-prune-snapshot-changed-files
+   #:worktree-delete-result
+   #:worktree-delete-result-removed-p
+   #:worktree-delete-result-error
+   #:worktree-delete-result-refresh-error
    #:lock-worktree
    #:unlock-worktree
    #:prune-worktrees

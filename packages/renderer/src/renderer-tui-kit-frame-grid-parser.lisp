@@ -149,7 +149,7 @@
         (multiple-value-bind (new-row new-col
                                       new-saved-row
                                       new-saved-col
-                                      new-style) 
+                                      new-style)
             (%frame-grid-apply-csi grid
                                    row
                                    col

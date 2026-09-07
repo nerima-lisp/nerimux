@@ -12,38 +12,39 @@
           (%sgr-wrap key +sgr-accent-bold+)
           (%sgr-wrap description +sgr-muted+)))
 
-(defparameter *workspace-footer-hints*
-  '(("n/p" "select")
-    ("Enter" "open")
-    ("Tab" "expand")
-    ("g" "refresh")
-    ("/" "filter")
-    (":" "command")
-    ("?" "menu"))
-  "Static key hints rendered in the workspace overview footer.")
-
 (defun %workspace-footer-line (mode prefix-code &optional tree-filter)
   "The overview footer: a mode chip followed by two-tone key hints."
   (format nil
           " ~A~A  ~{~A~^  ~}"
           (if (plusp (length (or tree-filter "")))
-              (format nil "~A  "
-                      (%sgr-wrap (format nil "/~A" tree-filter) +sgr-muted+))
+              (format nil "~A  " (%sgr-wrap (format nil "/~A" tree-filter) +sgr-muted+))
               "")
           (%sgr-wrap (format nil " ~:@(~A~) " mode) +sgr-mode-chip+)
-          (append (mapcar (lambda (hint)
-                            (apply #'%workspace-hint hint))
-                          *workspace-footer-hints*)
-                  (list
-                   (%workspace-hint
-                    (format nil "~A d" (%workspace-prefix-label prefix-code))
-                    "detach")))))
+          (append
+           (when (eq mode :repolist)
+             (list (%workspace-hint "n" "create+assign")
+                   (%workspace-hint "a" "assign")))
+           (list (%workspace-hint (if (eq mode :repolist) "Down/p" "n/p") "select")
+                 (%workspace-hint "Enter" "agent>terminal>assign")
+                 (%workspace-hint "Tab" "expand")
+                 (%workspace-hint "g" "refresh")
+                 (%workspace-hint "/" "filter")
+                 (%workspace-hint ":" "command")
+                 (%workspace-hint "?" "menu")
+                 (%workspace-hint
+                  (format nil "~A d" (%workspace-prefix-label prefix-code))
+                  "detach")))))
 
 (defun %workspace-key-panel-content (selected-object mode prefix-code tree-filter)
-  "Return the two key-panel content lines for SELECTED-OBJECT."
+  "Two values -- the key panel's two content lines -- switching on
+   SELECTED-OBJECT's row kind."
   (values
    (format nil " ~{~A~^  ~}"
-           (cond
+           (append
+            (when (eq mode :repolist)
+              (list (%workspace-hint "n" "create+assign")
+                    (%workspace-hint "a" "assign")))
+            (cond
              ((keywordp selected-object)
               (list (%workspace-hint "Enter/Tab" "fold")
                     (%workspace-hint "M-n/M-p" "section")
@@ -52,7 +53,7 @@
                     (%workspace-hint "C-p" "picker")
                     (%workspace-hint "g" "refresh")))
              ((typep selected-object 'repository)
-              (list (%workspace-hint "Enter" "shell(main)")
+              (list (%workspace-hint "Enter" "main:agent>terminal>assign")
                     (%workspace-hint "Tab" "expand")
                     (%workspace-hint "w" "worktree menu")
                     (%workspace-hint "f" "fetch menu")))
@@ -60,22 +61,24 @@
               (list (%workspace-hint "Tab" "diff")
                     (%workspace-hint "s/u" "stage")
                     (%workspace-hint "k" "discard")
-                    (%workspace-hint "n/p" "move")))
+                    (%workspace-hint (if (eq mode :repolist) "Down/p" "n/p") "move")))
              ((and (consp selected-object)
                    (member (first selected-object) '(:diff-line :diff-more)))
-              (list (%workspace-hint "n/p" "move")))
+              (list (%workspace-hint (if (eq mode :repolist) "Down/p" "n/p") "move")))
              ((and (consp selected-object) (eq (first selected-object) :commit))
-              (list (%workspace-hint "n/p" "select")
+              (list (%workspace-hint (if (eq mode :repolist) "Down/p" "n/p") "select")
                     (%workspace-hint "Tab" "diff")))
              ((typep selected-object 'pane)
               (list (%workspace-hint "Enter" "focus")
-                    (%workspace-hint "n/p" "select")))
+                    (%workspace-hint (if (eq mode :repolist) "Down/p" "n/p") "select")))
              (t
-              (list (%workspace-hint "Enter" "shell")
+              (list (%workspace-hint "Enter" "agent>terminal>assign")
                     (%workspace-hint "Tab" "expand")
                     (%workspace-hint "w" "worktree menu")
-                    (%workspace-hint "c/P/F" "commit/push/pull")
-                    (%workspace-hint "g" "refresh")))))
+                    (if (eq mode :repolist)
+                        (%workspace-hint "c/x" "Claude/Codex")
+                        (%workspace-hint "c/P/F" "commit/push/pull"))
+                    (%workspace-hint "g" "refresh"))))))
    (format nil " ~A~A  ~{~A~^  ~}"
            (if (plusp (length (or tree-filter "")))
                (format nil "~A  " (%sgr-wrap (format nil "/~A" tree-filter) +sgr-muted+))

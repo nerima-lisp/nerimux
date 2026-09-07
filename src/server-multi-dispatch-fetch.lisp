@@ -14,7 +14,7 @@ completion is what eventually refreshes the picker."
        (%client-notify conn "VCS unavailable"))
       (t
        (%client-notify conn "fetching...")
-       (handler-case (nerimux/vcs:fetch-repository-async repository
+       (handler-case (%workspace-fetch-repository-async repository
                                                          :callback-dispatch
                                                          #'%enqueue-main-thread-callback
                                                          :on-complete
@@ -45,7 +45,7 @@ completion is what eventually refreshes the picker."
        (%client-notify conn "VCS unavailable"))
       (t
        (%client-notify conn "fetching organization...")
-       (handler-case (nerimux/vcs:fetch-organization-async organization
+       (handler-case (%workspace-fetch-organization-async organization
                                                            :callback-dispatch
                                                            #'%enqueue-main-thread-callback
                                                            :on-complete

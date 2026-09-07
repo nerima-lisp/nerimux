@@ -3,7 +3,7 @@
 (defun %benchmark-organizations (organization-count repository-count
                                                     worktree-count
                                                     pane-count)
-  (when 
+  (when
       (and (zerop organization-count)
            (plusp (+ repository-count worktree-count pane-count)))
     (error

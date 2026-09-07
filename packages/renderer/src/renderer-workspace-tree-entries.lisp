@@ -263,7 +263,7 @@
                                                                 stale-ids))
                       repository
                       :repository)
-                (when 
+                (when
                     (or filter-active-p
                         (%workspace-repository-node-expanded-p
                          (repository-id repository)
@@ -303,7 +303,7 @@
    zero (empty sections are omitted from the tree)."
   (when (plusp count)
     (cons (list 0 (format nil "~A (~D)" label count) key :section)
-          (when 
+          (when
               (or filter-active-p
                   (%workspace-node-expanded-p :section key collapsed-node-ids))
             row-entries))))
@@ -326,6 +326,7 @@
 
 (defun %workspace-flat-tree-entries (organizations collapsed-node-ids
                                                    &key
+                                                   job-labels
                                                    refreshing-ids
                                                    stale-ids
                                                    filter
@@ -349,7 +350,7 @@
    happens to be expanded\". %WORKSPACE-FILTER-TREE-ENTRIES alone decides
    what is actually visible from the (now fully descended) raw entries."
   (let ((filter-active-p (and filter (plusp (length (string-trim " " filter))))))
-    (multiple-value-bind (attention active repositories shown) 
+    (multiple-value-bind (attention active repositories shown)
         (%workspace-classify-worktrees organizations)
       (let ((entries
              (append
@@ -391,4 +392,15 @@
                                            file-diffs)
                                           collapsed-node-ids
                                           filter-active-p))))
+        (when job-labels
+          (dolist (entry entries)
+            (let* ((object (third entry))
+                   (kind (fourth entry))
+                   (id (case kind
+                         (:section object)
+                         (:repository (repository-id object))
+                         (:worktree (worktree-id object))))
+                   (label (and id (gethash (list kind id) job-labels))))
+              (when label
+                (setf (second entry) (concatenate 'string (second entry) label))))))
         (%workspace-filter-tree-entries entries filter)))))

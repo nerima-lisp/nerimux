@@ -73,7 +73,7 @@
    neither a branch nor a resolved HEAD at all (an uninitialised worktree) --
    the same \"omitted when empty\" rule every other section in this view
    follows, applied to a section that never has a count of its own."
-  (when 
+  (when
       (or
        (and (worktree-branch worktree)
             (plusp (length (worktree-branch worktree))))
@@ -94,7 +94,7 @@
    untracked-file placeholder and the cache-entry lookup are the same shape
    that function uses; the actual line formatting is still
    %WORKSPACE-FILE-DIFF-LINE-ENTRIES, which is reused unchanged."
-  (when 
+  (when
       (%workspace-status-row-expanded-p (list :file-diff worktree-id path)
                                         expanded-node-ids
                                         diff-default-p)
@@ -214,7 +214,7 @@
    expansion entry -- see %WORKSPACE-STATUS-ROW-EXPANDED-P."
   (when (plusp count)
     (cons (list 0 (format nil "~A (~D)" heading count) key :section)
-          (when 
+          (when
               (%workspace-status-row-expanded-p (list :status-section key)
                                                 expanded-node-ids
                                                 section-default-p)

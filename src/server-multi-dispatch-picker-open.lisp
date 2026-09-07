@@ -9,10 +9,18 @@
              :test
              #'eq)))
 
-(defun %open-client-worktree-pane (session conn worktree &key default-command)
+(defun %open-client-worktree-pane (session conn worktree &key default-command agent-kind)
+  (when (%reject-pending-worktree-attachment conn :worktree worktree :pane nil :window nil)
+    (return-from %open-client-worktree-pane nil))
   (let ((path (and worktree (worktree-path worktree))))
     (cond
       ((null worktree)
+       nil)
+      ((%worktree-cancel-pending-p worktree)
+       (%client-notify conn "worktree cancellation is pending")
+       nil)
+      ((and agent-kind (worktree-running-agent-p worktree))
+       (%client-notify conn "worktree already has a running agent")
        nil)
       ((not (and (stringp path) (plusp (length path))))
        (%client-notify conn "worktree has no path")
@@ -36,6 +44,7 @@
                   (%client-notify conn "worktree pane unavailable")
                   nil)
                  ((not (pane-live-p pane))
+                  (setf (pane-agent-kind pane) agent-kind)
                   (pane-mark-startup-failure pane)
                   (worktree-add-pane worktree pane)
                   (%set-client-selected-worktree conn worktree)
@@ -44,12 +53,14 @@
                   (%mark-dirty)
                   t)
                  (t
-                  (start-reader-thread pane)
+                  (setf (pane-agent-kind pane) agent-kind)
                   (worktree-add-pane worktree pane)
+                  (start-reader-thread pane)
                   (%set-client-selected-worktree conn worktree)
                   (%set-client-focus conn pane)
+                  (setf (worktree-completed-p worktree) nil)
                   (%mark-dirty)
-                  t))))
+                  (values t t)))))
          (error (condition)
            (%client-notify
             conn
@@ -66,27 +77,32 @@
                        (nerimux/picker:picker-item-organization item)))))
          (pane (%client-worktree-pane session worktree))
          (window (and pane (nerimux/pane:pane-window pane))))
+    (when (and worktree
+               (%reject-pending-worktree-attachment conn :worktree worktree
+                                                        :pane pane :window window))
+      (return-from %select-client-picker-item nil))
     (cond
       ((and pane window)
-       (nerimux/session:session-select-window session window)
-       (nerimux/window:window-select-pane window pane)
-       (%set-client-selected-worktree conn worktree)
-       (%set-client-focus conn pane)
-       (%close-client-picker conn)
-       (%mark-dirty)
-       t)
+        (nerimux/session:session-select-window session window)
+        (nerimux/window:window-select-pane window pane)
+        (%set-client-selected-worktree conn worktree)
+        (%set-client-focus conn pane)
+        (worktree-resume worktree pane)
+        (%close-client-picker conn)
+        (%mark-dirty)
+        t)
       (worktree
        (when (%open-client-worktree-pane session conn worktree)
          (%close-client-picker conn)
          t))
       (object
-       (%set-client-selected-tree-object conn object)
-       (%close-client-picker conn)
-       (%client-notify conn
-                       (typecase object
-                         (nerimux/workspace-model:repository
-                          "repository selected; use :wt-create --branch <branch> --confirm")
-                         (nerimux/workspace-model:organization
-                          "organization selected; select a repository first")))
-       t)
+        (%set-client-selected-tree-object conn object)
+        (%close-client-picker conn)
+        (%client-notify conn
+                        (typecase object
+                          (nerimux/workspace-model:repository
+                           "repository selected; use :wt-create --branch <branch> --confirm")
+                          (nerimux/workspace-model:organization
+                           "organization selected; select a repository first")))
+        t)
       (t nil))))

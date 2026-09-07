@@ -9,6 +9,8 @@
       (expect (search "Status" visible))
       (expect (search "Menus" visible))
       (expect (search "Prefix C-q" visible))
+      (expect (search "workspace overview" visible))
+      (expect (null (search "status view" visible)))
       (expect (search "Scrollback" visible))
       (expect (search "Panes" visible))
       (expect (search "detail level" visible))

@@ -9,9 +9,13 @@
   (height   24  :type fixnum)
   (fd       -1  :type fixnum)         ; master PTY file descriptor
   (pid      -1  :type fixnum)         ; child process PID
+  (process-lock (cl-concurrent-kit:make-lock :name "pane process"))
+  (process-generation (list nil))
+  (stop-requested nil)
   (screen   nil)
   (window   nil)                      ; back-pointer to the owning window (set on attach)
   (worktree nil)                      ; logical repository worktree shown by this pane
+  (agent-kind nil :type (member nil :codex :claude))
   (role :terminal :type (member :terminal :agent))
   (marked           nil)              ; T when this pane is the marked pane (C-b m)
   (input-disabled   nil :type boolean) ; T when select-pane -d disables input
@@ -33,9 +37,34 @@
 (defun worktree-add-pane (worktree pane)
   "Attach PANE to WORKTREE and return PANE."
   (when (and worktree pane)
+    (when (and (pane-agent-kind pane)
+               (worktree-running-agent-p worktree)
+               (not (eq pane (worktree-agent-pane worktree))))
+      (error "worktree already has a running agent"))
     (pushnew pane (worktree-panes worktree) :test #'eq)
-    (setf (pane-worktree pane) worktree))
+    (setf (pane-worktree pane) worktree)
+    (when (and (pane-agent-kind pane) (not (pane-startup-failed-p pane)))
+      (setf (worktree-agent-pane worktree) pane)))
   pane)
+
+(defun worktree-running-agent-p (worktree)
+  (let ((pane (and worktree (worktree-agent-pane worktree))))
+    (and pane (or (pane-live-p pane) (pane-stop-requested pane))
+         (not (pane-process-exited-p pane)))))
+
+(defun worktree-agent-state (worktree)
+  (cond ((null (worktree-agent-pane worktree)) :none)
+        ((worktree-running-agent-p worktree) :running)
+        (t :exited)))
+
+(defun worktree-resume (worktree pane)
+  (when (and worktree pane
+             (eq (pane-worktree pane) worktree)
+             (pane-live-p pane)
+             (not (pane-process-exited-p pane))
+             (not (pane-startup-failed-p pane)))
+    (setf (worktree-completed-p worktree) nil))
+  worktree)
 
 (defun %pane-output-preview (bytes)
   (with-output-to-string (stream)
@@ -129,10 +158,8 @@
   (and pane (> (pane-fd pane) 0)))
 
 (defun pane-agent-p (pane)
-  (and pane (eq (pane-role pane) :agent)))
-
-(defun worktree-agent-pane (worktree)
-  (find-if #'pane-agent-p (worktree-panes worktree)))
+  (and pane (or (eq (pane-role pane) :agent)
+                (pane-agent-kind pane))))
 
 (defun worktree-live-panes (worktree)
   (remove-if-not #'pane-live-p (worktree-panes worktree)))

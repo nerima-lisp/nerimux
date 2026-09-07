@@ -694,17 +694,17 @@
           (it "only claims one-byte workspace prefix payloads"
               (let ((session (nerimux/session:make-session :id 1 :name "test"))
                     (conn (nerimux::%make-client-conn)))
-                (multiple-value-bind (handled result) 
+                (multiple-value-bind (handled result)
                     (nerimux::%handle-workspace-prefix-key session
                                                            conn
                                                            #(17 18))
                   (expect (null handled))
                   (expect (null result)))
-                (multiple-value-bind (handled result) 
+                (multiple-value-bind (handled result)
                     (nerimux::%handle-workspace-prefix-key session conn "Q")
                   (expect (null handled))
                   (expect (null result)))
-                (multiple-value-bind (handled result) 
+                (multiple-value-bind (handled result)
                     (nerimux::%handle-workspace-prefix-key session
                                                            conn
                                                            (vector

@@ -2,7 +2,7 @@
 
 (in-package #:nerimux/picker)
 
-(defstruct 
+(defstruct
     (picker-item
      (:constructor %make-picker-item
                    (&key id kind label organization repository worktree pane)))
@@ -152,14 +152,14 @@
   (check-type organizations list)
   (let ((items nil))
     (dolist (organization (reverse organizations) items)
-      (dolist 
+      (dolist
           (repository
            (reverse
             (nerimux/workspace-model:organization-repositories organization)))
-        (dolist 
+        (dolist
             (worktree
              (reverse (nerimux/workspace-model:repository-worktrees repository)))
-          (dolist 
+          (dolist
               (pane (reverse (nerimux/workspace-model:worktree-panes worktree)))
             (push (%make-pane-item organization repository worktree pane) items))
           (push (%make-worktree-item organization repository worktree) items))
@@ -193,4 +193,3 @@
      (nerimux/workspace-model:worktree-attention-p (picker-item-worktree item)))
     (:pane (nerimux/pane:pane-attention-p (picker-item-pane item)))
     (otherwise nil)))
-
