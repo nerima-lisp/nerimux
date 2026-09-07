@@ -8,6 +8,18 @@
                   (27
                    (setf (gethash conn *client-meta-pending*) :second)
                    t)
+                  ((and (eq view :repolist) (%client-key-p payload #\n))
+                   (%client-start-worktree-create session conn))
+                  ((and (eq view :repolist) (%client-key-p payload #\a))
+                   (%client-assign-worktree session conn))
+                  ((and (eq view :repolist) (%client-key-p payload #\C))
+                   (%client-complete-workspace conn :toggle t))
+                  ((and (eq view :repolist) (%client-key-p payload #\p))
+                   (%client-prune-workspaces conn))
+                  ((and (eq view :repolist) (%client-key-p payload #\P))
+                   (%client-prune-workspaces conn :all t))
+                  ((and (eq view :repolist) (%client-key-p payload #\v))
+                   (%client-show-selected-status conn))
                   (#\n (%select-client-tree-relative conn 1) t)
                   (#\p (%select-client-tree-relative conn -1) t)
                   (9 (%client-toggle-selected-tree-row conn))
@@ -24,11 +36,13 @@
                   ((and (eq view :repolist) (%client-key-p payload #\c))
                    (%client-open-selected-worktree-command session
                                                            conn
-                                                           +workspace-claude-command+))
+                                                           +workspace-claude-command+
+                                                           :agent-kind :claude))
                   ((and (eq view :repolist) (%client-key-p payload #\x))
                    (%client-open-selected-worktree-command session
                                                            conn
-                                                           +workspace-codex-command+))
+                                                           +workspace-codex-command+
+                                                           :agent-kind :codex))
                   (#\$ (%set-client-modal conn :process-log) t)
                   (#\/ (%client-enter-tree-filter-mode conn))
                   (#\: (%client-enter-command-mode conn))

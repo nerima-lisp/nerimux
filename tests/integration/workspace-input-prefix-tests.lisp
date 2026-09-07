@@ -165,7 +165,7 @@
         (expect (null (nerimux::client-conn-ui-prefix-p conn)))
         (expect (null (nerimux::client-conn-modal conn))))))
 
-  (it "r4-4-prefix-w-opens-status-view-for-the-focused-worktree"
+  (it "r4-4-prefix-w-opens-overview-directly-and-repeatedly-for-the-focused-worktree"
     (with-minimal-session (pane win sess)
       (declare (ignorable win))
       (let* ((organization
@@ -184,10 +184,60 @@
         (nerimux/workspace-model:repository-add-worktree repository worktree)
         (nerimux/pane:worktree-add-pane worktree pane)
         (nerimux::%set-client-focus conn pane)
-        (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q
-        (nerimux::%handle-multi-key-message sess conn #(119)) ; w
-        (expect (eq :status (nerimux::client-conn-view conn)))
-        (expect (eq worktree (nerimux::client-conn-selected-worktree conn))))))
+        (dolist (view '(:pane :status :repolist))
+          (nerimux::%set-client-view conn view)
+          (dotimes (iteration 2)
+            (declare (ignorable iteration))
+            (nerimux::%handle-multi-key-message sess conn #(17))
+            (nerimux::%handle-multi-key-message sess conn #(119))
+            (expect (eq :repolist (nerimux::client-conn-view conn)))
+            (expect (eq worktree (nerimux::client-conn-selected-worktree conn)))
+            (expect (eq worktree (nerimux::client-conn-selected-tree-object conn))))))))
+
+  (it "worktree-prefix-overview-create-uses-focused-repository-not-stale-selection"
+    (with-minimal-session (pane win sess)
+      (declare (ignorable win))
+      (let* ((organization
+               (nerimux/workspace-model:make-organization :id "org"))
+             (old-repository
+               (nerimux/workspace-model:make-repository
+                :id "old-repo" :organization organization))
+             (repository
+               (nerimux/workspace-model:make-repository
+                :id "focused-repo" :organization organization))
+             (worktree
+               (nerimux/workspace-model:make-worktree
+                :id "focused-wt" :repository repository
+                :path "/tmp/focused-wt" :branch "main"))
+             (conn (%make-test-conn))
+             (nerimux::*last-selected-worktree-token* nil)
+             (created nil)
+             (original (fdefinition 'nerimux/vcs:create-detached-worktree-async)))
+        (nerimux/workspace-model:organization-add-repository organization old-repository)
+        (nerimux/workspace-model:organization-add-repository organization repository)
+        (nerimux/workspace-model:repository-add-worktree repository worktree)
+        (nerimux/pane:worktree-add-pane worktree pane)
+        (nerimux::%set-client-selected-tree-object conn old-repository)
+        (nerimux::%set-client-focus conn pane)
+        (expect (eq old-repository (nerimux::client-conn-selected-tree-object conn)))
+        (unwind-protect
+             (progn
+               (setf (fdefinition 'nerimux/vcs:create-detached-worktree-async)
+                     (lambda (target &rest args)
+                       (declare (ignore args))
+                       (push target created)))
+               (nerimux::%handle-multi-key-message sess conn #(17))
+               (nerimux::%handle-multi-key-message sess conn #(119))
+               (expect (eq :repolist (nerimux::client-conn-view conn)))
+               (expect (eq worktree (nerimux::client-conn-selected-worktree conn)))
+               (expect (eq worktree (nerimux::client-conn-selected-tree-object conn)))
+               (nerimux::%handle-multi-key-message sess conn #(110)))
+          (setf (fdefinition 'nerimux/vcs:create-detached-worktree-async) original))
+        (expect (equal (list repository) created))
+        (expect (null (member old-repository created)))
+        (expect (eq repository
+                    (nerimux::workspace-assignment-repository
+                     (nerimux::client-conn-workspace-assignment conn)))))))
 
   (it "r4-4-prefix-w-with-no-focused-worktree-falls-back-to-repolist"
     (with-minimal-session (pane win sess)
@@ -196,6 +246,15 @@
         (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q
         (nerimux::%handle-multi-key-message sess conn #(119)) ; w
         (expect (eq :repolist (nerimux::client-conn-view conn))))))
+
+  (it "r4-4-prefix-w-with-no-focused-pane-opens-overview-from-every-view"
+    (with-fake-session (sess :nwindows 0)
+      (let ((conn (%make-test-conn)))
+        (dolist (view '(:pane :status :repolist))
+          (nerimux::%set-client-view conn view)
+          (nerimux::%handle-multi-key-message sess conn #(17))
+          (nerimux::%handle-multi-key-message sess conn #(119))
+          (expect (eq :repolist (nerimux::client-conn-view conn)))))))
 
   (it "r4-4-prefix-open-bracket-enters-scrollback-on-the-focused-pane"
     (with-minimal-session (pane win sess)
@@ -251,6 +310,50 @@
                           s conn (char-code #\t))))
           (expect (equal (list s conn nil) command-args))))))
 
+  (it "prefix-split-starts-reader-for-a-live-new-pane"
+    (with-minimal-session (pane window session)
+      (let* ((conn (%make-test-conn))
+             (new-pane (make-pane :id 2 :fd 42 :pid -1))
+             (starts 0))
+        (setf (pane-window pane) window
+              (pane-window new-pane) window)
+        (nerimux::%set-client-focus conn pane)
+        (with-stubbed-fdefinition
+            ((nerimux/window:window-split
+              (lambda (&rest arguments)
+                (declare (ignore arguments))
+                new-pane))
+             (nerimux::start-reader-thread
+              (lambda (candidate)
+                (when (eq candidate new-pane)
+                  (incf starts)))))
+          (expect (null (nerimux::%workspace-prefix-split session conn :h))))
+        (expect (= 1 starts))
+        (expect (eq new-pane (nerimux::client-conn-focus conn)))
+        (expect (eq new-pane (window-active-pane window))))))
+
+  (it "prefix-split-does-not-start-reader-for-a-dead-new-pane"
+    (with-minimal-session (pane window session)
+      (let* ((conn (%make-test-conn))
+             (new-pane (make-pane :id 2 :fd -1 :pid -1))
+             (starts 0))
+        (setf (pane-window pane) window
+              (pane-window new-pane) window)
+        (nerimux::%set-client-focus conn pane)
+        (with-stubbed-fdefinition
+            ((nerimux/window:window-split
+              (lambda (&rest arguments)
+                (declare (ignore arguments))
+                new-pane))
+             (nerimux::start-reader-thread
+              (lambda (candidate)
+                (declare (ignore candidate))
+                (incf starts))))
+          (expect (null (nerimux::%workspace-prefix-split session conn :h))))
+        (expect (= 0 starts))
+        (expect (eq new-pane (nerimux::client-conn-focus conn)))
+        (expect (eq new-pane (window-active-pane window))))))
+
   (it "r4-5-prefix-actions-report-missing-focus-without-mutating-session"
     (with-fake-session (s :nwindows 0)
       (let ((conn (%make-test-conn)))
@@ -259,7 +362,62 @@
         (expect (null (nerimux::%workspace-prefix-toggle-zoom s conn)))
         (expect (null (nerimux::%workspace-prefix-move-focus s conn :right)))
         (expect (null (nerimux::%workspace-prefix-cycle-window s conn 1)))
-        (expect (null (nerimux::client-conn-focus conn)))))) (it "r5-6-prefix-unzoom-restores-a-zoomed-window-before-action"
+        (expect (null (nerimux::client-conn-focus conn))))))
+
+  (it "r4-5-prefix-actions-stop-when-a-worktree-attachment-is-pending"
+    (with-fake-session (s :nwindows 0)
+      (let ((conn (%make-test-conn)))
+        (with-stubbed-fdefinition
+            ((nerimux::%reject-pending-worktree-attachment
+               (lambda (&rest arguments)
+                 (declare (ignore arguments))
+                 t)))
+          (expect (null (nerimux::%workspace-prefix-split s conn :h)))
+          (expect (null (nerimux::%workspace-prefix-close-pane s conn)))
+          (expect (null (nerimux::%workspace-prefix-move-focus s conn :right)))))))
+
+  (it "r4-5-prefix-refocus-stops-when-the-next-window-is-pending"
+    (with-fake-session (s :nwindows 2)
+      (let* ((conn (%make-test-conn))
+             (windows (nerimux/session:session-windows s))
+             (worktree
+               (nerimux/workspace-model:make-worktree
+                :id "wt" :path "/tmp/wt" :branch "main")))
+        (dolist (window windows)
+          (nerimux/pane:worktree-add-pane
+           worktree
+           (nerimux/window:window-active-pane window)))
+        (with-stubbed-fdefinition
+            ((nerimux::%reject-pending-worktree-attachment
+               (lambda (&rest arguments)
+                 (declare (ignore arguments))
+                 t)))
+          (expect (null
+                   (nerimux::%workspace-refocus-after-window-close
+                    s conn worktree)))))))
+
+  (it "r5-6-prefix-cycle-stops-when-the-next-window-is-pending"
+    (with-fake-session (s :nwindows 2)
+      (let* ((conn (%make-test-conn))
+             (windows (nerimux/session:session-windows s))
+             (worktree
+               (nerimux/workspace-model:make-worktree
+                :id "wt" :path "/tmp/wt" :branch "main")))
+        (dolist (window windows)
+          (nerimux/pane:worktree-add-pane
+           worktree
+           (nerimux/window:window-active-pane window)))
+        (nerimux::%set-client-focus
+         conn
+         (nerimux/window:window-active-pane (first windows)))
+        (with-stubbed-fdefinition
+            ((nerimux::%reject-pending-worktree-attachment
+               (lambda (&rest arguments)
+                 (declare (ignore arguments))
+                 t)))
+          (expect (null (nerimux::%workspace-prefix-cycle-window s conn 1)))))))
+
+  (it "r5-6-prefix-unzoom-restores-a-zoomed-window-before-action"
     (with-fake-two-pane-session (s)
       (let* ((conn (%make-test-conn))
              (window (first (nerimux/session:session-windows s))))
@@ -288,11 +446,11 @@
           (expect (null (nerimux::%workspace-prefix-cycle-window s conn 1))))
         (expect (search "no other window" message)))))
 
-  (it "r5-7-prefix-open-status-steps-out-from-the-status-view"
+  (it "r5-7-prefix-open-overview-steps-out-from-the-status-view"
     (with-fake-session (s :nwindows 0)
       (let ((conn (%make-test-conn)))
         (nerimux::%set-client-view conn :status)
-        (expect (null (nerimux::%workspace-prefix-open-status s conn)))
+        (expect (null (nerimux::%workspace-prefix-open-overview s conn)))
         (expect (eq :repolist (nerimux::client-conn-view conn))))))
 
   (it "r7-1-repository-fetch-reports-preconditions-and-completion"
@@ -330,7 +488,7 @@
                      (lambda () t)
                      (fdefinition 'nerimux/vcs:fetch-repository-async)
                      (lambda (repository &key on-complete on-error
-                                      callback-dispatch)
+                                      callback-dispatch &allow-other-keys)
                        (declare (ignore repository callback-dispatch))
                        (setf callback on-complete error-callback on-error)
                        t)
@@ -360,7 +518,7 @@
                  (expect (search "fetch failed" (first messages)))
                  (setf (fdefinition 'nerimux/vcs:fetch-repository-async)
                        (lambda (repository &key on-complete on-error
-                                        callback-dispatch)
+                                        callback-dispatch &allow-other-keys)
                          (declare (ignore repository on-complete on-error
                                              callback-dispatch))
                          (error "sync failure")))
@@ -369,7 +527,9 @@
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:fetch-repository-async) fetch
                 (fdefinition 'nerimux::%refresh-client-picker) refresh
-                (fdefinition 'nerimux::%client-notify) notify))))) (it "r7-1-organization-fetch-reports-unavailable-and-in-progress"
+                (fdefinition 'nerimux::%client-notify) notify)))))
+
+  (it "r7-1-organization-fetch-reports-unavailable-and-in-progress"
     (with-fake-session (s)
       (expect s)
       (let ((conn (%make-test-conn))
@@ -404,7 +564,7 @@
                        (setf refreshed t))
                      (fdefinition 'nerimux/vcs:fetch-organization-async)
                      (lambda (organization &key on-complete on-error
-                                        callback-dispatch)
+                                        callback-dispatch &allow-other-keys)
                        (declare (ignore organization callback-dispatch))
                        (setf completion-callback on-complete)
                        (funcall on-complete (list :repository))
@@ -429,11 +589,57 @@
                          (declare (ignore args))
                          (error "sync failure")))
                  (nerimux::%workspace-prefix-fetch-organization conn)
-                 (expect (search "sync failure" (first messages))))))
+                 (expect (search "sync failure" (first messages)))))
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:fetch-organization-async) fetch
                 (fdefinition 'nerimux::%refresh-client-picker) refresh
-                (fdefinition 'nerimux::%client-notify) notify))))
+                (fdefinition 'nerimux::%client-notify) notify)))))
+
+  (it "r7-1-repository-fetch-reports-wrapper-errors"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (organization
+               (nerimux/workspace-model:make-organization
+                :id "org" :host "github.com" :name "team"))
+             (repository
+               (nerimux/workspace-model:make-repository
+                :id "repo" :organization organization
+                :specification "github.com/team/repo"))
+             (messages nil))
+        (nerimux::%set-client-selected-tree-object conn repository)
+        (with-stubbed-fdefinition
+            ((nerimux/vcs:vcs-package-available-p (lambda () t))
+             (nerimux::%workspace-fetch-repository-async
+               (lambda (&rest args)
+                 (declare (ignore args))
+                 (error "wrapper failure")))
+             (nerimux::%client-notify
+               (lambda (connection message)
+                 (declare (ignore connection))
+                 (push message messages))))
+          (nerimux::%workspace-prefix-fetch-repository conn)
+          (expect (search "wrapper failure" (first messages)))))))
+
+  (it "r7-1-organization-fetch-reports-wrapper-errors"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (organization
+               (nerimux/workspace-model:make-organization
+                :id "org" :host "github.com" :name "team"))
+             (messages nil))
+        (nerimux::%set-client-selected-tree-object conn organization)
+        (with-stubbed-fdefinition
+            ((nerimux/vcs:vcs-package-available-p (lambda () t))
+             (nerimux::%workspace-fetch-organization-async
+               (lambda (&rest args)
+                 (declare (ignore args))
+                 (error "organization wrapper failure")))
+             (nerimux::%client-notify
+               (lambda (connection message)
+                 (declare (ignore connection))
+                 (push message messages))))
+          (nerimux::%workspace-prefix-fetch-organization conn)
+          (expect (search "organization wrapper failure" (first messages)))))))
 
   (it "r5-4-refocuses-to-the-most-recent-pane-in-the-worktree"
     (let* ((organization (nerimux/workspace-model:make-organization

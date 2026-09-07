@@ -23,9 +23,13 @@
    instead (R5.2) via the existing %open-client-worktree-pane path."
   (multiple-value-bind (pane window worktree)
       (%workspace-prefix-context session conn)
+    (when (%reject-pending-worktree-attachment conn :worktree worktree :pane pane :window window)
+      (return-from %workspace-prefix-split nil))
     (cond
       ((or (null pane) (null window))
        (%client-notify conn "no focused pane"))
+      ((%worktree-cancel-pending-p worktree)
+       (%client-notify conn "worktree cancellation is pending"))
       (t
        (%workspace-prefix-unzoom window)
        (cond
@@ -62,6 +66,8 @@
     (if best-pane
         (let* ((window (pane-window best-pane))
                (active (window-active-pane window)))
+          (when (%reject-pending-worktree-attachment conn :pane active :window window)
+            (return-from %workspace-refocus-after-window-close nil))
           (session-select-window session window)
           (%set-client-focus conn active))
         (%set-client-view conn :repolist))))
@@ -79,6 +85,11 @@
    escalate to SIGKILL."
   (multiple-value-bind (pane window worktree) 
       (%workspace-prefix-context session conn)
+    (when (or (%reject-pending-worktree-attachment conn :worktree worktree :pane pane :window window)
+              (some (lambda (candidate)
+                      (%window-delete-pending-p (pane-window candidate)))
+                    (and worktree (worktree-panes worktree))))
+      (return-from %workspace-prefix-close-pane nil))
     (cond
       ((or (null pane) (null window)) (%client-notify conn "no focused pane"))
       (t
@@ -115,6 +126,8 @@
   "C-q h/j/k/l : move focus to the neighbouring pane in DIRECTION,
    un-zooming first per R5.6."
   (multiple-value-bind (pane window) (%workspace-prefix-context session conn)
+    (when (%reject-pending-worktree-attachment conn :pane pane :window window)
+      (return-from %workspace-prefix-move-focus nil))
     (cond
       ((or (null pane) (null window)) (%client-notify conn "no focused pane"))
       (t
@@ -144,36 +157,25 @@
          (if (or (null index) (<= count 1))
              (%client-notify conn "no other window")
              (let* ((next-window (nth (mod (+ index delta) count) windows)))
+               (when (%reject-pending-worktree-attachment conn
+                                                         :pane (window-active-pane next-window)
+                                                         :window next-window)
+                 (return-from %workspace-prefix-cycle-window nil))
                (%workspace-prefix-unzoom window)
                (session-select-window session next-window)
                (%set-client-focus conn (window-active-pane next-window))
                (%mark-dirty)))))))
   nil)
 
-(defun %workspace-prefix-open-status (session conn)
-  "C-q w (FR-009): step out of a pane towards the workspace views, one level
-   per press -- :pane to :status, and :status on to :repolist.
-
-   The second step is what makes the repolist reachable at all. FR-006's `q`
-   ladder returns :status to the focused pane whenever one is live, which is
-   the ordinary case, so `q` alone can never walk OUT to the flat multi-repo
-   list; and the magit keymap retired `o`, which was the only key that did
-   that before. Without this, a user with any live pane could reach :repolist
-   only by closing every pane in the window.
-
-   With no pane focused -- or a focused pane with no worktree, which the
-   status view has nothing to render for either -- this goes straight to
-   :repolist rather than notifying and leaving the screen as it was, so the
-   key is never a dead end."
+(defun %workspace-prefix-open-overview (session conn)
+  "Return directly to the workspace overview, retaining the focused worktree
+   selection."
   (multiple-value-bind (pane window worktree) 
       (%workspace-prefix-context session conn)
     (declare (ignore window))
-    (cond
-      ((eq (client-conn-view conn) :status) (%set-client-view conn :repolist))
-      ((and pane worktree)
-        (setf (client-conn-selected-worktree conn) worktree)
-        (%set-client-view conn :status))
-      (t (%set-client-view conn :repolist))))
+    (when (and pane worktree)
+      (%set-client-selected-worktree conn worktree))
+    (%set-client-view conn :repolist))
   nil)
 
 (defun %workspace-prefix-open-scrollback (session conn)
@@ -207,7 +209,7 @@ FETCH-REPOSITORY-ASYNC)."
        (%client-notify conn "VCS adapter unavailable"))
       (t
         (%client-notify conn "fetching...")
-        (handler-case (nerimux/vcs:fetch-repository-async repository
+        (handler-case (%workspace-fetch-repository-async repository
                                                           :callback-dispatch
                                                           #'%enqueue-main-thread-callback
                                                           :on-complete
@@ -247,7 +249,7 @@ FETCH-REPOSITORY-ASYNC)."
        (%client-notify conn "VCS adapter unavailable"))
       (t
         (%client-notify conn "fetching organization...")
-        (handler-case (nerimux/vcs:fetch-organization-async organization
+        (handler-case (%workspace-fetch-organization-async organization
                                                             :callback-dispatch
                                                             #'%enqueue-main-thread-callback
                                                             :on-complete
@@ -278,21 +280,23 @@ FETCH-REPOSITORY-ASYNC)."
             (%client-notify conn (format nil "fetch failed: ~A" condition)))))))
   nil)
 
-(defun %open-confirm-view (conn operation fields action)
+(defun %open-confirm-view (conn operation fields action &key on-cancel)
   "Put a y/n confirmation in front of CONN and remember what to run on y.
    OPERATION titles the box; FIELDS is the ordered (LABEL . VALUE) body."
   (setf (client-conn-confirm-view conn)
         (nerimux/renderer:make-confirm-view :operation operation
                                             :fields fields
                                             :prompt-p t)
-        (client-conn-confirm-action conn) action)
+        (client-conn-confirm-action conn) action
+        (client-conn-confirm-cancel-action conn) on-cancel)
   (%set-client-modal conn :confirm)
   nil)
 
 (defun %close-confirm-view (conn)
   "Take the confirmation down and forget its pending action."
   (setf (client-conn-confirm-view conn) nil
-        (client-conn-confirm-action conn) nil)
+        (client-conn-confirm-action conn) nil
+        (client-conn-confirm-cancel-action conn) nil)
   (%set-client-modal conn nil))
 
 (defun %handle-confirm-key (session conn payload)
@@ -303,7 +307,8 @@ FETCH-REPOSITORY-ASYNC)."
    confirmation that let j scroll the tree underneath it would be asking about
    one thing while the user changed another."
   (declare (ignore session))
-  (let ((action (client-conn-confirm-action conn)))
+  (let ((action (client-conn-confirm-action conn))
+        (cancel (client-conn-confirm-cancel-action conn)))
     (cond
       ((%client-key-p payload #\y)
         (%close-confirm-view conn)
@@ -311,7 +316,7 @@ FETCH-REPOSITORY-ASYNC)."
       ((%client-key-p payload #\n)
         (%close-confirm-view conn)
         (%client-notify conn "cancelled")
-        (values t nil))
+        (values t (and cancel (funcall cancel))))
       (t (values t nil)))))
 
 (defun %workspace-prefix-quit-server (session conn)
@@ -344,10 +349,13 @@ FETCH-REPOSITORY-ASYNC)."
   (#\h (%workspace-prefix-move-focus session conn :left))
   (#\j (%workspace-prefix-move-focus session conn :down))
   (#\k (%workspace-prefix-move-focus session conn :up))
+  (#\K (nerimux/commands:stop-worktree-agent
+         (client-conn-selected-worktree conn) :on-finish #'%mark-dirty)
+        nil)
   (#\l (%workspace-prefix-move-focus session conn :right))
   (#\n (%workspace-prefix-cycle-window session conn 1))
   (#\p (%workspace-prefix-cycle-window session conn -1))
-  (#\w (%workspace-prefix-open-status session conn))
+  (#\w (%workspace-prefix-open-overview session conn))
   (#\t (%client-open-selected-worktree-command session conn nil))
   (#\[ (%workspace-prefix-open-scrollback session conn))
   (#\d :drop)

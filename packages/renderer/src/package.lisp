@@ -10,6 +10,7 @@
     flushed as a single write to avoid tearing.  Also owns the true-colour downsampling
     used when the outer terminal cannot show 24-bit colour.")
   (:export
+   #:ansi-row-delta
    #:render-session-to-string
    #:render-session-to-tui-string
    #:render-workspace-overview-to-string

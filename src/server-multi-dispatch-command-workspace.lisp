@@ -1,5 +1,17 @@
 (in-package #:nerimux)
 
+(defun %reject-pending-worktree-attachment (conn &key worktree
+                                                   (pane (client-conn-focus conn))
+                                                   (window
+                                                    (let ((session (%attach-target-session)))
+                                                      (and session (session-active-window session)))))
+  (when (or (%worktree-delete-pending-p worktree)
+            (%pane-delete-pending-p pane)
+            (%pane-delete-pending-p (client-conn-stdin-target conn))
+            (%window-delete-pending-p window))
+    (%client-notify conn "worktree deletion is pending")
+    t))
+
 (defun %client-ui-mode-p (mode)
   (member mode +client-ui-modes+ :test #'eq))
 
@@ -37,6 +49,9 @@
   "Apply TARGET (see %CLIENT-UI-MODE-TARGET-MODAL) to CONN, returning the
    resulting MODAL."
   (let ((mapped (%client-ui-mode-target-modal target)))
+    (when (and (member mapped '(:view-pane :picker))
+               (%reject-pending-worktree-attachment conn))
+      (return-from %apply-client-ui-mode-target (client-conn-modal conn)))
     (cond
       ((eq mapped :view-pane) (%set-client-view conn :pane))
       ((eq mapped :unchanged) nil)
@@ -65,6 +80,12 @@
          (target (if (eq event :toggle-copy)
                      (if (eq current-modal :scrollback) :enter-normal :copy)
                      event)))
+    (when (and (or (eq (%client-ui-mode-target-modal target) :view-pane)
+                   (eq (%client-ui-mode-target-modal target) :picker)
+                   (and (eq current-modal :command)
+                        (eq (client-conn-command-return-view conn) :pane)))
+               (%reject-pending-worktree-attachment conn))
+      (return-from %transition-client-ui-mode current-modal))
     (%apply-client-ui-mode-target conn target)
     (let ((next-modal (client-conn-modal conn)))
       (when (and (eq next-modal :command) (not (eq current-modal :command)))
@@ -78,6 +99,8 @@
       next-modal)))
 
 (defun %set-client-focus (conn pane)
+  (when (%reject-pending-worktree-attachment conn :pane pane)
+    (return-from %set-client-focus nil))
   (setf (client-conn-focus conn) pane
         (client-conn-viewport conn) 0
         (client-conn-view conn) :pane)
@@ -86,6 +109,8 @@
   pane)
 
 (defun %set-client-view (conn view)
+  (when (and (eq view :pane) (%reject-pending-worktree-attachment conn))
+    (return-from %set-client-view (client-conn-view conn)))
   (when (member view '(:repolist :status :pane) :test #'eq)
     (setf (client-conn-view conn) view)
     (%mark-dirty))
@@ -103,6 +128,8 @@
 
 (defun %client-enter-copy-mode (session conn)
   (let ((pane (%resolve-client-focus-pane session nil conn)))
+    (when (%reject-pending-worktree-attachment conn :pane pane)
+      (return-from %client-enter-copy-mode nil))
     (if (and pane (pane-screen pane))
         (progn
           (copy-mode-enter (pane-screen pane))
@@ -215,7 +242,7 @@
               (%client-attach-selection
                conn (nerimux/vcs:workspace-organizations))))))
       (when (and session (eq source :cwd))
-        (%focus-selected-client-worktree session conn))
+        (%focus-selected-client-worktree session conn :direct-shell-p t))
       (when (and session (null (client-conn-focus conn)))
         (let* ((window (session-active-window session))
                (pane (and window (window-active-pane window))))
@@ -320,9 +347,7 @@
 (defun %client-context-object (conn target)
   (or (%workspace-find-tree-object target)
       (%client-tree-object conn)
-      (%workspace-find-tree-object (%client-selection-token conn))
-      (and (client-conn-focus conn)
-           (nerimux/pane:pane-worktree (client-conn-focus conn)))))
+      (%workspace-find-tree-object (%client-selection-token conn))))
 
 (defun %client-selected-repository (conn &optional target)
   (let ((object (%client-context-object conn target)))
@@ -351,11 +376,9 @@ the tree (R7.1)."
               (nerimux/workspace-model:repository-organization repository)))))))
 
 (defun %client-operation-worktree (conn &optional target)
-  (let ((selected (%client-tree-object conn))
-        (focused (client-conn-focus conn)))
+  (let ((selected (%client-tree-object conn)))
     (or (%workspace-find-worktree target)
-        (and (typep selected 'nerimux/workspace-model:worktree) selected)
-        (and focused (nerimux/pane:pane-worktree focused)))))
+        (and (typep selected 'nerimux/workspace-model:worktree) selected))))
 
 (defun %select-client-tree-section-relative (conn direction)
   "J/K (section-based overview redesign, replacing the old repository-row

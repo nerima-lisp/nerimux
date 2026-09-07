@@ -99,6 +99,11 @@
    keymap, and every other view (i.e. :pane) hands the byte straight to the
    shell with no mode to leave first."
   (cond
+    ((and (%client-ui-keys-p conn) (vectorp payload) (> (length payload) 1))
+     (loop for index below (length payload)
+           for result = (%handle-multi-key-message
+                         session conn (subseq payload index (1+ index)))
+           finally (return result)))
     ((%client-esc-swallow-consume conn) nil)
     ((member (client-conn-modal conn) +keyboard-owning-modals+ :test #'eq)
      (case (client-conn-modal conn)

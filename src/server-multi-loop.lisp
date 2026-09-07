@@ -80,6 +80,7 @@
    listener + session, mutating *clients*) so the dispatch/teardown logic is
    unit-testable without driving a full process loop."
   (%drain-main-thread-callbacks)
+  (%workspace-job-tick)
   (%broadcast-frame session)
   (let* ((listener-fd (socket-fd listener))
          (ready (select-fds (cons listener-fd (%client-fds)) +poll-timeout-us+)))
@@ -100,7 +101,11 @@
 
 (defun %session-live-panes (session)
   "Return the live panes in SESSION."
-  (remove-if-not #'pane-live-p (all-panes session)))
+  (remove-if-not (lambda (pane)
+                   (or (pane-live-p pane)
+                       (and (nerimux/pane:pane-stop-requested pane)
+                            (not (nerimux/pane:pane-process-exited-p pane)))))
+                 (all-panes session)))
 
 (defun %pane-kill-description (pane)
   "Describe PANE for a refusal message."
@@ -122,16 +127,9 @@
            nil))))
 
 (defun %force-kill-panes (panes)
-  "Close PANES, then SIGKILL processes that outlive the grace period."
-  (require :sb-posix)
+  "Terminate and reap each owned pane process."
   (dolist (pane panes)
-    (close-pane-pty pane))
-  (sleep +kill-sighup-grace-seconds+)
-  (dolist (pane panes)
-    (when (%process-alive-p (pane-pid pane))
-      (handler-case (sb-posix:kill (pane-pid pane) sb-posix:sigkill)
-        (sb-posix:syscall-error ()
-          nil)))))
+    (close-pane-pty pane)))
 
 (defun %server-kill-request (session force-p)
   "Handle a kill request and return (VALUES status details)."

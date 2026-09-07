@@ -167,7 +167,10 @@ vcs-inspect.lisp for the race this closes."
                   (%worktree-association-match-p id path candidate))
                 worktrees)))
           (if worktree
-              (nerimux/pane:worktree-add-pane worktree pane)
+              (progn
+                (pushnew pane (nerimux/workspace-model:worktree-panes worktree)
+                         :test #'eq)
+                (setf (nerimux/pane:pane-worktree pane) worktree))
               (setf (nerimux/pane:pane-worktree pane) nil))))))
   current)
 
@@ -210,6 +213,10 @@ rescan exactly as commit history was before this function existed."
         (when match
           (setf (nerimux/workspace-model:worktree-id worktree) (nerimux/workspace-model:worktree-id
                                                                 match)
+                (nerimux/workspace-model:worktree-completed-p worktree)
+                (nerimux/workspace-model:worktree-completed-p match)
+                (nerimux/workspace-model:worktree-agent-pane worktree)
+                (nerimux/workspace-model:worktree-agent-pane match)
                 (nerimux/workspace-model:worktree-commits-state worktree) (nerimux/workspace-model:worktree-commits-state
                                                                            match)
                 (nerimux/workspace-model:worktree-recent-commits worktree) (nerimux/workspace-model:worktree-recent-commits
@@ -220,103 +227,123 @@ rescan exactly as commit history was before this function existed."
                                                                      match))))))
   current)
 
-(defun %worktree-recency (worktree)
-  "The most recent activity timestamp among WORKTREE's panes (item 6): the
-   later of each pane's last-output and last-focused time. Both are NIL
-   until a pane has ever produced output or been focused, so they are
-   excluded from the MAX rather than coerced to 0 -- coercing would make
-   \"never happened\" sort as an actual instant (epoch 0), only not the most
-   recent one, which is a fact about REDUCE's argument order rather than
-   about the pane. A worktree with no panes, or only ever-idle ones, has no
-   real timestamp to offer and sorts as least-recent (0)."
-  (let ((times
-         (loop for pane in (nerimux/workspace-model:worktree-panes worktree)
-               for output = (nerimux/pane:pane-last-output-time pane)
-               for focused = (nerimux/pane:pane-last-focused-time pane)
-               when output
-                 collect output
-               when focused
-                 collect focused)))
-    (if times
-        (reduce #'max times)
-        0)))
+(defun %valid-worktree-creation-date-p (year month day)
+  (and (<= 1 year 9999)
+       (<= 1 month 12)
+       (let ((days (if (= month 2)
+                       (if (and (zerop (mod year 4))
+                                (or (not (zerop (mod year 100)))
+                                    (zerop (mod year 400))))
+                           29 28)
+                       (if (member month '(4 6 9 11)) 30 31))))
+         (<= 1 day days))))
 
-(defun %repository-recency (repository)
-  (let ((times
-         (mapcar #'%worktree-recency
-                 (nerimux/workspace-model:repository-worktrees repository))))
-    (if times
-        (reduce #'max times)
-        0)))
+(defun %worktree-creation-key (worktree)
+  (let ((path (nerimux/workspace-model:worktree-path worktree)))
+    (unless (stringp path)
+      (return-from %worktree-creation-key nil))
+    (let* ((trimmed (string-right-trim "/" path))
+           (start (1+ (or (position #\/ trimmed :from-end t) -1)))
+           (name (subseq trimmed start))
+           (length (length name)))
+      (unless (and (> length 16)
+                   (char= (char name 8) #\T)
+                   (char= (char name 15) #\-)
+                   (loop for index below 15
+                         always (or (= index 8)
+                                    (digit-char-p (char name index) 10))))
+        (return-from %worktree-creation-key nil))
+      (let* ((year (parse-integer name :end 4))
+             (month (parse-integer name :start 4 :end 6))
+             (day (parse-integer name :start 6 :end 8))
+             (hour (parse-integer name :start 9 :end 11))
+             (minute (parse-integer name :start 11 :end 13))
+             (second (parse-integer name :start 13 :end 15))
+             (suffix-start (position #\- name :start 16))
+             (sha-end (or suffix-start length)))
+        (unless (and (%valid-worktree-creation-date-p year month day)
+                     (< hour 24) (< minute 60) (< second 60)
+                     (> sha-end 16)
+                     (loop for index from 16 below sha-end
+                           always (digit-char-p (char name index) 16)))
+          (return-from %worktree-creation-key nil))
+        (let ((suffix 1))
+          (when suffix-start
+            (let ((digits-start (1+ suffix-start)))
+              (unless (and (< digits-start length)
+                           (char/= (char name digits-start) #\0)
+                           (loop for index from digits-start below length
+                                 always (digit-char-p (char name index) 10)))
+                (return-from %worktree-creation-key nil))
+              (setf suffix (parse-integer name :start digits-start))
+              (unless (>= suffix 2)
+                (return-from %worktree-creation-key nil))))
+          (cons (+ (* (parse-integer name :end 8) 1000000)
+                   (parse-integer name :start 9 :end 15))
+                suffix))))))
 
-(defun %organization-recency (organization)
-  (let ((times
-         (mapcar #'%repository-recency
-                 (nerimux/workspace-model:organization-repositories
-                  organization))))
-    (if times
-        (reduce #'max times)
-        0)))
+(defun %worktree-creation-key-newer-p (left right)
+  (and left
+       (or (null right)
+           (> (car left) (car right))
+           (and (= (car left) (car right))
+                (> (cdr left) (cdr right))))))
 
-(defun %sort-workspace-organizations-by-activity (organizations)
-  "Reorder ORGANIZATIONS -- and, in place within each, its repositories, and
-   within each of those, its worktrees -- most-recently-active first (item
-   6, activity order).
-
-   Runs only from SET-WORKSPACE-ORGANIZATIONS, i.e. only when the catalog is
-   published (a scan landing, a merge, a worktree create/delete refresh),
-   never per-frame or mid-navigation: the requirement is that a row must not
-   move under the cursor while a client is looking at it, and a per-frame
-   re-sort would do exactly that on every keystroke that touches pane
-   activity (a reader thread's output alone would reorder the tree the
-   client is currently scrolling).
-
-   STABLE-SORT keeps ties (equal recency, including the common case where
-   every worktree in view is at the default 0) in their existing order,
-   which for a freshly scanned catalog is ghq's own enumeration order --
-   so an all-idle catalog looks exactly as before this feature.  Sorts
-   copies of the WORKTREES/REPOSITORIES lists rather than the lists in
-   place: those lists are shared with whatever built them (e.g.
-   ORGANIZATION-ADD-REPOSITORY's PUSHNEW), and SORT/STABLE-SORT are
-   destructive, so sorting the original list risks corrupting a structure
-   another holder of the same list object still expects to see unmodified."
+(defun %sort-workspace-worktrees-by-creation (organizations)
   (dolist (organization organizations)
-    (dolist 
-        (repository
-         (nerimux/workspace-model:organization-repositories organization))
-      (setf (nerimux/workspace-model:repository-worktrees repository) (stable-sort
-                                                                       (copy-list
-                                                                        (nerimux/workspace-model:repository-worktrees
-                                                                         repository))
-                                                                       #'>
-                                                                       :key
-                                                                       #'%worktree-recency)))
-    (setf (nerimux/workspace-model:organization-repositories organization) (stable-sort
-                                                                            (copy-list
-                                                                             (nerimux/workspace-model:organization-repositories
-                                                                              organization))
-                                                                            #'>
-                                                                            :key
-                                                                            #'%repository-recency)))
-  (stable-sort (copy-list organizations) #'> :key #'%organization-recency))
+    (dolist (repository
+             (nerimux/workspace-model:organization-repositories organization))
+      (setf (nerimux/workspace-model:repository-worktrees repository)
+            (stable-sort
+             (copy-list (nerimux/workspace-model:repository-worktrees repository))
+             #'%worktree-creation-key-newer-p :key #'%worktree-creation-key))))
+  organizations)
+
+(defvar *workspace-catalog-generation* nil)
+(defvar *workspace-catalog-generation-lock*
+  (cl-concurrent-kit:make-lock :name "workspace-catalog-generation"))
+
+(defstruct (%repository-data-generation
+            (:constructor %make-repository-data-generation))
+  catalog catalog-generation worktrees)
+
+(defvar *repository-data-generations* (make-hash-table :test #'eq :weakness :key))
+
+(defun %begin-repository-data-generation (repository)
+  (sb-thread:with-recursive-lock (*workspace-catalog-generation-lock*)
+    (setf (gethash repository *repository-data-generations*)
+          (%make-repository-data-generation
+           :catalog *workspace-organizations*
+           :catalog-generation *workspace-catalog-generation*
+           :worktrees (nerimux/workspace-model:repository-worktrees repository)))))
+
+(defun %repository-data-generation-current-p (repository generation &key before-apply)
+  (and (eq generation (gethash repository *repository-data-generations*))
+       (eq *workspace-organizations* (%repository-data-generation-catalog generation))
+       (eq *workspace-catalog-generation*
+           (%repository-data-generation-catalog-generation generation))
+       (or (not before-apply)
+           (eq (nerimux/workspace-model:repository-worktrees repository)
+               (%repository-data-generation-worktrees generation)))))
 
 (defun set-workspace-organizations (organizations)
   "Replace the workspace catalog with ORGANIZATIONS.
 
-As a side effect, reorders the published catalog -- organizations,
-repositories within each, and worktrees within each of those -- most-
-recently-active first (%SORT-WORKSPACE-ORGANIZATIONS-BY-ACTIVITY, item 6).
-That sort runs only here, i.e. only when the catalog is (re-)published, and
-never per-frame or mid-navigation, because a row must not move under a
-client's cursor while it is being looked at."
+Preserve organization and repository input order. Within each repository,
+sort a copy of its worktree list by generated basename: valid YYYYMMDDTHHMMSS
+timestamps descending, then numeric collision suffixes descending (absent
+means 1). SHA values do not break ties. Unknown names follow known names;
+ties and unknown names retain input order. Pane activity and filesystem
+timestamps do not affect this ordering."
   (check-type organizations list)
-  (let ((previous *workspace-organizations*)
+  (sb-thread:with-recursive-lock (*workspace-catalog-generation-lock*)
+   (let ((previous *workspace-organizations*)
         (current (copy-list organizations)))
     (setf *workspace-organizations* current)
     (%preserve-pane-associations previous current)
     (%preserve-worktree-commit-state previous current)
     (setf *workspace-organizations*
-          (%sort-workspace-organizations-by-activity *workspace-organizations*))))
+          (%sort-workspace-worktrees-by-creation *workspace-organizations*)))))
 
 (defun %repository-already-present-p (repository organizations)
   (let ((local-path (nerimux/workspace-model:repository-local-path repository))
@@ -380,6 +407,9 @@ client's cursor while it is being looked at."
         (apply callback arguments))))
 
 (defun refresh-workspace-organizations-async (&key query
+                                                   on-start
+                                                   on-repository-start
+                                                   on-repository
                                                    on-catalog
                                                    on-complete
                                                    on-error
@@ -387,11 +417,20 @@ client's cursor while it is being looked at."
                                                    on-progress
                                                    callback-dispatch)
   "Refresh and store the workspace catalog on a worker thread.
+   Only the latest registered request publishes a catalog or invokes observers.
+   Registration happens under the catalog lock before scanning starts.
+   Delivery, including direct worker delivery, checks the generation under the
+   catalog lock. Observers may synchronously start a new refresh, but must not
+   wait for another thread to enter a catalog callback or register a refresh.
+   Status launch is authorized under that lock after ON-CATALOG returns, if
+   the request is still current. An authorized launch runs outside the catalog
+   lock and is not cancelled by later requests.
    ON-CATALOG, when given, is called with the organizations as soon as the
    scan itself completes — before the per-repository status refresh, which
    runs `git status` across every repository and can take seconds on a large
-   root.  ON-COMPLETE still fires only after the statuses; a UI caller uses
-   ON-CATALOG to paint the freshly scanned tree instead of holding the
+   root. For the latest request, ON-COMPLETE fires only after the statuses;
+   a UI caller uses ON-CATALOG to paint the freshly scanned tree instead of
+   holding the
    \"scanning...\" placeholder until every status has arrived. ON-PROGRESS
    (FR-004b), when given, is called with the running repository count as the
    scan discovers each ghq entry -- before ON-CATALOG, and well before
@@ -404,40 +443,47 @@ terminal scan failure (SCAN-REPOSITORIES-ASYNC's own ON-ERROR below, e.g.
 coming, so the whole refresh has failed. ON-REPOSITORY-ERROR fires once per
 repository whose own `git status` failed during REFRESH-WORKSPACE-STATUS-
 ASYNC below, called with (REPOSITORY CONDITION) exactly as REFRESH-
-REPOSITORIES-ASYNC's own ON-ERROR is -- ON-COMPLETE still fires afterward
-for the batch as a whole, since one repository's failure does not stop the
-others from settling. Conflating the two used to mean a single repository's
+REPOSITORIES-ASYNC's own ON-ERROR is -- for the latest request, ON-COMPLETE
+fires afterward for the batch as a whole, since one repository's failure
+does not stop the others from settling. Conflating the two used to mean a single repository's
 status failure looked identical to a scan-wide failure to every caller,
 which is what let a per-repository failure mark the ENTIRE catalog stale."
-  (scan-repositories-async :query
-                           query
-                           :callback-dispatch
-                           callback-dispatch
-                           :on-progress
-                           on-progress
-                           :on-complete
-                           (lambda (organizations)
-                             (set-workspace-organizations organizations)
-                             (when on-catalog
-                               (funcall on-catalog organizations))
-                             (refresh-workspace-status-async :organizations
-                                                             organizations
-                                                             :callback-dispatch
-                                                             callback-dispatch
-                                                             :on-complete
-                                                             on-complete
-                                                             :on-error
-                                                             (lambda 
-                                                                 (repository
-                                                                  condition)
-                                                               (when 
-                                                                   on-repository-error
-                                                                 (funcall
-                                                                  on-repository-error
-                                                                  repository
-                                                                  condition)))))
-                           :on-error
-                           on-error))
+  (let ((generation (gensym "CATALOG-")))
+    (sb-thread:with-recursive-lock (*workspace-catalog-generation-lock*)
+      (setf *workspace-catalog-generation* generation))
+    (labels ((current-p ()
+               (eq generation *workspace-catalog-generation*))
+             (guard-observer (observer)
+               (when observer
+                 (lambda (&rest arguments)
+                   (sb-thread:with-recursive-lock (*workspace-catalog-generation-lock*)
+                     (when (current-p)
+                       (apply observer arguments)))))))
+      (scan-repositories-async
+       :query query
+       :on-start (guard-observer on-start)
+       :callback-dispatch callback-dispatch
+       :on-progress (guard-observer on-progress)
+       :on-complete
+       (lambda (organizations)
+         (when (sb-thread:with-recursive-lock (*workspace-catalog-generation-lock*)
+                 (when (current-p)
+                   (set-workspace-organizations organizations)
+                   (when on-catalog
+                     (funcall on-catalog organizations))
+                   (current-p)))
+           (refresh-workspace-status-async
+            :organizations organizations
+            :on-start (guard-observer on-repository-start)
+            :on-repository (guard-observer on-repository)
+            :callback-dispatch callback-dispatch
+            :on-complete (guard-observer on-complete)
+            :on-error
+            (guard-observer
+             (lambda (repository condition)
+               (when on-repository-error
+                 (funcall on-repository-error repository condition)))))))
+       :on-error (guard-observer on-error)))))
 
 (defun scan-repositories (&key query on-complete on-error on-progress)
   "Build the organization/repository hierarchy from ghq-list-repositories.
@@ -519,6 +565,10 @@ which is what let a per-repository failure mark the ENTIRE catalog stale."
                              (nerimux/workspace-model:worktree-status old-worktree))
                 :panes (and old-worktree
                             (nerimux/workspace-model:worktree-panes old-worktree))
+                :completed-p (and old-worktree
+                                  (nerimux/workspace-model:worktree-completed-p old-worktree))
+                :agent-pane (and old-worktree
+                                 (nerimux/workspace-model:worktree-agent-pane old-worktree))
                 :dirty-p (and old-worktree
                               (nerimux/workspace-model:worktree-dirty-p old-worktree))
                 :conflict-p (and old-worktree

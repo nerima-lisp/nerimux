@@ -13,7 +13,109 @@
   (let ((full (cl-tui-kit/ansi:ansi-encode-style style)))
     (subseq full 2 (1- (length full)))))
 
+(defun %row-delta-screen-state (screen)
+  (list
+   (loop for y below (nerimux/terminal:screen-height screen)
+         collect (loop for x below (nerimux/terminal:screen-width screen)
+                       for cell = (nerimux/terminal:screen-cell screen x y)
+                       collect (mapcar (lambda (accessor) (funcall accessor cell))
+                                       (list #'nerimux/terminal:cell-char
+                                             #'nerimux/terminal:cell-combining
+                                             #'nerimux/terminal:cell-width
+                                             #'nerimux/terminal:cell-fg
+                                             #'nerimux/terminal:cell-bg
+                                             #'nerimux/terminal:cell-attrs
+                                             #'nerimux/terminal:cell-attrs2
+                                             #'nerimux/terminal:cell-ul-color))))
+   (nerimux/terminal:screen-cursor-x screen)
+   (nerimux/terminal:screen-cursor-y screen)
+   (nerimux/terminal:screen-pending-wrap screen)))
+
+(defun %row-delta-feed (screen text)
+  (nerimux/terminal:screen-process-bytes
+   screen (cl-codec-kit:string-to-octets text :encoding :utf-8)))
+
 (describe "renderer-suite/tui-kit"
+
+  (it "row-delta reproduces full Unicode styled cells and cursor with known controls"
+    (let ((before (cl-tui-kit/core:make-surface 4 3))
+          (after (cl-tui-kit/core:make-surface 4 3))
+          (incremental (nerimux/terminal:make-screen 4 3))
+          (fresh (nerimux/terminal:make-screen 4 3)))
+      (dolist (surface (list before after))
+        (cl-tui-kit/core:surface-draw-text surface 0 0 "same")
+        (cl-tui-kit/core:surface-draw-text surface 0 2 "tail"))
+      (cl-tui-kit/core:surface-draw-text before 0 1 "古古")
+      (cl-tui-kit/core:surface-draw-text after 0 1 (format nil "ABあ~C" (code-char #x301)))
+      (multiple-value-bind (a snapshot-a) (nerimux/renderer::%surface-to-ansi-frame before)
+        (multiple-value-bind (b snapshot-b) (nerimux/renderer::%surface-to-ansi-frame after)
+          (let ((delta (nerimux/renderer:ansi-row-delta snapshot-a snapshot-b)))
+            (expect (< (length delta) (length b)))
+            (expect (null (search (format nil "~C[2J" #\Escape) delta)))
+            (expect (search (format nil "~C[2;1H" #\Escape) delta))
+            (expect (null (search (format nil "~C[1;1H" #\Escape) delta)))
+            (%row-delta-feed incremental a)
+            (%row-delta-feed incremental delta)
+            (%row-delta-feed fresh b)
+            (expect (equalp (%row-delta-screen-state incremental)
+                            (%row-delta-screen-state fresh)))
+            (expect (char= #\A (nerimux/terminal:cell-char
+                                (nerimux/terminal:screen-cell incremental 0 1))))
+            (let ((cell (nerimux/terminal:screen-cell incremental 2 1)))
+              (expect (char= #\あ (nerimux/terminal:cell-char cell)))
+              (expect (= 2 (nerimux/terminal:cell-width cell)))
+              (expect (find (code-char #x301) (nerimux/terminal:cell-combining cell))))
+            (expect (= 0 (nerimux/terminal:cell-width
+                          (nerimux/terminal:screen-cell incremental 3 1))))
+            (expect (= 3 (nerimux/terminal:screen-cursor-x incremental)))
+            (expect (= 2 (nerimux/terminal:screen-cursor-y incremental)))
+            (expect (null (nerimux/terminal:screen-pending-wrap incremental)))
+            (expect (string= "" (nerimux/renderer:ansi-row-delta snapshot-b snapshot-b)))
+            (cl-tui-kit/core:surface-draw-text after 0 0 "EDIT")
+            (expect (string= delta (nerimux/renderer:ansi-row-delta snapshot-a snapshot-b))))))))
+
+  (it "row-delta erases wide and styled tails and resets subsequent output style"
+    (let* ((a (nerimux/renderer::%surface-from-ansi-frame
+               (format nil "~C[1;31;44mああ" #\Escape) 2 4))
+           (b (nerimux/renderer::%surface-from-ansi-frame "Z" 2 4))
+           (incremental (nerimux/terminal:make-screen 4 2))
+           (fresh (nerimux/terminal:make-screen 4 2)))
+      (multiple-value-bind (full-a snapshot-a) (nerimux/renderer::%surface-to-ansi-frame a)
+        (multiple-value-bind (full-b snapshot-b) (nerimux/renderer::%surface-to-ansi-frame b)
+          (%row-delta-feed incremental full-a)
+          (expect (plusp (nerimux/terminal:cell-attrs
+                         (nerimux/terminal:screen-cell incremental 0 0))))
+          (%row-delta-feed incremental (nerimux/renderer:ansi-row-delta snapshot-a snapshot-b))
+          (%row-delta-feed fresh full-b)
+          (expect (equalp (%row-delta-screen-state incremental) (%row-delta-screen-state fresh)))
+          (loop for x from 1 below 4
+                for cell = (nerimux/terminal:screen-cell incremental x 0)
+                do (expect (char= #\Space (nerimux/terminal:cell-char cell)))
+                   (expect (= 1 (nerimux/terminal:cell-width cell)))
+                   (expect (zerop (nerimux/terminal:cell-attrs cell))))
+          (%row-delta-feed incremental "Q")
+          (%row-delta-feed fresh "Q")
+          (expect (equalp (%row-delta-screen-state incremental) (%row-delta-screen-state fresh)))
+          (expect (char= #\Q (nerimux/terminal:cell-char
+                              (nerimux/terminal:screen-cell incremental 3 1))))))))
+
+  (it "row-delta title-only update preserves OSC without repaint and rejects resize"
+    (multiple-value-bind (frame snapshot)
+        (nerimux/renderer::%surface-to-ansi-frame (cl-tui-kit/core:make-surface 4 2))
+      (multiple-value-bind (a snapshot-a)
+          (nerimux/renderer::%ansi-frame-with-title frame snapshot (format nil "~C]2;A~C" #\Escape #\Bel))
+        (declare (ignore a))
+        (let ((title (format nil "~C]2;B~C" #\Escape #\Bel)))
+          (multiple-value-bind (b snapshot-b)
+              (nerimux/renderer::%ansi-frame-with-title frame snapshot title)
+            (declare (ignore b))
+            (expect (string= title (nerimux/renderer:ansi-row-delta snapshot-a snapshot-b))))))
+      (dolist (geometry '((5 2) (4 3)))
+        (multiple-value-bind (resized-frame resized-snapshot)
+            (nerimux/renderer::%surface-to-ansi-frame
+             (apply #'cl-tui-kit/core:make-surface geometry))
+          (declare (ignore resized-frame))
+          (expect (null (nerimux/renderer:ansi-row-delta snapshot resized-snapshot)))))))
 
   (it "constructs the cl-tui-kit themes and frame area"
     (expect (typep
@@ -319,16 +421,13 @@
       (expect (search "PICKER (literal)" output))
       (expect (search "no matches" output))))
 
-  (it "joins frame rows with CR+LF so a raw-mode tty never sees a bare LF"
+  (it "row-delta positions every full-frame row absolutely without raw-mode newlines"
     (let* ((surface (cl-tui-kit/core:make-surface 10 3))
-           (output (nerimux/renderer::%surface-to-ansi-frame surface))
-           (newlines 0))
-      (loop for index from 0 below (length output)
-            when (char= (char output index) #\Newline)
-              do (incf newlines)
-                 (expect (and (plusp index)
-                              (char= (char output (1- index)) #\Return))))
-      (expect (= 2 newlines))))
+           (output (nerimux/renderer::%surface-to-ansi-frame surface)))
+      (expect (null (find #\Newline output)))
+      (loop for row from 1 to 3
+            do (expect (search (format nil "~C[~D;1H" #\Escape row) output)))
+      (expect (search (format nil "~C[3;10H" #\Escape) output))))
 
   (it "renders the bare repository overview with pane attention and detail"
     (let* ((pane (nerimux/pane:make-pane :id 7 :title "editor"))

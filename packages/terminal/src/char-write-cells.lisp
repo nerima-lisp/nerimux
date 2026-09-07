@@ -58,6 +58,10 @@
   (let ((x (screen-cursor-x screen)))
     (cond
       ((zerop x) 0)
+      ((screen-pending-wrap screen)
+       (if (zerop (cell-width (screen-cell screen x (screen-cursor-y screen))))
+           (1- x)
+           x))
       ((and (> x 1)
             (zerop
              (cell-width (screen-cell screen (1- x) (screen-cursor-y screen)))))

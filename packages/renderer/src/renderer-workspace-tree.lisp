@@ -173,14 +173,18 @@
      (list (cons (format nil "-~D" (worktree-behind worktree)) +sgr-behind+)))))
 
 (defun %worktree-pane-count-text (worktree)
-  "\"Np\" for WORKTREE's pane count, or \"Np!\" when any pane has exited; NIL
-   when WORKTREE has no panes at all (nothing to show)."
-  (let ((panes (worktree-panes worktree)))
-    (and panes
-         (format nil
-                 "~Dp~:[~;!~]"
-                 (length panes)
-                 (some #'pane-process-exited-p panes)))))
+  (format nil "terminal:~D"
+          (count-if-not #'nerimux/pane:pane-agent-kind (worktree-panes worktree))))
+
+(defun %worktree-agent-text (worktree)
+  (let* ((state (nerimux/pane:worktree-agent-state worktree))
+         (completed (nerimux/workspace-model:worktree-completed-p worktree))
+         (agent (nerimux/workspace-model:worktree-agent-pane worktree))
+         (kind (and agent (nerimux/pane:pane-agent-kind agent))))
+    (format nil "agent:~A~A~A"
+            (if (and completed (not (eq state :running))) "COMPLETED" state)
+            (if (and completed (eq state :running)) "+COMPLETED" "")
+            (case kind (:codex "/Codex") (:claude "/Claude") (t "")))))
 
 (defun %worktree-state-tag (worktree)
   "The single most salient %WORKTREE-STATUS-TOKENS entry for the info
@@ -201,11 +205,13 @@
   "Ordered (PLAIN . STYLED) token pairs for WORKTREE's tree-row info
    cluster, lowest priority first -- the order %WORKTREE-TREE-INFO-SUFFIX
    drops from when the row does not fit: relative time, then ahead/behind,
-   then pane count; the state tag is never dropped."
+   then terminal count; agent lifecycle and Git state stay together so a
+   narrow row cannot show CLEAN while silently dropping RUNNING."
   (let* ((time
           (%worktree-relative-time-text (%worktree-last-activity-time worktree)))
          (ahead-behind (%worktree-ahead-behind-parts worktree))
          (pane-count (%worktree-pane-count-text worktree))
+         (agent (%worktree-agent-text worktree))
          (state (%worktree-state-tag worktree))
          (state-sgr (%worktree-state-token-sgr state)))
     (remove nil
@@ -219,25 +225,26 @@
                                  (lambda (part)
                                    (%sgr-wrap (car part) (cdr part)))
                                  ahead-behind))))
-                  (and pane-count
-                       (cons pane-count
-                             (%sgr-wrap pane-count
-                                        (if (find #\! pane-count)
-                                            +sgr-alert+
-                                            +sgr-faint+))))
-                  (cons state
-                        (if state-sgr
-                            (%sgr-wrap state state-sgr)
-                            state))))))
+                  (cons pane-count (%sgr-wrap pane-count +sgr-faint+))
+                  (cons (format nil "~A git:~A" agent state)
+                        (format nil "~A git:~A"
+                                (%sgr-wrap agent
+                                           (if (eq (nerimux/pane:worktree-agent-state worktree)
+                                                   :running)
+                                               +sgr-alert+
+                                               +sgr-faint+))
+                                (if state-sgr
+                                    (%sgr-wrap state state-sgr)
+                                    state)))))))
 
 (defun %worktree-tree-info-suffix (worktree width)
   "Two values -- PLAIN and STYLED text for WORKTREE's tree-row info cluster
-   (state tag, ahead/behind, pane count, relative last-activity time),
+   (agent lifecycle, Git state, ahead/behind, terminal count, activity time),
    space-joined. Tokens drop from the front (lowest priority: relative time,
-   then ahead/behind, then pane count; the state tag never drops) until the
+   then ahead/behind, then terminal count; lifecycle and Git stay) until the
    plain form fits WIDTH display columns. %DISPLAY-CLIP's own
    truncate-with-ellipsis contract is the safety net for the case where even
-   the state tag alone overflows WIDTH."
+   lifecycle and Git pair alone overflows WIDTH."
   (let ((tokens (%worktree-tree-info-tokens worktree)))
     (loop for remaining on tokens
           for plain = (format nil "~{~A~^ ~}" (mapcar #'car remaining))
@@ -516,11 +523,9 @@
    (%WORKSPACE-REPOSITORIES-SECTION-ENTRIES) can exclude them -- a worktree
    appears in at most one section, never twice under a different one.
 
-   All three lists preserve ORGANIZATIONS' own order: %SORT-WORKSPACE-
-   ORGANIZATIONS-BY-ACTIVITY (vcs.lisp) already put organizations,
-   repositories, and worktrees into activity order once, at catalog publish
-   time -- this walk never re-sorts, so a row does not move under the cursor
-   between refreshes."
+   All three lists preserve the incoming organization, repository, and
+   worktree order within each section. This walk classifies entries but
+   does not sort them."
   (let (attention
         active
         repositories
@@ -689,6 +694,7 @@
 
 (defun %workspace-flat-tree-entries (organizations collapsed-node-ids
                                                    &key
+                                                   job-labels
                                                    refreshing-ids
                                                    stale-ids
                                                    filter
@@ -754,6 +760,17 @@
                                            file-diffs)
                                           collapsed-node-ids
                                           filter-active-p))))
+        (when job-labels
+          (dolist (entry entries)
+            (let* ((object (third entry))
+                   (kind (fourth entry))
+                   (id (case kind
+                         (:section object)
+                         (:repository (repository-id object))
+                         (:worktree (worktree-id object))))
+                   (label (and id (gethash (list kind id) job-labels))))
+              (when label
+                (setf (second entry) (concatenate 'string (second entry) label))))))
         (%workspace-filter-tree-entries entries filter)))))
 
 (defun workspace-tree-view-rows (terminal-rows)

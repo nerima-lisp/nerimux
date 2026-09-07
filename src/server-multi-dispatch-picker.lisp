@@ -1,5 +1,7 @@
 (in-package #:nerimux)
 
+(declaim (special *workspace-catalog-loaded-p* *workspace-scan-progress*))
+
 (defun %client-picker-items (conn)
   (or (client-conn-picker-items conn)
       (setf (client-conn-picker-items conn) (nerimux/picker:build-global-picker-items
@@ -239,10 +241,11 @@
 (defun %refresh-client-picker (conn &key on-complete on-error)
   (if (nerimux/vcs:vcs-package-available-p)
       (let ((failed-repository-ids nil))
+        (setf *workspace-scan-progress* nil)
         (%set-workspace-catalog-refresh-state
          (nerimux/vcs:workspace-organizations) :mark)
         (handler-case
-            (nerimux/vcs:refresh-workspace-organizations-async
+              (%workspace-refresh-organizations-async
              :callback-dispatch #'%enqueue-main-thread-callback
              :on-catalog
              (lambda (organizations)
@@ -257,6 +260,8 @@
                (%mark-dirty))
              :on-complete
              (lambda (organizations)
+               (setf *workspace-catalog-loaded-p* t
+                     *workspace-scan-progress* nil)
                (%set-workspace-catalog-refresh-state
                 organizations :settle :stale-p nil)
                (%reapply-stale-repository-marks organizations failed-repository-ids)
@@ -275,12 +280,16 @@
                (%mark-dirty))
              :on-error
              (lambda (condition)
+               (setf *workspace-catalog-loaded-p* t
+                     *workspace-scan-progress* nil)
                (%set-workspace-catalog-refresh-state
                 (nerimux/vcs:workspace-organizations) :settle :stale-p t)
                (when (and on-error (%client-live-p conn))
                  (funcall on-error condition))
                (%mark-dirty)))
           (error (condition)
+            (setf *workspace-catalog-loaded-p* t
+                  *workspace-scan-progress* nil)
             (%set-workspace-catalog-refresh-state
              (nerimux/vcs:workspace-organizations) :settle :stale-p t)
             (when (and on-error (%client-live-p conn))
@@ -294,6 +303,8 @@
   conn)
 
 (defun %open-client-picker (conn)
+  (when (%reject-pending-worktree-attachment conn :pane nil)
+    (return-from %open-client-picker nil))
   (%set-client-modal conn :picker)
   (setf (client-conn-picker-query conn) ""
         (client-conn-picker-regex-p conn) nil
@@ -305,6 +316,9 @@
   conn)
 
 (defun %close-client-picker (conn)
+  (when (and (client-conn-focus conn)
+             (%reject-pending-worktree-attachment conn))
+    (return-from %close-client-picker nil))
   (%set-client-modal conn nil)
   (%set-client-view conn
                     (if (client-conn-focus conn)
@@ -329,10 +343,18 @@
              :test
              #'eq)))
 
-(defun %open-client-worktree-pane (session conn worktree &key default-command)
+(defun %open-client-worktree-pane (session conn worktree &key default-command agent-kind)
+  (when (%reject-pending-worktree-attachment conn :worktree worktree :pane nil :window nil)
+    (return-from %open-client-worktree-pane nil))
   (let ((path (and worktree (worktree-path worktree))))
     (cond
       ((null worktree)
+       nil)
+      ((%worktree-cancel-pending-p worktree)
+       (%client-notify conn "worktree cancellation is pending")
+       nil)
+      ((and agent-kind (worktree-running-agent-p worktree))
+       (%client-notify conn "worktree already has a running agent")
        nil)
       ((not (and (stringp path) (plusp (length path))))
        (%client-notify conn "worktree has no path")
@@ -356,6 +378,7 @@
                   (%client-notify conn "worktree pane unavailable")
                   nil)
                  ((not (pane-live-p pane))
+                  (setf (pane-agent-kind pane) agent-kind)
                   (pane-mark-startup-failure pane)
                   (worktree-add-pane worktree pane)
                   (%set-client-selected-worktree conn worktree)
@@ -364,12 +387,14 @@
                   (%mark-dirty)
                   t)
                  (t
-                  (start-reader-thread pane)
+                  (setf (pane-agent-kind pane) agent-kind)
                   (worktree-add-pane worktree pane)
+                  (start-reader-thread pane)
                   (%set-client-selected-worktree conn worktree)
                   (%set-client-focus conn pane)
+                  (setf (worktree-completed-p worktree) nil)
                   (%mark-dirty)
-                  t))))
+                  (values t t)))))
          (error (condition)
            (%client-notify
             conn
@@ -386,12 +411,17 @@
                        (nerimux/picker:picker-item-organization item)))))
          (pane (%client-worktree-pane session worktree))
          (window (and pane (nerimux/pane:pane-window pane))))
+    (when (and worktree
+               (%reject-pending-worktree-attachment conn :worktree worktree
+                                                        :pane pane :window window))
+      (return-from %select-client-picker-item nil))
     (cond
       ((and pane window)
         (nerimux/session:session-select-window session window)
         (nerimux/window:window-select-pane window pane)
         (%set-client-selected-worktree conn worktree)
         (%set-client-focus conn pane)
+        (worktree-resume worktree pane)
         (%close-client-picker conn)
         (%mark-dirty)
         t)

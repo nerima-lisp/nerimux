@@ -6,6 +6,10 @@
                 "wt-unlock"
                 "wt-prune"
                 "wt-prune-confirm"
+                "wt-complete"
+                "workspace-complete"
+                "workspace-prune"
+                "workspace-prune-all"
                 "overview"
                 "detail"
                 "refresh")

@@ -8,8 +8,20 @@
 
   (it "filters to the wt- family for a wt- prefix"
     (expect (equal '("wt-create" "wt-delete" "wt-lock" "wt-unlock"
-                     "wt-prune" "wt-prune-confirm")
+                     "wt-prune" "wt-prune-confirm" "wt-complete")
                    (nerimux/renderer::%workspace-command-completions "wt-"))))
+
+  (it "offers the workspace completion command by its unique prefix"
+    (expect (equal '("workspace-complete")
+                   (nerimux/renderer::%workspace-command-completions "workspace-c"))))
+
+  (it "offers lifecycle prune commands separately from Git metadata prune"
+    (expect (equal '("workspace-prune" "workspace-prune-all")
+                   (nerimux/renderer::%workspace-command-completions "workspace-p"))))
+
+  (it "offers the workspace completion alias by its unique prefix"
+    (expect (equal '("wt-complete")
+                   (nerimux/renderer::%workspace-command-completions "wt-comp"))))
 
   (it "matches a single command by its unique prefix"
     (expect (equal '("refresh")
@@ -87,7 +99,7 @@
       (let ((plain (strip-sgr frame)))
         (expect (search "/feat" plain))
         (expect (search "detach" plain))
-        (expect (search "shell" plain)))))
+        (expect (search "agent>terminal>assign" plain)))))
 
   (it "replaces the whole key panel with the /query input line when mode is :filter"
     (let ((frame
@@ -96,4 +108,4 @@
       (let ((plain (strip-sgr frame)))
         (expect (search "/feat" plain))
         (expect (not (search "detach" plain)))
-        (expect (not (search "shell" plain)))))))
+        (expect (not (search "agent>terminal>assign" plain)))))))

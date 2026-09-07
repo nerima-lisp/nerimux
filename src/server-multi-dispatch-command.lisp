@@ -24,6 +24,32 @@
   "True when a kill command carried --force."
   (and args (member "--force" args :test #'string=) t))
 
+(defun %client-complete-workspace (conn &key toggle)
+  (let* ((selected (client-conn-selected-worktree conn))
+         (worktree (if (and toggle selected)
+                       (%workspace-find-worktree (worktree-path selected))
+                       selected)))
+    (cond
+      ((null selected) (%client-notify conn "no worktree selected"))
+      ((null worktree) (%client-notify conn "worktree no longer available"))
+      ((and toggle (worktree-completed-p worktree))
+       (setf (worktree-completed-p worktree) nil)
+       (%mark-dirty))
+      ((worktree-running-agent-p worktree)
+       (%open-confirm-view
+        conn "WORKSPACE COMPLETE"
+        (list (cons "workspace" (worktree-path worktree))
+              (cons "effect" "mark completed; agent keeps running"))
+        (lambda ()
+          (let ((current (%workspace-find-worktree (worktree-path worktree))))
+            (if current
+                (progn (worktree-complete current) (%mark-dirty))
+                (%client-notify conn "worktree no longer available"))))))
+      (t
+       (worktree-complete worktree)
+       (%mark-dirty))))
+  t)
+
 (define-command-rules %handle-client-ui-command
                       (session conn cmd target args)
                       "Apply a client-local UI command, returning true when CMD is recognized."
@@ -83,8 +109,18 @@
                        t)
                       ((:worktree-create :create-worktree :wt-create)
                        (%client-create-worktree conn target args))
+                      ((:workspace-complete :wt-complete)
+                       (if (or target args)
+                           (progn
+                             (%client-notify conn "workspace-complete takes no arguments")
+                             t)
+                           (%client-complete-workspace conn)))
                       ((:worktree-delete :delete-worktree :wt-delete)
                        (%client-delete-worktree conn target args))
+                      ((:workspace-prune :workspace-prune-all)
+                       (if (or target args)
+                           (progn (%client-notify conn "workspace prune takes no arguments") t)
+                           (%client-prune-workspaces conn :all (eq cmd :workspace-prune-all))))
                       ((:worktree-lock :lock-worktree :wt-lock)
                        (%client-lock-worktree conn target args))
                       ((:worktree-unlock :unlock-worktree :wt-unlock)

@@ -52,6 +52,8 @@
    reachable for the pane's lifetime, so SBCL's GC cannot close the fd out from
    under us.  pty-close / pty-child-exit-status reap through this table.")
 
+(defvar *pty-processes-lock* (sb-thread:make-mutex :name "pty ownership"))
+
 (defun %string-non-empty-p (value)
   "Return T when VALUE is a non-empty string."
   (and (stringp value) (plusp (length value))))
@@ -86,13 +88,17 @@
 (defun %remember-pty-process (master-fd pty)
   "Record the cl-tty-kit PTY struct so pty-close can reap it and so the struct
    (and the master stream/fd it owns) stays reachable for the pane's lifetime."
-  (setf (gethash master-fd *pty-processes*) pty))
+  (sb-thread:with-mutex (*pty-processes-lock*)
+    (setf (gethash master-fd *pty-processes*) pty)))
 
-(defun %take-pty-process (master-fd)
+(defun %take-pty-process (master-fd &optional child-pid)
   "Remove and return the cl-tty-kit PTY struct associated with MASTER-FD, if any."
-  (let ((pty (gethash master-fd *pty-processes*)))
-    (remhash master-fd *pty-processes*)
-    pty))
+  (sb-thread:with-mutex (*pty-processes-lock*)
+    (let ((pty (gethash master-fd *pty-processes*)))
+      (when (and pty (or (null child-pid)
+                         (= child-pid (cl-tty-kit:pty-pid pty))))
+        (remhash master-fd *pty-processes*)
+        pty))))
 
 (defparameter +pty-child-wait-timeout+
   (cl-date-kit:duration-of-seconds 5)
@@ -231,26 +237,46 @@
     (when (and count (plusp count))
       (subseq buffer 0 count))))
 
-(defun pty-close (master-fd child-pid)
-  "Send SIGHUP to the child process and close the PTY master.
+(defun %signal-owned-process (process signal)
+  ;; SBCL reaps under this same lock. A terminal status must not be checked
+  ;; separately from kill: the PID could otherwise be recycled between them.
+  (sb-sys:without-interrupts
+    (sb-thread:with-mutex (sb-impl::*active-processes-lock*)
+      (unless (or (sb-impl::process-closed-p process)
+                  (member (sb-impl::process-%status process) '(:exited :signaled)))
+        (sb-ext:process-kill process signal)))))
 
-   A non-positive CHILD-PID is ignored: kill(-1)/kill(0) broadcast the signal to
-   the whole process group (including this process), which must never happen.
-   Likewise a negative MASTER-FD is not closed."
-  (when (plusp child-pid)
-    (handler-case
-        (sb-posix:kill child-pid sb-posix:sighup)
-      (sb-posix:syscall-error () nil)))
+(defun %terminate-owned-process (process)
+  (%signal-owned-process process sb-posix:sighup)
+  (loop repeat 20
+        until (member (sb-ext:process-status process) '(:exited :signaled))
+        do (sleep 0.01))
+  (%signal-owned-process process sb-posix:sigkill)
+  ;; Darwin can keep a killed PTY child exiting until its master is closed.
+  ;; Keep the process itself open so SBCL still records the wait status.
+  (let ((master (sb-ext:process-pty process)))
+    (when master (close master :abort t)))
+  (sb-ext:process-wait process)
+  (values (sb-ext:process-exit-code process) (sb-ext:process-status process)))
+
+(defun pty-close (master-fd child-pid)
+  "Terminate and reap the owned child, close once, and return CODE and KIND."
   (when (>= master-fd 0)
-    (let ((pty (%take-pty-process master-fd)))
-      (if pty
-          (handler-case
-              (sb-ext:process-close (cl-tty-kit:pty-process pty))
-            (stream-error () nil)
-            (file-error () nil))
-          (handler-case
-              (sb-posix:close master-fd)
-            (sb-posix:syscall-error () nil))))))
+    (let ((pty (%take-pty-process master-fd child-pid)))
+      (cond
+        (pty
+         (let ((process (cl-tty-kit:pty-process pty)))
+           (multiple-value-prog1
+               (handler-case (%terminate-owned-process process)
+                 (error (condition)
+                   (%remember-pty-process master-fd pty)
+                   (error condition)))
+             (handler-case (sb-ext:process-close process)
+               (stream-error () nil)
+               (file-error () nil)))))
+        ((not (plusp child-pid))
+         (handler-case (sb-posix:close master-fd)
+           (sb-posix:syscall-error () nil)))))))
 
 (defconstant +microseconds-per-second+
   1000000

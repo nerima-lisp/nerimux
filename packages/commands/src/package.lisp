@@ -11,6 +11,7 @@
     exists.")
   (:export
    #:close-pane-pty
+   #:stop-worktree-agent
    #:copy-mode-enter
    #:copy-mode-exit
    #:copy-mode-scroll

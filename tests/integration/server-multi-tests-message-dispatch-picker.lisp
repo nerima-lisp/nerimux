@@ -2,6 +2,54 @@
 
 (describe "server-multi-suite"
 
+  (it "pending-worktree-guards-reject-picker-transitions"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (window (nerimux/session:session-active-window s))
+             (pane (nerimux/window:window-active-pane window)))
+        (setf (nerimux::client-conn-view conn) :repolist)
+        (with-stubbed-fdefinition
+            ((nerimux::%reject-pending-worktree-attachment
+               (lambda (&rest arguments)
+                 (declare (ignore arguments))
+                 t)))
+          (expect (null (nerimux::%open-client-picker conn)))
+          (expect (null (nerimux::client-conn-modal conn)))
+          (setf (nerimux::client-conn-focus conn) pane
+                (nerimux::client-conn-modal conn) :picker
+                (nerimux::client-conn-view conn) :pane)
+          (expect (null (nerimux::%close-client-picker conn)))
+          (expect (eq :picker (nerimux::client-conn-modal conn)))
+          (expect (eq :pane (nerimux::client-conn-view conn)))
+          (expect (null (nerimux::%open-client-worktree-pane s conn nil)))
+          (expect (eq :picker (nerimux::client-conn-modal conn)))))))
+
+  (it "picker-refresh-settles-stale-on-synchronous-error"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn))
+            (reported nil)
+            (nerimux::*clients* nil)
+            (nerimux::*workspace-catalog-loaded-p* nil)
+            (nerimux::*workspace-scan-progress* 9)
+            (nerimux::*workspace-refreshing-ids* (make-hash-table :test #'equal))
+            (nerimux::*workspace-stale-ids* (make-hash-table :test #'equal))
+            (nerimux::*dirty* nil)
+            (nerimux/vcs::*workspace-organizations* nil))
+        (setf nerimux::*clients* (list conn))
+        (with-stubbed-fdefinition
+            ((nerimux/vcs:vcs-package-available-p (lambda () t))
+             (nerimux::%workspace-refresh-organizations-async
+              (lambda (&rest arguments)
+                (declare (ignore arguments))
+                (error "sync picker refresh failure"))))
+          (nerimux::%refresh-client-picker
+           conn :on-error (lambda (condition)
+                            (setf reported condition)))
+          (expect (typep reported 'error))
+          (expect nerimux::*workspace-catalog-loaded-p*)
+          (expect (null nerimux::*workspace-scan-progress*))
+          (expect nerimux::*dirty*)))))
+
   (it "picker-arrow-key-bytes-one-at-a-time-do-not-move-the-index"
     (with-fake-session (s)
       (let* ((organization
@@ -162,6 +210,7 @@
         (expect (nerimux::%set-client-picker-regex conn :on t))
         (expect (nerimux::%set-client-picker-regex conn "invalid" t))
         (expect (null (nerimux::%set-client-picker-regex conn :off t)))
+        (expect (null (nerimux::%set-client-picker-regex conn "invalid" t)))
         (expect (nerimux::%set-client-picker-query conn "ab"))
         (expect (nerimux::%append-client-picker-query-octets conn "c"))
         (expect (string= "abc" (nerimux::client-conn-picker-query conn)))

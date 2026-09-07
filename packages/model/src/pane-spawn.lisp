@@ -120,11 +120,15 @@
    a new PTY, and updates the pane's FD and PID.  The existing screen is
    preserved so the renderer can continue without a layout change.
    Returns the updated pane."
-  (let ((old-fd  (pane-fd  pane))
+  (with-lock-held ((pane-process-lock pane))
+   (let ((old-fd  (pane-fd  pane))
         (old-pid (pane-pid pane))
         (cols    (pane-width  pane))
         (rows    (pane-height pane)))
-    (close-pty old-fd old-pid)
+    (setf (pane-fd pane) -1
+          (pane-pid pane) -1
+          (pane-process-generation pane) (list nil))
+    (when (plusp old-fd) (close-pty old-fd old-pid))
     (multiple-value-bind (new-fd new-pid slave-path)
         (%spawn-shell-for-pane session rows cols
                                :start-dir start-dir
@@ -141,5 +145,6 @@
             (pane-bell-p pane) nil
             (pane-process-exited-p pane) nil
             (pane-non-zero-exit-p pane) nil
-            (pane-startup-failed-p pane) nil))
-    pane))
+            (pane-startup-failed-p pane) nil
+            (pane-stop-requested pane) nil))
+    pane)))

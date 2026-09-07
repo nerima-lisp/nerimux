@@ -290,6 +290,8 @@
         (expect (consp (nerimux::%client-picker-visible-items conn)))
         (expect (nerimux::%set-client-picker-regex conn nil nil))
         (expect (nerimux::client-conn-picker-regex-p conn))
+        (expect (null (nerimux::%set-client-picker-regex conn nil nil)))
+        (expect (null (nerimux::client-conn-picker-regex-p conn)))
         (expect (nerimux::%set-client-picker-query conn ""))
         (expect (nerimux::%append-client-picker-query-octets conn "repo"))
         (expect (nerimux::%append-client-picker-query-octets
@@ -651,6 +653,50 @@
       (expect (nerimux::%client-exit-copy-mode session conn))
       (expect (null (nerimux::client-conn-modal conn)))))
 
+  (it "blocks-workspace-ui-operations-while-worktree-deletion-is-pending"
+    (multiple-value-bind (organizations organization repository main-worktree
+                          feature-worktree)
+        (%make-server-dispatch-helper-fixture)
+      (declare (ignore organizations organization repository main-worktree))
+      (let* ((conn (nerimux::%make-client-conn))
+             (pane (nerimux/pane:make-pane :worktree feature-worktree))
+             (window (nerimux/window:make-window
+                      :id 1 :name "test" :active pane :panes (list pane)))
+             (session (nerimux/session:make-session
+                       :id 1 :name "test" :windows (list window)
+                       :active window))
+             (key (nerimux::%worktree-delete-key feature-worktree))
+             (reservations (make-hash-table :test #'equal))
+             (notifications nil)
+             (nerimux::*worktree-delete-reservations* reservations)
+             (nerimux/vcs::*workspace-organizations* nil))
+        (setf (gethash key reservations)
+              (nerimux::make-worktree-delete-reservation
+               :key key :worktree feature-worktree :panes (list pane))
+              (nerimux::client-conn-focus conn) pane
+              (nerimux::client-conn-view conn) :repolist
+              (nerimux::client-conn-modal conn) :normal)
+        (with-stubbed-fdefinition
+            ((nerimux::%client-notify
+               (lambda (connection message)
+                 (declare (ignore connection))
+                 (push message notifications))))
+          (expect (eq :normal
+                      (nerimux::%apply-client-ui-mode-target
+                       conn :enter-input)))
+          (expect (eq :normal
+                      (nerimux::%transition-client-ui-mode
+                       conn :enter-input)))
+          (expect (null (nerimux::%set-client-focus conn pane)))
+          (expect (eq :repolist (nerimux::%set-client-view conn :pane)))
+          (expect (null (nerimux::%client-enter-copy-mode session conn)))
+          (expect (= 5 (length notifications))))
+        (expect (eq feature-worktree
+                    (nerimux::%client-context-object conn nil)))
+        (expect (eq feature-worktree
+                    (nerimux::%client-operation-worktree conn)))
+        )))
+
   (it "command-buffer-delete-character-is-safe-at-both-boundaries"
     (let ((conn (nerimux::%make-client-conn)))
       (setf (nerimux::client-conn-command-buffer conn) "abc")
@@ -772,16 +818,59 @@
                         (format nil "~S" calls)))
         (expect (null (nerimux::client-conn-modal conn))))))
 
+  (it "workspace-completion-toggle-preserves-contextual-c-bindings"
+    (let ((session (nerimux/session:make-session :id 1 :name "test"))
+          (conn (nerimux::%make-client-conn))
+          (calls nil))
+      (with-stubbed-fdefinition
+          ((nerimux::%client-complete-workspace
+            (lambda (connection &key toggle)
+              (expect (eq conn connection))
+              (push (list :complete toggle) calls) t))
+           (nerimux::%client-open-selected-worktree-command
+            (lambda (actual-session connection command &key agent-kind)
+              (expect (eq session actual-session))
+              (expect (eq conn connection))
+              (push (list :agent command agent-kind) calls) t))
+           (nerimux::%open-client-transient
+            (lambda (connection key)
+              (expect (eq conn connection))
+              (push (list :transient key) calls) t)))
+        (setf (nerimux::client-conn-view conn) :repolist)
+        (expect (nerimux::%handle-client-ui-key-payload session conn #(67)))
+        (expect (nerimux::%handle-client-ui-key-payload session conn #(99)))
+        (setf (nerimux::client-conn-view conn) :status)
+        (expect (null (nerimux::%handle-client-ui-key-payload session conn #(67))))
+        (expect (nerimux::%handle-client-ui-key-payload session conn #(99)))
+        (expect (equal (reverse calls)
+                       (list (list :complete t)
+                             (list :agent nerimux::+workspace-claude-command+ :claude)
+                             (list :transient #\c)))))))
+
   (it "ui-key-dispatch-covers-common-and-status-contracts"
     (let* ((session (nerimux/session:make-session :id 1 :name "test"))
            (conn (nerimux::%make-client-conn))
            (calls 0)
+           (row-calls nil)
+           (prune-calls nil)
+           (create-calls nil)
            (record (lambda (&rest arguments)
                      (declare (ignore arguments))
                      (incf calls))))
       (with-stubbed-fdefinition
           ((nerimux::%client-meta-pending-consume record)
-           (nerimux::%select-client-tree-relative record)
+           (nerimux::%select-client-tree-relative
+             (lambda (received-conn delta)
+               (push (list received-conn delta) row-calls)
+               (incf calls)))
+           (nerimux::%client-start-worktree-create
+             (lambda (received-session received-conn)
+               (push (list received-session received-conn) create-calls)
+               t))
+           (nerimux::%client-prune-workspaces
+             (lambda (received-conn &key all)
+               (push (list received-conn all) prune-calls)
+               t))
            (nerimux::%client-toggle-selected-tree-row record)
            (nerimux::%client-set-visibility-level record)
            (nerimux::%focus-selected-client-worktree record)
@@ -797,10 +886,19 @@
            (nerimux::%client-unstage-selection record)
            (nerimux::%client-unstage-all record)
            (nerimux::%client-start-discard-selection record))
+        (setf (nerimux::client-conn-view conn) :status)
         (dolist (payload '("n" "p" #(9) "1" "2" "3" "4"
                            #(13) #(10) "g" "q" "$" "/" ":" "?"))
           (nerimux::%handle-client-ui-key-payload session conn payload))
+        (expect (equal (list (list conn -1) (list conn 1)) row-calls))
+        (expect (null create-calls))
+        (expect (null prune-calls))
         (setf (nerimux::client-conn-view conn) :repolist)
+        (dolist (payload '("n" "p" "P"))
+          (nerimux::%handle-client-ui-key-payload session conn payload))
+        (expect (equal (list (list session conn)) create-calls))
+        (expect (equal (list (list conn t) (list conn nil)) prune-calls))
+        (expect (equal (list (list conn -1) (list conn 1)) row-calls))
         (dolist (payload '("t" "c" "x"))
           (nerimux::%handle-client-ui-key-payload session conn payload))
         (setf (nerimux::client-conn-view conn) :status)
@@ -810,6 +908,7 @@
         (setf (gethash conn nerimux::*client-meta-pending*) :second)
         (nerimux::%handle-client-ui-key-payload session conn "x")
         (remhash conn nerimux::*client-meta-pending*)
+        (expect (equal (list (list conn t) (list conn nil)) prune-calls))
         (expect (= 38 calls)))))
 
   (it "open-selected-worktree-command-reports-missing-selection"
@@ -841,7 +940,8 @@
                t)))
         (expect (nerimux::%client-open-selected-worktree-command
                  :session conn :shell))
-        (expect (equal (list :session conn :worktree :default-command :shell)
+        (expect (equal (list :session conn :worktree :default-command :shell
+                             :agent-kind nil)
                        calls)))))
 
   (it "status-write-reports-transient-write-errors"
@@ -1267,7 +1367,7 @@
         (expect (eq lower (nerimux::client-conn-focus conn)))
         (expect nerimux::*dirty*))))
 
-  (it "starts worktree creation with an automatic branch for a selected repository"
+  (it "starts detached worktree creation for a selected repository"
     (let ((session (nerimux/session:make-session :id 1 :name "test"))
           (conn (nerimux::%make-client-conn))
           (repository (nerimux/workspace-model:make-repository
@@ -1278,15 +1378,14 @@
              (lambda (connection)
                (declare (ignore connection))
                repository))
-           (nerimux::%client-create-worktree-now
-             (lambda (selected branch connection current-session)
-               (setf arguments (list selected branch connection current-session))))
+           (nerimux::%client-create-detached-worktree
+             (lambda (selected connection current-session)
+               (setf arguments (list selected connection current-session))))
            (nerimux::%mark-dirty (lambda () t)))
         (expect (nerimux::%client-start-worktree-create session conn))
         (expect (eq repository (first arguments)))
-        (expect (uiop:string-prefix-p "wt-" (second arguments)))
-        (expect (eq conn (third arguments)))
-        (expect (eq session (fourth arguments))))))
+        (expect (eq conn (second arguments)))
+        (expect (eq session (third arguments))))))
 
   (it "settles asynchronous refreshes when startup fails synchronously"
     (let* ((worktree (nerimux/workspace-model:make-worktree
@@ -1416,6 +1515,43 @@
       (expect (string= "repository has no worktrees"
                        (first (nerimux::client-conn-message-log conn))))
       (expect (eq :repolist (nerimux::client-conn-view conn)))))
+
+  (it "enter-on-an-untyped-row-prefers-the-running-agent-pane"
+    (let* ((worktree
+             (nerimux/workspace-model:make-worktree
+              :id "running-agent-wt" :path "/tmp/running-agent-wt"))
+           (agent
+             (nerimux/pane:make-pane
+              :id 88 :x 0 :y 0 :width 80 :height 24 :fd 99 :pid 88
+              :agent-kind :codex))
+           (conn (nerimux::%make-client-conn)))
+      (nerimux/pane:worktree-add-pane worktree agent)
+      (setf (nerimux::client-conn-selected-tree-object conn) 'worktree-row
+            (nerimux::client-conn-selected-worktree conn) worktree)
+      (expect (nerimux::%focus-selected-client-worktree nil conn))
+      (expect (eq agent (nerimux::client-conn-focus conn)))
+      (expect (eq :pane (nerimux::client-conn-view conn)))))
+
+  (it "enter-on-an-untyped-row-falls-back-to-a-live-pane-after-agent-exit"
+    (let* ((agent
+             (nerimux/pane:make-pane
+              :id 89 :x 0 :y 0 :width 80 :height 24 :fd -1 :pid 89
+              :agent-kind :codex :process-exited-p t))
+           (plain
+             (nerimux/pane:make-pane
+              :id 90 :x 0 :y 0 :width 80 :height 24 :fd 100 :pid 90))
+           (worktree
+             (nerimux/workspace-model:make-worktree
+              :id "exited-agent-wt" :path "/tmp/exited-agent-wt"
+              :agent-pane agent))
+           (conn (nerimux::%make-client-conn)))
+      (nerimux/pane:worktree-add-pane worktree agent)
+      (nerimux/pane:worktree-add-pane worktree plain)
+      (setf (nerimux::client-conn-selected-tree-object conn) 'worktree-row
+            (nerimux::client-conn-selected-worktree conn) worktree)
+      (expect (nerimux::%focus-selected-client-worktree nil conn))
+      (expect (eq plain (nerimux::client-conn-focus conn)))
+      (expect (eq :pane (nerimux::client-conn-view conn)))))
 
   (it "enter-on-an-organization-row-toggles-its-collapse-state"
     (let* ((organization
@@ -1977,6 +2113,7 @@
                       (make-hash-table :test #'equal)))
                 (expect (null (nerimux::%remember-worktree-pane nil pane)))
                 (expect (null (nerimux::%remember-worktree-pane worktree nil)))
+                (expect (null (nerimux::%worktree-remembered-pane worktree)))
                 (nerimux/pane:worktree-add-pane worktree pane)
                 (nerimux::%remember-worktree-pane worktree pane)
                 (expect (eq pane (nerimux::%worktree-remembered-pane worktree)))
