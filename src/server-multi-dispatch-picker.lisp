@@ -1,5 +1,7 @@
 (in-package #:nerimux)
 
+(declaim (special *workspace-catalog-loaded-p* *workspace-scan-progress*))
+
 (defun %client-picker-items (conn)
   (or (client-conn-picker-items conn)
       (setf (client-conn-picker-items conn) (nerimux/picker:build-global-picker-items
