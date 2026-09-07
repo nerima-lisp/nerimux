@@ -139,8 +139,13 @@
           (multiple-value-setq (*term-rows* *term-cols*) (terminal-size))
           (setf *resize-pending* nil)
           (install-sigwinch-handler)
-          (with-raw-mode (clear-display)
-                         (%run-attach-session stream server-socket-fd target)))
+          (with-raw-mode
+            (unwind-protect
+                 (progn
+                   (nerimux/renderer:enable-host-modes)
+                   (clear-display)
+                   (%run-attach-session stream server-socket-fd target))
+              (nerimux/renderer:disable-host-modes))))
       (close-socket socket))))
 
 (defun %read-kill-reply (stream)
