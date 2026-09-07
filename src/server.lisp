@@ -1,9 +1,7 @@
 (in-package #:nerimux)
 
 (defun %socket-tmp-base ()
-  "The socket base directory: $TMPDIR, else /tmp (§1.4 — no -L/-S override,
-   and no legacy temp-dir env var override: R1.17 removed the CLI flags
-   that could reach one, and R2.7 dropped the env var alongside them)."
+  "The socket base directory: $TMPDIR, else /tmp."
   (let ((tmpdir (sb-ext:posix-getenv "TMPDIR")))
     (string-right-trim "/"
                        (if (and tmpdir (plusp (length tmpdir)))
@@ -99,11 +97,12 @@
                          (sb-posix:syscall-error () nil))))
     (unless pre-existing
       (handler-case
-          (ensure-directories-exist (format nil "~A/" dir))
-        (file-error () nil))
-      (handler-case
-          (sb-posix:chmod dir #o700)
-        (sb-posix:syscall-error () nil)))
+          (progn
+            (ensure-directories-exist (format nil "~A/" dir))
+            (handler-case
+                (sb-posix:chmod dir #o700)
+              (sb-posix:syscall-error () nil)))
+        (file-error () nil)))
     (%verify-socket-directory-private dir uid)
     dir))
 
@@ -131,7 +130,7 @@
    (socket-path NAME).  The session persists across detaches until its last
    window is killed."
   (require :sb-posix)
-  (install-pty-port)              ; wire the PTY adapter into the domain port
+  (install-pty-port)
   (setf *running*          t
         *dirty*            t
         *resize-pending*   nil

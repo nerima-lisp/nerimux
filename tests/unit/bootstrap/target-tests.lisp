@@ -2,6 +2,23 @@
 
 (describe "target-suite"
 
+  (it "define-target-lookup-preserves-an-optional-docstring"
+    (let ((name (gensym "TARGET-LOOKUP-")))
+      (unwind-protect
+           (let ((expansion
+                   (macroexpand-1
+                    `(nerimux::define-target-lookup ,name (value)
+                       "A lookup used to verify the macro contract."
+                       ((when (and value (numberp value)) :number))
+                       (:nil-guard value)))))
+             (expect (string= "A lookup used to verify the macro contract."
+                              (fourth expansion)))
+             (eval expansion)
+             (expect (eq :number (funcall name 7)))
+             (expect (null (funcall name nil))))
+        (when (fboundp name)
+          (fmakunbound name)))))
+
 
   (it "parse-session-component-table"
     (dolist (c '(("sess:win"   4   nil "sess"      "text before colon")
@@ -24,8 +41,10 @@
   (it "parse-target-table"
     (dolist (c '(("mysession"  "mysession" nil   nil   "plain name → session only")
                  ("sess:win"   "sess"      "win" nil   "sess:win → session+window")
+                 ("sess:"      "sess"      nil   nil   "empty window component is absent")
                  ("sess:win.3" "sess"      "win" "3"   "sess:win.pane → all three")
                  ("sess.2"     "sess"      nil   "2"   "sess.N (no colon) → session+pane")
+                 ("sess."       "sess"      nil   nil   "empty pane component is absent")
                  (":win"       nil         "win" nil   ":win → window only")
                  ("$1:@2.%3"  "$1"        "@2"  "%3"  "sigil forms → session+window+pane")
                  ("%2"         nil         nil   "%2"  "bare %N → pane id")

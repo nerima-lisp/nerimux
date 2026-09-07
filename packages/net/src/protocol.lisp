@@ -130,15 +130,6 @@ schema cannot silently generate a partial or non-byte-aligned codec."
    interned and executed, so there a repaired string would be a guess with
    consequences.
 
-   There is exactly one caller today: CLIENT.LISP's %DECODE-SERVER-FRAME, which
-   classifies on the frame TYPE alone, and %RECEIVE-SERVER-FRAME, which only
-   WRITE-STRINGs the text it returns.  Neither inspects the decoded string, so
-   the lenient policy has no behavioural edge case to state.  It used to: the
-   +msg-reply+ reader in client-command.lisp branched on (PLUSP (LENGTH TEXT))
-   and on a trailing newline, which a fully-malformed payload could perturb by
-   one synthesised TERPRI.  That reader went with the CLI command client, and
-   nothing sends +msg-reply+ any more.
-
    Leniency also matters because the caller establishes no handler: signalling
    here would unwind the client's event loop and kill the user's attached
    terminal mid-render over a single bad byte.  The replacement character is

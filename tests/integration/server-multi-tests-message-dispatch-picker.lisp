@@ -197,6 +197,8 @@
         (expect (null (nerimux::%append-client-picker-query-octets
                        conn #(194 32))))
         (expect (null (nerimux::%append-client-picker-query-octets
+                       conn 42)))
+        (expect (null (nerimux::%append-client-picker-query-octets
                        conn #(1))))
         (expect (null (nerimux::%delete-client-picker-query-character conn)))
         (setf (nerimux::client-conn-picker-items conn) nil
@@ -248,6 +250,20 @@
         (setf (nerimux::client-conn-picker-items conn) nil)
         (nerimux::%client-picker-visible-items conn)
         (expect (= 0 (nerimux::client-conn-picker-index conn))))))
+
+  (it "picker-selected-item-returns-the-current-visible-item"
+    (with-fake-session (s)
+      (let* ((first-item (nerimux/picker::%make-picker-item
+                          :id "first" :kind :repository :label "first"))
+             (second-item (nerimux/picker::%make-picker-item
+                           :id "second" :kind :repository :label "second"))
+             (conn (%make-test-conn)))
+        (setf (nerimux::client-conn-picker-items conn)
+              (list first-item second-item)
+              (nerimux::client-conn-picker-index conn) 1)
+        (expect (eq second-item (nerimux::%picker-selected-item conn)))
+        (setf (nerimux::client-conn-picker-items conn) nil)
+        (expect (null (nerimux::%picker-selected-item conn))))))
 
   (it "picker-selects-repository-and-organization-without-opening-a-pane"
     (with-fake-session (s)

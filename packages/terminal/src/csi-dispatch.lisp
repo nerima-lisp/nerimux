@@ -40,9 +40,7 @@
          (t (values))))))
 
 (defmacro define-csi-rule-set (name &body rules)
-  "Define NAME as a declarative provider of CSI RULES.
-The generated macro expands to a quoted rule list so composition can inspect
-the data without evaluating rule predicates outside EXECUTE-CSI."
+  "Define NAME as a declarative provider of CSI RULES."
   `(defmacro ,name ()
      (list 'quote ',rules)))
 

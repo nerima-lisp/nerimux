@@ -1,7 +1,6 @@
 (in-package #:nerimux/test)
 
-(describe "target-suite"
-
+(describe "target-edge-cases-suite"
 
   (it "sigil-id-table"
     (dolist (row '(("$1"   #\$  1   "dollar single-digit")
@@ -38,7 +37,9 @@
   (it "find-window-by-target-index-out-of-range-returns-nil"
     (let* ((w1   (make-window :id 1 :name "w1" :width 80 :height 24))
            (sess (make-session :id 1 :name "s" :windows (list w1))))
-      (expect (null (nerimux::find-window-by-target sess "5")))))
+      (expect (null (nerimux::find-window-by-target sess "5")))
+      (expect (null (nerimux::find-window-by-target sess "-1")))
+      (expect (null (nerimux::find-window-by-target sess "not-an-index")))))
 
 
   (it "find-pane-by-target-empty-panes-returns-nil"
@@ -49,7 +50,9 @@
     (let* ((p1  (make-no-pty-pane 1 0 0 80 24))
            (win (make-window :id 1 :name "w" :width 80 :height 24
                              :panes (list p1))))
-      (expect (null (nerimux::find-pane-by-target win "10")))))
+      (expect (null (nerimux::find-pane-by-target win "10")))
+      (expect (null (nerimux::find-pane-by-target win "-1")))
+      (expect (null (nerimux::find-pane-by-target win "not-an-index")))))
 
 
   (it "find-session-by-target-multi-digit-id"
@@ -70,15 +73,29 @@
                              :panes (list p1))))
       (expect (eq p1 (nerimux::find-pane-by-target win "%15")))))
 
+  (it "sigil-id-rejects-invalid-integer"
+    (expect (null (nerimux::%sigil-id "$not-an-id" #\$))))
+
   (it "define-target-lookup-supports-docstrings-and-nil-guards"
     (let ((name (gensym "TARGET-LOOKUP-")))
       (unwind-protect
            (progn
              (eval `(nerimux::define-target-lookup ,name (value)
-                      "Generated lookup."
+                      "Lookup used to verify the macro contract."
                       (:nil-guard value)
                       ((and (eql value :hit) :matched))))
              (expect (null (funcall name nil)))
+             (expect (eq :matched (funcall name :hit)))
+             (expect (null (funcall name :miss))))
+        (when (fboundp name)
+          (fmakunbound name)))))
+
+  (it "define-target-lookup-supports-rules-without-a-docstring"
+    (let ((name (gensym "TARGET-LOOKUP-")))
+      (unwind-protect
+           (progn
+             (eval `(nerimux::define-target-lookup ,name (value)
+                      ((when (eql value :hit) :matched))))
              (expect (eq :matched (funcall name :hit)))
              (expect (null (funcall name :miss))))
         (when (fboundp name)

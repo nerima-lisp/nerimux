@@ -68,37 +68,9 @@
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  ;; NO EXTERNAL (non-org) DEPENDENCIES. Every name below is a nerima-lisp
-  ;; sibling, so this system now satisfies DEPENDENCY_POLICY.md's default rule
-  ;; outright rather than through the grandfather clause it used to rely on, and
-  ;; CODING_STANDARD.md's "外部依存を持つのは nerimux の1リポジトリだけです" no
-  ;; longer describes any repository in the org.
-  ;;
-  ;; Four external dependencies were removed across the 2026-08-01/02 sweep, each
-  ;; replaced by an org sibling rather than by hand-written code:
-  ;;   * cffi              -> cl-process-kit (select(2)), cl-tty-kit (ioctl
-  ;;                          TIOCSWINSZ, read(2)) and sb-posix (kill(2)). This
-  ;;                          also FIXED a live bug: the old ioctl went through a
-  ;;                          fixed cffi prototype, which misfires on the arm64
-  ;;                          variadic ABI, so pane resize was a silent no-op on
-  ;;                          Apple Silicon.
-  ;;   * babel             -> cl-codec-kit, an independent from-scratch
-  ;;                          codec with no dependencies of its own, which
-  ;;                          cl-tty-kit and cl-process-kit already use. Call
-  ;;                          sites went through cl-host-kit for one day before
-  ;;                          being re-pointed here; cl-host-kit remains a
-  ;;                          dependency, but for pathname/string ops only.
-  ;;   * bordeaux-threads  -> cl-concurrent-kit. Portability was the whole point
-  ;;                          of bordeaux-threads and ADR-0048 makes the org
-  ;;                          SBCL-only, so it was buying nothing. Note
-  ;;                          WITH-TIMEOUT's shape differs (see below).
-  ;;   * cl-ppcre          -> cl-regex-kit. This one is NOT behaviour-preserving:
-  ;;                          cl-regex-kit is RE2/Rust-style with no
-  ;;                          backreferences and no lookaround. That is a
-  ;;                          deliberate trade, and it moves nerimux CLOSER to
-  ;;                          upstream tmux, which compiles #{m/r:} and #{s///}
-  ;;                          patterns with regcomp()+REG_EXTENDED — POSIX ERE,
-  ;;                          which has neither construct either.
+  ;; Runtime dependencies are provided by nerima-lisp sibling systems.
+  ;; Platform-specific process, terminal, codec, and concurrency operations
+  ;; stay in those libraries instead of being reimplemented here.
   :depends-on (:cl-date-kit      ; exact elapsed-time values for deadline APIs
                :cl-concurrent-kit ; threads, locks, condvars and preemptive deadlines
                :cl-regex-kit     ; regex engine behind copy-mode search/highlight and picker query matching
@@ -137,12 +109,8 @@
      ;; lives in packages/<name>/ and is named in :depends-on above, so this
      ;; module loads after all of them without having to say so.
      ((:file "package")             ; nerimux (BOOTSTRAP layer, needs everything)
-       ;; target resolution is a "nerimux"-package service (W4-prep found it was
-       ;; never really part of nerimux/model despite living in that directory);
-       ;; moved here from domain/model now that its true package's declaration
-       ;; also lives here.
        (:file "target")              ; session/window/pane target resolution (-t flag)
-       (:file "server-dispatch-macros") ; declarative rule-table macros (moved out of package.lisp, W6)
+       (:file "server-dispatch-macros") ; declarative rule-table macros
        (:file "runtime-data")         ; shared declarations and constants
        (:file "runtime")              ; channel sync + SIGWINCH
        (:file "runtime-reader-data")  ; PTY reader shared state
@@ -155,12 +123,20 @@
        (:file "server-multi-data") ; multi-client data declarations
        (:file "server-multi-dispatch") ; shared multi-client handlers
        (:file "server-multi-dispatch-prefix-data") ; prefix constants
+       (:file "server-multi-dispatch-fetch") ; fetch operations
+       (:file "server-multi-dispatch-confirm") ; confirmation modal state
        (:file "server-multi-dispatch-prefix") ; C-q workspace actions
        (:file "server-multi-workspace-selection") ; workspace catalog selection logic
-       (:file "server-multi-dispatch-picker") ; picker/tree selection
+       (:file "server-multi-dispatch-picker-data") ; selection identity data
+       (:file "server-multi-dispatch-picker") ; picker/tree selection logic
+       (:file "server-multi-dispatch-picker-input") ; picker query and key input
+       (:file "server-multi-dispatch-picker-open") ; picker worktree effects
        (:file "server-multi-dispatch-command-workspace-relative") ; relative tree selection
+       (:file "server-multi-dispatch-command-workspace-data") ; command argument data
        (:file "server-multi-dispatch-command-workspace") ; workspace UI helpers
-       (:file "server-multi-dispatch-command-worktree") ; worktree operations
+       (:file "server-multi-dispatch-command-workspace-context") ; workspace object context
+       (:file "server-multi-dispatch-command-worktree-create") ; create command
+       (:file "server-multi-dispatch-command-worktree") ; remaining operations
        (:file "server-multi-command-input-primitives") ; payload predicates and decoding
        ;; Before the keymap: %HANDLE-CLIENT-UI-KEY-PAYLOAD calls
        ;; %OPEN-CLIENT-TRANSIENT for every transient key. A forward call would
@@ -168,10 +144,17 @@
        ;; misspelled name here -- an undefined function fails at runtime, and a
        ;; transient key that silently does nothing looks like an unbound key.
        (:file "server-multi-transient-data") ; declarative transient menus
+       (:file "server-multi-dispatch-transient-render") ; transient display projections
        (:file "server-multi-dispatch-transient") ; magit transient state and key handling
        (:file "server-multi-dispatch-command-input-data") ; client input state
+       (:file "server-multi-dispatch-command-input-mode-data") ; branch-name data
+       (:file "server-multi-dispatch-command-input-tree-filter") ; tree filter state
+       (:file "server-multi-dispatch-command-input-mode-commands") ; command mode commands
+       (:file "server-multi-dispatch-command-input-mode-refresh") ; async refresh effects
+       (:file "server-multi-dispatch-command-status") ; status mutations
        (:file "server-multi-dispatch-command-input-mode") ; command mode and tree navigation
        (:file "server-multi-dispatch-command-input") ; client input and command entry
+       (:file "server-multi-dispatch-command-input-process-log") ; process log modal
        (:file "server-multi-dispatch-command-input-keymap") ; NIL-modal UI keymap
        (:file "server-multi-dispatch-tree-filter-data") ; tree-filter declarations
        (:file "server-multi-dispatch-tree-filter") ; tree-filter input mode

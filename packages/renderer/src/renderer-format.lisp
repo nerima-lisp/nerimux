@@ -100,7 +100,7 @@
    straddle the WIDTH boundary is dropped whole, never split, and the
    resulting short column is padded with spaces so a fixed-width caller's
    layout does not shift. WIDTH >= 4 keeps a 3-column \"...\" suffix (as the
-   pre-R6.9 length-based clip did); a narrower WIDTH truncates without one.
+   length-based clipping did); a narrower WIDTH truncates without one.
    The returned string's display width always equals WIDTH once VALUE
    exceeds it."
   (let* ((text

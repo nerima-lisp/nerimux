@@ -5,7 +5,7 @@
     PTY, moves octets across the master fd, drives termios raw mode and TIOCSWINSZ
     geometry, and multiplexes readiness with select(2) — nerimux needs to poll PTY,
     socket, and stdin fds together, which is the one libc call sb-posix does not
-    expose.  Supplies the concrete adapters that install-pty-port stores into
+    expose.  Supplies the concrete operations that install-pty-port stores into
     nerimux/ports.")
   (:export
    #:forkpty-with-shell    ; (rows cols) → (values master-fd child-pid slave-path)

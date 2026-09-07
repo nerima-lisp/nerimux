@@ -1,22 +1,5 @@
 (in-package #:nerimux/test)
 
-(defmacro with-stubbed-locked-fdefinitions (bindings &body body)
-  (let ((originals
-         (loop for (name replacement) in bindings
-               collect (list (gensym "ORIGINAL-") `(fdefinition ',name)))))
-    `(sb-ext:without-package-locks
-      (let ,originals
-        (unwind-protect 
-            (progn
-              ,@(loop for (name replacement) in bindings
-                      for (original-variable original) in originals
-                      collect `(setf (fdefinition ',name) ,replacement))
-              ,@body)
-          (progn
-            ,@(loop for (name replacement) in bindings
-                    for (original-variable original) in originals
-                    collect `(setf (fdefinition ',name) ,original-variable))))))))
-
 (describe "server-suite"
 
 
@@ -193,43 +176,19 @@
         (let ((dir (nerimux::%socket-directory)))
           (expect (directory (format nil "~A/" dir)))))))
 
-  (it "socket-directory-continues-when-directory-creation-fails"
+  (it "socket-directory-continues-after-creation-errors-before-verification"
     (with-stubbed-locked-fdefinitions
-        ((nerimux::%socket-tmp-base (lambda () "/tmp/nerimux-test-base"))
-         (sb-posix:lstat (lambda (path)
+        ((sb-posix:lstat (lambda (path)
                            (declare (ignore path))
-                           nil))
+                           (error 'sb-posix:syscall-error :errno 2)))
          (ensure-directories-exist (lambda (path)
                                      (declare (ignore path))
                                      (error 'file-error)))
          (sb-posix:chmod (lambda (path mode)
-                           (declare (ignore path mode))))
-         (nerimux::%verify-socket-directory-private
-          (lambda (path uid)
-            (declare (ignore path uid))
-            t)))
-      (expect (string= (format nil "/tmp/nerimux-test-base/nerimux-~D"
-                               (sb-posix:getuid))
-                       (nerimux::%socket-directory)))))
-
-  (it "socket-directory-continues-when-chmod-fails"
-    (with-stubbed-locked-fdefinitions
-        ((nerimux::%socket-tmp-base (lambda () "/tmp/nerimux-test-base"))
-         (sb-posix:lstat (lambda (path)
-                           (declare (ignore path))
-                           nil))
-         (ensure-directories-exist (lambda (path)
-                                     (declare (ignore path))))
-         (sb-posix:chmod (lambda (path mode)
                            (declare (ignore path mode))
-                           (error 'sb-posix:syscall-error)))
-         (nerimux::%verify-socket-directory-private
-          (lambda (path uid)
-            (declare (ignore path uid))
-            t)))
-      (expect (string= (format nil "/tmp/nerimux-test-base/nerimux-~D"
-                               (sb-posix:getuid))
-                       (nerimux::%socket-directory)))))
+                           (error 'sb-posix:syscall-error :errno 2))))
+      (signals error
+        (nerimux::%socket-directory))))
 
   (it "socket-path-name-is-fixed-for-a-given-session-name"
     (let ((p1 (nerimux::socket-path "fixedname"))
@@ -245,6 +204,21 @@
       (expect (member "--no-userinit" args :test #'string=))
       (expect (equal "server" (nth (- (length args) 2) args)))
       (expect (equal "session-name" (car (last args))))))
+
+  (it "server-respawn-command-omits-core-when-runtime-is-an-executable-core"
+    (let* ((runtime sb-ext:*runtime-pathname*)
+           (original-core sb-ext:*core-pathname*))
+      (unwind-protect
+           (progn
+             (setf sb-ext:*core-pathname* runtime)
+             (multiple-value-bind (exe args)
+                 (nerimux::%server-respawn-command "executable-core")
+               (expect (string= (namestring runtime) exe))
+               (expect (null (member "--core" args :test #'string=)))
+               (expect (equal '("--no-sysinit" "--no-userinit" "server"
+                                "executable-core")
+                              args))))
+        (setf sb-ext:*core-pathname* original-core))))
 
 
   (it "stale-socket-p-detects-dead-socket-file"
@@ -351,18 +325,14 @@
 
   (it "ensure-server-running-continues-when-stale-socket-cannot-be-deleted"
     (with-stubbed-locked-fdefinitions
-        ((nerimux::%stale-socket-p (lambda (path)
-                                      (declare (ignore path))
-                                      t))
-         (probe-file (lambda (path)
+        ((probe-file (lambda (path)
                        (declare (ignore path))
                        t))
          (nerimux/net:connect-to (lambda (path)
                                    (declare (ignore path))
                                    (error 'sb-bsd-sockets:socket-error)))
          (delete-file (lambda (path)
-                        (declare (ignore path))
-                        (error 'file-error)))
+                        (error 'file-error :pathname path)))
          (nerimux::%launch-server-and-poll-when-live
           (lambda (&rest args) (declare (ignore args)) nil)))
       (signals error
@@ -635,3 +605,41 @@
                (expect (null (nerimux::%stale-socket-p "/synthetic/socket"))))
           (setf (fdefinition 'probe-file) original-probe-file)))))
   )
+(describe "agent-workspace merge additions"
+  (it "socket-directory-continues-when-directory-creation-fails"
+      (with-stubbed-locked-fdefinitions
+          ((nerimux::%socket-tmp-base (lambda () "/tmp/nerimux-test-base"))
+           (sb-posix:lstat (lambda (path)
+                             (declare (ignore path))
+                             nil))
+           (ensure-directories-exist (lambda (path)
+                                       (declare (ignore path))
+                                       (error 'file-error)))
+           (sb-posix:chmod (lambda (path mode)
+                             (declare (ignore path mode))))
+           (nerimux::%verify-socket-directory-private
+            (lambda (path uid)
+              (declare (ignore path uid))
+              t)))
+        (expect (string= (format nil "/tmp/nerimux-test-base/nerimux-~D"
+                                 (sb-posix:getuid))
+                         (nerimux::%socket-directory)))))
+  (it "socket-directory-continues-when-chmod-fails"
+      (with-stubbed-locked-fdefinitions
+          ((nerimux::%socket-tmp-base (lambda () "/tmp/nerimux-test-base"))
+           (sb-posix:lstat (lambda (path)
+                             (declare (ignore path))
+                             nil))
+           (ensure-directories-exist (lambda (path)
+                                       (declare (ignore path))))
+           (sb-posix:chmod (lambda (path mode)
+                             (declare (ignore path mode))
+                             (error 'sb-posix:syscall-error)))
+           (nerimux::%verify-socket-directory-private
+            (lambda (path uid)
+              (declare (ignore path uid))
+              t)))
+        (expect (string= (format nil "/tmp/nerimux-test-base/nerimux-~D"
+                                 (sb-posix:getuid))
+                         (nerimux::%socket-directory)))))
+)

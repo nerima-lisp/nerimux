@@ -67,14 +67,8 @@
    directory that may not exist yet, and is chmod'd 0700 (%secure-log-directory)
    before the child can write into it.
 
-   Crash-forensic logging is a purely diagnostic feature and must not become a
-   hard dependency for starting a server: previously :output nil :error nil
-   needed no directory at all, so a read-only or permission-denied
-   XDG_STATE_HOME/NERIMUX_RUNTIME_STATE (common in containers/CI) would now
-   fail server auto-start outright.  Creating/securing LOG-PATH's directory
-   and the log-redirected run-program attempt are therefore wrapped together;
-   known filesystem, stream, and process-launch failures fall back to an
-   un-redirected launch instead of blocking startup."
+   Crash-forensic logging is diagnostic and must not block startup. Filesystem,
+   stream, and process-launch failures fall back to an unredirected launch."
   (let ((launched
           (handler-case
               (progn

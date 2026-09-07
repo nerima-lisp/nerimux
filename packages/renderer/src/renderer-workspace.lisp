@@ -1,179 +1,5 @@
 (in-package #:nerimux/renderer)
 
-(defun %workspace-prefix-label (code)
-  (if (and (integerp code) (<= 1 code) (<= code 26))
-      (format nil "C-~A" (code-char (+ (char-code #\a) (1- code))))
-      (format nil "key/~D" code)))
-
-(defun %emit-styled-row (stream row col width text)
-  "MOVE-TO (ROW, COL) and write TEXT — which may embed SGR escapes — clipped
-   SGR-aware to WIDTH display columns and padded with spaces to exactly WIDTH,
-   then reset.  The styled sibling of the plain CELL helper below: CELL's
-   %DISPLAY-CLIP counts every character, so escape-bearing text must come
-   through here instead."
-  (when (plusp width)
-    (move-to stream row col)
-    (let* ((clipped (%visible-truncate text width))
-           (pad (- width (%visible-length clipped))))
-      (write-string clipped stream)
-      (reset-attrs stream)
-      (when (plusp pad)
-        (write-string (make-string pad :initial-element #\Space) stream)))))
-
-(defun %workspace-state-text (worktree)
-  "WORKTREE's status tokens, palette-coloured with a plain reset after each
-   token (unlike %STATUS-STATE-TEXT, which restores the status bar's base
-   background and would leak it into a default-background panel)."
-  (format nil
-          "~{~A~^ ~}"
-          (mapcar
-           (lambda (token)
-             (let ((sgr (%worktree-state-token-sgr token)))
-               (if sgr
-                   (%sgr-wrap token sgr)
-                   token)))
-           (%worktree-status-tokens worktree))))
-
-(defun %workspace-hint (key description)
-  "One footer hint: KEY in bold accent, DESCRIPTION muted."
-  (format nil
-          "~A ~A"
-          (%sgr-wrap key +sgr-accent-bold+)
-          (%sgr-wrap description +sgr-muted+)))
-
-(defun %workspace-footer-line (mode prefix-code &optional tree-filter)
-  "The overview footer: a mode chip followed by two-tone key hints.  The
-   pre-theme footer spelled out every :wt-* command; those are discoverable
-   from the `:` prompt's completion now, so the footer keeps only the
-   single-key surface. When TREE-FILTER is a non-empty string, a muted
-   `/query` chip is prepended so an active filter stays visible after the
-   user leaves tree-filter input mode and returns to ordinary navigation
-   (R... one-column redesign, PR2)."
-  (format nil
-          " ~A~A  ~{~A~^  ~}"
-          (if (plusp (length (or tree-filter "")))
-              (format nil
-                      "~A  "
-                      (%sgr-wrap (format nil "/~A" tree-filter) +sgr-muted+))
-              "")
-          (%sgr-wrap (format nil " ~:@(~A~) " mode) +sgr-mode-chip+)
-          (append
-           (when (eq mode :repolist)
-             (list (%workspace-hint "n" "create+assign")
-                   (%workspace-hint "a" "assign")))
-           (list (%workspace-hint (if (eq mode :repolist) "Down/p" "n/p") "select")
-                (%workspace-hint "Enter" "agent>terminal>assign")
-                (%workspace-hint "Tab" "expand")
-                (%workspace-hint "g" "refresh")
-                (%workspace-hint "/" "filter")
-                (%workspace-hint ":" "command")
-                (%workspace-hint "?" "menu")
-                (%workspace-hint
-                 (format nil "~A d" (%workspace-prefix-label prefix-code))
-                 "detach")))))
-
-(defun %workspace-key-panel-content (selected-object mode prefix-code tree-filter)
-  "Two values -- the key panel's two content lines -- switching on
-   SELECTED-OBJECT's row kind: a section keyword (:ATTENTION/:ACTIVE/
-   :REPOSITORIES, the section headers' OBJECT), a REPOSITORY, or anything
-   else (a WORKTREE, or no selection at all, which shares the worktree-row
-   hints as the common default). Line 2 carries the mode chip and the
-   tree-filter's `/query` chip, mirroring %WORKSPACE-FOOTER-LINE -- the
-   single-line footer this panel replaces at TERMINAL-ROWS >= 12."
-  (values
-   (format nil " ~{~A~^  ~}"
-           (append
-            (when (eq mode :repolist)
-              (list (%workspace-hint "n" "create+assign")
-                    (%workspace-hint "a" "assign")))
-            (cond
-             ((keywordp selected-object)
-              (list (%workspace-hint "Enter/Tab" "fold")
-                    (%workspace-hint "M-n/M-p" "section")
-                    (%workspace-hint "1-4" "level")
-                    (%workspace-hint "/" "filter")
-                    (%workspace-hint "C-p" "picker")
-                    (%workspace-hint "g" "refresh")))
-             ((typep selected-object 'repository)
-              (list (%workspace-hint "Enter" "main:agent>terminal>assign")
-                    (%workspace-hint "Tab" "expand")
-                    (%workspace-hint "w" "worktree menu")
-                    (%workspace-hint "f" "fetch menu")))
-             ((and (consp selected-object) (eq (first selected-object) :file))
-              (list (%workspace-hint "Tab" "diff")
-                    (%workspace-hint "s/u" "stage")
-                    (%workspace-hint "k" "discard")
-                    (%workspace-hint (if (eq mode :repolist) "Down/p" "n/p") "move")))
-             ((and (consp selected-object)
-                   (member (first selected-object) '(:diff-line :diff-more)))
-              (list (%workspace-hint (if (eq mode :repolist) "Down/p" "n/p") "move")))
-             ((and (consp selected-object) (eq (first selected-object) :commit))
-              (list (%workspace-hint (if (eq mode :repolist) "Down/p" "n/p") "select")
-                    (%workspace-hint "Tab" "diff")))
-             ((typep selected-object 'pane)
-              (list (%workspace-hint "Enter" "focus")
-                    (%workspace-hint (if (eq mode :repolist) "Down/p" "n/p") "select")))
-             (t
-              (list (%workspace-hint "Enter" "agent>terminal>assign")
-                    (%workspace-hint "Tab" "expand")
-                    (%workspace-hint "w" "worktree menu")
-                    (if (eq mode :repolist)
-                        (%workspace-hint "c/x" "Claude/Codex")
-                        (%workspace-hint "c/P/F" "commit/push/pull"))
-                    (%workspace-hint "g" "refresh"))))))
-   (format nil " ~A~A  ~{~A~^  ~}"
-           (if (plusp (length (or tree-filter "")))
-               (format nil "~A  " (%sgr-wrap (format nil "/~A" tree-filter) +sgr-muted+))
-               "")
-           (%sgr-wrap (format nil " ~:@(~A~) " mode) +sgr-mode-chip+)
-           (list (%workspace-hint "q" "back")
-                 (%workspace-hint "?" "menu")
-                 (%workspace-hint "$" "log")
-                 (%workspace-hint ":" "command")
-                 (%workspace-hint (format nil "~A w" (%workspace-prefix-label prefix-code))
-                                  "status")
-                 (%workspace-hint (format nil "~A d" (%workspace-prefix-label prefix-code))
-                                  "detach")))))
-
-(defun %render-workspace-scanning-frame (terminal-rows terminal-cols
-                                                       &key
-                                                       scan-progress)
-  "Render the complete frame shown while the workspace catalog is scanning."
-  (let* ((rows (max 1 terminal-rows))
-         (cols (max 1 terminal-cols))
-         (stream (make-string-output-stream))
-         (message
-          (if (and (integerp scan-progress) (plusp scan-progress))
-              (format nil
-                      "scanning workspaces... ~D repositories"
-                      scan-progress)
-              "scanning workspaces..."))
-         (text (%display-clip message cols)))
-    (cursor-invisible stream)
-    (move-to stream (floor rows 2) (%center-coord cols (%display-width text)))
-    (%emit-sgr stream +sgr-muted-italic+)
-    (write-string text stream)
-    (reset-attrs stream)
-    (write-string (%client-title-osc nil nil) stream)
-    (get-output-stream-string stream)))
-
-(defun %render-workspace-empty-catalog-hint (stream rows cols ghq-root)
-  "Render centered guidance when the catalog is empty and scanning is done."
-  (let ((top (max 0 (1- (floor rows 2))))
-        (lines
-         (list (cons "no repositories found" +sgr-muted-italic+)
-               (cons (format nil "ghq root: ~A" ghq-root) +sgr-muted+)
-               (cons "get one: ghq get <owner>/<repo>" +sgr-muted+))))
-    (loop for (text . sgr) in lines
-          for row from top
-          for clipped = (%display-clip text cols)
-          do (move-to stream row (%center-coord cols (%display-width clipped))) (%emit-sgr
-                                                                                 stream
-                                                                                 sgr) (write-string
-                                                                                       clipped
-                                                                                       stream) (reset-attrs
-                                                                                                stream))))
-
 (defun render-workspace-overview-to-string
     (organizations terminal-rows terminal-cols &key focus-pane
                                             selected-tree-object
@@ -196,7 +22,7 @@
                                             (tree-filter nil)
                                             (precomputed-tree-entries nil))
   "Render the bare-repository/worktree overview used by an attached client:
-   a header, the tree (its only panel now -- PR2's one-column redesign), a
+   a header, the tree panel, a
    separator, a 2-line detail panel for the current selection, a
    most-recent-message strip, and a bottom key panel (2 content lines plus
    its own divider at TERMINAL-ROWS >= 12, else the single-line
@@ -222,17 +48,8 @@
    line -- neither mode's ordinary key hints or divider draw at all while
    the prompt is active, matching the single-line footer's own pre-key-
    panel behaviour.
-   PRECOMPUTED-TREE-ENTRIES, when non-NIL, is used verbatim instead of
-   calling %WORKSPACE-FLAT-TREE-ENTRIES again -- RENDER-WORKSPACE-OVERVIEW-
-   TO-TUI-STRING (renderer-tui-kit.lisp) flattens the tree once per frame
-   and passes the result here, since this function used to redo that same
-   walk of the org/repo/worktree/pane graph on every call regardless of
-   whether the caller already had it. NIL still means \"not supplied\" (the
-   default, and what a direct caller such as a test gets), so it falls back
-   to computing it here exactly as before; the one frame where that is
-   wrong -- FILTER narrows the tree to genuinely zero rows, which is also
-   NIL -- just recomputes an already-empty result, which is cheap and not a
-   correctness gap."
+  PRECOMPUTED-TREE-ENTRIES, when non-NIL, is used verbatim. NIL requests
+  that this function compute the flattened tree entries itself."
   (if (and scanning-p (null organizations))
       (%render-workspace-scanning-frame terminal-rows terminal-cols
                                         :scan-progress scan-progress)

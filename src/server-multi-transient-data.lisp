@@ -66,11 +66,11 @@
                (list (list #\f "fetch this repository"
                            (list :call (lambda (session conn)
                                          (declare (ignore session))
-                                         (%workspace-prefix-fetch-repository conn))))
+                                         (%workspace-fetch-repository conn))))
                      (list #\F "fetch organization"
                            (list :call (lambda (session conn)
                                          (declare (ignore session))
-                                         (%workspace-prefix-fetch-organization conn)))))))
+                                         (%workspace-fetch-organization conn)))))))
    (cons #\t
          (list "Tag" nil
                (list (list #\l "list tags"

@@ -20,12 +20,7 @@
 
 (defconstant +max-scrollback-lines+
   10000
-  "Scrollback cap, in rows (§1.4).
-
-   This used to be a 1000-row fallback behind *HISTORY-LIMIT-FUNCTION*, a
-   callback the bootstrap layer installed so the terminal model never reached up
-   into the options package. With the option gone there is one number and no
-   injection point, so the callback and its fallback collapse into this.")
+  "Scrollback cap, in rows.")
 
 (defun trim-scroll-history (screen)
   "Cap the scrollback buffer of SCREEN to +MAX-SCROLLBACK-LINES+.

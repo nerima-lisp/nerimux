@@ -29,10 +29,16 @@
     (finishes (nerimux/pty:disable-raw-mode! 99)))
 
   (it "enable-then-disable-round-trips-on-tty"
-    (let ((enabled (handler-case (progn (nerimux/pty:enable-raw-mode! 1) t)
-                     (error () nil))))
-      (if (not enabled)
-          (skip "raw mode cannot be entered on fd 1 in this environment")
-          (unwind-protect
-               (finishes (nerimux/pty:disable-raw-mode! 1))
-            (ignore-errors (nerimux/pty:disable-raw-mode! 1)))))))
+    (let ((stdout-is-not-tty (string= ""
+                                      (uiop:run-program '("sh" "-c"
+                                                          "test -t 1 && printf tty")
+                                                        :output :string
+                                                        :error-output nil
+                                                        :ignore-error-status t))))
+      (if stdout-is-not-tty
+        (skip "stdout is not a tty in this environment")
+        (unwind-protect
+             (progn
+               (nerimux/pty:enable-raw-mode! 1)
+               (finishes (nerimux/pty:disable-raw-mode! 1)))
+          (ignore-errors (nerimux/pty:disable-raw-mode! 1)))))))

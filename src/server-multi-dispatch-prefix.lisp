@@ -83,7 +83,7 @@
    shutdown paths (%FORCE-KILL-PANES, RUN-SERVER's unwind) deliberately keep
    using CLOSE-PANE-PTY, because they read PANE-PID back afterwards to
    escalate to SIGKILL."
-  (multiple-value-bind (pane window worktree) 
+  (multiple-value-bind (pane window worktree)
       (%workspace-prefix-context session conn)
     (when (or (%reject-pending-worktree-attachment conn :worktree worktree :pane pane :window window)
               (some (lambda (candidate)
@@ -144,7 +144,7 @@
 (defun %workspace-prefix-cycle-window (session conn delta)
   "C-q n / C-q p : cycle DELTA steps through the current worktree's windows
    (wrapping), un-zooming the departing window first per R5.6."
-  (multiple-value-bind (pane window worktree) 
+  (multiple-value-bind (pane window worktree)
       (%workspace-prefix-context session conn)
     (declare (ignore pane))
     (cond
@@ -167,15 +167,30 @@
                (%mark-dirty)))))))
   nil)
 
-(defun %workspace-prefix-open-overview (session conn)
-  "Return directly to the workspace overview, retaining the focused worktree
-   selection."
+(defun %workspace-prefix-open-status (session conn)
+  "C-q w (FR-009): step out of a pane towards the workspace views, one level
+   per press -- :pane to :status, and :status on to :repolist.
+
+   The second step is what makes the repolist reachable at all. FR-006's `q`
+   ladder returns :status to the focused pane whenever one is live, which is
+   the ordinary case, so `q` alone can never walk OUT to the flat multi-repo
+   list; and the magit keymap retired `o`, which was the only key that did
+   that before. Without this, a user with any live pane could reach :repolist
+   only by closing every pane in the window.
+
+   With no pane focused -- or a focused pane with no worktree, which the
+   status view has nothing to render for either -- this goes straight to
+   :repolist rather than notifying and leaving the screen as it was, so the
+   key is never a dead end."
   (multiple-value-bind (pane window worktree) 
       (%workspace-prefix-context session conn)
     (declare (ignore window))
-    (when (and pane worktree)
-      (%set-client-selected-worktree conn worktree))
-    (%set-client-view conn :repolist))
+    (cond
+      ((eq (client-conn-view conn) :status) (%set-client-view conn :repolist))
+      ((and pane worktree)
+        (setf (client-conn-selected-worktree conn) worktree)
+        (%set-client-view conn :status))
+      (t (%set-client-view conn :repolist))))
   nil)
 
 (defun %workspace-prefix-open-scrollback (session conn)
@@ -189,6 +204,63 @@
   (when (%client-enter-copy-mode session conn)
     (%set-client-modal conn :scrollback))
   nil)
+
+(defun %workspace-prefix-quit-server (session conn)
+  "C-q Q (R8.2): ask before stopping the server, showing how many panes are
+   still running so the count is in front of the user at the moment they answer
+   — not discovered afterwards."
+  (let* ((live  (%session-live-panes session))
+         (count (length live)))
+    (%open-confirm-view
+     conn
+     "SERVER QUIT"
+     (list (cons "session" (session-name session))
+           (cons "panes" (format nil "~D open" count))
+           (cons "effect" (if (plusp count)
+                              "every pane is signalled and the server exits"
+                              "the server exits")))
+     (lambda ()
+       (%server-kill-request session t)
+       :quit))))
+
+(define-key-rules %workspace-prefix-dispatch (session conn byte)
+  "Resolve BYTE — the key struck right after C-q — against 1.5's table and
+   run its action.  Returns the loop disposition (NIL to keep serving,
+   :drop for `d`).  A BYTE with no binding here is discarded: the prefix
+   already consumed it and nothing else happens (R4.4)."
+  (#\- (%workspace-prefix-split session conn :v))
+  (#\| (%workspace-prefix-split session conn :h))
+  (#\x (%workspace-prefix-close-pane session conn))
+  (#\z (%workspace-prefix-toggle-zoom session conn))
+  (#\h (%workspace-prefix-move-focus session conn :left))
+  (#\j (%workspace-prefix-move-focus session conn :down))
+  (#\k (%workspace-prefix-move-focus session conn :up))
+  (#\l (%workspace-prefix-move-focus session conn :right))
+  (#\n (%workspace-prefix-cycle-window session conn 1))
+  (#\p (%workspace-prefix-cycle-window session conn -1))
+  (#\w (%workspace-prefix-open-status session conn))
+  (#\t (%client-open-selected-worktree-command session conn nil))
+  (#\[ (%workspace-prefix-open-scrollback session conn))
+  (#\d :drop)
+  (#\Q (%workspace-prefix-quit-server session conn))
+  ((and (integerp byte)
+        (= byte (client-conn-workspace-prefix-code conn)))
+   (%set-client-modal conn nil)
+   nil)
+  (t nil))
+
+
+(defun %workspace-prefix-open-overview (session conn)
+  "Return directly to the workspace overview, retaining the focused worktree
+   selection."
+  (multiple-value-bind (pane window worktree)
+      (%workspace-prefix-context session conn)
+    (declare (ignore window))
+    (when (and pane worktree)
+      (%set-client-selected-worktree conn worktree))
+    (%set-client-view conn :repolist))
+  nil)
+
 
 (defun %workspace-prefix-fetch-repository (conn)
   "Fetch the selected repository, then refresh status.  No longer bound to
@@ -235,6 +307,7 @@ FETCH-REPOSITORY-ASYNC)."
             (%client-notify conn (format nil "fetch failed: ~A" condition)))))))
   nil)
 
+
 (defun %workspace-prefix-fetch-organization (conn)
   "Fetch every repository in the selected organization concurrently, then
    refresh status.  No longer bound to C-q C-f -- same removal, and the same
@@ -279,89 +352,3 @@ FETCH-REPOSITORY-ASYNC)."
           (error (condition)
             (%client-notify conn (format nil "fetch failed: ~A" condition)))))))
   nil)
-
-(defun %open-confirm-view (conn operation fields action &key on-cancel)
-  "Put a y/n confirmation in front of CONN and remember what to run on y.
-   OPERATION titles the box; FIELDS is the ordered (LABEL . VALUE) body."
-  (setf (client-conn-confirm-view conn)
-        (nerimux/renderer:make-confirm-view :operation operation
-                                            :fields fields
-                                            :prompt-p t)
-        (client-conn-confirm-action conn) action
-        (client-conn-confirm-cancel-action conn) on-cancel)
-  (%set-client-modal conn :confirm)
-  nil)
-
-(defun %close-confirm-view (conn)
-  "Take the confirmation down and forget its pending action."
-  (setf (client-conn-confirm-view conn) nil
-        (client-conn-confirm-action conn) nil
-        (client-conn-confirm-cancel-action conn) nil)
-  (%set-client-modal conn nil))
-
-(defun %handle-confirm-key (session conn payload)
-  "Answer the confirmation CONN is looking at.  Returns two values: whether the
-   key was consumed here, and the loop disposition.
-
-   Only y and n are consumed.  Every other key is swallowed too — a
-   confirmation that let j scroll the tree underneath it would be asking about
-   one thing while the user changed another."
-  (declare (ignore session))
-  (let ((action (client-conn-confirm-action conn))
-        (cancel (client-conn-confirm-cancel-action conn)))
-    (cond
-      ((%client-key-p payload #\y)
-        (%close-confirm-view conn)
-        (values t (and action (funcall action))))
-      ((%client-key-p payload #\n)
-        (%close-confirm-view conn)
-        (%client-notify conn "cancelled")
-        (values t (and cancel (funcall cancel))))
-      (t (values t nil)))))
-
-(defun %workspace-prefix-quit-server (session conn)
-  "C-q Q (R8.2): ask before stopping the server, showing how many panes are
-   still running so the count is in front of the user at the moment they answer
-   — not discovered afterwards."
-  (let* ((live  (%session-live-panes session))
-         (count (length live)))
-    (%open-confirm-view
-     conn
-     "SERVER QUIT"
-     (list (cons "session" (session-name session))
-           (cons "panes" (format nil "~D open" count))
-           (cons "effect" (if (plusp count)
-                              "every pane is signalled and the server exits"
-                              "the server exits")))
-     (lambda ()
-       (%server-kill-request session t)
-       :quit))))
-
-(define-key-rules %workspace-prefix-dispatch (session conn byte)
-  "Resolve BYTE — the key struck right after C-q — against 1.5's table and
-   run its action.  Returns the loop disposition (NIL to keep serving,
-   :drop for `d`).  A BYTE with no binding here is discarded: the prefix
-   already consumed it and nothing else happens (R4.4)."
-  (#\- (%workspace-prefix-split session conn :v))
-  (#\| (%workspace-prefix-split session conn :h))
-  (#\x (%workspace-prefix-close-pane session conn))
-  (#\z (%workspace-prefix-toggle-zoom session conn))
-  (#\h (%workspace-prefix-move-focus session conn :left))
-  (#\j (%workspace-prefix-move-focus session conn :down))
-  (#\k (%workspace-prefix-move-focus session conn :up))
-  (#\K (nerimux/commands:stop-worktree-agent
-         (client-conn-selected-worktree conn) :on-finish #'%mark-dirty)
-        nil)
-  (#\l (%workspace-prefix-move-focus session conn :right))
-  (#\n (%workspace-prefix-cycle-window session conn 1))
-  (#\p (%workspace-prefix-cycle-window session conn -1))
-  (#\w (%workspace-prefix-open-overview session conn))
-  (#\t (%client-open-selected-worktree-command session conn nil))
-  (#\[ (%workspace-prefix-open-scrollback session conn))
-  (#\d :drop)
-  (#\Q (%workspace-prefix-quit-server session conn))
-  ((and (integerp byte)
-        (= byte (client-conn-workspace-prefix-code conn)))
-   (%set-client-modal conn nil)
-   nil)
-  (t nil))

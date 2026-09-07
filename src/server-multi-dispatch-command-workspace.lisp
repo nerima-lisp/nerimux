@@ -1,17 +1,5 @@
 (in-package #:nerimux)
 
-(defun %reject-pending-worktree-attachment (conn &key worktree
-                                                   (pane (client-conn-focus conn))
-                                                   (window
-                                                    (let ((session (%attach-target-session)))
-                                                      (and session (session-active-window session)))))
-  (when (or (%worktree-delete-pending-p worktree)
-            (%pane-delete-pending-p pane)
-            (%pane-delete-pending-p (client-conn-stdin-target conn))
-            (%window-delete-pending-p window))
-    (%client-notify conn "worktree deletion is pending")
-    t))
-
 (defun %client-ui-mode-p (mode)
   (member mode +client-ui-modes+ :test #'eq))
 
@@ -149,77 +137,33 @@
     (%mark-dirty)
     t))
 
-(defun %parse-client-integer (value)
-  (and (stringp value)
-       (handler-case (parse-integer value)
-         (parse-error ()
-           nil))))
-
 (defun %move-client-viewport (conn delta)
   (when (integerp delta)
     (setf (client-conn-viewport conn) (max 0
                                            (+ (client-conn-viewport conn) delta))))
   (client-conn-viewport conn))
 
-(defun %client-option-value (args names)
-  (loop for tail on args
-        for arg = (first tail)
-        when (stringp arg)
-          do (dolist (name names)
-               (when (string-equal arg name)
-                 (return-from %client-option-value
-                   (second tail)))
-               (when 
-                   (and (> (length arg) (length name))
-                        (string-equal name arg :end2 (length name))
-                        (char= (char arg (length name)) #\=))
-                 (return-from %client-option-value
-                   (subseq arg (1+ (length name))))))))
-
-(defun %client-boolean-option-p (args names)
-  (some
-   (lambda (arg)
-     (and (stringp arg)
-          (some
-           (lambda (name)
-             (string-equal arg name))
-           names)))
-   args))
-
-(defun %parse-client-key-code (value)
-  (cond
-    ((integerp value) value)
-    ((stringp value)
-     (let ((text (string-downcase value)))
-       (cond
-         ((member text '("c-q" "control-q" "control q") :test #'string=) #x11)
-         ((member text '("c-b" "control-b" "control b") :test #'string=) #x02)
-         ((= (length text) 1) (char-code (char text 0)))
-         ((handler-case (parse-integer text)
-            (parse-error ()
-              nil)))
-         (t nil))))
-    (t nil)))
-
 (defun %client-live-p (conn)
   (member conn *clients* :test #'eq))
 
 (defun %attach-target-session ()
-  "The one live session a running server holds, or NIL outside one.
-
-   %CLIENT-ATTACH-TARGET below needs a session to jump a cwd-matched client
-   straight to its detail pane (FR-002's %FOCUS-SELECTED-CLIENT-WORKTREE
-   call), but its one call site -- the :ATTACH-TARGET rule in
-   server-multi-dispatch-command.lisp, which is outside this change's scope
-   -- invokes it as (%client-attach-target conn args), with no session
-   argument, and server-dispatch-helper-tests.lisp calls it the same way
-   directly. Adding a session parameter would have to default to something
-   in both of those callers anyway, so this reads the one session
-   RUN-SERVER (server.lisp) registers instead of threading one through:
-   *SERVER-SESSIONS* is empty in the unit test (no session ever registered
-   there), which is exactly what keeps this whole feature a no-op there
-   rather than a broken multiple-value-setq target."
+  "Return the session registered by the running server, if any."
   (cdr (first *server-sessions*)))
+
+(defun %client-attach-refresh-catalog (conn session cwd)
+  (multiple-value-bind (worktree source)
+      (%client-attach-selection conn (nerimux/vcs:workspace-organizations))
+    (when (and session
+               (null worktree)
+               (stringp cwd)
+               (plusp (length cwd)))
+      (let ((organizations (nerimux/vcs:resolve-directory-organizations cwd)))
+        (when organizations
+          (nerimux/vcs:merge-workspace-organizations organizations)
+          (multiple-value-setq (worktree source)
+            (%client-attach-selection
+             conn (nerimux/vcs:workspace-organizations))))))
+    (values worktree source)))
 
 (defun %client-attach-target (conn args)
   (let ((target (first args))
@@ -266,130 +210,20 @@
         (%mark-dirty)))
     text))
 
-(defun %client-positional-branch (args)
-  (let ((skip-next nil))
-    (dolist (arg args)
-      (cond
-        (skip-next
-         (setf skip-next nil))
-        ((and (stringp arg)
-              (member arg
-                      '("--branch" "-b" "branch" "--path" "path")
-                      :test
-                      #'string-equal))
-         (setf skip-next t))
-        ((and (stringp arg)
-              (plusp (length arg))
-              (char/= (char arg 0) #\-)
-              (not (member arg '("confirm" "force") :test #'string-equal)))
-         (return-from %client-positional-branch
-           arg))))))
-
-(defun %workspace-find-repository (token &optional
-                                         (organizations
-                                          (nerimux/vcs:workspace-organizations)))
-  (when token
-    (dolist (organization organizations)
-      (dolist 
-          (repository
-           (nerimux/workspace-model:organization-repositories organization))
-        (when 
-            (or (eq repository token)
-                (and (stringp token)
-                     (some
-                      (lambda (value)
-                        (and value (string= token (princ-to-string value))))
-                      (list (nerimux/workspace-model:repository-id repository)
-                            (nerimux/workspace-model:repository-specification
-                             repository)
-                            (nerimux/workspace-model:repository-local-path
-                             repository)
-                            (nerimux/workspace-model:repository-local-path repository)))))
-          (return-from %workspace-find-repository
-            repository))))))
-
-(defun %workspace-find-organization (token &optional
-                                           (organizations
-                                            (nerimux/vcs:workspace-organizations)))
-  (when token
-    (find-if
-     (lambda (organization)
-       (or (eq organization token)
-           (and (stringp token)
-                (some
-                 (lambda (value)
-                   (and value (string= token (princ-to-string value))))
-                 (list (nerimux/workspace-model:organization-id organization)
-                       (nerimux/workspace-model:organization-host organization)
-                       (nerimux/workspace-model:organization-name organization)
-                       (%organization-selection-token organization))))))
-     organizations)))
-
-(defun %workspace-find-tree-object (token &optional
-                                          (organizations
-                                           (nerimux/vcs:workspace-organizations)))
-  (cond
-    ((typep token 'nerimux/workspace-model:organization) token)
-    ((typep token 'nerimux/workspace-model:repository) token)
-    ((typep token 'nerimux/workspace-model:worktree) token)
-    ((and (consp token) (keywordp (first token)))
-     (case (first token)
-       (:organization
-        (%workspace-find-organization (second token) organizations))
-       (:repository (%workspace-find-repository (second token) organizations))
-       (:worktree (%workspace-find-worktree (second token) organizations))
-       (:section (second token))))
-    ((stringp token)
-     (or (%workspace-find-worktree token organizations)
-         (%workspace-find-repository token organizations)
-         (%workspace-find-organization token organizations)))))
-
-(defun %client-context-object (conn target)
-  (or (%workspace-find-tree-object target)
-      (%client-tree-object conn)
-      (%workspace-find-tree-object (%client-selection-token conn))))
-
-(defun %client-selected-repository (conn &optional target)
-  (let ((object (%client-context-object conn target)))
-    (typecase object
-      (nerimux/workspace-model:repository object)
-      (nerimux/workspace-model:worktree
-       (nerimux/workspace-model:worktree-repository object))
-      (nerimux/workspace-model:organization
-       (let ((repositories
-              (nerimux/workspace-model:organization-repositories object)))
-         (and (= (length repositories) 1) (first repositories)))))))
-
-(defun %client-selected-organization (conn &optional target)
-  "Resolve the organization C-q C-f should fetch: the selected organization
-itself, or the organization owning the selected repository or worktree.
-Mirrors %CLIENT-SELECTED-REPOSITORY's object-resolution chain, one level up
-the tree (R7.1)."
-  (let ((object (%client-context-object conn target)))
-    (typecase object
-      (nerimux/workspace-model:organization object)
-      (nerimux/workspace-model:repository
-       (nerimux/workspace-model:repository-organization object))
-      (nerimux/workspace-model:worktree
-       (let ((repository (nerimux/workspace-model:worktree-repository object)))
-         (and repository
-              (nerimux/workspace-model:repository-organization repository)))))))
-
-(defun %client-operation-worktree (conn &optional target)
-  (let ((selected (%client-tree-object conn)))
-    (or (%workspace-find-worktree target)
-        (and (typep selected 'nerimux/workspace-model:worktree) selected))))
+(defun %adjust-client-tree-scroll (conn index visible)
+  (setf (client-conn-tree-scroll conn)
+        (cond
+          ((< index (client-conn-tree-scroll conn)) index)
+          ((>= index (+ (client-conn-tree-scroll conn) visible))
+           (max 0 (+ index 1 (- visible))))
+          (t (client-conn-tree-scroll conn))))
+  (client-conn-tree-scroll conn))
 
 (defun %select-client-tree-section-relative (conn direction)
-  "J/K (section-based overview redesign, replacing the old repository-row
-   jump): move the selection to the next/previous :SECTION header row --
-   Attention, Active, or Repositories, identified by its OBJECT being a
-   section keyword rather than a model object -- skipping every worktree/
-   repository row in between. Walks the same filtered row set %SELECT-
-   CLIENT-TREE-RELATIVE (j/k) uses, so a section hidden by an active
-   tree-filter (an empty section is omitted entirely, see %WORKSPACE-
-   SECTION-ENTRIES) is skipped exactly as j/k already skips any filtered-out
-   row."
+  "Move to the next or previous visible section header.
+
+Section headers are keyword objects in the same filtered row sequence used
+by %SELECT-CLIENT-TREE-RELATIVE."
   (let* ((objects (%workspace-tree-objects
                    (nerimux/vcs:workspace-organizations)
                    (client-conn-tree-filter conn)))
@@ -406,11 +240,7 @@ the tree (R7.1)."
               for candidate = (nth index objects)
               when (keywordp candidate)
                 do (%set-client-selected-tree-object conn candidate)
-                   (when (< index (client-conn-tree-scroll conn))
-                     (setf (client-conn-tree-scroll conn) index))
-                   (when (>= index (+ (client-conn-tree-scroll conn) visible))
-                     (setf (client-conn-tree-scroll conn)
-                           (max 0 (+ index 1 (- visible)))))
+                   (%adjust-client-tree-scroll conn index visible)
                    (%mark-dirty)
                    (return candidate))))))
 
@@ -440,3 +270,16 @@ the tree (R7.1)."
         (progn
           (%client-notify conn "invalid workspace prefix key")
           t))))
+
+
+(defun %reject-pending-worktree-attachment (conn &key worktree
+                                                   (pane (client-conn-focus conn))
+                                                   (window
+                                                    (let ((session (%attach-target-session)))
+                                                      (and session (session-active-window session)))))
+  (when (or (%worktree-delete-pending-p worktree)
+            (%pane-delete-pending-p pane)
+            (%pane-delete-pending-p (client-conn-stdin-target conn))
+            (%window-delete-pending-p window))
+    (%client-notify conn "worktree deletion is pending")
+    t))

@@ -119,6 +119,7 @@
                      #:pane-notification
                      #:pane-notify
                      #:pane-pid
+                     #:pane-role
                      #:pane-process-exited-p
                      #:pane-process-lock
                      #:pane-process-generation

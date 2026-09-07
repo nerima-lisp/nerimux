@@ -6,18 +6,7 @@
 
 (defun %join-thread-with-timeout (thread &optional
                                          (timeout +reader-thread-join-timeout+))
-  "Join THREAD, waiting at most TIMEOUT seconds.
-
-   SB-THREAD:JOIN-THREAD is called directly rather than through
-   CL-CONCURRENT-KIT:JOIN-THREAD only because there is nothing to gain from the
-   wrapper here: it forwards :TIMEOUT to this same call.  Signals
-   SB-THREAD:JOIN-THREAD-ERROR when the deadline passes or THREAD aborted;
-   callers that treat a stuck reader as survivable wrap this in IGNORE-ERRORS.
-
-   This used to carry a #-SBCL polling fallback for implementations whose
-   JOIN-THREAD takes no timeout.  It was already incoherent — the #+SBCL branch
-   above it made the function SBCL-only in practice — and ADR-0048 makes the
-   whole org SBCL-only, so the dead branch is gone rather than conditionalized."
+  "Join THREAD, waiting at most TIMEOUT seconds."
   (sb-thread:join-thread thread :timeout timeout))
 
 (defmacro with-channel-plist ((lk cv ch) &body body)

@@ -1,29 +1,5 @@
 (in-package #:nerimux/test)
 
-(defmacro %with-stubbed-run-kill-exit (code-var &body body)
-  "Local copy of main-entry-tests.lisp's WITH-STUBBED-EXIT idiom (not shared
-   across files here -- see execution-workflow on load-order-independent
-   test files): sb-ext:exit terminates the process, so it must be stubbed to
-   capture :code and unwind via THROW instead of actually exiting the test
-   runner. Uses WITHOUT-PACKAGE-LOCKS because SB-EXT is a locked package."
-  (let ((tag (gensym "EXIT-TAG"))
-        (orig (gensym "ORIG-EXIT")))
-    `(sb-ext:without-package-locks
-      (let ((,orig (fdefinition 'sb-ext:exit)))
-        (setf (fdefinition 'sb-ext:exit) (lambda 
-                                             (&rest args
-                                                    &key
-                                                    (code 0)
-                                                    &allow-other-keys)
-                                           (declare (ignore args))
-                                           (setf ,code-var code)
-                                           (throw ',tag
-                                             nil)))
-        (unwind-protect 
-            (catch ',tag
-              ,@body)
-          (setf (fdefinition 'sb-ext:exit) ,orig))))))
-
 (describe "server-kill-request-suite"
 
   (it "session-live-panes-filters-to-live-fds-only"
@@ -115,6 +91,19 @@
         (nerimux::%force-kill-panes (list one two)))
       (expect (= 2 (length closed)))
       (expect (equal (list one two) (nreverse closed)))))
+
+  (it "r8-1-force-kill-panes-ignores-sigkill-errors"
+    (let ((pane (make-pane :id 1 :fd -1 :pid 424242
+                           :screen (make-screen 10 3))))
+      (with-stubbed-locked-fdefinitions
+          ((nerimux::close-pane-pty (lambda (ignored) (declare (ignore ignored))))
+           (nerimux::%process-alive-p (lambda (ignored) (declare (ignore ignored)) t))
+           (sleep (lambda (ignored) (declare (ignore ignored)) nil)))
+        (with-stubbed-locked-fdefinitions
+            ((sb-posix:kill (lambda (ignored-pid ignored-signal)
+                             (declare (ignore ignored-pid ignored-signal))
+                             (error 'sb-posix:syscall-error :errno 2))))
+          (nerimux::%force-kill-panes (list pane))))))
 
   (it "r8-1-process-alive-p-answers-for-real-pids"
     (expect (nerimux::%process-alive-p (sb-posix:getpid)))
@@ -265,7 +254,7 @@
                    (lambda (name force-p)
                      (declare (ignore name force-p))
                      (values :ok "")))
-             (%with-stubbed-run-kill-exit exit-code
+             (with-stubbed-exit exit-code
                (nerimux::run-kill nil)))
         (setf (fdefinition 'nerimux::send-kill-request) orig))
       (expect (eql 0 exit-code))))
@@ -281,7 +270,7 @@
                      (values :denied (format nil "DENIED~%pane 1 (pid 123) in /tmp/wt"))))
              (setf errout
                    (with-output-to-string (*error-output*)
-                     (%with-stubbed-run-kill-exit exit-code
+                     (with-stubbed-exit exit-code
                        (nerimux::run-kill nil)))))
         (setf (fdefinition 'nerimux::send-kill-request) orig))
       (expect (eql 1 exit-code))
@@ -300,7 +289,7 @@
                      (values :denied (format nil "DENIED~%pane 1 (pid 123) in /tmp/wt~%pane 2 (pid 456) in /tmp/wt"))))
              (setf errout
                    (with-output-to-string (*error-output*)
-                     (%with-stubbed-run-kill-exit exit-code
+                     (with-stubbed-exit exit-code
                        (nerimux::run-kill nil)))))
         (setf (fdefinition 'nerimux::send-kill-request) orig))
       (expect (eql 1 exit-code))
@@ -319,7 +308,7 @@
                      (values :no-server nil)))
              (setf errout
                    (with-output-to-string (*error-output*)
-                     (%with-stubbed-run-kill-exit exit-code
+                     (with-stubbed-exit exit-code
                        (nerimux::run-kill nil)))))
         (setf (fdefinition 'nerimux::send-kill-request) orig))
       (expect (eql 1 exit-code))
@@ -339,7 +328,7 @@
              (setf errout
                    (with-output-to-string (*error-output*)
                      (handler-case
-                         (%with-stubbed-run-kill-exit exit-code
+                         (with-stubbed-exit exit-code
                            (nerimux::run-kill nil))
                        (sb-bsd-sockets:socket-error () (setf signalled t))))))
         (setf (fdefinition 'nerimux::send-kill-request) orig))
@@ -358,7 +347,7 @@
                      (values :eof nil)))
              (setf errout
                    (with-output-to-string (*error-output*)
-                     (%with-stubbed-run-kill-exit exit-code
+                     (with-stubbed-exit exit-code
                        (nerimux::run-kill nil)))))
         (setf (fdefinition 'nerimux::send-kill-request) orig))
       (expect (eql 1 exit-code))
@@ -373,7 +362,7 @@
                    (lambda (name force-p)
                      (setf captured (list name force-p))
                      (values :ok "")))
-             (%with-stubbed-run-kill-exit exit-code
+             (with-stubbed-exit exit-code
                (nerimux::run-kill (list "--force"))))
         (setf (fdefinition 'nerimux::send-kill-request) orig))
       (expect (equal (list "0" t) captured))
@@ -388,7 +377,23 @@
                    (lambda (name force-p)
                      (setf captured (list name force-p))
                      (values :ok "")))
-             (%with-stubbed-run-kill-exit exit-code
+             (with-stubbed-exit exit-code
                (nerimux::run-kill nil)))
         (setf (fdefinition 'nerimux::send-kill-request) orig))
-      (expect (equal (list "0" nil) captured)))))
+      (expect (equal (list "0" nil) captured))))
+
+  (it "r8-3-client-dispositions-apply-quit-and-drop-actions"
+    (let ((calls nil)
+          (conn :connection))
+      (with-stubbed-fdefinition
+          ((nerimux::%drop-client
+            (lambda (client reason force-p)
+              (push (list client reason force-p) calls))))
+        (expect (eq :quit
+                    (nerimux::%apply-client-disposition :quit conn)))
+        (expect (null (nerimux::%apply-client-disposition :eof conn)))
+        (expect (null (nerimux::%apply-client-disposition :drop conn)))
+        (expect (null (nerimux::%apply-client-disposition :unknown conn))))
+      (expect (equal '(:connection :bye t) (first calls)))
+      (expect (equal '(:connection :bye nil) (second calls)))
+      (expect (= 2 (length calls))))))

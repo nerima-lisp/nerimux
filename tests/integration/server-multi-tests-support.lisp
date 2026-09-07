@@ -34,3 +34,9 @@
                                    (open-stream-p
                                     (nerimux::client-conn-stream conn))))))
                            (ignore-errors (close-socket client)))))))
+
+(defmacro with-main-thread-callback-queue ((queue-var) &body body)
+  "Run BODY with an isolated main-thread callback queue."
+  `(let ((nerimux::*main-thread-callbacks* nil))
+     (let ((,queue-var nil))
+       ,@body)))

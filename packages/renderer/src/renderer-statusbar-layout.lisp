@@ -1,17 +1,8 @@
 (in-package #:nerimux/renderer)
 
 (defun %status-style-block-sgr (body base-sgr)
-  "SGR escape string for one inline #[BODY] status block: always resets to
-   BASE-SGR (reset + base attrs), regardless of BODY.
-   Previously an empty / \"default\" / \"none\" BODY reset to BASE-SGR while
-   any other BODY was parsed as a style string (e.g. \"fg=green,bold\")
-   via %status-sgr-from-style, which R2.4 deleted along with the rest of the
-   style-string parser.  A non-default/none/empty BODY can only occur in
-   live data now (a window/session name that happens to contain literal
-   \"#[...]\" text — status-left/-right/window-status-format are fixed
-   templates that never embed one themselves, R2.3), so there is no longer a
-   config-authored style for a non-trivial BODY to mean anything; BODY is
-   accepted but ignored."
+  "SGR escape string for one inline #[BODY] status block. Always resets to
+   BASE-SGR; BODY is not interpreted."
   (declare (ignore body))
   (format nil "~C[0;~Am" +esc+ base-sgr))
 

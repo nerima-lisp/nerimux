@@ -1,33 +1,19 @@
 (in-package #:nerimux)
 
 (defun %workspace-collapsed-nodes ()
-  "The collapsed-row set, for callers that load before its DEFVAR.
-
-   the multi-dispatch files are compiled before this file, so naming the
-   variable there would compile as an undeclared free reference. A function is
-   only a forward reference, which resolves at call time."
+  "Return the collapsed-row set after its DEFVAR is available."
   *workspace-collapsed-node-ids*)
 
 (defun %workspace-expanded-nodes ()
-  "The expanded-row set for Repositories-section repository rows (default
-   COLLAPSED; see *WORKSPACE-EXPANDED-NODE-IDS*), for callers that load
-   before its DEFVAR -- same forward-reference rationale as
-   %WORKSPACE-COLLAPSED-NODES above."
+  "Return the expanded repository-row set after its DEFVAR is available."
   *workspace-expanded-node-ids*)
 
 (defun %workspace-file-diffs ()
-  "The per-file diff cache (Wave C; see *WORKSPACE-FILE-DIFFS*), for callers
-   that load before its DEFVAR -- same forward-reference rationale as
-   %WORKSPACE-COLLAPSED-NODES/%WORKSPACE-EXPANDED-NODES above."
+  "Return the per-file diff cache after its DEFVAR is available."
   *workspace-file-diffs*)
 
 (defun %set-workspace-file-diff (key value)
-  "Write VALUE into *WORKSPACE-FILE-DIFFS* under KEY, the only path any
-   caller should use (F4, CWE-400): a genuinely new KEY that would push the
-   cache past *WORKSPACE-FILE-DIFFS-CACHE-LIMIT* evicts the oldest entry
-   first (*WORKSPACE-FILE-DIFFS-ORDER*, insertion order). Updating an
-   already-cached key -- the common :PENDING settling to :READY/:FAILED --
-   never evicts, since it does not grow the table."
+  "Store VALUE under KEY, evicting the oldest entry when the cache is full."
   (let* ((table (%workspace-file-diffs))
          (new-key-p (not (nth-value 1 (gethash key table)))))
     (when 
@@ -216,24 +202,8 @@
         (remhash key *workspace-stale-ids*))))
 
 (defun %set-workspace-catalog-refresh-state (organizations mode &key stale-p)
-  "Mark or settle every visible node in ORGANIZATIONS in one pass, per MODE.
-
-   Catalog refresh is a batch operation, so its callbacks carry the complete
-   tree rather than one node at a time.  Keeping the traversal here makes the
-   marker key contract identical to the renderer's tree-node keys.
-
-   MODE is required and distinguishes the two calls a refresh needs: :MARK
-   records that a refresh is now in flight for every node
-   (%MARK-WORKSPACE-REFRESHING) -- what a refresh's start, and its
-   in-progress on-catalog callback, both want; :SETTLE clears that in-flight
-   mark (%CLEAR-WORKSPACE-REFRESHING), tagging every node stale when STALE-P
-   and fresh otherwise -- what a refresh's terminal callback, on-complete or
-   on-error, wants. The previous version had no MODE: it always marked
-   unless STALE-P was already true, so a *successful* on-complete re-marked
-   every node refreshing instead of settling it, and the tree-wide
-   \"refreshing\" label never cleared after a scan that succeeded. MODE makes
-   that choice explicit at every call site instead of leaving it to STALE-P,
-   which never distinguished in-flight from finished in the first place."
+  "Mark or settle every visible node in ORGANIZATIONS according to MODE.
+MODE is :MARK or :SETTLE; STALE-P applies when settling."
   (labels ((visit (kind id)
              (ecase mode
                (:mark (%mark-workspace-refreshing kind id))
@@ -251,15 +221,7 @@
     nil))
 
 (defun %mark-repository-node-stale (repository)
-  "Immediately settle REPOSITORY's own tree row -- and each of its worktree
-   rows -- to :stale-p t (R6.2/design §7.3: a FAILED object shows stale;
-   other objects don't inherit it). Called from a catalog refresh's
-   PER-REPOSITORY error channel (NERIMUX/VCS:REFRESH-WORKSPACE-
-   ORGANIZATIONS-ASYNC's :ON-REPOSITORY-ERROR) as soon as that one
-   repository's own failure is known, rather than waiting for the
-   whole-catalog :ON-COMPLETE that follows once every other repository has
-   also settled -- and again from %REAPPLY-STALE-REPOSITORY-MARKS below, to
-   restore the mark after that :ON-COMPLETE settles the whole catalog fresh."
+  "Mark REPOSITORY and its worktrees stale immediately."
   (%clear-workspace-refreshing :repository
                                (repository-id repository)
                                :stale-p
@@ -268,15 +230,7 @@
     (%clear-workspace-refreshing :worktree (worktree-id worktree) :stale-p t)))
 
 (defun %reapply-stale-repository-marks (organizations failed-repository-ids)
-  "After a whole-catalog :SETTLE (%SET-WORKSPACE-CATALOG-REFRESH-STATE ...
-   :SETTLE :STALE-P NIL, which marks every visible node fresh), re-apply the
-   stale mark to each repository in FAILED-REPOSITORY-IDS -- and its
-   worktrees -- so a per-repository failure collected during the refresh
-   survives that settle instead of being overwritten back to fresh. A
-   failed id no longer present in ORGANIZATIONS (the repository vanished
-   from the catalog between the failure and this settle) is simply
-   skipped, matching %WORKSPACE-FIND-TREE-OBJECT's own not-found handling
-   elsewhere in this file."
+  "Restore stale marks for failed repositories still present in ORGANIZATIONS."
   (dolist (organization organizations)
     (dolist 
         (repository
@@ -321,6 +275,15 @@
   ((= type +msg-command+)
    (%handle-multi-command-message session conn payload))
   (t :drop))
+
+(defun %settle-workspace-catalog-after-error (condition)
+  "Settle the catalog as stale after its asynchronous refresh fails."
+  (declare (ignore condition))
+  (setf *workspace-catalog-loaded-p* t
+        *workspace-scan-progress* nil)
+  (%set-workspace-catalog-refresh-state
+   (nerimux/vcs:workspace-organizations) :settle :stale-p t)
+  (%mark-dirty))
 
 (defun %add-client (socket)
   "Register SOCKET as a new client: build its CLIENT-CONN and mark
@@ -381,13 +344,7 @@
                                       (%client-picker-visible-items client)))
                (%mark-dirty))
              :on-error
-             (lambda (condition)
-               (declare (ignore condition))
-               (setf *workspace-catalog-loaded-p* t
-                     *workspace-scan-progress* nil)
-               (%set-workspace-catalog-refresh-state
-                (nerimux/vcs:workspace-organizations) :settle :stale-p t)
-               (%mark-dirty)))
+             #'%settle-workspace-catalog-after-error)
           (error (condition)
             (declare (ignore condition))
             (setf *workspace-catalog-loaded-p* t

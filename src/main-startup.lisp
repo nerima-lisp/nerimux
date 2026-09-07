@@ -79,20 +79,7 @@
 
 (defun %dispatch-unknown-mode (mode rest)
   "Handle an argv whose first item is not a known startup mode.
-   Every case is a usage error now: print the summary to stderr and exit 1.
-
-   This used to have two other branches.  A recognized-looking command word was
-   forwarded to a running server as a command client, and a bare `nerimux` with
-   no arguments started the standalone in-process multiplexer.  Both belonged
-   to the removed command-forwarding surface: the forwarding branch is what
-   actually made `nerimux list-sessions` work, independently of the
-   *startup-modes* table, so removing the table entries alone would not have
-   removed the capability.
-   The entry surface is now `attach`, `server`, and `kill` (1.6, R8.1); any
-   other mode word is rejected rather than guessed at.  A bare `nerimux` with
-   no argument at all is no longer routed here at all -- see
-   %dispatch-startup-mode-entry, which defaults that case to `attach`
-   (FR-001) before this function would ever be reached."
+   Every case is a usage error: print the summary to stderr and exit 1."
   (declare (ignore rest))
   (declare (ignorable mode))
   (write-string (%usage-string) *error-output*)
