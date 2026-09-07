@@ -31,6 +31,8 @@
                        ("w" . "worktree")))
     ("Prefix C-q"
      (("-" . "split down") ("|" . "split right")
+                           ("< / >" . "shrink/grow horizontal")
+                           ("{ / }" . "shrink/grow vertical")
                            ("x" . "close pane")
                            ("z" . "zoom")
                            ("h/j/k/l" . "focus")

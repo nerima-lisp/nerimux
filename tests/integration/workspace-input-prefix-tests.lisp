@@ -256,6 +256,64 @@
                           s conn (char-code #\t))))
           (expect (equal (list s conn nil) command-args))))))
 
+  (it "prefix-resize-byte-dispatch-grows-and-shrinks-by-five-cells"
+    (with-loop-state
+      (with-h-split-81-24 (left right window)
+        (setf (nerimux/pane:pane-window left) window
+              (nerimux/pane:pane-window right) window)
+        (let* ((session (make-session :id 1 :name "s" :windows (list window)))
+               (conn (%make-test-conn)))
+          (window-select-pane window left)
+          (session-select-window session window)
+          (nerimux::%set-client-focus conn left)
+          (nerimux::%handle-multi-key-message session conn #(17)) ; C-q
+          (nerimux::%handle-multi-key-message session conn #(62)) ; >
+          (expect (= 45 (nerimux/pane:pane-width left)))
+          (expect (= 35 (nerimux/pane:pane-width right)))
+          (nerimux::%handle-multi-key-message session conn #(17)) ; C-q
+          (nerimux::%handle-multi-key-message session conn #(60)) ; <
+          (expect (= 40 (nerimux/pane:pane-width left)))
+          (expect (= 40 (nerimux/pane:pane-width right)))
+          (window-select-pane window right)
+          (nerimux::%set-client-focus conn right)
+          (nerimux::%handle-multi-key-message session conn #(17)) ; C-q
+          (nerimux::%handle-multi-key-message session conn #(62)) ; >
+          (expect (= 35 (nerimux/pane:pane-width left)))
+          (expect (= 45 (nerimux/pane:pane-width right)))))))
+
+  (it "prefix-resize-byte-dispatch-notifies-when-no-horizontal-split-exists"
+    (with-fake-session (session :nwindows 1 :npanes 1)
+        (let* ((window (nerimux/session:session-active-window session))
+             (pane (nerimux/window:window-active-pane window))
+             (conn (%make-test-conn))
+             (windows-before (nerimux/session:session-windows session))
+             (panes-before (nerimux/window:window-panes window))
+             (message nil))
+        (nerimux::%set-client-focus conn pane)
+        (expect (eq pane (nerimux::client-conn-focus conn)))
+        (with-stubbed-fdefinition
+            ((nerimux::%client-notify
+              (lambda (connection text)
+                (declare (ignore connection))
+                (setf message text))))
+          (nerimux::%handle-multi-key-message session conn #(17)) ; C-q
+          (nerimux::%handle-multi-key-message session conn #(62))) ; >
+        (expect (equal windows-before (nerimux/session:session-windows session)))
+        (expect (equal panes-before (nerimux/window:window-panes window)))
+        (expect (string= "pane cannot be resized" message)))))
+
+  (it "prefix-resize-bindings-appear-through-the-client-help-render"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn :rows 80 :cols 110)))
+        (nerimux::%handle-multi-key-message s conn #(63)) ; ?
+        (nerimux::%handle-multi-key-message s conn #(107)) ; k
+        (multiple-value-bind (type payload)
+            (decode-frame (nerimux::%render-client-frame s conn))
+          (expect (= nerimux::+msg-frame+ type))
+          (let ((visible (strip-sgr (decode-text payload))))
+            (expect (search "< / > shrink/grow horizontal" visible))
+            (expect (search "{ / } shrink/grow vertical" visible)))))))
+
   (it "r4-5-prefix-actions-report-missing-focus-without-mutating-session"
     (with-fake-session (s :nwindows 0)
       (let ((conn (%make-test-conn)))
