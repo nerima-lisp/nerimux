@@ -698,15 +698,25 @@
                (conn (%make-test-conn))
                (nerimux::*clients* (list conn)))
           (nerimux/pane:worktree-add-pane worktree pane)
-          (nerimux::%set-client-focus conn pane)
-          (nerimux::%handle-multi-key-message session conn #(17)) ; C-q
-          (nerimux::%handle-multi-key-message session conn #(45)) ; -
-          (expect (= 1 (length (nerimux/window:window-panes window))))
-          (expect (= 1 (length (nerimux/workspace-model:worktree-panes worktree))))
-          (expect (string= "pane too small to split"
-                           (first (nerimux::client-conn-message-log conn))))))))
+          (let ((windows-before (nerimux/session:session-windows session))
+                (window-panes-before (nerimux/window:window-panes window))
+                (worktree-panes-before
+                  (nerimux/workspace-model:worktree-panes worktree)))
+            (nerimux::%set-client-focus conn pane)
+            (nerimux::%handle-multi-key-message session conn #(17)) ; C-q
+            (nerimux::%handle-multi-key-message session conn #(45)) ; -
+            (expect (equal windows-before
+                           (nerimux/session:session-windows session)))
+            (expect (equal window-panes-before
+                           (nerimux/window:window-panes window)))
+            (expect (equal worktree-panes-before
+                           (nerimux/workspace-model:worktree-panes worktree)))
+            (expect (= 1 (length (nerimux/window:window-panes window))))
+            (expect (= 1 (length (nerimux/workspace-model:worktree-panes worktree))))
+            (expect (string= "pane too small to split"
+                             (first (nerimux::client-conn-message-log conn)))))))))
 
-  (it "r5-acceptance-split-focus-cap-new-window-move-close-to-empty"
+  (it "r5-acceptance-split-focus-without-pane-cap-move-close-to-empty"
     (%with-r5-fixture (session conn worktree window-1)
       (expect (= 1 (length (nerimux/window:window-panes window-1))))
       (expect (= 1 (length (nerimux/workspace-model:worktree-panes worktree))))
@@ -731,42 +741,20 @@
 
       (nerimux::%handle-multi-key-message session conn #(17))
       (nerimux::%handle-multi-key-message session conn #(45))
-      (expect (= 4 (length (nerimux/window:window-panes window-1)))
-              )
-      (expect (= 2 (length (nerimux::%worktree-windows worktree)))
-              )
-      (let ((window-2 (nerimux/session:session-active-window session)))
-        (expect (not (eq window-1 window-2)))
-        (expect (= 1 (length (nerimux/window:window-panes window-2))))
-        (expect (= 5 (length (nerimux/workspace-model:worktree-panes worktree))))
-        (expect (string= "feat/phase3 (2)" (nerimux/window:window-name window-2)))
+      (expect (= 5 (length (nerimux/window:window-panes window-1))))
+      (expect (= 5 (length (nerimux/workspace-model:worktree-panes worktree))))
+      (expect (= 1 (length (nerimux/session:session-windows session))))
+      (expect (= 1 (length (nerimux::%worktree-windows worktree))))
+      (expect (eq window-1 (nerimux/session:session-active-window session)))
 
+      (dotimes (_ 5)
         (nerimux::%handle-multi-key-message session conn #(17))
-        (nerimux::%handle-multi-key-message session conn #(112)) ; p
-        (expect (eq window-1 (nerimux/session:session-active-window session)))
+        (nerimux::%handle-multi-key-message session conn #(120))) ; x
+      (expect (null (nerimux/workspace-model:worktree-panes worktree)))
+      (expect (null (nerimux/session:session-windows session)))
+      (expect (eq :repolist (nerimux::client-conn-view conn)))))
 
-        (dotimes (_ 3)
-          (nerimux::%handle-multi-key-message session conn #(17))
-          (nerimux::%handle-multi-key-message session conn #(120))) ; x
-        (expect (= 1 (length (nerimux/window:window-panes window-1))))
-        (expect (member window-1 (nerimux/session:session-windows session)))
-
-        (nerimux::%handle-multi-key-message session conn #(17))
-        (nerimux::%handle-multi-key-message session conn #(120))
-        (expect (not (member window-1 (nerimux/session:session-windows session))))
-        (expect (not (member window-1 (nerimux::%worktree-windows worktree))))
-        (expect (eq window-2 (nerimux/session:session-active-window session))
-                )
-        (expect (eq (nerimux/window:window-active-pane window-2)
-                    (nerimux::client-conn-focus conn)))
-
-        (nerimux::%handle-multi-key-message session conn #(17))
-        (nerimux::%handle-multi-key-message session conn #(120))
-        (expect (null (nerimux/workspace-model:worktree-panes worktree)))
-        (expect (null (nerimux/session:session-windows session)))
-        (expect (eq :repolist (nerimux::client-conn-view conn))))))
-
-  (it "r5-6-zoom-auto-unzoom-so-the-4-pane-cap-is-checked-on-the-real-count"
+  (it "r5-6-zoom-auto-unzoom-then-splits-without-pane-cap"
     (%with-r5-fixture (session conn worktree window)
       (dotimes (_ 3)
         (nerimux::%handle-multi-key-message session conn #(17))
@@ -782,10 +770,26 @@
       (nerimux::%handle-multi-key-message session conn #(17))
       (nerimux::%handle-multi-key-message session conn #(45)) ; -
       (expect (not (nerimux/window:window-zoom-p window)) )
-      (expect (= 4 (length (nerimux/window:window-panes window)))
-              )
-      (expect (= 2 (length (nerimux::%worktree-windows worktree)))
-              )))
+      (expect (= 5 (length (nerimux/window:window-panes window))))
+      (expect (= 5 (length (nerimux/workspace-model:worktree-panes worktree))))
+      (expect (= 1 (length (nerimux/session:session-windows session))))
+      (expect (= 1 (length (nerimux::%worktree-windows worktree))))))
+
+  (it "r5-resize-prefix-dispatches-both-axes"
+    (%with-r5-fixture (session conn worktree window)
+      (declare (ignore worktree))
+      (nerimux::%handle-multi-key-message session conn #(17))
+      (nerimux::%handle-multi-key-message session conn #(45)) ; -
+      (let ((active (nerimux/window:window-active-pane window)))
+        (let ((height-before (nerimux/pane:pane-height active)))
+          (nerimux::%handle-multi-key-message session conn #(17))
+          (nerimux::%handle-multi-key-message session conn #(125)) ; }
+          (expect (= (+ height-before 5)
+                     (nerimux/pane:pane-height active)))
+          (nerimux::%handle-multi-key-message session conn #(17))
+          (nerimux::%handle-multi-key-message session conn #(123)) ; {
+          (expect (= height-before
+                     (nerimux/pane:pane-height active)))))))
 
   (it "r5-7-worktree-pane-startup-failure-is-recorded-as-durable-state"
     (with-loop-state

@@ -61,8 +61,8 @@ emulator の周辺機能は「消せる機能」ではなく端末としての�
 | pane の `$TERM` | `screen-256color`。加えて `COLORTERM=truecolor` を渡す |
 | pane 終了時 | 即座に閉じる |
 | scrollback | 10,000 行 |
-| 分割サイズ | 常に 50/50 |
-| window あたりの pane | 最大 4。超える分割要求は新しい window を作る |
+| 分割サイズ | 初期値は 50/50。C-q の resize binding で固定セル数ずつ調整 |
+| window あたりの pane | 上限なし。分割後の全 pane が最小サイズを満たす場合だけ許可し、満たさなければ通知して変更しない |
 | window / pane の番号 | 1 始まり |
 | window の名前 | branch 名 + 連番 |
 | tree の初期状態 | 全折りたたみ（organization の行のみ） |
@@ -352,8 +352,8 @@ R1.12 **`benchmark-workspace-overview` の予算テストをやめる。** 計�
 R1.13 **`tags` / `notes` / `recent-activity` を 4 モデルから削除する。**
 organization / repository / worktree / pane。3.3 の連鎖で参照が 0 になる。
 
-R1.14 **`window-rotate` と `apply-named-layout` を削除する。** 分割が常に 50/50、
-window あたり 4 pane という制約の下では使い道がない。
+R1.14 **`window-rotate` と `apply-named-layout` を削除する。** 分割は初期値が 50/50 で
+調整可能だが、これらの操作を復活させる要件はない。
 
 R1.15 **read-only attach（`-r`）を削除する。** `*client-read-only*`、protocol の
 `+attach-flag-read-only+`、`client-conn-read-only-p` と 2 箇所の enforcement。
@@ -447,11 +447,11 @@ R4.4 **`C-q` を本物の prefix に格上げする。** 1.5 の表のとおり�
 > 大半が実装済みと見られる（§5 冒頭の進捗メモ参照）。R5.5 は未確認。個別項目は
 > 着手前に再確認すること。
 
-R5.1 分割は常に 50/50。`%split-fits-p`（`window-core.lisp:86`）が入らないと判定した
-ときはメッセージを出して何もしない。
+R5.1 分割の初期値は 50/50。`%split-fits-p`（`window-core.lisp:86`）が入らないと判定した
+ときはメッセージを出し、window、pane、フォーカス、worktree の pane 一覧を変更しない。
 
-R5.2 window あたりの pane は最大 4。**上限に達した状態での分割要求は、同じ worktree に
-新しい window を作ってそこに pane を開く。**
+R5.2 window あたりの pane 数に上限は設けない。分割後の全 pane が最小サイズを満たす限り、
+同じ window に分割する。最小サイズを満たせない分割要求は R5.1 に従って拒否する。
 
 R5.3 分割で作った pane は、その window を持つ worktree の path で起動する。
 `worktree-add-pane` で worktree に登録し、overview の pane 数表示に反映する。
@@ -474,8 +474,9 @@ attention view を消すため、overview の `!` マークと状態トークン
 R5.8 window の名前は branch 名 + 連番（`feat/phase3`、`feat/phase3 (2)`）。tree の
 window 行に表示する。status line のタブは番号のみ。
 
-**受け入れ条件**: 分割 → フォーカス移動 → 4 枚目で新 window → window 移動 → 閉じる →
-最後の 1 枚を閉じる、の系列で window と worktree の pane 一覧が整合すること。
+**受け入れ条件**: 分割 → フォーカス移動 → 最小サイズまで分割 → それ以上の分割を拒否して
+window と pane 一覧を不変に保つ → 閉じる → 最後の 1 枚を閉じる、の系列で window と
+worktree の pane 一覧が整合すること。
 `:input` モード中に ESC が pane へ届くこと。prefix の未束縛キーが pane へ漏れないこと。
 
 ### R6. 表示

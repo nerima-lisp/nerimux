@@ -102,20 +102,52 @@
         (expect (null (window-resize-active win :up 5)))
         (expect (= w0 (pane-width (first (window-panes win))))))))
 
+  (it "resize-ratio-survives-relayout-and-zoom"
+    (let* ((l0   (tl-leaf 1 1 1))
+           (l1   (tl-leaf 2 1 1))
+           (tree (make-layout-split :h l0 l1))
+           (win  (tl-window tree 24 81 :active (layout-leaf-pane l0))))
+      (expect (eq (layout-leaf-pane l0) (window-resize-active win :right 5)))
+      (expect (= 9/16 (nerimux/layout:layout-split-ratio tree)))
+      (window-relayout win 24 101)
+      (expect (= 9/16 (nerimux/layout:layout-split-ratio tree)))
+      (destructuring-bind (p0 p1) (window-panes win)
+        (expect (= 56 (pane-width p0)))
+        (expect (= 44 (pane-width p1))))
+      (nerimux/window:window-zoom-toggle win)
+      (expect (= 9/16
+                 (nerimux/layout:layout-split-ratio
+                  (nerimux/window:window-zoom-tree win))))
+      (nerimux/window:window-zoom-toggle win)
+      (expect (= 9/16 (nerimux/layout:layout-split-ratio tree)))
+      (destructuring-bind (p0 p1) (window-panes win)
+        (expect (= 56 (pane-width p0)))
+        (expect (= 44 (pane-width p1))))))
+
 
   (it "split-too-small-aborts-without-forking"
     (let* ((pane (tl-pane 1 3 24))
            (win  (make-window :id 1 :name "w" :width 3 :height 24
                               :tree (make-layout-leaf pane)
                               :panes (list pane) :active pane)))
-      (expect (null (window-split nil win :h)))
-      (expect (= 1 (length (window-panes win)))))
+      (let ((tree-before (window-tree win))
+            (panes-before (window-panes win))
+            (active-before (window-active-pane win)))
+        (expect (null (window-split nil win :h)))
+        (expect (eq tree-before (window-tree win)))
+        (expect (equal panes-before (window-panes win)))
+        (expect (eq active-before (window-active-pane win)))))
     (let* ((pane (tl-pane 1 80 2))
            (win  (make-window :id 1 :name "w" :width 80 :height 2
                               :tree (make-layout-leaf pane)
                               :panes (list pane) :active pane)))
-      (expect (null (window-split nil win :v)))
-      (expect (= 1 (length (window-panes win))))))
+      (let ((tree-before (window-tree win))
+            (panes-before (window-panes win))
+            (active-before (window-active-pane win)))
+        (expect (null (window-split nil win :v)))
+        (expect (eq tree-before (window-tree win)))
+        (expect (equal panes-before (window-panes win)))
+        (expect (eq active-before (window-active-pane win))))))
 
 
   (it "remove-pane-collapses-parent-sibling-takes-over"

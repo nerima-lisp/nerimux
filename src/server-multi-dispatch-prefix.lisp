@@ -18,9 +18,7 @@
     (window-zoom-toggle window)))
 
 (defun %workspace-prefix-split (session conn orient)
-  "C-q - / C-q | : split the focused pane's window along ORIENT (R5.1/R5.3).
-   At the per-window pane cap, opens a new window in the same worktree
-   instead (R5.2) via the existing %open-client-worktree-pane path."
+  "C-q - / C-q | : split the focused pane's window along ORIENT (R5.1/R5.3)."
   (multiple-value-bind (pane window worktree)
       (%workspace-prefix-context session conn)
     (when (%reject-pending-worktree-attachment conn :worktree worktree :pane pane :window window)
@@ -32,23 +30,39 @@
        (%client-notify conn "worktree cancellation is pending"))
       (t
        (%workspace-prefix-unzoom window)
-       (cond
-         ((>= (length (window-panes window)) +max-panes-per-window+)
-          (%open-client-worktree-pane session conn worktree))
-         (t
-          (let ((new-pane (window-split session window orient
-                                        :start-dir (and worktree
-                                                        (worktree-path worktree)))))
-            (if new-pane
-                (progn
-                  (when worktree (worktree-add-pane worktree new-pane))
-                  (when (pane-live-p new-pane)
-                    (start-reader-thread new-pane))
-                  (window-select-pane window new-pane)
-                  (%set-client-focus conn new-pane)
-                  (%mark-dirty))
-                (%client-notify conn "pane too small to split")))))))
+       (let ((new-pane (window-split session window orient
+                                     :start-dir (and worktree
+                                                     (worktree-path worktree)))))
+         (if new-pane
+             (progn
+               (when worktree (worktree-add-pane worktree new-pane))
+               (when (pane-live-p new-pane)
+                 (start-reader-thread new-pane))
+               (window-select-pane window new-pane)
+               (%set-client-focus conn new-pane)
+               (%mark-dirty))
+             (%client-notify conn "pane too small to split")))))
     nil))
+
+(defun %workspace-prefix-resize (session conn direction)
+  "Resize the focused pane along DIRECTION by the fixed workspace step.
+   DIRECTION selects both the axis and whether the focused pane grows or
+   shrinks."
+  (multiple-value-bind (pane window worktree)
+      (%workspace-prefix-context session conn)
+    (when (%reject-pending-worktree-attachment conn :worktree worktree :pane pane :window window)
+      (return-from %workspace-prefix-resize nil))
+    (cond
+      ((or (null pane) (null window))
+       (%client-notify conn "no focused pane"))
+      ((%worktree-cancel-pending-p worktree)
+       (%client-notify conn "worktree cancellation is pending"))
+      (t
+       (%workspace-prefix-unzoom window)
+       (if (window-resize-active window direction +workspace-prefix-resize-delta+)
+           (%mark-dirty)
+           (%client-notify conn "pane cannot be resized")))))
+  nil)
 
 (defun %workspace-refocus-after-window-close (session conn worktree)
   "R5.4 fallback focus once a window closes because its last pane closed:
@@ -230,6 +244,10 @@
    already consumed it and nothing else happens (R4.4)."
   (#\- (%workspace-prefix-split session conn :v))
   (#\| (%workspace-prefix-split session conn :h))
+  (#\< (%workspace-prefix-resize session conn :left))
+  (#\> (%workspace-prefix-resize session conn :right))
+  (#\{ (%workspace-prefix-resize session conn :up))
+  (#\} (%workspace-prefix-resize session conn :down))
   (#\x (%workspace-prefix-close-pane session conn))
   (#\z (%workspace-prefix-toggle-zoom session conn))
   (#\h (%workspace-prefix-move-focus session conn :left))

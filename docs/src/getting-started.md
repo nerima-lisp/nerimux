@@ -167,6 +167,8 @@ command line for the alternatives listed in the table.
 | Key | Action |
 |---|---|
 | `C-q -` / `C-q \|` | Split the focused pane's window down / right |
+| `C-q <` / `C-q >` | Shrink / grow the focused pane horizontally by five cells |
+| `C-q {` / `C-q }` | Shrink / grow the focused pane vertically by five cells |
 | `C-q x` | Close the focused pane |
 | `C-q z` | Toggle zoom on the focused pane's window |
 | `C-q h` / `j` / `k` / `l` | Move focus to the neighbouring pane |
@@ -180,6 +182,12 @@ command line for the alternatives listed in the table.
 `C-q F` and `C-q C-f` (fetch repository / fetch organization) are gone —
 fetch is the `f` transient now, reachable from `status` directly or from
 `repolist` via `?` f.
+
+Splits start at 50/50 and can be resized with the bindings above. A window has
+no four-pane limit: splitting continues in the same window while every
+resulting pane meets the model's minimum size. When a split would make a pane
+too small, nerimux reports the refusal and leaves the window and pane lists
+unchanged.
 
 ### Scrollback (`C-q [`)
 
