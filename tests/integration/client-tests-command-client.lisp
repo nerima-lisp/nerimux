@@ -319,6 +319,19 @@
                 (nerimux::run-client "7")))))
       (expect (string= (%expected-client-host-output) output))))
 
+  (it "run-client-server-eof-cleans-up-host-modes"
+    (let ((output
+            (with-stubbed-fdefinition
+                ((nerimux/transport:send-frame
+                  (lambda (&rest args)
+                    (declare (ignore args))
+                    nil)))
+              (with-connected-client-host-output
+                  ((close-socket server-sock))
+                (nerimux::run-client "7")))))
+      (expect (string= (%expected-client-host-output) output))
+      (expect (search (%host-mode-sequence nil) output))))
+
   (it "run-client-attach-exception-cleans-up-host-modes"
     (let ((stream (make-string-output-stream))
           (condition nil))
