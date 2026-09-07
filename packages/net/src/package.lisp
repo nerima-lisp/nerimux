@@ -8,13 +8,13 @@
     format is unit-testable without a server; the I/O sits in nerimux/transport.")
   (:export
    #:+msg-attach+ #:+msg-key+ #:+msg-resize+ #:+msg-detach+ #:+msg-frame+ #:+msg-bye+
-   #:+msg-command+ #:+msg-reply+
+   #:+msg-command+ #:+msg-reply+ #:+msg-notification+
    #:+header-size+
    #:+payload-length-offset+
    #:+cols-offset-in-size-payload+
    #:encode-frame #:decode-frame
    #:msg-attach #:msg-key #:msg-resize #:msg-detach #:msg-frame #:msg-bye
-   #:msg-command #:msg-reply
+   #:msg-command #:msg-reply #:msg-notification
    #:+field-delimiter+
    #:encode-command-payload #:decode-command-payload #:target-field-p
    #:split-on-nul-bytes #:command-name-to-string

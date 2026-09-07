@@ -226,6 +226,9 @@
    #:screen-response-queue
    #:screen-passthrough-queue
    #:screen-clipboard-queue
+   #:screen-notification-queue
+   #:screen-record-notification
+   #:screen-drain-notification-queue
    #:combining-char-p
    #:screen-bell-pending
    #:screen-consume-bell

@@ -85,6 +85,45 @@
                       (declare (ignore payload))
                       (expect (eql nerimux::+msg-frame+ type))))))))))))
 
+  (it "multi-broadcast-sends-background-and-active-notifications-to-every-client"
+    (with-fake-session (s :npanes 3)
+      (let* ((panes (window-panes (session-active-window s)))
+             (pane1 (first panes))
+             (pane2 (second panes))
+             (pane3 (third panes))
+             (osc9 #(27 93 57 59 97 108 112 104 97 7))
+             (osc777 #(27 93 55 55 55 59 110 111 116 105 102 121 59
+                       116 105 116 108 101 27 92)))
+        (pane-feed pane1 osc9)
+        (pane-feed pane2 #(7))
+        (pane-feed pane3 osc777)
+        (with-test-listener (listener path (%test-socket-path "mnotify") :backlog 4)
+          (let* ((client1 (nerimux/net:connect-to path))
+                 (server1 (nerimux/net:accept-connection listener))
+                 (client2 (nerimux/net:connect-to path))
+                 (server2 (nerimux/net:accept-connection listener))
+                 (nerimux::*clients* nil)
+                 (expected (list osc9 #(7) osc777)))
+            (when (and client1 client2 server1 server2)
+              (nerimux::%add-client server1)
+              (nerimux::%add-client server2)
+              (setf nerimux::*dirty* nil)
+              (nerimux::%broadcast-frame s)
+              (dolist (client (list client1 client2))
+                (let ((received nil))
+                  (let ((ready (nerimux/pty:select-fds
+                                (list (nerimux/net:socket-fd client))
+                                1000000)))
+                    (expect ready :to-be-truthy)
+                    (when ready
+                      (dotimes (index 3)
+                        (declare (ignore index))
+                        (multiple-value-bind (type payload)
+                            (nerimux::read-frame (nerimux/net:socket-stream client))
+                          (expect (= nerimux::+msg-notification+ type))
+                          (push payload received)))))
+                  (expect (equalp (nreverse received) expected))))))))))
+
   (it "multi-broadcast-renders-private-client-surfaces"
     (progn
       (with-fake-session (s :npanes 2)

@@ -6,6 +6,13 @@
     (parse-error ()
       nil)))
 
+(defun %notification-command-p (command)
+  (member command '(9 99 777) :test #'=))
+
+(defun %dispatch-osc-notification (screen command body raw-sequence)
+  (when (and raw-sequence (%notification-command-p command))
+    (screen-record-notification screen raw-sequence body)))
+
 (defun %handle-osc-52 (text)
   "Handle OSC 52 clipboard write: decode Base64 payload and call *osc52-handler*."
   (let* ((inner-semi (position #\; text))
@@ -73,9 +80,10 @@
                   (4 (%handle-osc-4 screen body))
                   (104 (%handle-osc-104 screen body))
                   (52 (%handle-osc-52 body))
+                  ((9 99 777))
                   (133 (%handle-osc-133 screen body)))
 
-(defun %dispatch-osc (screen payload-buffer)
+(defun %dispatch-osc (screen payload-buffer &optional raw-sequence)
   "Parse accumulated OSC payload PAYLOAD-BUFFER and apply side effects to SCREEN.
 
    OSC payloads arrive from the child process and are untrusted, so a malformed
@@ -111,4 +119,6 @@
               (subseq payload (1+ semi-pos))
               "")))
     (when command
-      (%dispatch-osc-command screen command body))))
+      (progn
+        (%dispatch-osc-notification screen command body raw-sequence)
+        (%dispatch-osc-command screen command body)))))

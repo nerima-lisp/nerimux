@@ -19,6 +19,15 @@
     (%relayout-active-window session rows cols)
     (%mark-dirty)))
 
+(defun %session-panes-for-notifications (session)
+  (mapcan (lambda (window) (copy-list (window-panes window)))
+          (session-windows session)))
+
+(defun %drain-session-notifications (session)
+  "Drain each pane once and return raw notification sequences in arrival order."
+  (mapcan #'pane-drain-notifications
+          (%session-panes-for-notifications session)))
+
 (defun %render-workspace-frame (conn)
   "The repolist frame (FR-002). Split out of %RENDER-CLIENT-FRAME so the modal
    precedence above it stays readable as a list of one-line branches."
@@ -189,14 +198,20 @@
       (unless completed (setf (client-conn-sent-row-frame conn) nil)))))
 
 (defun %broadcast-frame (session)
-  "Render and send a dirty frame to every attached client."
-  (when (and *dirty* *clients*)
-    (setf *dirty* nil)
-    (dolist (conn (copy-list *clients*))
-      (with-loop-safe-error (nil :on-error (%drop-client conn))
-                            (%send-client-frame conn
-                                                (%render-client-frame session
-                                                                      conn))))))
+  "Render dirty content and broadcast one shared notification drain."
+  (when *clients*
+    (let ((dirty *dirty*)
+          (notifications (%drain-session-notifications session)))
+      (when (or dirty notifications)
+        (setf *dirty* nil)
+        (dolist (conn (copy-list *clients*))
+          (with-loop-safe-error (nil :on-error (%drop-client conn))
+            (dolist (raw-sequence notifications)
+              (send-frame (client-conn-stream conn)
+                          (msg-notification raw-sequence)))
+            (when dirty
+              (%send-client-frame conn
+                                  (%render-client-frame session conn)))))))))
 
 (defun %client-fds ()
   "Return the socket fds of every attached client."

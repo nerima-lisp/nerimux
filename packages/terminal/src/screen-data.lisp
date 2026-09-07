@@ -61,6 +61,7 @@
   (response-queue nil :type list)
   (passthrough-queue nil :type list)
   (clipboard-queue nil :type list)
+  (notification-queue nil :type list)
   (bell-pending nil :type boolean)
   (copy-search-term nil :type (or null string))
   (copy-search-direction nil :type (or null keyword))

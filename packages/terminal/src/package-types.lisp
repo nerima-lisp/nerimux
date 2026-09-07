@@ -115,6 +115,9 @@
    #:screen-response-queue
    #:screen-passthrough-queue
    #:screen-clipboard-queue
+   #:screen-notification-queue
+   #:screen-record-notification
+   #:screen-drain-notification-queue
    #:+osc-default-fg+
    #:+osc-default-bg+
    #:screen-osc-default-fg

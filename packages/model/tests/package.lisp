@@ -14,6 +14,7 @@
                 #:defmatcher)
 (:import-from #:nerimux/pane
                 #:make-pane #:pane-feed #:pane-screen #:pane-id
+                #:pane-drain-notifications #:pane-notification
                 #:pane-x #:pane-y #:pane-width #:pane-height #:pane-fd #:pane-pid
                 #:pane-live-p
                 #:respawn-pane

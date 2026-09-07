@@ -9,6 +9,7 @@
   (#x08  (cursor-bs screen) #'ground-state)
   (#x09  (cursor-ht screen) #'ground-state)
   (#x07  (set-bell-pending screen)
+         (screen-record-notification screen (vector #x07) "")
          #'ground-state)                           ; BEL — set pending flag
   (#x7F  #'ground-state)                           ; DEL — ignore
   (#x0E  (invoke-charset screen :g1) #'ground-state) ; SO — invoke G1 (locking shift out)
@@ -55,9 +56,16 @@
   (t     (let ((payload-buffer (make-array 64
                                            :element-type '(unsigned-byte 8)
                                            :fill-pointer 0
-                                           :adjustable t)))
+                                           :adjustable t))
+                 (raw-buffer (make-array 64
+                                         :element-type '(unsigned-byte 8)
+                                         :fill-pointer 0
+                                         :adjustable t)))
            (vector-push-extend byte payload-buffer)
-           (make-osc-k payload-buffer))))
+           (vector-push-extend #x1B raw-buffer)
+           (vector-push-extend #x5D raw-buffer)
+           (vector-push-extend byte raw-buffer)
+           (make-osc-k payload-buffer raw-buffer))))
 
 (define-state osc-st-state (screen byte)
   (#x5C  #'ground-state)                           ; \ → ST confirmed (empty payload)

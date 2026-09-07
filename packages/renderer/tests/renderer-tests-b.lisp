@@ -9,7 +9,7 @@
       (expect out :to-contain-sgr nerimux/renderer::+sgr-default-status+)))
 
 
-  (it "render-bel-table"
+  (it "render-bel-is-cleared-from-rendered-frame"
     (dolist (row '((t   "bell-pending T: BEL emitted and flag cleared")
                    (nil "bell-pending NIL: BEL absent")))
       (destructuring-bind (initial-pending desc) row
@@ -18,10 +18,7 @@
                (ap    (session-active-pane sess))
                (sc    (pane-screen ap)))
           (setf (nerimux/terminal/types:screen-bell-pending sc) initial-pending)
-          (let* ((out    (render-session-to-string sess 6 20))
-                 (before (%bel-before-title-osc out)))
-            (expect (if initial-pending
-                        (find (code-char 7) before)
-                        (null (find (code-char 7) before))))
+          (let ((out (render-session-to-string sess 6 20)))
+            (expect (null (find (code-char 7) (%bel-before-title-osc out))))
             (when initial-pending
               (expect (nerimux/terminal/types:screen-bell-pending sc) :to-be-falsy))))))))

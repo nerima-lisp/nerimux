@@ -31,7 +31,8 @@
               (handler-case (pane-feed pane bytes)
                 (peer-io-failure () nil))
               (nerimux/pane:pane-mark-output pane bytes)
-              (when (find 7 bytes)
+              (when (nerimux/terminal:screen-bell-pending
+                     (nerimux/pane:pane-screen pane))
                 (nerimux/pane:pane-mark-bell pane))
               (%mark-dirty)
               #'reader-idle-state))))))

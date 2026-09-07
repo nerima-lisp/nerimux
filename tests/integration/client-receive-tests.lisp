@@ -1,5 +1,17 @@
 (in-package #:nerimux/test)
 
+(defclass notification-output-stream (sb-gray:fundamental-binary-output-stream)
+  ((bytes :initform (make-array 0 :element-type '(unsigned-byte 8)
+                                :adjustable t :fill-pointer 0)
+           :reader notification-output-bytes)))
+
+(defmethod stream-element-type ((stream notification-output-stream))
+  '(unsigned-byte 8))
+
+(defmethod sb-gray:stream-write-byte ((stream notification-output-stream) byte)
+  (vector-push-extend byte (notification-output-bytes stream))
+  byte)
+
 (describe "client-receive-suite"
 
 
@@ -20,6 +32,17 @@
           (nerimux::%decode-server-frame client-side)
         (expect (eq :frame disposition))
         (expect (string= "PURE-TEXT" text)))))
+
+  (it "decode-server-frame-returns-raw-notification-bytes"
+    (let ((raw #(27 93 57 59 0 255 7)))
+      (with-guarded-socket-test
+        (send-frame server-side
+                    (nerimux/protocol:msg-notification raw))
+        (force-output server-side)
+        (multiple-value-bind (disposition payload)
+            (nerimux::%decode-server-frame client-side)
+          (expect (eq :notification disposition))
+          (expect (equalp raw payload))))))
 
   (it "decode-server-frame-ignores-unknown-frame"
     (with-guarded-socket-test
@@ -69,6 +92,17 @@
                          (setf result (nerimux::%receive-server-frame client-side)))))
           (expect (null result))
           (expect (string= "HELLO" painted))))))
+
+  (it "receive-server-frame-writes-notification-to-binary-stdout"
+    (let ((raw #(27 93 55 55 55 59 0 255 7)))
+      (with-guarded-socket-test
+        (send-frame server-side
+                    (nerimux/protocol:msg-notification raw))
+        (force-output server-side)
+        (let ((output (make-instance 'notification-output-stream)))
+          (let ((*standard-output* output))
+            (expect (null (nerimux::%receive-server-frame client-side))))
+          (expect (equalp raw (notification-output-bytes output)))))))
 
 
   (it "utf8-char-byte-count-table"

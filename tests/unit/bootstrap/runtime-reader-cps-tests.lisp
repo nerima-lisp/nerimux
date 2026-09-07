@@ -132,8 +132,11 @@
                 (pop payloads)))
              (nerimux/pane:pane-feed
               (lambda (received-pane bytes)
-                (declare (ignore received-pane))
-                (push bytes fed)))
+                (push bytes fed)
+                (when (find 7 bytes)
+                  (setf (nerimux/terminal/types:screen-bell-pending
+                         (nerimux/pane:pane-screen received-pane))
+                        t))))
              (nerimux/pane:pane-mark-output
               (lambda (received-pane bytes)
                 (declare (ignore received-pane))

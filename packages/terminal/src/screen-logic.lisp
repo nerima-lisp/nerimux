@@ -17,6 +17,20 @@
     (setf (screen-bell-pending screen) nil)
     t))
 
+(defun screen-record-notification (screen raw-bytes text)
+  "Record one terminal notification as RAW-BYTES plus display TEXT.
+   The raw sequence is copied before it is retained because the parser uses an
+   adjustable continuation buffer while it consumes an OSC sequence."
+  (push (cons (coerce raw-bytes '(simple-array (unsigned-byte 8) (*)))
+              text)
+        (screen-notification-queue screen))
+  screen)
+
+(defun screen-drain-notification-queue (screen)
+  "Return SCREEN's notification entries oldest-first and clear the queue."
+  (prog1 (nreverse (screen-notification-queue screen))
+    (setf (screen-notification-queue screen) nil)))
+
 (defun screen-drain-queue (screen queue-reader queue-writer)
   "Atomically read and clear a push-accumulated queue slot on SCREEN, returning
    the queued items in push order (oldest first).

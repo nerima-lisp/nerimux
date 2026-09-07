@@ -32,15 +32,44 @@
       (let ((title (nerimux/terminal/types:screen-title s)))
         (expect (or (null title) (string= "" title))))))
 
-  (it "osc-unknown-command-is-silently-ignored"
+  (it "osc-99-is-a-known-raw-notification"
+    (with-screen (s 20 5)
+      (screen-process-bytes s
+        (cl-codec-kit:string-to-octets
+          (format nil "~C]99;some-data~C" #\Escape (code-char 7))
+          :encoding :utf-8))
+      (let ((entry (car (nerimux/terminal/types:screen-notification-queue s))))
+        (expect (equalp #(27 93 57 57 59 115 111 109 101 45 100 97 116 97 7)
+                        (car entry)))
+        (expect (string= "some-data" (cdr entry))))))
+
+  (it "osc-9-99-777-are-recorded-from-terminal-bytes"
+    (with-screen (s 20 5)
+      (dolist (case (list (list #(27 93 57 59 110 105 110 101 7) "nine")
+                          (list #(27 93 57 57 59 110 105 110 101 116 121 45 110 105 110 101 7)
+                                "ninety-nine")
+                          (list #(27 93 55 55 55 59 115 101 118 101 110 45 115 101 118 101 110 45 115 101 118 101 110 7)
+                                "seven-seven-seven")))
+        (screen-process-bytes s (first case)))
+      (let ((entries (nreverse (nerimux/terminal/types:screen-notification-queue s))))
+        (expect (= 3 (length entries)))
+        (loop for case in (list (list #(27 93 57 59 110 105 110 101 7) "nine")
+                                (list #(27 93 57 57 59 110 105 110 101 116 121 45 110 105 110 101 7)
+                                      "ninety-nine")
+                                (list #(27 93 55 55 55 59 115 101 118 101 110 45 115 101 118 101 110 45 115 101 118 101 110 7)
+                                      "seven-seven-seven"))
+              for entry in entries
+              do (expect (equalp (first case) (car entry)))
+                 (expect (string= (second case) (cdr entry)))))))
+
+  (it "osc-998-remains-an-unknown-command"
     (with-screen (s 20 5)
       (finishes
         (screen-process-bytes s
           (cl-codec-kit:string-to-octets
-            (format nil "~C]99;some-data~C" #\Escape (code-char 7))
+            (format nil "~C]998;some-data~C" #\Escape (code-char 7))
             :encoding :utf-8)))
-      (let ((title (nerimux/terminal/types:screen-title s)))
-        (expect (or (null title) (string= "" title))))))
+      (expect (null (nerimux/terminal/types:screen-notification-queue s)))))
 
   (it "osc-empty-payload-bel-is-noop"
     (with-screen (s 20 5)

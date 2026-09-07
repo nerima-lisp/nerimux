@@ -1,5 +1,9 @@
 (in-package #:nerimux/pane)
 
+(defconstant +pane-notification-coalesce-seconds+
+  1
+  "The timestamp bucket used to coalesce pane notification events.")
+
 (defstruct pane
   "One terminal pane: a PTY fd + virtual screen + position within its window."
   (id       0   :type fixnum)
@@ -32,6 +36,9 @@
   (last-focused-time nil)
   (last-output "" :type string)
   (notification "" :type string)
+  (raw-notification-queue nil :type list)
+  (last-notification-time nil)
+  (pending-raw-notification nil :type list)
   (local-options (make-hash-table :test #'equal) :type hash-table))
 
 (defun worktree-add-pane (worktree pane)
@@ -122,6 +129,43 @@
           (pane-last-output-time pane) (get-universal-time)))
   pane)
 
+(defun pane-record-notification (pane raw-bytes text &optional (now (get-universal-time)))
+  "Store the newest raw notification while enforcing PANE's one-second rate.
+   A notification waiting in the queue is replaced by a newer eligible event;
+   events arriving before the next eligible second are coalesced separately."
+  (when pane
+    (pane-notify pane text)
+    (let ((entry (cons now
+                       (coerce raw-bytes
+                               '(simple-array (unsigned-byte 8) (*))))))
+      (if (or (null (pane-last-notification-time pane))
+              (>= (- now (pane-last-notification-time pane))
+                  +pane-notification-coalesce-seconds+))
+          (setf (pane-raw-notification-queue pane) (list entry)
+                (pane-pending-raw-notification pane) nil)
+          (setf (pane-pending-raw-notification pane) entry))))
+  pane)
+
+(defun pane-drain-notifications (pane)
+  "Return PANE's raw notification sequences and clear the send queue.
+   A coalesced event becomes eligible only after the one-second interval from
+   the last forwarded event has elapsed."
+  (when pane
+    (with-lock-held ((pane-process-lock pane))
+      (let ((now (get-universal-time)))
+        (when (and (pane-pending-raw-notification pane)
+                   (pane-last-notification-time pane)
+                   (>= (- now (pane-last-notification-time pane))
+                       +pane-notification-coalesce-seconds+))
+          (setf (pane-raw-notification-queue pane)
+                (list (pane-pending-raw-notification pane))
+                (pane-pending-raw-notification pane) nil))
+        (let ((entries (nreverse (pane-raw-notification-queue pane))))
+          (setf (pane-raw-notification-queue pane) nil)
+          (when entries
+            (setf (pane-last-notification-time pane) now))
+          (mapcar #'cdr entries))))))
+
 (defun pane-clear-unread-output (pane)
   (when pane
     (setf (pane-unread-output-p pane) nil))
@@ -208,6 +252,11 @@
    (DA1/DA2/CPR/DSR/DECRQM/XTGETTCAP/DECRQSS/OSC-color) back to the PTY.
    The response queue is populated by the CPS parser under the screen lock;
    it is drained outside the lock so write-pty never blocks while holding it."
-  (let ((screen (pane-screen pane)))
-    (with-lock-held ((screen-lock screen)) (screen-process-bytes screen bytes))
+  (let ((screen (pane-screen pane))
+        (notifications nil))
+    (with-lock-held ((screen-lock screen))
+                    (screen-process-bytes screen bytes)
+                    (setf notifications (screen-drain-notification-queue screen)))
+    (dolist (notification notifications)
+      (pane-record-notification pane (car notification) (cdr notification)))
     (%drain-response-queue pane screen)))

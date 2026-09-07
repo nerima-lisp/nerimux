@@ -1,5 +1,9 @@
 (in-package #:nerimux/protocol)
 
+(defconstant +msg-notification+
+  9
+  "server→client: one raw terminal notification sequence (binary payload).")
+
 (defmacro define-uint-codec (&rest specs)
   "Build paired big-endian integer encoder and decoder functions.
 
@@ -100,7 +104,11 @@ schema cannot silently generate a partial or non-byte-aligned codec."
  (msg-reply +msg-reply+
             (string)
             (cl-codec-kit:string-to-octets string :encoding :utf-8)
-            "server→client frame carrying a forwarded command's text output (UTF-8)."))
+            "server→client frame carrying a forwarded command's text output (UTF-8).")
+ (msg-notification +msg-notification+
+                   (octets)
+                   (to-octets octets)
+                   "server→client frame carrying one raw terminal notification sequence."))
 
 (defun msg-attach (rows cols)
   "Build a +msg-attach+ frame carrying the initial terminal size.

@@ -117,6 +117,10 @@
                      #:pane-marked
                      #:pane-non-zero-exit-p
                      #:pane-notification
+                     #:pane-raw-notification-queue
+                     #:pane-last-notification-time
+                     #:pane-record-notification
+                     #:pane-drain-notifications
                      #:pane-notify
                      #:pane-pid
                      #:pane-role
