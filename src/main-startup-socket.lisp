@@ -21,13 +21,15 @@
 (defun %stale-socket-p (socket-path)
   "True when SOCKET-PATH exists but no server accepts connections on it.
    A leftover socket file like this (e.g. after a crash) should not block
-   attaching: it is unlinked and a fresh server started instead of failing."
+   attaching: it is unlinked and a fresh server started instead of failing.
+   Only a refused connection identifies a dead listener. A timeout, file
+   error, or stream error is inconclusive, so leave that path untouched."
   (handler-case (and (probe-file socket-path)
-                     (not
-                      (%with-unavailable-socket-as-nil
-                        (let ((sock (nerimux/net:connect-to socket-path)))
-                          (nerimux/net:close-socket sock)
-                          t))))
+                     (eq :socket-error
+                         (%probe-socket-connection
+                           (let ((sock (nerimux/net:connect-to socket-path)))
+                             (nerimux/net:close-socket sock)
+                             :connected))))
     (file-error ()
       nil)
     (stream-error ()

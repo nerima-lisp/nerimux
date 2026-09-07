@@ -562,32 +562,41 @@
                (expect (null (nerimux::%stale-socket-p "/synthetic/socket"))))
           (setf (fdefinition 'probe-file) original-probe-file)))))
 
-  (it "stale-socket-p-treats-connection-file-errors-as-stale"
+  (it "stale-socket-p-treats-connection-file-errors-as-not-stale"
     (with-stubbed-locked-fdefinitions
         ((probe-file (lambda (path)
                        (pathname path)))
          (nerimux/net:connect-to (lambda (path)
                                    (declare (ignore path))
                                    (error 'file-error))))
-      (expect (eq t (and (nerimux::%stale-socket-p "/synthetic/socket") t)))))
+      (expect (null (nerimux::%stale-socket-p "/synthetic/socket")))))
 
-  (it "stale-socket-p-treats-connection-stream-errors-as-stale"
+  (it "stale-socket-p-treats-connection-stream-errors-as-not-stale"
     (with-stubbed-locked-fdefinitions
         ((probe-file (lambda (path)
                        (pathname path)))
          (nerimux/net:connect-to (lambda (path)
                                    (declare (ignore path))
                                    (error 'stream-error))))
+      (expect (null (nerimux::%stale-socket-p "/synthetic/socket")))))
+
+  (it "stale-socket-p-treats-connection-socket-errors-as-stale"
+    (with-stubbed-locked-fdefinitions
+        ((probe-file (lambda (path)
+                       (pathname path)))
+         (nerimux/net:connect-to (lambda (path)
+                                   (declare (ignore path))
+                                   (error 'sb-bsd-sockets:socket-error))))
       (expect (eq t (and (nerimux::%stale-socket-p "/synthetic/socket") t)))))
 
-  (it "stale-socket-p-treats-connection-timeouts-as-stale"
+  (it "stale-socket-p-treats-connection-timeouts-as-not-stale"
     (with-stubbed-locked-fdefinitions
         ((probe-file (lambda (path)
                        (pathname path)))
          (nerimux/net:connect-to (lambda (path)
                                    (declare (ignore path))
                                    (error 'sb-ext:timeout))))
-      (expect (eq t (and (nerimux::%stale-socket-p "/synthetic/socket") t)))))
+      (expect (null (nerimux::%stale-socket-p "/synthetic/socket")))))
 
   (it "stale-socket-p-returns-nil-after-probe-stream-error"
     (sb-ext:without-package-locks

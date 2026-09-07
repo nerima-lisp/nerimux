@@ -1,8 +1,9 @@
 (in-package #:nerimux)
 
-(defmacro %with-unavailable-socket-as-nil (&body body)
+(defmacro %probe-socket-connection (&body body)
+  "Classify the result of a socket connection probe by condition kind."
   `(handler-case (progn ,@body)
-     (sb-ext:timeout () nil)
-     (sb-bsd-sockets:socket-error () nil)
-     (file-error () nil)
-     (stream-error () nil)))
+     (sb-ext:timeout () :timeout)
+     (sb-bsd-sockets:socket-error () :socket-error)
+     (file-error () :file-error)
+     (stream-error () :stream-error)))
