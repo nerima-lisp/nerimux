@@ -500,6 +500,39 @@
                                sorted-organization)))))
         (nerimux/vcs:set-workspace-organizations previous))))
 
+  (it "keeps unknown creation keys stable when only one worktree has pane activity"
+    (let ((previous (nerimux/vcs:workspace-organizations)))
+      (unwind-protect
+           (let* ((organization
+                    (nerimux/workspace-model:make-organization
+                     :id "org-nil-time" :host "github.com" :name "team"))
+                  (repository
+                    (nerimux/workspace-model:make-repository
+                     :id "repo-nil-time" :organization organization
+                     :specification "github.com/team/repo"))
+                  (worktree-active
+                    (nerimux/workspace-model:make-worktree
+                     :id "wt-active" :repository repository
+                     :path "/tmp/active" :branch "active"))
+                  (worktree-idle
+                    (nerimux/workspace-model:make-worktree
+                     :id "wt-idle" :repository repository
+                     :path "/tmp/idle" :branch "idle"))
+                  (pane (nerimux/pane:make-pane :id 3 :fd -1)))
+             (nerimux/workspace-model:organization-add-repository organization repository)
+             (nerimux/workspace-model:repository-add-worktree repository worktree-active)
+             (nerimux/workspace-model:repository-add-worktree repository worktree-idle)
+             (nerimux/pane:worktree-add-pane worktree-active pane)
+             (setf (nerimux/pane:pane-last-output-time pane)
+                   (- (get-universal-time) 30))
+             (nerimux/vcs:set-workspace-organizations (list organization))
+             (let ((sorted-organization (first (nerimux/vcs:workspace-organizations))))
+               (expect (equal (list worktree-idle worktree-active)
+                              (nerimux/workspace-model:repository-worktrees
+                               (first (nerimux/workspace-model:organization-repositories
+                                       sorted-organization)))))))
+        (nerimux/vcs:set-workspace-organizations previous))))
+
   (it "keeps the existing order for tied (no-activity) worktrees"
     (let ((previous (nerimux/vcs:workspace-organizations)))
       (unwind-protect
