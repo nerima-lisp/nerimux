@@ -1,6 +1,105 @@
 (in-package #:nerimux/test)
 
+(defun %host-mode-sequence (enable-p)
+  (if enable-p
+      (format nil "~C[?1049h~C[?2004h~C[?1004h" #\Escape #\Escape #\Escape)
+      (format nil "~C[?1004l~C[?2004l~C[?1049l" #\Escape #\Escape #\Escape)))
+
+(defun %expected-client-host-output ()
+  (concatenate 'string
+               (%host-mode-sequence t)
+               (format nil "~C[2J~C[H" #\Escape #\Escape)
+               (%host-mode-sequence nil)
+               (format nil "~%")))
+
+(defmacro %with-stubbed-client-host-output-to (stream &body attach-body)
+  `(let ((*standard-output* ,stream)
+         (*error-output* (make-string-output-stream)))
+     (with-stubbed-fdefinition
+         ((nerimux::socket-path
+           (lambda (name)
+             (declare (ignore name))
+             "/tmp/nerimux-test-client.sock"))
+          (nerimux/net:connect-to
+           (lambda (path)
+             (declare (ignore path))
+             :socket))
+          (nerimux/net:socket-stream
+           (lambda (socket)
+             (declare (ignore socket))
+             :stream))
+          (nerimux/net:socket-fd
+           (lambda (socket)
+             (declare (ignore socket))
+             99))
+          (nerimux/pty:terminal-size
+           (lambda ()
+             (values 24 80)))
+          (nerimux::install-sigwinch-handler
+           (lambda () nil))
+          (nerimux/pty:enable-raw-mode!
+           (lambda (fd)
+             (declare (ignore fd))
+             nil))
+          (nerimux/pty:disable-raw-mode!
+           (lambda (fd)
+             (declare (ignore fd))
+             nil))
+          (nerimux/net:close-socket
+           (lambda (socket)
+             (declare (ignore socket))
+             nil))
+          (nerimux::%run-attach-session
+           (lambda (stream fd target)
+             (declare (ignore stream fd target))
+             ,@attach-body)))
+       (nerimux::run-client "7"))))
+
+(defmacro with-stubbed-client-host-output (&body attach-body)
+  `(with-output-to-string (output)
+     (%with-stubbed-client-host-output-to output ,@attach-body)))
+
+(defmacro with-connected-client-host-output (setup &body body)
+  `(with-guarded-socket-test/fd
+       (:server-sock server-sock
+        :client-sock client-sock
+        :server-stream server-stream)
+     ,@setup
+     (with-output-to-string (*standard-output*)
+       (let ((*error-output* (make-string-output-stream)))
+         (with-stubbed-fdefinition
+             ((nerimux/net:connect-to
+               (lambda (path)
+                 (declare (ignore path))
+                 client-sock))
+              (nerimux/pty:terminal-size
+               (lambda ()
+                 (values 24 80)))
+              (nerimux::install-sigwinch-handler
+               (lambda () nil))
+              (nerimux/pty:enable-raw-mode!
+               (lambda (fd)
+                 (declare (ignore fd))
+                 nil))
+              (nerimux/pty:disable-raw-mode!
+               (lambda (fd)
+                 (declare (ignore fd))
+                 nil)))
+           ,@body)))))
+
 (describe "client-command-suite"
+
+  (it "renderer-enable-host-modes-emits-1049-2004-1004"
+    (let ((output
+            (with-output-to-string (*standard-output*)
+              (nerimux/renderer:enable-host-modes))))
+      (expect (string= (%host-mode-sequence t) output))))
+
+  (it "renderer-disable-host-modes-emits-1004-2004-1049"
+    (let ((output
+            (with-output-to-string (*standard-output*)
+              (nerimux/renderer:disable-host-modes))))
+      (expect (string= (%host-mode-sequence nil) output))))
 
   (it "decode-server-frame-classifies-eof-bye-frame-and-unknown"
     (dolist (case (list (list nil nil :exit nil)
@@ -150,6 +249,10 @@
               (values 24 80)))
            (nerimux::install-sigwinch-handler
             (lambda () (push :sigwinch events) nil))
+           (nerimux/renderer:enable-host-modes
+            (lambda () (push :host-mode-enable events) nil))
+           (nerimux/renderer:disable-host-modes
+            (lambda () (push :host-mode-disable events) nil))
            (nerimux/pty:enable-raw-mode!
             (lambda (fd)
               (push (list :raw-enable fd) events)
@@ -173,11 +276,94 @@
       (expect (string= "7" socket-path-name))
       (expect (member :clear events) :to-be-truthy)
       (expect (member :sigwinch events) :to-be-truthy)
+      (expect (member :host-mode-enable events) :to-be-truthy)
+      (expect (member :host-mode-disable events) :to-be-truthy)
       (expect (member '(:raw-enable 0) events :test #'equal) :to-be-truthy)
       (expect (member '(:raw-disable 0) events :test #'equal) :to-be-truthy)
       (expect (member '(:attach :stream 99 "target") events :test #'equal)
               :to-be-truthy)
-      (expect (member '(:close :socket) events :test #'equal) :to-be-truthy))) (it "send-client-attach-target-sends-command"
+      (expect (member '(:close :socket) events :test #'equal) :to-be-truthy)))
+
+  (it "run-client-detach-server-drop-cleans-up-host-modes"
+    (let ((output
+            (with-connected-client-host-output
+                ((let ((conn (nerimux::%make-client-conn
+                               :socket server-sock
+                               :stream server-stream
+                               :fd (socket-fd server-sock))))
+                   (let ((nerimux::*clients* (list conn)))
+                     (with-stubbed-fdefinition
+                         ((nerimux/net:close-socket
+                           (lambda (&rest args)
+                             (declare (ignore args))
+                             nil)))
+                       (let ((disposition
+                               (nerimux::%handle-multi-client-message
+                                +msg-detach+ #() :session conn)))
+                         (expect (eq :drop disposition))
+                         (expect (null
+                                  (nerimux::%apply-client-disposition
+                                   disposition conn))))))))
+              (nerimux::run-client "7"))))
+      (expect (string= (%expected-client-host-output) output))))
+
+  (it "run-client-peer-io-failure-cleans-up-host-modes"
+    (let ((output
+            (with-stubbed-fdefinition
+                ((nerimux/transport:send-frame
+                  (lambda (&rest args)
+                    (declare (ignore args))
+                    (error "peer write failed"))))
+              (with-connected-client-host-output
+                  ()
+                (nerimux::run-client "7")))))
+      (expect (string= (%expected-client-host-output) output))))
+
+  (it "run-client-attach-exception-cleans-up-host-modes"
+    (let ((stream (make-string-output-stream))
+          (condition nil))
+      (handler-case
+          (%with-stubbed-client-host-output-to stream
+            (error "attach session failed"))
+        (error (caught)
+          (setf condition caught)))
+      (let ((output (get-output-stream-string stream)))
+        (expect condition :to-be-truthy)
+        (expect (search (%host-mode-sequence t) output))
+        (expect (search (%host-mode-sequence nil) output))
+        (expect (< (search (%host-mode-sequence t) output)
+                   (search (%host-mode-sequence nil) output))))))
+
+  (it "run-client-attach-non-local-exit-cleans-up-host-modes"
+    (let* ((stream (make-string-output-stream))
+           (result
+             (catch 'client-attach-non-local-exit
+               (%with-stubbed-client-host-output-to stream
+                 (throw 'client-attach-non-local-exit :stopped)))))
+      (expect (eq :stopped result))
+      (let ((output (get-output-stream-string stream)))
+        (expect (search (%host-mode-sequence t) output))
+        (expect (search (%host-mode-sequence nil) output))
+        (expect (< (search (%host-mode-sequence t) output)
+                   (search (%host-mode-sequence nil) output))))))
+
+  (it "run-client-connect-failure-emits-no-host-modes"
+    (let ((output
+            (with-output-to-string (*standard-output*)
+              (with-stubbed-fdefinition
+                  ((nerimux::socket-path
+                    (lambda (name)
+                      (declare (ignore name))
+                      "/tmp/nerimux-test-client.sock"))
+                   (nerimux/net:connect-to
+                    (lambda (path)
+                      (declare (ignore path))
+                      (error "connect failed"))))
+                (handler-case (nerimux::run-client "7")
+                  (error () nil))))))
+      (expect (string= "" output))))
+
+  (it "send-client-attach-target-sends-command"
     (with-guarded-socket-test
       (nerimux::%send-client-attach-target server-side "target")
       (force-output server-side)

@@ -32,6 +32,8 @@
    #:render-transient-panel
    #:render-transient-full-screen-to-tui-string
    #:render-process-log-to-tui-string
+   #:enable-host-modes
+   #:disable-host-modes
    #:clear-display
    #:*color-downsample-fn*
    #:%rgb-int-to-256))
