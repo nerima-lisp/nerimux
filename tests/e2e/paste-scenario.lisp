@@ -53,6 +53,21 @@
                           :element-type '(unsigned-byte 8))
     (write-sequence payload stream)))
 
+(defun %paste-file-size (pathname)
+  (when (probe-file pathname)
+    (with-open-file (stream pathname :element-type '(unsigned-byte 8))
+      (file-length stream))))
+
+(defun %read-paste-file-octets (pathname)
+  (when (probe-file pathname)
+    (with-open-file (stream pathname :element-type '(unsigned-byte 8))
+      (let* ((bytes (make-array (file-length stream)
+                                :element-type '(unsigned-byte 8)))
+             (end (read-sequence bytes stream)))
+        (if (= end (length bytes))
+            bytes
+            (subseq bytes 0 end))))))
+
 (defun %write-paste-sequence (fd payload deadline)
   (pty-write fd (format nil "~C[200~~" #\Escape))
   (loop for start from 0 below (length payload) by +e2e-paste-chunk-size+
@@ -108,23 +123,28 @@
 (defun run-paste-scenario (binary)
   (let* ((worktree (%paste-worktree))
          (payload (%make-paste-payload))
-         (sent-path (merge-pathnames "paste-sent.bin"
-                                     (uiop:ensure-directory-pathname
-                                      (sb-ext:posix-getenv "TMPDIR"))))
+         (tmpdir (uiop:ensure-directory-pathname
+                  (sb-ext:posix-getenv "TMPDIR")))
+         (sent-path (merge-pathnames "paste-sent.bin" tmpdir))
+         (received-path (merge-pathnames "paste-received.bin" tmpdir))
+         (boundary-path (merge-pathnames "paste-boundary.actual" tmpdir))
          (sent-digest nil)
          (ready-marker "NMX_PASTE_READY")
+         (done-marker "NMX_PASTE_DONE")
          (command
            (format nil
-                   "printf '~C[?2004l'; stty raw -echo; printf '%s' '~A' >\"$TMPDIR/paste-boundary.expected\"; printf 'NMX_PASTE_%s\n' READY; dd iflag=fullblock bs=~D count=1 of=\"$TMPDIR/paste-received.bin\" status=none; dd iflag=fullblock bs=~D count=1 of=\"$TMPDIR/paste-boundary.actual\" status=none; if cmp -s \"$TMPDIR/paste-boundary.expected\" \"$TMPDIR/paste-boundary.actual\"; then set -- $(sha256sum \"$TMPDIR/paste-received.bin\"); printf '\nNMX_PASTE_SHA_%s\n' \"$1\"; else printf '\nNMX_PASTE_BOUNDARY_%s\n' MISMATCH; fi~%"
+                   "printf '~C[?2004l'; stty raw -echo; printf '\\r\\nNMX_PASTE_%s\\r\\n' READY; dd iflag=fullblock bs=~D count=1 of=\"$TMPDIR/paste-received.bin\" status=none; dd iflag=fullblock bs=~D count=1 of=\"$TMPDIR/paste-boundary.actual\" status=none; printf '\\r\\nNMX_PASTE_%s\\r\\n' DONE~%"
                    #\Escape
-                   +e2e-paste-boundary+
                    +e2e-paste-size+
                    (length +e2e-paste-boundary+))))
     (%write-paste-payload-file sent-path payload)
     (setf sent-digest (%paste-sha256-file sent-path))
-    (let ((digest-marker (format nil "NMX_PASTE_SHA_~A" sent-digest)))
-      (assert (null (search ready-marker command)))
-      (assert (null (search digest-marker command)))
+    (assert (null (search ready-marker command)))
+    (assert (null (search done-marker command)))
+    (let ((expected-boundary
+            (map '(simple-array (unsigned-byte 8) (*))
+                 #'char-code
+                 +e2e-paste-boundary+)))
       (multiple-value-bind (fd pid)
           (forkpty-with-shell 24 80
                               :start-dir worktree
@@ -140,17 +160,31 @@
                                               +e2e-marker-timeout-seconds+ acc)))
                  (when ready
                    (%run-paste-writer-draining fd payload acc))
-                 (let ((matched
-                         (and ready
-                              (or (%search-in-tail
-                                   digest-marker
-                                   acc
-                                   (max +e2e-search-window-bytes+
-                                        (length digest-marker)))
-                                  (%wait-for-marker
-                                   fd digest-marker
-                                   +e2e-paste-result-timeout-seconds+
-                                   acc)))))
+                 (let* ((done
+                          (and ready
+                               (or (%search-in-tail
+                                    done-marker
+                                    acc
+                                    (max +e2e-search-window-bytes+
+                                         (length done-marker)))
+                                   (%wait-for-marker
+                                    fd done-marker
+                                    +e2e-paste-result-timeout-seconds+
+                                    acc))))
+                        (received-exists-p (not (null (probe-file received-path))))
+                        (received-size (and received-exists-p
+                                            (%paste-file-size received-path)))
+                        (received-digest (and received-exists-p
+                                              (%paste-sha256-file received-path)))
+                        (boundary-bytes (%read-paste-file-octets boundary-path))
+                        (boundary-size (and boundary-bytes
+                                            (length boundary-bytes)))
+                        (matched
+                          (and done
+                               received-exists-p
+                               (= received-size +e2e-paste-size+)
+                               (string= received-digest sent-digest)
+                               (equalp boundary-bytes expected-boundary))))
                    (pty-write fd (make-array 2 :element-type '(unsigned-byte 8)
                                               :initial-contents
                                               (list 17 (char-code #\d))))
@@ -164,7 +198,12 @@
                                          +e2e-paste-size+ sent-digest))
                          (values nil
                                  (format nil
-                                         "ready=~A sha256=~A exit-kind=~A exit-code=~A captured=~D bytes"
-                                         ready matched exit-kind exit-code
+                                         "ready=~A done=~A received=~A size=~S sha256=~S boundary-size=~S boundary-bytes=~S exit-kind=~A exit-code=~A captured=~D bytes"
+                                         ready done
+                                         (if received-exists-p :present :missing)
+                                         received-size received-digest boundary-size
+                                         (and boundary-bytes
+                                              (coerce boundary-bytes 'list))
+                                         exit-kind exit-code
                                          (fill-pointer acc))))))))
           (pty-close fd pid))))))
