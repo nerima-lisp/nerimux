@@ -158,10 +158,12 @@
                                          (expect (characterp (first action)))
                                          (expect (stringp (second action)))
                                          (expect
-                                          (member (first (third action))
+                                                  (member (first (third action))
                                                   '(:git :call
                                                          :open-transient
                                                          :help
+                                                         :prompt
+                                                         :read-view
                                                          :stub))))))
                                    (expect
                                     (string= "git push --force"
@@ -449,4 +451,150 @@
                       (expect (equal '("git push" "1" "boom")
                                      (first (nerimux::client-conn-process-log conn))))
                       (expect (string= "git push: failed: boom"
-                                       (first (nerimux::client-conn-message-log conn))))))))))
+                                       (first (nerimux::client-conn-message-log conn)))))))))
+
+          (it "routes read-only views through client bytes and closes them"
+              (with-fake-session (s)
+                (let ((conn (%make-test-conn))
+                      (nerimux::*clients* nil))
+                  (setf nerimux::*clients* (list conn))
+                  (multiple-value-bind (repository worktree ignored-conn)
+                      (%make-worktree-operation-fixture)
+                    (declare (ignore repository ignored-conn))
+                    (nerimux::%set-client-selected-tree-object conn worktree)
+                    (with-stubbed-fdefinition
+                        ((nerimux/vcs:vcs-package-available-p (lambda () t))
+                         (nerimux/vcs:read-worktree-log-async
+                           (lambda (received &key on-complete on-error callback-dispatch)
+                             (declare (ignore received on-error callback-dispatch))
+                             (funcall on-complete "commit abc\nsubject"))))
+                      (labels ((send-text (text)
+                                 (dolist (byte (coerce
+                                                (cl-codec-kit:string-to-octets
+                                                 text
+                                                 :encoding :utf-8)
+                                                'list))
+                                   (nerimux::%handle-multi-key-message
+                                    s conn (vector byte)))))
+                        (setf (nerimux::client-conn-view conn) :status)
+                        (nerimux::%open-client-transient conn #\l)
+                        (nerimux::%handle-multi-key-message s conn #(108))
+                        (expect (eq :read-view (nerimux::client-conn-modal conn)))
+                        (expect (string= "commit abc\nsubject"
+                                         (nerimux/renderer:read-view-content
+                                          (nerimux::client-conn-read-view conn))))
+                        (nerimux::%handle-multi-key-message s conn #(47))
+                        (send-text "commit")
+                        (nerimux::%handle-multi-key-message s conn #(13))
+                        (expect (eq :read-view (nerimux::client-conn-modal conn)))
+                        (expect (string= "commit"
+                                         (nerimux/renderer:read-view-query
+                                          (nerimux::client-conn-read-view conn))))
+                        (nerimux::%handle-multi-key-message s conn #(113))
+                        (expect (null (nerimux::client-conn-modal conn))))))))
+
+          (it "submits commit branch tag and remote prompts from client bytes"
+              (with-fake-session (s)
+                (let ((conn (%make-test-conn))
+                      (nerimux::*clients* nil)
+                      (calls nil))
+                  (setf nerimux::*clients* (list conn))
+                  (multiple-value-bind (repository worktree ignored-conn)
+                      (%make-worktree-operation-fixture)
+                    (declare (ignore ignored-conn))
+                    (nerimux::%set-client-selected-tree-object conn worktree)
+                    (with-stubbed-fdefinition
+                        ((nerimux/vcs:vcs-package-available-p (lambda () t))
+                         (nerimux/vcs:git-write-operation-async
+                           (lambda (received operation args &key on-complete on-error callback-dispatch)
+                             (declare (ignore on-error callback-dispatch))
+                             (push (list received operation args) calls)
+                             (funcall on-complete t "done"))))
+                      (labels ((send (payload)
+                               (nerimux::%handle-multi-key-message s conn payload))
+                             (send-text (text)
+                               (dolist (byte (coerce
+                                              (cl-codec-kit:string-to-octets
+                                               text
+                                               :encoding :utf-8)
+                                              'list))
+                                 (send (vector byte))))
+                             (submit-one-line (menu action text)
+                               (nerimux::%open-client-transient conn menu)
+                               (send action)
+                               (send-text text)
+                               (send #(13))))
+                        (setf (nerimux::client-conn-view conn) :status)
+                        (nerimux::%open-client-transient conn #\c)
+                        (send #(99))
+                        (send-text "message")
+                        (send #(19))
+                        (submit-one-line #\b #(99) "feature/new")
+                        (submit-one-line #\t #(116) "v1.2")
+                        (submit-one-line #\P #(101) "upstream")
+                        (expect (= 4 (length calls)))
+                        (expect (equal (list repository :commit '("--message" "message"))
+                                       (find :commit calls :key #'second)))
+                        (expect (equal (list repository :branch '("feature/new"))
+                                       (find :branch calls :key #'second)))
+                        (expect (equal (list repository :tag '("v1.2"))
+                                       (find :tag calls :key #'second)))
+                        (expect (equal (list repository :push '("upstream"))
+                                       (find :push calls :key #'second))))))))))
+
+          (it "keeps multiline prompt paste on the client byte path"
+              (with-fake-session (s)
+                (let ((conn (%make-test-conn))
+                      (nerimux::*clients* nil)
+                      (calls nil))
+                  (setf nerimux::*clients* (list conn))
+                  (multiple-value-bind (repository worktree ignored-conn)
+                      (%make-worktree-operation-fixture)
+                    (declare (ignore ignored-conn))
+                    (nerimux::%set-client-selected-tree-object conn worktree)
+                    (with-stubbed-fdefinition
+                        ((nerimux/vcs:vcs-package-available-p (lambda () t))
+                         (nerimux/vcs:git-write-operation-async
+                           (lambda (received operation args &key on-complete on-error callback-dispatch)
+                             (declare (ignore on-error callback-dispatch))
+                             (push (list received operation args) calls)
+                             (funcall on-complete t "done"))))
+                      (labels ((send-text (text)
+                                 (dolist (byte (coerce
+                                                (cl-codec-kit:string-to-octets
+                                                 text
+                                                 :encoding :utf-8)
+                                                'list))
+                                   (nerimux::%handle-multi-client-message
+                                    nerimux::+msg-key+
+                                    (vector byte)
+                                    s
+                                    conn))))
+                        (setf (nerimux::client-conn-view conn) :status)
+                        (nerimux::%open-client-transient conn #\c)
+                        (nerimux::%handle-multi-key-message s conn #(99))
+                        (send-text (concatenate 'string
+                                                (string #\Escape)
+                                                "[200~first"
+                                                (string #\Newline)
+                                                "second"
+                                                (string #\Escape)
+                                                "[201~"))
+                        (expect (eq :text-prompt
+                                    (nerimux::client-conn-modal conn)))
+                        (expect
+                         (string= (concatenate 'string
+                                               "first"
+                                               (string #\Newline)
+                                               "second")
+                                  (cl-tui-kit/widgets:input-widget-value
+                                   (nerimux::client-conn-text-prompt-widget conn))))
+                        (nerimux::%handle-multi-key-message s conn #(19))
+                        (expect
+                         (equal (list repository :commit
+                                      (list "--message"
+                                            (concatenate 'string
+                                                         "first"
+                                                         (string #\Newline)
+                                                         "second")))
+                                (first calls))))))))))

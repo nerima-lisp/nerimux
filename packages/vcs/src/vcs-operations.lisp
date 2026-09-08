@@ -149,6 +149,12 @@
                 :behind (if old-worktree
                             (nerimux/workspace-model:worktree-behind old-worktree)
                             0)
+                :additions (if old-worktree
+                               (nerimux/workspace-model::worktree-additions old-worktree)
+                               0)
+                :deletions (if old-worktree
+                               (nerimux/workspace-model::worktree-deletions old-worktree)
+                               0)
                 :changed-files (and old-worktree
                                     (nerimux/workspace-model:worktree-changed-files
                                      old-worktree))

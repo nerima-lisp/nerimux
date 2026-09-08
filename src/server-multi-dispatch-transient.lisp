@@ -74,10 +74,283 @@
                                                                   (princ-to-string
                                                                    condition))
                                              (%client-notify conn
-                                                             (format nil
-                                                                     "~A: failed: ~A"
-                                                                     command
-                                                                     condition))))))
+                                             (format nil
+                                                     "~A: failed: ~A"
+                                                     command
+                                                     condition))))))
+
+(defun %client-read-view-worktree (conn)
+  (or (client-conn-selected-worktree conn)
+      (%client-operation-worktree conn)))
+
+(defun %client-read-view-title (kind)
+  (case kind
+    (:log "GIT LOG")
+    (:diff "GIT DIFF")
+    (otherwise "READ VIEW")))
+
+(defun %close-client-read-view (conn &optional swallow-escape-p)
+  (when swallow-escape-p
+    (%client-esc-swallow-start conn))
+  (setf (client-conn-read-view conn) nil
+        (client-conn-read-view-worktree conn) nil
+        (client-conn-read-search-widget conn) nil)
+  (%set-client-modal conn nil))
+
+(defun %open-client-read-view (conn kind)
+  (let ((worktree (%client-read-view-worktree conn)))
+    (cond
+      ((null worktree) (%client-notify conn "no worktree selected"))
+      ((not (nerimux/vcs:vcs-package-available-p))
+       (%client-notify conn "VCS unavailable"))
+      (t
+       (let ((view (nerimux/renderer:make-read-view
+                    (%client-read-view-title kind)
+                    "Loading...\n")))
+         (setf (client-conn-read-view conn) view
+               (client-conn-read-view-worktree conn) worktree
+               (client-conn-read-search-widget conn) nil)
+         (%set-client-modal conn :read-view)
+         (flet ((complete (content)
+                  (when (eq (client-conn-read-view conn) view)
+                    (setf (nerimux/renderer:read-view-content view)
+                          (or content "")
+                          (nerimux/renderer:read-view-query view) nil)
+                    (%mark-dirty)))
+                (failed (condition)
+                  (when (eq (client-conn-read-view conn) view)
+                    (setf (nerimux/renderer:read-view-content view)
+                          (format nil "Unable to read ~A: ~A~%"
+                                  (string-downcase
+                                   (%client-read-view-title kind))
+                                  condition))
+                    (%mark-dirty))))
+           (case kind
+             (:log
+              (nerimux/vcs:read-worktree-log-async
+               worktree
+               :callback-dispatch #'%enqueue-main-thread-callback
+               :on-complete #'complete
+               :on-error #'failed))
+             (:diff
+              (nerimux/vcs:read-worktree-diff-async
+               worktree
+               :callback-dispatch #'%enqueue-main-thread-callback
+               :on-complete #'complete
+               :on-error #'failed)))
+           t))))))
+
+(defun %client-text-prompt-spec (kind conn)
+  (case kind
+    (:commit-message
+     (list "Commit message"
+           (cl-tui-kit/widgets:make-textarea-widget
+            :placeholder "commit message"
+            :preferred-rows 6
+            :soft-wrap-p t
+            :submit-on-enter-p nil
+            :focusable-p t
+            :semantic-role :textbox)
+           :commit
+           nil))
+    (:branch-create
+     (list "Create branch"
+           (cl-tui-kit/widgets:make-input-widget
+            :placeholder "branch name"
+            :focusable-p t
+            :semantic-role :textbox)
+           :branch
+           nil))
+    (:tag-create
+     (list "Create tag"
+           (cl-tui-kit/widgets:make-input-widget
+            :placeholder "tag name"
+            :focusable-p t
+            :semantic-role :textbox)
+           :tag
+           nil))
+    (:remote-push
+     (list "Push to remote"
+           (cl-tui-kit/widgets:make-input-widget
+            :placeholder "remote name"
+            :focusable-p t
+            :semantic-role :textbox)
+           :push
+           (copy-list (%client-transient-active-flags conn #\P))))))
+
+(defun %open-client-text-prompt (conn kind)
+  (let ((repository (%client-selected-repository conn)))
+    (cond
+      ((null repository) (%client-notify conn "no repository selected"))
+      ((not (nerimux/vcs:vcs-package-available-p))
+       (%client-notify conn "VCS unavailable"))
+      (t
+       (destructuring-bind (title widget operation static-args)
+           (%client-text-prompt-spec kind conn)
+         (setf (client-conn-text-prompt-kind conn) kind
+               (client-conn-text-prompt-title conn) title
+               (client-conn-text-prompt-widget conn) widget
+               (client-conn-text-prompt-repository conn) repository
+               (client-conn-text-prompt-operation conn) operation
+               (client-conn-text-prompt-static-args conn) static-args)
+         (%set-client-modal conn :text-prompt)
+         t)))))
+
+(defun %clear-client-text-prompt (conn &optional swallow-escape-p)
+  (when swallow-escape-p
+    (%client-esc-swallow-start conn))
+  (setf (client-conn-text-prompt-kind conn) nil
+        (client-conn-text-prompt-title conn) nil
+        (client-conn-text-prompt-widget conn) nil
+        (client-conn-text-prompt-repository conn) nil
+        (client-conn-text-prompt-operation conn) nil
+        (client-conn-text-prompt-static-args conn) nil)
+  (%set-client-modal conn nil))
+
+(defun %client-widget-handle-event (widget event)
+  (when widget
+    (let ((action (cl-tui-kit/widgets:handle-widget-event widget event)))
+      (%mark-dirty)
+      action)))
+
+(defun %client-text-prompt-handle-event (conn event)
+  (%client-widget-handle-event (client-conn-text-prompt-widget conn) event))
+
+(defun %client-text-prompt-handle-text (conn text)
+  (%client-text-prompt-handle-event
+   conn
+   (cl-tui-kit/core:make-text-input-event text)))
+
+(defun %submit-client-text-prompt (conn)
+  (let* ((widget (client-conn-text-prompt-widget conn))
+         (value (and widget (cl-tui-kit/widgets:input-widget-value widget)))
+         (repository (client-conn-text-prompt-repository conn))
+         (operation (client-conn-text-prompt-operation conn))
+         (static-args (client-conn-text-prompt-static-args conn))
+         (args (case (client-conn-text-prompt-kind conn)
+                 (:commit-message (list "--message" value))
+                 ((:branch-create :tag-create) (list value))
+                 (:remote-push (append static-args (list value))))))
+    (if (or (null value) (zerop (length value)))
+        (%client-notify conn "value required")
+        (progn
+          (%clear-client-text-prompt conn)
+          (%run-transient-git-write conn repository operation args)))))
+
+(defun %client-prompt-key-event (payload)
+  (cond
+    ((%client-byte-p payload 27)
+     (cl-tui-kit/core:make-key-event :escape))
+    ((%client-byte-p payload 13)
+     (cl-tui-kit/core:make-key-event :enter))
+    ((%client-byte-p payload 10)
+     (cl-tui-kit/core:make-key-event :enter))
+    ((or (%client-byte-p payload 8) (%client-byte-p payload 127))
+     (cl-tui-kit/core:make-key-event :backspace))
+    (t
+     (let ((text (%client-payload-text payload)))
+       (and text (cl-tui-kit/core:make-text-input-event text))))))
+
+(defun %handle-client-text-prompt-key (session conn payload)
+  (declare (ignore session))
+  (cond
+    ((%client-byte-p payload 27)
+     (%clear-client-text-prompt conn t)
+     t)
+    ((and (typep (client-conn-text-prompt-widget conn)
+                 'cl-tui-kit/widgets:textarea-widget)
+          (%client-byte-p payload 19))
+     (%submit-client-text-prompt conn)
+     t)
+    (t
+     (let ((action (%client-text-prompt-handle-event
+                    conn
+                    (%client-prompt-key-event payload))))
+       (when action
+         (case (cl-tui-kit/core:action-name action)
+           (:submit (%submit-client-text-prompt conn))
+           (:cancel (%clear-client-text-prompt conn))))
+       t))))
+
+(defun %client-read-half-page (conn)
+  (max 1 (floor (max 1 (- (client-conn-rows conn) 3)) 2)))
+
+(defun %open-client-read-search (conn)
+  (setf (client-conn-read-search-widget conn)
+        (cl-tui-kit/widgets:make-input-widget
+         :placeholder "search"
+         :focusable-p t
+         :semantic-role :searchbox))
+  (%set-client-modal conn :read-search))
+
+(defun %handle-client-read-search-key (session conn payload)
+  (declare (ignore session))
+  (cond
+    ((%client-byte-p payload 27)
+     (%client-esc-swallow-start conn)
+     (setf (client-conn-read-search-widget conn) nil)
+     (%set-client-modal conn :read-view)
+     t)
+    (t
+     (let ((action
+             (%client-widget-handle-event
+              (client-conn-read-search-widget conn)
+              (%client-prompt-key-event payload))))
+       (when (and action
+                  (eq (cl-tui-kit/core:action-name action) :submit))
+         (let ((query (cl-tui-kit/widgets:input-widget-value
+                       (client-conn-read-search-widget conn))))
+           (nerimux/renderer:read-view-find
+            (client-conn-read-view conn)
+            (client-conn-rows conn)
+            (client-conn-cols conn)
+            query)
+           (setf (client-conn-read-search-widget conn) nil)
+           (%set-client-modal conn :read-view)))
+       t))))
+
+(defun %handle-client-read-view-key (session conn payload)
+  (declare (ignore session))
+  (cond
+    ((or (%client-byte-p payload 27) (%client-key-p payload #\q))
+     (%close-client-read-view conn (%client-byte-p payload 27))
+     t)
+    ((or (%client-key-p payload #\/) (%client-key-p payload #\?))
+     (%open-client-read-search conn)
+     t)
+    ((%client-key-p payload #\j)
+     (nerimux/renderer:read-view-scroll-by
+      (client-conn-read-view conn)
+      (client-conn-rows conn)
+      (client-conn-cols conn)
+      1)
+     (%mark-dirty)
+     t)
+    ((%client-key-p payload #\k)
+     (nerimux/renderer:read-view-scroll-by
+      (client-conn-read-view conn)
+      (client-conn-rows conn)
+      (client-conn-cols conn)
+      -1)
+     (%mark-dirty)
+     t)
+    ((%client-byte-p payload 21)
+     (nerimux/renderer:read-view-scroll-by
+      (client-conn-read-view conn)
+      (client-conn-rows conn)
+      (client-conn-cols conn)
+      (- (%client-read-half-page conn)))
+     (%mark-dirty)
+     t)
+    ((%client-byte-p payload 4)
+     (nerimux/renderer:read-view-scroll-by
+      (client-conn-read-view conn)
+      (client-conn-rows conn)
+      (client-conn-cols conn)
+      (%client-read-half-page conn))
+     (%mark-dirty)
+     t)
+    (t t)))
 
 (defun %run-transient-git-action (conn transient-key
                                        operation
@@ -178,6 +451,8 @@
                                       confirm-p
                                       confirm-if-args)))
         (:call (funcall (second handler) session conn))
+        (:prompt (%open-client-text-prompt conn (second handler)))
+        (:read-view (%open-client-read-view conn (second handler)))
         (:help (%client-open-help-view conn))
         (:stub (%client-notify conn (second handler)))))))
 

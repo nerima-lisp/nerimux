@@ -141,26 +141,33 @@ versus report that they are not wired yet (source: `+transient-definitions+`,
 
 | Key | Menu | Wired actions | Not wired in this build |
 |---|---|---|---|
-| `c` | Commit | amend, keep message (`git commit --amend --no-edit`) | commit with a new message — no text prompt exists |
-| `P` | Push | push to `origin/<branch>`, toggling `-f`/`--force-with-lease`/`-F`/`--force` (confirms first when either is active) | push to another remote — no text prompt |
+| `c` | Commit | amend, keep message (`git commit --amend --no-edit`); commit with a new message | — |
+| `P` | Push | push to `origin/<branch>`, toggling `-f`/`--force-with-lease`/`-F`/`--force` (confirms first when either is active); push to another remote | — |
 | `F` | Pull | pull from `origin/<branch>`, toggling `--rebase` | — |
-| `b` | Branch | list branches; switch to the previous branch (`git switch -`) | create/delete a branch — no text prompt |
+| `b` | Branch | list branches; switch to the previous branch (`git switch -`); create a branch | delete a branch — no text prompt |
 | `m` | Merge | merge upstream (`@{u}`) | merge another branch — no text prompt |
 | `r` | Rebase | rebase onto upstream (`@{u}`, confirms first); abort rebase | — |
 | `z` | Stash | stash changes; pop the latest stash | — |
-| `l` | Log | — | show log — no pager exists in this build |
-| `d` | Diff | — | show diff — no pager exists in this build |
+| `l` | Log | show the selected worktree's log in a read-only pager | — |
+| `d` | Diff | show the selected worktree's diff in a read-only pager | — |
 | `f` | Fetch | fetch this repository; fetch the whole organization | — |
-| `t` | Tag | list tags | create a tag — no text prompt |
+| `t` | Tag | list tags; create a tag | — |
 | `X` | Reset | `reset --soft HEAD`; `reset --hard HEAD` (confirms first); clean untracked files `-fd` (confirms first) | — |
 | `!` | Shell command | — | arbitrary shell execution — deliberately never wired; it is its own trust-boundary decision |
 | `w` | Worktree | create a worktree and open its shell; delete/lock/unlock the selected worktree (each pre-fills the command line with e.g. `wt-delete --confirm` — press `Enter` to run it or `Esc` to cancel) | create with a chosen branch name — use `: wt-create --branch <name> --confirm` instead |
 | `?` | Dispatch | opens any of the above; `k` opens the full-screen help view | — |
 
+The `l` and `d` read-only views use `j`/`k` for line movement, `C-u`/`C-d`
+for half-page movement, `/` for search, and `q` or `Esc` to close. Their
+content is loaded asynchronously and remains separate from write operations.
+
+Commit messages use a multiline prompt: `Enter` inserts a newline and `C-s`
+submits. Branch names, tag names, and remote names use a one-line prompt where
+`Enter` submits and `Esc` cancels.
+
 A "not wired" action reports so on screen (`"... not wired in this build"`)
-and does nothing. These actions require free text that the dispatch menu cannot
-collect: a commit message, branch name, tag name, or remote name. Use the `:`
-command line for the alternatives listed in the table.
+and does nothing. The remaining branch-delete and merge-branch actions still
+require a free-text selection and remain outside this phase.
 
 ### The `:` command line (FR-207)
 

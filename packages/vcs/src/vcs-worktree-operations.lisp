@@ -88,6 +88,8 @@
   (conflict-p nil :read-only t)
   (ahead nil :read-only t)
   (behind nil :read-only t)
+  (additions 0 :read-only t)
+  (deletions 0 :read-only t)
   (changed-files nil :read-only t))
 
 (defun %status-entry-conflict-p (entry)

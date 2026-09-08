@@ -262,3 +262,58 @@ not wrong."
                             on-complete
                             on-error
                             callback-dispatch))
+
+(defvar *read-view-max-output-characters*
+  1000000
+  "Maximum captured output for the read-only log and diff views.")
+
+(defun %read-worktree-log (worktree)
+  (let* ((backend-repository
+           (%make-vcs-repository
+            (nerimux/workspace-model:worktree-path worktree)))
+         (commits
+           (vcs-kit:vcs-list-commits
+            backend-repository
+            :execution-options
+            (list :max-output-characters *read-view-max-output-characters*))))
+    (with-output-to-string (stream)
+      (dolist (commit commits)
+        (format stream
+                "commit ~A~%Author: ~A~%Date: ~A~%~%~A~%~%"
+                (vcs-kit:vcs-commit-id commit)
+                (vcs-kit:vcs-commit-author commit)
+                (vcs-kit:vcs-commit-committed-at commit)
+                (%strip-control-characters
+                 (or (vcs-kit:vcs-commit-message commit) "")))))))
+
+(defun %read-worktree-diff (worktree)
+  (let* ((backend-repository
+           (%make-vcs-repository
+            (nerimux/workspace-model:worktree-path worktree)))
+         (result
+           (vcs-kit:vcs-diff
+            backend-repository
+            "--no-ext-diff"
+            "--no-color"
+            :execution-options
+            (list :max-output-characters *read-view-max-output-characters*))))
+    (%strip-control-characters
+     (or (vcs-kit:process-result-stdout result) ""))))
+
+(defun read-worktree-log-async (worktree &key on-complete on-error callback-dispatch)
+  "Read WORKTREE's complete log for a read-only client view."
+  (%run-vcs-operation-async "nerimux-vcs-read-log"
+                            (lambda () (%read-worktree-log worktree))
+                            #'identity
+                            on-complete
+                            on-error
+                            callback-dispatch))
+
+(defun read-worktree-diff-async (worktree &key on-complete on-error callback-dispatch)
+  "Read WORKTREE's complete working-tree diff for a read-only client view."
+  (%run-vcs-operation-async "nerimux-vcs-read-diff"
+                            (lambda () (%read-worktree-diff worktree))
+                            #'identity
+                            on-complete
+                            on-error
+                            callback-dispatch))

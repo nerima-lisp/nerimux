@@ -146,86 +146,65 @@
               (expect (null (nerimux/vcs::%worktree-status-staged-files nil)))
               (expect (null (nerimux/vcs::%worktree-status-unstaged-files nil))))
           (it
-           "%apply-worktree-status writes all four split lists from a stubbed status snapshot"
+           "%apply-worktree-status writes all four split lists and line counts from a stubbed status snapshot"
            (let* ((path (namestring (host-kit:temporary-directory)))
                   (repository
-                   (nerimux/workspace-model:make-repository :specification
-                                                            "workspace-owner/project"
-                                                            :local-path
-                                                            path))
+                   (nerimux/workspace-model:make-repository
+                    :specification "workspace-owner/project"
+                    :local-path path))
                   (worktree
-                   (nerimux/workspace-model:make-worktree :repository
-                                                          repository
-                                                          :path
-                                                          path)))
+                   (nerimux/workspace-model:make-worktree
+                    :repository repository :path path)))
              (nerimux/workspace-model:repository-add-worktree repository
                                                               worktree)
              (with-stubbed-fdefinition
-              ((vcs-kit:make-vcs-repository
-                (lambda (directory &rest arguments)
-                  (declare (ignore arguments))
-                  directory))
-               (vcs-kit:vcs-status-structured
-                (lambda (&rest arguments)
-                  (declare (ignore arguments))
-                  (vcs-kit::%make-vcs-status-snapshot :branch-head
-                                                      "wt-head"
-                                                      :ahead
-                                                      0
-                                                      :behind
-                                                      0
-                                                      :entries
-                                                      (list
-                                                       (vcs-kit::%make-vcs-status-entry
-                                                        :kind
-                                                        :untracked
-                                                        :path
-                                                        "new.txt")
-                                                       (vcs-kit::%make-vcs-status-entry
-                                                        :kind
-                                                        :unmerged
-                                                        :index-status
-                                                        "U"
-                                                        :worktree-status
-                                                        "U"
-                                                        :path
-                                                        "conflict.lisp")
-                                                       (vcs-kit::%make-vcs-status-entry
-                                                        :kind
-                                                        :ordinary
-                                                        :index-status
-                                                        "M"
-                                                        :worktree-status
-                                                        " "
-                                                        :path
-                                                        "staged.lisp")
-                                                       (vcs-kit::%make-vcs-status-entry
-                                                        :kind
-                                                        :ordinary
-                                                        :index-status
-                                                        " "
-                                                        :worktree-status
-                                                        "M"
-                                                        :path
-                                                        "unstaged.lisp"))))))
-              (nerimux/vcs::%apply-worktree-status repository
-                                                   (nerimux/vcs::%read-worktree-status-at
-                                                    path
-                                                    nil
-                                                    path))
-              (expect
-               (equal (list (cons "??" "new.txt"))
-                      (nerimux/workspace-model:worktree-untracked-files
-                       worktree)))
-              (expect
-               (equal (list (cons "UU" "conflict.lisp"))
-                      (nerimux/workspace-model:worktree-unmerged-files worktree)))
-              (expect
-               (equal (list (cons "M" "staged.lisp"))
-                      (nerimux/workspace-model:worktree-staged-files worktree)))
-              (expect
-               (equal (list (cons "M" "unstaged.lisp"))
-                      (nerimux/workspace-model:worktree-unstaged-files worktree)))))))
+                 ((vcs-kit:make-vcs-repository
+                    (lambda (directory &rest arguments)
+                      (declare (ignore arguments))
+                      directory))
+                  (vcs-kit:vcs-status-structured
+                    (lambda (&rest arguments)
+                      (declare (ignore arguments))
+                      (vcs-kit::%make-vcs-status-snapshot
+                       :branch-head "wt-head" :ahead 0 :behind 0
+                       :entries
+                       (list
+                        (vcs-kit::%make-vcs-status-entry
+                         :kind :untracked :path "new.txt")
+                        (vcs-kit::%make-vcs-status-entry
+                         :kind :unmerged :index-status "U" :worktree-status "U"
+                         :path "conflict.lisp")
+                        (vcs-kit::%make-vcs-status-entry
+                         :kind :ordinary :index-status "M" :worktree-status " "
+                         :path "staged.lisp")
+                        (vcs-kit::%make-vcs-status-entry
+                         :kind :ordinary :index-status " " :worktree-status "M"
+                         :path "unstaged.lisp")))))
+                  (vcs-kit:git-diff-numstat
+                    (lambda (&rest arguments)
+                      (declare (ignore arguments))
+                      (list (vcs-kit::%make-numstat-entry
+                             :additions 11 :deletions 4 :path "unstaged.lisp")))))
+               (nerimux/vcs::%apply-worktree-status
+                repository (nerimux/vcs::%read-worktree-status-at path nil path))
+               (expect
+                (equal (list (cons "??" "new.txt"))
+                       (nerimux/workspace-model:worktree-untracked-files
+                        worktree)))
+               (expect
+                (equal (list (cons "UU" "conflict.lisp"))
+                       (nerimux/workspace-model:worktree-unmerged-files worktree)))
+               (expect
+                (equal (list (cons "M" "staged.lisp"))
+                       (nerimux/workspace-model:worktree-staged-files worktree)))
+               (expect
+                (equal (list (cons "M" "unstaged.lisp"))
+                       (nerimux/workspace-model:worktree-unstaged-files worktree)))
+               (expect (= 11
+                          (nerimux/workspace-model::worktree-additions worktree)))
+               (expect (= 4
+                          (nerimux/workspace-model::worktree-deletions worktree))))))
+)
 
 (describe "refresh-workspace-organizations-async per-repository error channel (BUG-2)"
   (it "invokes on-repository-error for a failing repository, still calls on-complete, and never calls on-error"

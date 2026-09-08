@@ -193,13 +193,19 @@
     (t nil)))
 
 (defun %client-paste-modal-p (modal)
-  (member modal '(:command :filter :picker) :test #'eq))
+  (member modal '(:command :filter :picker :text-prompt) :test #'eq))
 
 (defun %client-paste-candidate-reset (conn)
   (setf (client-conn-paste-candidate-modal conn) nil
         (client-conn-paste-candidate-view conn) nil
         (client-conn-paste-candidate-command-return-view conn) nil
-        (client-conn-paste-candidate-text conn) nil))
+        (client-conn-paste-candidate-text conn) nil
+        (client-conn-paste-candidate-text-prompt-kind conn) nil
+        (client-conn-paste-candidate-text-prompt-title conn) nil
+        (client-conn-paste-candidate-text-prompt-widget conn) nil
+        (client-conn-paste-candidate-text-prompt-repository conn) nil
+        (client-conn-paste-candidate-text-prompt-operation conn) nil
+        (client-conn-paste-candidate-text-prompt-static-args conn) nil))
 
 (defun %client-paste-candidate-restore (conn)
   (let ((modal (client-conn-paste-candidate-modal conn)))
@@ -217,7 +223,20 @@
                (client-conn-paste-candidate-text conn)))
         (:picker
          (setf (client-conn-picker-query conn)
-               (client-conn-paste-candidate-text conn))))
+               (client-conn-paste-candidate-text conn)))
+        (:text-prompt
+         (setf (client-conn-text-prompt-kind conn)
+               (client-conn-paste-candidate-text-prompt-kind conn)
+               (client-conn-text-prompt-title conn)
+               (client-conn-paste-candidate-text-prompt-title conn)
+               (client-conn-text-prompt-widget conn)
+               (client-conn-paste-candidate-text-prompt-widget conn)
+               (client-conn-text-prompt-repository conn)
+               (client-conn-paste-candidate-text-prompt-repository conn)
+               (client-conn-text-prompt-operation conn)
+               (client-conn-paste-candidate-text-prompt-operation conn)
+               (client-conn-text-prompt-static-args conn)
+               (client-conn-paste-candidate-text-prompt-static-args conn))))
       (%client-paste-candidate-reset conn)
       modal)))
 
@@ -263,10 +282,12 @@
                        '(simple-array (unsigned-byte 8) (*)))))
     (let ((text (%client-payload-text bytes)))
       (and text
-           (coerce (remove-if (lambda (character)
-                               (member character '(#\Newline #\Return)))
-                             text)
-                   'string)))))
+           (if (eq (client-conn-paste-modal conn) :text-prompt)
+               text
+               (coerce (remove-if (lambda (character)
+                                    (member character '(#\Newline #\Return)))
+                                  text)
+                       'string))))))
 
 (defun %client-paste-insert-modal (conn)
   (let ((text (%client-paste-modal-text conn)))
@@ -277,7 +298,8 @@
          (map nil (lambda (character)
                     (%client-tree-filter-buffer-append conn (string character)))
               text))
-        (:picker (%append-client-picker-query-octets conn text))))))
+        (:picker (%append-client-picker-query-octets conn text))
+        (:text-prompt (%client-text-prompt-handle-text conn text))))))
 
 (defun %client-paste-end (conn)
   (if (client-conn-paste-modal conn)
@@ -502,7 +524,21 @@
                 (case modal
                   (:command (client-conn-command-buffer conn))
                   (:filter (client-conn-tree-filter conn))
-                  (:picker (client-conn-picker-query conn))))
+                  (:picker (client-conn-picker-query conn))
+                  (:text-prompt nil)))
+          (when (eq modal :text-prompt)
+            (setf (client-conn-paste-candidate-text-prompt-kind conn)
+                  (client-conn-text-prompt-kind conn)
+                  (client-conn-paste-candidate-text-prompt-title conn)
+                  (client-conn-text-prompt-title conn)
+                  (client-conn-paste-candidate-text-prompt-widget conn)
+                  (client-conn-text-prompt-widget conn)
+                  (client-conn-paste-candidate-text-prompt-repository conn)
+                  (client-conn-text-prompt-repository conn)
+                  (client-conn-paste-candidate-text-prompt-operation conn)
+                  (client-conn-text-prompt-operation conn)
+                  (client-conn-paste-candidate-text-prompt-static-args conn)
+                  (client-conn-text-prompt-static-args conn)))
           (let ((*client-meta-replaying* t))
             (%handle-multi-key-message session conn payload))
           (setf (gethash conn *client-meta-pending*) :second))

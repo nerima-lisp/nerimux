@@ -144,7 +144,10 @@
        (:confirm (nth-value 1 (%handle-confirm-key session conn payload)))
        (:help (%handle-help-view-key conn payload))
        (:transient (%handle-client-transient-key-payload session conn payload))
-       (:process-log (%handle-process-log-key conn payload))))
+       (:process-log (%handle-process-log-key conn payload))
+       (:read-view (%handle-client-read-view-key session conn payload))
+       (:read-search (%handle-client-read-search-key session conn payload))
+       (:text-prompt (%handle-client-text-prompt-key session conn payload))))
     (t
      (multiple-value-bind (prefix-handled prefix-result)
          (%handle-workspace-prefix-key session conn payload)

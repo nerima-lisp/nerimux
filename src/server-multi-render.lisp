@@ -213,6 +213,19 @@
                (client-conn-rows conn)
                (client-conn-cols conn)
                :scroll (client-conn-process-log-scroll conn)))
+             ((:read-view :read-search)
+              (render-read-view-to-tui-string
+               (client-conn-read-view conn)
+               (client-conn-rows conn)
+               (client-conn-cols conn)
+               (when (eq (client-conn-modal conn) :read-search)
+                 (client-conn-read-search-widget conn))))
+             (:text-prompt
+              (render-text-prompt-to-tui-string
+               (client-conn-text-prompt-title conn)
+               (client-conn-text-prompt-widget conn)
+               (client-conn-rows conn)
+               (client-conn-cols conn)))
              (:picker (%render-pane-frame session conn))
              (:transient
               (if (eq (client-conn-view conn) :status)

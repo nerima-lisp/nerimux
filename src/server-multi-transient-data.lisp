@@ -12,14 +12,14 @@
                (list (list #\e "amend, keep message"
                            (list :git #\c :commit '("--amend" "--no-edit") nil nil))
                      (list #\c "commit"
-                           (list :stub "commit needs a message; no text-prompt UI exists in this build")))))
+                           (list :prompt :commit-message)))))
    (cons #\P
          (list "Push"
                (list (cons #\f "--force-with-lease") (cons #\F "--force"))
                (list (list #\p "push to origin/~A"
                            (list :git #\P :push nil nil '("--force" "--force-with-lease")))
                      (list #\e "push to another remote"
-                           (list :stub "remote selection needs a text-prompt UI, not wired in this build")))))
+                           (list :prompt :remote-push)))))
    (cons #\F
          (list "Pull"
                (list (cons #\r "--rebase"))
@@ -32,7 +32,7 @@
                      (list #\- "switch to previous branch"
                            (list :git #\b :switch '("-") nil nil))
                      (list #\c "create branch"
-                           (list :stub "branch name needs a text-prompt UI, not wired in this build"))
+                           (list :prompt :branch-create))
                      (list #\D "delete branch"
                            (list :stub "branch name needs a text-prompt UI, not wired in this build")))))
    (cons #\m
@@ -56,11 +56,11 @@
    (cons #\l
          (list "Log" nil
                (list (list #\l "show log"
-                           (list :stub "log view is not wired -- no read pager exists in this build")))))
+                           (list :read-view :log)))))
    (cons #\d
          (list "Diff" nil
                (list (list #\d "show diff"
-                           (list :stub "diff view is not wired -- no read pager exists in this build")))))
+                           (list :read-view :diff)))))
    (cons #\f
          (list "Fetch" nil
                (list (list #\f "fetch this repository"
@@ -76,7 +76,7 @@
                (list (list #\l "list tags"
                            (list :git #\t :tag nil nil nil))
                      (list #\t "create tag"
-                           (list :stub "tag name needs a text-prompt UI, not wired in this build")))))
+                           (list :prompt :tag-create)))))
    (cons #\X
          (list "Reset" nil
                (list (list #\s "reset --soft HEAD"

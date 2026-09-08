@@ -81,7 +81,11 @@
                                              :ahead
                                              ,status-ahead
                                              :behind
-                                             ,status-behind)))))
+                                             ,status-behind))))
+     (vcs-kit:git-diff-numstat
+      (lambda (&rest arguments)
+        (declare (ignore arguments))
+        nil)))
     ,@body))
 
 (describe "vcs worktree observation boundaries"
@@ -114,7 +118,11 @@
                                                              :ahead
                                                              2
                                                              :behind
-                                                             3))
+                                                             3
+                                                             :additions
+                                                             5
+                                                             :deletions
+                                                             2))
                      (raw-worktrees
                       (list
                        (%vcs-operations-fake-worktree path
@@ -170,6 +178,12 @@
                       (= 2 (nerimux/workspace-model:worktree-ahead current)))
                      (expect
                       (= 3 (nerimux/workspace-model:worktree-behind current)))
+                     (expect
+                      (= 5
+                         (nerimux/workspace-model::worktree-additions current)))
+                     (expect
+                      (= 2
+                         (nerimux/workspace-model::worktree-deletions current)))
                      (expect (eq current (nerimux/pane:pane-worktree pane)))
                      (expect
                       (nerimux/workspace-model:worktree-missing-p missing))

@@ -48,6 +48,8 @@
    #:fetch-organization-async
    #:refresh-worktree-commits-async
    #:refresh-worktree-file-diff-async
+   #:read-worktree-log-async
+   #:read-worktree-diff-async
    #:git-write-operation
    #:git-write-operation-async
    #:list-worktree-stashes))
