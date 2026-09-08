@@ -95,9 +95,13 @@
                (client-conn-host-focused-p conn))
       (%client-focus-event-report conn old-pane nil))
     (setf (client-conn-focus conn) pane
-        (client-conn-viewport conn) 0
+          (client-conn-viewport conn) 0
           (client-conn-view conn) :pane)
     (when pane
+      (when (member pane *runtime-restored-panes* :test #'eq)
+        (setf *runtime-restored-panes*
+              (remove pane *runtime-restored-panes* :test #'eq)
+              (pane-notification pane) ""))
       (nerimux/pane:pane-mark-focused pane))
     (when (and session
                (not (eq old-pane pane))

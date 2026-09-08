@@ -175,6 +175,12 @@
                        (nerimux/renderer::%worktree-tree-label worktree)))
              (expect
               (string= "pane/7 shell" (nerimux/renderer::%pane-tree-label pane)))))
+          (it "marks a restored pane in its tree label"
+              (let ((pane (nerimux/pane:make-pane :id 7 :fd -1)))
+                (setf (nerimux/pane:pane-notification pane) "restored")
+                (expect
+                 (string= "pane/7 shell restored"
+                          (nerimux/renderer::%pane-tree-label pane)))))
           (it
            "prefers each available partial label before its identifier fallback"
            (let ((host-only

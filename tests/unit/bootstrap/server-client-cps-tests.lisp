@@ -70,6 +70,14 @@
             (lambda (rows cols)
               (push (list :create-session rows cols) events)
               :session))
+           (nerimux::%runtime-session-from-state
+            (lambda (name)
+              (declare (ignore name))
+              nil))
+           (nerimux::%persist-runtime-state
+            (lambda (session &key force)
+              (declare (ignore session force))
+              nil))
            (nerimux::socket-path
             (lambda (name) (push (list :socket-path name) events) "/tmp/nerimux-test.sock"))
            (nerimux::server-add-session
