@@ -12,7 +12,8 @@
                 "workspace-prune-all"
                 "overview"
                 "detail"
-                "refresh")
+                "refresh"
+                "kill")
   "Command names completed by the workspace `:` prompt.")
 
 (defun %workspace-command-completions (command-buffer)

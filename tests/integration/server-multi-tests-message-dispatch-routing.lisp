@@ -117,6 +117,34 @@
         (expect (eq :pane (nerimux::client-conn-view conn)))
         (expect (null (nerimux::client-conn-modal conn))))))
 
+  (it "colon-command-line-allows-user-commands-and-rejects-internal-commands"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (nerimux::*clients* (list conn)))
+        (setf (nerimux::client-conn-view conn) :repolist)
+        (flet ((submit (command)
+                 (nerimux::%handle-multi-key-message s conn #(58))
+                 (nerimux::%handle-multi-key-message
+                  s conn
+                  (cl-codec-kit:string-to-octets command :encoding :utf-8))
+                 (nerimux::%handle-multi-key-message s conn #(13))))
+          (submit "tree-up")
+          (expect (search "not available from the : prompt: tree-up"
+                          (first (nerimux::client-conn-message-log conn))))
+          (expect (eq :repolist (nerimux::client-conn-view conn)))
+          (setf (nerimux::client-conn-message-log conn) nil)
+          (submit "overview")
+          (expect (null (nerimux::client-conn-message-log conn)))
+          (expect (eq :repolist (nerimux::client-conn-view conn)))))))
+
+  (it "workspace-command-completions-match-the-client-allow-list"
+    (expect
+     (equal
+      (mapcar (lambda (command)
+                (string-downcase (symbol-name command)))
+              nerimux::+client-command-allow-list+)
+      nerimux/renderer::+workspace-command-names+)))
+
   (it "command-submit-contract-covers-empty-unknown-and-failure"
     (with-fake-session (s)
       (let ((conn (%make-test-conn))
@@ -141,7 +169,7 @@
                        (error "expected command failure")))
                (nerimux::%handle-multi-key-message s conn #(58))
                (nerimux::%handle-multi-key-message
-                s conn (cl-codec-kit:string-to-octets "home" :encoding :utf-8))
+                s conn (cl-codec-kit:string-to-octets "overview" :encoding :utf-8))
                (nerimux::%handle-multi-key-message s conn #(13))
                (expect (search "command failed: expected command failure"
                                (first (nerimux::client-conn-message-log conn))))

@@ -13,6 +13,10 @@
         (expect (null
                  (nerimux::%handle-multi-command-message
                   s conn
+                  (nerimux/protocol::encode-command-payload :tree-up))))
+        (expect (null
+                 (nerimux::%handle-multi-command-message
+                  s conn
                   (nerimux/protocol::encode-command-payload :not-a-ui-command))))
         (let ((nerimux::*dirty* nil))
           (expect (null

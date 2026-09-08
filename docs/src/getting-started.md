@@ -162,6 +162,29 @@ and does nothing. These actions require free text that the dispatch menu cannot
 collect: a commit message, branch name, tag name, or remote name. Use the `:`
 command line for the alternatives listed in the table.
 
+### The `:` command line
+
+The workspace command line accepts exactly these command names. Tree navigation,
+picker control, and modal transitions are protocol commands and are not
+available for manual entry.
+
+| Command | Action |
+|---|---|
+| `wt-create` | Create a worktree, optionally with `--branch <name> --confirm` |
+| `wt-delete` | Delete the selected worktree, with `--confirm` |
+| `wt-lock` | Lock the selected worktree |
+| `wt-unlock` | Unlock the selected worktree |
+| `wt-prune` | Preview prunable worktrees |
+| `wt-prune-confirm` | Prune worktrees, with confirmation options |
+| `wt-complete` | Mark the selected worktree complete |
+| `workspace-complete` | Mark the selected worktree complete |
+| `workspace-prune` | Prune the selected workspace |
+| `workspace-prune-all` | Prune all workspaces |
+| `overview` | Open the repolist view |
+| `detail` | Open the selected worktree's pane view |
+| `refresh` | Refresh the workspace catalog and VCS state |
+| `kill` | Stop the server, subject to its pane and confirmation rules |
+
 ### The `C-q` prefix
 
 | Key | Action |

@@ -3,7 +3,10 @@
 (describe "renderer-suite/workspace-command-completions"
 
   (it "offers every command name for an empty buffer"
-    (expect (equal nerimux/renderer::+workspace-command-names+
+    (expect (equal '("wt-create" "wt-delete" "wt-lock" "wt-unlock"
+                     "wt-prune" "wt-prune-confirm" "wt-complete"
+                     "workspace-complete" "workspace-prune" "workspace-prune-all"
+                     "overview" "detail" "refresh" "kill")
                    (nerimux/renderer::%workspace-command-completions ""))))
 
   (it "filters to the wt- family for a wt- prefix"

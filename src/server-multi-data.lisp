@@ -37,6 +37,22 @@
 (defparameter +client-ui-modes+
   '(:normal :input :copy :command :picker :tree-filter))
 
+(defparameter +client-command-allow-list+
+  '(:wt-create
+    :wt-delete
+    :wt-lock
+    :wt-unlock
+    :wt-prune
+    :wt-prune-confirm
+    :wt-complete
+    :workspace-complete
+    :workspace-prune
+    :workspace-prune-all
+    :overview
+    :detail
+    :refresh
+    :kill))
+
 (defparameter +workspace-claude-command+
   "claude --dangerously-skip-permissions")
 
