@@ -284,3 +284,111 @@
                             (%box-widget-inner-rectangle rectangle)
                             transient-view)
     (%surface-to-ansi-frame surface)))
+
+(defstruct (read-view (:constructor make-read-view (title content)))
+  title
+  content
+  (offset 0 :type fixnum)
+  query
+  widget)
+
+(defun %read-view-widget (view rows cols)
+  (let ((widget (or (read-view-widget view)
+                    (setf (read-view-widget view)
+                          (cl-tui-kit/widgets:make-text-view-widget
+                           (read-view-content view)
+                           :wrap-p nil
+                           :offset (read-view-offset view)
+                           :focusable-p nil
+                           :semantic-role :document)))))
+    (setf (cl-tui-kit/widgets:text-view-widget-text widget)
+          (read-view-content view))
+    (cl-tui-kit/widgets:widget-layout
+     widget
+     (cl-tui-kit/core:make-rectangle 0
+                                     0
+                                     (max 1 cols)
+                                     (max 1 (- rows 2))))
+    widget))
+
+(defun read-view-scroll-by (view rows cols amount)
+  (let ((widget (%read-view-widget view rows cols)))
+    (cl-tui-kit/widgets:text-view-widget-scroll-by widget amount)
+    (setf (read-view-offset view)
+          (cl-tui-kit/widgets:text-view-widget-offset widget))))
+
+(defun read-view-find (view rows cols query)
+  (let ((widget (%read-view-widget view rows cols)))
+    (cl-tui-kit/widgets:text-view-widget-find widget query)
+    (setf (read-view-query view) query
+          (read-view-offset view)
+          (cl-tui-kit/widgets:text-view-widget-offset widget))))
+
+(defun %read-view-footer (view)
+  (if (read-view-query view)
+      (format nil "/~A  j/k move  C-u/C-d half page  q close"
+              (read-view-query view))
+      "j/k move  C-u/C-d half page  / search  q close"))
+
+(defun render-read-view-to-tui-string (view rows cols &optional search-widget)
+  (let* ((rows (max 4 rows))
+         (cols (max 1 cols))
+         (surface (cl-tui-kit/core:make-surface cols rows))
+         (rectangle (cl-tui-kit/core:make-rectangle 0 0 cols rows))
+         (content-rectangle
+           (cl-tui-kit/core:make-rectangle 0 0 cols (max 1 (- rows 2))))
+         (widget (%read-view-widget view rows cols)))
+    (let ((box (cl-tui-kit/widgets:make-box-widget
+                widget
+                :id :nerimux-read-view-box
+                :border-kind :single)))
+      (cl-tui-kit/widgets:render-widget box surface content-rectangle))
+    (%stamp-transient-view-title surface rectangle (read-view-title view))
+    (if search-widget
+        (let ((search-rectangle
+                (cl-tui-kit/core:make-rectangle 0
+                                                (max 0 (- rows 2))
+                                                cols
+                                                2)))
+          (let ((box (cl-tui-kit/widgets:make-box-widget
+                      search-widget
+                      :id :nerimux-read-search-box
+                      :border-kind :single)))
+            (cl-tui-kit/widgets:render-widget box surface search-rectangle))
+          (cl-tui-kit/core:surface-draw-text surface
+                                               2
+                                               (max 0 (- rows 2))
+                                               " SEARCH"))
+        (cl-tui-kit/core:surface-draw-text surface
+                                             1
+                                             (1- rows)
+                                             (%read-view-footer view)
+                                             :max-width
+                                             (max 0 (- cols 2))))
+    (setf (read-view-offset view)
+          (cl-tui-kit/widgets:text-view-widget-offset widget))
+    (%surface-to-ansi-frame surface)))
+
+(defun render-text-prompt-to-tui-string (title widget rows cols)
+  (let* ((rows (max 6 rows))
+         (cols (max 1 cols))
+         (surface (cl-tui-kit/core:make-surface cols rows))
+         (rectangle (cl-tui-kit/core:make-rectangle 0 0 cols rows))
+         (content-rectangle
+           (cl-tui-kit/core:make-rectangle 0 0 cols (max 1 (- rows 2)))))
+    (let ((box (cl-tui-kit/widgets:make-box-widget
+                widget
+                :id :nerimux-text-prompt-box
+                :border-kind :single)))
+      (cl-tui-kit/widgets:render-widget box surface content-rectangle))
+    (%stamp-transient-view-title surface rectangle title)
+    (cl-tui-kit/core:surface-draw-text
+     surface
+     1
+     (1- rows)
+     (if (typep widget 'cl-tui-kit/widgets:textarea-widget)
+         "C-s submit  Enter newline  Esc cancel"
+         "Enter submit  Esc cancel")
+     :max-width
+     (max 0 (- cols 2)))
+    (%surface-to-ansi-frame surface)))

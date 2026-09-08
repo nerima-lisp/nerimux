@@ -32,6 +32,11 @@
    #:transient-view-height
    #:render-transient-panel
    #:render-transient-full-screen-to-tui-string
+   #:read-view #:make-read-view #:read-view-p
+   #:read-view-title #:read-view-content #:read-view-query
+   #:read-view-scroll-by #:read-view-find
+   #:render-read-view-to-tui-string
+   #:render-text-prompt-to-tui-string
    #:render-process-log-to-tui-string
    #:enable-host-modes
    #:disable-host-modes
