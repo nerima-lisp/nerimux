@@ -13,12 +13,10 @@
     t))
 
 (defun %forward-stdin-byte (stream)
-  "Read one byte from stdin (non-blocking) and, if one is available, forward it
-   to the server as a +msg-key+ frame on STREAM.  Returns T when a byte was
-   forwarded, NIL when stdin had nothing ready."
-  (let ((stdin-byte (read-byte-nonblock 0)))
-    (when stdin-byte
-      (send-frame stream (msg-key (vector stdin-byte)))
+  "Read the available stdin burst once and forward it as one +msg-key+ frame."
+  (let ((stdin-octets (read-available-octets 0 +pty-buf-size+)))
+    (when stdin-octets
+      (send-frame stream (msg-key stdin-octets))
       t)))
 
 (defun %decode-server-frame (stream)

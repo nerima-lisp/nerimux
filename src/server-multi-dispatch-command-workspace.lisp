@@ -86,14 +86,23 @@
         (setf (client-conn-tree-filter conn) nil))
       next-modal)))
 
-(defun %set-client-focus (conn pane)
+(defun %set-client-focus (conn pane &optional session)
   (when (%reject-pending-worktree-attachment conn :pane pane)
     (return-from %set-client-focus nil))
-  (setf (client-conn-focus conn) pane
+  (let ((old-pane (client-conn-focus conn)))
+    (when (and session
+               (not (eq old-pane pane))
+               (client-conn-host-focused-p conn))
+      (%client-focus-event-report conn old-pane nil))
+    (setf (client-conn-focus conn) pane
         (client-conn-viewport conn) 0
-        (client-conn-view conn) :pane)
-  (when pane
-    (nerimux/pane:pane-mark-focused pane))
+          (client-conn-view conn) :pane)
+    (when pane
+      (nerimux/pane:pane-mark-focused pane))
+    (when (and session
+               (not (eq old-pane pane))
+               (client-conn-host-focused-p conn))
+      (%client-focus-event-report conn pane t)))
   pane)
 
 (defun %set-client-view (conn view)
@@ -121,7 +130,7 @@
     (if (and pane (pane-screen pane))
         (progn
           (copy-mode-enter (pane-screen pane))
-          (%set-client-focus conn pane)
+          (%set-client-focus conn pane session)
           (%transition-client-ui-mode conn :enter-copy)
           (%mark-dirty)
           t)
@@ -191,7 +200,9 @@
         (let* ((window (session-active-window session))
                (pane (and window (window-active-pane window))))
           (when pane
-            (setf (client-conn-focus conn) pane)))))
+            (let ((view (client-conn-view conn)))
+              (%set-client-focus conn pane session)
+              (setf (client-conn-view conn) view))))))
     (%mark-dirty)
     t))
 

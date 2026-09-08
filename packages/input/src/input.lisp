@@ -16,21 +16,30 @@
        (format t "~%")
        (force-output))))
 
-(defun read-byte-nonblock (&optional (timeout-us +poll-timeout-us+))
-  "Return a byte (0–255) from stdin within TIMEOUT-US microseconds, or NIL.
+(defun read-available-octets (&optional (timeout-us +poll-timeout-us+)
+                                        (max-octets +pty-buf-size+))
+  "Return up to MAX-OCTETS from stdin within TIMEOUT-US microseconds, or NIL.
    NIL means the timeout elapsed with no data — it does NOT mean EOF.
    EOF on stdin is indistinguishable from a zero-byte read at this layer;
    both return NIL.  TIMEOUT-US = 0 is a purely non-blocking poll.
 
    cl-tty-kit:fd-read-octets returns a positive count for data, 0 at EOF, and
-   NIL when the read would block or is interrupted. Only a count of exactly 1
-   yields a byte, so EOF and would-block both return NIL. PTY-OPERATION-FAILED
-   is also mapped to NIL so an unreadable stdin cannot terminate the key loop."
-  (declare (type fixnum timeout-us))
+   NIL when the read would block or is interrupted. PTY-OPERATION-FAILED is
+   also mapped to NIL so an unreadable stdin cannot terminate the key loop."
+  (declare (type fixnum timeout-us max-octets))
   (let ((ready (nerimux/pty:select-fds (list 0) timeout-us)))
     (when ready
-      (let ((buffer (make-array 1 :element-type '(unsigned-byte 8))))
-        (let ((count (handler-case (cl-tty-kit:fd-read-octets 0 buffer 1)
+      (let ((buffer (make-array max-octets :element-type '(unsigned-byte 8))))
+        (let ((count (handler-case (cl-tty-kit:fd-read-octets
+                                    0 buffer max-octets)
                        (cl-tty-kit:pty-operation-failed () nil))))
-          (when (eql count 1)
-            (aref buffer 0)))))))
+          (when (and count (plusp count))
+            (if (= count max-octets)
+                buffer
+                (subseq buffer 0 count))))))))
+
+(defun read-byte-nonblock (&optional (timeout-us +poll-timeout-us+))
+  "Return one byte (0–255) from stdin within TIMEOUT-US microseconds, or NIL."
+  (let ((octets (read-available-octets timeout-us 1)))
+    (when octets
+      (aref octets 0))))

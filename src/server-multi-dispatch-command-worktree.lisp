@@ -509,6 +509,8 @@ preview, or a preview of a different repository."
                       (nerimux/pane:pane-worktree pane) nil)
                 (dolist (client *clients*)
                   (when (eq pane (client-conn-focus client))
+                    (when (client-conn-host-focused-p client)
+                      (%client-focus-event-report client pane nil))
                     (setf (client-conn-focus client) nil))
                   (when (eq pane (client-conn-stdin-target client))
                     (setf (client-conn-stdin-target client) nil)))))

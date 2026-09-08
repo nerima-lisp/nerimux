@@ -26,7 +26,7 @@
     (let ((neighbor (and window (pane-neighbor window pane direction))))
       (if neighbor
           (progn
-            (%set-client-focus conn neighbor)
+            (%set-client-focus conn neighbor session)
             (%mark-dirty)
             t)
           (progn

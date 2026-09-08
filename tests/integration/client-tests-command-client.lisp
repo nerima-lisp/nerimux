@@ -195,28 +195,60 @@
       (expect (null nerimux::*resize-pending*))
       (expect (= 40 nerimux::*term-rows*))
       (expect (= 120 nerimux::*term-cols*))
-      (expect (eq :stream (first sent))))) (it "forward-stdin-byte-returns-nil-when-nothing-ready"
-    (let ((result (catch 'forward-stdin-byte-error
-                    (handler-bind
-                        ((error (lambda (condition)
-                                  (declare (ignore condition))
-                                  (throw 'forward-stdin-byte-error nil))))
-                      (nerimux::%forward-stdin-byte nil)))))
-      (expect (null result)))) (it "forward-stdin-byte-sends-available-byte"
-    (let (sent)
+      (expect (eq :stream (first sent)))))
+
+  (it "forward-stdin-byte-returns-nil-when-nothing-is-ready"
+    (let ((sends 0))
       (with-stubbed-fdefinition
-          ((nerimux::read-byte-nonblock (lambda (fd)
-                                          (declare (ignore fd))
-                                          65))
-           (nerimux/transport:send-frame (lambda (stream frame)
-                                           (setf sent (list stream frame)))))
+          ((nerimux::read-available-octets
+             (lambda (timeout-us max-octets)
+               (declare (ignore timeout-us max-octets))
+               nil))
+           (nerimux/transport:send-frame
+             (lambda (stream frame)
+               (declare (ignore stream frame))
+               (incf sends))))
+        (expect (null (nerimux::%forward-stdin-byte :stream))))
+      (expect (= 0 sends))))
+
+  (it "forward-stdin-byte-sends-one-available-octet"
+    (let (sent read-arguments)
+      (with-stubbed-fdefinition
+          ((nerimux::read-available-octets
+             (lambda (timeout-us max-octets)
+               (setf read-arguments (list timeout-us max-octets))
+               #(65)))
+           (nerimux/transport:send-frame
+             (lambda (stream frame)
+               (setf sent (list stream frame)))))
         (expect (nerimux::%forward-stdin-byte :stream)))
+      (expect (equal (list 0 nerimux/ports:+pty-buf-size+) read-arguments))
       (expect (eq :stream (first sent)))
       (multiple-value-bind (type payload next)
           (decode-frame (second sent))
         (declare (ignore next))
         (expect (= +msg-key+ type))
-        (expect (equal (list 65) (coerce payload 'list)))))) (it "client-working-directory-returns-a-string"
+        (expect (equalp #(65) payload)))))
+
+  (it "forward-stdin-byte-sends-a-multi-octet-burst-as-one-frame"
+    (let ((frames nil))
+      (with-stubbed-fdefinition
+          ((nerimux::read-available-octets
+             (lambda (timeout-us max-octets)
+               (declare (ignore timeout-us max-octets))
+               #(65 66 67 68)))
+           (nerimux/transport:send-frame
+             (lambda (stream frame)
+               (push (list stream frame) frames))))
+        (expect (nerimux::%forward-stdin-byte :stream)))
+      (expect (= 1 (length frames)))
+      (multiple-value-bind (type payload next)
+          (decode-frame (second (first frames)))
+        (declare (ignore next))
+        (expect (= +msg-key+ type))
+        (expect (equalp #(65 66 67 68) payload)))))
+
+  (it "client-working-directory-returns-a-string"
     (expect (stringp (nerimux::%client-working-directory)))) (it "client-working-directory-falls-back-when-default-directory-is-unresolvable"
     (let ((fallback (make-pathname :directory '(:absolute "path-that-does-not-exist"))))
       (let ((nerimux::*default-pathname-defaults* fallback))
