@@ -4,7 +4,8 @@
             (:constructor %make-worktree
                 (&key id repository path branch head status panes dirty-p
                       conflict-p ahead behind bare-p locked-p prunable-p
-                      missing-p changed-files recent-commits commits-state
+                      missing-p changed-files additions deletions
+                      recent-commits commits-state
                       staged-files unstaged-files untracked-files
                       unmerged-files stashes stashes-state completed-p agent-pane
                       waiting-p waiting-time waiting-message
@@ -27,6 +28,8 @@
   (prunable-p nil :type boolean)
   (missing-p nil :type boolean)
   (changed-files nil :type list)
+  (additions 0 :type integer)
+  (deletions 0 :type integer)
   (recent-commits nil :type list)
   (commits-state nil)
   (staged-files nil :type list)
@@ -63,6 +66,8 @@
                            prunable-p
                            missing-p
                            changed-files
+                           (additions 0)
+                           (deletions 0)
                            recent-commits
                            commits-state
                            staged-files
@@ -114,6 +119,10 @@
                     (not (null missing-p))
                     :changed-files
                     (copy-list changed-files)
+                    :additions
+                    additions
+                    :deletions
+                    deletions
                     :recent-commits
                     (copy-list recent-commits)
                     :commits-state

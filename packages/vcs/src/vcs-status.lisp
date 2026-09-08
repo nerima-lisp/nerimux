@@ -103,6 +103,18 @@ that duplication is magit's own display behaviour, not a bug."
 column, worktree side) -- magit's unstaged section (Unit MODEL)."
   (%collect-status-files entries vcs-kit:vcs-status-entry-worktree-status))
 
+(defun %worktree-status-diff-line-counts (path)
+  "Return additions and deletions from PATH's worktree diff."
+  (handler-case
+      (let ((additions 0)
+            (deletions 0))
+        (dolist (entry (vcs-kit:git-diff-numstat (vcs-kit:make-repository path))
+                       (values additions deletions))
+          (incf additions (or (vcs-kit:numstat-entry-additions entry) 0))
+          (incf deletions (or (vcs-kit:numstat-entry-deletions entry) 0))))
+    (error ()
+      (values 0 0))))
+
 (defun %read-worktree-status-at (path fallback-head repository-path)
   (let* ((directory (if (plusp (length path)) path repository-path))
          (missing-p (and (stringp directory)
@@ -110,21 +122,26 @@ column, worktree side) -- magit's unstaged section (Unit MODEL)."
                          (null (probe-file directory)))))
     (if missing-p
         (%make-worktree-status-update
-         :path path :missing-p t :head fallback-head :ahead 0 :behind 0)
-        (let* ((snapshot
-                 (vcs-kit:vcs-status-structured
-                  (%make-vcs-repository directory)))
+         :path path :missing-p t :head fallback-head :ahead 0 :behind 0
+         :additions 0 :deletions 0)
+        (let* ((repository (%make-vcs-repository directory))
+               (snapshot
+                 (vcs-kit:vcs-status-structured repository))
                (entries (vcs-kit:vcs-status-snapshot-entries snapshot))
                (branch-head
                  (vcs-kit:vcs-status-snapshot-branch-head snapshot)))
-          (%make-worktree-status-update
-           :path path :snapshot snapshot
-           :head (or branch-head fallback-head)
-           :dirty-p (not (null entries))
-           :conflict-p (not (null (some #'%status-entry-conflict-p entries)))
-           :ahead (or (vcs-kit:vcs-status-snapshot-ahead snapshot) 0)
-           :behind (or (vcs-kit:vcs-status-snapshot-behind snapshot) 0)
-           :changed-files (%worktree-status-changed-files entries))))))
+          (multiple-value-bind (additions deletions)
+              (%worktree-status-diff-line-counts directory)
+            (%make-worktree-status-update
+             :path path :snapshot snapshot
+             :head (or branch-head fallback-head)
+             :dirty-p (not (null entries))
+             :conflict-p (not (null (some #'%status-entry-conflict-p entries)))
+             :ahead (or (vcs-kit:vcs-status-snapshot-ahead snapshot) 0)
+             :behind (or (vcs-kit:vcs-status-snapshot-behind snapshot) 0)
+             :additions additions
+             :deletions deletions
+             :changed-files (%worktree-status-changed-files entries)))))))
 
 (defun %read-worktree-status (worktree)
   (let ((repository (nerimux/workspace-model:worktree-repository worktree)))
@@ -157,6 +174,10 @@ column, worktree side) -- magit's unstaged section (Unit MODEL)."
           (%worktree-status-update-ahead update)
           (nerimux/workspace-model:worktree-behind worktree)
           (%worktree-status-update-behind update)
+          (nerimux/workspace-model::worktree-additions worktree)
+          (%worktree-status-update-additions update)
+          (nerimux/workspace-model::worktree-deletions worktree)
+          (%worktree-status-update-deletions update)
           (nerimux/workspace-model:worktree-changed-files worktree)
           (%worktree-status-update-changed-files update)
           (nerimux/workspace-model:worktree-untracked-files worktree)

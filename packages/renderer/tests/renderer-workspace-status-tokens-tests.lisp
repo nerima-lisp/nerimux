@@ -33,6 +33,24 @@
       (expect (string= "AHEAD 12 BEHIND 3"
                        (nerimux/renderer::%worktree-status-label worktree)))))
 
+  (it "shows non-zero diff line counts after the dirty/conflict tokens"
+    (let ((worktree
+            (nerimux/workspace-model:make-worktree
+             :path "/repo/wt" :branch "main" :status :fetched
+             :dirty-p t :additions 8 :deletions 3 :ahead 2)))
+      (expect (equal '("DIRTY" "+8 -3" "AHEAD 2")
+                     (nerimux/renderer::%worktree-status-tokens worktree)))
+      (expect (string= "DIRTY +8 -3 AHEAD 2"
+                       (nerimux/renderer::%worktree-status-label worktree)))))
+
+  (it "omits a zero diff line count token"
+    (let ((worktree
+            (nerimux/workspace-model:make-worktree
+             :path "/repo/wt" :branch "main" :status :fetched
+             :additions 0 :deletions 0)))
+      (expect (equal '("CLEAN")
+                     (nerimux/renderer::%worktree-status-tokens worktree)))))
+
   (it "omits AHEAD 0 / BEHIND 0 rather than showing a zero count"
     (let ((worktree
             (nerimux/workspace-model:make-worktree :path "/repo/wt" :branch "main"

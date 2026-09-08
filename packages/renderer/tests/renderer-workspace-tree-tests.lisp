@@ -437,6 +437,25 @@
         (expect (not (search "EXITED" plain)))
         (expect (search "5m" plain)))))
 
+  (it "places diff line counts after activity and drops them first when narrow"
+    (let* ((pane (nerimux/pane:make-pane :id 1 :fd -1))
+           (worktree
+             (nerimux/workspace-model:make-worktree
+              :id "wt-lines" :path "/repo/lines" :branch "lines"
+              :status :fetched :dirty-p t :additions 8 :deletions 3 :ahead 2)))
+      (nerimux/pane:worktree-add-pane worktree pane)
+      (setf (nerimux/pane:pane-last-output-time pane)
+            (- (get-universal-time) 300))
+      (multiple-value-bind (full)
+          (nerimux/renderer::%worktree-tree-info-suffix worktree 100)
+        (expect (search "5m +8 -3 +2" full))
+        (multiple-value-bind (narrow)
+            (nerimux/renderer::%worktree-tree-info-suffix
+             worktree (1- (nerimux/renderer::%display-width full)))
+          (expect (search "5m" narrow))
+          (expect (not (search "+8 -3" narrow)))
+          (expect (search "+2" narrow))))))
+
   (it "switches relative-time buckets at the 60s/3600s/86400s boundaries"
     (flet ((relative (delta)
              (nerimux/renderer::%worktree-relative-time-text

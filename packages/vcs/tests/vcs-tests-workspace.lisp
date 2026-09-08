@@ -83,8 +83,17 @@
                 :entries
                 (list (vcs-kit::%make-vcs-status-entry
                        :kind :ordinary :index-status " " :worktree-status "M"
-                       :path "src/foo.lisp"))))))
+                       :path "src/foo.lisp")))))
+           (vcs-kit:git-diff-numstat
+             (lambda (&rest arguments)
+               (declare (ignore arguments))
+               (list (vcs-kit::%make-numstat-entry
+                      :additions 7 :deletions 3 :path "src/foo.lisp")))))
         (nerimux/vcs::%apply-worktree-status
          repository (nerimux/vcs::%read-worktree-status-at path nil path))
         (expect (equal (list (cons " M" "src/foo.lisp"))
-                       (nerimux/workspace-model:worktree-changed-files worktree)))))))
+                       (nerimux/workspace-model:worktree-changed-files worktree)))
+        (expect (= 7
+                   (nerimux/workspace-model::worktree-additions worktree)))
+        (expect (= 3
+                   (nerimux/workspace-model::worktree-deletions worktree)))))))

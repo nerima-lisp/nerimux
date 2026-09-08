@@ -775,7 +775,11 @@
                                                           :ahead
                                                           0
                                                           :behind
-                                                          0)))))
+                                                          0))))
+               (vcs-kit:git-diff-numstat
+                (lambda (&rest arguments)
+                  (declare (ignore arguments))
+                  nil)))
               (let* ((refresh
                       (nerimux/vcs::%read-repository-refresh repository))
                      (updates
@@ -829,7 +833,11 @@
                                                           :ahead
                                                           0
                                                           :behind
-                                                          0)))))
+                                                          0))))
+               (vcs-kit:git-diff-numstat
+                (lambda (&rest arguments)
+                  (declare (ignore arguments))
+                  nil)))
               (let ((updates (nerimux/vcs::%read-repository-status repository)))
                 (expect (= 1 (length updates)))
                 (expect

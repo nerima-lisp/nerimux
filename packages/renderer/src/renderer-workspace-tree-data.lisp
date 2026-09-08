@@ -180,6 +180,17 @@
    (when (plusp (worktree-behind worktree))
      (list (cons (format nil "-~D" (worktree-behind worktree)) +sgr-behind+)))))
 
+(defun %worktree-change-count-parts (worktree)
+  "Return WORKTREE's additions/deletions as one plain and styled token."
+  (let ((additions (nerimux/workspace-model::worktree-additions worktree))
+        (deletions (nerimux/workspace-model::worktree-deletions worktree)))
+    (when (or (plusp additions) (plusp deletions))
+      (let ((plain (format nil "+~D -~D" additions deletions)))
+        (cons plain
+              (format nil "~A ~A"
+                      (%sgr-wrap (format nil "+~D" additions) +sgr-ok+)
+                      (%sgr-wrap (format nil "-~D" deletions) +sgr-alert+)))))))
+
 (defun %worktree-pane-count-text (worktree)
   (format nil "terminal:~D"
           (count-if-not #'nerimux/pane:pane-agent-kind (worktree-panes worktree))))
@@ -207,18 +218,20 @@
     (lambda (token)
       (not
        (or (and (>= (length token) 5) (string= (subseq token 0 5) "AHEAD"))
-           (and (>= (length token) 6) (string= (subseq token 0 6) "BEHIND")))))
+           (and (>= (length token) 6) (string= (subseq token 0 6) "BEHIND"))
+           (and (plusp (length token)) (char= (char token 0) #\+)))))
     (%worktree-status-tokens worktree))
    "CLEAN"))
 
 (defun %worktree-tree-info-tokens (worktree)
   "Ordered (PLAIN . STYLED) token pairs for WORKTREE's tree-row info
    cluster, lowest priority first -- the order %WORKTREE-TREE-INFO-SUFFIX
-   drops from when the row does not fit: relative time, then ahead/behind,
-   then terminal count; agent lifecycle and Git state stay together so a
-   narrow row cannot show CLEAN while silently dropping RUNNING."
+   drops from when the row does not fit: relative time, then change counts,
+   then ahead/behind, then terminal count; agent lifecycle and Git state stay
+   together so a narrow row cannot show CLEAN while silently dropping RUNNING."
   (let* ((time
          (%worktree-relative-time-text (%worktree-last-activity-time worktree)))
+         (change-counts (%worktree-change-count-parts worktree))
          (ahead-behind (%worktree-ahead-behind-parts worktree))
          (pane-count (%worktree-pane-count-text worktree))
          (agent (%worktree-agent-text worktree))
@@ -226,6 +239,7 @@
          (state-sgr (%worktree-state-token-sgr state)))
     (remove nil
             (list (and time (cons time (%sgr-wrap time +sgr-faint+)))
+                  change-counts
                   (and ahead-behind
                        (cons
                         (format nil "~{~A~^/~}" (mapcar #'car ahead-behind))
@@ -247,17 +261,41 @@
                                     (%sgr-wrap state state-sgr)
                                     state)))))))
 
+(defun %worktree-tree-info-drop-priority (token)
+  "Return TOKEN's narrow-row omission priority, lower values first."
+  (let ((plain (car token)))
+    (cond
+      ((and (plusp (length plain))
+            (char= (char plain 0) #\+)
+            (find #\Space plain)) 0)
+      ((or (string= plain "now")
+           (and (plusp (length plain))
+                (find (char plain 0) "0123456789"))) 1)
+      ((or (and (plusp (length plain)) (char= (char plain 0) #\+))
+           (and (plusp (length plain)) (char= (char plain 0) #\-))) 2)
+      ((and (>= (length plain) 9) (string= plain "terminal:" :end1 9)) 3)
+      (t 4))))
+
 (defun %worktree-tree-info-suffix (worktree width)
   "Two values -- PLAIN and STYLED text for WORKTREE's tree-row info cluster
-   (agent lifecycle, Git state, ahead/behind, terminal count, activity time),
-   space-joined. Tokens drop from the front (lowest priority: relative time,
-   then ahead/behind, then terminal count; lifecycle and Git stay) until the
-   plain form fits WIDTH display columns. %DISPLAY-CLIP's own
+   (agent lifecycle, Git state, ahead/behind, terminal count, change counts,
+   activity time),
+   space-joined. Tokens remain in display order, while narrow-row omission
+   starts with change counts, then relative time, ahead/behind, and terminal
+   count; lifecycle and Git stay until the plain form fits WIDTH display
+   columns. %DISPLAY-CLIP's own
    truncate-with-ellipsis contract is the safety net for the case where even
    lifecycle and Git pair alone overflows WIDTH."
-  (let ((tokens (%worktree-tree-info-tokens worktree)))
-    (loop for remaining on tokens
-          for plain = (format nil "~{~A~^ ~}" (mapcar #'car remaining))
-          for styled = (format nil "~{~A~^ ~}" (mapcar #'cdr remaining))
-          when (or (null (cdr remaining)) (<= (%display-width plain) width))
-            return (values (%display-clip plain width) styled))))
+  (loop with remaining = (%worktree-tree-info-tokens worktree)
+        for plain = (format nil "~{~A~^ ~}" (mapcar #'car remaining))
+        for styled = (format nil "~{~A~^ ~}" (mapcar #'cdr remaining))
+        when (or (null (cdr remaining)) (<= (%display-width plain) width))
+          return (values (%display-clip plain width) styled)
+        do (let ((drop (reduce
+                        (lambda (left right)
+                          (if (< (%worktree-tree-info-drop-priority left)
+                                 (%worktree-tree-info-drop-priority right))
+                              left
+                              right))
+                        remaining)))
+             (setf remaining (delete drop remaining :count 1 :test #'eq)))))

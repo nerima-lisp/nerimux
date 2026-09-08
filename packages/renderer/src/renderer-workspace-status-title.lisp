@@ -1,5 +1,14 @@
 (in-package #:nerimux/renderer)
 
+(defun %worktree-change-count-token (worktree)
+  "Return WORKTREE's non-empty worktree diff line-count token."
+  (when (and (worktree-status worktree)
+             (or (plusp (nerimux/workspace-model::worktree-additions worktree))
+                 (plusp (nerimux/workspace-model::worktree-deletions worktree))))
+    (format nil "+~D -~D"
+            (nerimux/workspace-model::worktree-additions worktree)
+            (nerimux/workspace-model::worktree-deletions worktree))))
+
 (defun %worktree-status-tokens (worktree)
   "Return WORKTREE's structural and VCS status token strings in display order."
   (let ((structural
@@ -19,6 +28,9 @@
                   (list "DIRTY"))
                 (when (worktree-conflict-p worktree)
                   (list "CONFLICT"))
+                (let ((changes (%worktree-change-count-token worktree)))
+                  (when changes
+                    (list changes)))
                 (when (plusp (worktree-ahead worktree))
                   (list (format nil "AHEAD ~D" (worktree-ahead worktree))))
                 (when (plusp (worktree-behind worktree))
