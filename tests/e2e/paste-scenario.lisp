@@ -8,7 +8,10 @@
   30)
 
 (defconstant +e2e-paste-chunk-size+
-  4096)
+  256)
+
+(defconstant +e2e-paste-boundary+
+  "NMX-PASTE-BOUNDARY-0123456789")
 
 (defun %paste-worktree ()
   (let ((worktree
@@ -50,18 +53,57 @@
                           :element-type '(unsigned-byte 8))
     (write-sequence payload stream)))
 
-(defun %write-paste-sequence (fd payload)
-  (let ((deadline (+ (get-internal-real-time)
-                     (* +e2e-paste-transfer-timeout-seconds+
-                        internal-time-units-per-second))))
-    (pty-write fd (format nil "~C[200~~" #\Escape))
-    (loop for start from 0 below (length payload) by +e2e-paste-chunk-size+
-          for end = (min (length payload) (+ start +e2e-paste-chunk-size+))
-          do (when (> (get-internal-real-time) deadline)
-               (error "paste transfer exceeded ~D seconds after ~D bytes"
-                      +e2e-paste-transfer-timeout-seconds+ start))
-             (pty-write fd (subseq payload start end)))
-    (pty-write fd (format nil "~C[201~~" #\Escape))))
+(defun %write-paste-sequence (fd payload deadline)
+  (pty-write fd (format nil "~C[200~~" #\Escape))
+  (loop for start from 0 below (length payload) by +e2e-paste-chunk-size+
+        for end = (min (length payload) (+ start +e2e-paste-chunk-size+))
+        do (when (> (get-internal-real-time) deadline)
+             (error "paste transfer exceeded ~D seconds after ~D bytes"
+                    +e2e-paste-transfer-timeout-seconds+ start))
+           (pty-write fd (subseq payload start end)))
+  (pty-write fd (format nil "~C[201~~" #\Escape))
+  (pty-write fd +e2e-paste-boundary+))
+
+(defun %drain-paste-output-once (fd acc)
+  (when (select-fds (list fd) +e2e-poll-timeout-us+)
+    (let ((chunk
+            (pty-read-blocking-into
+             fd
+             (make-array +e2e-read-buf-size+
+                         :element-type '(unsigned-byte 8)))))
+      (when chunk
+        (%accumulate-chunk acc chunk)))))
+
+(defun %run-paste-writer-draining (fd payload acc)
+  (let* ((deadline (+ (get-internal-real-time)
+                      (* +e2e-paste-transfer-timeout-seconds+
+                         internal-time-units-per-second)))
+         (joined-p nil)
+         (writer
+           (sb-thread:make-thread
+            (lambda ()
+              (handler-case
+                  (progn
+                    (%write-paste-sequence fd payload deadline)
+                    :completed)
+                (serious-condition (condition) condition)))
+            :name "e2e-paste-writer")))
+    (unwind-protect
+         (loop
+           (%drain-paste-output-once fd acc)
+           (unless (sb-thread:thread-alive-p writer)
+             (let ((outcome (sb-thread:join-thread writer)))
+               (setf joined-p t)
+               (if (eq outcome :completed)
+                   (return t)
+                   (error "paste writer failed: ~A" outcome))))
+           (when (> (get-internal-real-time) deadline)
+             (error "paste writer exceeded ~D seconds"
+                    +e2e-paste-transfer-timeout-seconds+)))
+      (unless joined-p
+        (when (sb-thread:thread-alive-p writer)
+          (ignore-errors (sb-thread:terminate-thread writer)))
+        (ignore-errors (sb-thread:join-thread writer))))))
 
 (defun run-paste-scenario (binary)
   (let* ((worktree (%paste-worktree))
@@ -73,9 +115,11 @@
          (ready-marker "NMX_PASTE_READY")
          (command
            (format nil
-                   "printf '~C[?2004l'; stty raw -echo; printf 'NMX_PASTE_%s\n' READY; dd iflag=fullblock bs=~D count=1 of=\"$TMPDIR/paste-received.bin\" status=none; set -- $(sha256sum \"$TMPDIR/paste-received.bin\"); printf '\nNMX_PASTE_SHA_%s\n' \"$1\"~%"
+                   "printf '~C[?2004l'; stty raw -echo; printf '%s' '~A' >\"$TMPDIR/paste-boundary.expected\"; printf 'NMX_PASTE_%s\n' READY; dd iflag=fullblock bs=~D count=1 of=\"$TMPDIR/paste-received.bin\" status=none; dd iflag=fullblock bs=~D count=1 of=\"$TMPDIR/paste-boundary.actual\" status=none; if cmp -s \"$TMPDIR/paste-boundary.expected\" \"$TMPDIR/paste-boundary.actual\"; then set -- $(sha256sum \"$TMPDIR/paste-received.bin\"); printf '\nNMX_PASTE_SHA_%s\n' \"$1\"; else printf '\nNMX_PASTE_BOUNDARY_%s\n' MISMATCH; fi~%"
                    #\Escape
-                   +e2e-paste-size+)))
+                   +e2e-paste-boundary+
+                   +e2e-paste-size+
+                   (length +e2e-paste-boundary+))))
     (%write-paste-payload-file sent-path payload)
     (setf sent-digest (%paste-sha256-file sent-path))
     (let ((digest-marker (format nil "NMX_PASTE_SHA_~A" sent-digest)))
@@ -95,12 +139,18 @@
                (let ((ready (%wait-for-marker fd ready-marker
                                               +e2e-marker-timeout-seconds+ acc)))
                  (when ready
-                   (%write-paste-sequence fd payload))
+                   (%run-paste-writer-draining fd payload acc))
                  (let ((matched
                          (and ready
-                              (%wait-for-marker fd digest-marker
-                                                +e2e-paste-result-timeout-seconds+
-                                                acc))))
+                              (or (%search-in-tail
+                                   digest-marker
+                                   acc
+                                   (max +e2e-search-window-bytes+
+                                        (length digest-marker)))
+                                  (%wait-for-marker
+                                   fd digest-marker
+                                   +e2e-paste-result-timeout-seconds+
+                                   acc)))))
                    (pty-write fd (make-array 2 :element-type '(unsigned-byte 8)
                                               :initial-contents
                                               (list 17 (char-code #\d))))

@@ -56,8 +56,8 @@
 (defparameter *scenarios*
   (list (cons "kill-without-server" 'scenario-kill-without-server)
         (cons "server-starts" 'scenario-server-starts)
-        (cons "kill-cleans-empty-server" 'scenario-kill-cleans-empty-server)
-        (cons "kill-force-without-server" 'scenario-kill-force-without-server)
+        (cons "kill-refuses-with-pane" 'scenario-kill-refuses-with-pane)
+        (cons "kill-force-cleans" 'scenario-kill-force-cleans)
         (cons "attach" :attach)
         (cons "paste" :paste))
   "Mode-name -> handler-symbol (or :ATTACH), in the fixed run order.")
