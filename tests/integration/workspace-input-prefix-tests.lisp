@@ -551,8 +551,9 @@
                 (declare (ignore object))
                 (setf selected-window window)))
              (nerimux::%set-client-focus
-              (lambda (connection pane)
+              (lambda (connection pane &optional session)
                 (declare (ignore connection))
+                (declare (ignore session))
                 (setf focused-pane pane))))
           (nerimux::%workspace-refocus-after-window-close
            session test-conn worktree)

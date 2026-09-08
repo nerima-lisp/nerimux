@@ -95,15 +95,20 @@
    than a chain of flag tests, so two owners cannot both claim a key -- the
    failure the old MODE x VIEW product allowed.
 
-   The default arm is where FR-007 lands: :repolist and :status route to the UI
+  The default arm is where FR-007 lands: :repolist and :status route to the UI
    keymap, and every other view (i.e. :pane) hands the byte straight to the
    shell with no mode to leave first."
   (cond
-    ((and (%client-ui-keys-p conn) (vectorp payload) (> (length payload) 1))
+    ((and (or *client-wire-key-p* (%client-ui-keys-p conn))
+          (or (vectorp payload) (stringp payload))
+          (> (length payload) 1))
      (loop for index below (length payload)
            for result = (%handle-multi-key-message
                          session conn (subseq payload index (1+ index)))
            finally (return result)))
+    ((and *client-wire-key-p*
+          (not *client-meta-replaying*)
+          (%client-meta-handle-byte session conn payload)) nil)
     ((%client-esc-swallow-consume conn) nil)
     ((member (client-conn-modal conn) +keyboard-owning-modals+ :test #'eq)
      (case (client-conn-modal conn)

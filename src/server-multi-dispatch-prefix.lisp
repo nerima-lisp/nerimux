@@ -45,7 +45,7 @@
                   (when (pane-live-p new-pane)
                     (start-reader-thread new-pane))
                   (window-select-pane window new-pane)
-                  (%set-client-focus conn new-pane)
+                  (%set-client-focus conn new-pane session)
                   (%mark-dirty))
                 (%client-notify conn "pane too small to split")))))))
     nil))
@@ -69,7 +69,7 @@
           (when (%reject-pending-worktree-attachment conn :pane active :window window)
             (return-from %workspace-refocus-after-window-close nil))
           (session-select-window session window)
-          (%set-client-focus conn active))
+          (%set-client-focus conn active session))
         (%set-client-view conn :repolist))))
 
 (defun %workspace-prefix-close-pane (session conn)
@@ -104,7 +104,7 @@
               (progn
                 (window-select-pane window sibling)
                 (session-select-window session window)
-                (%set-client-focus conn sibling))
+                (%set-client-focus conn sibling session))
               (progn
                 (session-remove-window session window)
                 (%workspace-refocus-after-window-close session conn worktree))))))
@@ -136,7 +136,7 @@
           (if neighbor
               (progn
                 (window-select-pane window neighbor)
-                (%set-client-focus conn neighbor)
+                (%set-client-focus conn neighbor session)
                 (%mark-dirty))
               (%client-notify conn (format nil "no pane ~A" direction)))))))
   nil)
@@ -163,7 +163,7 @@
                  (return-from %workspace-prefix-cycle-window nil))
                (%workspace-prefix-unzoom window)
                (session-select-window session next-window)
-               (%set-client-focus conn (window-active-pane next-window))
+               (%set-client-focus conn (window-active-pane next-window) session)
                (%mark-dirty)))))))
   nil)
 
