@@ -458,3 +458,77 @@
             (send-byte (char-code #\I))
             (expect (equal (list (list 11 focus-out) (list 11 focus-in))
                            (nreverse writes)))))))))
+
+(describe "fr-107-server-input-suite"
+
+  (it "fr-107-translates-arrow-keys-for-a-pane-with-decckm"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (pane (nerimux/window:window-active-pane
+                    (nerimux/session:session-active-window s)))
+             (screen (nerimux/pane:pane-screen pane))
+             (writes nil))
+        (setf (nerimux/pane:pane-fd pane) 41
+              (nerimux::client-conn-focus conn) pane
+              (nerimux::client-conn-view conn) :pane
+              (nerimux/terminal/types:screen-app-cursor-keys screen) t)
+        (labels ((send-arrow (final-byte)
+                   (dolist (byte (list 27 91 final-byte))
+                     (nerimux::%handle-multi-client-message
+                      nerimux::+msg-key+ (vector byte) s conn)))
+                 (recorded-bytes (payload)
+                   (if (stringp payload)
+                       (cl-codec-kit:string-to-octets payload :encoding :utf-8)
+                       (copy-seq payload))))
+          (with-stubbed-fdefinition
+              ((nerimux/pty:pty-write
+                (lambda (fd bytes)
+                  (declare (ignore fd))
+                  (push (recorded-bytes bytes) writes))))
+            (dolist (final-byte '(65 66 67 68))
+              (send-arrow final-byte))
+            (expect
+             (equalp
+              (coerce
+               (mapcan (lambda (final-byte) (list 27 79 final-byte))
+                       '(65 66 67 68))
+               '(simple-array (unsigned-byte 8) (*)))
+              (coerce (mapcan (lambda (bytes) (coerce bytes 'list))
+                              (nreverse writes))
+                      '(simple-array (unsigned-byte 8) (*)))))
+            (setf writes nil
+                  (nerimux/terminal/types:screen-app-cursor-keys screen) nil)
+            (dolist (final-byte '(65 66 67 68))
+              (send-arrow final-byte))
+            (expect
+             (equalp
+              (coerce
+               (mapcan (lambda (final-byte) (list 27 91 final-byte))
+                       '(65 66 67 68))
+               '(simple-array (unsigned-byte 8) (*)))
+              (coerce (mapcan (lambda (bytes) (coerce bytes 'list))
+                              (nreverse writes))
+                      '(simple-array (unsigned-byte 8) (*))))))))))
+
+  (it "fr-107-does-not-send-modal-arrow-input-to-a-pane"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (pane (nerimux/window:window-active-pane
+                    (nerimux/session:session-active-window s)))
+             (screen (nerimux/pane:pane-screen pane))
+             (writes nil))
+        (setf (nerimux/pane:pane-fd pane) 41
+              (nerimux::client-conn-focus conn) pane
+              (nerimux::client-conn-view conn) :repolist
+              (nerimux::client-conn-modal conn) :command
+              (nerimux/terminal/types:screen-app-cursor-keys screen) t)
+        (with-stubbed-fdefinition
+            ((nerimux/pty:pty-write
+              (lambda (fd bytes)
+                (declare (ignore fd))
+                (push bytes writes))))
+          (dolist (byte '(27 91 65))
+            (nerimux::%handle-multi-client-message
+             nerimux::+msg-key+ (vector byte) s conn)))
+        (expect (null writes)))))
+  )

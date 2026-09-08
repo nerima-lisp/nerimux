@@ -88,10 +88,13 @@
       (send-frame server-side (msg-frame "HELLO"))
       (force-output server-side)
       (let (result)
-        (let ((painted (with-output-to-string (*standard-output*)
+          (let ((painted (with-output-to-string (*standard-output*)
                          (setf result (nerimux::%receive-server-frame client-side)))))
-          (expect (null result))
-          (expect (string= "HELLO" painted))))))
+            (expect (null result))
+          (expect (string= (format nil "~C[?2026hHELLO~C[?2026l"
+                                    #\Escape
+                                    #\Escape)
+                             painted))))))
 
   (it "receive-server-frame-writes-notification-to-binary-stdout"
     (let ((raw #(27 93 55 55 55 59 0 255 7)))
