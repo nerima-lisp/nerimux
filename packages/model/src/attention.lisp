@@ -13,6 +13,8 @@
         (push :behind reasons))
       (when (worktree-missing-p worktree)
         (push :missing reasons))
+      (when (nerimux/workspace-model:worktree-waiting-p worktree)
+        (push :waiting reasons))
       (when (some #'pane-attention-p (worktree-panes worktree))
         (push :pane reasons))
       (nreverse reasons))))

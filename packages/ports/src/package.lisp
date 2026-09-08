@@ -18,7 +18,9 @@
    #:*write-pty*
    #:*resize-pty*
    #:*close-pty*
+   #:*notify-host*
    #:spawn-pty
    #:write-pty
    #:resize-pty
-   #:close-pty))
+   #:close-pty
+   #:notify-host))
