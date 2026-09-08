@@ -28,6 +28,12 @@
     (when (and (consp pair) (stringp (car pair)) (stringp (cdr pair)))
       (setf (gethash (car pair) table) (cdr pair)))))
 
+(defun %apply-session-terminal-environment (session table)
+  "Merge the terminal identity captured at the latest attach into TABLE."
+  (when session
+    (dolist (pair (session-terminal-environment session))
+      (setf (gethash (car pair) table) (cdr pair)))))
+
 (defun session-child-environment (session &key term extra-env)
   "Return a full child environment snapshot for SESSION as a list of NAME=VALUE strings.
    The merge order is:
@@ -35,8 +41,9 @@
      2. update-environment variables from the current process
         (skipped when *suppress-update-environment* is non-NIL — new-session -E)
      3. SESSION overlay sets and unsets
-     4. TERM override, when TERM is a non-empty string
-     5. EXTRA-ENV alist of (NAME . VALUE), when supplied
+     4. EXTRA-ENV alist of (NAME . VALUE), when supplied
+     5. terminal identity from the latest client attach
+     6. TERM override, when TERM is a non-empty string
    SESSION may be NIL for bootstrap or pure geometry helpers — step 3 is skipped.
    The result is suitable for passing as :environment to sb-ext:run-program."
   (let ((table (%environment-strings-to-table (nerimux/ports:environment-entries))))
@@ -46,7 +53,8 @@
     (dolist (name *global-hidden-environment-names*)
       (remhash name table))
     (%apply-session-overlay session table)
+    (%apply-extra-env extra-env table)
+    (%apply-session-terminal-environment session table)
     (when (and term (plusp (length term)))
       (setf (gethash "TERM" table) term))
-    (%apply-extra-env extra-env table)
     (%environment-table-to-list table)))
