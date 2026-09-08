@@ -178,6 +178,7 @@
                      #:layout-split-ratio
                      #:layout-split-second
                      #:layout->string
+                     #:string->layout
                      #:make-layout-leaf
                      #:make-layout-split
                      #:orient-case

@@ -60,4 +60,24 @@
            (tree  (nerimux/layout::%build-flat-tree panes :v)))
       (expect (nerimux/layout::layout-split-p tree))
       (expect (nerimux/layout::layout-split-p (nerimux/layout::layout-split-second tree)))
-      (expect (nerimux/layout::layout-leaf-p (nerimux/layout::layout-split-first tree))))))
+      (expect (nerimux/layout::layout-leaf-p (nerimux/layout::layout-split-first tree)))))
+
+  (it "layout-string-round-trips-ratio-and-pane-ids"
+    (let* ((first-pane (tl-pane 1 40 24))
+           (second-pane (tl-pane 2 40 24))
+           (tree (make-layout-split :h
+                                    (make-layout-leaf first-pane)
+                                    (make-layout-leaf second-pane)
+                                    3/5))
+           (window (tl-window tree 24 81 :active first-pane))
+           (restored (nerimux/layout:string->layout
+                      (layout->string window)
+                      (list first-pane second-pane))))
+      (expect (nerimux/layout:layout-split-p restored))
+      (expect (= 3/5 (nerimux/layout:layout-split-ratio restored)))
+      (expect (eq first-pane
+                 (nerimux/layout:layout-leaf-pane
+                  (nerimux/layout:layout-split-first restored))))
+      (expect (eq second-pane
+                 (nerimux/layout:layout-leaf-pane
+                  (nerimux/layout:layout-split-second restored)))))))
