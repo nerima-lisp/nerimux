@@ -4,6 +4,36 @@
 
 (defconstant +max-clients+ 32)
 
+(defconstant +terminal-identity-term-program-name+
+  :term_program
+  "Exact TERM_PROGRAM variable name accepted from an attached client.")
+
+(defconstant +terminal-identity-term-program-version-name+
+  :term_program_version
+  "Exact TERM_PROGRAM_VERSION variable name accepted from an attached client.")
+
+(defconstant +terminal-identity-variable-prefix+
+  :kitty_
+  "Prefix for terminal identity variables accepted from an attached client.")
+
+(defun %terminal-identity-variable-p (name)
+  "Return true when NAME is an accepted POSIX terminal identity variable."
+  (and (stringp name)
+       (plusp (length name))
+       (or (string= name (symbol-name +terminal-identity-term-program-name+))
+           (string= name
+                    (symbol-name +terminal-identity-term-program-version-name+))
+           (and (>= (length name)
+                    (length (symbol-name +terminal-identity-variable-prefix+)))
+                (string= (symbol-name +terminal-identity-variable-prefix+)
+                         name
+                         :end2
+                         (length (symbol-name +terminal-identity-variable-prefix+)))))
+       (or (alpha-char-p (char name 0)) (char= (char name 0) #\_))
+       (loop for index from 1 below (length name)
+             for character = (char name index)
+             always (or (alphanumericp character) (char= character #\_)))))
+
 (defparameter +client-ui-modes+
   '(:normal :input :copy :command :picker :tree-filter))
 

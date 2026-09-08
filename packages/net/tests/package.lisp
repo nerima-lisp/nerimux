@@ -22,7 +22,7 @@
                 #:msg-command #:msg-reply #:msg-notification
                 #:encode-command-payload #:decode-command-payload
                 #:u16-octets-pair
-                #:decode-size #:decode-text #:to-octets)
+                #:decode-size #:decode-attach #:decode-text #:to-octets)
   (:import-from #:nerimux/transport
                 #:send-frame #:read-frame #:with-incoming-frame)
   (:import-from #:nerimux/net

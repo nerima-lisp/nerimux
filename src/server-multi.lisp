@@ -265,10 +265,24 @@ MODE is :MARK or :SETTLE; STALE-P applies when settling."
           (remhash (worktree-id worktree) *workspace-worktree-last-pane*)
           nil)))))
 
+(defun %record-client-terminal-identity (session payload)
+  "Store the allow-listed terminal identity carried by an attach frame."
+  (multiple-value-bind (rows cols environment) (decode-attach payload)
+    (declare (ignore rows cols))
+    (dolist (pair environment)
+      (unless (and (consp pair)
+                   (%terminal-identity-variable-p (car pair))
+                   (stringp (cdr pair)))
+        (error "Invalid client terminal identity: ~S" pair)))
+    (nerimux/session:session-set-terminal-environment session environment)))
+
 (define-multi-msg-dispatch
   ((null type) :drop)
   ((= type +msg-detach+) :drop)
-  ((or (= type +msg-attach+) (= type +msg-resize+))
+  ((= type +msg-attach+)
+   (%record-client-terminal-identity session payload)
+   (%handle-multi-attach-or-resize session conn type payload))
+  ((= type +msg-resize+)
    (%handle-multi-attach-or-resize session conn type payload))
   ((= type +msg-key+)
    (%handle-multi-key-message session conn payload))

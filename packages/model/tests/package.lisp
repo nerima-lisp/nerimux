@@ -69,6 +69,8 @@
                 #:session-set-environment
                 #:session-unset-environment
                 #:session-child-environment
+                #:session-terminal-environment
+                #:session-set-terminal-environment
                 #:all-panes
                 #:make-session
                 #:session-name

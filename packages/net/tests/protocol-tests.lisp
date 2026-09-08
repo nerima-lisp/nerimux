@@ -72,6 +72,24 @@
            (expect (= 24 rows))
            (expect (= 80 cols)))))))
 
+  (it "attach-terminal-identity-roundtrip-preserves-legacy-shape"
+    (let ((legacy (msg-attach 24 80))
+          (frame (msg-attach 24 80
+                             '(("KITTY_WINDOW_ID" . "42")
+                               ("TERM_PROGRAM" . "kitty")
+                               ("TERM_PROGRAM_VERSION" . "1.2")))))
+      (expect (= 9 (length legacy)))
+      (assert-decoded-frame-payload
+       frame
+       (lambda (payload)
+         (multiple-value-bind (rows cols environment) (decode-attach payload)
+           (expect (= 24 rows))
+           (expect (= 80 cols))
+           (expect (equal '(("KITTY_WINDOW_ID" . "42")
+                           ("TERM_PROGRAM" . "kitty")
+                           ("TERM_PROGRAM_VERSION" . "1.2"))
+                          environment)))))))
+
   (it "resize-roundtrip"
     (let ((frame (msg-resize 300 1000)))
       (assert-decoded-frame-type frame +msg-resize+)

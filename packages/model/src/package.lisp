@@ -272,6 +272,8 @@
                      #:session-select-window
                      #:session-set-environment
                      #:session-start-directory
+                     #:session-terminal-environment
+                     #:session-set-terminal-environment
                      #:session-swap-windows
                      #:session-touch
                      #:session-unset-environment

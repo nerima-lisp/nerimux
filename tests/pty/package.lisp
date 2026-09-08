@@ -46,6 +46,8 @@
                 #:pane-id
                 #:pane-x #:pane-y #:pane-width #:pane-height #:pane-fd #:pane-pid
                 #:pane-live-p
+                #:pane-process-exited-p
+                #:pane-non-zero-exit-p
                 #:respawn-pane
                 #:pane-window
                 #:pane-marked
