@@ -117,30 +117,42 @@
                              (or (find-symbol (string-upcase name) :keyword)
                                  name)))
                    (search-direction (%client-search-direction name)))
-              (if search-direction
-                  (multiple-value-bind (target args)
-                      (%client-command-target-and-args (rest tokens))
-                    (declare (ignore target))
-                    (%submit-client-search session conn search-direction args))
-                  (progn
-                    (let ((handled-p nil))
-                      (if cmd
-                          (multiple-value-bind (target args)
-                              (if (member cmd '(:workspace-complete :wt-complete))
-                                  (values nil (rest tokens))
-                                  (%client-command-target-and-args (rest tokens)))
-                            (setf handled-p
-                                  (%handle-client-ui-command
-                                   session conn cmd target args))
-                            (unless handled-p
-                              (%client-notify
-                               conn
-                               (format nil "unknown command: ~(~A~)" cmd)))))
-                      (unless handled-p
-                        (%client-restore-command-view conn)))
-                    (when (eq (client-conn-modal conn) :command)
-                      (%set-client-modal conn nil))
-                    (%mark-dirty))))
+              (progn
+                (if search-direction
+                    (multiple-value-bind (target args)
+                        (%client-command-target-and-args (rest tokens))
+                      (declare (ignore target))
+                      (%submit-client-search session conn search-direction args))
+                    (if (and (keywordp cmd)
+                             (not (member cmd +client-command-allow-list+
+                                          :test #'eq)))
+                        (progn
+                          (%client-notify
+                           conn
+                           (format nil
+                                   "command is not available from the : prompt: ~A"
+                                   name))
+                          (%client-restore-command-view conn)
+                          (%set-client-modal conn nil))
+                        (let ((handled-p nil))
+                          (if cmd
+                              (multiple-value-bind (target args)
+                                  (if (member cmd
+                                              '(:workspace-complete :wt-complete))
+                                      (values nil (rest tokens))
+                                      (%client-command-target-and-args (rest tokens)))
+                                (setf handled-p
+                                      (%handle-client-ui-command
+                                       session conn cmd target args))
+                                (unless handled-p
+                                  (%client-notify
+                                   conn
+                                   (format nil "unknown command: ~(~A~)" cmd)))))
+                          (unless handled-p
+                            (%client-restore-command-view conn))
+                          (when (eq (client-conn-modal conn) :command)
+                            (%set-client-modal conn nil)))))
+                (%mark-dirty)))
           (error (condition)
             (%client-notify
              conn

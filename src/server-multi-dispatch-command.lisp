@@ -62,7 +62,7 @@
                       ((:workspace-prefix :prefix-key :rebind-prefix)
                        (%client-rebind-prefix conn (command-argument))
                        t)
-                      ((:workspace-refresh :vcs-refresh :refresh-workspace)
+                      ((:workspace-refresh :vcs-refresh :refresh-workspace :refresh)
                        (%client-refresh-workspace conn))
                       ((:tree-up :worktree-up :tree-prev)
                        (%select-client-tree-relative conn
