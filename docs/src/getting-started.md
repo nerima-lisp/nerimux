@@ -340,6 +340,11 @@ On attach, the client uses the alternate screen and enables bracketed paste and
 focus reporting. Detach, quit, connection loss, and server EOF restore those
 terminal modes (FR-103).
 
+Each nerimux-rendered frame is wrapped in synchronized output, `ESC[?2026h`
+through `ESC[?2026l`, so the host terminal applies the frame atomically. Pane
+PTY bytes and forwarded notifications remain transparent to this framing
+(FR-106).
+
 BEL and OSC 9, 99, and 777 notification sequences from panes are forwarded to
 attached host terminals even when the pane is not focused. Each pane's
 notifications are coalesced to at most one per second; unknown OSC commands

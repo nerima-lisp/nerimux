@@ -131,13 +131,51 @@
         (setf decoded
               (with-output-to-string (*standard-output*)
                 (expect (null (nerimux::%receive-server-frame :stream)))))
-        (expect (string= "rendered" decoded))))
+        (expect (string= (format nil "~C[?2026hrendered~C[?2026l"
+                                  #\Escape
+                                  #\Escape)
+                           decoded))))
     (with-stubbed-fdefinition
         ((nerimux::%decode-server-frame
           (lambda (stream)
             (declare (ignore stream))
             (values :exit nil))))
-      (expect (eq :exit (nerimux::%receive-server-frame :stream))))) (it "receive-if-ready-dispatches-only-when-fd-is-ready"
+      (expect (eq :exit (nerimux::%receive-server-frame :stream)))))
+
+  (it "receive-server-frame-keeps-notifications-outside-synchronized-frames"
+    (let (written)
+      (with-stubbed-fdefinition
+          ((nerimux::%decode-server-frame
+            (lambda (stream)
+              (declare (ignore stream))
+              (values :notification #(27 91 57 57 57 126))))
+           (nerimux::%write-notification-bytes
+            (lambda (bytes)
+              (setf written (copy-seq bytes)))))
+        (expect (null (nerimux::%receive-server-frame :stream))))
+      (expect (equalp #(27 91 57 57 57 126) written))))
+
+  (it "receive-server-frame-closes-synchronized-output-when-frame-writing-signals"
+    (let ((stream (make-string-output-stream))
+          (condition nil))
+      (handler-case
+          (with-stubbed-fdefinition
+              ((nerimux::%decode-server-frame
+                (lambda (value)
+                  (declare (ignore value))
+                  (values :frame nil))))
+            (let ((*standard-output* stream))
+              (nerimux::%receive-server-frame :stream)))
+        (error (caught)
+          (setf condition caught)))
+      (let ((output (get-output-stream-string stream)))
+        (expect condition :to-be-truthy)
+        (expect (string= (format nil "~C[?2026h~C[?2026l"
+                                  #\Escape
+                                  #\Escape)
+                           output)))))
+
+  (it "receive-if-ready-dispatches-only-when-fd-is-ready"
     (let ((calls 0))
       (with-stubbed-fdefinition
           ((nerimux::%receive-server-frame

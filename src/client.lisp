@@ -64,8 +64,13 @@
     (case disposition
       (:exit :exit)
       (:frame
-        (write-string text)
-        (force-output)
+        (format t "~C[?2026h" #\Escape)
+        (unwind-protect
+             (progn
+               (write-string text)
+               (force-output))
+          (format t "~C[?2026l" #\Escape)
+          (force-output))
         nil)
       (:notification
         (%write-notification-bytes text)
