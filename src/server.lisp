@@ -131,6 +131,7 @@
    window is killed."
   (require :sb-posix)
   (install-pty-port)
+  (setf nerimux/ports:*notify-host* #'%send-host-notification)
   (setf *running*          t
         *dirty*            t
         *resize-pending*   nil

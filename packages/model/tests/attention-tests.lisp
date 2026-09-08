@@ -131,3 +131,57 @@
                           (nerimux/pane:worktree-attention-reasons worktree))))
                 (expect
                  (null (nerimux/workspace-model:worktree-attention-p worktree))))))
+
+(describe "agent waiting state"
+          (it "marks an agent worktree waiting on process exit"
+              (let* ((worktree
+                       (nerimux/workspace-model:make-worktree :id "waiting-exit"))
+                     (pane
+                       (nerimux/pane:make-pane :id 1 :agent-kind :codex)))
+                (nerimux/pane:worktree-add-pane worktree pane)
+                (nerimux/pane:pane-mark-process-exit pane :status 1)
+                (expect (nerimux/workspace-model:worktree-waiting-p worktree))
+                (expect
+                 (string= "process exited"
+                          (nerimux/workspace-model:worktree-waiting-message
+                           worktree)))
+                (expect
+                 (integerp
+                  (nerimux/workspace-model:worktree-waiting-time worktree)))))
+          (it "marks an agent worktree waiting on an OSC notification"
+              (let* ((worktree
+                       (nerimux/workspace-model:make-worktree :id "waiting-osc"))
+                     (pane
+                       (nerimux/pane:make-pane :id 2 :agent-kind :claude)))
+                (nerimux/pane:worktree-add-pane worktree pane)
+                (nerimux/pane:pane-record-notification
+                 pane
+                 #(27 93 57 57 59 105 61 49 59 84 59 97 112 112 114 111 118 97 108 59)
+                 (format nil "approval needed~%ignored")
+                 100)
+                (expect (nerimux/workspace-model:worktree-waiting-p worktree))
+                (expect
+                 (string= "approval needed"
+                          (nerimux/workspace-model:worktree-waiting-message
+                           worktree)))))
+          (it "does not mark ordinary terminal panes waiting"
+              (let* ((worktree
+                       (nerimux/workspace-model:make-worktree :id "terminal"))
+                     (pane (nerimux/pane:make-pane :id 3)))
+                (nerimux/pane:worktree-add-pane worktree pane)
+                (nerimux/pane:pane-mark-bell pane)
+                (nerimux/pane:pane-record-notification pane #(27 93 57 57) "message" 100)
+                (expect
+                 (null
+                  (nerimux/workspace-model:worktree-waiting-p worktree)))))
+          (it "clears waiting when the agent pane is focused"
+              (let* ((worktree
+                       (nerimux/workspace-model:make-worktree :id "waiting-focus"))
+                     (pane
+                       (nerimux/pane:make-pane :id 4 :agent-kind :codex)))
+                (nerimux/pane:worktree-add-pane worktree pane)
+                (nerimux/pane:pane-mark-bell pane)
+                (nerimux/pane:pane-mark-focused pane)
+                (expect
+                 (null
+                  (nerimux/workspace-model:worktree-waiting-p worktree))))))

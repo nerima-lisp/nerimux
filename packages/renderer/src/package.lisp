@@ -15,6 +15,7 @@
    #:render-session-to-tui-string
    #:render-workspace-overview-to-string
    #:render-workspace-overview-to-tui-string
+   #:worktree-notification-label
    #:workspace-tree-objects
    #:workspace-tree-view-rows
    #:confirm-view #:make-confirm-view #:confirm-view-p

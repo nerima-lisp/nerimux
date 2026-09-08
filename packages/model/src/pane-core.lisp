@@ -64,6 +64,14 @@
         ((worktree-running-agent-p worktree) :running)
         (t :exited)))
 
+(defun %agent-pane-p (pane)
+  (and pane (or (eq (pane-role pane) :agent)
+                (pane-agent-kind pane))))
+
+(defun %mark-agent-waiting (pane message &optional (now (get-universal-time)))
+  (when (and (%agent-pane-p pane) (pane-worktree pane))
+    (worktree-mark-waiting (pane-worktree pane) message now)))
+
 (defun worktree-resume (worktree pane)
   (when (and worktree pane
              (eq (pane-worktree pane) worktree)
@@ -95,20 +103,24 @@
 
 (defun pane-mark-bell (pane)
   (when pane
-    (setf (pane-bell-p pane) t
-          (pane-unread-output-p pane) t
-          (pane-last-output-time pane) (get-universal-time)))
+    (let ((now (get-universal-time)))
+      (setf (pane-bell-p pane) t
+            (pane-unread-output-p pane) t
+            (pane-last-output-time pane) now)
+      (%mark-agent-waiting pane "BEL" now)))
   pane)
 
 (defun pane-mark-process-exit (pane &key status signal)
   (when pane
-    (setf (pane-process-exited-p pane) t
-          (pane-non-zero-exit-p pane) (or
-                                       (and (integerp status)
-                                            (not (zerop status)))
-                                       (and (integerp signal) (plusp signal)))
-          (pane-unread-output-p pane) t
-          (pane-last-output-time pane) (get-universal-time)))
+    (let ((now (get-universal-time)))
+      (setf (pane-process-exited-p pane) t
+            (pane-non-zero-exit-p pane) (or
+                                         (and (integerp status)
+                                              (not (zerop status)))
+                                         (and (integerp signal) (plusp signal)))
+            (pane-unread-output-p pane) t
+            (pane-last-output-time pane) now)
+      (%mark-agent-waiting pane "process exited" now)))
   pane)
 
 (defun pane-mark-startup-failure (pane)
@@ -135,6 +147,16 @@
    events arriving before the next eligible second are coalesced separately."
   (when pane
     (pane-notify pane text)
+    (%mark-agent-waiting
+     pane
+     (if (and (= (length raw-bytes) 1)
+              (= (elt raw-bytes 0) #x07))
+         "BEL"
+         (let ((line-end (or (position #\Newline text)
+                             (position #\Return text))))
+           (let ((line (subseq text 0 (or line-end (length text)))))
+             (if (plusp (length line)) line "OSC notification"))))
+     now)
     (let ((entry (cons now
                        (coerce raw-bytes
                                '(simple-array (unsigned-byte 8) (*))))))
@@ -174,6 +196,8 @@
 (defun pane-mark-focused (pane)
   (when pane
     (setf (pane-last-focused-time pane) (get-universal-time))
+    (when (and (%agent-pane-p pane) (pane-worktree pane))
+      (worktree-clear-waiting (pane-worktree pane)))
     (pane-clear-unread-output pane))
   pane)
 

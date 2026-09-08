@@ -197,7 +197,15 @@ vcs-inspect.lisp for the race this closes."
         (nerimux/workspace-model:worktree-completed-p target)
         (nerimux/workspace-model:worktree-completed-p source)
         (nerimux/workspace-model:worktree-agent-pane target)
-        (nerimux/workspace-model:worktree-agent-pane source)))
+        (nerimux/workspace-model:worktree-agent-pane source)
+        (nerimux/workspace-model:worktree-waiting-p target)
+        (nerimux/workspace-model:worktree-waiting-p source)
+        (nerimux/workspace-model:worktree-waiting-time target)
+        (nerimux/workspace-model:worktree-waiting-time source)
+        (nerimux/workspace-model:worktree-waiting-message target)
+        (nerimux/workspace-model:worktree-waiting-message source)
+        (nerimux/workspace-model:worktree-waiting-host-notified-p target)
+        (nerimux/workspace-model:worktree-waiting-host-notified-p source)))
 
 (defun %preserve-worktree-commit-state (previous current)
   "Carry ID, COMMITS-STATE and RECENT-COMMITS from PREVIOUS's worktrees onto
