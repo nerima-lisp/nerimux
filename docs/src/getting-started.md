@@ -162,7 +162,7 @@ and does nothing. These actions require free text that the dispatch menu cannot
 collect: a commit message, branch name, tag name, or remote name. Use the `:`
 command line for the alternatives listed in the table.
 
-### The `:` command line
+### The `:` command line (FR-207)
 
 The workspace command line accepts exactly these command names. Tree navigation,
 picker control, and modal transitions are protocol commands and are not
@@ -196,7 +196,7 @@ available for manual entry.
 | `C-q z` | Toggle zoom on the focused pane's window |
 | `C-q h` / `j` / `k` / `l` | Move focus to the neighbouring pane |
 | `C-q n` / `p` | Cycle through the current worktree's windows |
-| `C-q w` | Switch to the `status` view for the focused pane's worktree (falls back to `repolist` if nothing is focused) |
+| `C-q w` | Return to the `repolist` overview, retaining the focused worktree selection |
 | `C-q [` | Enter scrollback on the focused pane |
 | `C-q d` | Detach while keeping the runtime session resident |
 | `C-q Q` | Quit the server (asks for confirmation, showing how many panes are still open) |
@@ -206,7 +206,7 @@ available for manual entry.
 fetch is the `f` transient now, reachable from `status` directly or from
 `repolist` via `?` f.
 
-Splits start at 50/50 and can be resized with the bindings above. A window has
+Splits start at 50/50 and can be resized with the bindings above (FR-105). A window has
 no four-pane limit: splitting continues in the same window while every
 resulting pane meets the model's minimum size. When a split would make a pane
 too small, nerimux reports the refusal and leaves the window and pane lists
@@ -234,7 +234,7 @@ The overview/detail keymap this replaced bound `j` `k` `J` `K` `h` `l` `i`
 `o` `d` (view switch) `r` (refresh) `X` (worktree delete) `L` `U` `n`
 (worktree create) and `c` (copy mode), plus the `:normal`/`:input`/`:copy`
 mode vocabulary itself. None of that survives: `j`/`k` are now `n`/`p`,
-`o`/`d` no longer switch views (`C-q w` and `q` do), worktree create/delete/
+`o`/`d` no longer switch views (`C-q w` returns to `repolist` and `q` steps back), worktree create/delete/
 lock/unlock moved under the `w` transient, refresh is `g`, and copy mode is
 scrollback (`C-q [`). Two working key bindings (`C-q F`, `C-q C-f`) were also
 retired outright, folded into the `f` transient. `1`–`4`, `Tab`,
@@ -247,7 +247,7 @@ The repolist view is a single full-width tree, with no side panels, built from
 three fixed sections in this order:
 
 - **Attention** — every worktree that needs attention (dirty, conflict,
-  ahead/behind, or missing) or is holding an exited pane.
+  ahead/behind, or missing), has a waiting agent, or is holding an exited pane.
 - **Active** — every other worktree that holds at least one open pane.
 - **Repositories** — every repository, always shown, whether or not any of
   its worktrees appear above. A repository row is **collapsed by default**;
@@ -265,9 +265,15 @@ create/delete — never while a client is just moving the selection, so a row
 never jumps out from under the cursor mid-navigation.
 
 Each worktree row also carries a compact status cluster to the right of its
-label: a state tag (`CLEAN`, `DIRTY`, `CONFLICT`, ...), ahead/behind counts
-(`+N`/`-N`) when nonzero, a pane count (`Np`, or `Np!` once any pane has
-exited), and a relative last-activity time (`now`, `Nm`, `Nh`, `Nd`).
+label: a terminal count (`terminal:N`), an agent state such as
+`agent:RUNNING`, `agent:WAITING`, or `agent:EXITED`, a Git state tag
+(`git:CLEAN`, `git:DIRTY`, `git:CONFLICT`, ...), ahead/behind counts
+(`+N`/`-N`) when nonzero, and a relative last-activity time (`now`, `Nm`,
+`Nh`, `Nd`). Process exit or a BEL/recognized terminal notification marks an
+agent `WAITING`; focusing its pane clears that state (FR-201).
+
+When no attached client is focusing a waiting agent, attached clients receive
+a host-terminal notification (FR-202).
 
 `Tab` on a worktree row inline-expands it one level deeper, in a fixed
 order: its panes, its changed files, and its recent commits, skipping any
@@ -297,20 +303,19 @@ scrollback. `q`, `Esc`, or `Enter` closes the help view; a pending
 confirmation (such as `C-q Q`'s server-quit prompt) takes priority over
 every other modal and stays on top of it.
 
-### Creating a worktree
+### Creating and assigning a worktree
 
-With a repository selected, open the Worktree transient (`w` from `status`,
-or `?` then `w` from either view) and press `c` to create a worktree right
-away: nerimux generates a branch name (`wt-<timestamp>`), creates the
-worktree, and jumps straight into its shell — there is no branch-name prompt
-in between. To pick the branch name yourself, use the command line instead:
+With a repository selected, press `n` to fetch its default branch and create a
+detached worktree. When it is ready, it is selected and the `Assign agent`
+transient opens: `x` starts Codex and `c` starts Claude. To assign an existing
+worktree, select it and press `a`; `Enter` returns to a running agent or
+terminal, or opens the assignment transient when neither exists. `t` opens an
+ordinary shell in the selected worktree, and `c`/`x` from the repolist start
+Claude/Codex directly. To pick the branch name yourself, use the command line:
 
 ```
 : wt-create --branch <name> --confirm
 ```
-
-Both paths land you in the new worktree's shell as soon as it is ready —
-selecting and creating both mean "enter it," not "select it and stop."
 
 Inside the picker, every printable key is a character of the search query, so
 the selection moves with **`C-p`** and **`C-n`** rather than `n` and `p`.
@@ -318,6 +323,37 @@ the selection moves with **`C-p`** and **`C-n`** rather than `n` and `p`.
 
 nerimux reads no configuration file; every key binding and layout value above
 is a compiled-in constant.
+
+### Terminal integration
+
+Pasted input is recognized as one bracketed-paste operation. In a pane, the
+paste delimiters are preserved only when that pane has requested bracketed
+paste; otherwise they are removed before the text reaches the shell (FR-101).
+In the command line, tree filter, and picker, pasted line breaks are removed
+and the remaining text is inserted into the current field.
+
+Panes that enable terminal focus reporting receive focus-out/focus-in reports
+when pane focus changes, and the host terminal's focus changes are relayed to
+the focused pane (FR-102).
+
+On attach, the client uses the alternate screen and enables bracketed paste and
+focus reporting. Detach, quit, connection loss, and server EOF restore those
+terminal modes (FR-103).
+
+BEL and OSC 9, 99, and 777 notification sequences from panes are forwarded to
+attached host terminals even when the pane is not focused. Each pane's
+notifications are coalesced to at most one per second; unknown OSC commands
+are ignored (FR-104).
+
+A newly attached client passes its allow-listed terminal identity, including
+`TERM_PROGRAM`, `TERM_PROGRAM_VERSION`, and `KITTY_*`, to panes created
+afterwards. `TERM` remains `screen-256color`; existing panes are unchanged
+(FR-108).
+
+The runtime saves worktrees, windows, split layouts, completion state, and
+expanded repository rows, then restores them after a server restart. Restored
+panes start fresh shells in their worktree, and missing worktrees are skipped
+(FR-206).
 
 ## Development
 
@@ -380,18 +416,6 @@ Like `nerimux/pty-test`, it is not part of `nix flake check`; run it
 yourself. It runs headless `server`/`kill` scenarios against the binary as a
 subprocess, then launches it with `attach`, sends a marker through the
 attached pane, verifies the rendered output, and detaches with `C-q d`:
-
-!!! warning
-    The `attach` scenario (`tests/e2e/attach-scenario.lisp`) still sends a
-    leading `i` keystroke before the marker command, a holdover from the
-    retired `:normal`/`:input` keymap. Since a pane now takes typing
-    directly, that `i` lands as a literal character in the shell instead of
-    switching modes, and the marker never appears. Verified by running it
-    against this branch's build: `nix build .` then `nerimux-sbcl --script
-    tests/e2e/e2e-smoke.lisp result/bin/nerimux attach` reports `FAIL attach --
-    marker=MISSING`. This is a test-script regression from the keymap
-    change, not a rendering defect; fix it in `tests/e2e/attach-scenario.lisp`
-    before trusting this scenario's result again.
 
 ```bash
 nix run .#e2e

@@ -60,7 +60,16 @@
         (cons "kill-force-cleans" 'scenario-kill-force-cleans)
         (cons "attach" :attach)
         (cons "paste" :paste))
-  "Mode-name -> handler-symbol (or :ATTACH), in the fixed run order.")
+  "Mode-name -> handler-symbol (or :ATTACH/:PASTE), in the fixed run order:
+   KILL-WITHOUT-SERVER, SERVER-STARTS, KILL-REFUSES-WITH-PANE,
+   KILL-FORCE-CLEANS, ATTACH, PASTE. KILL-WITHOUT-SERVER runs first while the
+   isolated environment has no server. SERVER-STARTS then creates the server
+   and its live initial shell pane; KILL-REFUSES-WITH-PANE checks that plain
+   KILL refuses that pane, and KILL-FORCE-CLEANS reuses the same server to
+   verify forced cleanup. ATTACH and PASTE follow the kill scenarios because
+   each may auto-start the default server; PASTE follows ATTACH so it can
+   reuse the linked-worktree fixture, and their server is cleaned up after the
+   scenario loop.")
 
 (defun %run-attach-scenario-lazily (binary)
   "Load attach-scenario.lisp and run RUN-ATTACH-SCENARIO, catching any error

@@ -87,7 +87,53 @@ For a single suite:
 time nix build .#checks.$(nix eval --raw --impure --expr builtins.currentSystem).default
 ```
 
-## Not yet measured
+## Attach first-frame latency (NFR-2)
+
+The measurement uses the PTY path from `tests/e2e/attach-scenario.lisp`. Each
+sample starts a fresh 24x80 PTY in an isolated environment and records the
+monotonic time from just before `forkpty-with-shell` launches `attach` until
+the first non-empty PTY output. A matching `printf` control run measures PTY
+and shell startup noise. The five control samples' max-minus-min range is the
+noise floor; the larger range across the two revisions is used for the
+comparison. The benchmark driver is
+`tests/e2e/benchmark-first-frame.lisp`.
+
+Measured on 2026-09-08, `aarch64-darwin`. The quiet-state check found no
+running SBCL, Nix build/run/flake, test, or e2e process. The 1-minute load
+average was 14.61 on a 16-CPU host at the start of the run; the 5- and
+15-minute averages were higher, so the control range is retained in the
+interpretation.
+
+| Revision | Control samples (ms) | Control median | Attach samples (ms) | Attach median |
+|---|---|---:|---|---:|
+| Before Phase 1, `b6960917a8ba95f60be40a5811e227daa72ef46f` | 89.772, 72.541, 77.574, 73.072, 83.599 | 77.574 | 125.712, 85.924, 89.115, 88.926, 97.674 | 89.115 |
+| Phase 3 candidate, `e48d01e5d894ab9271d8b95edaa711aeb45b3237` | 82.169, 96.803, 76.304, 109.280, 97.855 | 96.803 | 143.556, 124.048, 131.569, 131.448, 107.608 | 131.448 |
+
+The control ranges are 17.231 ms before Phase 1 and 32.976 ms for the Phase 3
+candidate, so the recorded noise floor is 32.976 ms. The raw attach median
+delta is **+42.333 ms**, which exceeds that floor and is recorded as an
+observed regression in this run. After subtracting each revision's control
+median, the delta is **+23.104 ms**, below the floor; the run therefore cannot
+attribute the whole raw delta to the Phase 1 changes. This is not evidence for
+a regression-free claim, and it should be repeated on a quieter host before
+using it as a release performance baseline.
+
+To reproduce one side, run the following twice with `control` and `attach`,
+using the checkout and built binary for that revision:
+
+```bash
+nix develop --command sbcl --dynamic-space-size 4096 \
+  --no-sysinit --no-userinit --disable-debugger \
+  --script tests/e2e/benchmark-first-frame.lisp . /path/to/nerimux control
+nix develop --command sbcl --dynamic-space-size 4096 \
+  --no-sysinit --no-userinit --disable-debugger \
+  --script tests/e2e/benchmark-first-frame.lisp . /path/to/nerimux attach
+```
+
+The driver emits five samples for each mode. The benchmark binaries used for
+the recorded run were the Nix outputs built from the two revisions above.
+
+## Other measurements
 
 `PERFORMANCE_STANDARD.md` also asks for a startup-time measurement, because
 nerimux saves a compressed core (`:compression t`) and a terminal multiplexer
