@@ -93,6 +93,10 @@
         (client-conn-viewport conn) 0
         (client-conn-view conn) :pane)
   (when pane
+    (when (member pane *runtime-restored-panes* :test #'eq)
+      (setf *runtime-restored-panes*
+            (remove pane *runtime-restored-panes* :test #'eq)
+            (pane-notification pane) ""))
     (nerimux/pane:pane-mark-focused pane))
   pane)
 

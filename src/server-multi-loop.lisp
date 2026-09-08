@@ -81,6 +81,7 @@
    unit-testable without driving a full process loop."
   (%drain-main-thread-callbacks)
   (%workspace-job-tick)
+  (%persist-runtime-state session)
   (%broadcast-frame session)
   (let* ((listener-fd (socket-fd listener))
          (ready (select-fds (cons listener-fd (%client-fds)) +poll-timeout-us+)))

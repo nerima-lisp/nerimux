@@ -331,6 +331,7 @@ MODE is :MARK or :SETTLE; STALE-P applies when settling."
                (%mark-dirty))
              :on-catalog
              (lambda (organizations)
+               (%rebind-runtime-worktrees organizations)
                (%set-workspace-catalog-refresh-state organizations :mark)
                (%mark-dirty))
              :on-repository-error
@@ -342,6 +343,7 @@ MODE is :MARK or :SETTLE; STALE-P applies when settling."
                (%mark-dirty))
              :on-complete
              (lambda (organizations)
+               (%rebind-runtime-worktrees organizations)
                (setf *workspace-catalog-loaded-p* t
                      *workspace-scan-progress* nil)
                (%set-workspace-catalog-refresh-state

@@ -104,12 +104,13 @@
 
 (defun %pane-tree-label (pane)
   (format nil
-          "pane/~D ~A"
+          "pane/~D ~A~@[ restored~]"
           (pane-id pane)
           (or (and (plusp (length (pane-title pane))) (pane-title pane))
               (and (plusp (length (pane-start-command pane)))
                    (pane-start-command pane))
-              "shell")))
+              "shell")
+          (and (string= (pane-notification pane) "restored") t)))
 
 (defun %workspace-tree-node-attention-p (object kind)
   "T when OBJECT (a KIND tree node) should carry the `!` attention mark."

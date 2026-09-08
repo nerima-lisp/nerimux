@@ -35,6 +35,22 @@ The timeout type is explicit because SBCL signals it outside the ERROR hierarchy
   nil
   "Sessions currently owned by the server runtime.")
 
+(defvar *runtime-persistence-enabled-p*
+  nil
+  "Whether the running server owns the runtime state file.")
+
+(defvar *runtime-restored-panes*
+  nil
+  "Restored panes whose one-shot `restored' label has not been cleared.")
+
+(defvar *runtime-restored-worktrees*
+  nil
+  "Synthetic worktrees waiting to be rebound to the VCS catalog.")
+
+(defvar *runtime-state-signature*
+  nil
+  "Serialized runtime state last written by this server process.")
+
 (defconstant +reader-thread-join-timeout+
   10
   "Maximum seconds spent joining a PTY reader thread.")

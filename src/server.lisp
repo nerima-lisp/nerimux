@@ -119,7 +119,11 @@
       (window-relayout active-window (- rows +status-line-rows+) cols))))
 
 (defun %start-session-reader-threads (session)
-  (mapcar #'start-reader-thread (all-panes session)))
+  (mapcar #'start-reader-thread
+          (remove-if (lambda (pane)
+                       (and (typep pane 'nerimux/pane:pane)
+                            (not (pane-live-p pane))))
+                     (all-panes session))))
 
 (defun %close-session-ptys (session)
   (dolist (pane (all-panes session))
@@ -135,8 +139,13 @@
         *dirty*            t
         *resize-pending*   nil
         *server-sessions*  nil
-        *runtime-server-name* name)
-  (let* ((session (create-initial-session *term-rows* *term-cols*))
+        *runtime-server-name* name
+        *runtime-persistence-enabled-p* t
+        *runtime-state-signature* nil
+        *runtime-restored-panes* nil
+        *runtime-restored-worktrees* nil)
+  (let* ((session (or (%runtime-session-from-state name)
+                      (create-initial-session *term-rows* *term-cols*)))
          (path    (socket-path name)))
     (setf *bound-socket-path* path)
     (server-add-session session)
@@ -147,6 +156,8 @@
         (install-sigwinch-handler)
         (unwind-protect
             (%run-multi-server-loop listener session)
+          (%persist-runtime-state session :force t)
+          (setf *runtime-persistence-enabled-p* nil)
           (stop-reader-threads reader-threads)
           (close-socket listener)
           (handler-case (delete-file path)
