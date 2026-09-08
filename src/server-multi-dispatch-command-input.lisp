@@ -422,6 +422,18 @@
            (%client-esc-swallow-consume conn)
            (%client-esc-swallow-consume conn)
            (%client-paste-candidate-reset conn))
+          ((and session
+                (null (client-conn-modal conn))
+                (eq (client-conn-view conn) :pane)
+                (member byte '(65 66 67 68))
+                (let* ((pane (or (client-conn-stdin-target conn)
+                                 (%resolve-client-focus-pane session nil conn)))
+                       (screen (and pane (pane-screen pane))))
+                  (and screen (screen-app-cursor-keys screen))))
+           (%handle-client-input-key-payload
+            session
+            conn
+            (format nil "~CO~C" #\Escape (code-char byte))))
           ((and (%client-ui-keys-p conn) (= byte 65))
            (%select-client-tree-relative conn -1))
           ((and (%client-ui-keys-p conn) (= byte 66))
