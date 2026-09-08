@@ -56,10 +56,13 @@
 (defparameter *scenarios*
   (list (cons "kill-without-server" 'scenario-kill-without-server)
         (cons "server-starts" 'scenario-server-starts)
-        (cons "kill-cleans-empty-server" 'scenario-kill-cleans-empty-server)
-        (cons "kill-force-without-server" 'scenario-kill-force-without-server)
+        (cons "kill-refuses-with-pane" 'scenario-kill-refuses-with-pane)
+        (cons "kill-force-cleans" 'scenario-kill-force-cleans)
         (cons "attach" :attach))
-  "Mode-name -> handler-symbol (or :ATTACH), in the fixed run order.")
+  "Mode-name -> handler-symbol (or :ATTACH), in the fixed run order. SERVER-STARTS
+   must precede the two pane-kill checks because startup creates the live initial
+   shell pane that plain KILL must refuse, leaving the same server for
+   KILL-FORCE-CLEANS to close.")
 
 (defun %run-attach-scenario-lazily (binary)
   "Load attach-scenario.lisp and run RUN-ATTACH-SCENARIO, catching any error
