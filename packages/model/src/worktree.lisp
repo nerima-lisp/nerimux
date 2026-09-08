@@ -6,7 +6,9 @@
                       conflict-p ahead behind bare-p locked-p prunable-p
                       missing-p changed-files recent-commits commits-state
                       staged-files unstaged-files untracked-files
-                      unmerged-files stashes stashes-state completed-p agent-pane)))
+                      unmerged-files stashes stashes-state completed-p agent-pane
+                      waiting-p waiting-time waiting-message
+                      waiting-host-notified-p)))
   (id "" :type string)
   (repository nil)
   (path "" :type string)
@@ -32,7 +34,11 @@
   (untracked-files nil :type list)
   (unmerged-files nil :type list)
   (stashes nil :type list)
-  (stashes-state nil))
+  (stashes-state nil)
+  (waiting-p nil :type boolean)
+  (waiting-time nil)
+  (waiting-message "" :type string)
+  (waiting-host-notified-p t :type boolean))
 
 (defun worktree-key (path branch head)
   (format nil
@@ -66,7 +72,11 @@
                            stashes
                            stashes-state
                            completed-p
-                           agent-pane)
+                           agent-pane
+                           waiting-p
+                           waiting-time
+                           waiting-message
+                           waiting-host-notified-p)
   (let ((path-string (%model-string path)))
     (%make-worktree :id
                     (or id (worktree-key path-string branch head))
@@ -119,7 +129,40 @@
                     :stashes
                     (copy-list stashes)
                     :stashes-state
-                    stashes-state)))
+                    stashes-state
+                    :waiting-p
+                    (not (null waiting-p))
+                    :waiting-time
+                    waiting-time
+                    :waiting-message
+                    (or waiting-message "")
+                    :waiting-host-notified-p
+                    (if (null waiting-host-notified-p)
+                        (not waiting-p)
+                        waiting-host-notified-p))))
+
+(defun worktree-mark-waiting (worktree message &optional (now (get-universal-time)))
+  (when worktree
+    (setf (worktree-waiting-p worktree) t
+          (worktree-waiting-time worktree) now
+          (worktree-waiting-message worktree) (if (stringp message)
+                                                   message
+                                                   (princ-to-string message))
+          (worktree-waiting-host-notified-p worktree) nil))
+  worktree)
+
+(defun worktree-clear-waiting (worktree)
+  (when worktree
+    (setf (worktree-waiting-p worktree) nil
+          (worktree-waiting-time worktree) nil
+          (worktree-waiting-message worktree) ""
+          (worktree-waiting-host-notified-p worktree) t))
+  worktree)
+
+(defun worktree-mark-waiting-host-notified (worktree)
+  (when worktree
+    (setf (worktree-waiting-host-notified-p worktree) t))
+  worktree)
 
 (defun worktree-complete (worktree)
   (setf (worktree-completed-p worktree) t)
