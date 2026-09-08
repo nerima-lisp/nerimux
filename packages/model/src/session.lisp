@@ -18,7 +18,12 @@
   (start-directory nil)
   (environment (make-hash-table :test #'equal))
   (environment-unsets nil :type list)
-  (environment-hidden nil :type list))
+  (environment-hidden nil :type list)
+  (terminal-environment nil :type list))
+
+(defun session-set-terminal-environment (session environment)
+  "Replace SESSION's attached-client terminal environment snapshot."
+  (setf (session-terminal-environment session) (copy-tree environment)))
 
 (defun session-active-window (session)
   "Return SESSION's active window, falling back to the first window when active is NIL."
@@ -41,7 +46,7 @@
     (when window
       (window-active-pane window))))
 
-(defun %attach-full-screen-pane (window rows
+(defun %attach-full-screen-pane (session window rows
                                         cols
                                         &key
                                         start-dir
@@ -50,7 +55,7 @@
    START-DIR: when non-NIL, the shell starts in that directory.
    The initial pane gets +PANE-BASE-INDEX+."
   (let ((pane
-          (%fork-pane nil
+          (%fork-pane session
                       +pane-base-index+
                       0
                       0
@@ -120,7 +125,7 @@
    is a separate named step so callers can see the two concerns distinctly."
   (let* ((new-id (%next-window-id session base-index))
          (win (make-window :id new-id :name name :width cols :height rows)))
-    (%attach-full-screen-pane win rows cols
+    (%attach-full-screen-pane session win rows cols
                               :start-dir start-dir
                               :default-command default-command)
     (session-insert-window session win)

@@ -58,7 +58,8 @@
         (cons "server-starts" 'scenario-server-starts)
         (cons "kill-cleans-empty-server" 'scenario-kill-cleans-empty-server)
         (cons "kill-force-without-server" 'scenario-kill-force-without-server)
-        (cons "attach" :attach))
+        (cons "attach" :attach)
+        (cons "paste" :paste))
   "Mode-name -> handler-symbol (or :ATTACH), in the fixed run order.")
 
 (defun %run-attach-scenario-lazily (binary)
@@ -72,11 +73,23 @@
       (let ((*print-circle* t))
         (values nil (format nil "attach scenario failed to load or run: ~A" c))))))
 
+(defun %run-paste-scenario-lazily (binary)
+  (handler-case
+      (progn
+        (unless (fboundp '%prepare-bare-worktree)
+          (load (merge-pathnames "attach-scenario.lisp" *e2e-dir*)))
+        (load (merge-pathnames "paste-scenario.lisp" *e2e-dir*))
+        (funcall (find-symbol "RUN-PASTE-SCENARIO") binary))
+    ((or error sb-ext:timeout) (c)
+      (let ((*print-circle* t))
+        (values nil (format nil "paste scenario failed to load or run: ~A" c))))))
+
 (defun %run-one-scenario (name binary)
   (let ((entry (cdr (assoc name *scenarios* :test #'string=))))
-    (handler-case (if (eq entry :attach)
-                      (%run-attach-scenario-lazily binary)
-                      (funcall entry binary))
+    (handler-case (case entry
+                    (:attach (%run-attach-scenario-lazily binary))
+                    (:paste (%run-paste-scenario-lazily binary))
+                    (t (funcall entry binary)))
       ((or error sb-ext:timeout) (c)
         (let ((*print-circle* t))
           (values nil (format nil "signalled ~A" c)))))))
@@ -117,7 +130,8 @@
 
 (defun %reap-attach-server (binary names)
   "Request server shutdown and confirm socket removal, not process exit."
-  (when (and (member "attach" names :test #'string=)
+  (when (and (or (member "attach" names :test #'string=)
+                 (member "paste" names :test #'string=))
              (probe-file (%expected-socket-path "0")))
     (multiple-value-bind (code stdout stderr timed-out)
         (run-program-bounded binary '("kill" "--force")

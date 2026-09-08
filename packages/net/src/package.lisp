@@ -15,6 +15,7 @@
    #:encode-frame #:decode-frame
    #:msg-attach #:msg-key #:msg-resize #:msg-detach #:msg-frame #:msg-bye
    #:msg-command #:msg-reply #:msg-notification
+   #:encode-attach-terminal-environment #:decode-attach
    #:+field-delimiter+
    #:encode-command-payload #:decode-command-payload #:target-field-p
    #:split-on-nul-bytes #:command-name-to-string

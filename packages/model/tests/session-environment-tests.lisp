@@ -99,6 +99,29 @@
       (expect (member "TERM=xterm-256color" env :test #'string=) :to-be-truthy)
       (expect (member "NERIMUX_TEST=1" env :test #'string=) :to-be-truthy)))
 
+  (it "session-child-environment-applies-latest-terminal-identity-before-term"
+    (with-temporary-posix-environment-variable ("TERM_PROGRAM" "server-origin")
+      (let* ((sess (make-session :id 1 :name "s"))
+             (before (session-child-environment sess :term "screen-256color")))
+        (expect (member "TERM_PROGRAM=server-origin" before :test #'string=)
+                :to-be-truthy)
+        (session-set-terminal-environment
+         sess
+         '(("TERM_PROGRAM" . "kitty")
+           ("TERM_PROGRAM_VERSION" . "1.2")
+           ("KITTY_WINDOW_ID" . "42")))
+        (let ((after (session-child-environment
+                      sess
+                      :term "screen-256color"
+                      :extra-env '(("TERM" . "xterm")
+                                   ("TERM_PROGRAM" . "wrong")))))
+          (expect (member "TERM_PROGRAM=server-origin" before :test #'string=)
+                  :to-be-truthy)
+          (expect (member "TERM_PROGRAM=kitty" after :test #'string=) :to-be-truthy)
+          (expect (member "TERM=xterm" after :test #'string=) :to-be-falsy)
+          (expect (member "TERM=screen-256color" after :test #'string=)
+                  :to-be-truthy)))))
+
 
   (it "environment-entry-name-and-value-table"
     (dolist (row '(("FOO=bar"    "FOO" "bar" "simple pair")

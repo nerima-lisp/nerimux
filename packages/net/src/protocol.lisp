@@ -110,10 +110,33 @@ schema cannot silently generate a partial or non-byte-aligned codec."
                    (to-octets octets)
                    "server→client frame carrying one raw terminal notification sequence."))
 
-(defun msg-attach (rows cols)
-  "Build a +msg-attach+ frame carrying the initial terminal size.
-   Payload is [rows u16][cols u16]."
-  (encode-frame +msg-attach+ (u16-octets-pair rows cols)))
+(defun %attach-terminal-environment-field (pair)
+  (unless (and (consp pair)
+               (stringp (car pair))
+               (stringp (cdr pair))
+               (plusp (length (car pair)))
+               (null (find #\Null (car pair)))
+               (null (find #\Null (cdr pair))))
+    (error "Invalid attach terminal environment entry: ~S" pair))
+  (concatenate 'string (car pair) "=" (cdr pair)))
+
+(defun encode-attach-terminal-environment (environment)
+  "Encode ENVIRONMENT as NUL-terminated NAME=VALUE UTF-8 fields."
+  (encode-fields-to-buffer
+   (mapcar (lambda (pair)
+             (cl-codec-kit:string-to-octets
+              (%attach-terminal-environment-field pair)
+              :encoding :utf-8))
+           environment)))
+
+(defun msg-attach (rows cols &optional terminal-environment)
+  "Build a +msg-attach+ frame carrying size and terminal identity.
+   Payload is [rows u16][cols u16][NUL-terminated NAME=VALUE fields]."
+  (encode-frame
+   +msg-attach+
+   (concatenate '(simple-array (unsigned-byte 8) (*))
+                (u16-octets-pair rows cols)
+                (encode-attach-terminal-environment terminal-environment))))
 
 (defun msg-command (command-name target args)
   "Build a +msg-command+ frame.
@@ -125,6 +148,30 @@ schema cannot silently generate a partial or non-byte-aligned codec."
 (defun decode-size (payload)
   "Decode a rows,cols payload (u16,u16) into (values ROWS COLS)."
   (values (read-u16 payload 0) (read-u16 payload +cols-offset-in-size-payload+)))
+
+(defun decode-attach (payload)
+  "Decode an attach PAYLOAD into (values ROWS COLS TERMINAL-ENVIRONMENT).
+   TERMINAL-ENVIRONMENT is an alist of NAME and VALUE strings."
+  (unless (>= (length payload) 4)
+    (error "Attach payload is shorter than its size prefix"))
+  (multiple-value-bind (rows cols) (decode-size payload)
+    (let ((fields (subseq payload 4)))
+      (values
+       rows
+       cols
+       (if (zerop (length fields))
+           nil
+           (progn
+             (unless (zerop (aref fields (1- (length fields))))
+               (error "Attach terminal environment is not NUL terminated"))
+             (mapcar
+              (lambda (field)
+                (let ((separator (position #\= field)))
+                  (unless (and separator (plusp separator))
+                    (error "Invalid attach terminal environment field: ~S" field))
+                  (cons (subseq field 0 separator)
+                        (subseq field (1+ separator)))))
+              (split-on-nul-bytes fields))))))))
 
 (defun decode-text (payload)
   "Decode a UTF-8 frame PAYLOAD into a string, LENIENTLY: malformed sequences

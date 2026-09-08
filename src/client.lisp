@@ -93,6 +93,17 @@
      (namestring defaults)
      "")))
 
+(defun %client-terminal-identity ()
+  "Return the attach client's allow-listed terminal environment snapshot."
+  (sort
+   (loop for entry in (nerimux/ports:environment-entries)
+         for separator = (and (stringp entry) (position #\= entry))
+         for name = (and separator (subseq entry 0 separator))
+         when (and name (%terminal-identity-variable-p name))
+           collect (cons name (subseq entry (1+ separator))))
+   #'string<
+   :key #'car))
+
 (defun %send-client-attach-target (stream target)
   (send-frame stream
               (msg-command :attach-target
@@ -127,7 +138,10 @@
    already does, so RUN-CLIENT's WITH-RAW-MODE still restores the terminal
    and its outer UNWIND-PROTECT still closes the socket."
   (handler-case (progn
-                  (send-frame stream (msg-attach *term-rows* *term-cols*))
+                  (send-frame stream
+                              (msg-attach *term-rows*
+                                          *term-cols*
+                                          (%client-terminal-identity)))
                   (%send-client-attach-target stream target)
                   (loop (%maybe-send-resize stream) (let ((ready
                                                            (select-fds
