@@ -1,5 +1,27 @@
 (in-package #:nerimux/test)
 
+(defun %make-waiting-agent-fixture ()
+  (multiple-value-bind (session window ignored-pane)
+      (make-single-pane-session)
+    (declare (ignore ignored-pane))
+    (let* ((organization
+             (nerimux/workspace-model:make-organization
+              :id "org" :host "github.com" :name "team"))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :id "repo" :specification "github.com/team/repo"
+              :organization organization))
+           (worktree
+             (nerimux/workspace-model:make-worktree
+              :id "wt" :branch "feature/waiting" :repository repository))
+           (agent (make-pane :id 99 :fd -1 :agent-kind :codex)))
+      (setf (window-panes window) (list agent)
+            (pane-window agent) window)
+      (nerimux/workspace-model:organization-add-repository organization repository)
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
+      (nerimux/pane:worktree-add-pane worktree agent)
+      (values session worktree agent))))
+
 (describe "server-multi-suite"
 
 
@@ -187,3 +209,69 @@
           (expect (null (nerimux::%run-multi-server-loop :listener :session)))
           (expect (null nerimux::*running*))
           (expect (= 2 calls))))))
+
+(describe "server-multi-agent-waiting-notifications"
+  (it "sends one host notification to every unfocused client"
+      (multiple-value-bind (session worktree agent)
+          (%make-waiting-agent-fixture)
+        (declare (ignore agent))
+        (let* ((conn-a (%make-test-conn))
+               (conn-b (%make-test-conn))
+               (notifications nil)
+               (nerimux::*clients* (list conn-a conn-b))
+               (nerimux::*dirty* nil)
+               (nerimux/ports:*notify-host*
+                 (lambda (stream title body)
+                   (push (list stream title body) notifications))))
+          (nerimux/workspace-model:worktree-mark-waiting
+           worktree "approval required" 100)
+          (nerimux::%broadcast-frame session)
+          (expect (= 2 (length notifications)))
+          (expect
+           (every (lambda (entry)
+                   (and (string= "nerimux" (second entry))
+                        (search "github.com/team/repo · feature/waiting: approval required"
+                                (third entry))))
+                  notifications))
+          (expect
+           (nerimux/workspace-model:worktree-waiting-host-notified-p worktree))
+          (nerimux::%broadcast-frame session)
+          (expect (= 2 (length notifications))))))
+  (it "suppresses the host notification while a client focuses the agent"
+      (multiple-value-bind (session worktree agent)
+          (%make-waiting-agent-fixture)
+        (let ((notifications nil)
+              (conn (%make-test-conn)))
+          (setf (nerimux::client-conn-focus conn) agent)
+          (nerimux/workspace-model:worktree-mark-waiting
+           worktree "approval required" 100)
+          (let ((nerimux::*clients* (list conn))
+                (nerimux::*dirty* nil)
+                (nerimux/ports:*notify-host*
+                  (lambda (stream title body)
+                    (declare (ignore stream title body))
+                    (push t notifications))))
+            (nerimux::%broadcast-frame session))
+          (expect (null notifications))
+          (expect
+           (nerimux/workspace-model:worktree-waiting-host-notified-p worktree)))))
+  (it "encodes the host notification as a Kitty OSC 99 notification frame"
+      (let ((frames nil))
+        (with-stubbed-fdefinition
+            ((nerimux/transport:send-frame
+              (lambda (stream frame)
+                (declare (ignore stream))
+                (push frame frames))))
+          (nerimux::%send-host-notification nil "nerimux" "approval required"))
+        (expect (= 1 (length frames)))
+        (multiple-value-bind (type payload next)
+            (nerimux/protocol:decode-frame (first frames))
+          (expect (= nerimux/protocol:+msg-notification+ type))
+          (expect (= (length (first frames)) next))
+          (let ((text (cl-codec-kit:octets-to-string payload :encoding :utf-8)))
+            (expect (search (format nil "~C]99;i=nerimux:d=0:p=title;nerimux~C\\"
+                                     #\Escape #\Escape)
+                            text))
+            (expect (search (format nil "~C]99;i=nerimux:d=1:p=body;approval required~C\\"
+                                     #\Escape #\Escape)
+                            text)))))))
