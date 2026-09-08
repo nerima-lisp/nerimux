@@ -96,6 +96,18 @@
       ((plusp (length path)) path)
       (t (worktree-id worktree)))))
 
+(defun worktree-notification-label (worktree)
+  "Return the compact workspace label used for an agent notification."
+  (let* ((repository (worktree-repository worktree))
+         (organization (and repository (repository-organization repository))))
+    (if (and organization repository)
+        (format nil
+                "~A/~A · ~A"
+                (%organization-tree-label organization)
+                (%repository-tree-label repository)
+                (%worktree-tree-label worktree))
+        (%worktree-tree-label worktree))))
+
 (defun %window-tree-label (window)
   "WINDOW's tree-row label: id + name. NAME is already branch + sequence
    number (R5.8, computed once at window-creation time in
@@ -177,10 +189,12 @@
          (completed (nerimux/workspace-model:worktree-completed-p worktree))
          (agent (nerimux/workspace-model:worktree-agent-pane worktree))
          (kind (and agent (nerimux/pane:pane-agent-kind agent))))
-    (format nil "agent:~A~A~A"
-            (if (and completed (not (eq state :running))) "COMPLETED" state)
-            (if (and completed (eq state :running)) "+COMPLETED" "")
-            (case kind (:codex "/Codex") (:claude "/Claude") (t "")))))
+    (if (nerimux/workspace-model:worktree-waiting-p worktree)
+        "agent:WAITING"
+        (format nil "agent:~A~A~A"
+                (if (and completed (not (eq state :running))) "COMPLETED" state)
+                (if (and completed (eq state :running)) "+COMPLETED" "")
+                (case kind (:codex "/Codex") (:claude "/Claude") (t ""))))))
 
 (defun %worktree-state-tag (worktree)
   "The single most salient %WORKTREE-STATUS-TOKENS entry for the info

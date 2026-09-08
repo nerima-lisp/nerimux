@@ -70,7 +70,14 @@
                      #:worktree-status
                      #:worktree-unmerged-files
                      #:worktree-unstaged-files
-                     #:worktree-untracked-files))
+                     #:worktree-untracked-files
+                     #:worktree-waiting-p
+                     #:worktree-waiting-time
+                     #:worktree-waiting-message
+                     #:worktree-waiting-host-notified-p
+                     #:worktree-mark-waiting
+                     #:worktree-clear-waiting
+                     #:worktree-mark-waiting-host-notified))
 
 (defpackage #:nerimux/pane
             (:use #:cl

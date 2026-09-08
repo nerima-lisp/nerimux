@@ -223,7 +223,7 @@
                                                               (first args))
                                                           conn)))
                          (when pane
-                           (%set-client-focus conn pane)
+                           (%set-client-focus conn pane session)
                            (%mark-dirty))
                          t))
                       (:viewport

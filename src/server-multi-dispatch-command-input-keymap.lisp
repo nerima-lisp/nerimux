@@ -3,9 +3,11 @@
 (define-key-rules %handle-client-ui-key-payload
                   (session conn payload)
                   (:let ((view (client-conn-view conn))))
-                  ((gethash conn *client-meta-pending*)
-                   (%client-meta-pending-consume conn payload))
-                  (27
+                  ((and (not *client-meta-replaying*)
+                        (gethash conn *client-meta-pending*))
+                   (%client-meta-pending-consume conn payload session))
+                  ((and (not *client-meta-replaying*)
+                        (%client-byte-p payload 27))
                    (setf (gethash conn *client-meta-pending*) :second)
                    t)
                   ((and (eq view :repolist) (%client-key-p payload #\n))

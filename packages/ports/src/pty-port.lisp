@@ -20,6 +20,11 @@
   "Function (fd pid) → nil.
    Installed by nerimux/pty:install-pty-port.")
 
+(defvar *notify-host*
+  nil
+  "Function (stream title body) → nil.
+   Installed by the server at startup and replaced by a fake in tests.")
+
 (defun spawn-pty (rows cols &key start-dir default-command environment)
   "Spawn a PTY-backed shell process. Returns (values fd pid slave-path)."
   (funcall *spawn-pty*
@@ -43,3 +48,7 @@
 (defun close-pty (fd pid)
   "Close PTY master FD and signal child PID."
   (funcall *close-pty* fd pid))
+
+(defun notify-host (stream title body)
+  "Send a server-generated desktop notification through STREAM's host client."
+  (funcall *notify-host* stream title body))

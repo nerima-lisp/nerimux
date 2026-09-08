@@ -28,7 +28,66 @@
   (mapcan #'pane-drain-notifications
           (%session-panes-for-notifications session)))
 
-(defun %render-workspace-frame (conn)
+(defun %session-worktrees (session)
+  (remove-duplicates
+   (remove nil
+           (mapcar #'pane-worktree
+                   (%session-panes-for-notifications session)))
+   :test #'eq))
+
+(defun %agent-waiting-message (worktree)
+  (format nil "~A: ~A"
+          (nerimux/renderer:worktree-notification-label worktree)
+          (or (worktree-waiting-message worktree) "notification")))
+
+(defun %latest-agent-waiting-message (session)
+  (let ((worktree
+          (first
+           (sort (copy-list
+                  (remove-if-not #'worktree-waiting-p
+                                 (%session-worktrees session)))
+                 #'>
+                 :key (lambda (candidate)
+                        (or (worktree-waiting-time candidate) 0))))))
+    (when worktree
+      (%agent-waiting-message worktree))))
+
+(defun %client-render-messages (session conn)
+  (let ((waiting (%latest-agent-waiting-message session)))
+    (if waiting
+        (cons waiting (client-conn-message-log conn))
+        (client-conn-message-log conn))))
+
+(defun %osc99-notification-bytes (title body)
+  (cl-codec-kit:string-to-octets
+   (format nil
+           "~C]99;i=nerimux:d=0:p=title;~A~C\\~C]99;i=nerimux:d=1:p=body;~A~C\\"
+           #\Escape title #\Escape #\Escape body #\Escape)
+   :encoding :utf-8))
+
+(defun %send-host-notification (stream title body)
+  (send-frame stream
+              (msg-notification (%osc99-notification-bytes title body))))
+
+(defun %client-focuses-pane-p (pane)
+  (some (lambda (conn)
+          (eq pane (client-conn-focus conn)))
+        *clients*))
+
+(defun %notify-agent-waiting-hosts (session)
+  (dolist (worktree (%session-worktrees session))
+    (when (and (worktree-waiting-p worktree)
+               (not (worktree-waiting-host-notified-p worktree)))
+      (let ((pane (worktree-agent-pane worktree)))
+        (unless (%client-focuses-pane-p pane)
+          (dolist (conn (copy-list *clients*))
+            (nerimux/ports:notify-host
+             (client-conn-stream conn)
+             "nerimux"
+             (%agent-waiting-message worktree)))))
+      (worktree-mark-waiting-host-notified worktree))))
+
+(defun %render-workspace-frame (session conn)
   "The repolist frame (FR-002). Split out of %RENDER-CLIENT-FRAME so the modal
    precedence above it stays readable as a list of one-line branches."
   (render-workspace-overview-to-tui-string (nerimux/vcs:workspace-organizations)
@@ -44,7 +103,9 @@
                                            :tree-scroll
                                            (client-conn-tree-scroll conn)
                                            :messages
-                                           (client-conn-message-log conn)
+                                           (%client-render-messages
+                                            session
+                                            conn)
                                            :mode
                                            (or (client-conn-modal conn)
                                                (client-conn-view conn))
@@ -75,7 +136,7 @@
                                            :command-buffer
                                            (client-conn-command-buffer conn)))
 
-(defun %render-status-frame (conn)
+(defun %render-status-frame (session conn)
   "The magit status frame (FR-003). Split out because two arms of
    %RENDER-CLIENT-FRAME reach it -- the ordinary :status view and a :transient
    opened while in that view, which the status frame hosts in place by growing
@@ -94,7 +155,9 @@
                                          :visibility-level
                                          (client-conn-visibility-level conn)
                                          :messages
-                                         (client-conn-message-log conn)
+                                         (%client-render-messages
+                                          session
+                                          conn)
                                          :transient
                                          (client-conn-transient-view conn)
                                          :prefix-code
@@ -153,15 +216,15 @@
              (:picker (%render-pane-frame session conn))
              (:transient
               (if (eq (client-conn-view conn) :status)
-                  (%render-status-frame conn)
+                  (%render-status-frame session conn)
                   (render-transient-full-screen-to-tui-string
                    (client-conn-transient-view conn)
                    (client-conn-rows conn)
                    (client-conn-cols conn))))
              (t
               (case (client-conn-view conn)
-                (:repolist (%render-workspace-frame conn))
-                (:status (%render-status-frame conn))
+                (:repolist (%render-workspace-frame session conn))
+                (:status (%render-status-frame session conn))
                 (t (%render-pane-frame session conn)))))
     (let ((frame (msg-frame text)))
       (setf (client-conn-frame conn) frame
@@ -202,6 +265,7 @@
   (when *clients*
     (let ((dirty *dirty*)
           (notifications (%drain-session-notifications session)))
+      (%notify-agent-waiting-hosts session)
       (when (or dirty notifications)
         (setf *dirty* nil)
         (dolist (conn (copy-list *clients*))

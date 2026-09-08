@@ -590,6 +590,13 @@
               (nerimux/workspace-model:worktree-panes worktree) nil)
         (expect (string= "terminal:0 agent:EXITED/Claude git:CLEAN"
                          (nerimux/renderer::%worktree-tree-info-suffix worktree 100)))))
+  (it "shows waiting instead of the agent lifecycle state"
+      (let ((worktree (nerimux/workspace-model:make-worktree :status t)))
+        (nerimux/pane:worktree-add-pane worktree
+          (nerimux/pane:make-pane :fd 10 :agent-kind :codex))
+        (nerimux/workspace-model:worktree-mark-waiting worktree "approval" 100)
+        (expect (string= "terminal:0 agent:WAITING git:CLEAN"
+                         (nerimux/renderer::%worktree-tree-info-suffix worktree 100)))))
   (it "clips completed running state without presenting completion alone"
       (let ((worktree (nerimux/workspace-model:make-worktree :status t :completed-p t)))
         (nerimux/pane:worktree-add-pane worktree

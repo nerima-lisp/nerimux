@@ -179,6 +179,16 @@
                                   (nerimux/workspace-model:worktree-completed-p old-worktree))
                 :agent-pane (and old-worktree
                                  (nerimux/workspace-model:worktree-agent-pane old-worktree))
+                :waiting-p (and old-worktree
+                                (nerimux/workspace-model:worktree-waiting-p old-worktree))
+                :waiting-time (and old-worktree
+                                   (nerimux/workspace-model:worktree-waiting-time old-worktree))
+                :waiting-message (and old-worktree
+                                      (nerimux/workspace-model:worktree-waiting-message
+                                       old-worktree))
+                :waiting-host-notified-p (and old-worktree
+                                             (nerimux/workspace-model:worktree-waiting-host-notified-p
+                                              old-worktree))
                 :bare-p (vcs-kit:vcs-worktree-bare-p raw)
                 :locked-p (vcs-kit:vcs-worktree-locked-p raw)
                 :prunable-p (vcs-kit:vcs-worktree-prunable-p raw)

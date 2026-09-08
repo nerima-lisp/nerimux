@@ -956,6 +956,10 @@
              (let ((refreshed (first (nerimux/workspace-model:repository-worktrees repo))))
                (expect (not (eq wt refreshed)))
                (expect (nerimux/workspace-model:worktree-completed-p refreshed))
+               (expect (nerimux/workspace-model:worktree-waiting-p refreshed))
+               (expect
+                (string= "process exited"
+                         (nerimux/workspace-model:worktree-waiting-message refreshed)))
                (expect (eq :running (nerimux/pane:worktree-agent-state refreshed)))
                (expect (eq refreshed (nerimux/pane:pane-worktree agent)))
                (expect (= 2 (length (nerimux/workspace-model:worktree-panes refreshed)))))
@@ -966,6 +970,10 @@
                (nerimux/workspace-model:repository-add-worktree new-repo new-wt)
                (nerimux/vcs:set-workspace-organizations (list new-org))
                (expect (nerimux/workspace-model:worktree-completed-p new-wt))
+               (expect (nerimux/workspace-model:worktree-waiting-p new-wt))
+               (expect
+                (string= "process exited"
+                         (nerimux/workspace-model:worktree-waiting-message new-wt)))
                (expect (eq agent (nerimux/workspace-model:worktree-agent-pane new-wt)))
                (expect (eq :running (nerimux/pane:worktree-agent-state new-wt)))
                (expect (= 2 (length (nerimux/workspace-model:worktree-panes new-wt))))
@@ -978,6 +986,10 @@
                 new-repo (list (vcs-kit::%make-vcs-worktree :path "work/lifecycle")) nil)
                (setf new-wt (first (nerimux/workspace-model:repository-worktrees new-repo)))
                (expect (nerimux/workspace-model:worktree-completed-p new-wt))
+               (expect (nerimux/workspace-model:worktree-waiting-p new-wt))
+               (expect
+                (string= "process exited"
+                         (nerimux/workspace-model:worktree-waiting-message new-wt)))
                (expect (eq agent (nerimux/workspace-model:worktree-agent-pane new-wt)))
                (expect (eq :exited (nerimux/pane:worktree-agent-state new-wt)))))
         (nerimux/vcs:set-workspace-organizations previous)))))

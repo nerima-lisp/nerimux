@@ -48,9 +48,14 @@
 
   (it "input-symbols-exported-and-fbound"
     (expect (macro-function (find-symbol "WITH-RAW-MODE" '#:nerimux/input)) :to-be-truthy)
+    (expect (fboundp (find-symbol "READ-AVAILABLE-OCTETS" '#:nerimux/input)) :to-be-truthy)
     (expect (fboundp (find-symbol "READ-BYTE-NONBLOCK" '#:nerimux/input)) :to-be-truthy)
     (multiple-value-bind (sym status)
         (find-symbol "WITH-RAW-MODE" '#:nerimux/input)
+      (declare (ignore sym))
+      (expect (eq :external status)))
+    (multiple-value-bind (sym status)
+        (find-symbol "READ-AVAILABLE-OCTETS" '#:nerimux/input)
       (declare (ignore sym))
       (expect (eq :external status)))
     (multiple-value-bind (sym status)
@@ -132,6 +137,58 @@
                                       (declare (ignore fd buffer length))
                                       (error 'cl-tty-kit:pty-operation-failed))))
       (expect (null (nerimux/input:read-byte-nonblock 0)))))
+
+  (it "read-available-octets-returns-multiple-octets-in-one-read"
+    (let ((reads 0))
+      (with-function-stubs
+          ((nerimux/pty:select-fds (lambda (fds timeout-us)
+                                     (declare (ignore timeout-us))
+                                     fds))
+           (cl-tty-kit:fd-read-octets
+             (lambda (fd buffer length)
+               (declare (ignore fd))
+               (incf reads)
+               (replace buffer #(65 66 67 68))
+               length)))
+        (expect (equalp #(65 66 67 68)
+                        (nerimux/input:read-available-octets 0 4))))
+      (expect (= 1 reads))))
+
+  (it "read-available-octets-trims-a-short-read"
+    (with-function-stubs
+        ((nerimux/pty:select-fds (lambda (fds timeout-us)
+                                   (declare (ignore timeout-us))
+                                   fds))
+         (cl-tty-kit:fd-read-octets
+           (lambda (fd buffer length)
+             (declare (ignore fd length))
+             (replace buffer #(70 71))
+             2)))
+      (expect (equalp #(70 71)
+                      (nerimux/input:read-available-octets 0 4)))))
+
+  (it "read-available-octets-does-not-read-when-stdin-is-not-ready"
+    (with-function-stubs
+        ((nerimux/pty:select-fds (lambda (fds timeout-us)
+                                   (declare (ignore fds timeout-us))
+                                   nil))
+         (cl-tty-kit:fd-read-octets
+           (lambda (fd buffer length)
+             (declare (ignore fd buffer length))
+             (error "read must not run"))))
+      (expect (null (nerimux/input:read-available-octets 0 4)))))
+
+  (it "read-byte-nonblock-remains-a-one-octet-wrapper"
+    (let (arguments)
+      (with-function-stubs
+          ((nerimux/input:read-available-octets
+             (lambda (timeout-us max-octets)
+               (setf arguments (list timeout-us max-octets))
+               (make-array 1
+                           :element-type '(unsigned-byte 8)
+                           :initial-element 72))))
+        (expect (= 72 (nerimux/input:read-byte-nonblock 9))))
+      (expect (equal '(9 1) arguments))))
 
   (it "read-byte-nonblock-select-returns-ready-list-when-data-present"
     (with-pipe-fds (rfd wfd)
