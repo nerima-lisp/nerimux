@@ -129,6 +129,7 @@
                  (values t "server process exited and socket removed")
                  (values nil
                          (format nil
-                                 "process-gone=~A socket-gone=~A"
+                                 "process-gone=~A socket-gone=~A stderr=~S"
                                  (and process-gone t)
-                                 (and socket-gone t))))))))))
+                                 (and socket-gone t)
+                                 stderr)))))))))
