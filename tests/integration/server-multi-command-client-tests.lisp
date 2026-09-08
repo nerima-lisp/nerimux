@@ -47,6 +47,78 @@
                       (expect (eq :next-window cmd))
                       (expect (equal '("-t" "2") args))))))))))))
 
+  (it "attach-client-terminal-identity-is-last-attach-and-not-resize"
+    (with-fake-session (s)
+      (with-test-listener (listener path (%test-socket-path "identity") :backlog 4)
+        (let* ((client1 (nerimux/net:connect-to path))
+               (server1 (nerimux/net:accept-connection listener))
+               (client2 nil)
+               (server2 nil)
+               (conn1 nil)
+               (conn2 nil)
+               (nerimux::*clients* nil)
+               (nerimux::*term-rows* 24)
+               (nerimux::*term-cols* 80))
+            (flet ((send-and-dispatch (client conn frame)
+                   (send-frame (nerimux/net:socket-stream client) frame)
+                   (let ((ready (nerimux/pty:select-fds
+                                 (list (nerimux::client-conn-fd conn))
+                                 1000000)))
+                     (expect ready :to-be-truthy)
+                     (when ready
+                       (nerimux::%read-and-dispatch-client-message s conn)))))
+            (unwind-protect
+                 (when (and client1 server1)
+                   (setf conn1 (nerimux::%add-client server1))
+                   (expect
+                    (null
+                     (send-and-dispatch
+                      client1 conn1
+                      (msg-attach 24 80
+                                  '(("TERM_PROGRAM" . "kitty-one")
+                                    ("TERM_PROGRAM_VERSION" . "1")
+                                    ("KITTY_WINDOW_ID" . "one")))))
+                    :to-be-truthy)
+                   (expect
+                    (equal '(("TERM_PROGRAM" . "kitty-one")
+                             ("TERM_PROGRAM_VERSION" . "1")
+                             ("KITTY_WINDOW_ID" . "one"))
+                           (session-terminal-environment s))
+                    :to-be-truthy)
+                   (expect
+                    (null (send-and-dispatch client1 conn1 (msg-resize 30 100)))
+                    :to-be-truthy)
+                   (expect
+                    (equal '(("TERM_PROGRAM" . "kitty-one")
+                             ("TERM_PROGRAM_VERSION" . "1")
+                             ("KITTY_WINDOW_ID" . "one"))
+                           (session-terminal-environment s))
+                    :to-be-truthy)
+                   (setf client2 (nerimux/net:connect-to path)
+                         server2 (nerimux/net:accept-connection listener))
+                   (expect client2 :to-be-truthy)
+                   (expect server2 :to-be-truthy)
+                   (when (and client2 server2)
+                     (setf conn2 (nerimux::%add-client server2))
+                     (expect
+                      (null
+                       (send-and-dispatch
+                        client2 conn2
+                        (msg-attach 30 100
+                                    '(("TERM_PROGRAM" . "ghostty")
+                                      ("KITTY_WINDOW_ID" . "two")))))
+                      :to-be-truthy)
+                     (expect
+                      (equal '(("TERM_PROGRAM" . "ghostty")
+                               ("KITTY_WINDOW_ID" . "two"))
+                             (session-terminal-environment s))
+                      :to-be-truthy)))
+              (dolist (conn (remove nil (list conn1 conn2)))
+                (when (member conn nerimux::*clients*)
+                  (nerimux::%drop-client conn)))
+              (dolist (socket (remove nil (list client1 client2 server1 server2)))
+                (ignore-errors (nerimux/net:close-socket socket)))))))))
+
 
   (it "last-client-detach-leaves-running-true"
     (let* ((conn (nerimux::%make-client-conn))

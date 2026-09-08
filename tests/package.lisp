@@ -145,6 +145,7 @@
                 #:session-set-environment
                 #:session-unset-environment
                 #:session-child-environment
+                #:session-terminal-environment
                 #:all-panes
                 #:make-session
                 #:session-name
@@ -172,7 +173,7 @@
                 #:msg-command #:msg-reply
                 #:encode-command-payload #:decode-command-payload
                 #:u16-octets-pair
-                #:decode-size #:decode-text #:to-octets)
+                #:decode-size #:decode-attach #:decode-text #:to-octets)
   (:import-from #:nerimux/transport
                 #:send-frame #:read-frame #:with-incoming-frame)
   (:import-from #:nerimux/net

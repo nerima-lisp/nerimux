@@ -390,6 +390,39 @@
            (expect (stringp (second args)))))
         (t (fail "unexpected frame type")))))
 
+  (it "run-attach-session-sends-only-allow-listed-terminal-identity"
+    (let ((frames nil))
+      (with-temporary-posix-environment-variable ("TERM_PROGRAM" "kitty")
+        (with-temporary-posix-environment-variable ("TERM_PROGRAM_VERSION" "1.2")
+          (with-temporary-posix-environment-variable ("KITTY_WINDOW_ID" "42")
+            (with-temporary-posix-environment-variable ("PATH" "not-forwarded")
+              (with-stubbed-fdefinition
+                  ((nerimux/transport:send-frame
+                    (lambda (stream frame)
+                      (declare (ignore stream))
+                      (push frame frames)))
+                   (nerimux/pty:select-fds
+                    (lambda (fds timeout-us)
+                      (declare (ignore fds timeout-us))
+                      '(99)))
+                   (nerimux::%receive-if-ready
+                    (lambda (stream fd ready)
+                      (declare (ignore stream fd ready))
+                      :exit)))
+                (nerimux::%run-attach-session nil 99 nil)))))
+      (let ((frames (nreverse frames)))
+        (expect (= 2 (length frames)))
+        (multiple-value-bind (type payload) (decode-frame (first frames))
+          (expect (= +msg-attach+ type))
+          (multiple-value-bind (rows cols environment) (decode-attach payload)
+            (expect (= 24 rows))
+            (expect (= 80 cols))
+            (expect (equal "kitty" (cdr (assoc "TERM_PROGRAM" environment :test #'string=))))
+            (expect (equal "1.2" (cdr (assoc "TERM_PROGRAM_VERSION" environment :test #'string=))))
+            (expect (equal "42" (cdr (assoc "KITTY_WINDOW_ID" environment :test #'string=))))
+            (expect (null (assoc "PATH" environment :test #'string=)))
+            (expect (null (assoc "TERM" environment :test #'string=)))))))))
+
 
   (it "run-attach-session-contains-a-genuine-timeout-from-send-frame"
     (with-stubbed-fdefinition
