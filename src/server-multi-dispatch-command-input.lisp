@@ -286,12 +286,34 @@
           (%client-write-pane-payload
            conn
            (client-conn-paste-pane conn)
-           (vector byte)))))
+           (make-array 1
+                       :element-type '(unsigned-byte 8)
+                       :initial-element byte)))))
   t)
 
+(defun %client-paste-consume-span (conn payload start end)
+  (when (< start end)
+    (if (client-conn-paste-modal conn)
+        (loop for index from start below end
+              for value = (aref payload index)
+              do (push (if (characterp value) (char-code value) value)
+                       (client-conn-paste-bytes conn)))
+        (%client-write-pane-payload
+         conn
+         (client-conn-paste-pane conn)
+         (subseq payload start end))))
+  t)
+
+(defun %client-paste-span-ready-p (conn)
+  (and (client-conn-paste-active-p conn)
+       (null (gethash conn *client-meta-pending*))))
+
 (defun %client-paste-end-candidate-replay (conn prefix payload)
-  (dolist (byte (append prefix (list (%client-single-byte payload))))
-    (%client-paste-consume-byte conn (vector byte))))
+  (dolist (byte prefix)
+    (%client-paste-consume-byte conn (vector byte)))
+  (if (%client-byte-p payload 27)
+      (setf (gethash conn *client-meta-pending*) :paste-second)
+      (%client-paste-consume-byte conn payload)))
 
 (defun %client-paste-end-candidate-consume (conn payload)
   (let ((state (gethash conn *client-meta-pending*)))
@@ -322,7 +344,12 @@
 (defun %client-meta-replay-bytes (session conn bytes)
   (let ((*client-meta-replaying* t))
     (dolist (byte bytes)
-      (%handle-multi-key-message session conn (vector byte)))))
+      (%handle-multi-key-message
+       session
+       conn
+       (make-array 1
+                   :element-type '(unsigned-byte 8)
+                   :initial-element byte)))))
 
 (defun %client-meta-replay-with-current (session conn prefix payload)
   (%client-meta-replay-bytes

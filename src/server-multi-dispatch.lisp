@@ -102,9 +102,38 @@
     ((and (or *client-wire-key-p* (%client-ui-keys-p conn))
           (or (vectorp payload) (stringp payload))
           (> (length payload) 1))
-     (loop for index below (length payload)
-           for result = (%handle-multi-key-message
-                         session conn (subseq payload index (1+ index)))
+     (loop with cursor = 0
+           with result = nil
+           while (< cursor (length payload))
+           do (if (%client-paste-span-ready-p conn)
+                  (let ((escape
+                          (position-if
+                           (lambda (value)
+                             (= 27 (if (characterp value)
+                                       (char-code value)
+                                       value)))
+                           payload
+                           :start cursor)))
+                    (cond
+                      ((null escape)
+                       (%client-paste-consume-span
+                        conn payload cursor (length payload))
+                       (setf cursor (length payload)))
+                      ((> escape cursor)
+                       (%client-paste-consume-span conn payload cursor escape)
+                       (setf cursor escape))
+                      (t
+                       (setf result
+                             (%handle-multi-key-message
+                              session conn (subseq payload cursor (1+ cursor))))
+                       (incf cursor))))
+                  (progn
+                    (setf result
+                          (%handle-multi-key-message
+                           session conn (subseq payload cursor (1+ cursor))))
+                    (incf cursor)))
+              (when (member result '(:drop :quit) :test #'eq)
+                (return result))
            finally (return result)))
     ((and *client-wire-key-p*
           (not *client-meta-replaying*)

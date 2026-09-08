@@ -267,6 +267,123 @@
           (expect (string= "oldnewtext"
                            (nerimux::client-conn-picker-query conn)))))))
 
+  (it "nfr-1-single-frame-paste-writes-the-body-in-one-batch"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (pane (nerimux/window:window-active-pane
+                    (nerimux/session:session-active-window s)))
+             (screen (nerimux/pane:pane-screen pane))
+             (writes nil))
+        (setf (nerimux/pane:pane-fd pane) 41
+              (nerimux::client-conn-focus conn) pane
+              (nerimux::client-conn-view conn) :pane
+              (nerimux/terminal/types:screen-bracketed-paste screen) nil)
+        (with-stubbed-fdefinition
+            ((nerimux/pty:pty-write
+               (lambda (fd bytes)
+                 (declare (ignore fd))
+                 (push (copy-seq bytes) writes))))
+          (expect
+           (null
+            (nerimux::%handle-multi-client-message
+             nerimux::+msg-key+
+             #(27 91 50 48 48 126 97 98 99 27 91 50 48 49 126)
+             s
+             conn))))
+        (expect (= 1 (length writes)))
+        (expect (equalp #(97 98 99) (first writes)))
+        (expect (null (nerimux::client-conn-paste-active-p conn)))
+        (expect (null (gethash conn nerimux::*client-meta-pending*))))))
+
+  (it "nfr-1-paste-delimiters-can-span-frames"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (pane (nerimux/window:window-active-pane
+                    (nerimux/session:session-active-window s)))
+             (writes nil))
+        (setf (nerimux/pane:pane-fd pane) 41
+              (nerimux::client-conn-focus conn) pane
+              (nerimux::client-conn-view conn) :pane)
+        (with-stubbed-fdefinition
+            ((nerimux/pty:pty-write
+               (lambda (fd bytes)
+                 (declare (ignore fd))
+                 (push (copy-seq bytes) writes))))
+          (nerimux::%handle-multi-client-message
+           nerimux::+msg-key+ #(27 91 50) s conn)
+          (expect (eq :csi-2
+                      (gethash conn nerimux::*client-meta-pending*)))
+          (nerimux::%handle-multi-client-message
+           nerimux::+msg-key+ #(48 48 126 97 98) s conn)
+          (expect (nerimux::client-conn-paste-active-p conn))
+          (nerimux::%handle-multi-client-message
+           nerimux::+msg-key+ #(99 27 91) s conn)
+          (expect (eq :paste-csi-third
+                      (gethash conn nerimux::*client-meta-pending*)))
+          (nerimux::%handle-multi-client-message
+           nerimux::+msg-key+ #(50 48 49 126) s conn))
+        (expect (equalp '(#(97 98) #(99)) (nreverse writes)))
+        (expect (null (nerimux::client-conn-paste-active-p conn)))
+        (expect (null (gethash conn nerimux::*client-meta-pending*))))))
+
+  (it "nfr-1-paste-mismatch-replays-and-end-tail-returns-to-bytewise-input"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (pane (nerimux/window:window-active-pane
+                    (nerimux/session:session-active-window s)))
+             (writes nil))
+        (setf (nerimux/pane:pane-fd pane) 41
+              (nerimux::client-conn-focus conn) pane
+              (nerimux::client-conn-view conn) :pane)
+        (with-stubbed-fdefinition
+            ((nerimux/pty:pty-write
+               (lambda (fd bytes)
+                 (declare (ignore fd))
+                 (check-type bytes (simple-array (unsigned-byte 8) (*)))
+                 (push (copy-seq bytes) writes))))
+          (nerimux::%handle-multi-client-message
+           nerimux::+msg-key+
+           (coerce '(27 91 50 48 48 126 97 98 27 91 50 88 99 100
+                     27 27 91 50 48 49 126 122 27 91 65)
+                   '(simple-array (unsigned-byte 8) (*)))
+           s
+           conn))
+        (expect
+         (equal '(97 98 27 91 50 88 99 100 27 122 27 91 65)
+                 (mapcan (lambda (bytes) (coerce bytes 'list))
+                         (nreverse writes))))
+        (expect (null (nerimux::client-conn-paste-active-p conn)))
+        (expect (null (gethash conn nerimux::*client-meta-pending*))))))
+
+  (it "nfr-1-modal-paste-batch-keeps-byte-order"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn)))
+        (setf (nerimux::client-conn-view conn) :repolist)
+        (nerimux::%client-enter-command-mode conn)
+        (setf (nerimux::client-conn-command-buffer conn) "before")
+        (nerimux::%handle-multi-client-message
+         nerimux::+msg-key+
+         #(27 91 50 48 48 126 111 110 101 10 116 119 111
+           27 91 50 48 49 126)
+         s
+         conn)
+        (expect (string= "beforeonetwo"
+                         (nerimux::client-conn-command-buffer conn)))
+        (expect (eq :command (nerimux::client-conn-modal conn))))))
+
+  (it "nfr-1-key-burst-stops-at-drop-disposition"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (prefix (nerimux::client-conn-workspace-prefix-code conn)))
+        (expect
+         (eq :drop
+             (nerimux::%handle-multi-client-message
+              nerimux::+msg-key+
+              (vector prefix (char-code #\d) prefix)
+              s
+              conn)))
+        (expect (null (nerimux::client-conn-ui-prefix-p conn))))))
+
   (it "fr-102-focus-reports-follow-focus-order-and-skip-disabled-screens"
     (with-fake-session (s :nwindows 1 :npanes 2)
       (let* ((conn (%make-test-conn))
