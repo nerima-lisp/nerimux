@@ -131,3 +131,19 @@ picker の 2 ファイルに限定された。
 統合完了後、terminal launch、workspace completion、refactor の各 worktree と、同じ
 commit を指す detached worktree を削除した。統合用 worktree と一時 branch も、main
 の更新確認後に削除対象とした。
+
+## 6. 2026-09-09 の current worktree 統合
+
+現在登録されていた worktree と branch を、`origin/main` に対する固有差分と未コミット
+変更の有無で確認した。
+
+| 対象 | 判定 |
+| --- | --- |
+| `fr-108-terminal-identity` (`810b4e4e`) | その commit は取り込まなかった。terminal identity の現行実装とテストは、後続の `1d49e24e` と `5731023b` として `origin/main` に既に到達可能で、旧実装を重ねると protocol/client の現行実装を戻す差分になるため。固有の未コミット変更は無かった。 |
+| `fr-108-terminal-identity-2` (`5731023b`) | `origin/main` に既に含まれていた。未追跡内容は `.omo/`、`.reader-counterfactual.XkZsAc/`、`=` の一時ファイルだけだったため、worktree の削除時に破棄した。 |
+| `fix-e2e-kill-scenarios` (`38382120`) | cherry-pick を試みたが、main 側に kill シナリオの実内容が既に存在していたため、競合解消後の cherry-pick は空になった。main 上で kill 系 E2E を実行し、作業単位の動作を確認した。 |
+| detached verification worktree | `origin/main` と同じ tip で固有差分が無かったため削除した。 |
+| 外部管理下の worktree | 読み取り確認のみ。現在の checkout 外にあるため、このセッションでは削除していない。 |
+
+内部 worktree 3 件と対応するローカル branch は整理し、外部管理下の worktree と、それに
+対応する branch は残した。
