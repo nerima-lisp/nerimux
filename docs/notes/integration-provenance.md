@@ -169,3 +169,21 @@ remote branch のみを残す状態になった。
 `refs/remotes/origin/fix-e2e-kill-scenarios` は自動更新されなかった。削除自体は
 `git ls-remote` で確認済みだったため、`git update-ref -d` で該当する stale な
 remote-tracking ref を手動で落とした。
+
+## 8. 2026-09-12 の未ステージ変更と docs branch の統合
+
+main 起点の detached worktree に残っていた未ステージ変更 180 ファイルを、
+`refactor: align project structure and documentation` としてコミットした。既存の
+`docs/20260911-worktree-branch-cleanup` は、その docs コミットを保持したまま統合用
+branch へ取り込んだ。両方のコミットを main 起点の統合用 branch に反映し、次の検証を
+通過させた。
+
+| 対象 | 判定 |
+| --- | --- |
+| flake 評価 | `nix flake check --print-build-logs` が exit 0。 |
+| テスト check | `nix build .#checks.aarch64-darwin.default --print-build-logs` が exit 0。 |
+| docs check | `nix build .#checks.aarch64-darwin.docs --print-build-logs` が exit 0。 |
+| 差分整合性 | `git diff --check` が exit 0。未追跡ファイルは無かった。 |
+
+統合後は remote の main tip を確認してから main へ push し、統合済みの worktree と
+対応する作業 branch を削除する。今回対象外の remote branch は削除しない。
