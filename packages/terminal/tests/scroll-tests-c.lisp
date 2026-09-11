@@ -21,17 +21,17 @@
   (it "insert-lines-ignored-when-cursor-above-scroll-region"
     (with-screen (s 5 5)
       (feed-lines s "AA" "BB" "CC" "DD" "EE")
-      (feed s (esc "[3;5r"))      ; DECSTBM region rows 3-5 (0-based 2-4); homes cursor (0,0)
-      (check-cursor s 0 0)        ; cursor is above scroll-top (row 2)
+      (feed s (esc "[3;5r"))
+      (check-cursor s 0 0)
       (nerimux/terminal/actions:insert-lines s 1)
-      (check-row s 0 "AA")        ; rows above the region must be untouched
+      (check-row s 0 "AA")
       (check-row s 1 "BB")
       (check-row s 2 "CC")))
 
   (it "delete-lines-ignored-when-cursor-above-scroll-region"
     (with-screen (s 5 5)
       (feed-lines s "AA" "BB" "CC" "DD" "EE")
-      (feed s (esc "[3;5r"))      ; region rows 2-4 (0-based); cursor homed to (0,0)
+      (feed s (esc "[3;5r"))
       (nerimux/terminal/actions:delete-lines s 1)
       (check-row s 0 "AA")
       (check-row s 1 "BB")))
@@ -94,8 +94,8 @@
 
   (it "decera-erases-rectangle"
     (with-screen (s 10 5)
-      (feed s "AAAAAAAAAA")     ; row 0 = "AAAAAAAAAA"
-      (feed s "BBBBBBBBBB")     ; row 1
+      (feed s "AAAAAAAAAA")
+      (feed s "BBBBBBBBBB")
       (nerimux/terminal/actions:decera s 1 2 2 4)
       (expect (char= #\Space (char-at s 1 0)))
       (expect (char= #\Space (char-at s 2 0)))
@@ -143,7 +143,7 @@
 
   (it "deccra-action-direct-copies-rectangle-to-target"
     (with-screen (s 10 5)
-      (nerimux/terminal/actions:decfra s 65 1 1 2 3)  ; 'A'=65
+      (nerimux/terminal/actions:decfra s 65 1 1 2 3)
       (nerimux/terminal/actions:deccra s 1 1 2 3 4 6)
       (expect (char= #\A (char-at s 5 3)))
       (expect (char= #\A (char-at s 6 3)))
@@ -162,12 +162,12 @@
 
   (it "deccra-degenerate-source-is-noop"
     (with-screen (s 5 3)
-      (nerimux/terminal/actions:decfra s 65 1 1 3 5)   ; fill whole screen with 'A'
+      (nerimux/terminal/actions:decfra s 65 1 1 3 5)
       (nerimux/terminal/actions:deccra s 3 1 1 5 1 1)
       (expect (char= #\A (char-at s 0 0)))))
 
   (it "deccra-target-clamped-to-screen-bounds"
     (with-screen (s 5 3)
-      (nerimux/terminal/actions:decfra s 90 1 1 2 2)   ; 'Z'=90
+      (nerimux/terminal/actions:decfra s 90 1 1 2 2)
       (nerimux/terminal/actions:deccra s 1 1 2 2 3 4)
       (expect (char= #\Z (char-at s 3 2))))))

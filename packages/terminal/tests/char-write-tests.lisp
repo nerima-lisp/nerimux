@@ -34,7 +34,7 @@
 
   (it "kana-sound-mark-does-not-advance-the-cursor"
     (with-screen (s 10 5)
-      (nerimux/terminal/actions:write-char-at-cursor s (code-char #x304B)) ; か
+      (nerimux/terminal/actions:write-char-at-cursor s (code-char #x304B))
       (check-cursor s 2 0)
       (nerimux/terminal/actions:write-char-at-cursor s (code-char #x3099))
       (check-cursor s 2 0)))
@@ -42,8 +42,8 @@
   (it "kana-plus-voiced-mark-occupies-the-same-cells-as-precomposed"
     (with-screen (composed 10 5)
       (with-screen (decomposed 10 5)
-        (utf8-feed composed   (string (code-char #x304C)))                ; が
-        (utf8-feed decomposed (coerce (list (code-char #x304B)            ; か
+        (utf8-feed composed   (string (code-char #x304C)))
+        (utf8-feed decomposed (coerce (list (code-char #x304B)
                                             (code-char #x3099))
                                       'string))
         (expect (= (screen-cursor-x composed) (screen-cursor-x decomposed)))
@@ -67,7 +67,7 @@
 
   (it "kana-semi-voiced-mark-attaches-to-the-lead-cell"
     (with-screen (s 10 5)
-      (utf8-feed s (coerce (list (code-char #x306F)  ; は
+      (utf8-feed s (coerce (list (code-char #x306F)
                                  (code-char #x309A))
                            'string))
       (check-cursor s 2 0)
@@ -138,9 +138,9 @@
 
   (it "emoji-zwj-sequence-costs-no-extra-column"
     (with-screen (s 20 5)
-      (utf8-feed s (coerce (list (code-char #x1F468)   ; man
+      (utf8-feed s (coerce (list (code-char #x1F468)
                                  (code-char #x200D)
-                                 (code-char #x1F469))  ; woman
+                                 (code-char #x1F469))
                            'string))
       (check-cursor s 4 0)
       (expect (member (code-char #x200D)

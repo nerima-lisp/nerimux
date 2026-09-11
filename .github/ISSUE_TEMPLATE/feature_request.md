@@ -6,7 +6,7 @@ labels: enhancement
 
 ## The tmux feature
 
-<!-- Command, flag, format variable, escape sequence, or behavior — with the
+<!-- Command, flag, format variable, escape sequence, or behavior, with the
      man-page section or upstream reference if you have it. -->
 
 ## What nerimux currently does

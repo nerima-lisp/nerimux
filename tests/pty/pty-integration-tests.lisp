@@ -80,7 +80,7 @@
       (skip "no PTY available (sandboxed environment)"))
     (with-pty-shell (fd pid)
       (drain-pty fd :deadline-seconds 2.0 :quiet-windows 2)
-      (let ((ready (select-fds (list fd) 100000)))  ; 100 ms, no input sent
+      (let ((ready (select-fds (list fd) 100000)))
         (expect (null ready)))))
 
   (it "split-then-relayout-keeps-panes-fitting"
@@ -105,7 +105,7 @@
       (skip "no PTY available (sandboxed environment)"))
     (with-pty-shell (fd pid)
       (drain-pty fd :deadline-seconds 2.0 :quiet-windows 2)
-      (sb-posix:kill pid 9)              ; SIGKILL — untrappable
+      (sb-posix:kill pid 9)
       (multiple-value-bind (code kind) (nerimux/pty:pty-child-exit-status fd)
         (expect (eq kind :signaled))
         (expect (null code)))))

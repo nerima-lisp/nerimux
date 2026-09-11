@@ -20,7 +20,7 @@
 (defun exit-alt-screen (screen &key restore-cursor-p)
   "Restore the saved primary grid and cursor from the alt-screen slots.
    When RESTORE-CURSOR-P is T (mode 1049), also restore the FULL cursor state
-   (SGR attrs, charset, origin mode) via RESTORE-CURSOR — equivalent to ?1047l
+   (SGR attrs, charset, origin mode) via RESTORE-CURSOR, equivalent to ?1047l
    + ?1048l (DECRC).  Falls back to erase-display mode 2 when nothing was saved."
   (if (screen-alt-cells screen)
       (setf (screen-cells screen) (screen-alt-cells screen)

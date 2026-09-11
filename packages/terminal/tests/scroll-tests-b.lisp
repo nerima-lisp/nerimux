@@ -4,13 +4,13 @@
 
   (it "copy-row-copies-all-cells"
     (with-screen (s 5 3)
-      (feed s "hello")                       ; row 0 = "hello"
-      (nerimux/terminal/actions::%copy-row s 1 0)  ; copy row 0 to row 1
+      (feed s "hello")
+      (nerimux/terminal/actions::%copy-row s 1 0)
       (expect (string= "hello" (row-string s 1)))))
 
   (it "clear-row-blanks-all-cells"
     (with-screen (s 5 3)
-      (feed s "hello")                       ; row 0 = "hello"
+      (feed s "hello")
       (nerimux/terminal/actions::%clear-row s 0)
       (expect (row-blank-p s 0))))
 
@@ -32,7 +32,7 @@
 
   (it "erase-region-clears-span-across-rows"
     (with-screen (s 5 4)
-      (feed s "aabbccddee")           ; rows 0 and 1 filled
+      (feed s "aabbccddee")
       (nerimux/terminal/actions:erase-region s 3 0 1 1)
       (expect (char= #\a (char-at s 0 0)))
       (expect (char= #\a (char-at s 1 0)))
@@ -52,7 +52,7 @@
   (it "erase-line-mode-0-erases-to-end"
     (with-screen (s 10 5)
       (feed s "hello")
-      (nerimux/terminal/actions:cursor-left s 3)   ; cursor at col 2
+      (nerimux/terminal/actions:cursor-left s 3)
       (nerimux/terminal/actions:erase-line s 0)
       (expect (char= #\h (char-at s 0 0)))
       (expect (char= #\e (char-at s 1 0)))
@@ -77,7 +77,7 @@
     (with-screen (s 5 5)
       (let ((orig-top    (nerimux/terminal/types:screen-scroll-top s))
             (orig-bottom (nerimux/terminal/types:screen-scroll-bottom s)))
-        (nerimux/terminal/actions:decstbm s 2 2)  ; top = bottom = 2
+        (nerimux/terminal/actions:decstbm s 2 2)
         (expect (= orig-top    (nerimux/terminal/types:screen-scroll-top s)))
         (expect (= orig-bottom (nerimux/terminal/types:screen-scroll-bottom s))))))
 
@@ -85,7 +85,7 @@
     (with-screen (s 5 5)
       (let ((orig-top    (nerimux/terminal/types:screen-scroll-top s))
             (orig-bottom (nerimux/terminal/types:screen-scroll-bottom s)))
-        (nerimux/terminal/actions:decstbm s 4 1)  ; top > bottom — invalid
+        (nerimux/terminal/actions:decstbm s 4 1)
         (expect (= orig-top    (nerimux/terminal/types:screen-scroll-top s)))
         (expect (= orig-bottom (nerimux/terminal/types:screen-scroll-bottom s))))))
 

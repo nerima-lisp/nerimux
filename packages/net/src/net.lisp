@@ -89,7 +89,7 @@
    underlying UNIX-CLOSE, so the fd is never actually released even though
    this function swallows the condition and returns normally.  Pass ABORT T
    to close a socket whose peer may already be gone (e.g. tearing down a
-   dropped client) — it skips the flush attempt entirely, so a broken peer
+   dropped client), it skips the flush attempt entirely, so a broken peer
    cannot prevent this end's own fd from being freed."
   (handler-case (sb-bsd-sockets:socket-close socket :abort abort)
     (sb-bsd-sockets:socket-error ()

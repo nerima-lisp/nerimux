@@ -44,7 +44,7 @@
            (nerimux/ports:*resize-pty*
              (lambda (fd rows cols) (push (list fd rows cols) calls)))
            (pane (make-no-pty-pane 1 0 0 20 5)))
-      (setf (pane-fd pane) 3)              ; positive: the fd guard passes
+      (setf (pane-fd pane) 3)
       (finishes (pane-reposition pane 0 0 40 0)
                 "a zero height must not reach set-pty-size")
       (expect (null calls))

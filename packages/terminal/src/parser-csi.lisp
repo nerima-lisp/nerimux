@@ -56,7 +56,7 @@
 
 (defun csi-final-byte-before-p (byte)
   "Return T when BYTE precedes the CSI final-byte range (i.e. still a
-   parameter, intermediate, or marker byte — the sequence is incomplete)."
+   parameter, intermediate, or marker byte, the sequence is incomplete)."
   (< byte +csi-final-low+))
 
 (defun csi-final-byte-p (byte)

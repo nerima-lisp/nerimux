@@ -112,8 +112,8 @@
                   #:nerimux/terminal/actions
                   #:nerimux/terminal/sgr)
             (:documentation
-             "DOMAIN layer: the CSI rule table.  Maps a parsed control sequence — final byte,
-    private-marker, and parameters — onto the nerimux/terminal/actions call it means,
+             "DOMAIN layer: the CSI rule table.  Maps a parsed control sequence, final byte,
+    private-marker, and parameters, onto the nerimux/terminal/actions call it means,
     and generates the replies the host expects back (DSR/CPR cursor reports, DA1/DA2
     device attributes, DECRQM mode state, XTWINOPS size reports).  Declarative on
     purpose: the sequence set is a specification, not an algorithm.")
@@ -126,8 +126,8 @@
         #:nerimux/terminal/csi)
   (:documentation
    "DOMAIN layer: the byte-level VT100 state machine, written in continuation-passing
-    style.  Each state — ground, escape, CSI, OSC, DCS, UTF-8 continuation, charset
-    designator — is a closure that takes the next byte and returns the next state,
+    style.  Each state, ground, escape, CSI, OSC, DCS, UTF-8 continuation, charset
+    designator, is a closure that takes the next byte and returns the next state,
     and the only place that state is stored is the screen's PARSER slot.  That is
     what lets a pane be fed one octet at a time from a PTY and resume mid-sequence
     across reads.")
@@ -164,9 +164,9 @@
    "DOMAIN layer: the terminal facade.  The six sub-packages above split the emulator
     by mechanism, which is the right seam for the emulator's own authors and the
     wrong one for its callers.  This package re-exports the subset the model, the
-    renderer, and the command layer are meant to reach — construction, geometry,
+    renderer, and the command layer are meant to reach, construction, geometry,
     cursor, grid and viewport access, copy-mode scrollback, and the mode flags the
-    renderer must honour — so that no caller outside src/domain/terminal/ needs to
+    renderer must honour, so that no caller outside src/domain/terminal/ needs to
     know which sub-package a name came from.  Adding a name here is a deliberate
     widening of the emulator's public surface.")
   (:export

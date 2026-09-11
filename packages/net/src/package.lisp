@@ -2,8 +2,8 @@
   (:use #:cl)
   (:documentation
    "INFRASTRUCTURE layer: the client/server wire format, as a pure codec.  Encodes
-    and decodes the frames a detached client exchanges with the server — keystrokes
-    and resizes upstream, rendered frames downstream — plus the delimiter-separated
+    and decodes the frames a detached client exchanges with the server, keystrokes
+    and resizes upstream, rendered frames downstream, plus the delimiter-separated
     command payload.  Deliberately holds no sockets and no global state, so the
     format is unit-testable without a server; the I/O sits in nerimux/transport.")
   (:export
@@ -32,13 +32,13 @@
                 #:decode-frame)
   (:documentation
    "INFRASTRUCTURE layer: the impure shell around the nerimux/protocol codec.  Moves
-    whole frames across any binary stream — a socket stream in production, a
-    temp-file stream in tests — under a wall-clock budget that keeps a hung peer
+    whole frames across any binary stream, a socket stream in production, a
+    temp-file stream in tests, under a wall-clock budget that keeps a hung peer
     from blocking a reader forever.  Does no framing of its own.")
   (:export
-   #:send-frame            ; (stream octets)          — write one frame + flush
-   #:read-frame            ; (stream) → (values type payload) or NIL at EOF
-   #:with-incoming-frame)) ; macro — read + Prolog-dispatch one frame from a stream
+   #:send-frame
+   #:read-frame
+   #:with-incoming-frame))
 
 (defpackage #:nerimux/net
             (:use #:cl)

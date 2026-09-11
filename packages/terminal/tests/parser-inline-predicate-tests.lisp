@@ -8,7 +8,7 @@
 
   (it "printable-ascii-p-range"
     (expect (nerimux/terminal/parser::printable-ascii-p #x20) :to-be-truthy)
-    (expect (nerimux/terminal/parser::printable-ascii-p #x41) :to-be-truthy) ; A
+    (expect (nerimux/terminal/parser::printable-ascii-p #x41) :to-be-truthy)
     (expect (nerimux/terminal/parser::printable-ascii-p #x7E) :to-be-truthy)
     (expect (nerimux/terminal/parser::printable-ascii-p #x1F) :to-be-falsy)
     (expect (nerimux/terminal/parser::printable-ascii-p #x7F) :to-be-falsy))
@@ -17,9 +17,9 @@
     (expect (nerimux/terminal/parser::utf8-lead-p #xC2) :to-be-truthy)
     (expect (nerimux/terminal/parser::utf8-lead-p #xE3) :to-be-truthy)
     (expect (nerimux/terminal/parser::utf8-lead-p #xF0) :to-be-truthy)
-    (expect (nerimux/terminal/parser::utf8-lead-p #x41) :to-be-falsy)  ; ASCII A
-    (expect (nerimux/terminal/parser::utf8-lead-p #x80) :to-be-falsy)  ; continuation
-    (expect (nerimux/terminal/parser::utf8-lead-p #xFF) :to-be-falsy)) ; excluded
+    (expect (nerimux/terminal/parser::utf8-lead-p #x41) :to-be-falsy)
+    (expect (nerimux/terminal/parser::utf8-lead-p #x80) :to-be-falsy)
+    (expect (nerimux/terminal/parser::utf8-lead-p #xFF) :to-be-falsy))
 
   (it "utf8-continuation-p-identifies-continuation-bytes"
     (expect (nerimux/terminal/parser::utf8-continuation-p #x80) :to-be-truthy)

@@ -9,7 +9,7 @@
    the UNWIND-PROTECT also avoids re-entering cl-tty-kit's raw-mode lock
    while a failing enable operation still holds it."
   `(progn
-     (enable-raw-mode! 0)        ; fd 0 = stdin
+     (enable-raw-mode! 0)
      (unwind-protect
           (progn ,@body)
        (disable-raw-mode! 0)
@@ -19,7 +19,7 @@
 (defun read-available-octets (&optional (timeout-us +poll-timeout-us+)
                                         (max-octets +pty-buf-size+))
   "Return up to MAX-OCTETS from stdin within TIMEOUT-US microseconds, or NIL.
-   NIL means the timeout elapsed with no data — it does NOT mean EOF.
+   NIL means the timeout elapsed with no data, it does NOT mean EOF.
    EOF on stdin is indistinguishable from a zero-byte read at this layer;
    both return NIL.  TIMEOUT-US = 0 is a purely non-blocking poll.
 

@@ -1,9 +1,7 @@
 (in-package #:nerimux/test)
 
 (defmacro with-dead-pane ((pane-var) &body body)
-  "Bind PANE-VAR to a standard dead pane (fd=-1, pid=-1, 5×3 screen) for BODY.
-   Eliminates the repeated (make-pane :id 1 :fd -1 :pid -1 :screen (make-screen 5 3))
-   boilerplate."
+  "Bind PANE-VAR to a dead 5x3 pane for BODY."
   `(let ((,pane-var (make-pane :id 1 :fd -1 :pid -1 :screen (make-screen 5 3))))
      ,@body))
 

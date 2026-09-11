@@ -1,8 +1,3 @@
-;;; This form comes FIRST, before any other form. ASDF binds *package* to
-;;; ASDF-USER only for a file it loads itself; read any other way — a REPL
-;;; `load`, an editor evaluating the buffer — the file is read in whatever
-;;; package happens to be current, and an unqualified `defsystem` then fails to
-;;; read at all. See PACKAGE_STANDARD.md "asd の書き方".
 (in-package #:asdf-user)
 
 (defsystem "nerimux-model"
@@ -14,14 +9,10 @@
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  ;; nerimux/pane :uses both: nerimux/ports for the PTY spawn hooks, and
-  ;; nerimux/terminal for the screen a pane owns.
   :depends-on ("nerimux-ports" "nerimux-terminal"
                :cl-concurrent-kit :cl-tty-kit)
   :pathname "src"
-  ;; Five packages share this system because they are mutually recursive:
-  ;; workspace-model<->pane, pane<->session and layout<->window each close a
-  ;; cycle. Splitting them further needs those cut first, not a new .asd.
+  ;; These files are mutually recursive and must load as one system.
   :serial t
   :components (
                (:file "package")
@@ -56,7 +47,6 @@
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  ;; Both edges mirror nerimux-model's own :depends-on.
   :depends-on ("nerimux-model" "nerimux-ports/test" "nerimux-terminal/test"
                :cl-codec-kit (:version "cl-weave" "1.3.0"))
   :pathname "tests"
@@ -95,8 +85,6 @@
                (:file "worktree-tests")
                (:file "attention-tests")
                (:file "advanced-tests")               )
-  ;; See packages/text/nerimux-text.asd for why this form is repeated per unit
-  ;; rather than shared, and why *PRINT-CIRCLE* is load-bearing.
   :perform (test-op (op c)
              (declare (ignore op c))
              (let ((*print-circle* t)

@@ -119,7 +119,7 @@
                        t))
                (setf (nerimux::client-conn-view conn) :repolist)
                (nerimux::%set-client-selected-tree-object conn repository)
-               (nerimux::%handle-multi-key-message s conn #(58)) ; :
+               (nerimux::%handle-multi-key-message s conn #(58))
                (nerimux::%handle-multi-key-message
                 s conn
                 (cl-codec-kit:string-to-octets
@@ -169,7 +169,7 @@
                        t))
                (setf (nerimux::client-conn-view conn) :repolist)
                (nerimux::%set-client-selected-tree-object conn worktree)
-               (nerimux::%handle-multi-key-message s conn #(58)) ; :
+               (nerimux::%handle-multi-key-message s conn #(58))
                (nerimux::%handle-multi-key-message
                 s conn
                 (cl-codec-kit:string-to-octets
@@ -316,7 +316,7 @@
                        t))
                (setf (nerimux::client-conn-view conn) :repolist)
                (nerimux::%set-client-selected-tree-object conn worktree)
-               (nerimux::%handle-multi-key-message s conn #(58)) ; :
+               (nerimux::%handle-multi-key-message s conn #(58))
                (nerimux::%handle-multi-key-message
                 s conn
                 (cl-codec-kit:string-to-octets
@@ -345,10 +345,10 @@
             (nerimux::*clients* nil))
         (setf nerimux::*clients* (list conn))
         (setf (nerimux::client-conn-view conn) :status)
-        (dolist (probe '((#(99)  . "select a repository first")   ; w c
-                         (#(107) . "select a worktree to delete") ; w k
-                         (#(108) . "select a worktree to lock")   ; w l
-                         (#(117) . "select a worktree to unlock"))) ; w u
+        (dolist (probe '((#(99)  . "select a repository first")
+                         (#(107) . "select a worktree to delete")
+                         (#(108) . "select a worktree to lock")
+                         (#(117) . "select a worktree to unlock")))
           (destructuring-bind (key . expected) probe
             (nerimux::%handle-multi-key-message
              s conn (cl-codec-kit:string-to-octets "w" :encoding :utf-8))
@@ -359,7 +359,7 @@
             (expect (null (nerimux::client-conn-modal conn)))))
         (nerimux::%handle-multi-key-message
          s conn (cl-codec-kit:string-to-octets "w" :encoding :utf-8))
-        (nerimux::%handle-multi-key-message s conn #(67)) ; C
+        (nerimux::%handle-multi-key-message s conn #(67))
         (expect (search "wt-create"
                         (first (nerimux::client-conn-message-log conn)))))))
 

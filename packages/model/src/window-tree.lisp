@@ -38,7 +38,7 @@
 (defun %assign-window-tree (window w h)
   "Assign WINDOW's split tree into a W x H area, starting at y=0.
    Status line is fixed to the bottom of the outer terminal (§1.4), so a
-   window's own panes always start flush at the top of its area — there is no
+   window's own panes always start flush at the top of its area, there is no
    longer a top-positioned status bar to offset around."
   (when (window-tree window)
     (layout-assign (window-tree window) 0 0 w h)))
@@ -46,7 +46,7 @@
 (defun window-relayout (window rows cols)
   "Re-fit WINDOW's panes into ROWS x COLS using the binary split tree.
    After assigning geometry via the tree, each pane's screen and PTY are
-   notified via pane-reposition — completing the data/logic separation:
+   notified via pane-reposition, completing the data/logic separation:
    layout-assign owns geometry, pane-reposition owns the I/O side effects."
   (setf (window-width window) cols
         (window-height window) rows)

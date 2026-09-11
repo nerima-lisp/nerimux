@@ -108,7 +108,7 @@
 
 (defun socket-path (name)
   "Filesystem path of the Unix socket for the server named NAME: a fixed name
-   inside the per-UID socket directory (§1.4). No -L/-S override exists —
+   inside the per-UID socket directory (§1.4). No -L/-S override exists,
    R1.17 removed the CLI flags that could set one."
   (format nil "~A/nerimux-~A.sock" (%socket-directory) name))
 

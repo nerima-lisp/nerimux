@@ -4,15 +4,15 @@
 (defmacro with-loop-safe-error (binding &body body)
   "Run BODY, catching a failed client/command so one of them can never wedge
    the multi-client event loop.  On success, returns BODY's value; on a
-   failure, evaluates and returns ON-ERROR instead — optionally with the
+   failure, evaluates and returns ON-ERROR instead, optionally with the
    condition bound to CONDITION-VAR so ON-ERROR can log it.  This is the
    single shape behind this file's 'never let one client take down the server
    loop' invariant.
 
    The clause is PEER-IO-FAILURE (server.lisp), not ERROR, and the difference is
    the whole invariant.  SB-EXT:TIMEOUT is a SERIOUS-CONDITION that is
-   deliberately NOT an ERROR — verified on SBCL 2.6.6:
-   (subtypep 'sb-ext:timeout 'error) => NIL — so an ERROR-only clause misses
+   deliberately NOT an ERROR, verified on SBCL 2.6.6:
+   (subtypep 'sb-ext:timeout 'error) => NIL, so an ERROR-only clause misses
    it silently.
 
    That is exactly the condition this macro is wrapped around.  SEND-FRAME
@@ -20,8 +20,8 @@
    SB-EXT:WITH-TIMEOUT and documents itself as signalling SB-EXT:TIMEOUT when
    the peer is too slow to accept it.  %BROADCAST-FRAME calls it through this
    macro for every attached client on every dirty frame.  With an ERROR-only
-   clause, one client whose socket stalls for +send-frame-timeout-seconds+ —
-   a suspended terminal, a laggy hop, a full send buffer — raised a condition
+   clause, one client whose socket stalls for +send-frame-timeout-seconds+,
+   a suspended terminal, a laggy hop, a full send buffer, raised a condition
    that passed straight through this handler, through the serve loop, and out
    of RUN-SERVER, taking the process down and disconnecting EVERY client.
    The macro promised the opposite of what it did, for the one failure it
@@ -173,7 +173,7 @@
 The prefix is consumed before the stdin-target path.  Once struck, the next
 byte is resolved against 1.5's binding table by %workspace-prefix-dispatch;
 a byte the table does not recognize is discarded there instead of falling
-through to the normal key pipeline — the old 'unbound means pass through'
+through to the normal key pipeline, the old 'unbound means pass through'
    behavior is discarded."
   (let ((single-byte
          (and (arrayp payload) (= (length payload) 1) (aref payload 0))))

@@ -127,7 +127,7 @@
 
 
   (it "read-header-k-calls-continuation-with-payload-length"
-    (let ((frame (msg-key #(1 2 3))))   ; 5-byte header + 3-byte payload
+    (let ((frame (msg-key #(1 2 3))))
       (with-temp-octet-file (path)
         (with-output-octet-stream (out path)
           (write-sequence frame out :end +header-size+))

@@ -1,9 +1,3 @@
-# nerima-lisp standard .gitignore
-# Copy to <repo>/.gitignore and append repository-specific entries below the
-# marked section. Everything above the marker must stay identical across repos
-# so that "is this artifact ignored?" has the same answer everywhere.
-
-# --- Common Lisp build output ---
 *.fasl
 *.fas
 *.lib
@@ -11,12 +5,10 @@
 *.ufsl
 *.fsl
 
-# --- Nix ---
 /result
 /result-*
 /.direnv/
 
-# --- Test and coverage output ---
 /coverage/
 /coverage-report/
 /*-coverage-report/
@@ -26,17 +18,12 @@ coverage.dat
 /__snapshots__/
 /*-snapshots/
 
-# --- Local caches and scratch space ---
 /.cache/
 /.deps/
 /tmp/
 /.worktrees/
 /.paredit.cleanup/
 
-# --- Credentials ---
-# Not because anyone plans to put a key here, but because the cost of the one
-# time it happens by accident is a rotation across the whole org. See
-# SUPPLY_CHAIN.md for what to do if one is committed anyway.
 .env
 .env.*
 !.env.example
@@ -46,24 +33,16 @@ coverage.dat
 *.pfx
 /secrets/
 
-# --- Editor and OS noise ---
 .DS_Store
 *~
 \#*\#
 .\#*
 
-# --- Repository-specific entries below this line ---
-
-# Generated documentation site; sources live under docs/src/.
 /docs/site/
 
-# SBCL image and standalone binary. The names match :build-pathname and the
-# save-lisp-and-die target in nerimux.asd / flake.nix, so a local
-# `asdf:make` or a hand-run build never lands in a commit.
 /nerimux
 /nerimux.core
 
-# Agent/editor harness state kept in-tree by local tooling only.
 /.claude/
 /.serena/
 

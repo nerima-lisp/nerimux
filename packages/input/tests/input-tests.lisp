@@ -67,7 +67,7 @@
   (it "read-byte-nonblock-returns-byte-when-data-available"
     (with-pipe-fds (rfd wfd)
       (write-byte-to-fd wfd 42)
-      (let ((ready (nerimux/pty:select-fds (list rfd) 200000)))  ; 200 ms timeout
+      (let ((ready (nerimux/pty:select-fds (list rfd) 200000)))
         (expect ready :to-be-truthy)
         (when ready
           (let ((bytes (read-octets-from-fd rfd 1)))
@@ -76,7 +76,7 @@
 
   (it "read-byte-nonblock-select-returns-nil-when-no-data"
     (with-pipe-fds (rfd _wfd)
-      (let ((ready (nerimux/pty:select-fds (list rfd) 10000)))  ; 10 ms
+      (let ((ready (nerimux/pty:select-fds (list rfd) 10000)))
         (expect (null ready)))))
 
   (it "select-fds-gates-on-positive-select-return"

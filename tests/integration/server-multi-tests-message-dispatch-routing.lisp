@@ -88,15 +88,15 @@
          pane
          (cl-codec-kit:string-to-octets "needle" :encoding :utf-8))
         (nerimux::%set-client-view conn :pane)
-        (nerimux::%handle-multi-key-message s conn #(105)) ; i -- ordinary input now
+        (nerimux::%handle-multi-key-message s conn #(105))
         (expect (eq :pane (nerimux::client-conn-view conn)))
-        (nerimux::%handle-multi-key-message s conn #(27)) ; ESC -- forwarded
+        (nerimux::%handle-multi-key-message s conn #(27))
         (expect (eq :pane (nerimux::client-conn-view conn)))
-        (nerimux::%handle-multi-key-message s conn #(17)) ; C-q
-        (nerimux::%handle-multi-key-message s conn #(91)) ; [
+        (nerimux::%handle-multi-key-message s conn #(17))
+        (nerimux::%handle-multi-key-message s conn #(91))
         (expect (eq :scrollback (nerimux::client-conn-modal conn)))
         (expect (nerimux/terminal:screen-copy-mode-p screen))
-        (nerimux::%handle-multi-key-message s conn #(47)) ; /
+        (nerimux::%handle-multi-key-message s conn #(47))
         (expect (eq :command (nerimux::client-conn-modal conn)))
         (expect (string= "search-forward "
                          (nerimux::client-conn-command-buffer conn)))
@@ -104,13 +104,13 @@
          s conn (cl-codec-kit:string-to-octets "needle" :encoding :utf-8))
         (nerimux::%handle-multi-key-message s conn #(13))
         (expect (eq :scrollback (nerimux::client-conn-modal conn)))
-        (nerimux::%handle-multi-key-message s conn #(113)) ; q
+        (nerimux::%handle-multi-key-message s conn #(113))
         (expect (null (nerimux::client-conn-modal conn)))
         (expect (nerimux/terminal:screen-copy-mode-p screen) :to-be-falsy)
-        (nerimux::%handle-multi-key-message s conn #(17)) ; C-q
-        (nerimux::%handle-multi-key-message s conn #(119)) ; w
+        (nerimux::%handle-multi-key-message s conn #(17))
+        (nerimux::%handle-multi-key-message s conn #(119))
         (expect (eq :repolist (nerimux::client-conn-view conn)))
-        (nerimux::%handle-multi-key-message s conn #(58)) ; :
+        (nerimux::%handle-multi-key-message s conn #(58))
         (nerimux::%handle-multi-key-message
          s conn (cl-codec-kit:string-to-octets "detail" :encoding :utf-8))
         (nerimux::%handle-multi-key-message s conn #(13))

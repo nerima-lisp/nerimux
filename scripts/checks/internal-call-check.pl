@@ -1,7 +1,6 @@
 #!/usr/bin/env perl
 # Internal-helper call check: does every %NAME call have a %NAME definition, and
 # does it pass a number of arguments that definition accepts?
-#
 # This is the cheapest approximation of "it compiles" available without a
 # compiler. It deliberately checks ONLY names beginning with `%`, the
 # convention this codebase uses for internal helpers, because that restriction
@@ -9,7 +8,6 @@
 # a Common Lisp symbol, never inherited from a sibling library, and never a
 # locally bound variable. So an unresolved `%name` call is a real defect rather
 # than a gap in the checker's knowledge.
-#
 # What it will not see: calls through APPLY or FUNCALL, names built with
 # INTERN or by a macro, and anything a macro generates. Those are the same
 # blind spots the rest of scripts/checks/ has.
@@ -29,7 +27,6 @@ for my $dir ('src', 'tests', 'packages') {
 }
 unless (@files) { print "NO FILES SCANNED\n"; exit 2 }
 
-# ---- strip comments and strings, tracking multi-line strings ---------------
 sub code_of {
     my ($path) = @_;
     open(my $fh, '<:encoding(UTF-8)', $path) or return ();
@@ -64,7 +61,6 @@ sub code_of {
 my %code;              # path => [lines of code]
 $code{$_} = [ code_of($_) ] for @files;
 
-# ---- collect definitions and their arity ----------------------------------
 # min = required count, max = undef when &rest/&key/&body makes it unbounded.
 my (%def, %where);
 for my $f (@files) {
@@ -148,13 +144,11 @@ for my $f (@files) {
     }
 }
 
-# ---- collect call sites ---------------------------------------------------
 # Count arguments by walking the form, so nested calls do not confuse the count.
 my (@undefined, @arity);
 for my $f (@files) {
     my @lines = @{$code{$f}};
     my $text  = join("\n", @lines);
-    # Offset -> line number, for reporting.
     my @line_at;
     { my $off = 0; my $ln = 1;
       for my $l (@lines) { $line_at[$off + $_] = $ln for (0 .. length($l)); $off += length($l) + 1; $ln++ } }

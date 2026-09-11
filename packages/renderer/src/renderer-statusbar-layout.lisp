@@ -50,7 +50,7 @@
   "Parse a #[BODY] block's comma-separated attrs.  Returns (values ALIGN REST):
    ALIGN is :left/:centre/:right when an align=… attr is present (else NIL), and
    REST is the remaining attrs re-joined by commas (NIL when none) so combined
-   blocks like #[align=right,fg=red] keep their colour."
+   blocks like #[align=right,fg=red] preserve their colour."
   (let ((align nil)
         (rest nil))
     (dolist (a (%split-comma-attrs body))

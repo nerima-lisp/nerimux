@@ -88,7 +88,7 @@
 
 (defun %workspace-prefix-close-pane (session conn)
   "C-q x : close the focused pane (R5.4).  Kills its PTY, drops it from its
-   worktree and window, and — when that empties the window — closes the
+   worktree and window, and, when that empties the window, closes the
    window too and refocuses per %workspace-refocus-after-window-close.
 
    RETIRE-PANE-PTY rather than CLOSE-PANE-PTY: this is the one path that
@@ -222,7 +222,7 @@
 (defun %workspace-prefix-quit-server (session conn)
   "C-q Q (R8.2): ask before stopping the server, showing how many panes are
    still running so the count is in front of the user at the moment they answer
-   — not discovered afterwards."
+   not discovered afterwards."
   (let* ((live  (%session-live-panes session))
          (count (length live)))
     (%open-confirm-view
@@ -238,7 +238,7 @@
        :quit))))
 
 (define-key-rules %workspace-prefix-dispatch (session conn byte)
-  "Resolve BYTE — the key struck right after C-q — against 1.5's table and
+  "Resolve BYTE, the key struck right after C-q, against 1.5's table and
    run its action.  Returns the loop disposition (NIL to keep serving,
    :drop for `d`).  A BYTE with no binding here is discarded: the prefix
    already consumed it and nothing else happens (R4.4)."
@@ -331,10 +331,9 @@ FETCH-REPOSITORY-ASYNC)."
 
 (defun %workspace-prefix-fetch-organization (conn)
   "Fetch every repository in the selected organization concurrently, then
-   refresh status.  No longer bound to C-q C-f -- same removal, and the same
-   reason to keep the function, as %WORKSPACE-PREFIX-FETCH-REPOSITORY above.
-   Duplicate suppression and the completion callback mirror that function,
-   one level up (nerimux/vcs:FETCH-ORGANIZATION-ASYNC)."
+   refresh status.  Duplicate suppression and the completion callback mirror
+   %WORKSPACE-PREFIX-FETCH-REPOSITORY above, one level up
+   (nerimux/vcs:FETCH-ORGANIZATION-ASYNC)."
   (let ((organization (%client-selected-organization conn)))
     (cond
       ((not organization)

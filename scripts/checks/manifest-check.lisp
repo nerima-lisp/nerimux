@@ -66,14 +66,14 @@
        (orphan  (remove-if (lambda (d) (member d declared :test #'string=)) on-disk)))
   (format t "~&manifest entries: ~D~%files under tests/ and packages/*/tests/: ~D~%" (length declared) (length on-disk))
   (when (zerop (length declared))
-    (format t "~&MANIFEST PARSED TO NOTHING — the walker is wrong, not the tree~%")
+    (format t "~&MANIFEST PARSED TO NOTHING: the walker is wrong, not the tree~%")
     (finish-output)
     (sb-ext:quit :unix-status 2))
   (when missing
-    (format t "~&MISSING (manifest names it, file absent) — kills the whole suite:~%")
+    (format t "~&MISSING (manifest names it, file absent): kills the whole suite:~%")
     (dolist (m missing) (format t "  ~A~%" m)))
   (when orphan
-    (format t "~&ORPHAN (file present, manifest silent) — never loaded:~%")
+    (format t "~&ORPHAN (file present, manifest silent): never loaded:~%")
     (dolist (o orphan) (format t "  ~A~%" o)))
   (finish-output)
   (sb-ext:quit :unix-status (if (or missing orphan) 1 0)))

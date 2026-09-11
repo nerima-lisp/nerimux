@@ -90,9 +90,7 @@
     (funcall check-fn payload)))
 
 (defun write-partial-frame-to-file (path frame byte-count)
-  "Write only the first BYTE-COUNT bytes of FRAME to PATH (creating a truncated frame).
-   Used by truncation tests to simulate mid-frame EOF conditions without duplicating
-   the raw with-open-file / write-sequence / subseq boilerplate."
+  "Write the first BYTE-COUNT bytes of FRAME to PATH."
   (with-open-file 
       (out path
            :direction

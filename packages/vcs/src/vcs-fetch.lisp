@@ -69,7 +69,7 @@
           (vcs-kit:vcs-fetch backend "origin"
                              "+refs/heads/*:refs/remotes/origin/*")
           (let ((checked (%repository-checked-handle repository)))
-            ;; Preserve even a dangling symbolic HEAD: it can express user intent.
+            ;; A dangling symbolic HEAD can express user intent, so preserve it.
             (unless (or (nth-value 1 (%fetch-optional-output
                                       #'vcs-kit:git-symbolic-ref checked
                                       "-q" "refs/remotes/origin/HEAD"))

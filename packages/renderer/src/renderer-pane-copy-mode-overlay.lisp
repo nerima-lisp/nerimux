@@ -3,7 +3,7 @@
 (defun %copy-mode-position-overlay-text (pane)
   "Position text for PANE's copy-mode overlay (R6.8): \"[POS/LIMIT]\", plus
    \" /TERM\" while a search is active, plus \" INDEX/TOTAL\" naming which match
-   the cursor is on — \"[12/3400] /pattern 2/7\".
+   the cursor is on, \"[12/3400] /pattern 2/7\".
 
    This replaces a 200+ character copy-mode-position-format template and the
    mode-style-indirected copy-mode-position-style with direct composition; both

@@ -5,7 +5,7 @@
   (it "csi-unknown-final-byte-does-not-crash"
     (with-screen (s 20 5)
       (feed s "A")
-      (finishes (feed s (esc "[99z")))   ; '99z' has no rule
+      (finishes (feed s (esc "[99z")))
       (feed s "B")
       (expect (char= #\A (char-at s 0 0)))
       (expect (char= #\B (char-at s 1 0)))))
@@ -13,8 +13,8 @@
   (it "csi-dec-private-unknown-mode-no-crash"
     (with-screen (s 20 5)
       (feed s "X")
-      (finishes (feed s (esc "[?9876h")))  ; unknown DEC PM set
-      (finishes (feed s (esc "[?9876l")))  ; unknown DEC PM reset
+      (finishes (feed s (esc "[?9876h")))
+      (finishes (feed s (esc "[?9876l")))
       (feed s "Y")
       (expect (char= #\X (char-at s 0 0)))
       (expect (char= #\Y (char-at s 1 0)))))
@@ -34,11 +34,11 @@
 
   (it "decom-cup-is-relative-to-scroll-region"
     (with-screen (s 20 10)
-      (feed s (esc "[3;6r"))   ; DECSTBM → scroll region rows 3-6 (0-based top=2, bottom=5)
-      (feed s (esc "[?6h"))    ; DECOM on → cursor homes to (scroll-top=2, col 0)
+      (feed s (esc "[3;6r"))
+      (feed s (esc "[?6h"))
       (expect (= 2 (screen-cursor-y s)))
       (expect (= 0 (screen-cursor-x s)))
-      (feed s (esc "[2;3H"))   ; CUP row 2 col 3 → origin-relative: row top+1=3, col 2
+      (feed s (esc "[2;3H"))
       (expect (= 3 (screen-cursor-y s)))
       (expect (= 2 (screen-cursor-x s)))))
 
@@ -46,16 +46,16 @@
     (with-screen (s 20 10)
       (feed s (esc "[3;6r"))
       (feed s (esc "[?6h"))
-      (feed s (esc "[99;1H"))  ; CUP row 99 → clamped to scroll-bottom (row 5)
+      (feed s (esc "[99;1H"))
       (expect (= 5 (screen-cursor-y s)))))
 
   (it "decom-reset-restores-absolute-cup"
     (with-screen (s 20 10)
       (feed s (esc "[3;6r"))
       (feed s (esc "[?6h"))
-      (feed s (esc "[?6l"))    ; DECOM off → cursor homes to (0,0)
+      (feed s (esc "[?6l"))
       (expect (= 0 (screen-cursor-y s)))
-      (feed s (esc "[2;3H"))   ; CUP row 2 col 3 → absolute: row 1, col 2
+      (feed s (esc "[2;3H"))
       (expect (= 1 (screen-cursor-y s))))))
 
 (describe "terminal-suite/cup-row-direct"
@@ -67,23 +67,23 @@
 
   (it "cup-row-decom-adds-scroll-top-offset"
     (with-screen (s 20 10)
-      (feed s (esc "[3;8r"))     ; DECSTBM → top=2, bottom=7 (0-based)
-      (feed s (esc "[?6h"))      ; DECOM on
+      (feed s (esc "[3;8r"))
+      (feed s (esc "[?6h"))
       (expect (= 2 (nerimux/terminal/csi::%cup-row s 1)))
       (expect (= 3 (nerimux/terminal/csi::%cup-row s 2)))))
 
   (it "cup-row-decom-clamps-to-scroll-bottom"
     (with-screen (s 20 10)
-      (feed s (esc "[3;6r"))     ; DECSTBM → top=2, bottom=5 (0-based)
-      (feed s (esc "[?6h"))      ; DECOM on
+      (feed s (esc "[3;6r"))
+      (feed s (esc "[?6h"))
       (expect (= 5 (nerimux/terminal/csi::%cup-row s 99))))))
 
 (describe "terminal-suite/enqueue-helpers"
 
   (it "enqueue-static-reply-signatures-table"
     (dolist (row (list (list #'nerimux/terminal/csi::enqueue-dsr-reply "[0n"   "dsr → [0n")
-                       (list #'nerimux/terminal/csi::enqueue-da1-reply "?1;2c" "da1 → ?1;2c")
-                       (list #'nerimux/terminal/csi::enqueue-da2-reply ">1;"   "da2 → >1;")))
+                       (list #'nerimux/terminal/csi::enqueue-da1-reply "?1;2c" "da1 reply")
+                       (list #'nerimux/terminal/csi::enqueue-da2-reply ">1;"   "da2 reply")))
       (destructuring-bind (fn expected-sub desc) row
         (declare (ignore desc))
         (with-screen (s 20 5)
@@ -93,7 +93,7 @@
 
   (it "enqueue-cpr-reply-reflects-cursor"
     (with-screen (s 20 10)
-      (feed s (esc "[3;5H"))     ; cursor → row 2, col 4 (0-based)
+      (feed s (esc "[3;5H"))
       (nerimux/terminal/csi::enqueue-cpr-reply s)
       (expect (some (lambda (r) (search "[3;5R" r))
                 (nerimux/terminal/types:screen-response-queue s))))))
@@ -103,22 +103,22 @@
   (it "xtpushtitle-saves-current-title"
     (with-screen (s 20 5)
       (setf (nerimux/terminal/types:screen-title s) "initial")
-      (feed s (esc "[>t"))   ; push
+      (feed s (esc "[>t"))
       (expect (equal '("initial") (nerimux/terminal/types:screen-title-stack s)))))
 
   (it "xtpoptitle-restores-saved-title"
     (with-screen (s 20 5)
       (setf (nerimux/terminal/types:screen-title s) "original")
-      (feed s (esc "[>t"))          ; push "original"
+      (feed s (esc "[>t"))
       (setf (nerimux/terminal/types:screen-title s) "changed")
-      (feed s (esc "[<t"))          ; pop → restore "original"
+      (feed s (esc "[<t"))
       (expect (string= "original" (nerimux/terminal/types:screen-title s)))
       (expect (null (nerimux/terminal/types:screen-title-stack s)))))
 
   (it "xtpoptitle-on-empty-stack-is-noop"
     (with-screen (s 20 5)
       (setf (nerimux/terminal/types:screen-title s) "kept")
-      (feed s (esc "[<t"))          ; pop on empty stack — no-op
+      (feed s (esc "[<t"))
       (expect (string= "kept" (nerimux/terminal/types:screen-title s)))))
 
   (it "xtpushtitle-stack-bounded-at-8"

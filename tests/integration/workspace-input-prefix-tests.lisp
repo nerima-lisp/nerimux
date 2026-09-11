@@ -14,7 +14,7 @@
              (progn
                (setf (fdefinition 'nerimux/pane:pane-feed)
                      (lambda (p bytes) (push (list p bytes) fed) (funcall orig p bytes)))
-               (dolist (byte '(108 104 107 106)) ; l h k j
+               (dolist (byte '(108 104 107 106))
                  (nerimux::%handle-multi-key-message s conn (vector byte))))
           (setf (fdefinition 'nerimux/pane:pane-feed) orig))
         (expect (= 4 (length fed)))
@@ -33,9 +33,9 @@
              (progn
                (setf (fdefinition 'nerimux/pane:pane-feed)
                      (lambda (p bytes) (push (list p bytes) fed) (funcall orig p bytes)))
-               (nerimux::%handle-multi-key-message s conn #(27)) ; ESC
-               (nerimux::%handle-multi-key-message s conn #(91)) ; [
-               (nerimux::%handle-multi-key-message s conn #(65))) ; A
+               (nerimux::%handle-multi-key-message s conn #(27))
+               (nerimux::%handle-multi-key-message s conn #(91))
+               (nerimux::%handle-multi-key-message s conn #(65)))
           (setf (fdefinition 'nerimux/pane:pane-feed) orig))
         (expect (equalp (list (list left #(65)) (list left #(91)) (list left #(27)))
                         fed))
@@ -45,11 +45,11 @@
   (it "r4-2-esc-is-forwarded-to-the-pane-in-pane-view-and-view-stays-pane"
     (with-minimal-session (pane win sess)
       (declare (ignorable win))
-      (setf (nerimux/pane:pane-fd pane) 9999) ; "live" without a real PTY
+      (setf (nerimux/pane:pane-fd pane) 9999)
       (let* ((conn (%make-test-conn))
              (writes nil)
              (orig (fdefinition 'nerimux::pty-write)))
-        (nerimux::%set-client-focus conn pane) ; also sets VIEW :pane
+        (nerimux::%set-client-focus conn pane)
         (unwind-protect
              (progn
                (setf (fdefinition 'nerimux::pty-write)
@@ -66,28 +66,28 @@
       (let* ((conn (%make-test-conn))
              (screen (nerimux/pane:pane-screen pane)))
         (nerimux::%set-client-focus conn pane)
-        (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q
-        (nerimux::%handle-multi-key-message sess conn #(91)) ; [ : enter scrollback
+        (nerimux::%handle-multi-key-message sess conn #(17))
+        (nerimux::%handle-multi-key-message sess conn #(91))
         (expect (eq :scrollback (nerimux::client-conn-modal conn)))
         (expect (nerimux/terminal:screen-copy-mode-p screen))
-        (nerimux::%handle-multi-key-message sess conn #(27)) ; ESC: no-op
+        (nerimux::%handle-multi-key-message sess conn #(27))
         (expect (eq :scrollback (nerimux::client-conn-modal conn)))
         (expect (nerimux/terminal:screen-copy-mode-p screen))
-        (nerimux::%handle-multi-key-message sess conn #(113)) ; q: exits
+        (nerimux::%handle-multi-key-message sess conn #(113))
         (expect (null (nerimux::client-conn-modal conn)))
         (expect (nerimux/terminal:screen-copy-mode-p screen) :to-be-falsy))))
 
   (it "r4-3-esc-in-command-modal-swallows-exactly-the-next-two-bytes"
     (with-fake-session (s)
       (let ((conn (%make-test-conn)))
-        (nerimux::%handle-multi-key-message s conn #(58)) ; :
+        (nerimux::%handle-multi-key-message s conn #(58))
         (expect (eq :command (nerimux::client-conn-modal conn)))
-        (nerimux::%handle-multi-key-message s conn #(27)) ; ESC: cancels + arms swallow(2)
+        (nerimux::%handle-multi-key-message s conn #(27))
         (expect (null (nerimux::client-conn-modal conn)))
-        (nerimux::%handle-multi-key-message s conn #(49)) ; "1" -- swallowed
-        (nerimux::%handle-multi-key-message s conn #(51)) ; "3" -- swallowed
-        (expect (= 2 (nerimux::client-conn-visibility-level conn))) ; default, unchanged
-        (nerimux::%handle-multi-key-message s conn #(52)) ; "4" -- live again
+        (nerimux::%handle-multi-key-message s conn #(49))
+        (nerimux::%handle-multi-key-message s conn #(51))
+        (expect (= 2 (nerimux::client-conn-visibility-level conn)))
+        (nerimux::%handle-multi-key-message s conn #(52))
         (expect (= 4 (nerimux::client-conn-visibility-level conn))))))
 
   (it "r4-3-esc-in-picker-modal-swallows-exactly-the-next-two-bytes"
@@ -109,7 +109,7 @@
         (setf (nerimux::client-conn-modal conn) :picker
               (nerimux::client-conn-picker-items conn)
               (nerimux/picker:build-global-picker-items (list organization)))
-        (nerimux::%handle-multi-key-message s conn #(27)) ; ESC: closes + arms swallow(2)
+        (nerimux::%handle-multi-key-message s conn #(27))
         (expect (null (nerimux::client-conn-modal conn)))
         (expect (string= "" (nerimux::client-conn-picker-query conn)))
         (nerimux::%handle-multi-key-message s conn #(91))
@@ -127,9 +127,9 @@
              (progn
                (setf (fdefinition 'nerimux/pane:pane-feed)
                      (lambda (p bytes) (push (list p bytes) fed) (funcall orig p bytes)))
-               (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q
+               (nerimux::%handle-multi-key-message sess conn #(17))
                (expect (nerimux::client-conn-ui-prefix-p conn))
-               (nerimux::%handle-multi-key-message sess conn #(101)) ; e: unbound
+               (nerimux::%handle-multi-key-message sess conn #(101))
                (expect (null (nerimux::client-conn-ui-prefix-p conn))
                        )
                (expect (null fed) ))
@@ -138,7 +138,7 @@
   (it "r4-4-prefix-F-and-C-f-are-unbound-now-not-forwarded-to-the-pane"
     (with-minimal-session (pane win sess)
       (declare (ignorable win))
-      (dolist (byte (list (char-code #\F) 6)) ; F, C-f
+      (dolist (byte (list (char-code #\F) 6))
         (let* ((conn (%make-test-conn))
                (fed nil)
                (orig (fdefinition 'nerimux/pane:pane-feed)))
@@ -147,7 +147,7 @@
                (progn
                  (setf (fdefinition 'nerimux/pane:pane-feed)
                        (lambda (p bytes) (push (list p bytes) fed) (funcall orig p bytes)))
-                 (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q
+                 (nerimux::%handle-multi-key-message sess conn #(17))
                  (expect (nerimux::client-conn-ui-prefix-p conn))
                  (nerimux::%handle-multi-key-message sess conn (vector byte))
                  (expect (null (nerimux::client-conn-ui-prefix-p conn))))
@@ -159,9 +159,9 @@
       (declare (ignorable pane win))
       (let ((conn (%make-test-conn)))
         (setf (nerimux::client-conn-modal conn) :scrollback)
-        (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q
+        (nerimux::%handle-multi-key-message sess conn #(17))
         (expect (nerimux::client-conn-ui-prefix-p conn))
-        (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q again
+        (nerimux::%handle-multi-key-message sess conn #(17))
         (expect (null (nerimux::client-conn-ui-prefix-p conn)))
         (expect (null (nerimux::client-conn-modal conn))))))
 
@@ -198,8 +198,8 @@
     (with-minimal-session (pane win sess)
       (declare (ignorable pane win))
       (let ((conn (%make-test-conn)))
-        (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q
-        (nerimux::%handle-multi-key-message sess conn #(119)) ; w
+        (nerimux::%handle-multi-key-message sess conn #(17))
+        (nerimux::%handle-multi-key-message sess conn #(119))
         (expect (eq :repolist (nerimux::client-conn-view conn))))))
 
   (it "r4-4-prefix-open-bracket-enters-scrollback-on-the-focused-pane"
@@ -207,8 +207,8 @@
       (declare (ignorable win))
       (let ((conn (%make-test-conn)))
         (nerimux::%set-client-focus conn pane)
-        (nerimux::%handle-multi-key-message sess conn #(17)) ; C-q
-        (nerimux::%handle-multi-key-message sess conn #(91)) ; [
+        (nerimux::%handle-multi-key-message sess conn #(17))
+        (nerimux::%handle-multi-key-message sess conn #(91))
         (expect (eq :scrollback (nerimux::client-conn-modal conn)))
         (expect (nerimux/terminal:screen-copy-mode-p
                  (nerimux/pane:pane-screen pane))))))
@@ -216,8 +216,8 @@
   (it "r4-4-prefix-open-bracket-with-no-focused-pane-reports-and-stays-unmodal"
     (with-fake-session (s :nwindows 0)
       (let ((conn (%make-test-conn)))
-        (nerimux::%handle-multi-key-message s conn #(17)) ; C-q
-        (nerimux::%handle-multi-key-message s conn #(91)) ; [
+        (nerimux::%handle-multi-key-message s conn #(17))
+        (nerimux::%handle-multi-key-message s conn #(91))
         (expect (null (nerimux::client-conn-modal conn))))))
 
   (it "r4-4-prefix-dispatch-drops-only-the-explicit-detach-key"
@@ -266,18 +266,18 @@
           (window-select-pane window left)
           (session-select-window session window)
           (nerimux::%set-client-focus conn left)
-          (nerimux::%handle-multi-key-message session conn #(17)) ; C-q
-          (nerimux::%handle-multi-key-message session conn #(62)) ; >
+          (nerimux::%handle-multi-key-message session conn #(17))
+          (nerimux::%handle-multi-key-message session conn #(62))
           (expect (= 45 (nerimux/pane:pane-width left)))
           (expect (= 35 (nerimux/pane:pane-width right)))
-          (nerimux::%handle-multi-key-message session conn #(17)) ; C-q
-          (nerimux::%handle-multi-key-message session conn #(60)) ; <
+          (nerimux::%handle-multi-key-message session conn #(17))
+          (nerimux::%handle-multi-key-message session conn #(60))
           (expect (= 40 (nerimux/pane:pane-width left)))
           (expect (= 40 (nerimux/pane:pane-width right)))
           (window-select-pane window right)
           (nerimux::%set-client-focus conn right)
-          (nerimux::%handle-multi-key-message session conn #(17)) ; C-q
-          (nerimux::%handle-multi-key-message session conn #(62)) ; >
+          (nerimux::%handle-multi-key-message session conn #(17))
+          (nerimux::%handle-multi-key-message session conn #(62))
           (expect (= 35 (nerimux/pane:pane-width left)))
           (expect (= 45 (nerimux/pane:pane-width right)))))))
 
@@ -296,8 +296,8 @@
               (lambda (connection text)
                 (declare (ignore connection))
                 (setf message text))))
-          (nerimux::%handle-multi-key-message session conn #(17)) ; C-q
-          (nerimux::%handle-multi-key-message session conn #(62))) ; >
+          (nerimux::%handle-multi-key-message session conn #(17))
+          (nerimux::%handle-multi-key-message session conn #(62)))
         (expect (equal windows-before (nerimux/session:session-windows session)))
         (expect (equal panes-before (nerimux/window:window-panes window)))
         (expect (string= "pane cannot be resized" message)))))
@@ -305,8 +305,8 @@
   (it "prefix-resize-bindings-appear-through-the-client-help-render"
     (with-fake-session (s)
       (let ((conn (%make-test-conn :rows 80 :cols 110)))
-        (nerimux::%handle-multi-key-message s conn #(63)) ; ?
-        (nerimux::%handle-multi-key-message s conn #(107)) ; k
+        (nerimux::%handle-multi-key-message s conn #(63))
+        (nerimux::%handle-multi-key-message s conn #(107))
         (multiple-value-bind (type payload)
             (decode-frame (nerimux::%render-client-frame s conn))
           (expect (= nerimux::+msg-frame+ type))

@@ -25,7 +25,7 @@
     handling; the server and client halves of detach-attach, with the single-session
     registry and the per-pane reader threads; the event loop that turns keystrokes
     into commands; and the command dispatcher that resolves -t targets and argv into
-    calls on nerimux/commands.  Nothing depends on this package — it is the top of
+    calls on nerimux/commands.  Nothing depends on this package, it is the top of
     the graph, which is why it may see everything.")
   (:export
    #:main

@@ -1,8 +1,3 @@
-;;; This form comes FIRST, before any other form. ASDF binds *package* to
-;;; ASDF-USER only for a file it loads itself; read any other way — a REPL
-;;; `load`, an editor evaluating the buffer — the file is read in whatever
-;;; package happens to be current, and an unqualified `defsystem` then fails to
-;;; read at all. See PACKAGE_STANDARD.md "asd の書き方".
 (in-package #:asdf-user)
 
 (defsystem "nerimux-renderer"
@@ -18,12 +13,7 @@
                :cl-tui-kit/core :cl-tui-kit/ansi :cl-tui-kit/layout :cl-tui-kit/widgets
                :cl-tty-kit :cl-regex-kit :cl-concurrent-kit)
   :pathname "src"
-  ;; Order carried over verbatim from nerimux.asd's presentation/renderer
-  ;; module: the ANSI primitives and theme palette first, then the workspace
-  ;; helpers (which depend on no pane compositor -- their position states that
-  ;; boundary), then the pane compositor, then the tui-kit surface helpers the
-  ;; three magit views need, with the transient before the status view because
-  ;; the status frame draws the transient panel into its own bottom region.
+  ;; Load order is significant: definitions precede the renderers that compose them.
   :serial t
   :components (
                (:file "package")
@@ -78,7 +68,6 @@
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  ;; All three edges mirror nerimux-renderer's own :depends-on.
   :depends-on ("nerimux-renderer" "nerimux-model/test" "nerimux-terminal/test"
                "nerimux-picker/test" (:version "cl-weave" "1.3.0"))
   :pathname "tests"
@@ -110,8 +99,6 @@
                (:file "renderer-tui-kit-help-tests")
                (:file "renderer-transient-tests")
                (:file "renderer-workspace-status-tests"))
-  ;; See packages/text/nerimux-text.asd for why this form is repeated per unit
-  ;; rather than shared, and why *PRINT-CIRCLE* is load-bearing.
   :perform (test-op (op c)
              (declare (ignore op c))
              (let ((*print-circle* t)

@@ -10,4 +10,4 @@
 
 (defconstant +status-line-rows+
   1
-  "Rows the status bar occupies. Fixed at 1 (§1.4 — no `status' option).")
+  "Rows the status bar occupies. Fixed at 1 (§1.4, no `status' option).")

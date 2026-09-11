@@ -82,8 +82,8 @@
     (with-screen (s 5 3)
       (feed s "A")
       (nerimux/terminal/actions:cursor-lf s)
-      (nerimux/terminal/actions:cursor-lf s) ; now at row 2 (bottom)
-      (nerimux/terminal/actions:cursor-lf s) ; should scroll, not go to row 3
+      (nerimux/terminal/actions:cursor-lf s)
+      (nerimux/terminal/actions:cursor-lf s)
       (expect (<= (screen-cursor-y s) 2))))
 
   (it "cursor-ht-advances-to-next-tab-stop"
@@ -126,35 +126,35 @@
 
   (it "hts-set-tab-stop-makes-cursor-ht-land-on-custom-stop"
     (with-cursor-at (s 40 5 3)
-      (nerimux/terminal/actions:set-tab-stop s)        ; HTS at col 3
+      (nerimux/terminal/actions:set-tab-stop s)
       (setf (nerimux/terminal/types:screen-cursor-x s) 0)
-      (nerimux/terminal/actions:cursor-ht s)           ; HT from col 0
+      (nerimux/terminal/actions:cursor-ht s)
       (expect (= 3 (screen-cursor-x s)))))
 
   (it "tbc-3-clears-all-stops-so-ht-goes-to-last-column"
     (with-cursor-at (s 40 5 0)
-      (nerimux/terminal/actions:clear-tab-stops s 3)   ; TBC 3 — clear all
+      (nerimux/terminal/actions:clear-tab-stops s 3)
       (nerimux/terminal/actions:cursor-ht s)
       (expect (= 39 (screen-cursor-x s)))))
 
   (it "tbc-0-clears-stop-at-cursor-column"
     (with-cursor-at (s 40 5 8)
-      (nerimux/terminal/actions:clear-tab-stops s 0)   ; TBC 0 at col 8
+      (nerimux/terminal/actions:clear-tab-stops s 0)
       (setf (nerimux/terminal/types:screen-cursor-x s) 0)
       (nerimux/terminal/actions:cursor-ht s)
       (expect (= 16 (screen-cursor-x s)))))
 
   (it "esc-h-hts-sets-tab-stop-via-parser"
     (with-screen (s 40 5)
-      (feed s (esc "[1;4H"))   ; CUP → col 4 (1-based) = col 3 (0-based)
-      (feed s (esc "H"))       ; ESC H → HTS at col 3
-      (feed s (esc "[1;1H"))   ; CUP → col 0
-      (feed s (string (code-char 9)))  ; HT → custom stop 3
+      (feed s (esc "[1;4H"))
+      (feed s (esc "H"))
+      (feed s (esc "[1;1H"))
+      (feed s (string (code-char 9)))
       (expect (= 3 (screen-cursor-x s)))))
 
   (it "csi-3-g-tbc-clears-all-stops-via-parser"
     (with-screen (s 40 5)
-      (feed s (esc "[3g"))     ; CSI 3 g → TBC clear all
-      (feed s (esc "[1;1H"))   ; cursor to col 0
-      (feed s (string (code-char 9)))  ; HT → last column
+      (feed s (esc "[3g"))
+      (feed s (esc "[1;1H"))
+      (feed s (string (code-char 9)))
       (expect (= 39 (screen-cursor-x s))))))

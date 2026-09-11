@@ -55,22 +55,22 @@
 
   (it "sgr-default-fg-39"
     (with-screen (s 10 2)
-      (feed s (esc "[31m"))    ; fg → 1 (red)
-      (feed s (esc "[39mX"))   ; fg → default sentinel
+      (feed s (esc "[31m"))
+      (feed s (esc "[39mX"))
       (check-sgr-state s :fg nerimux/terminal/types:+default-color+ :bg nerimux/terminal/types:+default-color+ :attrs 0)
       (expect (= nerimux/terminal/types:+default-color+ (fg-at s 0 0)))))
 
   (it "sgr-default-bg-49"
     (with-screen (s 10 2)
-      (feed s (esc "[42m"))    ; bg → 2 (green)
-      (feed s (esc "[49mX"))   ; bg → default sentinel
+      (feed s (esc "[42m"))
+      (feed s (esc "[49mX"))
       (check-sgr-state s :fg nerimux/terminal/types:+default-color+ :bg nerimux/terminal/types:+default-color+ :attrs 0)
       (expect (= nerimux/terminal/types:+default-color+ (bg-at s 0 0)))))
 
   (it "sgr-bold-dim-off-22"
     (with-screen (s 10 2)
-      (feed s (esc "[1;2m"))   ; bold + dim on
-      (feed s (esc "[22mX"))   ; both off
+      (feed s (esc "[1;2m"))
+      (feed s (esc "[22mX"))
       (expect (zerop (logand (attrs-at s 0 0) #b011)))))
 
   (it "sgr-compound"
@@ -93,8 +93,8 @@
 
   (it "sgr-italic-off-23"
     (with-screen (s 10 2)
-      (feed s (esc "[3;1mX"))  ; italic + bold on
-      (feed s (esc "[23mY"))   ; italic off
+      (feed s (esc "[3;1mX"))
+      (feed s (esc "[23mY"))
       (expect (logbitp 5 (attrs-at s 1 0)) :to-be-falsy)
       (expect (logbitp 0 (attrs-at s 1 0)))))
 
@@ -174,8 +174,8 @@
     (with-screen (s 10 2)
       (nerimux/terminal/sgr:apply-sgr s '(4))
       (let ((plain-underline (nerimux/terminal/types:screen-cur-attrs s)))
-        (nerimux/terminal/sgr:apply-sgr s '(0))           ; reset pen
-        (nerimux/terminal/sgr:apply-sgr s '((4 3)))       ; undercurl colon group
+        (nerimux/terminal/sgr:apply-sgr s '(0))
+        (nerimux/terminal/sgr:apply-sgr s '((4 3)))
         (expect (= plain-underline (nerimux/terminal/types:screen-cur-attrs s))))))
 
 
@@ -245,12 +245,12 @@
 
   (it "sgr-reset-clears-new-attrs"
     (with-screen (s 10 2)
-      (feed s (esc "[3;8;9mX"))    ; italic + conceal + strikethrough on
-      (feed s (esc "[0mY"))        ; SGR reset
+      (feed s (esc "[3;8;9mX"))
+      (feed s (esc "[0mY"))
       (check-cell s 1 0 :fg nerimux/terminal/types:+default-color+ :bg nerimux/terminal/types:+default-color+ :attrs 0)))
 
   (it "sgr-22-does-not-clear-italic"
     (with-screen (s 10 2)
-      (feed s (esc "[1;2;3mX"))    ; bold + dim + italic on
-      (feed s (esc "[22mY"))       ; bold + dim off
+      (feed s (esc "[1;2;3mX"))
+      (feed s (esc "[22mY"))
       (expect (logbitp 5 (attrs-at s 1 0))))))

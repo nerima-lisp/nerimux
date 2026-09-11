@@ -144,11 +144,9 @@
       (t ""))))
 
 (defun %worktree-relative-time-text (universal-time)
-  "ASCII relative-time label for UNIVERSAL-TIME (a GET-UNIVERSAL-TIME
-   integer, or NIL for \"never\"): \"now\" under a minute, then Nm/Nh/Nd.
-   Plain ASCII, never an arrow glyph -- the UI theme convention bans
-   ambiguous-width characters, which is exactly the class the obvious
-   compact alternatives (arrows, clock glyphs) fall into."
+  "Return an ASCII relative-time label for UNIVERSAL-TIME.
+   Use \"now\" under a minute, then Nm/Nh/Nd; arrow glyphs are disallowed
+   because the UI reserves ambiguous-width characters."
   (when universal-time
     (let ((delta (max 0 (- (get-universal-time) universal-time))))
       (cond

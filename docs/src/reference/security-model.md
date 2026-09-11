@@ -25,7 +25,7 @@ descriptors. This is a resource bound, not an authorization mechanism.
 Because that is the whole boundary, it is **verified rather than assumed**.
 Before binding, the server `lstat`s the directory and refuses to start unless
 it is a real directory (not a symlink), owned by the current uid, and mode
-exactly `0700`. Failure is fatal and names the property that failed — the
+exactly `0700`. Failure is fatal and names the property that failed, the
 server does not warn and continue, because continuing would mean serving from
 a directory that does not confine anything:
 
@@ -44,7 +44,7 @@ One race is narrowed rather than closed: the check and the later `bind` both
 resolve the path by name, so a sufficiently fast local attacker could swap the
 directory in between. Closing that needs a pinned directory descriptor and
 `fchdir`, which mutates process-wide working directory in a server that spawns
-PTY children from several threads — see the note in `%socket-directory`.
+PTY children from several threads, see the note in `%socket-directory`.
 
 ## No access control beyond the socket boundary
 
@@ -60,7 +60,7 @@ Programs running inside panes emit bytes that the VT100/ANSI parser consumes.
 That input is untrusted and the parser is exercised heavily by the test suite.
 
 Memory-unsafety bugs are not expected, because SBCL is memory-safe. What
-remains in scope, and is worth reporting, is state confusion and spoofing — for
+remains in scope, and is worth reporting, is state confusion and spoofing, for
 example a crafted OSC or DCS sequence that desynchronizes the parser, forges a
 prompt mark, or leaks clipboard contents through OSC 52.
 

@@ -33,10 +33,7 @@
 
 (defmacro with-center-test-panes ((&rest pane-specs) &body body)
   "Bind panes according to PANE-SPECS and run BODY.
-   Each PANE-SPEC is (VAR id x y width height).
-   Eliminates the repeated (make-pane :id N :fd -1 :pid -1 :x X :y Y
-   :width W :height H :screen (make-screen W H)) boilerplate in
-   %closest-to-center tests."
+   Each PANE-SPEC is (VAR id x y width height)."
   `(let* ,(mapcar
            (lambda (spec)
              (destructuring-bind (var id x y width height) spec
@@ -61,9 +58,7 @@
      ,@body))
 
 (defmacro with-two-1x1-panes ((p0-var p1-var) &body body)
-  "Bind P0-VAR and P1-VAR to two 1x1 no-PTY panes (ids 1 and 2) for BODY.
-   Used by layout-assign and %assign-split tests to avoid repeating the
-   same (make-pane :id N :fd -1 :pid -1 :width 1 :height 1 ...) boilerplate."
+  "Bind P0-VAR and P1-VAR to two 1x1 no-PTY panes (ids 1 and 2) for BODY."
   `(let* ((,p0-var
            (make-pane :id
                       1

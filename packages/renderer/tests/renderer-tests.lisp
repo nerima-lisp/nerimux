@@ -168,7 +168,7 @@
                            nerimux/renderer::+sgr-active-border+)))
       (feed (pane-screen (first  panes)) "AAA")
       (feed (pane-screen (second panes)) "BBB")
-      (let ((out (render-session-to-string sess 3 11)))   ; full width = 2*5+1
+      (let ((out (render-session-to-string sess 3 11)))
         (expect (find (code-char #x2502) out))
         (expect (search accent out))
         (expect (find #\A out))
@@ -180,7 +180,7 @@
            (panes (window-panes win)))
       (feed (pane-screen (first  panes)) "AAA")
       (feed (pane-screen (second panes)) "BBB")
-      (let ((out (render-session-to-string sess 7 5)))    ; full height = 2*3+1
+      (let ((out (render-session-to-string sess 7 5)))
         (expect (find (code-char #x2500) out))
         (expect (find #\A out))
         (expect (find #\B out)))))

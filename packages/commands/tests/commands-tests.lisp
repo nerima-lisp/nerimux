@@ -38,16 +38,16 @@
 
   (it "copy-mode-scroll-forward-clamps-at-zero"
     (let ((s (%screen-with-scrollback 3)))
-      (nerimux/commands::copy-mode-scroll s 100)   ; first jump to the oldest line
+      (nerimux/commands::copy-mode-scroll s 100)
       (expect (= 3 (screen-copy-offset s)))
-      (nerimux/commands::copy-mode-scroll s -100)  ; then race back to live
+      (nerimux/commands::copy-mode-scroll s -100)
       (expect (= 0 (screen-copy-offset s)))))
 
   (it "copy-mode-selection-honours-scroll-offset"
     (let ((s (make-screen 8 3)))
       (feed-lines s "AAA" "BBB" "CCC" "DDD" "EEE")
       (nerimux/commands::copy-mode-enter s)
-      (nerimux/commands::copy-mode-scroll s 1000)   ; scroll fully back
+      (nerimux/commands::copy-mode-scroll s 1000)
       (expect (plusp (screen-copy-offset s)))
       (let ((w      (screen-width s))
             (offset (screen-copy-offset s)))
@@ -67,16 +67,16 @@
   (it "copy-mode-e-auto-exits-on-scroll-to-bottom"
     (let ((s (%screen-with-scrollback 3)))
       (nerimux/commands::copy-mode-enter s :exit-on-bottom t)
-      (nerimux/commands::copy-mode-scroll s 2)        ; scroll back 2 lines (offset 2)
+      (nerimux/commands::copy-mode-scroll s 2)
       (expect (= 2 (screen-copy-offset s)))
       (expect (screen-copy-mode-p s) :to-be-truthy)
-      (nerimux/commands::copy-mode-scroll s -100)     ; race back to the live bottom
+      (nerimux/commands::copy-mode-scroll s -100)
       (expect (screen-copy-mode-p s) :to-be-falsy)))
 
   (it "copy-mode-e-no-exit-while-scrolling-up"
     (let ((s (%screen-with-scrollback 3)))
       (nerimux/commands::copy-mode-enter s :exit-on-bottom t)
-      (nerimux/commands::copy-mode-scroll s 100)      ; scroll up to oldest
+      (nerimux/commands::copy-mode-scroll s 100)
       (expect (screen-copy-mode-p s) :to-be-truthy)))
 
   (it "copy-mode-scroll-noop-when-not-in-copy-mode"

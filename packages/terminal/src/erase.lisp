@@ -67,8 +67,8 @@
             specs)))))
 
 (define-erase-line-rules
-  (0  cx     (1- w))   ; from cursor to end
-  (1  0       cx)      ; from start to cursor
+  (0  cx     (1- w))
+  (1  0       cx)
   (2  0      (1- w)))
 
 (defun %rect-bounds (screen top1 left1 bottom1 right1)
@@ -96,7 +96,7 @@
         (values t0 l0 b0 r0))))
 
 (defun decera (screen top1 left1 bottom1 right1)
-  "DECERA — Erase Rectangular Area (CSI Pt;Pl;Pb;Pr $ z).
+  "DECERA, Erase Rectangular Area (CSI Pt;Pl;Pb;Pr $ z).
    Parameters are 1-based and inclusive.  Cells are replaced with BCE blanks
    (background-colour-erase), matching DECERA semantics in xterm."
   (multiple-value-bind (t0 l0 b0 r0) 
@@ -108,7 +108,7 @@
       (setf (screen-dirty-p screen) t))))
 
 (defun decfra (screen char-code top1 left1 bottom1 right1)
-  "DECFRA — Fill Rectangular Area (CSI Pc;Pt;Pl;Pb;Pr $ x).
+  "DECFRA, Fill Rectangular Area (CSI Pc;Pt;Pl;Pb;Pr $ x).
    CHAR-CODE is the character to fill with (e.g. 65 for 'A').
    Uses the current SGR pen for fg/bg/attrs so themed apps render correctly."
   (multiple-value-bind (t0 l0 b0 r0) 
@@ -166,7 +166,7 @@
                       src-right1
                       tgt-top1
                       tgt-left1)
-  "DECCRA — Copy Rectangular Area (CSI Pt;Pl;Pb;Pr;Pp;Ptp;Plp;Ppp $ v).
+  "DECCRA, Copy Rectangular Area (CSI Pt;Pl;Pb;Pr;Pp;Ptp;Plp;Ppp $ v).
    Page parameters are ignored (only page 0 exists).
    Source and target rectangles are clamped independently; overlapping regions
    are handled correctly by buffering source cells before writing."

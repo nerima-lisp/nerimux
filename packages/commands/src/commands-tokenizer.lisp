@@ -4,19 +4,19 @@
   "Consume a single-quoted literal span from STRING beginning at START.
    Writes characters into ACCUMULATOR stream up to the closing quote.
    Returns the index after the closing quote (or LENGTH when unterminated)."
-  (let ((index (1+ start)))         ; skip the opening quote
+  (let ((index (1+ start)))
     (loop while (and (< index length)
                      (char/= (char string index) #\'))
           do (write-char (char string index) accumulator)
              (incf index))
-    (if (< index length) (1+ index) index))) ; skip closing quote when present
+    (if (< index length) (1+ index) index)))
 
 (defun %consume-double-quoted (string start length accumulator)
   "Consume a double-quoted span from STRING beginning at START.
    Inside double quotes a backslash followed by any character is an escape:
    only the escaped character is written.  Other characters are written verbatim.
    Returns the index after the closing quote (or LENGTH when unterminated)."
-  (let ((index (1+ start)))         ; skip the opening quote
+  (let ((index (1+ start)))
     (loop while (and (< index length)
                      (char/= (char string index) #\"))
           do (if (and (char= (char string index) #\\) (< (1+ index) length))
@@ -24,7 +24,7 @@
                         (incf index 2))
                  (progn (write-char (char string index) accumulator)
                         (incf index))))
-    (if (< index length) (1+ index) index))) ; skip closing quote when present
+    (if (< index length) (1+ index) index)))
 
 (defun %argument-token-matcher (source index)
   "cl-parser-kit token-rule matcher for one shell-style argument: a maximal run

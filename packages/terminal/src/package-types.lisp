@@ -3,9 +3,9 @@
   (:import-from #:cl-concurrent-kit #:make-lock)
   (:documentation
    "DOMAIN layer, the DATA half of the terminal emulator.  Defines the two structs
-    the whole emulator is written against — CELL (character, colours, attribute
+    the whole emulator is written against, CELL (character, colours, attribute
     bits, width) and SCREEN (the grid, the cursor, the SGR pen, scrollback, and the
-    dozens of DEC/ANSI mode flags) — together with their attribute-bit constants and
+    dozens of DEC/ANSI mode flags), together with their attribute-bit constants and
     pure grid access.  Owns no behaviour beyond allocation and slot access; every
     mutation lives in nerimux/terminal/actions.")
   (:export

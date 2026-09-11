@@ -16,9 +16,9 @@
 (defmacro define-decrqm-mode-table (&rest specs)
   "Generate %DECRQM-MODE-STATE from a declarative (mode-number accessor-fn) table.
    SPECS forms:
-     (mode-num accessor-fn)         — call (accessor-fn screen) and encode as flag
-     (mode-num :alt-screen)         — flag code for (and (screen-alt-cells screen) t)
-     (mode-num :fixed code)         — always return CODE (for modes not tracked dynamically)"
+     (mode-num accessor-fn)        means call (accessor-fn screen) and encode as flag
+     (mode-num :alt-screen)        means flag code for (and (screen-alt-cells screen) t)
+     (mode-num :fixed code)        means always return CODE (for modes not tracked dynamically)"
   `(defun %decrqm-mode-state (screen mode)
      "DECRQM reply value for DEC private MODE: 1 = set, 2 = reset, 0 = not recognised.
       Reports from the screen's tracked mode flags so an application querying support

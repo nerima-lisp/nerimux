@@ -2,7 +2,7 @@
 
 (defun %update-pane-geometry (pane x y width height)
   "Update PANE's position and dimension slots to X, Y, WIDTH, HEIGHT.
-   Pure data mutation — no I/O side effects."
+   Pure data mutation, no I/O side effects."
   (setf (pane-x pane) x
         (pane-y pane) y
         (pane-width pane) width

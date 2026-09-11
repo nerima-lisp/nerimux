@@ -25,10 +25,10 @@
   #b10000000)
 
 (defconstant +attr2-double-underline+
-  #b00000001) ; SGR 21
+  #b00000001)
 
 (defconstant +attr2-overline+
-  #b00000010) ; SGR 53
+  #b00000010)
 
 (defconstant +true-color-flag+
   #x1000000
@@ -38,8 +38,8 @@
 (defconstant +default-color+
   256
   "Sentinel colour value meaning \"the terminal default\" (SGR 39 fg / SGR 49 bg).
-   Placed at 256 — just above the 0-255 palette and without the
-   +true-color-flag+ bit — so it is distinct from palette index 7 (white)
+   Placed at 256, just above the 0-255 palette and without the
+   +true-color-flag+ bit, so it is distinct from palette index 7 (white)
    and 0 (black).  Cells carrying this value are the only ones
    window-style / window-active-style may recolour.")
 
@@ -72,22 +72,22 @@
   "One character position on the virtual screen.
 
    WIDTH encodes East-Asian double-width handling:
-     1 — normal single-column cell
-     2 — lead cell of a double-width character
-     0 — continuation placeholder occupied by the wide char to its left
+     1, normal single-column cell
+     2, lead cell of a double-width character
+     0, continuation placeholder occupied by the wide char to its left
 
    Color encoding (fg, bg, ul-color):
-     0-255            — palette index (0-7 standard, 8-15 bright, 16-255 extended)
-     >= +true-color-flag+ — true-colour RGB: bits 23-16 R, 15-8 G, 7-0 B"
+     0-255           means palette index (0-7 standard, 8-15 bright, 16-255 extended)
+     >= +true-color-flag+, true-colour RGB: bits 23-16 R, 15-8 G, 7-0 B"
   (char  #\Space :type character)
   (fg    +default-color+ :type (unsigned-byte 25))
   (bg    +default-color+ :type (unsigned-byte 25))
-  (attrs 0       :type (unsigned-byte 8))   ; bit-field: see +attr-* constants
+  (attrs 0       :type (unsigned-byte 8))
   (attrs2 0      :type (unsigned-byte 8))
   (ul-color 0   :type (unsigned-byte 25))
   (combining nil :type list)
   (hyperlink nil :type (or null string))
-  (width 1       :type (integer 0 2))) ; 1 normal, 2 wide lead, 0 continuation
+  (width 1       :type (integer 0 2)))
 
 (defun blank-cell ()
   "Return a fresh default (space, default fg/bg sentinel, no attrs, single-width) cell."
@@ -113,8 +113,8 @@
 
    SBCL's CHAR-CODE-LIMIT does not exclude this block: (CODE-CHAR #xD800) yields
    a real character object, so a bare (< cp CHAR-CODE-LIMIT) guard admits a lone
-   surrogate into a string.  Such a string cannot be UTF-8 encoded — SBCL's
-   encoder signals on it — so it must be rejected where it enters, not where it
+   surrogate into a string.  Such a string cannot be UTF-8 encoded, SBCL's
+   encoder signals on it, so it must be rejected where it enters, not where it
    is written out."
   (<= +surrogate-first+ cp +surrogate-last+))
 
@@ -146,11 +146,11 @@
    category handling keep column counts aligned with terminal rendering. Three
    representative cases are:
 
-     * U+0301 COMBINING ACUTE ACCENT (Mn) — table said 1, true width is 0.
-     * U+309A COMBINING KATAKANA-HIRAGANA SEMI-VOICED SOUND MARK — the table's
+     * U+0301 COMBINING ACUTE ACCENT (Mn), table said 1, true width is 0.
+     * U+309A COMBINING KATAKANA-HIRAGANA SEMI-VOICED SOUND MARK, the table's
        blanket #x3041-#x33FF \"Hiragana, Katakana\" range said 2 for a mark that
        occupies no columns at all, so one mark desynchronised a line by two.
-     * U+231A WATCH — East Asian Wide, but outside the table's emoji range
+     * U+231A WATCH, East Asian Wide, but outside the table's emoji range
        (#x1F300-#x1FAFF), so it was counted 1 and drawn 2.
 
    nshell already delegates the same way; keeping a second table here meant two

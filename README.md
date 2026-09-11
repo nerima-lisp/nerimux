@@ -6,11 +6,11 @@
 
 A workspace-oriented terminal multiplexer written entirely in Common Lisp,
 with a [magit](https://magit.vc/)-style keymap. The primary UI is a
-three-section repolist — Attention, Active, and Repositories — with a thin
-client attached to a headless runtime. The entry surface is workspace-only —
-`attach`, `server`, and `kill` are the only commands. The core regression
-suite runs hermetically through Nix; live PTY integration is an explicit
-host-side check.
+three-section repolist with three sections: Attention, Active, and
+Repositories, plus a thin client attached to a headless runtime. The entry
+surface is workspace-only: `attach`, `server`, and `kill` are the only commands.
+The core regression suite runs hermetically through Nix; live PTY integration
+is an explicit host-side check.
 
 Full documentation is published at <https://nerima-lisp.github.io/nerimux/>.
 The source for that site lives in [docs/src/](docs/src/).
@@ -35,14 +35,14 @@ unrecognized command word prints the usage summary and exits non-zero. If the
 current directory sits inside a worktree ghq already tracks (a subdirectory
 counts too), `attach` opens straight into that worktree's pane instead of the
 repolist. Use `C-q d` to detach and `C-p` to open the global picker. A
-selector containing a slash is resolved against the ghq catalog — the full
-specification, `host/organization/repository` — or against a local worktree
-path. `server` runs the headless runtime without attaching a client, and
+selector containing a slash is resolved either against the ghq catalog using
+the full specification, `host/organization/repository`, or against a local
+worktree path. `server` runs the headless runtime without attaching a client, and
 `kill` stops it.
 
 nerimux reads no configuration file and has no runtime-configurable options.
-Every value the workspace UI depends on — shell, `$TERM`, scrollback length,
-split ratios, pane limits, and the rest — is a compiled-in constant.
+Every value the workspace UI depends on, including shell, `$TERM`, scrollback
+length, split ratios, and pane limits, is a compiled-in constant.
 
 ## Install
 
@@ -63,11 +63,11 @@ so a build either reproduces exactly or fails loudly. From a checkout,
 
 ## Documentation
 
-- [Getting started](https://nerima-lisp.github.io/nerimux/getting-started/) —
+- [Getting started](https://nerima-lisp.github.io/nerimux/getting-started/),
   install, usage, default key bindings, running the suite
-- [Architecture](https://nerima-lisp.github.io/nerimux/reference/architecture/) —
+- [Architecture](https://nerima-lisp.github.io/nerimux/reference/architecture/),
   event flow, layering, source layout
-- [Security model](https://nerima-lisp.github.io/nerimux/reference/security-model/) —
+- [Security model](https://nerima-lisp.github.io/nerimux/reference/security-model/),
   the socket directory as the trust boundary
 
 ## Development
@@ -100,7 +100,7 @@ under a real PTY; run it with `nix run .#e2e` for the same `/dev/ptmx`
 reason.
 
 nerimux is the org's L4 application package and its testbed: it runs on the
-sibling libraries — [cl-cli](https://github.com/nerima-lisp/cl-cli),
+sibling libraries, [cl-cli](https://github.com/nerima-lisp/cl-cli),
 [cl-date-kit](https://github.com/nerima-lisp/cl-date-kit),
 [cl-parser-kit](https://github.com/nerima-lisp/cl-parser-kit),
 [cl-tty-kit](https://github.com/nerima-lisp/cl-tty-kit),

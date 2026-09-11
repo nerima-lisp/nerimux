@@ -52,7 +52,7 @@
 (defun %zoom-in-geometry (window pane)
   "Save the current tree and replace it with a single-leaf tree for PANE.
    Sets window-zoom-p to T and refreshes the panes list.
-   Does NOT call pane-reposition — the caller handles the PTY resize."
+   Does NOT call pane-reposition, the caller handles the PTY resize."
   (setf (window-zoom-tree window) (window-tree window)
         (window-tree window) (make-layout-leaf pane)
         (window-zoom-p window) t)

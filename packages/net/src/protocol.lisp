@@ -22,13 +22,13 @@ schema cannot silently generate a partial or non-byte-aligned codec."
                (let ((bytes (/ bits 8)))
                  `(progn
                     (defun ,encoder-name (n)
-                      ,(format nil "~A — ~D big-endian octets." docstring bytes)
+                      ,(format nil "~A, ~D big-endian octets." docstring bytes)
                       (vector
                        ,@(loop for shift from (- bits 8) downto 0 by 8
                                collect `(ldb (byte 8 ,shift) n))))
                     (defun ,decoder-name (buffer start)
                       ,(format nil
-                               "~A — big-endian ~D-bit value."
+                               "~A, big-endian ~D-bit value."
                                docstring
                                bits)
                       (logior
@@ -57,7 +57,7 @@ schema cannot silently generate a partial or non-byte-aligned codec."
 (defun encode-frame (type payload)
   "Encode one frame of TYPE carrying PAYLOAD into a fresh octet vector:
    [TYPE][LENGTH u32-be][PAYLOAD].  The vector is assembled declaratively
-   via CONCATENATE — no mutable setf/replace calls."
+   via CONCATENATE, no mutable setf/replace calls."
   (let* ((payload-length (length payload))
          (length-bytes (u32-octets payload-length))
          (payload-vector (to-octets payload)))
@@ -78,7 +78,7 @@ schema cannot silently generate a partial or non-byte-aligned codec."
              (payload-start  (+ start +header-size+))
              (next           (+ payload-start payload-length)))
         (if (> next end)
-            (values nil nil start)                 ; payload not fully arrived
+            (values nil nil start)
             (values type
                     (subseq buffer payload-start next)
                     next)))))
@@ -180,7 +180,7 @@ schema cannot silently generate a partial or non-byte-aligned codec."
    This is deliberately the opposite policy from SPLIT-ON-NUL-BYTES in
    protocol-command.lisp, which decodes strictly.  The two differ because the
    payloads differ in kind.  DECODE-TEXT is only ever applied to *display* text
-   — +msg-frame+ rendered screen content — which is written to stdout and never
+   +msg-frame+: rendered screen content, which is written to stdout and never
    re-parsed, interned, or dispatched on.  A command payload, by contrast, is
    interned and executed, so there a repaired string would be a guess with
    consequences.

@@ -36,15 +36,15 @@
 
   (it "g1-charset-via-parser-esc-paren-zero"
     (with-screen (s 10 5)
-      (feed s (esc ")0"))                    ; ESC ) 0 = designate G1 to DEC graphics
+      (feed s (esc ")0"))
       (expect (eq :ascii (nerimux/terminal/types:screen-charset s)))))
 
   (it "g1-charset-so-si-via-parser"
     (with-screen (s 10 5)
-      (feed s (esc ")0"))                         ; designate G1 to DEC graphics
-      (feed s (string (code-char #x0E)))          ; SO = invoke G1
+      (feed s (esc ")0"))
+      (feed s (string (code-char #x0E)))
       (expect (eq :dec-graphics (nerimux/terminal/types:screen-charset s)))
-      (feed s (string (code-char #x0F)))          ; SI = invoke G0
+      (feed s (string (code-char #x0F)))
       (expect (eq :ascii (nerimux/terminal/types:screen-charset s))))))
 
 (describe "terminal-suite/set-screen-cwd-suite"
@@ -86,8 +86,8 @@
   (it "irm-insert-mode-shifts-line-right"
     (with-screen (s 10 5)
       (feed s "abc")
-      (feed s (esc "[H"))      ; cursor home (col 0)
-      (feed s (esc "[4h"))     ; IRM on
+      (feed s (esc "[H"))
+      (feed s (esc "[4h"))
       (feed s "XY")
       (expect (string= "XYabc" (row-string s 0 :end 5)))))
 
@@ -95,7 +95,7 @@
     (with-screen (s 10 5)
       (feed s "abc")
       (feed s (esc "[H"))
-      (feed s (esc "[4l"))     ; IRM off (explicit)
+      (feed s (esc "[4l"))
       (feed s "XY")
       (expect (string= "XYc" (row-string s 0 :end 3)))))
 
@@ -120,9 +120,9 @@
 
   (it "lnm-newline-mode-lf-also-carriage-returns"
     (with-screen (s 10 5)
-      (feed s (esc "[20h"))             ; LNM on
+      (feed s (esc "[20h"))
       (feed s "a")
-      (feed s (string #\Linefeed))      ; LF
+      (feed s (string #\Linefeed))
       (feed s "b")
       (expect (char= #\a (char-at s 0 0)))
       (expect (char= #\b (char-at s 0 1)))))
@@ -130,7 +130,7 @@
   (it "lnm-off-lf-keeps-column"
     (with-screen (s 10 5)
       (feed s "a")
-      (feed s (string #\Linefeed))      ; LF
+      (feed s (string #\Linefeed))
       (feed s "b")
       (expect (char= #\a (char-at s 0 0)))
       (expect (char= #\b (char-at s 1 1)))))
@@ -153,13 +153,13 @@
 
   (it "decstr-resets-modes-but-preserves-screen-and-cursor"
     (with-screen (s 10 5)
-      (feed s "hello")                 ; content on row 0
-      (feed s (esc "[4h"))             ; IRM on
-      (feed s (esc "[?7l"))            ; autowrap off
-      (feed s (esc "[?25l"))           ; cursor hidden
-      (feed s (esc "[2;4r"))           ; scroll region rows 2..4 (DECSTBM homes cursor)
-      (feed s (esc "[1;6H"))           ; reposition cursor to row 1, col 6 (0-idx col 5)
-      (feed s (esc "[!p"))             ; DECSTR soft reset
+      (feed s "hello")
+      (feed s (esc "[4h"))
+      (feed s (esc "[?7l"))
+      (feed s (esc "[?25l"))
+      (feed s (esc "[2;4r"))
+      (feed s (esc "[1;6H"))
+      (feed s (esc "[!p"))
       (expect (not (nerimux/terminal/types:screen-insert-mode s)))
       (expect (nerimux/terminal/types:screen-autowrap s) :to-be-truthy)
       (expect (nerimux/terminal/types:screen-cursor-visible s) :to-be-truthy)
@@ -170,6 +170,6 @@
 
   (it "decstr-resets-sgr-pen"
     (with-screen (s 10 5)
-      (feed s (esc "[1;31m"))          ; bold red
-      (feed s (esc "[!p"))             ; DECSTR
+      (feed s (esc "[1;31m"))
+      (feed s (esc "[!p"))
       (expect (= 0 (nerimux/terminal/types:screen-cur-attrs s))))))

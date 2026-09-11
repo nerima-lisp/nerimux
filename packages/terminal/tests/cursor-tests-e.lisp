@@ -6,8 +6,8 @@
     "Clear SCREEN's tab stops, then move the cursor to each column in COLUMNS and
    call set-tab-stop (HTS), installing a clean multi-entry custom tab-stop list
    with exactly the given columns (set-tab-stop otherwise merges new stops into
-   whatever list — including the expanded :default grid — is already present)."
-    (nerimux/terminal/actions:clear-tab-stops screen 3)   ; TBC 3: clear ALL stops
+   whatever list, including the expanded :default grid, is already present)."
+    (nerimux/terminal/actions:clear-tab-stops screen 3)
     (dolist (col columns)
       (setf (nerimux/terminal/types:screen-cursor-x screen) col)
       (nerimux/terminal/actions:set-tab-stop screen)))

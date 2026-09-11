@@ -48,7 +48,7 @@
 
   (it "bell-byte-sets-pending-via-emulator"
     (with-screen (s 10 5)
-      (screen-process-bytes s (vector 7))  ; BEL = 0x07
+      (screen-process-bytes s (vector 7))
       (expect (nerimux/terminal/types:screen-bell-pending s)))))
 
 (describe "terminal-suite/set-charset-set-title-suite"
@@ -111,9 +111,9 @@
   (it "enter-alt-screen-is-noop-when-already-active"
     (with-screen (s 10 5)
       (feed s "primary")
-      (nerimux/terminal/actions:enter-alt-screen s)    ; first entry — saves grid
+      (nerimux/terminal/actions:enter-alt-screen s)
       (let ((saved-alt-cells (nerimux/terminal/types:screen-alt-cells s)))
-        (nerimux/terminal/actions:enter-alt-screen s)  ; second call — no-op
+        (nerimux/terminal/actions:enter-alt-screen s)
         (expect (eq saved-alt-cells (nerimux/terminal/types:screen-alt-cells s))))))
 
   (it "exit-alt-screen-clears-to-blank-when-no-saved-grid"

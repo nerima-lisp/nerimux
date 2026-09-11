@@ -74,7 +74,7 @@
 
   (it "write-char-at-cursor-combining-does-not-advance-cursor"
     (with-screen (s 10 5)
-      (feed s "a")                          ; cursor at col 1
+      (feed s "a")
       (nerimux/terminal/actions:write-char-at-cursor s (code-char #x0301))
       (check-cursor s 1 0)))
 
@@ -156,7 +156,7 @@
 
   (it "dec-graphics-deactivated-via-esc-sequence"
     (with-screen (s 10 5)
-      (feed s (esc "(0"))   ; enable DEC graphics
-      (feed s (esc "(B"))   ; restore ASCII
-      (feed s "j")          ; now plain ASCII 'j'
+      (feed s (esc "(0"))
+      (feed s (esc "(B"))
+      (feed s "j")
       (expect (char= #\j (char-at s 0 0))))))

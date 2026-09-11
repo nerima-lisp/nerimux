@@ -10,10 +10,10 @@
                                                     'terminal-suite))
   "Generate a describe block with three cl-weave tests for a boolean screen slot.
 
-   SLOT-ACCESSOR    — accessor symbol (e.g. nerimux/terminal/types:screen-insert-mode)
-   SUITE-NAME       — unquoted symbol naming the describe block
-   ENABLE-SEQUENCE  — form that feeds the enabling sequence to screen variable S
-   DISABLE-SEQUENCE — form that feeds the disabling sequence to screen variable S"
+   SLOT-ACCESSOR   means accessor symbol (e.g. nerimux/terminal/types:screen-insert-mode)
+   SUITE-NAME      means unquoted symbol naming the describe block
+   ENABLE-SEQUENCE means form that feeds the enabling sequence to screen variable S
+   DISABLE-SEQUENCE, form that feeds the disabling sequence to screen variable S"
   (declare (ignore suite-description))
   (let* ((name (symbol-name slot-accessor))
          (default-test (string-downcase (format nil "~A-DEFAULTS-FALSE" name)))
@@ -105,8 +105,8 @@
 (define-boolean-slot-tests
   nerimux/terminal/types:screen-focus-events
   focus-events-suite
-  (feed s (esc "[?1004h"))   ; ?1004h enables focus event reporting
-  (feed s (esc "[?1004l"))   ; ?1004l disables focus event reporting
+  (feed s (esc "[?1004h"))
+  (feed s (esc "[?1004l"))
   :suite-description "screen-focus-events: defaults NIL, ?1004h enables, ?1004l disables")
 
 (describe "terminal-suite/g0-g1-charset-suite"

@@ -23,7 +23,7 @@
   (clrhash (screen-line-sizes screen)))
 
 (defun ris-action (screen)
-  "RIS — ESC c: hard terminal reset.
+  "RIS, ESC c: hard terminal reset.
    Clears the entire cell grid, homes the cursor, resets all SGR attributes,
    cursor visibility, and restores the scroll region to the full screen height."
   (erase-region screen
@@ -36,7 +36,7 @@
   (reset-terminal-modes screen))
 
 (defun decstr-action (screen)
-  "DECSTR — CSI ! p: soft terminal reset.  Restores modes and the SGR pen to their
+  "DECSTR, CSI ! p: soft terminal reset.  Restores modes and the SGR pen to their
    power-on defaults but, unlike RIS, does NOT clear the screen or move the cursor.
    Resets the SGR pen, the terminal modes (charset / origin / autowrap / insert /
    scroll region / cursor visibility / pending wrap / tab stops via
@@ -49,7 +49,7 @@
         (screen-saved-cursor screen) nil))
 
 (defun decaln-action (screen)
-  "DECALN — ESC # 8: fill the entire screen with 'E' (the VT100 screen-alignment
+  "DECALN, ESC # 8: fill the entire screen with 'E' (the VT100 screen-alignment
    test pattern, used by vttest and terminal conformance suites), then home the
    cursor.  Each cell becomes a default-attribute 'E'."
   (dotimes (y (screen-height screen))

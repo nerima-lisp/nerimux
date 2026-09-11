@@ -10,7 +10,7 @@
    silently matches nothing; refused, it takes the literal-substring branch
    below, which is the useful answer for someone searching for the text `\\1`.
 
-   RENDERER-PANE-SEARCH.LISP's %ALL-MATCH-RANGES MUST KEEP THE SAME OPTIONS.
+   RENDERER-PANE-SEARCH.LISP's %ALL-MATCH-RANGES MUST USE THE SAME OPTIONS.
    That function decides independently whether the same TERM is a valid regex,
    and it is what paints the highlight.  If the two disagree, n/N jumps to
    matches that are not highlighted, or highlights spans the cursor never visits.

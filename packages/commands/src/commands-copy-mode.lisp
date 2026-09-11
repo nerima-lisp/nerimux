@@ -77,7 +77,7 @@
 
 (defun %reset-selection-fields (screen)
   "Clear all selection state fields on SCREEN (selecting, mark, line/rect flags) and
-   mark dirty.  Does NOT clear the cursor — callers that need that do so separately."
+   mark dirty.  Does NOT clear the cursor, callers that need that do so separately."
   (setf (screen-copy-selecting screen) nil
         (screen-copy-mark screen) nil
         (screen-copy-mark-offset screen) 0

@@ -86,22 +86,22 @@
 (define-boolean-slot-tests
   nerimux/terminal/types:screen-insert-mode
   screen-insert-mode-suite
-  (feed s (esc "[4h"))   ; CSI 4 h — IRM set (insert mode on)
-  (feed s (esc "[4l"))   ; CSI 4 l — IRM reset (replace mode)
+  (feed s (esc "[4h"))
+  (feed s (esc "[4l"))
   :suite-description "screen-insert-mode: defaults NIL, CSI 4h enables, CSI 4l disables")
 
 (define-boolean-slot-tests
   nerimux/terminal/types:screen-newline-mode
   screen-newline-mode-suite
-  (feed s (esc "[20h"))  ; CSI 20 h — LNM set
-  (feed s (esc "[20l"))  ; CSI 20 l — LNM reset
+  (feed s (esc "[20h"))
+  (feed s (esc "[20l"))
   :suite-description "screen-newline-mode: defaults NIL, CSI 20h enables, CSI 20l disables")
 
 (define-boolean-slot-tests
   nerimux/terminal/types:screen-reverse-screen
   screen-reverse-screen-suite
-  (feed s (esc "[?5h"))  ; ESC[?5h — DECSCNM set (reverse video on)
-  (feed s (esc "[?5l"))  ; ESC[?5l — DECSCNM reset
+  (feed s (esc "[?5h"))
+  (feed s (esc "[?5l"))
   :suite-description "screen-reverse-screen: defaults NIL, ESC[?5h enables, ESC[?5l disables")
 
 (describe "terminal-suite/copy-search-direction-suite"

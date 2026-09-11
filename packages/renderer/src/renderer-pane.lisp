@@ -238,7 +238,7 @@
    lock, then clear the screen's dirty flag.  COLOURS is the
    PANE-STYLE-COLOURS struct from %resolve-pane-style-colours.
    copy-mode-line-numbers is fixed \"off\" (§1.4), so there is no gutter to
-   reserve — content always fills the pane's full width."
+   reserve, content always fills the pane's full width."
   (with-lock-held ((screen-lock screen))
     (multiple-value-bind (sel-active sel-start-row sel-end-row sel-start-col sel-end-col
                           sel-rect-p sel-mark-row sel-mark-col)

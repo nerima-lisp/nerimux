@@ -703,8 +703,8 @@
                 (worktree-panes-before
                   (nerimux/workspace-model:worktree-panes worktree)))
             (nerimux::%set-client-focus conn pane)
-            (nerimux::%handle-multi-key-message session conn #(17)) ; C-q
-            (nerimux::%handle-multi-key-message session conn #(45)) ; -
+            (nerimux::%handle-multi-key-message session conn #(17))
+            (nerimux::%handle-multi-key-message session conn #(45))
             (expect (equal windows-before
                            (nerimux/session:session-windows session)))
             (expect (equal window-panes-before
@@ -722,7 +722,7 @@
       (expect (= 1 (length (nerimux/workspace-model:worktree-panes worktree))))
 
       (nerimux::%handle-multi-key-message session conn #(17))
-      (nerimux::%handle-multi-key-message session conn #(45)) ; -
+      (nerimux::%handle-multi-key-message session conn #(45))
       (expect (= 2 (length (nerimux/window:window-panes window-1))))
       (expect (= 2 (length (nerimux/workspace-model:worktree-panes worktree))))
       (expect (string= "/tmp/nerimux-r5-wt"
@@ -731,7 +731,7 @@
 
       (let ((before (nerimux::client-conn-focus conn)))
         (nerimux::%handle-multi-key-message session conn #(17))
-        (nerimux::%handle-multi-key-message session conn #(107)) ; k
+        (nerimux::%handle-multi-key-message session conn #(107))
         (expect (not (eq before (nerimux::client-conn-focus conn)))))
 
       (dotimes (_ 2)
@@ -749,7 +749,7 @@
 
       (dotimes (_ 5)
         (nerimux::%handle-multi-key-message session conn #(17))
-        (nerimux::%handle-multi-key-message session conn #(120))) ; x
+        (nerimux::%handle-multi-key-message session conn #(120)))
       (expect (null (nerimux/workspace-model:worktree-panes worktree)))
       (expect (null (nerimux/session:session-windows session)))
       (expect (eq :repolist (nerimux::client-conn-view conn)))))
@@ -762,13 +762,13 @@
       (expect (= 4 (length (nerimux/window:window-panes window))))
 
       (nerimux::%handle-multi-key-message session conn #(17))
-      (nerimux::%handle-multi-key-message session conn #(122)) ; z
+      (nerimux::%handle-multi-key-message session conn #(122))
       (expect (nerimux/window:window-zoom-p window))
       (expect (= 1 (length (nerimux/window:window-panes window)))
               )
 
       (nerimux::%handle-multi-key-message session conn #(17))
-      (nerimux::%handle-multi-key-message session conn #(45)) ; -
+      (nerimux::%handle-multi-key-message session conn #(45))
       (expect (not (nerimux/window:window-zoom-p window)) )
       (expect (= 5 (length (nerimux/window:window-panes window))))
       (expect (= 5 (length (nerimux/workspace-model:worktree-panes worktree))))
@@ -779,15 +779,15 @@
     (%with-r5-fixture (session conn worktree window)
       (declare (ignore worktree))
       (nerimux::%handle-multi-key-message session conn #(17))
-      (nerimux::%handle-multi-key-message session conn #(45)) ; -
+      (nerimux::%handle-multi-key-message session conn #(45))
       (let ((active (nerimux/window:window-active-pane window)))
         (let ((height-before (nerimux/pane:pane-height active)))
           (nerimux::%handle-multi-key-message session conn #(17))
-          (nerimux::%handle-multi-key-message session conn #(125)) ; }
+          (nerimux::%handle-multi-key-message session conn #(125))
           (expect (= (+ height-before 5)
                      (nerimux/pane:pane-height active)))
           (nerimux::%handle-multi-key-message session conn #(17))
-          (nerimux::%handle-multi-key-message session conn #(123)) ; {
+          (nerimux::%handle-multi-key-message session conn #(123))
           (expect (= height-before
                      (nerimux/pane:pane-height active)))))))
 
@@ -797,7 +797,7 @@
           ((nerimux/pane::%fork-pane
             (lambda (session id x y cols rows &key start-dir default-command)
               (declare (ignore session start-dir default-command))
-              (make-no-pty-pane id x y cols rows)))) ; fd stays -1: not live
+              (make-no-pty-pane id x y cols rows))))
         (let* ((organization
                  (nerimux/workspace-model:make-organization
                   :id "org" :host "github.com" :name "team"))

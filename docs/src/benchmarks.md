@@ -20,8 +20,8 @@ figures cover nerimux's own derivations only:
 
 | Date | Scope | Wall clock |
 |---|---|---|
-| 2026-07-26 | `nix flake check` before the migration — 3 checks (`default`, `weave`, `dataflow`), all rebuilt | 157 s |
-| 2026-07-26 | `nix flake check` after the migration — 5 checks, with `default`, `weave`, `dataflow` and `formatting` rebuilt and `docs` cached | 78 s |
+| 2026-07-26 | `nix flake check` before the migration, 3 checks (`default`, `weave`, `dataflow`), all rebuilt | 157 s |
+| 2026-07-26 | `nix flake check` after the migration, 5 checks, with `default`, `weave`, `dataflow` and `formatting` rebuilt and `docs` cached | 78 s |
 
 These are historical snapshots of the pre-workspace-only check graph.
 
@@ -40,16 +40,16 @@ current.
 ## Shipped core image size
 
 The workspace-only conversion removed 95 source files (the tmux command table,
-the keystroke pipeline, control mode, the standalone entry point). The obvious
-question is how much that took off the shipped `nerimux.core`.
+the keystroke pipeline, control mode, the standalone entry point). The relevant
+question is the effect on the shipped `nerimux.core`.
 
 **It is not currently answerable to the precision this page once claimed.**
 `nix build .#nerimux --rebuild` makes Nix's own determinism check fire: building
 the *same, unchanged* source twice does not reproduce a byte-identical
 `nerimux.core`. The build ends in
 `save-lisp-and-die ... :compression t`, and the compressed size of an SBCL core
-is sensitive to heap layout — symbol and hash-table ordering, gensym counters —
-not only to how much source went in.
+is sensitive to heap layout, symbol and hash-table ordering, gensym counters,
+as well as source volume.
 
 Observed spread between builds of identical source was on the order of 10^5
 bytes, which is the same magnitude as the deltas that were being attributed to

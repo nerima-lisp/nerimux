@@ -18,12 +18,8 @@
 (defmacro with-test-listener ((listener-var path-var path-form &key backlog)
                               &body
                               body)
-  "Bind PATH-VAR to PATH-FORM (e.g. (%test-socket-path \"label\") or an
-   explicit (socket-path name)) and LISTENER-VAR to a listener on it for the
-   extent of BODY, tearing both down afterwards.  Skips BODY (via cl-weave
-   `skip`) when Unix-domain sockets are unavailable — factors out the
-   make-listener/unwind-protect/close-socket/delete-file boilerplate shared by
-   every multi-client socket-lifecycle test."
+  "Bind PATH-VAR to PATH-FORM and LISTENER-VAR to a Unix-domain listener for BODY.
+   Skip BODY when Unix-domain sockets are unavailable."
   `(if (nerimux/net:unix-socket-available-p)
        (let* ((,path-var ,path-form)
               (_ (ensure-directories-exist ,path-var))

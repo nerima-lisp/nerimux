@@ -20,7 +20,7 @@
         (nerimux/workspace-model:organization-add-repository organization repository)
         (nerimux/workspace-model:repository-add-worktree repository worktree)
         (nerimux/pane:worktree-add-pane worktree pane)
-        (setf (nerimux/pane:pane-fd pane) 9999) ; "live" without a real PTY
+        (setf (nerimux/pane:pane-fd pane) 9999)
         (setf (nerimux::client-conn-view conn) :repolist)
         (nerimux::%set-client-selected-tree-object conn repository)
         (expect (nerimux::%focus-selected-client-worktree s conn))

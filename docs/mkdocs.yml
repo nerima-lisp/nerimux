@@ -53,8 +53,7 @@ nav:
       - Security model: reference/security-model.md
   - Benchmarks: benchmarks.md
 
-# Working records (coverage audits and similar) live in docs/notes/, which is
-# outside docs_dir and therefore never published. This entry keeps the
-# exclusion explicit for anyone who moves the directory under src/ later.
+# Working records in docs/notes/ are outside docs_dir and are not published.
+# The exclusion remains necessary if the directory moves under src/ later.
 not_in_nav: |
   notes/

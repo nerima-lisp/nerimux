@@ -3,7 +3,7 @@
 (defconstant +dcs-max-payload+
   1048576
   "Maximum DCS passthrough payload bytes buffered (1 MiB).  Beyond this the
-   payload is truncated — a safety bound against a runaway/malformed stream.")
+   payload is truncated, a safety bound against a runaway/malformed stream.")
 
 (defun %buffer-prefix-p (buffer &rest expected)
   "T when BUFFER's first (length EXPECTED) bytes match EXPECTED."
@@ -14,7 +14,7 @@
 
 (defmacro define-buffer-prefix-checkers (&rest specs)
   "Generate buffer prefix predicate functions from a declarative fact table.
-   Each SPEC is (fn-name docstring byte...) — the bytes are matched literally."
+   Each SPEC is (fn-name docstring byte...), the bytes are matched literally."
   `(progn
      ,@(mapcar
         (lambda (spec)
@@ -27,13 +27,13 @@
 (define-buffer-prefix-checkers
   (%dcs-tmux-prefix-p
    "T when BUFFER begins with ASCII \"tmux;\" (DCS passthrough tag)."
-   116 109 117 120 59)       ; t m u x ;
+   116 109 117 120 59)
   (%dcs-xtgettcap-prefix-p
    "T when BUFFER begins with \"+q\" (XTGETTCAP terminfo capability request)."
-   43 113)                   ; + q
+   43 113)
   (%dcs-decrqss-prefix-p
    "T when BUFFER begins with \"$q\" (DECRQSS request status string query)."
-   36 113)) ; $ q  ; q
+   36 113))
 
 (defun %hex-digit-16 (digit)
   "Return the numeric value of an ASCII hexadecimal digit DIGIT, or NIL."
@@ -70,11 +70,11 @@
   "The XTGETTCAP answer for terminfo capability CAPNAME:
    :BOOLEAN for a present boolean cap, a string for a numeric/string cap, or NIL
    when unknown.  nerimux renders 24-bit colour, so it advertises Tc and RGB
-   (true-colour) and colors=256 — letting apps that probe via XTGETTCAP enable
+   (true-colour) and colors=256, letting apps that probe via XTGETTCAP enable
    true-colour output."
   (cond
-    ((string= capname "Tc")     :boolean)   ; tmux/xterm's Tc capability name -- the flag many apps probe for true-colour support
-    ((string= capname "RGB")    :boolean)   ; direct-colour flag
+    ((string= capname "Tc")     :boolean)
+    ((string= capname "RGB")    :boolean)
     ((string= capname "colors") "256")
     (t nil)))
 
@@ -166,19 +166,19 @@
 
 (defun make-dcs-st-k (buffer)
   "Bridge state after an ESC inside a DCS payload (BUFFER accumulated so far).
-   On backslash: ST confirmed — finish the DCS and return to ground.
-   On ESC: a doubled ESC (\\e\\e) — append ONE literal ESC and keep accumulating.
-   On any other byte: lenient — append ESC then re-dispatch the byte."
+   On backslash: ST confirmed, finish the DCS and return to ground.
+   On ESC: a doubled ESC (\\e\\e), append ONE literal ESC and keep accumulating.
+   On any other byte: lenient, append ESC then re-dispatch the byte."
   (lambda (screen byte)
     (declare (type screen screen) (type (unsigned-byte 8) byte))
     (cond
-      ((= byte #x5C)               ; backslash = ST confirmed
+      ((= byte #x5C)
        (%finish-dcs screen buffer)
        #'ground-state)
-      ((= byte #x1B)               ; doubled ESC → one literal ESC in payload
+      ((= byte #x1B)
        (%dcs-accumulate buffer #x1B)
        (make-dcs-k buffer))
-      (t                           ; malformed: keep the ESC, re-process byte
+      (t
        (%dcs-accumulate buffer #x1B)
        (funcall (make-dcs-k buffer) screen byte)))))
 
@@ -204,7 +204,7 @@
      #x30 '0' → DEC special graphics (line-drawing)
      #x42 'B' → US ASCII
      all other designators → ASCII (accepted silently).
-   Designating does NOT activate G1 — that requires a SO (0x0E) locking shift."
+   Designating does NOT activate G1, that requires a SO (0x0E) locking shift."
   (lambda (screen byte)
     (declare (type screen screen)
              (type (unsigned-byte 8) byte))
@@ -217,7 +217,7 @@
 
 (defun make-ignore-final-byte-k ()
   "Return a CPS state that consumes one trailing byte and returns to ground with
-   no effect — for two-byte ESC sequences nerimux accepts but does not model:
+   no effect, for two-byte ESC sequences nerimux accepts but does not model:
      ESC SP <final>   S7C1T / S8C1T (7/8-bit C1) and ANSI conformance levels
      ESC %  <final>   charset selection (ESC % G = UTF-8, which nerimux already is)
    Consuming the trailing byte avoids it printing as a stray char (the bug when
@@ -227,7 +227,7 @@
     #'ground-state))
 
 (defun make-hash-line-size-k ()
-  "Return a CPS state for ESC # — the next byte is a DEC line-size / alignment
+  "Return a CPS state for ESC #, the next byte is a DEC line-size / alignment
    selector:
      #x38 '8' → DECALN: fill the screen with 'E' (the alignment test pattern).
      '3'/'4'  → DECDHL (double-height line top/bottom): recorded per row.
@@ -238,12 +238,12 @@
   (lambda (screen byte)
     (declare (type screen screen) (type (unsigned-byte 8) byte))
     (case byte
-      (#x38 (decaln-action screen))    ; '8' → DECALN
-      ((#x33 #x34 #x36)                ; '3'/'4'/'6' → record the row size
+      (#x38 (decaln-action screen))
+      ((#x33 #x34 #x36)
        (setf (gethash (screen-cursor-y screen) (screen-line-sizes screen))
              (code-char byte))
        (setf (screen-dirty-p screen) t))
-      (#x35                            ; '5' → back to single width
+      (#x35
        (remhash (screen-cursor-y screen) (screen-line-sizes screen))
        (setf (screen-dirty-p screen) t)))
     #'ground-state))

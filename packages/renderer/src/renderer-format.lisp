@@ -4,7 +4,7 @@
   #\Escape)
 
 (defun move-to (stream row col)
-  "ESC[row;colH — cursor absolute position, 1-based."
+  "ESC[row;colH, cursor absolute position, 1-based."
   (format stream "~C[~D;~DH" +esc+ (1+ row) (1+ col)))
 
 (defvar *color-downsample-fn*
@@ -52,14 +52,14 @@
         (format stream ";58;5;~D" n))))
 
 (define-cell-attr-renderer
-  (0 1)    ; bold          → SGR 1
-  (1 2)    ; dim           → SGR 2
-  (2 7)    ; reverse       → SGR 7
-  (3 4)    ; underline     → SGR 4
-  (4 5)    ; blink         → SGR 5
-  (5 3)    ; italic        → SGR 3
-  (6 8)    ; conceal       → SGR 8
-  (7 9)) ; strikethrough → SGR 9
+  (0 1)
+  (1 2)
+  (2 7)
+  (3 4)
+  (4 5)
+  (5 3)
+  (6 8)
+  (7 9))
 
 (defun cursor-invisible (stream)
   "Emit DECTCEM hide-cursor sequence ESC[?25l to STREAM."
@@ -76,7 +76,7 @@
 (defun %emit-sgr (stream code)
   "Emit an ANSI SGR escape sequence (ESC[CODEm) to STREAM.
    CODE may be an integer or a string (e.g. \"44;96\" for compound SGR parameters).
-   A no-op when CODE is NIL — allows callers to pass optional style codes directly."
+   A no-op when CODE is NIL, allowing callers to pass optional style codes directly."
   (when code
     (format stream "~C[~Am" +esc+ code)))
 
@@ -154,7 +154,7 @@
 (defun %visible-length (str)
   "Display-column width of STR, skipping CSI SGR escape sequences and
    counting each remaining character by NERIMUX/TERMINAL/TYPES:CHAR-WIDTH
-   (0/1/2 — R6.9) rather than by character count, so a fullwidth window or
+   (0/1/2, R6.9) rather than by character count, so a fullwidth window or
    session name (CJK, kana, hangul) does not desync status-bar column math
    the way (LENGTH STR) would.  Equals (LENGTH STR) for escape-free ASCII."
   (let ((n 0)
@@ -173,7 +173,7 @@
   "Prefix of STR holding at most N display columns; CSI escape sequences are
    copied through without counting toward N, and a fullwidth character that
    would straddle the N-column boundary is dropped whole rather than split
-   (R6.9) — the caller's own gap math (e.g. %JUSTIFY-RIGHT, %STATUS-PAD-TO)
+   (R6.9); the caller's own gap math (e.g. %JUSTIFY-RIGHT, %STATUS-PAD-TO)
    already fills the resulting short column with spaces, so this does not
    pad itself.  Equals (SUBSEQ STR 0 (MIN N (LENGTH STR))) for escape-free
    ASCII."

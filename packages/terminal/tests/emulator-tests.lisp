@@ -4,7 +4,7 @@
 
   (it "scrollback-accumulates"
     (with-screen (s 5 3)
-      (feed-lines s "L0" "L1" "L2" "L3" "L4")   ; 5 lines into a 3-row screen
+      (feed-lines s "L0" "L1" "L2" "L3" "L4")
       (expect (= 2 (length (screen-scrollback s))))
       (expect (string= "L2" (row-string s 0 :end 2)))
       (expect (string= "L4" (row-string s 2 :end 2)))))
@@ -29,7 +29,7 @@
     (with-screen (s 5 3)
       (feed-lines s "L0" "L1" "L2" "L3" "L4")
       (setf (screen-copy-mode-p s) nil
-            (screen-copy-offset s) 2)  ; should have no effect
+            (screen-copy-offset s) 2)
       (expect (string= "L2" (display-row-string s 0 :end 2)))
       (expect (string= "L4" (display-row-string s 2 :end 2))))))
 
@@ -173,7 +173,7 @@
 
   (it "screen-resize-clamps-cursor-inside-new-bounds"
     (with-screen (s 20 10)
-      (feed s (esc "[10;20H"))   ; row 9, col 19
+      (feed s (esc "[10;20H"))
       (screen-resize s 5 3)
       (expect (<= (screen-cursor-x s) 4))
       (expect (<= (screen-cursor-y s) 2)))))

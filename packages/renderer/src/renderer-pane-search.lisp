@@ -13,7 +13,7 @@
 
    :OCTAL NIL MUST MATCH %COPY-MODE-MAKE-MATCHER (commands-copy-mode-search.lisp).
    These are two independent decisions about whether the same user TERM is a
-   valid regex — one drives cursor motion for n/N, this one paints the highlight.
+   valid regex, one drives cursor motion for n/N, this one paints the highlight.
    Any difference in compile options desynchronises them.
 
    ALL-MATCHES returns a list of MATCH-RESULT structs, not cl-ppcre's flat list
@@ -50,7 +50,7 @@
                                           ox
                                           oy)
   "Overdraw every TERM match in ROW-STR (screen row ROW, already offset by
-   OX/OY) onto BUFFER in MATCH-SGR — CURRENT-SGR when the match spans
+   OX/OY) onto BUFFER in MATCH-SGR, CURRENT-SGR when the match spans
    (CUR-ROW . CUR-COL), the copy-mode cursor position."
   (dolist (range (%all-match-ranges term row-str))
     (let* ((start (car range))
@@ -68,8 +68,8 @@
 
 (defun %render-copy-search-matches (buffer pane)
   "When PANE's screen is in copy mode with an active search term, overdraw each
-   matching span in copy-mode-match-style — the span under the copy cursor in
-   copy-mode-current-match-style — over the already-rendered pane content."
+   matching span in copy-mode-match-style, the span under the copy cursor in
+   copy-mode-current-match-style, over the already-rendered pane content."
   (let ((screen (pane-screen pane)))
     (when (and screen (screen-copy-mode-p screen))
       (let ((term (screen-copy-search-term screen)))

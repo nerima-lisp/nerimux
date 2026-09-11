@@ -22,14 +22,14 @@
 
 (define-char-edit-rules
  (delete-chars
-  "DCH — delete N characters at the cursor, shifting remaining chars left.
+  "DCH, delete N characters at the cursor, shifting remaining chars left.
     The vacated cells at the end of the line are filled with blanks."
   (loop for x from cx to (- w n 1)
         do (setf (screen-cell screen x cy) (screen-cell screen (+ x n) cy)))
   (loop for x from (max cx (- w n)) to (1- w)
         do (setf (screen-cell screen x cy) (%erase-cell screen))))
  (insert-chars
-  "ICH — insert N blank characters at the cursor, pushing existing chars right.
+  "ICH, insert N blank characters at the cursor, pushing existing chars right.
     Characters shifted past the right margin are lost."
   (loop for x from (1- w) downto (+ cx n)
         do (setf (screen-cell screen x cy) (screen-cell screen (- x n) cy)))
@@ -57,14 +57,14 @@
 
 (define-line-edit-rules
  (insert-lines
-  "IL — insert N blank lines at the cursor row, pushing lower lines down within
+  "IL, insert N blank lines at the cursor row, pushing lower lines down within
     [cursor-row, scroll-bottom].  Lines pushed past the bottom are discarded."
   (loop for row from bottom downto (+ top count)
         do (%copy-row screen row (- row count)))
   (loop for row from top to (+ top count -1)
         do (%clear-row screen row)))
  (delete-lines
-  "DL — delete N lines at the cursor row, pulling lower lines up within
+  "DL, delete N lines at the cursor row, pulling lower lines up within
     [cursor-row, scroll-bottom].  Lines exposed at the bottom become blank."
   (loop for row from top to (- bottom count)
         do (%copy-row screen row (+ row count)))

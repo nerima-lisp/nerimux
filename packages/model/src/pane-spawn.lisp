@@ -38,7 +38,7 @@
   "Spawn a shell for a pane at COLS x ROWS, merging SESSION's environment overlay
    with *PANE-COLORTERM-ENV*, EXTRA-ENV, and the consumed *PANE-EXTRA-ENV*.
    DEFAULT-COMMAND, when non-NIL, is run via sh -c instead of the shell
-   (§1.4: NIL is the default everywhere — the pane always starts a shell).
+   (§1.4: NIL is the default everywhere, the pane always starts a shell).
    Returns (values fd pid slave-path)."
   (let ((environment (nerimux/session:session-child-environment session
                                                  :term +pane-term+

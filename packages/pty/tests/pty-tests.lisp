@@ -227,7 +227,7 @@
     (expect (null (nerimux/pty:pty-child-exit-status 999999))))
 
   (it "pty-child-exit-status-deadline-is-a-bare-form-signalling-an-error"
-    (let* ((duration (cl-date-kit:duration-of-millis 1)) ; computed, not literal
+    (let* ((duration (cl-date-kit:duration-of-millis 1))
            (condition (handler-case
                           (cl-concurrent-kit:with-timeout duration (sleep 60))
                         (cl-concurrent-kit:operation-timed-out (c) c))))

@@ -9,9 +9,8 @@
 (defconstant +send-frame-timeout-seconds+
   30
   "Maximum seconds to wait for write-sequence and finish-output to complete
-   before aborting.  Mirrors +read-frame-timeout-seconds+ so send-frame is
-   self-contained: it does not rely solely on the caller's stream having been
-   constructed with its own timeout (e.g. nerimux/net:socket-stream).")
+   before aborting.  Mirrors +read-frame-timeout-seconds+ and applies even when
+   the caller's stream has no timeout (e.g. nerimux/net:socket-stream).")
 
 (defconstant +max-frame-payload-bytes+
   (* 64 1024 1024)

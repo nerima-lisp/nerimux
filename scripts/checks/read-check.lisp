@@ -21,7 +21,7 @@
       (when (eq (first r) :fail)
         (push r bad))))
   (when (zerop n)
-    (format t "~&NO FILES MATCHED — check the working directory~%")
+    (format t "~&NO FILES MATCHED: check the working directory~%")
     (finish-output)
     (sb-ext:quit :unix-status 2))
   (format t "~&checked ~D files~%" n)

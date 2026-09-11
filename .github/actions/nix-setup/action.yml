@@ -7,9 +7,8 @@ description: >-
   flake-update workflows so the installer and Cachix wiring lives in exactly
   one place.
 
-# NOTE: `actions/checkout` intentionally lives in the caller, not here: a
-# local composite action cannot check the repository out, because its own
-# action.yml is not on disk until after checkout has run.
+# Checkout stays in each caller because this action is not available until
+# after the repository has been checked out.
 
 inputs:
   cachix-cache:
@@ -18,8 +17,8 @@ inputs:
     default: ""
   cachix-auth-token:
     description: >-
-      Cachix auth token (pass secrets.CACHIX_AUTH_TOKEN). When empty — or on
-      pull_request events — the cache is configured pull-only so untrusted runs
+      Cachix auth token (pass secrets.CACHIX_AUTH_TOKEN). When empty, or on
+      pull_request events, the cache is configured pull-only so untrusted runs
       can never push.
     required: false
     default: ""
@@ -29,11 +28,8 @@ runs:
   steps:
     - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
 
-    # Decide push vs pull-only once, off the event name and token presence, so
-    # both Cachix steps share a single source of truth. `nix flake check` runs
-    # arbitrary code out of the pull request, so a pull request must never hold
-    # a token that can write to the org cache. The token is read from the
-    # environment rather than interpolated into the script body.
+    # Pull requests run untrusted flake code and must never receive a
+    # write-capable cache token.
     - name: Resolve Cachix mode
       id: cachix-mode
       shell: bash
@@ -48,11 +44,7 @@ runs:
           push=true
         fi
         printf 'push=%s\n' "$push" >> "$GITHUB_OUTPUT"
-        # A missing repo variable silently disables Cachix below (both
-        # "Configure Cachix" steps are gated on cachix-cache != ''), so every
-        # build falls back to a full local realisation with a green check and
-        # no other signal. Surface it loudly instead of letting "CI got slow"
-        # go uninvestigated for months.
+        # Without this variable, builds silently run without a binary cache.
         if [[ -z "$CACHIX_CACHE" ]]; then
           echo "::warning::CACHIX_CACHE is unset; building without a binary cache"
         fi

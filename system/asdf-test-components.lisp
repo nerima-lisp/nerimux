@@ -24,31 +24,31 @@
           (:file "server-registry-tests")
           (:file "server-window-link-tests")
           (:file "server-session-listing-tests")
-          (:file "server-socket-path-tests") ; socket paths and stale sockets
-          (:file "server-client-cps-tests") ; client key CPS, runtime registry, resize edge cases
+          (:file "server-socket-path-tests")
+          (:file "server-client-cps-tests")
           (:file "server-dispatch-helper-fixtures")
           (:file "server-dispatch-helper-error-tests")
-          (:file "server-dispatch-helper-tests") ; command helper algebra
-          (:file "server-dispatch-helper-selection-tests") ; workspace and picker selection
-          (:file "server-dispatch-helper-refresh-tests") ; asynchronous refresh CPS
-          (:file "server-dispatch-helper-catalog-refresh-tests") ; failed catalog refresh state
+          (:file "server-dispatch-helper-tests")
+          (:file "server-dispatch-helper-selection-tests")
+          (:file "server-dispatch-helper-refresh-tests")
+          (:file "server-dispatch-helper-catalog-refresh-tests")
           (:file "server-dispatch-helper-status-tests")
           (:file "server-dispatch-helper-search-tests")
           (:file "server-dispatch-helper-navigation-tests")
           (:file "runtime-lifecycle-tests")
-      (:file "server-kill-request-tests") ; R8.1/R8.3
-      (:file "workspace-window-naming-tests") ; R5.8
-      (:file "workspace-catalog-refresh-state-tests") ; FR-005: mark/settle, not re-mark
-          (:file "system-composition-tests") ; layering guard; core declares no optional kit
+      (:file "server-kill-request-tests")
+      (:file "workspace-window-naming-tests")
+      (:file "workspace-catalog-refresh-state-tests")
+          (:file "system-composition-tests")
           (:file "target-tests")
           (:file "target-tests-b")))
         (:module "bootstrap-2"
          :pathname "bootstrap"
          :serial t
          :components
-         ((:file "runtime-tests") ; globals, pane-reader-loop, EOF/remain-on-exit, alert actions
-          (:file "runtime-reader-cps-tests") ; reader CPS state machine contracts
-          (:file "runtime-channel-helper-tests") ; cap-list and channel plist helpers
+         ((:file "runtime-tests")
+          (:file "runtime-reader-cps-tests")
+          (:file "runtime-channel-helper-tests")
           (:file "runtime-tests-c")
           (:file "runtime-tests-b")
           (:file "main-tests")
@@ -56,15 +56,15 @@
       (:module "integration"
        :serial t
        :components
-        ((:file "pane-response-queue-pty-tests") ; spans nerimux-model and the concrete nerimux-pty implementation
-         (:file "net-malformed-utf8-dispatch-tests") ; spans nerimux-net and the bootstrap event loop
-         (:file "commands-clear-history-tests") ; binds nerimux:: server state around a commands case
-         (:file "renderer-selection-copy-mode-tests") ; renderer bounds over a commands-built copy-mode screen
-         (:file "renderer-copy-search-highlight-tests") ; renderer highlight over a commands-built copy-mode screen
-         (:file "renderer-copy-mode-frame-tests") ; same, through a full rendered frame
-         (:file "renderer-help-transient-tests") ; renderer help sections against the bootstrap transient table
-         (:file "picker-selection-token-tests") ; picker tokens are bootstrap internals, not picker ones
-         (:file "workspace-file-diff-cache-tests") ; the cache is bootstrap state, keyed by worktree and file
+        ((:file "pane-response-queue-pty-tests")
+         (:file "net-malformed-utf8-dispatch-tests")
+         (:file "commands-clear-history-tests")
+         (:file "renderer-selection-copy-mode-tests")
+         (:file "renderer-copy-search-highlight-tests")
+         (:file "renderer-copy-mode-frame-tests")
+         (:file "renderer-help-transient-tests")
+         (:file "picker-selection-token-tests")
+         (:file "workspace-file-diff-cache-tests")
          (:file "net-tests")
          (:file "server-multi-tests-support")
          (:file "server-multi-tests-size")
@@ -89,10 +89,10 @@
          (:file "client-tests-frame-dispatch")
          (:file "client-tests-startup-modes")
          (:file "client-tests-command-client")
-         (:file "workspace-input-prefix-tests") ; R4: driven from client bytes
-         (:file "workspace-panes-acceptance-tests") ; R5 acceptance sequence
-         (:file "confirm-view-quit-tests") ; R8.2
-         (:file "attach-selector-resolution-tests") ; R7.6
+         (:file "workspace-input-prefix-tests")
+         (:file "workspace-panes-acceptance-tests")
+         (:file "confirm-view-quit-tests")
+         (:file "attach-selector-resolution-tests")
          (:file "client-receive-tests")))))))
 
 (defmacro define-system-with-nerimux-test-components (name &rest options)

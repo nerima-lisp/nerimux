@@ -22,9 +22,10 @@
 (defun %decode-server-frame (stream)
   "Read one frame from server STREAM and return its pure classification.
    Returns (values disposition text) where:
-     disposition  :exit    — server signalled end-of-session (+msg-bye+ or EOF);
-                  :frame   — a rendered screen frame was received;
-                  :ignore  — an unrecognised frame type (continue event loop).
+     disposition:
+       :exit   server signalled end-of-session (+msg-bye+ or EOF);
+       :frame  rendered screen frame was received;
+       :ignore unrecognised frame type (continue event loop).
      text         the decoded string payload for a :frame disposition, NIL otherwise;
      raw bytes    the original octet payload for a :notification disposition.
    The caller (%receive-server-frame) owns the output side effect."

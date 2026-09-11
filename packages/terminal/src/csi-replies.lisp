@@ -10,7 +10,7 @@
  (enqueue-dsr-reply (format nil "~C[0n" #\Escape)
                     "Push Device Status Report OK (ESC[0n) onto SCREEN's response queue.")
  (enqueue-da1-reply (format nil "~C[?1;2c" #\Escape)
-                    "Push Primary Device Attributes (ESC[?1;2c — VT100 with AVO) onto SCREEN's response queue.")
+                    "Push Primary Device Attributes (ESC[?1;2c, VT100 with AVO) onto SCREEN's response queue.")
  (enqueue-da2-reply (format nil "~C[>1;10;0c" #\Escape)
                     "Push Secondary Device Attributes (ESC[>1;10;0c) onto SCREEN's response queue.")
  (enqueue-da3-reply (format nil "~CP!|00000000~C\\" #\Escape #\Escape)
@@ -46,17 +46,17 @@
       2))
 
 (define-decrqm-mode-table
-  (1    screen-app-cursor-keys)       ; DECCKM — application cursor keys
-  (5    screen-reverse-screen)        ; DECSCNM — reverse video
-  (6    screen-origin-mode)           ; DECOM — origin mode
-  (7    screen-autowrap)              ; DECAWM — auto-wrap
-  (25   screen-cursor-visible)        ; DECTCEM — cursor visibility
-  (1004 screen-focus-events)          ; focus event reporting
-  (47   :alt-screen)                  ; alternate screen (old form)
-  (1047 :alt-screen)                  ; alternate screen (new form)
-  (1049 :alt-screen)                  ; alternate screen + save cursor
-  (2004 screen-bracketed-paste)       ; bracketed paste
-  (2026 :fixed 2)) ; synchronized output: not a persistent mode → always reset
+  (1    screen-app-cursor-keys)
+  (5    screen-reverse-screen)
+  (6    screen-origin-mode)
+  (7    screen-autowrap)
+  (25   screen-cursor-visible)
+  (1004 screen-focus-events)
+  (47   :alt-screen)
+  (1047 :alt-screen)
+  (1049 :alt-screen)
+  (2004 screen-bracketed-paste)
+  (2026 :fixed 2))
 
 (defun enqueue-decrqm-reply (screen mode)
   "Push the DECRQM report (ESC [ ? MODE ; Pm $ y) onto SCREEN's response queue,
@@ -72,12 +72,12 @@
   "DECRQM reply value for an ANSI (non-private) MODE: 1 = set, 2 = reset, 0 = not
    recognised.  Covers IRM (4) and LNM (20); other ANSI modes report 0."
   (case mode
-    (4  (%decrqm-flag-code (screen-insert-mode screen)))   ; IRM — insert/replace mode
-    (20 (%decrqm-flag-code (screen-newline-mode screen)))  ; LNM — line feed/new line mode
+    (4  (%decrqm-flag-code (screen-insert-mode screen)))
+    (20 (%decrqm-flag-code (screen-newline-mode screen)))
     (t  0)))
 
 (defun enqueue-decrqm-ansi-reply (screen mode)
-  "Push the ANSI-mode DECRQM report (ESC [ MODE ; Pm $ y — NO ? marker) onto the
+  "Push the ANSI-mode DECRQM report (ESC [ MODE ; Pm $ y, NO ? marker) onto the
    response queue, where Pm is %decrqm-ansi-mode-state for MODE."
   (%enqueue-reply screen
                   (format nil
@@ -91,7 +91,7 @@
      +xtwinops-text-area-query+ (18) → ESC [ 8 ; rows ; cols t
      +xtwinops-screen-query+    (19) → ESC [ 9 ; rows ; cols t
    Only ops 18/19 (grid-size queries) produce a reply; other XTWINOPS operations
-   (resize/move/iconify) are silently ignored — a multiplexer cannot resize the
+   (resize/move/iconify) are silently ignored, a multiplexer cannot resize the
    outer window and a wrong pixel size would mislead callers more than no reply."
   (let ((code
          (case op

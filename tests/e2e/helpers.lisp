@@ -29,7 +29,7 @@
                 (finish-output)
                 (setf ready t)
                 (funcall function root))
-           ;; Keep the namespace for diagnosis if server cleanup fails.
+           ;; The namespace identifies failed server cleanup in diagnostics.
            (when (and ready cleanup) (funcall cleanup root))
            (uiop:delete-directory-tree root :validate t)
            (when (probe-file root)

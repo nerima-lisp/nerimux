@@ -26,7 +26,7 @@
       (expect (search expected out))))
 
   (it "render-cell-attrs2-double-underline-and-overline"
-    (let ((out (cell-attrs-string 0 0 0 3)))    ; attrs2 bits 0+1
+    (let ((out (cell-attrs-string 0 0 0 3)))
       (expect (search ";21" out))
       (expect (search ";53" out))))
 

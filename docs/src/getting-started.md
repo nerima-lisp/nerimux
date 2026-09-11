@@ -34,18 +34,18 @@ These examples assume `nerimux` is on `PATH`. From a checkout, use
 `nerimux` with no command at all defaults to `attach`; `attach`, `server`,
 and `kill` are the only commands, and only an unrecognized command word
 prints the usage summary and exits non-zero. `-V`/`-h` are the only global
-flags. A selector containing a slash is resolved against the ghq catalog —
-the full specification, `host/organization/repository` — or against a local
-worktree path; a selector that matches both readings at once opens the
+flags. A selector containing a slash is resolved either against the ghq catalog
+using the full specification, `host/organization/repository`, or against a
+local worktree path. A selector that matches both readings at once opens the
 global picker with the selector pre-typed instead of guessing.
 
-If the current directory is inside a worktree ghq already tracks — a
-subdirectory of one counts too — `attach` skips the repolist and opens
+If the current directory is inside a worktree ghq already tracks (a
+subdirectory counts too), `attach` skips the repolist and opens
 straight into that worktree's pane: the one last focused there, or a new
 shell if none was open yet. This resolves against the running server's
 catalog even before the initial scan has finished, by resolving and merging
 just that directory's repository synchronously. The pane takes typing
-directly — there is no mode to leave first; every nerimux key inside a pane
+directly. There is no mode to leave first; every nerimux key inside a pane
 starts with `C-q` (see [Default key bindings](#default-key-bindings) below).
 An explicit selector (`attach github.com/org/repo`, `attach
 /path/to/worktree`) still opens the repolist with that item selected, not the
@@ -53,17 +53,17 @@ pane directly.
 
 The overview tree appears as soon as the repository scan finishes; the
 per-repository VCS status (dirty/ahead/behind flags) streams in afterwards,
-since it runs `git status` across every repository. A repository the scan
-cannot read — an incomplete or otherwise unreadable checkout — is kept in the
-tree flagged `!` rather than aborting the scan. While the initial scan is
+since it runs `git status` across every repository. An incomplete or otherwise
+unreadable checkout is kept in the tree, flagged `!`, rather than aborting the
+scan. While the initial scan is
 still running, attaching shows a placeholder screen (`scanning workspaces...`,
 with a running repository count once the scan has found any) instead of an
 empty tree; if the ghq root has no repositories at all once the scan
-finishes, the repolist view shows that directly, with the ghq root path and a
+finishes, the repolist view shows that directly with the ghq root path and a
 `ghq get <owner>/<repo>` hint, rather than a permanently empty tree.
 
-If `nerimux` has to auto-start the server — no server was already running for
-the target session — it prints `nerimux: starting server...` to stderr before
+If `nerimux` has to auto-start the server because no server was already running
+for the target session, it prints `nerimux: starting server...` to stderr before
 the client's screen takes over, so the wait for the new server's socket does
 not look like a hung shell.
 
@@ -72,22 +72,22 @@ spawned server's stdout/stderr are captured to a per-session-name log file
 rather than discarded, so a crash leaves a forensic trail. The path is
 `nerimux/<name>.log` under a state-home directory resolved as `$XDG_STATE_HOME`
 (falling back to `~/.local/state`), or under `$NERIMUX_RUNTIME_STATE` when
-that's set — the same state-home resolution the runtime-state snapshot file
-uses, so the two files always land in the same directory but never collide.
+that's set. Both paths use the same state-home resolution, so the two files
+always land in the same directory but never collide.
 The log directory is created `0700`. See `%runtime-log-path` and
 `%runtime-state-home` in `src/runtime-lifecycle.lisp`.
 
 ## Default key bindings
 
 The workspace UI follows [magit](https://magit.vc/)'s keymap. A client is
-always at one of three **views** — `repolist`, `status`, or `pane` — and,
-independently, may have a **modal** on top of that view (a transient menu,
+always at one of three **views**: `repolist`, `status`, or `pane`, and may
+independently have a **modal** on top of that view (a transient menu,
 a confirmation, the help view, the process log, the picker, an incremental
 filter, the command line, or scrollback). With no modal up, where a keystroke
 goes is derived entirely from the current view: `repolist` and `status` route
 to the workspace keymap below, and `pane` sends every byte straight to the
 shell. There is no `:normal`/`:input` distinction and no key to press before
-typing into a pane — every nerimux-level key inside a pane starts with
+typing into a pane. Every nerimux-level key inside a pane starts with
 **`C-q`** instead. The initial view is `repolist`, unless the cwd-match above
 jumps straight into a worktree's pane; `C-p` opens the global picker across
 organizations, repositories, worktrees, and panes from either `repolist` or
@@ -107,7 +107,7 @@ file is the one-line derivation described above.)
 | `Shift-Tab` | Cycle the global visibility level (same as pressing `1`…`4` in sequence) |
 | `1`–`4` | Set the global visibility level directly (`4` expands everything, `1` shows section headings only) |
 | `Enter` | Dive in: open/create a worktree's shell, jump into a repository's main worktree, or toggle a section header |
-| `q` | Step back one rung — closes an open transient, then clears an active filter, then leaves `status` for the focused pane (or `repolist` if none), in that order |
+| `q` | Step back one rung, closes an open transient, then clears an active filter, then leaves `status` for the focused pane (or `repolist` if none), in that order |
 | `g` | Refresh the workspace catalog and VCS state |
 | `$` | Open the process log of recent git writes |
 | `/` | Filter the tree incrementally |
@@ -122,10 +122,10 @@ file is the one-line derivation described above.)
 |---|---|
 | `s` / `S` | Stage the selected change / stage everything |
 | `u` / `U` | Unstage the selected change / unstage everything |
-| `k` | Discard the selected change — asks for confirmation first |
-| `c` `P` `F` `b` `m` `r` `z` `l` `d` `f` `t` `X` `!` `w` | Open the matching transient directly — see below. From `repolist`, the same transients are reachable only through `?` |
+| `k` | Discard the selected change: asks for confirmation first |
+| `c` `P` `F` `b` `m` `r` `z` `l` `d` `f` `t` `X` `!` `w` | Open the matching transient directly; see below. From `repolist`, the same transients are reachable only through `?` |
 
-Selecting a row that is not a file — a section header, a commit, a stash — and
+Selecting a row that is not a file (a section header, a commit, or a stash) and
 pressing one of these reports that there is nothing to stage rather than acting
 on something else. Paths are passed after `--`, so a file whose name begins
 with a dash is never read as a git option.
@@ -144,8 +144,8 @@ versus report that they are not wired yet (source: `+transient-definitions+`,
 | `c` | Commit | amend, keep message (`git commit --amend --no-edit`); commit with a new message | — |
 | `P` | Push | push to `origin/<branch>`, toggling `-f`/`--force-with-lease`/`-F`/`--force` (confirms first when either is active); push to another remote | — |
 | `F` | Pull | pull from `origin/<branch>`, toggling `--rebase` | — |
-| `b` | Branch | list branches; switch to the previous branch (`git switch -`); create a branch | delete a branch — no text prompt |
-| `m` | Merge | merge upstream (`@{u}`) | merge another branch — no text prompt |
+| `b` | Branch | list branches; switch to the previous branch (`git switch -`); create a branch | delete a branch (no text prompt) |
+| `m` | Merge | merge upstream (`@{u}`) | merge another branch (no text prompt) |
 | `r` | Rebase | rebase onto upstream (`@{u}`, confirms first); abort rebase | — |
 | `z` | Stash | stash changes; pop the latest stash | — |
 | `l` | Log | show the selected worktree's log in a read-only pager | — |
@@ -153,8 +153,8 @@ versus report that they are not wired yet (source: `+transient-definitions+`,
 | `f` | Fetch | fetch this repository; fetch the whole organization | — |
 | `t` | Tag | list tags; create a tag | — |
 | `X` | Reset | `reset --soft HEAD`; `reset --hard HEAD` (confirms first); clean untracked files `-fd` (confirms first) | — |
-| `!` | Shell command | — | arbitrary shell execution — deliberately never wired; it is its own trust-boundary decision |
-| `w` | Worktree | create a worktree and open its shell; delete/lock/unlock the selected worktree (each pre-fills the command line with e.g. `wt-delete --confirm` — press `Enter` to run it or `Esc` to cancel) | create with a chosen branch name — use `: wt-create --branch <name> --confirm` instead |
+| `!` | Shell command | N/A | arbitrary shell execution, deliberately never wired; it is its own trust-boundary decision |
+| `w` | Worktree | create a worktree and open its shell; delete/lock/unlock the selected worktree (each pre-fills the command line with e.g. `wt-delete --confirm`, press `Enter` to run it or `Esc` to cancel) | create with a chosen branch name; use `: wt-create --branch <name> --confirm` instead |
 | `?` | Dispatch | opens any of the above; `k` opens the full-screen help view | — |
 
 The `l` and `d` read-only views use `j`/`k` for line movement, `C-u`/`C-d`
@@ -209,8 +209,8 @@ available for manual entry.
 | `C-q Q` | Quit the server (asks for confirmation, showing how many panes are still open) |
 | `C-q C-q` | Escape: drop any modal and hand the keyboard back to the current view |
 
-`C-q F` and `C-q C-f` (fetch repository / fetch organization) are gone —
-fetch is the `f` transient now, reachable from `status` directly or from
+`C-q F` and `C-q C-f` (fetch repository / fetch organization) are gone.
+Fetch is the `f` transient now, reachable from `status` directly or from
 `repolist` via `?` f.
 
 Splits start at 50/50 and can be resized with the bindings above (FR-105). A window has
@@ -235,7 +235,7 @@ called copy mode.
 | `y` | Yank the selection and leave scrollback |
 | `q` | Leave scrollback without yanking |
 
-### Retired — do not reintroduce
+### Retired: do not reintroduce
 
 The overview/detail keymap this replaced bound `j` `k` `J` `K` `h` `l` `i`
 `o` `d` (view switch) `r` (refresh) `X` (worktree delete) `L` `U` `n`
@@ -253,10 +253,10 @@ equivalent to confuse them with.
 The repolist view is a single full-width tree, with no side panels, built from
 three fixed sections in this order:
 
-- **Attention** — every worktree that needs attention (dirty, conflict,
+- **Attention**: every worktree that needs attention (dirty, conflict,
   ahead/behind, or missing), has a waiting agent, or is holding an exited pane.
-- **Active** — every other worktree that holds at least one open pane.
-- **Repositories** — every repository, always shown, whether or not any of
+- **Active**: every other worktree that holds at least one open pane.
+- **Repositories**: every repository, always shown, whether or not any of
   its worktrees appear above. A repository row is **collapsed by default**;
   `Tab` expands it to list its worktrees.
 
@@ -267,8 +267,8 @@ under an expanded repository shows just its own branch, since the repository
 row above it already names the org and repo. Rows are ordered by activity
 rather than by catalog order: whichever repository or worktree had output or
 focus most recently sorts first among its siblings. Re-sorting only happens
-when the catalog itself changes — a scan landing, a merge, a worktree
-create/delete — never while a client is just moving the selection, so a row
+when the catalog itself changes (a scan landing, a merge, or a worktree
+create/delete), never while a client is just moving the selection, so a row
 never jumps out from under the cursor mid-navigation.
 
 Each worktree row also carries a compact status cluster to the right of its
@@ -289,7 +289,7 @@ inline-expands its own diff, capped at 200 cached lines with a trailing
 `... N more lines` row when the diff is longer. Below the tree, a separator
 line, a 2-line detail panel describing whatever row is selected, and a
 1-line strip for the most recent message fill the rest of the frame above
-the footer — which itself is a 2-3 line contextual key panel, collapsing to
+the footer, which itself is a 2-3 line contextual key panel, collapsing to
 a single line when the terminal is shorter than 12 rows.
 
 `/` starts an incremental, case-insensitive substring filter over the tree:
@@ -304,7 +304,7 @@ centered `no matches: /query` notice, so an empty tree always reads as
 "filtered to zero", never as a broken screen.
 
 `?` opens the dispatch transient (see [Transient menus](#transient-menus)
-above); its `k` entry opens a full-screen help view listing every binding —
+above); its `k` entry opens a full-screen help view listing every binding:
 Navigate, `status`-only staging, the transient menus, the `C-q` prefix, and
 scrollback. `q`, `Esc`, or `Enter` closes the help view; a pending
 confirmation (such as `C-q Q`'s server-quit prompt) takes priority over
@@ -419,7 +419,7 @@ hide executable behavior.
 
 The main suite runs on [cl-weave](https://github.com/nerima-lisp/cl-weave) and covers the VT100
 emulator, layout geometry, copy mode, and the client/server protocol. The
-runner is deliberately sequential — tests share global session/socket state.
+runner is deliberately sequential because tests share global session/socket state.
 
 Live PTY integration against a real shell is a separate system,
 `nerimux/pty-test`, run with `nix run .#test-pty`. It was split out of the

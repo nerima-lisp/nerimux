@@ -10,11 +10,11 @@
   (name        ""  :type string)
   (windows     nil :type list)
   (active      nil)
-  (last-active 0   :type integer)   ; universal-time of last access; updated on touch
-  (created (get-universal-time) :type integer) ; universal-time at construction (#{session_created})
-  (window-stack nil :type list)     ; windows in MRU order, current first (#{window_stack_index})
+  (last-active 0   :type integer)
+  (created (get-universal-time) :type integer)
+  (window-stack nil :type list)
   (window-index-map (make-hash-table :test #'eq) :type hash-table)
-  (clients     nil :type list)      ; list of connected client descriptors
+  (clients     nil :type list)
   (start-directory nil)
   (environment (make-hash-table :test #'equal))
   (environment-unsets nil :type list)
@@ -93,7 +93,7 @@
   index)
 
 (defun session-windows-in-index-order (session)
-  "SESSION's windows sorted by their per-session window index — the order
+  "SESSION's windows sorted by their per-session window index, the order
    used for listing windows (status bar, list-windows).  Identical to the plain
    list when no window carries an index override."
   (sort (copy-list (session-windows session))
@@ -104,7 +104,7 @@
 
 (defun session-insert-window (session window)
   "Insert WINDOW into SESSION's window list, keeping the list sorted by window-id.
-   Does NOT update the active window — callers manage focus separately.
+   Does NOT update the active window, callers manage focus separately.
    Returns the updated window list (pure list management)."
   (setf (session-windows session) (sort (cons window (session-windows session))
                                         #'<
@@ -135,7 +135,7 @@
 (defun session-remove-window (session window)
   "Remove WINDOW from SESSION: drop it from the window list, the MRU stack,
    and the winlink index-override table.  Clears SESSION's active window when
-   it was WINDOW — callers (R5.4: closing a window's last pane) reassign
+   it was WINDOW, callers (R5.4: closing a window's last pane) reassign
    focus themselves; this only stops SESSION from pointing at a window that
    no longer exists.  Returns the updated window list."
   (setf (session-windows session) (delete window (session-windows session))
@@ -153,7 +153,7 @@
 
 (defun %default-shell ()
   "Shell to spawn for a pane's child process: $SHELL, or \"/bin/sh\" when unset
-   (§1.4 — the shell is no longer configurable, so this is the whole rule)."
+   (§1.4, the shell is no longer configurable, so this is the whole rule)."
   (or (nerimux/ports:environment-value "SHELL") "/bin/sh"))
 
 (defun %shell-basename ()

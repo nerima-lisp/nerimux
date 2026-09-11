@@ -8,7 +8,7 @@
   "(VALUES ATTENTION REPOSITORY-TEXT WORKTREE-TEXT STATE-TEXT) for the status
    line's left block (R6.5). Each of REPOSITORY-TEXT/WORKTREE-TEXT/STATE-TEXT
    is %WORKSPACE-EM-DASH when FOCUS-PANE (or its worktree/repository) is
-   absent — design doc §2/§3.3: an unselected value must show as such, never
+   absent, design doc §2/§3.3: an unselected value must show as such, never
    silently carry the previous frame's text forward."
   (let* ((worktree (and focus-pane (pane-worktree focus-pane)))
          (repository (and worktree (worktree-repository worktree))))
@@ -47,7 +47,7 @@
 (defun %status-left-text (focus-pane &key include-repository-p)
   "The left block's text, styled: attention mark in alert red, repository
    muted, worktree branch in bold lavender, state tokens palette-coloured.
-   INCLUDE-REPOSITORY-P T includes the repository field; NIL omits it — the
+   INCLUDE-REPOSITORY-P T includes the repository field; NIL omits it, the
    first thing %COMPOSE-WORKSPACE-STATUS-LINE drops when the line does not
    fit (R6.5: notification, then tabs, then repository name; branch and
    state token are never dropped)."
@@ -73,7 +73,7 @@
 
 (defun %status-pane-tab-token (pane focus-pane)
   "PANE's status-bar tab token, including its own leading separator: a space
-   normally, or `!` in its place when PANE has unread output (R6.7) — the
+   normally, or `!` in its place when PANE has unread output (R6.7), the
    marker doubles as the separator, matching the format the requirements
    give ([w1: 1 2*!3]: pane 3's `!` sits where the usual space would, with no
    extra glue needed between it and the previous pane's tab).  The visible
@@ -104,7 +104,7 @@
 (defun %status-window-pane-tabs (focus-pane)
   "The middle block: FOCUS-PANE's worktree's window/pane tabs
    ([w1: 1 2*][w2: 1], R6.5), or NIL when there is no worktree or it has no
-   open windows — the caller shows %WORKSPACE-EM-DASH for NIL."
+   open windows, the caller shows %WORKSPACE-EM-DASH for NIL."
   (let* ((worktree (and focus-pane (pane-worktree focus-pane)))
          (windows (and worktree (%worktree-tree-windows worktree))))
     (when windows
@@ -121,7 +121,7 @@
 (defun %status-right-text (messages)
   "The right block: the single most recent notification, or an em-dash when
    there is none yet. MESSAGES is CLIENT-CONN-MESSAGE-LOG (most-recent-first,
-   %CLIENT-NOTIFY conses onto its front) — the 64-entry cap stays on the
+   %CLIENT-NOTIFY conses onto its front), the 64-entry cap stays on the
    conn's log (R6.5: \"display only, not retention, changes\"); this only
    ever reads the first entry."
   (if messages
@@ -154,7 +154,7 @@
                                                   (mode :normal))
   "Assemble the R6.5 status line, dropping blocks right-to-left when COLS is
    too narrow: the notification first, then the window/pane tabs, then the
-   repository name — branch and state token are never dropped (design doc
+   repository name, branch and state token are never dropped (design doc
    §11). The MODE chip (FR-003, %STATUS-MODE-CHIP) is placed ahead of all
    three and is never dropped by width degradation: it is a safety feature
    (whether a keystroke reaches the shell), not a display convenience, so it

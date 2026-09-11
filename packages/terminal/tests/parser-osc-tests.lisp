@@ -54,11 +54,11 @@
       (expect (null (nerimux/terminal/parser::%parse-osc-color input)))))
 
   (it "parse-osc-color-rgb-rejects-empty-and-extra-fields"
-    (dolist (input '("rgb:ff/00/00/"    ; trailing delimiter -> 4 fields
-                     "rgb:/ff/00/00"    ; leading delimiter  -> 4 fields
-                     "rgb:ff//00"       ; empty middle channel
-                     "rgb:ff/00"        ; too few
-                     "rgb:ff/00/00/00")) ; too many
+    (dolist (input '("rgb:ff/00/00/"
+                     "rgb:/ff/00/00"
+                     "rgb:ff//00"
+                     "rgb:ff/00"
+                     "rgb:ff/00/00/00"))
       (expect (null (nerimux/terminal/parser::%parse-osc-color input))))
     (expect (= #xFF0000 (nerimux/terminal/parser::%parse-osc-color "rgb:ff/00/00"))))
 
@@ -189,7 +189,7 @@
     (with-screen (s 20 5)
       (%feed-osc s "8;;https://example.com")
       (feed s "X")
-      (%feed-osc s "8;;")        ; clear the hyperlink
+      (%feed-osc s "8;;")
       (feed s "Y")
       (expect (string= "https://example.com"
                        (nerimux/terminal/types:cell-hyperlink

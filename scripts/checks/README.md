@@ -1,10 +1,10 @@
 # Static checks
 
-Three checks that need neither ASDF nor a compile. Each one covers a failure the
-test suite cannot report on, because each one breaks the suite itself: a file
+Three checks that need neither ASDF nor a compile. Each covers a failure the
+test suite cannot report because each breaks the suite itself: a file
 that will not read, a manifest that names a file that is not there, a reference
 to a symbol its package does not export. In all three cases `nerimux/test` does
-not fail a test — it fails to load, and reports nothing about anything.
+not fail a test. It fails to load and reports nothing.
 
 They are also the only checks available when ASDF cannot load a system at all.
 That is not hypothetical; it is how they came to exist.
@@ -20,20 +20,19 @@ perl scripts/checks/export-check.pl .
 Each exits non-zero on failure and prints what it checked, so an empty selection
 cannot pass for a clean one.
 
-## read-check.lisp — every file still reads
+## read-check.lisp: every file still reads
 
 Reads every `.lisp` and `.asd` with `*READ-SUPPRESS*` bound to `T`. Under that
 binding the reader tracks list structure, strings, character literals and `#| |#`
-blocks, but interns nothing and evaluates no `#.` form — so a file is checked for
+blocks, but interns nothing and evaluates no `#.` form, so a file is checked for
 balanced delimiters without any package existing and without loading ASDF.
 Unbalanced parens surface as `END-OF-FILE`.
 
-This is the guard against the failure mode this repository keeps hitting:
-deleting lines from `nerimux.asd`'s `:components` or a `defpackage`'s `:export`
-by line number, where a closing paren at the end of a deleted line was also
-closing its parent form.
+This catches malformed edits to `nerimux.asd`'s `:components` and a
+`defpackage`'s `:export` list, including a deleted line whose closing paren also
+closed its parent form.
 
-## manifest-check.lisp — the manifest and the tree agree
+## manifest-check.lisp: the manifest and the tree agree
 
 `system/asdf-test-components.lisp` lists every test file by hand, and
 `nerimux.asd` splices that list in at read time. So the manifest and the
@@ -41,38 +40,38 @@ directory can disagree in two directions, and they fail in opposite ways:
 
 | | on disk | result |
 |---|---|---|
-| named in the manifest | absent | ASDF aborts — **the whole suite disappears** |
-| not in the manifest | present | silently never loaded — **the tests stop running** |
+| named in the manifest | absent | ASDF aborts, **so the whole suite disappears** |
+| not in the manifest | present | silently never loaded, **the tests stop running** |
 
 Checking only the first direction catches a deletion that went too far but not
 one that went unnoticed. The second is how a test file becomes decoration.
 
 `tests/pty/` is excluded: it belongs to `nerimux/pty-test`, which has its own
-component list. Every file under `tests/e2e/` is excluded by design — it runs
+component list. Every file under `tests/e2e/` is excluded by design. It runs
 against a built binary via `nix run .#e2e` (or by hand, see the
 getting-started guide), not through any ASDF system.
 
-## suite-structure-check.pl — every test is inside a suite
+## suite-structure-check.pl: every test is inside a suite
 
 A test registered outside its DESCRIBE still runs, so a green result says
 nothing about it. What it breaks is the shape of the tree cl-weave hands to its
 collector: the root gains a test case where every other child is a suite.
 
-It found one. attention-tests.lisp had a closing paren too many after its second
-test, which ended the suite early and put the third test on the root — through
-every green run this repository ever had.
+It found one. `attention-tests.lisp` had a closing paren too many after its
+second test, which ended the suite early and put the third test on the root.
+That defect survived every green run this repository had.
 
-Also reports a file whose parens do not balance, which is the same mistake one
+Also reports a file with unbalanced parentheses, which is the same mistake one
 step earlier and the reason read-check exists.
 
-## internal-call-check.pl — every %helper call resolves, with a plausible arity
+## internal-call-check.pl: every %helper call resolves, with a plausible arity
 
-The cheapest approximation of "it compiles" that needs no compiler. It checks
-only names beginning with `%`, the convention for internal helpers, and that
-restriction is what makes it sound: a `%name` is always defined in this tree —
-never a Common Lisp symbol, never inherited from a sibling, never a stray
-variable. So an unresolved `%name` call is a defect rather than a gap in what
-the checker knows about the world.
+This is the cheapest approximation of "it compiles" that needs no compiler. It checks
+only names beginning with `%`, the convention for internal helpers. That
+restriction makes it sound: a `%name` is always defined in this tree, never a
+Common Lisp symbol, never inherited from a sibling, and never a stray variable.
+An unresolved `%name` call is therefore a defect rather than a gap in what the
+checker knows about the tree.
 
 It found one: the layering guard called `%file-text`, whose definition had gone
 with the domain/format tests it happened to live in (R2). A guard that cannot
@@ -84,7 +83,7 @@ Blind spots, shared with the rest of this directory: calls through `apply` or
 defined inside a `define-*` form are accepted without an arity, because the
 macro decides the lambda list and this checker cannot read macros.
 
-## export-check.pl — single-colon references resolve
+## export-check.pl: single-colon references resolve
 
 A `PKG:SYM` reference to a symbol `PKG` does not export is a **read-time** error.
 `read-check.lisp` cannot see it, precisely because it reads with `*READ-SUPPRESS*`

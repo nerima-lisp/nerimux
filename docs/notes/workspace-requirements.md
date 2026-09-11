@@ -705,7 +705,7 @@ R2 が最大の作業単位である。90 箇所 37 ファイルに触るため�
 
 ## 6. 検証
 
-canonical なゲートは `nix flake check`。darwin でしか実行できない点と、manifest に
+基準ゲートは `nix flake check`。darwin でしか実行できない点と、manifest に
 登録済みかつ untracked のファイルがスイート全体を落とす点に注意する（flake は
 git-tracked なファイルしか見ない）。
 

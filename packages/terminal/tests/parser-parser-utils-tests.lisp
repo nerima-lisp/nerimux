@@ -36,22 +36,22 @@
       (feed-osc s 0 "test-title")
       (expect (string= "test-title" (nerimux/terminal/types:screen-title s)))))
 
-  (it-each ((#x40 t)      ; '@' — low boundary
-            (#x4D t)      ; 'M' — mid-range final byte
-            (#x7E t)      ; '~' — high boundary
-            (#x3F nil)    ; '?' — private marker, below range
-            (#x30 nil)    ; '0' — parameter byte
-            (#x7F nil))   ; DEL — above range
+  (it-each ((#x40 t)
+            (#x4D t)
+            (#x7E t)
+            (#x3F nil)
+            (#x30 nil)
+            (#x7F nil))
       "csi-final-byte-p #x~X → ~A"
       (byte expected)
     (expect (eq expected (and (nerimux/terminal/parser:csi-final-byte-p byte) t))))
 
-  (it-each ((#x3F t)      ; '?' — private marker
-            (#x30 t)      ; '0' — parameter digit
-            (#x3B t)      ; ';' — parameter separator
-            (#x40 nil)    ; '@' — at the low boundary (already final)
-            (#x4D nil)    ; 'M' — in the final-byte range
-            (#x7E nil))   ; '~' — high boundary
+  (it-each ((#x3F t)
+            (#x30 t)
+            (#x3B t)
+            (#x40 nil)
+            (#x4D nil)
+            (#x7E nil))
       "csi-final-byte-before-p #x~X → ~A"
       (byte expected)
     (expect (eq expected (and (nerimux/terminal/parser:csi-final-byte-before-p byte) t)))))
@@ -102,7 +102,7 @@
 
   (it "csi-colon-undercurl-keeps-leading-underline"
     (with-screen (s 8 2)
-      (feed s (esc "[4:3m"))            ; undercurl via colon sub-parameter
+      (feed s (esc "[4:3m"))
       (feed s "X")
       (expect (char= #\X (char-at s 0 0)))
       (expect (logbitp 3 (attrs-at s 0 0)))))

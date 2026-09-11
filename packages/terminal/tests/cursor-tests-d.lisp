@@ -4,21 +4,21 @@
 
   (it "cursor-lf-moves-down-within-screen"
     (with-screen (s 10 5)
-      (nerimux/terminal/actions:cursor-lf s)   ; row 0 → row 1
+      (nerimux/terminal/actions:cursor-lf s)
       (check-cursor s 0 1)
-      (nerimux/terminal/actions:cursor-lf s)   ; row 1 → row 2
+      (nerimux/terminal/actions:cursor-lf s)
       (check-cursor s 0 2)))
 
   (it "cursor-lf-cancels-pending-wrap"
     (with-screen (s 3 3)
-      (feed s "abc")                     ; fills row 0; pending-wrap set
+      (feed s "abc")
       (expect (nerimux/terminal/types:screen-pending-wrap s) :to-be-truthy)
       (nerimux/terminal/actions:cursor-lf s)
       (expect (nerimux/terminal/types:screen-pending-wrap s) :to-be-falsy)))
 
   (it "cursor-lf-at-scroll-bottom-does-not-exceed-screen"
     (with-screen (s 5 3)
-      (nerimux/terminal/actions:set-cursor s 0 2)   ; bottom row
+      (nerimux/terminal/actions:set-cursor s 0 2)
       (nerimux/terminal/actions:cursor-lf s)
       (expect (<= (screen-cursor-y s) 2)))))
 
@@ -26,32 +26,32 @@
 
   (it "cursor-nl-default-lnm-off-preserves-column"
     (with-screen (s 10 5)
-      (feed s "hello")                         ; cursor at col 5, row 0
-      (nerimux/terminal/actions:cursor-nl s)   ; default LNM off
+      (feed s "hello")
+      (nerimux/terminal/actions:cursor-nl s)
       (check-cursor s 5 1)))
 
   (it "cursor-nl-with-lnm-on-resets-column-to-zero"
     (with-screen (s 10 5)
       (setf (nerimux/terminal/types:screen-newline-mode s) t)
-      (feed s "hello")                         ; cursor at col 5, row 0
+      (feed s "hello")
       (nerimux/terminal/actions:cursor-nl s)
       (check-cursor s 0 1)))
 
   (it "cursor-nl-lnm-on-stacks-text-vertically"
     (with-screen (s 10 5)
       (setf (nerimux/terminal/types:screen-newline-mode s) t)
-      (nerimux/terminal/actions:write-char-at-cursor s #\a)   ; col 0 row 0
-      (nerimux/terminal/actions:cursor-nl s)                  ; LF + CR
-      (nerimux/terminal/actions:write-char-at-cursor s #\b)   ; col 0 row 1
+      (nerimux/terminal/actions:write-char-at-cursor s #\a)
       (nerimux/terminal/actions:cursor-nl s)
-      (nerimux/terminal/actions:write-char-at-cursor s #\c)   ; col 0 row 2
+      (nerimux/terminal/actions:write-char-at-cursor s #\b)
+      (nerimux/terminal/actions:cursor-nl s)
+      (nerimux/terminal/actions:write-char-at-cursor s #\c)
       (expect (char= #\a (char-at s 0 0)))
       (expect (char= #\b (char-at s 0 1)))
       (expect (char= #\c (char-at s 0 2)))))
 
   (it "cursor-nl-lnm-off-leaves-column-intact"
     (with-screen (s 10 5)
-      (feed s "hi")                          ; cursor at col 2
+      (feed s "hi")
       (nerimux/terminal/actions:cursor-nl s)
       (check-cursor s 2 1))))
 
@@ -60,15 +60,15 @@
   (it "ind-via-parser-moves-down-preserving-column"
     (with-screen (s 10 5)
       (setf (nerimux/terminal/types:screen-newline-mode s) t)
-      (feed s "hello")                   ; cursor at col 5, row 0
-      (feed s (esc "D"))                 ; ESC D = IND = cursor-lf (not cursor-nl)
+      (feed s "hello")
+      (feed s (esc "D"))
       (check-cursor s 5 1)))
 
   (it "ind-via-parser-at-scroll-bottom-scrolls"
     (with-screen (s 5 3)
       (feed s "XXXXX")
-      (nerimux/terminal/actions:set-cursor s 0 2)   ; last row
-      (feed s (esc "D"))                             ; IND
+      (nerimux/terminal/actions:set-cursor s 0 2)
+      (feed s (esc "D"))
       (expect (<= (screen-cursor-y s) 2)))))
 
 (describe "terminal-suite/bce-background-suite"
@@ -76,7 +76,7 @@
   (it "erase-region-bce-carries-current-background"
     (with-screen (s 5 3)
       (feed s "aaaaa")
-      (feed s (esc "[42m"))           ; SGR 42 = green background
+      (feed s (esc "[42m"))
       (feed s (esc "[2J"))
       (let ((cell (screen-cell s 0 0)))
         (expect (= 2 (cell-bg cell))))))
@@ -90,10 +90,10 @@
 
   (it "erase-line-bce-carries-current-background"
     (with-screen (s 5 3)
-      (feed s "abcde")                   ; write some content
-      (feed s (esc "[44m"))              ; SGR 44 = blue background
-      (feed s (esc "[1;1H"))             ; cursor home (col 0, row 0)
-      (feed s (esc "[K"))                ; EL mode 0 (erase to end of line)
+      (feed s "abcde")
+      (feed s (esc "[44m"))
+      (feed s (esc "[1;1H"))
+      (feed s (esc "[K"))
       (let ((cell (screen-cell s 0 0)))
         (expect (= 4 (cell-bg cell)))))))
 

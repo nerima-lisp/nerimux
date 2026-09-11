@@ -91,13 +91,13 @@
    :REPLACEMENT for each one instead.
 
    :REPLACEMENT is passed explicitly rather than defaulted.  CL-CODEC-KIT's own
-   default is #\\SUB (U+001A), which is a C0 control character — wrong for a
+   default is #\\SUB (U+001A), which is a C0 control character, wrong for a
    terminal emulator, where this string is scanned for #\\; and then handed to
    title/clipboard/cwd handlers as display text.  U+FFFD is both what babel did
    here originally (its UTF-8 decoder hardcodes +REPL+ = #xFFFD for every
    decoding error, regardless of the encoding's own :DEFAULT-REPLACEMENT slot)
    and what nerimux substitutes everywhere else it cannot represent a code
-   point — see SAFE-CODE-CHAR and +UNICODE-REPLACEMENT-CHAR+ in cell.lisp.
+   point, see SAFE-CODE-CHAR and +UNICODE-REPLACEMENT-CHAR+ in cell.lisp.
 
    How MANY U+FFFD one bad sequence yields is not guaranteed: CL-CODEC-KIT
    emits one per decode error and resyncs one octet at a time, so ED A0 80

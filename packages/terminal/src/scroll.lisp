@@ -6,7 +6,7 @@
     (setf (screen-cell screen col dst-row) (screen-cell screen col src-row))))
 
 (defun %erase-cell (screen)
-  "A blank cell carrying the current background colour (BCE — background colour
+  "A blank cell carrying the current background colour (BCE, background colour
    erase).  Cells cleared by ED/EL/ECH, the blanks introduced by IL/DL/ICH/DCH,
    and lines exposed by scrolling take the current SGR background so a themed app
    that sets a background then clears renders that colour, not the default.  Only
@@ -99,7 +99,7 @@
 
 (defun trim-below-cursor (screen)
   "resize-pane -T: drop the rows below the cursor and pull rows out of the
-   scrollback to refill the screen from the top — the surviving content shifts
+   scrollback to refill the screen from the top, the surviving content shifts
    down so the cursor row becomes the bottom row, trimming all lines below the
    cursor position and pulling replacement lines out of the history.
    No-op when the cursor is already on the bottom row or on the alt screen
@@ -137,7 +137,7 @@
     (setf (screen-dirty-p screen) t)))
 
 (defun decstbm (screen top bottom)
-  "DECSTBM — set the vertical scroll region.
+  "DECSTBM, set the vertical scroll region.
    TOP and BOTTOM are 0-based inclusive row indices.  The cursor is homed
    to (0,0) after a valid set."
   (let ((clamped-top (max 0 top))

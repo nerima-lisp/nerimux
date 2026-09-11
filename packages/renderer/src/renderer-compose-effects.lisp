@@ -3,7 +3,7 @@
 (defun %emit-bell (buffer)
   "Write the audible BEL character to BUFFER.
    visual-bell (domain/options, deleted R2.2) defaulted to \"off\", which
-   %visual-bell-audible-p always classified as audible — with no config to
+   %visual-bell-audible-p always classified as audible, with no config to
    set it \"on\" (silent), the bell is unconditionally audible now; §1.1
    retires the visual-bell machinery outright, folding this function to the
    one live branch instead of leaving a dead dispatch on a deleted option."
@@ -55,7 +55,7 @@
   "Drain each pane's passthrough-queue, discarding it without emitting.
    allow-passthrough (domain/options, deleted R2.2) defaulted to \"off\" with
    no config to turn it \"on\"/\"all\", so this never wrote to BUFFER even
-   before R2 — the queue still had to be drained every frame so a pane that
+   before R2, the queue still had to be drained every frame so a pane that
    keeps emitting DCS-passthrough sequences cannot grow it without bound."
   (%drain-screen-queue buffer
                        panes
@@ -72,7 +72,7 @@
    server-scoped option table, but the deleted call site read the
    session-scoped one, silently falling through to its own passed-in
    default \"on\" every time) never changed the outcome, so it is not a
-   behaviour change — see the R2 renderer report."
+   behaviour change, see the R2 renderer report."
   (%drain-screen-queue buffer
                        panes
                        #'screen-clipboard-queue

@@ -1,19 +1,15 @@
 #!/usr/bin/env perl
-# Cross-package reference check.
-#
 # A single-colon reference (PKG:SYM) to a symbol PKG does not export is a
 # READ-time error: the file cannot even be read, let alone compiled. The
 # structure check cannot see it, because it reads with *READ-SUPPRESS* bound to
 # T precisely so that no package needs to exist.
-#
 # This closes that gap without loading anything: collect every (:export ...)
 # list from every .lisp file under src/ or packages/ that contains a
 # defpackage form -- not a fixed glob on src/bootstrap/package*.lisp, since a
 # future packages/<name>/ layout can carry defpackage forms anywhere in the
 # tree -- then check every PKG:SYM reference in src/, tests/, and packages/
 # against them.
-#
-# Double-colon (PKG::SYM) is deliberately NOT checked — it reaches internals on
+# Double-colon (PKG::SYM) is deliberately NOT checked, because it reaches internals on
 # purpose and is legal regardless of the export list.
 use strict;
 use warnings;
@@ -22,7 +18,6 @@ binmode(STDOUT, ":encoding(UTF-8)");
 my $root = shift // '.';
 chdir $root or die "cannot chdir $root: $!";
 
-# ---- collect every .lisp file under src/ and packages/ ---------------------
 my @source_files;
 for my $dir ('src', 'packages') {
     next unless -d $dir;
@@ -31,9 +26,8 @@ for my $dir ('src', 'packages') {
     close $find;
 }
 
-# ---- collect export lists -------------------------------------------------
-my %exports;           # package name (lc) => { symbol (lc) => 1 }
-my %is_pkgfile;         # source file (path) => 1 if it declares a defpackage
+my %exports;
+my %is_pkgfile;
 for my $f (@source_files) {
     open(my $fh, '<:encoding(UTF-8)', $f) or die "$f: $!";
     my $text = do { local $/; <$fh> };
@@ -46,8 +40,6 @@ for my $f (@source_files) {
     for my $c (@chunks) {
         next unless $c =~ /^#?:?([A-Za-z0-9\/\-\*\+]+)/;
         my $pkg = lc $1;
-        # Everything up to the next defpackage is this package's form.
-        # Grab all #:NAME tokens that appear after an (:export marker.
         if ($c =~ /\(:export(.*)$/s) {
             my $tail = $1;
             while ($tail =~ /#:([^\s\)\(]+)/g) {
@@ -58,11 +50,10 @@ for my $f (@source_files) {
 }
 
 unless (keys %exports) {
-    print "NO EXPORT LISTS PARSED — the parser is wrong, not the tree\n";
+    print "NO EXPORT LISTS PARSED: the parser is wrong, not the tree\n";
     exit 2;
 }
 
-# ---- scan references ------------------------------------------------------
 my @bad;
 my $refs = 0;
 my @files = @source_files;
@@ -73,10 +64,10 @@ if (-d 'tests') {
 }
 
 for my $f (@files) {
-    next if $is_pkgfile{$f};   # the declarations themselves
+    next if $is_pkgfile{$f};
     open(my $fh, '<:encoding(UTF-8)', $f) or next;
     my $ln = 0;
-    my $in_string = 0;   # docstrings span lines; a mention inside one is prose
+    my $in_string = 0;
     while (my $line = <$fh>) {
         $ln++;
         my $code = '';
@@ -92,8 +83,8 @@ for my $f (@files) {
                 next;
             }
             if ($c eq '"') { $in_string = 1; next }
-            if ($c eq ';') { last }                     # comment to end of line
-            if ($c eq '#' && ($ch[$i+1] // '') eq "\\") { $i += 2; next }  # #\x
+            if ($c eq ';') { last }
+            if ($c eq '#' && ($ch[$i+1] // '') eq "\\") { $i += 2; next }
             $code .= $c;
         }
         next unless length $code;

@@ -1,16 +1,12 @@
 # Integration provenance: deleted worktrees, deferred work, and verification baselines
 
-> **Salvaged from the old `EXECUTION.md`.** The previous `EXECUTION.md` was a
-> 407-line work journal that mostly duplicated git history (integrated work
-> units, commit contents, diff/commit-inspection results); that part is not
-> reproduced here since `git log` already carries it. This file keeps only
-> what git history alone cannot reconstruct: why specific worktrees and
-> branches were deleted, work that was deliberately deferred and why,
-> authorization/verification checks that were actually performed, and the
-> fact and scope of baselines that were red at integration time.
+> **Salvaged from the old `EXECUTION.md`.** This file records information not
+> recoverable from `git log`: why specific worktrees and branches were deleted,
+> deferred work and its reason, authorization and verification checks, and
+> baselines that were red at integration time.
 >
 > **`EXECUTION.md` is gone as of 2026-08-31.** It held the parallel-execution
-> runbook for the `packages/` reorganisation — W0 through W6 and the Phase 2
+> runbook for the `packages/` reorganisation, W0 through W6 and the Phase 2
 > preview. Every wave it directed is on main, so it had stopped being an
 > instruction and started reading as an unstarted plan. Recover it with
 > `git show 9742b8e:EXECUTION.md`; the repository standard also wants only
@@ -110,7 +106,7 @@ session 単位の `workspace-mode-p` 分岐で上書きしようとする、独�
   `define-window-records` マクロ経由で定義される `%split-spec-*` を、checker が
   `:conc-name` から学習できないことによる既知の偽陽性で、ゲートを緩めずにその状態の
   まま残された。フィルタ無しのフルスイートはそのマシンで実行不能（既知の SBCL GC
-  デッドロック、そのセッションの変更とは無関係）で、canonical gate の
+  デッドロック、そのセッションの変更とは無関係）で、基準ゲートの
   `nix flake check` も同じ理由でそのセッションでは実行されなかった。
 - **別セッション**（attach 導線の修復を行ったセッション）: ローカル (macOS) では
   テストスイートが実行不能（既知の SBCL 停止問題）だったため、検証は built binary を

@@ -12,7 +12,7 @@
 (defmacro with-pty-available (&body body)
   "Run BODY when PTY-backed shells are available; otherwise SKIP the enclosing test.
    A bare (WHEN (PTY-AVAILABLE-P) ...) would leave the test reporting a PASS on a
-   machine without /dev/ptmx, having asserted nothing — worse than a skip, because
+   machine without /dev/ptmx, having asserted nothing, worse than a skip, because
    CI then looks clean.  cl-weave's SKIP invokes the SKIP-TEST restart, so the test
    is reported as skipped and the reason is printed."
   `(if (pty-available-p)
@@ -113,7 +113,7 @@
         (quiet-count 0))
     (loop
       (when (> (get-internal-real-time) end) (return))
-      (if (select-fds (list fd) 200000)          ; 200 ms poll
+      (if (select-fds (list fd) 200000)
           (let ((chunk (pty-read-blocking-into fd (make-array 4096 :element-type '(unsigned-byte 8)))))
             (setf quiet-count 0)
             (when chunk

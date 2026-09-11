@@ -28,7 +28,7 @@
       nil)))
 
 (defun %apply-global-cli-invocation (invocation)
-  "Return INVOCATION's remaining :mode-args rest positional — the mode word
+  "Return INVOCATION's remaining :mode-args rest positional, the mode word
    plus its own args.  INVOCATION carries no other global options; -V and -h
    are the only global flags and are handled by
    %dispatch-global-cli-flag-actions."
@@ -60,7 +60,7 @@
    see %dispatch-startup-mode-entry.
    Any ERROR signaled by mode dispatch is caught here and reported the same way
    %parse-global-cli-argv already reports a malformed global flag: a one-line
-   message on *error-output* and exit 1 — never the raw SBCL debugger, which
+   message on *error-output* and exit 1, never the raw SBCL debugger, which
    the saved core would otherwise drop a real user into."
   (let ((*print-circle* t)
         (invocation (%parse-global-cli-argv (%application-argv))))

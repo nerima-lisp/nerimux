@@ -29,8 +29,8 @@ SIGWINCH ──► %maybe-send-resize                     from each ready client
                        ▼                                    ▼                        ▼
               repolist/status keymap,              focused pane's PTY       +msg-command+ payload
               C-q prefix, transients               (VIEW :pane, MODAL nil   → %handle-client-ui-command
-              (per-CLIENT-CONN VIEW × MODAL          — pty-write via the      (workspace UI vocabulary:
-               — %client-ui-keys-p derives            *write-pty* port)        wt-create, tree-*, picker-*,
+              (per-CLIENT-CONN VIEW × MODAL          pty-write via the      (workspace UI vocabulary:
+               %client-ui-keys-p derives              *write-pty* port)        wt-create, tree-*, picker-*,
                which of these three a key hits)                                view, modal …)
                                                             ▲
                                                             │ pane-feed, screen update, *dirty* = T
@@ -62,7 +62,7 @@ goes is *derived* from `VIEW` (`%client-ui-keys-p`,
 `src/server-multi-dispatch.lisp`) rather than stored: there is no
 state in which a pane is on screen and the workspace UI is nonetheless eating
 keys, because there is no slot in which to record one. That is what replaced
-the old `:normal`/`:input` mode pair — see [Getting
+the old `:normal`/`:input` mode pair, see [Getting
 started](../getting-started.md#default-key-bindings) for the resulting
 keymap.
 
@@ -75,7 +75,7 @@ pane/PTY layout underneath is still sized once, from the smallest attached
 client's geometry (`%effective-client-size`).
 
 A key an attached client sends reaches a pane's PTY whenever `VIEW` is
-`:pane` and `MODAL` is `NIL` — no mode to enter first. Every other key is
+`:pane` and `MODAL` is `NIL`, no mode to enter first. Every other key is
 handled by the per-client workspace dispatcher (`%handle-multi-key-message`,
 `src/server-multi-dispatch.lisp`); bindings are compiled into that
 dispatcher and no configuration file is read.
@@ -103,9 +103,9 @@ form, so the public port surface remains explicit without an adapter layer.
   A capability with exactly one implementation is a plain **wrapper**:
   `environment-value`, `environment-entries`, `working-directory` in
   `posix-port.lisp`. Their tests stub by setting a real environment variable,
-  never by installing a fake, so a port variable would have nothing on the other
-  side — and an unbound one would reproduce this codebase's most repeated
-  failure, a port nobody installs whose fallback succeeds silently. The wrappers
+  never by installing a fake. A port variable would have nothing on the other
+  side, and an unbound one would reproduce this codebase's most repeated
+  failure: a port nobody installs whose fallback succeeds silently. The wrappers
   still earn their place by naming the dependency in one file instead of
   scattering raw `sb-ext:` calls through the model.
 
@@ -134,7 +134,7 @@ catches what the other cannot.
 
 `no-package-declares-an-upward-layer-dependency` reads every `defpackage` form
 and fails if one declares an upward `:use` or `:import-from`. It catches a
-package re-opening the hole wholesale — a `:use` clause makes every reference
+package re-opening the hole wholesale. A `:use` clause makes every reference
 through it *unqualified*, and therefore invisible to a search for the package
 name.
 
@@ -144,15 +144,14 @@ and `::` bypasses the export list too. So the second test,
 `no-source-file-references-a-higher-layer-package`, scans source text instead: it
 strips comments, strings and character literals, maps every `pkg:sym` and
 `pkg::sym` reference to the referenced package's layer, and fails on any that
-points upward. Direction is what it judges — using `::` to reach *downward* is an
+points upward. Direction is what it judges. Using `::` to reach *downward* is an
 export-hygiene question, not a layering one.
 
 It also fails when a `nerimux/…` package carries no layer marker in its
-`defpackage` docstring. That case is currently empty and kept deliberately: a
-package nothing classifies is a package silently exempt from the check, the same
-shape of hole as the one above. Neither test carries an allow-list, for the same
-reason — an exception list makes a guard green while preserving exactly the
-condition it exists to find.
+`defpackage` docstring. The check currently treats an unclassified package as
+exempt. That is the same hole as the one above. Neither test carries an
+allow-list, because an exception list makes a guard green while preserving
+exactly the condition it exists to find.
 
 The tests report the offending package or source reference so a violation can
 be fixed at the layer boundary rather than hidden behind an allow-list.
@@ -192,7 +191,7 @@ dispatch units that call those operations.
 Each layer is its own ASDF system under `packages/<name>/`, and `src/` holds only
 the bootstrap core. A unit declares what it depends on in its own `.asd`, so a
 reference that crosses a unit boundary without a declared edge fails to load
-rather than failing a test — the layer order below is enforced by the build, not
+rather than failing a test. The layer order below is enforced by the build, not
 only by the guards in `tests/unit/bootstrap/system-composition-tests.lisp`.
 
 ```
@@ -236,7 +235,7 @@ slash-qualified secondary system from the *primary* system's `.asd`, so
    umbrella: it supplies all of them, so an omission stays green in the full
    suite. Declare a kit that only the *fixtures* need on the test system, not on
    the unit.
-3. Add the unit to `nerimux.asd` — both `:depends-on` and the list in the
+3. Add the unit to `nerimux.asd`, both `:depends-on` and the list in the
    `eval-when` that pre-loads each unit's `.asd`. That list is deliberately
    explicit rather than a glob: loading an `.asd` is executing it.
 4. Add `nerimux-<name>/test` to `nerimux/test`'s `:depends-on`, so its suites
@@ -247,18 +246,18 @@ slash-qualified secondary system from the *primary* system's `.asd`, so
    NERIMUX_TEST_SYSTEM=nerimux-<name>/test nix run 'path:.#test'
    ```
 
-The renderer has two independent first passes, and the split is deliberate:
+The renderer has two independent first passes:
 
-- **The pane view** — `render-session-to-string` (`renderer-compose.lisp`),
+- **The pane view**: `render-session-to-string` (`renderer-compose.lisp`),
   drawing the fixed one-row status line, laying out panes and emitting escape
   codes. This is the VT100 machinery: pane and border rendering, status-line
   composition, style/SGR emission, scrollback overlays (still `copy-mode` in
   source). Exercised on every frame that shows terminal content.
-- **The workspace view** — `renderer-workspace-status-title.lisp` owns status
+- **The workspace view**: `renderer-workspace-status-title.lisp` owns status
   labels and terminal titles shared by both views, while
   `renderer-workspace-command-line.lisp` owns workspace command completion.
   `renderer-workspace-tree.lisp` projects the repolist view's three fixed
-  sections — Attention, Active, Repositories — flattening each worktree's
+  sections: Attention, Active, and Repositories, flattening each worktree's
   optional inline expansion (panes, changed files, recent commits, and a
   changed file's own diff) into the same row list, including attention and
   refresh state.

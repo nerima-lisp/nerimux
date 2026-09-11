@@ -4,7 +4,7 @@
   nil
   "When non-NIL, session-child-environment SKIPS applying the update-environment
    variables (merge step 2).  Bound to T around new-session -E so the created
-   session — including its initial pane — does not pick up update-environment.")
+   session, including its initial pane, does not pick up update-environment.")
 
 (defun %apply-session-overlay (session table)
   "Merge SESSION's environment overlay into TABLE (mutates TABLE in place).
@@ -39,12 +39,12 @@
    The merge order is:
      1. current process environment (base)
      2. update-environment variables from the current process
-        (skipped when *suppress-update-environment* is non-NIL — new-session -E)
+        (skipped when *suppress-update-environment* is non-NIL, new-session -E)
      3. SESSION overlay sets and unsets
      4. EXTRA-ENV alist of (NAME . VALUE), when supplied
      5. terminal identity from the latest client attach
      6. TERM override, when TERM is a non-empty string
-   SESSION may be NIL for bootstrap or pure geometry helpers — step 3 is skipped.
+   SESSION may be NIL for bootstrap or pure geometry helpers, step 3 is skipped.
    The result is suitable for passing as :environment to sb-ext:run-program."
   (let ((table (%environment-strings-to-table (nerimux/ports:environment-entries))))
     (unless *suppress-update-environment*

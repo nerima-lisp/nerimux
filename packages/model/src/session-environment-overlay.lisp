@@ -34,10 +34,10 @@
 (defun session-environment-value (session name)
   "Return SESSION's effective value for NAME.
    Returns two values: (value source-keyword) where source-keyword is one of:
-     :unset   — explicitly removed from the session overlay
-     :session — set in the session overlay
-     :process — inherited from the current process environment
-     NIL      — not present anywhere relevant."
+     :unset   means explicitly removed from the session overlay
+     :session means set in the session overlay
+     :process means inherited from the current process environment
+     NIL      means not present anywhere relevant."
   (cond
     ((member name (session-environment-unsets session) :test #'string=)
      (values nil :unset))

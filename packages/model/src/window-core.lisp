@@ -155,7 +155,7 @@
    but not focused).  SIZE is an integer (cells) or real (fraction 0..1) that
    controls the new pane's initial size along the split axis.
    BEFORE T inserts the new pane before (left of / above) the active pane
-   instead of after (right of / below) — matches split-window -b.
+   instead of after (right of / below), matches split-window -b.
    FULL T makes the new pane span the FULL window dimension (split-window -f): the
    split is inserted at the tree ROOT, with the entire existing layout as one child
    and the new pane as the other, instead of subdividing only the active pane.

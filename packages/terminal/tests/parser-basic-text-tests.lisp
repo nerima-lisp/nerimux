@@ -19,9 +19,9 @@
 
   (it "carriage-return"
     (with-screen (s 20 5)
-      (feed s "abc")                         ; cursor at (3, 0)
+      (feed s "abc")
       (check-cursor s 3 0)
-      (feed s (string #\Return))             ; CR → column 0, row unchanged
+      (feed s (string #\Return))
       (check-cursor s 0 0)
       (expect (string= "abc" (row-string s 0 :end 3)))
       (feed s "XY")
@@ -30,9 +30,9 @@
 
   (it "carriage-return-keeps-row"
     (with-screen (s 20 5)
-      (feed s (esc "[3;6H"))                 ; cursor → (5, 2)
+      (feed s (esc "[3;6H"))
       (check-cursor s 5 2)
-      (feed s (string #\Return))             ; CR → column 0, still row 2
+      (feed s (string #\Return))
       (check-cursor s 0 2)))
 
   (it "line-wrap"
@@ -56,8 +56,8 @@
 
   (it "tab-already-at-stop"
     (with-screen (s 40 2)
-      (feed s "        ")   ; 8 spaces → cursor at (8, 0)
-      (feed s "a")          ; cursor at (9, 0)
-      (feed s (esc "[1;9H")) ; CUP row=1 col=9 (1-based) → (8, 0)
+      (feed s "        ")
+      (feed s "a")
+      (feed s (esc "[1;9H"))
       (feed s (string #\Tab))
       (check-cursor s 16 0))))

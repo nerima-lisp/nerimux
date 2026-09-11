@@ -1,49 +1,31 @@
 {
-  description = "nerimux — a git-worktree workspace multiplexer in Common Lisp";
+  description = "nerimux, a git-worktree workspace multiplexer in Common Lisp";
 
   inputs = {
     # nixos-unstable, not nixpkgs-unstable: it advances only after the NixOS
     # release tests pass, so it is less likely to land a broken build.
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-    # Sibling packages are ALWAYS pinned to a release tag. A bare
-    # `github:nerima-lisp/cl-weave` follows that repo's default branch, so an
-    # upstream push to main would break this repo's CI without warning.
-    #
-    # cl-weave is consumed as a flake, so it takes `inputs.nixpkgs.follows`:
-    # without it it drags in its own nixpkgs, inflating flake.lock and
-    # rebuilding the same derivations twice.
+    # Pin sibling packages to release tags so upstream branch changes cannot
+    # alter this repository's inputs without a lock-file update.
+    # Share nixpkgs with the sibling flake to avoid duplicate inputs.
     cl-weave = {
       url = "github:nerima-lisp/cl-weave/v1.3.0";
       inputs.nixpkgs.follows = "nixpkgs";
-      # cl-weave's own flake declares paredit-cli as a development input. Pin it
-      # explicitly to the release tag used by this project so the transitive
-      # development tool remains reproducible and is never linked into nerimux.
+      # cl-weave's transitive development tool follows the project release.
       inputs.paredit-cli.url = "github:nerima-lisp/paredit-cli/v1.6.2";
     };
-    # Keep the structural editor available as a first-class project tool.
-    # cl-weave consumes the same release transitively, but exposing it here
-    # makes the documented editing workflow reproducible in the dev shell.
     paredit-cli = {
       url = "github:nerima-lisp/paredit-cli/v1.6.2";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # `flake = false`: consumed as a plain source checkout, pushed onto ASDF's
-    # central registry below rather than through each repo's own flake outputs.
-    # This is the form DEPENDENCY_POLICY.md prescribes for sibling packages and
-    # it keeps working regardless of whether a given sibling ships a flake.nix.
-    #
-    # A `flake = false` input has no inputs of its own, so it takes no
-    # `follows` — there is no nested nixpkgs for it to duplicate. That is the
-    # same goal `follows` serves for the two flake inputs above, reached a
-    # different way, not an omission.
+    # Consume sibling packages as source checkouts and register them with ASDF.
+    # A non-flake input has no nested nixpkgs to follow.
     cl-cli = {
       url = "github:nerima-lisp/cl-cli/v1.3.0";
       flake = false;
     };
-    # Direct runtime dependency: cl-concurrent-kit's timeout API consumes
-    # CL-DATE-KIT:DURATION values.
     cl-date-kit = {
       url = "github:nerima-lisp/cl-date-kit/v1.0.0";
       flake = false;
@@ -53,69 +35,44 @@
       flake = false;
     };
     cl-tty-kit = {
-      # Provides the terminal-size ioctl and raw-mode fixes used by nerimux's
-      # PTY layer, including arm64-safe ioctl marshalling.
       url = "github:nerima-lisp/cl-tty-kit/v1.6.1";
       flake = false;
     };
     cl-process-kit = {
-      # Exports wait-for-input/select-fds, which the PTY process supervisor
-      # calls directly.
       url = "github:nerima-lisp/cl-process-kit/v3.2.0";
       flake = false;
     };
     cl-log-kit = {
-      # Transitive runtime dependency: cl-process-kit's ASDF system requires
-      # this source even though nerimux does not call its API directly.
+      # Required by cl-process-kit's ASDF system.
       url = "github:nerima-lisp/cl-log-kit/v2.2.0";
       flake = false;
     };
     cl-concurrent-kit = {
-      # Supplies the threads, locks, condition variables and preemptive
-      # WITH-TIMEOUT primitives used by the orchestration layer.
       url = "github:nerima-lisp/cl-concurrent-kit/v0.6.1";
       flake = false;
     };
     cl-boundary-kit = {
-      # Transitive runtime dependency: cl-concurrent-kit's ASDF system requires
-      # this source even though nerimux does not call its API directly.
+      # Required by cl-concurrent-kit's ASDF system.
       url = "github:nerima-lisp/cl-boundary-kit/v2.3.0";
       flake = false;
     };
     cl-regex-kit = {
-      # Provides the compile-regex, scan, match, split and replace-all API used
-      # by the command parser and format expansion code.
       url = "github:nerima-lisp/cl-regex-kit/v2.0.0";
       flake = false;
     };
     cl-codec-kit = {
-      # Independent from-scratch codec: the string<->octet call
-      # sites in src/ and tests/ name cl-codec-kit:string-to-octets /
-      # octets-to-string directly. Briefly routed through cl-host-kit instead;
-      # re-pointed here on 2026-08-02 so the codec is named at its own call
-      # sites rather than through a host-ops package.
-      #
-      # `:depends-on ()` — depth 0, so this input pulls in nothing else.
-      # cl-tty-kit and cl-process-kit (both already inputs above) consume it
-      # too, so one checkout serves all three.
       url = "github:nerima-lisp/cl-codec-kit/v0.5.0";
       flake = false;
     };
     cl-host-kit = {
-      # Provides the pathname and host-string operations still used by the
-      # bootstrap loader and environment parsing.
       url = "github:nerima-lisp/cl-host-kit/v0.3.1";
       flake = false;
     };
     cl-tui-kit = {
-      # The headless surface/layout/backend API used by nerimux's per-client
-      # renderer. Pin the API that exposes make-surface and the ANSI backend.
       url = "github:nerima-lisp/cl-tui-kit/v4.1.3";
       flake = false;
     };
     cl-vcs-kit = {
-      # ghq/repository/worktree discovery for the global picker. The source
-      # provides the stable VCS observation API used by the picker.
       url = "github:nerima-lisp/cl-vcs-kit/v0.2.0";
       flake = false;
     };
@@ -149,26 +106,15 @@
       ...
     }:
     let
-      # x86_64-linux is what CI gates; aarch64-darwin is the development
-      # machine. Every per-system output -- packages, checks, apps AND devShells
-      # -- comes from this one list, so leaving aarch64-darwin out takes `nix
-      # build` and `nix develop` off the development machine as well. That trade
-      # was made on 2026-08-01 and reverted on 2026-08-02; aarch64-darwin carries
-      # no CI gate, which PACKAGE_STANDARD.md's "systems" section accepts
-      # explicitly. aarch64-linux and x86_64-darwin are nobody's verification and
-      # are not declared.
+      # CI targets x86_64-linux; local development targets aarch64-darwin.
       systems = [
         "x86_64-linux"
         "aarch64-darwin"
       ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
 
-      # No config.allowBroken. It was here for the Quicklisp-packaged Lisp
-      # libraries this flake used to pull in — nixpkgs marks several sbcl-*
-      # packages broken on darwin even though they are pure Lisp and load fine.
-      # With bordeaux-threads and cl-ppcre gone, no sbcl-* package is referenced
-      # at all, so the exemption would only be hiding a genuinely broken package
-      # from us. Restore it only alongside a specific package that needs it.
+      # Do not hide broken packages. Restore allowBroken only with a package that
+      # requires it.
       pkgsFor = system: import nixpkgs { inherit system; };
 
       # SBCL's Darwin PTYs need a session and controlling terminal for job-control shells.
@@ -250,14 +196,7 @@
         else
           pkgs.sbcl;
 
-      # Single source of truth for the version: the `:version` form in
-      # nerimux.asd. A release only ever edits the .asd, and every Nix package
-      # follows automatically; release.yml refuses a tag that disagrees.
-      #
-      # Nix regexes are whole-string anchored and `.` never spans newlines, so
-      # the version is extracted line-by-line rather than with one multi-line
-      # match. The first match wins, which is the `nerimux` system — the test
-      # systems repeat the same field further down the file.
+      # Release tags are checked against the version in nerimux.asd.
       version =
         let
           lines = nixpkgs.lib.splitString "\n" (builtins.readFile ./nerimux.asd);
@@ -267,10 +206,6 @@
         in
         builtins.head (builtins.match "[[:space:]]*:version \"([^\"]*)\"" versionLine);
 
-      # Every dogfooded sibling and its ASDF transitive sources are consumed
-      # purely as source: each checkout goes on ASDF's central registry rather
-      # than through nixpkgs Lisp packaging. This one list drives every SBCL
-      # invocation below.
       patchedClTuiKit =
         system:
         let
@@ -312,9 +247,8 @@
         cl-vcs-kit
       ];
 
-      # Colon-separated source roots, read by run-tests.lisp. Keeping the list
-      # in one variable means the checks, the app and the devShell cannot drift
-      # apart on which siblings they can see.
+      # Source roots read by run-tests.lisp and shared by checks, apps, and the
+      # devShell.
       siblingRegistry = system: nixpkgs.lib.concatStringsSep ":" (map toString (siblingRepos system));
 
       siblingRegistryPushEvals =
@@ -323,36 +257,13 @@
           repo: ''--eval "(push (truename \"${repo}/\") asdf:*central-registry*)"''
         ) (siblingRepos system);
 
-      # Each in-repo unit lives in packages/<name>/ and carries its own .asd.
-      # ASDF's central registry finds a .asd only in a directory registered
-      # directly -- it does not recurse -- and the line above deliberately
-      # empties the source registry, so without this a unit asked for by its own
-      # name resolves to nothing. Kept in one binding for the same reason
-      # siblingRegistry is: the build phase and the devShell cannot drift apart
-      # on which units they can see.
+      # ASDF does not recurse through the central registry, so register each
+      # in-repo package directory for test and development invocations.
       packagesRegistryPushEval = ''--eval "(dolist (d (directory \"packages/*/\")) (push d asdf:*central-registry*))"'';
 
-      # Plain SBCL, with NO Quicklisp-packaged libraries wrapped around it.
-      #
-      # There is nothing left to wrap: nerimux has no external (non-org)
-      # dependencies. Every name in nerimux.asd's :depends-on is a nerima-lisp
-      # sibling, and siblings are consumed as SOURCE via siblingRegistry above,
-      # not through nixpkgs Lisp packaging.
-      #
-      # The four that used to be here, and where each went:
-      #   cffi             -> cl-process-kit / cl-tty-kit / sb-posix (2026-08-01)
-      #   babel            -> cl-host-kit                            (2026-08-01)
-      #   bordeaux-threads -> cl-concurrent-kit                      (2026-08-02)
-      #   cl-ppcre         -> cl-regex-kit                            (2026-08-02)
-      #
-      # If a `pkgs.sbcl.withPackages` ever comes back here, nerimux.asd's
-      # :depends-on must gain the matching external name in the same commit —
-      # a mismatch between the two fails only at load time.
+      # Runtime dependencies are ASDF sibling sources, not nixpkgs Lisp
+      # packages, so the build uses plain SBCL.
 
-      # treefmt drives `nix fmt` and the `checks.<system>.formatting` gate.
-      # Scope is Nix only: nixfmt is a low-diff formatter, whereas YAML
-      # formatters mangle the GitHub Actions `on:` key and Markdown
-      # reformatting would churn the whole docs tree.
       treefmtEval = forAllSystems (
         system:
         treefmt-nix.lib.evalModule (pkgsFor system) {
@@ -361,11 +272,7 @@
         }
       );
 
-      # One test derivation per suite. They differ only in which ASDF system
-      # run-tests.lisp is pointed at, so the shape lives here once.
-      #
-      # The tree is copied and made writable because the suite compiles in
-      # place; ${self} in the store is read-only.
+      # Copy the read-only flake source before running a suite that compiles in place.
       mkTestCheck =
         system: name: testSystem:
         let
@@ -388,9 +295,7 @@
             cp -r ${self} ./src-tree
             chmod -R u+w ./src-tree
             cd ./src-tree
-            # Keep the heap explicit for the Darwin builder. This only controls
-            # available address space; every test component is still loaded and the
-            # test runner keeps its bounded 45-minute timeout.
+            # Darwin's builder needs an explicit heap.
             ${pkgs.coreutils}/bin/timeout --signal=TERM --kill-after=30s 2700 \
               ${sbcl}/bin/sbcl --dynamic-space-size 4096 --no-sysinit \
               --no-userinit --disable-debugger --script run-tests.lisp
@@ -417,7 +322,6 @@
               runHook preBuild
               export HOME=$TMPDIR
 
-              # Compile all Lisp sources and save the image as a core file.
               # save-lisp-and-die without :executable avoids the macOS-specific
               # issue where embedded-core binaries fail to find sbcl.core at
               # runtime.
@@ -446,7 +350,6 @@
 
               cp nerimux.core $out/lib/nerimux/
 
-              # Wrap sbcl so users just call "nerimux".
               # --noinform is a C-runtime option; it must precede --core.
               # --no-sysinit/userinit are Lisp options; they follow --core.
               makeWrapper ${sbcl}/bin/sbcl $out/bin/nerimux \
@@ -464,13 +367,8 @@
 
           default = nerimux;
 
-          # Rendered documentation site (Material for MkDocs). Builds fully
-          # offline: Material bundles all of its assets, so no network access is
-          # required inside the Nix sandbox. --strict promotes broken links and
-          # pages missing from the nav to build failures.
-          #
-          # The fileset covers docs/mkdocs.yml and docs/src only, so docs/notes/
-          # (working records, deliberately unpublished) never reaches the site.
+          # Build the published docs offline with strict link and nav checks.
+          # docs/notes contains unpublished working records.
           docs = pkgs.stdenvNoCC.mkDerivation {
             pname = "nerimux-docs";
             inherit version;
@@ -495,13 +393,8 @@
             };
           };
 
-          # `nix build .#coverage-report` — a hermetic sb-cover report, for CI
-          # to upload as an artifact without a local SBCL checkout. Mirrors
-          # cl-tty-kit's package of the same name (scripts/coverage.lisp is
-          # this project's counterpart to its scripts/coverage.lisp). Runs in
-          # a writable copy with an isolated HOME, just like mkTestCheck, so
-          # compilation artifacts cannot modify the source tree. The
-          # interactive devShell helper below remains a separate local path.
+          # Hermetic sb-cover report for CI. Use a writable copy because coverage
+          # compilation writes fasls and the flake source is read-only.
           coverage-report =
             pkgs.runCommand "nerimux-coverage-report"
               {
@@ -528,22 +421,16 @@
         }
       );
 
-      # `nix fmt` entry point.
       formatter = forAllSystems (system: treefmtEval.${system}.config.build.wrapper);
 
-      # Granularity lives here, NOT in extra GitHub Actions jobs: `nix flake
-      # check` evaluates each attribute as its own derivation, in parallel, with
-      # build caching. Add a check here rather than a job in ci.yml.
+      # Separate attributes let Nix build static checks in parallel.
       checks = forAllSystems (
         system:
         let
           pkgs = pkgsFor system;
           sbcl = sbclFor system;
 
-          # scripts/checks/*.lisp and *.pl (see scripts/checks/README.md) need
-          # neither ASDF nor a compile — each only reads the tree, so ${self}
-          # is used directly rather than copied to a writable directory the
-          # way mkTestCheck does for the suites that compile in place.
+          # Static checks only read the tree, so they do not need a writable copy.
           mkStaticCheck =
             name: cmd:
             pkgs.runCommand name
@@ -560,21 +447,12 @@
               '';
         in
         {
-          # The full unit + integration suite. It spawns no pseudo-terminal: the
-          # cases that do live in nerimux/pty-test and run as `nix run .#test-pty`,
-          # because a sandbox has no /dev/ptmx and they would otherwise skip and be
-          # counted as passes (R9.2).
+          # Sandbox checks omit real-PTY cases because /dev/ptmx is unavailable.
           default = mkTestCheck system "nerimux-tests" "nerimux/test";
 
-          # Fails `nix flake check` when any tracked file is unformatted,
-          # turning the formatter into an enforced CI gate.
           formatting = treefmtEval.${system}.config.build.check self;
 
-          # The docs package builds with `mkdocs --strict`, so a broken link or
-          # a page missing from the nav fails here. Without this check the docs
-          # are only ever built by the publish workflow, which runs after a
-          # merge to main — so a break would surface as a failed deploy rather
-          # than as a failed pull request.
+          # Build documentation with mkdocs --strict so broken links fail the check.
           docs = self.packages.${system}.docs;
 
           read-check = mkStaticCheck "read-check" "${sbcl}/bin/sbcl --script scripts/checks/read-check.lisp";
@@ -605,8 +483,7 @@
             text = ''
               export NERIMUX_SIBLING_REGISTRY="${siblingRegistry system}"
               export NERIMUX_TEST_SYSTEM="''${NERIMUX_TEST_SYSTEM:-nerimux/test}"
-              # Run against a writable copy for the same reason the checks do:
-              # the suite compiles in place and ${self} is read-only.
+              # The suite compiles in place, so copy the read-only source first.
               work="$(mktemp -d)"
               trap 'rm -rf "$work"' EXIT
               mkdir -p "$work/home"
@@ -632,10 +509,8 @@
             text = ''
               export NERIMUX_SIBLING_REGISTRY="${siblingRegistry system}"
               export NERIMUX_TEST_SYSTEM="nerimux/pty-test"
-              # The PTY suite must use a deterministic POSIX shell.  A caller's
-              # interactive SHELL can be fish (or another shell whose startup
-              # hooks are not suitable for a non-login test PTY), making the
-              # child exit before the test sends its command.
+              # A caller's interactive shell can exit before the test sends its
+              # command, so the PTY suite always uses /bin/sh.
               export SHELL=/bin/sh
               work="$(mktemp -d)"
               trap 'rm -rf "$work"' EXIT
@@ -652,17 +527,8 @@
             '';
           };
 
-          # End-to-end smoke: headless server/kill scenarios plus the
-          # real-PTY attach scenario (tests/e2e/e2e-smoke.lisp), driven against
-          # the flake-built binary rather than a hand-run `nix build .`.
-          # Runs read-only against ${self} in the store -- unlike test and
-          # test-pty, e2e-smoke.lisp never compiles nerimux in place: the
-          # headless scenarios only spawn the already-built binary as a
-          # subprocess, and the attach scenario ASDF:LOAD-SYSTEMs nerimux,
-          # which (like the package derivation above, flake.nix:314-368)
-          # only ever writes its build output (fasls) under HOME's ASDF
-          # cache, not next to the source. Only HOME needs a writable
-          # scratch directory.
+          # End-to-end smoke uses the built binary and loads ASDF output under a
+          # temporary HOME, so the flake source remains read-only.
           e2e = pkgs.writeShellApplication {
             name = "nerimux-e2e";
             runtimeInputs = [
@@ -688,7 +554,7 @@
             type = "app";
             program = "${self.packages.${system}.nerimux}/bin/nerimux";
             meta = {
-              description = "nerimux — a git-worktree workspace multiplexer in Common Lisp";
+              description = "nerimux, a git-worktree workspace multiplexer in Common Lisp";
               mainProgram = "nerimux";
             };
           };
@@ -702,11 +568,7 @@
             };
           };
 
-          # The real-PTY suite. Deliberately an app and NOT a check: it needs
-          # /dev/ptmx, which the sandbox a check builds in does not have. Running
-          # it there would report a pass for cases that skipped, which is the
-          # false green splitting the suite exists to prevent. Run it on a real
-          # machine, by hand or from a job with a PTY available.
+          # The sandbox lacks /dev/ptmx, so real-PTY runs as an app.
           test-pty = {
             type = "app";
             program = "${testPty}/bin/nerimux-test-pty";
@@ -716,9 +578,7 @@
             };
           };
 
-          # End-to-end smoke against the built binary. Also needs a real
-          # PTY for the attach scenario, so it is an app, not a check, for
-          # the same reason test-pty is.
+          # The attach scenario needs a real PTY, so this remains an app.
           e2e = {
             type = "app";
             program = "${e2e}/bin/nerimux-e2e";
@@ -749,13 +609,8 @@
             ];
             NERIMUX_SIBLING_REGISTRY = siblingRegistry system;
             shellHook = ''
-              # Registers the central-registry entries the checks use, so an
-              # interactive `sbcl` session finds nerimux and every sibling
-              # library without repeating those --eval flags by hand. A plain
-              # `sbcl --load nerimux.asd` fails: .asd files read `defsystem` in
-              # whatever package ASDF put the reader in, which is only set up
-              # correctly once `(require :asdf)` and the registry pushes below
-              # have run.
+              # Register the same ASDF roots used by the checks for interactive
+              # sessions. Loading nerimux.asd directly does not set this up.
               nerimux-sbcl() {
                 sbcl --dynamic-space-size 4096 --no-sysinit --no-userinit \
                      --disable-debugger --eval "(require :asdf)" \
@@ -768,10 +623,7 @@
                      "$@"
               }
 
-              # Delegates to scripts/coverage.lisp — the single source of
-              # truth for the sb-cover instrumentation-order recipe (also used
-              # by `nix build .#coverage-report`, which runs it hermetically
-              # inside the Nix sandbox rather than this interactive shell).
+              # Use the same coverage recipe as the hermetic Nix report.
               nerimux-coverage() {
                 report_dir="''${1:-./coverage-report}/"
                 timeout --signal=TERM --kill-after=30s 2700 \

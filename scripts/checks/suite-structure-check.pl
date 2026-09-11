@@ -1,17 +1,10 @@
 #!/usr/bin/env perl
-# Every (it ...) belongs to a (describe ...).
-#
-# A test registered outside its suite still runs, so nothing about the result
-# says anything is wrong. What it breaks is the shape of the tree: cl-weave's
-# root gains a child that is a test case where every other child is a suite,
-# and code that walks the root meets a type it does not expect.
-#
+# Every (it ...) belongs to a (describe ...), and every test file must balance.
 # attention-tests.lisp had one closing paren too many after its second test,
 # which ended the DESCRIBE and put the third test on the root. It had been that
 # way through every green run.
-#
-# Also reports a file whose parens do not balance overall, which is the same
-# mistake caught one step earlier.
+# Also reports a file with unbalanced parentheses, which is the same mistake
+# caught one step earlier.
 use strict;
 use warnings;
 binmode(STDOUT, ":encoding(UTF-8)");
@@ -35,8 +28,7 @@ for my $f (@files) {
     my ($depth, $in_string, $ln) = (0, 0, 0);
     while (my $line = <$fh>) {
         $ln++;
-        # Strip strings, comments and character literals so only structural
-        # parens are counted -- the same lexing the other checks here need.
+        # Strip strings, comments and character literals before counting parens.
         my $code = '';
         my @ch = split //, $line;
         for (my $i = 0; $i < @ch; $i++) {

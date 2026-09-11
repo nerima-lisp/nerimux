@@ -1,7 +1,7 @@
 (defpackage #:nerimux/workspace-model
             (:use #:cl)
             (:documentation
-             "DOMAIN layer: the ghq-backed organization/repository/worktree hierarchy —
+             "DOMAIN layer: the ghq-backed organization/repository/worktree hierarchy,
     what the global picker and workspace overview show. No dependency on any
     other domain sub-package; pane and session depend on this one, not the
     other way around.")
@@ -86,8 +86,8 @@
                   #:nerimux/workspace-model)
             (:import-from #:cl-concurrent-kit #:with-lock-held)
             (:documentation
-             "DOMAIN layer: one terminal pane — a PTY fd, a virtual screen, and its
-    position within a window — plus the attention state composed from a
+             "DOMAIN layer: one terminal pane, a PTY fd, a virtual screen, and its
+    position within a window, plus the attention state composed from a
     worktree's and organization's panes (attention.lisp). Reaches the
     operating system only through nerimux/ports. Needs
     nerimux/session:session-child-environment for %spawn-shell-for-pane;
@@ -158,11 +158,11 @@
 (defpackage #:nerimux/layout
             (:use #:cl #:nerimux/pane)
             (:documentation
-             "DOMAIN layer: the binary split-tree layout — geometry solver, resize,
+             "DOMAIN layer: the binary split-tree layout, geometry solver, resize,
     zoom, and string serialization of the tree shape (layout->string). Needs
     pane's geometry accessors and %update-pane-geometry to assign rectangles
     to leaves. layout->string alone reaches into nerimux/window
-    (package-qualified, not :USEd — see the file header above) for
+    (package-qualified, not :USEd, see the file header above) for
     window-tree.")
             (:export #:%axis-floor
                      #:+pane-min-height+

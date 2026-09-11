@@ -34,12 +34,8 @@
            (ignore-errors (delete-file ,path)))))))
 
 (defmacro with-guarded-socket-test (&body body)
-  "Skip unless Unix-domain sockets are available, then run BODY under a 10-second
-   timeout inside a socket-pair.  Eliminates the repeated three-line boilerplate:
-     (unless (unix-socket-available-p) (skip ...))
-     (sb-ext:with-timeout 10 ...)
-     (with-client-test-socket-pair ...)
-   that appeared in every socket-roundtrip test."
+  "Skip when Unix-domain sockets are unavailable, then run BODY under a
+   10-second timeout with a client socket pair."
   (let ((server-side (gensym "SERVER-SIDE"))
         (client-side (gensym "CLIENT-SIDE")))
     `(progn

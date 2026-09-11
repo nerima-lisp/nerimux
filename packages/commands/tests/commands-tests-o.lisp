@@ -4,7 +4,7 @@
 
 
   (it "selection-bounds-after-scroll-uses-virtual-rows"
-    (let ((s (make-screen 4 3)))        ; 4 cols, 3 rows
+    (let ((s (make-screen 4 3)))
       (feed-lines s "AAA" "BBB" "CCC" "DDD" "EEE")
       (nerimux/commands::copy-mode-enter s)
       (expect (= 0 (screen-copy-offset s)))

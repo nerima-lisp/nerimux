@@ -1,8 +1,3 @@
-;;; This form comes FIRST, before any other form. ASDF binds *package* to
-;;; ASDF-USER only for a file it loads itself; read any other way — a REPL
-;;; `load`, an editor evaluating the buffer — the file is read in whatever
-;;; package happens to be current, and an unqualified `defsystem` then fails to
-;;; read at all. See PACKAGE_STANDARD.md "asd の書き方".
 (in-package #:asdf-user)
 
 (defsystem "nerimux-terminal"
@@ -14,15 +9,10 @@
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  ;; parser-osc-color calls nerimux/text:parse-integer-or-nil; csi-replies calls
-  ;; nerimux/version:version-string for the XTVERSION reply.
   :depends-on ("nerimux-text" "nerimux-version"
                :cl-codec-kit :cl-host-kit :cl-concurrent-kit :cl-tty-kit :cl-regex-kit)
   :pathname "src"
-  ;; The file order below is load-bearing and was carried over verbatim from
-  ;; nerimux.asd's domain/terminal module: scroll before cursor/erase/edit,
-  ;; each -definitions table before the file that composes it, and the CSI rule
-  ;; sets before csi-compose folds them into EXECUTE-CSI.
+  ;; Load order is significant: definitions precede the files that compose them.
   :serial t
   :components (
                (:file "package-types")
@@ -138,8 +128,6 @@
                (:file "parser-state-cps-tests")
                (:file "emulator-tests")
                (:file "parser-fuzz-tests")               )
-  ;; See packages/text/nerimux-text.asd for why this form is repeated per unit
-  ;; rather than shared, and why *PRINT-CIRCLE* is load-bearing.
   :perform (test-op (op c)
              (declare (ignore op c))
              (let ((*print-circle* t)

@@ -31,9 +31,9 @@
              (dot-pos   (position #\. target-string :start (or colon-pos 0))))
         (if (and (null colon-pos) (null dot-pos))
             (case (char target-string 0)
-              (#\% (values nil nil target-string))     ; %N → pane-id
-              (#\@ (values nil target-string nil))     ; @N → window-id
-              (t   (values target-string nil nil)))    ; $N session-id or plain name
+              (#\% (values nil nil target-string))
+              (#\@ (values nil target-string nil))
+              (t   (values target-string nil nil)))
             (let* ((win-raw  (cond
                                ((and colon-pos dot-pos)
                                 (subseq target-string (1+ colon-pos) dot-pos))

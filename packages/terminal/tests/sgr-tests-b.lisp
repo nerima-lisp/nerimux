@@ -8,27 +8,27 @@
       (expect (= 1 (nerimux/terminal/types:screen-cur-fg s)))
       (nerimux/terminal/sgr:apply-sgr s '(0))
       (expect (= nerimux/terminal/types:+default-color+ (nerimux/terminal/types:screen-cur-fg s)))
-      (nerimux/terminal/sgr:apply-sgr s '(42))      ; bg green
-      (nerimux/terminal/sgr:apply-sgr s nil)         ; empty = reset
+      (nerimux/terminal/sgr:apply-sgr s '(42))
+      (nerimux/terminal/sgr:apply-sgr s nil)
       (expect (= nerimux/terminal/types:+default-color+ (nerimux/terminal/types:screen-cur-bg s)))))
 
   (it "apply-sgr-39-sets-default-sentinel"
     (with-screen (s 10 2)
-      (nerimux/terminal/sgr:apply-sgr s '(31))   ; red first
-      (nerimux/terminal/sgr:apply-sgr s '(39))   ; default fg
+      (nerimux/terminal/sgr:apply-sgr s '(31))
+      (nerimux/terminal/sgr:apply-sgr s '(39))
       (expect (= nerimux/terminal/types:+default-color+
              (nerimux/terminal/types:screen-cur-fg s)))))
 
   (it "apply-sgr-49-sets-default-sentinel"
     (with-screen (s 10 2)
-      (nerimux/terminal/sgr:apply-sgr s '(42))   ; green bg first
-      (nerimux/terminal/sgr:apply-sgr s '(49))   ; default bg
+      (nerimux/terminal/sgr:apply-sgr s '(42))
+      (nerimux/terminal/sgr:apply-sgr s '(49))
       (expect (= nerimux/terminal/types:+default-color+
              (nerimux/terminal/types:screen-cur-bg s)))))
 
   (it "sgr-reset-sgr-pen-helper"
     (with-screen (s 10 2)
-      (nerimux/terminal/sgr:apply-sgr s '(31 42 1))   ; fg=1, bg=2, bold
+      (nerimux/terminal/sgr:apply-sgr s '(31 42 1))
       (nerimux/terminal/types:reset-sgr-pen s)
       (check-sgr-state s :fg nerimux/terminal/types:+default-color+ :bg nerimux/terminal/types:+default-color+ :attrs 0)))
 
@@ -57,8 +57,8 @@
 
   (it "sgr-21-double-underline-cleared-by-24"
     (with-screen (s 10 2)
-      (feed s (esc "[4;21mX"))   ; underline + double-underline on
-      (feed s (esc "[24mY"))     ; underline off
+      (feed s (esc "[4;21mX"))
+      (feed s (esc "[24mY"))
       (expect (logbitp 3 (nerimux/terminal/types:screen-cur-attrs s)) :to-be-falsy)
       (expect (zerop (logand (nerimux/terminal/types:screen-cur-attrs2 s)
                          nerimux/terminal/types:+attr2-double-underline+)))))
@@ -97,14 +97,14 @@
 
   (it "sgr-blink-off-25"
     (with-screen (s 10 2)
-      (feed s (esc "[5mB"))   ; blink on
-      (feed s (esc "[25mX"))  ; blink off
+      (feed s (esc "[5mB"))
+      (feed s (esc "[25mX"))
       (expect (logbitp 4 (attrs-at s 1 0)) :to-be-falsy)))
 
   (it "sgr-reverse-off-27"
     (with-screen (s 10 2)
-      (feed s (esc "[7mR"))   ; reverse on
-      (feed s (esc "[27mX"))  ; reverse off
+      (feed s (esc "[7mR"))
+      (feed s (esc "[27mX"))
       (expect (zerop (logand (attrs-at s 1 0) #b100)))))
 
   (it "sgr-framed-encircled-accepted-silently-table"

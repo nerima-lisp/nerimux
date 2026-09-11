@@ -333,9 +333,9 @@
         (nerimux/workspace-model:repository-add-worktree repository worktree)
         (setf (nerimux::client-conn-view conn) :repolist)
         (nerimux::%set-client-selected-tree-object conn worktree)
-        (nerimux::%handle-multi-key-message s conn #(9)) ; Tab: expand the worktree
+        (nerimux::%handle-multi-key-message s conn #(9))
         (nerimux::%handle-multi-key-message
-         s conn #(27 91 66)) ; Down: move onto the :file row
+         s conn #(27 91 66))
         (let ((selected (nerimux::client-conn-selected-tree-object conn)))
           (expect (consp selected))
           (expect (eq :file (first selected))))
@@ -520,13 +520,13 @@
     (with-fake-session (s)
       (let ((conn (%make-test-conn)))
         (expect (null (nerimux::client-conn-modal conn)))
-        (nerimux::%handle-multi-key-message s conn #(63)) ; ?
+        (nerimux::%handle-multi-key-message s conn #(63))
         (expect (eq :transient (nerimux::client-conn-modal conn)))
-        (nerimux::%handle-multi-key-message s conn #(107)) ; k
+        (nerimux::%handle-multi-key-message s conn #(107))
         (expect (eq :help (nerimux::client-conn-modal conn)))
-        (nerimux::%handle-multi-key-message s conn #(110)) ; n
+        (nerimux::%handle-multi-key-message s conn #(110))
         (expect (eq :help (nerimux::client-conn-modal conn)))
-        (nerimux::%handle-multi-key-message s conn #(113)) ; q
+        (nerimux::%handle-multi-key-message s conn #(113))
         (expect (null (nerimux::client-conn-modal conn))))))
 
   (it "?-then-k-also-opens-from-the-repolist-view-and-enter-or-esc-close-it"
@@ -536,11 +536,11 @@
         (nerimux::%handle-multi-key-message s conn #(63))
         (nerimux::%handle-multi-key-message s conn #(107))
         (expect (eq :help (nerimux::client-conn-modal conn)))
-        (nerimux::%handle-multi-key-message s conn #(13)) ; Enter
+        (nerimux::%handle-multi-key-message s conn #(13))
         (expect (null (nerimux::client-conn-modal conn)))
         (nerimux::%handle-multi-key-message s conn #(63))
         (nerimux::%handle-multi-key-message s conn #(107))
-        (nerimux::%handle-multi-key-message s conn #(27)) ; Esc
+        (nerimux::%handle-multi-key-message s conn #(27))
         (expect (null (nerimux::client-conn-modal conn))))))
 
   (it "the rendered client frame shows the help view's sections while it is up"
@@ -572,7 +572,7 @@
           (let ((visible (strip-sgr (nerimux/protocol::decode-text payload))))
             (expect (search "WORKTREE DELETE" visible))
             (expect (not (search "Prefix C-q" visible)))))
-        (nerimux::%handle-multi-key-message s conn #(110)) ; n
+        (nerimux::%handle-multi-key-message s conn #(110))
         (expect (not (nerimux::client-conn-confirm-view conn)))
         (expect (null (nerimux::client-conn-modal conn))))))
 
@@ -602,7 +602,7 @@
         (with-stubbed-fdefinition
             ((nerimux/pty:pty-write
                (lambda (fd payload) (push (list fd payload) writes))))
-          (nerimux::%handle-multi-key-message s conn #(110)) ; n
+          (nerimux::%handle-multi-key-message s conn #(110))
           (expect (null (nerimux::client-conn-modal conn)))
           (expect (eq :pane (nerimux::client-conn-view conn)))
           (expect (equalp (list (list 9999 #(110))) writes))))))
@@ -612,7 +612,7 @@
       (let ((conn (%make-test-conn)))
         (setf (nerimux::client-conn-view conn) :repolist
               (nerimux::client-conn-modal conn) :help)
-        (nerimux::%handle-multi-key-message s conn #(110)) ; n: "next row" in :repolist
+        (nerimux::%handle-multi-key-message s conn #(110))
         (expect (eq :help (nerimux::client-conn-modal conn)))
         (expect (null (nerimux::client-conn-selected-tree-object conn))))))
 

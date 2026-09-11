@@ -11,22 +11,22 @@
   (y        0   :type fixnum)
   (width    80  :type fixnum)
   (height   24  :type fixnum)
-  (fd       -1  :type fixnum)         ; master PTY file descriptor
-  (pid      -1  :type fixnum)         ; child process PID
+  (fd       -1  :type fixnum)
+  (pid      -1  :type fixnum)
   (process-lock (cl-concurrent-kit:make-lock :name "pane process"))
   (process-generation (list nil))
   (stop-requested nil)
   (screen   nil)
-  (window   nil)                      ; back-pointer to the owning window (set on attach)
-  (worktree nil)                      ; logical repository worktree shown by this pane
+  (window   nil)
+  (worktree nil)
   (agent-kind nil :type (member nil :codex :claude))
   (role :terminal :type (member :terminal :agent))
-  (marked           nil)              ; T when this pane is the marked pane (C-b m)
-  (input-disabled   nil :type boolean) ; T when select-pane -d disables input
-  (title    "" :type string)          ; pane title set via OSC 0/2 (#{pane_title})
-  (tty      "" :type string)          ; slave PTY device path, e.g. /dev/pts/3 (#{pane_tty})
-  (start-command "" :type string)     ; resolved command the pane started with
-  (start-path    "" :type string)     ; initial working directory
+  (marked           nil)
+  (input-disabled   nil :type boolean)
+  (title    "" :type string)
+  (tty      "" :type string)
+  (start-command "" :type string)
+  (start-path    "" :type string)
   (unread-output-p nil :type boolean)
   (bell-p nil :type boolean)
   (process-exited-p nil :type boolean)
@@ -247,22 +247,12 @@
            (let ((agent (worktree-agent-pane worktree)))
              (and agent (pane-process-exited-p agent))))))
 
-;;; ── Response-queue drain helper (logic layer) ──────────────────────────────
-;;;
-;;; Draining pending terminal-query responses lives here as a named step so that
-;;; pane-feed can express the "drain" concern independently of the "process" concern.
-;;; The queue is populated by the CPS parser under the screen lock; it is drained
-;;; outside the lock so pty-write never blocks while holding the screen lock.
-;;; ── Response-queue drain helper (logic layer) ──────────────────────────────
-;;;
-;;; Draining pending terminal-query responses lives here as a named step so that
-;;; pane-feed can express the "drain" concern independently of the "process" concern.
-;;; The queue is populated by the CPS parser under the screen lock; it is drained
-;;; outside the lock so pty-write never blocks while holding the screen lock.
+;;; Drain parser replies after releasing the screen lock so PTY writes do not
+;;; block screen processing.
 (defun %drain-response-queue (pane screen)
   "Drain SCREEN's response queue, writing each reply to PANE's PTY fd.
    Replies are reversed from newest-first to arrival order before writing.
-   Pure I/O at the orchestration boundary — no screen struct mutation.
+   Pure I/O at the orchestration boundary, no screen struct mutation.
    Returns NIL."
   (when (screen-response-queue screen)
     (let ((replies (nreverse (screen-response-queue screen))))

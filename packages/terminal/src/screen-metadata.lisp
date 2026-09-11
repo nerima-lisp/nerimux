@@ -1,7 +1,7 @@
 (in-package #:nerimux/terminal/types)
 
 (defun %mark-line-wrapped (screen row)
-  "Mark that ROW's line wraps (continues onto ROW+1) — set when an autowrap
+  "Mark that ROW's line wraps (continues onto ROW+1), set when an autowrap
    actually carries content to the next row."
   (let ((ht
          (or (screen-wrapped-rows screen)
@@ -14,13 +14,13 @@
     (and ht (gethash row ht) t)))
 
 (defun %clear-line-wrapped (screen row)
-  "Clear ROW's wrap flag — its content no longer continues (repositioned/erased)."
+  "Clear ROW's wrap flag, its content no longer continues (repositioned/erased)."
   (let ((ht (screen-wrapped-rows screen)))
     (when ht
       (remhash row ht))))
 
 (defun %clear-all-line-wrapped (screen)
-  "Drop all wrap flags — a coarse reset for erase-display / RIS / resize / alt-screen."
+  "Drop all wrap flags, a coarse reset for erase-display / RIS / resize / alt-screen."
   (let ((ht (screen-wrapped-rows screen)))
     (when ht
       (clrhash ht))))

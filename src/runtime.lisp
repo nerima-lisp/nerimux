@@ -55,7 +55,7 @@
    While a channel is locked, any call to signal-channel for the same NAME
    checks the :locked flag and skips the condition-notify entirely.  This
    allows callers to temporarily block notifications without losing them
-   permanently — the channel is not destroyed, only silenced."
+   permanently; the channel is not destroyed, only silenced."
   (%set-channel-locked name t))
 
 (defun unlock-channel (name)

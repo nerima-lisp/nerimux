@@ -37,7 +37,7 @@
     (with-screen (s 20 5)
       (let* ((buf    (make-osc-payload-buf "2;xterm-st-title"))
              (k      (nerimux/terminal/parser::make-osc-st-k buf))
-             (result (funcall k s #x5C)))      ; backslash = ST confirmed
+             (result (funcall k s #x5C)))
         (expect (eq #'nerimux/terminal/parser:ground-state result))
         (expect (string= "xterm-st-title" (nerimux/terminal/types:screen-title s))))))
 
@@ -45,6 +45,6 @@
     (with-screen (s 20 5)
       (let* ((buf    (make-osc-payload-buf "0;title"))
              (k      (nerimux/terminal/parser::make-osc-st-k buf))
-             (result (funcall k s (char-code #\X)))) ; not a backslash
+             (result (funcall k s (char-code #\X))))
         (expect (eq #'nerimux/terminal/parser:ground-state result))
         (expect (not (string= "title" (nerimux/terminal/types:screen-title s))))))))

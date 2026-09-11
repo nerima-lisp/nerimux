@@ -184,14 +184,14 @@
           do (expect (= 1 (char-width (code-char cp))))))
 
   (it "char-width-combining-marks-are-zero-columns"
-    (dolist (cp '(#x0300      ; COMBINING GRAVE ACCENT (Mn)
-                  #x0301      ; COMBINING ACUTE ACCENT (Mn)
-                  #x036F      ; COMBINING LATIN SMALL LETTER X (Mn), block end
-                  #x1AB0      ; COMBINING DOUBLED CIRCUMFLEX ACCENT (Mn)
-                  #x1DC0      ; COMBINING DOTTED GRAVE ACCENT (Mn)
-                  #x20D0      ; COMBINING LEFT HARPOON ABOVE (Mn)
-                  #x20DD      ; COMBINING ENCLOSING CIRCLE (Me)
-                  #xFE20))    ; COMBINING LIGATURE LEFT HALF (Mn)
+    (dolist (cp '(#x0300
+                  #x0301
+                  #x036F
+                  #x1AB0
+                  #x1DC0
+                  #x20D0
+                  #x20DD
+                  #xFE20))
       (expect (= 0 (char-width (code-char cp))))))
 
   (it "char-width-kana-combining-marks-are-zero-not-two"
@@ -214,15 +214,15 @@
                     (#x9FFF 2 "U+9FFF CJK Unified end")
                     (#xAC00 2 "U+AC00 Hangul syllables start")
                     (#xD7A3 2 "U+D7A3 Hangul syllables end")
-                    (#xFF00 1 "U+FF00 unassigned, below Fullwidth block — width 1")
+                    (#xFF00 1 "U+FF00 unassigned, below Fullwidth block, width 1")
                     (#xFF01 2 "U+FF01 Fullwidth exclamation, real block start")
                     (#xFF21 2 "U+FF21 Fullwidth Latin Capital A (mid-range)")
                     (#xFF60 2 "U+FF60 Fullwidth ASCII end")
                     (#xFFE0 2 "U+FFE0 Fullwidth signs start")
                     (#xFFE6 2 "U+FFE6 Fullwidth signs end")
-                    (#x1F2FF 1 "U+1F2FF below Emoji block — must be width 1")
+                    (#x1F2FF 1 "U+1F2FF below Emoji block, must be width 1")
                     (#x1F300 2 "U+1F300 Emoji/pictograph block start")
-                    (#x1FAFF 1 "U+1FAFF unassigned — width 1, not 2")
+                    (#x1FAFF 1 "U+1FAFF unassigned, width 1, not 2")
                     (#x1F600 2 "U+1F600 GRINNING FACE, a real wide emoji")
                     (#x20000 2 "U+20000 CJK Extension B start")))
       (destructuring-bind (cp expected-width desc) case
@@ -241,8 +241,8 @@
 
   (it "wide-char-wraps-at-right-edge"
     (with-screen (s 3 2)
-      (feed s "ab")            ; cursor at column 2 (last column of a 3-wide screen)
-      (utf8-feed s "あ")       ; cannot fit one column -> wraps to row 1
+      (feed s "ab")
+      (utf8-feed s "あ")
       (expect (char= #\a  (char-at s 0 0)))
       (expect (char= #\b  (char-at s 1 0)))
       (expect (char= #\Space (char-at s 2 0)))
@@ -264,7 +264,7 @@
 
   (it "write-char-at-cursor-combining-char-appended-not-advanced"
     (with-screen (s 10 5)
-      (feed s "a")                        ; base character at col 0; cursor now at col 1
+      (feed s "a")
       (nerimux/terminal/actions:write-char-at-cursor s (code-char #x0300))
       (check-cursor s 1 0)
       (let ((combining (nerimux/terminal/types:cell-combining (cell-at s 0 0))))

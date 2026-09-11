@@ -22,10 +22,10 @@
   (it "dcs-passthrough-tmux-prefix-queues-inner-sequence"
     (let ((s (make-screen 10 5)))
       (nerimux/terminal/emulator:screen-process-bytes
-       s (coerce (list #x1B #x50               ; ESC P (DCS)
-                       116 109 117 120 59      ; tmux;
-                       #x1B #x1B 93 49 51 51 55 ; \e\e ] 1 3 3 7  (doubled ESC)
-                       #x1B #x5C)              ; ESC \\  (ST)
+       s (coerce (list #x1B #x50
+                       116 109 117 120 59
+                       #x1B #x1B 93 49 51 51 55
+                       #x1B #x5C)
                  '(vector (unsigned-byte 8))))
       (let ((queue (nerimux/terminal/types:screen-passthrough-queue s)))
         (expect (= 1 (length queue)))

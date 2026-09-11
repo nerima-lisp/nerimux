@@ -4,7 +4,7 @@
 
 
   (it "copy-mode-move-cursor-direction-table"
-    (dolist (c '((:left  2 5  2 4)   ; (dir start-row start-col expected-row expected-col)
+    (dolist (c '((:left  2 5  2 4)
                  (:right 2 5  2 6)
                  (:up    2 5  1 5)
                  (:down  2 5  3 5)))

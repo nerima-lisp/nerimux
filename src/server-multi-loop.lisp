@@ -34,7 +34,7 @@
 (defun %apply-client-disposition (disposition conn)
   "Act on DISPOSITION (the result of dispatching CONN's message): drop CONN on
    :drop or :eof.  Returns :quit when the caller's loop must stop, else NIL.
-   Dropping the last client is not a reason to stop — panes keep running while
+   Dropping the last client is not a reason to stop, panes keep running while
    nobody is attached (R8.3)."
   (case disposition
     (:quit :quit)
@@ -48,9 +48,9 @@
 (defun %dispatch-buffered-client-messages (session conn)
   "Dispatch the message select reported for CONN, then keep dispatching while
    CONN's stream still holds buffered input.  One read(2) can slurp several
-   protocol frames into the Lisp stream's buffer — the client sends
+   protocol frames into the Lisp stream's buffer, the client sends
    msg-attach and its attach-target command back-to-back, and they usually
-   coalesce into one segment — after which the raw fd is no longer readable,
+   coalesce into one segment, after which the raw fd is no longer readable,
    so select alone would leave the buffered tail unread until some later
    keystroke arrived.  Returns :quit when a disposition ends the session."
   (loop

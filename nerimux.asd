@@ -1,9 +1,3 @@
-;;; This form comes FIRST, before any other form. ASDF binds *package* to
-;;; ASDF-USER only for a file it loads itself; read any other way — a REPL
-;;; `load`, an editor evaluating the buffer, flake.nix parsing :version — the
-;;; file is read in whatever package happens to be current, and an unqualified
-;;; `defsystem` then fails to read at all. Saying it makes the file
-;;; self-contained. See PACKAGE_STANDARD.md "asd の書き方".
 (in-package #:asdf-user)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
@@ -15,26 +9,10 @@
                          (error
                           "Cannot locate nerimux.asd while loading test components."))))))
 
-;;; Register every packages/<name>/nerimux-<name>.asd before the systems below
-;;; name them in :depends-on.
-;;;
-;;; ASDF's :central-registry finds a .asd only in a directory registered
-;;; directly; it does not recurse, and run-tests.lisp deliberately empties the
-;;; source registry so no machine-global tree is scanned. Without this, every
-;;; unit below resolves to "system not found".
-;;;
-;;; This covers the `nerimux' entry point only. Loading a unit directly --
-;;; (asdf:load-system "nerimux-terminal") -- never reads this file, because ASDF
-;;; resolves a primary system from the .asd named after it. That path is served
-;;; by pushing each packages/<name>/ onto the central registry, which
-;;; run-tests.lisp and flake.nix do. The two are different entry points, not two
-;;; spellings of one.
+;;; Register package systems before the root system names them in :depends-on.
+;;; ASDF's central registry is non-recursive, and the test runner clears the
+;;; source registry before loading tests.
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  ;; The glob finds the files; this list decides which of them may run. Without
-  ;; it, dropping a directory into packages/ is enough to get its .asd LOADED --
-  ;; that is, evaluated -- at build time without being named anywhere a reviewer
-  ;; diffing :depends-on would look. Naming the units here keeps the set of code
-  ;; that executes equal to the set that is declared.
   (defparameter cl-user::*nerimux-units*
     '("nerimux-text" "nerimux-version" "nerimux-ports" "nerimux-pty"
       "nerimux-net" "nerimux-input" "nerimux-terminal" "nerimux-model"
@@ -62,32 +40,24 @@
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
-  ;; Single source of truth for the version: flake.nix reads this form and
-  ;; release.yml refuses to publish a tag that disagrees with it.
+  ;; flake.nix reads this value and release.yml checks tags against it.
   :version "0.3.0"
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  ;; Runtime dependencies are provided by nerima-lisp sibling systems.
-  ;; Platform-specific process, terminal, codec, and concurrency operations
-  ;; stay in those libraries instead of being reimplemented here.
   :depends-on (:cl-date-kit      ; exact elapsed-time values for deadline APIs
-               :cl-concurrent-kit ; threads, locks, condvars and preemptive deadlines
-               :cl-regex-kit     ; regex engine behind copy-mode search/highlight and picker query matching
-               :cl-cli           ; startup argv/flag parsing (main-startup-flags)
-               :cl-parser-kit    ; commands-tokenizer combinator rewrite
-               :cl-tty-kit       ; PTY spawn/raw-mode/fd-io, ioctl window size, colour downsampling
-               :cl-process-kit   ; select(2)/wait-for-input over raw fds (PTY readiness poll)
-               :cl-codec-kit     ; string<->octet UTF-8 codec (protocol, PTY, OSC payloads)
-               :cl-host-kit      ; split-string, used by the OSC rgb: colour parser
-               :cl-tui-kit/ansi  ; headless surface/backend rendering for per-client frames
-               :cl-tui-kit/layout ; geometry and viewport layout for client frames
-               :cl-tui-kit/widgets ; widget rendering for client frames
-               :cl-vcs-kit       ; ghq/repository/worktree discovery
-               ;; In-repo units, one ASDF system per packages/<name>/. Each
-               ;; declares its own dependencies, so a reference that crosses a
-               ;; unit boundary without an edge here fails to load rather than
-               ;; failing a test.
+               :cl-concurrent-kit
+               :cl-regex-kit
+               :cl-cli
+               :cl-parser-kit
+               :cl-tty-kit
+               :cl-process-kit
+               :cl-codec-kit
+               :cl-host-kit
+               :cl-tui-kit/ansi
+               :cl-tui-kit/layout
+               :cl-tui-kit/widgets
+               :cl-vcs-kit
                "nerimux-text"
                "nerimux-version"
                "nerimux-ports"
@@ -104,75 +74,65 @@
   ((:module "src"
     :serial t
      :components
-     ;; All that is left in src/ is the bootstrap core: the "nerimux" package
-     ;; itself, the server, the client and startup. Everything it composes now
-     ;; lives in packages/<name>/ and is named in :depends-on above, so this
-     ;; module loads after all of them without having to say so.
-     ((:file "package")             ; nerimux (BOOTSTRAP layer, needs everything)
-       (:file "target")              ; session/window/pane target resolution (-t flag)
-       (:file "server-dispatch-macros") ; declarative rule-table macros
-       (:file "runtime-data")         ; shared declarations and constants
-       (:file "runtime")              ; channel sync + SIGWINCH
-       (:file "runtime-reader-data")  ; PTY reader shared state
-       (:file "runtime-reader")       ; PTY reader CPS state machine
-       (:file "session-registry")  ; lookup for the one session the server owns
+     ((:file "package")
+       (:file "target")
+       (:file "server-dispatch-macros")
+       (:file "runtime-data")
+       (:file "runtime")
+       (:file "runtime-reader-data")
+       (:file "runtime-reader")
+       (:file "session-registry")
        (:file "server-data")
        (:file "server")
-       (:file "workspace-window-data") ; workspace window constants
-       (:file "workspace-window") ; workspace window creation
-       (:file "server-multi-data") ; multi-client data declarations
-       (:file "server-multi-dispatch") ; shared multi-client handlers
-       (:file "server-multi-dispatch-prefix-data") ; prefix constants
-       (:file "server-multi-dispatch-fetch") ; fetch operations
-       (:file "server-multi-dispatch-confirm") ; confirmation modal state
-       (:file "server-multi-dispatch-prefix") ; C-q workspace actions
-       (:file "server-multi-workspace-selection") ; workspace catalog selection logic
-       (:file "server-multi-dispatch-picker-data") ; selection identity data
-       (:file "server-multi-dispatch-picker") ; picker/tree selection logic
-       (:file "server-multi-dispatch-picker-input") ; picker query and key input
-       (:file "server-multi-dispatch-picker-open") ; picker worktree effects
-       (:file "server-multi-dispatch-command-workspace-relative") ; relative tree selection
-       (:file "server-multi-dispatch-command-workspace-data") ; command argument data
-       (:file "server-multi-dispatch-command-workspace") ; workspace UI helpers
-       (:file "server-multi-dispatch-command-workspace-context") ; workspace object context
-       (:file "server-multi-dispatch-command-worktree-create") ; create command
-       (:file "server-multi-dispatch-command-worktree") ; remaining operations
-       (:file "server-multi-command-input-primitives") ; payload predicates and decoding
-       ;; Before the keymap: %HANDLE-CLIENT-UI-KEY-PAYLOAD calls
-       ;; %OPEN-CLIENT-TRANSIENT for every transient key. A forward call would
-       ;; only warn at compile time, but a warning is not what catches a
-       ;; misspelled name here -- an undefined function fails at runtime, and a
-       ;; transient key that silently does nothing looks like an unbound key.
-       (:file "server-multi-transient-data") ; declarative transient menus
-       (:file "server-multi-dispatch-transient-render") ; transient display projections
-       (:file "server-multi-dispatch-transient") ; magit transient state and key handling
-       (:file "server-multi-dispatch-command-input-data") ; client input state
-       (:file "server-multi-dispatch-command-input-mode-data") ; branch-name data
-       (:file "server-multi-dispatch-command-input-tree-filter") ; tree filter state
-       (:file "server-multi-dispatch-command-input-mode-commands") ; command mode commands
-       (:file "server-multi-dispatch-command-input-mode-refresh") ; async refresh effects
-       (:file "server-multi-dispatch-command-status") ; status mutations
-       (:file "server-multi-dispatch-command-input-mode") ; command mode and tree navigation
-       (:file "server-multi-dispatch-command-input") ; client input and command entry
-       (:file "server-multi-dispatch-command-input-process-log") ; process log modal
-       (:file "server-multi-dispatch-command-input-keymap") ; NIL-modal UI keymap
-       (:file "server-multi-dispatch-tree-filter-data") ; tree-filter declarations
-       (:file "server-multi-dispatch-tree-filter") ; tree-filter input mode
-       (:file "server-multi-dispatch-command") ; final command dispatcher
-       (:file "server-multi-state") ; mutable multi-client and workspace state
-       (:file "server-multi")  ; multi-client client registry + dispatch helpers
-       (:file "server-multi-render") ; client geometry and frame broadcast
-       (:file "server-multi-loop") ; multi-client select-multiplexed serve loop
-       (:file "runtime-lifecycle") ; per-server state directory and log path
+       (:file "workspace-window-data")
+       (:file "workspace-window")
+       (:file "server-multi-data")
+       (:file "server-multi-dispatch")
+       (:file "server-multi-dispatch-prefix-data")
+       (:file "server-multi-dispatch-fetch")
+       (:file "server-multi-dispatch-confirm")
+       (:file "server-multi-dispatch-prefix")
+       (:file "server-multi-workspace-selection")
+       (:file "server-multi-dispatch-picker-data")
+       (:file "server-multi-dispatch-picker")
+       (:file "server-multi-dispatch-picker-input")
+       (:file "server-multi-dispatch-picker-open")
+       (:file "server-multi-dispatch-command-workspace-relative")
+       (:file "server-multi-dispatch-command-workspace-data")
+       (:file "server-multi-dispatch-command-workspace")
+       (:file "server-multi-dispatch-command-workspace-context")
+       (:file "server-multi-dispatch-command-worktree-create")
+       (:file "server-multi-dispatch-command-worktree")
+       (:file "server-multi-command-input-primitives")
+       (:file "server-multi-transient-data")
+       (:file "server-multi-dispatch-transient-render")
+       (:file "server-multi-dispatch-transient")
+       (:file "server-multi-dispatch-command-input-data")
+       (:file "server-multi-dispatch-command-input-mode-data")
+       (:file "server-multi-dispatch-command-input-tree-filter")
+       (:file "server-multi-dispatch-command-input-mode-commands")
+       (:file "server-multi-dispatch-command-input-mode-refresh")
+       (:file "server-multi-dispatch-command-status")
+       (:file "server-multi-dispatch-command-input-mode")
+       (:file "server-multi-dispatch-command-input")
+       (:file "server-multi-dispatch-command-input-process-log")
+       (:file "server-multi-dispatch-command-input-keymap")
+       (:file "server-multi-dispatch-tree-filter-data")
+       (:file "server-multi-dispatch-tree-filter")
+       (:file "server-multi-dispatch-command")
+       (:file "server-multi-state")
+       (:file "server-multi")
+       (:file "server-multi-render")
+       (:file "server-multi-loop")
+       (:file "runtime-lifecycle")
        (:file "client")
-       (:file "main-startup-flags") ; global cl-cli flag definitions
-       (:file "main-startup-socket-data") ; startup timing and log policy
-       (:file "main-startup-socket-macros") ; startup socket error boundary
-       (:file "main-startup-socket") ; socket discovery + server auto-start helpers
-       (:file "main-startup-data") ; startup mode metadata
-       (:file "main-startup-commands") ; attach/version/usage handlers
+       (:file "main-startup-flags")
+       (:file "main-startup-socket-data")
+       (:file "main-startup-socket-macros")
+       (:file "main-startup-socket")
+       (:file "main-startup-data")
+       (:file "main-startup-commands")
        (:file "main-startup"))))
-  ;; Build a standalone binary: (asdf:make :nerimux)
   :build-operation "program-op"
   :build-pathname "nerimux"
   :entry-point "nerimux:main"
@@ -187,10 +147,6 @@
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  ;; Each unit's test system is named here so loading "nerimux/test" registers
-  ;; every unit's suites in the same image. cl-weave's registry is global, so
-  ;; RUN-TESTS then reports one total across the root suites and the units --
-  ;; the split changes where a test file lives, not how many run.
   :depends-on ("nerimux" (:version "cl-weave" "1.3.0")
                "nerimux-text/test"
                "nerimux-ports/test"
@@ -207,15 +163,8 @@
              (declare (ignore op c))
              (funcall (find-symbol "RUN-TESTS" (find-package "NERIMUX/TEST")))))
 
-;; The real-PTY suite, split out of nerimux/test by R9.2.
-;;
-;; `nix flake check` builds in a sandbox with no /dev/ptmx, so every case that
-;; forks a shell under a pseudo-terminal used to guard itself with a skip and
-;; report a pass for work it never did. Moving them here makes the main suite's
-;; green mean one thing and this suite's green mean another, instead of one
-;; number covering both.
-;;
-;; Run with: nix run .#test-pty   (or (asdf:test-system "nerimux/pty-test"))
+;; The sandbox has no /dev/ptmx, so real-PTY cases run in a separate suite.
+;; Run with: nix run .#test-pty
 (defsystem "nerimux/pty-test"
   :description "Real-PTY suite for nerimux: every case that forks a shell under a pseudo-terminal."
   :author "takeokunn <bararararatty@gmail.com>"

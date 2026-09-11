@@ -165,7 +165,7 @@ PATH, when given, is used verbatim. Otherwise the path is fixed to
   "Return the commit at REPOSITORY's default branch tip: the commit
 refs/remotes/origin/HEAD currently points to (R7.3), falling back to the
 local HEAD when origin/HEAD cannot be resolved.  A repository with no
-remote, or one where `git remote set-head origin` was simply never run --
+   remote, or one where `git remote set-head origin` was never run --
 both routine in real use, not just a contrived test fixture -- makes `git
 rev-parse origin/HEAD` fail outright (exit 128) rather than return
 something empty, so without this fallback every worktree create against

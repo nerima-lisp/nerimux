@@ -9,9 +9,9 @@
     (expect (nerimux/terminal/actions:combining-char-p #\Space) :to-be-falsy))
 
   (it "combining-char-appended-to-cell"
-    (when (< #x0301 char-code-limit)   ; U+0301 = combining acute accent
+    (when (< #x0301 char-code-limit)
       (with-screen (s 20 5)
-        (feed s "e")                   ; base character 'e' at (0,0)
+        (feed s "e")
         (check-cursor s 1 0)
         (screen-process-bytes s (make-array 2 :element-type '(unsigned-byte 8)
                                               :initial-contents '(#xCC #x81)))
@@ -90,7 +90,7 @@
 
   (it "dec-graphics-via-emulator-corner-chars"
     (with-screen (s 20 5)
-      (feed s (format nil "~C(0" #\Escape))  ; switch to DEC graphics
+      (feed s (format nil "~C(0" #\Escape))
       (feed s "jklm")
       (expect (char= #\┘ (char-at s 0 0)))
       (expect (char= #\┐ (char-at s 1 0)))
@@ -162,7 +162,7 @@
 
   (it "decrqss-sgr-reports-current-pen"
     (with-screen (s 20 5)
-      (feed s (esc "[1;31m"))        ; bold red pen
+      (feed s (esc "[1;31m"))
       (%feed-dcs s "$qm")
       (expect (string= (format nil "~CP1$r0;1;31m~C\\" #\Escape #\Escape)
                        (first (nerimux/terminal/types:screen-response-queue s))))))
@@ -175,7 +175,7 @@
 
   (it "decrqss-cursor-style-reports-shape"
     (with-screen (s 20 5)
-      (feed s (esc "[3 q"))          ; DECSCUSR shape 3
+      (feed s (esc "[3 q"))
       (%feed-dcs s "$q q")
       (expect (string= (format nil "~CP1$r3 q~C\\" #\Escape #\Escape)
                        (first (nerimux/terminal/types:screen-response-queue s))))))

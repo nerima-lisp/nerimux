@@ -17,8 +17,8 @@
 
   (it "clear-scrollback-leaves-visible-grid-intact"
     (with-screen (s 5 3)
-      (feed s "hello")                           ; write on the visible grid
-      (feed-lines s "" "L1" "L2" "L3")           ; build some scrollback
+      (feed s "hello")
+      (feed-lines s "" "L1" "L2" "L3")
       (nerimux/terminal/actions:clear-scrollback s)
       (expect (null (nerimux/terminal/types:screen-scrollback s)))
       (let ((any-non-blank nil))
@@ -39,10 +39,10 @@
 
   (it "decstbm-repeated-call-updates-region"
     (with-screen (s 10 10)
-      (nerimux/terminal/actions:decstbm s 0 4)   ; first call: rows 0-4
+      (nerimux/terminal/actions:decstbm s 0 4)
       (expect (= 0 (nerimux/terminal/types:screen-scroll-top    s)))
       (expect (= 4 (nerimux/terminal/types:screen-scroll-bottom s)))
-      (nerimux/terminal/actions:decstbm s 2 8)   ; second call: rows 2-8
+      (nerimux/terminal/actions:decstbm s 2 8)
       (expect (= 2 (nerimux/terminal/types:screen-scroll-top    s)))
       (expect (= 8 (nerimux/terminal/types:screen-scroll-bottom s)))))
 
@@ -50,7 +50,7 @@
     (with-screen (s 5 5)
       (let ((orig-top    (nerimux/terminal/types:screen-scroll-top    s))
             (orig-bottom (nerimux/terminal/types:screen-scroll-bottom s)))
-        (nerimux/terminal/actions:decstbm s 0 0)   ; top == bottom: invalid
+        (nerimux/terminal/actions:decstbm s 0 0)
         (expect (= orig-top    (nerimux/terminal/types:screen-scroll-top    s)))
         (expect (= orig-bottom (nerimux/terminal/types:screen-scroll-bottom s))))))
 
@@ -64,7 +64,7 @@
 
   (it "scroll-up-marks-dirty-with-restricted-region"
     (with-screen (s 5 5)
-      (nerimux/terminal/actions:decstbm s 1 3)   ; rows 1-3 only
+      (nerimux/terminal/actions:decstbm s 1 3)
       (screen-clear-dirty s)
       (expect (nerimux/terminal/types:screen-dirty-p s) :to-be-falsy)
       (nerimux/terminal/actions:scroll-up-one s)
@@ -148,9 +148,9 @@
   (it "scroll-up-one-preserves-newest-first-ordering"
     (with-screen (s 5 4)
       (feed-lines s "ROW0" "ROW1" "ROW2" "ROW3")
-      (nerimux/terminal/actions:scroll-up-one s)   ; pushes ROW0
-      (nerimux/terminal/actions:scroll-up-one s)   ; pushes ROW1 (now at top)
-      (nerimux/terminal/actions:scroll-up-one s)   ; pushes ROW2 (now at top)
+      (nerimux/terminal/actions:scroll-up-one s)
+      (nerimux/terminal/actions:scroll-up-one s)
+      (nerimux/terminal/actions:scroll-up-one s)
       (let ((scrollback (nerimux/terminal/types:screen-scrollback s)))
         (expect (= 3 (length scrollback)))
         (let ((newest-char (cell-char (aref (first scrollback) 0))))

@@ -5,7 +5,7 @@
   (it "csi-private-lt-marker-consumed-not-stray"
     (with-screen (s 10 2)
       (feed s "a")
-      (feed s (esc "[<t"))       ; XTPOPTITLE - pop title (no-op), prints nothing
+      (feed s (esc "[<t"))
       (feed s "b")
       (expect (char= #\a (char-at s 0 0)))
       (expect (char= #\b (char-at s 1 0)))))
@@ -20,7 +20,7 @@
   (it "esc-hash-selector-consumed-not-stray"
     (with-screen (s 10 2)
       (feed s "a")
-      (feed s (esc "#5"))        ; DECSWL - single-width line, no-op
+      (feed s (esc "#5"))
       (feed s "b")
       (expect (char= #\a (char-at s 0 0)))
       (expect (char= #\b (char-at s 1 0)))))
@@ -28,8 +28,8 @@
   (it "esc-star-plus-g2-g3-designator-consumed-not-stray"
     (with-screen (s 10 2)
       (feed s "a")
-      (feed s (esc "*0"))        ; designate G2 = DEC graphics (consumes '0')
-      (feed s (esc "+B"))        ; designate G3 = ASCII (consumes 'B')
+      (feed s (esc "*0"))
+      (feed s (esc "+B"))
       (feed s "b")
       (expect (char= #\a (char-at s 0 0)))
       (expect (char= #\b (char-at s 1 0)))))
@@ -37,8 +37,8 @@
   (it "esc-space-and-percent-two-byte-seqs-consumed-not-stray"
     (with-screen (s 10 2)
       (feed s "a")
-      (feed s (esc " F"))        ; ESC SP F - S7C1T (consumes 'F')
-      (feed s (esc "%G"))        ; ESC % G - select UTF-8 (consumes 'G')
+      (feed s (esc " F"))
+      (feed s (esc "%G"))
       (feed s "b")
       (expect (char= #\a (char-at s 0 0)))
       (expect (char= #\b (char-at s 1 0)))))
@@ -54,9 +54,9 @@
   (it "dec-pm-hide-show-cursor"
     (with-screen (s 10 2)
       (feed s "a")
-      (feed s (esc "[?25l"))    ; hide cursor - accepted silently
+      (feed s (esc "[?25l"))
       (feed s "b")
-      (feed s (esc "[?25h"))    ; show cursor - accepted silently
+      (feed s (esc "[?25h"))
       (feed s "c")
       (expect (char= #\a (char-at s 0 0)))
       (expect (char= #\b (char-at s 1 0)))

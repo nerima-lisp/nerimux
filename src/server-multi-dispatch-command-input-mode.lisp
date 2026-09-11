@@ -26,7 +26,7 @@
    something the tree had no way to express before: organization and repository
    rows toggle open and closed, so a workspace of a thousand repositories opens
    showing organizations rather than everything at once. Enter on those used to
-   start a worktree-create prompt — which made the create flow reachable but
+   start a worktree-create prompt, which made the create flow reachable but
    left expansion with no key at all."
   (unless (%client-tree-object conn)
     (%select-client-tree-worktree conn nil))

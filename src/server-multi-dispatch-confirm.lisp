@@ -23,7 +23,7 @@
   "Answer the confirmation CONN is looking at.  Returns two values: whether the
    key was consumed here, and the loop disposition.
 
-   Only y and n are consumed.  Every other key is swallowed too — a
+   Only y and n are consumed.  Every other key is swallowed too, a
    confirmation that let j scroll the tree underneath it would be asking about
    one thing while the user changed another."
   (declare (ignore session))

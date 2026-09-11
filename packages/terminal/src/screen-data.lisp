@@ -16,22 +16,22 @@
   (parser #'identity :type function)
   (dirty-p t :type boolean)
   (lock nil :type (or null cl-concurrent-kit:lock))
-  (alt-cells nil)                           ; saved normal-screen cell grid, or nil
-  (alt-cursor-x 0 :type fixnum)            ; cursor column saved on alt-screen entry
-  (alt-cursor-y 0 :type fixnum)            ; cursor row saved on alt-screen entry
+  (alt-cells nil)
+  (alt-cursor-x 0 :type fixnum)
+  (alt-cursor-y 0 :type fixnum)
   (saved-cursor nil :type list)
   (copy-mode-p  nil  :type boolean)
   (copy-hide-position nil :type boolean)
-  (copy-offset  0    :type fixnum)          ; lines scrolled back (0 = live view)
-  (scrollback   nil  :type list)            ; list of row-vectors, newest first
+  (copy-offset  0    :type fixnum)
+  (scrollback   nil  :type list)
   (scrollback-wrapped nil :type list)
   (prompt-marks nil :type list)
   (history-trimmed 0 :type integer)
   (line-sizes (make-hash-table) :type hash-table)
-  (copy-mark    nil  :type list)            ; (row . col) mark position, NIL = no selection
-  (copy-mark-offset 0 :type fixnum)         ; copy-offset in effect when copy-mark was set
+  (copy-mark    nil  :type list)
+  (copy-mark-offset 0 :type fixnum)
   (copy-cursor  nil  :type list)
-  (copy-selecting nil :type boolean)        ; T when selection is being built
+  (copy-selecting nil :type boolean)
   (copy-exit-on-bottom nil :type boolean)
   (copy-mode-entered-by-mouse-p nil :type boolean)
   (last-char nil :type (or null character))

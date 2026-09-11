@@ -3,18 +3,18 @@
 nerimux is the organization's L4 application package: nothing depends on it, so
 it is where `nerima-lisp` libraries get exercised against a real workload. Each
 one below was adopted where it is a genuine fit for something nerimux already
-did by hand — not bolted on beside it.
+did by hand, not bolted on beside it.
 
 ## The other siblings
 
 - [cl-cli](https://github.com/nerima-lisp/cl-cli) parses the top-level
   `nerimux [flags] [command [flags]]` global flags
   (`main-startup-flags.lisp`, `*cli-app*`), replacing the old ad hoc
-  `-L`/`-S`-only scanner with real tmux(1) flag parity — flags may now appear
+  `-L`/`-S`-only scanner with real tmux(1) flag parity. Flags may now appear
   in any order before the command word.
 - [cl-tty-kit](https://github.com/nerima-lisp/cl-tty-kit) backs the PTY layer:
   pane spawn, byte-transparent master-fd read/write, raw mode, and
-  terminal-size queries — including the `TIOCSWINSZ` ioctl itself — all
+  terminal-size queries, including the `TIOCSWINSZ` ioctl itself, all
   delegate to it (`packages/pty/src/`). It also contributes
   `rgb-to-256` for true-colour downsampling in `renderer-format.lisp`.
   nerimux keeps its own SIGHUP-based `pty-close` teardown on top, deliberately
@@ -24,7 +24,7 @@ did by hand — not bolted on beside it.
   cl-process-kit's, not nerimux's own.
 - [cl-parser-kit](https://github.com/nerima-lisp/cl-parser-kit) is the
   tokenizer framework behind `commands-tokenizer.lisp`'s shell-style argument
-  splitter — one custom rule for the quote/escape-joining scan (no generic
+  splitter, one custom rule for the quote/escape-joining scan (no generic
   library has tmux's "quotes extend the current argument" grammar built in)
   plus a whitespace-skip rule, composed through
   `cl-parser-kit:tokenize-string`.
@@ -36,10 +36,10 @@ did by hand — not bolted on beside it.
   wrapper whose `fd-set!` wrote past the end of a 128-byte bitmap for any fd
   past `FD_SETSIZE`, and which read an `EINTR` mid-wait as "nothing ready,"
   silently truncating an infinite-timeout wait on every `SIGWINCH`/`SIGCHLD`.
-  It previously also ran nerimux's three "shell out and capture" sites —
+  It previously also ran nerimux's three "shell out and capture" sites:
   `#{shell-command}` format expansion, the `#{pane_current_*}` OS probes, and
-  the copy-mode `copy-command` pipe — but those, and the rest of the
-  `#{...}` format-string engine, were deleted with the configuration system;
+  the copy-mode `copy-command` pipe. The same subsystem also handled the rest
+  of the `#{...}` format-string engine. The configuration system was deleted;
   `process-kit:run`'s subprocess timeout and SIGTERM→SIGKILL escalation have
   no caller left in nerimux today.
 - [cl-concurrent-kit](https://github.com/nerima-lisp/cl-concurrent-kit) replaced
@@ -63,12 +63,11 @@ did by hand — not bolted on beside it.
   match and `#{s/…/…/}` substitute format modifiers (`format-modifiers.lisp`),
   and its `escape` let `copy-mode-search-forward-word`/`-backward-word`
   search literally for the word under the cursor by escaping it before
-  handing it to the same regex matcher — both gone, the format engine with
-  the configuration system and the word-search commands in the
-  workspace-only reduction (`67fe5dc`), so search and the picker are the
-  only callers left. This is the one adoption that changed behaviour rather
-  than only moving it; the integration notes below state the deliberate
-  pattern differences from cl-ppcre.
+  handing it to the same regex matcher. Both are gone. The format engine and
+  configuration system were deleted in the workspace-only reduction
+  (`67fe5dc`); the word-search commands are the only remaining callers. This
+  adoption changed behaviour rather than only moving it; the integration notes
+  below state the pattern differences from cl-ppcre.
 - [cl-codec-kit](https://github.com/nerima-lisp/cl-codec-kit) replaced `babel`
   as the UTF-8 string↔octet codec for protocol frames, PTY output and OSC
   payloads (`string-to-octets` / `octets-to-string`). The integration notes
@@ -76,11 +75,11 @@ did by hand — not bolted on beside it.
 - [cl-host-kit](https://github.com/nerima-lisp/cl-host-kit) supplies
   pathname/string host operations; nerimux's one live call site is
   `host-kit:split-string`, splitting an OSC `rgb:R/G/B` colour spec on `/`
-  in `%parse-rgb-color` (`packages/terminal/src/parser-osc-color.lisp`) — a
+  in `%parse-rgb-color` (`packages/terminal/src/parser-osc-color.lisp`), a
   fixed single-character delimiter, not a job that needs a compiled
   pattern.
 - [cl-tui-kit](https://github.com/nerima-lisp/cl-tui-kit) renders the
-  per-client frames — headless surface/backend, layout and widgets behind the
+  per-client frames, headless surface/backend, layout and widgets behind the
   repolist, status, pane and picker views
   (`packages/renderer/src/renderer-tui-kit.lisp`).
 - [cl-vcs-kit](https://github.com/nerima-lisp/cl-vcs-kit) discovers ghq
@@ -109,13 +108,14 @@ cl-regex-kit patterns intentionally differ from cl-ppcre:
 
 - **No backreferences and no lookaround in patterns.** cl-regex-kit is
   RE2/Rust-style by design. `([a-z]+)_\1` and `(?=…)`/`(?<=…)` are rejected with
-  a `regex-syntax-error` rather than mis-compiled — the same restriction
+  a `regex-syntax-error` rather than being mis-compiled. The same restriction
   `%copy-mode-make-matcher` (`commands-copy-mode-search.lisp`) and
-  `%picker-regex-scanner` (`global-picker.lisp`) both compile under today.
+  `%picker-regex-scanner` (`global-picker.lisp`) both compile in the current
+  tree.
 - **This originally moved nerimux closer to real tmux, not further away.**
   When cl-regex-kit backed the (now-deleted) `#{m/r:…}`/`#{s/…/…/}` format
   modifiers, upstream compiled those same patterns with `regcomp()` +
-  `REG_EXTENDED` (`format.c`, `regsub.c`) — POSIX ERE, which has no
+  `REG_EXTENDED` (`format.c`, `regsub.c`). POSIX ERE has no
   backreferences and no lookaround either, so the RE2-style rejection was not
   a portability regression against a GNU-only `\1` extension tmux itself
   could not rely on. `format-modifiers.lisp` and the rest of
@@ -148,7 +148,7 @@ is exactly three channels.
 - **A live bug was fixed.** nerimux called variadic `ioctl(TIOCSWINSZ)` through
   a *fixed* CFFI prototype. On the arm64 ABI a variadic argument is passed on
   the stack while a fixed prototype passes it in a register, so the call failed
-  with `EFAULT` — `set-pty-size` was a silent no-op on Apple Silicon, and child
+  with `EFAULT`. `set-pty-size` was a silent no-op on Apple Silicon, and child
   processes never learned their window size. cl-tty-kit goes through
   `sb-unix:unix-ioctl`, which marshals the pointer correctly.
 - **`EINTR` is retried** against a deadline fixed up front, so a `SIGWINCH` or
@@ -158,8 +158,8 @@ is exactly three channels.
 
 UTF-8 string↔octet conversion uses
 [cl-codec-kit](https://github.com/nerima-lisp/cl-codec-kit)'s
-`string-to-octets` / `octets-to-string` — an independent from-scratch codec
-with `:depends-on ()`. cl-tty-kit and cl-process-kit use it directly; callers
+`string-to-octets` / `octets-to-string`, an independent from-scratch codec
+with `:depends-on ()`. cl-tty-kit and cl-process-kit use it directly. Callers
 pass the explicit keywords (`:encoding`, `:start`, `:end`, `:errorp`) they need.
 cl-host-kit remains limited to host/pathname helpers.
 
@@ -167,7 +167,7 @@ Two behaviors are worth knowing:
 
 - **Lone surrogates.** babel silently encoded them CESU-8 style; cl-codec-kit
   signals (`surrogate-code-point`). nerimux's own UTF-8 decoder could produce
-  one — the bytes `ED A0 80` from a child process reassemble to U+D800 — and
+  one. The bytes `ED A0 80` from a child process reassemble to U+D800, and
   `char-code-limit` does not exclude the surrogate block, so it reached a
   screen cell and then the frame encoder. `safe-code-char` substitutes U+FFFD
   for D800–DFFF, which is what a terminal should display for an unpaired
@@ -180,5 +180,5 @@ Two behaviors are worth knowing:
 
 The replacement character is passed **explicitly** at that one lenient call
 site. cl-codec-kit's own default is `#\SUB` (U+001A), a C0 control character;
-babel's UTF-8 decoder hardcoded U+FFFD. nerimux wants U+FFFD — it is what babel
+babel's UTF-8 decoder hardcoded U+FFFD. nerimux wants U+FFFD. That is what babel
 did, and it is what `safe-code-char` already substitutes everywhere else.

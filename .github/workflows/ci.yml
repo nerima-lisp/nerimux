@@ -16,21 +16,14 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # One job on purpose. Granularity belongs in the flake's `checks.*`
-  # attributes, which `nix flake check` evaluates in parallel with build
-  # caching. Splitting these into separate GitHub jobs would duplicate that
-  # scheduling and lose cache sharing between them.
-  #
-  # Add a second job ONLY for work the Nix sandbox cannot do: network access,
-  # a real PTY/TTY, artifact upload, or a different runner OS.
+  # One job lets the flake schedule checks together and share its build cache.
+  # Add jobs only for work the Nix sandbox cannot do.
   check:
     name: nix flake check
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      # persist-credentials: false — this job runs untrusted PR code via
-      # `nix flake check`, and never needs the token, so don't leave it in
-      # .git/config for that code to read.
+      # The flake runs untrusted PR code and never needs the checkout token.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -40,9 +33,6 @@ jobs:
           cachix-cache: ${{ vars.CACHIX_CACHE }}
           cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
-      # Runs the SBCL test suite (checks.default), the treefmt formatting gate
-      # (checks.formatting), and the mkdocs --strict build (checks.docs).
-      # Add `--all-systems` only when the flake declares more than one system.
       - name: Check flake
         run: nix flake check --print-build-logs
 

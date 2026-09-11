@@ -78,14 +78,14 @@
         stops)))
 
 (defun set-tab-stop (screen)
-  "HTS (ESC H) — set a horizontal tab stop at the current cursor column."
+  "HTS (ESC H), set a horizontal tab stop at the current cursor column."
   (setf (screen-tab-stops screen) (sort
                                    (adjoin (screen-cursor-x screen)
                                            (%materialize-tab-stops screen))
                                    #'<)))
 
 (defun clear-tab-stops (screen mode)
-  "TBC (CSI N g) — clear tab stops.  MODE 3 clears ALL stops; any other value
+  "TBC (CSI N g), clear tab stops.  MODE 3 clears ALL stops; any other value
    (including 0) clears the stop at the current cursor column."
   (setf (screen-tab-stops screen) (if (= mode 3)
                                       '()
@@ -127,13 +127,13 @@
                                                  (1- (screen-width screen)))))
 
 (defun cursor-cht (screen n)
-  "CHT — cursor forward N tab stops (CSI N I).
+  "CHT, cursor forward N tab stops (CSI N I).
    Advance the cursor to the Nth next tab stop, clamping to width-1."
   (dotimes (_ (max 1 n))
     (cursor-ht screen)))
 
 (defun cursor-cbt (screen n)
-  "CBT — cursor backward N tab stops (CSI N Z).
+  "CBT, cursor backward N tab stops (CSI N Z).
    Move the cursor back to the Nth previous tab stop, stopping at column 0."
   (%cancel-wrap screen)
   (dotimes (_ (max 1 n))
@@ -160,7 +160,7 @@
   (%clear-line-wrapped screen (screen-cursor-y screen)))
 
 (defun cursor-nel (screen)
-  "NEL (ESC E) — Next Line: carriage return then line feed, i.e. move the cursor
+  "NEL (ESC E), Next Line: carriage return then line feed, i.e. move the cursor
    to column 0 of the next row (scrolling at the bottom margin like LF)."
   (cursor-cr screen)
   (cursor-lf screen))

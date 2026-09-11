@@ -64,7 +64,7 @@
                   "start before the first item when moving backward")
             (list (nerimux::%tree-selection-index nil '(a b) 1)
                   -1
-                  "keep the invalid forward sentinel")
+                  "preserves the invalid forward sentinel")
             (list (nerimux::%tree-selection-scroll 2 3 5)
                   2
                   "scroll upward to the selected item")

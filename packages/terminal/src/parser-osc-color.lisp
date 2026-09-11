@@ -37,7 +37,7 @@
    This also TIGHTENS one case.  cl-ppcre:split drops trailing empty fields, so
    the malformed `rgb:1/2/3/` split into exactly three parts and was accepted as
    a colour.  SPLIT-STRING keeps them (as cl-regex-kit:split would), giving four
-   parts and a rejection — which is what xterm's rgb: syntax, exactly three
+   parts and a rejection, which is what xterm's rgb: syntax, exactly three
    channels, actually calls for."
   (let* ((parts (host-kit:split-string spec :separator #\/))
          (valid (= (length parts) 3)))

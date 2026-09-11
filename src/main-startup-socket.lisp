@@ -93,7 +93,7 @@
   "(values EXE ARGS) respawning this image as `… server SESSION-NAME`.
    sb-ext:*posix-argv* cannot be replayed for this: the C runtime strips the
    runtime options it consumed (--core, --noinform, …), so under the Nix
-   wrapper — a bare sbcl runtime plus a separate core file — respawning
+   wrapper, a bare sbcl runtime plus a separate core file, respawning
    argv[0] with only (\"server\" NAME) starts a plain SBCL REPL that never
    binds the socket.  Rebuild the command from *runtime-pathname* and
    *core-pathname* instead, and always suppress init files: the spawned
@@ -118,8 +118,8 @@
    Only enters the polling loop when run-program succeeded.
    Polls every +server-socket-poll-interval-seconds+ for up to
    +server-socket-poll-max-iterations+ iterations for the socket to appear.
-   Signals an ERROR when the socket still does not exist afterward — the
-   spawned server crashed, never started, or is simply slow — rather than
+   Signals an ERROR when the socket still does not exist afterward, the
+   spawned server crashed, never started, or is slow, rather than
    returning silently as if it had succeeded (main's top-level handler-case
    turns this into a clean one-line message and exit 1, the same as any
    other startup error).

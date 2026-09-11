@@ -5,7 +5,7 @@
   (%charset-slot-ref screen g))
 
 (defun designate-charset (screen g charset)
-  "Designate G (:g0 or :g1) of SCREEN to CHARSET — the effect of ESC ( X (G0)
+  "Designate G (:g0 or :g1) of SCREEN to CHARSET, the effect of ESC ( X (G0)
    or ESC ) X (G1).  Updates the effective charset ONLY when G is the currently
    invoked set, so ESC ) 0 designates G1 without activating line-drawing until a
    SO (0x0E) locking shift selects G1."

@@ -85,7 +85,7 @@
 
   (it "screen-cell-read-returns-correct-cell"
     (with-screen (s 5 3)
-      (feed s "A")             ; writes 'A' at (0,0), cursor advances to (1,0)
+      (feed s "A")
       (expect (char= #\A (cell-char (screen-cell s 0 0))))))
 
   (it "setf-screen-cell-stores-cell-at-position"
@@ -123,7 +123,7 @@
 
   (it "screen-cursor-y-advances-after-newline"
     (with-screen (s 20 5)
-      (feed s (esc "[3;5H"))   ; move cursor to row 2 (1-based 3), col 4
+      (feed s (esc "[3;5H"))
       (expect (= 2 (screen-cursor-y s)))))
 
   (it "screen-cursor-x-starts-at-zero"
@@ -146,7 +146,7 @@
 
   (it "resize-smaller-clamps-cursor"
     (with-screen (s 20 10)
-      (feed s (esc "[10;20H"))  ; cursor near bottom-right
+      (feed s (esc "[10;20H"))
       (screen-resize s 5 3)
       (expect (<= (screen-cursor-x s) 4))
       (expect (<= (screen-cursor-y s) 2))))

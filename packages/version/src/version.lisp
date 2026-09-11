@@ -14,7 +14,7 @@
    Kept as a literal, not a read of nerimux.asd's :version at runtime, because
    this package stays dependency-free even in the built standalone binary
    where ASDF's system definitions are not guaranteed to still be registered.
-   nerimux.asd's :version is the single source of truth; the
+   nerimux.asd's :version must match this value; the
    nerimux-version-string-matches-asdf-version test in
    tests/unit/bootstrap/package-version-tests.lisp pins this literal to it so the
    two cannot drift silently again."

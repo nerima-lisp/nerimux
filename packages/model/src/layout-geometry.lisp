@@ -23,7 +23,7 @@
    This is an ORCHESTRATE-layer function: it calls %update-pane-geometry (a DATA
    slot mutation in pane-geometry.lisp) on every leaf, so callers such as window-relayout
    can drive the PTY/screen resize as a separate step after the full tree has been
-   repositioned.  It is NOT a pure transform — it mutates pane slots in place."
+   repositioned.  It is NOT a pure transform, it mutates pane slots in place."
   (etypecase node
     (layout-leaf
      (%update-pane-geometry (layout-leaf-pane node)

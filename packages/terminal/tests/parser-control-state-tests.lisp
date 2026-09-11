@@ -32,23 +32,23 @@
 
   (it "escape-state-m-reverse-index-returns-ground"
     (with-screen (s 10 5)
-      (feed s (esc "[3;1H"))    ; move to row 2 (0-based)
+      (feed s (esc "[3;1H"))
       (let ((next (nerimux/terminal/parser:escape-state s #x4D)))
         (expect (eq #'nerimux/terminal/parser:ground-state next))
         (expect (= 1 (screen-cursor-y s))))))
 
   (it "escape-state-7-saves-cursor"
     (with-screen (s 10 5)
-      (feed s (esc "[3;6H"))    ; cursor -> (5, 2)
+      (feed s (esc "[3;6H"))
       (let ((next (nerimux/terminal/parser:escape-state s #x37)))
         (expect (eq #'nerimux/terminal/parser:ground-state next))
         (expect (not (null (nerimux/terminal/types:screen-saved-cursor s)))))))
 
   (it "escape-state-8-restores-cursor"
     (with-screen (s 10 5)
-      (feed s (esc "[3;6H"))    ; cursor -> (5, 2)
-      (feed s (esc "7"))        ; ESC 7 -- save
-      (feed s (esc "[1;1H"))    ; move to origin
+      (feed s (esc "[3;6H"))
+      (feed s (esc "7"))
+      (feed s (esc "[1;1H"))
       (let ((next (nerimux/terminal/parser:escape-state s #x38)))
         (expect (eq #'nerimux/terminal/parser:ground-state next))
         (check-cursor s 5 2))))
@@ -62,7 +62,7 @@
     (with-screen (s 10 5)
       (let ((next (nerimux/terminal/parser:escape-state s #x28)))
         (expect (functionp next))
-        (funcall next s 48)                ; '0' -> DEC graphics
+        (funcall next s 48)
         (expect (eq :dec-graphics (nerimux/terminal/types:screen-g0-charset s))))))
 
   (it "escape-state-close-bracket-returns-osc-state"
@@ -89,7 +89,7 @@
   (it "make-dcs-k-non-backslash-after-esc-continues"
     (let* ((s   (make-screen 10 5))
            (k0  (nerimux/terminal/parser::make-dcs-k))
-           (k1  (funcall k0 s #x1B))     ; ESC -> waiting for backslash
+           (k1  (funcall k0 s #x1B))
            (k2  (funcall k1 s (char-code #\A))))
       (expect (functionp k2))))
 
@@ -111,9 +111,9 @@
 
   (it "ss2-single-shift-maps-one-character"
     (with-screen (s 20 5)
-      (feed s (format nil "~C*0" #\Escape))     ; G2 = DEC graphics
-      (feed s (format nil "~CNq" #\Escape))     ; SS2 + q
-      (feed s "q")                              ; plain q afterwards
+      (feed s (format nil "~C*0" #\Escape))
+      (feed s (format nil "~CNq" #\Escape))
+      (feed s "q")
       (expect (char= #\─ (char-at s 0 0)))
       (expect (char= #\q (char-at s 1 0)))))
 

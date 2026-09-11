@@ -6,7 +6,7 @@
     (with-screen (s 10 5)
       (feed s "hello")
       (feed s (esc "[3;3H"))
-      (feed s (esc "c"))          ; ESC c = RIS
+      (feed s (esc "c"))
       (check-cursor s 0 0)
       (expect (row-blank-p s 0))
       (expect (row-blank-p s 1))))
@@ -23,9 +23,9 @@
   (it "alt-screen-save-restore"
     (with-screen (s 10 5)
       (feed s "hello")
-      (feed s (esc "[?1049h"))  ; enter alt screen -- primary grid saved
-      (feed s "ALT")            ; mutate the (blank) alternate screen
-      (feed s (esc "[?1049l"))  ; exit alt screen -- primary grid restored
+      (feed s (esc "[?1049h"))
+      (feed s "ALT")
+      (feed s (esc "[?1049l"))
       (expect (string= "hello" (row-string s 0 :end 5)))))
 
   (it "esc-1049h-enters-alt-buffer"
@@ -39,29 +39,29 @@
   (it "alt-screen-1047-save-restore"
     (with-screen (s 10 5)
       (feed s "hello")
-      (feed s (esc "[?1047h"))   ; enter alt screen
+      (feed s (esc "[?1047h"))
       (feed s "ALT")
-      (feed s (esc "[?1047l"))   ; exit alt screen — primary restored
+      (feed s (esc "[?1047l"))
       (expect (string= "hello" (row-string s 0 :end 5)))))
 
   (it "cursor-1048-save-restore"
     (with-screen (s 20 5)
-      (feed s (esc "[3;6H"))     ; cursor -> (5, 2)
-      (feed s (esc "[?1048h"))   ; save cursor
-      (feed s (esc "[1;1H"))     ; cursor -> (0, 0)
-      (feed s (esc "[?1048l"))   ; restore cursor
+      (feed s (esc "[3;6H"))
+      (feed s (esc "[?1048h"))
+      (feed s (esc "[1;1H"))
+      (feed s (esc "[?1048l"))
       (check-cursor s 5 2)))
 
   (it "decsc-decrc"
     (with-screen (s 20 5)
-      (feed s (esc "[3;6H"))     ; cursor -> (5, 2)
-      (feed s (esc "[31;1m"))    ; fg = 1 (red), bold on
-      (feed s (esc "7"))         ; DECSC -- save
-      (feed s (esc "[1;1H"))     ; cursor -> (0, 0)
-      (feed s (esc "[0m"))       ; reset SGR
-      (feed s (esc "8"))         ; DECRC -- restore
+      (feed s (esc "[3;6H"))
+      (feed s (esc "[31;1m"))
+      (feed s (esc "7"))
+      (feed s (esc "[1;1H"))
+      (feed s (esc "[0m"))
+      (feed s (esc "8"))
       (check-cursor s 5 2)
-      (feed s "X")               ; written with the restored SGR
+      (feed s "X")
       (expect (= 1 (fg-at s 5 2)))
       (expect (logbitp 0 (attrs-at s 5 2)))))
 
@@ -73,39 +73,39 @@
 
   (it "decsc-decrc-preserves-g0-charset"
     (with-screen (s 20 5)
-      (feed s (esc "(0"))                  ; G0 = DEC special graphics (line-drawing)
-      (feed s (esc "7"))                   ; DECSC -- save (incl. charset)
-      (feed s (esc "(B"))                  ; G0 = ASCII (change it)
+      (feed s (esc "(0"))
+      (feed s (esc "7"))
+      (feed s (esc "(B"))
       (expect (eq :ascii (nerimux/terminal/types:screen-g0-charset s)))
-      (feed s (esc "8"))                   ; DECRC -- restore
+      (feed s (esc "8"))
       (expect (eq :dec-graphics (nerimux/terminal/types:screen-g0-charset s)))
       (expect (eq :dec-graphics (nerimux/terminal/types:screen-charset s)))))
 
   (it "decsc-decrc-preserves-active-charset"
     (with-screen (s 20 5)
-      (feed s (esc ")0"))                  ; G1 = DEC special graphics
-      (feed s (string (code-char #x0E)))   ; SO -- invoke G1 (charset -> graphics)
-      (feed s (esc "7"))                   ; DECSC -- save (active-g = g1)
-      (feed s (string (code-char #x0F)))   ; SI -- invoke G0 (charset -> ascii)
+      (feed s (esc ")0"))
+      (feed s (string (code-char #x0E)))
+      (feed s (esc "7"))
+      (feed s (string (code-char #x0F)))
       (expect (eq :g0 (nerimux/terminal/types:screen-active-g s)))
-      (feed s (esc "8"))                   ; DECRC -- restore
+      (feed s (esc "8"))
       (expect (eq :g1 (nerimux/terminal/types:screen-active-g s)))
       (expect (eq :dec-graphics (nerimux/terminal/types:screen-charset s)))))
 
   (it "decsc-decrc-preserves-origin-mode"
     (with-screen (s 20 5)
-      (feed s (esc "[?6h"))                ; DECOM origin mode ON
-      (feed s (esc "7"))                   ; DECSC -- save (incl. origin mode)
-      (feed s (esc "[?6l"))                ; DECOM origin mode OFF
+      (feed s (esc "[?6h"))
+      (feed s (esc "7"))
+      (feed s (esc "[?6l"))
       (expect (not (nerimux/terminal/types:screen-origin-mode s)))
-      (feed s (esc "8"))                   ; DECRC -- restore
+      (feed s (esc "8"))
       (expect (nerimux/terminal/types:screen-origin-mode s))))
 
   (it "decrc-without-save-resets-charset-and-origin-mode"
     (with-screen (s 20 5)
-      (feed s (esc "(0"))                  ; G0 = dec-graphics
-      (feed s (esc "[?6h"))                ; origin mode ON
-      (feed s (esc "8"))                   ; DECRC with no prior save
+      (feed s (esc "(0"))
+      (feed s (esc "[?6h"))
+      (feed s (esc "8"))
       (expect (eq :ascii (nerimux/terminal/types:screen-g0-charset s)))
       (expect (eq :ascii (nerimux/terminal/types:screen-charset s)))
       (expect (not (nerimux/terminal/types:screen-origin-mode s))))))
@@ -128,10 +128,10 @@
   (it "save-and-restore-cursor"
     (with-screen (s 20 10)
       (nerimux/terminal/actions:set-cursor s 7 4)
-      (feed s (format nil "~C[31;1m" #\Escape))   ; fg=1 (red), bold
+      (feed s (format nil "~C[31;1m" #\Escape))
       (nerimux/terminal/actions:save-cursor s)
       (nerimux/terminal/actions:set-cursor s 0 0)
-      (feed s (format nil "~C[0m" #\Escape))       ; SGR reset
+      (feed s (format nil "~C[0m" #\Escape))
       (nerimux/terminal/actions:restore-cursor s)
       (check-cursor s 7 4)
       (expect (= 1 (nerimux/terminal/types:screen-cur-fg s)))))
@@ -155,9 +155,9 @@
   (it "dec-pm-reset-1049-exits-alt-screen"
     (with-screen (s 10 5)
       (feed s "primary")
-      (nerimux/terminal/actions:dec-pm-set   s '(1049))  ; enter alt
+      (nerimux/terminal/actions:dec-pm-set   s '(1049))
       (feed s "alt content")
-      (nerimux/terminal/actions:dec-pm-reset s '(1049))  ; exit alt
+      (nerimux/terminal/actions:dec-pm-reset s '(1049))
       (expect (string= "primary" (row-string s 0 :end 7)))
       (expect (null (nerimux/terminal/types:screen-alt-cells s)))))
 

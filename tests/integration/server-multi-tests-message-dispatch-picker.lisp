@@ -74,10 +74,10 @@
               (nerimux/picker:build-global-picker-items (list organization))
               (nerimux::client-conn-picker-index conn) 0)
         (expect (< 1 (length (nerimux::%client-picker-visible-items conn))))
-        (nerimux::%handle-multi-key-message s conn #(27)) ; ESC: closes the picker
+        (nerimux::%handle-multi-key-message s conn #(27))
         (expect (null (nerimux::client-conn-modal conn)))
-        (nerimux::%handle-multi-key-message s conn #(91)) ; [: swallowed
-        (nerimux::%handle-multi-key-message s conn #(66)) ; B: swallowed
+        (nerimux::%handle-multi-key-message s conn #(91))
+        (nerimux::%handle-multi-key-message s conn #(66))
         (expect (null (nerimux::client-conn-modal conn))
                 ))))
 
@@ -105,11 +105,11 @@
               (nerimux/picker:build-global-picker-items (list organization))
               (nerimux::client-conn-picker-index conn) 0)
         (expect (< 1 (length (nerimux::%client-picker-visible-items conn))))
-        (nerimux::%handle-multi-key-message s conn #(14)) ; C-n
+        (nerimux::%handle-multi-key-message s conn #(14))
         (expect (= 1 (nerimux::client-conn-picker-index conn)))
         (expect (eq :picker (nerimux::client-conn-modal conn))
                 )
-        (nerimux::%handle-multi-key-message s conn #(16)) ; C-p
+        (nerimux::%handle-multi-key-message s conn #(16))
         (expect (= 0 (nerimux::client-conn-picker-index conn)))
         (expect (string= "" (nerimux::client-conn-picker-query conn))
                 ))))

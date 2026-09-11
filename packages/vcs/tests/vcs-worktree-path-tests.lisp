@@ -10,7 +10,7 @@
 
    The name has to differ between PROCESSES, not just between calls: these tests
    create real directories and never remove them, and what they assert is which
-   suffix is free. RANDOM alone does not give that — SBCL's initial
+   suffix is free. RANDOM alone does not give that, SBCL's initial
    *RANDOM-STATE* is fixed, so every process draws the same first number, finds
    the previous run's leftovers, and gets -4 where it expects -2. The clock and
    the process id are what actually vary; the counter keeps calls within one

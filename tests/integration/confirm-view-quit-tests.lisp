@@ -8,9 +8,9 @@
              (nerimux::*clients* (list conn))
              (win (first (nerimux/session:session-windows s)))
              (panes (nerimux/window:window-panes win)))
-        (setf (nerimux/pane:pane-fd (first panes)) 9999) ; one live pane
-        (nerimux::%handle-multi-key-message s conn #(17)) ; C-q
-        (nerimux::%handle-multi-key-message s conn #(81)) ; Q
+        (setf (nerimux/pane:pane-fd (first panes)) 9999)
+        (nerimux::%handle-multi-key-message s conn #(17))
+        (nerimux::%handle-multi-key-message s conn #(81))
         (let ((view (nerimux::client-conn-confirm-view conn)))
           (expect view)
           (expect (string= "SERVER QUIT" (nerimux/renderer:confirm-view-operation view)))
@@ -18,10 +18,10 @@
                           (cdr (assoc "panes" (nerimux/renderer:confirm-view-fields view)
                                       :test #'string=)))
                   :to-be-truthy))
-        (nerimux::%handle-multi-key-message s conn #(106)) ; j
+        (nerimux::%handle-multi-key-message s conn #(106))
         (expect (nerimux::client-conn-confirm-view conn)
                 )
-        (nerimux::%handle-multi-key-message s conn #(110)) ; n
+        (nerimux::%handle-multi-key-message s conn #(110))
         (expect (null (nerimux::client-conn-confirm-view conn)))
         (expect (string= "cancelled" (first (nerimux::client-conn-message-log conn))))
         (expect nerimux::*running* :to-be-truthy))))

@@ -36,16 +36,16 @@
 
   (it "ed-clears-to-current-background"
     (with-screen (s 6 3)
-      (feed s (esc "[44m"))          ; SGR 44 → background colour 4
-      (feed s (esc "[2J"))           ; ED 2 → erase whole display
+      (feed s (esc "[44m"))
+      (feed s (esc "[2J"))
       (expect (= 4 (bg-at s 0 0)))
       (expect (= 4 (bg-at s 5 2)))
       (expect (char= #\Space (char-at s 0 0)))))
 
   (it "el-clears-to-current-background"
     (with-screen (s 6 3)
-      (feed s (esc "[41m"))          ; background colour 1
-      (feed s (esc "[K"))            ; EL 0 → cursor to end of line
+      (feed s (esc "[41m"))
+      (feed s (esc "[K"))
       (expect (= 1 (bg-at s 0 0)))))
 
   (it "erase-without-background-is-default"
@@ -56,7 +56,7 @@
 
   (it "bce-resets-foreground-and-attrs"
     (with-screen (s 6 3)
-      (feed s (esc "[1;31;44m"))     ; bold, fg red, bg blue
+      (feed s (esc "[1;31;44m"))
       (feed s (esc "[2J"))
       (expect (= 4 (bg-at s 0 0)))
       (expect (= nerimux/terminal/types:+default-color+ (fg-at s 0 0)))

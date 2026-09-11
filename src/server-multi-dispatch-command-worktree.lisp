@@ -170,7 +170,7 @@ DRY-RUN must default true at every call site; a caller passes DRY-RUN NIL
 only after the user has confirmed a previewed prune, and even then this
 function still requires both an explicit --confirm option AND that a dry-run
 preview was already shown to CONN for this same repository (tracked via
-CLIENT-CONN-PENDING-PRUNE-PREVIEW-REPOSITORY-ID) — so a prune can never be
+CLIENT-CONN-PENDING-PRUNE-PREVIEW-REPOSITORY-ID), so a prune can never be
 reached by a single accidental keystroke, a scripted --confirm with no
 preview, or a preview of a different repository."
   (if (and (not dry-run)

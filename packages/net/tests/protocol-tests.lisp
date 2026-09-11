@@ -153,7 +153,7 @@
         (expect (= 0 next)))))
 
   (it "decode-incomplete-payload-returns-nil"
-    (let ((frame (msg-key #(1 2 3 4 5 6))))   ; header(5) + 6 payload = 11 bytes
+    (let ((frame (msg-key #(1 2 3 4 5 6))))
       (expect (null (decode-frame frame 0 (1- (length frame)))))))
 
 

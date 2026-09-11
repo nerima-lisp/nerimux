@@ -29,7 +29,7 @@
    STYLE-GRID and CURRENT-STYLE are optional: callers that only care about
    cursor movement (the direct unit tests below) omit them and get the
    original cursor-only behavior.  The updated style is always returned as
-   a fifth value; callers not tracking style simply discard it."
+   a fifth value; callers that do not track style discard it."
   (let ((height (length grid))
         (width (length (aref grid 0)))
         (count (or (first params) 1))

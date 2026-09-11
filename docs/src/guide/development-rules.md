@@ -2,13 +2,13 @@
 
 The organization-wide contribution guide lives in
 [nerima-lisp/.github](https://github.com/nerima-lisp/.github/blob/main/CONTRIBUTING.md).
-This page records only the rules specific to nerimux — the ones that are easy
+This page records only the rules specific to nerimux, the ones that are easy
 to trip over and that no general guide would mention.
 
 ## When the suite starts and then stops dead
 
 `nix run .#test` printing `Running test system nerimux/test` and then producing
-nothing — no output, no error, no CPU — has been seen on macOS/arm64, and it is
+nothing, no output, no error, no CPU, has been seen on macOS/arm64, and it is
 not the suite. Garbage collection deadlocks. Check for it before reading a line
 of Lisp:
 
@@ -19,7 +19,7 @@ of Lisp:
 ```
 
 On an affected machine that never prints, with the process at zero CPU and
-unkillable by `sb-ext:with-timeout` — the block is below Lisp, and every thread
+unkillable by `sb-ext:with-timeout`, the block is below Lisp, and every thread
 is parked at a stop-the-world safepoint.
 
 What the size sweep shows is that the *first* collection is the one that dies;
@@ -37,7 +37,7 @@ wherever it happens to be, which is why raising the heap looks like progress
 without fixing anything.
 
 That accounts for a lot, but not for all of it, and the difference matters.
-Running the whole suite still stops with collection effectively disabled —
+Running the whole suite still stops with collection effectively disabled,
 `(setf (sb-ext:bytes-consed-between-gcs) (* 50 1024 1024 1024))` under a 64 GB
 heap, 292 MB consed, `sb-ext:*after-gc-hooks*` never fired. Loading the system
 completes; `cl-weave:run-all` over the full tree then blocks with no collection
@@ -49,7 +49,7 @@ changed in response to them.
 
 Two measurement traps make this hard to see. `ps` reports `%cpu` as a lifetime
 average, so a process that ran for a moment and then stopped forever reads as
-`0.0` and looks idle rather than stuck — the cumulative `time` column is what
+`0.0` and looks idle rather than stuck, the cumulative `time` column is what
 settles it. And `sample` cannot walk SBCL's Lisp stack, so the main thread shows
 as a single unresolvable frame no matter where it is.
 
@@ -58,20 +58,20 @@ happens. They are not a substitute for the suite and do not claim to be.
 
 ## Four failures the suite cannot report
 
-A test suite reports on tests that ran. It says nothing when it could not load —
+A test suite reports on tests that ran. It says nothing when it could not load,
 and the ways this tree stops loading all look like silence rather than a red
 test:
 
 - a file that no longer reads (a deleted line took a parent form's closing paren
   with it);
 - a manifest entry with no file behind it (ASDF aborts, and *every* test
-  disappears at once), or a file with no manifest entry (it is simply never
+  disappears at once), or a file with no manifest entry (it is never
   loaded, and its tests quietly stop running);
 - a `PKG:SYM` reference to a symbol `PKG` does not export, which is a *read-time*
   error, so the file is unreadable rather than merely broken;
 - a unit whose `.asd` omits a dependency it uses directly. The full suite loads
   the umbrella, which supplies every sibling kit and loads bootstrap first, so a
-  unit missing `:cl-tty-kit` — or a unit test reaching `nerimux::` — resolves
+  unit missing `:cl-tty-kit`, or a unit test reaching `nerimux::`, resolves
   anyway and the suite stays green. Only loading the unit on its own finds it.
 
 `scripts/checks/` covers the first three without ASDF and without a compile. The
@@ -88,14 +88,14 @@ cover.
 ## The flake only sees git-tracked files
 
 `nix build` and `nix flake check` copy the *git tree*, not the working
-directory. If you add a new source file — including any file pulled in by a
-loader `load` form — you must `git add` it before the Nix build can see it, or
+directory. If you add a new source file, including any file pulled in by a
+loader `load` form, you must `git add` it before the Nix build can see it, or
 you get a confusing "file not found" failure.
 
 ## Tests must not leak global state
 
-Tests that mutate a special variable the runtime reads — the session registry,
-the dirty flag, the running flag — must wrap themselves in the isolation helpers
+Tests that mutate a special variable the runtime reads, the session registry,
+the dirty flag, the running flag, must wrap themselves in the isolation helpers
 in `tests/helpers-*.lisp`. Otherwise they clobber that state for every test after
 them.
 
@@ -103,7 +103,7 @@ them.
 
 `.github/workflows/ci.yml` runs `nix flake check` on `ubuntu-latest`, and that
 is the gate a pull request has to pass. The flake defines the same checks for
-`aarch64-darwin`, but nothing runs them automatically — a development machine
+`aarch64-darwin`, but nothing runs them automatically, a development machine
 cannot cross-build the Linux side without a remote builder, so `nix flake check`
 on a Mac only ever exercises the Darwin attributes.
 
@@ -117,7 +117,7 @@ the other.
 PTY lives in `nerimux/pty-test` and runs through `nix run .#test-pty`.
 
 It is an app, not a check, on purpose. A check builds in a sandbox with no
-`/dev/ptmx`, so those cases would hit their skip guard and be counted as passes —
+`/dev/ptmx`, so those cases would hit their skip guard and be counted as passes,
 one number covering both "the logic is right" and "the PTY integration works",
 with only the first ever true. Adding it to `checks` would restore exactly the
 false green the split removed.
@@ -155,7 +155,7 @@ Some tests deliberately pin the *absence* of a feature. If your change makes
 such a test fail, flip the test in the same commit and explain why in the
 message.
 
-## Keep the data/logic layering
+## Data and logic layering
 
 The codebase follows a layered layout (`domain` / `application` /
 `infrastructure` / `presentation` / `bootstrap`), described in
@@ -164,7 +164,7 @@ under `packages/<name>/`; `src/` holds the bootstrap core alone. Terminal code
 further separates data structs (`types`) from logic (`actions`, `csi`, `sgr`).
 
 New code should land in the matching layer, and new public accessors must also be
-re-exported from that unit's package declaration — usually
+re-exported from that unit's package declaration, usually
 `packages/<name>/src/package.lisp`, but `nerimux-terminal` splits its own across
 `package.lisp` and `package-types.lisp`, and `nerimux-version` declares its
 package in `version.lisp` because the unit is one function.
@@ -182,10 +182,10 @@ never a bare number. It signals `cl-concurrent-kit:operation-timed-out`, which
 `sb-ext:with-timeout` takes **bare seconds**. `+send-frame-timeout-seconds+`
 and `+pty-write-timeout-seconds+` are both plain integers for that reason. It
 signals `sb-ext:timeout`, which is a `serious-condition` and deliberately
-**not** an `error` — so an `(error ...)` clause silently misses it and the
-condition escapes. On a non-main thread that is fatal to the whole process,
-not just the thread. Use the `peer-io-failure` type (`src/runtime.lisp`),
-which is `(or error sb-ext:timeout)`, wherever you contain either one.
+**not** an `error`, so an `(error ...)` clause silently misses it and the
+condition escapes. On a non-main thread that terminates the whole process. Use
+the `peer-io-failure` type (`src/runtime.lisp`), which is `(or error sb-ext:timeout)`,
+wherever you contain either one.
 
 Prefer bounding a wait at all over picking the prettier vocabulary: an
 unbounded wait on the serve-loop thread hangs every attached client.
@@ -194,7 +194,7 @@ unbounded wait on the serve-loop thread hangs every attached client.
 
 Include:
 
-1. What you ran — command line and the byte/escape sequence if it is an
+1. What you ran, command line and the byte/escape sequence if it is an
    emulation bug. There is no config file to include; nerimux reads none.
 2. The expected behavior and its reference.
 3. What nerimux does instead, including the smallest reproducing input.

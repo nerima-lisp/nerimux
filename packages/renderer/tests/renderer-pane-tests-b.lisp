@@ -53,7 +53,7 @@
 
 
   (it "in-selection-p-table"
-    (dolist (c '(;; single-row selection (sr = er = 2, sc=1, ec=5)
+    (dolist (c '(
                  (t   2 3 2 2 1 5 nil "single-row inside [1,5)")
                  (t   2 1 2 2 1 5 nil "single-row at left boundary (inclusive)")
                  (nil 2 5 2 2 1 5 nil "single-row at right boundary (exclusive)")

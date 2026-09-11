@@ -8,7 +8,7 @@
                            &optional
                            rect-p)
   "Return T when (ROW, COL) falls within the selection.
-   RECT-P non-nil: rectangle mode — any cell in [start-r..end-r] x [start-c..end-c).
+   RECT-P non-nil: rectangle mode, any cell in [start-r..end-r] x [start-c..end-c).
    Default (character mode): the standard stream-of-characters selection logic."
   (if rect-p
       (and (<= sel-start-r row sel-end-r)

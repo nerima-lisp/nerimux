@@ -3,8 +3,8 @@
 > **Historical document.** This recorded the ACL/permissions verification
 > before the tmux command table and keystroke pipeline were removed (branch
 > `feat/workspace-only-phase2`, commits `d3e8fc5`..`2a5fa47`). `server-access`
-> — the read-write/read-only ACL command this file's matrix and test table
-> are built around — no longer exists anywhere in the tree: it lived in
+> was the read-write/read-only ACL command covered by this file's matrix and
+> test table. It no longer exists anywhere in the tree: it lived in
 > `src/application/dispatch/commands/dispatch-commands-server.lisp`, which was
 > deleted along with the rest of `src/application/dispatch/` (the whole tmux
 > command table). Most of the file:line citations below (the dispatch,
@@ -13,29 +13,29 @@
 > `*known-command-names*` (`src/application/config/config-commands.lisp`),
 > which validates `bind-key` targets and does not implement anything.
 >
-> (That file has since been deleted with the rest of the key-table subsystem;
-> the note is kept as the historical record of the audit.)
+> The deleted file belonged to the same key-table subsystem; this note records
+> the earlier audit.
 >
 > What is still true today: `attach-session -r`'s wire flag
 > (`+attach-flag-read-only+` in `src/infrastructure/net/protocol.lisp`) and
 > the server's per-connection enforcement (`client-conn-read-only-p` in
 > `src/bootstrap/server-multi-dispatch.lisp`, gating pane input at lines 80
 > and 904) both still exist and still work if a connection's flags byte sets
-> the bit. But nothing in the current CLI sets it any more — the surviving
-> entry surface is `attach`/`server`/`-V`/`-h`
+> the bit. The current CLI no longer sets it. The surviving entry surface is
+> `attach`/`server`/`-V`/`-h`
 > (`src/bootstrap/main-startup-commands.lisp`), and `attach-session -r`
 > parsing is gone with the rest of the command table. Nothing sets
 > `*client-read-only*` to non-nil anywhere in the tree any more; it stays
 > permanently `nil`. (`src/bootstrap/client.lisp`'s comment there described the
 > old `attach-session -r` writer; it was corrected in the same change that added
-> this note.) See
+> this note.)
 > The compatibility statement was intentionally removed with the obsolete
 > command surface. The socket-directory boundary this
-> file also describes (mode `0700`, per-user directory) is unaffected and is
-> current — see [the published security model](../src/reference/security-model.md).
+> file also describes (mode `0700`, per-user directory) is unaffected and remains
+> current. See [the published security model](../src/reference/security-model.md).
 >
-> The body below is left as-is, as a record of what was verified at the time
-> it was written. Do not treat any file:line reference below as current.
+> The body records the earlier verification. Its file:line references are
+> historical and do not describe the current tree.
 
 この記録は、nerimux の「実際に接続を許す境界」、接続後の client mode、
 server-access が保持する ACL モデルを分けて説明する。docs/mkdocs.yml の

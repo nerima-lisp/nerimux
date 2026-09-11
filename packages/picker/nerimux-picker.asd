@@ -1,8 +1,3 @@
-;;; This form comes FIRST, before any other form. ASDF binds *package* to
-;;; ASDF-USER only for a file it loads itself; read any other way — a REPL
-;;; `load`, an editor evaluating the buffer — the file is read in whatever
-;;; package happens to be current, and an unqualified `defsystem` then fails to
-;;; read at all. See PACKAGE_STANDARD.md "asd の書き方".
 (in-package #:asdf-user)
 
 (defsystem "nerimux-picker"
@@ -38,8 +33,6 @@
   :serial t
   :components ((:file "package")
                (:file "global-picker-tests"))
-  ;; See packages/text/nerimux-text.asd for why this form is repeated per unit
-  ;; rather than shared, and why *PRINT-CIRCLE* is load-bearing.
   :perform (test-op (op c)
              (declare (ignore op c))
              (let ((*print-circle* t)

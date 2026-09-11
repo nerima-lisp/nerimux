@@ -112,7 +112,7 @@
   "The repository TOKEN names, by specification, local path, or id (R7.6).
 
    `nerimux attach github.com/org/repo` is a repository selector, and until this
-   existed the attach path matched only against worktrees — so a repository
+   existed the attach path matched only against worktrees, so a repository
    spec resolved to nothing and reported \"attach target not found\" for
    something the workspace was holding."
   (when (and (stringp token) (plusp (length token)))

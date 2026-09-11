@@ -173,16 +173,16 @@
    to hardcode, but read from every defpackage's own documentation string
    via %package-name->layer-name instead of a maintained list.
 
-   *layer-rank* was a fixed 16-entry table nobody kept in sync with the
-   packages that exist: one entry (nerimux/model) named a package deleted
-   outright in 3e00db6, and ten live packages -- nerimux/version and every
+   *layer-rank* was a fixed 16-entry table that drifted from the packages that
+   exist: one entry (nerimux/model) named a package deleted outright in
+   3e00db6, and ten live packages -- nerimux/version and every
    nerimux/terminal/* sub-package, nerimux/workspace-model, nerimux/pane,
    nerimux/layout, nerimux/window, nerimux/session -- were simply absent.
    'no-package-declares-an-upward-layer-dependency' read it through
    `(when mine ...)' / `(when theirs ...)' guards, so a package missing from
    the table was skipped on BOTH sides of every edge it took part in: not
    under-tested, silently unreachable.  Today, nerimux/pane declaring
-   `:use #:nerimux/renderer' would not be detected.
+   `:use #:nerimux/renderer' was not detected.
 
    This function makes that class of gap structurally impossible: every
    name it returns comes from a defpackage this build actually found, so

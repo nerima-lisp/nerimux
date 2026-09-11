@@ -140,7 +140,7 @@
    predicate), or any of its panes has exited. An exited pane is not part of
    WORKTREE-ATTENTION-P's own definition (that predicate knows nothing about
    panes), but leaving a dead shell buried under a collapsed repository row
-   is exactly the kind of thing this section exists to surface."
+   so collapsed rows still show that state."
   (or (worktree-attention-p worktree)
       (some #'pane-process-exited-p (worktree-panes worktree))))
 

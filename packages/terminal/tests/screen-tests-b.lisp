@@ -48,8 +48,8 @@
 
   (it "screen-alt-cursor-saved-on-alt-screen-entry"
     (with-screen (s 20 10)
-      (feed s (esc "[5;10H"))   ; move cursor to (row=4, col=9)
-      (feed s (esc "[?1049h"))  ; enter alt screen
+      (feed s (esc "[5;10H"))
+      (feed s (esc "[?1049h"))
       (expect (= 9 (nerimux/terminal/types:screen-alt-cursor-x s)))
       (expect (= 4 (nerimux/terminal/types:screen-alt-cursor-y s)))))
 
@@ -59,8 +59,8 @@
       (let ((saved-attrs (nerimux/terminal/types:screen-cur-attrs s))
             (saved-fg    (nerimux/terminal/types:screen-cur-fg    s)))
         (feed s (esc "[?1049h"))
-        (feed s (esc "[m"))          ; reset attributes
-        (feed s (esc "[10;5H"))      ; move cursor
+        (feed s (esc "[m"))
+        (feed s (esc "[10;5H"))
         (feed s (esc "[?1049l"))
         (expect (= 0 (nerimux/terminal/types:screen-cursor-x s)))
         (expect (= saved-attrs (nerimux/terminal/types:screen-cur-attrs s)))
@@ -123,8 +123,8 @@
 
   (it "screen-tab-stops-hts-materialises-sentinel"
     (with-screen (s 80 5)
-      (feed s (esc "[5G"))   ; CHA — move cursor to column 5 (1-based), i.e. 0-based col 4
-      (feed s (esc "H"))     ; ESC H = HTS (set tab stop at current cursor column)
+      (feed s (esc "[5G"))
+      (feed s (esc "H"))
       (let ((stops (nerimux/terminal/types:screen-tab-stops s)))
         (expect (listp stops))
         (expect (member 4 stops))))))
@@ -165,5 +165,5 @@
   (it "screen-parser-is-wired-ground-state"
     (with-screen (s 10 5)
       (expect (functionp (nerimux/terminal/types:screen-parser s)))
-      (screen-process-bytes s #(65))      ; 65 = #\A
+      (screen-process-bytes s #(65))
       (expect (char= #\A (char-at s 0 0))))))

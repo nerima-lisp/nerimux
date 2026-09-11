@@ -12,7 +12,7 @@
    :positionals (list (cl-cli:make-positional :key :mode-args :rest-p t)))
   "The root cl-cli app for nerimux's global startup flags.  See main()
    (main-startup.lisp), which also defines %parse-global-cli-argv /
-   %apply-global-cli-invocation / %dispatch-global-cli-flag-actions — placed
+   %apply-global-cli-invocation / %dispatch-global-cli-flag-actions, placed
    there rather than here because they call run-version / run-usage /
    %usage-string, all defined later in the load order
    (main-startup-commands.lisp, main-startup.lisp).")

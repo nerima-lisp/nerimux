@@ -4,8 +4,8 @@
 
   (it "rep-repeats-last-char"
     (with-screen (s 20 5)
-      (feed s "A")             ; writes 'A' at col 0, cursor at col 1
-      (feed s (esc "[3b"))     ; REP 3: writes 'A' 3 more times
+      (feed s "A")
+      (feed s (esc "[3b"))
       (expect (char= #\A (char-at s 0 0)))
       (expect (char= #\A (char-at s 1 0)))
       (expect (char= #\A (char-at s 2 0)))
@@ -15,15 +15,15 @@
   (it "rep-noop-when-no-last-char"
     (with-screen (s 20 5)
       (expect (null (nerimux/terminal/types:screen-last-char s)))
-      (feed s (esc "[3b"))     ; REP 3 — no-op
+      (feed s (esc "[3b"))
       (check-cursor s 0 0)
       (expect (row-blank-p s 0))))
 
   (it "rep-uses-last-printed-char"
     (with-screen (s 20 5)
-      (feed s "AB")            ; writes A at 0, B at 1; last-char = B
+      (feed s "AB")
       (expect (char= #\B (nerimux/terminal/types:screen-last-char s)))
-      (feed s (esc "[2b"))     ; REP 2: writes B twice more
+      (feed s (esc "[2b"))
       (expect (char= #\B (char-at s 2 0)))
       (expect (char= #\B (char-at s 3 0))))))
 
@@ -32,21 +32,21 @@
   (it "da1-response"
     (with-screen (s 20 5)
       (expect (null (nerimux/terminal/types:screen-response-queue s)))
-      (feed s (esc "[c"))        ; DA1
+      (feed s (esc "[c"))
       (let ((q (nerimux/terminal/types:screen-response-queue s)))
         (expect (consp q))
         (expect (some (lambda (r) (search "?1;2c" r)) q)))))
 
   (it "da2-response"
     (with-screen (s 20 5)
-      (feed s (esc "[>c"))       ; DA2
+      (feed s (esc "[>c"))
       (let ((q (nerimux/terminal/types:screen-response-queue s)))
         (expect (consp q))
         (expect (some (lambda (r) (search ">1;" r)) q)))))
 
   (it "xtversion-reports-nerimux-version"
     (with-screen (s 20 5)
-      (feed s (esc "[>q"))       ; XTVERSION
+      (feed s (esc "[>q"))
       (expect (string= (format nil "~CP>|nerimux ~A~C\\"
                                #\Escape
                                (nerimux/version:version-string)
@@ -55,7 +55,7 @@
 
   (it "da3-response"
     (with-screen (s 20 5)
-      (feed s (esc "[=c"))       ; DA3
+      (feed s (esc "[=c"))
       (let ((q (nerimux/terminal/types:screen-response-queue s)))
         (expect (consp q))
         (expect (some (lambda (r) (search "!|00000000" r)) q)))))
@@ -69,7 +69,7 @@
 
   (it "decrqm-reports-reset-mode"
     (with-screen (s 20 5)
-      (feed s (esc "[?25l"))     ; hide cursor
+      (feed s (esc "[?25l"))
       (feed s (esc "[?25$p"))
       (let ((q (nerimux/terminal/types:screen-response-queue s)))
         (expect (some (lambda (r) (search (format nil "~C[?25;2$y" #\Escape) r)) q)))))
@@ -149,31 +149,31 @@
 
   (it "cpr-at-home-replies-1-1"
     (with-screen (s 20 5)
-      (feed s (esc "[6n"))       ; CPR — report cursor position
+      (feed s (esc "[6n"))
       (let ((q (nerimux/terminal/types:screen-response-queue s)))
         (expect (consp q))
         (expect (some (lambda (r) (search "[1;1R" r)) q)))))
 
   (it "cpr-reports-moved-cursor-position"
     (with-screen (s 20 5)
-      (feed s (esc "[3;5H"))     ; CUP → row 3, col 5 (1-based)
-      (feed s (esc "[6n"))       ; CPR
+      (feed s (esc "[3;5H"))
+      (feed s (esc "[6n"))
       (let ((q (nerimux/terminal/types:screen-response-queue s)))
         (expect (some (lambda (r) (search "[3;5R" r)) q)))))
 
   (it "cpr-in-decom-mode-reports-relative-row"
     (with-screen (s 20 10)
-      (feed s (esc "[3;8r"))    ; DECSTBM: scroll region rows 3..8 (1-based)
-      (feed s (esc "[?6h"))     ; DECOM on — cursor is now relative to margin
+      (feed s (esc "[3;8r"))
+      (feed s (esc "[?6h"))
       (feed s (esc "[3;1H"))
-      (feed s (esc "[6n"))      ; CPR
+      (feed s (esc "[6n"))
       (let ((q (nerimux/terminal/types:screen-response-queue s)))
         (expect (some (lambda (r) (search "[3;1R" r)) q)))))
 
 
   (it "da-response-table"
-    (dolist (entry '(("[c"  "?1;2c")    ; DA1 signature
-                     ("[>c" ">1;")))     ; DA2 signature
+    (dolist (entry '(("[c"  "?1;2c")
+                     ("[>c" ">1;")))
       (let ((seq (first entry))
             (sig (second entry)))
         (with-screen (s 20 5)

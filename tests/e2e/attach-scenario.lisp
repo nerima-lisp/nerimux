@@ -160,7 +160,7 @@
   "Drive BINARY through `attach` from a linked worktree, type a Git marker,
    then detach. Returns
    (VALUES pass-p detail-string); never calls SB-EXT:EXIT, so the caller
-   controls the process's overall exit status."
+   supplies the process exit status."
   (format t "~&[e2e] driving ~A~%" binary)
   (let* ((worktree (handler-case (%prepare-bare-worktree)
                      (error (condition)

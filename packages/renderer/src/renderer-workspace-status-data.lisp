@@ -145,7 +145,7 @@
    that is already visible from its position in the frame."
   (cond
     ((string= code "??") (%workspace-status-style-muted))
-    ((>= (length code) 2) (%workspace-status-style-alert)) ; unmerged/conflict
+   ((>= (length code) 2) (%workspace-status-style-alert))
     ((zerop (length code)) (%workspace-status-style-plain))
     (t (case (char code 0)
          (#\A (%workspace-status-style-ok))

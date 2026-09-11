@@ -268,9 +268,6 @@
   (let ((items (%client-picker-visible-items conn)))
     (and items (nth (client-conn-picker-index conn) items))))
 
-;;; %worktree-window-name and %worktree-windows live in workspace-window.lisp
-;;; (which loads before this file), next to the other worktree-window
-;;; creation logic they serve.
 (defun %client-worktree-pane (session worktree)
   (and worktree
        (find worktree
@@ -310,14 +307,7 @@
                   (%client-notify conn "worktree pane unavailable")
                   nil)
                  ((not (pane-live-p pane))
-                  ;; R5.7: a pane that came back without a live PTY is a
-                  ;; startup failure — record it as durable pane state
-                  ;; (pane-mark-startup-failure) instead of only a
-                  ;; one-shot notification, so it survives as the `!`
-                  ;; overview mark (3.4) rather than vanishing once the
-                  ;; message log scrolls. No reader thread: start-reader-thread
-                  ;; would call select-fds on a dead pane's fd (-1 or worse,
-                  ;; unvalidated), which process-kit rejects outright.
+                  ;; A dead PTY has no fd for a reader, so retain the startup failure in pane state.
                   (pane-mark-startup-failure pane)
                   (worktree-add-pane worktree pane)
                   (%set-client-selected-worktree conn worktree)
