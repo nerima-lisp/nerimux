@@ -185,5 +185,9 @@ branch へ取り込んだ。両方のコミットを main 起点の統合用 bra
 | docs check | `nix build .#checks.aarch64-darwin.docs --print-build-logs` が exit 0。 |
 | 差分整合性 | `git diff --check` が exit 0。未追跡ファイルは無かった。 |
 
-統合後は remote の main tip を確認してから main へ push し、統合済みの worktree と
-対応する作業 branch を削除する。今回対象外の remote branch は削除しない。
+統合後、remote の main tip が `5021e8d9` であることを確認してから
+`b2eb6a70` まで main へ push した。push 後も remote と local の main が
+`b2eb6a70` で一致することを確認した。統合済みの3 worktree、local の2作業 branch、
+remote の `docs/20260911-worktree-branch-cleanup` を削除した。今回対象外の
+`codex/refactor-2026-09-01`、`codex/remove-ai-slop`、`update_flake_lock_action` は
+削除していない。
