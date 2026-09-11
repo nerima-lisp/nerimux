@@ -147,3 +147,29 @@ commit を指す detached worktree を削除した。統合用 worktree と一�
 
 内部 worktree 3 件と対応するローカル branch は整理し、外部管理下の worktree と、それに
 対応する branch は残した。
+
+## 7. 2026-09-11 の worktree/branch 全整理
+
+§6 で残した外部管理下の worktree（`/Users/take/mediator/worktrees/` 配下）と、その後
+新たに作成されていた内部 detached worktree 3 件を含め、登録されていた worktree・branch
+を `origin/main`（`5021e8d94905f03d4a47fd5533c8f7daa2ec2d2c`）に対する到達可能性と
+未コミット変更の有無で確認した。push すべき未反映の作業単位は 1 件も無かった。
+
+| 対象 | 種別 | 判定 |
+| --- | --- | --- |
+| `.worktrees/20260909T131255-5021e8d9`、`-20260909T132048-5021e8d9`、`-20260911T175404-5021e8d9` | worktree (detached、いずれも `5021e8d9`) | `origin/main` と同一 tip で固有差分・未コミット変更ともに無し。 |
+| `takeokunn-final-verification`、`takeokunn-fix-linux-stale-socket`、`land/final-main`、`takeokunn-phase-1b-paste-focus`、`takeokunn-phase-1d-resize`、`takeokunn-phase-1e-sync-decckm`、`phase-2a-agent-attention`、`phase-2c-persistence`、`phase-2d-command-allowlist`、`takeokunn-phase-2e-transients`、`takeokunn-phase-3-release-docs` | worktree + local branch（`/Users/take/mediator/worktrees/` 配下） | 全 11 branch とも `git merge-base --is-ancestor <branch> origin/main` が真で、作業ツリーも clean だった。`git branch -d` で削除。 |
+| `land/phase-2c-persistence`、`phase-0-agent-workspace`、`phase-1c-osc-passthrough`、`takeokunn-fix-e2e-kill-scenarios`、`takeokunn-land-phase1b-phase2`、`takeokunn-phase-2a-agent-attention`、`takeokunn-phase-2c-persistence`、`takeokunn-phase-2d-command-allowlist` | local branch（worktree 無し） | 同様に `origin/main` の祖先として到達可能だったため `git branch -d` で削除。 |
+| `fix-e2e-kill-scenarios` (`38382120`、local + `origin`) | worktree + local/remote branch | §6 の判定を今回のセッションで再検証した。`origin/main` の祖先ではなく `git branch -d` は拒否されたため、実際に `origin/main` へ cherry-pick を試みたところ `tests/e2e/server-kill-scenario.lisp` は無差分で適用され、`tests/e2e/e2e-smoke.lisp` のみ conflict した。conflict 内容を確認すると、`origin/main`（HEAD）側は 38382120 が改名した `kill-refuses-with-pane`/`kill-force-cleans` を含む `*scenarios*` を既に保持しており（`paste` シナリオが後続で追加された分、HEAD 側がむしろ新しい）、38382120 由来の固有差分は無かった。`git branch -D` でローカル削除、`git push origin --delete fix-e2e-kill-scenarios` で remote も削除し、`git ls-remote --heads origin fix-e2e-kill-scenarios` が空であることを確認した。 |
+
+worktree 15 件（内部 detached 3 件 + 外部管理下 12 件）と local branch 20 件、
+remote branch 1 件（`fix-e2e-kill-scenarios`）を削除した。削除後、`git worktree list`
+は bare リポジトリのみ、`git branch -a` は `main` と（このセッション対象外の）
+`codex/refactor-2026-09-01`、`codex/remove-ai-slop`、`update_flake_lock_action` の
+remote branch のみを残す状態になった。
+
+なお `origin` にはこのリポジトリの `remote.origin.fetch` refspec が設定されておらず
+（bare clone のため）、`git fetch --prune` を実行しても remote-tracking ref
+`refs/remotes/origin/fix-e2e-kill-scenarios` は自動更新されなかった。削除自体は
+`git ls-remote` で確認済みだったため、`git update-ref -d` で該当する stale な
+remote-tracking ref を手動で落とした。
