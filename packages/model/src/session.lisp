@@ -153,8 +153,12 @@
 
 (defun %default-shell ()
   "Shell to spawn for a pane's child process: $SHELL, or \"/bin/sh\" when unset
-   (§1.4, the shell is no longer configurable, so this is the whole rule)."
-  (or (nerimux/ports:environment-value "SHELL") "/bin/sh"))
+   or empty (§1.4, the shell is no longer configurable, so this is the whole
+   rule). An empty $SHELL is treated as unset so this agrees with
+   nerimux/pty's own %DEFAULT-SHELL, which the PTY spawn path resolves
+   independently."
+  (or (nerimux/text:non-empty-string (nerimux/ports:environment-value "SHELL"))
+      "/bin/sh"))
 
 (defun %shell-basename ()
   "Basename of the shell %DEFAULT-SHELL resolves to, used as the initial
@@ -174,8 +178,11 @@
   1
   "First window id in a session (§1.4: window / pane numbering starts at 1).")
 
-(defun create-initial-session (rows cols &key start-dir)
-  "Bootstrap: one session, one window, one full-screen pane.
+(defun make-test-session (rows cols &key start-dir)
+  "Test fixture: one session, one window, one full-screen pane.
+   The runtime builds its session with %CREATE-WORKSPACE-SESSION (src/runtime-
+   lifecycle.lisp); this shorter path is kept for the PTY test helpers, which
+   need a session with a real shell behind it and nothing else.
    The first window gets +BASE-INDEX+.
    START-DIR: when non-NIL, the initial shell starts in that directory.
    PANE-ROWS subtracts +STATUS-LINE-ROWS+ from ROWS to leave one row for the

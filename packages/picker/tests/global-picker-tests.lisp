@@ -199,7 +199,9 @@
                  (string= "id-worktree"
                           (nerimux/picker::%worktree-label id-worktree)))
                 (expect
-                 (string= "pane/8 shell" (nerimux/picker::%pane-label pane)))
+                 (string= "feature — shell"
+                          (nerimux/picker::%pane-display-label
+                           nil branch-worktree pane)))
                 (let* ((items
                         (nerimux/picker:build-global-picker-items
                          (list host-only)))
@@ -586,6 +588,7 @@
                       (length
                        (nerimux/picker:filter-global-picker-items items
                                                                   "editor"))))
+                  (nerimux/pane:pane-mark-focused pane)
                   (nerimux/pane:pane-mark-output pane #(111 107))
                   (expect (nerimux/picker:picker-item-attention-p pane-item)))))
           (it "searches repository and worktree state fields"
@@ -626,8 +629,6 @@
                                                              "feature/picker"
                                                              :head
                                                              "deadbeef"
-                                                             :bare-p
-                                                             t
                                                              :locked-p
                                                              t
                                                              :prunable-p
@@ -663,9 +664,9 @@
                            #'nerimux/picker:picker-item-kind
                            :test
                            #'eq)))
-                  (dolist 
+                  (dolist
                       (query
-                       '("deadbeef" "bare"
+                       '("deadbeef"
                                     "locked"
                                     "prunable"
                                     "ahead 4"
@@ -740,3 +741,87 @@
              (expect (= 12000 (getf result :match-count)))
              (expect (integerp (getf result :elapsed-ms)))
              (expect (>= (getf result :elapsed-ms) 0)))))
+
+(defun %make-picker-label-fixture ()
+  (let* ((organization
+           (nerimux/workspace-model:make-organization
+            :id "org" :host "github.com" :name "acme"))
+         (repository
+           (nerimux/workspace-model:make-repository
+            :id "repo" :organization organization
+            :specification "github.com/acme/beta.git"))
+         (feature
+           (nerimux/workspace-model:make-worktree
+            :id "feature" :repository repository
+            :path "/tmp/beta.git/.worktrees/feat-x" :branch "feature/x"))
+         (detached
+           (nerimux/workspace-model:make-worktree
+            :id "detached" :repository repository
+            :path "/tmp/beta.git/.worktrees/detached"))
+         (pane (nerimux/pane:make-pane :id 3 :title "editor")))
+    (nerimux/workspace-model:organization-add-repository organization repository)
+    (dolist (worktree (list feature detached))
+      (nerimux/workspace-model:repository-add-worktree repository worktree))
+    (nerimux/pane:worktree-add-pane feature pane)
+    (list organization)))
+
+(describe "global picker rows"
+
+  (it "names a repository and a worktree the way the workspace tree does"
+    (let* ((organizations (%make-picker-label-fixture))
+           (row-labels (mapcar #'nerimux/picker:picker-item-label
+                               (nerimux/picker:build-global-picker-items
+                                organizations))))
+      (expect (member "github.com/acme/beta" row-labels :test #'string=))
+      (expect (member "github.com/acme/beta · feature/x" row-labels
+                      :test #'string=))
+      (expect (member "github.com/acme/beta · detached" row-labels
+                      :test #'string=))))
+
+  (it "offers every open pane as its own row under its worktree"
+    (let* ((organizations (%make-picker-label-fixture))
+           (pane-item
+             (find :pane (nerimux/picker:build-global-picker-items organizations)
+                   :key #'nerimux/picker:picker-item-kind)))
+      (expect pane-item)
+      (expect (string= "github.com/acme/beta · feature/x — editor"
+                       (nerimux/picker:picker-item-label pane-item)))))
+
+  (it "matches a quantified dot, an anchor, and an alternation over the row text"
+    (let* ((organizations (%make-picker-label-fixture))
+           (items (nerimux/picker:build-global-picker-items organizations)))
+      (flet ((matches (query)
+               (length (nerimux/picker:filter-global-picker-items
+                        items query :regex-p t))))
+        (expect (plusp (matches "be.*x")))
+        (expect (plusp (matches "be.+a")))
+        (expect (plusp (matches "^repo")))
+        (expect (plusp (matches "feature/x$")))
+        (expect (plusp (matches "acme/(beta|gamma)")))
+        (expect (zerop (matches "^pane.*gamma"))))))
+
+  (it "falls back to a substring search when the pattern does not compile"
+    (let* ((organizations (%make-picker-label-fixture))
+           (items (nerimux/picker:build-global-picker-items organizations)))
+      (multiple-value-bind (matched status)
+          (nerimux/picker:filter-global-picker-items items "beta[" :regex-p t)
+        (expect (eq :unsupported status))
+        (expect (null matched)))
+      (multiple-value-bind (matched status)
+          (nerimux/picker:filter-global-picker-items items "beta" :regex-p t)
+        (expect (eq :ok status))
+        (expect (plusp (length matched))))))
+
+  (it "caps the regex query length and falls back to substring past the boundary (S5)"
+    (let* ((organizations (%make-picker-label-fixture))
+           (items (nerimux/picker:build-global-picker-items organizations)))
+      (multiple-value-bind (matched status)
+          (nerimux/picker:filter-global-picker-items
+           items (make-string 200 :initial-element #\a) :regex-p t)
+        (declare (ignore matched))
+        (expect (eq :ok status)))
+      (multiple-value-bind (matched status)
+          (nerimux/picker:filter-global-picker-items
+           items (make-string 201 :initial-element #\a) :regex-p t)
+        (expect (eq :unsupported status))
+        (expect (null matched))))))

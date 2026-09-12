@@ -40,17 +40,18 @@
                      #:repository-worktree-by-path
                      #:repository-worktrees
                      #:worktree
+                     #:worktree-additions
                      #:worktree-ahead
                      #:worktree-agent-pane
                      #:worktree-completed-p
                      #:worktree-complete
                      #:worktree-attention-p
-                     #:worktree-bare-p
                      #:worktree-behind
                      #:worktree-branch
                      #:worktree-changed-files
                      #:worktree-commits-state
                      #:worktree-conflict-p
+                     #:worktree-deletions
                      #:worktree-dirty-p
                      #:worktree-head
                      #:worktree-id
@@ -148,6 +149,7 @@
                      #:pane-worktree
                      #:pane-x
                      #:pane-y
+                     #:repository-attention-p
                      #:respawn-pane
                      #:worktree-add-pane
                      #:worktree-agent-state
@@ -252,9 +254,9 @@
                      #:*update-environment*
                      #:+default-update-environment+
                      #:all-panes
-                     #:create-initial-session
                      #:get-update-environment-vars
                      #:make-session
+                     #:make-test-session
                      #:process-environment-names
                      #:process-environment-value
                      #:process-set-environment

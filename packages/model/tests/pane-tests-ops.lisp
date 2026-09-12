@@ -138,3 +138,26 @@
       (expect (null (nerimux/pane:pane-non-zero-exit-p pane)))
       (expect (null (nerimux/pane:pane-startup-failed-p pane))))))
 )
+
+(describe "respawned pane launch window"
+
+  (it "respawn-pane-resets-start-time-so-an-instant-death-is-a-failed-launch"
+    (let* ((pane (make-pane :id 9 :x 0 :y 0 :width 40 :height 6
+                            :fd 11 :pid 12
+                            :start-command "claude"
+                            :screen (make-screen 40 6)))
+           (nerimux/ports:*close-pty*
+             (lambda (fd pid)
+               (declare (ignore fd pid))
+               :closed))
+           (nerimux/ports:*spawn-pty*
+             (lambda (rows cols &key start-dir default-command environment)
+               (declare (ignore rows cols start-dir default-command environment))
+               (values 51 61 "/dev/pts/new"))))
+      (setf (nerimux/pane::pane-start-time pane) (- (get-universal-time) 600))
+      (respawn-pane nil pane :default-command "claude")
+      (expect (>= (nerimux/pane::pane-start-time pane)
+                  (- (get-universal-time) 1)))
+      (nerimux/pane:pane-mark-process-exit pane :status 127)
+      (expect (string= "claude: exited 127 (not found?)"
+                       (pane-notification pane))))))

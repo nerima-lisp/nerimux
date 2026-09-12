@@ -119,6 +119,9 @@
    Closes the old PTY fd (sending SIGHUP to the child), spawns a fresh shell on
    a new PTY, and updates the pane's FD and PID.  The existing screen is
    preserved so the renderer can continue without a layout change.
+   The start time is reset with them, so a restarted agent that dies at once is
+   read as a failed launch (+PANE-LAUNCH-FAILURE-SECONDS+) rather than as a job
+   that ran since the pane first opened.
    Returns the updated pane."
   (with-lock-held ((pane-process-lock pane))
    (let ((old-fd  (pane-fd  pane))
@@ -136,6 +139,7 @@
                                :extra-env extra-env)
       (setf (pane-fd pane) new-fd
             (pane-pid pane) new-pid
+            (pane-start-time pane) (get-universal-time)
             (pane-tty pane) (or slave-path "")
             (pane-start-command pane) (or default-command "")
             (pane-start-path pane) (or start-dir
