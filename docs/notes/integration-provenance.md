@@ -191,3 +191,52 @@ branch へ取り込んだ。両方のコミットを main 起点の統合用 bra
 remote の `docs/20260911-worktree-branch-cleanup` を削除した。今回対象外の
 `codex/refactor-2026-09-01`、`codex/remove-ai-slop`、`update_flake_lock_action` は
 削除していない。
+
+## 9. 2026-09-12 の production-readiness 作業の着地と scratch worktree の整理
+
+`feat/ux-production-readiness`（`.worktrees/20260912T030818-c13c643f`、`c13c643f` 起点、
+固有 commit 0 件）に未コミットのまま積まれていた 156 ファイルを、`origin/main` 起点の
+`land/production-readiness` に作業単位ごとの 5 commit として切り分け、PR #38 として main
+へ merge した（merge commit `be1fab5c`）。着地 head は統合 worktree の内容とバイト単位で
+同一であることを `cmp` で確認した（差分ファイル 0 件）。
+
+| commit | 単位 | 内容 |
+| --- | --- | --- |
+| `f9aa9611` | model / picker / pty / text / commands | attention 理由の分離、pane 起動失敗の報告、picker のラベル、`make-test-session` への改名 |
+| `8067b500` | vcs | status pass の読み取りを posix_spawn 経由の `%run-git-read` へ、stash の repository 単位読み取り、clean worktree の numstat 省略、default branch fetch、worktree の branch/tag 一覧 |
+| `ac5102e1` | renderer | repolist の organization 別グループ化、Attention の絞り込み、単一 ANSI ツリー描画と選択行ハイライト、cl-tui-kit surface を経由しない frame 生成 |
+| `c7a5bb9b` | server + tests | repository 行の Enter を展開に変更、command 補完、prune 確認、status view の stage/discard、テスト更新 |
+| `55c58550` | docs | getting-started / index / architecture の記述更新 |
+
+5 commit のうち緑なのは head だけである。model 単位は `create-initial-session` の改名や
+`worktree-bare-p` の削除を含み、それを消費する renderer / src を伴わないと
+`export-check` が失敗する（`land/u1` 単独での `nix flake check` は exit 1 だった）。
+ディレクトリ単位で緑にできる分割は無かったため、履歴の読みやすさのための分割として
+残し、bisect は head で行う前提とした。
+
+### 削除した worktree / branch
+
+| 対象 | 種別 | 判定 |
+| --- | --- | --- |
+| `.worktrees/f6-docs`、`f6-hygiene`、`f6-prune`、`f6-render`、`w2-dispatch`、`w2-docs`、`w2-model`、`w2-renderer`、`w4-A-render`、`w4-B-input`、`w4-C-status`、`w4-D-worktree`、`w4-E-docs`、`x5-dispatch`、`x5-model` | worktree (detached、いずれも `c13c643f`) | 前セッションの並列修正 wave の作業場所。各 worktree の `HEAD` 差分（109〜151 ファイル）は、統合 worktree へ patch として取り込み済みだった。判定は「worktree の追加行のうち統合 worktree の同一ファイルに存在しない行の数」で行い、5,100〜8,100 行中 147〜333 行のみが不在で、不在行は統合側でレビュー後に書き換えられた箇所（`%pane-output-preview` の tail window 版、`%confirm-workspace-prune` の改名前版、Attention 行のラベル旧版など）だった。 |
+| `.claude/worktrees/wf_54273dce-d92-1` 〜 `-11` + `worktree-wf_54273dce-d92-1` 〜 `-11` | worktree + local branch（Workflow tool が作成） | 同じ wave の Workflow 実行分。2〜19 ファイルの未コミット変更は上と同じ方法で統合済みと判定した（`-1` は不在行 0）。branch は固有 commit 0 件。 |
+| `.worktrees/20260912T105621-c13c643f` | worktree (detached) | 未コミット変更無し、固有作業無し。 |
+| `.worktrees/20260912T030818-c13c643f` + `feat/ux-production-readiness` | worktree + local branch | 統合 worktree。内容は PR #38 の head と同一で、branch に固有 commit は無かった。 |
+| `.worktrees/20260912T222501-land-u1` + `land/production-readiness`（local + `origin`） | worktree + branch | PR #38 の作業場所。merge 後に削除した。 |
+| `.worktrees/20260912T223649-docs-landing` + `docs/20260912-production-readiness-landing`（local + `origin`） | worktree + branch | この節を追記した作業単位。PR #39 として merge 済み。 |
+
+### 検証
+
+| 対象 | 判定 |
+| --- | --- |
+| 着地 head の flake 評価 | `nix flake check --print-build-logs` が exit 0（2990 passed、1 skipped、0 failed）。 |
+| CI | PR #38 の `nix flake check`（ubuntu、x86_64-linux）が pass（2m24s）。 |
+| 実機 | isolated tmux で built binary を実 ghq root（98 repository / 339 worktree）に attach。旧 build と新 build を連続で計測し、最初のツリー描画 5.3 s → 1.5 s、status pass は 45 s 時点で未完 → 5.1 s で完了、`n` キー入力から画面更新まで 220〜260 ms → 70〜130 ms。 |
+
+### 保留した項目
+
+- cl-process-kit が `sb-ext:run-program` を `:use-posix-spawn nil` で呼ぶため、status pass 以外の git 呼び出し（fetch、worktree create/delete/prune、log、diff、cwd 解決）は今も fork 経路（1 spawn 約 66 ms、worker thread 間で直列化）を通る。SBCL の posix_spawn 経路は `:directory` を無視するため上流の修正は単純ではなく、flake input の更新を伴うため今回は見送った。`%run-git-read` は vcs-kit の内部シンボル 4 つに依存しており、上流が posix_spawn に対応した時点で削除する。
+- picker modal だけは cl-tui-kit surface 経由で描画され、140x40 で 1 frame 約 67 ms かかる。原因は cl-tui-kit の cell 単位の Unicode 幅判定で、修正先は上流。
+- catalog scan（`scan-repositories`）は repository ごとに単一 thread で worktree 一覧を読む。posix_spawn 経路では 1 件 2 ms 程度のため pool 化は見送った。
+- `%run-git-read` の 1 MiB 出力上限は打ち切って成功扱いにしている（エラーにはしない）。
+- Attention section の所属条件の変更（dirty / ahead / behind を除外）はユーザ指示ではなくセッション側の判断。旧条件では実環境の 339 worktree 中 184 件が該当し、一覧が読めなくなっていたことが根拠。戻す場合は `%workspace-worktree-needs-attention-p` のみを変更する。
