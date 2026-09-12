@@ -97,9 +97,10 @@
               :worktree-path "/tmp/nerimux-cwd-fixture/repo/.worktrees/wt1"))
            (conn (%make-test-conn)))
       (setf (nerimux::client-conn-attach-cwd conn) "/tmp/nerimux-cwd-fixture")
-      (let ((resolved (nerimux::%client-attach-selection conn organizations)))
+      (multiple-value-bind (resolved source)
+          (nerimux::%client-attach-selection conn organizations)
         (expect (null resolved))
-        (expect (null (nerimux::client-conn-selected-worktree conn))))))
+        (expect (null source)))))
 
   (it "cwd-sharing-a-string-prefix-with-a-sibling-path-does-not-match"
     (let* ((nerimux::*last-selected-worktree-token* nil)
@@ -252,16 +253,15 @@
            conn (list nil "/tmp/nerimux-cwd-fixture/repo/.worktrees/wt-no-session/src"))
           (expect (eq :repolist (nerimux::client-conn-view conn)))))))
 
-  (it "r7-2-a-attach-with-no-match-focuses-the-active-pane"
+  (it "r7-2-a-attach-with-no-match-leaves-focus-unset"
     (multiple-value-bind (session)
         (make-single-pane-session)
-      (let* ((pane (first (nerimux/session:all-panes session)))
-             (conn (%make-test-conn))
-             (nerimux::*server-sessions* (list (cons "0" session)))
-             (nerimux/vcs::*workspace-organizations* nil))
+      (let ((conn (%make-test-conn))
+            (nerimux::*server-sessions* (list (cons "0" session)))
+            (nerimux/vcs::*workspace-organizations* nil))
         (setf (nerimux::client-conn-view conn) :repolist)
         (nerimux::%client-attach-target conn '(nil nil))
-        (expect (eq pane (nerimux::client-conn-focus conn)))
+        (expect (null (nerimux::client-conn-focus conn)))
         (expect (eq :repolist (nerimux::client-conn-view conn))))))
 
   (it "r7-2-a-attach-resolves-and-merges-a-fresh-cwd-catalog"
@@ -290,3 +290,103 @@
           (expect (equal organizations
                           (nerimux/vcs:workspace-organizations)))
           (expect (eq :repolist (nerimux::client-conn-view conn))))))))
+
+(describe "attach-selector-consumption-suite"
+
+  (it "an-ambiguous-selector-opens-the-picker-once-and-consumes-the-selector"
+    (let* ((selector "github.com/team/widget")
+           (organizations (%attach-fixture :specification selector
+                                           :worktree-path selector))
+           (conn (%make-test-conn))
+           (nerimux::*clients* (list conn)))
+      (setf (nerimux::client-conn-attach-target conn) selector)
+      (nerimux::%client-attach-selection conn organizations)
+      (expect (eq :picker (nerimux::client-conn-modal conn)))
+      (expect (null (nerimux::client-conn-attach-target conn)))
+      (nerimux::%set-client-modal conn nil)
+      (nerimux::%rebind-client-selection conn organizations)
+      (expect (null (nerimux::client-conn-modal conn)))))
+
+  (it "an-explicit-selector-that-matches-nothing-keeps-the-previous-selection-out-of-it"
+    (let* ((organizations (%attach-fixture :worktree-path "/tmp/only-a-worktree"))
+           (conn (%make-test-conn))
+           (nerimux::*clients* (list conn))
+           (nerimux::*last-selected-worktree-token* "wt"))
+      (setf (nerimux::client-conn-attach-target conn) "github.com/team/missing")
+      (multiple-value-bind (worktree source)
+          (nerimux::%client-attach-selection conn organizations)
+        (expect (null worktree))
+        (expect (null source)))
+      (expect (null (nerimux::client-conn-selected-worktree conn)))
+      (expect (search "attach target not found: github.com/team/missing"
+                      (first (nerimux::client-conn-message-log conn))))))
+
+  (it "an-explicit-path-selector-that-matches-nothing-keeps-the-cwd-out-of-it"
+    (let* ((organizations
+             (%attach-fixture
+              :worktree-path "/tmp/nerimux-cwd-fixture/repo/.worktrees/wt1"))
+           (conn (%make-test-conn))
+           (nerimux::*clients* (list conn))
+           (nerimux::*last-selected-worktree-token* nil))
+      (setf (nerimux::client-conn-attach-target conn) "/no/such/worktree/xyz"
+            (nerimux::client-conn-attach-cwd conn)
+            "/tmp/nerimux-cwd-fixture/repo/.worktrees/wt1/src")
+      (expect (null (nerimux::%client-attach-selection conn organizations)))
+      (expect (null (nerimux::client-conn-selected-worktree conn)))
+      (expect (search "attach target not found: /no/such/worktree/xyz"
+                      (first (nerimux::client-conn-message-log conn))))))
+
+  (it "a-bare-repository-resolves-by-the-name-the-tree-shows"
+    (multiple-value-bind (organizations repository)
+        (%attach-fixture :specification "github.com/team/widget.git")
+      (expect (eq repository
+                  (nerimux::%workspace-find-repository-for-attach
+                   "github.com/team/widget" organizations)))
+      (expect (eq repository
+                  (nerimux::%workspace-find-repository-for-attach
+                   "github.com/team/widget.git" organizations)))))
+
+  (it "a-mixed-case-dot-git-suffix-resolves-as-an-attach-selector"
+    ;; D4: the three strippers used to disagree on case, so a `.GIT' clone
+    ;; displayed stripped in the tree but did not resolve back as a selector.
+    (multiple-value-bind (organizations repository)
+        (%attach-fixture :specification "github.com/team/widget.GIT")
+      (expect (eq repository
+                  (nerimux::%workspace-find-repository-for-attach
+                   "github.com/team/widget" organizations)))
+      (expect (eq repository
+                  (nerimux::%workspace-find-repository-for-attach
+                   "github.com/team/widget.GIT" organizations)))))
+
+  (it "a-path-selector-resolves-through-a-symlinked-parent"
+    (let* ((root (format nil "/tmp/nerimux-symlink-fixture-~D" (sb-posix:getpid)))
+           (real (format nil "~A/real" root))
+           (link (format nil "~A/link" root)))
+      (unwind-protect
+           (progn
+             (ensure-directories-exist (format nil "~A/worktree/" real))
+             (ignore-errors (sb-posix:unlink link))
+             (sb-posix:symlink real link)
+             (let* ((organizations
+                      (%attach-fixture
+                       :worktree-path (format nil "~A/worktree" real)))
+                    (conn (%make-test-conn)))
+               (setf (nerimux::client-conn-attach-target conn)
+                     (format nil "~A/worktree" link))
+               (let ((resolved
+                       (nerimux::%client-attach-selection conn organizations)))
+                 (expect resolved)
+                 (expect (string= (format nil "~A/worktree" real)
+                                  (nerimux/workspace-model:worktree-path
+                                   resolved))))))
+        (ignore-errors (sb-posix:unlink link))
+        (ignore-errors (sb-posix:rmdir (format nil "~A/worktree" real)))
+        (ignore-errors (sb-posix:rmdir real))
+        (ignore-errors (sb-posix:rmdir root)))))
+
+  (it "attach-with-no-selector-and-no-remembered-selection-selects-the-first-row"
+    (let* ((organizations (%attach-fixture :worktree-path "/tmp/only-a-worktree"))
+           (conn (%make-test-conn))
+           (nerimux::*last-selected-worktree-token* nil))
+      (expect (null (nerimux::%client-attach-selection conn organizations)))
+      (expect (nerimux::client-conn-selected-tree-object conn)))))

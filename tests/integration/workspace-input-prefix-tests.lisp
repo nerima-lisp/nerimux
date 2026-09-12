@@ -77,7 +77,7 @@
         (expect (null (nerimux::client-conn-modal conn)))
         (expect (nerimux/terminal:screen-copy-mode-p screen) :to-be-falsy))))
 
-  (it "r4-3-esc-in-command-modal-swallows-exactly-the-next-two-bytes"
+  (it "r4-3-esc-in-command-modal-keeps-the-next-keystroke"
     (with-fake-session (s)
       (let ((conn (%make-test-conn)))
         (nerimux::%handle-multi-key-message s conn #(58))
@@ -85,8 +85,9 @@
         (nerimux::%handle-multi-key-message s conn #(27))
         (expect (null (nerimux::client-conn-modal conn)))
         (nerimux::%handle-multi-key-message s conn #(49))
+        (expect (= 1 (nerimux::client-conn-visibility-level conn)))
         (nerimux::%handle-multi-key-message s conn #(51))
-        (expect (= 2 (nerimux::client-conn-visibility-level conn)))
+        (expect (= 3 (nerimux::client-conn-visibility-level conn)))
         (nerimux::%handle-multi-key-message s conn #(52))
         (expect (= 4 (nerimux::client-conn-visibility-level conn))))))
 
@@ -311,8 +312,40 @@
             (decode-frame (nerimux::%render-client-frame s conn))
           (expect (= nerimux::+msg-frame+ type))
           (let ((visible (strip-sgr (decode-text payload))))
-            (expect (search "< / > shrink/grow horizontal" visible))
-            (expect (search "{ / } shrink/grow vertical" visible)))))))
+            (expect (search "< / > width" visible))
+            (expect (search "{ / } height" visible)))))))
+
+  (it "r4-4-prefix-question-mark-opens-the-help-view-the-pane-hint-names"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn)))
+        (setf (nerimux::client-conn-view conn) :pane)
+        (expect (null (nerimux::%workspace-prefix-dispatch
+                       s conn (char-code #\?))))
+        (expect (eq :help (nerimux::client-conn-modal conn))))))
+
+  (it "closing-an-exited-pane-selected-through-the-tree-releases-the-selection"
+    (with-fake-session (sess)
+      (let* ((conn (%make-test-conn))
+             (win (nerimux/session:session-active-window sess))
+             (pane (nerimux/window:window-active-pane win))
+             (worktree
+               (nerimux/workspace-model:make-worktree
+                :id "wt-close" :path "/tmp/wt-close" :branch "main"))
+             (nerimux::*clients* (list conn)))
+        (setf (nerimux/pane:pane-window pane) win
+              (nerimux/pane:pane-fd pane) -1)
+        (nerimux/pane:worktree-add-pane worktree pane)
+        (nerimux::%set-client-focus conn pane sess)
+        ;; The tree's pane row is what the selection points at after Enter on
+        ;; it; the close clears PANE-WINDOW, and a selection left here signals
+        ;; out of the next render (NMX-PANES-1).
+        (nerimux::%set-client-selected-tree-object conn pane)
+        (expect (null (nerimux::%workspace-prefix-close-pane sess conn)))
+        (expect (null (nerimux/pane:pane-window pane)))
+        (expect (eq worktree (nerimux::client-conn-selected-tree-object conn)))
+        (expect (equal (list :worktree "wt-close")
+                       (nerimux/renderer::%workspace-tree-node-key
+                        (nerimux::client-conn-selected-tree-object conn)))))))
 
   (it "r4-5-prefix-actions-report-missing-focus-without-mutating-session"
     (with-fake-session (s :nwindows 0)
@@ -351,12 +384,18 @@
           (expect (null (nerimux::%workspace-prefix-cycle-window s conn 1))))
         (expect (search "no other window" message)))))
 
-  (it "r5-7-prefix-open-status-steps-out-from-the-status-view"
+  (it "r8-3-prefix-detach-drops-the-client-after-naming-what-stays-running"
     (with-fake-session (s :nwindows 0)
-      (let ((conn (%make-test-conn)))
-        (nerimux::%set-client-view conn :status)
-        (expect (null (nerimux::%workspace-prefix-open-status s conn)))
-        (expect (eq :repolist (nerimux::client-conn-view conn))))))
+      (let ((conn (%make-test-conn))
+            (parting nil))
+        (with-stubbed-fdefinition
+            ((nerimux::%send-client-parting
+              (lambda (connection text)
+                (declare (ignore connection))
+                (setf parting text))))
+          (expect (eq :drop (nerimux::%workspace-prefix-detach s conn))))
+        (expect (search "detached" parting) :to-be-truthy)
+        (expect (search "0 panes running" parting) :to-be-truthy))))
 
   (it "r7-1-repository-fetch-reports-preconditions-and-completion"
     (with-fake-session (s)
@@ -539,9 +578,8 @@
             (nerimux::%workspace-fetch-organization conn)
             (expect (= 2 fetch-count))
             (expect (search "already in progress" (first messages)))
-            (expect (eq job
-                        (gethash (list :organization "org" :fetch)
-                                 nerimux::*workspace-operation-jobs*)))
+            (expect (null (gethash (list :organization "org" :fetch)
+                                   nerimux::*workspace-operation-jobs*)))
             (expect (eq :succeeded
                         (nerimux::workspace-operation-job-state job))))
           (nerimux::%set-client-selected-tree-object conn failed-organization)
@@ -684,6 +722,7 @@
                  (expect (eq :repolist (nerimux::client-conn-view conn)))
                  (expect (eq worktree (nerimux::client-conn-selected-worktree conn)))
                  (expect (eq worktree (nerimux::client-conn-selected-tree-object conn)))
+                 (nerimux::%handle-multi-key-message sess conn #(119))
                  (nerimux::%handle-multi-key-message sess conn #(110)))
             (setf (fdefinition 'nerimux/vcs:create-detached-worktree-async) original))
           (expect (equal (list repository) created))
@@ -841,4 +880,53 @@
                    (push message messages))))
             (nerimux::%workspace-prefix-fetch-organization conn)
             (expect (search "organization wrapper failure" (first messages)))))))
+
+  (it "nmx-p19-c-q-x-asks-once-before-closing-a-live-pane"
+    (with-fake-two-pane-session (s)
+      (let* ((conn (%make-test-conn))
+             (win (first (nerimux/session:session-windows s)))
+             (left (first (nerimux/window:window-panes win)))
+             (nerimux::*clients* (list conn))
+             (nerimux/ports:*close-pty* (lambda (fd pid)
+                                          (declare (ignore fd pid))
+                                          nil)))
+        (setf (nerimux/pane:pane-fd left) 9999)
+        (nerimux::%set-client-focus conn left)
+        (nerimux::%handle-multi-key-message s conn #(17))
+        (nerimux::%handle-multi-key-message s conn #(120))
+        (expect (string= "C-q x again to close"
+                         (first (nerimux::client-conn-message-log conn))))
+        (expect (member left (nerimux/window:window-panes win) :test #'eq))
+        (nerimux::%handle-multi-key-message s conn #(17))
+        (nerimux::%handle-multi-key-message s conn #(120))
+        (expect (null (member left (nerimux/window:window-panes win) :test #'eq))))))
+
+  (it "nmx-p19-any-other-key-answers-the-pending-c-q-x-with-no"
+    (with-fake-two-pane-session (s)
+      (let* ((conn (%make-test-conn))
+             (win (first (nerimux/session:session-windows s)))
+             (left (first (nerimux/window:window-panes win)))
+             (nerimux/ports:*close-pty* (lambda (fd pid)
+                                          (declare (ignore fd pid))
+                                          nil)))
+        (setf (nerimux/pane:pane-fd left) 9999)
+        (nerimux::%set-client-focus conn left)
+        (nerimux::%handle-multi-key-message s conn #(17))
+        (nerimux::%handle-multi-key-message s conn #(120))
+        (nerimux::%handle-multi-key-message s conn #(17))
+        (nerimux::%handle-multi-key-message s conn #(121))
+        (nerimux::%handle-multi-key-message s conn #(17))
+        (nerimux::%handle-multi-key-message s conn #(120))
+        (expect (member left (nerimux/window:window-panes win) :test #'eq)))))
+
+  (it "nmx-p19-a-pane-whose-process-exited-closes-on-the-first-c-q-x"
+    (with-fake-two-pane-session (s)
+      (let* ((conn (%make-test-conn))
+             (win (first (nerimux/session:session-windows s)))
+             (left (first (nerimux/window:window-panes win))))
+        (setf (nerimux/pane:pane-fd left) -1)
+        (nerimux::%set-client-focus conn left)
+        (nerimux::%handle-multi-key-message s conn #(17))
+        (nerimux::%handle-multi-key-message s conn #(120))
+        (expect (null (member left (nerimux/window:window-panes win) :test #'eq))))))
 )

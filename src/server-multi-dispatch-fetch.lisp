@@ -22,15 +22,19 @@ completion is what eventually refreshes the picker."
                                                            (if result
                                                                (progn
                                                                  (%refresh-client-picker conn)
+                                                                 (%client-log-process conn "git fetch" t "")
                                                                  (%client-notify conn "fetch complete"))
                                                                (%client-notify conn
                                                                                "fetch already in progress")))
                                                          :on-error
                                                          (lambda (condition)
+                                                           (%client-log-process conn "git fetch" nil
+                                                                                (princ-to-string condition))
                                                            (%client-notify conn
                                                                            (format nil "fetch failed: ~A"
                                                                                    condition))))
          (error (condition)
+           (%client-log-process conn "git fetch" nil (princ-to-string condition))
            (%client-notify conn (format nil "fetch failed: ~A" condition)))))))
   nil)
 
@@ -53,11 +57,19 @@ completion is what eventually refreshes the picker."
                                                              (if repositories
                                                                  (progn
                                                                    (%refresh-client-picker conn)
+                                                                   (%client-log-process conn "git fetch" t "")
                                                                    (%client-notify conn "fetch complete"))
                                                                  (%client-notify conn
                                                                                  "fetch already in progress")))
                                                            :on-error
                                                            (lambda (repository condition)
+                                                             (%client-log-process
+                                                              conn
+                                                              (format nil "git fetch ~A"
+                                                                      (nerimux/workspace-model:repository-id
+                                                                       repository))
+                                                              nil
+                                                              (princ-to-string condition))
                                                              (%client-notify
                                                               conn
                                                               (format nil "fetch failed for ~A: ~A"
@@ -65,5 +77,6 @@ completion is what eventually refreshes the picker."
                                                                        repository)
                                                                       condition))))
          (error (condition)
+           (%client-log-process conn "git fetch" nil (princ-to-string condition))
            (%client-notify conn (format nil "fetch failed: ~A" condition)))))))
   nil)

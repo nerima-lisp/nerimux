@@ -59,7 +59,7 @@
           (expect second-win :to-be-truthy)))))
 
 
-  (it "create-initial-session-increments-id-counter"
+  (it "make-test-session-increments-id-counter"
     (unless (pty-available-p)
       (skip "no PTY available (sandboxed environment)"))
     (let ((before nerimux/session::*session-id-counter*))
@@ -67,7 +67,7 @@
         (expect (= (1+ before) (session-id sess1)))
         (expect (= (1+ before) nerimux/session::*session-id-counter*)))))
 
-  (it "create-initial-session-session-touch-called"
+  (it "make-test-session-session-touch-called"
     (unless (pty-available-p)
       (skip "no PTY available (sandboxed environment)"))
     (let ((before (get-universal-time)))

@@ -157,6 +157,116 @@
                   (ignore-errors
                     (uiop:delete-directory-tree root :validate t)))))
 
+          (it "restores a worktree that holds two windows"
+              (let* ((root (merge-pathnames
+                            (format nil "nerimux-state-two-windows-~D/"
+                                    (random 1000000))
+                            (host-kit:temporary-directory)))
+                     (worktree-path (merge-pathnames "worktree/" root)))
+                (ensure-directories-exist worktree-path)
+                (unwind-protect
+                     (with-runtime-state-environment ((namestring root) nil)
+                       (let* ((path (nerimux::%runtime-state-path "two-windows"))
+                              (first-pane (make-pane :id 1 :fd -1 :pid -1
+                                                     :width 40 :height 24
+                                                     :screen (make-screen 40 24)))
+                              (second-pane (make-pane :id 1 :fd -1 :pid -1
+                                                      :width 40 :height 24
+                                                      :screen (make-screen 40 24)))
+                              (worktree (nerimux/workspace-model:make-worktree
+                                         :id "two-windows"
+                                         :path (namestring worktree-path)))
+                              (first-window (make-window :id 1 :name "one"
+                                                         :width 40 :height 24
+                                                         :panes (list first-pane)
+                                                         :tree (make-layout-leaf
+                                                                first-pane)
+                                                         :active first-pane))
+                              (second-window (make-window :id 2 :name "two"
+                                                          :width 40 :height 24
+                                                          :panes (list second-pane)
+                                                          :tree (make-layout-leaf
+                                                                 second-pane)
+                                                          :active second-pane))
+                              (session (make-session
+                                        :id 1
+                                        :name "0"
+                                        :windows (list first-window second-window)
+                                        :active first-window))
+                              (nerimux::*runtime-persistence-enabled-p* t)
+                              (nerimux::*runtime-state-signature* nil)
+                              (nerimux::*runtime-server-name* "two-windows")
+                              (nerimux::*workspace-expanded-node-ids*
+                                (make-hash-table :test #'equal)))
+                         (setf (pane-window first-pane) first-window
+                               (pane-window second-pane) second-window)
+                         (nerimux/pane:worktree-add-pane worktree first-pane)
+                         (nerimux/pane:worktree-add-pane worktree second-pane)
+                         (window-refresh-panes first-window)
+                         (window-refresh-panes second-window)
+                         (nerimux::%persist-runtime-state session :force t)
+                         (with-stubbed-fdefinition
+                             ((nerimux/pane:%fork-pane
+                                (lambda (ignored-session id x y cols rows
+                                         &key start-dir default-command)
+                                  (declare (ignore ignored-session x y
+                                                   start-dir default-command))
+                                  (make-pane :id id
+                                             :fd -1
+                                             :pid -1
+                                             :width cols
+                                             :height rows
+                                             :screen (make-screen cols rows)))))
+                           (let ((restored (nerimux::%runtime-session-from-state
+                                            "two-windows")))
+                             (expect restored)
+                             (expect (= 2 (length (session-windows restored))))
+                             (expect (null (probe-file
+                                            (pathname
+                                             (format nil "~A.invalid1"
+                                                     (namestring path))))))
+                             (expect (search "(2)"
+                                             (nerimux/window:window-name
+                                              (second (session-windows restored))))
+                                     :to-be-truthy)))))
+                  (ignore-errors
+                    (uiop:delete-directory-tree root :validate t)))))
+
+          (it "clears a restored pane's unread mark when the fork succeeds"
+              (let ((worktree (nerimux/workspace-model:make-worktree
+                                :id "restored-unread" :path "/tmp/restored-unread")))
+                (with-stubbed-fdefinition
+                    ((nerimux/pane:%fork-pane
+                       (lambda (ignored-session id x y cols rows
+                                &key start-dir default-command)
+                         (declare (ignore ignored-session x y
+                                          start-dir default-command))
+                         (make-pane :id id
+                                    :fd 7
+                                    :pid 1234
+                                    :width cols
+                                    :height rows
+                                    :screen (make-screen cols rows)))))
+                  (let ((pane (nerimux::%runtime-restored-pane
+                               nil worktree (list :id 1) 24 80)))
+                    (expect (nerimux/pane:pane-live-p pane))
+                    (expect (string= "restored"
+                                     (nerimux/pane:pane-notification pane)))
+                    (expect (null (nerimux/pane:pane-unread-output-p pane)))))))
+
+          (it "leaves a restored pane's startup failure marked unread"
+              (let ((worktree (nerimux/workspace-model:make-worktree
+                                :id "restored-failure" :path "/tmp/restored-failure")))
+                (with-stubbed-fdefinition
+                    ((nerimux/pane:%fork-pane
+                       (lambda (&rest arguments)
+                         (declare (ignore arguments))
+                         (error "fork failed"))))
+                  (let ((pane (nerimux::%runtime-restored-pane
+                               nil worktree (list :id 1) 24 80)))
+                    (expect (not (nerimux/pane:pane-live-p pane)))
+                    (expect (nerimux/pane:pane-unread-output-p pane))))))
+
           (it "includes hidden panes when persisting a zoomed window"
               (let* ((first-pane (make-pane :id 1 :fd -1 :pid -1
                                              :width 40 :height 24

@@ -91,12 +91,15 @@
                                    (expect
                                     (null (nerimux::client-conn-modal conn)))
                                    (expect
-                                    (nerimux::%client-esc-swallow-consume conn))
+                                    (nerimux::%client-esc-swallow-consume conn
+                                                                          #(91)))
                                    (expect
-                                    (nerimux::%client-esc-swallow-consume conn))
+                                    (nerimux::%client-esc-swallow-consume conn
+                                                                          #(65)))
                                    (expect
                                     (null
-                                     (nerimux::%client-esc-swallow-consume conn)))
+                                     (nerimux::%client-esc-swallow-consume conn
+                                                                           #(65))))
                                    (setf (nerimux::client-conn-modal conn) :process-log)
                                    (nerimux::%handle-multi-key-message s
                                                                        conn
@@ -242,7 +245,12 @@
                                       (equal '(#\p #\e)
                                              (mapcar #'first
                                                      (nerimux/renderer:transient-view-actions
-                                                      view)))))
+                                                      view))))
+                                     (expect
+                                      (notany
+                                       (lambda (action) (search "origin/" (second action)))
+                                       (nerimux/renderer:transient-view-actions
+                                        view))))
                                    (nerimux::%handle-client-transient-key-payload
                                     s
                                     conn
@@ -410,10 +418,16 @@
                                                        on-error callback-dispatch)
                                         (declare (ignore received operation args on-error
                                                                 callback-dispatch))
-                                        (funcall on-complete nil "failed"))))
+                                        (funcall on-complete
+                                                 nil
+                                                 (format nil
+                                                         "~%fatal: No configured push destination.~%more")))))
                                   (nerimux::%run-transient-git-action conn #\P :push nil nil nil)
-                                  (expect (string= "git push: failed"
-                                                   (first (nerimux::client-conn-message-log conn)))))
+                                  (let ((message (first (nerimux::client-conn-message-log conn))))
+                                    (expect (search "git push failed: fatal: No configured push destination."
+                                                    message))
+                                    (expect (search "$ shows the full log" message))
+                                    (expect (< (length message) 100))))
                                 (multiple-value-bind (repository worktree
                                                                  ignored-conn)
                                     (%make-worktree-operation-fixture)
@@ -422,9 +436,20 @@
                                    conn
                                    worktree)
                                   (expect
+                                   (string= "no upstream"
+                                            (nerimux::%transient-subtitle #\P conn)))
+                                  (setf (nerimux/workspace-model:worktree-status worktree)
+                                        (vcs-kit::%make-vcs-status-snapshot
+                                         :branch-head "feature/errors"
+                                         :branch-upstream "origin/feature/errors"))
+                                  (expect
                                    (string=
-                                    "feature/errors -> origin/feature/errors"
+                                    "feature/errors → origin/feature/errors"
                                     (nerimux::%transient-subtitle #\P conn)))
+                                  (expect
+                                   (string=
+                                    "origin/feature/errors → feature/errors"
+                                    (nerimux::%transient-subtitle #\F conn)))
                                 (expect
                                  (string= "on feature/errors"
                                           (nerimux::%transient-subtitle #\x
@@ -450,7 +475,7 @@
                       (nerimux::%run-transient-git-action conn #\P :push nil nil nil)
                       (expect (equal '("git push" "1" "boom")
                                      (first (nerimux::client-conn-process-log conn))))
-                      (expect (string= "git push: failed: boom"
+                      (expect (string= "git push failed: boom  $ shows the full log"
                                        (first (nerimux::client-conn-message-log conn)))))))))
 
           (it "routes read-only views through client bytes and closes them"
@@ -542,6 +567,80 @@
                         (expect (equal (list repository :push '("upstream"))
                                        (find :push calls :key #'second))))))))))
 
+          (it "rejects a text-prompt value that starts with - for every git-argument kind"
+              ;; S3: a value beginning with `-` becomes an option to the git
+              ;; subprocess (`--abort` into merge, `--force` into push) rather
+              ;; than the name it looks like.
+              (with-fake-session (s)
+                (dolist (kind '(:branch-create :tag-create :merge-branch
+                                :branch-delete :remote-push))
+                  (let ((conn (%make-test-conn))
+                        (nerimux::*clients* nil)
+                        (calls nil))
+                    (setf nerimux::*clients* (list conn))
+                    (multiple-value-bind (repository worktree ignored-conn)
+                        (%make-worktree-operation-fixture)
+                      (declare (ignore ignored-conn repository))
+                      (nerimux::%set-client-selected-tree-object conn worktree)
+                      (with-stubbed-fdefinition
+                          ((nerimux/vcs:vcs-package-available-p (lambda () t))
+                           (nerimux/vcs:git-write-operation-async
+                             (lambda (received operation args &key on-complete
+                                               on-error callback-dispatch)
+                               (declare (ignore received operation args
+                                                on-complete on-error
+                                                callback-dispatch))
+                               (push t calls))))
+                        (nerimux::%open-client-text-prompt conn kind)
+                        (cl-tui-kit/widgets:handle-widget-event
+                         (nerimux::client-conn-text-prompt-widget conn)
+                         (cl-tui-kit/core:make-text-input-event "-force"))
+                        (nerimux::%submit-client-text-prompt conn)
+                        (expect (null calls))
+                        ;; For :branch-delete a bare non-empty value opens a
+                        ;; confirm view rather than calling git-write-operation
+                        ;; -async directly, so NULL CALLS alone would not
+                        ;; distinguish the rejected case from that path; the
+                        ;; prompt staying open (never cleared) does.
+                        (expect
+                         (eq :text-prompt (nerimux::client-conn-modal conn)))
+                        (expect
+                         (string= "a name cannot start with -"
+                                  (first (nerimux::client-conn-message-log
+                                          conn))))))))))
+
+          (it "strips an SGR escape sequence from a commit message before it reaches the notification"
+              ;; S4: %transient-argument-text feeds user-typed text straight
+              ;; into %client-notify, so a commit message carrying an SGR
+              ;; sequence would otherwise recolour the client's message strip.
+              (with-fake-session (s)
+                (let ((conn (%make-test-conn))
+                      (nerimux::*clients* nil))
+                  (setf nerimux::*clients* (list conn))
+                  (multiple-value-bind (repository worktree ignored-conn)
+                      (%make-worktree-operation-fixture)
+                    (declare (ignore repository ignored-conn))
+                    (nerimux::%set-client-selected-tree-object conn worktree)
+                    (with-stubbed-fdefinition
+                        ((nerimux/vcs:vcs-package-available-p (lambda () t))
+                         (nerimux/vcs:git-write-operation-async
+                           (lambda (received operation args &key on-complete
+                                             on-error callback-dispatch)
+                             (declare (ignore received operation args on-error
+                                              callback-dispatch))
+                             (funcall on-complete t "done"))))
+                      (nerimux::%open-client-text-prompt conn :commit-message)
+                      (cl-tui-kit/widgets:handle-widget-event
+                       (nerimux::client-conn-text-prompt-widget conn)
+                       (cl-tui-kit/core:make-text-input-event
+                        (format nil "danger~C[31mred" (code-char 27))))
+                      (nerimux::%submit-client-text-prompt conn)
+                      (let ((notified (first (nerimux::client-conn-message-log
+                                              conn))))
+                        (expect (not (find (code-char 27) notified)))
+                        (expect (not (search "[31m" notified)))
+                        (expect (string= "committed: dangerred" notified))))))))
+
           (it "keeps multiline prompt paste on the client byte path"
               (with-fake-session (s)
                 (let ((conn (%make-test-conn))
@@ -598,3 +697,135 @@
                                                          (string #\Newline)
                                                          "second")))
                                 (first calls))))))))))
+
+(describe "transient outcome messages and nested menus"
+  (it "names the commit subject on success and git's own first line on failure"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn))
+            (nerimux::*clients* nil)
+            (outcome nil))
+        (setf nerimux::*clients* (list conn))
+        (multiple-value-bind (repository ignored-worktree ignored-conn)
+            (%make-worktree-operation-fixture)
+          (declare (ignore ignored-worktree ignored-conn))
+          (with-stubbed-fdefinition
+              ((nerimux/vcs:vcs-package-available-p (lambda () t))
+               (nerimux::%refresh-client-picker
+                 (lambda (ignored-connection)
+                   (declare (ignore ignored-connection))))
+               (nerimux/vcs:git-write-operation-async
+                 (lambda (received operation args &key on-complete on-error
+                                   callback-dispatch)
+                   (declare (ignore received operation args on-error
+                                    callback-dispatch))
+                   (funcall on-complete t "[main abc1234] subject line"))))
+            (nerimux::%run-transient-git-write
+             conn repository :commit
+             (list "--message"
+                   (format nil "subject line~%~%body line two")))
+            (setf outcome (first (nerimux::client-conn-message-log conn)))
+            (expect (string= "committed: subject line" outcome))
+            (expect (null (find #\Newline
+                                (first (first (nerimux::client-conn-process-log
+                                               conn)))))))))))
+
+  (it "steps back one level on q and closes the whole stack on Esc"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn))
+            (nerimux::*clients* nil))
+        (setf nerimux::*clients* (list conn))
+        (multiple-value-bind (repository worktree ignored-conn)
+            (%make-worktree-operation-fixture)
+          (declare (ignore repository ignored-conn))
+          (nerimux::%set-client-selected-tree-object conn worktree)
+          (setf (nerimux::client-conn-view conn) :status)
+          (nerimux::%open-client-transient conn #\?)
+          (nerimux::%handle-multi-key-message s conn #(99))
+          (expect (string= "Commit"
+                           (nerimux/renderer:transient-view-title
+                            (nerimux::client-conn-transient-view conn))))
+          (nerimux::%handle-multi-key-message s conn #(113))
+          (expect (string= "Dispatch"
+                           (nerimux/renderer:transient-view-title
+                            (nerimux::client-conn-transient-view conn))))
+          (nerimux::%handle-multi-key-message s conn #(113))
+          (expect (null (nerimux::client-conn-transient-view conn)))
+          (nerimux::%open-client-transient conn #\?)
+          (nerimux::%handle-multi-key-message s conn #(99))
+          (nerimux::%handle-multi-key-message s conn #(27))
+          (expect (null (nerimux::client-conn-transient-view conn)))))))
+
+  (it "opens the branch and tag listings as read views"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn))
+            (nerimux::*clients* nil))
+        (setf nerimux::*clients* (list conn))
+        (multiple-value-bind (repository worktree ignored-conn)
+            (%make-worktree-operation-fixture)
+          (declare (ignore repository ignored-conn))
+          (nerimux::%set-client-selected-tree-object conn worktree)
+          (with-stubbed-fdefinition
+              ((nerimux/vcs:vcs-package-available-p (lambda () t))
+               (nerimux/vcs:read-worktree-branches-async
+                 (lambda (received &key on-complete on-error callback-dispatch)
+                   (declare (ignore received on-error callback-dispatch))
+                   (funcall on-complete (format nil "* main -> origin/main~%"))))
+               (nerimux/vcs:read-worktree-tags-async
+                 (lambda (received &key on-complete on-error callback-dispatch)
+                   (declare (ignore received on-error callback-dispatch))
+                   (funcall on-complete (format nil "v1.0 first release~%")))))
+            (nerimux::%open-client-read-view conn :branches)
+            (expect (eq :read-view (nerimux::client-conn-modal conn)))
+            (expect (string= "GIT BRANCHES"
+                             (nerimux/renderer:read-view-title
+                              (nerimux::client-conn-read-view conn))))
+            (expect (search "origin/main"
+                            (nerimux/renderer:read-view-content
+                             (nerimux::client-conn-read-view conn))))
+            (nerimux::%close-client-read-view conn)
+            (nerimux::%open-client-read-view conn :tags)
+            (expect (string= "GIT TAGS"
+                             (nerimux/renderer:read-view-title
+                              (nerimux::client-conn-read-view conn))))
+            (expect (search "v1.0"
+                            (nerimux/renderer:read-view-content
+                             (nerimux::client-conn-read-view conn)))))))))
+
+  (it "confirms a branch delete before running it and merges a named branch outright"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn))
+            (nerimux::*clients* nil)
+            (calls nil))
+        (setf nerimux::*clients* (list conn))
+        (multiple-value-bind (repository worktree ignored-conn)
+            (%make-worktree-operation-fixture)
+          (declare (ignore ignored-conn))
+          (nerimux::%set-client-selected-tree-object conn worktree)
+          (with-stubbed-fdefinition
+              ((nerimux/vcs:vcs-package-available-p (lambda () t))
+               (nerimux::%refresh-client-picker
+                 (lambda (ignored-connection)
+                   (declare (ignore ignored-connection))))
+               (nerimux/vcs:git-write-operation-async
+                 (lambda (received operation args &key on-complete on-error
+                                   callback-dispatch)
+                   (declare (ignore on-error callback-dispatch))
+                   (push (list received operation args) calls)
+                   (funcall on-complete t "done"))))
+            (nerimux::%open-client-text-prompt conn :branch-delete)
+            (cl-tui-kit/widgets:handle-widget-event
+             (nerimux::client-conn-text-prompt-widget conn)
+             (cl-tui-kit/core:make-text-input-event "feature/old"))
+            (nerimux::%submit-client-text-prompt conn)
+            (expect (eq :confirm (nerimux::client-conn-modal conn)))
+            (expect (null calls))
+            (funcall (nerimux::client-conn-confirm-action conn))
+            (expect (equal (list repository :branch (list "-D" "feature/old"))
+                           (first calls)))
+            (nerimux::%open-client-text-prompt conn :merge-branch)
+            (cl-tui-kit/widgets:handle-widget-event
+             (nerimux::client-conn-text-prompt-widget conn)
+             (cl-tui-kit/core:make-text-input-event "feature/new"))
+            (nerimux::%submit-client-text-prompt conn)
+            (expect (equal (list repository :merge (list "feature/new"))
+                           (first calls)))))))))

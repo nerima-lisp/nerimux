@@ -67,6 +67,14 @@
             (format nil "worktree open failed: ~A" condition))
            nil))))))
 
+(defun %client-picker-item-pane (session item worktree)
+  "The pane a picker row opens: the row's own pane when it names one and that
+   pane is still in SESSION, otherwise whatever pane the worktree has."
+  (let ((pane (and item (nerimux/picker:picker-item-pane item))))
+    (if (and pane (find pane (all-panes session) :test #'eq))
+        pane
+        (%client-worktree-pane session worktree))))
+
 (defun %select-client-picker-item (session conn)
   (let* ((item (%picker-selected-item conn))
          (worktree (and item (%picker-item-worktree item)))
@@ -75,7 +83,7 @@
               (and item
                    (or (nerimux/picker:picker-item-repository item)
                        (nerimux/picker:picker-item-organization item)))))
-         (pane (%client-worktree-pane session worktree))
+         (pane (%client-picker-item-pane session item worktree))
          (window (and pane (nerimux/pane:pane-window pane))))
     (when (and worktree
                (%reject-pending-worktree-attachment conn :worktree worktree
@@ -88,21 +96,27 @@
         (%set-client-selected-worktree conn worktree)
         (%set-client-focus conn pane session)
         (worktree-resume worktree pane)
-        (%close-client-picker conn)
+        (%close-client-picker conn :keep-view t)
         (%mark-dirty)
         t)
       (worktree
        (when (%open-client-worktree-pane session conn worktree)
-         (%close-client-picker conn)
+         (%close-client-picker conn :keep-view t)
          t))
-      (object
-        (%set-client-selected-tree-object conn object)
-        (%close-client-picker conn)
-        (%client-notify conn
-                        (typecase object
-                          (nerimux/workspace-model:repository
-                           "repository selected; use :wt-create --branch <branch> --confirm")
-                          (nerimux/workspace-model:organization
-                           "organization selected; select a repository first")))
-        t)
+      ((typep object 'nerimux/workspace-model:repository)
+       ;; PC-06: a repository row names a place in the tree, not a shell to
+       ;; open. Its main worktree is the row the user meant; expanding first
+       ;; keeps that row visible instead of parking the cursor on a hidden one.
+       (%set-client-selected-tree-object conn object)
+       (%client-tree-expand-selected conn)
+       (let ((main (nerimux/workspace-model:repository-main-worktree object)))
+         (when main
+           (%set-client-selected-tree-object conn main)))
+       (%close-client-picker conn)
+       t)
+      ((typep object 'nerimux/workspace-model:organization)
+       (%set-client-selected-tree-object conn object)
+       (%client-tree-expand-selected conn)
+       (%close-client-picker conn)
+       t)
       (t nil))))

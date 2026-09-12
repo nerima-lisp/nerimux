@@ -37,6 +37,67 @@
       (expect (search "prune:running confirming" (gethash '(:worktree "wt") (nerimux::%workspace-job-labels))))
       (nerimux::%workspace-job-update job object :failed :outcome :cancelled)
       (expect (search "prune:failed cancelled" (gethash '(:worktree "wt") (nerimux::%workspace-job-labels))))))
+  (it "workspace-job retires a succeeded job and reports a failure in plain words"
+    (let* ((nerimux::*workspace-operation-jobs* (make-hash-table :test #'equal))
+           (object (list :repository))
+           (job (nerimux::%workspace-job-begin :repository "repo" :status object)))
+      (nerimux::%workspace-job-update job object :succeeded)
+      (expect (null (gethash '(:repository "repo" :status)
+                             nerimux::*workspace-operation-jobs*)))
+      (expect (null (gethash '(:repository "repo")
+                             (nerimux::%workspace-job-labels))))
+      (let ((failing (nerimux::%workspace-job-begin :repository "repo" :status object))
+            (condition (make-condition 'simple-error
+                                       :format-control
+                                       "cannot add an fd handler for 1119: not under fd_setsize limit.")))
+        (nerimux::%workspace-job-update failing object :failed :outcome condition)
+        (let ((label (gethash '(:repository "repo")
+                              (nerimux::%workspace-job-labels))))
+          (expect (search "status:failed too many open files" label))
+          (expect (null (search "fd handler" label)))))))
+
+  (it "workspace-job forgets a failed job on the next refresh and names a write failure plainly"
+    (let* ((nerimux::*workspace-operation-jobs* (make-hash-table :test #'equal))
+           (object (list :repository))
+           (create (nerimux::%workspace-job-begin :repository "repo" :create object))
+           (status (nerimux::%workspace-job-begin :repository "repo" :status object))
+           (condition (make-condition 'simple-error
+                                      :format-control "git worktree add failed (exit 255)")))
+      (nerimux::%workspace-job-update create object :failed :outcome condition)
+      (let ((label (gethash '(:repository "repo") (nerimux::%workspace-job-labels))))
+        (expect (search "create:failed failed" label))
+        (expect (null (search "read failed" label))))
+      (nerimux::%workspace-job-forget-failed)
+      (expect (null (gethash '(:repository "repo" :create)
+                             nerimux::*workspace-operation-jobs*)))
+      (expect (eq status (gethash '(:repository "repo" :status)
+                                  nerimux::*workspace-operation-jobs*)))))
+
+  (it "workspace-job labels a plain status or scan failure as a read failure, not history"
+    ;; Pre-existing behaviour: :scan and :status were already in the read
+    ;; list; only the never-produced :history entry was removed (server-
+    ;; multi.lisp %workspace-job-outcome-label), so this documents what the
+    ;; surviving list still covers rather than fixing a bug.
+    (let ((condition (make-condition 'simple-error :format-control "boom")))
+      (expect (string= "read failed"
+                       (nerimux::%workspace-job-outcome-label condition :status)))
+      (expect (string= "read failed"
+                       (nerimux::%workspace-job-outcome-label condition :scan)))
+      (expect (string= "failed"
+                       (nerimux::%workspace-job-outcome-label condition :create)))))
+
+  (it "workspace-job forget-failed leaves a running job untouched"
+    ;; Pre-existing behaviour: %workspace-job-forget-failed only removes
+    ;; entries whose state is :failed.
+    (let* ((nerimux::*workspace-operation-jobs* (make-hash-table :test #'equal))
+           (object (list :repository))
+           (job (nerimux::%workspace-job-begin :repository "repo" :status object)))
+      (nerimux::%workspace-job-update job object :running)
+      (nerimux::%workspace-job-forget-failed)
+      (expect (eq job (gethash '(:repository "repo" :status)
+                               nerimux::*workspace-operation-jobs*)))
+      (expect (eq :running (nerimux::workspace-operation-job-state job)))))
+
   (it "workspace-job catalogue retirement uses object identity not matching ID"
     (multiple-value-bind (organizations organization repository)
         (%make-server-dispatch-helper-fixture)

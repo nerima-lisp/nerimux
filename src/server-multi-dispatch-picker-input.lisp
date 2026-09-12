@@ -1,5 +1,20 @@
 (in-package #:nerimux)
 
+(defun %deduplicate-client-picker-items (items)
+  "Keep one row per worktree, plus every pane row.
+   The uniqueness rule exists so a worktree reached through several catalog
+   paths is offered once; a pane carries its worktree only to say where it
+   runs, so keying panes by it hid every open pane behind its worktree row."
+  (let ((worktrees (make-hash-table :test #'eq)))
+    (loop for item in items
+          for worktree = (and (not (eq :pane (nerimux/picker:picker-item-kind item)))
+                              (nerimux/picker:picker-item-worktree item))
+          unless (and worktree (gethash worktree worktrees))
+            collect (progn
+                      (when worktree
+                        (setf (gethash worktree worktrees) t))
+                      item))))
+
 (defun %picker-selected-item (conn)
   (let ((items (%client-picker-visible-items conn)))
     (and items (nth (client-conn-picker-index conn) items))))

@@ -50,7 +50,7 @@
 
 (defmacro with-session ((var rows cols) &body body)
   "Bind VAR to a fresh session of ROWS x COLS, run BODY, then close all PTYs."
-  `(let ((,var (create-initial-session ,rows ,cols)))
+  `(let ((,var (make-test-session ,rows ,cols)))
      (unwind-protect 
          (progn
            ,@body)

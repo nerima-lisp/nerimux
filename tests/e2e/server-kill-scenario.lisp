@@ -62,17 +62,68 @@
                         socket
                         +ksc-startup-timeout-seconds+)))))
 
-(defun scenario-kill-refuses-with-pane (binary)
-  "A plain `nerimux kill` must refuse (exit 1) while the server's
-   pre-spawned pane is still open. Checking exit=1 alone is not sufficient:
-   `nerimux kill` also exits 1 with a \"no reply from server\" diagnostic
-   when it cannot reach the server at all (main-startup-commands.lisp's `t`
-   case), which would false-pass this scenario under a regression that
-   broke the pane check. The refusal path's exact diagnostic text is
-   \"panes still open\" (main-startup-commands.lisp's :DENIED case), so
-   require that substring in stderr too."
+(defun %ksc-socket-gone-p ()
+  (poll-until
+   (lambda ()
+     (not (probe-file (%expected-socket-path "0"))))
+   +ksc-shutdown-timeout-seconds+))
+
+(defun %ksc-process-gone-p ()
+  "True once *KSC-SERVER-PROCESS* has exited, or when no process handle is on
+   record: a server auto-started by `attach` belongs to that client, so only
+   its socket can be observed from here."
+  (or (null *ksc-server-process*)
+      (poll-until
+       (lambda ()
+         (not (sb-ext:process-alive-p *ksc-server-process*)))
+       +ksc-shutdown-timeout-seconds+)))
+
+(defun scenario-kill-empty-server-succeeds (binary)
+  "A freshly started server holds no pane, so a plain `nerimux kill` must
+   exit 0 and take the process and its socket down. Before the workspace
+   runtime stopped bootstrapping a hidden shell pane, this same call refused
+   with \"panes still open\" on a server nobody had used yet."
   (if (null *ksc-server-process*)
-      (%ksc-missing-prior-server "kill-refuses-with-pane")
+      (%ksc-missing-prior-server "kill-empty-server-succeeds")
+      (multiple-value-bind (exit-code stdout stderr timed-out)
+          (run-program-bounded binary
+                               '("kill")
+                               :timeout-seconds
+                               +ksc-kill-timeout-seconds+)
+        (declare (ignore stdout))
+        (cond
+          (timed-out (values nil "plain kill hung on an empty server"))
+          ((not (eql exit-code 0))
+           (values nil
+                   (format nil
+                           "expected exit 0 on an empty server, got ~A (stderr=~S)"
+                           exit-code
+                           stderr)))
+          (t
+           (let ((process-gone (%ksc-process-gone-p))
+                 (socket-gone (%ksc-socket-gone-p)))
+             (if (and process-gone socket-gone)
+                 (values t "empty server exited on plain kill and removed its socket")
+                 (values nil
+                         (format nil
+                                 "process-gone=~A socket-gone=~A stderr=~S"
+                                 (and process-gone t)
+                                 (and socket-gone t)
+                                 stderr)))))))))
+
+(defun scenario-kill-refuses-with-pane (binary)
+  "A plain `nerimux kill` must refuse (exit 1) while a pane is open. The pane
+   is the one the ATTACH scenario opened in the linked worktree before
+   detaching, so this scenario runs after ATTACH. Checking exit=1 alone is not
+   sufficient: `nerimux kill` also exits 1 with a \"no reply from server\"
+   diagnostic when it cannot reach the server at all (main-startup-commands.lisp
+   `t` case), which would false-pass this scenario under a regression that
+   broke the pane check. The refusal path's exact diagnostic text is
+   \"panes still open\" (main-startup-commands.lisp :DENIED case), so require
+   that substring in stderr too."
+  (if (not (probe-file (%expected-socket-path "0")))
+      (values nil
+              "kill-refuses-with-pane: no server socket -- ATTACH must run first")
       (multiple-value-bind (exit-code stdout stderr timed-out)
           (run-program-bounded binary
                                '("kill")
@@ -95,10 +146,11 @@
           (t (values t (format nil "exit=1 stderr=~S" stderr)))))))
 
 (defun scenario-kill-force-cleans (binary)
-  "`nerimux kill --force` must exit 0, then within the deadline both the
-   spawned server process and its socket file must be gone."
-  (if (null *ksc-server-process*)
-      (%ksc-missing-prior-server "kill-force-cleans")
+  "`nerimux kill --force` must exit 0, then within the deadline the socket
+   file must be gone, and so must the server process when its handle is on
+   record."
+  (if (not (probe-file (%expected-socket-path "0")))
+      (values nil "kill-force-cleans: no server socket -- ATTACH must run first")
       (multiple-value-bind (exit-code stdout stderr timed-out)
           (run-program-bounded binary
                                '("kill" "--force")
@@ -114,19 +166,10 @@
                            exit-code
                            stderr)))
           (t
-           (let* ((socket (%expected-socket-path "0"))
-                  (process-gone
-                   (poll-until
-                    (lambda ()
-                      (not (sb-ext:process-alive-p *ksc-server-process*)))
-                    +ksc-shutdown-timeout-seconds+))
-                  (socket-gone
-                   (poll-until
-                    (lambda ()
-                      (not (probe-file socket)))
-                    +ksc-shutdown-timeout-seconds+)))
+           (let ((process-gone (%ksc-process-gone-p))
+                 (socket-gone (%ksc-socket-gone-p)))
              (if (and process-gone socket-gone)
-                 (values t "server process exited and socket removed")
+                 (values t "server exited on kill --force and removed its socket")
                  (values nil
                          (format nil
                                  "process-gone=~A socket-gone=~A stderr=~S"

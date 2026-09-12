@@ -1,9 +1,9 @@
 (in-package #:nerimux)
 
-(defun %client-start-worktree-create (session conn)
+(defun %client-start-worktree-create (session conn &key (mode :assign))
   (let ((repository (%client-selected-repository conn)))
     (if repository
-        (%client-create-detached-worktree repository conn session)
+        (%client-create-detached-worktree repository conn session :mode mode)
         (%client-notify conn "select a repository first")))
   t)
 
@@ -12,22 +12,24 @@
                                "delete")
 
 (define-worktree-command-entry %client-start-worktree-lock
-                               "wt-lock --confirm"
+                               "wt-lock"
                                "lock")
 
 (define-worktree-command-entry %client-start-worktree-unlock
-                               "wt-unlock --confirm"
+                               "wt-unlock"
                                "unlock")
 
 (defun %focus-selected-client-worktree (session conn &key direct-shell-p)
   "Enter on the selected tree row (R6.3).
 
    What Enter means depends on the level, and the two upper levels mean
-   something the tree had no way to express before: organization and repository
-   rows toggle open and closed, so a workspace of a thousand repositories opens
-   showing organizations rather than everything at once. Enter on those used to
-   start a worktree-create prompt, which made the create flow reachable but
-   left expansion with no key at all."
+   something the tree had no way to express before: organization, repository,
+   and section rows toggle open and closed, so a workspace of a thousand
+   repositories opens showing organizations rather than everything at once.
+   Enter on a repository used to jump straight into its main or first
+   worktree's pane; now it shows the worktrees so the user picks one, since a
+   repository can hold several and the one that happened to be first or main
+   is not necessarily the one Enter was meant to reach."
   (unless (%client-tree-object conn)
     (%select-client-tree-worktree conn nil))
   (let ((object (%client-tree-object conn)))
@@ -40,22 +42,24 @@
       ((keywordp object)
        (%client-toggle-selected-tree-row conn))
       ((typep object 'nerimux/workspace-model:repository)
-       (let ((worktree (or (nerimux/workspace-model:repository-main-worktree object)
-                            (first (nerimux/workspace-model:repository-worktrees
-                                    object)))))
-         (if worktree
-             (progn
-               (%set-client-selected-tree-object conn worktree)
-               (%focus-selected-client-worktree session conn
-                                                :direct-shell-p direct-shell-p))
-             (progn
-               (%client-notify conn "repository has no worktrees")
-               t))))
+       (if (or (nerimux/workspace-model:repository-main-worktree object)
+               (nerimux/workspace-model:repository-worktrees object))
+           (%client-toggle-selected-tree-row conn)
+           (progn
+             (setf (gethash (list :repository
+                                  (nerimux/workspace-model:repository-id object))
+                            (%workspace-expanded-nodes))
+                   t)
+             (%client-notify conn "no worktree yet: w c creates one")
+             (%mark-dirty)
+             t)))
       ((typep object 'nerimux/pane:pane)
        (when (%reject-pending-worktree-attachment conn :pane object)
          (return-from %focus-selected-client-worktree nil))
+       (%select-client-pane-window session object)
        (%set-client-focus conn object session)
        (worktree-resume (pane-worktree object) object)
+       (%remember-worktree-pane (pane-worktree object) object)
        (%set-client-view conn :pane)
        (%mark-dirty)
        t)
@@ -66,6 +70,7 @@
          (when (%reject-pending-worktree-attachment conn :pane pane :window object)
            (return-from %focus-selected-client-worktree nil))
          (when pane
+           (%select-client-pane-window session pane)
            (%set-client-focus conn pane session)
            (worktree-resume (pane-worktree pane) pane)
            (%set-client-view conn :pane)))
@@ -74,31 +79,74 @@
       (t
        (unless (client-conn-selected-worktree conn)
          (%select-client-tree-worktree conn nil))
-       (let* ((worktree (client-conn-selected-worktree conn))
-              (pane (and worktree
-                         (or (and (worktree-running-agent-p worktree)
-                                  (nerimux/workspace-model:worktree-agent-pane worktree))
-                             (find-if (lambda (candidate)
-                                        (and (pane-live-p candidate)
-                                             (null (pane-agent-kind candidate))))
-                                      (worktree-panes worktree))))))
-         (when (%reject-pending-worktree-attachment conn :worktree worktree :pane pane)
-           (return-from %focus-selected-client-worktree nil))
-         (cond
-           ((and pane (nerimux/pane:pane-live-p pane))
-            (%set-client-focus conn pane session)
-            (worktree-resume worktree pane)
-            (%remember-worktree-pane worktree pane)
-            (%mark-dirty)
-            t)
-           (worktree
-            (if direct-shell-p
-                (when (%open-client-worktree-pane session conn worktree)
-                  (%set-client-view conn :pane))
-                (%client-assign-worktree session conn worktree)))
-           (t
-            (%client-notify conn "no worktree selected")
-            t)))))))
+       (%open-client-tree-worktree
+        session conn
+        (if (typep object 'nerimux/workspace-model:worktree)
+            object
+            (client-conn-selected-worktree conn))
+        direct-shell-p)))))
+
+(defun %worktree-enter-pane (worktree)
+  "The pane Enter on WORKTREE's tree row lands on (R6.3): the one the user was
+   last on there, else the running agent, else any live terminal, else a pane
+   that has exited but still has a screen.
+
+   The remembered pane comes first because that is what the requirement asks
+   for; it is skipped once it has exited so a live sibling still wins. The
+   exited pane is the last resort rather than no pane at all: a failed agent's
+   `exited 127' line is exactly what Enter on a flagged row was pressed to
+   read, and Assign instead of it hides the failure (NMX-PANES-2/4)."
+  (when worktree
+    (let ((remembered (%worktree-remembered-pane worktree))
+          (panes (worktree-panes worktree)))
+      (or (and remembered (pane-live-p remembered) remembered)
+          (and (worktree-running-agent-p worktree)
+               (nerimux/workspace-model:worktree-agent-pane worktree))
+          (find-if (lambda (candidate)
+                     (and (pane-live-p candidate)
+                          (null (pane-agent-kind candidate))))
+                   panes)
+          (and remembered (pane-screen remembered) remembered)
+          (find-if #'pane-screen panes)))))
+
+(defun %open-client-tree-worktree (session conn worktree direct-shell-p)
+  "Enter on WORKTREE: return to its running pane, or open one.
+
+WORKTREE is the row Enter was struck on, not CLIENT-CONN-SELECTED-WORKTREE:
+the two drift apart (a pane row selects no worktree, and the prefix keys set
+one without moving the tree cursor), and acting on the wrong one drops the
+user into another repository's live shell with nothing on screen saying so."
+  (let ((pane (%worktree-enter-pane worktree)))
+    (when (%reject-pending-worktree-attachment conn :worktree worktree :pane pane)
+      (return-from %open-client-tree-worktree nil))
+    (cond
+      (pane
+       (%set-client-selected-tree-object conn worktree)
+       (%select-client-pane-window session pane)
+       (%set-client-focus conn pane session)
+       (worktree-resume worktree pane)
+       (%remember-worktree-pane worktree pane)
+       (%mark-dirty)
+       t)
+      (worktree
+       (%set-client-selected-tree-object conn worktree)
+       (if direct-shell-p
+           (when (%open-client-worktree-pane session conn worktree)
+             (%set-client-view conn :pane))
+           (%client-assign-worktree session conn worktree)))
+      (t
+       (%client-notify conn "no worktree selected")
+       t))))
+
+(defun %select-client-pane-window (session pane)
+  "Make PANE's window the session's active one.
+
+Focus alone leaves the session pointing at whichever window was opened last,
+so the prefix keys would keep acting on that one while this pane is on screen."
+  (let ((window (and pane (nerimux/pane:pane-window pane))))
+    (when (and session window)
+      (nerimux/session:session-select-window session window)
+      (nerimux/window:window-select-pane window pane))))
 
 (defun %client-toggle-selected-file-diff (worktree-id path code)
   "Tab on a :FILE row toggles that file's own inline-diff expansion
@@ -223,6 +271,7 @@
 (defun %handle-client-input-key-payload (session conn payload)
   "Every byte, ESC included, is forwarded to the focused pane: VIEW :pane has
    no keyboard exit of its own (that returns with the C-q prefix, R4.4)."
+  (%client-clear-pending-close-pane conn)
   (let ((pane
          (or (client-conn-stdin-target conn)
              (%resolve-client-focus-pane session nil conn))))
@@ -249,6 +298,11 @@
         (progn
           (%set-client-selected-worktree conn worktree)
           (%set-client-view conn :status)
+          ;; F26: the view renders a `loading…` row until a status pass has
+          ;; landed, and nothing else asks for one, so `v` waited for whatever
+          ;; refresh happened next. This is the refresh `g` runs.
+          (unless (nerimux/workspace-model:worktree-status worktree)
+            (%client-refresh-workspace conn))
           t)
         (progn
           (%client-notify conn "select a worktree first")

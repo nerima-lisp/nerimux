@@ -7,7 +7,7 @@
     (with-empty-registry
       (let ((nerimux/session::*session-id-counter* 0))
         (setf nerimux::*server-sessions* nil)
-        (let ((session (create-initial-session 24 80)))
+        (let ((session (make-test-session 24 80)))
           (nerimux::server-add-session session)
           (expect (= 1 (length nerimux::*server-sessions*)))
           (expect (nerimux::server-find-session (session-name session)) :to-be-truthy)

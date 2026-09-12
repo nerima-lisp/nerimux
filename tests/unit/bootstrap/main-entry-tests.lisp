@@ -13,25 +13,27 @@
             (lambda (&rest args) (setf ensure-args args)))
            (nerimux::run-client
             (lambda (&rest args) (setf client-args args))))
-        (nerimux::run-attach-simple "org/repo")
+        (nerimux::run-attach-simple '("org/repo"))
         (expect (equal '("0") ensure-args))
         (expect (equal '("0" :target "org/repo") client-args)))))
 
-  (it "run-attach-simple-keeps-plain-name-as-session"
+  (it "run-attach-simple-sends-a-slashless-word-as-a-selector"
     (let (client-args)
       (with-stubbed-fdefinition
           ((nerimux::%ensure-server-running (lambda (&rest _) (declare (ignore _)) nil))
            (nerimux::run-client
             (lambda (&rest args) (setf client-args args))))
-        (nerimux::run-attach-simple "workspace")
-        (expect (equal '("workspace") client-args)))))
+        (nerimux::run-attach-simple '("workspace"))
+        (expect (equal '("0" :target "workspace") client-args)))))
 
-  (it "workspace-attach-target-p-recognizes-path-like-selectors"
-    (dolist (case '(("/tmp/worktree" . t) ("org/repository" . t)
-                    ("repository" . nil) ("" . nil) (nil . nil) (42 . nil)))
-      (expect (eql (cdr case)
-                   (not (null (nerimux::%workspace-attach-target-p
-                               (car case))))))))
+  (it "run-attach-simple-without-a-selector-attaches-the-only-session"
+    (let (client-args)
+      (with-stubbed-fdefinition
+          ((nerimux::%ensure-server-running (lambda (&rest _) (declare (ignore _)) nil))
+           (nerimux::run-client
+            (lambda (&rest args) (setf client-args args))))
+        (nerimux::run-attach-simple nil)
+        (expect (equal '("0") client-args)))))
 
   (it "strip-kill-reply-status-line-removes-status-and-blank-separator"
     (expect (string= (format nil "pane-1~%pane-2~%")
@@ -56,7 +58,7 @@
       (expect (eql 1 exit-code))
       (expect (search "usage: nerimux" errout) :to-be-truthy)))
 
-  (it "dispatch-unknown-command-word-prints-usage-and-exits-one"
+  (it "dispatch-unknown-command-word-names-the-word-then-prints-usage"
     (let (exit-code errout)
       (setf errout
             (with-output-to-string (*error-output*)
@@ -64,6 +66,8 @@
                 (let ((sb-ext:*posix-argv* (list "nerimux" "list-sessions")))
                   (nerimux::main)))))
       (expect (eql 1 exit-code))
+      (expect (search "nerimux: unknown command 'list-sessions'" errout)
+              :to-be-truthy)
       (expect (search "usage: nerimux" errout) :to-be-truthy)))
 
   (it "dispatch-no-arguments-falls-back-to-attach-with-default-session"

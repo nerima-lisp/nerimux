@@ -107,7 +107,7 @@
           :status-updates (mapcar (lambda (value)
                                    (nerimux/vcs::%make-worktree-status-update :path value :ahead 0 :behind 0))
                                   (list "/prune-fixture/primary" path))))
-        (expect (not (eq old (nerimux/vcs::%refreshed-worktree-successor old))))
+        (expect (not (eq old (nerimux/vcs:refreshed-worktree-successor old))))
         (funcall (getf (cdar preflights) :on-complete)
                  (nerimux/vcs::make-worktree-prune-snapshot))
         (with-stubbed-fdefinition
@@ -129,7 +129,7 @@
              (nerimux/vcs::*worktree-refresh-successors* (make-hash-table :test #'eq)))
         (setf (gethash old nerimux/vcs::*worktree-refresh-successors*) new
               (gethash new nerimux/vcs::*worktree-refresh-successors*) old)
-        (expect (eq old (nerimux/vcs::%refreshed-worktree-successor old))))))
+        (expect (eq old (nerimux/vcs:refreshed-worktree-successor old))))))
   (it "rechecks cancellation attachment and directory identity after content validation"
     (dolist (change '(:cancel :attach :directory))
       (with-workspace-prune-fixture (conn worktrees preflights deletes)
@@ -183,11 +183,15 @@
       (expect (eq :confirm (nerimux::client-conn-modal conn)))
       (let ((operation (gethash '(:worktree "prune-a" :prune) nerimux::*workspace-operation-jobs*)))
         (expect (eq :running (nerimux::workspace-operation-job-state operation)))
-        (expect (eq :confirming (nerimux::workspace-operation-job-phase operation))))
-      (nerimux::%handle-confirm-key nil conn #(110))
-      (let ((operation (gethash '(:worktree "prune-a" :prune) nerimux::*workspace-operation-jobs*)))
-        (expect (eq :failed (nerimux::workspace-operation-job-state operation)))
-        (expect (eq :cancelled (nerimux::workspace-operation-job-outcome operation))))
+        (expect (eq :confirming (nerimux::workspace-operation-job-phase operation)))
+        (nerimux::%handle-confirm-key nil conn #(110))
+        (expect (eq :kept (nerimux::workspace-operation-job-state operation)))
+        (expect (equal "not confirmed"
+                       (nerimux::workspace-operation-job-outcome operation)))
+        ;; A kept job is settled: it leaves the table so the row stops showing
+        ;; the running job's "..." badge.
+        (expect (null (gethash '(:worktree "prune-a" :prune)
+                               nerimux::*workspace-operation-jobs*))))
       (expect (= 2 (length preflights)))
       (expect (eq (second worktrees) (caar preflights)))
       (funcall (getf (cdr (first preflights)) :on-complete)
@@ -196,7 +200,8 @@
                (nerimux/vcs::make-worktree-delete-result :removed-p t :refresh-error "refresh failed"))
       (let ((operation (gethash '(:worktree "prune-b" :prune) nerimux::*workspace-operation-jobs*)))
         (expect (eq :failed (nerimux::workspace-operation-job-state operation)))
-        (expect (eq :removed-refresh-failed (nerimux::workspace-operation-job-outcome operation))))
+        (expect (equal "refresh failed"
+                       (nerimux::workspace-operation-job-outcome operation))))
       (let ((job (nerimux::client-conn-workspace-prune-job conn)))
         (expect (eq :failed (nerimux::workspace-prune-job-state job)))
         (expect (equal '(:removed-refresh-failed :cancelled)
@@ -308,16 +313,20 @@
       (expect (eq :stale-workspace
                   (third (first (nerimux::workspace-prune-job-results
                                   (nerimux::client-conn-workspace-prune-job conn))))))))
-  (it "missing and locked workspaces are excluded without Git work"
+  (it "a missing workspace is removed without a preflight and a locked one is excluded"
     (with-workspace-prune-fixture (conn worktrees preflights deletes)
       (setf (nerimux/workspace-model:worktree-missing-p (first worktrees)) t
             (nerimux/workspace-model:worktree-locked-p (second worktrees)) t)
       (nerimux::%client-prune-workspaces conn :all t)
       (expect (null preflights))
-      (expect (null deletes))
-      (expect (equal '(:locked :metadata-repair-required)
-                     (mapcar #'third (nerimux::workspace-prune-job-results
-                                      (nerimux::client-conn-workspace-prune-job conn)))))))
+      (expect (= 1 (length deletes)))
+      (expect (eq (first worktrees) (caar deletes)))
+      (funcall (getf (cdar deletes) :on-result)
+               (nerimux/vcs::make-worktree-delete-result :removed-p t))
+      (let ((results (nerimux::workspace-prune-job-results
+                      (nerimux::client-conn-workspace-prune-job conn))))
+        (expect (equal '(:excluded :removed) (mapcar #'second results)))
+        (expect (equal '(:locked nil) (mapcar #'third results))))))
 
   (it "ignores stale delete callbacks and settles cancellation or exclusion"
     (with-workspace-prune-fixture (conn worktrees preflights deletes)
@@ -696,7 +705,7 @@
                        (progn
                          (expect (null calls))
                          (expect (string=
-                                  "worktree delete requires closing its live panes"
+                                  "close its 1 pane first (C-q x)"
                                   (first (nerimux::client-conn-message-log conn))))
                          (expect (nerimux/pane:pane-live-p pane)))
                        (expect (equal (list (list worktree force)) calls)))
@@ -837,7 +846,9 @@
                (expect started)
                (expect (equal (list session conn worktree) focused))
                (expect (eq worktree
-                           (nerimux::client-conn-selected-worktree conn))))
+                           (nerimux::client-conn-selected-worktree conn)))
+               (expect (string= "worktree created: /tmp/feature"
+                                (first (nerimux::client-conn-message-log conn)))))
           (setf (fdefinition 'nerimux/vcs:create-worktree-async) create-fn
                 (fdefinition 'nerimux::%open-client-worktree-pane) focus-fn)))))
 
@@ -887,7 +898,7 @@
                  "wt-prune-confirm" :encoding :utf-8))
                (nerimux::%handle-multi-key-message s conn #(13))
                (expect (null call))
-               (expect (string= "worktree prune requires --confirm"
+               (expect (string= "wt-prune-confirm: add --confirm to run"
                                 (first (nerimux::client-conn-message-log conn))))
                (expect (equal (list worktree)
                               (nerimux/workspace-model:repository-worktrees repository)))
@@ -895,7 +906,14 @@
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:prune-worktrees-async) prune-fn)))))
 
-  (it "overview-worktree-prune-confirm-without-preview-is-rejected"
+  (it "overview-worktree-prune-confirm-without-preview-runs"
+    ;; `wt-prune-confirm --confirm\' used to call raw `git worktree prune\',
+    ;; then later ran the same workspace prune `w P\' does at once with no
+    ;; confirm view; it now opens that same confirm view, and its eligibility
+    ;; count -- not the prune worker's own per-worktree classification -- is
+    ;; what decides whether anything is offered to prune at all. The only
+    ;; worktree here is the repository's primary, always excluded, so nothing
+    ;; is eligible and the confirm view never opens.
     (with-fake-session (s)
       (let* ((organization
                (nerimux/workspace-model:make-organization
@@ -915,45 +933,31 @@
                 :branch "feature/stale"))
              (conn (%make-test-conn))
              (nerimux::*clients* (list conn))
-             (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
-             (prune-fn (fdefinition 'nerimux/vcs:prune-worktrees-async))
-             (call nil))
-        (unwind-protect
-             (progn
-               (nerimux/workspace-model:organization-add-repository organization repository)
-               (nerimux/workspace-model:repository-add-worktree repository worktree)
-               (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
-                     (lambda () t)
-                     (fdefinition 'nerimux/vcs:prune-worktrees-async)
-                     (lambda (received-repository
-                              &key dry-run verbose on-complete on-error
-                                callback-dispatch)
-                       (declare (ignore verbose on-error callback-dispatch))
-                       (setf call (list received-repository dry-run))
-                       (unless dry-run
-                         (setf (nerimux/workspace-model:repository-worktrees
-                                received-repository)
-                               nil))
-                       (funcall on-complete "")
-                       t))
-               (setf (nerimux::client-conn-view conn) :repolist)
-               (nerimux::%set-client-selected-tree-object conn repository)
-               (nerimux::%handle-multi-key-message s conn #(58))
-               (nerimux::%handle-multi-key-message
-                s conn
-                (cl-codec-kit:string-to-octets
-                 "wt-prune-confirm --confirm" :encoding :utf-8))
-               (nerimux::%handle-multi-key-message s conn #(13))
-               (expect (null call))
-               (expect
-                (string=
-                 "worktree prune requires a preview first: run wt-prune, then wt-prune-confirm --confirm"
-                 (first (nerimux::client-conn-message-log conn))))
-               (expect (equal (list worktree)
-                              (nerimux/workspace-model:repository-worktrees repository)))
-               (expect (nerimux::%client-ui-keys-p conn)))
-          (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
-                (fdefinition 'nerimux/vcs:prune-worktrees-async) prune-fn)))))
+             (nerimux::*server-sessions* nil)
+             (nerimux::*workspace-operation-jobs* (make-hash-table :test #'equal))
+             (nerimux::*workspace-cancel-reservations* (make-hash-table :test #'equal))
+             (nerimux::*worktree-delete-reservations* (make-hash-table :test #'equal)))
+        (nerimux/workspace-model:organization-add-repository organization repository)
+        (nerimux/workspace-model:repository-add-worktree repository worktree)
+        (with-stubbed-fdefinition
+            ((nerimux/vcs:vcs-package-available-p (lambda () t))
+             (nerimux/vcs:workspace-organizations (lambda () (list organization))))
+          (setf (nerimux::client-conn-view conn) :repolist)
+          (nerimux::%set-client-selected-tree-object conn repository)
+          (nerimux::%handle-multi-key-message s conn #(58))
+          (nerimux::%handle-multi-key-message
+           s conn
+           (cl-codec-kit:string-to-octets
+            "wt-prune-confirm --confirm" :encoding :utf-8))
+          (nerimux::%handle-multi-key-message s conn #(13))
+          (expect (null (nerimux::client-conn-modal conn)))
+          (expect (string= "nothing to prune"
+                           (first (nerimux::client-conn-message-log conn))))
+          (expect (equal (list worktree)
+                         (nerimux/workspace-model:repository-worktrees repository)))
+          (expect (null (gethash '(:worktree "stale" :prune)
+                                 nerimux::*workspace-operation-jobs*)))
+          (expect (nerimux::%client-ui-keys-p conn))))))
 
   (it "multi-picker-regex-toggle-is-client-local"
     (with-fake-session (s)
@@ -1024,7 +1028,9 @@
               do (nerimux::%handle-multi-key-message
                   s conn (vector (char-code character))))
         (expect (string= "feature" (nerimux::client-conn-picker-query conn)))
-        (expect (= 1 (length (nerimux::%client-picker-visible-items conn))))
+        (expect (equal '(:worktree :pane)
+                       (mapcar #'nerimux/picker:picker-item-kind
+                               (nerimux::%client-picker-visible-items conn))))
         (nerimux::%handle-multi-key-message s conn #(13))
         (expect (null (nerimux::client-conn-modal conn)))
         (expect (eq pane (nerimux::client-conn-focus conn))))))

@@ -24,6 +24,19 @@
           (expect (null (nerimux::%open-client-worktree-pane s conn nil)))
           (expect (eq :picker (nerimux::client-conn-modal conn)))))))
 
+  (it "closing-the-picker-keeps-the-view-it-was-opened-over"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (window (nerimux/session:session-active-window s))
+             (pane (nerimux/window:window-active-pane window)))
+        (setf (nerimux::client-conn-focus conn) pane)
+        (dolist (view '(:repolist :status))
+          (setf (nerimux::client-conn-view conn) view
+                (nerimux::client-conn-modal conn) :picker)
+          (expect (nerimux::%close-client-picker conn))
+          (expect (null (nerimux::client-conn-modal conn)))
+          (expect (eq view (nerimux::client-conn-view conn)))))))
+
   (it "picker-refresh-settles-stale-on-synchronous-error"
     (with-fake-session (s)
       (let ((conn (%make-test-conn))
@@ -274,33 +287,49 @@
                (nerimux/workspace-model:make-repository
                 :id "repo" :organization organization
                 :specification "github.com/team/repo"))
+             (main-worktree
+               (nerimux/workspace-model:make-worktree
+                :id "main" :path "/tmp/repo" :branch "main"))
              (conn (%make-test-conn))
-             (notifications nil))
+             (nerimux::*workspace-expanded-node-ids*
+               (make-hash-table :test #'equal))
+             (nerimux::*workspace-collapsed-node-ids*
+               (make-hash-table :test #'equal)))
+        (nerimux/workspace-model:organization-add-repository organization
+                                                             repository)
+        (nerimux/workspace-model:repository-add-worktree repository
+                                                         main-worktree)
+        (setf (gethash (list :organization "org")
+                       nerimux::*workspace-collapsed-node-ids*)
+              t)
         (nerimux::%set-client-modal conn :picker)
-        (with-stubbed-fdefinition
-            ((nerimux::%client-notify
-               (lambda (connection message)
-                 (declare (ignore connection))
-                 (push message notifications))))
-          (dolist (item-and-message
-                    (list
-                     (list (nerimux/picker::%make-picker-item
-                            :id "repo" :kind :repository :label "repo"
-                            :repository repository)
-                           "repository selected; use :wt-create --branch <branch> --confirm")
-                     (list (nerimux/picker::%make-picker-item
-                            :id "org" :kind :organization :label "team"
-                            :organization organization)
-                           "organization selected; select a repository first")))
-            (destructuring-bind (item message) item-and-message
-              (setf (nerimux::client-conn-picker-items conn) (list item)
-                    (nerimux::client-conn-picker-index conn) 0)
-              (expect (nerimux::%select-client-picker-item s conn))
-              (expect (null (nerimux::client-conn-modal conn)))
-              (expect (equal message (first notifications)))
-              (setf notifications nil)))
-          (setf (nerimux::client-conn-picker-items conn) nil)
-          (expect (null (nerimux::%select-client-picker-item s conn)))))))
+        (setf (nerimux::client-conn-picker-items conn)
+              (list (nerimux/picker::%make-picker-item
+                     :id "repo" :kind :repository :label "repo"
+                     :repository repository))
+              (nerimux::client-conn-picker-index conn) 0)
+        (expect (nerimux::%select-client-picker-item s conn))
+        (expect (null (nerimux::client-conn-modal conn)))
+        (expect (null (nerimux::client-conn-focus conn)))
+        (expect (eq main-worktree
+                    (nerimux::client-conn-selected-tree-object conn)))
+        (expect (gethash (list :repository "repo")
+                         nerimux::*workspace-expanded-node-ids*))
+        (nerimux::%set-client-modal conn :picker)
+        (setf (nerimux::client-conn-picker-items conn)
+              (list (nerimux/picker::%make-picker-item
+                     :id "org" :kind :organization :label "team"
+                     :organization organization))
+              (nerimux::client-conn-picker-index conn) 0)
+        (expect (nerimux::%select-client-picker-item s conn))
+        (expect (null (nerimux::client-conn-modal conn)))
+        (expect (null (nerimux::client-conn-focus conn)))
+        (expect (eq organization
+                    (nerimux::client-conn-selected-tree-object conn)))
+        (expect (null (gethash (list :organization "org")
+                               nerimux::*workspace-collapsed-node-ids*)))
+        (setf (nerimux::client-conn-picker-items conn) nil)
+        (expect (null (nerimux::%select-client-picker-item s conn))))))
 
 
 )

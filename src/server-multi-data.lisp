@@ -175,7 +175,6 @@
   (picker-query "" :type string)
   (picker-regex-p nil :type boolean)
   (picker-index 0 :type fixnum)
-  (pending-prune-preview-repository-id nil)
   (confirm-view nil)
   (confirm-action nil)
   (confirm-cancel-action nil)

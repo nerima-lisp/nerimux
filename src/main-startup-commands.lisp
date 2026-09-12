@@ -7,19 +7,16 @@
       (run-client name :target target)
       (run-client name)))
 
-(defun %workspace-attach-target-p (name)
-  (and (stringp name)
-       (string/= name "")
-       (or (char= (char name 0) #\/) (find #\/ name))))
-
-(defun run-attach-simple (name)
-  "Auto-start a server for NAME if not running, then attach as a client.
-   This is the handler for the bare 'attach' mode (no flag parsing).  A path or
-   slash-qualified selector attaches to the default workspace server and is
-   resolved by the server against the current catalog."
-  (if (%workspace-attach-target-p name)
-      (%attach-session "0" :target name)
-      (%attach-session name)))
+(defun run-attach-simple (rest)
+  "Auto-start the workspace server if not running, then attach as a client.
+   This is the handler for the 'attach' mode (no flag parsing).  REST's first
+   word, when there is one, is a selector the server resolves against the
+   current catalog; it is never a session name, because R1.5 fixes the session
+   to one and `nerimux kill` can only reach that one."
+  (let ((selector (first rest)))
+    (%attach-session "0" :target (and (stringp selector)
+                                      (plusp (length selector))
+                                      selector))))
 
 (defun run-version (raw-args)
   "Print the nerimux version to stdout and exit 0."
@@ -95,8 +92,8 @@
                ~2T-V | --version~26Tprint the version and exit~%~
                ~2T-h | --help~26Tprint this summary and exit~%~
                ~%~
-               A selector containing a slash resolves as an~%~
-               organization/repository selector or a local worktree path.~%~
+               A selector is a ghq specification (host/organization/repository)~%~
+               or a local worktree path.~%~
                ~%~
                Running nerimux with no command opens the workspace UI (same as attach).~%"))
 

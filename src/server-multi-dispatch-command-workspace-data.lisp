@@ -1,5 +1,11 @@
 (in-package #:nerimux)
 
+(defun %dash-leading-name-p (text)
+  "True when TEXT is a non-empty string whose first character is a dash --
+   the shape a typed branch, tag, or path name must not have, since git
+   would read it as an option rather than a positional argument."
+  (and (stringp text) (plusp (length text)) (char= (char text 0) #\-)))
+
 (defun %parse-client-integer (value)
   (and (stringp value)
        (handler-case (parse-integer value)

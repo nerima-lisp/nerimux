@@ -9,6 +9,27 @@
         (let ((worktree (%workspace-find-worktree worktree-id)))
           (and worktree (list worktree path)))))))
 
+(defun %status-file-listed-p (files path)
+  "True when PATH is one of FILES, a worktree's (CODE . PATH) change list."
+  (and (member path files :key #'cdr :test #'equal) t))
+
+(defun %status-file-staged-p (worktree path)
+  (%status-file-listed-p (nerimux/workspace-model:worktree-staged-files worktree)
+                         path))
+
+(defun %status-file-untracked-p (worktree path)
+  (%status-file-listed-p (nerimux/workspace-model:worktree-untracked-files
+                          worktree)
+                         path))
+
+(defun %status-file-unstaged-p (worktree path)
+  (or (%status-file-listed-p (nerimux/workspace-model:worktree-unstaged-files
+                              worktree)
+                             path)
+      (%status-file-listed-p (nerimux/workspace-model:worktree-unmerged-files
+                              worktree)
+                             path)))
+
 (defun %client-run-status-write (conn repository operation args)
   "Run a status mutation through the asynchronous transient write path."
   (if (null repository)
@@ -26,11 +47,15 @@
   (let ((selection (%client-selected-status-file conn)))
     (if selection
         (destructuring-bind (worktree path) selection
-          (%client-run-status-write
-           conn
-           (nerimux/workspace-model:worktree-repository worktree)
-           :add
-           (list "--" path)))
+          (if (and (%status-file-staged-p worktree path)
+                   (not (%status-file-unstaged-p worktree path))
+                   (not (%status-file-untracked-p worktree path)))
+              (%client-notify conn "already staged")
+              (%client-run-status-write
+               conn
+               (nerimux/workspace-model:worktree-repository worktree)
+               :add
+               (list "--" path))))
         (%client-notify conn "select a file first"))
     t))
 
@@ -49,11 +74,13 @@
   (let ((selection (%client-selected-status-file conn)))
     (if selection
         (destructuring-bind (worktree path) selection
-          (%client-run-status-write
-           conn
-           (nerimux/workspace-model:worktree-repository worktree)
-           :restore
-           (list "--staged" "--" path)))
+          (if (%status-file-staged-p worktree path)
+              (%client-run-status-write
+               conn
+               (nerimux/workspace-model:worktree-repository worktree)
+               :restore
+               (list "--staged" "--" path))
+              (%client-notify conn "nothing to unstage")))
         (%client-notify conn "select a file first"))
     t))
 
@@ -68,21 +95,37 @@
         (%client-notify conn "no worktree selected"))
     t))
 
+(defun %discard-selection-write (worktree path)
+  "The (OPERATION ARGS) k runs for PATH, chosen by where the change is.
+   `git restore -- <path>` only syncs the working tree from the index, so on
+   a staged path it is a no-op and the change survives the discard; an
+   untracked path is not in the index at all and needs removing instead."
+  (cond
+    ((%status-file-untracked-p worktree path)
+     (list :clean (list "-fd" "--" path)))
+    ((%status-file-staged-p worktree path)
+     (list :restore (list "--staged" "--worktree" "--" path)))
+    (t (list :restore (list "--" path)))))
+
 (defun %client-start-discard-selection (conn)
   (let ((selection (%client-selected-status-file conn)))
     (if selection
         (destructuring-bind (worktree path) selection
           (let ((repository
-                  (nerimux/workspace-model:worktree-repository worktree)))
-            (%open-confirm-view
-             conn
-             (format nil "git restore -- ~A" path)
-             (list (cons "worktree"
-                         (nerimux/workspace-model:worktree-path worktree))
-                   (cons "path" path))
-             (lambda ()
-               (%client-run-status-write conn repository :restore
-                                         (list "--" path))))
+                  (nerimux/workspace-model:worktree-repository worktree))
+                (untracked-p (%status-file-untracked-p worktree path)))
+            (destructuring-bind (operation args)
+                (%discard-selection-write worktree path)
+              (%open-confirm-view
+               conn
+               (if untracked-p
+                   "delete untracked file"
+                   (%transient-command-text operation args))
+               (list (cons "worktree"
+                           (nerimux/workspace-model:worktree-path worktree))
+                     (cons "path" path))
+               (lambda ()
+                 (%client-run-status-write conn repository operation args))))
             t))
         (%client-notify conn "select a file first"))
     t))

@@ -2,7 +2,7 @@
 
 (describe "server-dispatch-helper-tree-navigation-suite"
 
-  (it "enter-on-a-repository-row-with-a-main-worktree-jumps-straight-to-its-shell"
+  (it "enter-on-a-repository-row-expands-it-and-keeps-the-selection-on-the-row"
     (with-fake-session (s)
       (let* ((pane (nerimux/window:window-active-pane
                     (nerimux/session:session-active-window s)))
@@ -16,16 +16,23 @@
              (worktree
                (nerimux/workspace-model:make-worktree
                 :id "main" :repository repository :path "/tmp/main" :branch "main"))
-             (conn (nerimux::%make-client-conn)))
+             (conn (nerimux::%make-client-conn))
+             (nerimux::*workspace-expanded-node-ids* (make-hash-table :test #'equal))
+             (key (list :repository "repo")))
         (nerimux/workspace-model:organization-add-repository organization repository)
         (nerimux/workspace-model:repository-add-worktree repository worktree)
         (nerimux/pane:worktree-add-pane worktree pane)
         (setf (nerimux/pane:pane-fd pane) 9999)
         (setf (nerimux::client-conn-view conn) :repolist)
         (nerimux::%set-client-selected-tree-object conn repository)
+        ;; Enter shows the worktrees rather than jumping into whichever one
+        ;; happened to be main or first; the row itself is what toggles.
         (expect (nerimux::%focus-selected-client-worktree s conn))
-        (expect (eq :pane (nerimux::client-conn-view conn)))
-        (expect (eq pane (nerimux::client-conn-focus conn))))))
+        (expect (gethash key nerimux::*workspace-expanded-node-ids*))
+        (expect (eq repository (nerimux::%client-tree-object conn)))
+        (expect (eq :repolist (nerimux::client-conn-view conn)))
+        (expect (nerimux::%focus-selected-client-worktree s conn))
+        (expect (null (gethash key nerimux::*workspace-expanded-node-ids*))))))
 
   (it "enter-on-a-repository-row-with-no-worktrees-notifies-instead-of-crashing"
     (let* ((organization
@@ -41,9 +48,46 @@
       (setf (nerimux::client-conn-view conn) :repolist)
       (nerimux::%set-client-selected-tree-object conn repository)
       (expect (eq t (nerimux::%focus-selected-client-worktree nil conn)))
-      (expect (string= "repository has no worktrees"
+      (expect (string= "no worktree yet: w c creates one"
                        (first (nerimux::client-conn-message-log conn))))
       (expect (eq :repolist (nerimux::client-conn-view conn)))))
+
+  (it "revealing-a-worktree-unfolds-its-repository-and-its-organizations-fold"
+    (let* ((organization
+             (nerimux/workspace-model:make-organization
+              :id "org-reveal" :host "github.com" :name "team"))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :id "repo-reveal" :organization organization
+              :specification "github.com/team/repo-reveal"))
+           (worktree
+             (nerimux/workspace-model:make-worktree
+              :id "wt-reveal" :repository repository :path "/tmp/reveal"))
+           (nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
+           (nerimux::*workspace-expanded-node-ids* (make-hash-table :test #'equal))
+           (org-key (list :organization "org-reveal"))
+           (repo-key (list :repository "repo-reveal")))
+      (nerimux/workspace-model:organization-add-repository organization repository)
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
+      (setf (gethash org-key nerimux::*workspace-collapsed-node-ids*) t)
+      (nerimux::%reveal-tree-object-ancestors worktree)
+      (expect (null (gethash org-key nerimux::*workspace-collapsed-node-ids*)))
+      (expect (gethash repo-key nerimux::*workspace-expanded-node-ids*))))
+
+  (it "selection-fallback-for-a-hidden-repository-returns-its-drawn-organization"
+    (let* ((organization
+             (nerimux/workspace-model:make-organization
+              :id "org-fallback" :host "github.com" :name "team"))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :id "repo-fallback" :organization organization
+              :specification "github.com/team/repo-fallback")))
+      ;; A decoy row precedes ORGANIZATION so a fallback to (FIRST OBJECTS)
+      ;; would return the wrong row; only the REPOSITORY -> organization
+      ;; branch can pick ORGANIZATION out correctly here.
+      (expect (eq organization
+                  (nerimux::%client-selection-fallback-object
+                   repository (list :decoy-row organization))))))
 
   (it "enter-on-an-organization-row-toggles-its-collapse-state"
     (let* ((organization
@@ -59,6 +103,106 @@
       (expect (nerimux::%focus-selected-client-worktree nil conn))
       (expect (null (gethash (list :organization "org-toggle")
                              nerimux::*workspace-collapsed-node-ids*)))))
+
+  (it "enter-on-a-worktree-row-opens-that-row-not-the-last-selected-worktree"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/workspace-model:make-organization
+                :id "org" :host "github.com" :name "team"))
+             (repository
+               (nerimux/workspace-model:make-repository
+                :id "repo" :organization organization
+                :specification "github.com/team/repo"))
+             (other
+               (nerimux/workspace-model:make-worktree
+                :id "other" :repository repository :path "/tmp/other"))
+             (row
+               (nerimux/workspace-model:make-worktree
+                :id "row" :repository repository :path "/tmp/row"))
+             (other-pane (nerimux/window:window-active-pane
+                          (nerimux/session:session-active-window s)))
+             (row-pane (nerimux/pane:make-pane :id 4242 :fd 9998))
+             (conn (nerimux::%make-client-conn)))
+        (nerimux/workspace-model:organization-add-repository organization repository)
+        (nerimux/workspace-model:repository-add-worktree repository other)
+        (nerimux/workspace-model:repository-add-worktree repository row)
+        (nerimux/pane:worktree-add-pane other other-pane)
+        (nerimux/pane:worktree-add-pane row row-pane)
+        (setf (nerimux/pane:pane-fd other-pane) 9999
+              (nerimux::client-conn-view conn) :repolist)
+        ;; The prefix keys set the selected worktree without moving the tree
+        ;; cursor, so Enter must follow the cursor rather than that slot.
+        (nerimux::%set-client-selected-tree-object conn row)
+        (setf (nerimux::client-conn-selected-worktree conn) other)
+        (expect (nerimux::%focus-selected-client-worktree s conn))
+        (expect (eq row-pane (nerimux::client-conn-focus conn)))
+        (expect (eq row (nerimux::client-conn-selected-worktree conn))))))
+
+  (it "enter-on-a-worktree-row-returns-to-the-pane-the-user-left-last"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/workspace-model:make-organization
+                :id "org-memory" :host "github.com" :name "team"))
+             (repository
+               (nerimux/workspace-model:make-repository
+                :id "repo-memory" :organization organization
+                :specification "github.com/team/repo-memory"))
+             (worktree
+               (nerimux/workspace-model:make-worktree
+                :id "wt-enter-memory" :repository repository
+                :path "/tmp/wt-enter-memory" :branch "main"))
+             (left-pane (nerimux/pane:make-pane :id 1 :fd 9001))
+             (later-pane (nerimux/pane:make-pane :id 2 :fd 9002))
+             (conn (nerimux::%make-client-conn))
+             (nerimux::*workspace-worktree-last-pane*
+               (make-hash-table :test #'equal)))
+        (nerimux/workspace-model:organization-add-repository organization repository)
+        (nerimux/workspace-model:repository-add-worktree repository worktree)
+        (nerimux/pane:worktree-add-pane worktree left-pane)
+        (nerimux/pane:worktree-add-pane worktree later-pane)
+        (setf (nerimux::client-conn-view conn) :repolist)
+        ;; Pane order alone would answer LATER-PANE; the user's last focus was
+        ;; LEFT-PANE, and that is what Enter owes them (R6.3).
+        (nerimux::%remember-worktree-pane worktree left-pane)
+        (nerimux::%set-client-selected-tree-object conn worktree)
+        (expect (nerimux::%focus-selected-client-worktree s conn))
+        (expect (eq left-pane (nerimux::client-conn-focus conn)))
+        (expect (eq :pane (nerimux::client-conn-view conn))))))
+
+  (it "enter-on-a-worktree-whose-only-pane-exited-shows-that-pane"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/workspace-model:make-organization
+                :id "org-exited" :host "github.com" :name "team"))
+             (repository
+               (nerimux/workspace-model:make-repository
+                :id "repo-exited" :organization organization
+                :specification "github.com/team/repo-exited"))
+             (worktree
+               (nerimux/workspace-model:make-worktree
+                :id "wt-exited" :repository repository
+                :path "/tmp/wt-exited" :branch "main"))
+             (exited-pane (nerimux/pane:make-pane :id 7
+                                                  :screen (make-screen 40 10)))
+             (conn (nerimux::%make-client-conn))
+             (assigned nil)
+             (nerimux::*workspace-worktree-last-pane*
+               (make-hash-table :test #'equal)))
+        (nerimux/workspace-model:organization-add-repository organization repository)
+        (nerimux/workspace-model:repository-add-worktree repository worktree)
+        (nerimux/pane:worktree-add-pane worktree exited-pane)
+        (setf (nerimux/pane:pane-process-exited-p exited-pane) t
+              (nerimux::client-conn-view conn) :repolist)
+        (nerimux::%set-client-selected-tree-object conn worktree)
+        (with-stubbed-fdefinition
+            ((nerimux::%client-assign-worktree
+              (lambda (session connection row)
+                (declare (ignore session connection row))
+                (setf assigned t))))
+          (expect (nerimux::%focus-selected-client-worktree s conn)))
+        (expect (null assigned))
+        (expect (eq exited-pane (nerimux::client-conn-focus conn)))
+        (expect (eq :pane (nerimux::client-conn-view conn))))))
 
   (it "enter-on-a-pane-selects-the-pane-and-enters-pane-view"
     (with-fake-session (s)
@@ -226,6 +370,37 @@
         (expect (nerimux::%client-toggle-selected-tree-row conn))
         (expect (null (gethash key nerimux::*workspace-expanded-node-ids*)))
         (expect nerimux::*dirty*))))
+
+  (it "right-and-left-open-close-a-row-and-left-leaves-a-leaf-for-its-parent"
+    (multiple-value-bind (organizations organization repository main-worktree
+                          feature-worktree)
+        (%make-server-dispatch-helper-fixture)
+      (declare (ignorable organizations organization main-worktree))
+      (let ((nerimux::*workspace-expanded-node-ids* (make-hash-table :test #'equal))
+            (nerimux::*dirty* nil)
+            (conn (nerimux::%make-client-conn))
+            (repo-key (list :repository
+                            (nerimux/workspace-model:repository-id repository)))
+            (worktree-key (list :worktree
+                                (nerimux/workspace-model:worktree-id
+                                 feature-worktree))))
+        (nerimux::%set-client-selected-tree-object conn repository)
+        (expect (nerimux::%client-tree-expand-row conn))
+        (expect (gethash repo-key nerimux::*workspace-expanded-node-ids*))
+        (expect (nerimux::%client-tree-collapse-row conn))
+        (expect (null (gethash repo-key nerimux::*workspace-expanded-node-ids*)))
+        (nerimux::%set-client-selected-tree-object conn feature-worktree)
+        (with-stubbed-fdefinition
+            ((nerimux::%client-start-worktree-commits-refresh
+               (lambda (selected) (declare (ignore selected)) nil)))
+          (expect (nerimux::%client-tree-expand-row conn)))
+        (expect (gethash worktree-key nerimux::*workspace-expanded-node-ids*))
+        (expect (nerimux::%client-tree-collapse-row conn))
+        (expect (null (gethash worktree-key
+                               nerimux::*workspace-expanded-node-ids*)))
+        (expect (nerimux::%client-tree-collapse-row conn))
+        (expect (eq repository
+                    (nerimux::client-conn-selected-tree-object conn))))))
 
   (it "h-and-l-toggle-a-section-row"
     (let ((nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
@@ -682,15 +857,61 @@
                          '("  needle" "with" "spaces  "))))))
 
 (describe "client-dispatch-boundaries"
-          (it "consumes exactly the requested escape suffix"
+          (it "resolves the pending escape tail for a caller that parsed it"
               (let ((conn (nerimux::%make-client-conn)))
-                (nerimux::%client-esc-swallow-start conn 1)
-                (expect (nerimux::%client-esc-swallow-consume conn))
-                (expect (null (nerimux::%client-esc-swallow-consume conn)))
-                (nerimux::%client-esc-swallow-start conn 2)
-                (expect (nerimux::%client-esc-swallow-consume conn))
+                (nerimux::%client-esc-swallow-start conn)
                 (expect (nerimux::%client-esc-swallow-consume conn))
                 (expect (null (nerimux::%client-esc-swallow-consume conn)))))
+          (it "swallows only bytes that continue the escape sequence"
+              (let ((conn (nerimux::%make-client-conn)))
+                (nerimux::%client-esc-swallow-start conn)
+                (expect (null (nerimux::%client-esc-swallow-consume conn #(63))))
+                (expect (null (nerimux::%client-esc-swallow-consume conn #(63))))
+                (nerimux::%client-esc-swallow-start conn)
+                (expect (nerimux::%client-esc-swallow-consume conn #(91)))
+                (expect (nerimux::%client-esc-swallow-consume conn #(65)))
+                (expect (null (nerimux::%client-esc-swallow-consume conn #(65))))
+                (nerimux::%client-esc-swallow-start conn)
+                (expect (nerimux::%client-esc-swallow-consume conn #(91)))
+                (expect (nerimux::%client-esc-swallow-consume conn #(49)))
+                (expect (nerimux::%client-esc-swallow-consume conn #(126)))
+                (expect (null (nerimux::%client-esc-swallow-consume conn #(126))))
+                (nerimux::%client-esc-swallow-start conn)
+                (expect (nerimux::%client-esc-swallow-consume conn #(79)))
+                (expect (nerimux::%client-esc-swallow-consume conn #(80)))
+                (expect (null (nerimux::%client-esc-swallow-consume conn #(80))))))
+          (it "esc-then-meta-n-drops-the-paste-candidate-and-the-escape-tail"
+              (let ((conn (nerimux::%make-client-conn))
+                    (session (nerimux/session:make-session :id 1 :name "test"))
+                    (moved nil))
+                (setf (nerimux::client-conn-view conn) :repolist
+                      (nerimux::client-conn-modal conn) :command
+                      (nerimux::client-conn-command-buffer conn) "wt-lock")
+                (let ((nerimux::*client-wire-key-p* t))
+                  (nerimux::%handle-multi-key-message session conn #(27))
+                  (expect (eq :command
+                              (nerimux::client-conn-paste-candidate-modal conn)))
+                  (expect (eq :second
+                              (gethash conn nerimux::*client-meta-pending*)))
+                  (with-stubbed-fdefinition
+                      ((nerimux::%select-client-tree-section-relative
+                        (lambda (connection delta)
+                          (declare (ignore connection))
+                          (setf moved delta))))
+                    (nerimux::%handle-multi-key-message session conn #(110))))
+                (expect (eql 1 moved))
+                (expect (null (nerimux::client-conn-paste-candidate-modal conn)))
+                (expect (null (gethash conn
+                                       nerimux::*client-esc-swallow-counts*)))))
+          (it "hands the key after a cancelling escape to the help view again"
+              (let ((conn (nerimux::%make-client-conn))
+                    (session (nerimux/session:make-session :id 1 :name "test")))
+                (setf (nerimux::client-conn-modal conn) :help)
+                (nerimux::%handle-help-view-key conn #(27))
+                (expect (null (nerimux::client-conn-modal conn)))
+                (setf (nerimux::client-conn-view conn) :repolist)
+                (nerimux::%handle-multi-key-message session conn "?")
+                (expect (eq :transient (nerimux::client-conn-modal conn)))))
           (it "only claims one-byte workspace prefix payloads"
               (let ((session (nerimux/session:make-session :id 1 :name "test"))
                     (conn (nerimux::%make-client-conn)))
@@ -734,9 +955,9 @@
              (setf (nerimux::client-conn-modal conn) :help)
              (nerimux::%handle-help-view-key conn #(27))
              (expect (null (nerimux::client-conn-modal conn)))
-             (expect (nerimux::%client-esc-swallow-consume conn))
-             (expect (nerimux::%client-esc-swallow-consume conn))
-             (expect (null (nerimux::%client-esc-swallow-consume conn)))))
+             (expect (nerimux::%client-esc-swallow-consume conn #(91)))
+             (expect (nerimux::%client-esc-swallow-consume conn #(65)))
+             (expect (null (nerimux::%client-esc-swallow-consume conn #(65))))))
           (it "reports unavailable-focused-pane-input"
               (let* ((session (nerimux/session:make-session :id 1 :name "test"))
                      (conn (nerimux::%make-client-conn))
@@ -805,3 +1026,95 @@
                   (expect (equal '("42")
                                  (nerimux::client-conn-message-log conn)))))))
 )
+
+(describe "server-dispatch-helper-status-navigation-suite"
+
+  (it "status-view-selection-walks-the-status-rows-and-keeps-the-selected-worktree"
+    (let* ((organization
+             (nerimux/workspace-model:make-organization
+              :id "org-status-nav" :host "github.com" :name "team"))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :id "repo-status-nav" :organization organization
+              :specification "github.com/team/repo-status-nav"))
+           (worktree
+             (nerimux/workspace-model:make-worktree
+              :id "wt-status-nav" :repository repository
+              :path "/tmp/status-nav" :branch "main" :status :landed
+              :untracked-files (list (cons "??" "new.txt"))
+              :unstaged-files (list (cons "M" "a.txt"))))
+           (conn (nerimux::%make-client-conn)))
+      (nerimux/workspace-model:organization-add-repository organization repository)
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
+      (let ((nerimux/vcs::*workspace-organizations* (list organization))
+            (nerimux::*dirty* nil))
+        (setf (nerimux::client-conn-view conn) :status)
+        (nerimux::%set-client-selected-worktree conn worktree)
+        (expect (eq :untracked (nerimux::%select-client-tree-relative conn 1)))
+        (expect (eq worktree (nerimux::client-conn-selected-worktree conn)))
+        (expect (equal (list :file "wt-status-nav" "new.txt" "??")
+                       (nerimux::%select-client-tree-relative conn 1)))
+        (expect (eq worktree (nerimux::client-conn-selected-worktree conn)))
+        (expect (eq :untracked (nerimux::%select-client-tree-relative conn -1)))
+        (expect (eq worktree (nerimux::client-conn-selected-worktree conn))))))
+
+  (it "status-refresh-falls-back-to-the-head-row-when-the-section-disappears"
+    (let* ((organization
+             (nerimux/workspace-model:make-organization
+              :id "org-status-rebind" :host "github.com" :name "team"))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :id "repo-status-rebind" :organization organization
+              :specification "github.com/team/repo-status-rebind"))
+           (worktree
+             (nerimux/workspace-model:make-worktree
+              :id "wt-status-rebind" :repository repository
+              :path "/tmp/status-rebind" :branch "main" :status :landed
+              :unstaged-files (list (cons "M" "a.txt"))))
+           (conn (nerimux::%make-client-conn)))
+      (nerimux/workspace-model:organization-add-repository organization repository)
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
+      (let ((organizations (list organization))
+            (nerimux/vcs::*workspace-organizations* (list organization))
+            (nerimux::*dirty* nil))
+        (setf (nerimux::client-conn-view conn) :status)
+        (nerimux::%set-client-selected-worktree conn worktree)
+        (expect (eq :unstaged (nerimux::%select-client-tree-relative conn 1)))
+        ;; S stages everything, so the section the cursor sits on is gone by
+        ;; the time the git write's refresh re-binds the selection.
+        (setf (nerimux/workspace-model:worktree-unstaged-files worktree) nil
+              (nerimux/workspace-model:worktree-staged-files worktree)
+              (list (cons "M" "a.txt")))
+        (nerimux::%rebind-client-selection conn organizations)
+        (expect (eq worktree (nerimux::client-conn-selected-worktree conn)))
+        (expect (eq worktree (nerimux::client-conn-selected-tree-object conn)))
+        (expect (member (nerimux::client-conn-selected-tree-object conn)
+                        (nerimux/renderer:workspace-status-objects worktree)
+                        :test #'equal)))))
+
+  (it "status-view-selection-never-leaves-the-repolist-tree-rows-selected"
+    (let* ((organization
+             (nerimux/workspace-model:make-organization
+              :id "org-status-nav-2" :host "github.com" :name "team"))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :id "repo-status-nav-2" :organization organization
+              :specification "github.com/team/repo-status-nav-2"))
+           (worktree
+             (nerimux/workspace-model:make-worktree
+              :id "wt-status-nav-2" :repository repository
+              :path "/tmp/status-nav-2" :branch "main" :status :landed))
+           (conn (nerimux::%make-client-conn)))
+      (nerimux/workspace-model:organization-add-repository organization repository)
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
+      (let ((nerimux/vcs::*workspace-organizations* (list organization))
+            (nerimux::*dirty* nil))
+        (setf (nerimux::client-conn-view conn) :status)
+        (nerimux::%set-client-selected-worktree conn worktree)
+        (dotimes (step 5)
+          (declare (ignorable step))
+          (nerimux::%select-client-tree-relative conn 1))
+        (expect (eq worktree (nerimux::client-conn-selected-worktree conn)))
+        (expect (member (nerimux::client-conn-selected-tree-object conn)
+                        (nerimux/renderer:workspace-status-objects worktree)
+                        :test #'equal))))))

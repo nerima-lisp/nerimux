@@ -9,6 +9,7 @@
   (concatenate 'string
                (%host-mode-sequence t)
                (format nil "~C[2J~C[H" #\Escape #\Escape)
+               "nerimux: connecting..."
                (%host-mode-sequence nil)
                (format nil "~%")))
 

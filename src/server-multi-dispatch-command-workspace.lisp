@@ -179,6 +179,11 @@
     (values worktree source)))
 
 (defun %client-attach-target (conn args)
+  "Record what CONN attached to and select it: an explicit target, else the
+   worktree its cwd sits in.  CLIENT-CONN-FOCUS is deliberately left alone
+   when neither matches -- a client that has opened no pane keeps a NIL
+   focus, so `q` and a cancelled picker stay in the workspace views instead
+   of stepping into a pane the user never opened."
   (let ((target (first args))
         (cwd (second args))
         (session (%attach-target-session)))
@@ -199,14 +204,7 @@
               (%client-attach-selection
                conn (nerimux/vcs:workspace-organizations))))))
       (when (and session (eq source :cwd))
-        (%focus-selected-client-worktree session conn :direct-shell-p t))
-      (when (and session (null (client-conn-focus conn)))
-        (let* ((window (session-active-window session))
-               (pane (and window (window-active-pane window))))
-          (when pane
-            (let ((view (client-conn-view conn)))
-              (%set-client-focus conn pane session)
-              (setf (client-conn-view conn) view))))))
+        (%focus-selected-client-worktree session conn :direct-shell-p t)))
     (%mark-dirty)
     t))
 
@@ -260,6 +258,7 @@ by %SELECT-CLIENT-TREE-RELATIVE."
                    (return candidate))))))
 
 (defun %client-refresh-workspace (conn)
+  (%workspace-job-forget-failed)
   (%client-notify conn "workspace refresh started")
   (%refresh-client-picker conn
                           :on-complete

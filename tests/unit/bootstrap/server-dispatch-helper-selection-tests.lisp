@@ -62,7 +62,7 @@
         (expect (eq feature-worktree
                     (nerimux::%workspace-find-worktree "feature-id"))))))
 
-  (it "resolves-picker-organization-through-its-first-available-worktree"
+  (it "gives-an-organization-item-no-worktree-of-its-own"
     (let* ((organization (nerimux/workspace-model:make-organization :id "org"))
            (repository (nerimux/workspace-model:make-repository :id "repo"))
            (worktree (nerimux/workspace-model:make-worktree
@@ -72,9 +72,9 @@
                   :organization organization)))
       (nerimux/workspace-model:organization-add-repository organization repository)
       (nerimux/workspace-model:repository-add-worktree repository worktree)
-      (expect (eq worktree (nerimux::%picker-item-worktree item)))))
+      (expect (null (nerimux::%picker-item-worktree item)))))
 
-  (it "resolves-picker-repositories-through-their-main-worktree"
+  (it "gives-a-repository-item-no-worktree-of-its-own"
     (let* ((repository (nerimux/workspace-model:make-repository :id "repo"))
            (main-worktree
              (nerimux/workspace-model:make-worktree
@@ -84,16 +84,16 @@
                   :repository repository)))
       (setf (nerimux/workspace-model:repository-main-worktree repository)
             main-worktree)
-      (expect (eq main-worktree (nerimux::%picker-item-worktree item)))))
+      (expect (null (nerimux::%picker-item-worktree item)))))
 
-  (it "resolves-picker-repositories-through-their-first-worktree"
+  (it "resolves-a-worktree-item-through-its-own-worktree"
     (let* ((repository (nerimux/workspace-model:make-repository :id "repo"))
            (worktree
              (nerimux/workspace-model:make-worktree
               :id "tree" :repository repository :path "/tmp/tree"))
            (item (nerimux/picker::%make-picker-item
-                  :id "repo" :kind :repository :label "repo"
-                  :repository repository)))
+                  :id "tree" :kind :worktree :label "tree"
+                  :repository repository :worktree worktree)))
       (nerimux/workspace-model:repository-add-worktree repository worktree)
       (expect (eq worktree (nerimux::%picker-item-worktree item)))))
 
@@ -181,7 +181,6 @@
     (multiple-value-bind (organizations organization repository main-worktree
                           feature-worktree)
         (%make-server-dispatch-helper-fixture)
-      (declare (ignorable organization))
       (let ((nerimux::*dirty* nil)
             (nerimux::*last-selected-worktree-token* nil)
             (nerimux::*workspace-collapsed-node-ids*
@@ -196,11 +195,12 @@
             (conn (nerimux::%make-client-conn)))
         (setf (nerimux::client-conn-rows conn) 5)
         (let ((objects (nerimux::%workspace-tree-objects organizations)))
-          (expect (= 4 (length objects)))
+          (expect (= 5 (length objects)))
           (expect (eq :repositories (first objects)))
-          (expect (eq repository (second objects)))
-          (expect (eq feature-worktree (third objects)))
-          (expect (eq main-worktree (fourth objects))))
+          (expect (eq organization (second objects)))
+          (expect (eq repository (third objects)))
+          (expect (eq feature-worktree (fourth objects)))
+          (expect (eq main-worktree (fifth objects))))
         (expect (equal '(:organization "org-id")
                        (nerimux::%tree-object-selection-token organization)))
         (expect (equal '(:repository "repo-id")
@@ -215,7 +215,7 @@
         (expect (eq main-worktree
                     (nerimux::%select-client-tree-worktree conn "main-id")))
         (setf (nerimux::client-conn-tree-scroll conn) 0)
-        (expect (= 3 (nerimux::%move-client-tree-scroll conn 99)))
+        (expect (= 4 (nerimux::%move-client-tree-scroll conn 99)))
         (expect (zerop (nerimux::%move-client-tree-scroll conn -99)))
         (expect (zerop (nerimux::%move-client-tree-scroll conn "down")))
         (expect (eq main-worktree

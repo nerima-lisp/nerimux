@@ -40,6 +40,15 @@
                      fd
                      (cl-date-kit:duration-of-millis 50))))))
 
+  (it "forkpty-with-shell-leaves-the-slave-in-cooked-echoing-mode"
+    (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
+    (with-pty-shell (fd pid)
+      (expect (plusp pid))
+      (let ((lflag (sb-posix:termios-lflag (sb-posix:tcgetattr fd))))
+        (expect (logtest lflag sb-posix:echo))
+        (expect (logtest lflag sb-posix:icanon))
+        (expect (logtest lflag sb-posix:isig)))))
+
   (it "pty-child-exit-status-reports-exited-code"
     (unless (pty-available-p) (skip "no PTY available (sandboxed environment)"))
     (multiple-value-bind (fd pid)
