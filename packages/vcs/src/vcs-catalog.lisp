@@ -12,12 +12,18 @@
 
 (defun %strip-control-characters (text)
   "TEXT with every control character removed -- C0 (code < 32), DEL (127) and
-C1 (128-159) -- except Tab (9), which becomes a single space (F5,
+C1 (128-159) -- except Newline (10) and Tab (9), which are kept verbatim (F5,
 CWE-150-adjacent). Applies to any text this module retains from an untrusted
 VCS invocation before it reaches a renderer: safety there currently rests only
 on cl-tui-kit's incidental zero-width-glyph skip, which does not cover every
 render path (e.g. the exported plain-ANSI path). Non-string TEXT passes
 through unchanged.
+
+Newline and Tab stay because git's own multi-line output is the payload for
+two views: the diff pager splits on newline to scroll, and the process log
+splits on newline to show a failure's real text. Stripping them glued whole
+diffs and whole error messages into one clipped line. Neither character can
+introduce an escape sequence, which is what this function exists to stop.
 
 C1 is included because the client wire is UTF-8, so a branch name or commit
 subject carrying U+009B arrives here as one character rather than a raw byte,
@@ -29,7 +35,7 @@ reads it as CSI. Stripping C0 alone would block `ESC [` and pass its exact
         (loop for character across text
               for code = (char-code character)
               do (cond
-                   ((= code 9) (write-char #\Space out))
+                   ((or (= code 9) (= code 10)) (write-char character out))
                    ((or (< code 32) (<= 127 code 159)))
                    (t (write-char character out)))))
       text))
@@ -338,6 +344,36 @@ rescan exactly as commit history was before this function existed."
            (eq (nerimux/workspace-model:repository-worktrees repository)
                (%repository-data-generation-worktrees generation)))))
 
+(defun %catalog-repositories (organizations)
+  (loop for organization in organizations
+        append (copy-list
+                (nerimux/workspace-model:organization-repositories organization))))
+
+(defun %preserve-unreadable-repository-worktrees (previous current)
+  "Carry PREVIOUS's worktrees onto a CURRENT repository whose checkout could not
+be read, flagged missing.
+
+A full rescan builds a fresh repository struct per ghq entry, so a repository
+git refused to read arrives with no worktrees of its own and nothing to rebuild
+them from. Dropping them makes an unreadable checkout indistinguishable from
+one that legitimately has none; keeping them is what puts the `✗' mark on a row
+the user can still see (getting-started.md's row-mark table)."
+  (let ((previous-repositories (%catalog-repositories previous)))
+    (dolist (repository (%catalog-repositories current))
+      (when (and (nerimux/workspace-model:repository-missing-p repository)
+                 (null (nerimux/workspace-model:repository-worktrees repository)))
+        (let ((match (find (nerimux/workspace-model:repository-local-path repository)
+                           previous-repositories
+                           :key #'nerimux/workspace-model:repository-local-path
+                           :test #'equal)))
+          (when match
+            (dolist (worktree (reverse
+                               (nerimux/workspace-model:repository-worktrees match)))
+              (setf (nerimux/workspace-model:worktree-missing-p worktree) t)
+              (nerimux/workspace-model:repository-add-worktree repository
+                                                              worktree)))))))
+  current)
+
 (defun set-workspace-organizations (organizations)
   "Replace the workspace catalog with ORGANIZATIONS and publish a new generation."
   (check-type organizations list)
@@ -345,6 +381,7 @@ rescan exactly as commit history was before this function existed."
     (let ((previous *workspace-organizations*)
           (current (copy-list organizations)))
       (setf *workspace-organizations* current)
+      (%preserve-unreadable-repository-worktrees previous current)
       (%preserve-pane-associations previous current)
       (%preserve-worktree-commit-state previous current)
       (setf *workspace-organizations*

@@ -55,7 +55,8 @@
                     (vcs-kit::%make-vcs-status-entry
                      :kind :ordinary :index-status " " :worktree-status "M"
                      :path (format nil "a~C[31mb" (code-char 27))))))
-    (expect (equal "old file.lisp -> new file.lisp"
+    (expect (equal (format nil "old~Cfile.lisp -> new~Cfile.lisp"
+                           (code-char 9) (code-char 9))
                    (nerimux/vcs::%changed-file-path
                     (vcs-kit::%make-vcs-status-entry
                      :kind :rename-or-copy :index-status "R" :worktree-status " "
@@ -71,11 +72,7 @@
              (nerimux/workspace-model:make-worktree :repository repository :path path)))
       (nerimux/workspace-model:repository-add-worktree repository worktree)
       (with-stubbed-fdefinition
-          ((vcs-kit:make-vcs-repository
-             (lambda (directory &rest arguments)
-               (declare (ignore arguments))
-               directory))
-           (vcs-kit:vcs-status-structured
+          ((nerimux/vcs::%git-status-snapshot
              (lambda (&rest arguments)
                (declare (ignore arguments))
                (vcs-kit::%make-vcs-status-snapshot
@@ -84,7 +81,7 @@
                 (list (vcs-kit::%make-vcs-status-entry
                        :kind :ordinary :index-status " " :worktree-status "M"
                        :path "src/foo.lisp")))))
-           (vcs-kit:git-diff-numstat
+           (nerimux/vcs::%git-numstat-entries
              (lambda (&rest arguments)
                (declare (ignore arguments))
                (list (vcs-kit::%make-numstat-entry
@@ -94,6 +91,6 @@
         (expect (equal (list (cons " M" "src/foo.lisp"))
                        (nerimux/workspace-model:worktree-changed-files worktree)))
         (expect (= 7
-                   (nerimux/workspace-model::worktree-additions worktree)))
+                   (nerimux/workspace-model:worktree-additions worktree)))
         (expect (= 3
-                   (nerimux/workspace-model::worktree-deletions worktree)))))))
+                   (nerimux/workspace-model:worktree-deletions worktree)))))))

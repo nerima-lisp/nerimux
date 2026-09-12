@@ -101,24 +101,60 @@
 (defun %make-vcs-repository (directory)
   (vcs-kit:make-vcs-repository directory))
 
+(defun %git-worktree-list (directory)
+  "DIRECTORY's worktrees as VCS-KIT:VCS-WORKTREE structs, parsed the way
+VCS-KIT:VCS-LIST-WORKTREES does -- VCS-KIT::%VCS-WORKTREE-BLOCKS and
+VCS-KIT::%VCS-WORKTREE, both internal to cl-vcs-kit -- against `git worktree
+list --porcelain` read through %RUN-GIT-READ instead of a checked vcs-kit
+repository handle."
+  (mapcar #'vcs-kit::%vcs-worktree
+          (vcs-kit::%vcs-worktree-blocks
+           (%run-git-read directory "worktree" "list" "--porcelain"))))
+
 (defun %read-repository-worktrees (repository)
-  (let ((backend-repository
-         (%make-vcs-repository
-          (nerimux/workspace-model:repository-local-path repository))))
-    (values (vcs-kit:vcs-list-worktrees backend-repository)
-            (%path-missing-p
-             (nerimux/workspace-model:repository-local-path repository)))))
+  "REPOSITORY's raw worktree entries, and whether its checkout could not be read.
+
+`git worktree list` always names at least one entry -- the main checkout, or a
+bare repository's own directory -- so an empty answer for a directory that is
+still on disk is git declining to read the repository at all (a corrupt HEAD, a
+missing .git internal), not a repository that has no worktrees. Reporting that
+as missing keeps the row in the tree flagged `✗' instead of silently emptying
+it (getting-started.md's row-mark table)."
+  (let* ((path (nerimux/workspace-model:repository-local-path repository))
+         (raw-worktrees (%git-worktree-list path)))
+    (values raw-worktrees
+            (or (%path-missing-p path) (null raw-worktrees)))))
 
 (defun %apply-repository-worktrees
     (repository raw-worktrees missing-p &optional status-updates)
-  (let ((previous (copy-list (nerimux/workspace-model:repository-worktrees repository))))
+  "Rebuild REPOSITORY's worktree list from RAW-WORKTREES.
+
+`git worktree list` reports a bare repository's own directory as the first
+entry. That directory is not a worktree: it has no checkout, no branch and no
+status, and treating it as one drops the user into objects/ and hooks/. It is
+dropped here, and a bare repository is left with no primary worktree at all.
+No worktree the model holds can therefore be bare, which is why WORKTREE-BARE-P
+is always NIL for anything this produces.
+
+An unreadable checkout keeps the worktrees the last good read found, flagged
+missing, rather than dropping them: a scan that could not read the repository
+has learned nothing about which worktrees it has."
+  (when (and missing-p
+             (null raw-worktrees)
+             (nerimux/workspace-model:repository-worktrees repository))
+    (setf (nerimux/workspace-model:repository-missing-p repository) t)
+    (dolist (worktree (nerimux/workspace-model:repository-worktrees repository))
+      (setf (nerimux/workspace-model:worktree-missing-p worktree) t))
+    (return-from %apply-repository-worktrees repository))
+  (let ((previous (copy-list (nerimux/workspace-model:repository-worktrees repository)))
+        (bare-repository-p (some #'vcs-kit:vcs-worktree-bare-p raw-worktrees)))
     (setf (nerimux/workspace-model:repository-missing-p repository) missing-p)
     (dolist (old-worktree previous)
       (dolist (pane (nerimux/workspace-model:worktree-panes old-worktree))
         (setf (nerimux/pane:pane-worktree pane) nil)))
     (setf (nerimux/workspace-model:repository-worktrees repository) nil
           (nerimux/workspace-model:repository-main-worktree repository) nil)
-    (dolist (raw raw-worktrees)
+    (dolist (raw (remove-if #'vcs-kit:vcs-worktree-bare-p raw-worktrees))
       (let* ((path (vcs-kit:vcs-worktree-path raw))
              (status-update
                (find path status-updates
@@ -150,10 +186,10 @@
                             (nerimux/workspace-model:worktree-behind old-worktree)
                             0)
                 :additions (if old-worktree
-                               (nerimux/workspace-model::worktree-additions old-worktree)
+                               (nerimux/workspace-model:worktree-additions old-worktree)
                                0)
                 :deletions (if old-worktree
-                               (nerimux/workspace-model::worktree-deletions old-worktree)
+                               (nerimux/workspace-model:worktree-deletions old-worktree)
                                0)
                 :changed-files (and old-worktree
                                     (nerimux/workspace-model:worktree-changed-files
@@ -195,7 +231,6 @@
                 :waiting-host-notified-p (and old-worktree
                                              (nerimux/workspace-model:worktree-waiting-host-notified-p
                                               old-worktree))
-                :bare-p (vcs-kit:vcs-worktree-bare-p raw)
                 :locked-p (vcs-kit:vcs-worktree-locked-p raw)
                 :prunable-p (vcs-kit:vcs-worktree-prunable-p raw)
                 :missing-p (if status-update
@@ -204,6 +239,9 @@
         (dolist (pane (nerimux/workspace-model:worktree-panes worktree))
           (setf (nerimux/pane:pane-worktree pane) worktree))
         (nerimux/workspace-model:repository-add-worktree repository worktree)))
+    (when bare-repository-p
+      (setf (nerimux/workspace-model:repository-main-worktree repository) nil)
+      (nerimux/workspace-model:repository-recompute-status repository))
     repository))
 
 (defun list-repository-worktrees (repository)
@@ -212,11 +250,32 @@
     repository
     (%read-repository-worktrees repository)))
 
-(defun %read-repository-status (repository)
+(defun %repository-status-shared-stashes (repository)
+  "As %RAW-WORKTREES-SHARED-STASHES, for REPOSITORY's own workspace-model
+worktrees rather than the raw `git worktree list` entries %READ-REPOSITORY-
+REFRESH works from."
   (loop for worktree in (nerimux/workspace-model:repository-worktrees
                          repository)
-        unless (nerimux/workspace-model:worktree-bare-p worktree)
-          collect (%read-worktree-status worktree)))
+        do (let* ((wt-repository (nerimux/workspace-model:worktree-repository
+                                   worktree))
+                  (repository-path
+                    (and wt-repository
+                         (nerimux/workspace-model:repository-local-path
+                          wt-repository))))
+             (multiple-value-bind (directory missing-p)
+                 (%worktree-status-directory
+                  (nerimux/workspace-model:worktree-path worktree)
+                  repository-path)
+               (when (and directory (not missing-p))
+                 (return (%read-stashes-at directory)))))))
+
+(defun %read-repository-status (repository)
+  (let ((stashes (%repository-status-shared-stashes repository)))
+    (loop for worktree in (nerimux/workspace-model:repository-worktrees
+                           repository)
+          collect (if stashes
+                      (%read-worktree-status worktree :stashes stashes)
+                      (%read-worktree-status worktree)))))
 
 (defun %apply-repository-status (repository updates
                                             &optional

@@ -755,15 +755,11 @@
                                                  :head
                                                  "work-head"))))
              (with-stubbed-fdefinition
-              ((vcs-kit:make-vcs-repository
-                (lambda (directory &rest arguments)
-                  (declare (ignore arguments))
-                  directory))
-               (vcs-kit:vcs-list-worktrees
+              ((nerimux/vcs::%git-worktree-list
                 (lambda (&rest arguments)
                   (declare (ignore arguments))
                   raw-worktrees))
-               (vcs-kit:vcs-status-structured
+               (nerimux/vcs::%git-status-snapshot
                 (lambda (backend-directory &rest arguments)
                   (declare (ignore arguments))
                   (if (string= backend-directory bare-path)
@@ -776,7 +772,7 @@
                                                           0
                                                           :behind
                                                           0))))
-               (vcs-kit:git-diff-numstat
+               (nerimux/vcs::%git-numstat-entries
                 (lambda (&rest arguments)
                   (declare (ignore arguments))
                   nil)))
@@ -784,61 +780,6 @@
                       (nerimux/vcs::%read-repository-refresh repository))
                      (updates
                       (nerimux/vcs::%repository-refresh-status-updates refresh)))
-                (expect (= 1 (length updates)))
-                (expect
-                 (string= work-path
-                          (nerimux/vcs::%worktree-status-update-path
-                           (first updates))))))))
-          (it
-           "%read-repository-status skips the bare worktree and updates only the working worktree"
-           (let* ((bare-path (%bare-status-fixture-directory "status-bare"))
-                  (work-path (%bare-status-fixture-directory "status-work"))
-                  (repository
-                   (nerimux/workspace-model:make-repository :specification
-                                                            "workspace-owner/project"
-                                                            :local-path
-                                                            bare-path))
-                  (bare-worktree
-                   (nerimux/workspace-model:make-worktree :repository
-                                                          repository
-                                                          :path
-                                                          bare-path
-                                                          :bare-p
-                                                          t))
-                  (work-worktree
-                   (nerimux/workspace-model:make-worktree :repository
-                                                          repository
-                                                          :path
-                                                          work-path
-                                                          :branch
-                                                          "main")))
-             (nerimux/workspace-model:repository-add-worktree repository
-                                                              bare-worktree)
-             (nerimux/workspace-model:repository-add-worktree repository
-                                                              work-worktree)
-             (with-stubbed-fdefinition
-              ((vcs-kit:make-vcs-repository
-                (lambda (directory &rest arguments)
-                  (declare (ignore arguments))
-                  directory))
-               (vcs-kit:vcs-status-structured
-                (lambda (backend-directory &rest arguments)
-                  (declare (ignore arguments))
-                  (if (string= backend-directory bare-path)
-                      (error "status must not run against the bare root")
-                      (vcs-kit::%make-vcs-status-snapshot :entries
-                                                          nil
-                                                          :branch-head
-                                                          "work-head"
-                                                          :ahead
-                                                          0
-                                                          :behind
-                                                          0))))
-               (vcs-kit:git-diff-numstat
-                (lambda (&rest arguments)
-                  (declare (ignore arguments))
-                  nil)))
-              (let ((updates (nerimux/vcs::%read-repository-status repository)))
                 (expect (= 1 (length updates)))
                 (expect
                  (string= work-path

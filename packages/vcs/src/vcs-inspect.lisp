@@ -300,6 +300,58 @@ not wrong."
     (%strip-control-characters
      (or (vcs-kit:process-result-stdout result) ""))))
 
+(defun %branch-listing-line (branch)
+  "One `git branch -vv`-shaped line for BRANCH: the current branch marked
+with a star, then its name, then its upstream and divergence when it tracks
+one."
+  (let ((upstream (vcs-kit:vcs-branch-upstream branch))
+        (ahead (vcs-kit:vcs-branch-ahead branch))
+        (behind (vcs-kit:vcs-branch-behind branch)))
+    (format nil
+            "~A ~A~@[ -> ~A~]~@[~A~]"
+            (if (vcs-kit:vcs-branch-current-p branch)
+                "*"
+                " ")
+            (%sanitize-retained-text (vcs-kit:vcs-branch-name branch))
+            (and upstream (%sanitize-retained-text upstream))
+            (and upstream
+                 ahead
+                 behind
+                 (format nil " +~D -~D" ahead behind)))))
+
+(defun %read-worktree-branches (worktree)
+  (let ((backend-repository
+          (%make-vcs-repository
+           (nerimux/workspace-model:worktree-path worktree))))
+    (with-output-to-string (stream)
+      (dolist (branch (vcs-kit:vcs-list-branches
+                       backend-repository
+                       :execution-options
+                       (list :max-output-characters
+                             *read-view-max-output-characters*)))
+        (format stream "~A~%" (%branch-listing-line branch))))))
+
+(defun %tag-listing-line (tag)
+  "One `git tag -n`-shaped line for TAG: its name, then its message when it
+carries one (a lightweight tag carries none)."
+  (let ((message (vcs-kit:vcs-tag-message tag)))
+    (format nil
+            "~A~@[ ~A~]"
+            (%sanitize-retained-text (vcs-kit:vcs-tag-name tag))
+            (and message (%sanitize-retained-text message)))))
+
+(defun %read-worktree-tags (worktree)
+  (let ((backend-repository
+          (%make-vcs-repository
+           (nerimux/workspace-model:worktree-path worktree))))
+    (with-output-to-string (stream)
+      (dolist (tag (vcs-kit:vcs-list-tags
+                    backend-repository
+                    :execution-options
+                    (list :max-output-characters
+                          *read-view-max-output-characters*)))
+        (format stream "~A~%" (%tag-listing-line tag))))))
+
 (defun read-worktree-log-async (worktree &key on-complete on-error callback-dispatch)
   "Read WORKTREE's complete log for a read-only client view."
   (%run-vcs-operation-async "nerimux-vcs-read-log"
@@ -313,6 +365,24 @@ not wrong."
   "Read WORKTREE's complete working-tree diff for a read-only client view."
   (%run-vcs-operation-async "nerimux-vcs-read-diff"
                             (lambda () (%read-worktree-diff worktree))
+                            #'identity
+                            on-complete
+                            on-error
+                            callback-dispatch))
+
+(defun read-worktree-branches-async (worktree &key on-complete on-error callback-dispatch)
+  "Read WORKTREE's branch listing for a read-only client view."
+  (%run-vcs-operation-async "nerimux-vcs-read-branches"
+                            (lambda () (%read-worktree-branches worktree))
+                            #'identity
+                            on-complete
+                            on-error
+                            callback-dispatch))
+
+(defun read-worktree-tags-async (worktree &key on-complete on-error callback-dispatch)
+  "Read WORKTREE's tag listing for a read-only client view."
+  (%run-vcs-operation-async "nerimux-vcs-read-tags"
+                            (lambda () (%read-worktree-tags worktree))
                             #'identity
                             on-complete
                             on-error

@@ -22,21 +22,38 @@
   (path nil :read-only t)
   (head nil :read-only t)
   worktree
+  fetch-error
   refresh-error)
 
 (defun %create-detached-worktree-result (repository)
-  (%fetch-origin-main repository)
-  (let* ((head (%rev-parse repository "--verify" "refs/remotes/origin/main^{commit}"))
-         (short-head (%rev-parse repository "--short" head))
-         (path (%resolve-worktree-path repository short-head nil)))
-    (vcs-kit:vcs-worktree (%repository-backend repository)
-                          "add" "--detach" path head)
-    (let ((receipt (%make-detached-worktree-result :path path :head head)))
-      (cons receipt
-            (handler-case (%read-repository-refresh repository)
-              (error (condition)
-                (setf (detached-worktree-result-refresh-error receipt) condition)
-                nil))))))
+  "Create a detached worktree at REPOSITORY's default-branch tip (R7.5).
+
+The fetch that precedes it is advisory: %REPOSITORY-DEFAULT-BRANCH answers
+with the checked-out branch when origin/HEAD was never set, and that branch
+need not exist on the remote at all, so a fetch failure there says nothing
+about whether the start point resolves. What a failed fetch does rule out is
+the remote-tracking ref, which no longer stands for anything the remote has
+confirmed, so the start point is then taken from the local branch or HEAD.
+The failure travels back on the receipt for the dispatch layer to log."
+  (let ((fetch-error
+          (handler-case
+              (progn (%fetch-default-branch repository
+                                            (%repository-default-branch repository))
+                     nil)
+            (error (condition) condition))))
+    (let* ((head (%default-branch-start-point repository
+                                              :remote-ref-p (null fetch-error)))
+           (short-head (%rev-parse repository "--short" head))
+           (path (%resolve-worktree-path repository short-head nil)))
+      (vcs-kit:vcs-worktree (%repository-backend repository)
+                            "add" "--detach" path head)
+      (let ((receipt (%make-detached-worktree-result :path path :head head
+                                                     :fetch-error fetch-error)))
+        (cons receipt
+              (handler-case (%read-repository-refresh repository)
+                (error (condition)
+                  (setf (detached-worktree-result-refresh-error receipt) condition)
+                  nil)))))))
 
 (defun %apply-detached-worktree-result (repository result)
   (let ((receipt (car result)))
@@ -53,8 +70,9 @@
 
 (defun create-detached-worktree-async (repository &key on-complete on-error on-start
                                                     callback-dispatch)
-  "Fetch origin/main and create a detached worktree. ON-COMPLETE receives a
-DETACHED-WORKTREE-RESULT even if catalog refresh fails after creation.
+  "Create a detached worktree at the default branch's tip, fetching first when
+the remote has that branch. ON-COMPLETE receives a DETACHED-WORKTREE-RESULT
+even if the fetch or the catalog refresh fails.
 Reject concurrent detached creation for the same canonical repository path.
 The reservation lasts until callback delivery; generic fetch is independent.
 Joining the returned thread also yields the creation receipt and a worker or

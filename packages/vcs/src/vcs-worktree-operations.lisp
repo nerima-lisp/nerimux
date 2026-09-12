@@ -90,7 +90,11 @@
   (behind nil :read-only t)
   (additions 0 :read-only t)
   (deletions 0 :read-only t)
-  (changed-files nil :read-only t))
+  (changed-files nil :read-only t)
+  ;; The (STATE . STASHES) pair the worker read beside the status, so it is
+  ;; accepted or discarded by the same generation check the rest of the capture
+  ;; passes through.
+  (stashes nil :read-only t))
 
 (defun %status-entry-conflict-p (entry)
   (eq (vcs-kit:vcs-status-entry-kind entry) :unmerged))
@@ -115,23 +119,22 @@
       string
       (concatenate 'string string "/")))
 
-(defun %worktree-path-candidate (repository-git-dir base-name suffix)
+(defun %worktree-path-candidate (directory base-name suffix)
   (concatenate 'string
-               repository-git-dir
-               ".worktrees/"
+               directory
                base-name
                (if suffix
                    (format nil "-~D" suffix)
                    "")))
 
-(defun %unique-worktree-path (repository-git-dir base-name)
-  "Return REPOSITORY-GIT-DIR/.worktrees/BASE-NAME, or that name with -2, -3,
-... appended until a path that does not already exist is found (R7.2)."
-  (let ((candidate (%worktree-path-candidate repository-git-dir base-name nil)))
+(defun %unique-worktree-path (directory base-name)
+  "Return DIRECTORY/BASE-NAME, or that name with -2, -3, ... appended until a
+path that does not already exist is found (R7.2)."
+  (let ((candidate (%worktree-path-candidate directory base-name nil)))
     (if (null (probe-file candidate))
         candidate
         (loop for suffix from 2
-              for numbered = (%worktree-path-candidate repository-git-dir
+              for numbered = (%worktree-path-candidate directory
                                                        base-name
                                                        suffix)
               when (null (probe-file numbered))
@@ -140,13 +143,13 @@
 (defun %resolve-worktree-path (repository start-point-short-sha path)
   "Resolve the filesystem path for a new worktree.
 
-PATH, when given, is used verbatim. Otherwise the path is fixed to
-<repo>.git/.worktrees/<created-time>-<start-point-short-sha> (R7.2), with
--2, -3, ... appended if that name is already taken."
+PATH, when given, is used verbatim. Otherwise the name is
+<created-time>-<start-point-short-sha> (R7.2) inside the directory
+%WORKTREE-PARENT-DIRECTORY picks, with -2, -3, ... appended if that name is
+already taken."
   (or (and path (%string-value path))
       (%unique-worktree-path
-       (%ensure-trailing-slash
-        (%string-value (nerimux/workspace-model:repository-local-path repository)))
+       (worktree-parent-directory repository)
        (format nil "~A-~A" (%timestamp-token) start-point-short-sha))))
 
 (defun %repository-backend (repository)
@@ -161,29 +164,125 @@ PATH, when given, is used verbatim. Otherwise the path is fixed to
          (%repository-checked-handle repository)
          arguments))
 
-(defun %default-branch-start-point (repository)
-  "Return the commit at REPOSITORY's default branch tip: the commit
-refs/remotes/origin/HEAD currently points to (R7.3), falling back to the
-local HEAD when origin/HEAD cannot be resolved.  A repository with no
-   remote, or one where `git remote set-head origin` was never run --
-both routine in real use, not just a contrived test fixture -- makes `git
-rev-parse origin/HEAD` fail outright (exit 128) rather than return
-something empty, so without this fallback every worktree create against
-such a repository failed with no recourse.  HEAD is resolvable for any
-repository with at least one commit, which is the only kind CREATE-WORKTREE
-is ever called against.
+(defun %bare-repository-layout-p (repository)
+  "True when REPOSITORY holds no checkout of its own.
+
+The ghq bare clone is named <repo>.git, which settles the question without
+running git at all; anything else is asked directly."
+  (let* ((path (string-right-trim
+                "/"
+                (%string-value
+                 (nerimux/workspace-model:repository-local-path repository))))
+         (length (length path)))
+    (or (and (> length 4) (string= ".git" path :start2 (- length 4)))
+        (handler-case (string= "true" (%rev-parse repository "--is-bare-repository"))
+          (error () nil)))))
+
+(defun %worktrees-directory-ignored-p (repository)
+  "True when git ignores REPOSITORY's .worktrees directory.
+
+The query names a path inside .worktrees rather than the directory itself: a
+`.worktrees/` ignore pattern only matches a directory that already exists, and
+the first worktree is created before it does."
+  (handler-case
+      (progn
+        (vcs-kit:git-check-ignore (%repository-checked-handle repository)
+                                  "-q" "--" ".worktrees/name")
+        t)
+    (error () nil)))
+
+(defvar *worktrees-exclude-written-repository-ids* (make-hash-table :test #'equal)
+  "Repository ids this server run has already appended the .worktrees/ rule to.")
+
+(defun %worktrees-exclude-rule-present-p (exclude)
+  "True when EXCLUDE already carries a line saying .worktrees/."
+  (with-open-file (stream exclude :direction :input :if-does-not-exist nil)
+    (when stream
+      (loop for line = (read-line stream nil nil)
+            while line
+            thereis (string= ".worktrees/"
+                             (string-trim '(#\Space #\Tab #\Return) line))))))
+
+(defun %ensure-worktrees-directory-ignored (repository)
+  "Make git ignore REPOSITORY's .worktrees directory, reporting whether it does.
+
+A worktree created under a checkout that does not ignore .worktrees leaves the
+repository untracked-dirty, so the rule is written to .git/info/exclude, which
+belongs to this clone alone and is not itself tracked. A repository whose git
+directory cannot be written keeps its worktrees outside instead.
+
+The write happens at most once per repository: a .gitignore negation can
+outrank info/exclude, leaving the re-check answering NIL however many times
+the rule is appended, and every create then added another identical line to a
+file nothing ever prunes."
+  (or (%worktrees-directory-ignored-p repository)
+      (handler-case
+          (let ((exclude (merge-pathnames
+                          "info/exclude"
+                          (%ensure-trailing-slash
+                           (%rev-parse repository "--path-format=absolute"
+                                       "--git-common-dir"))))
+                (id (nerimux/workspace-model:repository-id repository)))
+            (ensure-directories-exist exclude)
+            (unless (or (gethash id *worktrees-exclude-written-repository-ids*)
+                        (%worktrees-exclude-rule-present-p exclude))
+              (with-open-file (stream exclude :direction :output
+                                              :if-exists :append
+                                              :if-does-not-exist :create)
+                (write-line ".worktrees/" stream)))
+            (setf (gethash id *worktrees-exclude-written-repository-ids*) t)
+            (%worktrees-directory-ignored-p repository))
+        (error () nil))))
+
+(defun worktree-parent-directory (repository)
+  "Directory that receives REPOSITORY's new worktrees (R7.2).
+
+A bare repository has no working tree to disturb. A checkout keeps its
+worktrees in .worktrees once git ignores that directory, and beside itself
+when the ignore rule cannot be established."
+  (let ((root (%ensure-trailing-slash
+               (%string-value
+                (nerimux/workspace-model:repository-local-path repository)))))
+    (if (or (%bare-repository-layout-p repository)
+            (%ensure-worktrees-directory-ignored repository))
+        (concatenate 'string root ".worktrees/")
+        (concatenate 'string (string-right-trim "/" root) "-worktrees/"))))
+
+(defun %optional-rev-parse (repository revision)
+  "REVISION's commit, or NIL when REPOSITORY does not have that ref."
+  (handler-case
+      (let ((resolved (%rev-parse repository "--verify" "--quiet" revision)))
+        (and (stringp resolved) (plusp (length resolved)) resolved))
+    (error () nil)))
+
+(defun %default-branch-start-point (repository &key (remote-ref-p t))
+  "Return the commit a new worktree starts from: the tip of REPOSITORY's
+default branch (R7.3) as the remote has it, its local branch when there is no
+remote-tracking ref, and the local HEAD when neither resolves.  A repository
+with no remote, or one whose default branch is not main, is routine in real
+use, and reading a fixed origin/main refspec made the create flow unusable
+there.  HEAD is resolvable for any repository with at least one commit, which
+is the only kind CREATE-WORKTREE is ever called against.
+
+REMOTE-REF-P NIL skips refs/remotes/origin: a caller whose fetch just failed
+knows the tracking ref names whatever the last successful fetch left there,
+and starting a worktree from an unconfirmed tracking ref is the failure mode
+the fetch exists to prevent.
 
 This is only as current as the last fetch (R7.5): call FETCH-REPOSITORY or
 FETCH-REPOSITORY-ASYNC first if it needs to reflect the remote's latest
 state.  A HEAD fallback that ALSO fails (e.g. an empty repository with no
 commits at all) is left to signal normally -- CREATE-WORKTREE's caller
 already turns that into a \"worktree create failed: ...\" notification."
-  (or
-   (handler-case (let ((resolved (%rev-parse repository "origin/HEAD")))
-                   (and (stringp resolved) (plusp (length resolved)) resolved))
-     (error ()
-       nil))
-   (%rev-parse repository "HEAD")))
+  (let ((branch (%repository-default-branch repository)))
+    (or (and branch
+             remote-ref-p
+             (%optional-rev-parse repository
+                                  (format nil "refs/remotes/origin/~A^{commit}" branch)))
+        (and branch
+             (%optional-rev-parse repository
+                                  (format nil "refs/heads/~A^{commit}" branch)))
+        (%rev-parse repository "HEAD"))))
 
 (defun %short-sha (repository commit)
   (%rev-parse repository "--short" commit))
@@ -226,7 +325,7 @@ REPOSITORY's default branch tip (R7.3) when not given."
           (append (list "add")
                   (when force
                     (list "--force"))
-                  (list "-b" branch-name worktree-path resolved-start-point))))
+                  (list "-b" branch-name "--" worktree-path resolved-start-point))))
     (apply #'vcs-kit:vcs-worktree backend-repository arguments)
     (list-repository-worktrees repository)
     (refresh-repository-status repository)
@@ -345,7 +444,7 @@ false DRY-RUN once a user has explicitly confirmed the operation."
   (append (list "add")
           (when force
             (list "--force"))
-          (list "-b" branch path start-point)))
+          (list "-b" branch "--" path start-point)))
 
 (defun %create-worktree-command (repository branch path start-point force)
   (unless (and repository branch (plusp (length (%string-value branch))))

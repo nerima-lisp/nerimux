@@ -30,6 +30,9 @@
    #:detached-worktree-result-head
    #:detached-worktree-result-worktree
    #:detached-worktree-result-refresh-error
+   #:detached-worktree-result-fetch-error
+   #:refreshed-worktree-successor
+   #:worktree-parent-directory
    #:delete-worktree-async
    #:read-worktree-prune-snapshot-async
    #:validate-worktree-prune-snapshot
@@ -50,6 +53,9 @@
    #:refresh-worktree-file-diff-async
    #:read-worktree-log-async
    #:read-worktree-diff-async
+   #:read-worktree-branches-async
+   #:read-worktree-tags-async
+   #:worktree-upstream
    #:git-write-operation
    #:git-write-operation-async
    #:list-worktree-stashes))

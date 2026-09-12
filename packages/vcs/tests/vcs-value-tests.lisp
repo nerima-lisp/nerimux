@@ -14,11 +14,12 @@
               (expect (equal '("project") (nerimux/vcs::%specification-parts "/project/")))
               (expect (equal '("org" "project") (nerimux/vcs::%specification-parts "///org///project///")))
               (expect (null (nerimux/vcs::%specification-parts nil))))
-          (it "strips C0 control characters and DEL, turning Tab into a single space (F5)"
+          (it "strips C0 control characters and DEL, keeping Newline and Tab (F5)"
               (expect (string= "a[31mb" (nerimux/vcs::%strip-control-characters (format nil "a~C[31mb" (code-char 27)))))
-              (expect (string= "a b" (nerimux/vcs::%strip-control-characters (format nil "a~Cb" (code-char 9)))))
+              (expect (string= (format nil "a~Cb" (code-char 9)) (nerimux/vcs::%strip-control-characters (format nil "a~Cb" (code-char 9)))))
+              (expect (string= (format nil "one~Ctwo" #\Newline) (nerimux/vcs::%strip-control-characters (format nil "one~Ctwo" #\Newline))))
               (expect (string= "ab" (nerimux/vcs::%strip-control-characters (format nil "a~Cb" (code-char 127)))))
-              (expect (notany (lambda (character) (< (char-code character) 32)) (nerimux/vcs::%strip-control-characters (map 'string #'code-char (loop for code from 0 below 32 collect code)))))
+              (expect (string= (format nil "~C~C" (code-char 9) (code-char 10)) (nerimux/vcs::%strip-control-characters (map 'string #'code-char (loop for code from 0 below 32 collect code)))))
               (expect (string= "no controls" (nerimux/vcs::%strip-control-characters "no controls")))
               (expect (null (nerimux/vcs::%strip-control-characters nil))))
           (it "derives organization and repository names by specification shape"

@@ -33,3 +33,33 @@
       (expect (not (nerimux/workspace-model:repository-dirty-p repository)))
       (expect
        (not (nerimux/workspace-model:repository-conflict-p repository))))))
+
+(describe "vcs worktree stash reading"
+  (it "applies the stashes the update was read beside, and only those"
+    (let* ((repository
+             (nerimux/workspace-model:make-repository
+              :specification "workspace-owner/stashes"
+              :local-path "/tmp/nerimux-stash-reading/"))
+           (worktree
+             (nerimux/workspace-model:make-worktree
+              :repository repository
+              :path "/tmp/nerimux-stash-reading"
+              :branch "main")))
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
+      (nerimux/vcs::%apply-worktree-status
+       repository
+       (nerimux/vcs::%make-worktree-status-update
+        :path "/tmp/nerimux-stash-reading" :ahead 0 :behind 0
+        :stashes (cons :ready (list "stash@{0} on main"))))
+      (expect (eq :ready (nerimux/workspace-model:worktree-stashes-state worktree)))
+      (expect (equal (list "stash@{0} on main")
+                     (nerimux/workspace-model:worktree-stashes worktree)))
+      ;; An update whose pass took no reading leaves the last one in place
+      ;; instead of picking up a reading a discarded capture left behind.
+      (nerimux/vcs::%apply-worktree-status
+       repository
+       (nerimux/vcs::%make-worktree-status-update
+        :path "/tmp/nerimux-stash-reading" :ahead 0 :behind 0))
+      (expect (eq :ready (nerimux/workspace-model:worktree-stashes-state worktree)))
+      (expect (equal (list "stash@{0} on main")
+                     (nerimux/workspace-model:worktree-stashes worktree))))))
