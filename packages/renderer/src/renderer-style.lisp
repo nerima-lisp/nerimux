@@ -58,6 +58,12 @@
                       "Panel separators and inactive pane borders: Dracula current-line, as a
    foreground colour.")
 
+(%define-sgr-constant +sgr-tree-row-selected-background+
+                      "48;2;68;71;90"
+                      "The selected tree row's full-width highlight: Dracula current-line as a
+   background, passed as %EMIT-STYLED-ROW's ROW-BACKGROUND. The same colour
+   the tree's now-deleted list-widget theme once gave the :SELECTED style.")
+
 (%define-sgr-constant +sgr-header-chip+
                       "1;38;2;40;42;54;48;2;189;147;249"
                       "The `nerimux` header chip: dark (Dracula bg) text on Dracula purple.")

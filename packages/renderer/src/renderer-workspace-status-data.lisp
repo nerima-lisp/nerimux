@@ -80,6 +80,16 @@
        (and (worktree-head worktree) (plusp (length (worktree-head worktree)))))
     (list (list 0 (%workspace-status-head-label worktree) worktree :head))))
 
+(defun %workspace-status-loading-entries (worktree)
+  "One `loading…` row while WORKTREE's VCS status has not landed. Every file
+   section is empty until the first status pass writes a snapshot, and an
+   empty section is omitted, so without this row a worktree whose status is
+   still being read renders exactly like a clean one. The row carries
+   WORKTREE itself as its object, the way the Head row does, so a catalog
+   refresh landing while it is selected still resolves to a worktree."
+  (unless (worktree-status worktree)
+    (list (list 0 "loading…" worktree :loading))))
+
 (defun %workspace-status-file-diff-child-entries (worktree-id path
                                                               code
                                                               level
@@ -227,7 +237,9 @@
   "The magit-style status buffer's rows for WORKTREE, flattened into (LEVEL
    LABEL OBJECT KIND) tuples in this fixed section order, each section
    omitted entirely when it has nothing to show: Head, Unmerged, Untracked,
-   Unstaged, Staged, Stashes, Recent commits, Panes, Worktrees (contract §3)."
+   Unstaged, Staged, Stashes, Recent commits, Panes, Worktrees (contract §3).
+   A worktree whose status has not landed yet gets a `loading…` row under
+   Head instead of the sections it has no data for."
   (let* ((level (or visibility-level 2))
          (section-default-p
           (%workspace-status-section-default-expanded-p level))
@@ -267,6 +279,7 @@
          (worktree-children
           (%workspace-status-sibling-worktree-entries worktree 1)))
     (append (%workspace-status-head-entries worktree)
+            (%workspace-status-loading-entries worktree)
             (%workspace-status-section-entries :unmerged
                                                "Unmerged changes"
                                                (length

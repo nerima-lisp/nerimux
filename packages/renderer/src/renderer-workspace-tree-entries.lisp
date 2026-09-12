@@ -72,15 +72,24 @@
                                                         expanded-node-ids
                                                         file-diffs)
   "One LEVEL entry per WORKTREE-CHANGED-FILES entry (plain (CODE . PATH)
-   conses), labelled \"XY path\" the way `git status --short` shows it,
-   followed by that file's own inline-diff child rows (LEVEL+1)."
+   conses), labelled \"state path\" with CODE's porcelain XY pair turned into
+   a word (%CHANGED-FILE-STATE-TEXT), followed by that file's own inline-diff
+   child rows (LEVEL+1). The row's OBJECT still carries the raw CODE, which
+   the detail panel and the styling both read."
   (let ((worktree-id (worktree-id worktree)))
     (loop for (code . path) in (worktree-changed-files worktree)
           append (cons
                   (list level
-                        (format nil "~A ~A" code path)
+                        (format nil "~A ~A" (%changed-file-state-text code) path)
                         (list :file worktree-id path code)
-                        :file)
+                        :file
+                        (%workspace-tree-row-fold
+                         (list :file worktree-id path code)
+                         :file
+                         (and expanded-node-ids
+                              (gethash (list :file-diff worktree-id path)
+                                       expanded-node-ids)
+                              t)))
                   (%workspace-worktree-file-diff-entries worktree-id
                                                          path
                                                          code
@@ -135,14 +144,23 @@
             (%workspace-worktree-commit-child-entries worktree level))))
 
 (defun %workspace-worktree-needs-attention-p (worktree)
-  "T when WORKTREE itself belongs under the Attention section: WORKTREE-
-   ATTENTION-P (dirty/conflict/ahead/behind/missing -- the existing model
-   predicate), or any of its panes has exited. An exited pane is not part of
-   WORKTREE-ATTENTION-P's own definition (that predicate knows nothing about
-   panes), but leaving a dead shell buried under a collapsed repository row
-   so collapsed rows still show that state."
-  (or (worktree-attention-p worktree)
-      (some #'pane-process-exited-p (worktree-panes worktree))))
+  "T when WORKTREE itself belongs under the Attention section: at least one
+   of its NERIMUX/PANE:WORKTREE-ATTENTION-REASONS is :CONFLICT, :MISSING,
+   :WAITING or :PANE, or one of its panes has exited. Dirty and ahead/behind
+   alone no longer qualify: those are the routine, expected state of a
+   worktree-per-task workflow rather than something the user must act on --
+   for one user's 339 real worktrees, the old WORKTREE-ATTENTION-P-based rule
+   (which treats dirty/ahead/behind the same as conflict/missing) put 184 of
+   them under Attention, crowding the Repositories section off screen below
+   them. A worktree excluded here by this narrower rule still shows under
+   its own repository row, still carrying its `!' mark via
+   %WORKSPACE-TREE-NODE-MARK -- that mark reads WORKTREE-ATTENTION-P
+   (unchanged) and repository-level aggregation, neither of which this
+   function touches."
+  (and (or (intersection '(:conflict :missing :waiting :pane)
+                        (nerimux/pane:worktree-attention-reasons worktree))
+           (some #'pane-process-exited-p (worktree-panes worktree)))
+       t))
 
 (defun %workspace-classify-worktrees (organizations)
   "Three values, plus a fourth: a list of (ORGANIZATION REPOSITORY WORKTREE)
@@ -187,13 +205,6 @@
           (%repository-tree-label repository)
           (%worktree-tree-label worktree)))
 
-(defun %workspace-repository-row-label (organization repository)
-  "\"org/name\" row label for a repository under the Repositories section."
-  (format nil
-          "~A/~A"
-          (%organization-tree-label organization)
-          (%repository-tree-label repository)))
-
 (defun %workspace-repository-node-expanded-p (id expanded-node-ids)
   "T when the (:REPOSITORY ID) row under the Repositories section shows its
    worktrees. Repository rows default COLLAPSED, unlike other rows whose
@@ -224,12 +235,128 @@
                                                                 refreshing-ids
                                                                 stale-ids))
                       worktree
-                      :worktree)
+                      :worktree
+                      (%workspace-tree-row-fold
+                       worktree
+                       :worktree
+                       (%workspace-worktree-node-expanded-p worktree
+                                                            expanded-node-ids)))
                 (%workspace-worktree-detail-entries worktree
                                                     2
                                                     expanded-node-ids
                                                     :file-diffs
                                                     file-diffs))))
+
+(defun %repository-row-expandable-p (repository)
+  "T when REPOSITORY's row under the Repositories section has worktrees of
+   its own to unfold. Applies %WORKSPACE-CLASSIFY-WORKTREES' rule to one
+   repository: a worktree already listed under Attention or Active is not
+   repeated here, so a repository whose only worktree is shown above unfolds
+   onto nothing. The key panel's own Enter/Tab hint for a repository row no
+   longer conditions on this (it always reads \"expand\" now); this
+   predicate remains for server-side dispatch code deciding whether
+   Enter/Tab actually has a worktree list to toggle."
+  (and (some (lambda (worktree)
+               (not (or (%workspace-worktree-needs-attention-p worktree)
+                        (worktree-panes worktree))))
+             (repository-worktrees repository))
+       t))
+
+(defun %workspace-repository-row-entries (repository shown-worktrees
+                                          expanded-node-ids
+                                          filter-active-p
+                                          refreshing-ids
+                                          stale-ids
+                                          file-diffs)
+  "One level-2 (LEVEL LABEL OBJECT :REPOSITORY) entry for REPOSITORY under
+   an expanded organization row, labelled by %REPOSITORY-TREE-LABEL alone
+   (the enclosing organization row already carries the org/host context),
+   followed -- when the repository row itself is expanded
+   (%WORKSPACE-REPOSITORY-NODE-EXPANDED-P, or FILTER-ACTIVE-P bypasses the
+   default collapse) -- by one level-3 (LEVEL LABEL OBJECT :WORKTREE) entry
+   per worktree not already in SHOWN-WORKTREES (the Attention/Active set: a
+   worktree never appears twice), each followed by its own inline-expansion
+   child rows at level 4."
+  (let* ((expanded-p (or filter-active-p
+                         (%workspace-repository-node-expanded-p
+                          (repository-id repository)
+                          expanded-node-ids)))
+         (worktrees (remove-if (lambda (worktree)
+                                 (gethash worktree shown-worktrees))
+                               (repository-worktrees repository))))
+    (cons (list 2
+                (concatenate 'string
+                             (%repository-tree-label repository)
+                             (%workspace-node-refresh-tag :repository
+                                                          (repository-id
+                                                           repository)
+                                                          refreshing-ids
+                                                          stale-ids))
+                repository
+                :repository
+                (when worktrees
+                  (if expanded-p :expanded :collapsed)))
+          (when expanded-p
+            (loop for worktree in worktrees
+                  append (cons
+                          (list 3
+                                (concatenate 'string
+                                             (%worktree-tree-label worktree)
+                                             (%workspace-node-refresh-tag
+                                              :worktree
+                                              (worktree-id worktree)
+                                              refreshing-ids
+                                              stale-ids))
+                                worktree
+                                :worktree
+                                (%workspace-tree-row-fold
+                                 worktree
+                                 :worktree
+                                 (%workspace-worktree-node-expanded-p
+                                  worktree
+                                  expanded-node-ids)))
+                          (%workspace-worktree-detail-entries worktree
+                                                              4
+                                                              expanded-node-ids
+                                                              :file-diffs
+                                                              file-diffs)))))))
+
+(defun %workspace-organization-row-entries (organization repository-tuples
+                                            shown-worktrees
+                                            expanded-node-ids
+                                            filter-active-p
+                                            refreshing-ids
+                                            stale-ids
+                                            collapsed-node-ids
+                                            file-diffs)
+  "One level-1 (LEVEL LABEL ORGANIZATION :ORGANIZATION FOLD) entry for
+   ORGANIZATION, carrying \"label (N)\" for the N repositories in
+   REPOSITORY-TUPLES (all of ORGANIZATION's own repositories: this group is
+   never itself narrowed), followed -- unless the row is collapsed
+   (%WORKSPACE-NODE-EXPANDED-P, or FILTER-ACTIVE-P bypasses that) -- by one
+   %WORKSPACE-REPOSITORY-ROW-ENTRIES group per repository, at level 2."
+  (let ((expanded-p (or filter-active-p
+                       (%workspace-node-expanded-p :organization
+                                                   (organization-id
+                                                    organization)
+                                                   collapsed-node-ids))))
+    (cons (list 1
+                (format nil "~A (~D)"
+                        (%organization-tree-label organization)
+                        (length repository-tuples))
+                organization
+                :organization
+                (if expanded-p :expanded :collapsed))
+          (when expanded-p
+            (loop for (nil repository) in repository-tuples
+                  append (%workspace-repository-row-entries
+                          repository
+                          shown-worktrees
+                          expanded-node-ids
+                          filter-active-p
+                          refreshing-ids
+                          stale-ids
+                          file-diffs))))))
 
 (defun %workspace-repositories-section-entries (repository-tuples
                                                 shown-worktrees
@@ -237,56 +364,37 @@
                                                 filter-active-p
                                                 refreshing-ids
                                                 stale-ids
+                                                collapsed-node-ids
                                                 &key
                                                 file-diffs)
-  "One level-1 (LEVEL LABEL OBJECT :REPOSITORY) entry per (ORGANIZATION
-   REPOSITORY) in REPOSITORY-TUPLES, followed -- when that repository row is
-   expanded (%WORKSPACE-REPOSITORY-NODE-EXPANDED-P, or FILTER-ACTIVE-P
-   bypasses the default collapse) -- by one level-2 (LEVEL LABEL OBJECT
-   :WORKTREE) entry per
-   worktree not already in SHOWN-WORKTREES (the Attention/Active set: a
-   worktree never appears twice), each followed in turn by its own inline-
-   expansion child rows at level 3 when that worktree is expanded.
-   Repository rows themselves are never gated by section collapse -- only
-   the wrapping %WORKSPACE-SECTION-ENTRIES call folds the whole
-   Repositories section, including its repository rows, as one unit."
-  (loop for (organization repository) in repository-tuples
-        append (cons
-                (list 1
-                      (concatenate 'string
-                                   (%workspace-repository-row-label organization
-                                                                    repository)
-                                   (%workspace-node-refresh-tag :repository
-                                                                (repository-id
-                                                                 repository)
-                                                                refreshing-ids
-                                                                stale-ids))
-                      repository
-                      :repository)
-                (when
-                    (or filter-active-p
-                        (%workspace-repository-node-expanded-p
-                         (repository-id repository)
-                         expanded-node-ids))
-                  (loop for worktree in (repository-worktrees repository)
-                        unless (gethash worktree shown-worktrees)
-                          append (cons
-                                  (list 2
-                                        (concatenate 'string
-                                                     (%worktree-tree-label
-                                                      worktree)
-                                                     (%workspace-node-refresh-tag
-                                                      :worktree
-                                                      (worktree-id worktree)
-                                                      refreshing-ids
-                                                      stale-ids))
-                                        worktree
-                                        :worktree)
-                                  (%workspace-worktree-detail-entries worktree
-                                                                      3
-                                                                      expanded-node-ids
-                                                                      :file-diffs
-                                                                      file-diffs)))))))
+  "One %WORKSPACE-ORGANIZATION-ROW-ENTRIES group per organization named in
+   REPOSITORY-TUPLES (a list of (ORGANIZATION REPOSITORY) tuples already in
+   organization order and already grouped into contiguous per-organization
+   runs by %WORKSPACE-CLASSIFY-WORKTREES' own nested walk), each holding
+   that organization's repository rows (and, under an expanded repository,
+   its worktree rows and their own inline-expansion children). Repository
+   and worktree rows are never gated by section collapse on their own --
+   only the wrapping %WORKSPACE-SECTION-ENTRIES call folds the whole
+   Repositories section as one unit, and only an organization or repository
+   row's own fold state gates what is nested under it."
+  (loop with remaining = repository-tuples
+        while remaining
+        for organization = (first (first remaining))
+        for boundary = (or (position organization remaining
+                                     :key #'first :test-not #'eq)
+                           (length remaining))
+        for group = (subseq remaining 0 boundary)
+        append (%workspace-organization-row-entries
+                organization
+                group
+                shown-worktrees
+                expanded-node-ids
+                filter-active-p
+                refreshing-ids
+                stale-ids
+                collapsed-node-ids
+                file-diffs)
+        do (setf remaining (nthcdr boundary remaining))))
 
 (defun %workspace-section-entries (key label
                                        count
@@ -301,12 +409,56 @@
    FILTER-ACTIVE-P, so a filter can still surface a match inside a collapsed
    section. Returns NIL -- omitting the section entirely -- when COUNT is
    zero (empty sections are omitted from the tree)."
-  (when (plusp count)
-    (cons (list 0 (format nil "~A (~D)" label count) key :section)
-          (when
-              (or filter-active-p
-                  (%workspace-node-expanded-p :section key collapsed-node-ids))
-            row-entries))))
+  (let ((expanded-p
+         (or filter-active-p
+             (%workspace-node-expanded-p :section key collapsed-node-ids))))
+    (when (plusp count)
+      (cons (list 0
+                  (format nil "~A (~D)" label count)
+                  key
+                  :section
+                  (if expanded-p :expanded :collapsed))
+            (when expanded-p row-entries)))))
+
+(defun %workspace-job-segment-badge (segment)
+  "The user-facing badge for one \"KIND:STATE[ SPINNER][ DETAIL]\" job
+   segment: nothing for a finished job, \"...\" while it runs, and
+   \"failed: DETAIL\" for a failure. Work the tool itself declined -- retired
+   by a newer refresh, cancelled by the user, or excluded from a prune -- is
+   not a failure to report on a row; the message strip already said so, and
+   the row would otherwise call `prune SUCCEEDED' a failure."
+  (let* ((colon (position #\: segment))
+         (state-start (if colon (1+ colon) 0))
+         (space (position #\Space segment :start state-start))
+         (state (subseq segment state-start (or space (length segment))))
+         (detail (string-trim " " (if space (subseq segment (1+ space)) ""))))
+    (cond
+      ((string-equal state "succeeded") nil)
+      ((not (string-equal state "failed")) "...")
+      ((member detail '("retired" "cancelled" "excluded") :test #'string-equal) nil)
+      ((plusp (length detail))
+       (format nil "failed: ~A" (%display-clip detail 24)))
+      (t "failed"))))
+
+(defun %workspace-job-row-badge (label)
+  "The badge for one row's raw job LABEL -- the bracketed
+   \" [KIND:STATE ...]\" segments %WORKSPACE-JOB-LABELS (server-multi.lisp)
+   concatenates for every job touching that row -- or NIL when none of them
+   has anything to say. Settled jobs used to sit on every resting row as a
+   permanent \"[scan:succeeded]\" chip."
+  (when label
+    (let ((badges
+           (loop with start = 0
+                 for open = (position #\[ label :start start)
+                 while open
+                 for close = (or (position #\] label :start open) (length label))
+                 for badge = (%workspace-job-segment-badge
+                              (subseq label (1+ open) close))
+                 do (setf start (min (length label) (1+ close)))
+                 when badge
+                   collect badge)))
+      (when badges
+        (format nil " ~{~A~^ ~}" (remove-duplicates badges :test #'string=))))))
 
 (defun workspace-tree-objects (organizations collapsed-node-ids
                                              &key
@@ -315,7 +467,7 @@
                                              file-diffs)
   "The objects the tree currently shows, in display order."
   (mapcar #'third
-          (%workspace-flat-tree-entries organizations
+          (workspace-flat-tree-entries organizations
                                         collapsed-node-ids
                                         :filter
                                         filter
@@ -324,7 +476,7 @@
                                         :file-diffs
                                         file-diffs)))
 
-(defun %workspace-flat-tree-entries (organizations collapsed-node-ids
+(defun workspace-flat-tree-entries (organizations collapsed-node-ids
                                                    &key
                                                    job-labels
                                                    refreshing-ids
@@ -332,7 +484,9 @@
                                                    filter
                                                    expanded-node-ids
                                                    file-diffs)
-  "Flatten ORGANIZATIONS into (LEVEL LABEL OBJECT KIND) display tuples, in
+  "Flatten ORGANIZATIONS into (LEVEL LABEL OBJECT KIND FOLD) display tuples,
+   FOLD being :EXPANDED, :COLLAPSED or NIL for a row with nothing under it
+   (%WORKSPACE-TREE-ROW-FOLD), in
    three fixed sections -- Attention, Active, Repositories (see
    %WORKSPACE-CLASSIFY-WORKTREES) -- optionally narrowed to FILTER (see
    %WORKSPACE-FILTER-TREE-ENTRIES). EXPANDED-NODE-IDS (default-COLLAPSED
@@ -347,60 +501,77 @@
    EXPANDED-NODE-IDS -- a collapsed section or repository can still hold the
    row the user is searching for, and the contract a caller reads off this
    function's name is \"search the whole tree\", not \"search whatever
-   happens to be expanded\". %WORKSPACE-FILTER-TREE-ENTRIES alone decides
-   what is actually visible from the (now fully descended) raw entries."
+   happens to be expanded\". %WORKSPACE-FILTER-TREE-ENTRIES decides what is
+   actually visible, run once per section on that section's own raw entries
+   -- not a second time on the merged three-section list, since a section's
+   header/row nesting never crosses into another section and a repeat pass
+   over already-filtered rows could only repeat the same verdict -- and each
+   section header counts the rows that survive it, so \"Attention (2)\"
+   never sits above one row."
   (let ((filter-active-p (and filter (plusp (length (string-trim " " filter))))))
     (multiple-value-bind (attention active repositories shown)
         (%workspace-classify-worktrees organizations)
-      (let ((entries
-             (append
-              (%workspace-section-entries :attention
-                                          "Attention"
-                                          (length attention)
-                                          (%workspace-worktree-section-entries
-                                           attention
-                                           refreshing-ids
-                                           stale-ids
-                                           expanded-node-ids
-                                           :file-diffs
-                                           file-diffs)
-                                          collapsed-node-ids
-                                          filter-active-p)
-              (%workspace-section-entries :active
-                                          "Active"
-                                          (length active)
-                                          (%workspace-worktree-section-entries
-                                           active
-                                           refreshing-ids
-                                           stale-ids
-                                           expanded-node-ids
-                                           :file-diffs
-                                           file-diffs)
-                                          collapsed-node-ids
-                                          filter-active-p)
-              (%workspace-section-entries :repositories
-                                          "Repositories"
-                                          (length repositories)
-                                          (%workspace-repositories-section-entries
-                                           repositories
-                                           shown
-                                           expanded-node-ids
-                                           filter-active-p
-                                           refreshing-ids
-                                           stale-ids
-                                           :file-diffs
-                                           file-diffs)
-                                          collapsed-node-ids
-                                          filter-active-p))))
-        (when job-labels
-          (dolist (entry entries)
-            (let* ((object (third entry))
-                   (kind (fourth entry))
-                   (id (case kind
-                         (:section object)
-                         (:repository (repository-id object))
-                         (:worktree (worktree-id object))))
-                   (label (and id (gethash (list kind id) job-labels))))
-              (when label
-                (setf (second entry) (concatenate 'string (second entry) label))))))
-        (%workspace-filter-tree-entries entries filter)))))
+      (flet ((section (key label rows count)
+               (let ((rows (if filter-active-p
+                               (%workspace-filter-tree-entries rows filter)
+                               rows)))
+                 (%workspace-section-entries
+                  key
+                  label
+                  (if filter-active-p
+                      (count (if (eq key :repositories) :repository :worktree)
+                             rows :key #'fourth)
+                      count)
+                  rows
+                  collapsed-node-ids
+                  filter-active-p))))
+        (let ((entries
+               (append
+                (section :attention
+                         "Attention"
+                         (%workspace-worktree-section-entries
+                          attention
+                          refreshing-ids
+                          stale-ids
+                          expanded-node-ids
+                          :file-diffs
+                          file-diffs)
+                         (length attention))
+                (section :active
+                         "Active"
+                         (%workspace-worktree-section-entries
+                          active
+                          refreshing-ids
+                          stale-ids
+                          expanded-node-ids
+                          :file-diffs
+                          file-diffs)
+                         (length active))
+                (section :repositories
+                         "Repositories"
+                         (%workspace-repositories-section-entries
+                          repositories
+                          shown
+                          expanded-node-ids
+                          filter-active-p
+                          refreshing-ids
+                          stale-ids
+                          collapsed-node-ids
+                          :file-diffs
+                          file-diffs)
+                         (length repositories)))))
+          (when job-labels
+            (dolist (entry entries)
+              (let* ((object (third entry))
+                     (kind (fourth entry))
+                     (id (case kind
+                           (:section object)
+                           (:repository (repository-id object))
+                           (:worktree (worktree-id object))))
+                     (badge (and id
+                                 (%workspace-job-row-badge
+                                  (gethash (list kind id) job-labels)))))
+                (when badge
+                  (setf (second entry)
+                        (concatenate 'string (second entry) badge))))))
+          entries)))))

@@ -27,7 +27,9 @@
                                                   origin-x
                                                   origin-y
                                                   pane-width)
-  "Render the copy-mode position banner as a right-aligned overlay slice.
+  "Render the copy-mode position banner as a right-aligned overlay slice: the
+   banner sits on the pane's top row, where a left-aligned one covers the
+   start of the line a search just matched.
    Suppressed when the entry asked to hide it (copy-mode -H)."
   (when 
       (and (screen-copy-mode-p (pane-screen pane))
@@ -38,6 +40,8 @@
         (reset-attrs stream)
         (move-to stream origin-y origin-x)
         (write-string
-         (%compose-aligned-line overlay-text +sgr-default-status+ pane-width)
+         (%compose-aligned-line (format nil "#[align=right]~A" overlay-text)
+                                +sgr-default-status+
+                                pane-width)
          stream)
         (reset-attrs stream)))))

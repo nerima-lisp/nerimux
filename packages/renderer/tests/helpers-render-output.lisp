@@ -12,9 +12,9 @@
 
 (defun strip-sgr (string)
   "STRING with every CSI escape sequence removed: the visible text of a
-   styled renderer string.  Tests that pin exact visible shapes (\"[w1: 1
-   2*!3]\") compare against this, with separate :to-contain-sgr assertions
-   for the styling itself."
+   styled renderer string.  Tests that pin exact visible shapes (\"win 1 ·
+   pane 1 2* 3!\") compare against this, with separate :to-contain-sgr
+   assertions for the styling itself."
   (with-output-to-string (out)
     (let ((i 0)
           (len (length string)))

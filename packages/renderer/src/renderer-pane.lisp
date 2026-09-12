@@ -67,7 +67,8 @@
   end-col
   rect-p
   mark-row
-  mark-col)
+  mark-col
+  cursor-row)
 
 (defun %render-cell (stream cell row col sgr-reg rev-screen
                      def-fg def-bg selection-style-fg selection-style-bg
@@ -90,7 +91,8 @@
                                          base-fg base-bg)
           (let* ((fg (if mark-col-p mark-fg sel-fg))
                  (bg (if mark-col-p mark-bg sel-bg))
-                 (attrs (%pane-cell-attrs cell in-sel selection-style-colour mark-col-p rev-screen))
+                 (attrs (%pane-cell-attrs cell in-sel selection-style-colour mark-col-p rev-screen
+                                          (eql row (sel-bounds-cursor-row sel))))
                  (attrs2   (cell-attrs2 cell))
                  (ul-color (cell-ul-color cell)))
             (%emit-cell-sgr-if-changed stream sgr-reg fg bg attrs attrs2 ul-color)
@@ -181,10 +183,14 @@
 (defun %pane-cell-attrs (cell in-sel
                               selection-style-colour
                               mark-col-p
-                              rev-screen)
+                              rev-screen
+                              &optional cursor-row-p)
   (let ((attrs
          (logxor (cell-attrs cell)
                  (if (and in-sel (not selection-style-colour) (not mark-col-p))
+                     nerimux/terminal/types:+attr-reverse+
+                     0)
+                 (if (and cursor-row-p (not in-sel) (not mark-col-p))
                      nerimux/terminal/types:+attr-reverse+
                      0)
                  (or rev-screen 0))))
@@ -230,6 +236,15 @@
                            :mark-bg
                            +copy-mode-mark-bg+))
 
+(defun %copy-mode-bare-cursor (screen sel-active)
+  "SCREEN's copy cursor (ROW . COL) while copy mode is on and nothing is
+   selected yet, else NIL.  Without this the j/k cursor has no renderer at all
+   until Space starts a selection, so the keys read as unbound."
+  (let ((cursor (and (not sel-active)
+                     (screen-copy-mode-p screen)
+                     (screen-copy-cursor screen))))
+    (when (consp cursor) cursor)))
+
 (defun %render-pane-body (stream screen pane-height pane-width
                           origin-x origin-y
                           colours
@@ -243,12 +258,15 @@
     (multiple-value-bind (sel-active sel-start-row sel-end-row sel-start-col sel-end-col
                           sel-rect-p sel-mark-row sel-mark-col)
         (%compute-selection-bounds screen)
-      (let ((sgr-reg (make-sgr-register))
-            (sel     (make-selection-bounds :active sel-active
-                                            :start-row sel-start-row :end-row sel-end-row
-                                            :start-col sel-start-col :end-col sel-end-col
-                                            :rect-p sel-rect-p
-                                            :mark-row sel-mark-row :mark-col sel-mark-col)))
+      (let* ((cursor (%copy-mode-bare-cursor screen sel-active))
+             (sgr-reg (make-sgr-register))
+             (sel     (make-selection-bounds :active sel-active
+                                             :start-row sel-start-row :end-row sel-end-row
+                                             :start-col sel-start-col :end-col sel-end-col
+                                             :rect-p sel-rect-p
+                                             :mark-row (if sel-active sel-mark-row (car cursor))
+                                             :mark-col (if sel-active sel-mark-col (cdr cursor))
+                                             :cursor-row (car cursor))))
         (loop for row below pane-height do
           (when (plusp pane-width)
             (move-to stream (+ origin-y row) origin-x)
@@ -264,8 +282,12 @@
   (screen-clear-dirty screen))
 
 (defun render-pane (stream session pane &key (viewport 0))
-  "Draw the pane's screen into the real terminal at the pane's (x, y) offset."
+  "Draw the pane's screen into the real terminal at the pane's (x, y) offset.
+   Drawing the pane is what makes its output read: a pane the user is looking
+   at must not carry the unread mark its own shell prompt would otherwise set
+   on every keystroke, which is what kept every used worktree in Attention."
   (declare (ignore session))
+  (pane-clear-unread-output pane)
   (let* ((screen      (pane-screen  pane))
          (pane-width  (pane-width  pane))
          (pane-height (pane-height pane))

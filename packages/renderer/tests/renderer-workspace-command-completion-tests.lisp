@@ -65,6 +65,17 @@
         (dolist (name nerimux/renderer::+workspace-command-names+)
           (expect (not (search name line)))))))
 
+  (it "wraps the candidate list onto the free rows above a narrow prompt"
+    (let ((stream (make-string-output-stream)))
+      (nerimux/renderer::%render-workspace-command-line stream 30 120 "")
+      (let ((line (strip-sgr (get-output-stream-string stream))))
+        (dolist (name nerimux/renderer::+workspace-command-names+)
+          (expect (search name line))))))
+
+  (it "keeps the candidate list off the message row on a short terminal"
+    (expect (null (nerimux/renderer::%workspace-command-hint-rows 10)))
+    (expect (equal '(28 29) (nerimux/renderer::%workspace-command-hint-rows 30))))
+
   (it "renders no candidates once a space has been typed, even with room to spare"
     (let ((stream (make-string-output-stream)))
       (nerimux/renderer::%render-workspace-command-line

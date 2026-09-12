@@ -103,10 +103,9 @@
       (setf (screen-copy-mode-p    screen) t
             (screen-copy-selecting screen) nil
             (screen-copy-mark      screen) nil
-            (screen-copy-cursor    screen) nil)
+            (screen-copy-cursor    screen) (cons 0 3))
       (let ((baseline (render-pane-output sess pane)))
         (setf (screen-copy-selecting screen) t
-              (screen-copy-mark      screen) nil
-              (screen-copy-cursor    screen) (cons 0 3))
+              (screen-copy-mark      screen) nil)
         (let ((out (render-pane-output sess pane)))
           (expect (string= baseline out)))))))

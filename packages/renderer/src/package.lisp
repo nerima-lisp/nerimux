@@ -17,6 +17,7 @@
    #:render-workspace-overview-to-tui-string
    #:worktree-notification-label
    #:workspace-tree-objects
+   #:workspace-flat-tree-entries
    #:workspace-tree-view-rows
    #:confirm-view #:make-confirm-view #:confirm-view-p
    #:confirm-view-operation #:confirm-view-fields #:confirm-view-prompt-p
@@ -31,7 +32,7 @@
    #:transient-view-arguments #:transient-view-actions
    #:transient-view-height
    #:render-transient-panel
-   #:render-transient-full-screen-to-tui-string
+   #:render-transient-panel-to-tui-string
    #:read-view #:make-read-view #:read-view-p
    #:read-view-title #:read-view-content #:read-view-query
    #:read-view-scroll-by #:read-view-find

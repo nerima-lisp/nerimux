@@ -2,6 +2,7 @@
 
 (defun %build-status-fixture (&key (branch "feature/status")
                                    head
+                                   (status :landed)
                                    ahead
                                    behind
                                    unmerged
@@ -19,7 +20,10 @@
    :WORKTREES list, so WORKTREE-REPOSITORY is actually wired (Unit
    STATUS-VIEW reads it for the Worktrees section and the frame header;
    MAKE-REPOSITORY alone never sets a worktree's back-pointer). Returns
-   (VALUES WORKTREE REPOSITORY SIBLING-OR-NIL)."
+   (VALUES WORKTREE REPOSITORY SIBLING-OR-NIL). STATUS stands in for the
+   snapshot the status pass writes: non-NIL by default, since every section
+   assertion here is about a worktree whose status has already landed, and
+   NIL for the not-yet-read state that shows the `loading…` row instead."
   (let* ((worktree
           (nerimux/workspace-model:make-worktree :id
                                                  "wt-status"
@@ -29,6 +33,8 @@
                                                  branch
                                                  :head
                                                  head
+                                                 :status
+                                                 status
                                                  :ahead
                                                  (or ahead 0)
                                                  :behind
@@ -109,6 +115,13 @@
     (multiple-value-bind (worktree) (%build-status-fixture)
       (let ((entries (nerimux/renderer:workspace-status-entries worktree)))
         (expect (equal '(:head) (%status-entry-kinds entries))))))
+
+  (it "shows a loading row instead of a clean tree until the status lands"
+    (multiple-value-bind (worktree) (%build-status-fixture :status nil)
+      (let ((entries (nerimux/renderer:workspace-status-entries worktree)))
+        (expect (equal '(:head :loading) (%status-entry-kinds entries)))
+        (expect (search "loading" (second (second entries))))
+        (expect (eq worktree (third (second entries)))))))
 
   (it "drops Head entirely for a worktree with neither a branch nor a HEAD"
     (multiple-value-bind (worktree) (%build-status-fixture :branch nil)
@@ -216,12 +229,94 @@
         (expect (stringp output))
         (expect (search "STATUS" (strip-sgr output))))))
 
-  (it "falls back to a full-screen transient when it is taller than the key panel"
-    (multiple-value-bind (worktree) (%build-status-fixture)
-      (let ((transient
-              (nerimux/renderer:make-transient-view
-               :title "Push" :subtitle nil :arguments nil
-               :actions (list (list #\p "push")))))
-        (let ((output (nerimux/renderer:render-workspace-status-to-tui-string
-                       worktree 24 80 :transient transient)))
-          (expect (search "Push" (strip-sgr output))))))))
+  (it "hosts a transient in place, keeping the status buffer visible above it"
+    (multiple-value-bind (worktree) (%build-status-fixture
+                                     :unstaged '(("M" . "a.txt")))
+      (let* ((transient
+               (nerimux/renderer:make-transient-view
+                :title "Commit" :subtitle nil :arguments nil
+                :actions (list (list #\c "commit"))))
+             (rows (%frame-rows
+                    (nerimux/renderer:render-workspace-status-to-tui-string
+                     worktree 24 80 :transient transient)
+                    24 80)))
+        (expect (search "STATUS" (first rows)))
+        (expect (search "a.txt" (format nil "~{~A~}" (subseq rows 1 18))))
+        (expect (search " Commit " (nth 19 rows)))
+        (expect (search "commit" (nth 21 rows)))
+        (expect (search "q back" (nth 22 rows))))))
+
+  (it "names only status-view keys in the key panel, and ? on every row kind"
+    (multiple-value-bind (worktree) (%build-status-fixture
+                                     :unstaged '(("M" . "a.txt")))
+      (let* ((head (third (first (nerimux/renderer:workspace-status-entries
+                                  worktree))))
+             (rows (%frame-rows
+                    (nerimux/renderer:render-workspace-status-to-tui-string
+                     worktree 24 100 :selected-object head)
+                    24 100))
+             (hint-line (nth 22 rows))
+             (footer (nth 23 rows)))
+        (expect (search "s/S stage" hint-line))
+        (expect (search "c commit" hint-line))
+        (expect (search "? all menus" hint-line))
+        (expect (search "n/p move" footer))
+        (expect (search "? menu" footer))
+        (expect (search "C-q w repolist" footer))
+        (expect (search "C-q d detach" footer))
+        (expect (not (search "C-p picker" footer))))))
+
+  (it "shows the close-in-pane hint for a pane row selection"
+    (multiple-value-bind (worktree)
+        (%build-status-fixture
+         :panes (list (nerimux/pane:make-pane :id 1 :fd -1 :title "shell")))
+      (let* ((pane (third (find :pane (nerimux/renderer:workspace-status-entries worktree)
+                                :key #'fourth)))
+             (rows (%frame-rows
+                    (nerimux/renderer:render-workspace-status-to-tui-string
+                     worktree 24 100 :selected-object pane)
+                    24 100))
+             (hint-line (nth 22 rows)))
+        (expect pane)
+        (expect (search "Enter focus" hint-line))
+        (expect (search "C-q x close (in pane)" hint-line)))))
+
+  (it "hosts the picker over this buffer instead of swapping it for another view"
+    (multiple-value-bind (worktree) (%build-status-fixture
+                                     :unstaged '(("M" . "a.txt")))
+      (let ((rows (%frame-rows
+                   (nerimux/renderer:render-workspace-status-to-tui-string
+                    worktree 24 100
+                    :picker-open-p t
+                    :picker-items nil
+                    :picker-query "wt")
+                   24 100)))
+        (expect (search "STATUS" (first rows)))
+        (expect (search "a.txt" (format nil "~{~A~}" rows)))
+        (expect (search "Pick a worktree, repository or pane"
+                        (format nil "~{~A~}" rows)))
+        (expect (search "Esc close" (format nil "~{~A~}" rows))))))
+
+  (it "draws the command line, prefilled buffer included, in place of the key panel"
+    (multiple-value-bind (worktree) (%build-status-fixture
+                                     :unstaged '(("M" . "a.txt")))
+      (let* ((rows (%frame-rows
+                    (nerimux/renderer:render-workspace-status-to-tui-string
+                     worktree 24 100
+                     :mode :command
+                     :command-buffer "wt-lock")
+                    24 100))
+             (footer (nth 23 rows)))
+        (expect (search ":wt-lock" footer))
+        (expect (not (search "C-q d detach" footer))))))
+
+  (it "draws the filter input line when the tree filter has the keyboard"
+    (multiple-value-bind (worktree) (%build-status-fixture
+                                     :unstaged '(("M" . "a.txt")))
+      (let ((footer (nth 23 (%frame-rows
+                             (nerimux/renderer:render-workspace-status-to-tui-string
+                              worktree 24 100
+                              :mode :filter
+                              :tree-filter "beta")
+                             24 100))))
+        (expect (search "/beta" footer))))))

@@ -69,7 +69,11 @@
 (defun %render-copy-search-matches (buffer pane)
   "When PANE's screen is in copy mode with an active search term, overdraw each
    matching span in copy-mode-match-style, the span under the copy cursor in
-   copy-mode-current-match-style, over the already-rendered pane content."
+   copy-mode-current-match-style, over the already-rendered pane content.
+   The position banner is redrawn afterwards: this pass runs after render-pane
+   drew it, and a search jump lands its current match on the first visible row,
+   which is the row the banner sits on -- whoever draws last wins, and the
+   position the user is navigating by has to stay legible."
   (let ((screen (pane-screen pane)))
     (when (and screen (screen-copy-mode-p screen))
       (let ((term (screen-copy-search-term screen)))
@@ -84,15 +88,16 @@
                  (w (screen-width screen)))
             (when match-sgr
               (dotimes (row (screen-height screen))
-                (let ((row-str (%screen-row-display-string screen row)))
-                  (%render-row-search-matches buffer
-                                              row
-                                              row-str
-                                              term
-                                              w
-                                              cur-row
-                                              cur-col
-                                              match-sgr
-                                              current-sgr
-                                              ox
-                                              oy))))))))))
+                (%render-row-search-matches buffer
+                                            row
+                                            (%screen-row-display-string screen row)
+                                            term
+                                            w
+                                            cur-row
+                                            cur-col
+                                            match-sgr
+                                            current-sgr
+                                            ox
+                                            oy))
+              (%render-copy-mode-position-overlay buffer pane
+                                                  ox oy (pane-width pane)))))))))

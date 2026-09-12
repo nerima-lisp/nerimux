@@ -42,18 +42,10 @@
       (render-tree-borders buffer tree active-pane terminal-cols))))
 
 (defun %picker-item-display-text (item)
-  (let ((prefix
-         (case (nerimux/picker:picker-item-kind item)
-           (:organization "org ")
-           (:repository "repo")
-           (:worktree "  wt ")
-           (:pane "pane")
-           (otherwise "     "))))
-    (format nil
-            "~A ~:[ ~;!~] ~A"
-            prefix
-            (nerimux/picker:picker-item-attention-p item)
-            (nerimux/picker:picker-item-label item))))
+  "The row the picker paints for ITEM, which is the picker package's own
+   PICKER-ITEM-ROW-TEXT: regex mode matches against that text, so a second
+   copy of the format here is a row whose `^' and `$' bind somewhere else."
+  (nerimux/picker:picker-item-row-text item))
 
 (defun %write-picker-box-line (stream row col text inner-width &key selected attention)
   (move-to stream row col)
@@ -98,10 +90,7 @@
       (%write-picker-box-line stream
                               (1+ top)
                               left
-                              (format nil
-                                      "~:[literal~;regex~] query: ~A"
-                                      regex-p
-                                      query)
+                              (format nil "~A~:[~;   regex on~]" query regex-p)
                               inner-width)
       (loop for item-index from first-index below last-index
             for row from (+ top 2)
@@ -146,12 +135,16 @@
 
 (defun render-session-to-string (session terminal-rows terminal-cols
                                  &key focus-pane (viewport 0) (mode :normal)
+                                   (messages nil)
                                    (picker-items nil) (picker-query "")
                                    (picker-index 0) (picker-regex-p nil)
                                    (command-buffer ""))
   "Compose a full frame for SESSION as an escape-sequence string.
    FOCUS-PANE overrides the session's active pane when it belongs to the
-   active window.  VIEWPORT and MODE are accepted at this boundary for
+   active window.  MESSAGES is the attached client's notification log, most
+   recent first; the status bar prefers its newest entry over the key hints,
+   which is the pane view's only channel for one -- every byte typed into a
+   focused pane goes to the shell.  VIEWPORT and MODE are accepted at this
    per-client rendering; their interaction with overlays is implemented by
    the corresponding mode/viewport phases.  Does not touch *standard-output*;
    suitable for unit-testing without a TTY."
@@ -166,7 +159,10 @@
                (screen-copy-mode-p (pane-screen active-pane)))
       (%render-copy-search-matches buffer active-pane))
     (%render-overlay-layer buffer active-pane terminal-rows terminal-cols)
-    (render-status-bar buffer session terminal-rows terminal-cols :mode mode)
+    (render-status-bar buffer session terminal-rows terminal-cols
+                       :focus-pane active-pane
+                       :messages messages
+                       :mode mode)
     (when (eq mode :picker)
       (%render-client-picker buffer terminal-rows terminal-cols
                              (or picker-items '()) picker-query

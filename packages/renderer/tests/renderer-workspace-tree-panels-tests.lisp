@@ -9,13 +9,39 @@
       (expect (search "fold" plain))
       (expect (not (search "shell(main)" plain)))))
 
-  (it "shows the create and fetch hints for a repository selection"
+  (it "shows the expand and fetch hints for a repository selection"
     (let* ((repository (nerimux/workspace-model:make-repository :id "repo-panel" :specification "s"))
            (plain (strip-sgr
                    (nerimux/renderer::%workspace-key-panel-content
                     repository :normal #x11 nil))))
-      (expect (search "main:agent>terminal>assign" plain))
+      (expect (search "Enter/Tab" plain))
+      (expect (search "expand" plain))
+      (expect (not (search "main:agent>terminal>assign" plain)))
       (expect (not (search "fold" plain)))))
+
+  (it "always shows the expand hint for a repository regardless of whether it lists worktrees below"
+    (let ((listed
+            (nerimux/workspace-model:make-repository :id "repo-listed"
+                                                     :specification "s"))
+          (shown-above
+            (nerimux/workspace-model:make-repository :id "repo-shown-above"
+                                                     :specification "s")))
+      (nerimux/workspace-model:repository-add-worktree
+       listed
+       (nerimux/workspace-model:make-worktree :id "wt-quiet" :path "/wt"
+                                              :status :fetched))
+      (nerimux/workspace-model:repository-add-worktree
+       shown-above
+       (nerimux/workspace-model:make-worktree :id "wt-dirty" :path "/wt2"
+                                              :status :fetched :dirty-p t))
+      (expect (search "expand"
+                      (strip-sgr
+                       (nerimux/renderer::%workspace-key-panel-content
+                        listed :normal #x11 nil))))
+      (expect (search "expand"
+                      (strip-sgr
+                       (nerimux/renderer::%workspace-key-panel-content
+                        shown-above :normal #x11 nil))))))
 
   (it "shows the default worktree-row hints for a worktree selection"
     (let* ((worktree (nerimux/workspace-model:make-worktree :id "wt-panel" :path "/wt"))
@@ -55,6 +81,7 @@
                    (nerimux/renderer::%workspace-key-panel-content
                     pane :normal #x11 nil))))
       (expect (search "focus" plain))
+      (expect (search "C-q x close (in pane)" plain))
       (expect (not (search "delete" plain))))))
 
 (describe "renderer-suite/workspace-repository-state"
@@ -84,7 +111,9 @@
                            (lambda ()
                              (setf (nerimux/workspace-model:repository-worktrees
                                     repository) nil)))
-                     (list :ready "ready" nil))))
+                     ;; A resting repository reports its worktree count alone:
+                     ;; `state: ready' spent the field saying nothing.
+                     (list :ready "worktrees: 1" nil))))
                (dolist (state states)
                  (setf (nerimux/workspace-model:repository-missing-p repository) nil
                        (nerimux/workspace-model:repository-conflict-p
@@ -106,7 +135,9 @@
                           100
                           :selected-tree-object
                           repository))))
-                   (expect (search (second state) plain))))))))
+                   (expect (search (second state) plain))
+                   (when (eq (first state) :ready)
+                     (expect (not (search "state:" plain))))))))))
 
 (describe "renderer-suite/workspace-tree-projection-helpers"
           (it
@@ -174,12 +205,12 @@
               (string= "wt-id"
                        (nerimux/renderer::%worktree-tree-label worktree)))
              (expect
-              (string= "pane/7 shell" (nerimux/renderer::%pane-tree-label pane)))))
+              (string= "shell 7" (nerimux/renderer::%pane-tree-label pane)))))
           (it "marks a restored pane in its tree label"
               (let ((pane (nerimux/pane:make-pane :id 7 :fd -1)))
                 (setf (nerimux/pane:pane-notification pane) "restored")
                 (expect
-                 (string= "pane/7 shell restored"
+                 (string= "shell 7 restored"
                           (nerimux/renderer::%pane-tree-label pane)))))
           (it
            "prefers each available partial label before its identifier fallback"
@@ -223,7 +254,7 @@
               (string= "/work/repo"
                        (nerimux/renderer::%repository-tree-label path-only)))
              (expect
-              (string= "pane/7 make test"
+              (string= "make test 7"
                        (nerimux/renderer::%pane-tree-label command-only)))))
           (it "keeps only meaningful activity and info tokens"
               (let* ((worktree
@@ -269,7 +300,7 @@
                 (multiple-value-bind (plain styled)
                     (nerimux/renderer::%worktree-tree-info-suffix worktree 80)
                   (declare (ignore styled))
-                  (expect (search "-2" plain))))))
+                  (expect (search "↓2" plain))))))
 
 (describe "renderer-suite/workspace-tree-view-rows"
 
@@ -310,10 +341,10 @@
       (let ((expanded (make-hash-table :test #'equal)))
         (setf (gethash (list :worktree "wt-expand") expanded) t)
         (let* ((entries
-                 (nerimux/renderer::%workspace-flat-tree-entries
+                 (nerimux/renderer:workspace-flat-tree-entries
                   (list organization) nil :expanded-node-ids expanded))
                (kinds (%tree-entry-kinds entries)))
-          (expect (equal '(:section :worktree :pane :file :commit :section :repository)
+          (expect (equal '(:section :worktree :pane :file :commit :section :organization :repository)
                          kinds))
           (expect (eq pane (third (third entries))))
           (expect (equal (list :file "wt-expand" "src/foo.lisp" " M")
@@ -323,26 +354,26 @@
 
   (it "omits empty groups and stays collapsed by default"
     (multiple-value-bind (organization repository worktree)
-        (%build-section-fixture :attention-p t)
+        (%build-section-fixture :conflict-p t)
       (declare (ignore repository))
       (let ((collapsed-entries
-              (nerimux/renderer::%workspace-flat-tree-entries
+              (nerimux/renderer:workspace-flat-tree-entries
                (list organization) nil)))
-        (expect (equal '(:section :worktree :section :repository)
+        (expect (equal '(:section :worktree :section :organization :repository)
                        (%tree-entry-kinds collapsed-entries))))
       (let ((expanded (make-hash-table :test #'equal)))
         (setf (gethash (list :worktree (nerimux/workspace-model:worktree-id worktree))
                        expanded)
               t)
         (let ((entries
-                (nerimux/renderer::%workspace-flat-tree-entries
+                (nerimux/renderer:workspace-flat-tree-entries
                  (list organization) nil :expanded-node-ids expanded)))
-          (expect (equal '(:section :worktree :section :repository)
+          (expect (equal '(:section :worktree :section :organization :repository)
                          (%tree-entry-kinds entries)))))))
 
   (it "shows a placeholder row while commits-state is :pending or :failed, none while NIL"
     (multiple-value-bind (organization repository worktree)
-        (%build-section-fixture :attention-p t)
+        (%build-section-fixture :conflict-p t)
       (declare (ignore repository))
       (let ((expanded (make-hash-table :test #'equal)))
         (setf (gethash (list :worktree (nerimux/workspace-model:worktree-id worktree))
@@ -350,21 +381,21 @@
               t)
         (setf (nerimux/workspace-model:worktree-commits-state worktree) :pending)
         (let ((entries
-                (nerimux/renderer::%workspace-flat-tree-entries
+                (nerimux/renderer:workspace-flat-tree-entries
                  (list organization) nil :expanded-node-ids expanded)))
-          (expect (equal '(:section :worktree :commit :section :repository)
+          (expect (equal '(:section :worktree :commit :section :organization :repository)
                          (%tree-entry-kinds entries)))
           (expect (search "refreshing" (second (third entries)))))
         (setf (nerimux/workspace-model:worktree-commits-state worktree) :failed)
         (let ((entries
-                (nerimux/renderer::%workspace-flat-tree-entries
+                (nerimux/renderer:workspace-flat-tree-entries
                  (list organization) nil :expanded-node-ids expanded)))
           (expect (search "UNKNOWN" (second (third entries)))))
         (setf (nerimux/workspace-model:worktree-commits-state worktree) nil)
         (let ((entries
-                (nerimux/renderer::%workspace-flat-tree-entries
+                (nerimux/renderer:workspace-flat-tree-entries
                  (list organization) nil :expanded-node-ids expanded)))
-          (expect (equal '(:section :worktree :section :repository)
+          (expect (equal '(:section :worktree :section :organization :repository)
                          (%tree-entry-kinds entries)))))))
 
   (it "keeps a cons node's own list as its node key, EQUAL-stable across two flatten calls"
@@ -393,6 +424,7 @@
            (let* ((worktree
                     (nerimux/workspace-model:make-worktree
                      :id "wt-diff" :path "/repo/wt" :branch "diff" :dirty-p t
+                     :conflict-p t
                      :changed-files (list (cons code path))))
                   (repository
                     (nerimux/workspace-model:make-repository
@@ -416,7 +448,7 @@
           (setf (gethash (list wt-id "src/foo.lisp") file-diffs)
                 (list :ready 3 (list "@@ -1,2 +1,2 @@" "-old line" "+new line")))
           (let* ((entries
-                   (nerimux/renderer::%workspace-flat-tree-entries
+                   (nerimux/renderer:workspace-flat-tree-entries
                     (list organization) nil
                     :expanded-node-ids expanded :file-diffs file-diffs))
                  (diff-entries (remove-if-not (lambda (e) (eq (fourth e) :diff-line)) entries)))
@@ -441,7 +473,7 @@
           (setf (gethash (list wt-id "src/foo.lisp") file-diffs)
                 (list :ready 250 lines))
           (let* ((entries
-                   (nerimux/renderer::%workspace-flat-tree-entries
+                   (nerimux/renderer:workspace-flat-tree-entries
                     (list organization) nil
                     :expanded-node-ids expanded :file-diffs file-diffs))
                  (diff-entries (remove-if-not (lambda (e) (eq (fourth e) :diff-line)) entries)))
@@ -462,14 +494,14 @@
           (setf (gethash (list :file-diff wt-id "src/foo.lisp") expanded) t)
           (setf (gethash (list wt-id "src/foo.lisp") file-diffs) (list :pending 0 nil))
           (let ((entries
-                  (nerimux/renderer::%workspace-flat-tree-entries
+                  (nerimux/renderer:workspace-flat-tree-entries
                    (list organization) nil
                    :expanded-node-ids expanded :file-diffs file-diffs)))
             (expect (search "diff: refreshing"
                             (second (find :diff-line entries :key #'fourth)))))
           (setf (gethash (list wt-id "src/foo.lisp") file-diffs) (list :failed 0 nil))
           (let ((entries
-                  (nerimux/renderer::%workspace-flat-tree-entries
+                  (nerimux/renderer:workspace-flat-tree-entries
                    (list organization) nil
                    :expanded-node-ids expanded :file-diffs file-diffs)))
             (expect (search "diff: UNKNOWN"
@@ -484,7 +516,7 @@
           (setf (gethash (list :worktree wt-id) expanded) t)
           (setf (gethash (list :file-diff wt-id "new.txt") expanded) t)
           (let* ((entries
-                   (nerimux/renderer::%workspace-flat-tree-entries
+                   (nerimux/renderer:workspace-flat-tree-entries
                     (list organization) nil :expanded-node-ids expanded))
                  (diff-entries (remove-if-not (lambda (e) (eq (fourth e) :diff-line)) entries)))
             (expect (= 1 (length diff-entries)))
@@ -503,7 +535,7 @@
           (setf (gethash (list wt-id "src/foo.lisp") file-diffs)
                 (list :ready 1 (list "+a line")))
           (let ((entries
-                  (nerimux/renderer::%workspace-flat-tree-entries
+                  (nerimux/renderer:workspace-flat-tree-entries
                    (list organization) nil
                    :expanded-node-ids expanded :file-diffs file-diffs)))
             (expect (null (find :diff-line entries :key #'fourth)))))))
@@ -527,3 +559,71 @@
             (expect frame :to-contain-sgr nerimux/renderer::+sgr-ok+)
             (expect frame :to-contain-sgr nerimux/renderer::+sgr-alert+)
             (expect frame :to-contain-sgr nerimux/renderer::+sgr-accent+)))))))
+
+(describe "renderer-suite/workspace-detail-panel-rows"
+
+  (flet ((%detail (organization selected &rest arguments)
+           (strip-sgr
+            (apply #'nerimux/renderer:render-workspace-overview-to-string
+                   (list organization) 24 100
+                   :selected-tree-object selected
+                   arguments))))
+
+    (it "describes a highlighted section header instead of reporting no selection"
+      (multiple-value-bind (organization) (%build-section-fixture :attention-p t)
+        (let ((plain (%detail organization :attention)))
+          (expect (search "section:" plain))
+          (expect (search "conflict" plain))
+          (expect (not (search "(no selection)" plain))))))
+
+    (it "describes a changed-file row with its state and the diff key"
+      (multiple-value-bind (organization repository worktree)
+          (%build-section-fixture :attention-p t)
+        (declare (ignore repository))
+        (setf (nerimux/workspace-model:worktree-changed-files worktree)
+              (list (cons ".M" "src/a.txt")))
+        (let ((plain (%detail organization (list :file "wt-section" "src/a.txt" ".M"))))
+          (expect (search "file: src/a.txt" plain))
+          (expect (search "modified" plain))
+          (expect (search "Tab" plain))
+          (expect (not (search "(no selection)" plain))))))
+
+    (it "describes a commit row with its sha and subject"
+      (multiple-value-bind (organization) (%build-section-fixture :attention-p t)
+        (let ((plain (%detail organization
+                              (list :commit "wt-section" "abc1234" "fix a bug"))))
+          (expect (search "commit: abc1234" plain))
+          (expect (search "fix a bug" plain))
+          (expect (not (search "(no selection)" plain))))))
+
+    (it "describes a diff-line row with its file and the hunk it sits in"
+      (multiple-value-bind (organization) (%build-section-fixture :attention-p t)
+        (let ((file-diffs (make-hash-table :test #'equal)))
+          (setf (gethash (list "wt-section" "src/a.txt") file-diffs)
+                (list :ready 3 (list "@@ -1,2 +1,2 @@" "-old" "+new")))
+          (let ((plain (%detail organization
+                                (list :diff-line "wt-section" "src/a.txt" 2)
+                                :file-diffs file-diffs)))
+            (expect (search "diff: src/a.txt" plain))
+            (expect (search "@@ -1,2 +1,2 @@" plain))
+            (expect (not (search "(no selection)" plain)))))))
+
+    (it "shows a pane's cwd and its output without the control sequences"
+      (multiple-value-bind (organization repository worktree)
+          (%build-section-fixture :pane-p t)
+        (declare (ignore repository))
+        (let ((pane (first (nerimux/workspace-model:worktree-panes worktree))))
+          (setf (nerimux/pane:pane-start-path pane) "/repo/wt")
+          (nerimux/pane:pane-mark-output
+           pane
+           (map 'vector #'char-code
+                (concatenate 'string
+                             (string (code-char 27)) "[?2004h"
+                             "sh-5.3$ ls"
+                             (string (code-char 27)) "[0m")))
+          (let ((plain (%detail organization pane)))
+            (expect (search "pane: shell 1" plain))
+            (expect (search "cwd: /repo/wt" plain))
+            (expect (search "sh-5.3$ ls" plain))
+            (expect (not (search "2004h" plain)))
+            (expect (not (search "[0m" plain)))))))))

@@ -117,10 +117,7 @@
           (declare (ignore resized-frame))
           (expect (null (nerimux/renderer:ansi-row-delta snapshot resized-snapshot)))))))
 
-  (it "constructs the cl-tui-kit themes and frame area"
-    (expect (typep
-             (nerimux/renderer::%make-workspace-tree-theme)
-             'cl-tui-kit/core:theme))
+  (it "constructs the cl-tui-kit picker theme and frame area"
     (expect (typep
              (nerimux/renderer::%make-picker-panel-theme)
              'cl-tui-kit/core:theme))
@@ -293,6 +290,23 @@
       (expect (search "OPERATION FAILED" failure-text))
       (expect (search "press any key to continue" failure-text))))
 
+  (it "anchors the confirm panel at the bottom, over the view it asks about"
+    (let* ((view (nerimux/renderer::make-confirm-view
+                  :operation "WORKTREE DELETE"
+                  :fields '(("worktree" . "feature/ui"))
+                  :prompt-p t))
+           (surface (nerimux/renderer::%surface-from-ansi-frame
+                     (nerimux/renderer::render-confirm-view-to-tui-string
+                      view 10 40 "tree row")
+                     10
+                     40))
+           (rows (uiop:split-string (cl-tui-kit/core:surface-string surface)
+                                    :separator (list #\Newline))))
+      (expect (search "tree row" (first rows)))
+      (expect (search " WORKTREE DELETE " (nth 5 rows)))
+      (expect (search "worktree: feature/ui" (nth 6 rows)))
+      (expect (search "y execute   n/q/Esc cancel" (nth 8 rows)))))
+
   (it "maps ANSI cursor movement into a headless surface"
     (let* ((escape (string (code-char 27)))
            (surface
@@ -332,7 +346,46 @@
       (expect (search "hello" output))
       (expect (search (string (code-char 27)) output))))
 
-  (it "renders the workspace hierarchy through the tree widget"
+  (it "renders a byte-identical frame and snapshot through the no-widget fast path and the cl-tui-kit surface path"
+    (let* ((escape (string (code-char 27)))
+           (cols 40)
+           (rows 10)
+           (viewport 1)
+           (styled-run
+             (concatenate 'string
+                          escape "[1;38;2;10;20;30;48;2;40;50;60m" "AB"
+                          escape "[0m" "CD"))
+           (longer-than-cols-row
+             (with-output-to-string (s) (dotimes (i 21) (write-string "あ" s))))
+           (frame
+             (concatenate 'string
+                          "off" (string #\Newline)
+                          styled-run (string #\Newline)
+                          longer-than-cols-row (string #\Newline)
+                          "hi"))
+           (no-op-widget-renderer (lambda (surface) (declare (ignore surface)))))
+      (multiple-value-bind (fast-frame fast-snapshot)
+          (nerimux/renderer::%render-ansi-frame-with-tui-kit
+           frame rows cols :viewport viewport)
+        (multiple-value-bind (surface-frame surface-snapshot)
+            (nerimux/renderer::%render-ansi-frame-with-tui-kit
+             frame rows cols :viewport viewport
+             :widget-renderer no-op-widget-renderer)
+          (expect (equal fast-frame surface-frame))
+          (expect (equalp (nerimux/renderer::ansi-row-snapshot-rows fast-snapshot)
+                          (nerimux/renderer::ansi-row-snapshot-rows surface-snapshot)))
+          (expect (= (nerimux/renderer::ansi-row-snapshot-width fast-snapshot)
+                     (nerimux/renderer::ansi-row-snapshot-width surface-snapshot)))
+          (expect (string= (nerimux/renderer::ansi-row-snapshot-footer fast-snapshot)
+                           (nerimux/renderer::ansi-row-snapshot-footer surface-snapshot)))
+          (expect fast-frame :to-contain-sgr
+                  (%expected-sgr-params
+                   (cl-tui-kit/core:make-style
+                    :bold t
+                    :foreground (cl-tui-kit/core:rgb-color 10 20 30)
+                    :background (cl-tui-kit/core:rgb-color 40 50 60))))))))
+
+  (it "renders the workspace hierarchy through the client tui-string entry point"
     (let* ((worktree
              (nerimux/workspace-model:make-worktree
               :id "wt-tree"
@@ -364,13 +417,49 @@
                :expanded-node-ids expanded-node-ids)))
         (expect (search "org" output))
         (expect (search "repo" output))
-        (expect (search "feature/tree" output)))
-      (let ((surface (nerimux/renderer::%surface-from-ansi-frame "" 12 100)))
-        (nerimux/renderer::%render-workspace-tree-widget
-         surface (list organization) 12 100 worktree 0
-         :collapsed-node-ids nil
-         :expanded-node-ids expanded-node-ids)
-        (expect (search "feature/tree" (cl-tui-kit/core:surface-string surface))))))
+        (expect (search "feature/tree" output)))))
+
+  (it "carries the selected tree row's background highlight, and only the selected row's, through the client tui-string entry point"
+    (let* ((selected-worktree
+             (nerimux/workspace-model:make-worktree
+              :id "wt-selected" :path "/repo/selected" :branch "feature/selected"))
+           (other-worktree
+             (nerimux/workspace-model:make-worktree
+              :id "wt-other" :path "/repo/other" :branch "feature/other"))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :id "repo-highlight" :specification "github.com/team/highlight"
+              :local-path "/repo"
+              :worktrees (list selected-worktree other-worktree)))
+           (organization
+             (nerimux/workspace-model:make-organization
+              :id "github.com/team" :host "github.com" :name "team"
+              :repositories (list repository)))
+           (expanded-node-ids
+             (let ((table (make-hash-table :test #'equal)))
+               (setf (gethash (list :repository "repo-highlight") table) t)
+               table))
+           (selected-output
+             (nerimux/renderer:render-workspace-overview-to-tui-string
+              (list organization) 24 100
+              :selected-tree-object selected-worktree
+              :expanded-node-ids expanded-node-ids))
+           (no-selection-output
+             (nerimux/renderer:render-workspace-overview-to-tui-string
+              (list organization) 24 100
+              :expanded-node-ids expanded-node-ids))
+           ;; The client tui-string entry point round-trips every row through
+           ;; %ANSI-FRAME-GRID and CL-TUI-KIT/ANSI:ANSI-ENCODE-STYLE, so the
+           ;; raw ESC[48;2;68;71;90m %EMIT-STYLED-ROW writes does not survive
+           ;; byte-for-byte -- match the re-encoded background-only style
+           ;; instead, the way every other SGR-round-trip test here does.
+           (expected
+             (%expected-sgr-params
+              (cl-tui-kit/core:make-style
+               :background (cl-tui-kit/core:rgb-color 68 71 90)))))
+      (expect selected-output :to-contain-sgr expected)
+      (expect (not (search (format nil "~C[~Am" (code-char 27) expected)
+                           no-selection-output)))))
 
   (it "renders the picker through input, list, form, and modal widgets"
     (let* ((worktree
@@ -401,7 +490,7 @@
       (nerimux/renderer::%render-picker-widget
        surface 16 80 items "feature" 0 nil)
       (let ((output (cl-tui-kit/core:surface-string surface)))
-        (expect (search "PICKER (literal)" output))
+        (expect (search "Pick a worktree, repository or pane" output))
         (expect (search "feature/picker-widget" output)))
       (let ((non-string-query-surface
               (nerimux/renderer::%surface-from-ansi-frame "" 16 80)))
@@ -418,8 +507,25 @@
              80
              :mode :picker
              :picker-query "missing")))
-      (expect (search "PICKER (literal)" output))
-      (expect (search "no matches" output))))
+      (expect (search "Pick a worktree, repository or pane" output))
+      (expect (search "0 results" output))
+      (expect (search "C-r regex" output))))
+
+  (it "names the regex flag beside the query, and says when the pattern did not compile"
+    (let ((off (nerimux/renderer:render-session-to-tui-string
+                (nerimux/session:make-session :id 23 :name "picker")
+                16 80 :mode :picker :picker-query "wt"))
+          (on (nerimux/renderer:render-session-to-tui-string
+               (nerimux/session:make-session :id 23 :name "picker")
+               16 80 :mode :picker :picker-query "wt" :picker-regex-p t))
+          (broken (nerimux/renderer:render-session-to-tui-string
+                   (nerimux/session:make-session :id 23 :name "picker")
+                   16 80 :mode :picker :picker-query "wt("
+                   :picker-regex-p t :picker-status :unsupported)))
+      (expect (not (search "regex on" off)))
+      (expect (search "regex on" on))
+      (expect (search "regex: unsupported pattern, matching literally" broken))
+      (expect (not (search "regex on" broken)))))
 
   (it "row-delta positions every full-frame row absolutely without raw-mode newlines"
     (let* ((surface (cl-tui-kit/core:make-surface 10 3))
@@ -429,7 +535,7 @@
             do (expect (search (format nil "~C[~D;1H" #\Escape row) output)))
       (expect (search (format nil "~C[3;10H" #\Escape) output))))
 
-  (it "renders the bare repository overview with pane attention and detail"
+  (it "renders the bare repository overview, leaving an unread-only pane's worktree unmarked"
     (let* ((pane (nerimux/pane:make-pane :id 7 :title "editor"))
            (window (nerimux/window:make-window :id 1 :name "w" :panes (list pane)))
            (worktree
@@ -464,9 +570,46 @@
                 :focus-pane pane))))
       (expect (search " nerimux " output))
       (expect (search "github.com/team" output))
-      (expect (search "! github.com/team/repo · feature/ui" (strip-sgr output)))
-      (expect (search "pane: pane/7 editor" (strip-sgr output)))
+      (expect (search "▸ github.com/team/repo · feature/ui" (strip-sgr output)))
+      (expect
+       (null (search "! ▸ github.com/team/repo · feature/ui" (strip-sgr output))))
+      (expect (search "pane: editor 7" (strip-sgr output)))
       (expect (search "hello-pane" (strip-sgr output)))))
+
+  (it "shows a pane's literal bracketed text in the detail panel unmangled"
+    (let* ((pane (nerimux/pane:make-pane :id 7 :title "editor"))
+           (window (nerimux/window:make-window :id 1 :name "w" :panes (list pane)))
+           (worktree
+             (nerimux/workspace-model:make-worktree
+              :id "wt"
+              :path "/repo/work"
+              :branch "feature/ui"
+              :panes (list pane)))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :id "repo"
+              :specification "github.com/team/repo"
+              :local-path "/repo"
+              :worktrees (list worktree)))
+           (organization
+             (nerimux/workspace-model:make-organization
+              :id "github.com/team"
+              :host "github.com"
+              :name "team"
+              :repositories (list repository)))
+           (output
+             (progn
+               (setf (nerimux/pane:pane-window pane) window)
+               (nerimux/pane:worktree-add-pane worktree pane)
+               (nerimux/pane:pane-mark-output
+                pane (map 'vector #'char-code "file.[1].txt"))
+               (nerimux/renderer:render-workspace-overview-to-string
+                (list organization)
+                12
+                100
+                :selected-tree-object pane
+                :focus-pane pane))))
+      (expect (search "file.[1].txt" (strip-sgr output)))))
 
 
   (it "carries a red foreground SGR through the full ANSI backend round trip"
