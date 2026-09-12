@@ -1,5 +1,7 @@
 # Workspace UI/UX 設計メモ（未統合）
 
+*本書が現行として記述する repolist の `n` / `p` / `C` / `P` キー割り当ては 2026-09-12 に廃止された。現行のキーは `docs/src/getting-started.md` を参照。*
+
 > **【キーバインドと画面構成は supersede 済み】** 本書のフッター図・キー表・モード表
 > （`j/k` / `o` overview / `d` detail / `i` input / `C-q F` / `C-q C-f` ほか）は
 > magit 準拠への全面置換で無効になった。`overview` と `detail` の 2 画面は
