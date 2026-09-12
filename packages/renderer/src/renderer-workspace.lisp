@@ -1,12 +1,90 @@
 (in-package #:nerimux/renderer)
 
+(defun %repository-open-worktree-count (repository)
+  "How many of REPOSITORY's worktrees a user can open. A MISSING worktree
+   still counts -- it keeps its branch and keeps its row, so dropping it
+   here made the header disagree with the tree below it."
+  (length (repository-worktrees repository)))
+
+(defun %workspace-detail-field (key value)
+  (format nil "~A ~A" (%sgr-wrap key +sgr-muted+) value))
+
+(defun %workspace-section-detail-lines (key)
+  "The two detail-panel lines for a section header row, which used to report
+   \"(no selection)\" while plainly highlighted."
+  (list
+   (%workspace-detail-field
+    "section:"
+    (case key
+      (:attention "worktrees with a conflict, a missing checkout, a waiting agent or an exited pane")
+      (:active "worktrees with a pane open")
+      (t "every repository in the workspace")))
+   (%sgr-wrap "Enter or Tab folds this section" +sgr-muted-italic+)))
+
+(defun %workspace-diff-row-detail-lines (object file-diffs)
+  "The two detail-panel lines for a diff row: its file, and the hunk it sits
+   in (the nearest @@ header above it) or the line itself."
+  (let* ((path (third object))
+         (index (fourth object))
+         (lines (and file-diffs
+                     (third (gethash (list (second object) path) file-diffs))))
+         (hunk
+          (when (integerp index)
+            (loop for position from (min index (1- (length lines))) downto 0
+                  for line = (nth position lines)
+                  when (and (>= (length line) 2) (string= line "@@" :end1 2))
+                    return line
+                  finally (return (nth index lines))))))
+    (list (%workspace-detail-field "diff:" path)
+          (%sgr-wrap (or hunk "") +sgr-muted+))))
+
+(defun %workspace-row-detail-lines (object file-diffs)
+  "The two detail-panel lines for a cons-keyed inline-expansion row -- a
+   changed file, a commit, or a diff line."
+  (case (first object)
+    (:file
+     (list (%workspace-detail-field "file:" (third object))
+           (format nil "~A  ~A"
+                   (%changed-file-state-text (fourth object))
+                   (%sgr-wrap "Tab shows its diff" +sgr-muted-italic+))))
+    (:commit
+     (let ((hash (third object))
+           (subject (fourth object)))
+       (if (stringp hash)
+           (list (%workspace-detail-field "commit:" hash)
+                 (%sgr-wrap (or subject "") +sgr-muted+))
+           (list (%workspace-detail-field "commit:" "-")
+                 (%sgr-wrap "history is still loading" +sgr-muted-italic+)))))
+    (:diff-more
+     (list (%workspace-detail-field "diff:" (third object))
+           (%sgr-wrap "the rest of this diff is not loaded" +sgr-muted-italic+)))
+    (t (%workspace-diff-row-detail-lines object file-diffs))))
+
+(defun %workspace-pane-detail-lines (pane)
+  "The two detail-panel lines for a pane row: what it runs and where, then
+   its own last visible output."
+  (list
+   (format nil "~A  ~A~@[  ~A~]"
+           (%workspace-detail-field "pane:" (%pane-tree-label pane))
+           (%workspace-detail-field
+            "cwd:"
+            (if (plusp (length (pane-start-path pane)))
+                (pane-start-path pane)
+                "-"))
+           (and (pane-process-exited-p pane)
+                (%sgr-wrap "exited" +sgr-alert+)))
+   (%sgr-wrap
+    (let ((output (string-trim " " (pane-last-output pane))))
+      (if (plusp (length output)) output "(no output)"))
+    +sgr-muted+)))
+
 (defun render-workspace-overview-to-string
     (organizations terminal-rows terminal-cols &key focus-pane
                                             selected-tree-object
                                             selected-worktree
                                             (tree-scroll 0)
                                             (messages nil)
-                                            (mode :normal)
+                                            (mode :repolist)
                                             (prefix-code #x11)
                                             (render-tree-p t)
                                             collapsed-node-ids
@@ -89,13 +167,10 @@
                (loop for organization in organizations
                      sum (length (organization-repositories organization))))
              (worktree-count
-               (if render-tree-p
-                   (loop for organization in organizations
-                         sum (loop for repository in
-                                   (organization-repositories organization)
-                                   sum (length (repository-worktrees repository))))
-                   (loop for organization in organizations
-                         sum (organization-active-worktree-count organization)))))
+               (loop for organization in organizations
+                     sum (loop for repository in
+                               (organization-repositories organization)
+                               sum (%repository-open-worktree-count repository)))))
         (labels
             ((cell (row col width value)
                (when (plusp width)
@@ -107,7 +182,7 @@
                      (write-string (make-string pad :initial-element #\Space)
                                    stream)))))
              (field (key value)
-               (format nil "~A ~A" (%sgr-wrap key +sgr-muted+) value))
+               (%workspace-detail-field key value))
              (state-field (key state)
                (format nil "~A ~A"
                        (%sgr-wrap key +sgr-muted+)
@@ -123,10 +198,11 @@
              (detail-row-styled-label (label object kind)
                (case kind
                  (:file
-                  (let ((code (fourth object)) (path (third object)))
+                  (let ((state (%changed-file-state-text (fourth object)))
+                        (path (third object)))
                     (format nil "~A ~A"
-                            (%sgr-wrap code (if (string= code "UU")
-                                                +sgr-alert+ +sgr-warn+))
+                            (%sgr-wrap state (if (string= state "conflict")
+                                                 +sgr-alert+ +sgr-warn+))
                             path)))
                  (:commit
                   (let ((hash (third object)) (subject (fourth object)))
@@ -159,22 +235,26 @@
                           (t (%sgr-wrap label +sgr-muted+))))))))
                  (t label)))
              (tree-row-text (entry)
-               (destructuring-bind (level label object kind) entry
+               (destructuring-bind (level label object kind &optional fold) entry
                  (let* ((selected
                           (or (eq object selected-object)
                               (and (consp object) (consp selected-object)
                                    (equal object selected-object))))
-                        (attention (%workspace-tree-node-attention-p object kind))
+                        (mark (%workspace-tree-node-mark object kind))
+                        (fold-glyph (%workspace-tree-fold-glyph fold))
                         (indent (make-string (* 2 level) :initial-element #\Space))
                         (plain-prefix
-                          (format nil "~A~:[ ~;>~]~:[ ~;!~] "
-                                  indent selected attention))
+                          (format nil "~A~:[ ~;>~]~A ~A "
+                                  indent selected mark fold-glyph))
                         (base-plain (format nil "~A~A" plain-prefix label))
                         (styled-prefix
-                          (format nil "~A~A~A "
+                          (format nil "~A~A~A ~A "
                                   indent
                                   (if selected (%sgr-wrap ">" +sgr-accent-bold+) " ")
-                                  (if attention (%sgr-wrap "!" +sgr-alert+) " ")))
+                                  (if (string= mark " ")
+                                      mark
+                                      (%sgr-wrap mark +sgr-alert+))
+                                  fold-glyph))
                         (base-styled
                           (format nil "~A~A" styled-prefix
                                   (cond
@@ -182,15 +262,26 @@
                                     ((member kind '(:file :commit :pane :diff-line :diff-more))
                                      (detail-row-styled-label label object kind))
                                     (t label)))))
-                   (if (eq kind :worktree)
+                   (values
+                    (case kind
+                      (:worktree
                        (multiple-value-bind (plain styled)
                            (%worktree-tree-info-suffix
                             object (max 0 (- cols (%display-width base-plain) 2)))
                          (declare (ignore plain))
                          (if (plusp (length styled))
                              (format nil "~A  ~A" base-styled styled)
-                             base-styled))
-                       base-styled))))
+                             base-styled)))
+                      (:repository
+                       (multiple-value-bind (plain styled)
+                           (%repository-tree-info-suffix
+                            object (max 0 (- cols (%display-width base-plain) 2)))
+                         (declare (ignore plain))
+                         (if (plusp (length styled))
+                             (format nil "~A  ~A" base-styled styled)
+                             base-styled)))
+                      (t base-styled))
+                    selected))))
              (detail-lines ()
                (cond
                  (selected-worktree
@@ -199,27 +290,34 @@
                    (format nil "~A  ~A"
                            (field "head:" (or (worktree-head selected-worktree) "-"))
                            (%workspace-state-text selected-worktree))))
-                 (selected-pane
-                  (list
-                   (field "pane:" (%pane-tree-label selected-pane))
-                   (%sgr-wrap
-                    (let ((output (pane-last-output selected-pane)))
-                      (if (plusp (length output)) output "(no output)"))
-                    +sgr-muted+)))
+                 (selected-pane (%workspace-pane-detail-lines selected-pane))
                  (selected-repository
-                  (list
-                   (field "repository:" (%repository-tree-label selected-repository))
-                   (format nil "~A  ~A"
-                           (state-field "state:" (repository-state selected-repository))
-                           (field "worktrees:"
-                                  (princ-to-string
-                                   (length (repository-worktrees selected-repository)))))))
+                  (let ((state (repository-state selected-repository))
+                        (worktrees
+                          (field "worktrees:"
+                                 (princ-to-string
+                                  (%repository-open-worktree-count
+                                   selected-repository)))))
+                    (list
+                     (field "repository:"
+                            (%repository-tree-label selected-repository))
+                     ;; A resting repository has no state worth a field of its
+                     ;; own, the way %WORKTREE-GIT-STATE-TEXT drops CLEAN.
+                     (if (string= state "ready")
+                         worktrees
+                         (format nil "~A  ~A"
+                                 (state-field "state:" state)
+                                 worktrees)))))
                  (selected-organization
                   (list
                    (field "organization:" (%organization-tree-label selected-organization))
                    (field "repositories:"
                           (princ-to-string
                            (length (organization-repositories selected-organization))))))
+                 ((keywordp selected-object)
+                  (%workspace-section-detail-lines selected-object))
+                 ((consp selected-object)
+                  (%workspace-row-detail-lines selected-object file-diffs))
                  (t (list (%sgr-wrap "(no selection)" +sgr-muted-italic+) "")))))
           (cursor-invisible stream)
           (when render-tree-p
@@ -242,7 +340,7 @@
           (if (and wide-enough-p tall-enough-p)
               (let* ((all-tree-entries
                        (or precomputed-tree-entries
-                           (%workspace-flat-tree-entries
+                           (workspace-flat-tree-entries
                             organizations collapsed-node-ids
                             :refreshing-ids refreshing-ids
                             :job-labels job-labels
@@ -272,7 +370,12 @@
                                     (min (+ tree-scroll view-rows) tree-count))))
                      (loop for entry in visible-tree-lines
                            for row from tree-top below tree-bottom
-                           do (%emit-styled-row stream row 0 cols (tree-row-text entry))))))
+                           do (multiple-value-bind (text selected)
+                                  (tree-row-text entry)
+                                (%emit-styled-row
+                                 stream row 0 cols text
+                                 (and selected
+                                      +sgr-tree-row-selected-background+)))))))
                 (%emit-styled-row
                  stream separator-row 0 cols
                  (%sgr-wrap (make-string cols :initial-element #\─) +sgr-line+))
@@ -282,8 +385,12 @@
                 (when messages
                   (%emit-styled-row
                    stream message-row 0 cols
-                   (%sgr-wrap (format nil "message: ~A" (first messages))
-                              +sgr-muted-italic+))))
+                   (%sgr-wrap
+                    (format nil
+                            "message: ~A"
+                            (%message-strip-text (first messages)
+                                                 (max 0 (- cols 9))))
+                    +sgr-muted-italic+))))
               (cell (min tree-top (max 0 (1- rows))) 0 cols
                     (cond
                       ((not (or wide-enough-p tall-enough-p))

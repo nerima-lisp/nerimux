@@ -36,21 +36,39 @@
              (win (make-window :id 1 :name "w" :panes (list live)
                                :tree (make-layout-leaf live)))
              (session (make-session :id 1 :name "0" :windows (list win))))
+        (setf (pane-window live) win)
         (multiple-value-bind (status descriptions)
             (nerimux::%server-kill-request session nil)
           (expect (eq :denied status))
           (expect (= 1 (length descriptions)))
-          (expect (search "pane 3" (first descriptions)) :to-be-truthy))
+          (expect (search "pane 1:3" (first descriptions)) :to-be-truthy))
         (expect nerimux::*running* :to-be-truthy))))
 
-  (it "r8-1-pane-kill-description-includes-worktree-path"
+  (it "r8-1-pane-kill-description-names-window-pane-and-worktree-path"
     (let* ((worktree (nerimux/workspace-model:make-worktree
                        :id "wt" :path "/tmp/worktree" :branch "feature"))
            (pane (make-pane :id 7 :fd 9999 :pid 1234
                             :worktree worktree
-                            :screen (make-screen 10 3))))
-      (expect (string= "pane 7 (pid 1234) in /tmp/worktree"
+                            :screen (make-screen 10 3)))
+           (win (make-window :id 2 :name "w" :panes (list pane)
+                             :tree (make-layout-leaf pane))))
+      (setf (pane-window pane) win)
+      (expect (string= "pane 2:7 (pid 1234) in /tmp/worktree"
                        (nerimux::%pane-kill-description pane)))))
+
+  (it "r8-1-pane-kill-description-separates-same-id-panes-in-two-windows"
+    (let* ((first-pane (make-pane :id 1 :fd 9999 :pid 11
+                                  :screen (make-screen 10 3)))
+           (second-pane (make-pane :id 1 :fd 9999 :pid 22
+                                   :screen (make-screen 10 3)))
+           (first-window (make-window :id 1 :name "w" :panes (list first-pane)
+                                      :tree (make-layout-leaf first-pane)))
+           (second-window (make-window :id 2 :name "w" :panes (list second-pane)
+                                       :tree (make-layout-leaf second-pane))))
+      (setf (pane-window first-pane) first-window
+            (pane-window second-pane) second-window)
+      (expect (string/= (nerimux::%pane-kill-description first-pane)
+                        (nerimux::%pane-kill-description second-pane)))))
 
   (it "r8-1-stops-immediately-when-no-panes-are-live-even-without-force"
     (with-global-running t

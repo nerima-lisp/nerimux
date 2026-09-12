@@ -41,6 +41,12 @@
 
 (defvar *repository-status-generations* (make-hash-table :test #'eq))
 
+(defconstant +repository-status-worker-limit+
+  8
+  "Status reads allowed to run at once.  Each one forks several `git`
+   processes, so a worker per repository exhausts the process file-descriptor
+   limit on a ghq root holding hundreds of repositories.")
+
 (defun %begin-repository-status-generation (repository)
   (sb-thread:with-recursive-lock (*workspace-catalog-generation-lock*)
     (let ((entry
@@ -64,12 +70,17 @@
    Generation registration and status application serialize per repository identity;
    an older captured success is discarded even while its successor is pending.
    Operation errors and completion callbacks still settle every request.
-   ON-COMPLETE receives REPOSITORIES itself, once every worker has settled --
+   ON-COMPLETE receives REPOSITORIES itself, once every request has settled --
    in the order given, not reordered by which worker happens to finish last.
    REFRESH-WORKSPACE-STATUS-ASYNC below wraps this ON-COMPLETE to hand its own
-   caller ORGANIZATIONS instead, for exactly that reason."
+   caller ORGANIZATIONS instead, for exactly that reason.
+   Every repository is registered for its generation before any read starts;
+   at most +REPOSITORY-STATUS-WORKER-LIMIT+ workers then drain that queue, so
+   the returned thread list is the pool, not one thread per repository."
   (let* ((repositories (copy-list repositories))
          (remaining (length repositories))
+         (queue-lock (cl-concurrent-kit:make-lock :name "vcs status queue"))
+         (queue nil)
          (threads nil))
     (labels ((complete-one (repository entry)
                (let ((complete-p
@@ -103,42 +114,60 @@
                           caught))))
                  (if condition
                      (fail-one repository entry condition)
-                     (complete-one repository entry)))))
+                     (complete-one repository entry))))
+             (next-request ()
+               (cl-concurrent-kit:with-lock-held (queue-lock) (pop queue)))
+             (read-one (repository entry token)
+               (%dispatch-callback callback-dispatch on-start repository)
+               (multiple-value-bind (update condition)
+                   (handler-case (values (funcall status-reader repository)
+                                         nil)
+                     (error (caught)
+                       (values nil caught)))
+                 (if condition
+                     (%dispatch-callback callback-dispatch
+                                         #'fail-one
+                                         repository
+                                         entry
+                                         condition)
+                     (%dispatch-callback callback-dispatch
+                                         #'apply-one
+                                         repository
+                                         entry
+                                         token
+                                         update))))
+             (drain ()
+               (loop for request = (next-request)
+                     while request
+                     ;; The workers are shared, so a condition escaping one
+                     ;; request would strand every repository queued behind
+                     ;; it; dropping it here instead of settling it through
+                     ;; FAIL-ONE left REMAINING stuck above zero and
+                     ;; ON-COMPLETE never firing for the batch.
+                     do (handler-case (apply #'read-one request)
+                          (error (caught)
+                            (destructuring-bind (repository entry token) request
+                              (declare (ignore token))
+                              (fail-one repository entry caught)))))))
       (if (null repositories)
           (progn
             (%dispatch-callback callback-dispatch on-complete repositories)
             nil)
           (progn
-            (dolist (repository repositories (nreverse threads))
-              (multiple-value-bind (entry token)
-                  (%begin-repository-status-generation repository)
-                (let ((current repository))
-                  (push
-                   (cl-concurrent-kit:make-thread
-                    (lambda ()
-                      (%dispatch-callback callback-dispatch on-start current)
-                      (multiple-value-bind (update condition)
-                          (handler-case (values (funcall status-reader current)
-                                                nil)
-                            (error (caught)
-                              (values nil caught)))
-                        (if condition
-                            (%dispatch-callback callback-dispatch
-                                                #'fail-one
-                                                current
-                                                entry
-                                                condition)
-                            (%dispatch-callback callback-dispatch
-                                                #'apply-one
-                                                current
-                                                entry
-                                                token
-                                                update))))
-                    :name
-                    (format nil
-                            "nerimux-vcs-status-~A"
-                            (nerimux/workspace-model:repository-id current)))
-                   threads)))))))))
+            (setf queue
+                  (loop for repository in repositories
+                        collect (multiple-value-bind (entry token)
+                                    (%begin-repository-status-generation
+                                     repository)
+                                  (list repository entry token))))
+            (dotimes (index
+                      (min +repository-status-worker-limit+
+                           (length repositories))
+                      (nreverse threads))
+              (push (cl-concurrent-kit:make-thread
+                     #'drain
+                     :name (format nil "nerimux-vcs-status-~D" index))
+                    threads)))))))
 
 (defun refresh-workspace-status-async (&key
                                        (organizations *workspace-organizations*)

@@ -38,12 +38,107 @@
                                                  +max-process-log-entries+)))
   (%mark-dirty))
 
+(defconstant +max-notify-characters+
+  99
+  "Longest notification this file builds. The message strip shows one line of
+   whatever it is given, so anything past the terminal's width is simply not
+   read -- and a commit message pushed the outcome off the end entirely.")
+
+(defun %clip-text (text limit)
+  (if (> (length text) limit)
+      (subseq text 0 limit)
+      text))
+
+(defun %argument-escape-sequence-end (text index)
+  "Index just past the CSI escape sequence TEXT starts at INDEX, an ESC
+   character; any other escape is a two-byte sequence. A typed git argument
+   has no legitimate reason to carry OSC/DCS output, so unlike
+   nerimux/pane's byte-oriented equivalent this only needs to recognise CSI."
+  (let* ((length (length text))
+         (introducer (when (< (1+ index) length) (char text (1+ index)))))
+    (cond
+      ((null introducer) length)
+      ((char= introducer #\[)
+       (let ((scan (+ index 2)))
+         (loop while (and (< scan length)
+                          (not (<= (char-code #\@) (char-code (char text scan))
+                                   (char-code #\~))))
+               do (incf scan))
+         (min length (1+ scan))))
+      (t (+ index 2)))))
+
+(defun %strip-argument-control-characters (text)
+  "TEXT with C0 control characters (Tab kept) and any ESC-led CSI sequence
+   removed, so a typed git argument cannot carry an SGR sequence into the
+   notification and process-log text built from it (S4)."
+  (with-output-to-string (out)
+    (let ((length (length text))
+          (index 0))
+      (loop while (< index length)
+            do (let ((character (char text index)))
+                 (cond
+                   ((char= character #\Escape)
+                    (setf index (%argument-escape-sequence-end text index)))
+                   ((and (< (char-code character) 32)
+                         (char/= character #\Tab))
+                    (incf index))
+                   (t
+                    (write-char character out)
+                    (incf index))))))))
+
+(defun %transient-argument-text (argument)
+  "ARGUMENT as one line of command text: its first line, capped. A commit
+   message is an ordinary argument here, and the whole of a multi-line one
+   would otherwise be interpolated into the command text every notification
+   and the process log are built from."
+  (let* ((text (princ-to-string argument))
+         (first-line (subseq text 0 (or (position #\Newline text) (length text)))))
+    (%clip-text (%strip-argument-control-characters first-line) 40)))
+
 (defun %transient-command-text (operation args)
-  (format nil "git ~(~A~)~{ ~A~}" operation args))
+  (format nil
+          "git ~(~A~)~{ ~A~}"
+          operation
+          (mapcar #'%transient-argument-text args)))
+
+(defun %first-output-line (output)
+  "OUTPUT's first non-empty line -- git's own reason for a failure, which it
+   puts on the first line of stderr."
+  (when (stringp output)
+    (loop with start = 0
+          while (< start (length output))
+          for end = (or (position #\Newline output :start start) (length output))
+          for line = (string-trim " " (subseq output start end))
+          do (setf start (1+ end))
+          unless (zerop (length line))
+            return line)))
+
+(defun %transient-success-text (operation args command)
+  (let ((message (and (eq operation :commit)
+                      (second (member "--message" args :test #'equal)))))
+    (if message
+        (format nil "committed: ~A" (%transient-argument-text message))
+        (%clip-text (format nil "~A: done" command) +max-notify-characters+))))
+
+(defun %transient-failure-text (command output)
+  "COMMAND's failure, its reason, and where the rest of it is: the process
+   log is the only place git's full output survives, and a message that does
+   not name the `$` key leaves a user who does not already know about it with
+   no way to the reason at all."
+  (let* ((hint "  $ shows the full log")
+         (head (%clip-text (format nil "~A failed" command)
+                           (- +max-notify-characters+ (length hint))))
+         (detail (%first-output-line output))
+         (room (- +max-notify-characters+ (length head) (length hint) 2)))
+    (if (and detail (plusp room))
+        (format nil "~A: ~A~A" head (%clip-text detail room) hint)
+        (format nil "~A~A" head hint))))
 
 (defun %run-transient-git-write (conn repository operation args)
   (let ((command (%transient-command-text operation args)))
-    (%client-notify conn (format nil "running ~A" command))
+    (%client-notify conn
+                    (%clip-text (format nil "running ~A" command)
+                                +max-notify-characters+))
     (nerimux/vcs:git-write-operation-async repository
                                            operation
                                            args
@@ -59,13 +154,14 @@
                                                  (progn
                                                    (%refresh-client-picker conn)
                                                    (%client-notify conn
-                                                                   (format nil
-                                                                           "~A: done"
-                                                                           command)))
+                                                                   (%transient-success-text
+                                                                    operation
+                                                                    args
+                                                                    command)))
                                                  (%client-notify conn
-                                                                 (format nil
-                                                                         "~A: failed"
-                                                                         command))))
+                                                                 (%transient-failure-text
+                                                                  command
+                                                                  output))))
                                            :on-error
                                            (lambda (condition)
                                              (%client-log-process conn
@@ -74,10 +170,10 @@
                                                                   (princ-to-string
                                                                    condition))
                                              (%client-notify conn
-                                             (format nil
-                                                     "~A: failed: ~A"
-                                                     command
-                                                     condition))))))
+                                                             (%transient-failure-text
+                                                              command
+                                                              (princ-to-string
+                                                               condition)))))))
 
 (defun %client-read-view-worktree (conn)
   (or (client-conn-selected-worktree conn)
@@ -87,6 +183,8 @@
   (case kind
     (:log "GIT LOG")
     (:diff "GIT DIFF")
+    (:branches "GIT BRANCHES")
+    (:tags "GIT TAGS")
     (otherwise "READ VIEW")))
 
 (defun %close-client-read-view (conn &optional swallow-escape-p)
@@ -137,10 +235,27 @@
                worktree
                :callback-dispatch #'%enqueue-main-thread-callback
                :on-complete #'complete
+               :on-error #'failed))
+             (:branches
+              (nerimux/vcs:read-worktree-branches-async
+               worktree
+               :callback-dispatch #'%enqueue-main-thread-callback
+               :on-complete #'complete
+               :on-error #'failed))
+             (:tags
+              (nerimux/vcs:read-worktree-tags-async
+               worktree
+               :callback-dispatch #'%enqueue-main-thread-callback
+               :on-complete #'complete
                :on-error #'failed)))
            t))))))
 
 (defun %client-text-prompt-spec (kind conn)
+  "KIND's (TITLE WIDGET OPERATION STATIC-ARGS). Every one-line placeholder
+   starts with a space: cl-tui-kit draws the input widget's cursor block at
+   column 0 of the field, over whatever the placeholder's first character is
+   (input-editing.lisp, WIDGET-RENDER), so \"branch name\" reached the user as
+   \"ranch name\". The picker's own placeholder already pads for this."
   (case kind
     (:commit-message
      (list "Commit message"
@@ -156,15 +271,31 @@
     (:branch-create
      (list "Create branch"
            (cl-tui-kit/widgets:make-input-widget
-            :placeholder "branch name"
+            :placeholder " branch name"
             :focusable-p t
             :semantic-role :textbox)
            :branch
            nil))
+    (:branch-delete
+     (list "Delete branch"
+           (cl-tui-kit/widgets:make-input-widget
+            :placeholder " branch to delete"
+            :focusable-p t
+            :semantic-role :textbox)
+           :branch
+           (list "-D")))
+    (:merge-branch
+     (list "Merge branch"
+           (cl-tui-kit/widgets:make-input-widget
+            :placeholder " branch to merge"
+            :focusable-p t
+            :semantic-role :textbox)
+           :merge
+           nil))
     (:tag-create
      (list "Create tag"
            (cl-tui-kit/widgets:make-input-widget
-            :placeholder "tag name"
+            :placeholder " tag name"
             :focusable-p t
             :semantic-role :textbox)
            :tag
@@ -172,7 +303,7 @@
     (:remote-push
      (list "Push to remote"
            (cl-tui-kit/widgets:make-input-widget
-            :placeholder "remote name"
+            :placeholder " remote name"
             :focusable-p t
             :semantic-role :textbox)
            :push
@@ -227,15 +358,36 @@
          (repository (client-conn-text-prompt-repository conn))
          (operation (client-conn-text-prompt-operation conn))
          (static-args (client-conn-text-prompt-static-args conn))
-         (args (case (client-conn-text-prompt-kind conn)
+         (kind (client-conn-text-prompt-kind conn))
+         (args (case kind
                  (:commit-message (list "--message" value))
-                 ((:branch-create :tag-create) (list value))
-                 (:remote-push (append static-args (list value))))))
-    (if (or (null value) (zerop (length value)))
-        (%client-notify conn "value required")
-        (progn
-          (%clear-client-text-prompt conn)
-          (%run-transient-git-write conn repository operation args)))))
+                 ((:branch-create :tag-create :merge-branch) (list value))
+                 ((:branch-delete :remote-push)
+                  (append static-args (list value))))))
+    (cond
+      ((or (null value) (zerop (length value)))
+       (%client-notify conn "value required"))
+      ((and (member kind
+                    '(:branch-create :tag-create :merge-branch :branch-delete
+                      :remote-push))
+            (%dash-leading-name-p value))
+       (%client-notify conn "a name cannot start with -"))
+      (t
+       (%clear-client-text-prompt conn)
+       (if (eq kind :branch-delete)
+           (%open-confirm-view conn
+                               (%transient-command-text operation args)
+                               (list
+                                (cons "repository"
+                                      (princ-to-string
+                                       (nerimux/workspace-model:repository-id
+                                        repository))))
+                               (lambda ()
+                                 (%run-transient-git-write conn
+                                                           repository
+                                                           operation
+                                                           args)))
+           (%run-transient-git-write conn repository operation args))))))
 
 (defun %client-prompt-key-event (payload)
   (cond
@@ -390,14 +542,28 @@
                                                        args))))
       (t (%run-transient-git-write conn repository operation args)))))
 
-(defun %open-client-transient (conn key)
+(defvar *client-transient-keys*
+  (make-hash-table :test #'eq :weakness :key)
+  "CONN -> the open transient chain, innermost first. Only q reads it: its
+   label says `back`, so from a menu opened out of the Dispatch menu it has
+   to return there rather than close the stack, which is what ESC is for.")
+
+(defun %client-transient-parent-key (conn)
+  (second (gethash conn *client-transient-keys*)))
+
+(defun %open-client-transient (conn key &optional nested-p)
   "Open the transient KEY names (contract §3). A KEY with no entry in
    +TRANSIENT-DEFINITIONS+ is a no-op: the keymap only ever calls this with a
    bound transient key, so reaching here with an unknown one is a caller bug
-   rather than a user mistake worth reporting."
+   rather than a user mistake worth reporting. NESTED-P records KEY as opened
+   from the transient already on screen, so q can step back to it."
   (let ((definition (cdr (assoc key +transient-definitions+))))
     (when definition
       (destructuring-bind (title arguments actions) definition
+        (setf (gethash conn *client-transient-keys*)
+              (if nested-p
+                  (cons key (gethash conn *client-transient-keys*))
+                  (cons key (cdr (gethash conn *client-transient-keys*)))))
         (setf (client-conn-transient-view conn) (nerimux/renderer:make-transient-view
                                                  :title
                                                  title
@@ -420,6 +586,7 @@
    when drawing the :status view (it is what makes the panel expand at all),
    so a stale non-NIL value here would keep drawing a closed transient the
    moment MODAL next returns to NIL."
+  (remhash conn *client-transient-keys*)
   (setf (client-conn-transient-view conn) nil)
   (%set-client-modal conn nil))
 
@@ -435,7 +602,7 @@
    worktree actions predate the transient and already work, so the transient
    adapts to their signature rather than the reverse."
   (case (first handler)
-    (:open-transient (%open-client-transient conn (second handler)))
+    (:open-transient (%open-client-transient conn (second handler) t))
     (t
       (%close-client-transient conn)
       (case (first handler)
@@ -476,7 +643,12 @@
         (%close-client-transient conn)
         t)
       ((%client-key-p payload #\q)
-        (%close-client-transient conn)
+        (let ((parent (%client-transient-parent-key conn)))
+          (if parent
+              (progn
+                (pop (gethash conn *client-transient-keys*))
+                (%open-client-transient conn parent))
+              (%close-client-transient conn)))
         t)
       ((null view)
         (%close-client-transient conn)

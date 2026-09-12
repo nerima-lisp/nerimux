@@ -85,13 +85,14 @@
           (nerimux::%handle-multi-key-message session conn #(27))
           (expect (null (nerimux::client-conn-modal conn)))
           (expect (= 0 spawns deletes))))))
-  (it "uses n for detached creation and a for an existing workspace"
+  (it "uses w n for detached creation and a for an existing workspace"
     (%with-assignment-fixture
       (let ((created 0) (selected nil))
         (with-stubbed-fdefinition
             ((nerimux/vcs:create-detached-worktree-async
               (lambda (repo &key on-complete &allow-other-keys)
                 (setf selected repo) (incf created) (funcall on-complete receipt))))
+          (nerimux::%handle-multi-key-message session conn #(119))
           (nerimux::%handle-multi-key-message session conn #(110))
           (expect (= 1 created))
           (expect (eq repository selected))
@@ -218,7 +219,7 @@
             (nerimux::%close-client-transient conn)
             (expect (= 0 calls))
             (nerimux::%show-worktree-assignment conn state)
-            (nerimux::%handle-multi-key-message session conn #(113))
+            (nerimux::%handle-multi-key-message session conn #(107))
             (expect (= 1 calls))
             (expect (functionp guard))
             (expect (nerimux::%worktree-cancel-pending-p worktree))
@@ -241,7 +242,7 @@
                             (nerimux::workspace-assignment-path state))
                            nerimux::*workspace-cancel-reservations*)
                   state)
-            (nerimux::%handle-multi-key-message session conn #(113))
+            (nerimux::%handle-multi-key-message session conn #(107))
             (expect (= 0 deletes))
             (expect (eq :retained (nerimux::workspace-assignment-phase state)))
             (expect (search "already pending"
@@ -272,7 +273,7 @@
                  (nerimux/pane:worktree-add-pane worktree pane)))
               (:missing
                (setf (nerimux/workspace-model:worktree-missing-p worktree) t)))
-            (nerimux::%handle-multi-key-message session conn #(113))
+            (nerimux::%handle-multi-key-message session conn #(107))
             (expect (= 0 deletes))
             (expect (search "not confirmed" (first (nerimux::client-conn-message-log conn)))))))))
   (it "blocks another client's open and split before spawning or unzooming"
@@ -290,6 +291,25 @@
           (nerimux::%workspace-prefix-split session conn :horizontal)
           (expect (= 0 spawns))
           (expect (nerimux/window:window-zoom-p window)))))))
+
+(describe "assign panel subtitle"
+  (it "strips a bare clone's .git suffix, the way the tree already does"
+    (let* ((repository (nerimux/workspace-model:make-repository
+                        :id "beta-repo" :local-path "/tmp/beta.git/"
+                        :specification "github.com/acme/beta.git"))
+           (worktree (nerimux/workspace-model:make-worktree
+                     :id "beta-wt" :repository repository
+                     :path "/tmp/beta.git/.worktrees/feat-x" :branch "feature/x")))
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
+      (with-stubbed-fdefinition
+          ((nerimux::%workspace-find-repository
+            (lambda (&rest args) (declare (ignore args)) repository)))
+        (let ((state (nerimux::make-workspace-assignment
+                      :repository repository
+                      :path (nerimux/workspace-model:worktree-path worktree)
+                      :worktree-id (nerimux/workspace-model:worktree-id worktree))))
+          (expect (string= "github.com/acme/beta · feature/x"
+                           (nerimux::%assignment-subtitle state))))))))
 
 (defun %check-assignment-real-git-guard (mode)
   (nerimux/test/vcs::%call-with-worktree-path-repository
@@ -524,12 +544,15 @@
                 (declare (ignore token organizations)) current)))
           (nerimux::%client-enter-command-mode conn "wt-complete")
           (nerimux::%submit-client-command session conn)
-          (expect (eq :confirm (nerimux::client-conn-modal conn)))
-          (nerimux::%handle-multi-key-message session conn #(121))
+          (expect (null (nerimux::client-conn-modal conn)))
+          (expect (string= "marked complete"
+                           (first (nerimux::client-conn-message-log conn))))
           (expect (nerimux/workspace-model:worktree-completed-p current))
           (expect (not (nerimux/workspace-model:worktree-completed-p worktree)))
-          (setf current nil)
+          (setf current worktree)
           (nerimux::%client-complete-workspace conn)
+          (expect (eq :confirm (nerimux::client-conn-modal conn)))
+          (setf current nil)
           (nerimux::%handle-multi-key-message session conn #(121))
           (expect (not (nerimux/workspace-model:worktree-completed-p worktree)))
           (expect (string= "worktree no longer available"
@@ -543,9 +566,11 @@
               (list (nerimux/workspace-model:repository-organization
                      (nerimux/workspace-model:worktree-repository worktree)))))
         (setf (nerimux::client-conn-view conn) :repolist)
+        (nerimux::%handle-multi-key-message session conn #(119))
         (nerimux::%handle-multi-key-message session conn #(67))
         (expect (nerimux/workspace-model:worktree-completed-p worktree))
         (expect (null (nerimux::client-conn-modal conn)))
+        (nerimux::%handle-multi-key-message session conn #(119))
         (nerimux::%handle-multi-key-message session conn #(67))
         (expect (not (nerimux/workspace-model:worktree-completed-p worktree)))
         (expect (null (nerimux::client-conn-modal conn))))))
@@ -568,14 +593,17 @@
         (expect (= 2 (length panes)))
         (expect window-panes)
         (setf (nerimux::client-conn-view conn) :repolist)
+        (nerimux::%handle-multi-key-message session conn #(119))
         (nerimux::%handle-multi-key-message session conn #(67))
         (expect (eq :confirm (nerimux::client-conn-modal conn)))
         (expect (not (nerimux/workspace-model:worktree-completed-p worktree)))
         (nerimux::%handle-multi-key-message session conn #(110))
         (expect (not (nerimux/workspace-model:worktree-completed-p worktree)))
+        (nerimux::%handle-multi-key-message session conn #(119))
         (nerimux::%handle-multi-key-message session conn #(67))
         (nerimux::%handle-multi-key-message session conn #(121))
         (expect (nerimux/workspace-model:worktree-completed-p worktree))
+        (nerimux::%handle-multi-key-message session conn #(119))
         (nerimux::%handle-multi-key-message session conn #(67))
         (expect (not (nerimux/workspace-model:worktree-completed-p worktree)))
         (expect (null (nerimux::client-conn-modal conn)))
@@ -601,15 +629,18 @@
               (nerimux/workspace-model:worktree-completed-p worktree) t
               (nerimux/workspace-model:repository-worktrees repository) (list current)
               (nerimux::client-conn-view conn) :repolist)
+        (nerimux::%handle-multi-key-message session conn #(119))
         (nerimux::%handle-multi-key-message session conn #(67))
         (expect (not (nerimux/workspace-model:worktree-completed-p current)))
         (expect (nerimux/workspace-model:worktree-completed-p worktree))
         (setf (nerimux/workspace-model:repository-worktrees repository) nil)
+        (nerimux::%handle-multi-key-message session conn #(119))
         (nerimux::%handle-multi-key-message session conn #(67))
         (expect (string= "worktree no longer available"
                          (first (nerimux::client-conn-message-log conn))))
         (expect (nerimux/workspace-model:worktree-completed-p worktree))
         (setf (nerimux::client-conn-selected-worktree conn) nil)
+        (nerimux::%handle-multi-key-message session conn #(119))
         (nerimux::%handle-multi-key-message session conn #(67))
         (expect (string= "no worktree selected"
                          (first (nerimux::client-conn-message-log conn)))))))
@@ -625,6 +656,7 @@
                        :repository repository
                        :path (nerimux/workspace-model:worktree-path worktree))))
         (setf (nerimux::client-conn-view conn) :repolist)
+        (nerimux::%handle-multi-key-message session conn #(119))
         (nerimux::%handle-multi-key-message session conn #(67))
         (expect (eq :confirm (nerimux::client-conn-modal conn)))
         (setf (nerimux/workspace-model:repository-worktrees repository) (list current))
@@ -632,6 +664,7 @@
         (expect (nerimux/workspace-model:worktree-completed-p current))
         (expect (not (nerimux/workspace-model:worktree-completed-p worktree)))
         (setf (nerimux/workspace-model:repository-worktrees repository) (list worktree))
+        (nerimux::%handle-multi-key-message session conn #(119))
         (nerimux::%handle-multi-key-message session conn #(67))
         (expect (eq :confirm (nerimux::client-conn-modal conn)))
         (setf (nerimux/workspace-model:repository-worktrees repository) nil)
@@ -748,8 +781,11 @@
       (expect (eq window-1 (nerimux/session:session-active-window session)))
 
       (dotimes (_ 5)
-        (nerimux::%handle-multi-key-message session conn #(17))
-        (nerimux::%handle-multi-key-message session conn #(120)))
+        ;; NMX-P19: a pane whose process is still running takes two C-q x,
+        ;; the first only asking.
+        (dotimes (_ 2)
+          (nerimux::%handle-multi-key-message session conn #(17))
+          (nerimux::%handle-multi-key-message session conn #(120))))
       (expect (null (nerimux/workspace-model:worktree-panes worktree)))
       (expect (null (nerimux/session:session-windows session)))
       (expect (eq :repolist (nerimux::client-conn-view conn)))))

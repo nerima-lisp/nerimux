@@ -96,24 +96,42 @@
              (expect (nerimux/vcs:detached-worktree-result-worktree receipt))
              (expect (null (nerimux/vcs:detached-worktree-result-refresh-error receipt)))
              (expect (string= config (uiop:read-file-string config-path)))))))))
-  (it "does not add from a stale tracking ref when origin has no main"
+  (it "creates from the local branch rather than an unconfirmed tracking ref"
+    ;; This asserted that a failed fetch aborted the create. It no longer does
+    ;; (review/R3: the branch %REPOSITORY-DEFAULT-BRANCH names need not exist on
+    ;; the remote at all, and aborting made create unusable on such a clone),
+    ;; so what is asserted now is the part that always mattered: the start point
+    ;; is not read from a tracking ref the failed fetch could not confirm.
     (%call-with-worktree-path-repository
      (lambda (repository root)
-       (let ((bare (nerimux/workspace-model:repository-local-path repository))
-             (adds 0))
+       (let* ((source (concatenate 'string root "source/"))
+              (bare (nerimux/workspace-model:repository-local-path repository))
+              (local-head (%fetch-test-git bare "rev-parse" "refs/heads/main")))
+         (%fetch-test-git source "-c" "user.name=Test" "-c"
+                          "user.email=test@example.invalid" "-c"
+                          "commit.gpgsign=false" "-c" "core.hooksPath=/dev/null"
+                          "commit" "--allow-empty" "-m" "tracking ref tip")
          (%fetch-test-git bare "fetch" "origin" "+refs/heads/main:refs/remotes/origin/main")
-         (%fetch-test-git (concatenate 'string root "source/") "branch" "-m" "other")
-         (with-stubbed-fdefinition
-             ((vcs-kit:vcs-worktree (lambda (&rest arguments)
-                                      (declare (ignore arguments)) (incf adds))))
+         (let ((tracking-head (%fetch-test-git bare "rev-parse" "refs/remotes/origin/main")))
+           (expect (not (string= local-head tracking-head)))
+           (%fetch-test-git (concatenate 'string root "source/") "branch" "-m" "other")
            (multiple-value-bind (receipt errors) (%detached-test-create repository)
-             (expect (null receipt))
-             (expect (= 1 (length errors)))
-             (expect (= 0 adds))))
+             (expect (null errors))
+             (expect receipt)
+             (expect (nerimux/vcs:detached-worktree-result-fetch-error receipt))
+             (expect (string= local-head
+                              (nerimux/vcs:detached-worktree-result-head receipt)))
+             (expect (not (string= tracking-head
+                                   (nerimux/vcs:detached-worktree-result-head receipt))))
+             (expect (string= local-head
+                              (%fetch-test-git
+                               (nerimux/vcs:detached-worktree-result-path receipt)
+                               "rev-parse" "HEAD")))))
          (%fetch-test-git (concatenate 'string root "source/") "branch" "-m" "main")
          (multiple-value-bind (receipt errors) (%detached-test-create repository)
            (expect (null errors))
-           (expect receipt))))))
+           (expect receipt)
+           (expect (null (nerimux/vcs:detached-worktree-result-fetch-error receipt))))))))
   (it "returns a receipt and releases reservation when both dispatch attempts fail"
     (%call-with-worktree-path-repository
      (lambda (repository root)
@@ -217,10 +235,12 @@
      (lambda (repository root)
        (declare (ignore root))
        (let ((queued nil) (receipt nil) (errors nil) (attempts 0)
-             (original (symbol-function 'nerimux/vcs::%fetch-origin-main)))
+             (original (symbol-function 'nerimux/vcs::%fetch-default-branch)))
          (with-stubbed-fdefinition
-             ((nerimux/vcs::%fetch-origin-main
-               (lambda (repository) (incf attempts) (funcall original repository))))
+             ((nerimux/vcs::%fetch-default-branch
+               (lambda (repository branch)
+                 (incf attempts)
+                 (funcall original repository branch))))
            (sb-thread:join-thread
             (nerimux/vcs:create-detached-worktree-async
              repository :callback-dispatch (lambda (callback) (push callback queued))
@@ -242,15 +262,18 @@
              (expect (= 2 attempts))
              (expect (not (string= (nerimux/vcs:detached-worktree-result-path receipt)
                                    (nerimux/vcs:detached-worktree-result-path second))))))))))
-  (it "uses explicit origin main and disables interactive authentication"
+  (it "fetches the named default branch explicitly and disables interactive authentication"
     (let ((arguments nil))
       (with-stubbed-fdefinition
-          ((nerimux/vcs::%repository-backend (lambda (repository) repository)))
+          ((nerimux/vcs::%repository-backend (lambda (repository) repository))
+           (nerimux/vcs::%repository-origin-p (lambda (repository)
+                                                (declare (ignore repository))
+                                                t)))
         (with-stubbed-fdefinition
             ((vcs-kit:vcs-fetch (lambda (repository &rest args)
                                  (expect (eq repository :repository))
                                  (setf arguments args))))
-          (nerimux/vcs::%fetch-origin-main :repository)))
+          (nerimux/vcs::%fetch-default-branch :repository "main")))
       (expect (equal (subseq arguments 0 2)
                      '("origin" "+refs/heads/main:refs/remotes/origin/main")))
       (expect (eq :execution-options (third arguments)))

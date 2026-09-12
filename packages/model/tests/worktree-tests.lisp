@@ -25,7 +25,7 @@
     (expect (equal '(:excluded :missing-repository)
                    (%prune-test-result
                     (nerimux/workspace-model:make-worktree
-                     :bare-p t :locked-p t :missing-p t :completed-p t)))))
+                     :locked-p t :missing-p t :completed-p t)))))
   (it "excludes primary by identity and by an independently reconstructed path"
     (let* ((worktree (%make-prune-test-worktree :completed-p t))
            (repository (nerimux/workspace-model:worktree-repository worktree)))
@@ -41,10 +41,6 @@
         (expect (string= primary-path path))
         (expect (not (eq primary-path path))))
       (expect (equal '(:excluded :primary) (%prune-test-result worktree)))))
-  (it "protects a nonprimary bare worktree independently of locking"
-    (expect (equal '(:excluded :bare)
-                   (%prune-test-result
-                    (%make-prune-test-worktree :bare-p t :completed-p t)))))
   (it "protects a locked nonbare completed worktree"
     (expect (equal '(:excluded :locked)
                    (%prune-test-result
@@ -84,6 +80,8 @@
                    (%prune-test-result
                     (%make-prune-test-worktree
                      :completed-p t :missing-p t :dirty-p t :conflict-p t))))
+    (expect (equal '(:missing :metadata-repair-required)
+                   (%prune-test-result (%make-prune-test-worktree :missing-p t))))
     (dolist (flags '((:dirty-p t) (:conflict-p t) (:dirty-p t :conflict-p t)))
       (expect (equal '(:candidate :confirmation-required)
                      (%prune-test-result
@@ -91,19 +89,17 @@
   (it "applies protection priority before missing metadata and candidate status"
     (let* ((pane (nerimux/pane:make-pane :fd 22))
            (worktree (%make-prune-test-worktree
-                      :bare-p t :locked-p t :missing-p t :dirty-p t
+                      :locked-p t :missing-p t :dirty-p t
                       :panes (list pane)))
            (repository (nerimux/workspace-model:worktree-repository worktree)))
       (setf (nerimux/workspace-model:repository-main-worktree repository) worktree)
       (expect (equal '(:excluded :primary) (%prune-test-result worktree)))
       (setf (nerimux/workspace-model:repository-main-worktree repository) nil)
-      (expect (equal '(:excluded :bare) (%prune-test-result worktree)))
-      (setf (nerimux/workspace-model:worktree-bare-p worktree) nil)
       (expect (equal '(:excluded :locked) (%prune-test-result worktree)))
       (setf (nerimux/workspace-model:worktree-locked-p worktree) nil)
       (expect (equal '(:excluded :live-pane) (%prune-test-result worktree)))
       (setf (nerimux/pane:pane-fd pane) -1)
-      (expect (equal '(:excluded :not-completed-or-agent-exited)
+      (expect (equal '(:missing :metadata-repair-required)
                      (%prune-test-result worktree)))
       (setf (nerimux/workspace-model:worktree-completed-p worktree) t)
       (expect (equal '(:missing :metadata-repair-required)
@@ -233,8 +229,6 @@
                 (expect (= 0 (nerimux/workspace-model:worktree-ahead worktree)))
                 (expect
                  (= 0 (nerimux/workspace-model:worktree-behind worktree)))
-                (expect
-                 (null (nerimux/workspace-model:worktree-bare-p worktree)))
                 (expect
                  (null (nerimux/workspace-model:worktree-locked-p worktree)))
                 (expect

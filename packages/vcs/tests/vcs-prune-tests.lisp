@@ -17,7 +17,7 @@
                (declare (ignore backend-repository))
                (setf captured-arguments arguments)
                ""))
-           (vcs-kit:vcs-list-worktrees
+           (nerimux/vcs::%git-worktree-list
              (lambda (&rest arguments)
                (declare (ignore arguments))
                nil)))

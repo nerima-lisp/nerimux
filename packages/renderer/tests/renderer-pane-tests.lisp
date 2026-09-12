@@ -1,8 +1,12 @@
 (in-package #:nerimux/test/renderer)
 
 (defun %snippet-around (text needle &optional (radius 24))
+  "TEXT around NEEDLE, RADIUS characters each side.  The SGR sequence that
+   styles a cell is emitted before its character, so a snippet that started at
+   NEEDLE would miss the very attributes it is being searched for."
   (let ((pos (position needle text)))
-    (and pos (subseq text pos (min (length text) (+ pos radius))))))
+    (and pos (subseq text (max 0 (- pos radius))
+                     (min (length text) (+ pos radius))))))
 
 (describe "renderer-suite"
 
@@ -49,6 +53,34 @@
       (let ((out (render-pane-output sess pane)))
         (expect (search (format nil "~C]8;;https://x~C\\" #\Escape #\Escape) out))
         (expect (search (format nil "~C]8;;~C\\" #\Escape #\Escape) out)))))
+
+  (it "render-pane-highlights-the-copy-cursor-row-before-any-selection"
+    (let* ((sess   (make-renderer-test-session 4 3))
+           (pane   (first (window-panes (session-active-window sess))))
+           (screen (pane-screen pane)))
+      (feed screen "ab")
+      (let ((live (render-pane-output sess pane)))
+        (setf (screen-copy-mode-p screen) t
+              (screen-copy-cursor screen) (cons 1 0))
+        (let ((copy (render-pane-output sess pane)))
+          (expect (null (search ";7" live)))
+          (expect (search ";7" copy))))))
+
+  (it "render-pane-leaves-no-mark-cell-outside-copy-mode"
+    (let* ((sess   (make-renderer-test-session 4 3))
+           (pane   (first (window-panes (session-active-window sess))))
+           (screen (pane-screen pane)))
+      (feed screen "ab")
+      (expect (null (search ";7" (render-pane-output sess pane))))))
+
+  (it "render-pane-marks-the-drawn-pane-read"
+    (let* ((sess (make-renderer-test-session 4 3))
+           (pane (first (window-panes (session-active-window sess)))))
+      (nerimux/pane:pane-mark-focused pane)
+      (nerimux/pane:pane-mark-output pane #(111 107))
+      (expect (nerimux/pane:pane-unread-output-p pane))
+      (render-pane-output sess pane)
+      (expect (null (nerimux/pane:pane-unread-output-p pane)))))
 
   (it "render-pane-no-osc-8-without-hyperlink"
     (let* ((sess   (make-renderer-test-session 10 2))

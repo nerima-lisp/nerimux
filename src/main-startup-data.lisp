@@ -8,7 +8,7 @@
 
 (defparameter *startup-modes*
   (list (%startup-mode "server" run-server)
-        (%startup-mode "attach" run-attach-simple)
+        (%startup-mode "attach" run-attach-simple :raw-args-p t)
         (%startup-mode "kill" run-kill :raw-args-p t)
         (%startup-mode "-V" run-version :raw-args-p t)
         (%startup-mode "--version" run-version :raw-args-p t)

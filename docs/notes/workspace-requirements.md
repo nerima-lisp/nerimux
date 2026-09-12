@@ -1,5 +1,7 @@
 # Workspace 縮約フェーズ 3 の要件
 
+*本書が現行として記述する repolist の `n` / `p` / `C` / `P` キー割り当ては 2026-09-12 に廃止された。現行のキーは `docs/src/getting-started.md` を参照。*
+
 > **【キーバインドは supersede 済み】** 本書のキー表（`C-q F` / `C-q C-f` / `i` /
 > `j/k` / `r` / `X` / `L` / `U` ほか）は magit 準拠への全面置換で無効になった。
 > 現行のキーは `+HELP-VIEW-SECTIONS+`（`src/presentation/renderer/renderer-tui-kit-help.lisp`）

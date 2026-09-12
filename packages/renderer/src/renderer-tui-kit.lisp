@@ -48,20 +48,27 @@
   (footer "" :read-only t)
   (title "" :read-only t))
 
+(defun %ansi-row-header (row)
+  "The cursor-position-plus-reset prefix every emitted row starts with,
+   shared by the cl-tui-kit surface path (%SURFACE-ANSI-ROW) and the direct
+   frame-grid path (%FRAME-GRID-ANSI-ROW) so the two cannot drift apart."
+  (format nil "~C[~D;1H~C[0m" (code-char 27) (1+ row) (code-char 27)))
+
 (defun %surface-ansi-row (surface row)
-  (let ((previous-style nil))
-    (with-output-to-string (stream)
-      (format stream "~C[~D;1H~C[0m" (code-char 27) (1+ row) (code-char 27))
-        (dotimes (column (cl-tui-kit/core:surface-width surface))
-          (let ((cell (cl-tui-kit/core:surface-cell surface column row)))
-            (unless (cl-tui-kit/core:cell-continuation-p cell)
-              (let ((style (cl-tui-kit/core:cell-style cell)))
-                (unless (and previous-style
-                             (cl-tui-kit/core:style= previous-style style))
-                  (write-string (cl-tui-kit/ansi:ansi-encode-style style)
-                                stream)
-                  (setf previous-style style)))
-              (write-string (cl-tui-kit/core:cell-content cell) stream)))))))
+  (concatenate 'string
+               (%ansi-row-header row)
+               (let ((previous-style nil))
+                 (with-output-to-string (stream)
+                   (dotimes (column (cl-tui-kit/core:surface-width surface))
+                     (let ((cell (cl-tui-kit/core:surface-cell surface column row)))
+                       (unless (cl-tui-kit/core:cell-continuation-p cell)
+                         (let ((style (cl-tui-kit/core:cell-style cell)))
+                           (unless (and previous-style
+                                        (cl-tui-kit/core:style= previous-style style))
+                             (write-string (cl-tui-kit/ansi:ansi-encode-style style)
+                                           stream)
+                             (setf previous-style style)))
+                         (write-string (cl-tui-kit/core:cell-content cell) stream))))))))
 
 (defun %surface-to-ansi-frame (surface)
   (let* ((height (cl-tui-kit/core:surface-height surface))
@@ -75,6 +82,55 @@
     (values (with-output-to-string (stream)
               (format stream "~C[2J" (code-char 27))
               (map nil (lambda (row) (write-string row stream)) rows)
+              (write-string footer stream))
+            snapshot)))
+
+(defun %frame-grid-ansi-row (grid style-grid content-row display-row)
+  "One row of %ANSI-FRAME-GRID's parsed output (GRID/STYLE-GRID, indexed at
+   CONTENT-ROW) as %SURFACE-ANSI-ROW would render the equivalent cl-tui-kit
+   surface row, addressed at DISPLAY-ROW -- CONTENT-ROW and DISPLAY-ROW
+   differ by VIEWPORT the same way %SURFACE-FROM-ANSI-FRAME's own
+   content-row/surface-row pair does.  Skips +FRAME-GRID-CONTINUATION+ cells
+   and coalesces a run of cells sharing one style into a single SGR
+   emission, exactly as the surface path's cell-by-cell walk does, so the
+   two paths are byte-for-byte identical for the same input frame."
+  (concatenate 'string
+               (%ansi-row-header display-row)
+               (let ((chars-row (%frame-grid-row grid content-row))
+                     (styles-row (%frame-grid-style-row style-grid content-row))
+                     (previous-style nil))
+                 (with-output-to-string (stream)
+                   (dotimes (column (length chars-row))
+                     (let ((character (char chars-row column)))
+                       (unless (char= character +frame-grid-continuation+)
+                         (let ((style (aref styles-row column)))
+                           (unless (and previous-style
+                                        (cl-tui-kit/core:style= previous-style style))
+                             (write-string (cl-tui-kit/ansi:ansi-encode-style style)
+                                           stream)
+                             (setf previous-style style)))
+                         (write-char character stream))))))))
+
+(defun %frame-grid-to-ansi-frame (grid style-grid rows cols viewport)
+  "%SURFACE-TO-ANSI-FRAME's counterpart for the fast path: ROWS x COLS of
+   %ANSI-FRAME-GRID's GRID/STYLE-GRID, offset by VIEWPORT content rows,
+   assembled into the same complete-frame string and ANSI-ROW-SNAPSHOT
+   %RENDER-ANSI-FRAME-WITH-TUI-KIT's surface path returns -- built without
+   ever allocating a CL-TUI-KIT/CORE:SURFACE, since nothing here draws a
+   widget onto one."
+  (let* ((rows-vector
+           (map 'vector
+                (lambda (display-row)
+                  (%frame-grid-ansi-row grid style-grid
+                                        (+ display-row viewport) display-row))
+                (loop for display-row below rows collect display-row)))
+         (footer (format nil "~C[0m~C[~D;~DH" (code-char 27) (code-char 27)
+                         rows cols))
+         (snapshot (%make-ansi-row-snapshot :rows rows-vector :width cols
+                                           :footer footer)))
+    (values (with-output-to-string (stream)
+              (format stream "~C[2J" (code-char 27))
+              (map nil (lambda (row) (write-string row stream)) rows-vector)
               (write-string footer stream))
             snapshot)))
 
@@ -134,27 +190,49 @@
                                               &key
                                               (viewport 0)
                                               widget-renderer)
-  (let* ((too-small-p (%terminal-too-small-p rows cols))
-         (surface
-          (if too-small-p
-              (%render-terminal-too-small-surface rows cols)
-              (%surface-from-ansi-frame frame rows cols :viewport viewport))))
-    (when (and widget-renderer (not too-small-p))
-      (funcall widget-renderer surface))
-    (%surface-to-ansi-frame surface)))
+  "Render FRAME (an ANSI string) as a headless-backend frame at ROWS x COLS.
+   WIDGET-RENDERER NIL is the common case (every view but an open picker):
+   nothing draws onto a CL-TUI-KIT/CORE:SURFACE, so nothing needs one --
+   %FRAME-GRID-TO-ANSI-FRAME builds the output directly from %ANSI-FRAME-
+   GRID's parsed grid, skipping the per-cell surface allocation and
+   MAKE-CELL/VALIDATE/TEXT-UNIT-WIDTH cost of a surface round-trip this
+   frame never uses.  A supplied WIDGET-RENDERER (the picker modal) still
+   takes the CL-TUI-KIT/CORE:SURFACE path, the only one it can draw onto."
+  (let ((too-small-p (%terminal-too-small-p rows cols)))
+    (cond
+      (too-small-p
+       (%surface-to-ansi-frame (%render-terminal-too-small-surface rows cols)))
+      (widget-renderer
+       (let ((surface (%surface-from-ansi-frame frame rows cols :viewport viewport)))
+         (funcall widget-renderer surface)
+         (%surface-to-ansi-frame surface)))
+      (t
+       (let* ((rows (max 1 rows))
+              (cols (max 1 cols))
+              (viewport (max 0 viewport))
+              (content-height (+ rows viewport)))
+         (multiple-value-bind (grid style-grid)
+             (%ansi-frame-grid frame content-height cols)
+           (%frame-grid-to-ansi-frame grid style-grid rows cols viewport)))))))
 
 (defun render-session-to-tui-string (session terminal-rows terminal-cols
-                                     &key focus-pane (viewport 0) (mode :normal)
+                                     &key focus-pane (viewport 0) (mode nil)
+                                       (messages nil)
                                        (picker-items nil) (picker-query "")
                                        (picker-index 0) (picker-regex-p nil)
+                                       (picker-status nil)
                                        (command-buffer ""))
-  "Render a client frame through cl-tui-kit's headless surface/widget path."
+  "Render a client frame through cl-tui-kit's headless surface/widget path.
+   The ANSI pass below is told no mode while the picker is open: the picker it
+   would draw there is the plain-text one this function replaces with the
+   widget, and drawing both leaves the ASCII box's corners around the widget.
+   The picker names itself in its own title, so nothing is lost."
   (let* ((widget-renderer
            (when (eq mode :picker)
              (lambda (surface)
                (%render-picker-widget
                 surface terminal-rows terminal-cols picker-items picker-query
-                picker-index picker-regex-p))))
+                picker-index picker-regex-p picker-status))))
          (active-pane (%session-title-pane session focus-pane))
          (worktree (and active-pane (pane-worktree active-pane))))
     (concatenate
@@ -164,7 +242,8 @@
        session terminal-rows terminal-cols
        :focus-pane focus-pane
        :viewport viewport
-       :mode (if (eq mode :picker) :normal mode)
+       :messages messages
+       :mode (unless (eq mode :picker) mode)
        :picker-items picker-items
        :picker-query picker-query
        :picker-index picker-index
@@ -181,7 +260,12 @@
                                                selected-worktree
                                                (tree-scroll 0)
                                                (messages nil)
-                                               (mode :normal)
+                                               (mode :repolist)
+                                               (picker-items nil)
+                                               (picker-query "")
+                                               (picker-index 0)
+                                               (picker-regex-p nil)
+                                               (picker-status nil)
                                                (prefix-code #x11)
                                                collapsed-node-ids
                                                expanded-node-ids
@@ -193,37 +277,51 @@
                                                (scan-progress nil)
                                                (catalog-empty-hint nil)
                                                (command-buffer "")
-                                               (tree-filter nil))
+                                               (tree-filter nil)
+                                               (tree-entries nil))
   "Render the workspace overview through cl-tui-kit's headless backend.
    COLLAPSED-NODE-IDS / EXPANDED-NODE-IDS / REFRESHING-IDS / STALE-IDS /
    FILE-DIFFS / SCANNING-P / SCAN-PROGRESS / CATALOG-EMPTY-HINT /
    COMMAND-BUFFER / TREE-FILTER are forwarded to RENDER-WORKSPACE-OVERVIEW-
-   TO-STRING and, for the tree, to %RENDER-WORKSPACE-TREE-WIDGET -- see that
-   function and %WORKSPACE-FLAT-TREE-ENTRIES (renderer-workspace-tree.lisp)
-   for what each one means.
-   The tree is flattened/filtered exactly ONCE per frame, right here, and
-   the result threaded through to both RENDER-WORKSPACE-OVERVIEW-TO-STRING
-   (:PRECOMPUTED-TREE-ENTRIES) and %RENDER-WORKSPACE-TREE-WIDGET
-   (:PRECOMPUTED-ENTRIES) below. Before this, one frame walked the (possibly
-   large) org/repo/worktree/pane graph up to three times: once here for
-   NO-MATCHES-P, again inside the ANSI pass, and a third time inside the
-   tree widget."
+   TO-STRING -- see that function and %WORKSPACE-FLAT-TREE-ENTRIES
+   (renderer-workspace-tree.lisp) for what each one means. The tree itself
+   draws through that same ANSI pass in every mode (the coloured path
+   tree-row-text builds, renderer-workspace.lisp) -- there is no separate
+   tree widget; a picker open over this frame is the only thing that still
+   draws onto a CL-TUI-KIT/CORE:SURFACE (see %RENDER-ANSI-FRAME-WITH-TUI-
+   KIT).
+   TREE-ENTRIES, when supplied, is used verbatim in place of flattening here:
+   a caller that already needs the flat rows for its own purposes (the
+   server's per-frame selection reveal, src/server-multi-render.lisp) flattens
+   once and passes the result down, instead of this function silently
+   flattening the same tree a second time.
+   The tree is flattened/filtered exactly ONCE per frame, right here (unless
+   TREE-ENTRIES already did it for the caller), and the result threaded
+   through to RENDER-WORKSPACE-OVERVIEW-TO-STRING as :PRECOMPUTED-TREE-
+   ENTRIES.
+   MODE :PICKER draws the global picker over this frame, the way
+   RENDER-SESSION-TO-TUI-STRING draws it over the pane view: the picker is a
+   modal above whatever view the user opened it from, not a view of its own,
+   so the tree stays on screen behind it."
   (let ((all-tree-entries
-          (%workspace-flat-tree-entries
-           organizations collapsed-node-ids
-           :job-labels job-labels
-           :refreshing-ids refreshing-ids
-           :stale-ids stale-ids
-           :filter tree-filter
-           :expanded-node-ids expanded-node-ids
-           :file-diffs file-diffs)))
+          (or tree-entries
+              (workspace-flat-tree-entries
+               organizations collapsed-node-ids
+               :job-labels job-labels
+               :refreshing-ids refreshing-ids
+               :stale-ids stale-ids
+               :filter tree-filter
+               :expanded-node-ids expanded-node-ids
+               :file-diffs file-diffs))))
     (multiple-value-bind (title-repository title-worktree)
         (%workspace-title-selection focus-pane selected-tree-object
                                     selected-worktree)
-      (let ((no-matches-p
-              (and organizations
-                   (plusp (length (or tree-filter "")))
-                   (null all-tree-entries))))
+      (let ((picker-renderer
+              (when (eq mode :picker)
+                (lambda (surface)
+                  (%render-picker-widget
+                   surface terminal-rows terminal-cols picker-items
+                   picker-query picker-index picker-regex-p picker-status)))))
         (multiple-value-bind (frame snapshot)
          (%render-ansi-frame-with-tui-kit
           (render-workspace-overview-to-string
@@ -235,7 +333,6 @@
            :messages messages
            :mode mode
            :prefix-code prefix-code
-           :render-tree-p nil
            :collapsed-node-ids collapsed-node-ids
            :expanded-node-ids expanded-node-ids
            :refreshing-ids refreshing-ids
@@ -249,20 +346,6 @@
            :precomputed-tree-entries all-tree-entries)
           terminal-rows terminal-cols
           :viewport 0
-          :widget-renderer
-          (unless (and (null organizations)
-                       (or scanning-p catalog-empty-hint))
-            (unless no-matches-p
-              (lambda (surface)
-                (%render-workspace-tree-widget
-                 surface organizations terminal-rows terminal-cols
-                 selected-tree-object tree-scroll
-                 :collapsed-node-ids collapsed-node-ids
-                 :expanded-node-ids expanded-node-ids
-                 :refreshing-ids refreshing-ids
-                 :stale-ids stale-ids
-                 :filter tree-filter
-                 :file-diffs file-diffs
-                 :precomputed-entries all-tree-entries)))))
+          :widget-renderer picker-renderer)
           (%ansi-frame-with-title
            frame snapshot (%client-title-osc title-repository title-worktree)))))))

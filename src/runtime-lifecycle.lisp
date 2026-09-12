@@ -283,11 +283,22 @@
       (pane-mark-startup-failure pane))
     (worktree-add-pane worktree pane)
     (pane-notify pane "restored")
+    ;; PANE-NOTIFY always marks unread output, which is right for output the
+    ;; client stepped away from -- a restored pane was never attached, so
+    ;; nothing was missed. A genuine startup failure already set the flag
+    ;; above and stays marked; only the synthetic "restored" notice is
+    ;; cleared here.
+    (when (pane-live-p pane)
+      (setf (pane-unread-output-p pane) nil))
     (push pane *runtime-restored-panes*)
     pane))
 
 (defun %runtime-restored-window (session worktree record rows cols window-id)
-  (let* ((pane-records (getf record :panes))
+  ;; The name is read before the panes exist: %worktree-window-name counts the
+  ;; worktree's windows through pane-window, and the panes below join the
+  ;; worktree with that back-link still unset.
+  (let* ((name (%worktree-window-name worktree))
+         (pane-records (getf record :panes))
          (panes (mapcar (lambda (pane-record)
                           (%runtime-restored-pane session
                                                   worktree
@@ -297,7 +308,7 @@
                         pane-records))
          (tree (nerimux/layout:string->layout (getf record :layout) panes))
          (window (make-window :id window-id
-                              :name (%worktree-window-name worktree)
+                              :name name
                               :width cols
                               :height rows
                               :panes panes
@@ -316,12 +327,19 @@
       (window-relayout window rows cols))
     window))
 
+(defun %create-workspace-session ()
+  "The session a server starts from: named, empty, no window and no pane.
+   Every window belongs to a worktree the user opened, so bootstrapping a
+   shell here would put a pane in the `kill` refusal and the C-q Q count that
+   no tree row ever shows."
+  (make-session :id (incf nerimux/session:*session-id-counter*)
+                :name "0"
+                :last-active (get-universal-time)))
+
 (defun %restore-runtime-state (form)
   (let* ((rows (max 1 (- *term-rows* +status-line-rows+)))
          (cols (max 1 *term-cols*))
-         (session (make-session :id (incf nerimux/session:*session-id-counter*)
-                                :name "0"
-                                :last-active (get-universal-time)))
+         (session (%create-workspace-session))
          (next-window-id 1)
          (missing-paths (make-hash-table :test #'equal)))
     (setf *runtime-restored-panes* nil

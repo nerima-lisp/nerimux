@@ -4,11 +4,24 @@
   (let ((worktree (%client-operation-worktree conn)))
     (and worktree (nerimux/workspace-model:worktree-head worktree))))
 
+(defun %transient-upstream (conn)
+  (let ((worktree (%client-operation-worktree conn)))
+    (and worktree (nerimux/vcs:worktree-upstream worktree))))
+
 (defun %transient-subtitle (key conn)
+  "The line under a transient's title. Push and Fetch read <branch> → its
+   real upstream, Pull reads the other way, and a branch that tracks nothing
+   says so: the old subtitle named origin/<branch> for every repository,
+   including ones with no remote at all, which invited a push to a
+   destination that does not exist."
   (let ((branch (%transient-branch conn)))
     (when branch
       (if (member key '(#\P #\F #\f))
-          (format nil "~A -> origin/~A" branch branch)
+          (let ((upstream (%transient-upstream conn)))
+            (cond
+              ((null upstream) "no upstream")
+              ((eql key #\F) (format nil "~A → ~A" upstream branch))
+              (t (format nil "~A → ~A" branch upstream))))
           (format nil "on ~A" branch)))))
 
 (defun %transient-action-display-description (conn description)

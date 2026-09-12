@@ -60,6 +60,10 @@
     (setf (workspace-operation-job-state job) state
           (workspace-operation-job-phase job) phase
           (workspace-operation-job-outcome job) outcome)
+    ;; A job that succeeded has nothing left to report, and its row carries the
+    ;; result itself; keeping it here left a badge on every row after a scan.
+    (when (eq state :succeeded)
+      (remhash (workspace-operation-job-key job) *workspace-operation-jobs*))
     (%mark-dirty)
     job))
 
@@ -86,6 +90,35 @@
       (%mark-dirty)
       t)))
 
+(defun %workspace-job-outcome-label (outcome &optional operation)
+  "A short reason for OUTCOME, which is a keyword for a result the code chose
+   and a condition for one it caught.  A condition's own text is runtime
+   internals -- truncated mid-sentence in a tree row it says nothing a user can
+   act on -- so failures are reported by what went wrong instead.  OPERATION
+   decides the catch-all word: only a read (scan, status) is a read failure;
+   a create or prune that git refused is just a failure."
+  (typecase outcome
+    (null nil)
+    (keyword (string-downcase outcome))
+    (condition
+     (let ((text (string-downcase (princ-to-string outcome))))
+       (cond
+         ((search "fd_setsize" text) "too many open files")
+         ((search "no such file" text) "path is gone")
+         ((member operation '(:scan :status)) "read failed")
+         (t "failed"))))
+    (t (princ-to-string outcome))))
+
+(defun %workspace-job-forget-failed ()
+  "Drop every settled failure so a refresh the user asked for starts with a
+   clean row; a failure that recurs is recorded again by the job that hits it."
+  (maphash
+   (lambda (key job)
+     (when (eq :failed (workspace-operation-job-state job))
+       (remhash key *workspace-operation-jobs*)))
+   *workspace-operation-jobs*)
+  (%mark-dirty))
+
 (defun %workspace-job-labels ()
   (let ((labels (make-hash-table :test #'equal)))
     (maphash
@@ -94,11 +127,15 @@
               (phase (workspace-operation-job-phase job))
               (row (if (member (first key) '(:catalog :organization))
                        '(:section :repositories) (subseq key 0 2)))
-              (label (format nil " [~(~A~):~(~A~)~@[ ~A~]~@[ ~(~A~)~]]"
+              (label (format nil " [~(~A~):~(~A~)~@[ ~A~]~@[ ~A~]]"
                              (third key) state
                              (when (and (eq state :running) (not (eq phase :confirming)))
                                (char "|/-\\" (mod *workspace-job-spinner-tick* 4)))
-                             (or phase (workspace-operation-job-outcome job)))))
+                             (if phase
+                                 (string-downcase phase)
+                                 (%workspace-job-outcome-label
+                                  (workspace-operation-job-outcome job)
+                                  (third key))))))
          (setf (gethash row labels)
                (concatenate 'string (gethash row labels "") label))))
      *workspace-operation-jobs*)

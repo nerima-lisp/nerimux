@@ -57,7 +57,8 @@
   "OUTPUT split into sanitized display lines, capped at
    +PROCESS-LOG-MAX-OUTPUT-LINES+ with a trailing elision marker."
   (let* ((clean (%process-log-sanitize-text (or output "")))
-         (lines (%process-log-split-lines clean)))
+         (lines (when (plusp (length clean))
+                  (%process-log-split-lines clean))))
     (if (> (length lines) +process-log-max-output-lines+)
         (append (subseq lines 0 +process-log-max-output-lines+)
                 (list
@@ -102,7 +103,7 @@
                                                 (list
                                                  (cl-tui-kit/core:make-text-span
                                                   (format nil
-                                                          "[~A] "
+                                                          "exit ~A "
                                                           (%process-log-sanitize-text
                                                            (princ-to-string
                                                             exit-status)))

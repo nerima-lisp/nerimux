@@ -40,6 +40,7 @@
                  (start-reader-thread new-pane))
                (window-select-pane window new-pane)
                (%set-client-focus conn new-pane session)
+               (%remember-worktree-pane worktree new-pane)
                (%mark-dirty))
              (%client-notify conn "pane too small to split")))))
     nil))
@@ -86,10 +87,35 @@
           (%set-client-focus conn active session))
         (%set-client-view conn :repolist))))
 
+(defvar *client-pending-close-panes*
+  (make-hash-table :test #'eq :weakness :key)
+  "The pane each client's first C-q x asked about, keyed by connection.")
+
+(defun %release-closed-pane-selection (pane worktree)
+  "Move every client's tree selection off PANE before the close removes it.
+
+   WINDOW-REMOVE-PANE clears PANE-WINDOW (window-tree.lisp), and the repolist
+   draws a pane row's key as (window-id (pane-window pane)), so a selection
+   still pointing here signals out of the render loop and the client is
+   dropped -- what closing an exited pane reached through the tree did
+   (NMX-PANES-1). The worktree row is what the close returns the user to."
+  (dolist (conn *clients*)
+    (when (eq pane (client-conn-selected-tree-object conn))
+      (%set-client-selected-tree-object conn worktree))))
+
+(defun %client-clear-pending-close-pane (conn)
+  "Forget the pane C-q x asked about: any other key answers no (NMX-P19)."
+  (remhash conn *client-pending-close-panes*))
+
 (defun %workspace-prefix-close-pane (session conn)
   "C-q x : close the focused pane (R5.4).  Kills its PTY, drops it from its
    worktree and window, and, when that empties the window, closes the
    window too and refocuses per %workspace-refocus-after-window-close.
+
+   A pane whose process is still running takes two presses (NMX-P19): the
+   first only says so, because the single press was closing live shells and
+   agents outright with nothing on screen having asked.  A pane whose process
+   has already exited has nothing left to lose and closes on the first.
 
    RETIRE-PANE-PTY rather than CLOSE-PANE-PTY: this is the one path that
    closes a single pane while the server keeps serving, so it is the one path
@@ -106,9 +132,15 @@
       (return-from %workspace-prefix-close-pane nil))
     (cond
       ((or (null pane) (null window)) (%client-notify conn "no focused pane"))
+      ((and (pane-live-p pane)
+            (not (eq pane (gethash conn *client-pending-close-panes*))))
+       (setf (gethash conn *client-pending-close-panes*) pane)
+       (%client-notify conn "C-q x again to close"))
       (t
+        (%client-clear-pending-close-pane conn)
         (%workspace-prefix-unzoom window)
         (retire-pane-pty pane)
+        (%release-closed-pane-selection pane worktree)
         (when worktree
           (setf (worktree-panes worktree) (delete pane
                                                   (worktree-panes worktree)))
@@ -151,6 +183,7 @@
               (progn
                 (window-select-pane window neighbor)
                 (%set-client-focus conn neighbor session)
+                (%remember-worktree-pane (pane-worktree neighbor) neighbor)
                 (%mark-dirty))
               (%client-notify conn (format nil "no pane ~A" direction)))))))
   nil)
@@ -178,33 +211,8 @@
                (%workspace-prefix-unzoom window)
                (session-select-window session next-window)
                (%set-client-focus conn (window-active-pane next-window) session)
+               (%remember-worktree-pane worktree (window-active-pane next-window))
                (%mark-dirty)))))))
-  nil)
-
-(defun %workspace-prefix-open-status (session conn)
-  "C-q w (FR-009): step out of a pane towards the workspace views, one level
-   per press -- :pane to :status, and :status on to :repolist.
-
-   The second step is what makes the repolist reachable at all. FR-006's `q`
-   ladder returns :status to the focused pane whenever one is live, which is
-   the ordinary case, so `q` alone can never walk OUT to the flat multi-repo
-   list; and the magit keymap retired `o`, which was the only key that did
-   that before. Without this, a user with any live pane could reach :repolist
-   only by closing every pane in the window.
-
-   With no pane focused -- or a focused pane with no worktree, which the
-   status view has nothing to render for either -- this goes straight to
-   :repolist rather than notifying and leaving the screen as it was, so the
-   key is never a dead end."
-  (multiple-value-bind (pane window worktree) 
-      (%workspace-prefix-context session conn)
-    (declare (ignore window))
-    (cond
-      ((eq (client-conn-view conn) :status) (%set-client-view conn :repolist))
-      ((and pane worktree)
-        (setf (client-conn-selected-worktree conn) worktree)
-        (%set-client-view conn :status))
-      (t (%set-client-view conn :repolist))))
   nil)
 
 (defun %workspace-prefix-open-scrollback (session conn)
@@ -219,6 +227,22 @@
     (%set-client-modal conn :scrollback))
   nil)
 
+(defun %send-client-parting (conn text)
+  "Send TEXT as the line CONN prints once it has left the alternate screen
+   (client.lisp).  Detach and quit otherwise end in the same blank host
+   terminal, with nothing saying which of the two happened."
+  (handler-case (send-frame (client-conn-stream conn) (msg-reply text))
+    (peer-io-failure () nil)))
+
+(defun %workspace-prefix-detach (session conn)
+  "C-q d: leave the session running and tell CONN what it left behind."
+  (%send-client-parting conn
+                        (format nil
+                                "nerimux: detached (session ~A, ~D pane~:P running)"
+                                (session-name session)
+                                (length (%session-live-panes session))))
+  :drop)
+
 (defun %workspace-prefix-quit-server (session conn)
   "C-q Q (R8.2): ask before stopping the server, showing how many panes are
    still running so the count is in front of the user at the moment they answer
@@ -227,17 +251,18 @@
          (count (length live)))
     (%open-confirm-view
      conn
-     "SERVER QUIT"
-     (list (cons "session" (session-name session))
-           (cons "panes" (format nil "~D open" count))
+     "Quit server"
+     (list (cons "panes" (format nil "~D open" count))
            (cons "effect" (if (plusp count)
                               "every pane is signalled and the server exits"
                               "the server exits")))
      (lambda ()
        (%server-kill-request session t)
+       (dolist (client (copy-list *clients*))
+         (%send-client-parting client "nerimux: server stopped"))
        :quit))))
 
-(define-key-rules %workspace-prefix-dispatch (session conn byte)
+(define-key-rules %workspace-prefix-key-action (session conn byte)
   "Resolve BYTE, the key struck right after C-q, against 1.5's table and
    run its action.  Returns the loop disposition (NIL to keep serving,
    :drop for `d`).  A BYTE with no binding here is discarded: the prefix
@@ -262,13 +287,23 @@
   (#\w (%workspace-prefix-open-overview session conn))
   (#\t (%client-open-selected-worktree-command session conn nil))
   (#\[ (%workspace-prefix-open-scrollback session conn))
-  (#\d :drop)
+  ;; The pane view's status strip advertises this and a focused pane sends
+  ;; every other byte to the shell, so without the binding the hint lies (R4).
+  (#\? (%client-open-help-view conn) nil)
+  (#\d (%workspace-prefix-detach session conn))
   (#\Q (%workspace-prefix-quit-server session conn))
   ((and (integerp byte)
         (= byte (client-conn-workspace-prefix-code conn)))
    (%set-client-modal conn nil)
    nil)
   (t nil))
+
+(defun %workspace-prefix-dispatch (session conn byte)
+  "Run the prefix binding for BYTE, first answering any pending C-q x with no:
+   every key but a second x leaves the pane the user was asked about open."
+  (unless (eql byte (char-code #\x))
+    (%client-clear-pending-close-pane conn))
+  (%workspace-prefix-key-action session conn byte))
 
 
 (defun %workspace-prefix-open-overview (session conn)

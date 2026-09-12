@@ -71,6 +71,82 @@
       (%mark-dirty)
       t)))
 
+(defvar *client-command-line-p* nil
+  "True while a command typed at the `:' prompt is running, as opposed to one
+   forwarded by the `nerimux' CLI over the socket. The two callers want
+   opposite things from a refusal: the CLI waits for a reply frame and then
+   hangs up, the attached client wants the reason on screen and its session
+   left alone.")
+
+(defvar *client-command-completion-state*
+  (make-hash-table :test #'eq :weakness :key)
+  "Per-client Tab state as (PREFIX INDEX INSERTED): what the user had typed
+   before the first Tab, how far through the candidates the last Tab got, and
+   what it inserted -- which is how a later Tab tells a continued cycle from a
+   fresh one without a slot on the connection.")
+
+(defun %client-command-names ()
+  (mapcar (lambda (command) (string-downcase (symbol-name command)))
+          +client-command-allow-list+))
+
+(defun %client-command-completions (prefix)
+  (remove-if-not (lambda (name)
+                   (and (<= (length prefix) (length name))
+                        (string= prefix name :end2 (length prefix))))
+                 (%client-command-names)))
+
+(defun %client-common-name-prefix (names)
+  (let ((first-name (first names)))
+    (subseq first-name 0
+            (or (loop for index from 0 below (length first-name)
+                      unless (every (lambda (name)
+                                      (and (< index (length name))
+                                           (char= (char name index)
+                                                  (char first-name index))))
+                                    (rest names))
+                        return index)
+                (length first-name)))))
+
+(defun %complete-client-command-buffer (conn)
+  "Tab: extend the typed name to the longest prefix every candidate shares,
+   then step one candidate per Tab."
+  (let* ((buffer (client-conn-command-buffer conn))
+         (state (gethash conn *client-command-completion-state*))
+         (continuing (and state (string= buffer (third state))))
+         (prefix (if continuing (first state) buffer))
+         (candidates (%client-command-completions prefix)))
+    (when (and candidates (not (find #\Space buffer)))
+      (let* ((common (%client-common-name-prefix candidates))
+             ;; A common prefix no longer than what is typed still counts as the
+             ;; extension step: the first Tab must stand still on `wt-' rather
+             ;; than jump to the first candidate, and cycling starts on the next.
+             (extend-p (and (not continuing) (>= (length common) (length prefix))))
+             (index (if extend-p
+                        (or (position common candidates :test #'string=) -1)
+                        (if continuing
+                            (mod (1+ (second state)) (length candidates))
+                            0)))
+             (value (if extend-p common (nth index candidates))))
+        (setf (client-conn-command-buffer conn) value
+              (gethash conn *client-command-completion-state*)
+              (list prefix index value))
+        (%mark-dirty)
+        t))))
+
+(defun %client-command-prompt-shortcut (session conn name)
+  "Answer the two words a `:' prompt has to answer itself: `help' opens the
+   help view, `q' and `quit' step back the way the `q' key does. Neither is a
+   workspace command, so neither can reach the allow list."
+  (let ((help-p (string-equal name "help"))
+        (quit-p (member name '("q" "quit") :test #'string-equal)))
+    (when (or help-p quit-p)
+      (%client-restore-command-view conn)
+      (%set-client-modal conn nil)
+      (if help-p
+          (%client-open-help-view conn)
+          (%client-step-back session conn))
+      t)))
+
 (defun %client-command-target-and-args (args)
   (if (and (stringp (first args))
            (member (first args) '("-t" "--target") :test #'string=))
@@ -118,40 +194,43 @@
                                  name)))
                    (search-direction (%client-search-direction name)))
               (progn
-                (if search-direction
-                    (multiple-value-bind (target args)
-                        (%client-command-target-and-args (rest tokens))
-                      (declare (ignore target))
-                      (%submit-client-search session conn search-direction args))
-                    (if (and (keywordp cmd)
-                             (not (member cmd +client-command-allow-list+
-                                          :test #'eq)))
-                        (progn
-                          (%client-notify
-                           conn
-                           (format nil
-                                   "command is not available from the : prompt: ~A"
-                                   name))
-                          (%client-restore-command-view conn)
-                          (%set-client-modal conn nil))
-                        (let ((handled-p nil))
-                          (if cmd
-                              (multiple-value-bind (target args)
-                                  (if (member cmd
-                                              '(:workspace-complete :wt-complete))
-                                      (values nil (rest tokens))
-                                      (%client-command-target-and-args (rest tokens)))
-                                (setf handled-p
-                                      (%handle-client-ui-command
-                                       session conn cmd target args))
-                                (unless handled-p
-                                  (%client-notify
-                                   conn
-                                   (format nil "unknown command: ~(~A~)" cmd)))))
-                          (unless handled-p
-                            (%client-restore-command-view conn))
-                          (when (eq (client-conn-modal conn) :command)
-                            (%set-client-modal conn nil)))))
+                (cond
+                  (search-direction
+                   (multiple-value-bind (target args)
+                       (%client-command-target-and-args (rest tokens))
+                     (declare (ignore target))
+                     (%submit-client-search session conn search-direction args)))
+                  ((%client-command-prompt-shortcut session conn name))
+                  ((and (keywordp cmd)
+                        (not (member cmd +client-command-allow-list+
+                                     :test #'eq)))
+                   (%client-notify
+                    conn
+                    (format nil
+                            "command is not available from the : prompt: ~A"
+                            name))
+                   (%client-restore-command-view conn)
+                   (%set-client-modal conn nil))
+                  (t
+                   (let ((handled-p nil))
+                     (if cmd
+                         (multiple-value-bind (target args)
+                             (if (member cmd
+                                         '(:workspace-complete :wt-complete))
+                                 (values nil (rest tokens))
+                                 (%client-command-target-and-args (rest tokens)))
+                           (setf handled-p
+                                 (let ((*client-command-line-p* t))
+                                   (%handle-client-ui-command
+                                    session conn cmd target args)))
+                           (unless handled-p
+                             (%client-notify
+                              conn
+                              (format nil "unknown command: ~(~A~)" cmd)))))
+                     (unless handled-p
+                       (%client-restore-command-view conn))
+                     (when (eq (client-conn-modal conn) :command)
+                       (%set-client-modal conn nil)))))
                 (%mark-dirty)))
           (error (condition)
             (%client-notify
@@ -172,6 +251,9 @@
    t)
   ((or (%client-byte-p payload 13) (%client-byte-p payload 10))
    (%submit-client-command session conn))
+  (9
+   (%complete-client-command-buffer conn)
+   t)
   ((or (%client-byte-p payload 8) (%client-byte-p payload 127))
    (%client-command-buffer-delete-character conn)
    t)
@@ -418,15 +500,27 @@
        (cond
          ((%client-byte-p payload 91)
           (setf (gethash conn *client-meta-pending*) :csi-third))
-         ((and (client-conn-paste-candidate-modal conn)
-               (%client-esc-swallow-consume conn))
-          (%client-paste-candidate-reset conn))
-         ((and (%client-ui-keys-p conn) (%client-key-p payload #\n))
-          (%select-client-tree-section-relative conn 1))
-         ((and (%client-ui-keys-p conn) (%client-key-p payload #\p))
-          (%select-client-tree-section-relative conn -1))
-         ((and session (not (%client-ui-keys-p conn)))
-          (%client-meta-replay-with-current session conn '(27) payload))))
+         ((%client-byte-p payload 79)
+          (setf (gethash conn *client-meta-pending*) :ss3-third))
+         (t
+          ;; RL-13: only `[` and `O` can continue the sequence the Esc began, so
+          ;; this byte is the user's next key. The cleanup is hoisted above every
+          ;; arm below: an arm that acts and returns with the candidate still
+          ;; armed re-opens the closed modal on the next paste, and one that
+          ;; leaves the swallow counting eats the two bytes after it (R2).
+          (when (client-conn-paste-candidate-modal conn)
+            (%client-paste-candidate-reset conn))
+          (remhash conn *client-esc-swallow-counts*)
+          (cond
+            ((and (%client-ui-keys-p conn) (%client-key-p payload #\n))
+             (%select-client-tree-section-relative conn 1))
+            ((and (%client-ui-keys-p conn) (%client-key-p payload #\p))
+             (%select-client-tree-section-relative conn -1))
+            ((and session (not (%client-ui-keys-p conn)))
+             (%client-meta-replay-with-current session conn '(27) payload))
+            (session
+             (let ((*client-meta-replaying* t))
+               (%handle-multi-key-message session conn payload)))))))
      (:csi-third
       (let ((byte (%client-single-byte payload)))
         (cond
@@ -441,7 +535,6 @@
           ((= byte 50)
            (setf (gethash conn *client-meta-pending*) :csi-2))
           ((client-conn-paste-candidate-modal conn)
-           (%client-esc-swallow-consume conn)
            (%client-esc-swallow-consume conn)
            (%client-paste-candidate-reset conn))
           ((and session
@@ -460,10 +553,30 @@
            (%select-client-tree-relative conn -1))
           ((and (%client-ui-keys-p conn) (= byte 66))
            (%select-client-tree-relative conn 1))
+          ((and (%client-ui-keys-p conn) (= byte 67))
+           (%client-tree-expand-row conn))
+          ((and (%client-ui-keys-p conn) (= byte 68))
+           (%client-tree-collapse-row conn))
           ((and (%client-ui-keys-p conn) (= byte 90))
            (%client-cycle-visibility conn))
           ((and session (not (%client-ui-keys-p conn)))
            (%client-meta-replay-with-current session conn '(27 91) payload)))))
+     (:ss3-third
+      (let ((byte (%client-single-byte payload)))
+        (cond
+          ((client-conn-paste-candidate-modal conn)
+           (%client-esc-swallow-consume conn)
+           (%client-paste-candidate-reset conn))
+          ((and (%client-ui-keys-p conn) (= byte 65))
+           (%select-client-tree-relative conn -1))
+          ((and (%client-ui-keys-p conn) (= byte 66))
+           (%select-client-tree-relative conn 1))
+          ((and (%client-ui-keys-p conn) (= byte 67))
+           (%client-tree-expand-row conn))
+          ((and (%client-ui-keys-p conn) (= byte 68))
+           (%client-tree-collapse-row conn))
+          ((and session (not (%client-ui-keys-p conn)))
+           (%client-meta-replay-with-current session conn '(27 79) payload)))))
      (:csi-2
       (if (= (%client-single-byte payload) 48)
           (setf (gethash conn *client-meta-pending*) :csi-20)
@@ -552,6 +665,34 @@
      t)
     (t nil)))
 
+(defun %client-worktree-row-expanded-p (worktree)
+  (gethash (list :worktree (nerimux/workspace-model:worktree-id worktree))
+           (%workspace-expanded-nodes)))
+
+(defun %client-tree-expand-row (conn)
+  "Right arrow: open the selected row. A worktree row expands through the same
+   toggle Tab uses, so its commits are fetched the one way."
+  (let ((object (%client-tree-object conn)))
+    (if (and (typep object 'nerimux/workspace-model:worktree)
+             (not (%client-worktree-row-expanded-p object)))
+        (%client-toggle-selected-tree-row conn)
+        (%client-tree-expand-selected conn))))
+
+(defun %client-tree-collapse-row (conn)
+  "Left arrow: close the selected row, or move to its parent when the row has
+   nothing left to close."
+  (let ((object (%client-tree-object conn)))
+    (cond
+      ((and (typep object 'nerimux/workspace-model:worktree)
+            (%client-worktree-row-expanded-p object))
+       (%client-toggle-selected-tree-row conn))
+      ((typep object 'nerimux/workspace-model:worktree)
+       (let ((repository (nerimux/workspace-model:worktree-repository object)))
+         (when repository
+           (%set-client-selected-tree-object conn repository)
+           t)))
+      (t (%client-tree-collapse-selected conn)))))
+
 (defun %client-set-visibility-level (conn level)
   "`1`-`4` (contract SS2): set CONN's global section-visibility preset.
    Out-of-range LEVEL is a no-op rather than storing an unrenderable value --
@@ -559,6 +700,10 @@
    value %CLIENT-CYCLE-VISIBILITY has already reduced into that range."
   (when (<= 1 level 4)
     (setf (client-conn-visibility-level conn) level)
+    ;; The new level folds rows away, and the one the cursor was on can be
+    ;; among them: a selection nobody can see is one the next key discards
+    ;; (NMX-1).
+    (%client-reveal-or-move-selection conn)
     (%mark-dirty))
   t)
 

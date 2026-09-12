@@ -13,6 +13,15 @@
         (expect (equal expected (nerimux/text:non-empty-string input))))))
 
 
+  (it "strip-dot-git-suffix-table"
+    (dolist (row '(("repo.GIT" "repo" "case-insensitive .GIT is stripped")
+                   ("repo.git" "repo" "lowercase .git is stripped")
+                   ("repo"     "repo" "no suffix is unchanged")
+                   (".git"     ".git" "bare .git is not stripped to empty")))
+      (destructuring-bind (input expected desc) row
+        (declare (ignore desc))
+        (expect (string= expected (nerimux/text:strip-dot-git-suffix input))))))
+
   (it "parse-integer-or-nil-table"
     (dolist (row '(("0"    0   nil                         "zero parses")
                    ("42"   42  nil                         "multi-digit parses")

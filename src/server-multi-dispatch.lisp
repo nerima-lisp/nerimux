@@ -44,18 +44,40 @@
                              '())
          ,on-error))))
 
-(defun %client-esc-swallow-start (conn &optional (n 2))
-  (setf (gethash conn *client-esc-swallow-counts*) n))
+(defun %client-esc-swallow-start (conn)
+  "Arm the escape-tail filter after an ESC byte was acted on: what follows is
+   discarded only while it can still be the tail of a CSI/SS3 sequence the same
+   key press produced."
+  (setf (gethash conn *client-esc-swallow-counts*) :introducer))
 
-(defun %client-esc-swallow-consume (conn)
-  "If CONN has a pending swallow count, decrement it and return T (the byte
-   this call was invoked for must be discarded). Returns NIL otherwise."
-  (let ((remaining (gethash conn *client-esc-swallow-counts*)))
-    (when (and remaining (plusp remaining))
-      (if (<= remaining 1)
+(defun %client-esc-swallow-consume (conn &optional (payload nil payload-p))
+  "Advance CONN's escape-tail state for the byte this call was invoked for and
+   return T when that byte must be discarded.
+
+   PAYLOAD is what keeps the keystroke after a cancelling Esc alive: only `[`
+   and `O` continue the sequence, so any other byte disarms the filter and is
+   left to be handled normally.  A caller that parsed the sequence itself (the
+   meta-pending path) passes no PAYLOAD, and that resolves the whole pending
+   tail at once rather than leaving a budget for the user's next real key."
+  (let ((state (gethash conn *client-esc-swallow-counts*))
+        (byte (and payload-p (%client-single-byte payload))))
+    (cond
+      ((null state) nil)
+      ((not payload-p)
+       (remhash conn *client-esc-swallow-counts*)
+       t)
+      ((eq state :introducer)
+       (cond
+         ((member byte '(91 79) :test #'eql)
+          (setf (gethash conn *client-esc-swallow-counts*) :final)
+          t)
+         (t
           (remhash conn *client-esc-swallow-counts*)
-          (setf (gethash conn *client-esc-swallow-counts*) (1- remaining)))
-      t)))
+          nil)))
+      (t
+       (unless (and byte (<= 48 byte 63))
+         (remhash conn *client-esc-swallow-counts*))
+       t))))
 
 (defun %handle-multi-attach-or-resize (session conn type payload)
   "Update CONN's geometry from PAYLOAD, refresh client ordering for
@@ -97,7 +119,13 @@
 
   The default arm is where FR-007 lands: :repolist and :status route to the UI
    keymap, and every other view (i.e. :pane) hands the byte straight to the
-   shell with no mode to leave first."
+   shell with no mode to leave first.
+
+   %CLIENT-NOTE-KEYSTROKE first, before anything reads the key: the strip is
+   showing what the PREVIOUS action did, and the one starting now is a
+   different question. It is idempotent, so the recursive multi-byte walk
+   below retires the same notification once."
+  (%client-note-keystroke conn)
   (cond
     ((and (or *client-wire-key-p* (%client-ui-keys-p conn))
           (or (vectorp payload) (stringp payload))
@@ -138,7 +166,7 @@
     ((and *client-wire-key-p*
           (not *client-meta-replaying*)
           (%client-meta-handle-byte session conn payload)) nil)
-    ((%client-esc-swallow-consume conn) nil)
+    ((%client-esc-swallow-consume conn payload) nil)
     ((member (client-conn-modal conn) +keyboard-owning-modals+ :test #'eq)
      (case (client-conn-modal conn)
        (:confirm (nth-value 1 (%handle-confirm-key session conn payload)))

@@ -23,9 +23,10 @@
   "Read one frame from server STREAM and return its pure classification.
    Returns (values disposition text) where:
      disposition:
-       :exit   server signalled end-of-session (+msg-bye+ or EOF);
-       :frame  rendered screen frame was received;
-       :ignore unrecognised frame type (continue event loop).
+       :exit    server signalled end-of-session (+msg-bye+ or EOF);
+       :frame   rendered screen frame was received;
+       :parting the line to print after the terminal is restored (detach/quit);
+       :ignore  unrecognised frame type (continue event loop).
      text         the decoded string payload for a :frame disposition, NIL otherwise;
      raw bytes    the original octet payload for a :notification disposition.
    The caller (%receive-server-frame) owns the output side effect."
@@ -36,6 +37,8 @@
                         (values :frame (decode-text payload)))
                        ((= type +msg-notification+)
                         (values :notification payload))
+                       ((= type +msg-reply+)
+                        (values :parting (decode-text payload)))
                        (t (values :ignore nil))))
 
 (defun %write-notification-bytes (bytes)
@@ -60,7 +63,8 @@
    Uses %decode-server-frame's pure classification step, then writes any :frame text to
    *standard-output* (the only side-effecting step).
    Returns :exit when the server signals end-of-session (+msg-bye+ or EOF),
-   NIL to continue the event loop."
+   NIL to continue the event loop, and as a second value the parting line the
+   caller prints once the terminal is back on its normal screen."
   (multiple-value-bind (disposition text) (%decode-server-frame stream)
     (case disposition
       (:exit :exit)
@@ -76,12 +80,14 @@
       (:notification
         (%write-notification-bytes text)
         nil)
+      (:parting (values nil text))
       (t nil))))
 
 (defun %receive-if-ready (stream server-socket-fd ready)
   "If SERVER-SOCKET-FD appears in the READY fd list, read and dispatch one server
    frame from STREAM via %receive-server-frame.  Returns :exit when the server
-   signals end-of-session, NIL otherwise (including when the fd was not ready).
+   signals end-of-session, NIL otherwise (including when the fd was not ready),
+   and passes through %receive-server-frame's parting line as a second value.
    Completes the naming symmetry with %maybe-send-resize and %forward-stdin-byte:
    every run-client event-loop action is a named helper so all three are
    independently unit-testable without driving the full attach loop."
@@ -114,10 +120,21 @@
                            nil
                            (list (or target "") (%client-working-directory)))))
 
+(defun %paint-connecting-notice ()
+  "Put one line on the alternate screen before the first server frame arrives
+   (START-18).  Entering the alternate screen hides the host's own scrollback
+   at once, and the handshake plus first render take long enough that the gap
+   reads as a hang.  Every full frame opens with an erase-display, so the
+   notice is painted over rather than left behind."
+  (format t "nerimux: connecting...")
+  (force-output))
+
 (defun %run-attach-session (stream server-socket-fd target)
   "Send the initial handshake (msg-attach, then the attach-target command) on
    STREAM, then run the blocking stdin<->server relay loop until the server
    signals end-of-session or a PEER-IO-FAILURE (server.lisp) is caught.
+   Returns the parting line the server sent on the way out (detach or quit),
+   or NIL; RUN-CLIENT prints it once the terminal is restored.
 
    Extracted from RUN-CLIENT so this pure networking session (no terminal
    calls -- no WITH-RAW-MODE, TERMINAL-SIZE, or INSTALL-SIGWINCH-HANDLER) is
@@ -141,29 +158,35 @@
    *ERROR-OUTPUT* and return, exactly as reaching :exit (+msg-bye+ / EOF)
    already does, so RUN-CLIENT's WITH-RAW-MODE still restores the terminal
    and its outer UNWIND-PROTECT still closes the socket."
-  (handler-case (progn
-                  (send-frame stream
-                              (msg-attach *term-rows*
-                                          *term-cols*
-                                          (%client-terminal-identity)))
-                  (%send-client-attach-target stream target)
-                  (loop (%maybe-send-resize stream) (let ((ready
-                                                           (select-fds
-                                                            (list 0
-                                                                  server-socket-fd)
-                                                            +poll-timeout-us+)))
-                                                      (when (member 0 ready)
-                                                        (%forward-stdin-byte
-                                                         stream))
-                                                      (when 
-                                                          (eq :exit
-                                                              (%receive-if-ready
-                                                               stream
-                                                               server-socket-fd
-                                                               ready))
-                                                        (return)))))
-    (peer-io-failure (c)
-      (format *error-output* "~&nerimux: connection lost: ~A~%" c))))
+  (let ((parting nil))
+    (handler-case (progn
+                    (send-frame stream
+                                (msg-attach *term-rows*
+                                            *term-cols*
+                                            (%client-terminal-identity)))
+                    (%send-client-attach-target stream target)
+                    (loop (%maybe-send-resize stream) (let ((ready
+                                                             (select-fds
+                                                              (list 0
+                                                                    server-socket-fd)
+                                                              +poll-timeout-us+)))
+                                                        (when (member 0 ready)
+                                                          (%forward-stdin-byte
+                                                           stream))
+                                                        (multiple-value-bind
+                                                            (disposition text)
+                                                            (%receive-if-ready
+                                                             stream
+                                                             server-socket-fd
+                                                             ready)
+                                                          (when text
+                                                            (setf parting text))
+                                                          (when (eq :exit
+                                                                    disposition)
+                                                            (return))))))
+      (peer-io-failure (c)
+        (format *error-output* "~&nerimux: connection lost: ~A~%" c)))
+    parting))
 
 (defun run-client (name &key target)
   "Attach to the server at (socket-path NAME): forward stdin + resizes, render
@@ -171,22 +194,30 @@
    TARGET is an optional explicit organization/repository/worktree selector;
    the current working directory is sent for cwd-based attach selection.
    The handshake and event loop are %RUN-ATTACH-SESSION (above); this
-   function only owns the terminal/socket setup and teardown around it."
+   function only owns the terminal/socket setup and teardown around it,
+   including the parting line, which is printed here rather than in the loop
+   because it belongs on the host's normal screen, after DISABLE-HOST-MODES
+   has left the alternate screen the frames were drawn on."
   (require :sb-posix)
   (let ((socket (connect-to (socket-path name))))
-    (unwind-protect 
+    (unwind-protect
         (let ((stream (socket-stream socket))
               (server-socket-fd (socket-fd socket)))
           (multiple-value-setq (*term-rows* *term-cols*) (terminal-size))
           (setf *resize-pending* nil)
           (install-sigwinch-handler)
-          (with-raw-mode
-            (unwind-protect
-                 (progn
-                   (nerimux/renderer:enable-host-modes)
-                   (clear-display)
-                   (%run-attach-session stream server-socket-fd target))
-              (nerimux/renderer:disable-host-modes))))
+          (let ((parting
+                 (with-raw-mode
+                   (unwind-protect
+                        (progn
+                          (nerimux/renderer:enable-host-modes)
+                          (clear-display)
+                          (%paint-connecting-notice)
+                          (%run-attach-session stream server-socket-fd target))
+                     (nerimux/renderer:disable-host-modes)))))
+            (when parting
+              (format *error-output* "~&~A~%" parting)
+              (force-output *error-output*))))
       (close-socket socket))))
 
 (defun %read-kill-reply (stream)

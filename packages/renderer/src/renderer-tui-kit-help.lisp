@@ -1,21 +1,35 @@
 (in-package #:nerimux/renderer)
 
 (defparameter +help-view-sections+
-  '(("Navigate"
-     (("Up/Down" . "move") ("M-n/M-p" . "section")
+  '(("Navigate (repolist and status)"
+     (("n/p" . "move") ("Up/Down" . "move")
+                       ("M-n/M-p" . "section")
                        ("Tab" . "expand")
+                       ("Right/Left" . "expand/collapse")
                        ("S-Tab" . "cycle all")
                        ("1-4" . "detail level")
                        ("Enter" . "agent>terminal>assign")
                        ("q" . "back")
+                       ("Esc" . "close")
                        ("g" . "refresh")
                        ("/" . "filter")
                        (":" . "command")
                        ("C-p" . "picker")
                        ("$" . "process log")
-                       ("?" . "menu")))
-    ("Repolist" (("n" . "create+assign") ("a" . "assign existing")))
-    ("Status" (("n/p" . "move") ("s/S" . "stage") ("u/U" . "unstage") ("k" . "discard")))
+                       ("?" . "menu")
+                       ("? k" . "this help")))
+    ("Repolist"
+     (("a" . "assign agent") ("v" . "status")
+                             ("t" . "terminal")
+                             ("c" . "Claude")
+                             ("x" . "Codex")
+                             ("?" . "commit/tag menus")))
+    ("Status"
+     (("s/S" . "stage") ("u/U" . "unstage")
+                        ("k" . "discard")
+                        ("c" . "commit")
+                        ("t" . "tag")
+                        ("!" . "shell command")))
     ("Menus (?)"
      (("c" . "commit") ("P" . "push")
                        ("F" . "pull")
@@ -28,24 +42,38 @@
                        ("f" . "fetch")
                        ("t" . "tag")
                        ("X" . "reset")
-                       ("w" . "worktree")))
+                       ("w" . "worktree")
+                       ("!" . "shell command")))
+    ("Worktree menu (w)"
+     (("c" . "create+shell") ("n" . "create+agent")
+                             ("a" . "assign agent")
+                             ("k" . "delete")
+                             ("l" . "lock")
+                             ("u" . "unlock")
+                             ("C" . "toggle complete")
+                             ("p" . "prune")
+                             ("P" . "prune all")
+                             ("b" . "branch name")))
     ("Prefix C-q"
      (("-" . "split down") ("|" . "split right")
-                           ("< / >" . "shrink/grow horizontal")
-                           ("{ / }" . "shrink/grow vertical")
+                           ("< / >" . "width")
+                           ("{ / }" . "height")
                            ("x" . "close pane")
                            ("z" . "zoom")
                            ("h/j/k/l" . "focus")
                            ("n/p" . "cycle window")
-                           ("w" . "workspace overview")
+                           ("t" . "new shell window")
+                           ("w" . "repolist")
                            ("K" . "stop workspace agent")
                            ("[" . "scrollback")
                            ("d" . "detach")
+                           ("C-q" . "drop modal")
                            ("Q" . "quit server")))
     ("Scrollback (C-q [)"
      (("j/k" . "line") ("C-u/C-d" . "half page")
                        ("g/G" . "top/bottom")
                        ("/" . "search")
+                       ("?" . "search back")
                        ("n/N" . "next/prev")
                        ("Space" . "select")
                        ("y" . "yank+exit")
@@ -88,7 +116,7 @@
 
 (defun %help-view-section-columns (bindings available-width)
   (max 1
-       (min 3
+       (min 4
             (floor (max 1 available-width)
                    (%help-view-section-item-width bindings)))))
 
@@ -124,9 +152,12 @@
                                         section)
   "Draw SECTION -- (HEADING BINDINGS) -- starting at ROW, indented INDENT
    columns, wrapping BINDINGS into %HELP-VIEW-SECTION-COLUMNS side-by-side
-   item columns. Returns the next free row. Drawing stops (silently clipping
-   any remainder) once ROW exceeds MAX-ROW -- the box's bottom border row --
-   rather than overflowing it; this view has no scroll of its own."
+   item columns. Returns the next free row: sections sit directly on top of
+   each other, because the full binding list fits a 40-row terminal only
+   without a blank line between them, and the styled heading already separates
+   them. Drawing stops (silently clipping any remainder) once ROW exceeds
+   MAX-ROW -- the box's bottom border row -- rather than overflowing it; this
+   view has no scroll of its own."
   (destructuring-bind (heading bindings) section
     (when (<= row max-row)
       (%draw-help-view-heading surface row indent heading available-width)
@@ -147,7 +178,7 @@
                                                    key
                                                    description
                                                    item-width))) (incf row)))
-    (1+ row)))
+    row))
 
 (defun %render-help-view-box (surface rectangle)
   (let ((box

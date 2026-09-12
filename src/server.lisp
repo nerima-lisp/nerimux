@@ -131,8 +131,10 @@
 
 (defun run-server (name)
   "Run a headless server owning a session, serving clients attaching to
-   (socket-path NAME).  The session persists across detaches until its last
-   window is killed."
+   (socket-path NAME).  A fresh session starts with no window: the workspace
+   UI opens the first one when the user asks for a pane, so `kill` and
+   `C-q Q` on an untouched server count zero panes.  The session persists
+   across detaches."
   (require :sb-posix)
   (install-pty-port)
   (setf nerimux/ports:*notify-host* #'%send-host-notification)
@@ -146,7 +148,7 @@
         *runtime-restored-panes* nil
         *runtime-restored-worktrees* nil)
   (let* ((session (or (%runtime-session-from-state name)
-                      (create-initial-session *term-rows* *term-cols*)))
+                      (%create-workspace-session)))
          (path    (socket-path name)))
     (setf *bound-socket-path* path)
     (server-add-session session)

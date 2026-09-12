@@ -43,6 +43,31 @@
       (expect (string= "DIRTY +8 -3 AHEAD 2"
                        (nerimux/renderer::%worktree-status-label worktree)))))
 
+  (it "omits the zero side of a one-sided diff line count"
+    (let ((added-only
+            (nerimux/workspace-model:make-worktree
+             :path "/repo/wt" :branch "main" :status :fetched
+             :dirty-p t :additions 1 :deletions 0))
+          (deleted-only
+            (nerimux/workspace-model:make-worktree
+             :path "/repo/wt" :branch "main" :status :fetched
+             :dirty-p t :additions 0 :deletions 4)))
+      (expect (equal '("DIRTY" "+1")
+                     (nerimux/renderer::%worktree-status-tokens added-only)))
+      (expect (equal '("DIRTY" "-4")
+                     (nerimux/renderer::%worktree-status-tokens deleted-only)))))
+
+  (it "reads ahead/behind as arrows for the pane status line only"
+    (let ((worktree
+            (nerimux/workspace-model:make-worktree :path "/repo/wt" :branch "main"
+                                         :status :fetched :ahead 2 :behind 7)))
+      (expect (equal '("AHEAD 2" "BEHIND 7")
+                     (nerimux/renderer::%worktree-status-tokens worktree)))
+      (expect (equal (list (format nil "~C2" (code-char #x2191))
+                           (format nil "~C7" (code-char #x2193)))
+                     (nerimux/renderer::%worktree-status-tokens
+                      worktree :ahead-behind :arrows)))))
+
   (it "omits a zero diff line count token"
     (let ((worktree
             (nerimux/workspace-model:make-worktree
@@ -62,10 +87,10 @@
     (let ((worktree
             (nerimux/workspace-model:make-worktree :path "/repo/wt" :branch "main"
                                          :status :fetched
-                                         :missing-p t :bare-p t :locked-p t
+                                         :missing-p t :locked-p t
                                          :prunable-p t :dirty-p t :conflict-p t
                                          :ahead 2 :behind 7)))
-      (expect (equal '("MISSING" "BARE" "LOCKED" "PRUNABLE"
+      (expect (equal '("MISSING" "LOCKED" "PRUNABLE"
                        "DIRTY" "CONFLICT" "AHEAD 2" "BEHIND 7")
                      (nerimux/renderer::%worktree-status-tokens worktree)))))
 
@@ -74,13 +99,6 @@
             (nerimux/workspace-model:make-worktree :path "/repo/wt" :branch "main"
                                          :locked-p t :prunable-p t)))
       (expect (equal '("LOCKED" "PRUNABLE" "UNKNOWN")
-                     (nerimux/renderer::%worktree-status-tokens worktree)))))
-
-  (it "lists BARE alongside health tokens rather than replacing them"
-    (let ((worktree
-            (nerimux/workspace-model:make-worktree :path "/repo/wt" :branch "main"
-                                         :status :fetched :bare-p t :dirty-p t)))
-      (expect (equal '("BARE" "DIRTY")
                      (nerimux/renderer::%worktree-status-tokens worktree))))))
 
 (describe "renderer-suite/workspace-status-title-selection"
@@ -95,6 +113,14 @@
                                                                 :local-path
                                                                 "/repo")
                        "team/project")
+                      (list
+                       (nerimux/workspace-model:make-repository :id
+                                                                "repo-bare"
+                                                                :specification
+                                                                "github.com/acme/beta.git"
+                                                                :local-path
+                                                                "/repo")
+                       "github.com/acme/beta")
                       (list
                        (nerimux/workspace-model:make-repository :id
                                                                 "repo-path"
@@ -129,7 +155,7 @@
                                                               "/repo/wt"
                                                               :branch
                                                               "")
-                       "/repo/wt")
+                       "detached wt")
                       (list
                        (nerimux/workspace-model:make-worktree :id
                                                               "wt-id"
@@ -189,16 +215,28 @@
                     (nerimux/renderer::%workspace-title-selection pane nil nil)
                   (expect (eq repository selected-repository))
                   (expect (eq worktree selected-worktree)))))
-          (it "builds the terminal title with the em-dash separator"
+          (it "builds the terminal title from the fields that exist, with no placeholder"
               (expect
-               (string= (string (code-char #x2014))
-                        (nerimux/renderer::%workspace-em-dash)))
-              (expect
-               (search "nerimux: team/project — feature/x"
+               (search "nerimux: team/project · feature/x"
                        (nerimux/renderer::%client-title-osc
                         (nerimux/workspace-model:make-repository :specification
                                                                  "team/project")
                         (nerimux/workspace-model:make-worktree :path
                                                                "/wt"
                                                                :branch
-                                                               "feature/x"))))))
+                                                               "feature/x"))))
+              (let ((empty (nerimux/renderer::%client-title-osc nil nil)))
+                (expect (search "nerimux" empty))
+                (expect (not (find (code-char #x2014) empty)))
+                (expect (not (search "-" empty)))))
+
+          (it "trims an overlong message from the front, keeping the tail that names it"
+              (let ((message "worktree created: /home/u/ghq/github.com/acme/alpha"))
+                (expect (string= message
+                                 (nerimux/renderer::%message-strip-text message
+                                                                        200)))
+                (let ((strip (nerimux/renderer::%message-strip-text message 20)))
+                  (expect (= 20 (nerimux/renderer::%display-width strip)))
+                  (expect (char= #\… (char strip 0)))
+                  (expect (search "acme/alpha" strip))
+                  (expect (not (search "worktree created" strip)))))))

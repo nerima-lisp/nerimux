@@ -16,22 +16,26 @@ default key bindings.
 
 ## Workspace UI
 
-- **Repolist**: three sections, Attention (worktrees needing attention or
-  holding an exited pane), Active (every other worktree with an open pane),
-  and Repositories (collapsed by default; `Tab` expands one). `Tab` on a
+- **Repolist**: three sections, Attention (worktrees with a conflict, a
+  missing checkout, a waiting agent, or an exited pane), Active (every other
+  worktree with an open pane), and Repositories (grouped by organization,
+  each repository collapsed by default; `Enter` or `Tab` expands one to show
+  its worktrees). `Tab` on a
   worktree row inline-expands its panes, changed files, and recent commits;
   `?` opens the dispatch transient, whose `k` entry opens a full-screen help
   view listing every binding.
 - **Status view**: focus a worktree's staged/unstaged changes and reach
   every git write (commit, push, pull, branch, merge, rebase, stash, fetch,
-  tag, reset) through magit-style transient menus. Unread, bell, exit, dirty,
-  and conflict signals surface as `!` marks on the repolist tree and global
-  picker.
+  tag, reset) through magit-style transient menus. Bell, exit, dirty, and
+  conflict signals surface as `!` marks on the repolist tree and global
+  picker; unread output marks the pane row that produced it and leaves its
+  worktree where it was.
 - **Pane view**: a focused shell takes typing directly; every nerimux-level
   key inside it starts with `C-q`, replacing the old normal/input mode
   distinction.
-- **Global picker**: press `C-p` to search organizations, repositories,
-  worktrees, panes, metadata, and attention items.
+- **Global picker**: from `repolist` or `status`, press `C-p` to search
+  organizations, repositories, worktrees, and panes; `Esc` returns to the view
+  it was opened over.
 - **Thin-client sessions**: `C-q d` detaches one client while the runtime and
   pane processes remain resident for later attach.
 

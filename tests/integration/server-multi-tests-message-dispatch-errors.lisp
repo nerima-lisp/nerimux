@@ -239,34 +239,11 @@
                                            (nerimux::%set-client-selected-tree-object
                                             conn
                                             repository)
-                                           (setf (fdefinition
-                                                  'nerimux/vcs:prune-worktrees-async) (lambda 
-                                                                                          (received-repository
-                                                                                           &key
-                                                                                           dry-run
-                                                                                           verbose
-                                                                                           on-complete
-                                                                                           on-error
-                                                                                           callback-dispatch)
-                                                                                        (declare (ignore
-                                                                                                  received-repository
-                                                                                                  dry-run
-                                                                                                  verbose
-                                                                                                  on-complete
-                                                                                                  callback-dispatch))
-                                                                                        (funcall
-                                                                                         on-error
-                                                                                         "prune async failure")
-                                                                                        t))
-                                           (nerimux::%client-prune-worktrees
-                                            conn
-                                            nil
-                                            nil
-                                            :dry-run
-                                            t)
-                                           (expect
-                                            (%worktree-message-seen-p conn
-                                                                      "worktree prune failed: prune async failure"))
+                                           ;; The preview is read from the
+                                           ;; catalogue now, not from a git
+                                           ;; process, so there is no async or
+                                           ;; synchronous prune failure left to
+                                           ;; report.
                                            (setf (fdefinition
                                                   'nerimux/vcs:prune-worktrees-async) (lambda 
                                                                                           (&rest
@@ -274,7 +251,7 @@
                                                                                         (declare (ignore
                                                                                                   arguments))
                                                                                         (error
-                                                                                         "prune synchronous failure")))
+                                                                                         "preview must not run git")))
                                            (nerimux::%client-prune-worktrees
                                             conn
                                             nil
@@ -283,7 +260,7 @@
                                             t)
                                            (expect
                                             (%worktree-message-seen-p conn
-                                                                      "worktree prune failed: prune synchronous failure")))
+                                                                      "worktree prune preview: nothing to prune")))
                                        (setf (fdefinition
                                               'nerimux/vcs:vcs-package-available-p) available
                                              (fdefinition
@@ -355,7 +332,7 @@
                                                  conn)))
                                            (expect
                                             (%worktree-message-seen-p conn
-                                                                      "worktree created"))
+                                                                      "worktree created: /tmp/worktree-errors"))
                                            (setf (fdefinition
                                                   'nerimux/vcs:delete-worktree-async) (lambda 
                                                                                           (received-worktree
@@ -410,22 +387,9 @@
                                             conn
                                             nil
                                             nil)
-                                           (nerimux::%client-lock-worktree conn
-                                                                           nil
-                                                                           nil)
-                                           (nerimux::%client-unlock-worktree
-                                            conn
-                                            nil
-                                            nil)
                                            (expect
                                             (%worktree-message-seen-p conn
-                                                                      "worktree create requires --confirm"))
-                                           (expect
-                                            (%worktree-message-seen-p conn
-                                                                      "worktree lock requires --confirm"))
-                                           (expect
-                                            (%worktree-message-seen-p conn
-                                                                      "worktree unlock requires --confirm"))
+                                                                      "wt-create: add --confirm to run"))
                                            (nerimux::%set-client-selected-tree-object
                                             conn
                                             nil)
@@ -439,11 +403,11 @@
                                                                       "worktree create requires a repository"))
                                            (nerimux::%client-lock-worktree conn
                                                                            nil
-                                                                           '("--confirm"))
+                                                                           nil)
                                            (nerimux::%client-unlock-worktree
                                             conn
                                             nil
-                                            '("--confirm"))
+                                            nil)
                                            (expect
                                             (%worktree-message-seen-p conn
                                                                       "worktree lock requires a worktree"))

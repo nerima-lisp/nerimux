@@ -6,6 +6,7 @@
     (when (and (stringp query) (plusp (length query)))
       (setf (client-conn-tree-filter conn) (subseq query 0 (1- (length query)))
             (client-conn-tree-scroll conn) 0)
+      (%client-reveal-or-move-selection conn)
       (%mark-dirty)
       t)))
 
@@ -22,6 +23,7 @@
              (< (length query) +max-tree-filter-length+))
       (setf (client-conn-tree-filter conn) (concatenate 'string query text)
             (client-conn-tree-scroll conn) 0)
+      (%client-reveal-or-move-selection conn)
       (%mark-dirty)
       t)))
 

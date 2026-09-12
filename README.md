@@ -5,9 +5,9 @@
 [![Documentation](https://img.shields.io/badge/docs-MkDocs%20Material-0a7a5a)](https://nerima-lisp.github.io/nerimux/)
 
 A workspace-oriented terminal multiplexer written entirely in Common Lisp,
-with a [magit](https://magit.vc/)-style keymap. The primary UI is a
-three-section repolist with three sections: Attention, Active, and
-Repositories, plus a thin client attached to a headless runtime. The entry
+with a [magit](https://magit.vc/)-style keymap. The primary UI is a repolist
+of three sections, Attention, Active, and Repositories, plus a thin client
+attached to a headless runtime. The entry
 surface is workspace-only: `attach`, `server`, and `kill` are the only commands.
 The core regression suite runs hermetically through Nix; live PTY integration
 is an explicit host-side check.
@@ -34,7 +34,8 @@ commands with `./result/bin/nerimux`.
 unrecognized command word prints the usage summary and exits non-zero. If the
 current directory sits inside a worktree ghq already tracks (a subdirectory
 counts too), `attach` opens straight into that worktree's pane instead of the
-repolist. Use `C-q d` to detach and `C-p` to open the global picker. A
+repolist. `C-q d` detaches and leaves the runtime resident; `C-p`, from the
+repolist or status view, opens the global picker over whatever is on screen. A
 selector containing a slash is resolved either against the ghq catalog using
 the full specification, `host/organization/repository`, or against a local
 worktree path. `server` runs the headless runtime without attaching a client, and

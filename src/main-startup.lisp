@@ -81,7 +81,7 @@
   "Handle an argv whose first item is not a known startup mode.
    Every case is a usage error: print the summary to stderr and exit 1."
   (declare (ignore rest))
-  (declare (ignorable mode))
+  (format *error-output* "~&nerimux: unknown command '~A'~%" mode)
   (write-string (%usage-string) *error-output*)
   (sb-ext:exit :code 1))
 

@@ -65,7 +65,11 @@
       (let* ((frame
                (nerimux/renderer:render-workspace-overview-to-string
                 (list organization) 24 cols :expanded-node-ids expanded-node-ids))
-             (base (format nil "~A~A" (make-string 7 :initial-element #\Space) branch))
+             ;; Level 3: organization (1) -> repository (2) -> worktree (3),
+             ;; each row's own 2-space indent plus the fixed 5-character
+             ;; select/mark/glyph prefix (see RENDERER-WORKSPACE.LISP's
+             ;; TREE-ROW-TEXT), i.e. (2 * 3) + 5 = 11.
+             (base (format nil "~A~A" (make-string 11 :initial-element #\Space) branch))
              (suffix
                (nth-value 1
                 (nerimux/renderer::%worktree-tree-info-suffix
@@ -97,10 +101,10 @@
       (nerimux/pane:worktree-add-pane worktree
         (nerimux/pane:make-pane :fd 10 :agent-kind :codex))
       (let* ((entry (find worktree
-                          (nerimux/renderer::%workspace-flat-tree-entries
+                          (nerimux/renderer:workspace-flat-tree-entries
                            (list organization) nil)
                           :key #'third))
-             (base (format nil "~A~A"
+             (base (format nil "~A▸ ~A"
                            (make-string (+ 3 (* 2 (first entry)))
                                         :initial-element #\Space)
                            (second entry))))
@@ -117,8 +121,8 @@
               for plain-row = (strip-sgr row)
               do (expect (search row frame))
                  (expect (<= (nerimux/renderer::%display-width plain-row) cols))
-                 (when (search "COMPLETED" plain-row)
+                 (when (search "completed" plain-row)
                    (expect (search "RUNNING" plain-row)))
                  (when (= cols 80)
-                   (expect (search "agent:RUNNING+COMPLETED/Codex git:CLEAN"
+                   (expect (search "completed agent RUNNING"
                                    (strip-sgr frame)))))))))

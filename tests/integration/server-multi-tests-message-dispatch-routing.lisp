@@ -36,7 +36,7 @@
              (before-modal (nerimux::client-conn-modal conn))
              (before-view (nerimux::client-conn-view conn))
              (key (make-array 1 :element-type '(unsigned-byte 8)
-                                 :initial-contents (list (char-code #\z))))
+                                 :initial-contents (list (char-code #\o))))
              (writes nil))
         (flet ((rec (fd bytes) (declare (ignore fd)) (push bytes writes)))
           (let ((orig (fdefinition 'nerimux::pty-write)))
@@ -134,8 +134,62 @@
           (expect (eq :repolist (nerimux::client-conn-view conn)))
           (setf (nerimux::client-conn-message-log conn) nil)
           (submit "overview")
-          (expect (null (nerimux::client-conn-message-log conn)))
+          (expect (string= "view: overview"
+                           (first (nerimux::client-conn-message-log conn))))
           (expect (eq :repolist (nerimux::client-conn-view conn)))))))
+
+  (it "colon-help-opens-the-help-view-and-colon-q-steps-back"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (nerimux::*clients* (list conn)))
+        (setf (nerimux::client-conn-view conn) :repolist)
+        (flet ((submit (command)
+                 (nerimux::%handle-multi-key-message s conn #(58))
+                 (nerimux::%handle-multi-key-message
+                  s conn
+                  (cl-codec-kit:string-to-octets command :encoding :utf-8))
+                 (nerimux::%handle-multi-key-message s conn #(13))))
+          (submit "help")
+          (expect (eq :help (nerimux::client-conn-modal conn)))
+          (expect (null (nerimux::client-conn-message-log conn)))
+          (nerimux::%set-client-modal conn nil)
+          (setf (nerimux::client-conn-tree-filter conn) "feat")
+          (submit "q")
+          (expect (null (nerimux::client-conn-tree-filter conn)))
+          (expect (null (nerimux::client-conn-modal conn)))
+          (expect (null (nerimux::client-conn-message-log conn)))
+          (setf (nerimux::client-conn-tree-filter conn) "feat")
+          (submit "quit")
+          (expect (null (nerimux::client-conn-tree-filter conn)))
+          (expect (null (nerimux::client-conn-message-log conn)))))))
+
+  (it "tab-completes-the-command-name-and-cycles-on-repeat"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (nerimux::*clients* (list conn)))
+        (setf (nerimux::client-conn-view conn) :repolist)
+        (flet ((tab ()
+                 (nerimux::%handle-multi-key-message s conn #(9)))
+               (type-text (text)
+                 (nerimux::%handle-multi-key-message
+                  s conn
+                  (cl-codec-kit:string-to-octets text :encoding :utf-8))))
+          (nerimux::%handle-multi-key-message s conn #(58))
+          (type-text "wt-p")
+          (tab)
+          (expect (string= "wt-prune"
+                           (nerimux::client-conn-command-buffer conn)))
+          (tab)
+          (expect (string= "wt-prune-confirm"
+                           (nerimux::client-conn-command-buffer conn)))
+          (tab)
+          (expect (string= "wt-prune"
+                           (nerimux::client-conn-command-buffer conn)))
+          (setf (nerimux::client-conn-command-buffer conn) "")
+          (type-text "ref")
+          (tab)
+          (expect (string= "refresh"
+                           (nerimux::client-conn-command-buffer conn)))))))
 
   (it "workspace-command-completions-match-the-client-allow-list"
     (expect
@@ -531,4 +585,38 @@
             (nerimux::%handle-multi-client-message
              nerimux::+msg-key+ (vector byte) s conn)))
         (expect (null writes)))))
+
+  (it "rl-13-an-escape-that-cancels-a-modal-does-not-eat-the-next-key"
+    (with-fake-session (s)
+      (dolist (opening (list #(47 122) #(58) #()))
+        (let ((conn (%make-test-conn)))
+          (setf (nerimux::client-conn-view conn) :repolist)
+          (when (plusp (length opening))
+            (nerimux::%handle-multi-client-message
+             nerimux::+msg-key+ opening s conn))
+          (nerimux::%handle-multi-client-message
+           nerimux::+msg-key+ #(27) s conn)
+          (nerimux::%handle-multi-client-message
+           nerimux::+msg-key+ #(36) s conn)
+          (expect (eq :process-log (nerimux::client-conn-modal conn)))))))
+
+  (it "an-escape-introducer-still-resolves-arrow-and-ss3-sequences"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn)))
+        (setf (nerimux::client-conn-view conn) :repolist)
+        (dolist (byte (list 27 91 66))
+          (nerimux::%handle-multi-client-message
+           nerimux::+msg-key+ (vector byte) s conn))
+        (expect (null (nerimux::client-conn-modal conn)))
+        (dolist (byte (list 27 79 66))
+          (nerimux::%handle-multi-client-message
+           nerimux::+msg-key+ (vector byte) s conn))
+        (expect (null (nerimux::client-conn-modal conn))))))
+
+  (it "v-in-the-status-view-steps-back-to-the-repolist"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn)))
+        (setf (nerimux::client-conn-view conn) :status)
+        (nerimux::%handle-multi-key-message s conn #(118))
+        (expect (eq :repolist (nerimux::client-conn-view conn))))))
   )

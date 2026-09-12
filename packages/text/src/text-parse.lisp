@@ -5,6 +5,15 @@
   (when (and (stringp string) (plusp (length string)))
     string))
 
+(defun strip-dot-git-suffix (name)
+  "NAME with a trailing \".git\" removed (case-insensitively), unless NAME
+   is nothing but \".git\" itself -- in which case stripping it would leave
+   an empty label, so NAME is returned unchanged."
+  (if (and (> (length name) 4)
+           (string-equal name ".git" :start1 (- (length name) 4)))
+      (subseq name 0 (- (length name) 4))
+      name))
+
 (defun parse-integer-or-nil (string &rest args)
   "Parse STRING as an integer and return NIL when parsing fails.
 

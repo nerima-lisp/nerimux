@@ -14,6 +14,7 @@
                      #:picker-item-worktree
                      #:picker-item-pane
                      #:picker-item-attention-p
+                     #:picker-item-row-text
                      #:build-global-picker-items
                      #:filter-global-picker-items
                      #:select-global-picker-item

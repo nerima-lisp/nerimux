@@ -40,6 +40,29 @@
                 (if (eq (sb-ext:process-status process) :signaled)
                     (values nil :signaled) (values code :exited)))))
         (cl-concurrent-kit:operation-timed-out () nil) (error () nil)))))
+(defun %restore-cooked-termios (master-fd)
+  "Give the PTY behind MASTER-FD the ordinary interactive line discipline.
+   SBCL's run-program runs set_noecho (runtime/run-program.c) in the child
+   before exec, which clears ECHO on the slave: without this the user sees
+   nothing of what they type and readline stops echoing history recall too.
+   tcsetattr on the master reaches the same termios as the slave, and the
+   parent only gets here after the child has exec'd (wait-for-exec), so the
+   child cannot clear ECHO again afterwards.  A child that died before this
+   runs leaves the master with no slave open, hence the syscall guard."
+  (handler-case
+      (let ((termios (sb-posix:tcgetattr master-fd)))
+        (setf (sb-posix:termios-lflag termios)
+              (logior (sb-posix:termios-lflag termios)
+                      sb-posix:icanon sb-posix:echo sb-posix:echoe
+                      sb-posix:echok sb-posix:isig)
+              (sb-posix:termios-iflag termios)
+              (logior (sb-posix:termios-iflag termios) sb-posix:icrnl)
+              (sb-posix:termios-oflag termios)
+              (logior (sb-posix:termios-oflag termios) sb-posix:opost))
+        (sb-posix:tcsetattr master-fd sb-posix:tcsanow termios)
+        t)
+    (sb-posix:syscall-error () nil)))
+
 (defun forkpty-with-shell (rows cols &key start-dir default-command environment)
   (declare (type fixnum rows cols))
   (multiple-value-bind (program args search-p) (%target-program-and-args default-command)
@@ -49,7 +72,8 @@
           (success nil))
       (unwind-protect
            (let ((master (cl-tty-kit:pty-fd pty)) (pid (cl-tty-kit:pty-pid pty)))
-             (set-pty-size master rows cols) (%remember-pty-process master pty)
+             (set-pty-size master rows cols) (%restore-cooked-termios master)
+             (%remember-pty-process master pty)
              (setf success t) (values master pid ""))
         (unless success
           (handler-case (cl-tty-kit:close-pty pty)

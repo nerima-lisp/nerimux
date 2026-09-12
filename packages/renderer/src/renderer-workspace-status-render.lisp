@@ -130,7 +130,10 @@
               (%workspace-status-row-content-spans label object kind)))))
 
 (defun %workspace-status-header-spans (worktree)
-  (let* ((repository (worktree-repository worktree))
+  "The header line. WORKTREE is NIL for a client put in this view before a
+   worktree was ever selected (the frame-dispatch contract renders every view
+   for such a connection), and then the header carries the chip alone."
+  (let* ((repository (and worktree (worktree-repository worktree)))
          (organization (and repository (repository-organization repository)))
          (repository-label
           (cond
@@ -149,12 +152,14 @@
                                      :style
                                      (%workspace-status-style-heading))
      (cl-tui-kit/core:make-text-span
-      (if repository-label
-          (format nil
-                  " ~A · ~A"
-                  repository-label
-                  (%worktree-tree-label worktree))
-          (format nil " ~A" (%worktree-tree-label worktree)))))))
+      (cond
+        ((null worktree) "")
+        (repository-label
+         (format nil
+                 " ~A · ~A"
+                 repository-label
+                 (%worktree-tree-label worktree)))
+        (t (format nil " ~A" (%worktree-tree-label worktree))))))))
 
 (defun %workspace-status-hint-spans (pairs)
   "One flat spans list for PAIRS (KEY . DESCRIPTION) -- the span equivalent
@@ -185,32 +190,72 @@
    the selected row's KIND. Mirrors %WORKSPACE-KEY-PANEL-CONTENT's per-kind
    dispatch (renderer-workspace.lisp) but with FR-003's status-only stage/
    unstage/discard keys (contract §2) in place of the repolist's worktree-
-   management keys, which do not apply to this view."
+   management keys, which do not apply to this view. Every key named here is
+   bound in the status view (%HANDLE-CLIENT-UI-KEY-PAYLOAD); the second line
+   carries `?`, the way into every transient, whatever row is selected."
   (values
    (%workspace-status-hint-spans
     (case kind
       (:section
-       (list (cons "TAB" "fold")
+       (list (cons "Tab" "fold")
              (cons "1..4" "visibility")
-             (cons "?" "transient")))
+             (cons "s/S" "stage")
+             (cons "u/U" "unstage")))
       (:file
        (list (cons "s" "stage")
              (cons "u" "unstage")
              (cons "k" "discard")
-             (cons "TAB" "diff")))
-      (:stash (list (cons "z" "stash") (cons "TAB" "fold")))
-      (:commit (list (cons "n/p" "move")))
-      (:pane (list (cons "RET" "focus")))
-      (:worktree (list (cons "RET" "open")))
-      (t (list (cons "n/p" "move") (cons "TAB" "expand") (cons "g" "refresh")))))
+             (cons "Tab" "diff")))
+      (:stash (list (cons "z" "stash") (cons "Tab" "fold")))
+      (:commit (list (cons "l" "log") (cons "d" "diff") (cons "Tab" "expand")))
+      (:pane
+       (list (cons "Enter" "focus")
+             (cons (format nil "~A x" (%workspace-prefix-label prefix-code))
+                   "close (in pane)")))
+      (t
+       (list (cons "s/S" "stage")
+             (cons "u/U" "unstage")
+             (cons "c" "commit")
+             (cons "P" "push")
+             (cons "F" "pull")
+             (cons "?" "all menus")))))
    (%workspace-status-hint-spans
-    (list (cons "$" "process log")
-          (cons "/" "filter")
+    (list (cons "n/p" "move")
+          (cons "v/q" "back")
+          (cons "g" "refresh")
+          (cons "?" "menu")
+          (cons "$" "log")
           (cons ":" "command")
-          (cons "C-p" "picker")
+          (cons (format nil "~A w" (%workspace-prefix-label prefix-code))
+                "repolist")
           (cons (format nil "~A d" (%workspace-prefix-label prefix-code))
-                "detach")
-          (cons "q" "back")))))
+                "detach")))))
+
+(defun %workspace-status-command-line-spans (command-buffer)
+  "The `:` command line as spans: the prompt, the typed buffer and the faint
+   completion list %RENDER-WORKSPACE-COMMAND-LINE draws for the repolist,
+   built for this view's surface instead of an ANSI stream."
+  (let* ((buffer (or command-buffer ""))
+         (completions (%workspace-command-completions buffer)))
+    (append
+     (list (cl-tui-kit/core:make-text-span
+            ":"
+            :style
+            (%workspace-status-style-accent-bold))
+           (cl-tui-kit/core:make-text-span buffer))
+     (when completions
+       (list
+        (cl-tui-kit/core:make-text-span (format nil "  ~{~A~^ ~}" completions)
+                                        :style
+                                        (%workspace-status-style-faint)))))))
+
+(defun %workspace-status-filter-line-spans (tree-filter)
+  "The `/` filter input line as spans, the command line's sibling."
+  (list
+   (cl-tui-kit/core:make-text-span "/"
+                                   :style
+                                   (%workspace-status-style-accent-bold))
+   (cl-tui-kit/core:make-text-span (or tree-filter ""))))
 
 (defmacro %draw-status-text (surface row spans cols)
   `(cl-tui-kit/core:surface-draw-styled-text ,surface
@@ -220,16 +265,15 @@
                                              :max-width
                                              ,cols))
 
-(defun %workspace-status-panel-rows-available (rows)
-  "Rows the bottom key panel occupies below TERMINAL-ROWS = 12's threshold
-   (2 content lines) vs. above the single-line footer it collapses to (1) --
-   what a TRANSIENT (Unit TRANSIENT) must fit within before
-   RENDER-WORKSPACE-STATUS-TO-TUI-STRING falls back to drawing it full-
-   screen instead (contract §3's TRANSIENT-VIEW-HEIGHT/height-fallback
-   note)."
-  (if (>= rows 12)
-      2
-      1))
+(defun %workspace-status-transient-rectangle (rows cols transient)
+  "The open transient's panel: full width, anchored at the frame's bottom
+   edge, as tall as the transient's own content plus its border. It grows
+   over the key panel and, if the transient is long, over the status rows
+   themselves -- what it never does is replace the frame, so the buffer the
+   transient acts on stays on screen above it."
+  (%bottom-panel-rectangle rows
+                           cols
+                           (transient-view-height transient nil (- cols 4))))
 
 (defun %workspace-status-render-frame (worktree rows
                                                 cols
@@ -240,16 +284,21 @@
                                                 level
                                                 messages
                                                 transient
-                                                prefix-code)
+                                                prefix-code
+                                                picker
+                                                mode
+                                                command-buffer
+                                                tree-filter)
   (let* ((surface (cl-tui-kit/core:make-surface cols rows))
          (entries
-          (workspace-status-entries worktree
-                                    :expanded-node-ids
-                                    expanded-node-ids
-                                    :file-diffs
-                                    file-diffs
-                                    :visibility-level
-                                    level))
+          (when worktree
+            (workspace-status-entries worktree
+                                      :expanded-node-ids
+                                      expanded-node-ids
+                                      :file-diffs
+                                      file-diffs
+                                      :visibility-level
+                                      level)))
          (view-rows (workspace-status-view-rows rows))
          (entry-count (length entries))
          (max-scroll (max 0 (- entry-count view-rows)))
@@ -280,43 +329,58 @@
             (make-string cols :initial-element #\─)
             :style (%workspace-status-style-muted)))
      cols)
-    (let ((panel-top
-           (if key-panel-p
-               key-panel-separator-row
-               footer-row)))
-      (cond
-        (transient
-         (render-transient-panel surface
-                                 (cl-tui-kit/core:make-rectangle 0
-                                                                 panel-top
-                                                                 cols
-                                                                 (- rows
-                                                                    panel-top))
-                                 transient))
-        (key-panel-p
-          (when messages
-            (%draw-status-text
-             surface message-row
-             (list (cl-tui-kit/core:make-text-span
-                    (format nil "message: ~A" (first messages))
-                    :style (%workspace-status-style-muted)))
-             cols))
-          (%draw-status-text
-           surface key-panel-separator-row
-           (list (cl-tui-kit/core:make-text-span
-                  (make-string cols :initial-element #\─)
-                  :style (%workspace-status-style-muted)))
-           cols)
-          (multiple-value-bind (line-1 line-2)
-              (%workspace-status-key-panel-spans selected-kind prefix-code)
-            (%draw-status-text surface key-panel-line-1 line-1 cols)
-            (%draw-status-text surface footer-row line-2 cols)))
-        (t
-         (%draw-status-text
-          surface footer-row
-          (%workspace-status-hint-spans
-           (list (cons "q" "back") (cons "?" "help")))
-          cols))))
+    (when (and key-panel-p messages)
+      (%draw-status-text
+       surface message-row
+       (list (cl-tui-kit/core:make-text-span
+              (format nil
+                      "message: ~A"
+                      (%message-strip-text (first messages)
+                                           (max 0 (- cols 9))))
+              :style (%workspace-status-style-muted)))
+       cols))
+    (cond
+      ((eq mode :command)
+       (%draw-status-text
+        surface footer-row
+        (%workspace-status-command-line-spans command-buffer)
+        cols))
+      ((eq mode :filter)
+       (%draw-status-text
+        surface footer-row
+        (%workspace-status-filter-line-spans tree-filter)
+        cols))
+      (key-panel-p
+        (%draw-status-text
+         surface key-panel-separator-row
+         (list (cl-tui-kit/core:make-text-span
+                (make-string cols :initial-element #\─)
+                :style (%workspace-status-style-muted)))
+         cols)
+        (multiple-value-bind (line-1 line-2)
+            (%workspace-status-key-panel-spans selected-kind prefix-code)
+          (%draw-status-text surface key-panel-line-1 line-1 cols)
+          (%draw-status-text surface footer-row line-2 cols)))
+      (t
+       (%draw-status-text
+        surface footer-row
+        (%workspace-status-hint-spans
+         (list (cons "q" "back") (cons "?" "help")))
+        cols)))
+    (when transient
+      (let ((rectangle
+             (%workspace-status-transient-rectangle rows cols transient)))
+        (render-transient-panel surface
+                                (%draw-panel-frame surface
+                                                   rectangle
+                                                   (transient-view-title
+                                                    transient))
+                                transient
+                                nil)))
+    (when picker
+      (destructuring-bind (items query index regex-p status) picker
+        (%render-picker-widget surface rows cols items query index regex-p
+                               status)))
     (%surface-to-ansi-frame surface)))
 
 (defun render-workspace-status-to-tui-string (worktree rows
@@ -329,30 +393,50 @@
                                                        visibility-level
                                                        messages
                                                        transient
-                                                       (prefix-code #x11))
+                                                       (prefix-code #x11)
+                                                       (picker-open-p nil)
+                                                       (picker-items nil)
+                                                       (picker-query "")
+                                                       (picker-index 0)
+                                                       (picker-regex-p nil)
+                                                       (picker-status nil)
+                                                       (mode nil)
+                                                       (command-buffer "")
+                                                       (tree-filter nil))
   "Render the magit-style status buffer for WORKTREE through CL-TUI-KIT's
    headless surface, same contract as RENDER-WORKSPACE-OVERVIEW-TO-TUI-
    STRING (renderer-tui-kit.lisp): a complete ANSI frame string. TRANSIENT,
-   when non-NIL and taller than the bottom key panel can hold
-   (%WORKSPACE-STATUS-PANEL-ROWS-AVAILABLE), replaces the WHOLE frame with
-   Unit TRANSIENT's own full-screen fallback (RENDER-TRANSIENT-FULL-SCREEN-
-   TO-TUI-STRING) instead of being drawn into the panel -- the same height-
-   fallback contract §3 documents for TRANSIENT-VIEW-HEIGHT."
+   when non-NIL, is hosted in place as a bordered panel over the bottom of
+   this frame (%WORKSPACE-STATUS-TRANSIENT-RECTANGLE); there is no
+   replace-the-screen path, since a panel that can grow upwards always has
+   somewhere to put its content.
+   PICKER-OPEN-P draws the global picker over this frame, the same modal the
+   pane and repolist frames host, so opening it from the status view does
+   not swap the buffer underneath for the pane view.
+   MODE :COMMAND or :FILTER replaces the key panel with that modal's input
+   line, exactly as the repolist footer does (RENDER-WORKSPACE-OVERVIEW-TO-
+   STRING): `:` and `/` are bound in this view too, and a prompt that draws
+   nothing leaves the user typing into an invisible buffer."
   (let* ((rows (max 1 rows))
          (cols (max 1 cols))
          (level (or visibility-level 2)))
-    (if (and transient
-             (> (transient-view-height transient)
-                (%workspace-status-panel-rows-available rows)))
-        (render-transient-full-screen-to-tui-string transient rows cols)
-        (%workspace-status-render-frame worktree
-                                        rows
-                                        cols
-                                        selected-object
-                                        scroll
-                                        expanded-node-ids
-                                        file-diffs
-                                        level
-                                        messages
-                                        transient
-                                        prefix-code))))
+    (%workspace-status-render-frame worktree
+                                    rows
+                                    cols
+                                    selected-object
+                                    scroll
+                                    expanded-node-ids
+                                    file-diffs
+                                    level
+                                    messages
+                                    transient
+                                    prefix-code
+                                    (when picker-open-p
+                                      (list picker-items
+                                            picker-query
+                                            picker-index
+                                            picker-regex-p
+                                            picker-status))
+                                    mode
+                                    command-buffer
+                                    tree-filter)))

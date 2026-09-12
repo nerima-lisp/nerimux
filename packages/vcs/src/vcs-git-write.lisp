@@ -156,15 +156,46 @@ NIL, exactly as it does synchronously."
           (%dispatch-callback callback-dispatch on-complete nil nil)
           nil))))
 
+(defun %git-stash-entries (directory)
+  "DIRECTORY's stashes as VCS-KIT:VCS-STASH-ENTRY structs, replicating
+VCS-KIT:VCS-LIST-STASHES's own line/NUL-delimited parsing of `git stash list
+--format=%gd%x00%gs%x00%gI` (cl-vcs-kit's vcs-observations-refs.lisp) against
+%RUN-GIT-READ's output instead of a checked git-layer repository handle. Uses
+VCS-KIT::%SPLIT-LINE-RECORDS, VCS-KIT::%SPLIT-NUL-RECORDS-VECTOR and
+VCS-KIT::%VCS-EMPTY-TO-NIL, all internal to cl-vcs-kit."
+  (let ((entries nil))
+    (dolist (line (vcs-kit::%split-line-records
+                   (%run-git-read directory "stash" "list"
+                                  "--format=%gd%x00%gs%x00%gI")))
+      (unless (string= line "")
+        (let ((fields (vcs-kit::%split-nul-records-vector line)))
+          (unless (>= (length fields) 3)
+            (error "Malformed Git stash output: ~S." line))
+          (push (vcs-kit::%make-vcs-stash-entry
+                 :reference (vcs-kit::%vcs-empty-to-nil (aref fields 0))
+                 :message (vcs-kit::%vcs-empty-to-nil (aref fields 1))
+                 :date (vcs-kit::%vcs-empty-to-nil (aref fields 2)))
+                entries))))
+    (nreverse entries)))
+
+(defun %list-stashes-at (directory)
+  "DIRECTORY's stashes as (REFERENCE . MESSAGE) conses, most recent first --
+%GIT-STASH-ENTRIES already returns them in that order (git stash list's own
+traversal). Never a VCS-KIT:VCS-STASH-ENTRY struct crosses this boundary (D1)."
+  (mapcar
+   (lambda (entry)
+     (cons (vcs-kit:vcs-stash-entry-reference entry)
+           (%sanitize-retained-text (vcs-kit:vcs-stash-entry-message entry))))
+   (%git-stash-entries directory)))
+
+(defun %read-stashes-at (directory)
+  "(STATE . STASHES) for DIRECTORY, the shape WORKTREE-STASHES-STATE/
+WORKTREE-STASHES take: (:READY . ENTRIES), or (:FAILED) for a directory git
+will not list stashes for. Called on the status pass's worker thread."
+  (handler-case (cons :ready (%list-stashes-at directory))
+    (error ()
+      (cons :failed nil))))
+
 (defun list-worktree-stashes (worktree)
-  "WORKTREE's stashes as (REFERENCE . MESSAGE) conses, most recent first --
-VCS-KIT:VCS-LIST-STASHES already returns them in that order (git stash
-list's own traversal). Never a VCS-KIT:VCS-STASH-ENTRY struct crosses this
-boundary (D1)."
-  (let ((backend-repository
-         (%make-vcs-repository (nerimux/workspace-model:worktree-path worktree))))
-    (mapcar
-     (lambda (entry)
-       (cons (vcs-kit:vcs-stash-entry-reference entry)
-             (%sanitize-retained-text (vcs-kit:vcs-stash-entry-message entry))))
-     (vcs-kit:vcs-list-stashes backend-repository))))
+  "WORKTREE's stashes, see %LIST-STASHES-AT."
+  (%list-stashes-at (nerimux/workspace-model:worktree-path worktree)))

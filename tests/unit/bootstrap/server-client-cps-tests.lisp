@@ -66,9 +66,9 @@
       (with-stubbed-fdefinition
           ((nerimux::install-pty-port
             (lambda () (push :install-pty-port events)))
-           (nerimux::create-initial-session
-            (lambda (rows cols)
-              (push (list :create-session rows cols) events)
+           (nerimux::%create-workspace-session
+            (lambda ()
+              (push :create-session events)
               :session))
            (nerimux::%runtime-session-from-state
             (lambda (name)

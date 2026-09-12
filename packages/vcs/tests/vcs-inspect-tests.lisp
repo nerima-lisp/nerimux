@@ -293,7 +293,7 @@
                   (lambda (character)
                     (< (char-code character) 32))
                   (first (cdr diff))))))))
-          (it "turns Tab into a single space while dropping other C0 controls"
+          (it "keeps Tab, the indentation a diff line carries, while dropping other C0 controls"
               (let ((worktree
                      (nerimux/workspace-model:make-worktree :id
                                                             "wt-diff-tab"
@@ -312,7 +312,8 @@
                  (let ((diff
                         (nerimux/vcs::%read-worktree-file-diff worktree
                                                                "src/tab.lisp")))
-                   (expect (string= "ab c" (first (cdr diff)))))))))
+                   (expect (string= (format nil "ab~Cc" (code-char 9))
+                                    (first (cdr diff)))))))))
 
 (describe "vcs worktree commit subject content limits (F3b/F5)"
           (it
@@ -411,3 +412,61 @@
                 (expect (null (nerimux/workspace-model:worktree-commits-state struct-a)))
                 (expect (eq struct-b completed)))))
         (nerimux/vcs:set-workspace-organizations previous)))))
+
+(describe "vcs branch and tag read views (F13)"
+  (it "%read-worktree-branches marks the current branch and names its upstream"
+    (let ((worktree (nerimux/workspace-model:make-worktree
+                      :id "wt-branches" :path "/tmp/nerimux-inspect-branches")))
+      (with-stubbed-fdefinition
+          ((vcs-kit:make-vcs-repository
+             (lambda (directory &rest arguments)
+               (declare (ignore arguments))
+               directory))
+           (vcs-kit:vcs-list-branches
+             (lambda (&rest arguments)
+               (declare (ignore arguments))
+               (list (vcs-kit::%make-vcs-branch
+                      :name "main" :current-p t :upstream "origin/main"
+                      :ahead 1 :behind 2)
+                     (vcs-kit::%make-vcs-branch
+                      :name "feature/x" :current-p nil)))))
+        (let ((text (nerimux/vcs::%read-worktree-branches worktree)))
+          (expect (search "* main -> origin/main +1 -2" text))
+          (expect (search "  feature/x" text))
+          (expect (= 2 (count #\Newline text)))))))
+
+  (it "%read-worktree-tags shows an annotated tag's message and a lightweight tag alone"
+    (let ((worktree (nerimux/workspace-model:make-worktree
+                      :id "wt-tags" :path "/tmp/nerimux-inspect-tags")))
+      (with-stubbed-fdefinition
+          ((vcs-kit:make-vcs-repository
+             (lambda (directory &rest arguments)
+               (declare (ignore arguments))
+               directory))
+           (vcs-kit:vcs-list-tags
+             (lambda (&rest arguments)
+               (declare (ignore arguments))
+               (list (vcs-kit::%make-vcs-tag
+                      :name "v1.0" :target "abc1234" :annotated-p t
+                      :message "first release")
+                     (vcs-kit::%make-vcs-tag :name "nightly" :target "def5678")))))
+        (let ((text (nerimux/vcs::%read-worktree-tags worktree)))
+          (expect (search "v1.0 first release" text))
+          (expect (search "nightly" text))))))
+
+  (it "%read-worktree-diff keeps the newlines the pager scrolls through (F3)"
+    (let ((worktree (nerimux/workspace-model:make-worktree
+                      :id "wt-read-diff" :path "/tmp/nerimux-inspect-read-diff")))
+      (with-stubbed-fdefinition
+          ((vcs-kit:make-vcs-repository
+             (lambda (directory &rest arguments)
+               (declare (ignore arguments))
+               directory))
+           (vcs-kit:vcs-diff
+             (lambda (&rest arguments)
+               (declare (ignore arguments))
+               (%inspect-fake-diff-result
+                (format nil "diff --git a/a.txt b/a.txt~%@@ -1 +1 @@~%+one~%")))))
+        (let ((text (nerimux/vcs::%read-worktree-diff worktree)))
+          (expect (= 3 (count #\Newline text)))
+          (expect (search "@@ -1 +1 @@" text)))))))

@@ -57,7 +57,7 @@
                 #:window-local-options
                 #:window-layout-cycle-index)
 (:import-from #:nerimux/session
-                #:create-initial-session
+                #:make-test-session
                 #:session-windows
                 #:session-active-window
                 #:session-select-window

@@ -47,56 +47,79 @@
 
 (describe "renderer-suite/statusbar-workspace-unselected"
 
-  (it "shows the em-dash placeholder for repository, worktree, and state when nothing is focused"
+  (it "leaves every left-block field out when nothing is focused"
     (multiple-value-bind (attention repository worktree state)
         (nerimux/renderer::%status-left-fields nil)
-      (expect (string= " " attention))
-      (expect (string= repository worktree))
-      (expect (string= worktree state))
-      (expect (= 1 (length repository)))
-      (expect (= #x2014 (char-code (char repository 0))))))
+      (expect (null attention))
+      (expect (null repository))
+      (expect (null worktree))
+      (expect (null state))
+      (expect (null (nerimux/renderer::%status-left-text
+                     nil :include-repository-p t)))))
 
-  (it "shows the em-dash placeholder for the middle block when nothing is focused"
-    (expect (string= (string (code-char #x2014))
-                     (nerimux/renderer::%status-middle-text nil))))
+  (it "shows no middle block when nothing is focused"
+    (expect (null (nerimux/renderer::%status-middle-text nil))))
 
-  (it "shows the em-dash placeholder for the right block when there are no messages"
-    (expect (string= (string (code-char #x2014))
-                     (nerimux/renderer::%status-right-text nil)))))
+  (it "shows the prefix key hints in the right block when there are no messages"
+    (expect (string= "C-q ? keys  C-q w repolist  C-q d detach"
+                     (strip-sgr (nerimux/renderer::%status-right-text nil))))))
 
 (describe "renderer-suite/statusbar-workspace-three-blocks"
 
-  (it "composes exactly mode-chip+left+middle+right, with no clock or other segment, when it all fits"
+  (it "composes exactly left+middle+right, with no chip, clock, or other segment, when it all fits"
     (multiple-value-bind (pane) (%fixture-pane-with-worktree)
       (let* ((messages (list "build ok"))
-             (mode-chip (nerimux/renderer::%status-mode-chip :normal))
              (left (nerimux/renderer::%status-left-text
                     pane :include-repository-p t))
              (middle (nerimux/renderer::%status-middle-text pane))
              (right (nerimux/renderer::%status-right-text messages))
-             (expected (format nil "~A  ~A  ~A  ~A" mode-chip left middle right))
+             (expected (format nil "~A  ~A  ~A" left middle right))
              (composed
                (nerimux/renderer::%compose-workspace-status-line
                 pane messages 200)))
-        (expect (string= expected composed))))))
+        (expect (string= expected composed))
+        (expect (search "github.com/team/status · feature/x" (strip-sgr composed))))))
+
+  (it "reads the worktree as org/repo · branch, with no em-dash placeholder anywhere"
+    (multiple-value-bind (pane) (%fixture-pane-with-worktree)
+      (let ((line (strip-sgr
+                   (nerimux/renderer::%compose-workspace-status-line pane nil 200))))
+        (expect (not (find (code-char #x2014) line)))
+        (expect (search "github.com/team/status · feature/x CLEAN" line))))))
 
 (describe "renderer-suite/statusbar-workspace-pane-tabs"
 
-  (it "marks only the unread pane's tab with ! in [w1: 1 2*!3]"
+  (it "marks only the unread pane's tab with ! in win 1 · pane 1 2* 3!"
     (let* ((pane-1 (nerimux/pane:make-pane :id 1 :fd -1))
            (pane-2 (nerimux/pane:make-pane :id 2 :fd -1))
            (pane-3 (nerimux/pane:make-pane :id 3 :fd -1 :unread-output-p t))
            (window (nerimux/window:make-window
                     :id 1 :name "w" :panes (list pane-1 pane-2 pane-3)))
            (tab (nerimux/renderer::%status-window-tab window pane-2)))
-      (expect (string= "[w1: 1 2*!3]" (strip-sgr tab)))
+      (expect (string= "win 1 · pane 1 2* 3!" (strip-sgr tab)))
       (expect tab :to-contain-sgr nerimux/renderer::+sgr-warn+)
       (expect tab :to-contain-sgr nerimux/renderer::+sgr-accent-bold+)))
+
+  (it "keeps listing every pane, plus a zoom marker, while the window is zoomed"
+    (let* ((pane-1 (nerimux/pane:make-pane :id 1 :fd -1))
+           (pane-2 (nerimux/pane:make-pane :id 2 :fd -1))
+           (window (nerimux/window:make-window
+                    :id 4 :name "w" :panes (list pane-1 pane-2))))
+      (setf (nerimux/window:window-zoom-tree window)
+            (nerimux/layout:make-layout-split
+             :h
+             (nerimux/layout:make-layout-leaf pane-1)
+             (nerimux/layout:make-layout-leaf pane-2))
+            (nerimux/window:window-panes window) (list pane-1)
+            (nerimux/window:window-zoom-p window) t)
+      (expect (string= "win 4 · pane 1* 2 [zoom]"
+                       (strip-sgr
+                        (nerimux/renderer::%status-window-tab window pane-1))))))
 
   (it "composes each pane's own tab token from its unread/active state"
     (let* ((pane-unread-active (nerimux/pane:make-pane :id 5 :fd -1 :unread-output-p t))
            (pane-read-inactive (nerimux/pane:make-pane :id 6 :fd -1)))
-      (expect (string= "!5*"
+      (expect (string= " 5*!"
                        (strip-sgr
                         (nerimux/renderer::%status-pane-tab-token
                          pane-unread-active pane-unread-active))))
@@ -116,33 +139,57 @@
             (nerimux/pane:pane-window pane-2) window-2)
       (nerimux/pane:worktree-add-pane worktree pane-1)
       (nerimux/pane:worktree-add-pane worktree pane-2)
-      (expect (string= "[w1: 1*][w2: 2]"
+      (expect (string= "win 1 · pane 1*  win 2 · pane 2"
                        (strip-sgr
-                        (nerimux/renderer::%status-middle-text pane-1)))))))
+                        (nerimux/renderer::%status-middle-text pane-1))))))
+
+  (it "leaves the middle block out for a single unzoomed pane in a single window"
+    (let* ((pane (nerimux/pane:make-pane :id 1 :fd -1))
+           (window (nerimux/window:make-window :id 1 :name "w" :panes (list pane)))
+           (worktree (nerimux/workspace-model:make-worktree
+                      :id "wt-single" :path "/repo/wt" :branch "main")))
+      (setf (nerimux/pane:pane-window pane) window)
+      (nerimux/pane:worktree-add-pane worktree pane)
+      (expect (null (nerimux/renderer::%status-middle-text pane))))))
 
 (describe "renderer-suite/statusbar-workspace-degradation"
 
-  (it "drops notification, then tabs, then the repository name, in that order as cols shrink"
+  (it "elides the notification, then drops it, then tabs, then the repository name, as cols shrink"
     (multiple-value-bind (pane) (%fixture-pane-with-worktree :branch "feature/wide-enough-branch")
-      (let* ((messages (list "a very long notification that will not fit once things get tight"))
-             (full (nerimux/renderer::%compose-workspace-status-line pane messages 500))
-             (full-width (nerimux/renderer::%visible-length full))
-             (stage-1 (nerimux/renderer::%compose-workspace-status-line
-                       pane messages (1- full-width)))
-             (stage-1-width (nerimux/renderer::%visible-length stage-1)))
-        (expect (not (search "a very long notification" stage-1)))
-        (expect (search "[w1:" stage-1))
-        (expect (search "feature/wide-enough-branch" stage-1))
-        (let* ((stage-2 (nerimux/renderer::%compose-workspace-status-line
-                          pane messages (1- stage-1-width)))
-               (stage-2-width (nerimux/renderer::%visible-length stage-2)))
-          (expect (not (search "[w1:" stage-2)))
-          (expect (search "feature/wide-enough-branch" stage-2))
-          (let ((stage-3 (nerimux/renderer::%compose-workspace-status-line
-                          pane messages (1- stage-2-width))))
-            (expect (not (search "github.com/team/status" stage-3)))
-            (expect (search "feature/wide-enough-branch" stage-3))
-            (expect (search "CLEAN" stage-3)))))))
+      (let ((messages
+              (list "a very long notification that will not fit once things get tight"))
+            (head "a very long notification")
+            (elided nil)
+            (dropped nil)
+            (no-tabs nil)
+            (no-repository nil))
+        (flet ((compose (cols)
+                 (strip-sgr
+                  (nerimux/renderer::%compose-workspace-status-line pane
+                                                                    messages
+                                                                    cols))))
+          (expect (search head (compose 500)))
+          (loop for cols from 500 downto 20
+                for line = (compose cols)
+                do (when (and (null elided) (find #\… line))
+                     (setf elided cols))
+                   (when (and (null dropped)
+                              (not (find #\… line))
+                              (not (search head line)))
+                     (setf dropped cols))
+                   (when (and (null no-tabs) (not (search "win 1 ·" line)))
+                     (setf no-tabs cols))
+                   (when (and (null no-repository)
+                              (not (search "github.com/team/status" line)))
+                     (setf no-repository cols)))
+          (expect (and elided dropped no-tabs no-repository))
+          (expect (> elided dropped))
+          (expect (> dropped no-tabs))
+          (expect (>= no-tabs no-repository))
+          ;; The tail of the elided notification is the half that identifies it.
+          (expect (search "tight" (compose (1- elided))))
+          (expect (search "feature/wide-enough-branch" (compose 40)))
+          (expect (search "CLEAN" (compose 40)))))))
 
   (it "never overflows COLS even at a pathologically narrow width"
     (multiple-value-bind (pane) (%fixture-pane-with-worktree)
@@ -175,6 +222,14 @@
                               pane messages 40 :mode :scrollback))))))))))
 
 (describe "renderer-suite/statusbar-workspace-mode-chip"
+
+  (it "renders no chip for the retired :normal mode"
+    (expect (null (nerimux/renderer::%status-mode-chip :normal)))
+    (multiple-value-bind (pane) (%fixture-pane-with-worktree)
+      (expect (not (search "NORMAL"
+                           (strip-sgr
+                            (nerimux/renderer::%compose-workspace-status-line
+                             pane nil 200 :mode :normal)))))))
 
   (it "renders no chip and no literal NIL text when mode is nil"
     (expect (null (nerimux/renderer::%status-mode-chip nil)))

@@ -1,5 +1,7 @@
 # Workspace 中心 UX 詳細設計
 
+*本書が現行として記述する repolist の `n` / `p` / `C` / `P` キー割り当ては 2026-09-12 に廃止された。現行のキーは `docs/src/getting-started.md` を参照。*
+
 ## 1. 目的
 
 bare repository と detached worktree を、agent 作業の単位である `workspace` として扱う。利用者は worktree のパス、ブランチ名、pane の構成を意識せず、repository を選んで作業を開始できる。

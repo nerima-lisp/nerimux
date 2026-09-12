@@ -15,16 +15,6 @@
                                                        conn)))
                                             0)))
 
-(defun %deduplicate-client-picker-items (items)
-  (let ((worktrees (make-hash-table :test #'eq)))
-    (loop for item in items
-          for worktree = (nerimux/picker:picker-item-worktree item)
-          unless (and worktree (gethash worktree worktrees))
-            collect (progn
-                      (when worktree
-                        (setf (gethash worktree worktrees) t))
-                      item))))
-
 (defun %client-picker-filtered-items (conn)
   "Return picker data after applying the client's query and uniqueness rule."
   (%deduplicate-client-picker-items
@@ -39,12 +29,15 @@
     items))
 
 (defun %open-client-picker-filtered (conn query)
-  "Open the picker with QUERY already typed (R7.6)."
-  (%open-client-picker conn)
-  (setf (client-conn-picker-query conn) (or query ""))
-  (%refresh-client-picker conn)
-  (%mark-dirty)
-  conn)
+  "Open the picker with QUERY already typed (R7.6).
+
+   %OPEN-CLIENT-PICKER has already started the catalog scan this needs; a
+   second scan here would cancel that one's callbacks and rebuild the item
+   list under the query the user is typing into."
+  (when (%open-client-picker conn)
+    (setf (client-conn-picker-query conn) (or query ""))
+    (%mark-dirty)
+    conn))
 
 (defun %client-tree-object (conn)
   (or (client-conn-selected-tree-object conn)
@@ -72,12 +65,18 @@
    Selection by cwd, and by whatever was selected last, is unchanged: neither is
    a selector the user typed, so neither can be ambiguous in this sense.
 
+   An explicit selector answers on its own: cwd and the last selection stand in
+   only when the user named nothing, never for a selector that matched nothing,
+   because substituting a different worktree for the one that was typed reads
+   as a successful attach to the wrong place.
+
    Returns a property list consumed by %CLIENT-ATTACH-SELECTION."
   (let* ((explicit (client-conn-attach-target conn))
          (explicitp (and (stringp explicit) (plusp (length explicit))))
          (cwd (client-conn-attach-cwd conn))
-         (previous (or (%client-selection-token conn)
-                       *last-selected-worktree-token*))
+         (previous (and (not explicitp)
+                        (or (%client-selection-token conn)
+                            *last-selected-worktree-token*)))
          (explicit-worktree
            (and explicitp
                 (%workspace-find-worktree-for-attach explicit organizations)))
@@ -85,13 +84,12 @@
            (and explicitp
                 (%workspace-find-repository-for-attach explicit organizations)))
          (cwd-worktree
-           (and (not explicit-worktree)
+           (and (not explicitp)
                 (stringp cwd)
                 (plusp (length cwd))
                 (%workspace-find-worktree-for-cwd cwd organizations)))
          (previous-worktree
-           (and (not explicit-worktree)
-                (not cwd-worktree)
+           (and (not cwd-worktree)
                 previous
                 (%workspace-find-worktree previous organizations))))
     (list :explicit explicit
@@ -104,32 +102,97 @@
           :repository explicit-repository
           :organizations-p organizations)))
 
+(defun %client-consume-attach-target (conn)
+  "Forget the selector this attach carried, now that it has been acted on.
+
+   Every catalog refresh rebinds every client's selection, and a selector left
+   on the connection is acted on again there -- an ambiguous one re-opening the
+   picker from inside the refresh the picker itself started, forever."
+  (setf (client-conn-attach-target conn) nil))
+
+(defun %client-default-tree-selection (conn organizations)
+  "Select the first actionable row for a client that has no selection (RL-01)."
+  (when (and organizations (null (%client-tree-object conn)))
+    (let ((object (%workspace-default-tree-selection
+                   organizations
+                   (client-conn-tree-filter conn))))
+      (when object
+        (%set-client-selected-tree-object conn object)))))
+
 (defun %client-attach-selection (conn organizations)
   (let ((resolution (%resolve-client-attach-selection conn organizations)))
     (cond
       ((getf resolution :ambiguous-p)
+       (%client-consume-attach-target conn)
        (%open-client-picker-filtered conn (getf resolution :explicit))
        (values nil nil))
       ((getf resolution :worktree)
+       (%client-consume-attach-target conn)
        (%set-client-selected-worktree conn (getf resolution :worktree))
        (values (getf resolution :worktree) (getf resolution :source)))
       ((getf resolution :repository)
+       (%client-consume-attach-target conn)
        (%set-client-selected-tree-object conn (getf resolution :repository))
        (values nil nil))
       ((and (getf resolution :explicit-p)
             (getf resolution :organizations-p))
+       (%client-consume-attach-target conn)
+       (setf (client-conn-attach-cwd conn) nil)
        (%client-notify conn
                        (format nil "attach target not found: ~A"
                                (getf resolution :explicit)))
        (values nil nil))
       (t
+       (%client-default-tree-selection conn organizations)
        (values nil nil)))))
 
+(defun %rebind-client-status-selection (conn organizations)
+  "Re-point the status view's own selection at the refreshed catalog.
+
+   The whole view renders from SELECTED-WORKTREE, and a status row (a section
+   header, a file, a commit) is not a worktree, so re-binding it through
+   %SET-CLIENT-SELECTED-TREE-OBJECT cleared that slot and blanked the screen --
+   the hazard %SELECT-CLIENT-STATUS-RELATIVE already avoids on the n/p path.
+   A row the refresh removed (S staged every file under the selected header)
+   falls back to the Head row, never to no selection."
+  (let ((worktree (or (%workspace-find-worktree
+                       (%worktree-selection-token
+                        (client-conn-selected-worktree conn))
+                       organizations)
+                      (client-conn-selected-worktree conn))))
+    (setf (client-conn-selected-worktree conn) worktree)
+    (let ((objects (%client-status-view-objects conn))
+          (current (client-conn-selected-tree-object conn)))
+      (setf (client-conn-selected-tree-object conn)
+            (cond
+              ((typep current 'nerimux/workspace-model:worktree) worktree)
+              ((member current objects :test #'equal) current)
+              (t (first objects))))))
+  (%mark-dirty)
+  (client-conn-selected-tree-object conn))
+
 (defun %rebind-client-selection (conn organizations)
-  (or (%client-attach-selection conn organizations)
-      (let* ((token (%client-tree-selection-token conn))
-             (object (%workspace-find-tree-object token organizations)))
-        (%set-client-selected-tree-object conn object))))
+  "Re-point CONN's selection at the refreshed catalog (WT-21).
+
+   The attach selection answers only while this client has nothing selected:
+   a plain `g` refresh re-running it dragged the cursor back to whatever the
+   attach named, undoing wherever the user had since moved. A row the refresh
+   no longer knows keeps the object it had rather than being cleared, so the
+   status view it feeds does not go blank mid-refresh."
+  (let ((explicit (client-conn-attach-target conn)))
+    (cond
+      ((or (and (stringp explicit) (plusp (length explicit)))
+           (null (%client-tree-object conn)))
+       (%client-attach-selection conn organizations))
+      ((and (eq (client-conn-view conn) :status)
+            (client-conn-selected-worktree conn))
+       (%rebind-client-status-selection conn organizations))
+      (t
+       (let ((object (%workspace-find-tree-object
+                      (%client-tree-selection-token conn)
+                      organizations)))
+         (when object
+           (%set-client-selected-tree-object conn object)))))))
 
 (defun %set-client-selected-tree-object (conn object)
   (let ((worktree (and (typep object 'nerimux/workspace-model:worktree) object)))
@@ -237,9 +300,14 @@
           (funcall on-complete organizations))))
   conn)
 
+(defvar *client-picker-return-views*
+  (make-hash-table :test #'eq :weakness :key)
+  "The view each client's picker was opened over, keyed by connection.")
+
 (defun %open-client-picker (conn)
   (when (%reject-pending-worktree-attachment conn :pane nil)
     (return-from %open-client-picker nil))
+  (setf (gethash conn *client-picker-return-views*) (client-conn-view conn))
   (%set-client-modal conn :picker)
   (setf (client-conn-picker-query conn) ""
         (client-conn-picker-regex-p conn) nil
@@ -250,205 +318,24 @@
   (%mark-dirty)
   conn)
 
-(defun %close-client-picker (conn)
+(defun %close-client-picker (conn &key keep-view)
+  "Close the picker, putting back the view it was opened over.
+
+   The picker is a modal drawn over that view, so cancelling it must not move
+   the client: deriving the view from the focus pane instead dropped whoever
+   had ever focused a pane into that shell, with no way back the footer named.
+   KEEP-VIEW is for the rows that move the client on purpose -- picking a pane
+   or a worktree leaves :pane up rather than returning to the tree."
   (when (and (client-conn-focus conn)
              (%reject-pending-worktree-attachment conn))
     (return-from %close-client-picker nil))
+  (let ((view (gethash conn *client-picker-return-views*)))
+    (remhash conn *client-picker-return-views*)
+    (when (and view (not keep-view))
+      (%set-client-view conn view)))
   (%set-client-modal conn nil)
-  (%set-client-view conn
-                    (if (client-conn-focus conn)
-                        :pane
-                        :repolist))
   (setf (client-conn-picker-query conn) ""
         (client-conn-picker-regex-p conn) nil
         (client-conn-picker-index conn) 0)
   (%mark-dirty)
   conn)
-(defun %picker-selected-item (conn)
-  (let ((items (%client-picker-visible-items conn)))
-    (and items (nth (client-conn-picker-index conn) items))))
-
-(defun %client-worktree-pane (session worktree)
-  (and worktree
-       (find worktree
-             (all-panes session)
-             :key
-             #'nerimux/pane:pane-worktree
-             :test
-             #'eq)))
-
-(defun %open-client-worktree-pane
-    (session conn worktree &key default-command (role :terminal))
-  (let ((path (and worktree (worktree-path worktree))))
-    (cond
-      ((null worktree)
-       nil)
-      ((not (and (stringp path) (plusp (length path))))
-       (%client-notify conn "worktree has no path")
-       nil)
-      ((worktree-missing-p worktree)
-       (%client-notify conn "worktree is missing")
-       nil)
-      (t
-       (handler-case
-           (let ((*term-rows* (client-conn-rows conn))
-                 (*term-cols* (client-conn-cols conn)))
-             (let* ((window (%workspace-new-window
-                             session
-                             :name (%worktree-window-name worktree)
-                             :start-dir path
-                             :default-command default-command
-                             :start-reader-p nil))
-                    (pane (window-active-pane window)))
-               (when pane
-                 (setf (nerimux/pane:pane-role pane) role))
-               (cond
-                 ((null pane)
-                  (%client-notify conn "worktree pane unavailable")
-                  nil)
-                 ((not (pane-live-p pane))
-                  ;; A dead PTY has no fd for a reader, so retain the startup failure in pane state.
-                  (pane-mark-startup-failure pane)
-                  (worktree-add-pane worktree pane)
-                  (%set-client-selected-worktree conn worktree)
-                  (%set-client-focus conn pane session)
-                  (%client-notify conn "worktree pane failed to start")
-                  (%mark-dirty)
-                  t)
-                 (t
-                  (start-reader-thread pane)
-                  (worktree-add-pane worktree pane)
-                  (%set-client-selected-worktree conn worktree)
-                  (%set-client-focus conn pane session)
-                  (%mark-dirty)
-                  t))))
-         (error (condition)
-           (%client-notify
-            conn
-            (format nil "worktree open failed: ~A" condition))
-           nil))))))
-
-(defun %select-client-picker-item (session conn)
-  (let* ((item (%picker-selected-item conn))
-         (worktree (and item (%picker-item-worktree item)))
-         (object
-          (or worktree
-              (and item
-                   (or (nerimux/picker:picker-item-repository item)
-                       (nerimux/picker:picker-item-organization item)))))
-         (pane (%client-worktree-pane session worktree))
-         (window (and pane (nerimux/pane:pane-window pane))))
-    (cond
-      ((and pane window)
-        (nerimux/session:session-select-window session window)
-        (nerimux/window:window-select-pane window pane)
-        (%set-client-selected-worktree conn worktree)
-        (%set-client-focus conn pane session)
-        (%close-client-picker conn)
-        (%mark-dirty)
-        t)
-      (worktree
-       (when (%open-client-worktree-pane session conn worktree)
-         (%close-client-picker conn)
-         t))
-      (object
-        (%set-client-selected-tree-object conn object)
-        (%close-client-picker conn)
-        (%client-notify conn
-                        (typecase object
-                          (nerimux/workspace-model:repository
-                           "repository selected; use :wt-create --branch <branch> --confirm")
-                          (nerimux/workspace-model:organization
-                           "organization selected; select a repository first")))
-        t)
-      (t nil))))
-
-(defun %set-client-picker-query (conn value)
-  (when (stringp value)
-    (setf (client-conn-picker-query conn) value
-          (client-conn-picker-index conn) 0)
-    (%mark-dirty)
-    t))
-
-(defun %set-client-picker-regex (conn value supplied-p)
-  (setf (client-conn-picker-regex-p conn) (if supplied-p
-                                              (cond
-                                                ((member value
-                                                         '(:on "on"
-                                                               "true"
-                                                               "1"
-                                                               t)
-                                                         :test
-                                                         #'equal) t)
-                                                ((member value
-                                                         '(:off "off"
-                                                                "false"
-                                                                "0"
-                                                                nil)
-                                                         :test
-                                                         #'equal) nil)
-                                                (t
-                                                 (client-conn-picker-regex-p
-                                                  conn)))
-                                              (not
-                                               (client-conn-picker-regex-p conn)))
-        (client-conn-picker-index conn) 0)
-  (%mark-dirty)
-  (client-conn-picker-regex-p conn))
-
-(defun %delete-client-picker-query-character (conn)
-  (let ((query (client-conn-picker-query conn)))
-    (when (plusp (length query))
-      (setf (client-conn-picker-query conn) (subseq query 0 (1- (length query)))
-            (client-conn-picker-index conn) 0)
-      (%mark-dirty)
-      t)))
-
-(defun %append-client-picker-query-octets (conn payload)
-  (let ((text
-         (cond
-           ((stringp payload) payload)
-           ((vectorp payload)
-            (handler-case (cl-codec-kit:octets-to-string payload
-                                                         :encoding
-                                                         :utf-8)
-              (cl-codec-kit:decode-error ()
-                nil))))))
-    (when 
-        (and text
-             (every
-              (lambda (character)
-                (>= (char-code character) 32))
-              text))
-      (setf (client-conn-picker-query conn) (concatenate 'string
-                                                         (client-conn-picker-query
-                                                          conn)
-                                                         text)
-            (client-conn-picker-index conn) 0)
-      (%mark-dirty)
-      t)))
-
-(defun %move-client-picker-index (conn delta)
-  (let ((items (%client-picker-visible-items conn)))
-    (when items
-      (setf (client-conn-picker-index conn) (mod
-                                             (+ (client-conn-picker-index conn)
-                                                delta)
-                                             (length items)))
-      (%mark-dirty)
-      t)))
-
-(defun %handle-client-picker-key-payload (session conn payload)
-  (cond
-    ((or (equalp payload #(13)) (equalp payload #(10)))
-     (%select-client-picker-item session conn))
-    ((equalp payload #(27))
-      (%client-esc-swallow-start conn)
-      (%close-client-picker conn)
-      t)
-    ((equalp payload #(18)) (%set-client-picker-regex conn nil nil))
-    ((equalp payload #(16)) (%move-client-picker-index conn -1))
-    ((equalp payload #(14)) (%move-client-picker-index conn 1))
-    ((or (equalp payload #(8)) (equalp payload #(127)))
-     (%delete-client-picker-query-character conn))
-    (t (%append-client-picker-query-octets conn payload))))

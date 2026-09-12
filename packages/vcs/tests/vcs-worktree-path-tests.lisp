@@ -45,29 +45,25 @@
 (describe "renderer-suite/vcs-worktree-path-no-collision"
 
   (it "returns the base name verbatim when nothing occupies it yet"
-    (let* ((git-dir (%fresh-fake-repo-git-dir))
+    (let* ((directory (concatenate 'string (%fresh-fake-repo-git-dir) ".worktrees/"))
            (base-name "20260821T130000-abc1234")
-           (path (nerimux/vcs::%unique-worktree-path git-dir base-name)))
-      (expect (string= (concatenate 'string git-dir ".worktrees/" base-name)
-                       path)))))
+           (path (nerimux/vcs::%unique-worktree-path directory base-name)))
+      (expect (string= (concatenate 'string directory base-name) path)))))
 
 (describe "renderer-suite/vcs-worktree-path-collision-sequence"
 
   (it "appends -2, then -3, as each candidate name is already occupied"
-    (let* ((git-dir (%fresh-fake-repo-git-dir))
+    (let* ((directory (concatenate 'string (%fresh-fake-repo-git-dir) ".worktrees/"))
            (base-name "20260821T130000-abc1234"))
-      (ensure-directories-exist
-       (concatenate 'string git-dir ".worktrees/" base-name "/"))
-      (expect (string= (concatenate 'string git-dir ".worktrees/" base-name "-2")
-                       (nerimux/vcs::%unique-worktree-path git-dir base-name)))
-      (ensure-directories-exist
-       (concatenate 'string git-dir ".worktrees/" base-name "-2/"))
-      (expect (string= (concatenate 'string git-dir ".worktrees/" base-name "-3")
-                       (nerimux/vcs::%unique-worktree-path git-dir base-name)))
-      (ensure-directories-exist
-       (concatenate 'string git-dir ".worktrees/" base-name "-3/"))
-      (expect (string= (concatenate 'string git-dir ".worktrees/" base-name "-4")
-                       (nerimux/vcs::%unique-worktree-path git-dir base-name))))))
+      (ensure-directories-exist (concatenate 'string directory base-name "/"))
+      (expect (string= (concatenate 'string directory base-name "-2")
+                       (nerimux/vcs::%unique-worktree-path directory base-name)))
+      (ensure-directories-exist (concatenate 'string directory base-name "-2/"))
+      (expect (string= (concatenate 'string directory base-name "-3")
+                       (nerimux/vcs::%unique-worktree-path directory base-name)))
+      (ensure-directories-exist (concatenate 'string directory base-name "-3/"))
+      (expect (string= (concatenate 'string directory base-name "-4")
+                       (nerimux/vcs::%unique-worktree-path directory base-name))))))
 
 (describe "renderer-suite/vcs-worktree-path-resolve"
 
@@ -178,3 +174,90 @@
     (%check-created-worktree-path t :absolute))
   (it "returns the canonical model through a symlink parent asynchronously"
     (%check-created-worktree-path t :symlink)))
+
+(defun %call-with-worktree-path-checkout (function)
+  "Run FUNCTION on the ordinary checkout that backs the bare fixture."
+  (%call-with-worktree-path-repository
+   (lambda (bare-repository root)
+     (declare (ignore bare-repository))
+     (let ((source (concatenate 'string root "source/")))
+       (funcall function
+                (nerimux/workspace-model:make-repository
+                 :specification "workspace-owner/source-fixture"
+                 :local-path source)
+                source)))))
+
+(describe "renderer-suite/vcs-worktree-parent-directory"
+
+  (it "keeps a bare repository's worktrees inside it"
+    (%call-with-worktree-path-repository
+     (lambda (repository root)
+       (declare (ignore root))
+       (expect (string= (concatenate 'string
+                                     (nerimux/vcs::%ensure-trailing-slash
+                                      (nerimux/workspace-model:repository-local-path
+                                       repository))
+                                     ".worktrees/")
+                        (nerimux/vcs:worktree-parent-directory repository))))))
+
+  (it "keeps a checkout's worktrees in .worktrees by ignoring it locally"
+    (%call-with-worktree-path-checkout
+     (lambda (repository source)
+       (expect (null (nerimux/vcs::%worktrees-directory-ignored-p repository)))
+       (expect (string= (concatenate 'string source ".worktrees/")
+                        (nerimux/vcs:worktree-parent-directory repository)))
+       (expect (nerimux/vcs::%worktrees-directory-ignored-p repository))
+       (expect (search ".worktrees/"
+                       (uiop:read-file-string
+                        (concatenate 'string source ".git/info/exclude"))))
+       (expect (string= ""
+                        (%fetch-test-git source "status" "--short"))))))
+
+  (it "puts a checkout's worktrees beside it when the ignore cannot be written"
+    (%call-with-worktree-path-checkout
+     (lambda (repository source)
+       (with-stubbed-fdefinition
+           ((vcs-kit:git-check-ignore
+              (lambda (&rest arguments)
+                (declare (ignore arguments))
+                (error "not ignored"))))
+         (expect (string= (concatenate 'string
+                                       (string-right-trim "/" source) "-worktrees/")
+                          (nerimux/vcs:worktree-parent-directory repository))))))))
+
+(describe "renderer-suite/vcs-default-branch"
+
+  (it "uses the checked-out branch and its local tip when there is no origin"
+    (%call-with-worktree-path-checkout
+     (lambda (repository source)
+       (expect (null (nerimux/vcs::%repository-origin-p repository)))
+       (expect (string= "main" (nerimux/vcs::%repository-default-branch repository)))
+       (%fetch-test-git source "branch" "-m" "trunk")
+       (expect (string= "trunk" (nerimux/vcs::%repository-default-branch repository)))
+       (expect (string= (%fetch-test-git source "rev-parse" "HEAD")
+                        (nerimux/vcs::%default-branch-start-point repository)))
+       (expect (null (nerimux/vcs::%fetch-default-branch repository "trunk"))))))
+
+  (it "reads the default branch a bare clone's origin/HEAD names"
+    (%call-with-worktree-path-repository
+     (lambda (repository root)
+       (declare (ignore root))
+       (expect (nerimux/vcs::%repository-origin-p repository))
+       (expect (string= "main" (nerimux/vcs::%repository-default-branch repository)))))))
+
+(describe "vcs worktrees exclude rule"
+  (it "detects a .worktrees/ rule already present so it is not appended twice"
+    (let ((exclude (merge-pathnames
+                    (format nil "nerimux-exclude-test-~D-~D"
+                            (sb-posix:getpid) (incf *fake-repo-counter*))
+                    (host-kit:temporary-directory))))
+      (unwind-protect
+           (progn
+             (expect (null (nerimux/vcs::%worktrees-exclude-rule-present-p exclude)))
+             (with-open-file (stream exclude :direction :output
+                                             :if-exists :supersede
+                                             :if-does-not-exist :create)
+               (write-line "*.log" stream)
+               (write-line ".worktrees/" stream))
+             (expect (nerimux/vcs::%worktrees-exclude-rule-present-p exclude)))
+        (ignore-errors (delete-file exclude))))))

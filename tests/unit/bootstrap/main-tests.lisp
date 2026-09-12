@@ -37,7 +37,7 @@
 
   (it "dispatch-main-table"
     (dolist (c '((("server" "foo") :server "foo" "server with name")
-                 (("attach" "foo") :client "foo" "attach with name")
+                 (("attach" "foo") :client "0" "attach with a selector")
                  (("server")       :server "0"   "server default name")
                  (("attach")       :client "0"   "attach default name")))
       (destructuring-bind (argv-tail expected-key expected-name desc) c
@@ -95,8 +95,8 @@
     (expect (nerimux::%startup-mode-raw-args-p "--version") :to-be-truthy)
     (expect (nerimux::%startup-mode-raw-args-p "-h") :to-be-truthy)
     (expect (nerimux::%startup-mode-raw-args-p "--help") :to-be-truthy)
+    (expect (nerimux::%startup-mode-raw-args-p "attach") :to-be-truthy)
     (expect (nerimux::%startup-mode-raw-args-p "server") :to-be-falsy)
-    (expect (nerimux::%startup-mode-raw-args-p "attach") :to-be-falsy)
     (expect (nerimux::%startup-mode-raw-args-p "bogus") :to-be-falsy))
 
   (it "dispatches-raw-startup-handler-with-complete-argv-tail"

@@ -115,11 +115,6 @@
                                           worktree))))
                              (lambda (worktree)
                                (when
-                                   (nerimux/workspace-model:worktree-bare-p
-                                    worktree)
-                                 "bare"))
-                             (lambda (worktree)
-                               (when
                                    (nerimux/workspace-model:worktree-locked-p
                                     worktree)
                                  "locked"))
@@ -161,8 +156,7 @@
   (with-output-to-string (stream)
     (dolist
         (value
-         (list* (picker-item-id item)
-                (picker-item-kind item)
+         (list* (picker-item-kind item)
                 (picker-item-label item)
                 (append
                  (%level-search-values (picker-item-organization item)
@@ -178,28 +172,55 @@
           (write-string string stream)
           (write-char #\Space stream))))))
 
+(defconstant +picker-regex-query-length-limit+
+  200
+  "Longest QUERY %PICKER-REGEX-SCANNER will try to compile (S5). Beyond this,
+   FILTER-GLOBAL-PICKER-ITEMS falls back to a substring search the same way
+   it does for a syntactically invalid pattern, rather than handing
+   cl-regex-kit an arbitrarily long attacker-controlled pattern to compile.")
+
 (defun %picker-regex-scanner (query)
-  (handler-case (cl-regex-kit:compile-regex query
-                                            :case-insensitive
-                                            t
-                                            :octal
-                                            nil)
-    (cl-regex-kit:regex-syntax-error ()
-      nil)))
+  "Compile QUERY for a whole-row search, or NIL when QUERY is too long to
+   try (S5) or does not compile.
+
+   cl-regex-kit 2.0.0 reports a match only when it reaches the end of the
+   subject, so `ga.*a' finds nothing in `acme/gamma x' while `ga.*a.*' does.
+   Wrapping the user's pattern and appending `.*' restores ordinary
+   search-anywhere semantics without touching what the pattern itself asserts:
+   `$' still demands the real end, `^' still demands the start, and the group
+   keeps `|' from swallowing the appended tail.  The row text is a single line,
+   so the appended `.*' always reaches the end."
+  (unless (> (length query) +picker-regex-query-length-limit+)
+    (handler-case (cl-regex-kit:compile-regex (format nil "(~A).*" query)
+                                              :case-insensitive
+                                              t
+                                              :octal
+                                              nil)
+      (cl-regex-kit:regex-syntax-error ()
+        nil))))
 
 (defun filter-global-picker-items (items query &key regex-p)
+  "Return the ITEMS matching QUERY, and :UNSUPPORTED as a second value when
+   regex mode fell back to a substring search because QUERY does not compile.
+   Regex mode matches the visible row text; a plain query matches the wider
+   field index as well, so a path or a status word still finds its row."
   (check-type items list)
   (check-type query string)
   (if (zerop (length query))
-      (copy-list items)
-      (let ((needle (string-downcase query))
-            (scanner (and regex-p (%picker-regex-scanner query))))
-        (loop for item in items
-              for text = (%picker-item-search-text item)
-              when (if regex-p
-                       (and scanner (cl-regex-kit:scan scanner text))
-                       (not (null (cl:search needle (string-downcase text)))))
-                collect item))))
+      (values (copy-list items) :ok)
+      (let* ((needle (string-downcase query))
+             (scanner (and regex-p (%picker-regex-scanner query)))
+             (regex-search-p (and regex-p scanner)))
+        (values
+         (loop for item in items
+               for text = (if regex-search-p
+                              (picker-item-row-text item)
+                              (%picker-item-search-text item))
+               when (if regex-search-p
+                        (cl-regex-kit:scan scanner text)
+                        (not (null (cl:search needle (string-downcase text)))))
+                 collect item)
+         (if (and regex-p (not scanner)) :unsupported :ok)))))
 
 (defun select-global-picker-item (items selection)
   (check-type items list)

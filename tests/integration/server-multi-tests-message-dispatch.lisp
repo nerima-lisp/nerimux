@@ -144,7 +144,7 @@
                (nerimux/workspace-model:make-worktree
                 :id "wt-top-bottom-noise" :repository repo-noise
                 :path "/tmp/top-bottom-noise" :branch "attention-noise"
-                :dirty-p t))
+                :dirty-p t :conflict-p t))
              (worktree-buried
                (nerimux/workspace-model:make-worktree
                 :id "wt-top-bottom-buried" :repository repo-buried
@@ -223,7 +223,7 @@
              (worktree
                (nerimux/workspace-model:make-worktree
                 :id "wt-mnp-keys" :repository repository :path "/tmp/mnp-keys"
-                :branch "mnp-keys" :dirty-p t))
+                :branch "mnp-keys" :dirty-p t :conflict-p t))
              (conn (%make-test-conn))
              (nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
              (nerimux/vcs::*workspace-organizations* (list organization)))
@@ -250,7 +250,7 @@
              (worktree
                (nerimux/workspace-model:make-worktree
                 :id "wt-tab-wt" :repository repository :path "/tmp/tab-wt"
-                :branch "tab-wt" :dirty-p t
+                :branch "tab-wt" :dirty-p t :conflict-p t
                 :changed-files (list (cons " M" "src/foo.lisp"))))
              (conn (%make-test-conn))
              (nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
@@ -261,7 +261,7 @@
         (setf (nerimux::client-conn-view conn) :repolist)
         (nerimux::%set-client-selected-tree-object conn worktree)
         (flet ((entries ()
-                 (nerimux/renderer::%workspace-flat-tree-entries
+                 (nerimux/renderer:workspace-flat-tree-entries
                   (list organization) nerimux::*workspace-collapsed-node-ids*
                   :expanded-node-ids nerimux::*workspace-expanded-node-ids*)))
           (expect (null (find :file (entries) :key #'fourth)))
@@ -291,6 +291,7 @@
                (nerimux/workspace-model:make-worktree
                 :id "wt-file-reflatten" :repository repository
                 :path "/tmp/file-reflatten" :branch "file-reflatten" :dirty-p t
+                :conflict-p t
                 :changed-files (list (cons " M" "src/foo.lisp"))))
              (conn (%make-test-conn))
              (nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
@@ -323,6 +324,7 @@
                (nerimux/workspace-model:make-worktree
                 :id "wt-file-rebind" :repository repository
                 :path "/tmp/file-rebind" :branch "file-rebind" :dirty-p t
+                :conflict-p t
                 :changed-files (list (cons " M" "src/foo.lisp"))))
              (conn (%make-test-conn))
              (nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
@@ -378,6 +380,31 @@
         (nerimux::%rebind-client-selection conn (list new-organization))
         (expect (eq new-worktree (nerimux::client-conn-selected-tree-object conn)))
         (expect (eq new-worktree (nerimux::client-conn-selected-worktree conn))))))
+
+  (it "wt-21-a-refresh-that-no-longer-carries-the-row-keeps-the-selection"
+    (let* ((organization
+             (nerimux/workspace-model:make-organization
+              :id "org-dropped" :host "github.com" :name "team"))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :id "repo-dropped" :organization organization
+              :specification "github.com/team/repo-dropped"))
+           (worktree
+             (nerimux/workspace-model:make-worktree
+              :id "wt-dropped" :repository repository
+              :path "/tmp/dropped" :branch "dropped"))
+           (conn (%make-test-conn))
+           (nerimux::*last-selected-worktree-token* nil))
+      (nerimux/workspace-model:organization-add-repository organization repository)
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
+      (setf (nerimux::client-conn-view conn) :repolist)
+      (nerimux::%set-client-selected-tree-object conn worktree)
+      (nerimux::%rebind-client-selection
+       conn
+       (list (nerimux/workspace-model:make-organization
+              :id "org-other" :host "github.com" :name "other")))
+      (expect (eq worktree (nerimux::client-conn-selected-tree-object conn)))
+      (expect (eq worktree (nerimux::client-conn-selected-worktree conn)))))
 
   (it "a-file-row-selection-re-anchors-onto-the-new-worktree-across-a-stable-id-refresh"
     (let* ((organization
@@ -479,7 +506,7 @@
              (worktree
                (nerimux/workspace-model:make-worktree
                 :id "wt-diff-cached" :repository repository :path "/tmp/diff-cached"
-                :branch "diff-cached" :dirty-p t
+                :branch "diff-cached" :dirty-p t :conflict-p t
                 :changed-files (list (cons " M" "src/foo.lisp"))))
              (conn (%make-test-conn))
              (wt-id (nerimux/workspace-model:worktree-id worktree))
@@ -503,7 +530,7 @@
           (flet ((diff-entries ()
                    (remove-if-not
                     (lambda (entry) (eq (fourth entry) :diff-line))
-                    (nerimux/renderer::%workspace-flat-tree-entries
+                    (nerimux/renderer:workspace-flat-tree-entries
                      (list organization) nerimux::*workspace-collapsed-node-ids*
                      :expanded-node-ids nerimux::*workspace-expanded-node-ids*
                      :file-diffs nerimux::*workspace-file-diffs*))))
@@ -648,15 +675,11 @@
                       (lambda (&key query)
                         (declare (ignore query))
                         (list healthy-entry failing-entry)))
-                    (vcs-kit:make-vcs-repository
-                      (lambda (directory &rest arguments)
-                        (declare (ignore arguments))
-                        directory))
-                    (vcs-kit:vcs-list-worktrees
+                    (nerimux/vcs::%git-worktree-list
                       (lambda (directory)
                         (list (%vcs-operations-fake-worktree
                                directory :branch "main" :head "head"))))
-                    (vcs-kit:vcs-status-structured
+                    (nerimux/vcs::%git-status-snapshot
                       (lambda (directory &rest arguments)
                         (declare (ignore arguments))
                         (if (string= directory failing-path)
@@ -770,9 +793,9 @@
             (expect (null (nerimux::client-conn-modal conn)))
             (expect (null (gethash conn nerimux::*client-meta-pending*))))
           (nerimux::%handle-multi-key-message s conn #(112))
-          (expect (equal (list (list :prune conn nil)) calls))
+          (expect (equal (list '(:row -1)) calls))
           (nerimux::%handle-multi-key-message s conn #(27 91 65))
-          (expect (equal (list '(:row -1) (list :prune conn nil)) calls))))))
+          (expect (equal (list '(:row -1) '(:row -1)) calls))))))
 
   (it "worktree-arrow-decoding-leaves-pane-payloads-intact"
     (with-fake-two-pane-session (s)
@@ -928,18 +951,39 @@
             (expect (equal '(:close) calls))))))
   (it "ui-command-dispatches-single-and-all-workspace-prune"
       (with-fake-session (s)
-        (let ((conn (%make-test-conn))
-              (calls nil))
-          (with-stubbed-fdefinition
-              ((nerimux::%client-prune-workspaces
-                (lambda (client &key all)
-                  (push (list client all) calls)
-                  t)))
-            (expect (nerimux::%handle-client-ui-command
-                     s conn :workspace-prune nil nil))
-            (expect (nerimux::%handle-client-ui-command
-                     s conn :workspace-prune-all nil nil))
-            (expect (equal (list (list conn t) (list conn nil)) calls))))))
+        (let* ((organization (nerimux/workspace-model:make-organization :id "org"))
+               (repository (nerimux/workspace-model:make-repository
+                            :id "repo" :organization organization))
+               (worktree (nerimux/workspace-model:make-worktree
+                          :id "feature" :repository repository
+                          :path "/tmp/feature"))
+               ;; Prune-all now counts only what it would remove, and the
+               ;; first worktree added is the repository's primary one.
+               (prunable (nerimux/workspace-model:make-worktree
+                          :id "done" :repository repository
+                          :path "/tmp/done" :completed-p t))
+               (conn (%make-test-conn))
+               (nerimux::*clients* (list conn))
+               (calls nil))
+          (nerimux/workspace-model:organization-add-repository organization repository)
+          (nerimux/workspace-model:repository-add-worktree repository worktree)
+          (nerimux/workspace-model:repository-add-worktree repository prunable)
+          (let ((nerimux/vcs::*workspace-organizations* (list organization)))
+            (nerimux::%set-client-selected-tree-object conn worktree)
+            (with-stubbed-fdefinition
+                ((nerimux::%client-prune-workspaces
+                  (lambda (client &key all)
+                    (push (list client all) calls)
+                    t)))
+              (expect (nerimux::%handle-client-ui-command
+                       s conn :workspace-prune nil nil))
+              (expect (eq :confirm (nerimux::client-conn-modal conn)))
+              (nerimux::%handle-multi-key-message s conn #(121))
+              (expect (nerimux::%handle-client-ui-command
+                       s conn :workspace-prune-all nil nil))
+              (expect (eq :confirm (nerimux::client-conn-modal conn)))
+              (nerimux::%handle-multi-key-message s conn #(121))
+              (expect (equal (list (list conn t) (list conn nil)) calls)))))))
   (it "pending-worktree-guards-preserve-command-and-focus-state"
       (with-fake-session (s)
         (let* ((conn (%make-test-conn))
@@ -1005,7 +1049,7 @@
                  (nerimux/workspace-model:make-worktree
                   :id "wt-section-scroll" :repository repository
                   :path "/tmp/section-scroll" :branch "section-scroll"
-                  :dirty-p t))
+                  :dirty-p t :conflict-p t))
                (conn (%make-test-conn :rows 7))
                (nerimux/vcs::*workspace-organizations* (list organization)))
           (nerimux/workspace-model:organization-add-repository organization repository)

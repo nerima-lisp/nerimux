@@ -44,6 +44,25 @@
           (expect (eq :notification disposition))
           (expect (equalp raw payload))))))
 
+  (it "decode-server-frame-returns-parting-text-for-a-reply"
+    (with-guarded-socket-test
+      (send-frame server-side (nerimux/protocol:msg-reply "nerimux: server stopped"))
+      (force-output server-side)
+      (multiple-value-bind (disposition text)
+          (nerimux::%decode-server-frame client-side)
+        (expect (eq :parting disposition))
+        (expect (string= "nerimux: server stopped" text)))))
+
+  (it "receive-server-frame-hands-the-parting-line-back-without-exiting"
+    (with-guarded-socket-test
+      (send-frame server-side
+                  (nerimux/protocol:msg-reply "nerimux: detached (session 0, 1 pane running)"))
+      (force-output server-side)
+      (multiple-value-bind (disposition text)
+          (nerimux::%receive-server-frame client-side)
+        (expect (null disposition))
+        (expect (string= "nerimux: detached (session 0, 1 pane running)" text)))))
+
   (it "decode-server-frame-ignores-unknown-frame"
     (with-guarded-socket-test
       (write-sequence (encode-frame 255 #(1 2 3)) server-side)
@@ -106,6 +125,12 @@
           (let ((*standard-output* output))
             (expect (null (nerimux::%receive-server-frame client-side))))
           (expect (equalp raw (notification-output-bytes output)))))))
+
+  (it "paint-connecting-notice-puts-plain-text-on-the-alternate-screen"
+    (let ((painted (with-output-to-string (*standard-output*)
+                     (nerimux::%paint-connecting-notice))))
+      (expect (search "connecting" painted))
+      (expect (null (find #\Escape painted)))))
 
 
   (it "utf8-char-byte-count-table"

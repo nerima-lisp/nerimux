@@ -9,8 +9,8 @@
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  :depends-on ("nerimux-ports" "nerimux-terminal"
-               :cl-concurrent-kit :cl-tty-kit)
+  :depends-on ("nerimux-ports" "nerimux-terminal" "nerimux-text"
+               :cl-codec-kit :cl-concurrent-kit :cl-tty-kit)
   :pathname "src"
   ;; These files are mutually recursive and must load as one system.
   :serial t

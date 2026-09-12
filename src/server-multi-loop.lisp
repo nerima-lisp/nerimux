@@ -109,9 +109,12 @@
                  (all-panes session)))
 
 (defun %pane-kill-description (pane)
-  "Describe PANE for a refusal message."
+  "Describe PANE for a refusal message as window:pane, the addressing the
+   status bar shows.  Pane ids restart at 1 in every window, so the id alone
+   names two different panes once a second window is open."
   (format nil
-          "pane ~D (pid ~D)~@[ in ~A~]"
+          "pane ~D:~D (pid ~D)~@[ in ~A~]"
+          (window-id (pane-window pane))
           (pane-id pane)
           (pane-pid pane)
           (and (pane-worktree pane) (worktree-path (pane-worktree pane)))))

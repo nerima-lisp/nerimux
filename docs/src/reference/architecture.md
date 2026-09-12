@@ -51,7 +51,7 @@ SIGWINCH ──► %maybe-send-resize                     from each ready client
 
 The client side of the diagram is `src/client.lisp`; everything on
 the server side is keyed off the per-connection `CLIENT-CONN` struct in
-`src/server-multi-dispatch.lisp`.
+`src/server-multi-data.lisp`.
 
 `CLIENT-CONN` holds two independent axes rather than one mode×view product:
 `VIEW` (`:repolist` / `:status` / `:pane`) says which screen is up, and
@@ -69,7 +69,7 @@ keymap.
 The server renders **per client**, not once for the whole session: each
 attached `CLIENT-CONN` can be at a different view (`repolist`/`status`/
 `pane`), a different modal, and a different terminal size, so
-`%render-client-frame` (`src/server-multi.lisp`) picks the matching
+`%render-client-frame` (`src/server-multi-render.lisp`) picks the matching
 renderer and the client's own `rows`/`cols` on every broadcast. The shared
 pane/PTY layout underneath is still sized once, from the smallest attached
 client's geometry (`%effective-client-size`).
@@ -257,7 +257,8 @@ The renderer has two independent first passes:
   labels and terminal titles shared by both views, while
   `renderer-workspace-command-line.lisp` owns workspace command completion.
   `renderer-workspace-tree.lisp` projects the repolist view's three fixed
-  sections: Attention, Active, and Repositories, flattening each worktree's
+  sections: Attention, Active, and Repositories (the last grouped under
+  organization rows), flattening each worktree's
   optional inline expansion (panes, changed files, recent commits, and a
   changed file's own diff) into the same row list, including attention and
   refresh state.

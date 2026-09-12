@@ -1,5 +1,9 @@
 (in-package #:nerimux)
 
+(defun %client-kill-denied-message (descriptions)
+  (format nil "kill refused: ~D pane~:P still open, retry with :kill --force"
+          (length descriptions)))
+
 (defun %handle-client-kill-command (session conn args)
   "Serve `nerimux kill` (R8.1): answer with OK or DENIED, then drop the client.
 
@@ -7,33 +11,44 @@
    handler that only acted and returned would leave the CLI waiting on a server
    that considers the exchange finished. Returning :QUIT here is what stops the
    serve loop -- and it only reaches the loop because
-   %handle-multi-command-message forwards this value rather than discarding it."
-  (multiple-value-bind (status descriptions) 
+   %handle-multi-command-message forwards this value rather than discarding it.
+
+   Typed at the `:' prompt there is no CLI waiting for a frame and no reason to
+   hang up on a refusal: the attached client is shown why the kill was refused
+   and keeps its session. An accepted kill has already stopped the server by
+   the time %SERVER-KILL-REQUEST returns, so that path still ends the loop."
+  (multiple-value-bind (status descriptions)
       (%server-kill-request session (%client-kill-force-p args))
-    (send-frame (client-conn-stream conn)
-                (msg-reply
-                 (if (eq status :denied)
-                     (format nil "DENIED~{~%~A~}" descriptions)
-                     "OK")))
-    (%drop-client conn)
-    (if (eq status :ok)
-        :quit
-        t)))
+    (cond
+      (*client-command-line-p*
+       (if (eq status :ok)
+           :quit
+           (progn (%client-notify conn (%client-kill-denied-message descriptions))
+                  t)))
+      (t
+       (send-frame (client-conn-stream conn)
+                   (msg-reply
+                    (if (eq status :denied)
+                        (format nil "DENIED~{~%~A~}" descriptions)
+                        "OK")))
+       (%drop-client conn)
+       (if (eq status :ok)
+           :quit
+           t)))))
 
 (defun %client-kill-force-p (args)
   "True when a kill command carried --force."
   (and args (member "--force" args :test #'string=) t))
 
-(defun %client-complete-workspace (conn &key toggle)
+(defun %client-complete-workspace (conn)
   (let* ((selected (client-conn-selected-worktree conn))
-         (worktree (if (and toggle selected)
-                       (%workspace-find-worktree (worktree-path selected))
-                       selected)))
+         (worktree (and selected (%workspace-find-worktree (worktree-path selected)))))
     (cond
       ((null selected) (%client-notify conn "no worktree selected"))
       ((null worktree) (%client-notify conn "worktree no longer available"))
-      ((and toggle (worktree-completed-p worktree))
+      ((worktree-completed-p worktree)
        (setf (worktree-completed-p worktree) nil)
+       (%client-notify conn "completion cleared")
        (%mark-dirty))
       ((worktree-running-agent-p worktree)
        (%open-confirm-view
@@ -43,11 +58,53 @@
         (lambda ()
           (let ((current (%workspace-find-worktree (worktree-path worktree))))
             (if current
-                (progn (worktree-complete current) (%mark-dirty))
+                (progn (worktree-complete current)
+                       (%client-notify conn "marked complete")
+                       (%mark-dirty))
                 (%client-notify conn "worktree no longer available"))))))
       (t
        (worktree-complete worktree)
+       (%client-notify conn "marked complete")
        (%mark-dirty))))
+  t)
+
+(defun %workspace-prune-eligible-worktrees (worktrees)
+  "The WORKTREES a prune would actually remove -- exactly what
+   %WORKSPACE-PRUNE-EXCLUSION lets through at prune time, attached/pending
+   checks included. Classification alone under-excludes: a worktree open in a
+   client or mid cancellation/deletion classifies as :CANDIDATE but is never
+   pruned, so counting it here promised work the job was never going to do."
+  (remove-if #'%workspace-prune-exclusion worktrees))
+
+(defun %confirm-client-prune-workspaces (conn all)
+  "Ask before pruning, then run the job from the confirmation's y.
+   %CLIENT-PRUNE-WORKSPACES refuses to start while a modal owns the client, so
+   the confirmation has to close before the job begins rather than wrap it --
+   which is also what lets the `:' prompt reach prune at all, since the command
+   modal is still up while the command runs."
+  (let* ((worktrees (if all
+                        (%workspace-prune-eligible-worktrees
+                         (%workspace-worktrees))
+                        (let ((selected (client-conn-selected-worktree conn)))
+                          (and selected (list selected)))))
+         (count (length worktrees))
+         (dirty (%workspace-prune-confirmation-required-worktrees worktrees)))
+    (cond
+      ((and all (null worktrees)) (%client-notify conn "nothing to prune"))
+      ((null worktrees)
+       (%client-notify conn "no workspace selected for prune"))
+      (t
+       (%open-confirm-view
+        conn
+        (if all "PRUNE ALL WORKSPACES" "PRUNE WORKSPACE")
+        (append
+         (list (cons "workspaces" (format nil "~D" count))
+               (cons "effect" "each eligible worktree is removed"))
+         (when dirty
+           (list (cons "these have uncommitted changes and will be deleted with them"
+                       (format nil "~{~A~^, ~}"
+                               (mapcar #'%worktree-prune-confirm-label dirty))))))
+        (lambda () (%client-prune-workspaces conn :all all))))))
   t)
 
 (define-command-rules %handle-client-ui-command
@@ -57,8 +114,12 @@
                       (:attach-target (%client-attach-target conn args))
                       ((:overview :workspace-overview :home)
                        (%set-client-view conn :repolist)
+                       (%client-notify conn "view: overview")
                        t)
-                      ((:detail :pane-detail) (%set-client-view conn :pane) t)
+                      ((:detail :pane-detail)
+                       (%set-client-view conn :pane)
+                       (%client-notify conn "view: pane")
+                       t)
                       ((:workspace-prefix :prefix-key :rebind-prefix)
                        (%client-rebind-prefix conn (command-argument))
                        t)
@@ -108,7 +169,8 @@
                                                              conn)))))
                        t)
                       ((:worktree-create :create-worktree :wt-create)
-                       (%client-create-worktree conn target args))
+                       (or (%client-report-missing-target conn target)
+                           (%client-create-worktree conn target args)))
                       ((:workspace-complete :wt-complete)
                        (if (or target args)
                            (progn
@@ -116,19 +178,30 @@
                              t)
                            (%client-complete-workspace conn)))
                       ((:worktree-delete :delete-worktree :wt-delete)
-                       (%client-delete-worktree conn target args))
+                       (or (%client-report-missing-target conn target
+                                                          #'%workspace-find-worktree)
+                           (%client-delete-worktree conn target args)))
                       ((:workspace-prune :workspace-prune-all)
                        (if (or target args)
                            (progn (%client-notify conn "workspace prune takes no arguments") t)
-                           (%client-prune-workspaces conn :all (eq cmd :workspace-prune-all))))
+                           (%confirm-client-prune-workspaces
+                            conn (eq cmd :workspace-prune-all))))
                       ((:worktree-lock :lock-worktree :wt-lock)
-                       (%client-lock-worktree conn target args))
+                       (or (%client-report-missing-target conn target
+                                                          #'%workspace-find-worktree)
+                           (%client-lock-worktree conn target args)))
                       ((:worktree-unlock :unlock-worktree :wt-unlock)
-                       (%client-unlock-worktree conn target args))
+                       (or (%client-report-missing-target conn target
+                                                          #'%workspace-find-worktree)
+                           (%client-unlock-worktree conn target args)))
                       ((:worktree-prune-preview :wt-prune :wt-prune-dry-run)
-                       (%client-prune-worktrees conn target args :dry-run t))
+                       (or (%client-report-missing-target conn target)
+                           (%client-prune-worktrees conn target args
+                                                    :dry-run t)))
                       ((:worktree-prune-confirm :wt-prune-confirm)
-                       (%client-prune-worktrees conn target args :dry-run nil))
+                       (or (%client-report-missing-target conn target)
+                           (%client-prune-worktrees conn target args
+                                                    :dry-run nil)))
                       (:mode
                        (let ((mode
                               (%client-ui-mode-value (command-argument))))

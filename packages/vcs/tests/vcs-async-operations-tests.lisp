@@ -864,3 +864,96 @@
                      (error (condition)
                        (setf condition-seen condition)))
                    (expect (typep condition-seen 'error)))))))
+
+(describe "vcs repository status worker pool"
+  (it "bounds in-flight status reads and still settles every repository"
+    (let* ((repositories
+             (loop for index from 1 to 40
+                   collect (nerimux/workspace-model:make-repository
+                            :specification
+                            (format nil "workspace-owner/project-~D" index)
+                            :local-path (format nil "/tmp/project-~D" index))))
+           (probe-lock (cl-concurrent-kit:make-lock :name "status probe"))
+           (in-flight 0)
+           (peak 0)
+           (reads 0)
+           (completed nil)
+           (deadline (+ (get-internal-real-time)
+                        (* 20 internal-time-units-per-second)))
+           (threads
+             (nerimux/vcs:refresh-repositories-async
+              repositories
+              :status-reader
+              (lambda (repository)
+                (declare (ignore repository))
+                (cl-concurrent-kit:with-lock-held (probe-lock)
+                  (incf reads)
+                  (incf in-flight)
+                  (setf peak (max peak in-flight)))
+                (sleep 0.02)
+                (cl-concurrent-kit:with-lock-held (probe-lock)
+                  (decf in-flight))
+                nil)
+              :status-applier
+              (lambda (repository update)
+                (declare (ignore repository update))
+                nil)
+              :on-complete
+              (lambda (refreshed)
+                (declare (ignore refreshed))
+                (setf completed t)))))
+      (loop until completed
+            while (< (get-internal-real-time) deadline)
+            do (sleep 0.01))
+      (dolist (thread threads)
+        (cl-concurrent-kit:join-thread thread :timeout 10))
+      (expect completed)
+      (expect (= 8 (length threads)))
+      (expect (= 40 reads))
+      (expect (zerop in-flight))
+      (expect (<= peak 8))
+      (expect (> peak 1))))
+
+  (it "uses one worker for one repository and keeps the batch in order"
+    (let ((repository (nerimux/workspace-model:make-repository
+                       :specification "workspace-owner/project"))
+          (completed :not-called))
+      (let ((threads
+              (nerimux/vcs:refresh-repositories-async
+               (list repository)
+               :status-reader (lambda (current) (declare (ignore current)) nil)
+               :status-applier (lambda (current update)
+                                 (declare (ignore current update))
+                                 nil)
+               :on-complete (lambda (refreshed) (setf completed refreshed)))))
+        (expect (= 1 (length threads)))
+        (dolist (thread threads)
+          (cl-concurrent-kit:join-thread thread :timeout 10)))
+      (expect (equal (list repository) completed))))
+
+  (it "settles the batch when a request signals before READ-ONE ever reaches FAIL-ONE"
+    (let ((repository (nerimux/workspace-model:make-repository
+                       :specification "workspace-owner/project"))
+          (completed :not-called)
+          (errors nil))
+      (let ((threads
+              (nerimux/vcs:refresh-repositories-async
+               (list repository)
+               ;; ON-START runs before the STATUS-READER handler-case exists,
+               ;; so a condition here used to escape DRAIN's catch-all
+               ;; uncaught by FAIL-ONE, leaving REMAINING stuck above zero.
+               :on-start (lambda (current) (declare (ignore current))
+                          (error "on-start failed"))
+               :on-error (lambda (current condition)
+                          (push (cons current condition) errors))
+               :status-reader (lambda (current) (declare (ignore current)) nil)
+               :status-applier (lambda (current update)
+                                 (declare (ignore current update))
+                                 nil)
+               :on-complete (lambda (refreshed) (setf completed refreshed)))))
+        (dolist (thread threads)
+          (cl-concurrent-kit:join-thread thread :timeout 10)))
+      (expect (equal (list repository) completed))
+      (expect (= 1 (length errors)))
+      (expect (eq repository (car (first errors))))
+      (expect (typep (cdr (first errors)) 'error)))))

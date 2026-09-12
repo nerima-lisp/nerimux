@@ -16,31 +16,31 @@
    (cons #\P
          (list "Push"
                (list (cons #\f "--force-with-lease") (cons #\F "--force"))
-               (list (list #\p "push to origin/~A"
+               (list (list #\p "push to upstream"
                            (list :git #\P :push nil nil '("--force" "--force-with-lease")))
                      (list #\e "push to another remote"
                            (list :prompt :remote-push)))))
    (cons #\F
          (list "Pull"
                (list (cons #\r "--rebase"))
-               (list (list #\p "pull from origin/~A"
+               (list (list #\p "pull from upstream"
                            (list :git #\F :pull nil nil nil)))))
    (cons #\b
          (list "Branch" nil
                (list (list #\l "list branches"
-                           (list :git #\b :branch nil nil nil))
+                           (list :read-view :branches))
                      (list #\- "switch to previous branch"
                            (list :git #\b :switch '("-") nil nil))
                      (list #\c "create branch"
                            (list :prompt :branch-create))
                      (list #\D "delete branch"
-                           (list :stub "branch name needs a text-prompt UI, not wired in this build")))))
+                           (list :prompt :branch-delete)))))
    (cons #\m
          (list "Merge" nil
                (list (list #\u "merge upstream (@{u})"
                            (list :git #\m :merge '("@{u}") nil nil))
                      (list #\b "merge another branch"
-                           (list :stub "branch name needs a text-prompt UI, not wired in this build")))))
+                           (list :prompt :merge-branch)))))
    (cons #\r
          (list "Rebase" nil
                (list (list #\u "rebase onto upstream (@{u})"
@@ -74,7 +74,7 @@
    (cons #\t
          (list "Tag" nil
                (list (list #\l "list tags"
-                           (list :git #\t :tag nil nil nil))
+                           (list :read-view :tags))
                      (list #\t "create tag"
                            (list :prompt :tag-create)))))
    (cons #\X
@@ -93,7 +93,13 @@
          (list "Worktree" nil
                (list (list #\c "create worktree and open its shell"
                            (list :call (lambda (session conn)
+                                         (%client-start-worktree-create session conn :mode :shell))))
+                     (list #\n "create worktree and assign an agent"
+                           (list :call (lambda (session conn)
                                          (%client-start-worktree-create session conn))))
+                     (list #\a "assign an agent to this worktree"
+                           (list :call (lambda (session conn)
+                                         (%client-assign-worktree session conn))))
                      (list #\k "delete worktree"
                            (list :call (lambda (session conn)
                                          (declare (ignore session))
@@ -106,7 +112,19 @@
                            (list :call (lambda (session conn)
                                          (declare (ignore session))
                                          (%client-start-worktree-unlock conn))))
-                     (list #\C "create with a chosen branch name"
+                     (list #\C "toggle complete"
+                           (list :call (lambda (session conn)
+                                         (declare (ignore session))
+                                         (%client-complete-workspace conn))))
+                     (list #\p "prune this workspace"
+                           (list :call (lambda (session conn)
+                                         (declare (ignore session))
+                                         (%confirm-client-prune-workspaces conn nil))))
+                     (list #\P "prune all workspaces"
+                           (list :call (lambda (session conn)
+                                         (declare (ignore session))
+                                         (%confirm-client-prune-workspaces conn t))))
+                     (list #\b "create with a chosen branch name"
                            (list :stub "use `: wt-create --branch <name> --confirm`")))))
    (cons #\?
          (list "Dispatch" nil
@@ -124,5 +142,5 @@
                      (list #\X "Reset" (list :open-transient #\X))
                      (list #\! "Shell command" (list :open-transient #\!))
                      (list #\w "Worktree" (list :open-transient #\w))
-                     (list #\k "help" (list :help))))))
+                     (list #\k "Help (all keys)" (list :help))))))
     "KEY -> (TITLE ARGUMENTS ACTIONS); see the section comment above."))

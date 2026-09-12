@@ -15,6 +15,7 @@
              '(("/bin/bash"  "bash" "%shell-basename strips /bin/ prefix")
                ("zsh"        "zsh"  "%shell-basename returns bare name when no slash")
                (nil          "sh"   "%shell-basename falls back to /bin/sh's basename when $SHELL is unset")
+               (""           "sh"   "%shell-basename falls back to /bin/sh's basename when $SHELL is empty")
                ("/usr/bin/"  ""     "%shell-basename returns empty string for trailing-slash path")))
       (destructuring-bind (shell expected desc) entry
         (declare (ignore desc))

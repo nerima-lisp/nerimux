@@ -2,7 +2,7 @@
 
 (describe "server-multi-selection-suite"
 
-  (it "resolves picker worktrees through repository and organization fallbacks"
+  (it "resolves a picker worktree only from the item that names one"
     (let* ((empty-organization
              (nerimux/workspace-model:make-organization))
            (repository
@@ -18,14 +18,16 @@
       (expect (eq worktree
                   (nerimux::%picker-item-worktree
                    (nerimux/picker::%make-picker-item
-                    :repository repository))))
+                    :repository repository :worktree worktree))))
+      (expect (null (nerimux::%picker-item-worktree
+                     (nerimux/picker::%make-picker-item
+                      :repository repository))))
       (expect (null (nerimux::%picker-item-worktree
                      (nerimux/picker::%make-picker-item
                       :organization empty-organization))))
-      (expect (eq worktree
-                  (nerimux::%picker-item-worktree
-                   (nerimux/picker::%make-picker-item
-                    :organization organization))))))
+      (expect (null (nerimux::%picker-item-worktree
+                     (nerimux/picker::%make-picker-item
+                      :organization organization))))))
 
   (it "does not search panes when picker worktree is absent"
     (let ((session (make-session :id 1 :name "0")))

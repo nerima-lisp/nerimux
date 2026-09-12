@@ -204,11 +204,13 @@
                  :picker-query "team"
                  :picker-index 1
                  :picker-regex-p t)))
-      (expect (search "regex query: team" out))
+      (expect (search "team" out))
+      (expect (search "regex on" out))
+      (expect (not (search "regex query" out)))
       (expect (search "github.com/team" out))
       (expect (search "github.com/team/repo" out))
       (expect (search "feature/picker" out))
-      (expect (search "pane/7 editor" out))
+      (expect (search "feature/picker — editor" out))
       (expect (search (format nil "~C[7m" #\Escape) out))
       (expect (search (format nil "~C[33m" #\Escape) out))))
 

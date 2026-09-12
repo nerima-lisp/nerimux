@@ -18,16 +18,6 @@
   (cl-concurrent-kit:with-lock-held (*fetch-lock*)
                                     (remhash key *in-progress-fetches*)))
 
-(defun %fetch-origin-main (repository)
-  (vcs-kit:vcs-fetch
-   (%repository-backend repository)
-   "origin" "+refs/heads/main:refs/remotes/origin/main"
-   :execution-options
-   '(:environment-update (("GIT_TERMINAL_PROMPT" . "0")
-                          ("GIT_ASKPASS" . "true")
-                          ("SSH_ASKPASS" . "true")
-                          ("GIT_SSH_COMMAND" . "ssh -oBatchMode=yes")))))
-
 (defun %fetch-optional-output (function &rest arguments)
   (handler-case
       (values (string-right-trim '(#\Newline #\Return)
@@ -42,6 +32,80 @@
       (unless (eql 1 (vcs-kit:vcs-command-exit-error-exit-code condition))
         (error condition))
       (values nil nil))))
+
+(defun %probe-git-output (function &rest arguments)
+  "FUNCTION's trimmed stdout, with a second value saying whether git agreed.
+
+Unlike %FETCH-OPTIONAL-OUTPUT this swallows every failure, not just exit 1:
+the questions asked through it (which branch is the default, is there an
+origin) are also asked of directories that are not repositories at all."
+  (handler-case
+      (values (string-right-trim '(#\Newline #\Return)
+                                 (or (vcs-kit:process-result-stdout
+                                      (apply function arguments))
+                                     ""))
+              t)
+    (error () (values nil nil))))
+
+(defun %repository-origin-p (repository)
+  "True when REPOSITORY has a remote named origin."
+  (let ((remotes (%probe-git-output #'vcs-kit:vcs-remote
+                                    (%repository-backend repository))))
+    (and remotes
+         (member "origin" (uiop:split-string remotes :separator '(#\Newline))
+                 :test #'string=)
+         t)))
+
+(defun %repository-default-branch (repository)
+  "Name REPOSITORY's default branch (R7.3).
+
+origin/HEAD is what the remote calls its default branch, but it is only set
+once `git remote set-head` has run, and a repository need not have a remote at
+all. The checked-out branch answers the question next, and main or master last
+-- a detached checkout of a repository whose origin/HEAD was never set leaves
+nothing else to go on."
+  (let ((handle (%repository-checked-handle repository)))
+    (flet ((local-branch (name)
+             (when (nth-value 1 (%probe-git-output
+                                 #'vcs-kit:git-show-ref handle
+                                 "--verify" "--quiet"
+                                 (format nil "refs/heads/~A" name)))
+               name))
+           (origin-head-branch ()
+             ;; The full ref, not --short: only the literal
+             ;; refs/remotes/origin/ prefix can be stripped without guessing
+             ;; where a branch name like feature/x begins.
+             (let ((prefix "refs/remotes/origin/")
+                   (value (%probe-git-output #'vcs-kit:git-symbolic-ref handle
+                                             "-q" "refs/remotes/origin/HEAD")))
+               (when (and value (eql 0 (search prefix value)))
+                 (let ((branch (subseq value (length prefix))))
+                   (when (plusp (length branch)) branch)))))
+           (head-branch ()
+             (let ((value (%probe-git-output #'vcs-kit:git-symbolic-ref handle
+                                             "-q" "--short" "HEAD")))
+               (when (and value (plusp (length value))) value))))
+      (or (origin-head-branch)
+          (head-branch)
+          (local-branch "main")
+          (local-branch "master")))))
+
+(defun %fetch-default-branch (repository branch)
+  "Fetch BRANCH from origin before a worktree is created from it (R7.5).
+
+A repository with no origin has nothing to fetch and is left to its local
+refs. One that has an origin is not: a fetch failure there means the branch
+this is about to create from may no longer exist on the remote, so it is
+signalled rather than resolved from a stale tracking ref."
+  (when (and branch (plusp (length branch)) (%repository-origin-p repository))
+    (vcs-kit:vcs-fetch
+     (%repository-backend repository)
+     "origin" (format nil "+refs/heads/~A:refs/remotes/origin/~A" branch branch)
+     :execution-options
+     '(:environment-update (("GIT_TERMINAL_PROMPT" . "0")
+                            ("GIT_ASKPASS" . "true")
+                            ("SSH_ASKPASS" . "true")
+                            ("GIT_SSH_COMMAND" . "ssh -oBatchMode=yes"))))))
 
 (defun %bare-origin-fetch-p (repository backend)
   (and (string= "true" (%rev-parse repository "--is-bare-repository"))

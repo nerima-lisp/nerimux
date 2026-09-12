@@ -61,6 +61,7 @@
                        organization))))))
           (it "tracks pane output, lifecycle failures, and focus clearing"
               (let ((pane (nerimux/pane:make-pane :id 7 :title "editor")))
+                (nerimux/pane:pane-mark-focused pane)
                 (nerimux/pane:pane-mark-output pane #(72 105 10))
                 (expect (nerimux/pane:pane-unread-output-p pane))
                 (expect (search "Hi" (nerimux/pane:pane-last-output pane)))
@@ -130,7 +131,110 @@
                   (member :pane
                           (nerimux/pane:worktree-attention-reasons worktree))))
                 (expect
-                 (null (nerimux/workspace-model:worktree-attention-p worktree))))))
+                 (null (nerimux/workspace-model:worktree-attention-p worktree)))))
+          (it
+           "leaves a worktree in Active when unread pane output is its only reason"
+           (let* ((organization
+                   (nerimux/workspace-model:make-organization :id "org"))
+                  (repository
+                   (nerimux/workspace-model:make-repository :id
+                                                            "repo"
+                                                            :organization
+                                                            organization))
+                  (worktree
+                   (nerimux/workspace-model:make-worktree :id
+                                                          "unread"
+                                                          :repository
+                                                          repository))
+                  (pane (nerimux/pane:make-pane :id 1 :title "editor")))
+             (nerimux/pane:worktree-add-pane worktree pane)
+             (nerimux/pane:pane-mark-focused pane)
+             (nerimux/pane:pane-mark-output pane #(72 105 10))
+             (nerimux/workspace-model:organization-add-repository organization
+                                                                  repository)
+             (nerimux/workspace-model:repository-add-worktree repository
+                                                              worktree)
+             (expect
+              (equal '(:unread-output)
+                     (nerimux/pane:pane-attention-reasons pane)))
+             (expect (nerimux/pane:pane-attention-p pane))
+             (expect
+              (null
+               (member :pane
+                       (nerimux/pane:worktree-attention-reasons worktree))))
+             (expect
+              (null (nerimux/workspace-model:worktree-attention-p worktree)))
+             (expect
+              (zerop
+               (nerimux/workspace-model:organization-attention-count
+                organization)))
+             (expect
+              (= 1
+                 (nerimux/workspace-model:organization-active-worktree-count
+                  organization)))))
+          (it
+           "leaves a worktree in Active when nerimux's own message strip text is the pane's only notification"
+           (let ((worktree
+                  (nerimux/workspace-model:make-worktree :id "notified"))
+                 (pane (nerimux/pane:make-pane :id 1 :title "shell")))
+             (nerimux/pane:worktree-add-pane worktree pane)
+             (nerimux/pane:pane-notify pane "workspace refresh complete")
+             (expect (string= "workspace refresh complete"
+                              (nerimux/pane:pane-notification pane)))
+             (expect
+              (equal '(:unread-output)
+                     (nerimux/pane:pane-attention-reasons pane)))
+             (expect
+              (null
+               (member :pane
+                       (nerimux/pane:worktree-attention-reasons worktree))))
+             (expect
+              (null (nerimux/workspace-model:worktree-attention-p worktree)))))
+          (it
+           "escalates a worktree whose pane reported a notification of its own, and clears it on focus"
+           (let ((worktree
+                  (nerimux/workspace-model:make-worktree :id "osc-notified"))
+                 (pane (nerimux/pane:make-pane :id 1 :title "shell")))
+             (nerimux/pane:worktree-add-pane worktree pane)
+             (nerimux/pane:pane-record-notification pane #(27 93 57 57) "build done" 100)
+             (expect
+              (member :notification
+                      (nerimux/pane:pane-attention-reasons pane)))
+             (expect
+              (member :pane
+                      (nerimux/pane:worktree-attention-reasons worktree)))
+             (nerimux/pane:pane-mark-focused pane)
+             (expect
+              (null
+               (member :notification
+                       (nerimux/pane:pane-attention-reasons pane))))
+             (expect (string= "build done" (nerimux/pane:pane-notification pane)))))
+          (it "still escalates a pane whose unread output came with a bell"
+              (let ((worktree
+                     (nerimux/workspace-model:make-worktree :id "unread-bell"))
+                    (pane (nerimux/pane:make-pane :id 1 :title "editor")))
+                (nerimux/pane:worktree-add-pane worktree pane)
+                (nerimux/pane:pane-mark-focused pane)
+                (nerimux/pane:pane-mark-output pane #(72 105 10))
+                (nerimux/pane:pane-mark-bell pane)
+                (expect
+                 (member :unread-output
+                         (nerimux/pane:pane-attention-reasons pane)))
+                (expect
+                 (member :pane
+                         (nerimux/pane:worktree-attention-reasons worktree))))))
+
+(describe "pane seen state"
+          (it "does not mark a fresh pane's own first prompt unread"
+              (let ((pane (nerimux/pane:make-pane :id 1)))
+                (nerimux/pane:pane-mark-output pane #(72 105))
+                (expect (null (nerimux/pane:pane-unread-output-p pane)))
+                (expect (string= "Hi" (nerimux/pane:pane-last-output pane)))))
+          (it "marks output unread once the pane has been focused and loses focus again"
+              (let ((pane (nerimux/pane:make-pane :id 1)))
+                (nerimux/pane:pane-mark-focused pane)
+                (nerimux/pane:pane-mark-output pane #(72 105))
+                (expect (nerimux/pane:pane-unread-output-p pane)))))
 
 (describe "agent waiting state"
           (it "marks an agent worktree waiting on process exit"
@@ -174,6 +278,52 @@
                 (expect
                  (null
                   (nerimux/workspace-model:worktree-waiting-p worktree)))))
+          (it "names a failed launch in the pane instead of marking the worktree waiting"
+              (let* ((worktree
+                       (nerimux/workspace-model:make-worktree :id "launch-failure"))
+                     (pane
+                       (make-pane :id 10 :agent-kind :claude
+                                  :start-command "claude --dangerously-skip-permissions"
+                                  :screen (make-screen 40 4))))
+                (nerimux/pane:worktree-add-pane worktree pane)
+                (nerimux/pane:pane-mark-process-exit pane :status 127)
+                (expect
+                 (null (nerimux/workspace-model:worktree-waiting-p worktree)))
+                (expect
+                 (string= "claude: exited 127 (not found?)"
+                          (pane-notification pane)))))
+          (it "reports a failed launch whose command name is outside Latin-1"
+              ;; CHAR-CODE on such a name returns a value the (unsigned-byte 8)
+              ;; element type cannot hold, and the type-error killed the reader
+              ;; thread this runs on.
+              (let* ((worktree
+                       (nerimux/workspace-model:make-worktree :id "wide-name"))
+                     (pane
+                       (make-pane :id 12 :agent-kind :claude
+                                  :start-command "クロード --flag"
+                                  :screen (make-screen 40 4))))
+                (nerimux/pane:worktree-add-pane worktree pane)
+                (nerimux/pane:pane-mark-process-exit pane :status 127)
+                (expect
+                 (string= "クロード: exited 127 (not found?)"
+                          (pane-notification pane)))
+                (expect (nerimux/pane:pane-non-zero-exit-p pane))))
+          (it "keeps the waiting mark for an agent that exits long after it started"
+              (let* ((worktree
+                       (nerimux/workspace-model:make-worktree :id "late-exit"))
+                     (pane
+                       (make-pane :id 11 :agent-kind :claude
+                                  :start-command "claude"
+                                  :screen (make-screen 40 4))))
+                (setf (nerimux/pane::pane-start-time pane)
+                      (- (get-universal-time) 600))
+                (nerimux/pane:worktree-add-pane worktree pane)
+                (nerimux/pane:pane-mark-process-exit pane :status 1)
+                (expect (nerimux/workspace-model:worktree-waiting-p worktree))
+                (expect
+                 (string= "process exited"
+                          (nerimux/workspace-model:worktree-waiting-message
+                           worktree)))))
           (it "clears waiting when the agent pane is focused"
               (let* ((worktree
                        (nerimux/workspace-model:make-worktree :id "waiting-focus"))

@@ -3,7 +3,7 @@
 (defstruct (worktree
             (:constructor %make-worktree
                 (&key id repository path branch head status panes dirty-p
-                      conflict-p ahead behind bare-p locked-p prunable-p
+                      conflict-p ahead behind locked-p prunable-p
                       missing-p changed-files additions deletions
                       recent-commits commits-state
                       staged-files unstaged-files untracked-files
@@ -23,7 +23,6 @@
   (conflict-p nil :type boolean)
   (ahead 0 :type integer)
   (behind 0 :type integer)
-  (bare-p nil :type boolean)
   (locked-p nil :type boolean)
   (prunable-p nil :type boolean)
   (missing-p nil :type boolean)
@@ -61,7 +60,6 @@
                            conflict-p
                            (ahead 0)
                            (behind 0)
-                           bare-p
                            locked-p
                            prunable-p
                            missing-p
@@ -109,8 +107,6 @@
                     ahead
                     :behind
                     behind
-                    :bare-p
-                    (not (null bare-p))
                     :locked-p
                     (not (null locked-p))
                     :prunable-p
@@ -188,18 +184,18 @@
             (or (eq primary worktree)
                 (string= (worktree-path primary) (worktree-path worktree))))
        (values :excluded :primary))
-      ((worktree-bare-p worktree)
-       (values :excluded :bare))
       ((worktree-locked-p worktree)
        (values :excluded :locked))
       ((or (some #'nerimux/pane:pane-live-p (worktree-panes worktree))
            (nerimux/pane:pane-live-p (worktree-agent-pane worktree)))
        (values :excluded :live-pane))
+      ;; A worktree whose directory is gone holds no work to lose, so it is
+      ;; repairable whether or not its agent ever reported completion.
+      ((worktree-missing-p worktree)
+       (values :missing :metadata-repair-required))
       ((and (not (worktree-completed-p worktree))
             (not (eq :exited (nerimux/pane:worktree-agent-state worktree))))
        (values :excluded :not-completed-or-agent-exited))
-      ((worktree-missing-p worktree)
-       (values :missing :metadata-repair-required))
       ((or (worktree-dirty-p worktree) (worktree-conflict-p worktree))
        (values :candidate :confirmation-required))
       (t (values :candidate :clean)))))

@@ -56,20 +56,21 @@
 (defparameter *scenarios*
   (list (cons "kill-without-server" 'scenario-kill-without-server)
         (cons "server-starts" 'scenario-server-starts)
+        (cons "kill-empty-server-succeeds" 'scenario-kill-empty-server-succeeds)
+        (cons "attach" :attach)
         (cons "kill-refuses-with-pane" 'scenario-kill-refuses-with-pane)
         (cons "kill-force-cleans" 'scenario-kill-force-cleans)
-        (cons "attach" :attach)
         (cons "paste" :paste))
   "Mode-name -> handler-symbol (or :ATTACH/:PASTE), in the fixed run order:
-   KILL-WITHOUT-SERVER, SERVER-STARTS, KILL-REFUSES-WITH-PANE,
-   KILL-FORCE-CLEANS, ATTACH, PASTE. KILL-WITHOUT-SERVER runs first while the
-   isolated environment has no server. SERVER-STARTS then creates the server
-   and its live initial shell pane; KILL-REFUSES-WITH-PANE checks that plain
-   KILL refuses that pane, and KILL-FORCE-CLEANS reuses the same server to
-   verify forced cleanup. ATTACH and PASTE follow the kill scenarios because
-   each may auto-start the default server; PASTE follows ATTACH so it can
-   reuse the linked-worktree fixture, and their server is cleaned up after the
-   scenario loop.")
+   KILL-WITHOUT-SERVER, SERVER-STARTS, KILL-EMPTY-SERVER-SUCCEEDS, ATTACH,
+   KILL-REFUSES-WITH-PANE, KILL-FORCE-CLEANS, PASTE. KILL-WITHOUT-SERVER runs
+   first while the isolated environment has no server. SERVER-STARTS creates
+   a server with no pane, so KILL-EMPTY-SERVER-SUCCEEDS expects plain KILL to
+   stop it. ATTACH auto-starts a server and opens a pane in the linked
+   worktree before detaching; KILL-REFUSES-WITH-PANE checks that plain KILL
+   refuses that pane and KILL-FORCE-CLEANS verifies forced cleanup of the same
+   server. PASTE follows so it can reuse the linked-worktree fixture; its
+   server is cleaned up after the scenario loop.")
 
 (defun %run-attach-scenario-lazily (binary)
   "Load attach-scenario.lisp and run RUN-ATTACH-SCENARIO, catching any error

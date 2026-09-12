@@ -1,14 +1,5 @@
 (in-package #:nerimux/renderer)
 
-(defun %repository-attention-p (repository)
-  "T when REPOSITORY itself, or any worktree under it, needs attention."
-  (or (repository-dirty-p repository)
-      (repository-conflict-p repository)
-      (plusp (repository-ahead repository))
-      (plusp (repository-behind repository))
-      (repository-missing-p repository)
-      (some #'worktree-attention-p (repository-worktrees repository))))
-
 (defun %worktree-tree-windows (worktree)
   "Distinct windows holding at least one of WORKTREE's panes, ordered by
    window id -- the order the tree and status line show them in (R5.8)."
@@ -55,15 +46,6 @@
       ((plusp (length name)) name)
       (t (organization-id organization)))))
 
-(defun %strip-dot-git-suffix (name)
-  "NAME with a trailing \".git\" removed (case-insensitively), unless NAME
-   is nothing but \".git\" itself -- in which case stripping it would leave
-   an empty label, so NAME is returned unchanged."
-  (if (and (> (length name) 4)
-           (string-equal name ".git" :start1 (- (length name) 4)))
-      (subseq name 0 (- (length name) 4))
-      name))
-
 (defun %repository-tree-label (repository)
   "Repository row label: the repository name from the final segment of
    SPECIFICATION, with a trailing `.git' removed. When SPECIFICATION is
@@ -72,7 +54,7 @@
   (let ((specification (repository-specification repository)))
     (if (plusp (length specification))
         (let ((slash (position #\/ specification :from-end t)))
-          (%strip-dot-git-suffix
+          (nerimux/text:strip-dot-git-suffix
            (if slash
                (subseq specification (1+ slash))
                specification)))
@@ -81,19 +63,41 @@
               (repository-local-path repository))
          (repository-id repository)))))
 
+(defun %worktree-short-head (worktree)
+  "WORKTREE-HEAD's 7-character commit id, or NIL when HEAD holds something
+   else -- a status refresh replaces the id read from `worktree list' with
+   the branch name, or with \"(detached)\" when there is none."
+  (let ((head (worktree-head worktree)))
+    (when (and head
+               (>= (length head) 7)
+               (every (lambda (character) (digit-char-p character 16)) head))
+      (subseq head 0 7))))
+
+(defun %path-last-component (path)
+  "The final component of PATH, or NIL when PATH names nothing."
+  (let* ((trimmed (string-right-trim "/" (or path "")))
+         (slash (position #\/ trimmed :from-end t)))
+    (when (plusp (length trimmed))
+      (if slash
+          (subseq trimmed (1+ slash))
+          trimmed))))
+
 (defun %worktree-tree-label (worktree)
-  "WORKTREE's tree-row label: BRANCH when set; otherwise \"(bare)\" for a
-   bare worktree (WORKTREE-BARE-P) rather than its full PATH, which read as
-   noise on a bare root row in real-terminal smoke testing -- a bare
-   worktree's path is rarely meaningful to look at and every row already
-   crowds a full path into a single line; otherwise PATH, then ID, exactly
-   as before."
+  "WORKTREE's tree-row label: BRANCH when set; otherwise, for a detached
+   HEAD, the word `detached' with its short commit id when HEAD still
+   carries one and the worktree's own directory name (unless that name is
+   the word itself) -- never the absolute PATH, which overflows the row,
+   pushes the status cluster off a 120-column screen and puts the user's
+   home directory on it; then ID."
   (let ((branch (worktree-branch worktree))
         (path (worktree-path worktree)))
     (cond
       ((and branch (plusp (length branch))) branch)
-      ((worktree-bare-p worktree) "(bare)")
-      ((plusp (length path)) path)
+      ((plusp (length path))
+       (let ((name (%path-last-component path)))
+         (format nil "detached~@[ @ ~A~]~@[ ~A~]"
+                 (%worktree-short-head worktree)
+                 (and name (not (string-equal name "detached")) name))))
       (t (worktree-id worktree)))))
 
 (defun worktree-notification-label (worktree)
@@ -114,26 +118,114 @@
    workspace-window.lisp) -- this only formats it, it does not recompute it."
   (format nil "win ~D:~A" (window-id window) (window-name window)))
 
+(defun %pane-command-name (pane)
+  "What PANE runs, as a word: the agent it hosts, else its title, else its
+   start command, else \"shell\". An agent row names the sandbox it was
+   launched without (+WORKSPACE-CLAUDE-COMMAND+ /
+   +WORKSPACE-CODEX-COMMAND+, server-multi-data.lisp, are the only commands
+   either agent kind is ever started with), because `claude' alone does not
+   say that this pane skips the permission prompts."
+  (case (pane-agent-kind pane)
+    (:codex "codex (bypass sandbox)")
+    (:claude "claude (skip permissions)")
+    (t (or (and (plusp (length (pane-title pane))) (pane-title pane))
+           (and (plusp (length (pane-start-command pane)))
+                (pane-start-command pane))
+           "shell"))))
+
 (defun %pane-tree-label (pane)
-  (format nil
-          "pane/~D ~A~@[ restored~]"
-          (pane-id pane)
-          (or (and (plusp (length (pane-title pane))) (pane-title pane))
-              (and (plusp (length (pane-start-command pane)))
-                   (pane-start-command pane))
-              "shell")
-          (and (string= (pane-notification pane) "restored") t)))
+  "PANE's tree-row label: what it runs, plus its pane id for a terminal (two
+   shells under one worktree are otherwise the same row), its window number
+   when the worktree spans more than one window, and `exited' once the
+   process is gone -- a dead pane read exactly like a live one before."
+  (let* ((worktree (pane-worktree pane))
+         (window (pane-window pane))
+         (multi-window-p
+          (and worktree
+               window
+               (cdr (remove-duplicates
+                     (remove nil (mapcar #'pane-window (worktree-panes worktree)))
+                     :test #'eq)))))
+    (format nil "~@[w~D ~]~A~@[ ~D~]~@[ ~A~]~@[ ~A~]"
+            (and multi-window-p (window-id window))
+            (%pane-command-name pane)
+            (and (null (pane-agent-kind pane)) (pane-id pane))
+            (and (pane-process-exited-p pane) "exited")
+            (and (string= (pane-notification pane) "restored") "restored"))))
 
 (defun %workspace-tree-node-attention-p (object kind)
   "T when OBJECT (a KIND tree node) should carry the `!` attention mark."
   (case kind
     (:organization (or (plusp (organization-attention-count object))
                         (organization-attention-worktrees object)))
-    (:repository (%repository-attention-p object))
+    (:repository (repository-attention-p object))
     (:worktree (worktree-attention-p object))
     (:pane (pane-attention-p object))
     (:section nil)
     (t nil)))
+
+(defun %changed-file-state-text (code)
+  "The porcelain XY status CODE as the word a user reads. \".M\" and \"??\"
+   are git's own internals and were showing through on every expanded file
+   row."
+  (let* ((index (and (plusp (length code)) (char code 0)))
+         (worktree (and (> (length code) 1) (char code 1)))
+         (significant (if (and index (not (find index ". "))) index worktree)))
+    (cond
+      ((string= code "??") "untracked")
+      ((string= code "!!") "ignored")
+      ((or (eql index #\U) (eql worktree #\U)) "conflict")
+      ((eql significant #\M) "modified")
+      ((eql significant #\A) "added")
+      ((eql significant #\D) "deleted")
+      ((eql significant #\R) "renamed")
+      ((eql significant #\C) "copied")
+      ((eql significant #\T) "typechange")
+      (t "changed"))))
+
+(defun %workspace-tree-node-unreadable-p (object kind)
+  "T when a KIND row's checkout could not be read."
+  (case kind
+    (:organization (organization-missing-p object))
+    (:repository (repository-missing-p object))
+    (:worktree (worktree-missing-p object))
+    (t nil)))
+
+(defun %workspace-tree-node-mark (object kind)
+  "The one-character row flag: `✗' for a checkout that could not be read,
+   `!' for a row needing attention, else a space. The two were one glyph
+   before, so a healthy but dirty repository read as a broken one."
+  (cond
+    ((%workspace-tree-node-unreadable-p object kind) "✗")
+    ((%workspace-tree-node-attention-p object kind) "!")
+    (t " ")))
+
+(defun %workspace-tree-row-children-p (object kind)
+  "T when a KIND row has rows of its own to fold away. Section and
+   repository rows know their own children from the rows they just built, so
+   they pass their fold state in directly."
+  (case kind
+    (:worktree
+     (and (or (worktree-panes object)
+              (worktree-changed-files object)
+              (worktree-commits-state object))
+          t))
+    (:file t)
+    (t nil)))
+
+(defun %workspace-tree-fold-glyph (fold)
+  "The disclosure glyph for a row's FOLD state (:EXPANDED, :COLLAPSED or NIL
+   for a leaf), so a folded row is distinguishable from an empty one."
+  (case fold
+    (:expanded "▾")
+    (:collapsed "▸")
+    (t " ")))
+
+(defun %workspace-tree-row-fold (object kind expanded-p)
+  "A row's fold state for %WORKSPACE-TREE-FOLD-GLYPH: NIL for a leaf,
+   otherwise :EXPANDED or :COLLAPSED from EXPANDED-P."
+  (when (%workspace-tree-row-children-p object kind)
+    (if expanded-p :expanded :collapsed)))
 
 (defun %workspace-node-refresh-tag (kind id refreshing-ids stale-ids)
   "Return the refresh-state suffix for an organization, repository, or worktree."
@@ -170,40 +262,54 @@
 
 (defun %worktree-ahead-behind-parts (worktree)
   "List of (TEXT . SGR) pairs for WORKTREE's nonzero ahead/behind counts,
-   ahead first -- \"+N\"/\"-N\" (ASCII, never the ambiguous-width arrow
-   glyphs)."
+   ahead first -- \"↑N\"/\"↓N\", so a commit count cannot be read as the
+   changed-line count beside it. Both arrows are East-Asian Ambiguous, which
+   CHAR-WIDTH and the terminal agree is one column."
   (append
    (when (plusp (worktree-ahead worktree))
-     (list (cons (format nil "+~D" (worktree-ahead worktree)) +sgr-ahead+)))
+     (list (cons (format nil "↑~D" (worktree-ahead worktree)) +sgr-ahead+)))
    (when (plusp (worktree-behind worktree))
-     (list (cons (format nil "-~D" (worktree-behind worktree)) +sgr-behind+)))))
+     (list (cons (format nil "↓~D" (worktree-behind worktree)) +sgr-behind+)))))
 
 (defun %worktree-change-count-parts (worktree)
-  "Return WORKTREE's additions/deletions as one plain and styled token."
-  (let ((additions (nerimux/workspace-model::worktree-additions worktree))
-        (deletions (nerimux/workspace-model::worktree-deletions worktree)))
-    (when (or (plusp additions) (plusp deletions))
-      (let ((plain (format nil "+~D -~D" additions deletions)))
-        (cons plain
-              (format nil "~A ~A"
-                      (%sgr-wrap (format nil "+~D" additions) +sgr-ok+)
-                      (%sgr-wrap (format nil "-~D" deletions) +sgr-alert+)))))))
+  "WORKTREE's added/deleted line counts as one plain and styled token, each
+   half omitted when it is zero -- \"-0\" said nothing and read as a behind
+   count."
+  (let* ((additions (nerimux/workspace-model:worktree-additions worktree))
+         (deletions (nerimux/workspace-model:worktree-deletions worktree))
+         (parts
+          (append
+           (when (plusp additions)
+             (list (cons (format nil "+~D" additions) +sgr-ok+)))
+           (when (plusp deletions)
+             (list (cons (format nil "−~D" deletions) +sgr-alert+))))))
+    (when parts
+      (cons (format nil "~{~A~^ ~}" (mapcar #'car parts))
+            (format nil "~{~A~^ ~}"
+                    (mapcar (lambda (part) (%sgr-wrap (car part) (cdr part)))
+                            parts))))))
 
-(defun %worktree-pane-count-text (worktree)
-  (format nil "terminal:~D"
-          (count-if-not #'nerimux/pane:pane-agent-kind (worktree-panes worktree))))
+(defun %worktree-shell-count-text (worktree)
+  "\"1 shell\"/\"N shells\" for WORKTREE's non-agent panes, NIL when it holds
+   none -- an absent terminal is not news."
+  (let ((count
+         (count-if-not #'nerimux/pane:pane-agent-kind (worktree-panes worktree))))
+    (when (plusp count)
+      (format nil "~D shell~P" count count))))
+
+(defun %worktree-exited-pane-text (worktree)
+  "\"exited\" when one of WORKTREE's panes has lost its process."
+  (when (some #'pane-process-exited-p (worktree-panes worktree))
+    "exited"))
 
 (defun %worktree-agent-text (worktree)
-  (let* ((state (nerimux/pane:worktree-agent-state worktree))
-         (completed (nerimux/workspace-model:worktree-completed-p worktree))
-         (agent (nerimux/workspace-model:worktree-agent-pane worktree))
-         (kind (and agent (nerimux/pane:pane-agent-kind agent))))
-    (if (nerimux/workspace-model:worktree-waiting-p worktree)
-        "agent:WAITING"
-        (format nil "agent:~A~A~A"
-                (if (and completed (not (eq state :running))) "COMPLETED" state)
-                (if (and completed (eq state :running)) "+COMPLETED" "")
-                (case kind (:codex "/Codex") (:claude "/Claude") (t ""))))))
+  "\"agent RUNNING/WAITING/EXITED\" for WORKTREE's agent lifecycle, or NIL
+   when no agent has ever run here."
+  (let ((state (nerimux/pane:worktree-agent-state worktree)))
+    (cond
+      ((nerimux/workspace-model:worktree-waiting-p worktree) "agent WAITING")
+      ((eq state :none) nil)
+      (t (format nil "agent ~A" state)))))
 
 (defun %worktree-state-tag (worktree)
   "The single most salient %WORKTREE-STATUS-TOKENS entry for the info
@@ -221,72 +327,122 @@
     (%worktree-status-tokens worktree))
    "CLEAN"))
 
+(defun %worktree-git-state-text (worktree)
+  "WORKTREE's Git state as a lowercase word, or NIL when it is clean -- the
+   resting state needs no token of its own."
+  (let ((tag (%worktree-state-tag worktree)))
+    (unless (string= tag "CLEAN")
+      (string-downcase tag))))
+
 (defun %worktree-tree-info-tokens (worktree)
-  "Ordered (PLAIN . STYLED) token pairs for WORKTREE's tree-row info
-   cluster, lowest priority first -- the order %WORKTREE-TREE-INFO-SUFFIX
-   drops from when the row does not fit: relative time, then change counts,
-   then ahead/behind, then terminal count; agent lifecycle and Git state stay
-   together so a narrow row cannot show CLEAN while silently dropping RUNNING."
-  (let* ((time
-         (%worktree-relative-time-text (%worktree-last-activity-time worktree)))
-         (change-counts (%worktree-change-count-parts worktree))
-         (ahead-behind (%worktree-ahead-behind-parts worktree))
-         (pane-count (%worktree-pane-count-text worktree))
-         (agent (%worktree-agent-text worktree))
-         (state (%worktree-state-tag worktree))
-         (state-sgr (%worktree-state-token-sgr state)))
-    (remove nil
-            (list (and time (cons time (%sgr-wrap time +sgr-faint+)))
-                  change-counts
-                  (and ahead-behind
-                       (cons
-                        (format nil "~{~A~^/~}" (mapcar #'car ahead-behind))
-                        (format nil
-                                "~{~A~^/~}"
-                                (mapcar
-                                 (lambda (part)
-                                   (%sgr-wrap (car part) (cdr part)))
-                                 ahead-behind))))
-                  (cons pane-count (%sgr-wrap pane-count +sgr-faint+))
-                  (cons (format nil "~A git:~A" agent state)
-                        (format nil "~A git:~A"
-                                (%sgr-wrap agent
-                                           (if (eq (nerimux/pane:worktree-agent-state worktree)
-                                                   :running)
-                                               +sgr-alert+
-                                               +sgr-faint+))
-                                (if state-sgr
-                                    (%sgr-wrap state state-sgr)
-                                    state)))))))
+  "Ordered (PLAIN STYLED PRIORITY) token triples for WORKTREE's tree-row
+   info cluster, in display order. PRIORITY is the narrow-row omission
+   order %WORKTREE-TREE-INFO-SUFFIX drops from, lowest first: changed lines,
+   relative time, ahead/behind, shell count, then the pane and agent
+   lifecycle words; the agent state and the Git state go last so a narrow row
+   cannot drop RUNNING while keeping a count."
+  (flet ((faint (text priority)
+           (list text (%sgr-wrap text +sgr-faint+) priority)))
+    (let* ((time
+            (%worktree-relative-time-text (%worktree-last-activity-time worktree)))
+           (change-counts (%worktree-change-count-parts worktree))
+           (ahead-behind (%worktree-ahead-behind-parts worktree))
+           (shells (%worktree-shell-count-text worktree))
+           (exited (%worktree-exited-pane-text worktree))
+           (completed (and (worktree-completed-p worktree) "completed"))
+           (agent (%worktree-agent-text worktree))
+           (state (%worktree-git-state-text worktree))
+           (state-sgr (and state (%worktree-state-token-sgr (string-upcase state)))))
+      (remove nil
+              (list (and time (faint time 1))
+                    (and change-counts
+                         (list (car change-counts) (cdr change-counts) 0))
+                    (and ahead-behind
+                         (list
+                          (format nil "~{~A~^ ~}" (mapcar #'car ahead-behind))
+                          (format nil "~{~A~^ ~}"
+                                  (mapcar (lambda (part)
+                                            (%sgr-wrap (car part) (cdr part)))
+                                          ahead-behind))
+                          2))
+                    (and shells (faint shells 3))
+                    (and exited
+                         (list exited (%sgr-wrap exited +sgr-alert+) 4))
+                    (and completed (faint completed 4))
+                    (and agent
+                         (list agent
+                               (%sgr-wrap agent
+                                          (if (eq (nerimux/pane:worktree-agent-state
+                                                   worktree)
+                                                  :running)
+                                              +sgr-alert+
+                                              +sgr-faint+))
+                               5))
+                    (and state
+                         (list state
+                               (if state-sgr (%sgr-wrap state state-sgr) state)
+                               5)))))))
 
 (defun %worktree-tree-info-drop-priority (token)
   "Return TOKEN's narrow-row omission priority, lower values first."
-  (let ((plain (car token)))
-    (cond
-      ((and (plusp (length plain))
-            (char= (char plain 0) #\+)
-            (find #\Space plain)) 0)
-      ((or (string= plain "now")
-           (and (plusp (length plain))
-                (find (char plain 0) "0123456789"))) 1)
-      ((or (and (plusp (length plain)) (char= (char plain 0) #\+))
-           (and (plusp (length plain)) (char= (char plain 0) #\-))) 2)
-      ((and (>= (length plain) 9) (string= plain "terminal:" :end1 9)) 3)
-      (t 4))))
+  (third token))
 
 (defun %worktree-tree-info-suffix (worktree width)
   "Two values -- PLAIN and STYLED text for WORKTREE's tree-row info cluster
-   (agent lifecycle, Git state, ahead/behind, terminal count, change counts,
-   activity time),
-   space-joined. Tokens remain in display order, while narrow-row omission
-   starts with change counts, then relative time, ahead/behind, and terminal
-   count; lifecycle and Git stay until the plain form fits WIDTH display
-   columns. %DISPLAY-CLIP's own
+   (shell count, pane and agent lifecycle, Git state, ahead/behind, changed
+   lines, activity time), space-joined. Tokens remain in display order, while
+   narrow-row omission follows %WORKTREE-TREE-INFO-TOKENS's own priorities
+   until the plain form fits WIDTH display columns. %DISPLAY-CLIP's own
    truncate-with-ellipsis contract is the safety net for the case where even
-   lifecycle and Git pair alone overflows WIDTH."
+   the last token alone overflows WIDTH."
   (loop with remaining = (%worktree-tree-info-tokens worktree)
-        for plain = (format nil "~{~A~^ ~}" (mapcar #'car remaining))
-        for styled = (format nil "~{~A~^ ~}" (mapcar #'cdr remaining))
+        for plain = (format nil "~{~A~^ ~}" (mapcar #'first remaining))
+        for styled = (format nil "~{~A~^ ~}" (mapcar #'second remaining))
+        when (or (null (cdr remaining)) (<= (%display-width plain) width))
+          return (values (%display-clip plain width) styled)
+        do (let ((drop (reduce
+                        (lambda (left right)
+                          (if (< (%worktree-tree-info-drop-priority left)
+                                 (%worktree-tree-info-drop-priority right))
+                              left
+                              right))
+                        remaining)))
+             (setf remaining (delete drop remaining :count 1 :test #'eq)))))
+
+(defun %repository-tree-info-tokens (repository)
+  "Ordered (PLAIN STYLED PRIORITY) token triples for REPOSITORY's tree-row
+   info cluster: its total worktree count, how many of those hold at least
+   one pane (active), and how many need attention
+   (NERIMUX/WORKSPACE-MODEL:WORKTREE-ATTENTION-P) -- the counts a collapsed
+   repository row would otherwise hide entirely. PRIORITY follows
+   %WORKTREE-TREE-INFO-DROP-PRIORITY's own convention: lower drops first, so
+   a narrow row loses the worktree count before the active count, and loses
+   the attention count last."
+  (let* ((worktrees (repository-worktrees repository))
+         (total (length worktrees))
+         (active (count-if #'worktree-panes worktrees))
+         (attention
+           (count-if #'nerimux/workspace-model:worktree-attention-p worktrees)))
+    (remove nil
+            (list (and (plusp total)
+                       (let ((text (format nil "~D worktree~:P" total)))
+                         (list text (%sgr-wrap text +sgr-faint+) 1)))
+                  (and (plusp active)
+                       (let ((text (format nil "~D active" active)))
+                         (list text (%sgr-wrap text +sgr-faint+) 2)))
+                  (and (plusp attention)
+                       (let ((text (format nil "~D !" attention)))
+                         (list text (%sgr-wrap text +sgr-alert+) 3)))))))
+
+(defun %repository-tree-info-suffix (repository width)
+  "Two values -- PLAIN and STYLED text for REPOSITORY's tree-row info
+   cluster, built from %REPOSITORY-TREE-INFO-TOKENS with the same contract
+   as %WORKTREE-TREE-INFO-SUFFIX: space-joined tokens, dropped by priority
+   (lowest first) until the plain form fits WIDTH, with %DISPLAY-CLIP as the
+   safety net for a single token that alone overflows WIDTH."
+  (loop with remaining = (%repository-tree-info-tokens repository)
+        for plain = (format nil "~{~A~^ ~}" (mapcar #'first remaining))
+        for styled = (format nil "~{~A~^ ~}" (mapcar #'second remaining))
         when (or (null (cdr remaining)) (<= (%display-width plain) width))
           return (values (%display-clip plain width) styled)
         do (let ((drop (reduce

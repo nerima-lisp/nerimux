@@ -6,127 +6,129 @@
 
 (defun %status-left-fields (focus-pane)
   "(VALUES ATTENTION REPOSITORY-TEXT WORKTREE-TEXT STATE-TEXT) for the status
-   line's left block (R6.5). Each of REPOSITORY-TEXT/WORKTREE-TEXT/STATE-TEXT
-   is %WORKSPACE-EM-DASH when FOCUS-PANE (or its worktree/repository) is
-   absent, design doc §2/§3.3: an unselected value must show as such, never
-   silently carry the previous frame's text forward."
+   line's left block (R6.5). Each value is NIL when FOCUS-PANE (or its
+   worktree/repository) is absent: an absent field is left out of the line
+   entirely, where the em-dash placeholder it used to carry only spent a
+   column saying nothing."
   (let* ((worktree (and focus-pane (pane-worktree focus-pane)))
          (repository (and worktree (worktree-repository worktree))))
     (values
-     (if (and worktree (worktree-attention-p worktree))
-         "!"
-         " ")
-     (if repository
-         (%repository-title-text repository)
-         (%workspace-em-dash))
-     (if worktree
-         (%worktree-title-text worktree)
-         (%workspace-em-dash))
-     (if worktree
-         (%worktree-status-label worktree)
-         (%workspace-em-dash)))))
+     (when (and worktree (worktree-attention-p worktree)) "!")
+     (when repository (%repository-title-text repository))
+     (when worktree (%worktree-title-text worktree))
+     (when worktree (%worktree-status-label worktree)))))
 
 (defun %status-state-text (worktree)
   "WORKTREE's status tokens, each wrapped in its palette colour
-   (%WORKTREE-STATE-TOKEN-SGR), or the em-dash placeholder when WORKTREE is
-   absent.  Styled sibling of %WORKTREE-STATUS-LABEL, kept out of that shared
-   helper because the workspace tree feeds the plain label through
-   %DISPLAY-CLIP, which must never see escape sequences."
-  (if worktree
-      (format nil
-              "~{~A~^ ~}"
-              (mapcar
-               (lambda (token)
-                 (let ((sgr (%worktree-state-token-sgr token)))
-                   (if sgr
-                       (%status-wrap token sgr)
-                       token)))
-               (%worktree-status-tokens worktree)))
-      (%workspace-em-dash)))
+   (%WORKTREE-STATE-TOKEN-SGR), or NIL when WORKTREE is absent.  Styled
+   sibling of %WORKTREE-STATUS-LABEL, kept out of that shared helper because
+   the workspace tree feeds the plain label through %DISPLAY-CLIP, which must
+   never see escape sequences.  The pane line reads ahead/behind as arrows so
+   they cannot be confused with the diff line counts beside them."
+  (when worktree
+    (format nil
+            "~{~A~^ ~}"
+            (mapcar
+             (lambda (token)
+               (let ((sgr (%worktree-state-token-sgr token)))
+                 (if sgr
+                     (%status-wrap token sgr)
+                     token)))
+             (%worktree-status-tokens worktree :ahead-behind :arrows)))))
 
 (defun %status-left-text (focus-pane &key include-repository-p)
   "The left block's text, styled: attention mark in alert red, repository
-   muted, worktree branch in bold lavender, state tokens palette-coloured.
+   muted, worktree branch in bold lavender, state tokens palette-coloured,
+   composed as `org/repo · branch STATE`.
    INCLUDE-REPOSITORY-P T includes the repository field; NIL omits it, the
    first thing %COMPOSE-WORKSPACE-STATUS-LINE drops when the line does not
    fit (R6.5: notification, then tabs, then repository name; branch and
    state token are never dropped)."
-  (multiple-value-bind (attention repository worktree state) 
+  (multiple-value-bind (attention repository worktree state)
       (%status-left-fields focus-pane)
     (declare (ignore state))
-    (let* ((source-worktree (and focus-pane (pane-worktree focus-pane)))
-           (attention-styled
-            (if (string= attention "!")
-                (%status-wrap "!" +sgr-alert+)
-                attention))
-           (repository-styled (%status-wrap repository +sgr-muted+))
-           (worktree-styled (%status-wrap worktree +sgr-branch+))
-           (state-styled (%status-state-text source-worktree)))
-      (if include-repository-p
-          (format nil
-                  "~A ~A ~A ~A"
-                  attention-styled
-                  repository-styled
-                  worktree-styled
-                  state-styled)
-          (format nil "~A ~A ~A" attention-styled worktree-styled state-styled)))))
+    (let ((fields
+           (remove nil
+                   (list
+                    (when attention (%status-wrap "!" +sgr-alert+))
+                    (when (and include-repository-p repository)
+                      (format nil "~A ·" (%status-wrap repository +sgr-muted+)))
+                    (when worktree (%status-wrap worktree +sgr-branch+))
+                    (%status-state-text (and focus-pane
+                                             (pane-worktree focus-pane)))))))
+      (when fields (format nil "~{~A~^ ~}" fields)))))
 
 (defun %status-pane-tab-token (pane focus-pane)
-  "PANE's status-bar tab token, including its own leading separator: a space
-   normally, or `!` in its place when PANE has unread output (R6.7), the
-   marker doubles as the separator, matching the format the requirements
-   give ([w1: 1 2*!3]: pane 3's `!` sits where the usual space would, with no
-   extra glue needed between it and the previous pane's tab).  The visible
-   text is unchanged by the theme; the unread mark renders amber and the
-   focused pane's `N*` renders bold accent."
-  (let ((separator
-         (if (pane-unread-output-p pane)
-             (%status-wrap "!" +sgr-warn+)
-             " ")))
-    (if (eq pane focus-pane)
-        (format nil
-                "~A~A"
-                separator
-                (%status-wrap (format nil "~D*" (pane-id pane))
-                              +sgr-accent-bold+))
-        (format nil "~A~D" separator (pane-id pane)))))
+  "PANE's status-bar tab token, including its own leading space: the pane
+   number, `*` when PANE has the focus, then `!` when it has unread output
+   (R6.7), so the strip reads `pane 1 2* 3!`.  The unread mark used to stand
+   in for the separator itself, which glued the numbers together -- restore a
+   window of three panes and `pane!1!2!3` reads as a corrupted string, not as
+   three panes with unread output.  The visible text is unchanged by the
+   theme; the unread mark renders amber and the focused pane's `N*` renders
+   bold accent."
+  (format nil
+          " ~A~@[~A~]"
+          (if (eq pane focus-pane)
+              (%status-wrap (format nil "~D*" (pane-id pane))
+                            +sgr-accent-bold+)
+              (format nil "~D" (pane-id pane)))
+          (when (pane-unread-output-p pane)
+            (%status-wrap "!" +sgr-warn+))))
+
+(defun %status-window-panes (window)
+  "Every pane of WINDOW, including the ones zoom hid: WINDOW-ZOOM-TOGGLE swaps
+   the split tree for a single leaf, so WINDOW-PANES answers one pane while
+   zoomed and the strip would read as if the others had been closed."
+  (if (and (window-zoom-p window) (window-zoom-tree window))
+      (layout-leaves (window-zoom-tree window))
+      (window-panes window)))
 
 (defun %status-window-tab (window focus-pane)
+  "WINDOW's locator: `win 1 · pane 1 2* 3!`, plus a zoom marker when the
+   window is zoomed."
   (format nil
-          "~A~{~A~}~A"
-          (%status-wrap (format nil "[w~D:" (window-id window)) +sgr-muted+)
-          (mapcar
-           (lambda (pane)
-             (%status-pane-tab-token pane focus-pane))
-           (window-panes window))
-          (%status-wrap "]" +sgr-muted+)))
+          "~A ·~{~A~}~@[ ~A~]"
+          (%status-wrap (format nil "win ~D" (window-id window)) +sgr-muted+)
+          (cons (%status-wrap " pane" +sgr-muted+)
+                (mapcar
+                 (lambda (pane)
+                   (%status-pane-tab-token pane focus-pane))
+                 (%status-window-panes window)))
+          (when (window-zoom-p window)
+            (%status-wrap "[zoom]" +sgr-warn+))))
 
-(defun %status-window-pane-tabs (focus-pane)
-  "The middle block: FOCUS-PANE's worktree's window/pane tabs
-   ([w1: 1 2*][w2: 1], R6.5), or NIL when there is no worktree or it has no
-   open windows, the caller shows %WORKSPACE-EM-DASH for NIL."
+(defun %status-middle-text (focus-pane)
+  "The middle block: FOCUS-PANE's worktree's window/pane locators, or NIL when
+   there is nothing to locate -- a single unzoomed pane in a single window is
+   where the user already is, so naming it is noise."
   (let* ((worktree (and focus-pane (pane-worktree focus-pane)))
          (windows (and worktree (%worktree-tree-windows worktree))))
-    (when windows
+    (when (and windows
+               (or (rest windows)
+                   (rest (%status-window-panes (first windows)))
+                   (window-zoom-p (first windows))))
       (format nil
-              "~{~A~}"
+              "~{~A~^  ~}"
               (mapcar
                (lambda (window)
                  (%status-window-tab window focus-pane))
                windows)))))
 
-(defun %status-middle-text (focus-pane)
-  (or (%status-window-pane-tabs focus-pane) (%workspace-em-dash)))
+(defparameter +status-key-hints+
+  "C-q ? keys  C-q w repolist  C-q d detach"
+  "The pane view's only key panel: a focused pane forwards every byte to the
+   shell, so without this the prefix itself is invisible to a new user.")
 
 (defun %status-right-text (messages)
-  "The right block: the single most recent notification, or an em-dash when
-   there is none yet. MESSAGES is CLIENT-CONN-MESSAGE-LOG (most-recent-first,
+  "The right block: the single most recent notification, or the key hints when
+   there is none. MESSAGES is CLIENT-CONN-MESSAGE-LOG (most-recent-first,
    %CLIENT-NOTIFY conses onto its front), the 64-entry cap stays on the
    conn's log (R6.5: \"display only, not retention, changes\"); this only
    ever reads the first entry."
   (if messages
       (%status-wrap (first messages) +sgr-muted-italic+)
-      (%workspace-em-dash)))
+      (%status-wrap +status-key-hints+ +sgr-muted+)))
 
 (defun %status-mode-chip (mode)
   "The status line's leftmost, always-kept segment (FR-003): a bold MODE-name
@@ -144,16 +146,28 @@
    Styled with %STATUS-WRAP (not %SGR-WRAP) so it restores the status bar's
    own base style rather than a plain reset; +sgr-mode-chip+
    (renderer-style.lisp) is the same chip the workspace footer uses
-   (%workspace-footer-line, renderer-workspace.lisp)."
-  (when mode
+   (%workspace-footer-line, renderer-workspace.lisp).
+   :NORMAL reports nothing for the same reason NIL does: the :normal/:input
+   vocabulary is retired, and a caller that still defaults to it is naming a
+   mode the user can no longer be in."
+  (when (and mode (not (eq mode :normal)))
     (%status-wrap (format nil " ~:@(~A~) " mode) +sgr-mode-chip+)))
+
+(defparameter +status-message-columns-floor+
+  16
+  "Columns a notification needs before eliding it beats dropping it: below
+   this the ellipsis and the fragment behind it name nothing to act on.")
 
 (defun %compose-workspace-status-line (focus-pane messages
                                                   cols
                                                   &key
-                                                  (mode :normal))
+                                                  (mode nil))
   "Assemble the R6.5 status line, dropping blocks right-to-left when COLS is
-   too narrow: the notification first, then the window/pane tabs, then the
+   too narrow: a notification too long for the room left over is first
+   elided from the front (%MESSAGE-STRIP-TEXT) and only dropped when even
+   +STATUS-MESSAGE-COLUMNS-FLOOR+ columns are unavailable, since a pane
+   forwards every key to the shell and the strip is the only place an action
+   it refused can report itself. Then the window/pane tabs, then the
    repository name, branch and state token are never dropped (design doc
    §11). The MODE chip (FR-003, %STATUS-MODE-CHIP) is placed ahead of all
    three and is never dropped by width degradation: it is a safety feature
@@ -167,9 +181,8 @@
    assembled list with no gap -- that is MODE having nothing to report, not
    a degradation step, so it happens identically at every COLS width."
   (let ((middle (%status-middle-text focus-pane))
-        (right (%status-right-text messages))
         (mode-chip (%status-mode-chip mode)))
-    (labels ((assemble (include-repository-p include-middle-p include-right-p)
+    (labels ((assemble (include-repository-p include-middle-p right)
                (format nil
                        "~{~A~^  ~}"
                        (remove nil
@@ -178,17 +191,24 @@
                                                         :include-repository-p
                                                         include-repository-p)
                                      (and include-middle-p middle)
-                                     (and include-right-p right))))))
-      (let ((full (assemble t t t)))
-        (if (<= (%visible-length full) cols)
-            full
-            (let ((no-notification (assemble t t nil)))
-              (if (<= (%visible-length no-notification) cols)
-                  no-notification
-                  (let ((no-tabs (assemble t nil nil)))
-                    (if (<= (%visible-length no-tabs) cols)
-                        no-tabs
-                        (%visible-truncate (assemble nil nil nil) cols))))))))))
+                                     right)))))
+      (let* ((right (%status-right-text messages))
+             (full (assemble t t right))
+             (no-notification (assemble t t nil))
+             (room (- cols (%visible-length no-notification) 2)))
+        (cond
+          ((<= (%visible-length full) cols) full)
+          ((and messages (>= room +status-message-columns-floor+))
+           (assemble t
+                     t
+                     (%status-right-text
+                      (list (%message-strip-text (first messages) room)))))
+          ((<= (%visible-length no-notification) cols) no-notification)
+          (t
+           (let ((no-tabs (assemble t nil nil)))
+             (if (<= (%visible-length no-tabs) cols)
+                 no-tabs
+                 (%visible-truncate (assemble nil nil nil) cols)))))))))
 
 (defun %render-status-line (stream status-row sgr-code line &optional cols)
   "Emit a fully-composed status LINE at STATUS-ROW, wrapped in SGR-CODE, then
@@ -213,7 +233,7 @@
                                   (- terminal-rows +status-line-rows+))
                                  (focus-pane (session-active-pane session))
                                  (messages nil)
-                                 (mode :normal))
+                                 (mode nil))
   "Draw the R6.5 status line at STATUS-ROW (defaults to the bottom row,
    §1.4/R2.2).
    FOCUS-PANE/MESSAGES default from SESSION / empty for a caller that has not
