@@ -231,6 +231,8 @@
               (ext-root (merge-pathnames "ghq-ext-blocked/" base))
               (file-config (merge-pathnames "rewrite-file.config" base))
               (ext-config (merge-pathnames "rewrite-ext.config" base))
+              (ghq-bin (merge-pathnames "bin/" base))
+              (ghq-executable (merge-pathnames "ghq" ghq-bin))
               (file-target
                 (string-right-trim "/"
                                    (concatenate 'string "file://" (namestring source))))
@@ -239,6 +241,15 @@
          (ensure-directories-exist file-root)
          (ensure-directories-exist control-root)
          (ensure-directories-exist ext-root)
+         (ensure-directories-exist (merge-pathnames "placeholder" ghq-bin))
+         (with-open-file (stream ghq-executable :direction :output
+                                 :if-exists :supersede
+                                 :if-does-not-exist :create)
+           (write-line "#!/bin/sh" stream)
+           (write-line "set -eu" stream)
+           (write-line "[ \"$#\" -eq 4 ] && [ \"$1\" = get ] && [ \"$2\" = --bare ] && [ \"$3\" = -- ] || exit 64" stream)
+           (write-line "exec git clone --bare -- \"$4\" \"$GHQ_ROOT/repository.git\"" stream))
+         (uiop:run-program (list "chmod" "+x" (namestring ghq-executable)))
          (flet ((write-rule (path protocol target)
                   (with-open-file (stream path :direction :output
                                           :if-exists :supersede
@@ -253,7 +264,11 @@
                     (list (cons "GIT_CONFIG_NOSYSTEM" "1")
                           (cons "GIT_CONFIG_GLOBAL" (namestring config))
                           (cons "GIT_CONFIG_COUNT" "0")
-                          (cons "GHQ_ROOT" (namestring root))))
+                          (cons "GHQ_ROOT" (namestring root))
+                          (cons "PATH"
+                                (format nil "~A:~A"
+                                        (namestring ghq-bin)
+                                        (or (uiop:getenv "PATH") "")))))
                    updates)))
            (write-rule file-config "file" file-target)
            (with-open-file (stream ext-helper :direction :output
