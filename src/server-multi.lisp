@@ -107,9 +107,7 @@
              ((member operation '(:scan :status)) "read failed")
              (t "failed")))))
     (string
-     (if (eq operation :create)
-         (%strip-argument-control-characters outcome)
-         outcome))
+     outcome)
     (t
      (let ((text (princ-to-string outcome)))
        (if (eq operation :create)

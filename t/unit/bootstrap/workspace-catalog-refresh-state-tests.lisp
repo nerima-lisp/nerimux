@@ -754,3 +754,17 @@
               (error 'stream-error :stream stream))))
         (nerimux::%drop-client conn :bye t))
       (expect (null nerimux::*clients*)))))
+
+(describe "workspace-job outcome labels"
+  (it "does not sanitize an already sanitized create error"
+    (let ((calls 0)
+          (message "already sanitized"))
+      (with-stubbed-fdefinition
+          ((nerimux::%strip-argument-control-characters
+            (lambda (text)
+              (incf calls)
+              text)))
+        (expect (string= message
+                         (nerimux::%workspace-job-outcome-label
+                          message :create)))
+        (expect (zerop calls))))))
