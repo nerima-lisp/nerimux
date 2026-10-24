@@ -13,7 +13,7 @@
           (expect action)
           (if (char= (first action) #\k)
               (expect (eq :help (first (third action))))
-              (expect (eq :open-transient (first (third action))))))))
+              (expect (eq :open-transient (first (third action)))))))))
   (it "omits shell command and lists Help in the help table"
     (let ((status (find "Status" nerimux/renderer::+help-view-sections+
                         :key #'first :test #'string=))
@@ -52,4 +52,4 @@
                  (list "arbitrary shell execution is deliberately not wired -- it is its own trust-boundary decision")
                  (nerimux::client-conn-message-log conn)))
         (expect (null (nerimux::client-conn-modal conn)))
-        (expect (null (nerimux::client-conn-transient-view conn))))))))
+        (expect (null (nerimux::client-conn-transient-view conn)))))))

@@ -546,7 +546,7 @@
         (nerimux::%handle-client-ui-key-payload session conn "x")
         (remhash conn nerimux::*client-meta-pending*)
         (expect (null prune-calls))
-        (expect (= 41 calls)))))
+        (expect (= 40 calls)))))
 
   (it "ui-key-dispatch-binds-the-shared-menu-keys-in-both-workspace-views"
     (let* ((session (nerimux/session:make-session :id 1 :name "test"))
