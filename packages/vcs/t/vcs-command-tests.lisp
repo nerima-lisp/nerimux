@@ -261,8 +261,8 @@
               :branch "main"))
            (ref-output
              (format nil
-                     "refs/heads/main~C~%refs/remotes/origin/main~C~%refs/remotes/origin/topic/remote-only~C~%refs/remotes/origin/HEAD~Crefs/remotes/origin/main~%"
-                     #\Null #\Null #\Null #\Null))
+                     "refs/heads/main~C~Crefs/remotes/origin/main~%refs/remotes/origin/main~C~C~%refs/remotes/origin/topic/remote-only~C~C~%refs/remotes/origin/HEAD~Crefs/remotes/origin/main~C~%"
+                     #\Null #\Null #\Null #\Null #\Null #\Null #\Null #\Null))
            (candidates nil)
            (condition-seen nil)
            (thread nil))

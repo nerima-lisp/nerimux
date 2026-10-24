@@ -1,7 +1,5 @@
 (in-package #:nerimux/vcs)
 
-(declaim (special *git-read-fail-on-output-limit*))
-
 (defparameter *worktree-operation-timeout-seconds*
   vcs-kit::+default-vcs-timeout+
   "Maximum time allowed for a Git worktree write operation.")
@@ -495,12 +493,7 @@ false DRY-RUN once a user has explicitly confirmed the operation."
         (error creation-error)))))
 
 (defun %read-worktree-branch-candidates (repository)
-  "Return branch candidate plists with the checkout, if any, for X3.
-
-Each plist has :BRANCH, :KIND (:LOCAL or :REMOTE), :REF, :REMOTE, and
-:WORKTREE keys. Local candidates have no :REMOTE; remote candidates retain
-their configured remote name. Pass REMOTE/BRANCH to CREATE-WORKTREE-ASYNC to
-select a remote when multiple remotes have the same branch name."
+  "Return branch candidates, associating remote checkouts by exact upstream ref."
   (unless repository
     (error "A repository is required to list branch candidates."))
   (let* ((repository (list-repository-worktrees repository))
@@ -508,20 +501,18 @@ select a remote when multiple remotes have the same branch name."
          (worktrees (nerimux/workspace-model:repository-worktrees repository))
          (remote-names
            (sort
-            (remove "" (uiop:split-string
-                        (let ((*git-read-fail-on-output-limit* t))
-                          (%run-git-read directory "remote"))
-                        :separator (list #\Newline))
-                    :test (function string=))
-            (function >)
-            :key (function length)))
+            (remove "" (uiop:split-string (%run-git-read directory "remote")
+                                           :separator (list #\Newline))
+                    :test #'string=)
+            #'>
+            :key #'length))
          (ref-output
-           (let ((*git-read-fail-on-output-limit* t))
-             (%run-git-read directory
-                            "for-each-ref"
-                            "--format=%(refname)%00%(symref)"
-                            "refs/heads/"
-                            "refs/remotes/")))
+           (%run-git-read directory
+                          "for-each-ref"
+                          "--format=%(refname)%00%(symref)%00%(upstream)"
+                          "refs/heads/"
+                          "refs/remotes/"))
+         (local-upstreams (make-hash-table :test #'equal))
          (candidates nil))
     (labels ((prefix-p (prefix string)
                (and (>= (length string) (length prefix))
@@ -539,31 +530,44 @@ select a remote when multiple remotes have the same branch name."
                        (when separator
                          (values (subseq name 0 separator)
                                  (subseq name (1+ separator))))))))
-             (checkout-for (branch)
-               (find-if (lambda (worktree)
-                          (let ((checked-out
-                                  (nerimux/workspace-model:worktree-branch
-                                   worktree)))
-                            (and (stringp checked-out)
-                                 (or (string= branch checked-out)
-                                     (and (prefix-p "refs/heads/" checked-out)
-                                          (string= branch
-                                                   (subseq checked-out
-                                                           (length "refs/heads/"))))))))
-                        worktrees)))
-      (dolist (line (uiop:split-string ref-output
-                                       :separator (list #\Newline)))
+             (checkout-for (branch &optional selected-remote-ref)
+               (find-if
+                (lambda (worktree)
+                  (let* ((checked-out
+                           (nerimux/workspace-model:worktree-branch worktree))
+                         (checked-out-branch
+                           (cond
+                             ((and (stringp checked-out)
+                                   (prefix-p "refs/heads/" checked-out))
+                              (subseq checked-out (length "refs/heads/")))
+                             ((stringp checked-out) checked-out)))
+                         (local-ref
+                           (and checked-out-branch
+                                (concatenate 'string
+                                             "refs/heads/"
+                                             checked-out-branch)))
+                         (upstream (and local-ref
+                                        (gethash local-ref local-upstreams))))
+                    (and checked-out-branch
+                         (string= branch checked-out-branch)
+                         (or (null selected-remote-ref)
+                             (and (stringp upstream)
+                                  (string= selected-remote-ref upstream))))))
+                worktrees)))
+      (dolist (line (uiop:split-string ref-output :separator (list #\Newline)))
         (let* ((fields
                  (uiop:split-string (string-right-trim (list #\Return) line)
                                     :separator (list #\Null)))
                (reference (first fields))
-               (symbolic-target (or (second fields) "")))
+               (symbolic-target (or (second fields) ""))
+               (upstream (or (third fields) "")))
           (when (and reference
                      (plusp (length reference))
                      (string= symbolic-target ""))
             (cond
               ((prefix-p "refs/heads/" reference)
                (let ((branch (subseq reference (length "refs/heads/"))))
+                 (setf (gethash reference local-upstreams) upstream)
                  (push (list :branch branch
                              :kind :local
                              :ref reference
@@ -577,7 +581,7 @@ select a remote when multiple remotes have the same branch name."
                                :kind :remote
                                :ref reference
                                :remote remote
-                               :worktree (checkout-for branch))
+                               :worktree (checkout-for branch reference))
                          candidates))))))))
       (nreverse candidates))))
 

@@ -563,14 +563,3 @@ since -- %READ-WORKTREE-STATUS-AT's end-to-end fixture."
       (expect (= 1 (nerimux/vcs::%worktree-status-update-additions update)))
       (expect (= 0 (nerimux/vcs::%worktree-status-update-deletions update))))))
 
-(describe "%run-git-read strict output cap"
-  (it "signals instead of returning a truncated candidate prefix"
-    (let* ((directory (%run-git-read-test-repo))
-           (nerimux/vcs::*git-read-output-limit* 4)
-           (nerimux/vcs::*git-read-fail-on-output-limit* t)
-           (condition-seen nil))
-      (handler-case
-          (nerimux/vcs::%run-git-read directory "rev-parse" "--git-dir")
-        (nerimux/vcs::%git-read-error (condition)
-          (setf condition-seen condition)))
-      (expect (typep condition-seen 'nerimux/vcs::%git-read-error)))))

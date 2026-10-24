@@ -636,3 +636,57 @@
                    "/ghq-other/project" "/ghq")))
     (expect (null (nerimux/vcs:path-under-directory-p
                    "relative/project" "/ghq")))))
+(describe "vcs remote candidate checkout identity"
+          (it "reuses only a checkout tracking the selected remote ref"
+              (%call-with-worktree-path-repository
+               (lambda (repository root)
+                 (let* ((source (concatenate 'string root "source/"))
+                        (bare (nerimux/workspace-model:repository-local-path repository))
+                        (worktree-path
+                         (concatenate 'string
+                                      (nerimux/vcs:worktree-parent-directory repository)
+                                      "foo-checkout"))
+                        (candidates nil)
+                        (errors nil))
+                   (%fetch-test-git source "checkout" "-b" "foo")
+                   (%fetch-test-git
+                    source
+                    "-c" "user.name=Test"
+                    "-c" "user.email=test@example.invalid"
+                    "-c" "commit.gpgsign=false"
+                    "-c" "core.hooksPath=/dev/null"
+                    "commit" "--allow-empty" "-m" "remote checkout identity fixture")
+                   (dolist (remote '("origin" "upstream"))
+                     (if (string= remote "origin")
+                         (%fetch-test-git bare "remote" "set-url" remote source)
+                       (%fetch-test-git bare "remote" "add" remote source))
+                     (%fetch-test-git
+                      bare "config" "--replace-all"
+                      (format nil "remote.~A.fetch" remote)
+                      (format nil "+refs/heads/*:refs/remotes/~A/*" remote))
+                     (%fetch-test-git
+                      bare "fetch" remote
+                      (format nil "refs/heads/foo:refs/remotes/~A/foo" remote)))
+                   (%fetch-test-git bare "branch" "foo" "refs/remotes/origin/foo")
+                   (%fetch-test-git bare "config" "branch.foo.remote" "origin")
+                   (%fetch-test-git bare "config" "branch.foo.merge" "refs/heads/foo")
+                   (%fetch-test-git bare "worktree" "add" worktree-path "foo")
+                   (sb-thread:join-thread
+                    (nerimux/vcs:list-worktree-branch-candidates-async
+                     repository
+                     :on-complete (lambda (result) (setf candidates result))
+                     :on-error (lambda (condition) (push condition errors))))
+                   (expect (null errors))
+                   (let ((origin-candidate
+                          (find "refs/remotes/origin/foo" candidates
+                                :key (lambda (entry) (getf entry :ref))
+                                :test #'string=))
+                         (upstream-candidate
+                          (find "refs/remotes/upstream/foo" candidates
+                                :key (lambda (entry) (getf entry :ref))
+                                :test #'string=)))
+                     (expect origin-candidate)
+                     (expect upstream-candidate)
+                     (expect
+                      (string= (namestring (nerimux/vcs:resolve-path-prefix worktree-path)) (nerimux/workspace-model:worktree-path (getf origin-candidate :worktree))))
+                     (expect (null (getf upstream-candidate :worktree)))))))))
