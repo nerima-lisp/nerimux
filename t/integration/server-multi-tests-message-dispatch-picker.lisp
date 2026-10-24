@@ -36,6 +36,75 @@
           (expect (nerimux::%close-client-picker conn))
           (expect (null (nerimux::client-conn-modal conn)))
           (expect (eq view (nerimux::client-conn-view conn)))))))
+  (it "prefix-c-p-cancels-to-original-pane-without-shell-input"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (window (nerimux/session:session-active-window s))
+             (pane (nerimux/window:window-active-pane window))
+             (input-payloads nil)
+             (nerimux::*dirty* nil))
+        (setf (nerimux::client-conn-focus conn) pane
+              (nerimux::client-conn-view conn) :pane)
+        (with-stubbed-fdefinition
+            ((nerimux/vcs:workspace-organizations (lambda () nil))
+             (nerimux::%refresh-client-picker
+              (lambda (connection &rest arguments)
+                (declare (ignore arguments))
+                connection))
+             (nerimux::%handle-client-input-key-payload
+              (lambda (session connection payload)
+                (declare (ignore session connection))
+                (push payload input-payloads))))
+          (nerimux::%handle-multi-key-message s conn #(17))
+          (nerimux::%handle-multi-key-message s conn #(16))
+          (expect (eq :picker (nerimux::client-conn-modal conn)))
+          (expect
+           (equal (list (nerimux/window:window-id window)
+                        (nerimux/pane:pane-id pane))
+                  (getf (gethash conn nerimux::*client-picker-return-targets*)
+                        :pane-key)))
+          (expect (eq pane (nerimux::client-conn-focus conn)))
+          (expect (eq window (nerimux/session:session-active-window s)))
+          (expect (eq pane (nerimux/window:window-active-pane window)))
+          (expect (nerimux::%handle-multi-key-message s conn #(120)))
+          (expect (string= "x" (nerimux::client-conn-picker-query conn)))
+          (expect (null input-payloads))
+          (nerimux::%handle-multi-key-message s conn #(27))
+          (expect (null (nerimux::client-conn-modal conn)))
+          (expect (eq :pane (nerimux::client-conn-view conn)))
+          (expect (eq pane (nerimux::client-conn-focus conn)))
+          (expect (eq window (nerimux/session:session-active-window s)))
+          (expect (eq pane (nerimux/window:window-active-pane window)))
+          (expect (null input-payloads))))))
+  (it "prefix-c-p-cancel-falls-back-when-origin-pane-closed"
+    (with-fake-session (s :npanes 2)
+      (let* ((conn (%make-test-conn))
+             (window (nerimux/session:session-active-window s))
+             (origin-pane (first (nerimux/window:window-panes window)))
+             (fallback-pane (second (nerimux/window:window-panes window)))
+             (nerimux::*clients* (list conn)))
+        (setf (nerimux::client-conn-focus conn) origin-pane
+              (nerimux::client-conn-view conn) :pane)
+        (with-stubbed-fdefinition
+            ((nerimux/vcs:workspace-organizations (lambda () nil))
+             (nerimux::%refresh-client-picker
+              (lambda (connection &rest arguments)
+                (declare (ignore arguments))
+                connection)))
+          (nerimux::%handle-multi-key-message s conn #(17))
+          (nerimux::%handle-multi-key-message s conn #(16))
+          (expect (eq :picker (nerimux::client-conn-modal conn)))
+          (expect (eq fallback-pane
+                      (nerimux/window:window-remove-pane window origin-pane)))
+          (expect (null (nerimux/pane:pane-window origin-pane)))
+          (expect (eq origin-pane (nerimux::client-conn-focus conn)))
+          (nerimux::%handle-multi-key-message s conn #(27))
+          (expect (null (nerimux::client-conn-modal conn)))
+          (expect (eq :pane (nerimux::client-conn-view conn)))
+          (expect (eq fallback-pane (nerimux::client-conn-focus conn)))
+          (expect (not (eq origin-pane (nerimux::client-conn-focus conn))))
+          (expect (search "picker return pane is no longer available"
+                          (first (nerimux::client-conn-message-log conn))))))))
 
   (it "picker-refresh-settles-stale-on-synchronous-error"
     (with-fake-session (s)
@@ -161,6 +230,57 @@
                     (nerimux/session:session-active-window s)))
         (expect (eq pane (nerimux::client-conn-focus conn)))
         (expect (null (nerimux::client-conn-modal conn))))))
+  (it "prefix-c-p-enter-opens-selected-pane-in-another-window"
+    (with-fake-session (s :nwindows 2)
+      (let* ((organization
+               (nerimux/workspace-model:make-organization
+                :id "org" :host "github.com" :name "team"))
+             (repository
+               (nerimux/workspace-model:make-repository
+                :id "repo" :organization organization
+                :specification "github.com/team/repo"))
+             (worktree
+               (nerimux/workspace-model:make-worktree
+                :id "feature" :repository repository
+                :path "/tmp/feature" :branch "feature/inactive"))
+             (conn (%make-test-conn))
+             (origin-window (first (nerimux/session:session-windows s)))
+             (target-window (second (nerimux/session:session-windows s)))
+             (origin-pane (nerimux/window:window-active-pane origin-window))
+             (target-pane (nerimux/window:window-active-pane target-window)))
+        (nerimux/workspace-model:organization-add-repository organization repository)
+        (nerimux/workspace-model:repository-add-worktree repository worktree)
+        (nerimux/pane:worktree-add-pane worktree target-pane)
+        (setf (nerimux/pane:pane-title target-pane) "picker-target"
+              (nerimux::client-conn-focus conn) origin-pane
+              (nerimux::client-conn-view conn) :pane)
+        (with-stubbed-fdefinition
+            ((nerimux/vcs:workspace-organizations
+              (lambda () (list organization)))
+             (nerimux::%refresh-client-picker
+              (lambda (connection &rest arguments)
+                (declare (ignore arguments))
+                connection)))
+          (nerimux::%handle-multi-key-message s conn #(17))
+          (nerimux::%handle-multi-key-message s conn #(16))
+          (expect (eq :picker (nerimux::client-conn-modal conn)))
+          (expect (eq origin-pane (nerimux::client-conn-focus conn)))
+          (expect (eq origin-window
+                      (nerimux/session:session-active-window s)))
+          (expect (nerimux::%set-client-picker-query conn "picker-target"))
+          (let ((items (nerimux::%client-picker-visible-items conn)))
+            (expect (= 1 (length items)))
+            (expect (eq :pane (nerimux/picker:picker-item-kind (first items))))
+            (expect (eq target-pane
+                        (nerimux/picker:picker-item-pane (first items)))))
+          (nerimux::%handle-multi-key-message s conn #(13))
+          (expect (eq target-window
+                      (nerimux/session:session-active-window s)))
+          (expect (eq target-pane
+                      (nerimux/window:window-active-pane target-window)))
+          (expect (eq target-pane (nerimux::client-conn-focus conn)))
+          (expect (null (nerimux::client-conn-modal conn)))
+          (expect (eq :pane (nerimux::client-conn-view conn)))))))
 
   (it "multi-picker-new-window-uses-client-geometry"
     (with-fake-session (s)

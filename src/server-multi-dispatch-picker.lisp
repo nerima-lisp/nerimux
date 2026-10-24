@@ -300,14 +300,17 @@
           (funcall on-complete organizations))))
   conn)
 
-(defvar *client-picker-return-views*
+(defvar *client-picker-return-targets*
   (make-hash-table :test #'eq :weakness :key)
-  "The view each client's picker was opened over, keyed by connection.")
+  "Each client's saved picker view and pane location, keyed by connection.")
 
 (defun %open-client-picker (conn)
   (when (%reject-pending-worktree-attachment conn :pane nil)
     (return-from %open-client-picker nil))
-  (setf (gethash conn *client-picker-return-views*) (client-conn-view conn))
+  (setf (gethash conn *client-picker-return-targets*)
+        (list :view (client-conn-view conn)
+              :pane-key (%client-picker-return-pane-key
+                         (client-conn-focus conn))))
   (%set-client-modal conn :picker)
   (setf (client-conn-picker-query conn) ""
         (client-conn-picker-regex-p conn) nil
@@ -318,24 +321,50 @@
   (%mark-dirty)
   conn)
 
-(defun %close-client-picker (conn &key keep-view)
-  "Close the picker, putting back the view it was opened over.
-
-   The picker is a modal drawn over that view, so cancelling it must not move
-   the client: deriving the view from the focus pane instead dropped whoever
-   had ever focused a pane into that shell, with no way back the footer named.
-   KEEP-VIEW is for the rows that move the client on purpose -- picking a pane
-   or a worktree leaves :pane up rather than returning to the tree."
+(defun %close-client-picker (conn &key keep-view session)
+  "Close the picker and restore its saved view and pane on cancellation."
   (when (and (client-conn-focus conn)
              (%reject-pending-worktree-attachment conn))
     (return-from %close-client-picker nil))
-  (let ((view (gethash conn *client-picker-return-views*)))
-    (remhash conn *client-picker-return-views*)
-    (when (and view (not keep-view))
-      (%set-client-view conn view)))
+  (let ((target (gethash conn *client-picker-return-targets*)))
+    (remhash conn *client-picker-return-targets*)
+    (when (and target (not keep-view))
+      (let* ((pane-key (getf target :pane-key))
+             (pane (%resolve-client-picker-return-pane session pane-key)))
+        (cond
+          (pane (%set-client-focus conn pane session))
+          ((and session pane-key)
+           (let* ((panes (all-panes session))
+                  (resolved (%resolve-client-focus-pane session nil conn))
+                  (fallback (or (find resolved panes :test #'eq)
+                                (first panes))))
+             (if fallback
+                 (%set-client-focus conn fallback session)
+                 (setf (client-conn-focus conn) nil))
+             (%client-notify conn "picker return pane is no longer available"))))
+        (%set-client-view conn (getf target :view)))))
   (%set-client-modal conn nil)
   (setf (client-conn-picker-query conn) ""
         (client-conn-picker-regex-p conn) nil
         (client-conn-picker-index conn) 0)
   (%mark-dirty)
   conn)
+
+(defun %client-picker-return-pane-key (pane)
+  (let ((window (and pane (nerimux/pane:pane-window pane))))
+    (when window
+      (list (nerimux/window:window-id window)
+            (nerimux/pane:pane-id pane)))))
+
+(defun %resolve-client-picker-return-pane (session key)
+  (when (and session key)
+    (let ((window
+            (find (first key)
+                  (nerimux/session:session-windows session)
+                  :key #'nerimux/window:window-id
+                  :test #'eql)))
+      (and window
+           (find (second key)
+                 (nerimux/window:window-panes window)
+                 :key #'nerimux/pane:pane-id
+                 :test #'eql)))))

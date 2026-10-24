@@ -75,7 +75,7 @@
      (%select-client-picker-item session conn))
     ((equalp payload #(27))
      (%client-esc-swallow-start conn)
-     (%close-client-picker conn)
+     (%close-client-picker conn :session session)
      t)
     ((equalp payload #(18)) (%set-client-picker-regex conn nil nil))
     ((equalp payload #(16)) (%move-client-picker-index conn -1))

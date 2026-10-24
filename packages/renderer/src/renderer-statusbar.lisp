@@ -116,7 +116,7 @@
                windows)))))
 
 (defparameter +status-key-hints+
-  "C-q ? keys  C-q w repolist  C-q d detach"
+  "C-q ? keys  C-q C-p picker  C-q w repolist  C-q d detach"
   "The pane view's only key panel: a focused pane forwards every byte to the
    shell, so without this the prefix itself is invisible to a new user.")
 

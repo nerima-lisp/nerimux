@@ -284,6 +284,7 @@
   (#\l (%workspace-prefix-move-focus session conn :right))
   (#\n (%workspace-prefix-cycle-window session conn 1))
   (#\p (%workspace-prefix-cycle-window session conn -1))
+  (16 (%open-client-picker conn) nil)
   (#\w (%workspace-prefix-open-overview session conn))
   (#\t (%client-open-selected-worktree-command session conn nil))
   (#\[ (%workspace-prefix-open-scrollback session conn))
