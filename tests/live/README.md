@@ -6,7 +6,7 @@ Run the commands below from the repository root.
 
 ## Requirements
 
-- Nix for the repository build command below.
+- Nix with flakes enabled for the repository build. The first build may need network access to fetch uncached flake inputs.
 - Bash, tmux, and `script` for raw terminal capture.
 - A built `nerimux` executable. Run `nix build . --no-link --print-out-paths`, then pass the printed output directory or its `bin/nerimux` executable to the harness.
 - `jj` for the fixture generators that create repositories and worktrees.
@@ -31,9 +31,10 @@ The other generators create these fixtures:
 
 | Generator | Fixture state |
 |---|---|
+| `generate-bare.sh` | Three worktrees and a bare repository with no worktrees, reachable from a GHQ entry. |
 | `generate-dirty.sh` | A repository with modified, added, deleted, untracked, and renamed files, including `-dash`. |
-| `generate-behind.sh` | A local bare remote with one local commit ahead and one commit behind. |
-| `generate-conflict.sh` | A repository with an unresolved merge conflict. |
+| `generate-behind.sh` | A local bare remote with one local commit ahead and one commit behind. The generator creates the history with `jj` and adds a Git HEAD reflog entry so `git switch -` has a previous branch. |
+| `generate-conflict.sh` | A repository with an unresolved merge conflict and a sibling repository with an active rebase conflict. |
 | `generate-missing.sh` | Removed, locked, and prunable worktree states. |
 | `generate-unreadable.sh` | A checkout with read and search permission removed. |
 | `generate-escape.sh` | A symlink from a repository path to a directory outside that repository. |
@@ -43,20 +44,20 @@ The other generators create these fixtures:
 | `generate-term.sh` | A script that emits color, alternate-screen, scroll-region, line-drawing, CJK, OSC 133, and OSC 52 output, then waits for Enter before restoring the screen. |
 | `generate-clone-src.sh` | A local bare repository used as a clone source. |
 
-Each generator script is named `tests/live/fixtures/generate-<fixture>.sh` and creates `<output-parent>/F-<fixture>/`. Each one refuses to replace a non-empty fixture directory. `generate-unreadable.sh` makes only `checkouts/unreadable` inaccessible; restore it with `chmod u+rwx "$fixture_root/checkouts/unreadable"` before removing that fixture.
+`generate-unreadable.sh` makes only `F-unreadable/checkouts/unreadable` inaccessible. After setting `fixture_parent` to the output parent passed to the generator, restore it with `chmod u+rwx "$fixture_parent/F-unreadable/checkouts/unreadable"`.
 
 ## Run a lane
 
-Start the selected binary with a fixture root. Generate F-bare once under the selected fixture parent before running this block. `start` runs the self-check when the lane has no successful self-check marker, before creating or reattaching the app pane. Each check uses an isolated tmux server and retains its evidence under `evidence/self-check/`.
+Start the selected binary with a fixture root. Generate F-bare once under the selected fixture parent before running this block. `start` runs the self-check when the lane has no successful self-check marker, before creating or reattaching the app pane. Each self-check invocation uses an isolated tmux server and retains its evidence under `evidence/self-check/`.
 
-```sh
+```bash
 export LIVE_BASE_TMPDIR="${LIVE_BASE_TMPDIR:-${TMPDIR:-/tmp}/nmx-live}"
 export LIVE_LANE=L1
 lane_root="$LIVE_BASE_TMPDIR/$LIVE_LANE"
 fixture_parent="${LIVE_FIXTURE_PARENT:-$lane_root/fixtures}"
 tests/live/harness self-check L1
-LIVE_FIXTURE_ROOT="$fixture_parent/F-bare" \
-  tests/live/harness start L1 /path/to/nerimux
+export LIVE_FIXTURE_ROOT="$fixture_parent/F-bare"
+tests/live/harness start L1 /path/to/nerimux
 tests/live/harness wait-for L1 'Repositories' 30
 tests/live/harness snap L1 L1-04
 tests/live/harness keys L1 n
@@ -71,14 +72,13 @@ until grep -Fq 'nerimux: detached' "$lane_root/evidence/attach-stderr.log"; do
   fi
   sleep 0.1
 done
-LIVE_FIXTURE_ROOT="$fixture_parent/F-bare" \
-  tests/live/harness start L1 /path/to/nerimux
+tests/live/harness start L1 /path/to/nerimux
 tests/live/harness wait-for L1 'Repositories' 30
 tests/live/harness snap L1 L1-10
 tests/live/harness stop L1
 ```
 
-This command set shows one run. For three runs with separate evidence, use a fresh `LIVE_BASE_TMPDIR` and fixture parent for each run, keep `LIVE_LANE=L1`, and generate F-bare once under that run's fixture parent before invoking the block. If `LIVE_FIXTURE_PARENT` is set, choose a fresh value for each run as well. Do not regenerate a non-empty fixture parent. The `LIVE_LANE` value must match the harness lane argument (`L1` here). Set `NERIMUX_BIN` instead of passing the binary argument when several commands use the same build. The value may be an executable path or a build output directory containing `bin/nerimux`.
+This command set shows one run. For three runs with separate evidence, use a fresh `LIVE_BASE_TMPDIR` and fixture parent for each run, keep `LIVE_LANE=L1`, and generate F-bare once under that run's fixture parent before invoking the block. If `LIVE_FIXTURE_PARENT` is set, choose a fresh value for each run as well. The `LIVE_LANE` value must match the harness lane argument (`L1` here). Set `NERIMUX_BIN` instead of passing the binary argument when several commands use the same build. The value may be an executable path or a build output directory containing `bin/nerimux`.
 
 Run `tests/live/harness self-check <lane>` to repeat the self-check. Every invocation writes a separate evidence directory. `start` accepts lanes `L1` through `L8` and runs the check automatically when `<lane-root>/state/self-check.ok` is absent.
 

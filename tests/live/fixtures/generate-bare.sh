@@ -70,3 +70,10 @@ jj_fixture -R "$state" git export >/dev/null
 
 printf 'ref: refs/heads/feature/alpha\n' > "$bare_repo/worktrees/alpha/HEAD"
 printf 'ref: refs/heads/feature/beta\n' > "$bare_repo/worktrees/beta/HEAD"
+
+no_worktree_store="$fixture_root/support/no-worktree.git"
+no_worktree_entry="$fixture_root/ghq/example.test/org/no-worktree-repo"
+mkdir -p "$no_worktree_store" "$no_worktree_entry"
+cp -R "$seed/.jj/repo/store/git/." "$no_worktree_store/"
+printf 'ref: refs/heads/main\n' > "$no_worktree_store/HEAD"
+ln -s "$no_worktree_store" "$no_worktree_entry/.git"

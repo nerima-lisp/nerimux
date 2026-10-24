@@ -49,6 +49,8 @@ jj_fixture -R "$repo" new main >/dev/null
 printf 'local ahead\n' > "$repo/local-ahead.txt"
 jj_fixture -R "$repo" commit -m 'F-behind local ahead' >/dev/null
 jj_fixture -R "$repo" bookmark set main -r @- >/dev/null
+jj_fixture -R "$repo" bookmark create fixture/previous -r @-- >/dev/null
+jj_fixture -R "$repo" git export >/dev/null
 
 jj_fixture git init --git-repo "$origin" --no-colocate "$origin_state" >/dev/null
 jj_fixture -R "$origin_state" new main >/dev/null
@@ -79,3 +81,10 @@ cat >> "$repo/.git/config" <<'CONFIG'
 	remote = origin
 	merge = refs/heads/main
 CONFIG
+
+main_commit=$(jj_fixture -R "$repo" log --no-pager --no-graph -r main --template 'commit_id')
+previous_commit=$(jj_fixture -R "$repo" log --no-pager --no-graph -r fixture/previous --template 'commit_id')
+mkdir -p "$repo/.git/logs"
+printf '%s %s Fixture <fixture@example.test> 1700000000 +0000\tcheckout: moving from main to fixture/previous\n%s %s Fixture <fixture@example.test> 1700000000 +0000\tcheckout: moving from fixture/previous to main\n' \
+  "$main_commit" "$previous_commit" "$previous_commit" "$main_commit" \
+  > "$repo/.git/logs/HEAD"

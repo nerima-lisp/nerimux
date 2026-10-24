@@ -52,3 +52,36 @@ theirs_commit=$(jj_fixture -R "$repo" log --no-pager --no-graph -r feature/their
 jj_fixture -R "$repo" new feature/ours feature/theirs >/dev/null
 printf 'ref: refs/heads/feature/ours\n' > "$repo/.git/HEAD"
 printf '%s\n' "$theirs_commit" > "$repo/.git/MERGE_HEAD"
+
+rebase_repo="$fixture_root/ghq/example.test/org/rebase-repo"
+mkdir -p "${rebase_repo%/*}"
+jj_fixture git init --colocate "$rebase_repo" >/dev/null
+printf 'common base\n' > "$rebase_repo/conflict.txt"
+jj_fixture -R "$rebase_repo" commit -m 'F-rebase base' >/dev/null
+jj_fixture -R "$rebase_repo" bookmark create main -r @- >/dev/null
+
+jj_fixture -R "$rebase_repo" new main >/dev/null
+printf 'ours\n' > "$rebase_repo/conflict.txt"
+jj_fixture -R "$rebase_repo" commit -m 'F-rebase ours' >/dev/null
+jj_fixture -R "$rebase_repo" bookmark create feature/rebase-ours -r @- >/dev/null
+ours_commit=$(jj_fixture -R "$rebase_repo" log --no-pager --no-graph -r feature/rebase-ours --template 'commit_id')
+
+jj_fixture -R "$rebase_repo" new main >/dev/null
+printf 'theirs\n' > "$rebase_repo/conflict.txt"
+jj_fixture -R "$rebase_repo" commit -m 'F-rebase theirs' >/dev/null
+jj_fixture -R "$rebase_repo" bookmark create feature/rebase-theirs -r @- >/dev/null
+theirs_commit=$(jj_fixture -R "$rebase_repo" log --no-pager --no-graph -r feature/rebase-theirs --template 'commit_id')
+
+jj_fixture -R "$rebase_repo" new feature/rebase-theirs feature/rebase-ours >/dev/null
+mkdir -p "$rebase_repo/.git/rebase-merge"
+printf 'refs/heads/feature/rebase-ours\n' > "$rebase_repo/.git/rebase-merge/head-name"
+printf '%s\n' "$theirs_commit" > "$rebase_repo/.git/rebase-merge/onto"
+printf '%s\n' "$ours_commit" > "$rebase_repo/.git/rebase-merge/orig-head"
+printf '1\n' > "$rebase_repo/.git/rebase-merge/msgnum"
+printf '1\n' > "$rebase_repo/.git/rebase-merge/end"
+printf 'pick %s F-rebase ours\n' "$ours_commit" > "$rebase_repo/.git/rebase-merge/done"
+: > "$rebase_repo/.git/rebase-merge/git-rebase-todo"
+printf '%s\n' "$ours_commit" > "$rebase_repo/.git/rebase-merge/stopped-sha"
+printf '%s\n' "$theirs_commit" > "$rebase_repo/.git/HEAD"
+printf '%s\n' "$ours_commit" > "$rebase_repo/.git/REBASE_HEAD"
+printf '%s\n' "$ours_commit" > "$rebase_repo/.git/ORIG_HEAD"
