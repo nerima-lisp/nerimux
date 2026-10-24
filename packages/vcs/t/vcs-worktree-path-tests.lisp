@@ -2,6 +2,59 @@
 
 (defvar *fake-repo-counter*
   0)
+(defun %call-with-isolated-test-git-environment (function)
+  (let* ((root
+          (merge-pathnames
+           (format nil
+                   "nerimux-test-git-environment-~D-~D-~D/"
+                   (get-universal-time)
+                   (sb-posix:getpid)
+                   (incf *fake-repo-counter*))
+           (host-kit:temporary-directory)))
+         (home (merge-pathnames "home/" root))
+         (xdg-config (merge-pathnames "xdg-config/" root))
+         (global-config (merge-pathnames "config" root))
+         (template-directory (merge-pathnames "templates/" root)))
+    (unwind-protect
+        (progn
+          (ensure-directories-exist home)
+          (ensure-directories-exist xdg-config)
+          (ensure-directories-exist template-directory)
+          (with-open-file
+              (stream global-config :direction :output :if-exists :error :if-does-not-exist :create)
+            (declare (ignore stream)))
+          (let* ((bindings
+                  (list (cons "HOME" (namestring home))
+                        (cons "XDG_CONFIG_HOME" (namestring xdg-config))
+                        (cons "GIT_CONFIG_GLOBAL" (namestring global-config))
+                        (cons "GIT_CONFIG_NOSYSTEM" "1")
+                        (cons "GIT_CONFIG_COUNT" "0")
+                        (cons "GIT_CONFIG_PARAMETERS" nil)
+                        (cons "GIT_TEMPLATE_DIR" (namestring template-directory))))
+                 (original
+                  (mapcar
+                   (lambda (binding)
+                     (cons (car binding) (sb-ext:posix-getenv (car binding))))
+                   bindings)))
+            (unwind-protect
+                (progn
+                  (dolist (binding bindings)
+                    (unless
+                        (zerop
+                         (if (cdr binding)
+                             (sb-posix:setenv (car binding) (cdr binding) 1)
+                             (sb-posix:unsetenv (car binding))))
+                      (error "Could not set Git test environment variable ~A" (car binding))))
+                  (funcall function))
+              (dolist (binding original)
+                (unless
+                    (zerop
+                     (if (cdr binding)
+                         (sb-posix:setenv (car binding) (cdr binding) 1)
+                         (sb-posix:unsetenv (car binding))))
+                  (error "Could not restore environment variable ~A" (car binding))))))
+          (when (probe-file root)
+            (uiop:delete-directory-tree root :validate t :if-does-not-exist :ignore))))))
 
 (defun %fresh-fake-repo-git-dir ()
   "A repository.git/-shaped directory path (with a trailing slash, as
@@ -91,28 +144,30 @@
         (expect (char= #\T (char timestamp 8)))))))
 
 (defun %call-with-worktree-path-repository (function)
-  (let* ((root (%fresh-fake-repo-git-dir))
-         (source (concatenate 'string root "source/"))
-         (bare (concatenate 'string root "repository.git/")))
-    (unwind-protect
-         (progn
-           (uiop:run-program (list "git" "init" "--initial-branch=main" source)
-                             :output :string :error-output :string)
-           (uiop:run-program
-            (list "git" "-C" source "-c" "user.name=Test"
-                  "-c" "user.email=test@example.invalid"
-                  "-c" "commit.gpgsign=false" "-c" "core.hooksPath=/dev/null"
-                  "commit" "--allow-empty" "-m" "fixture")
-            :output :string :error-output :string)
-           (uiop:run-program (list "git" "clone" "--bare" source bare)
-                             :output :string :error-output :string)
-           (funcall function
-                    (nerimux/workspace-model:make-repository
-                     :specification "workspace-owner/path-fixture"
-                     :local-path bare)
-                    (namestring (truename root))))
-      (when (probe-file root)
-        (uiop:delete-directory-tree (pathname root) :validate t)))))
+  (%call-with-isolated-test-git-environment
+   (lambda ()
+     (let* ((root (%fresh-fake-repo-git-dir))
+            (source (concatenate 'string root "source/"))
+            (bare (concatenate 'string root "repository.git/")))
+       (unwind-protect
+            (progn
+              (uiop:run-program (list "git" "init" "--initial-branch=main" source)
+                                :output :string :error-output :string)
+              (uiop:run-program
+               (list "git" "-C" source "-c" "user.name=Test"
+                     "-c" "user.email=test@example.invalid"
+                     "-c" "commit.gpgsign=false" "-c" "core.hooksPath=/dev/null"
+                     "commit" "--allow-empty" "-m" "fixture")
+               :output :string :error-output :string)
+              (uiop:run-program (list "git" "clone" "--bare" source bare)
+                                :output :string :error-output :string)
+              (funcall function
+                       (nerimux/workspace-model:make-repository
+                        :specification "workspace-owner/path-fixture"
+                        :local-path bare)
+                       (namestring (truename root))))
+         (when (probe-file root)
+           (uiop:delete-directory-tree (pathname root) :validate t)))))))
 
 (defun %check-created-worktree-path (async-p path-kind)
   (%call-with-worktree-path-repository

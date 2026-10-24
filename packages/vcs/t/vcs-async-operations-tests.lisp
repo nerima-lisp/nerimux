@@ -30,30 +30,33 @@
     (write-string content stream)))
 
 (defun %call-with-prune-git-fixture (function)
-  (let* ((root (merge-pathnames (format nil ".prune-test-~D-~D/"
-                                       (get-universal-time) (random 1000000000))
-                                (uiop:getcwd)))
-         (primary (merge-pathnames "primary/" root))
-         (child (merge-pathnames "child/" root)))
-    (ensure-directories-exist primary)
-    (unwind-protect
-         (flet ((git (&rest arguments)
-                  (uiop:run-program (append (list "git" "-C" (namestring primary)) arguments)
-                                    :output :string :error-output :string)))
-           (git "init")
-           (%write-prune-fixture-file (merge-pathnames "tracked" primary) "initial")
-           (%write-prune-fixture-file (merge-pathnames ".gitignore" primary) "ignored")
-           (git "add" "tracked" ".gitignore")
-           (git "-c" "user.name=Fixture" "-c" "user.email=fixture@example.invalid"
-                "-c" "commit.gpgsign=false" "commit" "-m" "fixture")
-           (git "worktree" "add" "-b" "prune-child" (namestring child))
-           (let* ((repository (nerimux/workspace-model:make-repository
-                               :id "prune-fixture" :local-path (namestring (truename primary))))
-                  (worktree (nerimux/workspace-model:make-worktree
-                             :id "prune-child" :repository repository
-                             :path (namestring (truename child)) :completed-p t)))
-             (funcall function worktree (truename child))))
-      (uiop:delete-directory-tree root :validate t :if-does-not-exist :ignore))))
+  (%call-with-isolated-test-git-environment
+   (lambda ()
+     (let* ((root
+             (merge-pathnames
+              (format nil ".prune-test-~D-~D/" (get-universal-time) (random 1000000000))
+              (uiop:getcwd)))
+            (primary (merge-pathnames "primary/" root))
+            (child (merge-pathnames "child/" root)))
+       (ensure-directories-exist primary)
+       (unwind-protect
+           (flet ((git (&rest arguments)
+                    (uiop:run-program (append (list "git" "-C" (namestring primary)) arguments)
+                                      :output :string :error-output :string)))
+             (git "init")
+             (%write-prune-fixture-file (merge-pathnames "tracked" primary) "initial")
+             (%write-prune-fixture-file (merge-pathnames ".gitignore" primary) "ignored")
+             (git "add" "tracked" ".gitignore")
+             (git "-c" "user.name=Fixture" "-c" "user.email=fixture@example.invalid"
+                  "-c" "commit.gpgsign=false" "commit" "-m" "fixture")
+             (git "worktree" "add" "-b" "prune-child" (namestring child))
+             (let* ((repository (nerimux/workspace-model:make-repository
+                                 :id "prune-fixture" :local-path (namestring (truename primary))))
+                    (worktree (nerimux/workspace-model:make-worktree
+                               :id "prune-child" :repository repository
+                               :path (namestring (truename child)) :completed-p t)))
+               (funcall function worktree (truename child)))
+             (uiop:delete-directory-tree root :validate t :if-does-not-exist :ignore)))))))
 
 (describe "workspace-prune-snapshot"
   (it "real Git clean control and same-path tracked untracked and staged changes invalidate consent"
