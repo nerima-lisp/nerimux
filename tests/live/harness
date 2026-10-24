@@ -140,8 +140,9 @@ run_self_check() {
   check_lane "$lane"
   dir=$(lane_dir "$lane")
   fixture_root=${LIVE_FIXTURE_ROOT:-$(default_fixture_root "$lane")}
-  selfcheck_root="$dir/self-check-runtime/run-$BASHPID"
   original_live_root=$LIVE_ROOT
+  prepare_lane "$lane" "$fixture_root"
+  selfcheck_root="$dir/self-check-runtime/run-$BASHPID"
   LIVE_ROOT=$selfcheck_root
   prepare_lane "$lane" "$fixture_root"
   socket=$(app_socket "$lane")
