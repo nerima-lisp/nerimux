@@ -17,16 +17,16 @@
       (setf (nerimux/workspace-model:repository-main-worktree repository) nil)
       (expect (eq worktree
                   (nerimux::%picker-item-worktree
-                   (nerimux/picker::%make-picker-item
+                   (nerimux/picker:make-picker-item
                     :repository repository :worktree worktree))))
       (expect (null (nerimux::%picker-item-worktree
-                     (nerimux/picker::%make-picker-item
+                     (nerimux/picker:make-picker-item
                       :repository repository))))
       (expect (null (nerimux::%picker-item-worktree
-                     (nerimux/picker::%make-picker-item
+                     (nerimux/picker:make-picker-item
                       :organization empty-organization))))
       (expect (null (nerimux::%picker-item-worktree
-                     (nerimux/picker::%make-picker-item
+                     (nerimux/picker:make-picker-item
                       :organization organization))))))
 
   (it "does not search panes when picker worktree is absent"

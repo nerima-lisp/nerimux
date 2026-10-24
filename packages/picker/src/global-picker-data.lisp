@@ -4,7 +4,7 @@
 
 (defstruct
     (picker-item
-     (:constructor %make-picker-item
+     (:constructor make-picker-item
                    (&key id kind label organization repository worktree pane data)))
   id
   kind
@@ -14,16 +14,6 @@
   worktree
   pane
   data)
-(defun make-picker-item (&key id kind label organization repository worktree pane data)
-  (%make-picker-item :id id
-                     :kind kind
-                     :label label
-                     :organization organization
-                     :repository repository
-                     :worktree worktree
-                     :pane pane
-                     :data data))
-
 (defun %picker-string (value)
   (cond
     ((null value) "")
@@ -155,7 +145,7 @@
           (nerimux/pane:pane-id pane)))
 
 (defun %make-organization-item (organization)
-  (%make-picker-item :id
+  (make-picker-item :id
                      (%organization-id organization)
                      :kind
                      :organization
@@ -165,7 +155,7 @@
                      organization))
 
 (defun %make-repository-item (organization repository)
-  (%make-picker-item :id
+  (make-picker-item :id
                      (%repository-id organization repository)
                      :kind
                      :repository
@@ -177,7 +167,7 @@
                      repository))
 
 (defun %make-worktree-item (organization repository worktree)
-  (%make-picker-item :id
+  (make-picker-item :id
                      (%worktree-id organization repository worktree)
                      :kind
                      :worktree
@@ -191,7 +181,7 @@
                      worktree))
 
 (defun %make-pane-item (organization repository worktree pane)
-  (%make-picker-item :id
+  (make-picker-item :id
                      (%pane-id organization repository worktree pane)
                      :kind
                      :pane

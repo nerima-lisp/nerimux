@@ -389,13 +389,13 @@
   (it "picker-visible-items-deduplicate-worktrees-and-clamp-selection"
     (with-fake-session (s)
       (let* ((worktree (nerimux/workspace-model:make-worktree :id "shared" :path "/tmp/shared"))
-             (first-item (nerimux/picker::%make-picker-item
+             (first-item (nerimux/picker:make-picker-item
                           :id "first" :kind :worktree :label "first"
                           :worktree worktree))
-             (duplicate-item (nerimux/picker::%make-picker-item
+             (duplicate-item (nerimux/picker:make-picker-item
                               :id "duplicate" :kind :worktree :label "duplicate"
                               :worktree worktree))
-             (organization-item (nerimux/picker::%make-picker-item
+             (organization-item (nerimux/picker:make-picker-item
                                  :id "organization" :kind :organization
                                  :label "organization"))
              (conn (%make-test-conn)))
@@ -416,9 +416,9 @@
 
   (it "picker-selected-item-returns-the-current-visible-item"
     (with-fake-session (s)
-      (let* ((first-item (nerimux/picker::%make-picker-item
+      (let* ((first-item (nerimux/picker:make-picker-item
                           :id "first" :kind :repository :label "first"))
-             (second-item (nerimux/picker::%make-picker-item
+             (second-item (nerimux/picker:make-picker-item
                            :id "second" :kind :repository :label "second"))
              (conn (%make-test-conn)))
         (setf (nerimux::client-conn-picker-items conn)
@@ -454,7 +454,7 @@
               t)
         (nerimux::%set-client-modal conn :picker)
         (setf (nerimux::client-conn-picker-items conn)
-              (list (nerimux/picker::%make-picker-item
+              (list (nerimux/picker:make-picker-item
                      :id "repo" :kind :repository :label "repo"
                      :repository repository))
               (nerimux::client-conn-picker-index conn) 0)
@@ -467,7 +467,7 @@
                          nerimux::*workspace-expanded-node-ids*))
         (nerimux::%set-client-modal conn :picker)
         (setf (nerimux::client-conn-picker-items conn)
-              (list (nerimux/picker::%make-picker-item
+              (list (nerimux/picker:make-picker-item
                      :id "org" :kind :organization :label "team"
                      :organization organization))
               (nerimux::client-conn-picker-index conn) 0)

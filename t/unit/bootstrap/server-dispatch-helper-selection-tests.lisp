@@ -67,7 +67,7 @@
            (repository (nerimux/workspace-model:make-repository :id "repo"))
            (worktree (nerimux/workspace-model:make-worktree
                       :id "tree" :repository repository :path "/tmp/tree"))
-           (item (nerimux/picker::%make-picker-item
+           (item (nerimux/picker:make-picker-item
                   :id "org" :kind :organization :label "org"
                   :organization organization)))
       (nerimux/workspace-model:organization-add-repository organization repository)
@@ -79,7 +79,7 @@
            (main-worktree
              (nerimux/workspace-model:make-worktree
               :id "main" :repository repository :path "/tmp/main"))
-           (item (nerimux/picker::%make-picker-item
+           (item (nerimux/picker:make-picker-item
                   :id "repo" :kind :repository :label "repo"
                   :repository repository)))
       (setf (nerimux/workspace-model:repository-main-worktree repository)
@@ -91,14 +91,14 @@
            (worktree
              (nerimux/workspace-model:make-worktree
               :id "tree" :repository repository :path "/tmp/tree"))
-           (item (nerimux/picker::%make-picker-item
+           (item (nerimux/picker:make-picker-item
                   :id "tree" :kind :worktree :label "tree"
                   :repository repository :worktree worktree)))
       (nerimux/workspace-model:repository-add-worktree repository worktree)
       (expect (eq worktree (nerimux::%picker-item-worktree item)))))
 
   (it "returns-no-worktree-for-an-unowned-picker-item"
-    (let ((item (nerimux/picker::%make-picker-item
+    (let ((item (nerimux/picker:make-picker-item
                  :id "empty" :kind :unknown :label "empty")))
       (expect (null (nerimux::%picker-item-worktree item)))))
 

@@ -1,25 +1,16 @@
 (in-package #:nerimux/test/picker)
 (describe "branch picker item constructor"
   (it "branch-picker-item-constructor-exposes-row-data"
-    (let* ((constructor (find-symbol "MAKE-PICKER-ITEM" "NERIMUX/PICKER"))
-           (data-accessor (find-symbol "PICKER-ITEM-DATA" "NERIMUX/PICKER"))
-           (data (list :branch "main" :kind :local))
-           (item (and constructor
-                      (fboundp constructor)
-                      (funcall (symbol-function constructor)
-                               :id "branch/0"
-                               :kind :branch
-                               :label "local main"
-                               :data data))))
-      (expect (eq :external
-                  (nth-value 1
-                             (find-symbol "MAKE-PICKER-ITEM" "NERIMUX/PICKER"))))
-      (expect (eq :external
-                  (nth-value 1
-                             (find-symbol "PICKER-ITEM-DATA" "NERIMUX/PICKER"))))
-      (expect item)
-      (when (and item data-accessor (fboundp data-accessor))
-        (expect (eq data (funcall (symbol-function data-accessor) item)))))))
+    (let* ((data (list :branch "main" :kind :local))
+           (item
+             (nerimux/picker:make-picker-item
+              :id "branch/0"
+              :kind :branch
+              :label "local main"
+              :data data)))
+      (expect
+       (eq data
+           (nerimux/picker:picker-item-data item))))))
 
 
 (describe "global picker"
@@ -325,7 +316,7 @@
                         worktree-repository))
                (expect
                 (nerimux/picker:picker-item-attention-p
-                 (nerimux/picker::%make-picker-item :id
+                 (nerimux/picker:make-picker-item :id
                                                     (nerimux/workspace-model:repository-id
                                                      repository)
                                                     :kind
@@ -335,7 +326,7 @@
              (expect
               (not
                (nerimux/picker:picker-item-attention-p
-                (nerimux/picker::%make-picker-item :id
+                (nerimux/picker:make-picker-item :id
                                                    "clean"
                                                    :kind
                                                    :repository
@@ -348,7 +339,7 @@
                         repository-organization))
                (expect
                 (nerimux/picker:picker-item-attention-p
-                 (nerimux/picker::%make-picker-item :id
+                 (nerimux/picker:make-picker-item :id
                                                     (nerimux/workspace-model:organization-id
                                                      organization)
                                                     :kind
@@ -358,7 +349,7 @@
              (expect
               (not
                (nerimux/picker:picker-item-attention-p
-                (nerimux/picker::%make-picker-item :id
+                (nerimux/picker:make-picker-item :id
                                                    "clean"
                                                    :kind
                                                    :organization
@@ -366,7 +357,7 @@
                                                    clean-organization))))
              (expect
               (nerimux/picker:picker-item-attention-p
-               (nerimux/picker::%make-picker-item :id
+               (nerimux/picker:make-picker-item :id
                                                   "attention-worktree"
                                                   :kind
                                                   :worktree
@@ -375,7 +366,7 @@
              (expect
               (not
                (nerimux/picker:picker-item-attention-p
-                (nerimux/picker::%make-picker-item :id
+                (nerimux/picker:make-picker-item :id
                                                    "clean-worktree"
                                                    :kind
                                                    :worktree
@@ -383,7 +374,7 @@
                                                    clean-worktree))))
              (expect
               (nerimux/picker:picker-item-attention-p
-               (nerimux/picker::%make-picker-item :id
+               (nerimux/picker:make-picker-item :id
                                                   "attention-pane"
                                                   :kind
                                                   :pane
@@ -392,7 +383,7 @@
              (expect
               (not
                (nerimux/picker:picker-item-attention-p
-                (nerimux/picker::%make-picker-item :id
+                (nerimux/picker:make-picker-item :id
                                                    "clean-pane"
                                                    :kind
                                                    :pane
@@ -401,7 +392,7 @@
              (expect
               (not
                (nerimux/picker:picker-item-attention-p
-                (nerimux/picker::%make-picker-item :id "unknown" :kind :unknown))))))
+                (nerimux/picker:make-picker-item :id "unknown" :kind :unknown))))))
           (it "indexes transient metadata in picker searches"
               (let* ((organization
                       (nerimux/workspace-model:make-organization :id
