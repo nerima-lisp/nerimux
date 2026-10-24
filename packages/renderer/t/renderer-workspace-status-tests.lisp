@@ -236,6 +236,17 @@
         (expect (not (search "A staged.txt" visible)))
         (expect output :to-contain-sgr
                 (%expected-sgr-params (nerimux/renderer::%workspace-status-style-heading))))))
+  (it "derives file status spans from row data rather than reparsing the label"
+    (let* ((spans
+             (nerimux/renderer::%workspace-status-row-content-spans
+              "stale label"
+              (list :file "wt-status" "a.txt" "M")
+              :file))
+           (span-texts
+             (mapcar (function cl-tui-kit/core:text-span-text)
+                     spans)))
+      (expect (equal (list "modified" " a.txt")
+                     span-texts))))
 
   (it "still renders a complete frame on a short terminal (no key panel, no message row)"
     (multiple-value-bind (worktree) (%build-status-fixture :unstaged '(("M" . "a.txt")))
