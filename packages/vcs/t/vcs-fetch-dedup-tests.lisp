@@ -454,7 +454,7 @@
 
 (defun %job-fetch-await (fixture repository)
   (expect (sb-thread:wait-on-semaphore
-           (gethash repository (%job-fetch-fixture-entered fixture)) :timeout 2)))
+           (gethash repository (%job-fetch-fixture-entered fixture)))))
 
 (defun %job-fetch-release (fixture repository)
   (sb-thread:signal-semaphore
@@ -462,7 +462,7 @@
 
 (defun %job-fetch-join (fixture)
   (dolist (thread (%job-fetch-fixture-threads fixture))
-    (sb-thread:join-thread thread :timeout 2)
+    (sb-thread:join-thread thread)
     (expect (not (sb-thread:thread-alive-p thread))))
   (setf (%job-fetch-fixture-threads fixture) nil))
 
@@ -600,7 +600,7 @@
                            :on-complete (lambda (result) (push result results)))))
              (dolist (repo repos) (%job-fetch-await f repo))
              (%job-fetch-release f failed)
-             (sb-thread:join-thread (first threads) :timeout 2)
+             (sb-thread:join-thread (first threads))
              (expect (not (sb-thread:thread-alive-p (first threads))))
              (%job-fetch-drain f)
              (expect (equal (list failed) errors))

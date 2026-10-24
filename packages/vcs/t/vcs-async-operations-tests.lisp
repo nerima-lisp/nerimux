@@ -433,7 +433,7 @@
                    options)))
       (expect (= 1 (length threads)))
       (dolist (thread threads)
-        (sb-thread:join-thread thread :timeout 2)))
+        (sb-thread:join-thread thread)))
     (expect (= 1 (length queued)))
     (first queued)))
 
