@@ -1,124 +1,65 @@
 (in-package #:nerimux/vcs)
 
 (defvar *git-read-output-limit* (* 1024 1024)
-  "Stdout byte cap for %RUN-GIT-READ (F3, CWE-400): a status or diff read
-that would otherwise capture an unbounded amount from a pathological
-repository is truncated to the first *GIT-READ-OUTPUT-LIMIT* bytes actually
-read instead of raising -- callers get a usable, if incomplete, reading
-rather than none.")
+  "Maximum stdout byte count captured by %RUN-GIT-READ. Output over this limit
+signals %GIT-READ-ERROR.")
 
 (defvar *git-read-timeout-seconds* 30
-  "Deadline for one %RUN-GIT-READ call. Past this the child is killed and
-%GIT-READ-ERROR is signaled, so a hung git process cannot park the calling
-worker thread forever -- an in-image timeout would not do this, since it
-does not interrupt a blocked read(2).")
+  "Deadline for one %RUN-GIT-READ call. A process that exceeds it is terminated
+and reported as %GIT-READ-ERROR.")
 
 (define-condition %git-read-error (error)
   ((directory :initarg :directory :reader %git-read-error-directory)
    (subcommand :initarg :subcommand :reader %git-read-error-subcommand)
    (arguments :initarg :arguments :reader %git-read-error-arguments)
-   (exit-code :initarg :exit-code :initform nil :reader %git-read-error-exit-code))
+   (exit-code :initarg :exit-code :initform nil :reader %git-read-error-exit-code)
+   (output-limit :initarg :output-limit :initform nil
+                 :reader %git-read-error-output-limit))
   (:report
    (lambda (condition stream)
-     (format stream "git ~A~{ ~A~} in ~A failed~@[ (exit ~D)~]"
+     (format stream "git ~A~{ ~A~} in ~A failed~@[ (exit ~D)~]~@[ (stdout exceeded ~D-byte limit)~]"
              (%git-read-error-subcommand condition)
              (%git-read-error-arguments condition)
              (%git-read-error-directory condition)
-             (%git-read-error-exit-code condition))))
+             (%git-read-error-exit-code condition)
+             (%git-read-error-output-limit condition))))
   (:documentation
-   "Signaled by %RUN-GIT-READ for a non-zero git exit, a read past
-*GIT-READ-TIMEOUT-SECONDS*, or a launch failure -- a subclass of ERROR, so
-every handler-case ERROR clause that used to catch a VCS-KIT:VCS-ERROR from
-this same call site keeps working unchanged."))
-
-(defun %git-read-fill-prefix (chunks total-read)
-  "Assemble CHUNKS (pushed newest-first by %RUN-GIT-READ's read loop) into an
-octet vector holding the first (MIN TOTAL-READ *GIT-READ-OUTPUT-LIMIT*) bytes
-actually read -- the prefix of the stream, not the suffix, since a capped
-read behaves like `head -c`, not `tail -c`."
-  (let* ((capped (min total-read *git-read-output-limit*))
-         (octets (make-array capped :element-type '(unsigned-byte 8)))
-         (offset 0))
-    (dolist (chunk (nreverse chunks) octets)
-      (when (>= offset capped)
-        (return octets))
-      (let ((take (min (length chunk) (- capped offset))))
-        (replace octets chunk :start1 offset :end2 take)
-        (incf offset take)))))
+   "Signaled by %RUN-GIT-READ for a non-zero git exit, stdout overflow, timeout,
+or launch failure."))
 
 (defun %run-git-read (directory subcommand &rest arguments)
-  "Run `git -C DIRECTORY SUBCOMMAND ARGUMENTS...` through SBCL's posix_spawn
-path and return its stdout, decoded as UTF-8.
-
-Measured this session (macOS arm64, SBCL 2.6.6): SB-EXT:RUN-PROGRAM's default
-fork path costs ~66 ms per spawn and serializes under cl-process-kit's own
-spawn lock, so parallel worker threads see no speedup from it; passing
-:USE-POSIX-SPAWN T costs ~3.5 ms per spawn and does scale across threads.
-SBCL's posix_spawn path ignores :DIRECTORY (src/runtime/run-program.c's
-pspawn), hence `-C DIRECTORY` as an explicit git argument here instead of
-that option. This runner exists until cl-process-kit can spawn without
-forking.
-
-Reads the child's stdout directly off its file descriptor (never through the
-FD-STREAM's own buffering, which nothing else here touches), polling
-readiness with SB-SYS:WAIT-UNTIL-FD-USABLE against *GIT-READ-TIMEOUT-SECONDS*
-so a hung git cannot park this thread forever. Hitting *GIT-READ-OUTPUT-LIMIT*
-or the deadline forces SB-EXT:PROCESS-KILL before SB-EXT:PROCESS-WAIT, because
-waiting on a child that is still blocked writing to a pipe nobody is draining
-deadlocks the caller, not just the child."
-  (let ((process
+  "Run git through VCS-KIT with a deadline and bounded octet capture."
+  (let ((result
           (handler-case
-              (sb-ext:run-program "git" (list* "-C" directory subcommand arguments)
-                                   :search t :wait nil :input nil
-                                   :output :stream :error nil
-                                   :use-posix-spawn t)
-            (error ()
+              (vcs-kit:run-vcs nil subcommand arguments
+                               :executable "git"
+                               :directory directory
+                               :input ""
+                               :timeout *git-read-timeout-seconds*
+                               :output :capture
+                               :error-output :capture
+                               :result-type :octets
+                               :max-output-characters *git-read-output-limit*)
+            (vcs-kit:vcs-command-error ()
               (error '%git-read-error
-                     :directory directory :subcommand subcommand :arguments arguments)))))
-    (unwind-protect
-         (let ((fd (sb-sys:fd-stream-fd (sb-ext:process-output process)))
-               (buffer (make-array 65536 :element-type '(unsigned-byte 8)))
-               (deadline (+ (get-internal-real-time)
-                            (* *git-read-timeout-seconds* internal-time-units-per-second)))
-               (chunks nil)
-               (total 0)
-               (reason nil))
-           (loop
-             (when (> total *git-read-output-limit*)
-               (setf reason :capped)
-               (return))
-             (let ((remaining (/ (max 0 (- deadline (get-internal-real-time)))
-                                  internal-time-units-per-second)))
-               (when (zerop remaining)
-                 (setf reason :aborted)
-                 (return))
-               (unless (sb-sys:wait-until-fd-usable fd :input remaining nil)
-                 (setf reason :aborted)
-                 (return)))
-             (multiple-value-bind (count errno)
-                 (sb-sys:with-pinned-objects (buffer)
-                   (sb-unix:unix-read fd (sb-sys:vector-sap buffer) (length buffer)))
-               (cond
-                 ((and (null count) (= errno sb-unix:eintr)))
-                 ((null count) (setf reason :aborted) (return))
-                 ((zerop count) (setf reason :eof) (return))
-                 (t (incf total count) (push (subseq buffer 0 count) chunks)))))
-           (when (member reason '(:capped :aborted))
-             (ignore-errors (sb-ext:process-kill process 9)))
-           (sb-ext:process-wait process)
-           (let ((exit-code (sb-ext:process-exit-code process)))
-             (when (eq reason :aborted)
-               (error '%git-read-error
-                      :directory directory :subcommand subcommand :arguments arguments
-                      :exit-code exit-code))
-             (when (and (eq reason :eof) (not (eql exit-code 0)))
-               (error '%git-read-error
-                      :directory directory :subcommand subcommand :arguments arguments
-                      :exit-code exit-code))
-             (sb-ext:octets-to-string
-              (%git-read-fill-prefix chunks total)
-              :external-format '(:utf-8 :replacement #\?))))
-      (sb-ext:process-close process))))
+                     :directory directory
+                     :subcommand subcommand
+                     :arguments arguments)))))
+    (let* ((success-p (process-kit:process-success-p result))
+           (output-limit
+             (when (process-kit:process-result-stdout-truncated-p result)
+               *git-read-output-limit*)))
+      (when (or (not success-p) output-limit)
+        (error '%git-read-error
+               :directory directory
+               :subcommand subcommand
+               :arguments arguments
+               :exit-code (unless success-p
+                            (process-kit:process-result-exit-code result))
+               :output-limit output-limit)))
+    (sb-ext:octets-to-string
+     (process-kit:process-result-stdout result)
+     :external-format (quote (:utf-8 :replacement #\?)))))
 
 (defun %git-status-snapshot (directory)
   "DIRECTORY's status as a VCS-KIT:VCS-STATUS-SNAPSHOT with VCS-STATUS-ENTRY

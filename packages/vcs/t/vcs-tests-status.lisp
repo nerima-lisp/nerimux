@@ -518,11 +518,16 @@ since -- %READ-WORKTREE-STATUS-AT's end-to-end fixture."
           (setf signaled (nerimux/vcs::%git-read-error-exit-code condition))))
       (expect (eql 128 signaled))))
 
-  (it "honours the size cap, truncating to *git-read-output-limit* bytes"
+  (it "signals a git-read error when stdout exceeds its byte cap"
     (let* ((directory (%run-git-read-test-repo))
-           (nerimux/vcs::*git-read-output-limit* 4))
-      (expect (= 4 (length (nerimux/vcs::%run-git-read
-                           directory "rev-parse" "--git-dir")))))))
+           (nerimux/vcs::*git-read-output-limit* 4)
+           (signaled-limit nil))
+      (handler-case
+          (nerimux/vcs::%run-git-read directory "rev-parse" "--git-dir")
+        (nerimux/vcs::%git-read-error (condition)
+          (setf signaled-limit
+                (nerimux/vcs::%git-read-error-output-limit condition))))
+      (expect (eql 4 signaled-limit)))))
 
 (describe "%read-worktree-status-at against a real repository (posix_spawn end-to-end)"
   (it "reports dirty-p, one changed file, and numstat additions/deletions"

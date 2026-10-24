@@ -235,8 +235,7 @@ remote の `docs/20260911-worktree-branch-cleanup` を削除した。今回対�
 
 ### 保留した項目
 
-- cl-process-kit が `sb-ext:run-program` を `:use-posix-spawn nil` で呼ぶため、status pass 以外の git 呼び出し（fetch、worktree create/delete/prune、log、diff、cwd 解決）は今も fork 経路（1 spawn 約 66 ms、worker thread 間で直列化）を通る。SBCL の posix_spawn 経路は `:directory` を無視するため上流の修正は単純ではなく、flake input の更新を伴うため今回は見送った。`%run-git-read` は vcs-kit の内部シンボル 4 つに依存しており、上流が posix_spawn に対応した時点で削除する。
+- cl-vcs-kit v0.2.1 は同期・非同期の VCS 実行で cl-process-kit v3.4.1 の POSIX spawn 経路を使う。cl-process-kit は POSIX spawn 時の `:directory` を shell wrapper 内で適用する。`%run-git-read` は `vcs-kit:run-vcs` を使い、30 秒の期限と stdout 1 MiB の octet capture を指定する。上限を超えたデータは保持せず、コマンドの終了またはタイムアウトまで読み捨てる。`process-kit:process-result-stdout-truncated-p` が真の場合と非ゼロ終了の場合は `%git-read-error` をシグナルし、非ゼロ終了コードも条件に含める。status、worktree、stash の各読み取りは cl-vcs-kit の内部シンボルを使う。対象は `%vcs-status-snapshot`、`%vcs-status-entry`、`%vcs-worktree-blocks`、`%vcs-worktree`、`%split-line-records`、`%split-nul-records-vector`、`%make-vcs-stash-entry`、`%vcs-empty-to-nil` で、定義は v0.2.1 と v0.2.0 で変わっていない。
 - picker modal だけは cl-tui-kit surface 経由で描画され、140x40 で 1 frame 約 67 ms かかる。原因は cl-tui-kit の cell 単位の Unicode 幅判定で、修正先は上流。
 - catalog scan（`scan-repositories`）は repository ごとに単一 thread で worktree 一覧を読む。posix_spawn 経路では 1 件 2 ms 程度のため pool 化は見送った。
-- `%run-git-read` の 1 MiB 出力上限は打ち切って成功扱いにしている（エラーにはしない）。
 - Attention section の所属条件の変更（dirty / ahead / behind を除外）はユーザ指示ではなくセッション側の判断。旧条件では実環境の 339 worktree 中 184 件が該当し、一覧が読めなくなっていたことが根拠。戻す場合は `%workspace-worktree-needs-attention-p` のみを変更する。
