@@ -387,11 +387,14 @@
         (expect (null (nerimux::%handle-client-picker-key-payload s conn #(16))))
         (expect (null (nerimux::%handle-client-picker-key-payload s conn #(14))))
         (expect (nerimux::%handle-client-picker-key-payload s conn #(127))))))
-  (it "picker-query-inputs-are-capped-at-200-characters"
+  (it "picker-query-inputs-are-capped-at-200-characters-including-utf8-octets"
     (with-fake-session (s)
       (expect s)
       (let* ((conn (%make-test-conn))
-             (query (make-string 205 :initial-element #\x)))
+             (query (make-string 205 :initial-element (code-char 120)))
+             (utf8-query (make-string 205 :initial-element (code-char #x3042)))
+             (utf8-octets (cl-codec-kit:string-to-octets
+                           utf8-query :encoding :utf-8)))
         (expect (nerimux::%set-client-picker-query conn ""))
         (expect (nerimux::%append-client-picker-query-octets conn query))
         (expect (= 200 (length (nerimux::client-conn-picker-query conn))))
@@ -400,7 +403,50 @@
         (expect (nerimux::%set-client-picker-query conn query))
         (expect (= 200 (length (nerimux::client-conn-picker-query conn))))
         (expect (string= (subseq query 0 200)
+                         (nerimux::client-conn-picker-query conn)))
+        (expect (nerimux::%set-client-picker-query conn ""))
+        (expect (nerimux::%handle-client-picker-key-payload s conn utf8-octets))
+        (expect (= 200 (length (nerimux::client-conn-picker-query conn))))
+        (expect (string= (subseq utf8-query 0 200)
                          (nerimux::client-conn-picker-query conn))))))
+  (it "attach-selector-query-inputs-are-capped-at-200-characters-and-notifies-on-truncation"
+    (with-fake-session (s)
+      (expect s)
+      (let* ((selector (format nil "github.com/team/~A" (make-string 189 :initial-element (code-char 120))))
+             (organization
+               (nerimux/workspace-model:make-organization
+                :id "org" :host "github.com" :name "team"))
+             (repository
+               (nerimux/workspace-model:make-repository
+                :id "repo" :organization organization :specification selector))
+             (worktree
+               (nerimux/workspace-model:make-worktree
+                :id "wt" :repository repository :path selector :branch "main"))
+             (conn (%make-test-conn)))
+        (nerimux/workspace-model:organization-add-repository organization repository)
+        (nerimux/workspace-model:repository-add-worktree repository worktree)
+        (let ((nerimux::*clients* (list conn)))
+          (with-stubbed-fdefinition
+              ((nerimux/vcs:workspace-organizations
+                (lambda () (list organization)))
+               (nerimux::%refresh-client-picker
+                (lambda (connection &rest arguments)
+                  (declare (ignore arguments))
+                  connection)))
+            (setf (nerimux::client-conn-attach-target conn) selector)
+            (expect (null (nerimux::%client-attach-selection
+                           conn (list organization))))
+            (expect (eq :picker (nerimux::client-conn-modal conn)))
+            (expect (= 200 (length (nerimux::client-conn-picker-query conn))))
+            (expect (string= (subseq selector 0 200)
+                             (nerimux::client-conn-picker-query conn)))
+            (expect
+             (some (lambda (message)
+                     (let ((text (string-downcase message)))
+                       (and (search "200" text)
+                            (or (search "trunc" text)
+                                (search "limit" text)))))
+                   (nerimux::client-conn-message-log conn))))))))
   (it "picker-close-requires-session"
     (with-fake-session (s)
       (let ((conn (%make-test-conn)))

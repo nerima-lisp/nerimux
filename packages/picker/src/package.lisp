@@ -20,4 +20,5 @@
                      #:build-global-picker-items
                      #:filter-global-picker-items
                      #:select-global-picker-item
-                     #:benchmark-global-picker))
+                     #:benchmark-global-picker
+                     #:+picker-regex-query-length-limit+))

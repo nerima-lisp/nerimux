@@ -245,6 +245,37 @@
         (nerimux::%handle-multi-key-message s conn #(27))
         (nerimux::%handle-multi-key-message s conn #(112))
         (expect (eq :attention (nerimux::client-conn-selected-tree-object conn))))))
+  (it "meta-section-navigation-preserves-an-accepted-tree-filter"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (nerimux::*client-meta-pending* (make-hash-table :test (function eq)))
+             (calls nil)
+             (query-after-n nil)
+             (query-after-p nil))
+        (setf (nerimux::client-conn-view conn) :repolist)
+        (flet ((accept-filter ()
+                 (nerimux::%handle-multi-key-message s conn #(47))
+                 (nerimux::%handle-multi-key-message
+                  s conn (cl-codec-kit:string-to-octets "alpha" :encoding :utf-8))
+                 (nerimux::%handle-multi-key-message s conn #(13))))
+          (with-stubbed-fdefinition
+              ((nerimux::%select-client-tree-section-relative
+                 (lambda (received-conn delta)
+                   (push (list received-conn delta) calls))))
+            (accept-filter)
+            (expect (null (nerimux::client-conn-modal conn)))
+            (nerimux::%handle-multi-key-message s conn #(27))
+            (nerimux::%handle-multi-key-message s conn #(110))
+            (setf query-after-n (nerimux::client-conn-tree-filter conn))
+            (accept-filter)
+            (expect (null (nerimux::client-conn-modal conn)))
+            (nerimux::%handle-multi-key-message s conn #(27))
+            (nerimux::%handle-multi-key-message s conn #(112))
+            (setf query-after-p (nerimux::client-conn-tree-filter conn))
+            (expect (equal (list (list conn 1) (list conn -1))
+                           (reverse calls)))
+            (expect (string= "alpha" query-after-n))
+            (expect (string= "alpha" query-after-p)))))))
 
   (it "tab-key-expands-and-collapses-a-worktree-rows-inline-detail"
     (with-fake-session (s)

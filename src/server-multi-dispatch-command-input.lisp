@@ -310,9 +310,7 @@
         (:filter
          (setf (client-conn-tree-filter conn)
                (client-conn-paste-candidate-text conn)))
-        (:picker
-         (setf (client-conn-picker-query conn)
-               (client-conn-paste-candidate-text conn)))
+        (:picker (%set-client-picker-query conn (client-conn-paste-candidate-text conn)))
         (:text-prompt
          (setf (client-conn-text-prompt-kind conn)
                (client-conn-paste-candidate-text-prompt-kind conn)
@@ -617,6 +615,23 @@
                 (%client-meta-replay-with-current session conn '(27 91 50 48 49) payload))))))
    t))
 
+(defun %client-meta-ui-escape-start (session conn)
+  (let ((tree-filter (client-conn-tree-filter conn)))
+    (when tree-filter
+      (setf (gethash conn *client-meta-tree-filter-snapshots*) tree-filter)
+      (%client-step-back session conn)))
+  (setf (gethash conn *client-meta-pending*) :second)
+  t)
+
+(defun %client-meta-ui-escape-restore-filter (conn)
+  (multiple-value-bind (tree-filter saved-p)
+      (gethash conn *client-meta-tree-filter-snapshots*)
+    (when saved-p
+      (remhash conn *client-meta-tree-filter-snapshots*)
+      (setf (client-conn-tree-filter conn) tree-filter)
+      (%mark-dirty))))
+
+
 (defun %client-meta-handle-byte (session conn payload)
   (cond
     ((and (client-conn-paste-active-p conn)
@@ -629,6 +644,7 @@
          (%client-paste-consume-byte conn payload))
      t)
     ((gethash conn *client-meta-pending*)
+     (%client-meta-ui-escape-restore-filter conn)
      (%client-meta-pending-consume conn payload session)
      t)
     ((%client-byte-p payload 27)
@@ -663,9 +679,7 @@
             (%handle-multi-key-message session conn payload))
           (setf (gethash conn *client-meta-pending*) :second))
          ((%client-ui-keys-p conn)
-          (when (client-conn-tree-filter conn)
-            (%client-step-back session conn))
-          (setf (gethash conn *client-meta-pending*) :second))
+          (%client-meta-ui-escape-start session conn))
          ((member modal +keyboard-owning-modals+ :test #'eq)
           (let ((*client-meta-replaying* t))
             (%handle-multi-key-message session conn payload)))

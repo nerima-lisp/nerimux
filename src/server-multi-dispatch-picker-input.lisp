@@ -19,14 +19,26 @@
   (let ((items (%client-picker-visible-items conn)))
     (and items (nth (client-conn-picker-index conn) items))))
 
+(defvar *client-picker-query-truncation-notices*
+  (make-hash-table :test #'eq :weakness :key)
+  "Clients already notified that their current picker query was truncated.")
+
 (defun %set-client-picker-query (conn value)
   (when (stringp value)
-    (setf (client-conn-picker-query conn)
-          (subseq value 0 (min (length value)
-                              nerimux/picker::+picker-regex-query-length-limit+))
-          (client-conn-picker-index conn) 0)
-    (%mark-dirty)
-    t))
+    (let* ((limit nerimux/picker:+picker-regex-query-length-limit+)
+           (query (subseq value 0 (min (length value) limit)))
+           (truncated-p (> (length value) limit)))
+      (setf (client-conn-picker-query conn) query
+            (client-conn-picker-index conn) 0)
+      (%mark-dirty)
+      (if truncated-p
+          (unless (gethash conn *client-picker-query-truncation-notices*)
+            (setf (gethash conn *client-picker-query-truncation-notices*) t)
+            (%client-notify
+             conn
+             (format nil "picker query limited to ~D characters" limit)))
+          (remhash conn *client-picker-query-truncation-notices*))
+      t)))
 
 (defun %set-client-picker-regex (conn value supplied-p)
   (setf (client-conn-picker-regex-p conn)
@@ -43,10 +55,7 @@
 (defun %delete-client-picker-query-character (conn)
   (let ((query (client-conn-picker-query conn)))
     (when (plusp (length query))
-      (setf (client-conn-picker-query conn) (subseq query 0 (1- (length query)))
-            (client-conn-picker-index conn) 0)
-      (%mark-dirty)
-      t)))
+      (%set-client-picker-query conn (subseq query 0 (1- (length query)))))))
 
 (defun %append-client-picker-query-octets (conn payload)
   (let ((text
@@ -56,19 +65,13 @@
              (handler-case
                  (cl-codec-kit:octets-to-string payload :encoding :utf-8)
                (cl-codec-kit:decode-error () nil))))))
-    (when (and text (every (lambda (character) (not (nerimux/text:control-character-p character))) text))
-      (let* ((query (client-conn-picker-query conn))
-             (remaining (- nerimux/picker::+picker-regex-query-length-limit+
-                           (length query))))
-        (when (plusp remaining)
-          (setf (client-conn-picker-query conn)
-                (concatenate
-                 'string
-                 query
-                 (subseq text 0 (min remaining (length text))))
-                (client-conn-picker-index conn) 0)
-          (%mark-dirty))
-        t))))
+    (when (and text
+               (every (lambda (character)
+                        (not (nerimux/text:control-character-p character)))
+                      text))
+      (%set-client-picker-query
+       conn
+       (concatenate 'string (client-conn-picker-query conn) text)))))
 
 (defun %move-client-picker-index (conn delta)
   (let ((items (%client-picker-visible-items conn)))

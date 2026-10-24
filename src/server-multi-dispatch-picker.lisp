@@ -38,8 +38,7 @@
    second scan here would cancel that one's callbacks and rebuild the item
    list under the query the user is typing into."
   (when (%open-client-picker conn)
-    (setf (client-conn-picker-query conn) (or query ""))
-    (%mark-dirty)
+    (%set-client-picker-query conn (or query ""))
     conn))
 
 (defun %client-tree-object (conn)
@@ -317,9 +316,8 @@
               :pane-key (%client-picker-return-pane-key
                          (client-conn-focus conn))))
   (%set-client-modal conn :picker)
-  (setf (client-conn-picker-query conn) ""
-        (client-conn-picker-regex-p conn) nil
-        (client-conn-picker-index conn) 0
+  (%set-client-picker-query conn "")
+  (setf (client-conn-picker-regex-p conn) nil
         (client-conn-picker-mode conn) mode
         (client-conn-picker-repository conn) repository
         (client-conn-picker-items conn)
@@ -355,9 +353,8 @@
              (%client-notify conn "picker return pane is no longer available"))))
         (%set-client-view conn (getf target :view)))))
   (%set-client-modal conn nil)
-  (setf (client-conn-picker-query conn) ""
-        (client-conn-picker-regex-p conn) nil
-        (client-conn-picker-index conn) 0
+  (%set-client-picker-query conn "")
+  (setf (client-conn-picker-regex-p conn) nil
         (client-conn-picker-mode conn) :global
         (client-conn-picker-repository conn) nil)
   (%mark-dirty)
