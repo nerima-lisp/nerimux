@@ -63,7 +63,14 @@ tests/live/harness keys L1 n
 # This navigation action exercises L2-04 while the same L1 session remains open.
 tests/live/harness snap L1 L2-04
 tests/live/harness keys L1 C-q d
-tests/live/harness wait-for L1 'nerimux: detached' 10
+detach_deadline=$((SECONDS + 10))
+until grep -Fq 'nerimux: detached' "$lane_root/evidence/attach-stderr.log"; do
+  if (( SECONDS >= detach_deadline )); then
+    printf 'timed out waiting for detach\n' >&2
+    exit 1
+  fi
+  sleep 0.1
+done
 LIVE_FIXTURE_ROOT="$fixture_parent/F-bare" \
   tests/live/harness start L1 /path/to/nerimux
 tests/live/harness wait-for L1 'Repositories' 30
