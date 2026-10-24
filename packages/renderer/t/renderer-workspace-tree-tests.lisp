@@ -341,18 +341,12 @@
              nil 24 80 :scanning-p t :scan-progress 12)))
       (expect (search "scanning workspaces... 12 repositories" frame))))
 
-  (it "keeps the plain ellipsis wording when scan-progress is nil"
-    (let ((frame
-            (nerimux/renderer:render-workspace-overview-to-string
-             nil 24 80 :scanning-p t :scan-progress nil)))
-      (expect (search "scanning workspaces..." frame))
-      (expect (not (search "repositories" frame)))))
-
   (it "shows zero before the first progress callback"
     (let ((frame
             (nerimux/renderer:render-workspace-overview-to-string
              nil 24 80 :scanning-p t :scan-progress nil)))
       (expect (search "scanning workspaces... 0 repositories" frame))))
+
   (it "counts a single repository in the singular"
     (let ((frame
             (nerimux/renderer:render-workspace-overview-to-string
