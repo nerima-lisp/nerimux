@@ -25,6 +25,7 @@
                (:file "vcs-fetch")
                (:file "vcs-inspect")
                (:file "vcs-operations")
+               (:file "vcs-clone")
                (:file "vcs-git-write"))
   :in-order-to ((test-op (test-op "nerimux-vcs/test"))))
 
@@ -54,7 +55,9 @@
                (:file "vcs-operations-tests")
                (:file "vcs-command-tests")
                (:file "vcs-async-operations-tests")
-               (:file "vcs-inspect-tests"))
+               (:file "vcs-inspect-tests")
+               (:file "vcs-clone-tests")
+               (:file "vcs-clone-path-boundary-tests"))
   :perform (test-op (op c)
              (declare (ignore op c))
              (let ((*print-circle* t)

@@ -20,6 +20,13 @@
    #:resolve-directory-organizations
    #:merge-workspace-organizations
    #:ghq-root-directory
+   #:clone-bare-repository
+   #:clone-bare-repository-async
+   #:clone-result
+   #:clone-result-specification
+   #:clone-result-local-path
+   #:clone-error
+   #:clone-error-reason
    #:create-worktree
    #:delete-worktree
    #:create-worktree-async
