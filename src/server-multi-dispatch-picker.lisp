@@ -332,7 +332,7 @@
   (%mark-dirty)
   conn)
 
-(defun %close-client-picker (conn &key keep-view session)
+(defun %close-client-picker (conn session &key keep-view)
   "Close the picker and restore its saved view and pane on cancellation."
   (when (and (client-conn-focus conn)
              (%reject-pending-worktree-attachment conn))

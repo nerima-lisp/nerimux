@@ -83,7 +83,12 @@
         (expect (null (nerimux::client-conn-tree-filter conn)))
         (nerimux::%handle-multi-key-message
          s conn (cl-codec-kit:string-to-octets "z" :encoding :utf-8))
-        (expect (string= "z" (nerimux::client-conn-tree-filter conn))))))
+        (nerimux::%handle-multi-key-message s conn #(13))
+        (expect (null (nerimux::client-conn-modal conn)))
+        (expect (string= "z" (nerimux::client-conn-tree-filter conn)))
+        (let ((nerimux::*client-wire-key-p* t))
+          (nerimux::%handle-multi-key-message s conn #(27)))
+        (expect (null (nerimux::client-conn-tree-filter conn))))))
 
   (it "overview-tree-filter-mode-absorbs-np-as-query-text-not-navigation"
     (with-fake-session (s)
@@ -951,7 +956,7 @@
                 (lambda (&rest arguments)
                   (push arguments calls)))
                (nerimux::%close-client-picker
-                (lambda (client &key session) (declare (ignore client session)) (push :close calls))))
+                (lambda (client session &key keep-view) (declare (ignore client session keep-view)) (push :close calls))))
             (expect (nerimux::%handle-client-ui-command
                      s conn :workspace-prune "unexpected" nil))
             (expect (null calls))

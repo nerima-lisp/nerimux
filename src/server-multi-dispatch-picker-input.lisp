@@ -21,7 +21,9 @@
 
 (defun %set-client-picker-query (conn value)
   (when (stringp value)
-    (setf (client-conn-picker-query conn) value
+    (setf (client-conn-picker-query conn)
+          (subseq value 0 (min (length value)
+                              nerimux/picker::+picker-regex-query-length-limit+))
           (client-conn-picker-index conn) 0)
     (%mark-dirty)
     t))
@@ -55,11 +57,18 @@
                  (cl-codec-kit:octets-to-string payload :encoding :utf-8)
                (cl-codec-kit:decode-error () nil))))))
     (when (and text (every (lambda (character) (>= (char-code character) 32)) text))
-      (setf (client-conn-picker-query conn)
-            (concatenate 'string (client-conn-picker-query conn) text)
-            (client-conn-picker-index conn) 0)
-      (%mark-dirty)
-      t)))
+      (let* ((query (client-conn-picker-query conn))
+             (remaining (- nerimux/picker::+picker-regex-query-length-limit+
+                           (length query))))
+        (when (plusp remaining)
+          (setf (client-conn-picker-query conn)
+                (concatenate
+                 'string
+                 query
+                 (subseq text 0 (min remaining (length text))))
+                (client-conn-picker-index conn) 0)
+          (%mark-dirty))
+        t))))
 
 (defun %move-client-picker-index (conn delta)
   (let ((items (%client-picker-visible-items conn)))
@@ -75,7 +84,7 @@
      (%select-client-picker-item session conn))
     ((equalp payload #(27))
      (%client-esc-swallow-start conn)
-     (%close-client-picker conn :session session)
+     (%close-client-picker conn session)
      t)
     ((equalp payload #(18)) (%set-client-picker-regex conn nil nil))
     ((equalp payload #(16)) (%move-client-picker-index conn -1))

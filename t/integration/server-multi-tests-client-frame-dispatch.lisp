@@ -51,7 +51,7 @@
                            (declare (ignore client))
                            (push :open calls)))
                        (nerimux::%close-client-picker
-                         (lambda (client &key session) (declare (ignore client session)) (push :close calls)))
+                         (lambda (client session &key keep-view) (declare (ignore client session keep-view)) (push :close calls)))
                        (nerimux::%transition-client-ui-mode
                        (lambda (client mode)
                            (declare (ignore client))

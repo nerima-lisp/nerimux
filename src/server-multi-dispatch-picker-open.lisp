@@ -130,12 +130,12 @@
         (%set-client-selected-worktree conn worktree)
         (%set-client-focus conn pane session)
         (worktree-resume worktree pane)
-        (%close-client-picker conn :keep-view t)
+        (%close-client-picker conn session :keep-view t)
         (%mark-dirty)
         t)
       (worktree
        (when (%open-client-worktree-pane session conn worktree)
-         (%close-client-picker conn :keep-view t)
+         (%close-client-picker conn session :keep-view t)
          t))
       ((typep object 'nerimux/workspace-model:repository)
        ;; PC-06: a repository row names a place in the tree, not a shell to
@@ -146,11 +146,11 @@
        (let ((main (nerimux/workspace-model:repository-main-worktree object)))
          (when main
            (%set-client-selected-tree-object conn main)))
-       (%close-client-picker conn)
+       (%close-client-picker conn session)
        t)
       ((typep object 'nerimux/workspace-model:organization)
        (%set-client-selected-tree-object conn object)
        (%client-tree-expand-selected conn)
-       (%close-client-picker conn)
+       (%close-client-picker conn session)
        t)
       (t nil))))

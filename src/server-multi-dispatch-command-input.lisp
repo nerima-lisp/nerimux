@@ -663,6 +663,8 @@
             (%handle-multi-key-message session conn payload))
           (setf (gethash conn *client-meta-pending*) :second))
          ((%client-ui-keys-p conn)
+          (when (client-conn-tree-filter conn)
+            (%client-step-back session conn))
           (setf (gethash conn *client-meta-pending*) :second))
          ((member modal +keyboard-owning-modals+ :test #'eq)
           (let ((*client-meta-replaying* t))

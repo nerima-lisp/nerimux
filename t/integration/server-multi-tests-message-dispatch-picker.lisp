@@ -18,7 +18,7 @@
           (setf (nerimux::client-conn-focus conn) pane
                 (nerimux::client-conn-modal conn) :picker
                 (nerimux::client-conn-view conn) :pane)
-          (expect (null (nerimux::%close-client-picker conn)))
+          (expect (null (nerimux::%close-client-picker conn s)))
           (expect (eq :picker (nerimux::client-conn-modal conn)))
           (expect (eq :pane (nerimux::client-conn-view conn)))
           (expect (null (nerimux::%open-client-worktree-pane s conn nil)))
@@ -33,7 +33,7 @@
         (dolist (view '(:repolist :status))
           (setf (nerimux::client-conn-view conn) view
                 (nerimux::client-conn-modal conn) :picker)
-          (expect (nerimux::%close-client-picker conn))
+          (expect (nerimux::%close-client-picker conn s))
           (expect (null (nerimux::client-conn-modal conn)))
           (expect (eq view (nerimux::client-conn-view conn)))))))
   (it "prefix-c-p-cancels-to-original-pane-without-shell-input"
@@ -385,6 +385,27 @@
         (expect (null (nerimux::%handle-client-picker-key-payload s conn #(16))))
         (expect (null (nerimux::%handle-client-picker-key-payload s conn #(14))))
         (expect (nerimux::%handle-client-picker-key-payload s conn #(127))))))
+  (it "picker-query-inputs-are-capped-at-200-characters"
+    (with-fake-session (s)
+      (declare (ignore s))
+      (let* ((conn (%make-test-conn))
+             (query (make-string 205 :initial-element #\x)))
+        (expect (nerimux::%set-client-picker-query conn ""))
+        (expect (nerimux::%append-client-picker-query-octets conn query))
+        (expect (= 200 (length (nerimux::client-conn-picker-query conn))))
+        (expect (string= (subseq query 0 200)
+                        (nerimux::client-conn-picker-query conn)))
+        (expect (nerimux::%set-client-picker-query conn query))
+        (expect (= 200 (length (nerimux::client-conn-picker-query conn))))
+        (expect (string= (subseq query 0 200)
+                        (nerimux::client-conn-picker-query conn))))))
+  (it "picker-close-requires-session"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn)))
+        (expect (signals program-error
+                  (funcall (symbol-function (quote nerimux::%close-client-picker))
+                           conn)))
+        (expect (nerimux::%close-client-picker conn s)))))
 
   (it "picker-visible-items-deduplicate-worktrees-and-clamp-selection"
     (with-fake-session (s)
