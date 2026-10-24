@@ -235,7 +235,7 @@ once reads it exactly once and passes the same reading down (see
              :dirty-p (not (null entries))
              :conflict-p (not (null (some #'%status-entry-conflict-p entries)))
              :ahead (or (vcs-kit:vcs-status-snapshot-ahead snapshot) 0)
-             :behind (or (vcs-kit:vcs-status-snapshot-behind snapshot) 0)
+             :behind (abs (or (vcs-kit:vcs-status-snapshot-behind snapshot) 0))
              :additions additions
              :deletions deletions
              :changed-files (%worktree-status-changed-files entries)

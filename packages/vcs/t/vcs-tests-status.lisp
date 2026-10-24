@@ -227,6 +227,29 @@
                           (nerimux/workspace-model:worktree-additions worktree)))
                (expect (= 4
                           (nerimux/workspace-model:worktree-deletions worktree))))))
+          (it
+ "%read-worktree-status-at applies a negative behind snapshot as a positive worktree-behind count"
+ (let* ((path (namestring (host-kit:temporary-directory)))
+        (repository
+          (nerimux/workspace-model:make-repository
+           :specification "workspace-owner/project"
+           :local-path path))
+        (worktree
+          (nerimux/workspace-model:make-worktree
+           :repository repository :path path)))
+   (nerimux/workspace-model:repository-add-worktree repository worktree)
+   (with-stubbed-fdefinition
+       ((nerimux/vcs::%git-status-snapshot
+         (lambda (&rest arguments)
+           (declare (ignore arguments))
+           (vcs-kit::%make-vcs-status-snapshot
+            :branch-head "wt-head" :ahead 1 :behind -1 :entries nil))))
+     (nerimux/vcs::%apply-worktree-status
+      repository
+      (nerimux/vcs::%read-worktree-status-at
+       path nil path :stashes (cons :ready nil)))
+     (expect (= 1 (nerimux/workspace-model:worktree-ahead worktree)))
+     (expect (= 1 (nerimux/workspace-model:worktree-behind worktree))))))
 )
 
 (describe "refresh-workspace-organizations-async per-repository error channel (BUG-2)"
