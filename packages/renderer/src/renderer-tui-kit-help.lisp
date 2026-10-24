@@ -62,6 +62,8 @@
                            ("z" . "zoom")
                            ("h/j/k/l" . "focus")
                            ("n/p" . "cycle window")
+                           (";" . "previous pane")
+                           ("L" . "previous window")
                            ("t" . "new shell window")
                            ("w" . "repolist")
                            ("K" . "stop workspace agent")

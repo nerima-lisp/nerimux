@@ -17,6 +17,21 @@
   (when (and window (window-zoom-p window))
     (window-zoom-toggle window)))
 
+(defun %window-history-panes (window)
+  (let* ((tree (if (and (window-zoom-p window) (window-zoom-tree window))
+                   (window-zoom-tree window)
+                   (window-tree window)))
+         (panes (if tree
+                    (nerimux/layout:layout-leaves tree)
+                    (window-panes window))))
+    (remove-if-not (lambda (pane) (eq (pane-window pane) window)) panes)))
+(defun %workspace-prefix-unzoom-history-window (window)
+  (when (and window (window-zoom-p window))
+    (%workspace-prefix-unzoom window)
+    (dolist (pane (copy-list (window-panes window)))
+      (when (null (pane-window pane))
+        (window-remove-pane window pane)))))
+
 (defun %workspace-prefix-split (session conn orient)
   "C-q - / C-q | : split the focused pane's window along ORIENT (R5.1/R5.3)."
   (multiple-value-bind (pane window worktree)
@@ -214,6 +229,76 @@
                (%remember-worktree-pane worktree (window-active-pane next-window))
                (%mark-dirty)))))))
   nil)
+(defun %workspace-prefix-previous-pane (session conn)
+  (let* ((reference (client-conn-previous-pane conn))
+         (candidate (and reference (sb-ext:weak-pointer-value reference)))
+         (window (and candidate (pane-window candidate)))
+         (pane (and window
+                    (member window (session-windows session) :test #'eq)
+                    (find candidate (%window-history-panes window) :test #'eq))))
+    (cond
+      ((null pane)
+       (setf (client-conn-previous-pane conn) nil)
+       (%client-notify conn "no previous pane"))
+      ((%reject-pending-worktree-attachment
+        conn :pane pane :window window)
+       nil)
+      (t
+       (let ((worktree (pane-worktree pane)))
+         (multiple-value-bind (current-pane current-window)
+             (%workspace-prefix-context session conn)
+           (declare (ignore current-pane))
+           (%workspace-prefix-unzoom-history-window current-window)
+           (unless (eq current-window window)
+             (%workspace-prefix-unzoom-history-window window)))
+         (session-select-window session window)
+         (window-select-pane window pane)
+         (%set-client-focus conn pane session)
+         (%remember-worktree-pane worktree pane)
+         (%mark-dirty)))))
+  nil)
+(defun %workspace-prefix-previous-window (session conn)
+  (let* ((reference (client-conn-previous-window conn))
+         (window (and reference (sb-ext:weak-pointer-value reference))))
+    (cond
+      ((null window)
+       (setf (client-conn-previous-window conn) nil
+             (client-conn-previous-window-pane conn) nil)
+       (%client-notify conn "no previous window"))
+      ((not (member window (session-windows session) :test #'eq))
+       (setf (client-conn-previous-window conn) nil
+             (client-conn-previous-window-pane conn) nil)
+       (%client-notify conn "no previous window"))
+      (t
+       (let* ((pane-reference (client-conn-previous-window-pane conn))
+              (saved-pane (and pane-reference
+                               (sb-ext:weak-pointer-value pane-reference)))
+              (panes (%window-history-panes window))
+              (active (window-active-pane window))
+              (pane (or (and saved-pane (find saved-pane panes :test #'eq))
+                        (and active (find active panes :test #'eq))
+                        (first panes))))
+         (cond
+           ((null pane)
+            (setf (client-conn-previous-window conn) nil
+                  (client-conn-previous-window-pane conn) nil)
+            (%client-notify conn "no previous window"))
+           ((%reject-pending-worktree-attachment
+             conn :pane pane :window window)
+            nil)
+           (t
+            (multiple-value-bind (current-pane current-window)
+                (%workspace-prefix-context session conn)
+              (declare (ignore current-pane))
+              (%workspace-prefix-unzoom-history-window current-window)
+              (unless (eq current-window window)
+                (%workspace-prefix-unzoom-history-window window)))
+            (window-select-pane window pane)
+            (session-select-window session window)
+            (%set-client-focus conn pane session)
+            (%remember-worktree-pane (pane-worktree pane) pane)
+            (%mark-dirty)))))))
+  nil)
 
 (defun %workspace-prefix-open-scrollback (session conn)
   "C-q [ (FR-008): enter scrollback on the focused pane -- the new entry
@@ -284,6 +369,8 @@
   (#\l (%workspace-prefix-move-focus session conn :right))
   (#\n (%workspace-prefix-cycle-window session conn 1))
   (#\p (%workspace-prefix-cycle-window session conn -1))
+  (#\; (%workspace-prefix-previous-pane session conn))
+  (#\L (%workspace-prefix-previous-window session conn))
   (16 (%open-client-picker conn) nil)
   (#\w (%workspace-prefix-open-overview session conn))
   (#\t (%client-open-selected-worktree-command session conn nil))
