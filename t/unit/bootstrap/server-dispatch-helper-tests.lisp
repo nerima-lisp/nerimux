@@ -1201,3 +1201,37 @@
                        (nerimux::%worktree-display-path "/elsewhere/x")))))
 
 )
+
+(describe "server-dispatch-helper-open-pane-regression-suite"
+  (it "opening-a-live-shell-remembers-it-ahead-of-an-existing-agent"
+    (with-fake-session (session :nwindows 2)
+      (let* ((connection (nerimux::%make-client-conn))
+             (windows (nerimux/session:session-windows session))
+             (agent-pane
+               (nerimux/window:window-active-pane (first windows)))
+             (shell-window (second windows))
+             (shell-pane (nerimux/window:window-active-pane shell-window))
+             (worktree
+               (nerimux/workspace-model:make-worktree
+                :id "last-opened-pane"
+                :path "/tmp/last-opened-pane"))
+             (nerimux::*workspace-worktree-last-pane*
+               (make-hash-table :test #'equal)))
+        (setf (nerimux/pane:pane-agent-kind agent-pane) :codex)
+        (nerimux/pane:worktree-add-pane worktree agent-pane)
+        (with-stubbed-fdefinition
+            ((nerimux::%workspace-new-window
+              (lambda (&rest arguments)
+                (declare (ignore arguments))
+                shell-window))
+             (nerimux::start-reader-thread
+              (lambda (pane) pane))
+             (nerimux/pane:pane-live-p
+              (lambda (pane) (declare (ignore pane)) t)))
+          (expect (nerimux::%open-client-worktree-pane
+                   session connection worktree))
+          (expect (eq shell-pane
+                      (nerimux::%worktree-remembered-pane worktree)))
+          (expect (eq shell-pane
+                      (nerimux::%worktree-enter-pane worktree)))))))
+)

@@ -58,7 +58,9 @@
                   (start-reader-thread pane)
                   (%set-client-selected-worktree conn worktree)
                   (%set-client-focus conn pane session)
-                  (setf (worktree-completed-p worktree) nil)
+                  (progn
+                    (%remember-worktree-pane worktree pane)
+                    (setf (worktree-completed-p worktree) nil))
                   (%mark-dirty)
                   (values t t)))))
          (error (condition)
@@ -68,10 +70,12 @@
            nil))))))
 
 (defun %client-picker-item-pane (session item worktree)
-  "The pane a picker row opens: the row's own pane when it names one and that
-   pane is still in SESSION, otherwise whatever pane the worktree has."
+  "The pane a picker row opens: its pane when it still belongs to WORKTREE
+   and remains in SESSION, otherwise a pane already owned by WORKTREE."
   (let ((pane (and item (nerimux/picker:picker-item-pane item))))
-    (if (and pane (find pane (all-panes session) :test #'eq))
+    (if (and pane
+             (eq (nerimux/pane:pane-worktree pane) worktree)
+             (find pane (all-panes session) :test #'eq))
         pane
         (%client-worktree-pane session worktree))))
 

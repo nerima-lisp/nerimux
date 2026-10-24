@@ -99,7 +99,11 @@
   (when worktree
     (let ((remembered (%worktree-remembered-pane worktree))
           (panes (worktree-panes worktree)))
-      (or (and remembered (pane-live-p remembered) remembered)
+      (or (and remembered
+               (pane-live-p remembered)
+               (not (pane-process-exited-p remembered))
+               (not (pane-startup-failed-p remembered))
+               remembered)
           (and (worktree-running-agent-p worktree)
                (nerimux/workspace-model:worktree-agent-pane worktree))
           (find-if (lambda (candidate)

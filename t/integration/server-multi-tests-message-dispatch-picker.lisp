@@ -504,3 +504,55 @@
 
 
 )
+
+(describe "server-multi-picker-pane-ownership-regression-suite"
+  (it "a-stale-pane-row-does-not-focus-a-pane-from-another-worktree"
+    (with-fake-session (session :nwindows 2)
+      (let* ((organization
+               (nerimux/workspace-model:make-organization
+                :id "picker-pane-owner-org" :host "example.test" :name "team"))
+             (repository
+               (nerimux/workspace-model:make-repository
+                :id "picker-pane-owner-repo" :organization organization
+                :specification "example.test/team/repo"))
+             (alpha
+               (nerimux/workspace-model:make-worktree
+                :id "picker-pane-owner-alpha" :repository repository
+                :path "/tmp/picker-pane-owner/alpha" :branch "feature/alpha"))
+             (beta
+               (nerimux/workspace-model:make-worktree
+                :id "picker-pane-owner-beta" :repository repository
+                :path "/tmp/picker-pane-owner/beta" :branch "feature/beta"))
+             (windows (nerimux/session:session-windows session))
+             (stale-pane
+               (nerimux/window:window-active-pane (first windows)))
+             (beta-window (second windows))
+             (beta-pane (nerimux/window:window-active-pane beta-window))
+             (connection (nerimux::%make-client-conn))
+             (items nil))
+        (nerimux/workspace-model:organization-add-repository
+         organization repository)
+        (nerimux/workspace-model:repository-add-worktree repository alpha)
+        (nerimux/workspace-model:repository-add-worktree repository beta)
+        (setf (nerimux/pane:pane-title stale-pane) "stale-shell")
+        (nerimux/pane:worktree-add-pane beta stale-pane)
+        (setf (nerimux/pane:pane-worktree stale-pane) alpha
+              (nerimux/pane:pane-title beta-pane) "beta-shell")
+        (nerimux/pane:worktree-add-pane beta beta-pane)
+        (setf items
+              (nerimux/picker:build-global-picker-items (list organization))
+              (nerimux::client-conn-picker-items connection) items
+              (nerimux::client-conn-picker-query connection) "stale-shell"
+              (nerimux::client-conn-picker-index connection) 0)
+        (nerimux::%set-client-modal connection :picker)
+        (let ((visible (nerimux::%client-picker-visible-items connection)))
+          (expect (= 1 (length visible)))
+          (expect (eq beta
+                      (nerimux/picker:picker-item-worktree (first visible))))
+          (expect (eq stale-pane
+                      (nerimux/picker:picker-item-pane (first visible)))))
+        (expect (nerimux::%select-client-picker-item session connection))
+        (expect (eq beta-pane (nerimux::client-conn-focus connection)))
+        (expect (eq beta (nerimux::client-conn-selected-worktree connection)))
+        (expect (eq beta-pane
+                    (nerimux/window:window-active-pane beta-window)))))))
