@@ -5,7 +5,6 @@
   (it "offers every command name for an empty buffer"
     (expect (equal '("wt-create" "wt-delete" "wt-lock" "wt-unlock"
                      "wt-prune" "wt-prune-confirm" "wt-complete"
-                     "workspace-complete" "workspace-prune" "workspace-prune-all"
                      "overview" "detail" "refresh" "kill")
                    (nerimux/renderer::%workspace-command-completions ""))))
 
@@ -14,15 +13,16 @@
                      "wt-prune" "wt-prune-confirm" "wt-complete")
                    (nerimux/renderer::%workspace-command-completions "wt-"))))
 
-  (it "offers the workspace completion command by its unique prefix"
-    (expect (equal '("workspace-complete")
-                   (nerimux/renderer::%workspace-command-completions "workspace-c"))))
+  (it "does not complete retired workspace command aliases"
+    (dolist (prefix '("workspace-c" "workspace-complete"
+                      "workspace-p" "workspace-prune" "workspace-prune-all"))
+      (expect (null (nerimux/renderer::%workspace-command-completions prefix)))))
 
-  (it "offers lifecycle prune commands separately from Git metadata prune"
-    (expect (equal '("workspace-prune" "workspace-prune-all")
-                   (nerimux/renderer::%workspace-command-completions "workspace-p"))))
+  (it "completes canonical prune commands by their unique prefix"
+    (expect (equal '("wt-prune" "wt-prune-confirm")
+                   (nerimux/renderer::%workspace-command-completions "wt-p"))))
 
-  (it "offers the workspace completion alias by its unique prefix"
+  (it "offers wt-complete by its unique prefix"
     (expect (equal '("wt-complete")
                    (nerimux/renderer::%workspace-command-completions "wt-comp"))))
 

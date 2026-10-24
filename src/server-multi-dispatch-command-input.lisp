@@ -203,12 +203,19 @@
                   ((%client-command-prompt-shortcut session conn name))
                   ((and (keywordp cmd)
                         (not (member cmd +client-command-allow-list+
-                                     :test #'eq)))
-                   (%client-notify
-                    conn
-                    (format nil
-                            "command is not available from the : prompt: ~A"
-                            name))
+                                     :test (function eq))))
+                   (if (member cmd
+                               (list :workspace-complete :workspace-prune
+                                     :workspace-prune-all)
+                               :test (function eq))
+                       (let ((*client-command-line-p* t))
+                         (%handle-client-ui-command session conn cmd nil
+                                                    (rest tokens)))
+                       (%client-notify
+                        conn
+                        (format nil
+                                "command is not available from the : prompt: ~A"
+                                name)))
                    (%client-restore-command-view conn)
                    (%set-client-modal conn nil))
                   (t

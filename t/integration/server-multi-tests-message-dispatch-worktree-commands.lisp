@@ -105,28 +105,27 @@
                                s conn :kill nil '("--force")))))
           (expect (null drops))))))
 
-  (it "colon-workspace-prune-asks-before-it-prunes"
+  (it "colon-workspace-prune-guides-to-w-p"
     (with-fake-session (s)
-      (let* ((repository
-               (nerimux/workspace-model:make-repository :id "repo"))
-             (worktree
-               (nerimux/workspace-model:make-worktree
-                :id "feature" :repository repository :path "/tmp/feature"))
-             (conn (%make-test-conn))
-             (nerimux::*clients* (list conn))
-             (pruned nil))
-        (nerimux::%set-client-selected-tree-object conn worktree)
+      (let ((conn (%make-test-conn))
+            (calls nil)
+            (notifications nil))
         (with-stubbed-fdefinition
-            ((nerimux::%client-prune-workspaces
-              (lambda (client &key all)
-                (push (list client all) pruned)
-                t)))
+            ((nerimux::%client-notify
+              (lambda (client message)
+                (declare (ignore client))
+                (push message notifications)))
+             (nerimux::%client-prune-workspaces
+              (lambda (&rest arguments)
+                (push arguments calls)))
+             (nerimux::%confirm-client-prune-workspaces
+              (lambda (&rest arguments)
+                (push arguments calls))))
           (expect (eq t (nerimux::%handle-client-ui-command
                          s conn :workspace-prune nil nil)))
-          (expect (eq :confirm (nerimux::client-conn-modal conn)))
-          (expect (null pruned))
-          (nerimux::%handle-multi-key-message s conn #(121))
-          (expect (equal (list (list conn nil)) pruned))
+          (expect (equal (list "deprecated command: workspace-prune; use w p")
+                         notifications))
+          (expect (null calls))
           (expect (null (nerimux::client-conn-modal conn)))))))
 
   (it "colon-wt-complete-reports-its-outcome-and-toggles-back"
@@ -858,6 +857,46 @@
           (nerimux::%handle-multi-key-message s conn #(121))
           (expect (equal (list (list conn nil)) prune-calls))
           (expect (null (nerimux::client-conn-modal conn)))))))
+  (it "the-w-transient-confirms-all-before-pruning"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/workspace-model:make-organization
+                :id "org-prune-all" :host "github.com" :name "team-prune-all"))
+             (repository
+               (nerimux/workspace-model:make-repository
+                :id "repo-prune-all" :organization organization
+                :specification "github.com/team-prune-all/repo-prune-all"))
+             (primary
+               (nerimux/workspace-model:make-worktree
+                :id "wt-primary" :repository repository
+                :path "/tmp/wt-primary" :branch "main"))
+             (eligible
+               (nerimux/workspace-model:make-worktree
+                :id "wt-eligible" :repository repository
+                :path "/tmp/wt-eligible" :branch "feature/eligible"
+                :completed-p t))
+             (conn (%make-test-conn))
+             (nerimux::*clients* (list conn))
+             (nerimux/vcs::*workspace-organizations* (list organization))
+             (prune-calls nil))
+        (nerimux/workspace-model:organization-add-repository
+         organization repository)
+        (nerimux/workspace-model:repository-add-worktree repository primary)
+        (nerimux/workspace-model:repository-add-worktree repository eligible)
+        (with-stubbed-fdefinition
+            ((nerimux::%client-prune-workspaces
+               (lambda (received-conn &key all)
+                 (push (list received-conn all) prune-calls)
+                 t)))
+          (setf (nerimux::client-conn-view conn) :repolist)
+          (nerimux::%handle-multi-key-message
+           s conn (cl-codec-kit:string-to-octets "w" :encoding :utf-8))
+          (nerimux::%handle-multi-key-message s conn #(80))
+          (expect (eq :confirm (nerimux::client-conn-modal conn)))
+          (expect (null prune-calls))
+          (nerimux::%handle-multi-key-message s conn #(121))
+          (expect (equal (list (list conn t)) prune-calls))
+          (expect (null (nerimux::client-conn-modal conn)))))))
 
   (it "every-transient-call-handler-accepts-the-arguments-the-dispatcher-passes"
     (with-fake-session (s)
@@ -1046,8 +1085,7 @@
                (lambda (received-conn &key all)
                  (push (list received-conn all) prunes)
                  t)))
-          (expect (nerimux::%handle-client-ui-command
-                   s conn :workspace-prune-all nil nil))
+          (expect (nerimux::%confirm-client-prune-workspaces conn t))
           (expect (null (nerimux::client-conn-modal conn)))
           (expect (null prunes))
           (expect (string= "nothing to prune"
@@ -1058,8 +1096,7 @@
                    :path "/tmp/wt-done" :branch "feature/done"
                    :completed-p t)))
             (nerimux/workspace-model:repository-add-worktree repository eligible)
-            (expect (nerimux::%handle-client-ui-command
-                     s conn :workspace-prune-all nil nil))
+            (expect (nerimux::%confirm-client-prune-workspaces conn t))
             (expect (eq :confirm (nerimux::client-conn-modal conn)))
             (expect (equal (cons "workspaces" "1")
                            (assoc "workspaces"
@@ -1110,8 +1147,7 @@
           ;; %WORKSPACE-PRUNE-ELIGIBLE-WORKTREES used to count both -- only
           ;; classification, not %WORKSPACE-PRUNE-EXCLUSION's :attached check
           ;; -- so `w P' promised a prune the job was never going to run.
-          (expect (nerimux::%handle-client-ui-command
-                   s conn :workspace-prune-all nil nil))
+          (expect (nerimux::%confirm-client-prune-workspaces conn t))
           (expect (eq :confirm (nerimux::client-conn-modal conn)))
           (expect (equal (cons "workspaces" "1")
                          (assoc "workspaces"
@@ -1143,8 +1179,7 @@
         (nerimux/workspace-model:organization-add-repository organization repository)
         (nerimux/workspace-model:repository-add-worktree repository primary)
         (nerimux/workspace-model:repository-add-worktree repository dirty)
-        (expect (nerimux::%handle-client-ui-command
-                 s conn :workspace-prune-all nil nil))
+        (expect (nerimux::%confirm-client-prune-workspaces conn t))
         (expect (eq :confirm (nerimux::client-conn-modal conn)))
         (let ((field
                 (assoc "these have uncommitted changes and will be deleted with them"
@@ -1179,8 +1214,7 @@
         (nerimux/workspace-model:organization-add-repository organization repository)
         (nerimux/workspace-model:repository-add-worktree repository primary)
         (nerimux/workspace-model:repository-add-worktree repository clean)
-        (expect (nerimux::%handle-client-ui-command
-                 s conn :workspace-prune-all nil nil))
+        (expect (nerimux::%confirm-client-prune-workspaces conn t))
         (expect (eq :confirm (nerimux::client-conn-modal conn)))
         (expect
          (null

@@ -117,10 +117,17 @@
         (expect (eq :pane (nerimux::client-conn-view conn)))
         (expect (null (nerimux::client-conn-modal conn))))))
 
-  (it "colon-command-line-allows-user-commands-and-rejects-internal-commands"
+  (it "colon-command-line-routes-user-commands-and-guides-retired-aliases"
     (with-fake-session (s)
       (let* ((conn (%make-test-conn))
-             (nerimux::*clients* (list conn)))
+             (nerimux::*clients* (list conn))
+             (nerimux::+client-command-allow-list+
+               (remove-if
+                (lambda (command)
+                  (member command
+                          (list :workspace-complete :workspace-prune :workspace-prune-all)
+                          :test (function eq)))
+                nerimux::+client-command-allow-list+)))
         (setf (nerimux::client-conn-view conn) :repolist)
         (flet ((submit (command)
                  (nerimux::%handle-multi-key-message s conn #(58))
@@ -132,6 +139,19 @@
           (expect (search "not available from the : prompt: tree-up"
                           (first (nerimux::client-conn-message-log conn))))
           (expect (eq :repolist (nerimux::client-conn-view conn)))
+          (dolist (case
+                   (list (list "workspace-complete"
+                               "deprecated command: workspace-complete; use wt-complete")
+                         (list "workspace-prune"
+                               "deprecated command: workspace-prune; use w p")
+                         (list "workspace-prune-all"
+                               "deprecated command: workspace-prune-all; use w P")))
+            (setf (nerimux::client-conn-message-log conn) nil)
+            (submit (first case))
+            (expect (string= (second case)
+                             (first (nerimux::client-conn-message-log conn))))
+            (expect (eq :repolist (nerimux::client-conn-view conn)))
+            (expect (null (nerimux::client-conn-modal conn))))
           (setf (nerimux::client-conn-message-log conn) nil)
           (submit "overview")
           (expect (string= "view: overview"
@@ -191,12 +211,17 @@
           (expect (string= "refresh"
                            (nerimux::client-conn-command-buffer conn)))))))
 
-  (it "workspace-command-completions-match-the-client-allow-list"
+  (it "workspace-command-completions-omit-retired-aliases"
     (expect
      (equal
       (mapcar (lambda (command)
                 (string-downcase (symbol-name command)))
-              nerimux::+client-command-allow-list+)
+              (remove-if
+               (lambda (command)
+                 (member command
+                         '(:workspace-complete :workspace-prune :workspace-prune-all)
+                         :test #'eq))
+               nerimux::+client-command-allow-list+))
       nerimux/renderer::+workspace-command-names+)))
 
   (it "command-submit-contract-covers-empty-unknown-and-failure"

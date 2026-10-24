@@ -411,16 +411,21 @@
     (%check-assignment-real-git-guard :running-agent)))
 
 (describe "worktree lifecycle acceptance"
-  (it "rejects completion arguments instead of completing the selected workspace"
+  (it "rejects wt-complete arguments and guides retired aliases"
     (%with-r5-fixture (session conn worktree window)
       (declare (ignore window))
-      (dolist (command '("workspace-complete other" "wt-complete -t other"
-                        "workspace-complete -t" "wt-complete --target"))
-        (nerimux::%client-enter-command-mode conn command)
+      (dolist (case
+               '(("workspace-complete other"
+                  . "deprecated command: workspace-complete; use wt-complete")
+                 ("wt-complete -t other" . "wt-complete takes no arguments")
+                 ("workspace-complete -t"
+                  . "deprecated command: workspace-complete; use wt-complete")
+                 ("wt-complete --target" . "wt-complete takes no arguments")))
+        (nerimux::%client-enter-command-mode conn (car case))
         (nerimux::%submit-client-command session conn)
         (expect (not (nerimux/workspace-model:worktree-completed-p worktree)))
         (expect (not (eq :confirm (nerimux::client-conn-modal conn))))
-        (expect (string= "workspace-complete takes no arguments"
+        (expect (string= (cdr case)
                          (first (nerimux::client-conn-message-log conn)))))))
   (it "launches explicit agents once and rejects duplicates before spawning"
     (%with-r5-fixture (session conn worktree window)
@@ -525,7 +530,7 @@
               (declare (ignore organizations))
               (expect (string= token (nerimux/workspace-model:worktree-path worktree)))
               worktree)))
-        (nerimux::%client-enter-command-mode conn "workspace-complete")
+        (nerimux::%client-enter-command-mode conn "wt-complete")
         (nerimux::%submit-client-command session conn)
         (expect (eq :confirm (nerimux::client-conn-modal conn)))
         (expect (not (nerimux/workspace-model:worktree-completed-p worktree)))
@@ -673,15 +678,14 @@
         (expect (string= "worktree no longer available"
                          (first (nerimux::client-conn-message-log conn)))))))
 
-  (it "keeps named completion commands completion-only"
+  (it "keeps wt-complete completion-only"
     (%with-r5-fixture (session conn worktree window)
       (declare (ignore window))
       (setf (nerimux/workspace-model:worktree-completed-p worktree) t)
-      (dolist (command '("workspace-complete" "wt-complete"))
-        (nerimux::%client-enter-command-mode conn command)
-        (nerimux::%submit-client-command session conn)
-        (expect (nerimux/workspace-model:worktree-completed-p worktree))
-        (expect (null (nerimux::client-conn-modal conn)))))))
+      (nerimux::%client-enter-command-mode conn "wt-complete")
+      (nerimux::%submit-client-command session conn)
+      (expect (nerimux/workspace-model:worktree-completed-p worktree))
+      (expect (null (nerimux::client-conn-modal conn))))))
 
 (describe "workspace-panes-acceptance-suite"
 

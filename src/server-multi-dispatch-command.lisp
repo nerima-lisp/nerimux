@@ -172,20 +172,26 @@
                        (or (%client-report-missing-target conn target)
                            (%client-create-worktree conn target args)))
                       ((:workspace-complete :wt-complete)
-                       (if (or target args)
+                       (if (eq cmd :workspace-complete)
                            (progn
-                             (%client-notify conn "workspace-complete takes no arguments")
+                             (%client-notify conn "deprecated command: workspace-complete; use wt-complete")
                              t)
-                           (%client-complete-workspace conn)))
+                           (if (or target args)
+                               (progn
+                                 (%client-notify conn "wt-complete takes no arguments")
+                                 t)
+                               (%client-complete-workspace conn))))
                       ((:worktree-delete :delete-worktree :wt-delete)
                        (or (%client-report-missing-target conn target
                                                           #'%workspace-find-worktree)
                            (%client-delete-worktree conn target args)))
                       ((:workspace-prune :workspace-prune-all)
-                       (if (or target args)
-                           (progn (%client-notify conn "workspace prune takes no arguments") t)
-                           (%confirm-client-prune-workspaces
-                            conn (eq cmd :workspace-prune-all))))
+                       (%client-notify
+                        conn
+                        (if (eq cmd :workspace-prune)
+                            "deprecated command: workspace-prune; use w p"
+                            "deprecated command: workspace-prune-all; use w P"))
+                       t)
                       ((:worktree-lock :lock-worktree :wt-lock)
                        (or (%client-report-missing-target conn target
                                                           #'%workspace-find-worktree)
