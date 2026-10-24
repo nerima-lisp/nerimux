@@ -71,6 +71,7 @@
                            ("d" . "detach")
                            ("C-q" . "drop modal")
                            ("C-p" . "global picker")
+                           ("q" . "send C-q")
                            ("Q" . "quit server")))
     ("Scrollback (C-q [)"
      (("j/k" . "line") ("C-u/C-d" . "half page")

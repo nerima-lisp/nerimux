@@ -61,7 +61,7 @@
     (expect (null (nerimux/renderer::%status-middle-text nil))))
 
   (it "shows the prefix key hints in the right block when there are no messages"
-    (expect (string= "C-q ? keys  C-q w repolist  C-q d detach"
+    (expect (string= "C-q ? keys  C-q C-p picker  C-q ; prev pane  C-q L prev win  C-q q sends C-q  C-q w repolist  C-q d detach"
                      (strip-sgr (nerimux/renderer::%status-right-text nil))))))
 
 (describe "renderer-suite/statusbar-workspace-three-blocks"

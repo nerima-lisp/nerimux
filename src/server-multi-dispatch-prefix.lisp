@@ -372,6 +372,7 @@
   (#\; (%workspace-prefix-previous-pane session conn))
   (#\L (%workspace-prefix-previous-window session conn))
   (16 (%open-client-picker conn) nil)
+  (#\q (%handle-client-input-key-payload session conn #(17)))
   (#\w (%workspace-prefix-open-overview session conn))
   (#\t (%client-open-selected-worktree-command session conn nil))
   (#\[ (%workspace-prefix-open-scrollback session conn))
