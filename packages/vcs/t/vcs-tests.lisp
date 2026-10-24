@@ -686,11 +686,39 @@
                    (lambda (repository)
                      (expect (eq backend repository))
                      nil)))
-                 (multiple-value-bind (root worktrees) 
+                 (multiple-value-bind (root worktrees)
                      (nerimux/vcs::%directory-repository-root
                       "/tmp/empty-worktrees")
                    (expect (null root))
                    (expect (null worktrees))))))
+          (it "selects the worktree containing the requested directory"
+              (let* ((alpha "/tmp/ghq/example.test/org/bare-repo/.worktrees/alpha")
+                     (worktrees
+                      (list
+                       (vcs-kit::%make-vcs-worktree
+                        :path
+                        "/tmp/ghq/example.test/org/bare-repo/.worktrees/beta"
+                        :bare-p
+                        nil)
+                       (vcs-kit::%make-vcs-worktree
+                        :path
+                        alpha
+                        :bare-p
+                        nil))))
+                (with-stubbed-fdefinition
+                 ((nerimux/vcs::%make-directory-vcs-repository
+                   (lambda (directory)
+                     (declare (ignore directory))
+                     :fake-backend))
+                  (vcs-kit:vcs-list-worktrees
+                   (lambda (backend)
+                     (declare (ignore backend))
+                     worktrees)))
+                 (multiple-value-bind (root returned-worktrees)
+                     (nerimux/vcs::%directory-repository-root
+                      (concatenate 'string alpha "/src"))
+                   (expect (string= alpha root))
+                   (expect (eq worktrees returned-worktrees))))))
           (it-each
            ((nil "/tmp/first-worktree"
                  ((:path "/tmp/first-worktree" :bare-p nil)
@@ -714,7 +742,7 @@
                 (lambda (backend)
                   (declare (ignore backend))
                   worktrees)))
-              (multiple-value-bind (root returned-worktrees) 
+              (multiple-value-bind (root returned-worktrees)
                   (nerimux/vcs::%directory-repository-root "/tmp/probe")
                 (expect (string= expected-path root))
                 (expect (eq worktrees returned-worktrees))

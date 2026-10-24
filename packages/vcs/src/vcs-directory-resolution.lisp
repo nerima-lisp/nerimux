@@ -11,14 +11,6 @@
 (defun %path-missing-p (path)
   (and (stringp path) (plusp (length path)) (null (probe-file path))))
 
-(defun %directory-repository-root (directory)
-  (let ((worktrees
-         (vcs-kit:vcs-list-worktrees (%make-directory-vcs-repository directory))))
-    (when worktrees
-      (let ((bare (find-if #'vcs-kit:vcs-worktree-bare-p worktrees)))
-        (values (vcs-kit:vcs-worktree-path (or bare (first worktrees)))
-                worktrees)))))
-
 (defun %directory-under-p (root path)
   (and (stringp root)
        (plusp (length root))
@@ -30,6 +22,24 @@
                   (concatenate 'string root "/"))))
          (and (>= (length path) (length prefix))
               (string= prefix path :end2 (length prefix))))))
+
+(defun %directory-repository-root (directory)
+  (let ((worktrees
+         (vcs-kit:vcs-list-worktrees (%make-directory-vcs-repository directory))))
+    (when worktrees
+      (let* ((bare (find-if #'vcs-kit:vcs-worktree-bare-p worktrees))
+             (containing
+               (find-if
+                (lambda (worktree)
+                  (let ((path (vcs-kit:vcs-worktree-path worktree)))
+                    (and (stringp directory)
+                         (stringp path)
+                         (or (string= path directory)
+                             (%directory-under-p path directory)))))
+                worktrees)))
+        (values (vcs-kit:vcs-worktree-path
+                 (or bare containing (first worktrees)))
+                worktrees)))))
 
 (defun %directory-specification (repository-root)
   (let ((ghq-root (ghq-root-directory)))
@@ -44,6 +54,29 @@
               (subseq repository-root (length prefix))
               ""))
         "local")))
+(defun %canonicalize-bare-repository-entry (entry)
+  "Return ENTRY normalized to a bare root and its raw worktree rows."
+  (let* ((path (%string-value (vcs-kit:ghq-repository-entry-path entry)))
+         (backend (vcs-kit:ghq-repository-entry-backend entry)))
+    (if (and (stringp path)
+             (plusp (length path))
+             (eq (or backend :git) :git))
+        (handler-case
+            (multiple-value-bind (root worktrees)
+                (%directory-repository-root path)
+              (if (find-if
+                   (function vcs-kit:vcs-worktree-bare-p)
+                   worktrees)
+                  (values
+                   (vcs-kit:make-ghq-repository-entry
+                    :specification (%directory-specification root)
+                    :path root
+                    :backend :git)
+                   worktrees)
+                (values entry worktrees)))
+          (error ()
+                 (values entry nil)))
+      (values entry nil))))
 
 (defun resolve-directory-organizations (directory)
   (handler-case (when (and (stringp directory) (plusp (length directory)))

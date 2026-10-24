@@ -338,7 +338,101 @@
                                   (nerimux/workspace-model:repository-worktrees
                                    (first
                                     (nerimux/workspace-model:organization-repositories
-                                     organization)))))))))))))
+                                     organization))))))))))))
+                    (it "publishes one canonical repository for its GHQ worktree entries"
+  (let* ((saved-organizations (nerimux/vcs:workspace-organizations))
+         (ghq-root "/scan/ghq")
+         (bare-path "/scan/ghq/example.test/org/bare-repo")
+         (alpha-path "/scan/ghq/example.test/org/bare-repo/.worktrees/alpha")
+         (beta-path "/scan/ghq/example.test/org/bare-repo/.worktrees/beta")
+         (detached-path "/scan/ghq/example.test/org/bare-repo/.worktrees/detached")
+         (raw-worktrees
+           (list (%vcs-operations-fake-worktree bare-path :bare-p t)
+                 (%vcs-operations-fake-worktree alpha-path :branch "feature/alpha")
+                 (%vcs-operations-fake-worktree beta-path :branch "feature/beta")
+                 (%vcs-operations-fake-worktree detached-path :branch "feature/detached")))
+         (entries
+           (list
+            (vcs-kit:make-ghq-repository-entry
+             :specification "example.test/org/bare-repo/.worktrees/alpha"
+             :path alpha-path :backend :git)
+            (vcs-kit:make-ghq-repository-entry
+             :specification "example.test/org/bare-repo/.worktrees/beta"
+             :path beta-path :backend :git)
+            (vcs-kit:make-ghq-repository-entry
+             :specification "example.test/org/bare-repo/.worktrees/detached"
+             :path detached-path :backend :git)))
+         (previous-organization
+           (nerimux/workspace-model:make-organization
+            :id "example.test/org" :host "example.test" :name "org"))
+         (previous-repository
+           (nerimux/workspace-model:make-repository
+            :specification "example.test/org/bare-repo"
+            :local-path bare-path :organization previous-organization))
+         (previous-alpha
+           (nerimux/workspace-model:make-worktree
+            :id "previous-alpha" :repository previous-repository
+            :path alpha-path :branch "feature/alpha"))
+         (pane (make-pane :id 908)))
+    (progn
+  (nerimux/workspace-model:organization-add-repository
+   previous-organization previous-repository)
+  (nerimux/workspace-model:repository-add-worktree
+   previous-repository previous-alpha))
+    (nerimux/pane:worktree-add-pane previous-alpha pane)
+    (unwind-protect
+         (progn
+           (nerimux/vcs:set-workspace-organizations (list previous-organization))
+           (with-stubbed-fdefinition
+               ((vcs-kit:ghq-list-repositories
+                  (lambda (&key query)
+                    (declare (ignore query))
+                    entries))
+                (nerimux/vcs:ghq-root-directory
+                  (lambda () ghq-root))
+                (nerimux/vcs::%directory-repository-root
+                  (lambda (directory)
+                    (declare (ignore directory))
+                    (values bare-path raw-worktrees)))
+                (nerimux/vcs:list-repository-worktrees
+                  (lambda (repository)
+                    (nerimux/vcs::%apply-repository-worktrees
+                     repository raw-worktrees nil))))
+             (let* ((organizations (nerimux/vcs:scan-repositories))
+                    (repositories
+                      (loop for organization in organizations
+                            append
+                            (nerimux/workspace-model:organization-repositories
+                             organization)))
+                    (repository (first repositories))
+                    (alpha
+                      (and repository
+                           (find alpha-path
+                                 (nerimux/workspace-model:repository-worktrees
+                                  repository)
+                                 :key
+                                 (function nerimux/workspace-model:worktree-path)
+                                 :test
+                                 (function string=)))))
+               (nerimux/vcs:set-workspace-organizations organizations)
+               (expect (= 1 (length repositories)))
+               (expect (string= bare-path
+                                (nerimux/workspace-model:repository-local-path
+                                 repository)))
+               (expect (= 3
+                          (length
+                           (nerimux/workspace-model:repository-worktrees
+                            repository))))
+               (expect alpha)
+               (expect (eq alpha (pane-worktree pane)))
+               (expect (eq repository
+                           (nerimux/workspace-model:worktree-repository alpha)))
+               (expect (string= "feature/alpha"
+                                (nerimux/workspace-model:worktree-branch
+                                 alpha))))))
+      (nerimux/vcs:set-workspace-organizations saved-organizations)
+      (setf (pane-worktree pane) nil))))
+)
           (it "keeps an unreadable repository in the catalog as missing"
               (let* ((path (%vcs-operations-existing-path))
                      (entry

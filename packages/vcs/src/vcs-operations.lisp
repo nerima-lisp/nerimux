@@ -66,14 +66,15 @@
 (defun scan-repositories (&key query on-complete on-error on-progress)
   "Build the organization/repository hierarchy from ghq-list-repositories.
    ON-PROGRESS (FR-004b), when given, is called once per ghq entry with the
-   running count of entries processed so far -- so a caller on a worker
-   thread's other end can show \"N found\" while a large ghq root is still
-   being walked, instead of only a bare scanning indicator."
+   running count of entries processed so far, so a caller on a worker thread
+   can show the count while a large ghq root is still being walked, instead
+   of only a bare scanning indicator."
   (handler-case
       (let* ((entries (vcs-kit:ghq-list-repositories :query query))
-             (organizations (make-hash-table :test #'equal))
+             (organizations (make-hash-table :test (function equal)))
              (organizations-lock (cl-concurrent-kit:make-lock
                                   :name "vcs repository scan organizations"))
+             (scanned-repositories (make-hash-table :test (function equal)))
              (queue-lock (cl-concurrent-kit:make-lock
                           :name "vcs repository scan queue"))
              (progress-lock (cl-concurrent-kit:make-lock
@@ -85,74 +86,95 @@
              (scan-error nil)
              (threads nil))
         (labels ((next-entry ()
-                   (cl-concurrent-kit:with-lock-held (queue-lock)
-                     (pop queue)))
+                             (cl-concurrent-kit:with-lock-held (queue-lock)
+                                                               (pop queue)))
                  (record-scan-error (condition)
-                   (cl-concurrent-kit:with-lock-held (error-lock)
-                     (unless scan-error
-                       (setf scan-error condition))))
+                                    (cl-concurrent-kit:with-lock-held (error-lock)
+                                                                      (unless scan-error
+                                                                        (setf scan-error condition))))
                  (process-entry (entry)
-                   (handler-case
-                       (multiple-value-bind (candidate repository)
-                           (%repository-from-entry entry)
-                         (handler-case
-                             (list-repository-worktrees repository)
-                           (error ()
-                             (setf (nerimux/workspace-model:repository-missing-p
-                                    repository)
-                                   t)))
-                         (cl-concurrent-kit:with-lock-held (organizations-lock)
-                           (let* ((key
-                                    (nerimux/workspace-model:organization-id
-                                     candidate))
-                                  (organization
-                                    (or (gethash key organizations)
-                                        (setf (gethash key organizations)
-                                              candidate))))
-                             (nerimux/workspace-model:organization-add-repository
-                              organization repository))))
-                     (error (condition)
-                       (record-scan-error condition))))
+                                (handler-case
+                                    (multiple-value-bind (canonical-entry raw-worktrees)
+                                        (%canonicalize-bare-repository-entry entry)
+                                      (multiple-value-bind (candidate repository)
+                                          (%repository-from-entry canonical-entry)
+                                        (let* ((path
+                                                (nerimux/workspace-model:repository-local-path
+                                                 repository))
+                                               (identity
+                                                (if (and (stringp path) (plusp (length path)))
+                                                    (list (nerimux/workspace-model:repository-backend repository)
+                                                          path
+                                                          (nerimux/workspace-model:repository-specification repository))
+                                                  (gensym "REPOSITORY-ENTRY-")))
+                                               (first-entry-p nil))
+                                          (cl-concurrent-kit:with-lock-held (organizations-lock)
+                                                                            (unless (gethash identity scanned-repositories)
+                                                                              (setf (gethash identity scanned-repositories) t
+                                                                                    first-entry-p t)))
+                                          (when first-entry-p
+                                            (handler-case
+                                                (if raw-worktrees
+                                                    (%apply-repository-worktrees
+                                                     repository raw-worktrees nil)
+                                                  (list-repository-worktrees repository))
+                                              (error ()
+                                                     (setf
+                                                      (nerimux/workspace-model:repository-missing-p
+                                                       repository)
+                                                      t)))
+                                            (cl-concurrent-kit:with-lock-held (organizations-lock)
+                                                                              (let* ((key
+                                                                                      (nerimux/workspace-model:organization-id
+                                                                                       candidate))
+                                                                                     (organization
+                                                                                      (or (gethash key organizations)
+                                                                                          (setf (gethash key organizations)
+                                                                                                candidate))))
+                                                                                (nerimux/workspace-model:organization-add-repository
+                                                                                 organization repository)))))))
+                                  (error (condition)
+                                         (record-scan-error condition))))
                  (scan-worker ()
-                   (handler-case
-                       (loop for entry = (next-entry)
-                             while entry
-                             do (process-entry entry)
-                                (let ((count
-                                        (cl-concurrent-kit:with-lock-held
-                                            (progress-lock)
-                                          (incf processed))))
-                                  (when on-progress
-                                    (funcall on-progress count))))
-                     (error (condition)
-                       (record-scan-error condition)))))
+                              (handler-case
+                                  (loop for entry = (next-entry)
+                                        while entry
+                                        do (process-entry entry)
+                                        (let ((count
+                                               (cl-concurrent-kit:with-lock-held
+                                                (progress-lock)
+                                                (incf processed))))
+                                          (when on-progress
+                                            (funcall on-progress count))))
+                                (error (condition)
+                                       (record-scan-error condition)))))
           (dotimes (index (min +repository-scan-worker-limit+
                                (length entries)))
             (push (cl-concurrent-kit:make-thread
-                   #'scan-worker
+                   (function scan-worker)
                    :name (format nil "nerimux-vcs-scan-~D" index))
                   threads))
           (dolist (thread threads)
             (handler-case
                 (cl-concurrent-kit:join-thread thread)
               (error (condition)
-                (record-scan-error condition)))))
+                     (record-scan-error condition)))))
         (if scan-error
             (error scan-error)
-            (let ((result
-                    (sort (loop for organization being the hash-values of organizations
-                                collect organization)
-                          #'string<
-                          :key #'nerimux/workspace-model:organization-id)))
-              (when on-complete
-                (funcall on-complete result))
-              result)))
+          (let ((result
+                 (sort (loop for organization being the hash-values of organizations
+                             collect organization)
+                       (function string<)
+                       :key (function nerimux/workspace-model:organization-id))))
+            (when on-complete
+              (funcall on-complete result))
+            result)))
     (error (condition)
-      (if on-error
-          (progn
-            (funcall on-error condition)
-            nil)
-          (error condition)))))
+           (if on-error
+               (progn
+                 (funcall on-error condition)
+                 nil)
+             (error condition)))))
 
 (defun %make-vcs-repository (directory)
   (vcs-kit:make-vcs-repository directory))
