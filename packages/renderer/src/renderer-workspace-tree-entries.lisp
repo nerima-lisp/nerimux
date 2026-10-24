@@ -107,7 +107,7 @@
     (:pending
      (list
       (list level
-            "commits: refreshing..."
+            "commits: loading..."
             (list :commit (worktree-id worktree) :pending nil)
             :commit)))
     (:failed

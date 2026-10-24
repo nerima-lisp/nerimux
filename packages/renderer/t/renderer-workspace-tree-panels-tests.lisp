@@ -385,7 +385,7 @@
                  (list organization) nil :expanded-node-ids expanded)))
           (expect (equal '(:section :worktree :commit :section :organization :repository)
                          (%tree-entry-kinds entries)))
-          (expect (search "refreshing" (second (third entries)))))
+          (expect (equal "commits: loading..." (second (third entries)))))
         (setf (nerimux/workspace-model:worktree-commits-state worktree) :failed)
         (let ((entries
                 (nerimux/renderer:workspace-flat-tree-entries
