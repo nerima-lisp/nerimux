@@ -601,6 +601,37 @@
                       (nerimux/picker:picker-item-pane (first visible)))))
         (expect (nerimux::%select-client-picker-item session connection))
         (expect (eq beta-pane (nerimux::client-conn-focus connection)))
-        (expect (eq beta (nerimux::client-conn-selected-worktree connection)))
+        (progn
+          (expect (eq beta (nerimux::client-conn-selected-worktree connection)))
+          (expect (eq beta-pane (nerimux::%worktree-remembered-pane beta))))
         (expect (eq beta-pane
-                    (nerimux/window:window-active-pane beta-window)))))))
+                    (nerimux/window:window-active-pane beta-window))))))
+  (it "client-worktree-pane-uses-enter-priority-and-skips-a-dead-remembered-pane"
+    (with-fake-session (session :nwindows 2)
+      (let* ((windows (nerimux/session:session-windows session))
+             (dead-agent (nerimux/window:window-active-pane (first windows)))
+             (live-shell (nerimux/window:window-active-pane (second windows)))
+             (worktree
+               (nerimux/workspace-model:make-worktree
+                :id "picker-enter-priority" :path "/tmp/picker-enter-priority"))
+             (nerimux::*workspace-worktree-last-pane*
+               (make-hash-table :test #'equal))
+             (dead-pane-live-checks 0)
+             (selected nil))
+        (setf (nerimux/pane:pane-agent-kind dead-agent) :codex)
+        (nerimux/pane:worktree-add-pane worktree live-shell)
+        (nerimux/pane:worktree-add-pane worktree dead-agent)
+        (nerimux::%remember-worktree-pane worktree dead-agent)
+        (with-stubbed-fdefinition
+            ((nerimux/pane:pane-live-p
+              (lambda (pane)
+                (if (eq pane dead-agent)
+                    (progn (incf dead-pane-live-checks) nil)
+                    t)))
+             (nerimux/pane:worktree-running-agent-p
+              (lambda (candidate)
+                (declare (ignore candidate))
+                nil)))
+          (setf selected (nerimux::%client-worktree-pane session worktree)))
+        (expect (plusp dead-pane-live-checks))
+        (expect (eq live-shell selected))))))

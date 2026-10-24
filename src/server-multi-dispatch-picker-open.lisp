@@ -1,13 +1,7 @@
 (in-package #:nerimux)
 
 (defun %client-worktree-pane (session worktree)
-  (and worktree
-       (find worktree
-             (all-panes session)
-             :key
-             #'nerimux/pane:pane-worktree
-             :test
-             #'eq)))
+  (%worktree-enter-pane worktree (all-panes session)))
 
 (defun %open-client-worktree-pane (session conn worktree &key default-command agent-kind)
   (when (%reject-pending-worktree-attachment conn :worktree worktree :pane nil :window nil)
@@ -58,9 +52,7 @@
                   (start-reader-thread pane)
                   (%set-client-selected-worktree conn worktree)
                   (%set-client-focus conn pane session)
-                  (progn
-                    (%remember-worktree-pane worktree pane)
-                    (setf (worktree-completed-p worktree) nil))
+                  (setf (worktree-completed-p worktree) nil)
                   (%mark-dirty)
                   (values t t)))))
          (error (condition)

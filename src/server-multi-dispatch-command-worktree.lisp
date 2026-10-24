@@ -610,7 +610,12 @@ is not a request to delete it. It stays selected, with no shell open yet, and
           (when (eq (worktree-delete-reservation-phase reservation) :pending)
             (remhash key *worktree-delete-reservations*))
           (progn
-            (setf (worktree-delete-reservation-phase reservation) :removed)
+            (progn
+              (setf (worktree-delete-reservation-phase reservation) :removed)
+              (remhash
+               (nerimux/workspace-model:worktree-id
+                (worktree-delete-reservation-worktree reservation))
+               *workspace-worktree-last-pane*))
             (dolist (pane (worktree-delete-reservation-panes reservation))
               (unless (pane-live-p pane)
                 (let ((window (pane-window pane)))

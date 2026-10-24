@@ -114,7 +114,9 @@
         (setf *runtime-restored-panes*
               (remove pane *runtime-restored-panes* :test #'eq)
               (pane-notification pane) ""))
-      (nerimux/pane:pane-mark-focused pane))
+      (progn
+        (nerimux/pane:pane-mark-focused pane)
+        (%remember-worktree-pane (nerimux/pane:pane-worktree pane) pane)))
     (when (and session
                (not (eq old-pane pane))
                (client-conn-host-focused-p conn))

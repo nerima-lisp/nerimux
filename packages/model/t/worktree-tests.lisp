@@ -191,7 +191,21 @@
                     (length (nerimux/workspace-model:worktree-panes worktree))))
                 (expect
                  (eq pane
-                     (first (nerimux/workspace-model:worktree-panes worktree)))))))
+                     (first (nerimux/workspace-model:worktree-panes worktree))))))
+          (it "moves a pane out of its previous worktree"
+              (let* ((previous
+                      (nerimux/workspace-model:make-worktree
+                       :id "previous-owner" :path "/tmp/previous-owner"))
+                     (next
+                      (nerimux/workspace-model:make-worktree
+                       :id "next-owner" :path "/tmp/next-owner"))
+                     (pane (nerimux/pane:make-pane :id 41)))
+                (nerimux/pane:worktree-add-pane previous pane)
+                (nerimux/pane:worktree-add-pane next pane)
+                (expect (eq next (nerimux/pane:pane-worktree pane)))
+                (expect (null (nerimux/workspace-model:worktree-panes previous)))
+                (expect (equal (list pane)
+                               (nerimux/workspace-model:worktree-panes next))))))
 
 (describe "worktree-values"
           (it "retains defaults when optional values are omitted"

@@ -59,7 +59,6 @@
        (%select-client-pane-window session object)
        (%set-client-focus conn object session)
        (worktree-resume (pane-worktree object) object)
-       (%remember-worktree-pane (pane-worktree object) object)
        (%set-client-view conn :pane)
        (%mark-dirty)
        t)
@@ -86,31 +85,46 @@
             (client-conn-selected-worktree conn))
         direct-shell-p)))))
 
-(defun %worktree-enter-pane (worktree)
-  "The pane Enter on WORKTREE's tree row lands on (R6.3): the one the user was
-   last on there, else the running agent, else any live terminal, else a pane
-   that has exited but still has a screen.
+(defun %worktree-enter-pane (worktree &optional (session-panes nil session-panes-p))
+  "The pane Enter on WORKTREE's tree row lands on the one the user last used,
+   else the running agent, else any live terminal, else a pane with an exited
+   process that still has a screen.
 
-   The remembered pane comes first because that is what the requirement asks
-   for; it is skipped once it has exited so a live sibling still wins. The
-   exited pane is the last resort rather than no pane at all: a failed agent's
-   `exited 127' line is exactly what Enter on a flagged row was pressed to
-   read, and Assign instead of it hides the failure (NMX-PANES-2/4)."
+   The remembered pane comes first and is skipped once it has exited so a live
+   sibling still wins. An exited pane remains a last resort so a failed agent's
+   exited 127 line stays readable.
+
+   When SESSION-PANES is supplied, only panes owned by WORKTREE and present in
+   the session are eligible."
   (when worktree
-    (let ((remembered (%worktree-remembered-pane worktree))
-          (panes (worktree-panes worktree)))
+    (let* ((remembered (%worktree-remembered-pane worktree))
+           (worktree-panes (worktree-panes worktree))
+           (panes (if session-panes-p
+                      (remove-if-not
+                       (lambda (pane)
+                         (and (eq (nerimux/pane:pane-worktree pane) worktree)
+                              (member pane session-panes :test #'eq)))
+                       worktree-panes)
+                      worktree-panes))
+           (agent-pane (nerimux/workspace-model:worktree-agent-pane worktree)))
       (or (and remembered
+               (member remembered panes :test #'eq)
                (pane-live-p remembered)
                (not (pane-process-exited-p remembered))
                (not (pane-startup-failed-p remembered))
                remembered)
-          (and (worktree-running-agent-p worktree)
-               (nerimux/workspace-model:worktree-agent-pane worktree))
+          (and agent-pane
+               (member agent-pane panes :test #'eq)
+               (worktree-running-agent-p worktree)
+               agent-pane)
           (find-if (lambda (candidate)
                      (and (pane-live-p candidate)
                           (null (pane-agent-kind candidate))))
                    panes)
-          (and remembered (pane-screen remembered) remembered)
+          (and remembered
+               (member remembered panes :test #'eq)
+               (pane-screen remembered)
+               remembered)
           (find-if #'pane-screen panes)))))
 
 (defun %open-client-tree-worktree (session conn worktree direct-shell-p)
@@ -129,7 +143,6 @@ user into another repository's live shell with nothing on screen saying so."
        (%select-client-pane-window session pane)
        (%set-client-focus conn pane session)
        (worktree-resume worktree pane)
-       (%remember-worktree-pane worktree pane)
        (%mark-dirty)
        t)
       (worktree

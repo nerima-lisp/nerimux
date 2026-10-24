@@ -1188,7 +1188,12 @@
              (nerimux::*server-sessions* nil)
              (nerimux::*worktree-delete-reservations* (make-hash-table :test #'equal))
              (nerimux::*workspace-refreshing-ids* (make-hash-table :test #'equal))
-             (nerimux::*workspace-stale-ids* (make-hash-table :test #'equal)))
+             (nerimux::*workspace-stale-ids* (make-hash-table :test #'equal))
+             (nerimux::*workspace-worktree-last-pane*
+              (let ((memory (make-hash-table :test #'equal)))
+                (setf (gethash (nerimux/workspace-model:worktree-id worktree) memory)
+                      :remembered-pane)
+                memory)))
         (nerimux/workspace-model:repository-add-worktree repository main-worktree)
         (nerimux/workspace-model:repository-add-worktree repository worktree)
         (nerimux::%set-client-selected-tree-object conn worktree)
@@ -1217,8 +1222,11 @@
                     :removed-p t :refresh-error "synthetic refresh failure")))
         (expect (zerop (hash-table-count nerimux::*workspace-refreshing-ids*)))
         (expect (= 1 (hash-table-count nerimux::*workspace-stale-ids*)))
-        (expect (search "worktree deleted; refresh failed: synthetic refresh failure"
-                        (first (nerimux::client-conn-message-log conn)))))))
+        (progn
+          (expect (search "worktree deleted; refresh failed: synthetic refresh failure"
+                          (first (nerimux::client-conn-message-log conn))))
+          (expect (null (gethash (nerimux/workspace-model:worktree-id worktree)
+                                 nerimux::*workspace-worktree-last-pane*)))))))
 
   (it "workspace-prune-settles-preflight-and-delete-worker-failures"
     (dolist (mode '(:preflight :delete))
