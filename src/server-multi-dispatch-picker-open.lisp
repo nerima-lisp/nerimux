@@ -84,7 +84,7 @@
     (cond
       (candidate
        (let ((branch (%client-branch-candidate-ref candidate)))
-         (%close-client-picker conn :keep-view t)
+         (%close-client-picker conn session :keep-view t)
          (%client-create-worktree-now repository branch conn session)))
       ((and repository (stringp query) (plusp (length query)))
        (let ((display-branch (%client-branch-display-text query)))
@@ -93,7 +93,7 @@
                (%client-notify conn "branch name contains control characters")
                nil)
              (progn
-               (%close-client-picker conn :session session)
+               (%close-client-picker conn session)
                (%open-confirm-view
                 conn "CREATE WORKTREE"
                 (list (cons "branch" display-branch))
