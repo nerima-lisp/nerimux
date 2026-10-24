@@ -103,7 +103,7 @@
                            (first calls)))
             (expect (= 2 (length calls)))
             (expect (null (nerimux::client-conn-modal conn))))))))
-  (it "branch-picker-confirms-raw-unmatched-query-through-create-route"
+  (it "branch-picker-preserves-raw-query-without-parsing-boolean-options"
     (with-fake-session (session)
       (let* ((organization
                (nerimux/workspace-model:make-organization
@@ -114,7 +114,7 @@
                 :specification "github.com/team/repo"))
              (conn (%make-test-conn))
              (nerimux::*clients* (list conn))
-             (raw-branch (format nil "feature/control~C[31mred" (code-char 27)))
+             (raw-branch "feature/raw-name")
              (create-call nil))
         (nerimux/workspace-model:organization-add-repository organization repository)
         (nerimux::%set-client-selected-tree-object conn repository)
@@ -129,8 +129,8 @@
              (nerimux/vcs:create-worktree-async
               (lambda (received-repository &key branch path force on-complete on-error
                                                    callback-dispatch &allow-other-keys)
-                (declare (ignore path force on-complete on-error callback-dispatch))
-                (setf create-call (list received-repository branch))
+                (declare (ignore path on-complete on-error callback-dispatch))
+                (setf create-call (list received-repository branch force))
                 t)))
           (nerimux::%handle-multi-key-message
            session conn (cl-codec-kit:string-to-octets "w" :encoding :utf-8))
@@ -138,16 +138,32 @@
           (nerimux::%set-client-picker-query conn raw-branch)
           (nerimux::%handle-multi-key-message session conn #(13))
           (expect (eq :confirm (nerimux::client-conn-modal conn)))
-          (expect (equal (cons "branch" "feature/controlred")
+          (expect (equal (cons "branch" raw-branch)
                          (assoc "branch"
                                 (nerimux/renderer:confirm-view-fields
                                  (nerimux::client-conn-confirm-view conn))
                                 :test #'string=)))
           (nerimux::%handle-multi-key-message session conn #(121))
-          (expect (equal (list repository raw-branch) create-call))
-          (expect (search "opening worktree feature/controlred"
+          (expect (equal (list repository raw-branch nil) create-call))
+          (expect (search "opening worktree feature/raw-name"
                           (first (nerimux::client-conn-message-log conn))))
           (expect (null (nerimux::client-conn-modal conn)))
+          (dolist (branch (list "force"))
+            (setf create-call nil)
+            (nerimux::%handle-multi-key-message
+             session conn (cl-codec-kit:string-to-octets "w" :encoding :utf-8))
+            (nerimux::%handle-multi-key-message session conn #(98))
+            (nerimux::%set-client-picker-query conn branch)
+            (nerimux::%handle-multi-key-message session conn #(13))
+            (expect (eq :confirm (nerimux::client-conn-modal conn)))
+            (expect (equal (cons "branch" branch)
+                           (assoc "branch"
+                                  (nerimux/renderer:confirm-view-fields
+                                   (nerimux::client-conn-confirm-view conn))
+                                  :test #'string=)))
+            (nerimux::%handle-multi-key-message session conn #(121))
+            (expect (equal (list repository branch nil) create-call))
+            (expect (null (nerimux::client-conn-modal conn))))
           (nerimux::%handle-multi-key-message
            session conn (cl-codec-kit:string-to-octets "w" :encoding :utf-8))
           (nerimux::%handle-multi-key-message session conn #(98))
@@ -157,7 +173,47 @@
           (nerimux::%handle-multi-key-message session conn #(121))
           (expect (search "a name cannot start with -"
                           (first (nerimux::client-conn-message-log conn))))
-          (expect (null (nerimux::client-conn-modal conn))))))));
+          (expect (null (nerimux::client-conn-modal conn)))))))
+  (it "branch-picker-rejects-c0-c1-and-bidi-controls-before-confirmation"
+    (with-fake-session (session)
+      (let* ((repository
+               (nerimux/workspace-model:make-repository
+                :id "branch-picker-invalid-query-repo"
+                :specification "github.com/team/repo"))
+             (conn (%make-test-conn))
+             (confirmation-count 0)
+             (notification nil))
+        (with-stubbed-fdefinition
+            ((nerimux::%close-client-picker
+              (lambda (connection &key keep-view session)
+                (declare (ignore connection keep-view session))
+                t))
+             (nerimux::%open-confirm-view
+              (lambda (&rest arguments)
+                (declare (ignore arguments))
+                (incf confirmation-count)
+                t))
+             (nerimux::%client-notify
+              (lambda (connection message)
+                (declare (ignore connection))
+                (setf notification message)
+                t)))
+          (dolist (code
+                   (list #x0001 #x001b #x0085 #x061c #x200e #x200f
+                         #x202a #x202b #x202c #x202d #x202e
+                         #x2066 #x2067 #x2068 #x2069))
+            (setf confirmation-count 0
+                  notification nil
+                  (nerimux::client-conn-picker-repository conn) repository
+                  (nerimux::client-conn-picker-query conn)
+                  (format nil "feature/~Cbranch" (code-char code)))
+            (expect
+             (null (nerimux::%select-client-branch-picker-item
+                    session conn nil)))
+            (expect (zerop confirmation-count))
+            (expect
+             (search "branch name contains control characters"
+                     notification))))))));
 
 
 (describe "server-multi-worktree-command-suite"

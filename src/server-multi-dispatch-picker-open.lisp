@@ -88,14 +88,21 @@
          (%client-create-worktree-now repository branch conn session)))
       ((and repository (stringp query) (plusp (length query)))
        (let ((display-branch (%client-branch-display-text query)))
-         (%close-client-picker conn :session session)
-         (%open-confirm-view
-          conn "CREATE WORKTREE"
-          (list (cons "branch" display-branch))
-          (lambda ()
-            (%client-create-worktree
-             conn repository (list "--branch" query "--confirm"))))
-         t))
+         (if (not (string= query display-branch))
+             (progn
+               (%client-notify conn "branch name contains control characters")
+               nil)
+             (progn
+               (%close-client-picker conn :session session)
+               (%open-confirm-view
+                conn "CREATE WORKTREE"
+                (list (cons "branch" display-branch))
+                (lambda ()
+                  (if (%dash-leading-name-p query)
+                      (%client-notify conn "a name cannot start with -")
+                      (%client-create-worktree-now
+                       repository query conn session))))
+               t))))
       (t nil))))
 
 (defun %select-client-picker-item (session conn)
