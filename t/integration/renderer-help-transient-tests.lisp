@@ -1,13 +1,55 @@
 (in-package #:nerimux/test)
 
 (describe "renderer-help-transient-agreement-suite"
-
-  (it "every menu key the help advertises actually opens a transient"
+  (it "every advertised Dispatch key has a matching action"
     (let* ((section (find "Menus (?)" nerimux/renderer::+help-view-sections+
                           :key #'first :test #'string=))
-           (advertised (mapcar #'car (second section))))
+           (advertised (mapcar #'car (second section)))
+           (dispatch (assoc #\? nerimux::+transient-definitions+ :test #'char=))
+           (actions (fourth dispatch)))
       (expect (plusp (length advertised)))
       (dolist (key advertised)
-        (expect (assoc (char key 0) nerimux::+transient-definitions+
-                       :test #'char=)))))
-)
+        (let ((action (find (char key 0) actions :key #'first :test #'char=)))
+          (expect action)
+          (if (char= (first action) #\k)
+              (expect (eq :help (first (third action))))
+              (expect (eq :open-transient (first (third action))))))))
+  (it "omits shell command and lists Help in the help table"
+    (let ((status (find "Status" nerimux/renderer::+help-view-sections+
+                        :key #'first :test #'string=))
+          (menus (find "Menus (?)" nerimux/renderer::+help-view-sections+
+                       :key #'first :test #'string=)))
+      (expect (null (assoc "!" (second status) :test #'string=)))
+      (expect (null (assoc "!" (second menus) :test #'string=)))
+      (expect (assoc "k" (second menus) :test #'string=))
+      (expect (null (assoc #\! nerimux::+transient-definitions+ :test #'char=)))))
+  (it "renders the Dispatch menu without shell and with Help"
+    (with-fake-session (session)
+      (let ((conn (nerimux::%make-client-conn :rows 40 :cols 110)))
+        (nerimux::%open-client-transient conn #\?)
+        (multiple-value-bind (type payload)
+            (decode-frame (nerimux::%render-client-frame session conn))
+          (expect (= +msg-frame+ type))
+          (let ((visible (strip-sgr (decode-text payload))))
+            (expect (search "Help (all keys)" visible))
+            (expect (not (search "Shell command" visible)))
+            (expect (not (search "run a shell command" visible)))))
+        (nerimux::%handle-multi-key-message session conn "k")
+        (expect (eq :help (nerimux::client-conn-modal conn)))
+        (multiple-value-bind (type payload)
+            (decode-frame (nerimux::%render-client-frame session conn))
+          (expect (= +msg-frame+ type))
+          (let ((visible (strip-sgr (decode-text payload))))
+            (expect (search "k help" visible))
+            (expect (not (search "shell command" visible))))))))
+  (it "status ! reports shell execution guidance without opening a transient"
+    (with-fake-session (session)
+      (let* ((conn (nerimux::%make-client-conn))
+             (nerimux::*clients* (list conn)))
+        (setf (nerimux::client-conn-view conn) :status)
+        (expect (nerimux::%handle-multi-key-message session conn "!"))
+        (expect (equal
+                 (list "arbitrary shell execution is deliberately not wired -- it is its own trust-boundary decision")
+                 (nerimux::client-conn-message-log conn)))
+        (expect (null (nerimux::client-conn-modal conn)))
+        (expect (null (nerimux::client-conn-transient-view conn))))))))

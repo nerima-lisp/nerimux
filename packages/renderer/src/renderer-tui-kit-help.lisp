@@ -28,8 +28,7 @@
      (("s/S" . "stage") ("u/U" . "unstage")
                         ("k" . "discard")
                         ("c" . "commit")
-                        ("t" . "tag")
-                        ("!" . "shell command")))
+                        ("t" . "tag")))
     ("Menus (?)"
      (("c" . "commit") ("P" . "push")
                        ("F" . "pull")
@@ -43,7 +42,7 @@
                        ("t" . "tag")
                        ("X" . "reset")
                        ("w" . "worktree")
-                       ("!" . "shell command")))
+                       ("k" . "help")))
     ("Worktree menu (w)"
      (("c" . "create+shell") ("n" . "create+agent")
                              ("a" . "assign agent")

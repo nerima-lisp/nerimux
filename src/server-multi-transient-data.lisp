@@ -85,10 +85,6 @@
                            (list :git #\X :reset '("--hard" "HEAD") t nil))
                      (list #\c "clean untracked files (-fd)"
                            (list :git #\X :clean '("-fd") t nil)))))
-   (cons #\!
-         (list "Shell command" nil
-               (list (list #\! "run a shell command"
-                           (list :stub "arbitrary shell execution is deliberately not wired -- it is its own trust-boundary decision")))))
    (cons #\w
          (list "Worktree" nil
                (list (list #\c "create worktree and open its shell"
@@ -142,7 +138,6 @@
                      (list #\f "Fetch" (list :open-transient #\f))
                      (list #\t "Tag" (list :open-transient #\t))
                      (list #\X "Reset" (list :open-transient #\X))
-                     (list #\! "Shell command" (list :open-transient #\!))
                      (list #\w "Worktree" (list :open-transient #\w))
                      (list #\k "Help (all keys)" (list :help))))))
     "KEY -> (TITLE ARGUMENTS ACTIONS); see the section comment above."))
