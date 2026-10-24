@@ -69,7 +69,7 @@
       flake = false;
     };
     cl-tui-kit = {
-      url = "github:nerima-lisp/cl-tui-kit/v4.1.3";
+      url = "github:nerima-lisp/cl-tui-kit/v4.1.5";
       flake = false;
     };
     cl-vcs-kit = {
@@ -203,30 +203,6 @@
         in
         builtins.head (builtins.match "[[:space:]]*:version \"([^\"]*)\"" versionLine);
 
-      patchedClTuiKit =
-        system:
-        let
-          pkgs = pkgsFor system;
-          boundedDatumPatch = pkgs.writeText "cl-tui-kit-bounded-datum.patch" ''
-            diff --git a/src/list.lisp b/src/list.lisp
-            --- a/src/list.lisp
-            +++ b/src/list.lisp
-            @@ -36,5 +36,6 @@
-             (defun %validated-model-count (value name)
-               (unless (and (integerp value) (>= value 0))
-            -    (error 'callback-contract-error :callback name :value (bounded-datum value)
-            +    (error 'callback-contract-error :callback name
-            +           :value (cl-tui-kit/core::bounded-datum value)
-                        :detail (format nil "~A must return a non-negative integer." name)))
-               value)
-          '';
-        in
-        pkgs.applyPatches {
-          name = "cl-tui-kit-${cl-tui-kit.shortRev or "v4.1.3"}";
-          src = cl-tui-kit;
-          patches = [ boundedDatumPatch ];
-        };
-
       siblingRepos = system: [
         cl-weave
         cl-cli
@@ -240,7 +216,7 @@
         cl-regex-kit
         cl-codec-kit
         cl-host-kit
-        (patchedClTuiKit system)
+        cl-tui-kit
         cl-vcs-kit
       ];
 
