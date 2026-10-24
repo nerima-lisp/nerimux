@@ -67,12 +67,13 @@
   (let* ((rows (max 1 terminal-rows))
          (cols (max 1 terminal-cols))
          (stream (make-string-output-stream))
+         (progress (or scan-progress 0))
          (message
-          (if (and (integerp scan-progress) (plusp scan-progress))
+          (if (and (integerp progress) (not (minusp progress)))
               (format nil
                       "scanning workspaces... ~D ~:[repositories~;repository~]"
-                      scan-progress
-                      (= scan-progress 1))
+                      progress
+                      (= progress 1))
               "scanning workspaces..."))
          (text (%display-clip message cols)))
     (cursor-invisible stream)
