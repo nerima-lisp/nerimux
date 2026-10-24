@@ -87,7 +87,7 @@
            (backend nil)
            (condition-seen nil))
       (with-open-file (stream script :direction :output :if-exists :supersede)
-        (format stream "#!/bin/sh~%printf '%s' \"${GIT_TERMINAL_PROMPT-unset}\" > '~A'~%sleep 5~%"
+        (format stream "#!/bin/sh~%printf '%s' \"${GIT_TERMINAL_PROMPT-unset}\" > '~A'~%"
                 (namestring environment-file)))
       (uiop:run-program (list "chmod" "+x" (namestring script)))
       (setf backend
@@ -95,19 +95,22 @@
              directory
              :executable (namestring script)
              :default-timeout 30d0))
-      (let ((nerimux/vcs::*worktree-operation-timeout-seconds* 0.1d0))
-        (with-stubbed-fdefinition
-            ((nerimux/vcs::%repository-backend
-               (lambda (current)
-                 (declare (ignore current))
-                 backend)))
+      (with-stubbed-fdefinition
+          ((nerimux/vcs::%repository-backend
+             (lambda (current)
+               (declare (ignore current))
+               backend)))
+        (nerimux/vcs::%delete-worktree-command worktree nil)
+        (with-open-file (stream environment-file :direction :input)
+          (expect (string= "0" (read-line stream))))
+        (with-open-file (stream script :direction :output :if-exists :supersede)
+          (format stream "#!/bin/sh~%sleep 5~%"))
+        (let ((nerimux/vcs::*worktree-operation-timeout-seconds* 0.1d0))
           (handler-case
               (nerimux/vcs::%delete-worktree-command worktree nil)
             (error (condition)
               (setf condition-seen condition)))))
-      (expect (typep condition-seen 'vcs-kit:vcs-command-timeout-error))
-      (with-open-file (stream environment-file :direction :input)
-        (expect (string= "0" (read-line stream))))))
+      (expect (typep condition-seen 'vcs-kit:vcs-command-timeout-error))))
 
   (it "rejects invalid worktree and repository inputs before invoking VCS"
     (let* ((repository-path (%vcs-operations-existing-path))
