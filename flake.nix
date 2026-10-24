@@ -261,6 +261,7 @@
               sbcl
               pkgs.coreutils
               pkgs.git
+              pkgs.ghq
             ];
             NERIMUX_SIBLING_REGISTRY = siblingRegistry system;
             NERIMUX_TEST_SYSTEM = testSystem;
@@ -378,6 +379,7 @@
                   sbcl
                   pkgs.coreutils
                   pkgs.git
+                  pkgs.ghq
                 ];
                 NERIMUX_SIBLING_REGISTRY = siblingRegistry system;
                 NERIMUX_COVERAGE_REPORT_ONLY = "1";
