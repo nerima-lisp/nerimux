@@ -103,7 +103,7 @@
                                            (progn
                                              (expect
                                               (%worktree-message-seen-p
-                                               conn "worktree create failed"))
+                                               conn "worktree create failed: create async failure"))
                                              (expect
                                               (every (lambda (message)
                                                        (and (not (find (code-char 27) message))
@@ -115,7 +115,7 @@
                                                 (string= "worktree branch selection: dangerred"
                                                          (first entry)))
                                                (expect
-                                                (string= "worktree creation failed"
+                                                (string= "create async failure"
                                                          (third entry)))
                                                (expect (not (find (code-char 27) (first entry))))
                                                (expect (not (find #\Tab (first entry))))
@@ -137,8 +137,7 @@
                                             '("--confirm" "--branch"
                                                           "feature/create"))
                                            (expect
-                                            (%worktree-message-seen-p conn
-                                                                      "worktree create failed"))
+                                            (%worktree-message-seen-p conn "worktree create failed: create synchronous failure"))
                                            (nerimux::%set-client-selected-tree-object
                                             conn
                                             worktree)
@@ -353,8 +352,7 @@
                                                 (nerimux::client-conn-selected-worktree
                                                  conn)))
                                            (expect
-                                            (%worktree-message-seen-p conn
-                                                                      "worktree ready: /tmp/worktree-errors"))
+                                            (%worktree-message-seen-p conn "worktree reused: /tmp/worktree-errors"))
                                            (setf (fdefinition
                                                   'nerimux/vcs:delete-worktree-async) (lambda 
                                                                                           (received-worktree
@@ -483,3 +481,45 @@
                                                                       "VCS unavailable")))
                                        (setf (fdefinition
                                               'nerimux/vcs:vcs-package-available-p) available)))))))
+(describe "worktree creation failure reasons"
+  (it "shows sanitized reasons in notifications, process log, and tree details"
+    (with-fake-session (session)
+      (multiple-value-bind (repository worktree conn)
+          (%make-worktree-operation-fixture)
+        (declare (ignore worktree session))
+        (let* ((nerimux::*workspace-operation-jobs*
+                 (make-hash-table :test #'equal))
+               (nerimux::*clients* (list conn))
+               (available (fdefinition 'nerimux/vcs:vcs-package-available-p))
+               (create (fdefinition 'nerimux/vcs:create-worktree-async))
+               (reason (format nil "create~C[31m failure~Cbidi"
+                               (code-char 27) (code-char #x202e)))
+               (failure-condition
+                 (make-condition 'simple-error
+                                 :format-control "~A"
+                                 :format-arguments (list reason))))
+          (unwind-protect
+               (progn
+                 (setf (fdefinition 'nerimux/vcs:vcs-package-available-p)
+                       (lambda () t)
+                       (fdefinition 'nerimux/vcs:create-worktree-async)
+                       (lambda (received-repository &key on-error &allow-other-keys)
+                         (declare (ignore received-repository))
+                         (funcall on-error failure-condition)
+                         t))
+                 (nerimux::%client-create-worktree-now
+                  repository "feature/errors" conn nil)
+                 (expect
+                  (%worktree-message-seen-p
+                   conn "worktree create failed: create failurebidi"))
+                 (expect
+                  (string=
+                   "create failurebidi"
+                   (third (first (nerimux::client-conn-process-log conn)))))
+                 (expect
+                  (search
+                   "create failurebidi"
+                   (gethash '(:repository "repo-errors")
+                            (nerimux::%workspace-job-labels)))))
+            (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
+                  (fdefinition 'nerimux/vcs:create-worktree-async) create)))))))

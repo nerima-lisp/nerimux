@@ -829,3 +829,18 @@
             (nerimux::%submit-client-text-prompt conn)
             (expect (equal (list repository :merge (list "feature/new"))
                            (first calls)))))))))
+(describe "transient argument control stripping"
+  (it "removes terminal and bidirectional control characters"
+    (dolist (code
+             (append
+              (loop for code from 0 to 31
+                    unless (= code 27)
+                      collect code)
+              (loop for code from #x7f to #x9f collect code)
+              (loop for code from #x202a to #x202e collect code)
+              (loop for code from #x2066 to #x2069 collect code)))
+      (expect
+       (string=
+        "leftright"
+        (nerimux::%strip-argument-control-characters
+         (format nil "left~Cright" (code-char code))))))))

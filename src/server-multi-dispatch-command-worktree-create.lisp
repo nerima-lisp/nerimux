@@ -77,84 +77,90 @@
        t)
       (t nil))))
 
-(defun %client-create-worktree-now (repository branch
-                                               conn
-                                               session
-                                               &key
-                                               path
-                                               force)
-  (let ((display-branch
-          (%client-branch-display-text branch)))
+(defun %client-create-worktree-now (repository branch conn session &key path force)
+  (let* ((existing-worktree-paths
+           (mapcar #'nerimux/workspace-model:worktree-path
+                   (nerimux/workspace-model:repository-worktrees repository)))
+         (display-branch (%client-branch-display-text branch)))
     (%client-notify conn (format nil "opening worktree ~A" display-branch))
-    (%mark-workspace-refreshing :repository
-                                (nerimux/workspace-model:repository-id repository))
-    (let ((job (%workspace-job-begin :repository (repository-id repository) :create repository)))
+    (%mark-workspace-refreshing
+     :repository
+     (nerimux/workspace-model:repository-id repository))
+    (let ((job (%workspace-job-begin
+                :repository (repository-id repository) :create repository)))
       (flet ((%on-error (condition)
-               (%workspace-job-update job repository :failed :outcome condition)
-               (%clear-workspace-refreshing :repository
-                                            (nerimux/workspace-model:repository-id
-                                             repository)
-                                            :stale-p
-                                            t)
-               (%client-log-process conn
-                                    (format nil "worktree branch selection: ~A"
-                                            display-branch)
-                                    nil
-                                    "worktree creation failed")
-               (%client-notify conn
-                               "worktree create failed")
+               (let ((safe-reason
+                       (%strip-argument-control-characters
+                        (princ-to-string condition))))
+                 (%workspace-job-update job repository :failed :outcome safe-reason)
+                 (%clear-workspace-refreshing
+                  :repository
+                  (nerimux/workspace-model:repository-id repository)
+                  :stale-p t)
+                 (%client-log-process
+                  conn
+                  (format nil "worktree branch selection: ~A" display-branch)
+                  nil
+                  safe-reason)
+                 (%client-notify
+                  conn
+                  (%clip-text
+                   (format nil "worktree create failed: ~A" safe-reason)
+                   +max-notify-characters+))
+                 (%mark-dirty)))
+             (%on-complete (worktree)
+               (%workspace-job-update job repository :succeeded)
+               (%clear-workspace-refreshing
+                :repository
+                (nerimux/workspace-model:repository-id repository))
+               (when (%client-live-p conn)
+                 (%set-client-selected-worktree conn worktree)
+                 (%note-worktree-layout
+                  conn repository
+                  (nerimux/workspace-model:worktree-path worktree))
+                 (when session
+                   (%open-client-worktree-pane session conn worktree)))
+               (%refresh-client-picker conn)
+               (%client-log-process
+                conn
+                (format nil "worktree branch selection: ~A -> ~A"
+                        display-branch
+                        (nerimux/workspace-model:worktree-path worktree))
+                t
+                "")
+               (let* ((worktree-path
+                        (nerimux/workspace-model:worktree-path worktree))
+                      (display-path (%worktree-display-path worktree-path))
+                      (reused-p
+                        (member worktree-path existing-worktree-paths
+                                :test #'string=))
+                      (ignored-options
+                        (append (when path (list "--path"))
+                                (when force (list "--force"))))
+                      (notice
+                        (if reused-p
+                            (if ignored-options
+                                (format nil
+                                        "worktree reused; ignored ~{~A~^ and ~}: ~A"
+                                        ignored-options display-path)
+                                (format nil "worktree reused: ~A" display-path))
+                            (format nil "worktree ready: ~A" display-path))))
+                 (%client-notify
+                  conn
+                  (%clip-text notice +max-notify-characters+)))
                (%mark-dirty)))
-        (handler-case (nerimux/vcs:create-worktree-async repository
-                                                         :branch
-                                                         branch
-                                                         :path
-                                                         path
-                                                         :force
-                                                         force
-                                                         :callback-dispatch
-                                                         #'%enqueue-main-thread-callback
-                                                         :on-start
-                                                         (lambda ()
-                                                           (%workspace-job-update
-                                                            job repository :running))
-                                                         :on-complete
-                                                         (lambda (worktree)
-                                                           (%workspace-job-update
-                                                            job repository :succeeded)
-                                                           (%clear-workspace-refreshing
-                                                            :repository
-                                                            (nerimux/workspace-model:repository-id
-                                                             repository))
-                                                           (when (%client-live-p conn)
-                                                             (%set-client-selected-worktree
-                                                              conn worktree)
-                                                             (%note-worktree-layout
-                                                              conn repository
-                                                              (nerimux/workspace-model:worktree-path
-                                                               worktree))
-                                                             (when session
-                                                               (%open-client-worktree-pane
-                                                                session conn worktree)))
-                                                           (%refresh-client-picker conn)
-                                                           (%client-log-process
-                                                            conn
-                                                            (format nil
-                                                                    "worktree branch selection: ~A -> ~A"
-                                                                    display-branch
-                                                                    (nerimux/workspace-model:worktree-path
-                                                                     worktree))
-                                                            t
-                                                            "")
-                                                           (%client-notify
-                                                            conn
-                                                            (format nil
-                                                                    "worktree ready: ~A"
-                                                                    (%worktree-display-path
-                                                                     (nerimux/workspace-model:worktree-path
-                                                                      worktree))))
-                                                           (%mark-dirty))
-                                                         :on-error
-                                                         #'%on-error)
+        (handler-case
+            (nerimux/vcs:create-worktree-async
+             repository
+             :branch branch
+             :path path
+             :force force
+             :callback-dispatch #'%enqueue-main-thread-callback
+             :on-start
+             (lambda ()
+               (%workspace-job-update job repository :running))
+             :on-complete #'%on-complete
+             :on-error #'%on-error)
           (error (condition)
             (%on-error condition))))))
   t)

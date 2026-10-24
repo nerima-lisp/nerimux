@@ -3,6 +3,9 @@
 (defconstant +kill-sighup-grace-seconds+ 3)
 
 (defconstant +max-clients+ 32)
+(defconstant +max-notify-characters+
+  99
+  "Maximum length before the single-line message strip hides useful text.")
 
 (defconstant +terminal-identity-term-program-name+
   :term_program

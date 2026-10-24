@@ -38,12 +38,6 @@
                                                  +max-process-log-entries+)))
   (%mark-dirty))
 
-(defconstant +max-notify-characters+
-  99
-  "Longest notification this file builds. The message strip shows one line of
-   whatever it is given, so anything past the terminal's width is simply not
-   read -- and a commit message pushed the outcome off the end entirely.")
-
 (defun %clip-text (text limit)
   (if (> (length text) limit)
       (subseq text 0 limit)
@@ -68,9 +62,7 @@
       (t (+ index 2)))))
 
 (defun %strip-argument-control-characters (text)
-  "TEXT with C0 control characters (Tab kept) and any ESC-led CSI sequence
-   removed, so a typed git argument cannot carry an SGR sequence into the
-   notification and process-log text built from it (S4)."
+  "TEXT without terminal, C0/C1, or bidirectional formatting controls."
   (with-output-to-string (out)
     (let ((length (length text))
           (index 0))
@@ -79,8 +71,11 @@
                  (cond
                    ((char= character #\Escape)
                     (setf index (%argument-escape-sequence-end text index)))
-                   ((and (< (char-code character) 32)
-                         (char/= character #\Tab))
+                   ((let ((code (char-code character)))
+                      (or (< code 32)
+                          (<= 127 code 159)
+                          (<= #x202a code #x202e)
+                          (<= #x2066 code #x2069)))
                     (incf index))
                    (t
                     (write-char character out)

@@ -1382,3 +1382,34 @@
                  (nerimux/renderer:confirm-view-fields
                   (nerimux::client-conn-confirm-view conn))
                  :test #'string=)))))))
+(describe "worktree create reuse notification"
+  (it "reports that requested path and force were ignored on reuse"
+    (with-fake-session (session)
+      (multiple-value-bind (repository worktree conn)
+          (%make-worktree-operation-fixture)
+        (declare (ignore session))
+        (let* ((nerimux::*workspace-operation-jobs*
+                 (make-hash-table :test #'equal))
+               (nerimux::*clients* (list conn))
+               (create (fdefinition 'nerimux/vcs:create-worktree-async))
+               (call nil))
+          (unwind-protect
+               (progn
+                 (setf (fdefinition 'nerimux/vcs:create-worktree-async)
+                       (lambda (received-repository &key path force on-complete
+                                                     &allow-other-keys)
+                         (setf call (list received-repository path force))
+                         (funcall on-complete worktree)
+                         t))
+                 (nerimux::%client-create-worktree-now
+                  repository "feature/errors" conn nil
+                  :path "/tmp/requested-worktree" :force t)
+                 (let ((notice (first (nerimux::client-conn-message-log conn))))
+                   (expect (search "worktree reused" notice))
+                   (expect (search "ignored --path" notice))
+                   (expect (search "--force" notice)))
+                 (expect
+                  (equal
+                   (list repository "/tmp/requested-worktree" t)
+                   call)))
+            (setf (fdefinition 'nerimux/vcs:create-worktree-async) create)))))))

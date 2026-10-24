@@ -91,23 +91,30 @@
       t)))
 
 (defun %workspace-job-outcome-label (outcome &optional operation)
-  "A short reason for OUTCOME, which is a keyword for a result the code chose
-   and a condition for one it caught.  A condition's own text is runtime
-   internals -- truncated mid-sentence in a tree row it says nothing a user can
-   act on -- so failures are reported by what went wrong instead.  OPERATION
-   decides the catch-all word: only a read (scan, status) is a read failure;
-   a create or prune that git refused is just a failure."
+  "Return the failure detail for OUTCOME, sanitizing user-visible create errors."
   (typecase outcome
     (null nil)
     (keyword (string-downcase outcome))
     (condition
-     (let ((text (string-downcase (princ-to-string outcome))))
-       (cond
-         ((search "fd_setsize" text) "too many open files")
-         ((search "no such file" text) "path is gone")
-         ((member operation '(:scan :status)) "read failed")
-         (t "failed"))))
-    (t (princ-to-string outcome))))
+     (let* ((display-text (%strip-argument-control-characters
+                           (princ-to-string outcome)))
+            (text (string-downcase display-text)))
+       (if (eq operation :create)
+           display-text
+           (cond
+             ((search "fd_setsize" text) "too many open files")
+             ((search "no such file" text) "path is gone")
+             ((member operation '(:scan :status)) "read failed")
+             (t "failed")))))
+    (string
+     (if (eq operation :create)
+         (%strip-argument-control-characters outcome)
+         outcome))
+    (t
+     (let ((text (princ-to-string outcome)))
+       (if (eq operation :create)
+           (%strip-argument-control-characters text)
+           text)))))
 
 (defun %workspace-job-forget-failed ()
   "Drop every settled failure so a refresh the user asked for starts with a

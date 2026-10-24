@@ -65,7 +65,7 @@
                                       :format-control "git worktree add failed (exit 255)")))
       (nerimux::%workspace-job-update create object :failed :outcome condition)
       (let ((label (gethash '(:repository "repo") (nerimux::%workspace-job-labels))))
-        (expect (search "create:failed failed" label))
+        (expect (search "create:failed git worktree add failed (exit 255)" label))
         (expect (null (search "read failed" label))))
       (nerimux::%workspace-job-forget-failed)
       (expect (null (gethash '(:repository "repo" :create)
@@ -83,7 +83,7 @@
                        (nerimux::%workspace-job-outcome-label condition :status)))
       (expect (string= "read failed"
                        (nerimux::%workspace-job-outcome-label condition :scan)))
-      (expect (string= "failed"
+      (expect (string= "boom"
                        (nerimux::%workspace-job-outcome-label condition :create)))))
 
   (it "workspace-job forget-failed leaves a running job untouched"
