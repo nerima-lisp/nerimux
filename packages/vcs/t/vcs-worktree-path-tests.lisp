@@ -2,59 +2,6 @@
 
 (defvar *fake-repo-counter*
   0)
-(defun %call-with-isolated-test-git-environment (function)
-  (let* ((root
-          (merge-pathnames
-           (format nil
-                   "nerimux-test-git-environment-~D-~D-~D/"
-                   (get-universal-time)
-                   (sb-posix:getpid)
-                   (incf *fake-repo-counter*))
-           (host-kit:temporary-directory)))
-         (home (merge-pathnames "home/" root))
-         (xdg-config (merge-pathnames "xdg-config/" root))
-         (global-config (merge-pathnames "config" root))
-         (template-directory (merge-pathnames "templates/" root)))
-    (unwind-protect
-        (progn
-          (ensure-directories-exist home)
-          (ensure-directories-exist xdg-config)
-          (ensure-directories-exist template-directory)
-          (with-open-file
-              (stream global-config :direction :output :if-exists :error :if-does-not-exist :create)
-            (declare (ignore stream)))
-          (let* ((bindings
-                  (list (cons "HOME" (namestring home))
-                        (cons "XDG_CONFIG_HOME" (namestring xdg-config))
-                        (cons "GIT_CONFIG_GLOBAL" (namestring global-config))
-                        (cons "GIT_CONFIG_NOSYSTEM" "1")
-                        (cons "GIT_CONFIG_COUNT" "0")
-                        (cons "GIT_CONFIG_PARAMETERS" nil)
-                        (cons "GIT_TEMPLATE_DIR" (namestring template-directory))))
-                 (original
-                  (mapcar
-                   (lambda (binding)
-                     (cons (car binding) (sb-ext:posix-getenv (car binding))))
-                   bindings)))
-            (unwind-protect
-                (progn
-                  (dolist (binding bindings)
-                    (unless
-                        (zerop
-                         (if (cdr binding)
-                             (sb-posix:setenv (car binding) (cdr binding) 1)
-                             (sb-posix:unsetenv (car binding))))
-                      (error "Could not set Git test environment variable ~A" (car binding))))
-                  (funcall function))
-              (dolist (binding original)
-                (unless
-                    (zerop
-                     (if (cdr binding)
-                         (sb-posix:setenv (car binding) (cdr binding) 1)
-                         (sb-posix:unsetenv (car binding))))
-                  (error "Could not restore environment variable ~A" (car binding))))))
-          (when (probe-file root)
-            (uiop:delete-directory-tree root :validate t :if-does-not-exist :ignore))))))
 
 (defun %fresh-fake-repo-git-dir ()
   "A repository.git/-shaped directory path (with a trailing slash, as
@@ -143,12 +90,65 @@
         (expect (= 15 (length timestamp)))
         (expect (char= #\T (char timestamp 8)))))))
 
+(defun %call-with-isolated-test-git-environment (function)
+  (let* ((root
+          (merge-pathnames
+           (format nil
+                   "nerimux-test-git-environment-~D-~D-~D/"
+                   (get-universal-time)
+                   (sb-posix:getpid)
+                   (incf *fake-repo-counter*))
+           (host-kit:temporary-directory)))
+         (home (merge-pathnames "home/" root))
+         (xdg-config (merge-pathnames "xdg-config/" root))
+         (global-config (merge-pathnames "config" root))
+         (template-directory (merge-pathnames "templates/" root)))
+    (unwind-protect
+        (progn
+          (ensure-directories-exist home)
+          (ensure-directories-exist xdg-config)
+          (ensure-directories-exist template-directory)
+          (with-open-file
+              (stream global-config :direction :output :if-exists :error :if-does-not-exist :create)
+            (declare (ignore stream)))
+          (let* ((bindings
+                  (list (cons "HOME" (namestring home))
+                        (cons "XDG_CONFIG_HOME" (namestring xdg-config))
+                        (cons "GIT_CONFIG_GLOBAL" (namestring global-config))
+                        (cons "GIT_CONFIG_NOSYSTEM" "1")
+                        (cons "GIT_CONFIG_COUNT" "0")
+                        (cons "GIT_CONFIG_PARAMETERS" nil)
+                        (cons "GIT_TEMPLATE_DIR" (namestring template-directory))))
+                 (original
+                  (mapcar
+                   (lambda (binding)
+                     (cons (car binding) (sb-ext:posix-getenv (car binding))))
+                   bindings)))
+            (unwind-protect
+                (progn
+                  (dolist (binding bindings)
+                    (unless
+                        (zerop
+                         (if (cdr binding)
+                             (sb-posix:setenv (car binding) (cdr binding) 1)
+                             (sb-posix:unsetenv (car binding))))
+                      (error "Could not set Git test environment variable ~A" (car binding))))
+                  (funcall function))
+              (dolist (binding original)
+                (unless
+                    (zerop
+                     (if (cdr binding)
+                         (sb-posix:setenv (car binding) (cdr binding) 1)
+                         (sb-posix:unsetenv (car binding))))
+                  (error "Could not restore environment variable ~A" (car binding))))))
+          (when (probe-file root)
+            (uiop:delete-directory-tree root :validate t :if-does-not-exist :ignore))))))
 (defun %call-with-worktree-path-repository (function)
   (%call-with-isolated-test-git-environment
    (lambda ()
      (let* ((root (%fresh-fake-repo-git-dir))
-            (source (concatenate 'string root "source/"))
-            (bare (concatenate 'string root "repository.git/")))
+            (source (concatenate (quote string) root "source/"))
+            (bare (concatenate (quote string) root "repository.git/")))
        (unwind-protect
             (progn
               (uiop:run-program (list "git" "init" "--initial-branch=main" source)
@@ -161,29 +161,35 @@
                :output :string :error-output :string)
               (uiop:run-program (list "git" "clone" "--bare" source bare)
                                 :output :string :error-output :string)
-              (funcall function
+              (let* ((repository
                        (nerimux/workspace-model:make-repository
                         :specification "workspace-owner/path-fixture"
-                        :local-path bare)
-                       (namestring (truename root))))
+                        :local-path bare))
+                     (parent (nerimux/vcs:worktree-parent-directory repository)))
+                (ensure-directories-exist (format nil "~Aplaceholder" parent))
+                (funcall function repository (namestring (truename root)))))
          (when (probe-file root)
            (uiop:delete-directory-tree (pathname root) :validate t)))))))
 
 (defun %check-created-worktree-path (async-p path-kind)
   (%call-with-worktree-path-repository
    (lambda (repository root)
-     (let* ((path (ecase path-kind
-                    (:relative "../created/")
-                    (:dot (concatenate 'string root "repository.git/../created/"))
-                    (:symlink (concatenate 'string root "linked-parent/created/"))
-                    (:absolute (concatenate 'string root "created"))))
-            (expected-path (concatenate 'string root "created"))
+     (declare (ignore root))
+     (let* ((bare (nerimux/workspace-model:repository-local-path repository))
+            (parent (nerimux/vcs:worktree-parent-directory repository))
+            (linked-parent (concatenate 'string bare "linked-parent"))
+            (path (ecase path-kind
+                    (:relative ".worktrees/created/")
+                    (:dot (concatenate 'string parent "./created/"))
+                    (:symlink (concatenate 'string linked-parent "/created/"))
+                    (:absolute (concatenate 'string parent "created"))))
+            (expected-path (namestring (nerimux/vcs:resolve-path-prefix (concatenate 'string parent "created"))))
             (created nil)
             (errors nil)
             (completed 0))
+       (ensure-directories-exist (concatenate 'string parent "placeholder"))
        (when (eq path-kind :symlink)
-         (uiop:run-program (list "ln" "-s" root
-                                 (concatenate 'string root "linked-parent"))
+         (uiop:run-program (list "ln" "-s" parent linked-parent)
                            :output :string :error-output :string)
          (expect (not (string= path expected-path))))
        (expect (null (probe-file expected-path)))
@@ -228,7 +234,133 @@
   (it "returns the canonical model for an absolute asynchronous path"
     (%check-created-worktree-path t :absolute))
   (it "returns the canonical model through a symlink parent asynchronously"
-    (%check-created-worktree-path t :symlink)))
+    (%check-created-worktree-path t :symlink))
+  (it "creates and reuses a tracking branch from a remote-only branch"
+    (%call-with-worktree-path-repository
+     (lambda (repository root)
+       (let* ((source (concatenate 'string root "source/"))
+              (bare (nerimux/workspace-model:repository-local-path repository))
+              (branch "feature/remote-only")
+              (remote-reference "refs/remotes/origin/feature/remote-only")
+              (branch-path
+               (namestring
+                (nerimux/vcs:resolve-path-prefix
+                 (format nil "~Aremote-only-worktree"
+                         (nerimux/vcs:worktree-parent-directory
+                          repository)))))
+              (alternate-path
+                 (concatenate 'string
+                              (nerimux/vcs:worktree-parent-directory repository)
+                              "unused-worktree"))
+              (candidates nil)
+              (candidate-errors nil)
+              (created nil)
+              (create-errors nil)
+              (reused nil)
+              (reuse-errors nil))
+         (%fetch-test-git source "checkout" "-b" branch)
+         (%fetch-test-git
+          source
+          "-c" "user.name=Test"
+          "-c" "user.email=test@example.invalid"
+          "-c" "commit.gpgsign=false"
+          "-c" "core.hooksPath=/dev/null"
+          "commit" "--allow-empty" "-m" "remote-only branch fixture")
+         (progn
+           (%fetch-test-git bare "config" "remote.origin.url" source)
+           (%fetch-test-git
+            bare "config" "--replace-all" "remote.origin.fetch"
+            "+refs/heads/*:refs/remotes/origin/*"))
+         (%fetch-test-git
+          bare
+          "fetch"
+          "origin"
+          (concatenate 'string
+                       "refs/heads/" branch
+                       ":refs/remotes/origin/" branch))
+         (expect
+          (string=
+           ""
+           (%fetch-test-git
+            bare
+            "for-each-ref"
+            "--format=%(refname)"
+            "refs/heads/feature/remote-only")))
+         (expect
+          (string=
+           remote-reference
+           (%fetch-test-git
+            bare
+            "for-each-ref"
+            "--format=%(refname)"
+            remote-reference)))
+         (sb-thread:join-thread
+          (nerimux/vcs:list-worktree-branch-candidates-async
+           repository
+           :on-complete (lambda (result) (setf candidates result))
+           :on-error (lambda (condition) (push condition candidate-errors))))
+         (expect (null candidate-errors))
+         (let ((candidate
+                 (find remote-reference
+                       candidates
+                       :key (lambda (entry) (getf entry :ref))
+                       :test #'string=)))
+           (expect candidate)
+           (expect (eq :remote (getf candidate :kind)))
+           (expect (string= branch (getf candidate :branch)))
+           (expect (string= "origin" (getf candidate :remote)))
+           (expect (null (getf candidate :worktree))))
+         (sb-thread:join-thread
+          (nerimux/vcs:create-worktree-async
+           repository
+           :branch branch
+           :path branch-path
+           :on-complete (lambda (worktree) (setf created worktree))
+           :on-error (lambda (condition) (push condition create-errors))))
+         (expect (null create-errors))
+         (expect created)
+         (expect
+          (string=
+           branch-path
+           (nerimux/workspace-model:worktree-path created)))
+         (expect
+          (string=
+           branch
+           (nerimux/workspace-model:worktree-branch created)))
+         (expect
+          (string=
+           branch
+           (%fetch-test-git branch-path "branch" "--show-current")))
+         (expect
+          (string=
+           "origin/feature/remote-only"
+           (%fetch-test-git
+            branch-path
+            "rev-parse"
+            "--abbrev-ref"
+            "--symbolic-full-name"
+            "@{upstream}")))
+         (expect
+          (string=
+           (%fetch-test-git bare "rev-parse" remote-reference)
+           (%fetch-test-git
+            bare
+            "rev-parse"
+            "refs/heads/feature/remote-only")))
+         (sb-thread:join-thread
+          (nerimux/vcs:create-worktree-async
+           repository
+           :branch branch
+           :path alternate-path
+           :on-complete (lambda (worktree) (setf reused worktree))
+           :on-error (lambda (condition) (push condition reuse-errors))))
+         (expect (null reuse-errors))
+         (expect reused)
+         (expect
+          (string=
+           branch-path
+           (nerimux/workspace-model:worktree-path reused)))
+         (expect (null (probe-file alternate-path))))))))
 
 (defun %call-with-worktree-path-checkout (function)
   "Run FUNCTION on the ordinary checkout that backs the bare fixture."
@@ -316,3 +448,191 @@
                (write-line ".worktrees/" stream))
              (expect (nerimux/vcs::%worktrees-exclude-rule-present-p exclude)))
         (ignore-errors (delete-file exclude))))))
+
+(describe "vcs worktree branch and path integration"
+  (it "rejects a remote-qualified name that is also another remote branch name"
+    (%call-with-worktree-path-repository
+     (lambda (repository root)
+       (let* ((source (concatenate 'string root "source/"))
+              (bare (nerimux/workspace-model:repository-local-path repository))
+              (branch-path
+                (concatenate 'string
+                             (nerimux/vcs:worktree-parent-directory repository)
+                             "ambiguous"))
+              (completed nil)
+              (errors nil))
+         (%fetch-test-git source "checkout" "-b" "topic")
+         (%fetch-test-git source "checkout" "main")
+         (%fetch-test-git source "checkout" "-b" "origin/topic")
+         (%fetch-test-git bare "config" "remote.origin.url" source)
+         (%fetch-test-git
+          bare "fetch" "origin"
+          "refs/heads/topic:refs/remotes/origin/topic"
+          "refs/heads/origin/topic:refs/remotes/origin/origin/topic")
+         (expect
+          (string=
+           "refs/remotes/origin/topic"
+           (%fetch-test-git bare "for-each-ref" "--format=%(refname)"
+                            "refs/remotes/origin/topic")))
+         (expect
+          (string=
+           "refs/remotes/origin/origin/topic"
+           (%fetch-test-git bare "for-each-ref" "--format=%(refname)"
+                            "refs/remotes/origin/origin/topic")))
+         (sb-thread:join-thread
+          (nerimux/vcs:create-worktree-async
+           repository :branch "origin/topic" :path branch-path
+           :on-complete (lambda (worktree) (setf completed worktree))
+           :on-error (lambda (condition) (push condition errors))))
+         (expect (null completed))
+         (expect (first errors))
+         (expect
+          (string=
+           ""
+           (%fetch-test-git bare "for-each-ref" "--format=%(refname)"
+                            "refs/heads/origin/topic")))
+         (expect (null (probe-file branch-path))))))
+  )
+  (it "creates an unmatched branch and worktree with the requested start point"
+    (%call-with-worktree-path-repository
+     (lambda (repository root)
+       (declare (ignore root))
+       (let* ((bare (nerimux/workspace-model:repository-local-path repository))
+              (branch "feature/unmatched-integration")
+              (branch-path
+                (concatenate 'string
+                             (nerimux/vcs:worktree-parent-directory repository)
+                             "unmatched"))
+              (created nil)
+              (errors nil))
+         (sb-thread:join-thread
+          (nerimux/vcs:create-worktree-async
+           repository :branch branch :path branch-path :start-point "HEAD"
+           :on-complete (lambda (worktree) (setf created worktree))
+           :on-error (lambda (condition) (push condition errors))))
+         (expect (null errors))
+         (expect created)
+         (expect (string= branch
+                          (nerimux/workspace-model:worktree-branch created)))
+         (expect
+          (string=
+           (concatenate 'string "refs/heads/" branch)
+           (%fetch-test-git bare "for-each-ref" "--format=%(refname)"
+                            (concatenate 'string "refs/heads/" branch))))
+         (expect
+          (string=
+           ""
+           (%fetch-test-git bare "for-each-ref" "--format=%(upstream)"
+                            (concatenate 'string "refs/heads/" branch)))))))
+  )
+  (it "rejects empty and outside paths before creating branches"
+    (%call-with-worktree-path-repository
+     (lambda (repository root)
+       (let* ((bare (nerimux/workspace-model:repository-local-path repository))
+              (empty-errors nil)
+              (outside-errors nil))
+         (sb-thread:join-thread
+          (nerimux/vcs:create-worktree-async
+           repository :branch "empty-path" :path "" :start-point "HEAD"
+           :on-complete (lambda (worktree) (declare (ignore worktree)))
+           :on-error (lambda (condition) (push condition empty-errors))))
+         (sb-thread:join-thread
+          (nerimux/vcs:create-worktree-async
+           repository :branch "outside-path"
+           :path (concatenate 'string root "outside-worktree")
+           :start-point "HEAD"
+           :on-complete (lambda (worktree) (declare (ignore worktree)))
+           :on-error (lambda (condition) (push condition outside-errors))))
+         (expect (first empty-errors))
+         (expect (first outside-errors))
+         (dolist (branch '("empty-path" "outside-path"))
+           (expect
+            (string=
+             ""
+             (%fetch-test-git
+              bare "for-each-ref" "--format=%(refname)"
+              (concatenate 'string "refs/heads/" branch)))))))))
+  (it "removes a newly created branch when attaching its worktree fails"
+    (%call-with-worktree-path-repository
+     (lambda (repository root)
+       (declare (ignore root))
+       (let* ((bare (nerimux/workspace-model:repository-local-path repository))
+              (parent (nerimux/vcs:worktree-parent-directory repository))
+              (branch "feature/failed-attachment")
+              (branch-path (concatenate 'string parent "occupied"))
+              (marker (concatenate 'string branch-path "/marker"))
+              (errors nil))
+         (ensure-directories-exist marker)
+         (with-open-file (stream marker :direction :output :if-exists :supersede)
+           (write-line "fixture" stream))
+         (sb-thread:join-thread
+          (nerimux/vcs:create-worktree-async
+           repository :branch branch :path branch-path :start-point "HEAD"
+           :on-complete (lambda (worktree) (declare (ignore worktree)))
+           :on-error (lambda (condition) (push condition errors))))
+         (expect (first errors))
+         (expect
+          (string=
+           ""
+           (%fetch-test-git bare "for-each-ref" "--format=%(refname)"
+                            (concatenate 'string "refs/heads/" branch))))
+         (expect (string= "fixture"
+                          (string-right-trim '(#\Newline #\Return)
+                                              (uiop:read-file-string marker))))
+         (expect (not (probe-file
+                       (concatenate 'string branch-path "/.git")))))))
+  (it "fails candidate reads rather than parsing a capped ref listing"
+    (%call-with-worktree-path-repository
+     (lambda (repository root)
+       (declare (ignore root))
+       (let* ((bare (nerimux/workspace-model:repository-local-path repository))
+              (remote-output (%fetch-test-git bare "remote"))
+              (ref-output
+                (%fetch-test-git
+                 bare "for-each-ref" "--format=%(refname)%00%(symref)"
+                 "refs/heads/" "refs/remotes/"))
+              (limit (1+ (length remote-output)))
+              (nerimux/vcs::*git-read-output-limit* limit)
+              (condition-seen nil))
+         (expect (> (length ref-output) limit))
+         (handler-case
+             (nerimux/vcs::%read-worktree-branch-candidates repository)
+           (error (condition)
+             (setf condition-seen condition)))
+         (expect (typep condition-seen 'nerimux/vcs::%git-read-error)))))))
+
+)
+
+(describe "vcs exported canonical path helpers"
+  (it "resolves symlinks and preserves an unresolved suffix"
+    (let* ((root (%fresh-fake-repo-git-dir))
+           (target (concatenate 'string root "target/"))
+           (link (concatenate 'string root "link"))
+           (resolved nil))
+      (unwind-protect
+           (progn
+             (ensure-directories-exist (concatenate 'string target "marker"))
+             (uiop:run-program (list "ln" "-s" target link)
+                               :output :string :error-output :string)
+             (setf resolved
+                   (nerimux/vcs:resolve-path-prefix
+                    (concatenate 'string link "/missing/child")))
+             (expect (pathnamep resolved))
+             (expect
+              (string=
+               (concatenate
+                'string
+                (namestring (uiop:ensure-directory-pathname (truename target)))
+                "missing/child")
+               (namestring resolved))))
+        (when (probe-file root)
+          (uiop:delete-directory-tree (pathname root) :validate t)))))
+  (it "checks path containment on directory boundaries"
+    (expect (nerimux/vcs:path-under-directory-p
+             "/ghq/owner/project" "/ghq"))
+    (expect (nerimux/vcs:path-under-directory-p
+             "/ghq" "/ghq"))
+    (expect (null (nerimux/vcs:path-under-directory-p
+                   "/ghq-other/project" "/ghq")))
+    (expect (null (nerimux/vcs:path-under-directory-p
+                   "relative/project" "/ghq")))))

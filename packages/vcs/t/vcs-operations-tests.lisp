@@ -488,13 +488,19 @@
 
 (describe "vcs worktree creation"
   (it "creates worktrees from default and explicit start points"
-    (let* ((repository-path (%vcs-operations-existing-path))
+    (let* ((repository-path (%vcs-operations-missing-path))
+           (worktree-parent
+            (nerimux/vcs::%ensure-trailing-slash
+             (namestring
+              (nerimux/vcs:resolve-path-prefix
+               (concatenate 'string repository-path ".worktrees/")))))
            (repository
              (nerimux/workspace-model:make-repository
               :specification "workspace-owner/project"
               :local-path repository-path))
            (raw-worktrees nil)
-           (commands nil))
+           (branch-commands nil)
+           (worktree-commands nil))
       (with-vcs-operations-observations
           (raw-worktrees
            :status-snapshot nil
@@ -503,7 +509,12 @@
            :status-ahead nil
            :status-behind nil)
         (with-stubbed-fdefinition
-            ((vcs-kit:git-symbolic-ref
+            ((nerimux/vcs:worktree-parent-directory
+               (lambda (current)
+                 (unless (eq current repository)
+                   (error "Unexpected repository"))
+                 worktree-parent))
+             (vcs-kit:git-symbolic-ref
                (lambda (backend &rest arguments)
                  (declare (ignore backend))
                  (if (equal '("-q" "refs/remotes/origin/HEAD") arguments)
@@ -524,40 +535,45 @@
                     "def5678")
                    (t
                     (error "unexpected rev-parse arguments: ~S" arguments)))))
+             (vcs-kit:vcs-branch
+               (lambda (backend &rest arguments)
+                 (declare (ignore backend))
+                 (push (copy-list arguments) branch-commands)))
              (vcs-kit:vcs-worktree
                (lambda (backend &rest arguments)
                  (declare (ignore backend))
-                 (push (copy-list arguments) commands)
+                 (push (copy-list arguments) worktree-commands)
                  (let* ((options-position (position :execution-options arguments))
                         (command-arguments (subseq arguments 0 options-position))
-                        (path (nth (- (length command-arguments) 2)
-                                   command-arguments))
-                        (branch (nth (- (length command-arguments) 4)
-                                     command-arguments))
-                        (head (car (last command-arguments))))
-                   (setf raw-worktrees
-                         (list (%vcs-operations-fake-worktree
-                                path
-                                :branch branch
-                                :head head))))
-                 :created))
+                        (path (nth (- (length command-arguments) 2) command-arguments))
+                        (branch (first (last command-arguments))))
+                   (progn
+                     (ensure-directories-exist (format nil "~A/placeholder" path))
+                     (setf raw-worktrees
+                           (list (%vcs-operations-fake-worktree
+                                  path :branch branch :head "deadbeef"))))
+                   :created))
              (nerimux/vcs:refresh-repository-status
-               (lambda (current) current)))
-          (let* ((first-path (concatenate 'string repository-path "first"))
+               (lambda (current) current))))
+          (let* ((first-path (concatenate 'string worktree-parent "first"))
                  (first-worktree
                    (nerimux/vcs:create-worktree
-                    repository
-                    :branch "feature/first"
-                    :path first-path)))
+                    repository :branch "feature/first" :path first-path)))
             (expect (string= first-path
                              (nerimux/workspace-model:worktree-path first-worktree)))
-            (expect (equal
-                     (append (list "add" "-b" "feature/first" "--"
-                                   first-path "origin/main")
-                             (list :execution-options
-                                   (nerimux/vcs::%worktree-operation-execution-options)))
-                     (first commands))))
-          (let* ((second-path (concatenate 'string repository-path "second"))
+            (expect
+             (equal
+              (append (list "add" "--" first-path "feature/first")
+                      (list :execution-options
+                            (nerimux/vcs::%worktree-operation-execution-options)))
+              (first worktree-commands)))
+            (expect
+             (equal
+              (append (list "--" "feature/first" "origin/main")
+                      (list :execution-options
+                            (nerimux/vcs::%worktree-operation-execution-options)))
+              (first branch-commands))))
+          (let* ((second-path (concatenate 'string worktree-parent "second"))
                  (second-worktree
                    (nerimux/vcs:create-worktree
                     repository
@@ -567,18 +583,28 @@
                     :force t)))
             (expect (string= second-path
                              (nerimux/workspace-model:worktree-path second-worktree)))
-            (expect (equal
-                     (append (list "add" "--force" "-b" "feature/second" "--"
-                                   second-path "release")
-                             (list :execution-options
-                                   (nerimux/vcs::%worktree-operation-execution-options)))
-                     (first commands))))
+            (expect
+             (equal
+              (append (list "add" "--force" "--" second-path "feature/second")
+                      (list :execution-options
+                            (nerimux/vcs::%worktree-operation-execution-options)))
+              (first worktree-commands)))
+            (expect
+             (equal
+              (append (list "--" "feature/second" "release")
+                      (list :execution-options
+                            (nerimux/vcs::%worktree-operation-execution-options)))
+              (first branch-commands))))
           (let ((condition-seen nil))
             (handler-case
                 (nerimux/vcs:create-worktree repository :branch "")
               (error (condition)
                 (setf condition-seen condition)))
-            (expect (typep condition-seen 'error)))))))
+            (progn
+              (expect (typep condition-seen (quote error)))
+              (when (probe-file worktree-parent)
+                (uiop:delete-directory-tree (pathname worktree-parent)
+                                            :validate t))))))))
 
   (it "falls back to local HEAD when origin/HEAD cannot be resolved"
     (let* ((repository-path (%vcs-operations-existing-path))

@@ -259,12 +259,12 @@
            (nerimux/vcs::%path-missing-p
              (lambda (path) (declare (ignore path)) nil))
            (nerimux/vcs::%create-worktree-command
-             (lambda (received branch path start-point force)
+             (lambda (received branch path start-point force &optional generation)
                (declare (ignore branch start-point force))
                (unless (eq received repository) (error "Unexpected repository"))
                (record-io)
                (incf commands)
-               path))
+               (values path generation)))
            (nerimux/vcs::%delete-worktree-command
              (lambda (worktree force)
                (declare (ignore force))

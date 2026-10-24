@@ -311,7 +311,10 @@
                                   (concatenate 'string bare "config"))))
          (expect (string= new-tip (%fetch-test-git bare "rev-parse" "origin/main")))
          (expect (string= new-tip (%fetch-test-git bare "rev-parse" "origin/HEAD")))
-         (let ((path (concatenate 'string root "created")))
+         (let ((path
+                 (concatenate 'string
+                              (nerimux/vcs:worktree-parent-directory repository)
+                              "created")))
            (expect (nerimux/vcs:create-worktree repository :branch "from-fetch" :path path))
            (expect (string= new-tip (%fetch-test-git path "rev-parse" "HEAD")))))))))
 

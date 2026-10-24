@@ -847,7 +847,7 @@
                (expect (equal (list session conn worktree) focused))
                (expect (eq worktree
                            (nerimux::client-conn-selected-worktree conn)))
-               (expect (string= "worktree created: /tmp/feature"
+               (expect (string= "worktree ready: /tmp/feature"
                                 (first (nerimux::client-conn-message-log conn)))))
           (setf (fdefinition 'nerimux/vcs:create-worktree-async) create-fn
                 (fdefinition 'nerimux::%open-client-worktree-pane) focus-fn)))))

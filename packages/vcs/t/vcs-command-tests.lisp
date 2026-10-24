@@ -143,7 +143,197 @@
             (handler-case (funcall thunk)
               (error (condition) (setf condition-seen condition)))
             (expect (typep condition-seen 'error))))
-        (expect (zerop calls))))))
+        (expect (zerop calls)))))
+  (it "creates from local and remote branches, reuses checked-out branches, and creates unmatched branches"
+    (let* ((repository-path (%vcs-operations-existing-path))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :specification "workspace-owner/project"
+              :local-path repository-path))
+           (execution-options
+             (nerimux/vcs::%worktree-operation-execution-options)))
+      (labels ((run-case (branch candidates expected-path expected-branch-arguments
+                                 expected-worktree-arguments)
+                 (let ((branch-commands nil)
+                       (worktree-commands nil))
+                   (with-stubbed-fdefinition
+                       ((nerimux/vcs::%read-worktree-branch-candidates
+                          (lambda (current)
+                            (unless (eq current repository)
+                              (error "Unexpected repository"))
+                            candidates))
+                        (nerimux/vcs::%repository-backend
+                          (lambda (current)
+                            (unless (eq current repository)
+                              (error "Unexpected repository"))
+                            :backend))
+                        (nerimux/vcs::%short-sha
+                          (lambda (current reference)
+                            (declare (ignore current reference))
+                            "short"))
+                        (nerimux/vcs::%resolve-worktree-path
+                          (lambda (current short path)
+                            (declare (ignore current))
+                            (unless (and (string= short "short") (null path))
+                              (error "Unexpected path resolution"))
+                            "/tmp/generated-worktree"))
+                        (nerimux/vcs::%default-branch-start-point
+                          (lambda (current)
+                            (declare (ignore current))
+                            "refs/heads/main"))
+                        (vcs-kit:vcs-branch
+                          (lambda (backend &rest arguments)
+                            (unless (eq backend :backend)
+                              (error "Unexpected VCS backend"))
+                            (push arguments branch-commands)))
+                        (vcs-kit:vcs-worktree
+                          (lambda (backend &rest arguments)
+                            (unless (eq backend :backend)
+                              (error "Unexpected VCS backend"))
+                            (push arguments worktree-commands))))
+                     (expect
+                      (string= expected-path
+                               (nerimux/vcs::%create-worktree-command
+                                repository branch nil nil nil)))
+                     (expect (equal expected-branch-arguments
+                                    (first branch-commands)))
+                     (expect (equal expected-worktree-arguments
+                                    (first worktree-commands)))
+                     (expect (= (if expected-branch-arguments 1 0)
+                                (length branch-commands)))
+                     (expect (= (if expected-worktree-arguments 1 0)
+                                (length worktree-commands)))))))
+        (run-case
+         "feature/local"
+         (list (list :branch "feature/local"
+                     :kind :local
+                     :ref "refs/heads/feature/local"
+                     :remote nil
+                     :worktree nil))
+         "/tmp/generated-worktree"
+         nil
+         (list "add" "--" "/tmp/generated-worktree" "feature/local"
+               :execution-options execution-options))
+        (run-case
+         "feature/remote"
+         (list (list :branch "feature/remote"
+                     :kind :remote
+                     :remote "origin"
+                     :ref "refs/remotes/origin/feature/remote"
+                     :worktree nil))
+         "/tmp/generated-worktree"
+         (list "--track" "--" "feature/remote" "origin/feature/remote" :execution-options execution-options)
+         (list "add" "--" "/tmp/generated-worktree" "feature/remote"
+               :execution-options execution-options))
+        (let ((worktree
+                (nerimux/workspace-model:make-worktree
+                 :repository repository
+                 :path "/tmp/checked-out-feature"
+                 :branch "feature/checked")))
+          (run-case
+           "feature/checked"
+           (list (list :branch "feature/checked"
+                       :kind :local
+                       :ref "refs/heads/feature/checked"
+                       :remote nil
+                       :worktree worktree))
+           "/tmp/checked-out-feature"
+           nil
+           nil))
+        (run-case
+         "feature/new"
+         nil
+         "/tmp/generated-worktree"
+         (list "--" "feature/new" "refs/heads/main"
+               :execution-options execution-options)
+         (list "add" "--" "/tmp/generated-worktree" "feature/new"
+               :execution-options execution-options)))))
+  (it "lists local and remote branch candidates with checked-out worktrees asynchronously"
+    (let* ((repository-path (%vcs-operations-existing-path))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :specification "workspace-owner/project"
+              :local-path repository-path))
+           (main-worktree
+             (nerimux/workspace-model:make-worktree
+              :repository repository
+              :path "/tmp/worktree-main"
+              :branch "main"))
+           (ref-output
+             (format nil
+                     "refs/heads/main~C~%refs/remotes/origin/main~C~%refs/remotes/origin/topic/remote-only~C~%refs/remotes/origin/HEAD~Crefs/remotes/origin/main~%"
+                     #\Null #\Null #\Null #\Null))
+           (candidates nil)
+           (condition-seen nil)
+           (thread nil))
+      (nerimux/workspace-model:repository-add-worktree repository main-worktree)
+      (with-stubbed-fdefinition
+          ((nerimux/vcs:list-repository-worktrees
+             (lambda (current) current))
+           (nerimux/vcs::%run-git-read
+             (lambda (directory subcommand &rest arguments)
+               (declare (ignore directory arguments))
+               (cond
+                 ((string= subcommand "remote") (format nil "origin~%backup~%"))
+                 ((string= subcommand "for-each-ref") ref-output)
+                 (t (error "Unexpected git read: ~A" subcommand))))))
+        (setf thread
+              (nerimux/vcs:list-worktree-branch-candidates-async
+               repository
+               :on-complete (lambda (result) (setf candidates result))
+               :on-error (lambda (condition) (setf condition-seen condition))))
+        (expect thread)
+        (cl-concurrent-kit:join-thread thread :timeout 2)
+        (expect (null condition-seen))
+        (let* ((local-main
+                 (find-if (lambda (candidate)
+                            (and (eq :local (getf candidate :kind))
+                                 (string= "main" (getf candidate :branch))))
+                          candidates))
+               (remote-main
+                 (find-if (lambda (candidate)
+                            (and (eq :remote (getf candidate :kind))
+                                 (string= "main" (getf candidate :branch))))
+                          candidates))
+               (remote-only
+                 (find-if (lambda (candidate)
+                            (and (eq :remote (getf candidate :kind))
+                                 (string= "topic/remote-only" (getf candidate :branch))))
+                          candidates)))
+          (expect (= 3 (length candidates)))
+          (expect (eq main-worktree (getf local-main :worktree)))
+          (expect (string= "origin" (getf remote-main :remote)))
+          (expect (eq main-worktree (getf remote-main :worktree)))
+          (expect (string= "refs/remotes/origin/topic/remote-only"
+                           (getf remote-only :ref)))
+          (expect (null (getf remote-only :worktree)))))))
+  (it "rejects option-like branch names before reading refs or invoking git"
+    (let* ((repository-path (%vcs-operations-existing-path))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :specification "workspace-owner/project"
+              :local-path repository-path))
+           (candidate-reads 0)
+           (git-writes 0)
+           (condition-seen nil))
+      (with-stubbed-fdefinition
+          ((nerimux/vcs::%read-worktree-branch-candidates
+             (lambda (current)
+               (declare (ignore current))
+               (incf candidate-reads)
+               nil))
+           (vcs-kit:vcs-worktree
+             (lambda (&rest arguments)
+               (declare (ignore arguments))
+               (incf git-writes))))
+        (handler-case
+            (nerimux/vcs::%create-worktree-command
+             repository "--force" nil nil nil)
+          (simple-error (condition)
+            (setf condition-seen condition))))
+      (expect (typep condition-seen 'simple-error))
+      (expect (zerop candidate-reads))
+      (expect (zerop git-writes)))))
 (describe "vcs live-pane-delete attachment safety"
   (it "live-pane-delete rejects live panes before synchronous and asynchronous command dispatch even with force"
     (let* ((repository-path (%vcs-operations-existing-path))
@@ -310,3 +500,129 @@
               (expect (eq agent-pane
                           (nerimux/workspace-model:worktree-agent-pane worktree)))
               (expect (= fd (nerimux/pane:pane-fd agent-pane))))))))))
+
+(describe "vcs worktree branch selection safety"
+  (it "rejects previous-checkout branch syntax before reading refs or invoking git"
+    (let* ((repository
+             (nerimux/workspace-model:make-repository
+              :specification "workspace-owner/project"
+              :local-path (%vcs-operations-existing-path)))
+           (candidate-reads 0)
+           (git-writes 0)
+           (condition-seen nil))
+      (with-stubbed-fdefinition
+          ((nerimux/vcs::%read-worktree-branch-candidates
+             (lambda (current)
+               (declare (ignore current))
+               (incf candidate-reads)
+               nil))
+           (vcs-kit:vcs-branch
+             (lambda (&rest arguments)
+               (declare (ignore arguments))
+               (incf git-writes)))
+           (vcs-kit:vcs-worktree
+             (lambda (&rest arguments)
+               (declare (ignore arguments))
+               (incf git-writes))))
+        (handler-case
+            (nerimux/vcs::%create-worktree-command
+             repository "@{-1}" nil nil nil)
+          (error (condition)
+            (setf condition-seen condition))))
+      (expect (typep condition-seen 'error))
+      (expect (zerop candidate-reads))
+      (expect (zerop git-writes))))
+  (it "rejects a selector with two remote interpretations before invoking git"
+    (let* ((repository
+             (nerimux/workspace-model:make-repository
+              :specification "workspace-owner/project"
+              :local-path (%vcs-operations-existing-path)))
+           (candidate-reads 0)
+           (git-writes 0)
+           (condition-seen nil)
+           (candidates
+             (list (list :branch "topic"
+                         :kind :remote
+                         :remote "origin"
+                         :ref "refs/remotes/origin/topic"
+                         :worktree nil)
+                   (list :branch "origin/topic"
+                         :kind :remote
+                         :remote "origin"
+                         :ref "refs/remotes/origin/origin/topic"
+                         :worktree nil))))
+      (with-stubbed-fdefinition
+          ((nerimux/vcs::%read-worktree-branch-candidates
+             (lambda (current)
+               (unless (eq current repository)
+                 (error "Unexpected repository"))
+               (incf candidate-reads)
+               candidates))
+           (vcs-kit:vcs-branch
+             (lambda (&rest arguments)
+               (declare (ignore arguments))
+               (incf git-writes)))
+           (vcs-kit:vcs-worktree
+             (lambda (&rest arguments)
+               (declare (ignore arguments))
+               (incf git-writes))))
+        (handler-case
+            (nerimux/vcs::%create-worktree-command
+             repository "origin/topic" nil nil nil)
+          (error (condition)
+            (setf condition-seen condition))))
+      (expect (typep condition-seen 'error))
+      (expect (= 1 candidate-reads))
+      (expect (zerop git-writes))))
+  (it "removes the new branch when worktree attachment fails"
+    (let* ((repository
+             (nerimux/workspace-model:make-repository
+              :specification "workspace-owner/project"
+              :local-path (%vcs-operations-existing-path)))
+           (branch-commands nil)
+           (worktree-command nil)
+           (condition-seen nil)
+           (execution-options
+             (nerimux/vcs::%worktree-operation-execution-options)))
+      (with-stubbed-fdefinition
+          ((nerimux/vcs::%repository-backend
+             (lambda (current)
+               (unless (eq current repository)
+                 (error "Unexpected repository"))
+               :backend))
+           (vcs-kit:vcs-branch
+             (lambda (backend &rest arguments)
+               (unless (eq backend :backend)
+                 (error "Unexpected VCS backend"))
+               (push arguments branch-commands)))
+           (vcs-kit:vcs-worktree
+             (lambda (backend &rest arguments)
+               (unless (eq backend :backend)
+                 (error "Unexpected VCS backend"))
+               (setf worktree-command arguments)
+               (error "worktree path occupied"))))
+        (handler-case
+            (nerimux/vcs::%create-worktree-from-new-branch
+             repository "feature/cleanup" "/tmp/occupied"
+             "refs/heads/main" nil)
+          (error (condition)
+            (setf condition-seen condition))))
+      (expect (typep condition-seen 'error))
+      (expect
+       (equal
+        (list (list "--" "feature/cleanup" "refs/heads/main"
+                    :execution-options execution-options)
+              (list "-D" "--" "feature/cleanup"
+                    :execution-options execution-options))
+        (reverse branch-commands)))
+      (expect
+       (equal (list "add" "--" "/tmp/occupied" "feature/cleanup"
+                    :execution-options execution-options)
+              worktree-command))))
+  (it "requires an on-error callback when listing candidates"
+    (let ((condition-seen nil))
+      (handler-case
+          (nerimux/vcs:list-worktree-branch-candidates-async nil)
+        (error (condition)
+          (setf condition-seen condition)))
+      (expect (typep condition-seen 'error)))))

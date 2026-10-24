@@ -1,5 +1,7 @@
 (in-package #:nerimux/vcs)
 
+(declaim (special *git-read-fail-on-output-limit*))
+
 (defparameter *worktree-operation-timeout-seconds*
   vcs-kit::+default-vcs-timeout+
   "Maximum time allowed for a Git worktree write operation.")
@@ -143,8 +145,8 @@
                    "")))
 
 (defun %unique-worktree-path (directory base-name)
-  "Return DIRECTORY/BASE-NAME, or that name with -2, -3, ... appended until a
-path that does not already exist is found (R7.2)."
+  "Return the first free path under DIRECTORY, starting with BASE-NAME and
+then trying -2, -3, and higher suffixes."
   (let ((candidate (%worktree-path-candidate directory base-name nil)))
     (if (null (probe-file candidate))
         candidate
@@ -158,10 +160,9 @@ path that does not already exist is found (R7.2)."
 (defun %resolve-worktree-path (repository start-point-short-sha path)
   "Resolve the filesystem path for a new worktree.
 
-PATH, when given, is used verbatim. Otherwise the name is
-<created-time>-<start-point-short-sha> (R7.2) inside the directory
-%WORKTREE-PARENT-DIRECTORY picks, with -2, -3, ... appended if that name is
-already taken."
+Return PATH when given. Otherwise generate a timestamped name under
+WORKTREE-PARENT-DIRECTORY using START-POINT-SHORT-SHA, adding -2, -3, ... if
+the base name already exists."
   (or (and path (%string-value path))
       (%unique-worktree-path
        (worktree-parent-directory repository)
@@ -272,11 +273,11 @@ when the ignore rule cannot be established."
 
 (defun %default-branch-start-point (repository &key (remote-ref-p t))
   "Return the commit a new worktree starts from: the tip of REPOSITORY's
-default branch (R7.3) as the remote has it, its local branch when there is no
-remote-tracking ref, and the local HEAD when neither resolves.  A repository
+default branch as the remote has it, its local branch when there is no
+remote-tracking ref, and the local HEAD when neither resolves. A repository
 with no remote, or one whose default branch is not main, is routine in real
 use, and reading a fixed origin/main refspec made the create flow unusable
-there.  HEAD is resolvable for any repository with at least one commit, which
+there. HEAD is resolvable for any repository with at least one commit, which
 is the only kind CREATE-WORKTREE is ever called against.
 
 REMOTE-REF-P NIL skips refs/remotes/origin: a caller whose fetch just failed
@@ -284,11 +285,10 @@ knows the tracking ref names whatever the last successful fetch left there,
 and starting a worktree from an unconfirmed tracking ref is the failure mode
 the fetch exists to prevent.
 
-This is only as current as the last fetch (R7.5): call FETCH-REPOSITORY or
-FETCH-REPOSITORY-ASYNC first if it needs to reflect the remote's latest
-state.  A HEAD fallback that ALSO fails (e.g. an empty repository with no
-commits at all) is left to signal normally -- CREATE-WORKTREE's caller
-already turns that into a \"worktree create failed: ...\" notification."
+An origin tracking ref is only as current as the last fetch. Call
+FETCH-REPOSITORY or FETCH-REPOSITORY-ASYNC first when the start point must
+reflect the remote's latest state. If the HEAD fallback also fails (e.g. an
+empty repository with no commits), the error is left to signal normally."
   (let ((branch (%repository-default-branch repository)))
     (or (and branch
              remote-ref-p
@@ -319,36 +319,36 @@ already turns that into a \"worktree create failed: ...\" notification."
     "VCS created a worktree but it was not returned by list-worktrees: ~A"
     worktree-path)))
 (defun create-worktree (repository &key branch path start-point force)
-  "Create a worktree with a new branch and refresh its repository model.
+  "Create a worktree on a new local branch and refresh the repository model.
 
-BRANCH names the new branch; git worktree add -b always creates it (R7.4),
-there is no mode that attaches to an existing branch. START-POINT defaults to
-REPOSITORY's default branch tip (R7.3) when not given."
+BRANCH names the new branch. PATH, when given, must resolve under the worktree
+parent. If attachment fails after branch creation, the operation removes that
+branch and reports any cleanup failure. START-POINT defaults to the repository's
+default branch tip when not given."
   (unless (and repository branch (plusp (length (%string-value branch))))
     (error
      "A repository and non-empty branch are required to create a worktree."))
-  (let* ((branch-name (%string-value branch))
-         (resolved-start-point
-          (or (and start-point (%string-value start-point))
-              (%default-branch-start-point repository)))
-         (worktree-path
-          (%resolve-worktree-path repository
-                                  (%short-sha repository resolved-start-point)
-                                  path))
-         (backend-repository (%repository-backend repository))
-         (arguments
-          (append (list "add")
-                  (when force
-                    (list "--force"))
-                  (list "-b" branch-name "--" worktree-path resolved-start-point))))
-    (apply #'vcs-kit:vcs-worktree
-           backend-repository
-           (append arguments
-                   (list :execution-options
-                         (%worktree-operation-execution-options))))
-    (list-repository-worktrees repository)
-    (refresh-repository-status repository)
-    (%created-worktree-by-path repository worktree-path)))
+  (let ((branch-name (%string-value branch)))
+    (when (char= (char branch-name 0) #\-)
+      (error "A branch name cannot start with -"))
+    (when (search "@{" branch-name)
+      (error "A branch name cannot contain @{"))
+    (let ((canonical-path (and path (validate-worktree-path repository path))))
+      (when (and path (null canonical-path))
+        (error "Worktree path must stay under the repository worktree parent."))
+      (let* ((resolved-start-point
+               (or (and start-point (%string-value start-point))
+                   (%default-branch-start-point repository)))
+             (worktree-path
+               (%resolve-worktree-path
+                repository
+                (%short-sha repository resolved-start-point)
+                canonical-path)))
+        (%create-worktree-from-new-branch
+         repository branch-name worktree-path resolved-start-point force)
+        (list-repository-worktrees repository)
+        (refresh-repository-status repository)
+        (%created-worktree-by-path repository worktree-path)))))
 
 (defun %refresh-worktree-repository (repository)
   (list-repository-worktrees repository)
@@ -458,36 +458,219 @@ false DRY-RUN once a user has explicitly confirmed the operation."
   (%worktree-operation-result-value operation-result))
 (defun %worktree-command-arguments (operation &rest arguments)
   (append (list operation) (remove nil arguments)))
-
-(defun %create-worktree-arguments (branch path start-point force)
+(defun %create-worktree-arguments
+    (branch path start-point force &key existing-branch-p)
   (append (list "add")
           (when force
             (list "--force"))
-          (list "-b" branch "--" path start-point)))
+          (unless existing-branch-p
+            (list "-b" branch))
+          (list "--" path start-point)))
+(defun %create-worktree-from-new-branch
+    (repository branch path start-point force &key track-p)
+  (let ((backend (%repository-backend repository)))
+    (apply #'vcs-kit:vcs-branch
+           (append (list backend)
+                   (when track-p (list "--track"))
+                   (list "--" branch
+                         (if track-p (subseq start-point (length "refs/remotes/")) start-point)
+                         :execution-options
+                         (%worktree-operation-execution-options))))
+    (handler-case
+        (apply #'vcs-kit:vcs-worktree
+               backend
+               (append (%create-worktree-arguments
+                        branch path branch force :existing-branch-p t)
+                       (list :execution-options
+                             (%worktree-operation-execution-options))))
+      (error (creation-error)
+        (handler-case
+            (vcs-kit:vcs-branch
+             backend "-D" "--" branch
+             :execution-options
+             (%worktree-operation-execution-options))
+          (error (cleanup-error)
+            (error "Worktree creation failed (~A); branch cleanup failed (~A)"
+                   creation-error cleanup-error)))
+        (error creation-error)))))
 
-(defun %create-worktree-command (repository branch path start-point force)
+(defun %read-worktree-branch-candidates (repository)
+  "Return branch candidate plists with the checkout, if any, for X3.
+
+Each plist has :BRANCH, :KIND (:LOCAL or :REMOTE), :REF, :REMOTE, and
+:WORKTREE keys. Local candidates have no :REMOTE; remote candidates retain
+their configured remote name. Pass REMOTE/BRANCH to CREATE-WORKTREE-ASYNC to
+select a remote when multiple remotes have the same branch name."
+  (unless repository
+    (error "A repository is required to list branch candidates."))
+  (let* ((repository (list-repository-worktrees repository))
+         (directory (nerimux/workspace-model:repository-local-path repository))
+         (worktrees (nerimux/workspace-model:repository-worktrees repository))
+         (remote-names
+           (sort
+            (remove "" (uiop:split-string
+                        (let ((*git-read-fail-on-output-limit* t))
+                          (%run-git-read directory "remote"))
+                        :separator (list #\Newline))
+                    :test (function string=))
+            (function >)
+            :key (function length)))
+         (ref-output
+           (let ((*git-read-fail-on-output-limit* t))
+             (%run-git-read directory
+                            "for-each-ref"
+                            "--format=%(refname)%00%(symref)"
+                            "refs/heads/"
+                            "refs/remotes/")))
+         (candidates nil))
+    (labels ((prefix-p (prefix string)
+               (and (>= (length string) (length prefix))
+                    (string= prefix string :end2 (length prefix))))
+             (remote-parts (reference)
+               (let* ((name (subseq reference (length "refs/remotes/")))
+                      (remote
+                        (find-if (lambda (candidate)
+                                   (prefix-p (concatenate 'string candidate "/")
+                                             name))
+                                 remote-names)))
+                 (if remote
+                     (values remote (subseq name (1+ (length remote))))
+                     (let ((separator (position #\/ name)))
+                       (when separator
+                         (values (subseq name 0 separator)
+                                 (subseq name (1+ separator))))))))
+             (checkout-for (branch)
+               (find-if (lambda (worktree)
+                          (let ((checked-out
+                                  (nerimux/workspace-model:worktree-branch
+                                   worktree)))
+                            (and (stringp checked-out)
+                                 (or (string= branch checked-out)
+                                     (and (prefix-p "refs/heads/" checked-out)
+                                          (string= branch
+                                                   (subseq checked-out
+                                                           (length "refs/heads/"))))))))
+                        worktrees)))
+      (dolist (line (uiop:split-string ref-output
+                                       :separator (list #\Newline)))
+        (let* ((fields
+                 (uiop:split-string (string-right-trim (list #\Return) line)
+                                    :separator (list #\Null)))
+               (reference (first fields))
+               (symbolic-target (or (second fields) "")))
+          (when (and reference
+                     (plusp (length reference))
+                     (string= symbolic-target ""))
+            (cond
+              ((prefix-p "refs/heads/" reference)
+               (let ((branch (subseq reference (length "refs/heads/"))))
+                 (push (list :branch branch
+                             :kind :local
+                             :ref reference
+                             :remote nil
+                             :worktree (checkout-for branch))
+                       candidates)))
+              ((prefix-p "refs/remotes/" reference)
+               (multiple-value-bind (remote branch) (remote-parts reference)
+                 (when (and remote branch (plusp (length branch)))
+                   (push (list :branch branch
+                               :kind :remote
+                               :ref reference
+                               :remote remote
+                               :worktree (checkout-for branch))
+                         candidates))))))))
+      (nreverse candidates))))
+
+(defun %create-worktree-command (repository branch path start-point force &optional generation)
   (unless (and repository branch (plusp (length (%string-value branch))))
     (error
      "A repository and non-empty branch are required to create a worktree."))
-  (let* ((branch-name (%string-value branch))
-         (resolved-start-point
-          (or (and start-point (%string-value start-point))
-              (%default-branch-start-point repository)))
-         (worktree-path
-          (%resolve-worktree-path repository
-                                  (%short-sha repository resolved-start-point)
-                                  path))
-         (arguments
-          (%create-worktree-arguments branch-name
-                                      worktree-path
-                                      resolved-start-point
-                                      force)))
-    (apply #'vcs-kit:vcs-worktree
-           (%repository-backend repository)
-           (append arguments
-                   (list :execution-options
-                         (%worktree-operation-execution-options))))
-    worktree-path))
+  (let ((branch-name (%string-value branch)))
+    (when (char= (char branch-name 0) #\-)
+      (error "A branch name cannot start with -"))
+    (when (search "@{" branch-name)
+      (error "A branch name cannot contain @{"))
+    (let ((canonical-path (and path (validate-worktree-path repository path))))
+      (when (and path (null canonical-path))
+        (error "Worktree path must stay under the repository worktree parent."))
+      (let* ((candidates (unless start-point
+                           (%read-worktree-branch-candidates repository)))
+             (local-matches
+              (remove-if-not
+               (lambda (candidate)
+                 (and (eq :local (getf candidate :kind))
+                      (string= branch-name (getf candidate :branch))))
+               candidates))
+             (remote-candidates
+              (remove-if-not (lambda (candidate)
+                               (eq :remote (getf candidate :kind)))
+                             candidates))
+             (matching-remotes
+              (remove-if-not (lambda (candidate)
+                               (string= branch-name (getf candidate :branch)))
+                             remote-candidates))
+             (qualified-remotes
+              (remove-if-not
+               (lambda (candidate)
+                 (string= branch-name
+                          (format nil "~A/~A"
+                                  (getf candidate :remote)
+                                  (getf candidate :branch))))
+               remote-candidates))
+             (interpretations
+              (remove-duplicates
+               (append local-matches
+                       qualified-remotes
+                       ;; An exact local name wins over unqualified remote names.
+                       (unless local-matches matching-remotes))
+               :test #'string=
+               :key (lambda (candidate) (getf candidate :ref))))
+             (selected-candidate (first interpretations)))
+        (when (> (length interpretations) 1)
+          (error "Branch selector is ambiguous; specify one unambiguous name."))
+        (when generation
+          (sb-thread:with-recursive-lock (*workspace-catalog-generation-lock*)
+            (unless (%repository-data-generation-current-p repository generation)
+              (error "Worktree refresh was superseded; refresh the workspace catalogue."))
+            (setf generation
+                  (%begin-repository-data-generation repository))))
+        (let* ((selected-branch
+                (or (and selected-candidate (getf selected-candidate :branch))
+                    branch-name))
+               (resolved-start-point
+                (or (and selected-candidate (getf selected-candidate :ref))
+                    (and start-point (%string-value start-point))
+                    (%default-branch-start-point repository)))
+               (worktree (and selected-candidate
+                              (getf selected-candidate :worktree)))
+               (worktree-path
+                (if worktree
+                    (nerimux/workspace-model:worktree-path worktree)
+                  (%resolve-worktree-path
+                   repository
+                   (%short-sha repository resolved-start-point)
+                   canonical-path)))
+               (remote-candidate-p
+                (and selected-candidate
+                     (eq :remote (getf selected-candidate :kind))))
+               (new-branch-p (or (null selected-candidate) remote-candidate-p)))
+          (unless worktree
+            (if new-branch-p
+                (%create-worktree-from-new-branch
+                 repository
+                 selected-branch
+                 worktree-path
+                 resolved-start-point
+                 (and force (null selected-candidate))
+                 :track-p remote-candidate-p)
+              (apply #'vcs-kit:vcs-worktree
+                     (%repository-backend repository)
+                     (append (%create-worktree-arguments
+                              selected-branch worktree-path selected-branch nil
+                              :existing-branch-p t)
+                             (list :execution-options
+                                   (%worktree-operation-execution-options))))))
+          (values worktree-path generation))))))
 
 (defun %apply-created-worktree (repository operation-result)
   (let ((worktree-path (%apply-worktree-operation-result operation-result)))
@@ -559,3 +742,29 @@ false DRY-RUN once a user has explicitly confirmed the operation."
                         (list :execution-options
                               (%worktree-operation-execution-options))))))
     (list repository result)))
+
+(in-package #:nerimux/vcs)
+
+(defun validate-worktree-path (repository path)
+  "Return PATH's canonical absolute destination when it stays under the worktree parent."
+  (when (and repository path)
+    (let ((path-string (%string-value path)))
+      (when (plusp (length path-string))
+        (unless (member ".."
+                        (uiop:split-string path-string :separator '(#\/))
+                        :test #'string=)
+          (let* ((pathname (uiop:parse-native-namestring path-string))
+                 (pathname (if (eq :absolute (first (pathname-directory pathname)))
+                               pathname
+                               (merge-pathnames
+                                pathname
+                                (uiop:ensure-directory-pathname
+                                 (nerimux/workspace-model:repository-local-path
+                                  repository)))))
+                 (candidate (resolve-path-prefix pathname))
+                 (parent (resolve-path-prefix
+                          (uiop:parse-native-namestring
+                           (worktree-parent-directory repository)))))
+            (when (and candidate parent
+                       (path-under-directory-p candidate parent))
+              (namestring candidate))))))))

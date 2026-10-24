@@ -172,24 +172,39 @@ dispatch error as two values, so failed delivery cannot hide a created path."
                                          on-complete
                                          on-error
                                          callback-dispatch)
-  "Create a worktree on a worker thread and invoke one callback."
+  "Create or reuse a worktree on a worker thread and invoke one callback.
+ON-COMPLETE receives the selected worktree; remote candidates are selected by
+branch name when unique or by REMOTE/BRANCH when names collide. Unmatched names
+create a new local branch."
   (let ((generation (%begin-worktree-request repository)))
     (%run-vcs-operation-async "nerimux-vcs-worktree-create"
-                            (lambda ()
-                              (%capture-worktree-operation-result repository
-                                                                  (%create-worktree-command
-                                                                   repository
-                                                                   branch
-                                                                   path
-                                                                   start-point
-                                                                   force)
-                                                                  generation))
-                            (lambda (operation-result)
-                              (%apply-created-worktree repository
-                                                       operation-result))
-                            on-complete
-                            on-error
-                            callback-dispatch on-start)))
+                              (lambda ()
+                                (multiple-value-bind (worktree-path operation-generation)
+              (%create-worktree-command repository branch path start-point force generation)
+            (%capture-worktree-operation-result repository worktree-path operation-generation)))
+                              (lambda (operation-result)
+                                (%apply-created-worktree repository
+                                                         operation-result))
+                              on-complete
+                              on-error
+                              callback-dispatch on-start)))
+(defun list-worktree-branch-candidates-async
+    (repository &key on-start on-complete on-error callback-dispatch)
+  "Return a worker thread that reads branch selection candidates.
+
+ON-COMPLETE receives a list of entries with :BRANCH, :KIND (:LOCAL or
+:REMOTE), :REF, :REMOTE, and :WORKTREE keys. ON-ERROR is required and receives
+read failures."
+  (unless on-error
+    (error "ON-ERROR callback is required."))
+  (%run-vcs-operation-async
+   "nerimux-vcs-worktree-branch-candidates"
+   (lambda () (%read-worktree-branch-candidates repository))
+   #'identity
+   on-complete
+   on-error
+   callback-dispatch
+   on-start))
 (defstruct worktree-delete-result
   (removed-p nil)
   error

@@ -96,11 +96,33 @@
                                            (nerimux::%client-create-worktree
                                             conn
                                             nil
-                                            '("--confirm" "--branch"
-                                                          "feature/create"))
-                                           (expect
-                                            (%worktree-message-seen-p conn
-                                                                      "worktree create failed: create async failure"))
+                                            (list "--confirm" "--branch"
+                                                  (format nil "danger~C[31mred~C"
+                                                          (code-char 27)
+                                                          (code-char 9))))
+                                           (progn
+                                             (expect
+                                              (%worktree-message-seen-p
+                                               conn "worktree create failed"))
+                                             (expect
+                                              (every (lambda (message)
+                                                       (and (not (find (code-char 27) message))
+                                                            (not (find #\Tab message))
+                                                            (not (search "[31m" message))))
+                                                     (nerimux::client-conn-message-log conn)))
+                                             (let ((entry (first (nerimux::client-conn-process-log conn))))
+                                               (expect
+                                                (string= "worktree branch selection: dangerred"
+                                                         (first entry)))
+                                               (expect
+                                                (string= "worktree creation failed"
+                                                         (third entry)))
+                                               (expect (not (find (code-char 27) (first entry))))
+                                               (expect (not (find #\Tab (first entry))))
+                                               (expect (not (search "[31m" (first entry))))
+                                               (expect (not (find (code-char 27) (third entry))))
+                                               (expect (not (find #\Tab (third entry))))
+                                               (expect (not (search "[31m" (third entry))))))
                                            (setf (fdefinition
                                                   'nerimux/vcs:create-worktree-async) (lambda 
                                                                                           (&rest
@@ -116,7 +138,7 @@
                                                           "feature/create"))
                                            (expect
                                             (%worktree-message-seen-p conn
-                                                                      "worktree create failed: create synchronous failure"))
+                                                                      "worktree create failed"))
                                            (nerimux::%set-client-selected-tree-object
                                             conn
                                             worktree)
@@ -332,7 +354,7 @@
                                                  conn)))
                                            (expect
                                             (%worktree-message-seen-p conn
-                                                                      "worktree created: /tmp/worktree-errors"))
+                                                                      "worktree ready: /tmp/worktree-errors"))
                                            (setf (fdefinition
                                                   'nerimux/vcs:delete-worktree-async) (lambda 
                                                                                           (received-worktree

@@ -6,8 +6,7 @@
     corresponding domain ports.  cl-vcs-kit is a required system dependency;
     the availability predicate reports whether its package is currently loaded
     for command-level error reporting.")
-  (:export
-   #:vcs-package-available-p
+  (:export #:list-worktree-branch-candidates-async #:vcs-package-available-p
    #:scan-repositories
    #:list-repository-worktrees
    #:worktree-status
@@ -33,6 +32,9 @@
    #:detached-worktree-result-fetch-error
    #:refreshed-worktree-successor
    #:worktree-parent-directory
+   #:resolve-path-prefix
+   #:path-under-directory-p
+   #:validate-worktree-path
    #:delete-worktree-async
    #:read-worktree-prune-snapshot-async
    #:validate-worktree-prune-snapshot

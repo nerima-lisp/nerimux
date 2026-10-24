@@ -553,7 +553,7 @@
 
   (it "wt-create-command-strips-control-characters-from-the-branch-notification"
     ;; S4: %client-create-worktree-now interpolates the typed branch into
-    ;; the "creating worktree ~A" notification, so an SGR sequence in the
+    ;; the "opening worktree ~A" notification, so an SGR sequence in the
     ;; branch must not reach the client's message strip unstripped. Dispatch
     ;; goes through %handle-client-ui-command with a pre-tokenized args list
     ;; rather than raw keystroke bytes: the byte-level command-line input
@@ -590,7 +590,7 @@
                (let ((notified (first (nerimux::client-conn-message-log conn))))
                  (expect (not (find (code-char 27) notified)))
                  (expect (not (search "[31m" notified)))
-                 (expect (string= "creating worktree dangerred" notified))))
+                 (expect (string= "opening worktree dangerred" notified))))
           (setf (fdefinition 'nerimux/vcs:vcs-package-available-p) available
                 (fdefinition 'nerimux/vcs:create-worktree-async) create)))))
 
