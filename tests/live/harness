@@ -107,14 +107,14 @@ wait_for_on_socket() {
   while :; do
     if capture=$(run_tmux "$lane" "$fixture_root" "$socket" \
       capture-pane -p -t "$session:0.0" 2>/dev/null) &&
-      printf '%s\n' "$capture" | grep -E -q -- "$pattern"; then
+      printf '%s\n' "$capture" | grep -E -- "$pattern" >/dev/null; then
       return 0
     fi
     if (( SECONDS >= deadline )); then
       printf 'harness: wait-for timed out after %s seconds: %s\n' "$seconds" "$pattern" >&2
       return 1
     fi
-    sleep 0.2
+    sleep 0.1
   done
 }
 
