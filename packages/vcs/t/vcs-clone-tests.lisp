@@ -423,3 +423,20 @@
               (loop for code from #x2066 to #x2069 collect code)))
       (expect (nerimux/vcs::%clone-control-or-whitespace-p
                (code-char code))))))
+
+(describe "vcs clone error formatting"
+  (it "joins multiline Git errors with semicolons"
+    (expect
+     (string=
+      "fatal: x; hint: y"
+      (nerimux/vcs::%clone-error-reason
+       nil
+       (format nil "fatal: x~Chint: y" (code-char 10))
+       128)))
+    (expect
+     (string=
+      "fatal: x; hint: y"
+      (nerimux/vcs::%clone-error-reason
+       nil
+       (format nil "fatal: x~C~Chint: y" (code-char 13) (code-char 10))
+       128)))))

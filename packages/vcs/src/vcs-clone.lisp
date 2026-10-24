@@ -214,17 +214,30 @@
 
 (defun %clean-clone-error-text (text)
   (let ((clean (with-output-to-string (output)
-                 (loop with space-p = nil
+                 (loop with separator = nil
+                       with line-break-p = nil
+                       with content-p = nil
                        for character across (%redact-clone-credentials text)
                        do (cond
-                            ((sb-unicode:whitespace-p character)
-                             (unless space-p (write-char #\Space output))
-                             (setf space-p t))
-                            ((nerimux/text:control-character-p character)
-                             (setf space-p t))
+                            ((or (char= character #\Newline)
+                                 (char= character #\Return))
+                             (when (and content-p (not line-break-p))
+                               (setf separator :line))
+                             (setf line-break-p t))
+                            ((or (sb-unicode:whitespace-p character)
+                                 (nerimux/text:control-character-p character))
+                             (when (and content-p (null separator))
+                               (setf separator :space))
+                             (setf line-break-p nil))
                             (t
+                             (when separator
+                               (write-string
+                                (if (eq separator :line) "; " " ")
+                                output)
+                               (setf separator nil))
                              (write-char character output)
-                             (setf space-p nil)))))))
+                             (setf content-p t
+                                   line-break-p nil)))))))
     (let ((trimmed (string-trim (list #\Space) clean)))
       (if (> (length trimmed) 180)
           (subseq trimmed 0 180)
